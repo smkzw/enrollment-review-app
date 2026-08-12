@@ -1685,3 +1685,16 @@ OCR concurrency note:
 - 新增未参与任何 Evidence/Assessment 发布的额外 AgentCall 场景：即使 Schema Gate 合法，只要附加 accepted Gate 的 input_scope_hash 或 input_revision_map 错配，Fixture 也会拒绝。
 - 本地验证为 V2 `138 passed + 2 subtests`、默认 `268 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`；8 个生成制品双跑一致，`compileall`、`uv lock --check`、`git diff --check` 通过。
 - Phase 0.5 继续 `in_progress`；第十一次仍只复用同一 Luna checker。
+
+2026-08-13 Phase 0.5 同一 Luna checker 第十一次复核：
+
+- 候选 `1535304` 被拒绝；未参与 Evidence/Assessment 发布的 AgentCall 现已确认执行全部 Gate 闭包检查。
+- 唯一 P2：可向 Fixture 和预先 registry 同时追加一个完全不被 AgentCall、Protocol、Assessment、Action、Rollup 引用的 GateResult，当前只检查其已登记，未检查它属于当前发布图。
+- 下一修复按 Protocol Authority/Integrity、AgentCall 声明 Gate、Assessment 发布链、Action 和 EpisodeRollup 建立显式 Gate 归属集合，拒绝任何无业务归属 Gate 或孤立 Gate 子图；自由 input 引用不能产生归属。Phase 1 继续冻结，第十二次仍复用同一 checker。
+
+2026-08-13 Phase 0.5 第十一次拒绝后的本地修复（待第十二次复核）：
+
+- Fixture 的 GateResult 集合现在必须与当前发布对象显式拥有的 Gate 集合完全相等；历史/审计对象若未来需要保留，应进入独立集合，不能夹带在当前发布 Fixture。
+- 新增单个孤立 Gate、互相引用的孤立 Gate 子图、以及向合法 Schema Gate 注入孤立 Gate ID 的反向测试，三者均在发布前拒绝。
+- 本地验证为 V2 `139 passed + 2 subtests`、默认 `269 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`；8 个生成制品双跑一致，`compileall`、`uv lock --check`、`git diff --check` 通过。
+- Phase 0.5 保持 `in_progress`，第十二次继续复用同一 Luna checker，不调用 Qwen 3.8。

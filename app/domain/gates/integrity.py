@@ -843,6 +843,32 @@ def validate_fixture_scope(fixture: FixtureV1, registry) -> None:
     if len(gate_ids) != len(fixture.gate_results):
         raise StageIsolationError("GateResult ID 必须唯一")
     gate_by_id = {item.gate_result_id: item for item in fixture.gate_results}
+    owned_gate_ids = {
+        fixture.project.protocol_version.authority_gate_result_id,
+        fixture.project.protocol_version.integrity_gate_result_id,
+        fixture.episode_rollup.gate_result_id,
+        *[gate_id for call in fixture.agent_calls for gate_id in call.gate_result_ids],
+        *[item.gate_result_id for item in fixture.final_assessments],
+        *[item.gate_result_id for item in fixture.actions],
+    }
+    for assessment in fixture.final_assessments:
+        publication = assessment_publication_from_fixture(
+            fixture, assessment.assessment_id
+        )
+        owned_gate_ids.update(
+            {
+                publication.gate_result.gate_result_id,
+                publication.candidate_gate_result.gate_result_id,
+                publication.agent_call_gate_result.gate_result_id,
+                publication.evidence_gate_result.gate_result_id,
+                publication.evidence_agent_call_gate_result.gate_result_id,
+                publication.protocol_integrity_gate_result.gate_result_id,
+            }
+        )
+    if not owned_gate_ids <= gate_ids:
+        raise StageIsolationError("当前发布对象引用了不存在的验收结果")
+    if owned_gate_ids != gate_ids:
+        raise StageIsolationError("Fixture 包含无法归属到当前发布对象的孤立验收结果")
     prompt_by_id = {
         item.prompt_version_id: item for item in fixture.prompt_versions
     }

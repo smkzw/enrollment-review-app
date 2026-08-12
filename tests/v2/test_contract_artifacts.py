@@ -829,6 +829,86 @@ def test_fixture_scope_validates_gates_for_unused_registered_agent_call() -> Non
         )
 
 
+def test_fixture_scope_rejects_orphan_gate_and_orphan_gate_subgraph() -> None:
+    fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
+    source_gate = fixture.gate_results[0]
+    orphan_gate = source_gate.model_copy(
+        update={
+            "gate_result_id": "gate-orphan",
+            "input_scope_hash": "f" * 64,
+            "input_revision_map": {"orphan": 1},
+            "input_entity_refs": ["orphan-input"],
+            "accepted_entity_refs": ["orphan-output"],
+            "idempotency_key": "gate:orphan",
+            "output_hash": "e" * 64,
+        }
+    )
+    orphan_fixture = fixture.model_copy(
+        update={"gate_results": [*fixture.gate_results, orphan_gate]}
+    )
+    with pytest.raises(ValueError, match="孤立验收结果"):
+        validate_fixture_scope(
+            orphan_fixture, _trusted_registry_from_fixture(orphan_fixture)
+        )
+
+    schema_gate = next(
+        item
+        for item in fixture.gate_results
+        if item.gate_name == "agent-output-schema-gate"
+    )
+    schema_gate_with_orphan_ref = schema_gate.model_copy(
+        update={
+            "input_entity_refs": [
+                *schema_gate.input_entity_refs,
+                orphan_gate.gate_result_id,
+            ]
+        }
+    )
+    smuggled_orphan_fixture = fixture.model_copy(
+        update={
+            "gate_results": [
+                *[
+                    schema_gate_with_orphan_ref
+                    if item.gate_result_id == schema_gate.gate_result_id
+                    else item
+                    for item in fixture.gate_results
+                ],
+                orphan_gate,
+            ]
+        }
+    )
+    with pytest.raises(ValueError, match="孤立验收结果"):
+        validate_fixture_scope(
+            smuggled_orphan_fixture,
+            _trusted_registry_from_fixture(smuggled_orphan_fixture),
+        )
+
+    orphan_a = orphan_gate.model_copy(
+        update={
+            "gate_result_id": "gate-orphan-a",
+            "input_entity_refs": ["gate-orphan-b"],
+            "idempotency_key": "gate:orphan-a",
+        }
+    )
+    orphan_b = orphan_gate.model_copy(
+        update={
+            "gate_result_id": "gate-orphan-b",
+            "input_entity_refs": ["gate-orphan-a"],
+            "idempotency_key": "gate:orphan-b",
+        }
+    )
+    orphan_subgraph_fixture = fixture.model_copy(
+        update={
+            "gate_results": [*fixture.gate_results, orphan_a, orphan_b]
+        }
+    )
+    with pytest.raises(ValueError, match="孤立验收结果"):
+        validate_fixture_scope(
+            orphan_subgraph_fixture,
+            _trusted_registry_from_fixture(orphan_subgraph_fixture),
+        )
+
+
 def test_stage_isolation_gate_rejects_cross_project_episode() -> None:
     fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
     registry = _trusted_registry_from_fixture(fixture)

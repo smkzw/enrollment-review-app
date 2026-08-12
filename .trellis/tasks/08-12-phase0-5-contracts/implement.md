@@ -92,3 +92,17 @@
 - 新增“未参与发布的额外 AgentCall + 合法 Schema Gate + scope/revision 错配 accepted 非 Schema Gate”负例。
 - 本地验证：V2 `138 passed + 2 subtests`；默认 `268 passed, 1 skipped + 18 subtests`；legacy `130 passed, 1 skipped`；生成制品双跑一致。
 - 状态保持 `in_progress`，等待同一 checker 第十一次复核。
+
+## 2026-08-13 第十一次复核结论
+
+- 候选 `1535304` 被拒绝；未参与下游发布的 AgentCall 已确认执行完整共享闭包。
+- 唯一 P2：Fixture 可追加一个已登记但不被任何 AgentCall、方案、Assessment、Action 或 Rollup 引用的孤立 GateResult。
+- 下一候选按方案验收、AgentCall、Assessment 发布链、Action 和 Rollup 建立显式 Gate 归属集合，任何无业务归属 Gate 均拒绝；仅被其他 Gate 自由引用不能取得归属，历史审计 Gate 不混入当前发布集合。状态保持 `in_progress`。
+
+## 2026-08-13 第十一次复核后的本地候选
+
+- Fixture 中每个 GateResult 必须明确归属于方案权威/完整性验收、AgentCall 声明、Assessment 候选/证据/最终发布、Action 或 EpisodeRollup；已登记但无发布对象归属的 Gate 及孤立 Gate 子图均被拒绝。
+- 归属不从 Gate 的自由 `input_entity_refs` 推导，避免把孤立 Gate ID 塞入合法 Gate 后伪造“图可达”。
+- 新增单个孤立 Gate、两个 Gate 互相引用的孤立子图、以及合法 Schema Gate 引用孤立 Gate 三类反向测试。
+- 本地验证：V2 `139 passed + 2 subtests`；默认 `269 passed, 1 skipped + 18 subtests`；legacy `130 passed, 1 skipped`；8 个生成制品双跑一致，`compileall`、`uv lock --check`、`git diff --check` 通过。
+- 状态保持 `in_progress`，等待同一 checker 第十二次复核。
