@@ -6,6 +6,15 @@ from .agents import (
     ModelConfigContract,
     PromptVersion,
 )
+from .agent_io import AgentContractsV1
+from .api import (
+    ActionOverrideCommand,
+    ActionOverrideResponse,
+    JobStatusResponse,
+    ProjectListResponse,
+    SubjectListResponse,
+    WorkspaceResponse,
+)
 from .common import DateValue, ErrorDetail, ErrorEnvelope, VersionedModel
 from .evidence import (
     ClinicalFact,
@@ -27,10 +36,14 @@ from .review import (
     Subject,
 )
 from .rules import EvidenceRequirement, Rule, RuleComponent, RuleExpression, RuleSet, WorkflowStage
+from .uat import UatWorkspaceFixture
 
 __all__ = [
     "ActionRequest",
+    "ActionOverrideCommand",
+    "ActionOverrideResponse",
     "AgentCallContract",
+    "AgentContractsV1",
     "AgentNode",
     "AgentOutputKind",
     "AgentWriteScope",
@@ -46,10 +59,12 @@ __all__ = [
     "FinalAssessment",
     "FixtureV1",
     "JobEvent",
+    "JobStatusResponse",
     "ModelConfigContract",
     "PatientProfile",
     "PatientProfileEvent",
     "Project",
+    "ProjectListResponse",
     "PromptVersion",
     "ReviewEpisode",
     "ReviewRun",
@@ -59,6 +74,9 @@ __all__ = [
     "RuleExpression",
     "RuleSet",
     "Subject",
+    "SubjectListResponse",
     "VersionedModel",
+    "UatWorkspaceFixture",
     "WorkflowStage",
+    "WorkspaceResponse",
 ]

@@ -89,6 +89,8 @@ class ComponentDecision(StableEnum):
     CONFLICT = "conflict"
     NOT_DUE = "not_due"
     NOT_APPLICABLE = "not_applicable"
+    REQUIREMENT_MET = "requirement_met"
+    REQUIREMENT_NOT_MET = "requirement_not_met"
 
 
 class GapType(StableEnum):
@@ -200,3 +202,23 @@ class CriticAction(StableEnum):
     DOWNRANK = "downrank"
     OPEN_ACTION = "open_action"
     NONE = "none"
+
+
+class TruthValue(StableEnum):
+    TRUE = "true"
+    FALSE = "false"
+    UNKNOWN = "unknown"
+
+
+class RunOutcome(StableEnum):
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    STOPPED = "stopped"
+    CANCELLED = "cancelled"
+    PARTIAL = "partial"
+
+
+class GateOutcome(StableEnum):
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    BLOCKED = "blocked"

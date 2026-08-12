@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.domain.contracts.common import VersionedModel
 from app.domain.contracts.enums import (
@@ -15,6 +15,7 @@ from app.domain.contracts.enums import (
 )
 from app.domain.contracts.evidence import EvidenceExpectation
 from app.domain.contracts.review import ActionRequest, FinalAssessment
+from app.domain.policies import derive_expectation_blocking_level
 
 
 STATUS_SORT_RANK = {
@@ -38,6 +39,42 @@ class EpisodeRollup(VersionedModel):
     provenance_followup_count: int = Field(ge=0)
     gap_counts: dict[str, int]
 
+    @model_validator(mode="after")
+    def validate_projection_consistency(self) -> "EpisodeRollup":
+        expected = _main_status_from_counts(
+            barrier_count=self.barrier_count,
+            current_gap_count=self.current_gap_count,
+            conflict_count=self.conflict_count,
+            professional_count=self.professional_judgment_count,
+            future_count=self.future_attention_count,
+        )
+        if self.main_status != expected:
+            raise ValueError(f"EpisodeRollup 主状态必须由计数推导为 {expected.value}")
+        if self.sort_rank != STATUS_SORT_RANK[expected]:
+            raise ValueError("EpisodeRollup sort_rank 与主状态不一致")
+        return self
+
+
+def _main_status_from_counts(
+    *,
+    barrier_count: int,
+    current_gap_count: int,
+    conflict_count: int,
+    professional_count: int,
+    future_count: int,
+) -> EpisodeMainStatus:
+    if barrier_count:
+        return EpisodeMainStatus.CLEAR_BARRIER
+    if current_gap_count:
+        return EpisodeMainStatus.CURRENT_GAP
+    if conflict_count:
+        return EpisodeMainStatus.CONFLICT
+    if professional_count:
+        return EpisodeMainStatus.PROFESSIONAL_JUDGMENT
+    if future_count:
+        return EpisodeMainStatus.FUTURE_ATTENTION
+    return EpisodeMainStatus.NO_CLEAR_BARRIER
+
 
 def rollup_episode(
     assessments: list[FinalAssessment],
@@ -56,13 +93,14 @@ def rollup_episode(
     current_gap_count = sum(
         1
         for item in assessments
-        if item.decision == ComponentDecision.INDETERMINATE
+        if item.decision
+        in {ComponentDecision.INDETERMINATE, ComponentDecision.REQUIREMENT_NOT_MET}
         and item.blocking_level == BlockingLevel.BLOCKING
     ) + sum(
         1
         for item in expectations
-        if item.status in {ExpectationStatus.ABSENT, ExpectationStatus.REFERENCED_MISSING}
-        and item.gap_type != GapType.FUTURE_STAGE_NOT_DUE
+        if derive_expectation_blocking_level(item.status, item.gap_type)
+        == BlockingLevel.BLOCKING
     )
     conflict_count = decisions[ComponentDecision.CONFLICT]
     professional_count = decisions[ComponentDecision.PROFESSIONAL_JUDGMENT]
@@ -76,18 +114,13 @@ def rollup_episode(
         and action.state in {ActionState.OPEN, ActionState.REOPENED}
     )
 
-    if barrier_count:
-        main_status = EpisodeMainStatus.CLEAR_BARRIER
-    elif current_gap_count:
-        main_status = EpisodeMainStatus.CURRENT_GAP
-    elif conflict_count:
-        main_status = EpisodeMainStatus.CONFLICT
-    elif professional_count:
-        main_status = EpisodeMainStatus.PROFESSIONAL_JUDGMENT
-    elif future_count:
-        main_status = EpisodeMainStatus.FUTURE_ATTENTION
-    else:
-        main_status = EpisodeMainStatus.NO_CLEAR_BARRIER
+    main_status = _main_status_from_counts(
+        barrier_count=barrier_count,
+        current_gap_count=current_gap_count,
+        conflict_count=conflict_count,
+        professional_count=professional_count,
+        future_count=future_count,
+    )
 
     return EpisodeRollup(
         main_status=main_status,

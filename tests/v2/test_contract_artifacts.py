@@ -3,10 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
 from app.domain.contracts.review import FixtureV1
-from app.domain.gates import validate_action_request
+from app.domain.contracts.agent_io import AgentContractsV1
+from app.domain.contracts.uat import UatWorkspaceFixture
+from app.domain.gates import validate_action_request, validate_fixture_scope, validate_protocol_integrity
 from app.domain.rollup import rollup_episode
 
 
@@ -14,7 +17,10 @@ ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_ROOT = ROOT / "contracts" / "v1"
 SCHEMA_PATH = CONTRACT_ROOT / "schema" / "fixture-v1.schema.json"
 OPENAPI_PATH = CONTRACT_ROOT / "schema" / "openapi-v1.draft.json"
+AGENT_SCHEMA_PATH = CONTRACT_ROOT / "schema" / "agent-contracts-v1.schema.json"
 FIXTURE_PATHS = sorted((CONTRACT_ROOT / "fixtures").glob("subject-*.json"))
+UAT_SCHEMA_PATH = CONTRACT_ROOT / "schema" / "uat-phase1-workspace.schema.json"
+UAT_FIXTURE_PATH = CONTRACT_ROOT / "fixtures" / "uat-phase1-workspace.json"
 
 
 def load_json(path: Path) -> dict:
@@ -40,6 +46,7 @@ def test_three_fixture_scenarios_validate_with_pydantic_and_json_schema() -> Non
         "subject-gap_conflict",
     ]
     schema = load_json(SCHEMA_PATH)
+    Draft202012Validator.check_schema(schema)
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
     for path in FIXTURE_PATHS:
         payload = load_json(path)
@@ -50,6 +57,19 @@ def test_three_fixture_scenarios_validate_with_pydantic_and_json_schema() -> Non
 def test_fixture_references_are_internally_consistent() -> None:
     for path in FIXTURE_PATHS:
         fixture = FixtureV1.model_validate(load_json(path))
+        validate_protocol_integrity(
+            fixture.rule_set,
+            expected_official_codes=[
+                "IN-01",
+                "EX-01",
+                "EX-02",
+                "EX-03",
+                "EX-04",
+                "REQ-01",
+                "REQ-02",
+            ],
+        )
+        validate_fixture_scope(fixture)
         span_ids = {item.evidence_span_id for item in fixture.evidence_spans}
         fact_ids = {item.fact_id for item in fixture.facts}
         component_ids = {
@@ -102,7 +122,7 @@ def test_fixture_references_are_internally_consistent() -> None:
             assert assessment.gate_result_id in gate_ids
             assert set(assessment.action_ids) <= action_ids
         for call in fixture.agent_calls:
-            assert call.gate_result_id in gate_ids
+            assert set(call.gate_result_ids) <= gate_ids
             assert call.prompt_version_id in prompt_by_id
             assert prompt_by_id[call.prompt_version_id].node == call.node
             assert call.model_config_id in model_ids
@@ -152,9 +172,88 @@ def test_openapi_non_success_responses_use_versioned_error_envelope() -> None:
                     assert schema == {"$ref": "#/components/schemas/ErrorEnvelope"}
 
 
+def test_openapi_paths_declare_parameters_requests_and_success_schemas() -> None:
+    openapi = load_json(OPENAPI_PATH)
+    for path, path_item in openapi["paths"].items():
+        parameter_names = {
+            item[1:-1]
+            for item in path.split("/")
+            if item.startswith("{") and item.endswith("}")
+        }
+        for operation in path_item.values():
+            declared = {
+                parameter["name"]
+                for parameter in operation.get("parameters", [])
+                if parameter["in"] == "path" and parameter["required"] is True
+            }
+            assert declared == parameter_names
+            success = operation["responses"]["200"]
+            assert success["content"]["application/json"]["schema"]["$ref"].startswith(
+                "#/components/schemas/"
+            )
+    override = openapi["paths"]["/api/v2/actions/{action_id}/override"]["post"]
+    assert override["requestBody"]["required"] is True
+    assert override["requestBody"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ActionOverrideCommand"
+    }
+
+
 def test_generated_schema_matches_current_contract_model() -> None:
     expected = FixtureV1.model_json_schema(ref_template="#/$defs/{model}")
     actual = load_json(SCHEMA_PATH)
     actual.pop("$id")
     actual.pop("$schema")
     assert actual == expected
+
+    expected_agent = AgentContractsV1.model_json_schema(ref_template="#/$defs/{model}")
+    actual_agent = load_json(AGENT_SCHEMA_PATH)
+    Draft202012Validator.check_schema(actual_agent)
+    actual_agent.pop("$id")
+    actual_agent.pop("$schema")
+    assert actual_agent == expected_agent
+
+    expected_uat = UatWorkspaceFixture.model_json_schema(ref_template="#/$defs/{model}")
+    actual_uat = load_json(UAT_SCHEMA_PATH)
+    Draft202012Validator.check_schema(actual_uat)
+    actual_uat.pop("$id")
+    actual_uat.pop("$schema")
+    assert actual_uat == expected_uat
+
+
+def test_uat_workspace_has_executable_multistage_coverage() -> None:
+    payload = load_json(UAT_FIXTURE_PATH)
+    schema = load_json(UAT_SCHEMA_PATH)
+    Draft202012Validator(schema, format_checker=FormatChecker()).validate(payload)
+    workspace = UatWorkspaceFixture.model_validate(payload)
+    assert len(workspace.episodes) == 12
+    assert len({item.subject.subject_id for item in workspace.episodes}) == 6
+    for fixture in workspace.episodes:
+        validate_fixture_scope(fixture)
+        validate_protocol_integrity(
+            fixture.rule_set,
+            expected_official_codes=[
+                "IN-01",
+                "EX-01",
+                "EX-02",
+                "EX-03",
+                "EX-04",
+                "REQ-01",
+                "REQ-02",
+            ],
+        )
+
+
+def test_stage_isolation_gate_rejects_cross_project_episode() -> None:
+    fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
+    invalid_episode = fixture.review_episode.model_copy(update={"project_id": "project-other"})
+    invalid_fixture = fixture.model_copy(update={"review_episode": invalid_episode})
+    with pytest.raises(ValueError, match="project_id"):
+        validate_fixture_scope(invalid_fixture)
+
+
+def test_stage_isolation_gate_rejects_future_stage_source() -> None:
+    fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
+    future_document = fixture.source_documents[0].model_copy(update={"review_stage": "baseline"})
+    invalid_fixture = fixture.model_copy(update={"source_documents": [future_document]})
+    with pytest.raises(ValueError, match="未来阶段"):
+        validate_fixture_scope(invalid_fixture)

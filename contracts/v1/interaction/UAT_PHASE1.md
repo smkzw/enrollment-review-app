@@ -7,11 +7,13 @@
 | 合同标识 | `enrollment-review/v1/uat-phase1` |
 | 目标 | 验证医学监查员能否在不理解电脑或人工智能内部实现的前提下，完成首屏进入、项目/阶段、方案、看板、受试者、Patient Profile、规则/证据、缺口/行动、批量和恢复任务 |
 | 被测对象 | Phase 1 真实 React 前端壳与 `fixture/v1` 结构化示例数据；不得以旧 Markdown 或模型自由文本作为界面真相 |
-| 样本内容 | 仅使用去标识化或合成的三类示例受试者：未发现明确障碍、明确障碍、缺口/冲突；不得使用真实病历完成本轮原型 UAT |
+| 样本内容 | 使用 `contracts/v1/fixtures/uat-phase1-workspace.json`：6 名合成受试者、每人筛选与基线两个独立 Episode，覆盖未发现明确障碍、明确障碍、缺口/冲突三类情形；不得使用真实病历完成本轮原型 UAT |
 | 当前状态 | Phase 0.5 草案；通过脚本和指标后仍须用户明确批准，才能冻结默认首屏、术语、页面架构、信息密度和主要路径 |
 | 非目标 | 本轮不证明临床准确性、不宣称后端已实现、不进行真实临床重审，不把 UAT 结果当作最终入组决定 |
 
 ## 1. 参与者、环境和操作定义
+
+工作区 Fixture 由 `UatWorkspaceFixture` 和 `uat-phase1-workspace.schema.json` 约束。它必须包含 12 个 Episode、筛选全量与基线增量快照链、四级 EvidenceSpan、主要缺口与行动类型、至少 6 类 Patient Profile 事件、方案新增/删除/逻辑或时间窗变化，以及 Job 失败、重试、Checkpoint 和完成事件；任一前置条件缺失时不得开始 UAT。
 
 ### 1.1 样本量
 

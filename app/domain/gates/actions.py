@@ -2,18 +2,11 @@ from __future__ import annotations
 
 from app.domain.contracts.enums import BlockingLevel, GapType
 from app.domain.contracts.review import ActionRequest
+from app.domain.policies import derive_action_blocking_level
 
 
 class ActionGateError(ValueError):
     pass
-
-
-def derive_action_blocking_level(gap_type: GapType) -> BlockingLevel:
-    if gap_type == GapType.PROVENANCE_FOLLOWUP:
-        return BlockingLevel.NONE
-    if gap_type == GapType.FUTURE_STAGE_NOT_DUE:
-        return BlockingLevel.ATTENTION
-    return BlockingLevel.BLOCKING
 
 
 def validate_action_request(action: ActionRequest) -> None:

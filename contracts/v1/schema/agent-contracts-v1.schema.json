@@ -1,167 +1,5 @@
 {
   "$defs": {
-    "ActionRequest": {
-      "additionalProperties": false,
-      "properties": {
-        "acceptable_evidence": {
-          "minLength": 1,
-          "title": "Acceptable Evidence",
-          "type": "string"
-        },
-        "action_id": {
-          "minLength": 1,
-          "title": "Action Id",
-          "type": "string"
-        },
-        "blocking_level": {
-          "$ref": "#/$defs/BlockingLevel"
-        },
-        "due_stage": {
-          "$ref": "#/$defs/ReviewStage"
-        },
-        "gap_type": {
-          "$ref": "#/$defs/GapType"
-        },
-        "recompute_scope": {
-          "items": {
-            "type": "string"
-          },
-          "minItems": 1,
-          "title": "Recompute Scope",
-          "type": "array"
-        },
-        "requested_action": {
-          "minLength": 1,
-          "title": "Requested Action",
-          "type": "string"
-        },
-        "revision": {
-          "default": 1,
-          "minimum": 1,
-          "title": "Revision",
-          "type": "integer"
-        },
-        "rule_component_id": {
-          "minLength": 1,
-          "title": "Rule Component Id",
-          "type": "string"
-        },
-        "schema_version": {
-          "const": "fixture/v1",
-          "default": "fixture/v1",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "state": {
-          "$ref": "#/$defs/ActionState"
-        },
-        "target_party": {
-          "$ref": "#/$defs/ActionTarget"
-        },
-        "transitions": {
-          "items": {
-            "$ref": "#/$defs/ActionTransition"
-          },
-          "title": "Transitions",
-          "type": "array"
-        },
-        "trigger_evidence_span_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Trigger Evidence Span Id"
-        }
-      },
-      "required": [
-        "action_id",
-        "rule_component_id",
-        "gap_type",
-        "target_party",
-        "requested_action",
-        "acceptable_evidence",
-        "due_stage",
-        "blocking_level",
-        "state",
-        "recompute_scope"
-      ],
-      "title": "ActionRequest",
-      "type": "object"
-    },
-    "ActionState": {
-      "enum": [
-        "open",
-        "closed_system",
-        "closed_manual",
-        "reopened",
-        "superseded"
-      ],
-      "title": "ActionState",
-      "type": "string"
-    },
-    "ActionTarget": {
-      "enum": [
-        "investigator",
-        "crc",
-        "cra",
-        "sponsor_medical_or_project"
-      ],
-      "title": "ActionTarget",
-      "type": "string"
-    },
-    "ActionTransition": {
-      "additionalProperties": false,
-      "properties": {
-        "evidence_span_ids": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Evidence Span Ids",
-          "type": "array"
-        },
-        "from_state": {
-          "$ref": "#/$defs/ActionState"
-        },
-        "occurred_at": {
-          "format": "date-time",
-          "title": "Occurred At",
-          "type": "string"
-        },
-        "reason": {
-          "minLength": 1,
-          "title": "Reason",
-          "type": "string"
-        },
-        "schema_version": {
-          "const": "fixture/v1",
-          "default": "fixture/v1",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "to_state": {
-          "$ref": "#/$defs/ActionState"
-        },
-        "transition_id": {
-          "minLength": 1,
-          "title": "Transition Id",
-          "type": "string"
-        }
-      },
-      "required": [
-        "transition_id",
-        "from_state",
-        "to_state",
-        "occurred_at",
-        "reason"
-      ],
-      "title": "ActionTransition",
-      "type": "object"
-    },
     "AgentCallContract": {
       "additionalProperties": false,
       "properties": {
@@ -660,15 +498,6 @@
       "title": "AtomicPredicate",
       "type": "object"
     },
-    "BlockingLevel": {
-      "enum": [
-        "none",
-        "attention",
-        "blocking"
-      ],
-      "title": "BlockingLevel",
-      "type": "string"
-    },
     "BoundingBox": {
       "additionalProperties": false,
       "properties": {
@@ -888,6 +717,153 @@
       "title": "ConflictGroup",
       "type": "object"
     },
+    "CoverageSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "duplicate_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Duplicate Refs",
+          "type": "array"
+        },
+        "missing_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Refs",
+          "type": "array"
+        },
+        "processed_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Processed Refs",
+          "type": "array"
+        },
+        "schema_version": {
+          "const": "fixture/v1",
+          "default": "fixture/v1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "title": "CoverageSummary",
+      "type": "object"
+    },
+    "CriticAction": {
+      "enum": [
+        "veto",
+        "downrank",
+        "open_action",
+        "none"
+      ],
+      "title": "CriticAction",
+      "type": "string"
+    },
+    "CriticRun": {
+      "additionalProperties": false,
+      "properties": {
+        "affected_scope": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Affected Scope",
+          "type": "array"
+        },
+        "assessment_candidate_id": {
+          "minLength": 1,
+          "title": "Assessment Candidate Id",
+          "type": "string"
+        },
+        "created_by_agent_call_id": {
+          "minLength": 1,
+          "title": "Created By Agent Call Id",
+          "type": "string"
+        },
+        "critic_run_id": {
+          "minLength": 1,
+          "title": "Critic Run Id",
+          "type": "string"
+        },
+        "disposition": {
+          "$ref": "#/$defs/CriticAction"
+        },
+        "evidence_span_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Span Ids",
+          "type": "array"
+        },
+        "gate_result_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Gate Result Ids",
+          "type": "array"
+        },
+        "input_scope_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Input Scope Hash",
+          "type": "string"
+        },
+        "rationale": {
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "required_followup": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Required Followup",
+          "type": "array"
+        },
+        "revision": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "fixture/v1",
+          "default": "fixture/v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "trigger_codes": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Trigger Codes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "critic_run_id",
+        "assessment_candidate_id",
+        "disposition",
+        "trigger_codes",
+        "reason_codes",
+        "rationale",
+        "affected_scope",
+        "input_scope_hash",
+        "created_by_agent_call_id"
+      ],
+      "title": "CriticRun",
+      "type": "object"
+    },
     "DatePrecision": {
       "enum": [
         "day",
@@ -936,35 +912,184 @@
       "title": "DateValue",
       "type": "object"
     },
-    "EvidenceExpectation": {
+    "EligibilityAssessmentInput": {
       "additionalProperties": false,
       "properties": {
-        "evidence_span_ids": {
+        "evidence_snapshot_id": {
+          "minLength": 1,
+          "title": "Evidence Snapshot Id",
+          "type": "string"
+        },
+        "expectation_ids": {
           "items": {
             "type": "string"
           },
-          "title": "Evidence Span Ids",
+          "title": "Expectation Ids",
           "type": "array"
         },
-        "expectation_id": {
+        "fact_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fact Ids",
+          "type": "array"
+        },
+        "project_id": {
           "minLength": 1,
-          "title": "Expectation Id",
+          "title": "Project Id",
           "type": "string"
         },
-        "gap_type": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/GapType"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "requirement_id": {
+        "review_episode_id": {
           "minLength": 1,
-          "title": "Requirement Id",
+          "title": "Review Episode Id",
+          "type": "string"
+        },
+        "rule_component_ids": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Rule Component Ids",
+          "type": "array"
+        },
+        "rule_set_id": {
+          "minLength": 1,
+          "title": "Rule Set Id",
+          "type": "string"
+        },
+        "rule_set_revision": {
+          "minimum": 1,
+          "title": "Rule Set Revision",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "fixture/v1",
+          "default": "fixture/v1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "rule_set_id",
+        "rule_set_revision",
+        "review_episode_id",
+        "evidence_snapshot_id",
+        "rule_component_ids"
+      ],
+      "title": "EligibilityAssessmentInput",
+      "type": "object"
+    },
+    "EligibilityAssessmentOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "candidates": {
+          "items": {
+            "$ref": "#/$defs/AssessmentCandidate"
+          },
+          "title": "Candidates",
+          "type": "array"
+        },
+        "coverage": {
+          "$ref": "#/$defs/CoverageSummary"
+        },
+        "created_by_agent_call_id": {
+          "minLength": 1,
+          "title": "Created By Agent Call Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "fixture/v1",
+          "default": "fixture/v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "unresolved_items": {
+          "items": {
+            "$ref": "#/$defs/UnresolvedItem"
+          },
+          "title": "Unresolved Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "candidates",
+        "coverage",
+        "created_by_agent_call_id"
+      ],
+      "title": "EligibilityAssessmentOutput",
+      "type": "object"
+    },
+    "EvidenceNormalizationCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "minLength": 1,
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "clinical_fact_candidates": {
+          "items": {
+            "$ref": "#/$defs/ClinicalFact"
+          },
+          "title": "Clinical Fact Candidates",
+          "type": "array"
+        },
+        "conflict_candidates": {
+          "items": {
+            "$ref": "#/$defs/ConflictGroup"
+          },
+          "title": "Conflict Candidates",
+          "type": "array"
+        },
+        "coverage": {
+          "$ref": "#/$defs/CoverageSummary"
+        },
+        "created_by_agent_call_id": {
+          "minLength": 1,
+          "title": "Created By Agent Call Id",
+          "type": "string"
+        },
+        "evidence_span_candidates": {
+          "items": {
+            "$ref": "#/$defs/EvidenceSpan"
+          },
+          "title": "Evidence Span Candidates",
+          "type": "array"
+        },
+        "schema_version": {
+          "const": "fixture/v1",
+          "default": "fixture/v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "unresolved_items": {
+          "items": {
+            "$ref": "#/$defs/UnresolvedItem"
+          },
+          "title": "Unresolved Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "coverage",
+        "created_by_agent_call_id"
+      ],
+      "title": "EvidenceNormalizationCandidate",
+      "type": "object"
+    },
+    "EvidenceNormalizationInput": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_snapshot_id": {
+          "minLength": 1,
+          "title": "Evidence Snapshot Id",
+          "type": "string"
+        },
+        "project_id": {
+          "minLength": 1,
+          "title": "Project Id",
           "type": "string"
         },
         "review_episode_id": {
@@ -978,17 +1103,37 @@
           "title": "Schema Version",
           "type": "string"
         },
-        "status": {
-          "$ref": "#/$defs/ExpectationStatus"
+        "source_document_version_ids": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Source Document Version Ids",
+          "type": "array"
+        },
+        "source_page_refs": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Source Page Refs",
+          "type": "array"
+        },
+        "subject_id": {
+          "minLength": 1,
+          "title": "Subject Id",
+          "type": "string"
         }
       },
       "required": [
-        "expectation_id",
-        "requirement_id",
+        "project_id",
+        "subject_id",
         "review_episode_id",
-        "status"
+        "evidence_snapshot_id",
+        "source_document_version_ids",
+        "source_page_refs"
       ],
-      "title": "EvidenceExpectation",
+      "title": "EvidenceNormalizationInput",
       "type": "object"
     },
     "EvidenceRequirement": {
@@ -1049,70 +1194,6 @@
         "description"
       ],
       "title": "EvidenceRequirement",
-      "type": "object"
-    },
-    "EvidenceSnapshot": {
-      "additionalProperties": false,
-      "properties": {
-        "created_at": {
-          "format": "date-time",
-          "title": "Created At",
-          "type": "string"
-        },
-        "evidence_snapshot_id": {
-          "minLength": 1,
-          "title": "Evidence Snapshot Id",
-          "type": "string"
-        },
-        "prior_snapshot_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Prior Snapshot Id"
-        },
-        "review_episode_id": {
-          "minLength": 1,
-          "title": "Review Episode Id",
-          "type": "string"
-        },
-        "schema_version": {
-          "const": "fixture/v1",
-          "default": "fixture/v1",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "source_document_version_ids": {
-          "items": {
-            "type": "string"
-          },
-          "minItems": 1,
-          "title": "Source Document Version Ids",
-          "type": "array"
-        },
-        "subject_id": {
-          "minLength": 1,
-          "title": "Subject Id",
-          "type": "string"
-        },
-        "upload_mode": {
-          "$ref": "#/$defs/UploadMode"
-        }
-      },
-      "required": [
-        "evidence_snapshot_id",
-        "subject_id",
-        "review_episode_id",
-        "source_document_version_ids",
-        "upload_mode",
-        "created_at"
-      ],
-      "title": "EvidenceSnapshot",
       "type": "object"
     },
     "EvidenceSpan": {
@@ -1245,17 +1326,6 @@
       "title": "EvidenceSpan",
       "type": "object"
     },
-    "ExpectationStatus": {
-      "enum": [
-        "observed",
-        "observed_weak",
-        "referenced_missing",
-        "absent",
-        "not_due"
-      ],
-      "title": "ExpectationStatus",
-      "type": "string"
-    },
     "FactPolarity": {
       "enum": [
         "affirmed",
@@ -1264,81 +1334,6 @@
       ],
       "title": "FactPolarity",
       "type": "string"
-    },
-    "FinalAssessment": {
-      "additionalProperties": false,
-      "properties": {
-        "action_ids": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Action Ids",
-          "type": "array"
-        },
-        "assessment_id": {
-          "minLength": 1,
-          "title": "Assessment Id",
-          "type": "string"
-        },
-        "blocking_level": {
-          "$ref": "#/$defs/BlockingLevel"
-        },
-        "decision": {
-          "$ref": "#/$defs/ComponentDecision"
-        },
-        "evidence_span_ids": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Evidence Span Ids",
-          "type": "array"
-        },
-        "gap_types": {
-          "items": {
-            "$ref": "#/$defs/GapType"
-          },
-          "title": "Gap Types",
-          "type": "array"
-        },
-        "gate_result_id": {
-          "minLength": 1,
-          "title": "Gate Result Id",
-          "type": "string"
-        },
-        "review_run_id": {
-          "minLength": 1,
-          "title": "Review Run Id",
-          "type": "string"
-        },
-        "rule_component_id": {
-          "minLength": 1,
-          "title": "Rule Component Id",
-          "type": "string"
-        },
-        "schema_version": {
-          "const": "fixture/v1",
-          "default": "fixture/v1",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "used_fact_ids": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Used Fact Ids",
-          "type": "array"
-        }
-      },
-      "required": [
-        "assessment_id",
-        "review_run_id",
-        "rule_component_id",
-        "decision",
-        "blocking_level",
-        "gate_result_id"
-      ],
-      "title": "FinalAssessment",
-      "type": "object"
     },
     "GapType": {
       "enum": [
@@ -1496,109 +1491,6 @@
       "title": "GateResult",
       "type": "object"
     },
-    "JobEvent": {
-      "additionalProperties": false,
-      "properties": {
-        "attempt": {
-          "default": 1,
-          "minimum": 1,
-          "title": "Attempt",
-          "type": "integer"
-        },
-        "checkpoint_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Checkpoint Id"
-        },
-        "event_type": {
-          "$ref": "#/$defs/JobEventType"
-        },
-        "job_event_id": {
-          "minLength": 1,
-          "title": "Job Event Id",
-          "type": "string"
-        },
-        "job_id": {
-          "minLength": 1,
-          "title": "Job Id",
-          "type": "string"
-        },
-        "occurred_at": {
-          "format": "date-time",
-          "title": "Occurred At",
-          "type": "string"
-        },
-        "payload": {
-          "additionalProperties": true,
-          "title": "Payload",
-          "type": "object"
-        },
-        "progress_completed": {
-          "default": 0,
-          "minimum": 0,
-          "title": "Progress Completed",
-          "type": "integer"
-        },
-        "progress_total": {
-          "default": 0,
-          "minimum": 0,
-          "title": "Progress Total",
-          "type": "integer"
-        },
-        "retryable": {
-          "default": false,
-          "title": "Retryable",
-          "type": "boolean"
-        },
-        "schema_version": {
-          "const": "fixture/v1",
-          "default": "fixture/v1",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "step_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Step Id"
-        }
-      },
-      "required": [
-        "job_event_id",
-        "job_id",
-        "event_type",
-        "occurred_at"
-      ],
-      "title": "JobEvent",
-      "type": "object"
-    },
-    "JobEventType": {
-      "enum": [
-        "created",
-        "step_started",
-        "step_completed",
-        "step_failed",
-        "retry_scheduled",
-        "cancel_requested",
-        "cancelled",
-        "completed"
-      ],
-      "title": "JobEventType",
-      "type": "string"
-    },
     "LocatorPrecision": {
       "enum": [
         "bbox",
@@ -1718,242 +1610,6 @@
       "title": "ModelConfigContract",
       "type": "object"
     },
-    "PatientProfile": {
-      "additionalProperties": false,
-      "properties": {
-        "events": {
-          "items": {
-            "$ref": "#/$defs/PatientProfileEvent"
-          },
-          "title": "Events",
-          "type": "array"
-        },
-        "highlighted_event_ids": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Highlighted Event Ids",
-          "type": "array"
-        },
-        "missing_expectation_ids": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Missing Expectation Ids",
-          "type": "array"
-        },
-        "patient_profile_id": {
-          "minLength": 1,
-          "title": "Patient Profile Id",
-          "type": "string"
-        },
-        "review_episode_id": {
-          "minLength": 1,
-          "title": "Review Episode Id",
-          "type": "string"
-        },
-        "schema_version": {
-          "const": "fixture/v1",
-          "default": "fixture/v1",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "stale": {
-          "default": false,
-          "title": "Stale",
-          "type": "boolean"
-        },
-        "subject_id": {
-          "minLength": 1,
-          "title": "Subject Id",
-          "type": "string"
-        }
-      },
-      "required": [
-        "patient_profile_id",
-        "subject_id",
-        "review_episode_id",
-        "events"
-      ],
-      "title": "PatientProfile",
-      "type": "object"
-    },
-    "PatientProfileEvent": {
-      "additionalProperties": false,
-      "properties": {
-        "end_date": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/DateValue"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "event_id": {
-          "minLength": 1,
-          "title": "Event Id",
-          "type": "string"
-        },
-        "event_type": {
-          "minLength": 1,
-          "title": "Event Type",
-          "type": "string"
-        },
-        "evidence_span_ids": {
-          "items": {
-            "type": "string"
-          },
-          "minItems": 1,
-          "title": "Evidence Span Ids",
-          "type": "array"
-        },
-        "fact_ids": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Fact Ids",
-          "type": "array"
-        },
-        "has_trend_change": {
-          "default": false,
-          "title": "Has Trend Change",
-          "type": "boolean"
-        },
-        "is_abnormal": {
-          "default": false,
-          "title": "Is Abnormal",
-          "type": "boolean"
-        },
-        "is_critical": {
-          "default": false,
-          "title": "Is Critical",
-          "type": "boolean"
-        },
-        "lane": {
-          "$ref": "#/$defs/ProfileLane"
-        },
-        "related_rule_component_ids": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Related Rule Component Ids",
-          "type": "array"
-        },
-        "risk_labels": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Risk Labels",
-          "type": "array"
-        },
-        "schema_version": {
-          "const": "fixture/v1",
-          "default": "fixture/v1",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "start_date": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/DateValue"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "title": {
-          "minLength": 1,
-          "title": "Title",
-          "type": "string"
-        }
-      },
-      "required": [
-        "event_id",
-        "lane",
-        "event_type",
-        "title",
-        "evidence_span_ids"
-      ],
-      "title": "PatientProfileEvent",
-      "type": "object"
-    },
-    "ProfileLane": {
-      "enum": [
-        "study_milestone",
-        "demographics",
-        "target_disease",
-        "symptoms_signs",
-        "medical_history",
-        "medication",
-        "non_drug_treatment",
-        "test_exam_score",
-        "allergy_infection_immune",
-        "reproductive",
-        "social_environmental",
-        "special_history",
-        "evidence_quality"
-      ],
-      "title": "ProfileLane",
-      "type": "string"
-    },
-    "Project": {
-      "additionalProperties": false,
-      "properties": {
-        "project_code": {
-          "minLength": 1,
-          "title": "Project Code",
-          "type": "string"
-        },
-        "project_id": {
-          "minLength": 1,
-          "title": "Project Id",
-          "type": "string"
-        },
-        "project_name": {
-          "minLength": 1,
-          "title": "Project Name",
-          "type": "string"
-        },
-        "protocol_version": {
-          "$ref": "#/$defs/ProtocolDocumentVersion"
-        },
-        "revision": {
-          "default": 1,
-          "minimum": 1,
-          "title": "Revision",
-          "type": "integer"
-        },
-        "rule_set_id": {
-          "minLength": 1,
-          "title": "Rule Set Id",
-          "type": "string"
-        },
-        "schema_version": {
-          "const": "fixture/v1",
-          "default": "fixture/v1",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "study_phase": {
-          "$ref": "#/$defs/StudyPhase"
-        }
-      },
-      "required": [
-        "project_id",
-        "project_code",
-        "project_name",
-        "study_phase",
-        "protocol_version",
-        "rule_set_id"
-      ],
-      "title": "Project",
-      "type": "object"
-    },
     "PromptVersion": {
       "additionalProperties": false,
       "properties": {
@@ -1991,26 +1647,35 @@
       "title": "PromptVersion",
       "type": "object"
     },
-    "ProtocolDocumentVersion": {
+    "ProtocolDeconstructionDraft": {
       "additionalProperties": false,
       "properties": {
-        "official_date": {
-          "$ref": "#/$defs/DateValue"
+        "coverage": {
+          "$ref": "#/$defs/CoverageSummary"
         },
-        "official_version": {
+        "created_by_agent_call_id": {
           "minLength": 1,
-          "title": "Official Version",
+          "title": "Created By Agent Call Id",
           "type": "string"
         },
-        "protocol_code": {
+        "draft_id": {
           "minLength": 1,
-          "title": "Protocol Code",
+          "title": "Draft Id",
           "type": "string"
         },
-        "protocol_version_id": {
-          "minLength": 1,
-          "title": "Protocol Version Id",
-          "type": "string"
+        "proposed_rules": {
+          "items": {
+            "$ref": "#/$defs/Rule"
+          },
+          "title": "Proposed Rules",
+          "type": "array"
+        },
+        "proposed_workflow_stages": {
+          "items": {
+            "$ref": "#/$defs/WorkflowStage"
+          },
+          "title": "Proposed Workflow Stages",
+          "type": "array"
         },
         "schema_version": {
           "const": "fixture/v1",
@@ -2018,83 +1683,57 @@
           "title": "Schema Version",
           "type": "string"
         },
-        "sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Sha256",
-          "type": "string"
+        "source_refs": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Source Refs",
+          "type": "array"
+        },
+        "unresolved_items": {
+          "items": {
+            "$ref": "#/$defs/UnresolvedItem"
+          },
+          "title": "Unresolved Items",
+          "type": "array"
         }
       },
       "required": [
-        "protocol_version_id",
-        "protocol_code",
-        "official_version",
-        "official_date",
-        "sha256"
+        "draft_id",
+        "proposed_rules",
+        "proposed_workflow_stages",
+        "coverage",
+        "source_refs",
+        "created_by_agent_call_id"
       ],
-      "title": "ProtocolDocumentVersion",
+      "title": "ProtocolDeconstructionDraft",
       "type": "object"
     },
-    "ReviewEpisode": {
+    "ProtocolDeconstructionInput": {
       "additionalProperties": false,
       "properties": {
-        "anchor_dates": {
-          "additionalProperties": {
-            "$ref": "#/$defs/DateValue"
+        "interpretation_source_ids": {
+          "items": {
+            "type": "string"
           },
-          "propertyNames": {
-            "$ref": "#/$defs/AnchorType"
-          },
-          "title": "Anchor Dates",
-          "type": "object"
-        },
-        "due_at": {
-          "anyOf": [
-            {
-              "format": "date-time",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Due At"
-        },
-        "evidence_snapshot_id": {
-          "minLength": 1,
-          "title": "Evidence Snapshot Id",
-          "type": "string"
+          "title": "Interpretation Source Ids",
+          "type": "array"
         },
         "project_id": {
           "minLength": 1,
           "title": "Project Id",
           "type": "string"
         },
+        "protocol_file_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Protocol File Sha256",
+          "type": "string"
+        },
         "protocol_version_id": {
           "minLength": 1,
           "title": "Protocol Version Id",
           "type": "string"
-        },
-        "review_episode_id": {
-          "minLength": 1,
-          "title": "Review Episode Id",
-          "type": "string"
-        },
-        "revision": {
-          "default": 1,
-          "minimum": 1,
-          "title": "Revision",
-          "type": "integer"
-        },
-        "rule_set_id": {
-          "minLength": 1,
-          "title": "Rule Set Id",
-          "type": "string"
-        },
-        "rule_set_revision": {
-          "minimum": 1,
-          "title": "Rule Set Revision",
-          "type": "integer"
         },
         "schema_version": {
           "const": "fixture/v1",
@@ -2102,174 +1741,22 @@
           "title": "Schema Version",
           "type": "string"
         },
-        "stage": {
-          "$ref": "#/$defs/ReviewStage"
-        },
-        "study_phase": {
-          "$ref": "#/$defs/StudyPhase"
-        },
-        "subject_id": {
-          "minLength": 1,
-          "title": "Subject Id",
-          "type": "string"
+        "source_page_refs": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Source Page Refs",
+          "type": "array"
         }
       },
       "required": [
-        "review_episode_id",
-        "subject_id",
         "project_id",
-        "rule_set_id",
-        "study_phase",
-        "stage",
         "protocol_version_id",
-        "rule_set_revision",
-        "evidence_snapshot_id"
+        "protocol_file_sha256",
+        "source_page_refs"
       ],
-      "title": "ReviewEpisode",
-      "type": "object"
-    },
-    "ReviewRun": {
-      "additionalProperties": false,
-      "properties": {
-        "completed_at": {
-          "anyOf": [
-            {
-              "format": "date-time",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Completed At"
-        },
-        "evidence_snapshot_id": {
-          "minLength": 1,
-          "title": "Evidence Snapshot Id",
-          "type": "string"
-        },
-        "protocol_version_id": {
-          "minLength": 1,
-          "title": "Protocol Version Id",
-          "type": "string"
-        },
-        "review_episode_id": {
-          "minLength": 1,
-          "title": "Review Episode Id",
-          "type": "string"
-        },
-        "review_run_id": {
-          "minLength": 1,
-          "title": "Review Run Id",
-          "type": "string"
-        },
-        "rule_set_revision": {
-          "minimum": 1,
-          "title": "Rule Set Revision",
-          "type": "integer"
-        },
-        "schema_version": {
-          "const": "fixture/v1",
-          "default": "fixture/v1",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "started_at": {
-          "format": "date-time",
-          "title": "Started At",
-          "type": "string"
-        },
-        "supersedes_review_run_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Supersedes Review Run Id"
-        }
-      },
-      "required": [
-        "review_run_id",
-        "review_episode_id",
-        "protocol_version_id",
-        "rule_set_revision",
-        "evidence_snapshot_id",
-        "started_at"
-      ],
-      "title": "ReviewRun",
-      "type": "object"
-    },
-    "ReviewRunDiff": {
-      "additionalProperties": false,
-      "properties": {
-        "changed_assessment_ids": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Changed Assessment Ids",
-          "type": "array"
-        },
-        "changed_fact_ids": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Changed Fact Ids",
-          "type": "array"
-        },
-        "closed_action_ids": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Closed Action Ids",
-          "type": "array"
-        },
-        "current_review_run_id": {
-          "minLength": 1,
-          "title": "Current Review Run Id",
-          "type": "string"
-        },
-        "opened_action_ids": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Opened Action Ids",
-          "type": "array"
-        },
-        "prior_review_run_id": {
-          "minLength": 1,
-          "title": "Prior Review Run Id",
-          "type": "string"
-        },
-        "review_run_diff_id": {
-          "minLength": 1,
-          "title": "Review Run Diff Id",
-          "type": "string"
-        },
-        "schema_version": {
-          "const": "fixture/v1",
-          "default": "fixture/v1",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "stale_projection_ids": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Stale Projection Ids",
-          "type": "array"
-        }
-      },
-      "required": [
-        "review_run_diff_id",
-        "prior_review_run_id",
-        "current_review_run_id"
-      ],
-      "title": "ReviewRunDiff",
+      "title": "ProtocolDeconstructionInput",
       "type": "object"
     },
     "ReviewStage": {
@@ -2432,52 +1919,6 @@
       "title": "RuleKind",
       "type": "string"
     },
-    "RuleSet": {
-      "additionalProperties": false,
-      "properties": {
-        "protocol_version_id": {
-          "minLength": 1,
-          "title": "Protocol Version Id",
-          "type": "string"
-        },
-        "revision": {
-          "default": 1,
-          "minimum": 1,
-          "title": "Revision",
-          "type": "integer"
-        },
-        "rule_set_id": {
-          "minLength": 1,
-          "title": "Rule Set Id",
-          "type": "string"
-        },
-        "rules": {
-          "items": {
-            "$ref": "#/$defs/Rule"
-          },
-          "minItems": 1,
-          "title": "Rules",
-          "type": "array"
-        },
-        "schema_version": {
-          "const": "fixture/v1",
-          "default": "fixture/v1",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "study_phase": {
-          "$ref": "#/$defs/StudyPhase"
-        }
-      },
-      "required": [
-        "rule_set_id",
-        "protocol_version_id",
-        "study_phase",
-        "rules"
-      ],
-      "title": "RuleSet",
-      "type": "object"
-    },
     "RunOutcome": {
       "enum": [
         "accepted",
@@ -2489,21 +1930,42 @@
       "title": "RunOutcome",
       "type": "string"
     },
-    "SourceDocumentVersion": {
+    "SafetyProvenanceCriticInput": {
       "additionalProperties": false,
       "properties": {
-        "document_type": {
-          "minLength": 1,
-          "title": "Document Type",
-          "type": "string"
+        "assessment_candidate_ids": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Assessment Candidate Ids",
+          "type": "array"
         },
-        "file_name": {
-          "minLength": 1,
-          "title": "File Name",
-          "type": "string"
+        "evidence_span_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Span Ids",
+          "type": "array"
         },
-        "review_stage": {
-          "$ref": "#/$defs/ReviewStage"
+        "expectation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Expectation Ids",
+          "type": "array"
+        },
+        "fact_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fact Ids",
+          "type": "array"
+        },
+        "input_scope_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Input Scope Hash",
+          "type": "string"
         },
         "schema_version": {
           "const": "fixture/v1",
@@ -2511,35 +1973,44 @@
           "title": "Schema Version",
           "type": "string"
         },
-        "sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Sha256",
-          "type": "string"
-        },
-        "source_document_version_id": {
-          "minLength": 1,
-          "title": "Source Document Version Id",
-          "type": "string"
-        },
-        "source_party": {
-          "minLength": 1,
-          "title": "Source Party",
-          "type": "string"
-        },
-        "upload_mode": {
-          "$ref": "#/$defs/UploadMode"
+        "trigger_codes": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Trigger Codes",
+          "type": "array"
         }
       },
       "required": [
-        "source_document_version_id",
-        "file_name",
-        "sha256",
-        "document_type",
-        "source_party",
-        "upload_mode",
-        "review_stage"
+        "assessment_candidate_ids",
+        "trigger_codes",
+        "input_scope_hash"
       ],
-      "title": "SourceDocumentVersion",
+      "title": "SafetyProvenanceCriticInput",
+      "type": "object"
+    },
+    "SafetyProvenanceCriticOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "critic_runs": {
+          "items": {
+            "$ref": "#/$defs/CriticRun"
+          },
+          "title": "Critic Runs",
+          "type": "array"
+        },
+        "schema_version": {
+          "const": "fixture/v1",
+          "default": "fixture/v1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "critic_runs"
+      ],
+      "title": "SafetyProvenanceCriticOutput",
       "type": "object"
     },
     "StudyPhase": {
@@ -2551,94 +2022,6 @@
       ],
       "title": "StudyPhase",
       "type": "string"
-    },
-    "Subject": {
-      "additionalProperties": false,
-      "properties": {
-        "age_years": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Age Years"
-        },
-        "center_code": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Center Code"
-        },
-        "center_name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Center Name"
-        },
-        "project_id": {
-          "minLength": 1,
-          "title": "Project Id",
-          "type": "string"
-        },
-        "revision": {
-          "default": 1,
-          "minimum": 1,
-          "title": "Revision",
-          "type": "integer"
-        },
-        "schema_version": {
-          "const": "fixture/v1",
-          "default": "fixture/v1",
-          "title": "Schema Version",
-          "type": "string"
-        },
-        "sex": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Sex"
-        },
-        "subject_code": {
-          "minLength": 1,
-          "title": "Subject Code",
-          "type": "string"
-        },
-        "subject_id": {
-          "minLength": 1,
-          "title": "Subject Id",
-          "type": "string"
-        }
-      },
-      "required": [
-        "subject_id",
-        "subject_code",
-        "project_id"
-      ],
-      "title": "Subject",
-      "type": "object"
     },
     "TimeConstraint": {
       "additionalProperties": false,
@@ -2710,13 +2093,42 @@
       "title": "TimeDirection",
       "type": "string"
     },
-    "UploadMode": {
-      "enum": [
-        "full",
-        "incremental"
+    "UnresolvedItem": {
+      "additionalProperties": false,
+      "properties": {
+        "affected_scope": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Affected Scope",
+          "type": "array"
+        },
+        "code": {
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "fixture/v1",
+          "default": "fixture/v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Refs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "code",
+        "affected_scope"
       ],
-      "title": "UploadMode",
-      "type": "string"
+      "title": "UnresolvedItem",
+      "type": "object"
     },
     "WorkflowStage": {
       "additionalProperties": false,
@@ -2774,181 +2186,67 @@
       "type": "object"
     }
   },
-  "$id": "https://local.enrollment-review.invalid/contracts/fixture-v1.schema.json",
+  "$id": "https://local.enrollment-review.invalid/contracts/agent-contracts-v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
-    "actions": {
-      "items": {
-        "$ref": "#/$defs/ActionRequest"
-      },
-      "title": "Actions",
-      "type": "array"
+    "agent_call": {
+      "$ref": "#/$defs/AgentCallContract"
     },
-    "agent_calls": {
-      "items": {
-        "$ref": "#/$defs/AgentCallContract"
-      },
-      "title": "Agent Calls",
-      "type": "array"
+    "eligibility_assessment_input": {
+      "$ref": "#/$defs/EligibilityAssessmentInput"
     },
-    "assessment_candidates": {
-      "items": {
-        "$ref": "#/$defs/AssessmentCandidate"
-      },
-      "title": "Assessment Candidates",
-      "type": "array"
+    "eligibility_assessment_output": {
+      "$ref": "#/$defs/EligibilityAssessmentOutput"
     },
-    "conflict_groups": {
-      "items": {
-        "$ref": "#/$defs/ConflictGroup"
-      },
-      "title": "Conflict Groups",
-      "type": "array"
+    "evidence_normalization_input": {
+      "$ref": "#/$defs/EvidenceNormalizationInput"
     },
-    "evidence_expectations": {
-      "items": {
-        "$ref": "#/$defs/EvidenceExpectation"
-      },
-      "title": "Evidence Expectations",
-      "type": "array"
+    "evidence_normalization_output": {
+      "$ref": "#/$defs/EvidenceNormalizationCandidate"
     },
-    "evidence_snapshot": {
-      "$ref": "#/$defs/EvidenceSnapshot"
+    "gate_result": {
+      "$ref": "#/$defs/GateResult"
     },
-    "evidence_spans": {
-      "items": {
-        "$ref": "#/$defs/EvidenceSpan"
-      },
-      "title": "Evidence Spans",
-      "type": "array"
+    "model_configuration": {
+      "$ref": "#/$defs/ModelConfigContract"
     },
-    "facts": {
-      "items": {
-        "$ref": "#/$defs/ClinicalFact"
-      },
-      "title": "Facts",
-      "type": "array"
+    "prompt_version": {
+      "$ref": "#/$defs/PromptVersion"
     },
-    "final_assessments": {
-      "items": {
-        "$ref": "#/$defs/FinalAssessment"
-      },
-      "title": "Final Assessments",
-      "type": "array"
+    "protocol_deconstruction_input": {
+      "$ref": "#/$defs/ProtocolDeconstructionInput"
     },
-    "fixture_id": {
-      "minLength": 1,
-      "title": "Fixture Id",
-      "type": "string"
+    "protocol_deconstruction_output": {
+      "$ref": "#/$defs/ProtocolDeconstructionDraft"
     },
-    "gate_results": {
-      "items": {
-        "$ref": "#/$defs/GateResult"
-      },
-      "title": "Gate Results",
-      "type": "array"
+    "safety_provenance_critic_input": {
+      "$ref": "#/$defs/SafetyProvenanceCriticInput"
     },
-    "job_events": {
-      "items": {
-        "$ref": "#/$defs/JobEvent"
-      },
-      "title": "Job Events",
-      "type": "array"
-    },
-    "model_configs": {
-      "items": {
-        "$ref": "#/$defs/ModelConfigContract"
-      },
-      "title": "Model Configs",
-      "type": "array"
-    },
-    "patient_profile": {
-      "$ref": "#/$defs/PatientProfile"
-    },
-    "project": {
-      "$ref": "#/$defs/Project"
-    },
-    "prompt_versions": {
-      "items": {
-        "$ref": "#/$defs/PromptVersion"
-      },
-      "title": "Prompt Versions",
-      "type": "array"
-    },
-    "review_episode": {
-      "$ref": "#/$defs/ReviewEpisode"
-    },
-    "review_run_diffs": {
-      "items": {
-        "$ref": "#/$defs/ReviewRunDiff"
-      },
-      "title": "Review Run Diffs",
-      "type": "array"
-    },
-    "review_runs": {
-      "items": {
-        "$ref": "#/$defs/ReviewRun"
-      },
-      "title": "Review Runs",
-      "type": "array"
-    },
-    "rule_set": {
-      "$ref": "#/$defs/RuleSet"
-    },
-    "scenario": {
-      "minLength": 1,
-      "title": "Scenario",
-      "type": "string"
+    "safety_provenance_critic_output": {
+      "$ref": "#/$defs/SafetyProvenanceCriticOutput"
     },
     "schema_version": {
       "const": "fixture/v1",
       "default": "fixture/v1",
       "title": "Schema Version",
       "type": "string"
-    },
-    "source_documents": {
-      "items": {
-        "$ref": "#/$defs/SourceDocumentVersion"
-      },
-      "title": "Source Documents",
-      "type": "array"
-    },
-    "subject": {
-      "$ref": "#/$defs/Subject"
-    },
-    "workflow_stages": {
-      "items": {
-        "$ref": "#/$defs/WorkflowStage"
-      },
-      "title": "Workflow Stages",
-      "type": "array"
     }
   },
   "required": [
-    "fixture_id",
-    "scenario",
-    "project",
-    "rule_set",
-    "workflow_stages",
-    "subject",
-    "review_episode",
-    "evidence_snapshot",
-    "review_runs",
-    "source_documents",
-    "evidence_spans",
-    "evidence_expectations",
-    "facts",
-    "patient_profile",
-    "assessment_candidates",
-    "final_assessments",
-    "actions",
-    "prompt_versions",
-    "model_configs",
-    "agent_calls",
-    "gate_results",
-    "job_events"
+    "prompt_version",
+    "model_configuration",
+    "agent_call",
+    "gate_result",
+    "protocol_deconstruction_input",
+    "protocol_deconstruction_output",
+    "evidence_normalization_input",
+    "evidence_normalization_output",
+    "eligibility_assessment_input",
+    "eligibility_assessment_output",
+    "safety_provenance_critic_input",
+    "safety_provenance_critic_output"
   ],
-  "title": "FixtureV1",
+  "title": "AgentContractsV1",
   "type": "object"
 }

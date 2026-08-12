@@ -1340,6 +1340,183 @@
       "title": "FinalAssessment",
       "type": "object"
     },
+    "FixtureV1": {
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "items": {
+            "$ref": "#/$defs/ActionRequest"
+          },
+          "title": "Actions",
+          "type": "array"
+        },
+        "agent_calls": {
+          "items": {
+            "$ref": "#/$defs/AgentCallContract"
+          },
+          "title": "Agent Calls",
+          "type": "array"
+        },
+        "assessment_candidates": {
+          "items": {
+            "$ref": "#/$defs/AssessmentCandidate"
+          },
+          "title": "Assessment Candidates",
+          "type": "array"
+        },
+        "conflict_groups": {
+          "items": {
+            "$ref": "#/$defs/ConflictGroup"
+          },
+          "title": "Conflict Groups",
+          "type": "array"
+        },
+        "evidence_expectations": {
+          "items": {
+            "$ref": "#/$defs/EvidenceExpectation"
+          },
+          "title": "Evidence Expectations",
+          "type": "array"
+        },
+        "evidence_snapshot": {
+          "$ref": "#/$defs/EvidenceSnapshot"
+        },
+        "evidence_spans": {
+          "items": {
+            "$ref": "#/$defs/EvidenceSpan"
+          },
+          "title": "Evidence Spans",
+          "type": "array"
+        },
+        "facts": {
+          "items": {
+            "$ref": "#/$defs/ClinicalFact"
+          },
+          "title": "Facts",
+          "type": "array"
+        },
+        "final_assessments": {
+          "items": {
+            "$ref": "#/$defs/FinalAssessment"
+          },
+          "title": "Final Assessments",
+          "type": "array"
+        },
+        "fixture_id": {
+          "minLength": 1,
+          "title": "Fixture Id",
+          "type": "string"
+        },
+        "gate_results": {
+          "items": {
+            "$ref": "#/$defs/GateResult"
+          },
+          "title": "Gate Results",
+          "type": "array"
+        },
+        "job_events": {
+          "items": {
+            "$ref": "#/$defs/JobEvent"
+          },
+          "title": "Job Events",
+          "type": "array"
+        },
+        "model_configs": {
+          "items": {
+            "$ref": "#/$defs/ModelConfigContract"
+          },
+          "title": "Model Configs",
+          "type": "array"
+        },
+        "patient_profile": {
+          "$ref": "#/$defs/PatientProfile"
+        },
+        "project": {
+          "$ref": "#/$defs/Project"
+        },
+        "prompt_versions": {
+          "items": {
+            "$ref": "#/$defs/PromptVersion"
+          },
+          "title": "Prompt Versions",
+          "type": "array"
+        },
+        "review_episode": {
+          "$ref": "#/$defs/ReviewEpisode"
+        },
+        "review_run_diffs": {
+          "items": {
+            "$ref": "#/$defs/ReviewRunDiff"
+          },
+          "title": "Review Run Diffs",
+          "type": "array"
+        },
+        "review_runs": {
+          "items": {
+            "$ref": "#/$defs/ReviewRun"
+          },
+          "title": "Review Runs",
+          "type": "array"
+        },
+        "rule_set": {
+          "$ref": "#/$defs/RuleSet"
+        },
+        "scenario": {
+          "minLength": 1,
+          "title": "Scenario",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "fixture/v1",
+          "default": "fixture/v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_documents": {
+          "items": {
+            "$ref": "#/$defs/SourceDocumentVersion"
+          },
+          "title": "Source Documents",
+          "type": "array"
+        },
+        "subject": {
+          "$ref": "#/$defs/Subject"
+        },
+        "workflow_stages": {
+          "items": {
+            "$ref": "#/$defs/WorkflowStage"
+          },
+          "title": "Workflow Stages",
+          "type": "array"
+        }
+      },
+      "required": [
+        "fixture_id",
+        "scenario",
+        "project",
+        "rule_set",
+        "workflow_stages",
+        "subject",
+        "review_episode",
+        "evidence_snapshot",
+        "review_runs",
+        "source_documents",
+        "evidence_spans",
+        "evidence_expectations",
+        "facts",
+        "patient_profile",
+        "assessment_candidates",
+        "final_assessments",
+        "actions",
+        "prompt_versions",
+        "model_configs",
+        "agent_calls",
+        "gate_results",
+        "job_events"
+      ],
+      "title": "FixtureV1",
+      "type": "object"
+    },
     "GapType": {
       "enum": [
         "record_incomplete",
@@ -1989,6 +2166,69 @@
         "schema_version_id"
       ],
       "title": "PromptVersion",
+      "type": "object"
+    },
+    "ProtocolDiffExample": {
+      "additionalProperties": false,
+      "properties": {
+        "added_rule_codes": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Added Rule Codes",
+          "type": "array"
+        },
+        "changed_logic_or_window_codes": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Changed Logic Or Window Codes",
+          "type": "array"
+        },
+        "current_protocol_version_id": {
+          "minLength": 1,
+          "title": "Current Protocol Version Id",
+          "type": "string"
+        },
+        "deleted_rule_codes": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Deleted Rule Codes",
+          "type": "array"
+        },
+        "proposed_protocol_version_id": {
+          "minLength": 1,
+          "title": "Proposed Protocol Version Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "fixture/v1",
+          "default": "fixture/v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_refs": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Source Refs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "current_protocol_version_id",
+        "proposed_protocol_version_id",
+        "added_rule_codes",
+        "deleted_rule_codes",
+        "changed_logic_or_window_codes",
+        "source_refs"
+      ],
+      "title": "ProtocolDiffExample",
       "type": "object"
     },
     "ProtocolDocumentVersion": {
@@ -2774,132 +3014,20 @@
       "type": "object"
     }
   },
-  "$id": "https://local.enrollment-review.invalid/contracts/fixture-v1.schema.json",
+  "$id": "https://local.enrollment-review.invalid/contracts/uat-phase1-workspace.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
-    "actions": {
+    "episodes": {
       "items": {
-        "$ref": "#/$defs/ActionRequest"
+        "$ref": "#/$defs/FixtureV1"
       },
-      "title": "Actions",
+      "minItems": 12,
+      "title": "Episodes",
       "type": "array"
     },
-    "agent_calls": {
-      "items": {
-        "$ref": "#/$defs/AgentCallContract"
-      },
-      "title": "Agent Calls",
-      "type": "array"
-    },
-    "assessment_candidates": {
-      "items": {
-        "$ref": "#/$defs/AssessmentCandidate"
-      },
-      "title": "Assessment Candidates",
-      "type": "array"
-    },
-    "conflict_groups": {
-      "items": {
-        "$ref": "#/$defs/ConflictGroup"
-      },
-      "title": "Conflict Groups",
-      "type": "array"
-    },
-    "evidence_expectations": {
-      "items": {
-        "$ref": "#/$defs/EvidenceExpectation"
-      },
-      "title": "Evidence Expectations",
-      "type": "array"
-    },
-    "evidence_snapshot": {
-      "$ref": "#/$defs/EvidenceSnapshot"
-    },
-    "evidence_spans": {
-      "items": {
-        "$ref": "#/$defs/EvidenceSpan"
-      },
-      "title": "Evidence Spans",
-      "type": "array"
-    },
-    "facts": {
-      "items": {
-        "$ref": "#/$defs/ClinicalFact"
-      },
-      "title": "Facts",
-      "type": "array"
-    },
-    "final_assessments": {
-      "items": {
-        "$ref": "#/$defs/FinalAssessment"
-      },
-      "title": "Final Assessments",
-      "type": "array"
-    },
-    "fixture_id": {
-      "minLength": 1,
-      "title": "Fixture Id",
-      "type": "string"
-    },
-    "gate_results": {
-      "items": {
-        "$ref": "#/$defs/GateResult"
-      },
-      "title": "Gate Results",
-      "type": "array"
-    },
-    "job_events": {
-      "items": {
-        "$ref": "#/$defs/JobEvent"
-      },
-      "title": "Job Events",
-      "type": "array"
-    },
-    "model_configs": {
-      "items": {
-        "$ref": "#/$defs/ModelConfigContract"
-      },
-      "title": "Model Configs",
-      "type": "array"
-    },
-    "patient_profile": {
-      "$ref": "#/$defs/PatientProfile"
-    },
-    "project": {
-      "$ref": "#/$defs/Project"
-    },
-    "prompt_versions": {
-      "items": {
-        "$ref": "#/$defs/PromptVersion"
-      },
-      "title": "Prompt Versions",
-      "type": "array"
-    },
-    "review_episode": {
-      "$ref": "#/$defs/ReviewEpisode"
-    },
-    "review_run_diffs": {
-      "items": {
-        "$ref": "#/$defs/ReviewRunDiff"
-      },
-      "title": "Review Run Diffs",
-      "type": "array"
-    },
-    "review_runs": {
-      "items": {
-        "$ref": "#/$defs/ReviewRun"
-      },
-      "title": "Review Runs",
-      "type": "array"
-    },
-    "rule_set": {
-      "$ref": "#/$defs/RuleSet"
-    },
-    "scenario": {
-      "minLength": 1,
-      "title": "Scenario",
-      "type": "string"
+    "protocol_diff": {
+      "$ref": "#/$defs/ProtocolDiffExample"
     },
     "schema_version": {
       "const": "fixture/v1",
@@ -2907,48 +3035,17 @@
       "title": "Schema Version",
       "type": "string"
     },
-    "source_documents": {
-      "items": {
-        "$ref": "#/$defs/SourceDocumentVersion"
-      },
-      "title": "Source Documents",
-      "type": "array"
-    },
-    "subject": {
-      "$ref": "#/$defs/Subject"
-    },
-    "workflow_stages": {
-      "items": {
-        "$ref": "#/$defs/WorkflowStage"
-      },
-      "title": "Workflow Stages",
-      "type": "array"
+    "workspace_id": {
+      "minLength": 1,
+      "title": "Workspace Id",
+      "type": "string"
     }
   },
   "required": [
-    "fixture_id",
-    "scenario",
-    "project",
-    "rule_set",
-    "workflow_stages",
-    "subject",
-    "review_episode",
-    "evidence_snapshot",
-    "review_runs",
-    "source_documents",
-    "evidence_spans",
-    "evidence_expectations",
-    "facts",
-    "patient_profile",
-    "assessment_candidates",
-    "final_assessments",
-    "actions",
-    "prompt_versions",
-    "model_configs",
-    "agent_calls",
-    "gate_results",
-    "job_events"
+    "workspace_id",
+    "protocol_diff",
+    "episodes"
   ],
-  "title": "FixtureV1",
+  "title": "UatWorkspaceFixture",
   "type": "object"
 }

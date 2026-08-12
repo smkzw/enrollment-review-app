@@ -18,7 +18,7 @@
 
 ### 1.1 实体与版本
 
-1. 所有持久实体必须带稳定 ID、`schema_version`、创建时间、来源范围和当前 `revision`（不可编辑实体可用固定 revision）。
+1. 所有合同实体必须带 `schema_version` 和稳定 ID；可编辑实体使用 `revision`，运行事件使用时间戳，来源相关实体使用显式来源引用。各类型不得为追求字段齐全而伪造不适用的时间、来源或 revision。
 2. 所有受试者审核结果必须同时绑定 `project_id`、正式方案版本、`rule_set_id`、`rule_set_revision`、`review_episode_id`、`evidence_snapshot_id` 和 `review_run_id`。
 3. `AssessmentCandidate` 与 `FinalAssessment` 是不同类型；候选不能通过类型转换、字段补齐、文本正则或 UI 默认值直接变成最终判断。
 4. `ActionRequest.blocking_level`、节点主状态、分类计数、排序键和 Action 自动关闭结果均由确定性代码计算，不接受 Agent 自由填写。
@@ -98,25 +98,24 @@ sha256(contract_id | node_id | schema_version | prompt_or_code_version |
 
 ### 2.4 通用运行审计字段
 
-每一次 AgentCall、Gate、Projection 和 JobStep 都必须至少记录以下字段；字段缺失时不能宣称该步骤完成：
+`AgentCallContract` 的机器可读字段以 `contracts/v1/schema/fixture-v1.schema.json` 为准，当前至少包括：
 
 | 字段 | 要求 |
 | --- | --- |
-| `run_record_id` | 该运行记录的稳定 ID |
-| `contract_id`、`node_id`、`schema_version` | 合同和节点身份 |
-| `prompt_version` 或 `code_version` | 提示词版本或确定性代码合同版本 |
-| `model_config_id` | Agent 必填并引用不可变的 `ModelConfigContract`；Gate/Projection 可为 `not_applicable` |
+| `agent_call_id`、`node`、`schema_version` | 调用和节点身份 |
+| `output_kind`、`write_scope` | 该节点唯一允许的候选输出类型和写域 |
+| `prompt_version_id`、`model_config_id` | 分别引用不可变的 PromptVersion 与 ModelConfigContract |
 | `input_scope_hash`、`input_revision_map` | 输入范围及每个实体的 revision 哈希 |
 | `project_id`、`subject_id`、`review_episode_id`、`review_run_id` | 适用时必填；不适用明确写 `null` 原因 |
 | `evidence_snapshot_id`、`source_ids` | 事实或判断相关步骤必填 |
 | `idempotency_key` | 按 2.2 计算，重复运行必须可查 |
-| `attempt_no`、`same_session_group_id` | 记录传输重试和同会话修复归属 |
+| `attempt`、`max_attempts`、`same_session_group_id` | 记录传输重试和同会话修复归属 |
 | `started_at`、`finished_at`、`duration_ms` | 时间和耗时 |
 | `outcome`、`error_codes` | `accepted / rejected / stopped / cancelled / partial` 之一及结构化原因 |
 | `output_hash`、`gate_result_ids` | 输出完整性和所依赖 Gate |
 | `recompute_scope` | 受影响的实体、规则组件、阶段或页面范围 |
 | `trigger`、`parent_event_id` | 触发来源和事件链 |
-| `token_usage`、`cost_estimate` | Agent 可获得时记录；缺失要标明未提供，不补猜测 |
+| `input_tokens`、`output_tokens`、`estimated_cost` | 供应商可获得时记录；不可获得时保持 `null`，不补猜测 |
 
 以上字段是运行审计，不作为 Patient Profile 或报告的可见文案。运行记录也不能成为临床判断的来源。
 
@@ -297,12 +296,13 @@ Critic 不接受全项目自由文本，不读取 Agent scratchpad，不读取�
 
 ```text
 gate_result_id
-gate_id
+gate_name
 schema_version = fixture/v1
 code_version = gate_contract/v1
 input_scope_hash
 input_revision_map
-result = pass | reject | blocked | not_applicable
+result = accepted | rejected | blocked
+input_entity_refs[]
 accepted_entity_refs[]
 rejected_entity_refs[]
 error_codes[]
@@ -311,6 +311,7 @@ recompute_scope
 idempotency_key
 parent_event_id
 created_at
+output_hash
 ```
 
 GateResult 是不可变审计事实。后续修正必须产生新 GateResult 和新 revision，不能修改旧结果。
@@ -332,12 +333,12 @@ GateResult 是不可变审计事实。后续修正必须产生新 GateResult 和
 
 ### 7.2.1 Gate 与 Projection 的逐项运行字段
 
-上表的每一行都必须显式带有以下字段，不能因“确定性代码”而省略：
+上表的每一次 Gate 运行都必须实例化 7.1 的 `GateResult`，不能因“确定性代码”而省略：
 
-- `schema_version = fixture/v1`；`prompt_version = not_applicable`；Gate 使用 `code_version = gate_contract/v1`，Projection 使用 `code_version = projection_contract/v1`；
-- `idempotency_key = sha256(kind_id | schema_version | code_version | input_scope_hash | input_revision_map | parent_revision)`；同一输入重算只能复用同一键；
-- `same_session_group_id = not_applicable`。Gate/Projection 不做语义同会话修复；只允许同一输入的纯函数重算。字段级错误由 GateResult 返回给上游 Agent，修复后以新输入 revision 重新执行；
-- 第 2.4 节的 `run_record_id`、节点/门控身份、版本、输入范围哈希、实体 revision、适用项目/受试者/阶段/运行、来源 ID、幂等键、尝试次数、起止时间、结果、错误码、输出哈希、GateResult 关联、重算范围、父事件和资源记录全部必填；不适用字段必须写明原因；
+- `schema_version = fixture/v1`，`code_version = gate_contract/v1`；Gate 不使用 Prompt 或模型配置，也不伪造这两个字段；
+- `idempotency_key` 必须覆盖 Gate 身份、合同版本、输入范围哈希和输入 revision map；同一输入重算只能复用同一键；
+- Gate 不做语义同会话修复；字段级错误由 `error_codes` 返回给上游，修复后以新输入 revision 重新执行；
+- `input_entity_refs / accepted_entity_refs / rejected_entity_refs / affected_scope / recompute_scope` 必须明确记录本次处理的实体和影响范围；
 - Gate 失败只产生 `GateResult = reject/blocked`；Projection 输入不完整只产生不完整投影或停止记录。二者都不能用默认值补齐临床字段，不能把失败显示成成功。
 
 下表进一步固定每一个确定性 Gate/Projection 的幂等输入和专属审计字段。输入、输出、可写实体、禁止动作和停止条件仍以 7.2 与 8 节为准。

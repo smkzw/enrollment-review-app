@@ -24,34 +24,86 @@
       "agent_call_id": "call-clear-1",
       "attempt": 1,
       "duration_ms": 1201,
+      "error_codes": [],
       "estimated_cost": 0.01,
-      "gate_result_id": "gate-clear-1",
+      "evidence_snapshot_id": "snapshot-clear",
+      "finished_at": "2026-08-12T12:00:00Z",
+      "gate_result_ids": [
+        "gate-clear-1"
+      ],
       "idempotency_key": "clear:evidence_normalizer:v1",
+      "input_revision_map": {
+        "snapshot-clear": 1
+      },
       "input_scope_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "input_tokens": 101,
       "max_attempts": 2,
       "model_config_id": "model-baseline-v1",
       "node": "evidence_normalizer",
+      "outcome": "accepted",
+      "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
       "output_kind": "candidate",
+      "output_tokens": 51,
+      "parent_event_id": null,
+      "project_id": "project-synthetic-phase-iii",
       "prompt_version_id": "prompt-evidence_normalizer-v1",
       "raw_output_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "recompute_scope": [
+        "subject-clear"
+      ],
+      "review_episode_id": "episode-clear",
+      "review_run_id": "run-clear",
+      "same_session_group_id": null,
       "schema_version": "fixture/v1",
+      "source_ids": [
+        "document-clear"
+      ],
+      "started_at": "2026-08-12T12:00:00Z",
+      "subject_id": "subject-clear",
+      "trigger": "fixture_generation",
       "write_scope": "evidence_candidate"
     },
     {
       "agent_call_id": "call-clear-2",
       "attempt": 1,
       "duration_ms": 1202,
+      "error_codes": [],
       "estimated_cost": 0.02,
-      "gate_result_id": "gate-clear-2",
+      "evidence_snapshot_id": "snapshot-clear",
+      "finished_at": "2026-08-12T12:00:00Z",
+      "gate_result_ids": [
+        "gate-clear-2"
+      ],
       "idempotency_key": "clear:eligibility_assessor:v1",
+      "input_revision_map": {
+        "snapshot-clear": 1
+      },
       "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "input_tokens": 102,
       "max_attempts": 2,
       "model_config_id": "model-baseline-v1",
       "node": "eligibility_assessor",
+      "outcome": "accepted",
+      "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
       "output_kind": "candidate",
+      "output_tokens": 52,
+      "parent_event_id": null,
+      "project_id": "project-synthetic-phase-iii",
       "prompt_version_id": "prompt-eligibility_assessor-v1",
       "raw_output_hash": "4444444444444444444444444444444444444444444444444444444444444444",
+      "recompute_scope": [
+        "subject-clear"
+      ],
+      "review_episode_id": "episode-clear",
+      "review_run_id": "run-clear",
+      "same_session_group_id": null,
       "schema_version": "fixture/v1",
+      "source_ids": [
+        "document-clear"
+      ],
+      "started_at": "2026-08-12T12:00:00Z",
+      "subject_id": "subject-clear",
+      "trigger": "fixture_generation",
       "write_scope": "assessment_candidate"
     }
   ],
@@ -236,39 +288,121 @@
   "fixture_id": "fixture-clear",
   "gate_results": [
     {
-      "accepted": true,
+      "accepted_entity_refs": [
+        "call-clear-1"
+      ],
+      "affected_scope": [
+        "subject-clear"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
       "gate_name": "agent-output-schema-gate",
       "gate_result_id": "gate-clear-1",
-      "issue_codes": [],
-      "output_entity_ids": [],
+      "idempotency_key": "gate:clear:evidence_normalizer:v1",
+      "input_entity_refs": [
+        "call-clear-1"
+      ],
+      "input_revision_map": {
+        "snapshot-clear": 1
+      },
+      "input_scope_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "subject-clear"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
       "schema_version": "fixture/v1"
     },
     {
-      "accepted": true,
+      "accepted_entity_refs": [
+        "call-clear-2"
+      ],
+      "affected_scope": [
+        "subject-clear"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
       "gate_name": "agent-output-schema-gate",
       "gate_result_id": "gate-clear-2",
-      "issue_codes": [],
-      "output_entity_ids": [],
+      "idempotency_key": "gate:clear:eligibility_assessor:v1",
+      "input_entity_refs": [
+        "call-clear-2"
+      ],
+      "input_revision_map": {
+        "snapshot-clear": 1
+      },
+      "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "subject-clear"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
       "schema_version": "fixture/v1"
     },
     {
-      "accepted": true,
-      "gate_name": "fixture-assessment-gate",
-      "gate_result_id": "gate-clear-in",
-      "issue_codes": [],
-      "output_entity_ids": [
+      "accepted_entity_refs": [
         "assessment-clear-in"
       ],
+      "affected_scope": [
+        "component-in-01"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "fixture-assessment-gate",
+      "gate_result_id": "gate-clear-in",
+      "idempotency_key": "gate:assessment-clear-in",
+      "input_entity_refs": [
+        "run-clear",
+        "component-in-01"
+      ],
+      "input_revision_map": {
+        "run-clear": 1
+      },
+      "input_scope_hash": "e4ff6b7ad9a7e0d6883c114b4d3478980eb65fc6c4ad02f8226cb875987b4676",
+      "output_hash": "64ec56ec1c6be3f858270beed5b13677cf467841ba07924c89de33e7faf5917c",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-in-01"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
       "schema_version": "fixture/v1"
     },
     {
-      "accepted": true,
-      "gate_name": "fixture-assessment-gate",
-      "gate_result_id": "gate-clear-ex",
-      "issue_codes": [],
-      "output_entity_ids": [
+      "accepted_entity_refs": [
         "assessment-clear-ex"
       ],
+      "affected_scope": [
+        "component-ex-01"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "fixture-assessment-gate",
+      "gate_result_id": "gate-clear-ex",
+      "idempotency_key": "gate:assessment-clear-ex",
+      "input_entity_refs": [
+        "run-clear",
+        "component-ex-01"
+      ],
+      "input_revision_map": {
+        "run-clear": 1
+      },
+      "input_scope_hash": "470fa29b05c4bad9cb304a21593a2c93b5094332d8517dceef54c2857dd62a96",
+      "output_hash": "8f1672bf8351f7eb5c55aa27a0c879ea5c24b0526f48d1d5075c887cf2d3d12d",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-ex-01"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
       "schema_version": "fixture/v1"
     }
   ],
@@ -403,12 +537,15 @@
     },
     "due_at": null,
     "evidence_snapshot_id": "snapshot-clear",
+    "project_id": "project-synthetic-phase-iii",
     "protocol_version_id": "protocol-v1",
     "review_episode_id": "episode-clear",
     "revision": 1,
+    "rule_set_id": "ruleset-synthetic-phase-iii",
     "rule_set_revision": 1,
     "schema_version": "fixture/v1",
     "stage": "screening",
+    "study_phase": "phase_iii",
     "subject_id": "subject-clear"
   },
   "review_run_diffs": [],
@@ -572,6 +709,236 @@
         "rule_id": "rule-ex-01",
         "schema_version": "fixture/v1",
         "source_text": "合成规则：异常达到阈值且研究者判断构成不可接受风险时排除。",
+        "study_phase": "phase_iii"
+      },
+      {
+        "components": [
+          {
+            "display_code": "EX-02a",
+            "evidence_requirements": [
+              {
+                "allows_screening_record_transcription": true,
+                "description": "待研究者判断的合成规则",
+                "due_stage": "screening",
+                "fact_type": "investigator.rule_specific_judgment",
+                "required_source_types": [
+                  "screening_record"
+                ],
+                "requirement_id": "req-professional",
+                "requires_contemporaneous_objective_source": false,
+                "rule_component_id": "component-ex-02",
+                "schema_version": "fixture/v1"
+              }
+            ],
+            "exception_expression": null,
+            "expression": {
+              "kind": "predicate",
+              "predicate": {
+                "applicable_population": null,
+                "attribute": "rule_specific_judgment",
+                "comparator": "eq",
+                "requires_professional_judgment": true,
+                "subject": "investigator",
+                "unit": null,
+                "value": true
+              },
+              "time_constraint": null
+            },
+            "parent_rule_id": "rule-ex-02",
+            "rule_component_id": "component-ex-02",
+            "schema_version": "fixture/v1",
+            "title": "待研究者判断的合成规则"
+          }
+        ],
+        "kind": "exclusion",
+        "official_code": "EX-02",
+        "rule_id": "rule-ex-02",
+        "schema_version": "fixture/v1",
+        "source_text": "待研究者判断的合成规则",
+        "study_phase": "phase_iii"
+      },
+      {
+        "components": [
+          {
+            "display_code": "EX-03a",
+            "evidence_requirements": [
+              {
+                "allows_screening_record_transcription": true,
+                "description": "后续节点才到期的合成规则",
+                "due_stage": "baseline",
+                "fact_type": "baseline.future_assessment",
+                "required_source_types": [
+                  "screening_record"
+                ],
+                "requirement_id": "req-future",
+                "requires_contemporaneous_objective_source": false,
+                "rule_component_id": "component-ex-03",
+                "schema_version": "fixture/v1"
+              }
+            ],
+            "exception_expression": null,
+            "expression": {
+              "kind": "predicate",
+              "predicate": {
+                "applicable_population": null,
+                "attribute": "future_assessment",
+                "comparator": "eq",
+                "requires_professional_judgment": false,
+                "subject": "baseline",
+                "unit": null,
+                "value": true
+              },
+              "time_constraint": null
+            },
+            "parent_rule_id": "rule-ex-03",
+            "rule_component_id": "component-ex-03",
+            "schema_version": "fixture/v1",
+            "title": "后续节点才到期的合成规则"
+          }
+        ],
+        "kind": "exclusion",
+        "official_code": "EX-03",
+        "rule_id": "rule-ex-03",
+        "schema_version": "fixture/v1",
+        "source_text": "后续节点才到期的合成规则",
+        "study_phase": "phase_iii"
+      },
+      {
+        "components": [
+          {
+            "display_code": "EX-04a",
+            "evidence_requirements": [
+              {
+                "allows_screening_record_transcription": true,
+                "description": "病历引用资料必须提供的合成规则",
+                "due_stage": "screening",
+                "fact_type": "history.referenced_document",
+                "required_source_types": [
+                  "screening_record"
+                ],
+                "requirement_id": "req-referenced",
+                "requires_contemporaneous_objective_source": false,
+                "rule_component_id": "component-ex-04",
+                "schema_version": "fixture/v1"
+              }
+            ],
+            "exception_expression": null,
+            "expression": {
+              "kind": "predicate",
+              "predicate": {
+                "applicable_population": null,
+                "attribute": "referenced_document",
+                "comparator": "eq",
+                "requires_professional_judgment": false,
+                "subject": "history",
+                "unit": null,
+                "value": true
+              },
+              "time_constraint": null
+            },
+            "parent_rule_id": "rule-ex-04",
+            "rule_component_id": "component-ex-04",
+            "schema_version": "fixture/v1",
+            "title": "病历引用资料必须提供的合成规则"
+          }
+        ],
+        "kind": "exclusion",
+        "official_code": "EX-04",
+        "rule_id": "rule-ex-04",
+        "schema_version": "fixture/v1",
+        "source_text": "病历引用资料必须提供的合成规则",
+        "study_phase": "phase_iii"
+      },
+      {
+        "components": [
+          {
+            "display_code": "REQ-01a",
+            "evidence_requirements": [
+              {
+                "allows_screening_record_transcription": true,
+                "description": "当前节点必做检查的合成规则",
+                "due_stage": "screening",
+                "fact_type": "procedure.required_completed",
+                "required_source_types": [
+                  "screening_record"
+                ],
+                "requirement_id": "req-procedure",
+                "requires_contemporaneous_objective_source": false,
+                "rule_component_id": "component-req-01",
+                "schema_version": "fixture/v1"
+              }
+            ],
+            "exception_expression": null,
+            "expression": {
+              "kind": "predicate",
+              "predicate": {
+                "applicable_population": null,
+                "attribute": "required_completed",
+                "comparator": "eq",
+                "requires_professional_judgment": false,
+                "subject": "procedure",
+                "unit": null,
+                "value": true
+              },
+              "time_constraint": null
+            },
+            "parent_rule_id": "rule-req-01",
+            "rule_component_id": "component-req-01",
+            "schema_version": "fixture/v1",
+            "title": "当前节点必做检查的合成规则"
+          }
+        ],
+        "kind": "required_procedure",
+        "official_code": "REQ-01",
+        "rule_id": "rule-req-01",
+        "schema_version": "fixture/v1",
+        "source_text": "当前节点必做检查的合成规则",
+        "study_phase": "phase_iii"
+      },
+      {
+        "components": [
+          {
+            "display_code": "REQ-02a",
+            "evidence_requirements": [
+              {
+                "allows_screening_record_transcription": true,
+                "description": "检验结果关键字段的合成规则",
+                "due_stage": "screening",
+                "fact_type": "laboratory.required_fields_complete",
+                "required_source_types": [
+                  "screening_record"
+                ],
+                "requirement_id": "req-result-fields",
+                "requires_contemporaneous_objective_source": false,
+                "rule_component_id": "component-req-02",
+                "schema_version": "fixture/v1"
+              }
+            ],
+            "exception_expression": null,
+            "expression": {
+              "kind": "predicate",
+              "predicate": {
+                "applicable_population": null,
+                "attribute": "required_fields_complete",
+                "comparator": "eq",
+                "requires_professional_judgment": false,
+                "subject": "laboratory",
+                "unit": null,
+                "value": true
+              },
+              "time_constraint": null
+            },
+            "parent_rule_id": "rule-req-02",
+            "rule_component_id": "component-req-02",
+            "schema_version": "fixture/v1",
+            "title": "检验结果关键字段的合成规则"
+          }
+        ],
+        "kind": "required_procedure",
+        "official_code": "REQ-02",
+        "rule_id": "rule-req-02",
+        "schema_version": "fixture/v1",
+        "source_text": "检验结果关键字段的合成规则",
         "study_phase": "phase_iii"
       }
     ],

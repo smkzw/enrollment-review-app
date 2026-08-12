@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from .agents import AgentCallContract, GateResult, ModelConfigContract, PromptVersion
 from .common import DateValue, RevisionedModel, VersionedModel
@@ -59,6 +59,9 @@ class Subject(RevisionedModel):
 class ReviewEpisode(RevisionedModel):
     review_episode_id: str = Field(min_length=1)
     subject_id: str = Field(min_length=1)
+    project_id: str = Field(min_length=1)
+    rule_set_id: str = Field(min_length=1)
+    study_phase: StudyPhase
     stage: ReviewStage
     protocol_version_id: str = Field(min_length=1)
     rule_set_revision: int = Field(ge=1)
@@ -101,6 +104,15 @@ class FinalAssessment(VersionedModel):
     action_ids: list[str] = Field(default_factory=list)
     gate_result_id: str = Field(min_length=1)
 
+    @model_validator(mode="after")
+    def validate_gate_owned_state(self) -> "FinalAssessment":
+        from app.domain.policies import derive_assessment_blocking_level
+
+        expected = derive_assessment_blocking_level(self.decision, set(self.gap_types))
+        if self.blocking_level != expected:
+            raise ValueError(f"FinalAssessment blocking_level 必须由 Gate 推导为 {expected.value}")
+        return self
+
 
 class ActionTransition(VersionedModel):
     transition_id: str = Field(min_length=1)
@@ -124,6 +136,15 @@ class ActionRequest(RevisionedModel):
     state: ActionState
     recompute_scope: list[str] = Field(min_length=1)
     transitions: list[ActionTransition] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_gate_owned_blocking(self) -> "ActionRequest":
+        from app.domain.policies import derive_action_blocking_level
+
+        expected = derive_action_blocking_level(self.gap_type)
+        if self.blocking_level != expected:
+            raise ValueError(f"ActionRequest blocking_level 必须由 Gate 推导为 {expected.value}")
+        return self
 
 
 class FixtureV1(VersionedModel):

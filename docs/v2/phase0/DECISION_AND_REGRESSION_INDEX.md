@@ -51,7 +51,7 @@
 | A-07 | EvidenceRequirement 投影为 EvidenceExpectation；判断状态与 gap_type 分离。 | observed/observed_weak/referenced_missing/absent/not_due 与 record_incomplete、referenced_file_missing、required_procedure_not_done、professional_judgment、source_conflict、ocr_or_parse_risk、future_stage_not_due 等不混用。 | 最终设计 §4.2、§5.2-§5.3；实施计划 Phase 5-6。 |
 | A-08 | V2 有独立命名空间和 storage root；legacy 只提供显式只读适配。 | V2 写目标不得落入 legacy 项目、旧报告或审计树；快照测试在 V2 操作前后比较受保护树内容。 | Phase 0 design.md；最终设计 §9-§10；BASELINE_MANIFEST.md §7。 |
 | A-09 | 前端是新的 React/TypeScript/Vite 产品壳，fixture/API 合同先于数据层；不把旧单文件 SPA 或自由文本审核器直接升级为 V2 核心。 | UI 读取结构化合同；桌面/窄屏、证据定位、空/错/stale/恢复和键盘路径进入真实浏览器验收。 | 最终设计 §3.3、§8、§10；实施计划 Phase 1、Phase 1.5。 |
-| A-10 | 所有业务变更都保留 revision、stale 影响范围、AgentCall/GateResult、ActionTransition 和 ReviewRun diff。 | 旧事实不被覆盖；受影响投影可重建；报告可回到方案版本、RuleModelRevision、EvidenceSnapshot 和 EvidenceSpan。 | 最终设计 §6、§7、§9；实施计划 Phase 2、Phase 7。 |
+| A-10 | 所有业务变更都保留 revision、stale 影响范围、AgentCall/GateResult、ActionTransition 和 ReviewRun diff。 | 旧事实不被覆盖；受影响投影可重建；报告可回到方案版本、RuleSet revision、EvidenceSnapshot 和 EvidenceSpan。 | 最终设计 §6、§7、§9；实施计划 Phase 2、Phase 7。 |
 
 ## 4. 历史高价值错误族
 

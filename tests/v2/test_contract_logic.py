@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import cast
 
 import pytest
@@ -26,6 +26,7 @@ from app.domain.contracts.enums import (
     ReviewStage,
     RuleKind,
     StudyPhase,
+    TruthValue,
     UploadMode,
 )
 from app.domain.contracts.evidence import (
@@ -35,7 +36,7 @@ from app.domain.contracts.evidence import (
     EvidenceSnapshot,
     EvidenceSpan,
 )
-from app.domain.contracts.review import ActionRequest, AssessmentCandidate
+from app.domain.contracts.review import ActionRequest, AssessmentCandidate, FinalAssessment
 from app.domain.contracts.rules import (
     AtomicExpression,
     AtomicPredicate,
@@ -45,7 +46,12 @@ from app.domain.contracts.rules import (
     RuleSet,
     TimeConstraint,
 )
-from app.domain.expression import evaluate_expression
+from app.domain.expression import (
+    ComponentEvaluation,
+    EvaluationContext,
+    EvaluationResult,
+    evaluate_expression,
+)
 from app.domain.gates import (
     ActionGateError,
     AgentPermissionError,
@@ -54,8 +60,9 @@ from app.domain.gates import (
     publish_assessment,
     require_agent_write_permission,
     validate_action_request,
+    validate_protocol_integrity,
 )
-from app.domain.rollup import rollup_episode
+from app.domain.rollup import EpisodeRollup, rollup_episode
 
 
 def candidate(decision: ComponentDecision, gaps: list[GapType]) -> AssessmentCandidate:
@@ -72,8 +79,41 @@ def candidate(decision: ComponentDecision, gaps: list[GapType]) -> AssessmentCan
 
 
 def final_assessment(decision: ComponentDecision, gaps: list[GapType]):
+    if decision in {ComponentDecision.EXCLUSION_NOT_TRIGGERED, ComponentDecision.INCLUSION_NOT_MET}:
+        trigger = TruthValue.FALSE
+    elif decision in {
+        ComponentDecision.INCLUSION_MET,
+        ComponentDecision.EXCLUSION_TRIGGERED,
+        ComponentDecision.REQUIREMENT_MET,
+    }:
+        trigger = TruthValue.TRUE
+    elif decision == ComponentDecision.REQUIREMENT_NOT_MET:
+        trigger = TruthValue.FALSE
+    else:
+        trigger = TruthValue.UNKNOWN
+    rule_kind = (
+        RuleKind.EXCLUSION
+        if decision in {ComponentDecision.EXCLUSION_NOT_TRIGGERED, ComponentDecision.EXCLUSION_TRIGGERED}
+        else RuleKind.REQUIRED_PROCEDURE
+        if decision in {ComponentDecision.REQUIREMENT_MET, ComponentDecision.REQUIREMENT_NOT_MET}
+        else RuleKind.INCLUSION
+    )
     return publish_assessment(
         candidate(decision, gaps),
+        rule_kind=rule_kind,
+        evaluation=ComponentEvaluation(
+            applicable=(
+                TruthValue.FALSE
+                if decision == ComponentDecision.NOT_APPLICABLE
+                else TruthValue.TRUE
+            ),
+            trigger=EvaluationResult(truth=trigger),
+            exception=(
+                EvaluationResult(truth=TruthValue.FALSE)
+                if decision == ComponentDecision.EXCLUSION_TRIGGERED
+                else None
+            ),
+        ),
         assessment_id=f"assessment-{decision.value}",
         review_run_id="run-1",
         gate_result_id="gate-1",
@@ -132,14 +172,36 @@ def test_rule_expression_all_any_not_have_distinct_truth_semantics() -> None:
         AtomicExpression(predicate=AtomicPredicate(subject="x", attribute="a", comparator="eq", value=True)),
         AtomicExpression(predicate=AtomicPredicate(subject="x", attribute="b", comparator="eq", value=True)),
     ]
-    values = {"a": True, "b": False}
-    resolve = lambda predicate: values[predicate.attribute]
+    context = EvaluationContext(
+        facts=[
+            ClinicalFact(
+                fact_id="fact-a",
+                fact_type="x.a",
+                value=True,
+                polarity=FactPolarity.AFFIRMED,
+                certainty=1,
+                evidence_span_ids=["span-1"],
+            ),
+            ClinicalFact(
+                fact_id="fact-b",
+                fact_type="x.b",
+                value=False,
+                polarity=FactPolarity.NEGATED,
+                certainty=1,
+                evidence_span_ids=["span-2"],
+            ),
+        ]
+    )
 
-    assert evaluate_expression(LogicalExpression(operator=LogicalOperator.ALL, children=predicates), resolve) is False
-    assert evaluate_expression(LogicalExpression(operator=LogicalOperator.ANY, children=predicates), resolve) is True
     assert evaluate_expression(
-        LogicalExpression(operator=LogicalOperator.NOT, children=[predicates[0]]), resolve
-    ) is False
+        LogicalExpression(operator=LogicalOperator.ALL, children=predicates), context
+    ).truth == TruthValue.FALSE
+    assert evaluate_expression(
+        LogicalExpression(operator=LogicalOperator.ANY, children=predicates), context
+    ).truth == TruthValue.TRUE
+    assert evaluate_expression(
+        LogicalExpression(operator=LogicalOperator.NOT, children=[predicates[0]]), context
+    ).truth == TruthValue.FALSE
 
 
 def test_indicator_identity_is_part_of_predicate_resolution() -> None:
@@ -159,11 +221,21 @@ def test_indicator_identity_is_part_of_predicate_resolution() -> None:
             value=1.5,
         )
     )
-    observed = {("laboratory", "ggt_multiple_of_uln"): True}
-    resolve = lambda predicate: observed.get((predicate.subject, predicate.attribute), False)
+    context = EvaluationContext(
+        facts=[
+            ClinicalFact(
+                fact_id="fact-ggt",
+                fact_type="laboratory.ggt_multiple_of_uln",
+                value=1.8,
+                polarity=FactPolarity.AFFIRMED,
+                certainty=1,
+                evidence_span_ids=["span-1"],
+            )
+        ]
+    )
 
-    assert evaluate_expression(ggt, resolve) is True
-    assert evaluate_expression(alt, resolve) is False
+    assert evaluate_expression(ggt, context).truth == TruthValue.TRUE
+    assert evaluate_expression(alt, context).truth == TruthValue.UNKNOWN
 
 
 def test_negated_fact_and_unrecorded_fact_are_distinct() -> None:
@@ -179,6 +251,30 @@ def test_negated_fact_and_unrecorded_fact_are_distinct() -> None:
     assert denied.polarity != unrecorded.polarity
     assert denied.value is False
     assert unrecorded.value is None
+
+    expression = AtomicExpression(
+        predicate=AtomicPredicate(
+            subject="history",
+            attribute="heavy_alcohol_use",
+            comparator="eq",
+            value=True,
+        )
+    )
+    assert evaluate_expression(expression, EvaluationContext(facts=[denied])).truth == TruthValue.FALSE
+    assert evaluate_expression(expression, EvaluationContext(facts=[unrecorded])).truth == TruthValue.UNKNOWN
+
+
+def test_fact_polarity_cannot_contradict_normalized_value() -> None:
+    base = {
+        "fact_id": "fact-contradiction",
+        "fact_type": "history.prohibited_exposure",
+        "certainty": 1,
+        "evidence_span_ids": ["span-1"],
+    }
+    with pytest.raises(ValidationError, match="否定事实"):
+        ClinicalFact(**base, value=True, polarity=FactPolarity.NEGATED)
+    with pytest.raises(ValidationError, match="未知极性"):
+        ClinicalFact(**base, value=False, polarity=FactPolarity.UNKNOWN)
 
 
 def test_exception_tree_is_not_merged_into_trigger_tree() -> None:
@@ -241,6 +337,163 @@ def test_randomization_and_baseline_anchors_are_not_screening_date() -> None:
     )
     assert randomization.anchor_type != screening.anchor_type
     assert baseline.anchor_type != screening.anchor_type
+
+
+@pytest.mark.parametrize(
+    ("distance_days", "expected"),
+    [(27, TruthValue.FALSE), (28, TruthValue.TRUE), (29, TruthValue.TRUE)],
+)
+def test_time_window_uses_explicit_randomization_anchor_and_boundaries(
+    distance_days,
+    expected,
+) -> None:
+    expression = AtomicExpression(
+        predicate=AtomicPredicate(
+            subject="medication",
+            attribute="prohibited_exposure",
+            comparator="eq",
+            value=True,
+        ),
+        time_constraint=TimeConstraint(
+            anchor_type="randomization_date",
+            direction="before",
+            lower_bound_days=28,
+        ),
+    )
+    event_date = date(2026, 8, 31).fromordinal(date(2026, 8, 31).toordinal() - distance_days)
+    fact = ClinicalFact(
+        fact_id="fact-medication",
+        fact_type="medication.prohibited_exposure",
+        value=True,
+        polarity=FactPolarity.AFFIRMED,
+        certainty=1,
+        effective_date=DateValue(value=event_date, precision=DatePrecision.DAY),
+        evidence_span_ids=["span-1"],
+    )
+    context = EvaluationContext(
+        facts=[fact],
+        anchor_dates={
+            "randomization_date": DateValue(
+                value=date(2026, 8, 31), precision=DatePrecision.DAY
+            )
+        },
+    )
+    assert evaluate_expression(expression, context).truth == expected
+
+    missing_anchor = EvaluationContext(
+        facts=[fact],
+        anchor_dates={
+            "screening_date": DateValue(
+                value=date(2026, 8, 31), precision=DatePrecision.DAY
+            )
+        },
+    )
+    result = evaluate_expression(expression, missing_anchor)
+    assert result.truth == TruthValue.UNKNOWN
+    assert "date_or_anchor_missing" in result.reason_codes
+
+
+def test_unit_mismatch_and_silent_fact_do_not_become_false_or_pass() -> None:
+    expression = AtomicExpression(
+        predicate=AtomicPredicate(
+            subject="laboratory",
+            attribute="target_ratio_uln",
+            comparator="gte",
+            value=1.5,
+            unit="xULN",
+        )
+    )
+    silent = evaluate_expression(expression, EvaluationContext())
+    assert silent.truth == TruthValue.UNKNOWN
+    mismatch = evaluate_expression(
+        expression,
+        EvaluationContext(
+            facts=[
+                ClinicalFact(
+                    fact_id="fact-lab",
+                    fact_type="laboratory.target_ratio_uln",
+                    value=2.0,
+                    unit="mg/L",
+                    polarity=FactPolarity.AFFIRMED,
+                    certainty=1,
+                    evidence_span_ids=["span-1"],
+                )
+            ]
+        ),
+    )
+    assert mismatch.truth == TruthValue.UNKNOWN
+    assert "unit_mismatch" in mismatch.reason_codes
+
+
+def test_comparator_mutation_changes_boundary_result() -> None:
+    context = EvaluationContext(
+        facts=[
+            ClinicalFact(
+                fact_id="fact-threshold",
+                fact_type="laboratory.target_ratio_uln",
+                value=1.5,
+                unit="xULN",
+                polarity=FactPolarity.AFFIRMED,
+                certainty=1,
+                evidence_span_ids=["span-1"],
+            )
+        ]
+    )
+    gte = AtomicExpression(
+        predicate=AtomicPredicate(
+            subject="laboratory",
+            attribute="target_ratio_uln",
+            comparator="gte",
+            value=1.5,
+            unit="xULN",
+        )
+    )
+    gt = gte.model_copy(
+        update={"predicate": gte.predicate.model_copy(update={"comparator": "gt"})}
+    )
+    assert evaluate_expression(gte, context).truth == TruthValue.TRUE
+    assert evaluate_expression(gt, context).truth == TruthValue.FALSE
+
+
+def test_partial_date_window_is_only_definitive_when_entire_interval_agrees() -> None:
+    expression = AtomicExpression(
+        predicate=AtomicPredicate(
+            subject="history",
+            attribute="event_present",
+            comparator="eq",
+            value=True,
+        ),
+        time_constraint=TimeConstraint(
+            anchor_type="randomization_date",
+            direction="before",
+            lower_bound_days=28,
+            allow_partial_date=True,
+        ),
+    )
+    fact = ClinicalFact(
+        fact_id="fact-partial-date",
+        fact_type="history.event_present",
+        value=True,
+        polarity=FactPolarity.AFFIRMED,
+        certainty=1,
+        effective_date=DateValue(
+            value=date(2026, 8, 1),
+            precision=DatePrecision.MONTH,
+            source_text="2026年8月",
+        ),
+        evidence_span_ids=["span-1"],
+    )
+    context = EvaluationContext(
+        facts=[fact],
+        anchor_dates={
+            "randomization_date": DateValue(
+                value=date(2026, 9, 15), precision=DatePrecision.DAY
+            )
+        },
+    )
+    result = evaluate_expression(expression, context)
+    assert result.truth == TruthValue.UNKNOWN
+    assert "ambiguous_time_window" in result.reason_codes
 
 
 def test_logical_arity_and_time_window_are_rejected() -> None:
@@ -392,6 +645,12 @@ def test_rule_set_rejects_parent_phase_and_kind_prefix_drift() -> None:
         (ComponentDecision.CONFLICT, [GapType.SOURCE_CONFLICT], BlockingLevel.BLOCKING),
         (ComponentDecision.NOT_DUE, [GapType.FUTURE_STAGE_NOT_DUE], BlockingLevel.ATTENTION),
         (ComponentDecision.NOT_APPLICABLE, [], BlockingLevel.NONE),
+        (ComponentDecision.REQUIREMENT_MET, [], BlockingLevel.NONE),
+        (
+            ComponentDecision.REQUIREMENT_NOT_MET,
+            [GapType.REQUIRED_PROCEDURE_NOT_DONE],
+            BlockingLevel.BLOCKING,
+        ),
     ],
 )
 def test_assessment_gate_accepts_state_gap_matrix(decision, gaps, blocking) -> None:
@@ -424,11 +683,18 @@ def test_agent_call_node_scope_and_retry_budget_are_enforced() -> None:
         "prompt_version_id": "prompt-1",
         "model_config_id": "model-1",
         "input_scope_hash": "a" * 64,
+        "input_revision_map": {"snapshot-1": 1},
         "raw_output_hash": "b" * 64,
+        "output_hash": "c" * 64,
         "idempotency_key": "episode-1:component-1",
         "attempt": 1,
         "max_attempts": 2,
         "duration_ms": 100,
+        "started_at": datetime(2026, 8, 12, tzinfo=timezone.utc),
+        "finished_at": datetime(2026, 8, 12, tzinfo=timezone.utc),
+        "outcome": "accepted",
+        "recompute_scope": ["component-1"],
+        "trigger": "manual_test",
     }
     assert AgentCallContract(**base).node == AgentNode.ELIGIBILITY_ASSESSOR
     with pytest.raises(ValidationError, match="写入范围"):
@@ -445,6 +711,56 @@ def test_agent_cannot_publish_final_state_or_action() -> None:
                 AgentNode.ELIGIBILITY_ASSESSOR,
                 cast(AgentPublishedEntity, forbidden),
             )
+
+
+def test_final_assessment_direct_construction_cannot_bypass_gate_matrix() -> None:
+    with pytest.raises(ValidationError, match="明确判断"):
+        FinalAssessment(
+            assessment_id="assessment-invalid",
+            review_run_id="run-1",
+            rule_component_id="component-1",
+            decision=ComponentDecision.INCLUSION_MET,
+            gap_types=[GapType.RECORD_INCOMPLETE],
+            blocking_level=BlockingLevel.BLOCKING,
+            gate_result_id="gate-1",
+        )
+
+
+def test_agent_candidate_cannot_override_deterministic_component_result() -> None:
+    wrong = candidate(ComponentDecision.EXCLUSION_TRIGGERED, [])
+    with pytest.raises(AssessmentGateError, match="不一致"):
+        publish_assessment(
+            wrong,
+            rule_kind=RuleKind.EXCLUSION,
+            evaluation=ComponentEvaluation(
+                trigger=EvaluationResult(truth=TruthValue.FALSE)
+            ),
+            assessment_id="assessment-wrong",
+            review_run_id="run-1",
+            gate_result_id="gate-1",
+        )
+
+
+def test_missing_exception_evidence_cannot_force_exclusion_triggered() -> None:
+    proposed = candidate(
+        ComponentDecision.INDETERMINATE,
+        [GapType.RECORD_INCOMPLETE],
+    )
+    assessment = publish_assessment(
+        proposed,
+        rule_kind=RuleKind.EXCLUSION,
+        evaluation=ComponentEvaluation(
+            trigger=EvaluationResult(truth=TruthValue.TRUE),
+            exception=EvaluationResult(
+                truth=TruthValue.UNKNOWN,
+                reason_codes=["fact_not_observed"],
+            ),
+        ),
+        assessment_id="assessment-exception-unknown",
+        review_run_id="run-1",
+        gate_result_id="gate-1",
+    )
+    assert assessment.decision == ComponentDecision.INDETERMINATE
 
 
 def test_rollup_priority_counts_and_provenance_are_deterministic() -> None:
@@ -492,6 +808,12 @@ def test_rollup_priority_counts_and_provenance_are_deterministic() -> None:
         ),
         (ComponentDecision.NOT_DUE, [GapType.FUTURE_STAGE_NOT_DUE], EpisodeMainStatus.FUTURE_ATTENTION),
         (ComponentDecision.INCLUSION_MET, [], EpisodeMainStatus.NO_CLEAR_BARRIER),
+        (ComponentDecision.REQUIREMENT_MET, [], EpisodeMainStatus.NO_CLEAR_BARRIER),
+        (
+            ComponentDecision.REQUIREMENT_NOT_MET,
+            [GapType.REQUIRED_PROCEDURE_NOT_DONE],
+            EpisodeMainStatus.CURRENT_GAP,
+        ),
     ],
 )
 def test_rollup_truth_table_covers_each_main_status(decision, gaps, expected) -> None:
@@ -513,6 +835,70 @@ def test_rollup_precedence_is_stable_without_narrative_input() -> None:
     assert rollup_episode(assessments[1:], [], []).main_status == EpisodeMainStatus.CONFLICT
     assert rollup_episode(assessments[2:], [], []).main_status == EpisodeMainStatus.PROFESSIONAL_JUDGMENT
     assert rollup_episode(assessments[3:], [], []).main_status == EpisodeMainStatus.FUTURE_ATTENTION
+
+
+def test_rollup_uses_expectation_blocking_policy_for_weak_and_provenance_evidence() -> None:
+    provenance = EvidenceExpectation(
+        expectation_id="expectation-provenance",
+        requirement_id="requirement-1",
+        review_episode_id="episode-1",
+        status=ExpectationStatus.OBSERVED_WEAK,
+        evidence_span_ids=["span-1"],
+        gap_type=GapType.PROVENANCE_FOLLOWUP,
+    )
+    ocr_risk = provenance.model_copy(
+        update={
+            "expectation_id": "expectation-ocr",
+            "gap_type": GapType.OCR_OR_PARSE_RISK,
+        }
+    )
+    assert rollup_episode([], [provenance], []).main_status == EpisodeMainStatus.NO_CLEAR_BARRIER
+    assert rollup_episode([], [ocr_risk], []).main_status == EpisodeMainStatus.CURRENT_GAP
+
+
+def test_episode_rollup_direct_construction_cannot_bypass_status_precedence() -> None:
+    with pytest.raises(ValidationError, match="主状态"):
+        EpisodeRollup(
+            main_status=EpisodeMainStatus.NO_CLEAR_BARRIER,
+            sort_rank=5,
+            barrier_count=1,
+            current_gap_count=0,
+            conflict_count=0,
+            professional_judgment_count=0,
+            future_attention_count=0,
+            provenance_followup_count=0,
+            gap_counts={},
+        )
+
+
+def test_protocol_integrity_compares_exact_official_sequence() -> None:
+    expression = AtomicExpression(
+        predicate=AtomicPredicate(subject="x", attribute="present", comparator="eq", value=True)
+    )
+    rule = Rule(
+        rule_id="rule-99",
+        official_code="IN-99",
+        kind=RuleKind.INCLUSION,
+        source_text="合成规则原文",
+        study_phase=StudyPhase.PHASE_III,
+        components=[
+            RuleComponent(
+                rule_component_id="component-99",
+                parent_rule_id="rule-99",
+                display_code="IN-99a",
+                title="合成组件",
+                expression=expression,
+            )
+        ],
+    )
+    rules = RuleSet(
+        rule_set_id="rules-99",
+        protocol_version_id="protocol-1",
+        study_phase=StudyPhase.PHASE_III,
+        rules=[rule],
+    )
+    with pytest.raises(ValueError, match="官方规则编号"):
+        validate_protocol_integrity(rules, expected_official_codes=["IN-01"])
 
 
 @pytest.mark.parametrize(
@@ -546,6 +932,22 @@ def test_action_blocking_level_is_deterministic(gap, expected) -> None:
     validate_action_request(action)
     with pytest.raises(ActionGateError):
         validate_action_request(action.model_copy(update={"blocking_level": BlockingLevel.NONE if expected != BlockingLevel.NONE else BlockingLevel.BLOCKING}))
+
+
+def test_action_direct_construction_cannot_bypass_blocking_policy() -> None:
+    with pytest.raises(ValidationError, match="ActionRequest blocking_level"):
+        ActionRequest(
+            action_id="action-invalid",
+            rule_component_id="component-1",
+            gap_type=GapType.PROVENANCE_FOLLOWUP,
+            target_party=ActionTarget.CRA,
+            requested_action="核对来源",
+            acceptable_evidence="来源核对记录",
+            due_stage=ReviewStage.BASELINE,
+            blocking_level=BlockingLevel.BLOCKING,
+            state=ActionState.OPEN,
+            recompute_scope=["component-1"],
+        )
 
 
 def test_date_value_does_not_accept_known_precision_without_date() -> None:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -12,6 +13,15 @@ from app.domain.contracts.agents import (
     GateResult,
     ModelConfigContract,
     PromptVersion,
+)
+from app.domain.contracts.agent_io import AgentContractsV1
+from app.domain.contracts.api import (
+    ActionOverrideCommand,
+    ActionOverrideResponse,
+    JobStatusResponse,
+    ProjectListResponse,
+    SubjectListResponse,
+    WorkspaceResponse,
 )
 from app.domain.contracts.common import DateValue, ErrorEnvelope
 from app.domain.contracts.enums import (
@@ -25,12 +35,14 @@ from app.domain.contracts.enums import (
     DatePrecision,
     ExpectationStatus,
     FactPolarity,
+    GateOutcome,
     GapType,
     LocatorPrecision,
     LogicalOperator,
     ProfileLane,
     ReviewStage,
     RuleKind,
+    RunOutcome,
     StudyPhase,
     UploadMode,
 )
@@ -66,6 +78,8 @@ from app.domain.contracts.rules import (
     RuleSet,
     WorkflowStage,
 )
+from app.domain.contracts.uat import ProtocolDiffExample, UatWorkspaceFixture
+from app.domain.expression import EvaluationContext, evaluate_component
 from app.domain.gates import publish_assessment
 
 
@@ -74,6 +88,10 @@ CONTRACT_ROOT = ROOT / "contracts" / "v1"
 SCHEMA_ROOT = CONTRACT_ROOT / "schema"
 FIXTURE_ROOT = CONTRACT_ROOT / "fixtures"
 NOW = datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc)
+
+
+def digest(label: str) -> str:
+    return hashlib.sha256(label.encode("utf-8")).hexdigest()
 
 
 def atomic_predicate(subject: str, attribute: str, comparator: str, value, **kwargs):
@@ -164,11 +182,98 @@ def rule_set() -> RuleSet:
             )
         ],
     )
+    auxiliary_specs = [
+        (
+            "rule-ex-02",
+            "EX-02",
+            RuleKind.EXCLUSION,
+            "component-ex-02",
+            "待研究者判断的合成规则",
+            "req-professional",
+            "investigator.rule_specific_judgment",
+            ReviewStage.SCREENING,
+        ),
+        (
+            "rule-ex-03",
+            "EX-03",
+            RuleKind.EXCLUSION,
+            "component-ex-03",
+            "后续节点才到期的合成规则",
+            "req-future",
+            "baseline.future_assessment",
+            ReviewStage.BASELINE,
+        ),
+        (
+            "rule-ex-04",
+            "EX-04",
+            RuleKind.EXCLUSION,
+            "component-ex-04",
+            "病历引用资料必须提供的合成规则",
+            "req-referenced",
+            "history.referenced_document",
+            ReviewStage.SCREENING,
+        ),
+        (
+            "rule-req-01",
+            "REQ-01",
+            RuleKind.REQUIRED_PROCEDURE,
+            "component-req-01",
+            "当前节点必做检查的合成规则",
+            "req-procedure",
+            "procedure.required_completed",
+            ReviewStage.SCREENING,
+        ),
+        (
+            "rule-req-02",
+            "REQ-02",
+            RuleKind.REQUIRED_PROCEDURE,
+            "component-req-02",
+            "检验结果关键字段的合成规则",
+            "req-result-fields",
+            "laboratory.required_fields_complete",
+            ReviewStage.SCREENING,
+        ),
+    ]
+    auxiliary_rules = []
+    for rule_id, code, kind, component_id, title, requirement_id, fact_type, due_stage in auxiliary_specs:
+        requirement = EvidenceRequirement(
+            requirement_id=requirement_id,
+            rule_component_id=component_id,
+            fact_type=fact_type,
+            required_source_types=["screening_record"],
+            due_stage=due_stage,
+            description=title,
+        )
+        auxiliary_rules.append(
+            Rule(
+                rule_id=rule_id,
+                official_code=code,
+                kind=kind,
+                source_text=title,
+                study_phase=StudyPhase.PHASE_III,
+                components=[
+                    RuleComponent(
+                        rule_component_id=component_id,
+                        parent_rule_id=rule_id,
+                        display_code=f"{code}a",
+                        title=title,
+                        expression=atomic_predicate(
+                            fact_type.rsplit(".", 1)[0],
+                            fact_type.rsplit(".", 1)[1],
+                            "eq",
+                            True,
+                            requires_professional_judgment=(code == "EX-02"),
+                        ),
+                        evidence_requirements=[requirement],
+                    )
+                ],
+            )
+        )
     return RuleSet(
         rule_set_id="ruleset-synthetic-phase-iii",
         protocol_version_id="protocol-v1",
         study_phase=StudyPhase.PHASE_III,
-        rules=[inclusion, exclusion],
+        rules=[inclusion, exclusion, *auxiliary_rules],
     )
 
 
@@ -198,6 +303,9 @@ def base_objects(suffix: str):
     episode = ReviewEpisode(
         review_episode_id=f"episode-{suffix}",
         subject_id=subject.subject_id,
+        project_id=project.project_id,
+        rule_set_id=project.rule_set_id,
+        study_phase=project.study_phase,
         stage=ReviewStage.SCREENING,
         protocol_version_id=protocol.protocol_version_id,
         rule_set_revision=1,
@@ -267,16 +375,61 @@ def agent_calls(suffix: str) -> list[AgentCallContract]:
                 prompt_version_id=f"prompt-{node.value}-v1",
                 model_config_id="model-baseline-v1",
                 input_scope_hash=str(index) * 64,
+                input_revision_map={f"snapshot-{suffix}": 1},
                 raw_output_hash=str(index + 2) * 64,
+                output_hash=str(index + 4) * 64,
                 idempotency_key=f"{suffix}:{node.value}:v1",
                 attempt=1,
                 max_attempts=2,
                 duration_ms=1200 + index,
+                started_at=NOW,
+                finished_at=NOW,
+                outcome=RunOutcome.ACCEPTED,
+                recompute_scope=[f"subject-{suffix}"],
+                trigger="fixture_generation",
+                project_id="project-synthetic-phase-iii",
+                subject_id=f"subject-{suffix}",
+                review_episode_id=f"episode-{suffix}",
+                review_run_id=f"run-{suffix}",
+                evidence_snapshot_id=f"snapshot-{suffix}",
+                source_ids=[f"document-{suffix}"],
+                input_tokens=100 + index,
+                output_tokens=50 + index,
                 estimated_cost=0.01 * index,
-                gate_result_id=f"gate-{suffix}-{index}",
+                gate_result_ids=[f"gate-{suffix}-{index}"],
             )
         )
     return calls
+
+
+def publish_fixture_assessment(
+    rules: RuleSet,
+    candidate: AssessmentCandidate,
+    facts: list[ClinicalFact],
+    episode: ReviewEpisode,
+    *,
+    assessment_id: str,
+    review_run_id: str,
+    gate_result_id: str,
+    action_ids: list[str] | None = None,
+):
+    for rule in rules.rules:
+        for component in rule.components:
+            if component.rule_component_id == candidate.rule_component_id:
+                evaluation = evaluate_component(
+                    component,
+                    EvaluationContext(facts=facts, anchor_dates=episode.anchor_dates),
+                )
+                return publish_assessment(
+                    candidate,
+                    rule_kind=rule.kind,
+                    evaluation=evaluation,
+                    assessment_id=assessment_id,
+                    review_run_id=review_run_id,
+                    gate_result_id=gate_result_id,
+                    action_ids=action_ids,
+                )
+    raise ValueError(f"未找到规则组件: {candidate.rule_component_id}")
 
 
 def build_fixture(scenario: str) -> FixtureV1:
@@ -370,8 +523,8 @@ def build_fixture(scenario: str) -> FixtureV1:
             ),
         ]
         final = [
-            publish_assessment(candidates[0], assessment_id="assessment-clear-in", review_run_id=review_run.review_run_id, gate_result_id="gate-clear-in"),
-            publish_assessment(candidates[1], assessment_id="assessment-clear-ex", review_run_id=review_run.review_run_id, gate_result_id="gate-clear-ex", action_ids=["action-clear-provenance"]),
+            publish_fixture_assessment(rules, candidates[0], facts, episode, assessment_id="assessment-clear-in", review_run_id=review_run.review_run_id, gate_result_id="gate-clear-in"),
+            publish_fixture_assessment(rules, candidates[1], facts, episode, assessment_id="assessment-clear-ex", review_run_id=review_run.review_run_id, gate_result_id="gate-clear-ex", action_ids=["action-clear-provenance"]),
         ]
         actions = [
             ActionRequest(
@@ -408,6 +561,14 @@ def build_fixture(scenario: str) -> FixtureV1:
                 value=45,
                 unit="year",
                 polarity=FactPolarity.AFFIRMED,
+                certainty=1,
+                evidence_span_ids=["span-barrier-risk"],
+            ),
+            ClinicalFact(
+                fact_id="fact-barrier-no-exception",
+                fact_type="exception.protocol_exception_documented",
+                value=False,
+                polarity=FactPolarity.NEGATED,
                 certainty=1,
                 evidence_span_ids=["span-barrier-risk"],
             ),
@@ -459,8 +620,8 @@ def build_fixture(scenario: str) -> FixtureV1:
             ),
         ]
         final = [
-            publish_assessment(candidates[0], assessment_id="assessment-barrier-in", review_run_id=review_run.review_run_id, gate_result_id="gate-barrier-in"),
-            publish_assessment(candidates[1], assessment_id="assessment-barrier-ex", review_run_id=review_run.review_run_id, gate_result_id="gate-barrier-ex"),
+            publish_fixture_assessment(rules, candidates[0], facts, episode, assessment_id="assessment-barrier-in", review_run_id=review_run.review_run_id, gate_result_id="gate-barrier-in"),
+            publish_fixture_assessment(rules, candidates[1], facts, episode, assessment_id="assessment-barrier-ex", review_run_id=review_run.review_run_id, gate_result_id="gate-barrier-ex"),
         ]
     else:
         spans = [
@@ -517,6 +678,41 @@ def build_fixture(scenario: str) -> FixtureV1:
                 evidence_span_ids=["span-gap-page"],
                 gap_type=GapType.OCR_OR_PARSE_RISK,
             ),
+            EvidenceExpectation(
+                expectation_id="expectation-gap-professional",
+                requirement_id="req-professional",
+                review_episode_id=episode.review_episode_id,
+                status=ExpectationStatus.ABSENT,
+                gap_type=GapType.DESCRIPTION_INSUFFICIENT,
+            ),
+            EvidenceExpectation(
+                expectation_id="expectation-gap-future",
+                requirement_id="req-future",
+                review_episode_id=episode.review_episode_id,
+                status=ExpectationStatus.NOT_DUE,
+                gap_type=GapType.FUTURE_STAGE_NOT_DUE,
+            ),
+            EvidenceExpectation(
+                expectation_id="expectation-gap-referenced",
+                requirement_id="req-referenced",
+                review_episode_id=episode.review_episode_id,
+                status=ExpectationStatus.REFERENCED_MISSING,
+                gap_type=GapType.REFERENCED_FILE_MISSING,
+            ),
+            EvidenceExpectation(
+                expectation_id="expectation-gap-procedure",
+                requirement_id="req-procedure",
+                review_episode_id=episode.review_episode_id,
+                status=ExpectationStatus.ABSENT,
+                gap_type=GapType.REQUIRED_PROCEDURE_NOT_DONE,
+            ),
+            EvidenceExpectation(
+                expectation_id="expectation-gap-result-fields",
+                requirement_id="req-result-fields",
+                review_episode_id=episode.review_episode_id,
+                status=ExpectationStatus.ABSENT,
+                gap_type=GapType.RESULT_FIELDS_MISSING,
+            ),
         ]
         candidates = [
             AssessmentCandidate(
@@ -538,10 +734,56 @@ def build_fixture(scenario: str) -> FixtureV1:
                 evidence_span_ids=["span-gap-page"],
                 candidate_rationale="同一研究者风险判断存在冲突来源。",
             ),
+            AssessmentCandidate(
+                assessment_candidate_id="candidate-gap-professional",
+                agent_call_id=calls[1].agent_call_id,
+                rule_component_id="component-ex-02",
+                proposed_decision=ComponentDecision.PROFESSIONAL_JUDGMENT,
+                gap_types=[GapType.PROFESSIONAL_JUDGMENT],
+                evidence_span_ids=["span-gap-page"],
+                candidate_rationale="客观资料存在，但缺少针对本规则的研究者判断。",
+            ),
+            AssessmentCandidate(
+                assessment_candidate_id="candidate-gap-future",
+                agent_call_id=calls[1].agent_call_id,
+                rule_component_id="component-ex-03",
+                proposed_decision=ComponentDecision.NOT_DUE,
+                gap_types=[GapType.FUTURE_STAGE_NOT_DUE],
+                candidate_rationale="该要求在基线节点到期。",
+            ),
+            AssessmentCandidate(
+                assessment_candidate_id="candidate-gap-referenced",
+                agent_call_id=calls[1].agent_call_id,
+                rule_component_id="component-ex-04",
+                proposed_decision=ComponentDecision.INDETERMINATE,
+                gap_types=[GapType.REFERENCED_FILE_MISSING],
+                candidate_rationale="病历引用的资料尚未提供。",
+            ),
+            AssessmentCandidate(
+                assessment_candidate_id="candidate-gap-procedure",
+                agent_call_id=calls[1].agent_call_id,
+                rule_component_id="component-req-01",
+                proposed_decision=ComponentDecision.INDETERMINATE,
+                gap_types=[GapType.REQUIRED_PROCEDURE_NOT_DONE],
+                candidate_rationale="当前节点必做检查尚未完成。",
+            ),
+            AssessmentCandidate(
+                assessment_candidate_id="candidate-gap-result-fields",
+                agent_call_id=calls[1].agent_call_id,
+                rule_component_id="component-req-02",
+                proposed_decision=ComponentDecision.INDETERMINATE,
+                gap_types=[GapType.RESULT_FIELDS_MISSING],
+                candidate_rationale="检验结果缺少判定所需字段。",
+            ),
         ]
         final = [
-            publish_assessment(candidates[0], assessment_id="assessment-gap-in", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-in", action_ids=["action-gap-age"]),
-            publish_assessment(candidates[1], assessment_id="assessment-gap-ex", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-ex", action_ids=["action-gap-conflict"]),
+            publish_fixture_assessment(rules, candidates[0], facts, episode, assessment_id="assessment-gap-in", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-in", action_ids=["action-gap-age"]),
+            publish_fixture_assessment(rules, candidates[1], facts, episode, assessment_id="assessment-gap-ex", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-ex", action_ids=["action-gap-conflict"]),
+            publish_fixture_assessment(rules, candidates[2], facts, episode, assessment_id="assessment-gap-professional", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-professional", action_ids=["action-gap-professional"]),
+            publish_fixture_assessment(rules, candidates[3], facts, episode, assessment_id="assessment-gap-future", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-future", action_ids=["action-gap-future"]),
+            publish_fixture_assessment(rules, candidates[4], facts, episode, assessment_id="assessment-gap-referenced", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-referenced", action_ids=["action-gap-referenced"]),
+            publish_fixture_assessment(rules, candidates[5], facts, episode, assessment_id="assessment-gap-procedure", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-procedure", action_ids=["action-gap-procedure"]),
+            publish_fixture_assessment(rules, candidates[6], facts, episode, assessment_id="assessment-gap-result-fields", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-result-fields", action_ids=["action-gap-result-fields"]),
         ]
         actions = [
             ActionRequest(
@@ -569,6 +811,68 @@ def build_fixture(scenario: str) -> FixtureV1:
                 state=ActionState.OPEN,
                 recompute_scope=["component-ex-01"],
             ),
+            ActionRequest(
+                action_id="action-gap-professional",
+                rule_component_id="component-ex-02",
+                gap_type=GapType.PROFESSIONAL_JUDGMENT,
+                target_party=ActionTarget.INVESTIGATOR,
+                requested_action="研究者针对本规则记录是否构成方案所述风险。",
+                acceptable_evidence="具名、具日期并关联本规则的研究者判断。",
+                due_stage=ReviewStage.SCREENING,
+                blocking_level=BlockingLevel.BLOCKING,
+                trigger_evidence_span_id="span-gap-page",
+                state=ActionState.OPEN,
+                recompute_scope=["component-ex-02"],
+            ),
+            ActionRequest(
+                action_id="action-gap-future",
+                rule_component_id="component-ex-03",
+                gap_type=GapType.FUTURE_STAGE_NOT_DUE,
+                target_party=ActionTarget.CRC,
+                requested_action="在基线节点完成并上传该项评估。",
+                acceptable_evidence="基线日期锚点和对应评估记录。",
+                due_stage=ReviewStage.BASELINE,
+                blocking_level=BlockingLevel.ATTENTION,
+                state=ActionState.OPEN,
+                recompute_scope=["component-ex-03"],
+            ),
+            ActionRequest(
+                action_id="action-gap-referenced",
+                rule_component_id="component-ex-04",
+                gap_type=GapType.REFERENCED_FILE_MISSING,
+                target_party=ActionTarget.CRC,
+                requested_action="补充病历中明确引用的原始资料。",
+                acceptable_evidence="被引用文件及其日期、版本和来源。",
+                due_stage=ReviewStage.SCREENING,
+                blocking_level=BlockingLevel.BLOCKING,
+                trigger_evidence_span_id="span-gap-page",
+                state=ActionState.OPEN,
+                recompute_scope=["component-ex-04"],
+            ),
+            ActionRequest(
+                action_id="action-gap-procedure",
+                rule_component_id="component-req-01",
+                gap_type=GapType.REQUIRED_PROCEDURE_NOT_DONE,
+                target_party=ActionTarget.CRC,
+                requested_action="完成当前节点必做检查。",
+                acceptable_evidence="检查执行记录和完整结果。",
+                due_stage=ReviewStage.SCREENING,
+                blocking_level=BlockingLevel.BLOCKING,
+                state=ActionState.OPEN,
+                recompute_scope=["component-req-01"],
+            ),
+            ActionRequest(
+                action_id="action-gap-result-fields",
+                rule_component_id="component-req-02",
+                gap_type=GapType.RESULT_FIELDS_MISSING,
+                target_party=ActionTarget.CRC,
+                requested_action="补充检验结果的数值、单位和参考范围。",
+                acceptable_evidence="同一检验报告中的完整结果字段。",
+                due_stage=ReviewStage.SCREENING,
+                blocking_level=BlockingLevel.BLOCKING,
+                state=ActionState.OPEN,
+                recompute_scope=["component-req-02"],
+            ),
         ]
 
     events = [
@@ -586,6 +890,30 @@ def build_fixture(scenario: str) -> FixtureV1:
             is_critical=scenario == "barrier",
         )
     ]
+    if scenario == "gap_conflict":
+        profile_event_specs = [
+            (ProfileLane.STUDY_MILESTONE, "筛选节点", ["阶段隔离"]),
+            (ProfileLane.TARGET_DISEASE, "目标疾病病程待补充", ["记录不完整"]),
+            (ProfileLane.MEDICATION, "合并用药时间轴待核对", ["日期锚点"]),
+            (ProfileLane.TEST_EXAM_SCORE, "必做检查和结果字段待补", ["当前节点缺口"]),
+            (ProfileLane.MEDICAL_HISTORY, "既往资料被引用但未提供", ["来源缺失"]),
+            (ProfileLane.EVIDENCE_QUALITY, "同一判断存在冲突来源", ["来源冲突"]),
+        ]
+        for index, (lane, title, labels) in enumerate(profile_event_specs, start=1):
+            events.append(
+                PatientProfileEvent(
+                    event_id=f"event-gap-detail-{index}",
+                    lane=lane,
+                    event_type="risk_or_gap",
+                    title=title,
+                    start_date=DateValue(value=date(2026, 8, 10), precision=DatePrecision.DAY),
+                    evidence_span_ids=["span-gap-page"],
+                    related_rule_component_ids=["component-ex-01"],
+                    risk_labels=labels,
+                    is_abnormal=lane == ProfileLane.EVIDENCE_QUALITY,
+                    has_trend_change=lane == ProfileLane.MEDICATION,
+                )
+            )
     profile = PatientProfile(
         patient_profile_id=f"profile-{scenario}",
         subject_id=subject.subject_id,
@@ -596,17 +924,34 @@ def build_fixture(scenario: str) -> FixtureV1:
     )
     gates = [
         GateResult(
-            gate_result_id=call.gate_result_id or f"gate-{scenario}-call-{index}",
+            gate_result_id=call.gate_result_ids[0],
             gate_name="agent-output-schema-gate",
-            accepted=True,
+            result=GateOutcome.ACCEPTED,
+            input_scope_hash=call.input_scope_hash,
+            input_revision_map=call.input_revision_map,
+            input_entity_refs=[call.agent_call_id],
+            accepted_entity_refs=[call.agent_call_id],
+            affected_scope=call.recompute_scope,
+            recompute_scope=call.recompute_scope,
+            idempotency_key=f"gate:{call.idempotency_key}",
+            created_at=NOW,
+            output_hash=call.output_hash,
         )
         for index, call in enumerate(calls, start=1)
     ] + [
         GateResult(
             gate_result_id=assessment.gate_result_id,
             gate_name="fixture-assessment-gate",
-            accepted=True,
-            output_entity_ids=[assessment.assessment_id],
+            result=GateOutcome.ACCEPTED,
+            input_scope_hash=digest(f"{scenario}:{assessment.assessment_id}:input"),
+            input_revision_map={assessment.review_run_id: 1},
+            input_entity_refs=[assessment.review_run_id, assessment.rule_component_id],
+            accepted_entity_refs=[assessment.assessment_id],
+            affected_scope=[assessment.rule_component_id],
+            recompute_scope=[assessment.rule_component_id],
+            idempotency_key=f"gate:{assessment.assessment_id}",
+            created_at=NOW,
+            output_hash=digest(f"{scenario}:{assessment.assessment_id}:output"),
         )
         for index, assessment in enumerate(final, start=1)
     ]
@@ -627,6 +972,43 @@ def build_fixture(scenario: str) -> FixtureV1:
             progress_total=2,
         ),
     ]
+    if scenario == "gap_conflict":
+        jobs[1:1] = [
+            JobEvent(
+                job_event_id="job-event-gap-step-failed",
+                job_id="job-gap_conflict",
+                event_type="step_failed",
+                step_id="normalize-page-4",
+                occurred_at=NOW,
+                retryable=True,
+                progress_completed=1,
+                progress_total=2,
+                payload={"error_code": "ocr_or_parse_risk"},
+            ),
+            JobEvent(
+                job_event_id="job-event-gap-retry",
+                job_id="job-gap_conflict",
+                event_type="retry_scheduled",
+                step_id="normalize-page-4",
+                occurred_at=NOW,
+                attempt=2,
+                checkpoint_id="checkpoint-gap-page-3",
+                retryable=True,
+                progress_completed=1,
+                progress_total=2,
+            ),
+            JobEvent(
+                job_event_id="job-event-gap-step-complete",
+                job_id="job-gap_conflict",
+                event_type="step_completed",
+                step_id="normalize-page-4",
+                occurred_at=NOW,
+                attempt=2,
+                checkpoint_id="checkpoint-gap-page-4",
+                progress_completed=2,
+                progress_total=2,
+            ),
+        ]
     return FixtureV1(
         fixture_id=f"fixture-{scenario}",
         scenario=scenario,
@@ -692,6 +1074,37 @@ def openapi_draft(fixture_schema: dict) -> dict:
     definitions = rewrite_openapi_refs(fixture_schema.get("$defs", {}))
     error_schema = ErrorEnvelope.model_json_schema(ref_template="#/components/schemas/{model}")
     definitions.update(error_schema.pop("$defs", {}))
+    api_models = [
+        ProjectListResponse,
+        SubjectListResponse,
+        WorkspaceResponse,
+        ActionOverrideCommand,
+        ActionOverrideResponse,
+        JobStatusResponse,
+    ]
+    api_schemas: dict[str, dict] = {}
+    for model in api_models:
+        schema = model.model_json_schema(ref_template="#/components/schemas/{model}")
+        definitions.update(schema.pop("$defs", {}))
+        api_schemas[model.__name__] = rewrite_openapi_refs(schema)
+
+    def success_response(model_name: str) -> dict:
+        return {
+            "description": "成功",
+            "content": {
+                "application/json": {
+                    "schema": {"$ref": f"#/components/schemas/{model_name}"}
+                }
+            },
+        }
+
+    def path_parameter(name: str) -> dict:
+        return {
+            "name": name,
+            "in": "path",
+            "required": True,
+            "schema": {"type": "string", "minLength": 1},
+        }
     error_response = {
         "description": "请求未完成",
         "content": {
@@ -704,17 +1117,18 @@ def openapi_draft(fixture_schema: dict) -> dict:
         "openapi": "3.1.0",
         "info": {"title": "入排审核系统 V2 Stub API", "version": "fixture/v1"},
         "paths": {
-            "/api/v2/projects": {"get": {"summary": "读取项目看板", "responses": {"200": {"description": "成功"}, "500": error_response}}},
-            "/api/v2/projects/{project_id}/subjects": {"get": {"summary": "读取项目受试者及分阶段状态", "responses": {"200": {"description": "成功"}, "404": error_response}}},
-            "/api/v2/review-episodes/{episode_id}/workspace": {"get": {"summary": "读取入排工作台", "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FixtureV1"}}}}, "404": error_response}}},
-            "/api/v2/actions/{action_id}/override": {"post": {"summary": "人工关闭或重新打开行动", "responses": {"200": {"description": "成功"}, "409": error_response, "422": error_response}}},
-            "/api/v2/jobs/{job_id}": {"get": {"summary": "读取后台任务状态", "responses": {"200": {"description": "成功"}, "404": error_response}}},
+            "/api/v2/projects": {"get": {"summary": "读取项目看板", "responses": {"200": success_response("ProjectListResponse"), "500": error_response}}},
+            "/api/v2/projects/{project_id}/subjects": {"get": {"summary": "读取项目受试者及分阶段状态", "parameters": [path_parameter("project_id")], "responses": {"200": success_response("SubjectListResponse"), "404": error_response}}},
+            "/api/v2/review-episodes/{episode_id}/workspace": {"get": {"summary": "读取入排工作台", "parameters": [path_parameter("episode_id")], "responses": {"200": success_response("WorkspaceResponse"), "404": error_response}}},
+            "/api/v2/actions/{action_id}/override": {"post": {"summary": "人工关闭或重新打开行动", "parameters": [path_parameter("action_id")], "requestBody": {"required": True, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ActionOverrideCommand"}}}}, "responses": {"200": success_response("ActionOverrideResponse"), "409": error_response, "422": error_response}}},
+            "/api/v2/jobs/{job_id}": {"get": {"summary": "读取后台任务状态", "parameters": [path_parameter("job_id")], "responses": {"200": success_response("JobStatusResponse"), "404": error_response}}},
         },
         "components": {
             "schemas": {
                 "FixtureV1": fixture_component,
                 **definitions,
                 "ErrorEnvelope": rewrite_openapi_refs(error_schema),
+                **api_schemas,
             }
         },
     }
@@ -725,6 +1139,100 @@ def write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+LOCAL_ID_PREFIXES = (
+    "job-event-",
+    "assessment-",
+    "expectation-",
+    "candidate-",
+    "document-",
+    "snapshot-",
+    "conflict-",
+    "profile-",
+    "episode-",
+    "subject-",
+    "action-",
+    "event-",
+    "fact-",
+    "span-",
+    "call-",
+    "gate-",
+    "job-",
+    "run-",
+)
+
+
+def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStage) -> FixtureV1:
+    subject_namespace = f"uat-{subject_number:02d}"
+    episode_namespace = f"{subject_namespace}-{stage.value}"
+
+    def transform(value):
+        if isinstance(value, dict):
+            return {transform(key): transform(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [transform(item) for item in value]
+        if isinstance(value, str):
+            for prefix in LOCAL_ID_PREFIXES:
+                if value.startswith(prefix):
+                    namespace = subject_namespace if prefix == "subject-" else episode_namespace
+                    return f"{prefix}{namespace}-{value[len(prefix):]}"
+        return value
+
+    payload = transform(base.model_dump(mode="json"))
+    payload["fixture_id"] = f"fixture-{episode_namespace}"
+    payload["subject"]["subject_code"] = f"UAT-{subject_number:02d}"
+    payload["review_episode"]["stage"] = stage.value
+    payload["source_documents"][0]["review_stage"] = stage.value
+    for call in payload["agent_calls"]:
+        call["idempotency_key"] = f"{episode_namespace}:{call['idempotency_key']}"
+    for gate in payload["gate_results"]:
+        gate["idempotency_key"] = f"{episode_namespace}:{gate['idempotency_key']}"
+
+    if stage == ReviewStage.SCREENING:
+        payload["review_episode"]["anchor_dates"] = {
+            "screening_date": DateValue(
+                value=date(2026, 8, 10), precision=DatePrecision.DAY
+            ).model_dump(mode="json")
+        }
+    else:
+        payload["review_episode"]["anchor_dates"] = {
+            "baseline_date": DateValue(
+                value=date(2026, 8, 31), precision=DatePrecision.DAY
+            ).model_dump(mode="json"),
+            "randomization_date": DateValue(
+                value=date(2026, 8, 31), precision=DatePrecision.DAY
+            ).model_dump(mode="json"),
+        }
+        payload["evidence_snapshot"]["upload_mode"] = UploadMode.INCREMENTAL.value
+        payload["evidence_snapshot"]["prior_snapshot_id"] = (
+            f"snapshot-{subject_namespace}-screening-{base.evidence_snapshot.evidence_snapshot_id[len('snapshot-') :]}"
+        )
+        payload["source_documents"][0]["upload_mode"] = UploadMode.INCREMENTAL.value
+    return FixtureV1.model_validate(payload)
+
+
+def build_uat_workspace() -> UatWorkspaceFixture:
+    scenarios = ["clear", "barrier", "gap_conflict", "gap_conflict", "clear", "barrier"]
+    episodes = []
+    for subject_number, scenario in enumerate(scenarios, start=1):
+        base = build_fixture(scenario)
+        episodes.extend(
+            namespace_fixture(base, subject_number=subject_number, stage=stage)
+            for stage in (ReviewStage.SCREENING, ReviewStage.BASELINE)
+        )
+    return UatWorkspaceFixture(
+        workspace_id="uat-phase1-workspace",
+        protocol_diff=ProtocolDiffExample(
+            current_protocol_version_id="protocol-v1",
+            proposed_protocol_version_id="protocol-v2-draft",
+            added_rule_codes=["EX-05"],
+            deleted_rule_codes=["REQ-02"],
+            changed_logic_or_window_codes=["EX-01"],
+            source_refs=["protocol-v1:p10", "protocol-v2-draft:p12"],
+        ),
+        episodes=episodes,
+    )
+
+
 def main() -> None:
     schema = FixtureV1.model_json_schema(ref_template="#/$defs/{model}")
     schema["$id"] = "https://local.enrollment-review.invalid/contracts/fixture-v1.schema.json"
@@ -732,12 +1240,26 @@ def main() -> None:
     write_json(SCHEMA_ROOT / "fixture-v1.schema.json", schema)
     write_json(SCHEMA_ROOT / "openapi-v1.draft.json", openapi_draft(schema))
 
+    agent_schema = AgentContractsV1.model_json_schema(ref_template="#/$defs/{model}")
+    agent_schema["$id"] = "https://local.enrollment-review.invalid/contracts/agent-contracts-v1.schema.json"
+    agent_schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+    write_json(SCHEMA_ROOT / "agent-contracts-v1.schema.json", agent_schema)
+
+    uat_schema = UatWorkspaceFixture.model_json_schema(ref_template="#/$defs/{model}")
+    uat_schema["$id"] = "https://local.enrollment-review.invalid/contracts/uat-phase1-workspace.schema.json"
+    uat_schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+    write_json(SCHEMA_ROOT / "uat-phase1-workspace.schema.json", uat_schema)
+
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
     for scenario in ("clear", "barrier", "gap_conflict"):
         fixture = build_fixture(scenario)
         payload = fixture.model_dump(mode="json")
         validator.validate(payload)
         write_json(FIXTURE_ROOT / f"subject-{scenario}.json", payload)
+    write_json(
+        FIXTURE_ROOT / "uat-phase1-workspace.json",
+        build_uat_workspace().model_dump(mode="json"),
+    )
 
 
 if __name__ == "__main__":

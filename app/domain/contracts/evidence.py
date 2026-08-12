@@ -118,8 +118,19 @@ class EvidenceExpectation(VersionedModel):
             raise ValueError("较弱证据必须说明溯源、解析或历史来源风险")
         if self.status == ExpectationStatus.NOT_DUE and self.gap_type != GapType.FUTURE_STAGE_NOT_DUE:
             raise ValueError("尚未到期必须使用 future_stage_not_due")
-        if self.status in {ExpectationStatus.ABSENT, ExpectationStatus.REFERENCED_MISSING} and self.gap_type is None:
-            raise ValueError("缺失证据必须说明 gap_type")
+        if self.status == ExpectationStatus.ABSENT and self.gap_type not in {
+            GapType.RECORD_INCOMPLETE,
+            GapType.DESCRIPTION_INSUFFICIENT,
+            GapType.REQUIRED_PROCEDURE_NOT_DONE,
+            GapType.RESULT_FIELDS_MISSING,
+            GapType.DATE_OR_ANCHOR_MISSING,
+        }:
+            raise ValueError("未观察到的到期证据必须使用具体当前缺口")
+        if (
+            self.status == ExpectationStatus.REFERENCED_MISSING
+            and self.gap_type != GapType.REFERENCED_FILE_MISSING
+        ):
+            raise ValueError("已引用未提供必须使用 referenced_file_missing")
         return self
 
 
@@ -133,6 +144,14 @@ class ClinicalFact(VersionedModel):
     effective_date: DateValue | None = None
     evidence_span_ids: list[str] = Field(min_length=1)
     conflict_group_id: str | None = None
+
+    @model_validator(mode="after")
+    def validate_polarity_value(self) -> "ClinicalFact":
+        if self.polarity == FactPolarity.NEGATED and self.value is not False:
+            raise ValueError("否定事实必须规范化为布尔 false")
+        if self.polarity == FactPolarity.UNKNOWN and self.value is not None:
+            raise ValueError("未知极性不能携带确定值")
+        return self
 
 
 class PatientProfileEvent(VersionedModel):

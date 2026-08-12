@@ -1537,6 +1537,9 @@ OCR concurrency note:
 - 证据状态、判断状态和待办阻断等级分离；溯源待办非阻断、后续节点为关注、当前缺口/专业判断/冲突为阻断。
 - Agent/交互/UAT 合同由独立 Luna worker 在限定写域完成，主线程核对后将概念字段统一为 `RuleSet.revision`、`EpisodeRollup`、`AgentCall.model_config_id`。
 - 三个合成 Fixture 覆盖明确障碍、未发现明确障碍、缺口/冲突及四级 EvidenceSpan；Schema/OpenAPI/Fixture 连续生成 SHA-256 一致。
-- 候选测试：合同专项 `60 passed`；V2 默认全套 `196 passed, 1 skipped`；legacy Python 3.9 `130 passed, 1 skipped`。唯一跳过仍是 MG-K10-SAR/06003 OCR 缓存 Fixture 不存在。
+- 首轮 Phase 0.5 候选 `43896d1` 被独立 checker 拒绝，finding 包括：表达式只有逻辑结构而无比较器/单位/时间求值、Agent/Gate Schema 与文档漂移、OpenAPI 不可直接消费、3 个单节点 Fixture 不足以执行 UAT、rollup 对弱证据/溯源误判、缺少 ProtocolIntegrity/StageIsolation Gate，以及 FinalAssessment/Action/EpisodeRollup 可直接绕过 Gate 构造。
+- 现已按根因修复形成待复核工作树：三值 Evaluator 计算比较器/单位/显式锚点和时间窗，trigger 与 exception 独立；Assessment Gate 从规则类型与求值结果推导状态并拒绝不一致候选；最终 DTO 在模型边界自校验；共享 gap 阻断策略驱动 rollup；新增机器可读 Agent I/O Schema、可消费 OpenAPI、ProtocolIntegrity/StageIsolation 闭包 Gate，以及 6 名受试者 x 2 Episode 的 UAT 工作区。
+- 修复后候选测试：合同专项 `82 passed`；V2 默认全套 `218 passed, 1 skipped`；legacy Python 3.9 `130 passed, 1 skipped`。8 个生成 Schema/OpenAPI/Fixture 连续生成 SHA-256 一致；唯一跳过仍是 MG-K10-SAR/06003 OCR 缓存 Fixture 不存在。
+- 复核前最后一次测试收集发现 `AgentContractsV1.model_config` 与 Pydantic v2 保留配置名冲突；复合合同字段改为 `model_configuration`，底层审计引用仍为 `AgentCall.model_config_id`，并通过生成器、Schema 和全套回归重新验证。
 - 本阶段没有调用真实 LLM/OCR、没有临床重审、没有修改 legacy 项目数据；用户明确要求不再找 Qwen 3.8 会商，后续执行与 checker 路由均排除 Qwen 3.8。
 - 下一硬门槛：新上下文独立 checker 无阻断 finding，Codex 接受后才归档 Phase 0.5；Phase 1 只构建真实 React 产品壳和 stub API，Phase 1.5 仍需用户批准后才进入后端业务层。
