@@ -1,0 +1,7 @@
+{"file":".trellis/spec/backend/directory-structure.md","reason":"V2 目录边界与依赖方向"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"V2 存储和 legacy 隔离"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"写保护、泛化和测试要求"}
+{"file":".trellis/spec/frontend/directory-structure.md","reason":"React 产品壳目录预留"}
+{"file":"docs/REARCHITECTURE_FINAL_DESIGN_20260812.md","reason":"冻结架构和旧系统保留边界"}
+{"file":"plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md","reason":"Phase 0 工作与退出门槛"}
+{"file":"SYSTEM_REVIEW_REPORT.md","reason":"第三方问题索引和反面基线"}

@@ -1,0 +1,28 @@
+{
+  "id": "enrollment-review-v2",
+  "name": "enrollment-review-v2",
+  "title": "入排审核系统 V2 分阶段构建",
+  "description": "基于最终设计完成本地单用户、AI lead、多 Agent 协同但确定性门禁裁决的 V2 系统，并通过真实临床回归与浏览器验收。",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P0",
+  "creator": "smkzw",
+  "assignee": "smkzw",
+  "createdAt": "2026-08-12",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "08-12-phase0-foundation"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
