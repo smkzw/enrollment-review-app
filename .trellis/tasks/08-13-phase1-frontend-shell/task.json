@@ -15,7 +15,7 @@
   "branch": "codex/v2-phase0-foundation",
   "base_branch": "codex/v2-phase0-foundation",
   "worktree_path": null,
-  "commit": null,
+  "commit": "72059e0",
   "pr_url": null,
   "subtasks": [],
   "children": [],
