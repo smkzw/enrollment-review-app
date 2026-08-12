@@ -1,4 +1,5 @@
 import ast
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -56,6 +57,41 @@ class WriteBoundaryTests(unittest.TestCase):
             with self.subTest(protected_root=protected_root):
                 with self.assertRaises(ProtectedPathError):
                     boundary.require_v2_target(protected_root / "phase0-write-probe")
+
+    def test_atomic_writer_preserves_legacy_tree_and_rejects_links(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            v2_root = workspace / "v2-data"
+            legacy_root = workspace / "projects"
+            v2_root.mkdir()
+            legacy_root.mkdir()
+            legacy_record = legacy_root / "project.json"
+            legacy_record.write_text('{"status":"legacy"}', encoding="utf-8")
+            boundary = WriteBoundary.create(v2_root, [legacy_root])
+            before = snapshot_tree(legacy_root)
+
+            boundary.atomic_write_bytes(v2_root / "review.json", b'{"status":"v2"}')
+            self.assertEqual(before, snapshot_tree(legacy_root))
+
+            hard_link = v2_root / "hard-link.json"
+            os.link(legacy_record, hard_link)
+            with self.assertRaises(ProtectedPathError):
+                boundary.atomic_write_bytes(hard_link, b"changed")
+            self.assertEqual(before, snapshot_tree(legacy_root))
+
+            symbolic_link = v2_root / "symbolic-link.json"
+            symbolic_link.symlink_to(legacy_record)
+            with self.assertRaises(ProtectedPathError):
+                boundary.atomic_write_bytes(symbolic_link, b"changed")
+            self.assertEqual(before, snapshot_tree(legacy_root))
+
+    def test_overlapping_storage_roots_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            legacy_root = workspace / "projects"
+            legacy_root.mkdir()
+            with self.assertRaises(ProtectedPathError):
+                WriteBoundary.create(legacy_root / "v2-data", [legacy_root])
 
 
 class DependencyDirectionTests(unittest.TestCase):

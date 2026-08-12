@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -25,17 +27,41 @@ class WriteBoundary:
 
     @classmethod
     def create(cls, v2_root: Path, protected_roots: Iterable[Path]) -> "WriteBoundary":
-        return cls(
-            v2_root=v2_root.resolve(),
-            protected_roots=tuple(root.resolve() for root in protected_roots),
-        )
+        resolved_v2_root = v2_root.resolve()
+        resolved_protected_roots = tuple(root.resolve() for root in protected_roots)
+        for root in resolved_protected_roots:
+            if _is_within(resolved_v2_root, root) or _is_within(root, resolved_v2_root):
+                raise ProtectedPathError("V2 数据目录不能与旧系统目录重叠")
+        return cls(v2_root=resolved_v2_root, protected_roots=resolved_protected_roots)
 
     def require_v2_target(self, target: Path) -> Path:
+        if target.is_symlink():
+            raise ProtectedPathError("V2 写入目标不能是符号链接")
         resolved = target.resolve()
         if not _is_within(resolved, self.v2_root):
             raise ProtectedPathError("V2 写入目标不在 V2 数据目录内")
         if any(_is_within(resolved, root) for root in self.protected_roots):
             raise ProtectedPathError("V2 写入目标位于受保护的旧系统目录")
+        if resolved.is_file() and resolved.stat().st_nlink > 1:
+            raise ProtectedPathError("V2 写入目标不能是硬链接")
+        return resolved
+
+    def atomic_write_bytes(self, target: Path, content: bytes) -> Path:
+        """Write through a same-directory temporary file, then atomically replace."""
+        resolved = self.require_v2_target(target)
+        parent = self.require_v2_target(resolved.parent)
+        parent.mkdir(parents=True, exist_ok=True)
+        temporary_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=parent, delete=False) as handle:
+                temporary_path = Path(handle.name)
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_path, resolved)
+        finally:
+            if temporary_path is not None and temporary_path.exists():
+                temporary_path.unlink()
         return resolved
 
 

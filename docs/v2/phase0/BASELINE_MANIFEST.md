@@ -28,10 +28,11 @@
 | 基线分支 | main |
 | 基线提交主题 | chore: 冻结V2重构前基线 |
 | 当前分支 | codex/v2-phase0-foundation |
-| 当前 HEAD | 4bf277bbc6f683d9cbba692d612983c3542b3f96（短号 4bf277b） |
+| Trellis 初始化提交 | 4bf277bbc6f683d9cbba692d612983c3542b3f96（短号 4bf277b） |
+| 首次 Phase 0 候选提交 | 97dbadd（随后由独立 checker 提出问题，需以 `git log` 查看修订后的当前提交） |
 | 祖先关系 | a02b833 是当前 HEAD 的祖先；本轮未执行回滚。 |
 
-a02b833 是 legacy 代码的回滚锚点，不是当前工作树所有文件的完整快照。当前工作树存在并行工作流新增的未跟踪 V2/Phase 0 文件，例如 V2 包目录、frontend/、tests/v2/、pyproject.toml、uv.lock、DEPENDENCY_DECISIONS.md 和 CLEANUP_MANIFEST.md；这些文件不是本 Worker 创建或修改的，本清单不把它们当作已验收结果。
+a02b833 是 legacy 代码的回滚锚点，不是当前工作树所有文件的完整快照。首次记录本表时，V2/Phase 0 文件仍处于并行工作树；随后已进入 97dbadd 候选提交。独立 checker 对该候选提出默认测试入口、写入隔离测试、依赖记录和文档时态问题，因此 97dbadd 仅是历史候选，不代表 Phase 0 已接受。当前状态必须以 `git status`、`git log` 和 Trellis 任务状态为准。
 
 ### 2.2 复核命令
 
@@ -230,3 +231,12 @@ du -sh logs/*
 - 依赖许可证、V2 目录方向、写保护、清理 manifest 和独立 checker 仍是 Phase 0 的独立门槛；本 Worker 不声称这些门槛已全部通过。
 - 现有测试对 legacy 审计资产有写入副作用，后续需要隔离测试 root 或增加可证明的只读测试夹具。
 - 没有执行新的临床重审、浏览器 UAT、V2 端到端流程、数据库迁移或生产切换。
+
+## 10. 首次独立检查后的修订
+
+首次 Phase 0 候选 `97dbadd` 未被 checker 接受，随后完成以下修订：
+
+- 默认 `uv run pytest -q` 同时收集 legacy 与 V2，不再以 `testpaths=tests/v2` 静默缩小测试范围；修订后为 136 通过、1 跳过。
+- V2 写边界通过真实原子 writer 验证；V2/legacy root 重叠、实际 `projects/`/`output/` 目标、硬链接和符号链接均被拒绝，legacy 夹具快照不变。
+- 依赖记录改为真实 npmmirror 锁文件来源，并补充官方交叉核验、维护、替代方案、数据外传和移除路径。
+- 本节记录修订事实，不替代 checker 的复验和 Codex 最终接受。

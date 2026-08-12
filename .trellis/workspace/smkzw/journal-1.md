@@ -12,6 +12,14 @@
 - legacy 实际运行时为 `/usr/bin/python3`（Python 3.9.6），131 项测试通过、1 项跳过；误用另一套缺 FastAPI 的 Python 曾造成假失败。
 - V2 选用独立 CPython 3.12.13 + `uv`，避免 Alembic 新版本与 Python 3.9 不兼容；前端 Node 22.22.3。
 - 固定 React/Vite/TanStack Table/SQLAlchemy/Alembic 等基础依赖并生成锁文件。
-- 建立 V2 目录、写边界和依赖方向测试；V2 3 项测试通过。
+- 建立 V2 目录、写边界和依赖方向测试；首次候选为 4 项 V2 测试，独立 checker 要求进一步补强默认测试门禁与真实写入路径。
 - 安全清理仅处理 `.DS_Store`、源码字节码缓存和旧 `.playwright-cli` 临时缓存；`projects/`、`output/`、logs、执行/会商证据全部保留。
 - 当前待办：合并独立 Worker 的 baseline/regression 索引，独立 checker 核验 Phase 0，完成退出门槛后进入 Phase 0.5。
+
+### 独立检查与修订
+
+- 首次候选 `97dbadd` 被独立 checker 拒绝：默认 pytest 仅收集 V2、写边界测试未经过真实 writer、依赖来源记录不完整、基线文档时态过期。
+- 修订默认 pytest 为完整 `tests/`，补足 legacy 测试开发依赖；统一入口现为 136 通过、1 跳过，legacy 单独仍为 130 通过、1 跳过。
+- 新增原子写入路径、V2/legacy root 重叠拒绝、硬链接/符号链接拒绝和 legacy 快照不变测试。
+- 依赖记录明确本机 npm 锁文件使用 npmmirror，官方文档/仓库仅作为交叉核验；补充维护、替代、数据外传和移除说明。
+- Phase 0 尚待原 checker 同会话复验，未提前进入 Phase 0.5。
