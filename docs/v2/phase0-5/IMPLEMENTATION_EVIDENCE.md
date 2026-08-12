@@ -76,6 +76,6 @@ uv run --python 3.12.13 pytest -q
 - 第十二次复核后的本地候选从每个 FinalAssessment 的完整 AssessmentPublication 反推唯一候选，要求 Fixture AssessmentCandidate 集合与已发布候选集合完全相等；新增已登记未发布候选负例。当前本地 V2 `140 passed + 2 subtests`、默认 `270 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`；8 个生成制品双跑一致，仍待同一 checker 第十三次复核。
 - 本阶段未调用真实 LLM/OCR、未重审临床项目、未修改 legacy 项目数据、未调用 Qwen 3.8；用户已明确后续也不使用 Qwen 3.8 会商。
 
-## 待验收
+## 独立验收结论
 
-同一独立 checker 需复核第六次拒绝项和回归面：注册表全集、发布闭包、Rollup 完整集合、Action 确定性派生、Fixture 额外对象、Schema/文档漂移及 UAT 停止门槛。只有无阻断 finding 且 Codex 接受后，才归档 Phase 0.5 并进入 Phase 1。
+同一 Luna checker `019ff5fa-ccc9-7cc0-8f38-2cc489783423` 在第十三次复核中对候选 `efbebe6` 给出 `ACCEPT`，无 P1/P2/P3 阻断 finding。检查者独立复现了已登记未发布候选、Candidate Gate 无 FinalAssessment、同一候选重复进入结论、多候选/多 Gate 同步替换、额外 AgentCall 和额外 EvidenceNormalizationCandidate 等路径；均被当前发布闭包拒绝。独立运行结果为 V2 `140 passed + 2 subtests`、默认 `270 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`、定向回归 `21 passed`，8 个生成制品双跑且与工作区逐字节一致。Phase 0.5 满足归档门槛。

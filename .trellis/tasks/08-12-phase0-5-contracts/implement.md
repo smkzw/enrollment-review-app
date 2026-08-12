@@ -121,3 +121,10 @@
 - EvidenceNormalizationCandidate 已由 Evidence Gate 加 Fact/Span 全集等价约束封闭，本轮未复制另一套候选规则。
 - 本地验证：V2 `140 passed + 2 subtests`；默认 `270 passed, 1 skipped + 18 subtests`；legacy `130 passed, 1 skipped`；8 个生成制品双跑一致，`compileall`、`uv lock --check`、`git diff --check` 通过。
 - 状态保持 `in_progress`，等待同一 checker 第十三次复核。
+
+## 2026-08-13 第十三次复核结论
+
+- 同一 Luna checker `019ff5fa-ccc9-7cc0-8f38-2cc489783423` 对候选 `efbebe6` 给出 `ACCEPT`，无 P1/P2/P3 阻断 finding。
+- 独立复现覆盖：已登记未发布候选、有 Candidate Gate 但无 FinalAssessment、同一候选进入多个结论、多候选/多 Gate 同步替换、额外 AgentCall 产出候选、额外 EvidenceNormalizationCandidate。
+- 独立锚点：V2 `140 passed + 2 subtests`；默认 `270 passed, 1 skipped + 18 subtests`；legacy `130 passed, 1 skipped`；定向回归 `21 passed`；8 个生成制品双跑且与工作区逐字节一致。
+- Phase 0.5 已满足退出门槛，可按 Trellis 流程归档；Phase 1 尚未在本任务中开始。

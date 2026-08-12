@@ -1712,3 +1712,9 @@ OCR concurrency note:
 - EvidenceNormalizationCandidate 已由 Evidence Gate 与 Fact/Span 全集相等约束覆盖，不存在同构的空候选夹带路径。
 - 本地验证为 V2 `140 passed + 2 subtests`、默认 `270 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`；8 个生成制品双跑一致，`compileall`、`uv lock --check`、`git diff --check` 通过。
 - Phase 0.5 保持 `in_progress`，第十三次继续复用同一 Luna checker，不调用 Qwen 3.8。
+
+2026-08-13 Phase 0.5 同一 Luna checker 第十三次复核：
+
+- 候选 `efbebe6` 获得 `ACCEPT`，无 P1/P2/P3 阻断 finding；第十二次的 AssessmentCandidate 发布全集问题及前十二轮回归面均确认关闭。
+- 独立复现覆盖已登记未发布候选、Candidate Gate 无 FinalAssessment、候选重复发布、同步替换、额外 AgentCall 与 EvidenceNormalizationCandidate；独立测试为 V2 `140 passed + 2 subtests`、默认 `270 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`、定向 `21 passed`，8 个制品逐字节一致。
+- Phase 0.5 已满足退出门槛，按 Trellis 归档；Phase 1 不混入本阶段提交。
