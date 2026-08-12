@@ -18,14 +18,14 @@
 
 ## Acceptance Criteria
 
-- [ ] 所有 fixture 通过 Pydantic 和生成 JSON Schema 验证，Schema 快照变更必须显式审阅。
-- [ ] 历史 AND/OR、复合研究者判断、时间窗、例外、否定/沉默和指标串项均有项目无关合同测试。
-- [ ] 节点汇总真值表覆盖全部组件状态、gap、阻断和溯源组合，顺序与计数确定。
-- [ ] Agent 写权限测试证明语义节点只能产生 draft/candidate/CriticRun，不能发布最终组件状态。
-- [ ] OpenAPI 草案、错误信封和前端 fixture 使用同一版本字段与枚举。
-- [ ] 3 名示例受试者包含可点击 EvidenceSpan、Patient Profile 和阶段隔离信息。
-- [ ] 交互合同在 1280/1440/1920、窄窗口及 100/150/200% 缩放下有可执行验收描述。
-- [ ] UAT 至少 10 项；临时门槛为无辅助完成率 >=90%、错误结论 0、关键证据 <=3 次操作可达，并明确须用户批准。
+- [x] 所有 fixture 通过 Pydantic 和生成 JSON Schema 验证，Schema 快照变更必须显式审阅。
+- [x] 历史 AND/OR、复合研究者判断、时间窗、例外、否定/沉默和指标串项均有项目无关合同测试。
+- [x] 节点汇总真值表覆盖全部组件状态、gap、阻断和溯源组合，顺序与计数确定。
+- [x] Agent 写权限测试证明语义节点只能产生 draft/candidate/CriticRun，不能发布最终组件状态。
+- [x] OpenAPI 草案、错误信封和前端 fixture 使用同一版本字段与枚举。
+- [x] 3 名示例受试者包含可点击 EvidenceSpan、Patient Profile 和阶段隔离信息。
+- [x] 交互合同在 1280/1440/1920、窄窗口及 100/150/200% 缩放下有可执行验收描述。
+- [x] UAT 至少 10 项；临时门槛为无辅助完成率 >=90%、错误结论 0、关键证据 <=3 次操作可达，并明确须用户批准。
 - [ ] 独立 checker 无阻断 findings，Codex 接受后才进入 Phase 1。
 
 ## Notes

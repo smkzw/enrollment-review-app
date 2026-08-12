@@ -1527,3 +1527,16 @@ OCR concurrency note:
   - `docs/REARCHITECTURE_FINAL_DESIGN_20260812.md`;
   - `plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md`.
 - Hold point remains active: no V2 business implementation, legacy project write, deletion or clinical rerun until the user approves the revised design. After approval, only Phase 0/0.5/1 starts; Phase 1.5 is the next mandatory user gate.
+
+2026-08-12 V2 Phase 0 与 Phase 0.5 合同候选进度：
+
+- Phase 0 已经独立 checker 验收并归档：候选 `97dbadd` 首轮因默认 pytest 覆盖不足、写边界假阳性、依赖/镜像记录不足和文档漂移被拒绝；经 `6fa901d`、`8036d6a` 修复后由同一 checker 接受，验收提交 `2fbe25c`，归档提交 `56bf2f5`。
+- Phase 0.5 Trellis 任务为 `.trellis/tasks/08-12-phase0-5-contracts`，当前仍是候选，尚未归档。
+- 新合同实现包含 `app/domain/contracts/`、`app/domain/gates/`、`app/domain/expression.py`、`app/domain/rollup.py`、`contracts/v1/`、`scripts/generate_v2_contracts.py` 和 `tests/v2/`。
+- 根因防线：Agent 只能写 draft/candidate/CriticRun；FinalAssessment、Action 阻断和 EpisodeRollup 由确定性 Gate/Projection 产生；`ALL/ANY/NOT` 有独立真值语义测试，防止“和”被弱化为“或”。
+- 证据状态、判断状态和待办阻断等级分离；溯源待办非阻断、后续节点为关注、当前缺口/专业判断/冲突为阻断。
+- Agent/交互/UAT 合同由独立 Luna worker 在限定写域完成，主线程核对后将概念字段统一为 `RuleSet.revision`、`EpisodeRollup`、`AgentCall.model_config_id`。
+- 三个合成 Fixture 覆盖明确障碍、未发现明确障碍、缺口/冲突及四级 EvidenceSpan；Schema/OpenAPI/Fixture 连续生成 SHA-256 一致。
+- 候选测试：合同专项 `60 passed`；V2 默认全套 `196 passed, 1 skipped`；legacy Python 3.9 `130 passed, 1 skipped`。唯一跳过仍是 MG-K10-SAR/06003 OCR 缓存 Fixture 不存在。
+- 本阶段没有调用真实 LLM/OCR、没有临床重审、没有修改 legacy 项目数据；用户明确要求不再找 Qwen 3.8 会商，后续执行与 checker 路由均排除 Qwen 3.8。
+- 下一硬门槛：新上下文独立 checker 无阻断 finding，Codex 接受后才归档 Phase 0.5；Phase 1 只构建真实 React 产品壳和 stub API，Phase 1.5 仍需用户批准后才进入后端业务层。

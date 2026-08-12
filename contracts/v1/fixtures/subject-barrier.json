@@ -1,0 +1,592 @@
+{
+  "actions": [],
+  "agent_calls": [
+    {
+      "agent_call_id": "call-barrier-1",
+      "attempt": 1,
+      "duration_ms": 1201,
+      "estimated_cost": 0.01,
+      "gate_result_id": "gate-barrier-1",
+      "idempotency_key": "barrier:evidence_normalizer:v1",
+      "input_scope_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "max_attempts": 2,
+      "model_config_id": "model-baseline-v1",
+      "node": "evidence_normalizer",
+      "output_kind": "candidate",
+      "prompt_version_id": "prompt-evidence_normalizer-v1",
+      "raw_output_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "schema_version": "fixture/v1",
+      "write_scope": "evidence_candidate"
+    },
+    {
+      "agent_call_id": "call-barrier-2",
+      "attempt": 1,
+      "duration_ms": 1202,
+      "estimated_cost": 0.02,
+      "gate_result_id": "gate-barrier-2",
+      "idempotency_key": "barrier:eligibility_assessor:v1",
+      "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "max_attempts": 2,
+      "model_config_id": "model-baseline-v1",
+      "node": "eligibility_assessor",
+      "output_kind": "candidate",
+      "prompt_version_id": "prompt-eligibility_assessor-v1",
+      "raw_output_hash": "4444444444444444444444444444444444444444444444444444444444444444",
+      "schema_version": "fixture/v1",
+      "write_scope": "assessment_candidate"
+    }
+  ],
+  "assessment_candidates": [
+    {
+      "agent_call_id": "call-barrier-2",
+      "assessment_candidate_id": "candidate-barrier-in",
+      "candidate_rationale": "年龄达到合成规则阈值。",
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "gap_types": [],
+      "proposed_decision": "inclusion_met",
+      "rule_component_id": "component-in-01",
+      "schema_version": "fixture/v1",
+      "used_fact_ids": [
+        "fact-barrier-age"
+      ]
+    },
+    {
+      "agent_call_id": "call-barrier-2",
+      "assessment_candidate_id": "candidate-barrier-ex",
+      "candidate_rationale": "阈值和研究者判断两个 AND 组件均满足。",
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "gap_types": [],
+      "proposed_decision": "exclusion_triggered",
+      "rule_component_id": "component-ex-01",
+      "schema_version": "fixture/v1",
+      "used_fact_ids": [
+        "fact-barrier-lab",
+        "fact-barrier-risk"
+      ]
+    }
+  ],
+  "conflict_groups": [],
+  "evidence_expectations": [
+    {
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "expectation_id": "expectation-barrier-risk",
+      "gap_type": null,
+      "requirement_id": "req-composite-risk",
+      "review_episode_id": "episode-barrier",
+      "schema_version": "fixture/v1",
+      "status": "observed"
+    }
+  ],
+  "evidence_snapshot": {
+    "created_at": "2026-08-12T12:00:00Z",
+    "evidence_snapshot_id": "snapshot-barrier",
+    "prior_snapshot_id": null,
+    "review_episode_id": "episode-barrier",
+    "schema_version": "fixture/v1",
+    "source_document_version_ids": [
+      "document-barrier"
+    ],
+    "subject_id": "subject-barrier",
+    "upload_mode": "full"
+  },
+  "evidence_spans": [
+    {
+      "anchor_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "bbox": null,
+      "degradation_reason": null,
+      "evidence_span_id": "span-barrier-risk",
+      "excerpt": "合成数据：指标超过阈值，研究者判断参与构成不可接受风险。",
+      "locator_algorithm_version": "locator-v1",
+      "match_confidence": 0.91,
+      "page_number": 3,
+      "precision": "page_excerpt",
+      "schema_version": "fixture/v1",
+      "source_document_version_id": "document-barrier",
+      "text_end": null,
+      "text_start": null
+    }
+  ],
+  "facts": [
+    {
+      "certainty": 1.0,
+      "conflict_group_id": null,
+      "effective_date": null,
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "fact_id": "fact-barrier-age",
+      "fact_type": "demographics.age_years",
+      "polarity": "affirmed",
+      "schema_version": "fixture/v1",
+      "unit": "year",
+      "value": 45
+    },
+    {
+      "certainty": 1.0,
+      "conflict_group_id": null,
+      "effective_date": null,
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "fact_id": "fact-barrier-lab",
+      "fact_type": "laboratory.target_ratio_uln",
+      "polarity": "affirmed",
+      "schema_version": "fixture/v1",
+      "unit": "xULN",
+      "value": 2.1
+    },
+    {
+      "certainty": 1.0,
+      "conflict_group_id": null,
+      "effective_date": null,
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "fact_id": "fact-barrier-risk",
+      "fact_type": "investigator.unacceptable_participation_risk",
+      "polarity": "affirmed",
+      "schema_version": "fixture/v1",
+      "unit": null,
+      "value": true
+    }
+  ],
+  "final_assessments": [
+    {
+      "action_ids": [],
+      "assessment_id": "assessment-barrier-in",
+      "blocking_level": "none",
+      "decision": "inclusion_met",
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "gap_types": [],
+      "gate_result_id": "gate-barrier-in",
+      "review_run_id": "run-barrier",
+      "rule_component_id": "component-in-01",
+      "schema_version": "fixture/v1",
+      "used_fact_ids": [
+        "fact-barrier-age"
+      ]
+    },
+    {
+      "action_ids": [],
+      "assessment_id": "assessment-barrier-ex",
+      "blocking_level": "none",
+      "decision": "exclusion_triggered",
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "gap_types": [],
+      "gate_result_id": "gate-barrier-ex",
+      "review_run_id": "run-barrier",
+      "rule_component_id": "component-ex-01",
+      "schema_version": "fixture/v1",
+      "used_fact_ids": [
+        "fact-barrier-lab",
+        "fact-barrier-risk"
+      ]
+    }
+  ],
+  "fixture_id": "fixture-barrier",
+  "gate_results": [
+    {
+      "accepted": true,
+      "gate_name": "agent-output-schema-gate",
+      "gate_result_id": "gate-barrier-1",
+      "issue_codes": [],
+      "output_entity_ids": [],
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted": true,
+      "gate_name": "agent-output-schema-gate",
+      "gate_result_id": "gate-barrier-2",
+      "issue_codes": [],
+      "output_entity_ids": [],
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted": true,
+      "gate_name": "fixture-assessment-gate",
+      "gate_result_id": "gate-barrier-in",
+      "issue_codes": [],
+      "output_entity_ids": [
+        "assessment-barrier-in"
+      ],
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted": true,
+      "gate_name": "fixture-assessment-gate",
+      "gate_result_id": "gate-barrier-ex",
+      "issue_codes": [],
+      "output_entity_ids": [
+        "assessment-barrier-ex"
+      ],
+      "schema_version": "fixture/v1"
+    }
+  ],
+  "job_events": [
+    {
+      "attempt": 1,
+      "checkpoint_id": null,
+      "event_type": "created",
+      "job_event_id": "job-event-barrier-1",
+      "job_id": "job-barrier",
+      "occurred_at": "2026-08-12T12:00:00Z",
+      "payload": {},
+      "progress_completed": 0,
+      "progress_total": 2,
+      "retryable": false,
+      "schema_version": "fixture/v1",
+      "step_id": null
+    },
+    {
+      "attempt": 1,
+      "checkpoint_id": null,
+      "event_type": "completed",
+      "job_event_id": "job-event-barrier-2",
+      "job_id": "job-barrier",
+      "occurred_at": "2026-08-12T12:00:00Z",
+      "payload": {},
+      "progress_completed": 2,
+      "progress_total": 2,
+      "retryable": false,
+      "schema_version": "fixture/v1",
+      "step_id": null
+    }
+  ],
+  "model_configs": [
+    {
+      "model": "configured-review-model",
+      "model_config_id": "model-baseline-v1",
+      "parameters": {
+        "temperature": 0
+      },
+      "provider": "configured-review-provider",
+      "reasoning_effort": "max",
+      "schema_version": "fixture/v1"
+    }
+  ],
+  "patient_profile": {
+    "events": [
+      {
+        "end_date": null,
+        "event_id": "event-barrier-summary",
+        "event_type": "screening_summary",
+        "evidence_span_ids": [
+          "span-barrier-risk"
+        ],
+        "fact_ids": [
+          "fact-barrier-age",
+          "fact-barrier-lab",
+          "fact-barrier-risk"
+        ],
+        "has_trend_change": false,
+        "is_abnormal": true,
+        "is_critical": true,
+        "lane": "demographics",
+        "related_rule_component_ids": [
+          "component-in-01",
+          "component-ex-01"
+        ],
+        "risk_labels": [
+          "入排相关"
+        ],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2026-08-10"
+        },
+        "title": "发现明确排除障碍"
+      }
+    ],
+    "highlighted_event_ids": [
+      "event-barrier-summary"
+    ],
+    "missing_expectation_ids": [],
+    "patient_profile_id": "profile-barrier",
+    "review_episode_id": "episode-barrier",
+    "schema_version": "fixture/v1",
+    "stale": false,
+    "subject_id": "subject-barrier"
+  },
+  "project": {
+    "project_code": "SYNTHETIC-001-III",
+    "project_id": "project-synthetic-phase-iii",
+    "project_name": "合成Ⅲ期入排审核项目",
+    "protocol_version": {
+      "official_date": {
+        "precision": "day",
+        "source_text": null,
+        "value": "2026-08-01"
+      },
+      "official_version": "V1.0",
+      "protocol_code": "SYNTHETIC-001",
+      "protocol_version_id": "protocol-v1",
+      "schema_version": "fixture/v1",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "revision": 1,
+    "rule_set_id": "ruleset-synthetic-phase-iii",
+    "schema_version": "fixture/v1",
+    "study_phase": "phase_iii"
+  },
+  "prompt_versions": [
+    {
+      "node": "evidence_normalizer",
+      "prompt_version_id": "prompt-evidence_normalizer-v1",
+      "schema_version": "fixture/v1",
+      "schema_version_id": "fixture/v1",
+      "template_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    {
+      "node": "eligibility_assessor",
+      "prompt_version_id": "prompt-eligibility_assessor-v1",
+      "schema_version": "fixture/v1",
+      "schema_version_id": "fixture/v1",
+      "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    }
+  ],
+  "review_episode": {
+    "anchor_dates": {
+      "screening_date": {
+        "precision": "day",
+        "source_text": null,
+        "value": "2026-08-10"
+      }
+    },
+    "due_at": null,
+    "evidence_snapshot_id": "snapshot-barrier",
+    "protocol_version_id": "protocol-v1",
+    "review_episode_id": "episode-barrier",
+    "revision": 1,
+    "rule_set_revision": 1,
+    "schema_version": "fixture/v1",
+    "stage": "screening",
+    "subject_id": "subject-barrier"
+  },
+  "review_run_diffs": [],
+  "review_runs": [
+    {
+      "completed_at": "2026-08-12T12:00:00Z",
+      "evidence_snapshot_id": "snapshot-barrier",
+      "protocol_version_id": "protocol-v1",
+      "review_episode_id": "episode-barrier",
+      "review_run_id": "run-barrier",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "started_at": "2026-08-12T12:00:00Z",
+      "supersedes_review_run_id": null
+    }
+  ],
+  "rule_set": {
+    "protocol_version_id": "protocol-v1",
+    "revision": 1,
+    "rule_set_id": "ruleset-synthetic-phase-iii",
+    "rules": [
+      {
+        "components": [
+          {
+            "display_code": "IN-01",
+            "evidence_requirements": [
+              {
+                "allows_screening_record_transcription": true,
+                "description": "筛选节点应有可定位的年龄记录。",
+                "due_stage": "screening",
+                "fact_type": "demographics.age_years",
+                "required_source_types": [
+                  "screening_record",
+                  "identity_record"
+                ],
+                "requirement_id": "req-age",
+                "requires_contemporaneous_objective_source": false,
+                "rule_component_id": "component-in-01",
+                "schema_version": "fixture/v1"
+              }
+            ],
+            "exception_expression": null,
+            "expression": {
+              "kind": "predicate",
+              "predicate": {
+                "applicable_population": null,
+                "attribute": "age_years",
+                "comparator": "gte",
+                "requires_professional_judgment": false,
+                "subject": "demographics",
+                "unit": "year",
+                "value": 18
+              },
+              "time_constraint": null
+            },
+            "parent_rule_id": "rule-in-01",
+            "rule_component_id": "component-in-01",
+            "schema_version": "fixture/v1",
+            "title": "年龄要求"
+          }
+        ],
+        "kind": "inclusion",
+        "official_code": "IN-01",
+        "rule_id": "rule-in-01",
+        "schema_version": "fixture/v1",
+        "source_text": "合成规则：年龄应不低于18岁。",
+        "study_phase": "phase_iii"
+      },
+      {
+        "components": [
+          {
+            "display_code": "EX-01a",
+            "evidence_requirements": [
+              {
+                "allows_screening_record_transcription": true,
+                "description": "异常指标与研究者不可接受风险判断必须同时有证据。",
+                "due_stage": "baseline",
+                "fact_type": "laboratory_and_investigator_risk",
+                "required_source_types": [
+                  "laboratory_report",
+                  "investigator_assessment"
+                ],
+                "requirement_id": "req-composite-risk",
+                "requires_contemporaneous_objective_source": false,
+                "rule_component_id": "component-ex-01",
+                "schema_version": "fixture/v1"
+              }
+            ],
+            "exception_expression": {
+              "children": [
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "applicable_population": null,
+                    "attribute": "protocol_exception_documented",
+                    "comparator": "eq",
+                    "requires_professional_judgment": false,
+                    "subject": "exception",
+                    "unit": null,
+                    "value": true
+                  },
+                  "time_constraint": null
+                },
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "applicable_population": null,
+                    "attribute": "exception_confirmed",
+                    "comparator": "eq",
+                    "requires_professional_judgment": true,
+                    "subject": "investigator",
+                    "unit": null,
+                    "value": true
+                  },
+                  "time_constraint": null
+                }
+              ],
+              "kind": "logical",
+              "operator": "all"
+            },
+            "expression": {
+              "children": [
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "applicable_population": null,
+                    "attribute": "target_ratio_uln",
+                    "comparator": "gte",
+                    "requires_professional_judgment": false,
+                    "subject": "laboratory",
+                    "unit": "xULN",
+                    "value": 1.5
+                  },
+                  "time_constraint": null
+                },
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "applicable_population": null,
+                    "attribute": "unacceptable_participation_risk",
+                    "comparator": "eq",
+                    "requires_professional_judgment": true,
+                    "subject": "investigator",
+                    "unit": null,
+                    "value": true
+                  },
+                  "time_constraint": null
+                }
+              ],
+              "kind": "logical",
+              "operator": "all"
+            },
+            "parent_rule_id": "rule-ex-01",
+            "rule_component_id": "component-ex-01",
+            "schema_version": "fixture/v1",
+            "title": "实验室异常与研究者风险的复合条件"
+          }
+        ],
+        "kind": "exclusion",
+        "official_code": "EX-01",
+        "rule_id": "rule-ex-01",
+        "schema_version": "fixture/v1",
+        "source_text": "合成规则：异常达到阈值且研究者判断构成不可接受风险时排除。",
+        "study_phase": "phase_iii"
+      }
+    ],
+    "schema_version": "fixture/v1",
+    "study_phase": "phase_iii"
+  },
+  "scenario": "barrier",
+  "schema_version": "fixture/v1",
+  "source_documents": [
+    {
+      "document_type": "screening_record",
+      "file_name": "合成筛选资料-barrier.pdf",
+      "review_stage": "screening",
+      "schema_version": "fixture/v1",
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "source_document_version_id": "document-barrier",
+      "source_party": "investigator",
+      "upload_mode": "full"
+    }
+  ],
+  "subject": {
+    "age_years": null,
+    "center_code": "01",
+    "center_name": "合成研究中心",
+    "project_id": "project-synthetic-phase-iii",
+    "revision": 1,
+    "schema_version": "fixture/v1",
+    "sex": null,
+    "subject_code": "S-BARRIER",
+    "subject_id": "subject-barrier"
+  },
+  "workflow_stages": [
+    {
+      "display_name": "筛选期审核",
+      "due_requirement_ids": [
+        "req-age"
+      ],
+      "review_required": true,
+      "schema_version": "fixture/v1",
+      "stage": "screening",
+      "visit_window": "D-28至D-1",
+      "workflow_stage_id": "stage-screening"
+    },
+    {
+      "display_name": "基线期审核",
+      "due_requirement_ids": [
+        "req-composite-risk"
+      ],
+      "review_required": true,
+      "schema_version": "fixture/v1",
+      "stage": "baseline",
+      "visit_window": "D1随机前",
+      "workflow_stage_id": "stage-baseline"
+    }
+  ]
+}
