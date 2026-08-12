@@ -852,6 +852,8 @@ def validate_fixture_scope(fixture: FixtureV1, registry) -> None:
         item.assessment_id: item for item in fixture.final_assessments
     }
     assessment_ids = set(assessment_by_id)
+    from app.domain.gates.scope import require_registered_review_scope
+
     for call in fixture.agent_calls:
         if len(call.gate_result_ids) != len(set(call.gate_result_ids)):
             raise StageIsolationError("AgentCall 验收结果引用不得重复")
@@ -897,6 +899,11 @@ def validate_fixture_scope(fixture: FixtureV1, registry) -> None:
         if len(schema_gates) != 1:
             raise StageIsolationError("AgentCall 必须且只能绑定一个输出 Schema Gate")
         try:
+            require_registered_review_scope(
+                call,
+                registry=registry,
+                expected_schema_version=fixture.schema_version,
+            )
             require_accepted_agent_call(call, schema_gates[0])
         except ValueError as exc:
             raise StageIsolationError(str(exc)) from exc

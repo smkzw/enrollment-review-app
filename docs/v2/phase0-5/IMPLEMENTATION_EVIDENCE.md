@@ -68,6 +68,8 @@ uv run --python 3.12.13 pytest -q
 - 第八次复核后的本地候选已在共享 scope 增加来源阶段顺序、Snapshot/Agent 来源引用唯一性、Gate 引用唯一性和唯一结构化输出 Gate；直接 Candidate、Evidence、FinalAssessment 与 Fixture 均有对应反向测试。当前本地 V2 `135 passed + 2 subtests`、默认 `265 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`，8 个生成制品双跑一致；仍待同一 checker 第九次验收。
 - 第九次 checker 已确认上述阶段与重复引用 finding 全部关闭。唯一剩余 P2 是直接发布只验证调用方传入的 Schema Gate，没有逐一验证 AgentCall 另外声明的 GateResult；Fixture 路径已有更严格检查。Phase 0.5 继续 `in_progress`。
 - 第九次复核后的本地候选已在共享 scope 逐项核对 AgentCall 声明的全部 GateResult，并新增 rejected Gate、scope 错配 accepted Gate 及 FinalAssessment 夹带 Gate 的负例。当前本地 V2 `137 passed + 2 subtests`、默认 `267 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`，8 个生成制品双跑一致；仍待同一 checker 第十次复核。
+- 第十次 checker 已确认直接发布路径关闭。唯一剩余 P2 是 Fixture 对未参与 Evidence/Assessment 发布的额外 AgentCall 尚未复用共享 scope，因此其额外 Gate 的 input scope/revision 错配可漏过。Phase 0.5 继续 `in_progress`。
+- 第十次复核后的本地候选已让 Fixture 每个 AgentCall 无条件复用共享 scope/Gate 闭包，并新增未参与下游发布的额外调用负例。当前本地 V2 `138 passed + 2 subtests`、默认 `268 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`，生成制品双跑一致；仍待同一 checker 第十一次复核。
 - 本阶段未调用真实 LLM/OCR、未重审临床项目、未修改 legacy 项目数据、未调用 Qwen 3.8；用户已明确后续也不使用 Qwen 3.8 会商。
 
 ## 待验收

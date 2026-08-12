@@ -79,3 +79,16 @@
 - 新增额外 rejected Gate、表面 accepted 但 scope 错配 Gate 的 Evidence 发布负例，以及 FinalAssessment 夹带 rejected Gate 负例。
 - 本地验证：V2 `137 passed + 2 subtests`；默认全套 `267 passed, 1 skipped + 18 subtests`；legacy `130 passed, 1 skipped`；8 个生成制品双跑一致。
 - 状态仍为 `in_progress`，等待同一 checker 第十次复核。
+
+## 2026-08-13 第十次复核结论
+
+- 候选 `a249d9a` 被拒绝；直接 Evidence、Candidate、FinalAssessment 对 rejected Gate 和五类错配 accepted Gate 均确认关闭，多个合法非 Schema Gate 仍可正常接受。
+- 唯一 P2：Fixture 对未参与下游发布的额外 AgentCall 仍使用较弱手写检查，没有核对额外 Gate 的 input scope 和 revision map。
+- 根因是同一 Gate 闭包在 Fixture 与直接发布维护两份实现。下一候选让 Fixture 每个 AgentCall 都复用共享 scope 校验器。状态保持 `in_progress`。
+
+## 2026-08-13 第十次复核后的本地候选
+
+- Fixture 对每个 AgentCall 无条件调用共享审核作用域与 Gate 闭包校验器，不再取决于该调用是否被 Evidence/Assessment 下游使用。
+- 新增“未参与发布的额外 AgentCall + 合法 Schema Gate + scope/revision 错配 accepted 非 Schema Gate”负例。
+- 本地验证：V2 `138 passed + 2 subtests`；默认 `268 passed, 1 skipped + 18 subtests`；legacy `130 passed, 1 skipped`；生成制品双跑一致。
+- 状态保持 `in_progress`，等待同一 checker 第十一次复核。

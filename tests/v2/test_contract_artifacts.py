@@ -776,6 +776,59 @@ def test_fixture_scope_rejects_duplicate_snapshot_and_agent_gate_references() ->
         )
 
 
+def test_fixture_scope_validates_gates_for_unused_registered_agent_call() -> None:
+    fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
+    source_call = fixture.agent_calls[0]
+    source_schema_gate = next(
+        gate
+        for gate in fixture.gate_results
+        if gate.gate_result_id == source_call.gate_result_ids[0]
+    )
+    extra_call_id = "call-unused-extra"
+    extra_schema_gate_id = "gate-unused-extra-schema"
+    extra_other_gate_id = "gate-unused-extra-other"
+    extra_call = source_call.model_copy(
+        update={
+            "agent_call_id": extra_call_id,
+            "idempotency_key": "unused-extra-agent-call",
+            "gate_result_ids": [extra_schema_gate_id, extra_other_gate_id],
+        }
+    )
+    extra_schema_gate = source_schema_gate.model_copy(
+        update={
+            "gate_result_id": extra_schema_gate_id,
+            "input_entity_refs": [extra_call_id],
+            "accepted_entity_refs": [extra_call_id],
+            "idempotency_key": "gate:unused-extra-schema",
+        }
+    )
+    extra_other_gate = source_schema_gate.model_copy(
+        update={
+            "gate_result_id": extra_other_gate_id,
+            "gate_name": "additional-output-gate",
+            "input_scope_hash": "f" * 64,
+            "input_revision_map": {"wrong-scope": 9},
+            "input_entity_refs": [extra_call_id],
+            "accepted_entity_refs": [extra_call_id],
+            "idempotency_key": "gate:unused-extra-other",
+        }
+    )
+    invalid_fixture = fixture.model_copy(
+        update={
+            "agent_calls": [*fixture.agent_calls, extra_call],
+            "gate_results": [
+                *fixture.gate_results,
+                extra_schema_gate,
+                extra_other_gate,
+            ],
+        }
+    )
+    with pytest.raises(ValueError, match="每项验收结果都必须完整接受"):
+        validate_fixture_scope(
+            invalid_fixture, _trusted_registry_from_fixture(invalid_fixture)
+        )
+
+
 def test_stage_isolation_gate_rejects_cross_project_episode() -> None:
     fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
     registry = _trusted_registry_from_fixture(fixture)

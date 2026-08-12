@@ -1672,3 +1672,16 @@ OCR concurrency note:
 - 新增 Evidence 直接发布夹带 rejected Gate、夹带 scope 错配但 accepted 的 Gate，以及 FinalAssessment 夹带 rejected Gate 的反向测试；Fixture 与直接发布合同现使用同一严格度。
 - 本地验证为 V2 `137 passed + 2 subtests`、默认 `267 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`；8 个生成制品双跑一致，`compileall`、`uv lock --check`、`git diff --check` 通过。
 - Phase 0.5 仍为 `in_progress`；第十次继续复用同一 Luna checker，不调用 Qwen 3.8。
+
+2026-08-13 Phase 0.5 同一 Luna checker 第十次复核：
+
+- 候选 `a249d9a` 被拒绝；第九次直接发布 finding 已确认关闭。Evidence、Candidate、FinalAssessment 均拒绝 rejected Gate 和五类错配 accepted Gate，并允许一个 Schema Gate 加多个完整接受的非 Schema Gate。
+- 唯一 P2：Fixture 的 AgentCall 循环仍有一份较弱手写 Gate 检查。追加一个未参与下游发布的 AgentCall 时，可夹带 input_scope_hash/input_revision_map 错配的 accepted 非 Schema Gate。
+- 根因是直接发布和 Fixture 重复实现同一闭包。下一修复让 Fixture 每个 AgentCall 无条件复用 `require_registered_review_scope`，不再依赖是否被 Evidence/Assessment 使用。Phase 1 继续冻结，第十一次仍复用同一 checker。
+
+2026-08-13 Phase 0.5 第十次拒绝后的本地修复（待第十一次复核）：
+
+- `validate_fixture_scope` 的每个 AgentCall 现在无条件调用 `require_registered_review_scope`，因此所有声明 Gate 都执行与直接发布完全相同的 accepted、调用引用、scope、revision 和 output 闭包检查。
+- 新增未参与任何 Evidence/Assessment 发布的额外 AgentCall 场景：即使 Schema Gate 合法，只要附加 accepted Gate 的 input_scope_hash 或 input_revision_map 错配，Fixture 也会拒绝。
+- 本地验证为 V2 `138 passed + 2 subtests`、默认 `268 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`；8 个生成制品双跑一致，`compileall`、`uv lock --check`、`git diff --check` 通过。
+- Phase 0.5 继续 `in_progress`；第十一次仍只复用同一 Luna checker。
