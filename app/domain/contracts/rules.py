@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Literal, Union
 
 from pydantic import Field, model_validator
@@ -32,6 +33,15 @@ class TimeConstraint(ContractModel):
             and self.lower_bound_days > self.upper_bound_days
         ):
             raise ValueError("时间窗下界不能大于上界")
+        if self.direction == TimeDirection.ON and any(
+            value is not None
+            for value in (
+                self.lower_bound_days,
+                self.upper_bound_days,
+                self.half_life_multiplier,
+            )
+        ):
+            raise ValueError("on 仅表示与锚点同一日，不能携带时间窗或半衰期参数")
         return self
 
 
@@ -44,6 +54,7 @@ class AtomicPredicate(ContractModel):
     unit: str | None = None
     applicable_population: str | None = None
     requires_professional_judgment: bool = False
+    unit_match_policy: Literal["exact_canonical_label"] = "exact_canonical_label"
 
     @model_validator(mode="after")
     def validate_comparator_value(self) -> "AtomicPredicate":
@@ -186,40 +197,48 @@ class WorkflowStage(VersionedModel):
     due_requirement_ids: list[str] = Field(default_factory=list)
 
 
-class ProtocolIntegrityManifest(VersionedModel):
-    manifest_id: str = Field(min_length=1)
+class ProtocolAuthorityRecord(VersionedModel):
+    authority_record_id: str = Field(min_length=1)
     protocol_version_id: str = Field(min_length=1)
     protocol_document_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     study_phase: StudyPhase
-    source_refs: list[str] = Field(min_length=1)
-    authoritative_rules: list[Rule] = Field(min_length=1)
-    authoritative_workflow_stages: list[WorkflowStage] = Field(min_length=1)
-    manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    official_rules: list[Rule] = Field(min_length=1)
+    official_workflow_stages: list[WorkflowStage] = Field(min_length=1)
+    rule_source_anchor_refs: dict[str, list[str]]
+    verified_by: str = Field(min_length=1)
+    verified_at: datetime
+    verification_method: Literal["human_verified_official_protocol"]
+    authority_record_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
-    def validate_manifest_hash(self) -> "ProtocolIntegrityManifest":
+    def validate_authority_record(self) -> "ProtocolAuthorityRecord":
         from app.domain.publication import canonical_hash
 
         expected = canonical_hash(
-            self.model_dump(mode="json", exclude={"manifest_sha256"})
+            self.model_dump(mode="json", exclude={"authority_record_sha256"})
         )
-        if self.manifest_sha256 != expected:
-            raise ValueError("ProtocolIntegrityManifest 与权威结构哈希不一致")
-        if any(rule.study_phase != self.study_phase for rule in self.authoritative_rules):
-            raise ValueError("权威规则期别必须与 Manifest 一致")
+        if self.authority_record_sha256 != expected:
+            raise ValueError("ProtocolAuthorityRecord 哈希与正式方案权威结构不一致")
+        codes = [item.official_code for item in self.official_rules]
+        if set(self.rule_source_anchor_refs) != set(codes):
+            raise ValueError("每条官方规则必须提供且只能提供自己的来源定位")
+        if any(not self.rule_source_anchor_refs[code] for code in codes):
+            raise ValueError("官方规则来源定位不能为空")
+        if any(item.study_phase != self.study_phase for item in self.official_rules):
+            raise ValueError("权威规则期别必须与 AuthorityRecord 一致")
         stage_by_value = {
-            workflow.stage: workflow for workflow in self.authoritative_workflow_stages
+            workflow.stage: workflow for workflow in self.official_workflow_stages
         }
-        if len(stage_by_value) != len(self.authoritative_workflow_stages):
-            raise ValueError("ProtocolIntegrityManifest 不得包含重复审核阶段")
+        if len(stage_by_value) != len(self.official_workflow_stages):
+            raise ValueError("ProtocolAuthorityRecord 不得包含重复审核阶段")
         requirements = {
             requirement.requirement_id: requirement
-            for rule in self.authoritative_rules
+            for rule in self.official_rules
             for component in rule.components
             for requirement in component.evidence_requirements
         }
         listed_due_stages: dict[str, ReviewStage] = {}
-        for workflow in self.authoritative_workflow_stages:
+        for workflow in self.official_workflow_stages:
             for requirement_id in workflow.due_requirement_ids:
                 if requirement_id in listed_due_stages:
                     raise ValueError("EvidenceRequirement 不得在多个阶段重复到期")
@@ -233,6 +252,30 @@ class ProtocolIntegrityManifest(VersionedModel):
             for requirement_id, requirement in requirements.items()
         ):
             raise ValueError("WorkflowStage 到期阶段与 EvidenceRequirement.due_stage 不一致")
+        return self
+
+
+class ProtocolIntegrityManifest(VersionedModel):
+    manifest_id: str = Field(min_length=1)
+    protocol_version_id: str = Field(min_length=1)
+    protocol_document_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    study_phase: StudyPhase
+    source_refs: list[str] = Field(min_length=1)
+    authority_record_id: str = Field(min_length=1)
+    authority_record_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    authoritative_rule_set_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    authoritative_workflow_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def validate_manifest_hash(self) -> "ProtocolIntegrityManifest":
+        from app.domain.publication import canonical_hash
+
+        expected = canonical_hash(
+            self.model_dump(mode="json", exclude={"manifest_sha256"})
+        )
+        if self.manifest_sha256 != expected:
+            raise ValueError("ProtocolIntegrityManifest 与权威结构哈希不一致")
         return self
 
 

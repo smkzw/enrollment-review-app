@@ -55,6 +55,9 @@ class AgentCallContract(VersionedModel):
     parent_event_id: str | None = None
     same_session_group_id: str | None = None
     project_id: str | None = None
+    protocol_version_id: str | None = None
+    rule_set_id: str | None = None
+    rule_set_revision: int | None = Field(default=None, ge=1)
     subject_id: str | None = None
     review_episode_id: str | None = None
     review_run_id: str | None = None
@@ -63,7 +66,7 @@ class AgentCallContract(VersionedModel):
     input_tokens: int | None = Field(default=None, ge=0)
     output_tokens: int | None = Field(default=None, ge=0)
     estimated_cost: float | None = Field(default=None, ge=0)
-    gate_result_ids: list[str] = Field(default_factory=list)
+    gate_result_ids: list[str] = Field(min_length=1)
 
     @model_validator(mode="after")
     def validate_node_scope(self) -> "AgentCallContract":
@@ -79,14 +82,16 @@ class AgentCallContract(VersionedModel):
             raise ValueError("attempt 不能大于 max_attempts")
         if self.finished_at < self.started_at:
             raise ValueError("finished_at 不能早于 started_at")
-        if not self.project_id:
-            raise ValueError("AgentCall 必须绑定 project_id")
+        if not self.project_id or not self.protocol_version_id:
+            raise ValueError("AgentCall 必须绑定 project_id 和 protocol_version_id")
         if self.node == AgentNode.PROTOCOL_DECONSTRUCTOR:
             if not self.source_ids:
                 raise ValueError("方案解构 AgentCall 必须绑定方案来源")
         elif not all(
             [
                 self.subject_id,
+                self.rule_set_id,
+                self.rule_set_revision,
                 self.review_episode_id,
                 self.review_run_id,
                 self.evidence_snapshot_id,

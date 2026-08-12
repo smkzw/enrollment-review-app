@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .enums import DatePrecision
+from .enums import DatePrecision, ErrorCode
 
 
 class ContractModel(BaseModel):
@@ -38,7 +38,7 @@ class AuditStamp(ContractModel):
 
 
 class ErrorDetail(ContractModel):
-    code: str = Field(min_length=1)
+    code: ErrorCode
     title: str = Field(min_length=1)
     detail: str = Field(min_length=1)
     recovery_action: str = Field(min_length=1)

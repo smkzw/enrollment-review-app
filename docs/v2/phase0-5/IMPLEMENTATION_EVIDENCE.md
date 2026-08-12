@@ -6,7 +6,7 @@
 ## 已形成的合同
 
 - Pydantic `fixture/v1` 领域模型：项目、正式方案版本、独立研究期别、受试者、审核节点、规则树、证据快照、事实、Patient Profile、判断候选、最终判断、行动、Agent 调用、Gate、Job 和运行差异。
-- 有限递归 `ALL / ANY / NOT` 规则表达式；三值 Evaluator 确定性计算比较器、单位、时间锚点/窗口及独立例外树，缺失、冲突或不可比时保守返回 unknown。
+- 有限递归 `ALL / ANY / NOT` 规则表达式；三值 Evaluator 确定性计算比较器、规范单位、时间锚点/窗口及独立例外树，缺失、冲突或不可比时保守返回 unknown。首版禁止隐式单位换算，`on` 不能夹带区间或半衰期参数。
 - 每个原子谓词有 RuleSet 内唯一的 `predicate_id`；AssessmentCandidate 必须逐项输出谓词真值、事实与原因引用，Gate 与确定性 Evaluator 逐谓词对比，拒绝漏项或改写。
 - 确定性 Assessment Gate 从规则类型、trigger/exception 和 gap 推导最终状态，并拒绝不一致的 Agent 候选；Action 阻断、Agent 写域、阶段闭包和节点汇总同样由确定性代码控制。
 - 三类合成受试者 Fixture：未发现明确障碍、明确障碍、当前缺口/来源冲突；定位覆盖 `bbox / text_range / page_excerpt / page_only`。
@@ -17,9 +17,11 @@
 ## 不变量
 
 - Agent 只能产生草稿、候选或 CriticRun，不能写 FinalAssessment、Action 阻断等级或 EpisodeRollup。
-- FinalAssessment 的状态、缺口矩阵和阻断等级由 Gate 计算；FinalAssessment、ActionRequest 和 EpisodeRollup 的模型边界也拒绝绕过 Gate 的非法直接构造。
-- 发布实体必须同时持有发布指纹和与输出哈希一致的 accepted GateResult；被拒 Gate、跨 Project/Subject/Episode/Snapshot 事实或候选均无法通过 Fixture 完整性校验。
-- ProtocolIntegrityManifest 绑定正式方案文件哈希、完整 Rule/Component/Expression/EvidenceRequirement 树和 WorkflowStage；到期清单必须与每条 `due_stage` 一一一致。
+- FinalAssessment 的求值、状态、缺口矩阵和阻断等级由 Gate 内部重算；调用方不能提交自算 `evaluation`。FinalAssessment、ActionRequest 和 EpisodeRollup 只接受完整上游 publication 闭包。
+- EvidenceNormalizationCandidate、AssessmentCandidate、FinalAssessment、ActionRequest、EpisodeRollup 和 ProtocolIntegrity 均产生或验证 accepted GateResult；发布指纹只是实体自校验，不能替代 Gate 闭包。Evidence Gate 不再接受脱离 Normalizer AgentCall/Candidate 的另一组调用方事实。
+- `ProtocolAuthorityRecord` 绑定正式方案哈希、人工核对人/时间/方式、每条规则来源锚点及完整 Rule/Workflow；Authority Gate 之后才能构建 Manifest，Protocol Integrity Gate 再逐项重算并封闭 RuleSet/Workflow/ProtocolVersion。
+- AgentCall 的 `gate_result_ids` 非空；受试者 Agent 与其输出完整绑定 Project/ProtocolVersion/RuleSet revision/Subject/Episode/Run/Snapshot/Source。Agent 输出 Schema Gate 是后续 Candidate Gate 的强制上游，跨作用域、跨调用或未经接受的调用被拒绝。
+- UNKNOWN ClinicalFact 不能携带 typed value/unit；原子观察的值、单位、fact/span 引用由 Evaluator 从 accepted Evidence Gate 输入推导，拒绝候选伪造。
 - `provenance_followup` 单独计数且不阻断；`future_stage_not_due` 为关注；当前资料/判断/冲突缺口为阻断。
 - 节点主状态固定按：明确障碍、当前节点缺口、冲突、需专业判断、后续节点关注、未发现明确障碍。
 - OpenAPI 所有已声明的非成功响应均引用 `ErrorEnvelope`，不由前端自行猜错误结构。
@@ -34,22 +36,24 @@ uv run --python 3.12.13 pytest -q
 /usr/bin/python3 -m pytest -q tests --ignore=tests/v2
 ```
 
-候选生成与测试结果：
+本轮候选生成与测试结果：
 
-- Phase 0.5 合同专项：`91 passed`。
-- V2 默认全套：`227 passed, 1 skipped`，另有 18 个 subtests；跳过项为既有 MG-K10-SAR/06003 OCR 缓存 Fixture 不存在。
+- Phase 0.5 合同专项：`106 passed`，另有 2 个 subtests。
+- V2 默认全套：`236 passed, 1 skipped`，另有 18 个 subtests；跳过项为既有 MG-K10-SAR/06003 OCR 缓存 Fixture 不存在。
 - legacy Python 3.9：`130 passed, 1 skipped`；跳过原因相同。
 - `compileall` 和 `git diff --check` 通过。
 - 生成器覆盖 4 个 Schema/OpenAPI 和 4 个 Fixture；连续两次生成的 8 个 SHA-256 完全一致：
-  - `agent-contracts-v1.schema.json`: `b098483c6180fdea4220cb4014fc78347796325696df53f50b2d3cdd494aba14`
-  - `fixture-v1.schema.json`: `95eb93a548a4ff33f72b0ccdc2089bb8e550f1a4a764bc0ee83ee0d7ebad3d72`
-  - `openapi-v1.draft.json`: `0f2b4dd250f701793fda5615e5279ebf2b3d593f74a276b5e3eea71b8bc9143f`
-  - `uat-phase1-workspace.schema.json`: `432aa1904bd8114fab6397adf75c2a6ad7eb17552e353da97bba3e7df43a89c3`
-  - `subject-barrier.json`: `6fae17736e6787a6c99aadf525f00986b1ad8715086ae3eb3b2ff91cd7b2f79c`
-  - `subject-clear.json`: `d6a7a466c7cb9b5ef7cba5a5668c355e2a93b0c9ad1002fe70835fcada7efa9a`
-  - `subject-gap_conflict.json`: `c16b58d589a1a9719660acb4ecdb03b68256bab4705314ff1436cbbb54acabbc`
-  - `uat-phase1-workspace.json`: `6fb2600b4b154189459dfa68caca052115f23c6aa57168141dab8016885845b8`
-- 本阶段未调用真实 LLM/OCR、未重审临床项目、未修改 legacy 项目数据、未调用 Qwen 3.8。
+  - `agent-contracts-v1.schema.json`: `972f1b30dc782f96bdd65408e429791dc6600efd5e9a3e0d58eff1b3cc1e2da1`
+  - `fixture-v1.schema.json`: `5797d1db63e5182d64a00df65aa13a6e2ba1f8f5fc182401f2e47053ed873f31`
+  - `openapi-v1.draft.json`: `a7828539cd9590e8a05765b3ad350245e6fd78f0d376b05e8c40ecfee5b6c4b3`
+  - `uat-phase1-workspace.schema.json`: `82e8ced0a9aead0f14fb664b2b990d27e82939a02f194ca7af897ec5824812cd`
+  - `subject-barrier.json`: `7045d8e88b1724befef41d9e7d43220fdf9583352b4d09ef6eed941dfe394317`
+  - `subject-clear.json`: `71462a0f9f9e07d54323094037c53f0ec45202e878ed2804eff63670586229dc`
+  - `subject-gap_conflict.json`: `cdadbf795c4565dc64230834567c62ed6ca78386cc471709742b7cc8b7ed5b4d`
+  - `uat-phase1-workspace.json`: `438b9fb6a2a4dd2ef6ca41f9bd6492301eeffa407d8632d9a892d22ebbb059f1`
+- 第三次独立复核识别并已修复：caller-supplied evaluation、UNKNOWN 携带值、`on` 忽略区间参数、候选伪造观察值/单位/Span、Agent scope 漂移、调用方自证方案权威、Action/Rollup 未验证完整上游 publication，以及 UAT 语义覆盖不足。
+- 当前针对性 V2 契约测试、完整套件、legacy 回归和生成哈希均已更新；同一 checker 复核仍待完成。
+- 本阶段未调用真实 LLM/OCR、未重审临床项目、未修改 legacy 项目数据、未调用 Qwen 3.8；用户已明确后续也不使用 Qwen 3.8 会商。
 
 ## 待验收
 

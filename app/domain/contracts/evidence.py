@@ -151,6 +151,10 @@ class ClinicalFact(VersionedModel):
 
     @model_validator(mode="after")
     def validate_polarity_value(self) -> "ClinicalFact":
+        if self.polarity == FactPolarity.UNKNOWN:
+            if self.value is not None or self.unit is not None:
+                raise ValueError("未知极性事实不能携带 typed value 或单位")
+            return self
         if self.polarity in {FactPolarity.AFFIRMED, FactPolarity.NEGATED} and self.value is None:
             raise ValueError("肯定或否定事实必须携带被断言的 typed value")
         if (

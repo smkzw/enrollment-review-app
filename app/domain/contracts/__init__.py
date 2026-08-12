@@ -25,6 +25,7 @@ from .evidence import (
     PatientProfileEvent,
 )
 from .jobs import JobEvent, ReviewRunDiff
+from .normalization import EvidenceNormalizationCandidate
 from .projections import EpisodeRollup
 from .review import (
     ActionRequest,
@@ -38,6 +39,7 @@ from .review import (
 )
 from .rules import (
     EvidenceRequirement,
+    ProtocolAuthorityRecord,
     ProtocolIntegrityManifest,
     Rule,
     RuleComponent,
@@ -62,6 +64,7 @@ __all__ = [
     "EvidenceExpectation",
     "EvidenceSnapshot",
     "EvidenceRequirement",
+    "EvidenceNormalizationCandidate",
     "EvidenceSpan",
     "EpisodeRollup",
     "ErrorDetail",
@@ -76,6 +79,7 @@ __all__ = [
     "Project",
     "ProjectListResponse",
     "ProtocolIntegrityManifest",
+    "ProtocolAuthorityRecord",
     "PromptVersion",
     "ReviewEpisode",
     "ReviewRun",

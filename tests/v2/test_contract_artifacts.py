@@ -10,7 +10,14 @@ from app.domain.contracts.review import FixtureV1
 from app.domain.contracts.agent_io import AgentContractsV1
 from app.domain.contracts.uat import UatWorkspaceFixture
 from app.domain.contracts.enums import ReviewStage
-from app.domain.gates import validate_action_request, validate_fixture_scope, validate_protocol_integrity
+from app.domain.gates import (
+    assert_protocol_integrity,
+    require_protocol_integrity_acceptance,
+    validate_action_publication,
+    validate_fixture_scope,
+)
+from app.domain.gates.actions import ActionPublication
+from app.domain.gates.assessment import AssessmentPublication
 from app.domain.rollup import publish_episode_rollup
 
 
@@ -58,11 +65,16 @@ def test_three_fixture_scenarios_validate_with_pydantic_and_json_schema() -> Non
 def test_fixture_references_are_internally_consistent() -> None:
     for path in FIXTURE_PATHS:
         fixture = FixtureV1.model_validate(load_json(path))
-        validate_protocol_integrity(
+        gate_by_id = {item.gate_result_id: item for item in fixture.gate_results}
+        assert_protocol_integrity(
             fixture.rule_set,
             workflow_stages=fixture.workflow_stages,
             protocol_version=fixture.project.protocol_version,
             manifest=fixture.protocol_integrity_manifest,
+            authority_record=fixture.protocol_authority_record,
+            authority_gate_result=gate_by_id[
+                fixture.project.protocol_version.authority_gate_result_id
+            ],
         )
         validate_fixture_scope(fixture)
         span_ids = {item.evidence_span_id for item in fixture.evidence_spans}
@@ -72,7 +84,6 @@ def test_fixture_references_are_internally_consistent() -> None:
             for rule in fixture.rule_set.rules
             for component in rule.components
         }
-        action_ids = {item.action_id for item in fixture.actions}
         gate_ids = {item.gate_result_id for item in fixture.gate_results}
         call_ids = {item.agent_call_id for item in fixture.agent_calls}
         prompt_by_id = {item.prompt_version_id: item for item in fixture.prompt_versions}
@@ -103,6 +114,16 @@ def test_fixture_references_are_internally_consistent() -> None:
 
         for fact in fixture.facts:
             assert set(fact.evidence_span_ids) <= span_ids
+        assert {
+            item.fact_id
+            for candidate in fixture.evidence_normalization_candidates
+            for item in candidate.clinical_fact_candidates
+        } == fact_ids
+        assert {
+            item.evidence_span_id
+            for candidate in fixture.evidence_normalization_candidates
+            for item in candidate.evidence_span_candidates
+        } == span_ids
         for expectation in fixture.evidence_expectations:
             assert expectation.review_episode_id == fixture.review_episode.review_episode_id
             assert expectation.requirement_id in requirement_ids
@@ -115,14 +136,27 @@ def test_fixture_references_are_internally_consistent() -> None:
         for assessment in fixture.final_assessments:
             assert assessment.rule_component_id in component_ids
             assert assessment.gate_result_id in gate_ids
-            assert set(assessment.action_ids) <= action_ids
         for call in fixture.agent_calls:
             assert set(call.gate_result_ids) <= gate_ids
             assert call.prompt_version_id in prompt_by_id
             assert prompt_by_id[call.prompt_version_id].node == call.node
             assert call.model_config_id in model_ids
         for action in fixture.actions:
-            validate_action_request(action)
+            assessment = next(
+                item
+                for item in fixture.final_assessments
+                if item.assessment_id == action.assessment_id
+            )
+            validate_action_publication(
+                ActionPublication(
+                    action=action,
+                    gate_result=gate_by_id[action.gate_result_id],
+                ),
+                assessment_publication=AssessmentPublication(
+                    assessment=assessment,
+                    gate_result=gate_by_id[assessment.gate_result_id],
+                ),
+            )
         for run in fixture.review_runs:
             assert run.review_episode_id == fixture.review_episode.review_episode_id
             assert run.protocol_version_id == fixture.review_episode.protocol_version_id
@@ -140,9 +174,29 @@ def test_fixture_rollups_match_scenario_semantics() -> None:
         fixture = FixtureV1.model_validate(load_json(path))
         publication = publish_episode_rollup(
             review_episode_id=fixture.review_episode.review_episode_id,
-            assessments=fixture.final_assessments,
+            assessment_publications=[
+                AssessmentPublication(
+                    assessment=item,
+                    gate_result=next(
+                        gate
+                        for gate in fixture.gate_results
+                        if gate.gate_result_id == item.gate_result_id
+                    ),
+                )
+                for item in fixture.final_assessments
+            ],
             expectations=fixture.evidence_expectations,
-            actions=fixture.actions,
+            action_publications=[
+                ActionPublication(
+                    action=item,
+                    gate_result=next(
+                        gate
+                        for gate in fixture.gate_results
+                        if gate.gate_result_id == item.gate_result_id
+                    ),
+                )
+                for item in fixture.actions
+            ],
             gate_result_id=fixture.episode_rollup.gate_result_id,
             input_revision_map={
                 fixture.review_episode.review_episode_id: fixture.review_episode.revision
@@ -232,11 +286,62 @@ def test_uat_workspace_has_executable_multistage_coverage() -> None:
     assert {item.review_episode.stage for item in workspace.episodes} == set(ReviewStage)
     for fixture in workspace.episodes:
         validate_fixture_scope(fixture)
-        validate_protocol_integrity(
+        gate_by_id = {item.gate_result_id: item for item in fixture.gate_results}
+        assert_protocol_integrity(
             fixture.rule_set,
             workflow_stages=fixture.workflow_stages,
             protocol_version=fixture.project.protocol_version,
             manifest=fixture.protocol_integrity_manifest,
+            authority_record=fixture.protocol_authority_record,
+            authority_gate_result=gate_by_id[
+                fixture.project.protocol_version.authority_gate_result_id
+            ],
+        )
+
+
+def test_uat_workspace_rejects_semantic_operator_coverage_regression() -> None:
+    payload = load_json(UAT_FIXTURE_PATH)
+
+    def remove_not(expression: dict) -> dict:
+        if expression.get("kind") != "logical":
+            return expression
+        children = [remove_not(item) for item in expression["children"]]
+        if expression.get("operator") == "not":
+            return children[0]
+        return {**expression, "children": children}
+
+    for fixture in payload["episodes"]:
+        for rule in fixture["rule_set"]["rules"]:
+            for component in rule["components"]:
+                component["expression"] = remove_not(component["expression"])
+                if component.get("exception_expression") is not None:
+                    component["exception_expression"] = remove_not(
+                        component["exception_expression"]
+                    )
+
+    with pytest.raises(ValueError, match="ALL、ANY、NOT"):
+        UatWorkspaceFixture.model_validate(payload)
+
+
+def test_protocol_integrity_gate_rejects_tampered_stored_closure() -> None:
+    fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
+    gate_by_id = {item.gate_result_id: item for item in fixture.gate_results}
+    authority_gate = gate_by_id[
+        fixture.project.protocol_version.authority_gate_result_id
+    ]
+    stored_gate = gate_by_id[
+        fixture.project.protocol_version.integrity_gate_result_id
+    ]
+    tampered = stored_gate.model_copy(update={"output_hash": "f" * 64})
+    with pytest.raises(ValueError, match="闭包无效"):
+        require_protocol_integrity_acceptance(
+            tampered,
+            rule_set=fixture.rule_set,
+            workflow_stages=fixture.workflow_stages,
+            protocol_version=fixture.project.protocol_version,
+            manifest=fixture.protocol_integrity_manifest,
+            authority_record=fixture.protocol_authority_record,
+            authority_gate_result=authority_gate,
         )
 
 

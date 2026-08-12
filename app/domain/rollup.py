@@ -19,9 +19,10 @@ from app.domain.contracts.projections import (
     STATUS_SORT_RANK,
     main_status_from_counts,
 )
-from app.domain.contracts.review import ActionRequest, FinalAssessment
+from app.domain.gates.actions import ActionPublication, validate_action_publication
+from app.domain.gates.assessment import AssessmentPublication
 from app.domain.policies import derive_expectation_blocking_level
-from app.domain.publication import build_published_model, canonical_hash
+from app.domain.publication import _build_gate_owned_model, canonical_hash
 
 
 class EpisodeRollupPublication(VersionedModel):
@@ -32,13 +33,46 @@ class EpisodeRollupPublication(VersionedModel):
 def publish_episode_rollup(
     *,
     review_episode_id: str,
-    assessments: list[FinalAssessment],
+    assessment_publications: list[AssessmentPublication],
     expectations: list[EvidenceExpectation],
-    actions: list[ActionRequest],
+    action_publications: list[ActionPublication],
     gate_result_id: str,
     input_revision_map: dict[str, int],
     created_at: datetime,
 ) -> EpisodeRollupPublication:
+    assessments = [item.assessment for item in assessment_publications]
+    actions = [item.action for item in action_publications]
+    for publication in assessment_publications:
+        assessment = publication.assessment
+        gate = publication.gate_result
+        if (
+            gate.gate_name != "assessment-publication-gate"
+            or gate.result != GateOutcome.ACCEPTED
+            or assessment.assessment_id not in gate.accepted_entity_refs
+            or gate.output_hash != canonical_hash(assessment.model_dump(mode="json"))
+            or assessment.review_episode_id != review_episode_id
+        ):
+            raise ValueError("EpisodeRollup 输入包含未验收或跨 Episode 的 Assessment")
+    assessment_publication_by_id = {
+        item.assessment.assessment_id: item for item in assessment_publications
+    }
+    assessment_ids = set(assessment_publication_by_id)
+    for publication in action_publications:
+        action = publication.action
+        assessment_publication = assessment_publication_by_id.get(action.assessment_id)
+        if assessment_publication is None:
+            raise ValueError("EpisodeRollup Action 未引用当前输入 Assessment")
+        validate_action_publication(
+            publication,
+            assessment_publication=assessment_publication,
+        )
+        if (
+            action.review_episode_id != review_episode_id
+            or action.assessment_id not in assessment_ids
+        ):
+            raise ValueError("EpisodeRollup 输入包含跨 Episode/Assessment 的 Action")
+    if any(item.review_episode_id != review_episode_id for item in expectations):
+        raise ValueError("EpisodeRollup 输入包含跨 Episode 的 EvidenceExpectation")
     decisions = Counter(item.decision for item in assessments)
     gaps = Counter(gap for item in assessments for gap in item.gap_types)
     expectation_gaps = Counter(item.gap_type for item in expectations if item.gap_type is not None)
@@ -80,7 +114,7 @@ def publish_episode_rollup(
         future_count=future_count,
     )
 
-    rollup = build_published_model(
+    rollup = _build_gate_owned_model(
         EpisodeRollup,
         entity_type="episode_rollup",
         gate_result_id=gate_result_id,
@@ -105,6 +139,8 @@ def publish_episode_rollup(
     )
     input_entity_refs = [
         review_episode_id,
+        *[item.gate_result.gate_result_id for item in assessment_publications],
+        *[item.gate_result.gate_result_id for item in action_publications],
         *rollup.input_assessment_ids,
         *rollup.input_expectation_ids,
         *rollup.input_action_ids,

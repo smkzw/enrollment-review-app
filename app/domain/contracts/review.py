@@ -27,7 +27,8 @@ from .evidence import (
     SourceDocumentVersion,
 )
 from .jobs import JobEvent, ReviewRunDiff
-from .rules import ProtocolIntegrityManifest, RuleSet, WorkflowStage
+from .normalization import EvidenceNormalizationCandidate
+from .rules import ProtocolAuthorityRecord, ProtocolIntegrityManifest, RuleSet, WorkflowStage
 from .projections import EpisodeRollup
 
 
@@ -38,6 +39,9 @@ class ProtocolDocumentVersion(VersionedModel):
     official_date: DateValue
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     integrity_manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    authority_record_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    authority_gate_result_id: str = Field(min_length=1)
+    integrity_gate_result_id: str = Field(min_length=1)
 
 
 class Project(RevisionedModel):
@@ -97,6 +101,12 @@ class PredicateObservation(VersionedModel):
 class AssessmentCandidate(VersionedModel):
     assessment_candidate_id: str = Field(min_length=1)
     agent_call_id: str = Field(min_length=1)
+    project_id: str = Field(min_length=1)
+    protocol_version_id: str = Field(min_length=1)
+    subject_id: str = Field(min_length=1)
+    rule_set_id: str = Field(min_length=1)
+    rule_set_revision: int = Field(ge=1)
+    review_run_id: str = Field(min_length=1)
     rule_component_id: str = Field(min_length=1)
     review_episode_id: str = Field(min_length=1)
     evidence_snapshot_id: str = Field(min_length=1)
@@ -116,6 +126,13 @@ class AssessmentCandidate(VersionedModel):
 
 class FinalAssessment(VersionedModel):
     assessment_id: str = Field(min_length=1)
+    project_id: str = Field(min_length=1)
+    protocol_version_id: str = Field(min_length=1)
+    subject_id: str = Field(min_length=1)
+    rule_set_id: str = Field(min_length=1)
+    rule_set_revision: int = Field(ge=1)
+    review_episode_id: str = Field(min_length=1)
+    evidence_snapshot_id: str = Field(min_length=1)
     review_run_id: str = Field(min_length=1)
     rule_component_id: str = Field(min_length=1)
     decision: ComponentDecision
@@ -123,7 +140,6 @@ class FinalAssessment(VersionedModel):
     blocking_level: BlockingLevel
     used_fact_ids: list[str] = Field(default_factory=list)
     evidence_span_ids: list[str] = Field(default_factory=list)
-    action_ids: list[str] = Field(default_factory=list)
     gate_result_id: str = Field(min_length=1)
     publication_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
 
@@ -161,6 +177,15 @@ class ActionTransition(VersionedModel):
 
 class ActionRequest(RevisionedModel):
     action_id: str = Field(min_length=1)
+    project_id: str = Field(min_length=1)
+    protocol_version_id: str = Field(min_length=1)
+    subject_id: str = Field(min_length=1)
+    rule_set_id: str = Field(min_length=1)
+    rule_set_revision: int = Field(ge=1)
+    review_episode_id: str = Field(min_length=1)
+    evidence_snapshot_id: str = Field(min_length=1)
+    review_run_id: str = Field(min_length=1)
+    assessment_id: str = Field(min_length=1)
     rule_component_id: str = Field(min_length=1)
     gap_type: GapType
     target_party: ActionTarget
@@ -207,6 +232,7 @@ class FixtureV1(VersionedModel):
     fixture_id: str = Field(min_length=1)
     scenario: str = Field(min_length=1)
     project: Project
+    protocol_authority_record: ProtocolAuthorityRecord
     protocol_integrity_manifest: ProtocolIntegrityManifest
     rule_set: RuleSet
     workflow_stages: list[WorkflowStage]
@@ -216,6 +242,9 @@ class FixtureV1(VersionedModel):
     review_runs: list[ReviewRun]
     source_documents: list[SourceDocumentVersion]
     evidence_spans: list[EvidenceSpan]
+    evidence_normalization_candidates: list[EvidenceNormalizationCandidate] = Field(
+        min_length=1
+    )
     evidence_expectations: list[EvidenceExpectation]
     facts: list[ClinicalFact]
     conflict_groups: list[ConflictGroup] = Field(default_factory=list)

@@ -1,10 +1,18 @@
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from .agents import AgentCallContract, CriticRun, GateResult, ModelConfigContract, PromptVersion
 from .common import VersionedModel
-from .evidence import ClinicalFact, ConflictGroup, EvidenceExpectation, EvidenceSpan
+from .evidence import EvidenceExpectation, EvidenceSpan
+from .normalization import (
+    ClinicalEventCandidate,
+    CoverageSummary,
+    EvidenceNormalizationCandidate,
+    MedicationExposureCandidate,
+    ReferencedDocumentCandidate,
+    UnresolvedItem,
+)
 from .review import AssessmentCandidate
 from .rules import EvidenceRequirement, Rule, RuleComponent, WorkflowStage
 
@@ -32,18 +40,6 @@ class EvidenceRequirementDraft(VersionedModel):
     source_refs: list[str] = Field(min_length=1)
 
 
-class CoverageSummary(VersionedModel):
-    processed_refs: list[str] = Field(default_factory=list)
-    missing_refs: list[str] = Field(default_factory=list)
-    duplicate_refs: list[str] = Field(default_factory=list)
-
-
-class UnresolvedItem(VersionedModel):
-    code: str = Field(min_length=1)
-    affected_scope: list[str] = Field(min_length=1)
-    source_refs: list[str] = Field(default_factory=list)
-
-
 class ProtocolDeconstructionInput(VersionedModel):
     project_id: str = Field(min_length=1)
     protocol_version_id: str = Field(min_length=1)
@@ -54,6 +50,8 @@ class ProtocolDeconstructionInput(VersionedModel):
 
 class ProtocolDeconstructionDraft(VersionedModel):
     draft_id: str = Field(min_length=1)
+    project_id: str = Field(min_length=1)
+    protocol_version_id: str = Field(min_length=1)
     proposed_rules: list[Rule]
     proposed_workflow_stages: list[WorkflowStage]
     protocol_metadata: ProtocolMetadataDraft
@@ -74,54 +72,14 @@ class EvidenceNormalizationInput(VersionedModel):
     source_page_refs: list[str] = Field(min_length=1)
 
 
-class ClinicalEventCandidate(VersionedModel):
-    event_candidate_id: str = Field(min_length=1)
-    event_type: str = Field(min_length=1)
-    event_date_lower: str | None = None
-    event_date_upper: str | None = None
-    subject_role: str = Field(min_length=1)
-    stage_candidate: str | None = None
-    evidence_span_ids: list[str] = Field(min_length=1)
-
-
-class MedicationExposureCandidate(VersionedModel):
-    exposure_candidate_id: str = Field(min_length=1)
-    medication_or_class: str = Field(min_length=1)
-    dose: str | None = None
-    frequency: str | None = None
-    route: str | None = None
-    start_date_lower: str | None = None
-    end_date_upper: str | None = None
-    indication: str | None = None
-    evidence_span_ids: list[str] = Field(min_length=1)
-
-
-class ReferencedDocumentCandidate(VersionedModel):
-    referenced_document_candidate_id: str = Field(min_length=1)
-    description: str = Field(min_length=1)
-    referenced_by_evidence_span_id: str = Field(min_length=1)
-
-
-class EvidenceNormalizationCandidate(VersionedModel):
-    candidate_id: str = Field(min_length=1)
-    clinical_fact_candidates: list[ClinicalFact] = Field(default_factory=list)
-    evidence_span_candidates: list[EvidenceSpan] = Field(default_factory=list)
-    conflict_candidates: list[ConflictGroup] = Field(default_factory=list)
-    clinical_event_candidates: list[ClinicalEventCandidate] = Field(default_factory=list)
-    medication_exposure_candidates: list[MedicationExposureCandidate] = Field(default_factory=list)
-    referenced_document_candidates: list[ReferencedDocumentCandidate] = Field(default_factory=list)
-    uncertainty_codes: list[str] = Field(default_factory=list)
-    source_refs: list[str] = Field(min_length=1)
-    coverage: CoverageSummary
-    unresolved_items: list[UnresolvedItem] = Field(default_factory=list)
-    created_by_agent_call_id: str = Field(min_length=1)
-
-
 class EligibilityAssessmentInput(VersionedModel):
     project_id: str = Field(min_length=1)
+    protocol_version_id: str = Field(min_length=1)
+    subject_id: str = Field(min_length=1)
     rule_set_id: str = Field(min_length=1)
     rule_set_revision: int = Field(ge=1)
     review_episode_id: str = Field(min_length=1)
+    review_run_id: str = Field(min_length=1)
     evidence_snapshot_id: str = Field(min_length=1)
     rule_component_ids: list[str] = Field(min_length=1)
     fact_ids: list[str] = Field(default_factory=list)
@@ -129,10 +87,47 @@ class EligibilityAssessmentInput(VersionedModel):
 
 
 class EligibilityAssessmentOutput(VersionedModel):
+    project_id: str = Field(min_length=1)
+    protocol_version_id: str = Field(min_length=1)
+    subject_id: str = Field(min_length=1)
+    rule_set_id: str = Field(min_length=1)
+    rule_set_revision: int = Field(ge=1)
+    review_episode_id: str = Field(min_length=1)
+    review_run_id: str = Field(min_length=1)
+    evidence_snapshot_id: str = Field(min_length=1)
     candidates: list[AssessmentCandidate]
     coverage: CoverageSummary
     unresolved_items: list[UnresolvedItem] = Field(default_factory=list)
     created_by_agent_call_id: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_candidate_scope(self) -> "EligibilityAssessmentOutput":
+        expected = (
+            self.project_id,
+            self.protocol_version_id,
+            self.subject_id,
+            self.rule_set_id,
+            self.rule_set_revision,
+            self.review_episode_id,
+            self.review_run_id,
+            self.evidence_snapshot_id,
+            self.created_by_agent_call_id,
+        )
+        for candidate in self.candidates:
+            actual = (
+                candidate.project_id,
+                candidate.protocol_version_id,
+                candidate.subject_id,
+                candidate.rule_set_id,
+                candidate.rule_set_revision,
+                candidate.review_episode_id,
+                candidate.review_run_id,
+                candidate.evidence_snapshot_id,
+                candidate.agent_call_id,
+            )
+            if actual != expected:
+                raise ValueError("EligibilityAssessmentOutput 与候选 scope/call 不一致")
+        return self
 
 
 class SafetyProvenanceCriticInput(VersionedModel):
@@ -145,7 +140,25 @@ class SafetyProvenanceCriticInput(VersionedModel):
 
 
 class SafetyProvenanceCriticOutput(VersionedModel):
+    project_id: str = Field(min_length=1)
+    protocol_version_id: str = Field(min_length=1)
+    subject_id: str = Field(min_length=1)
+    rule_set_id: str = Field(min_length=1)
+    rule_set_revision: int = Field(ge=1)
+    review_episode_id: str = Field(min_length=1)
+    review_run_id: str = Field(min_length=1)
+    evidence_snapshot_id: str = Field(min_length=1)
+    created_by_agent_call_id: str = Field(min_length=1)
     critic_runs: list[CriticRun]
+
+    @model_validator(mode="after")
+    def validate_critic_call_binding(self) -> "SafetyProvenanceCriticOutput":
+        if any(
+            item.created_by_agent_call_id != self.created_by_agent_call_id
+            for item in self.critic_runs
+        ):
+            raise ValueError("SafetyProvenanceCriticOutput 与 CriticRun call 不一致")
+        return self
 
 
 class AgentContractsV1(VersionedModel):

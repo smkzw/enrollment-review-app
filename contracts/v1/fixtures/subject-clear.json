@@ -3,19 +3,28 @@
     {
       "acceptable_evidence": "来源链接或核对记录。",
       "action_id": "action-clear-provenance",
+      "assessment_id": "assessment-clear-ex",
       "blocking_level": "none",
       "due_stage": "baseline",
+      "evidence_snapshot_id": "snapshot-clear",
       "gap_type": "provenance_followup",
       "gate_result_id": "gate-action-clear-provenance",
-      "publication_fingerprint": "faae3b1a74e8a84e36a667bf55bb96a4f68229bcafe76d57139883a9370fcfc4",
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "publication_fingerprint": "ca0c6017b86b31023d52da677ccebe1e51c55243c8fbd98c42e9135613c60b70",
       "recompute_scope": [
         "component-ex-01"
       ],
       "requested_action": "在后续阶段核对阳性既往史转述来源。",
+      "review_episode_id": "episode-clear",
+      "review_run_id": "run-clear",
       "revision": 1,
       "rule_component_id": "component-ex-01",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
       "schema_version": "fixture/v1",
       "state": "open",
+      "subject_id": "subject-clear",
       "target_party": "cra",
       "transitions": [],
       "trigger_evidence_span_id": "span-clear-history"
@@ -49,12 +58,15 @@
       "parent_event_id": null,
       "project_id": "project-synthetic-phase-iii",
       "prompt_version_id": "prompt-evidence_normalizer-v1",
+      "protocol_version_id": "protocol-v1",
       "raw_output_hash": "3333333333333333333333333333333333333333333333333333333333333333",
       "recompute_scope": [
         "subject-clear"
       ],
       "review_episode_id": "episode-clear",
       "review_run_id": "run-clear",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
       "same_session_group_id": null,
       "schema_version": "fixture/v1",
       "source_ids": [
@@ -92,12 +104,15 @@
       "parent_event_id": null,
       "project_id": "project-synthetic-phase-iii",
       "prompt_version_id": "prompt-eligibility_assessor-v1",
+      "protocol_version_id": "protocol-v1",
       "raw_output_hash": "4444444444444444444444444444444444444444444444444444444444444444",
       "recompute_scope": [
         "subject-clear"
       ],
       "review_episode_id": "episode-clear",
       "review_run_id": "run-clear",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
       "same_session_group_id": null,
       "schema_version": "fixture/v1",
       "source_ids": [
@@ -121,30 +136,19 @@
       ],
       "gap_types": [],
       "missing_predicate_ids": [],
-      "predicate_observations": [
-        {
-          "evidence_span_ids": [
-            "span-clear-age"
-          ],
-          "fact_ids": [
-            "fact-clear-age"
-          ],
-          "observed_unit": "year",
-          "observed_value": 36,
-          "predicate_id": "predicate-demographics-age_years-gte",
-          "reason_codes": [],
-          "schema_version": "fixture/v1",
-          "truth": "true"
-        }
-      ],
-      "processed_predicate_ids": [
-        "predicate-demographics-age_years-gte"
-      ],
+      "predicate_observations": [],
+      "processed_predicate_ids": [],
+      "project_id": "project-synthetic-phase-iii",
       "proposed_decision": "inclusion_met",
+      "protocol_version_id": "protocol-v1",
       "reason_codes": [],
       "review_episode_id": "episode-clear",
+      "review_run_id": "run-clear",
       "rule_component_id": "component-in-01",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
       "schema_version": "fixture/v1",
+      "subject_id": "subject-clear",
       "uncertainty_codes": [],
       "unresolved_items": [],
       "used_fact_ids": [
@@ -163,109 +167,21 @@
       "gap_types": [
         "provenance_followup"
       ],
-      "missing_predicate_ids": [
-        "predicate-laboratory-target_ratio_uln-gte",
-        "predicate-medication-prohibited-window",
-        "predicate-laboratory-critical_measurement_invalid-eq",
-        "predicate-exception-protocol_exception_documented-eq",
-        "predicate-investigator-exception_confirmed-eq"
-      ],
-      "predicate_observations": [
-        {
-          "evidence_span_ids": [
-            "span-clear-history"
-          ],
-          "fact_ids": [
-            "fact-clear-risk"
-          ],
-          "observed_unit": null,
-          "observed_value": true,
-          "predicate_id": "predicate-investigator-unacceptable_participation_risk-eq",
-          "reason_codes": [],
-          "schema_version": "fixture/v1",
-          "truth": "false"
-        },
-        {
-          "evidence_span_ids": [],
-          "fact_ids": [],
-          "observed_unit": null,
-          "observed_value": null,
-          "predicate_id": "predicate-laboratory-target_ratio_uln-gte",
-          "reason_codes": [
-            "fact_not_observed"
-          ],
-          "schema_version": "fixture/v1",
-          "truth": "unknown"
-        },
-        {
-          "evidence_span_ids": [],
-          "fact_ids": [],
-          "observed_unit": null,
-          "observed_value": null,
-          "predicate_id": "predicate-medication-prohibited-window",
-          "reason_codes": [
-            "fact_not_observed"
-          ],
-          "schema_version": "fixture/v1",
-          "truth": "unknown"
-        },
-        {
-          "evidence_span_ids": [],
-          "fact_ids": [],
-          "observed_unit": null,
-          "observed_value": null,
-          "predicate_id": "predicate-laboratory-critical_measurement_invalid-eq",
-          "reason_codes": [
-            "fact_not_observed"
-          ],
-          "schema_version": "fixture/v1",
-          "truth": "unknown"
-        },
-        {
-          "evidence_span_ids": [],
-          "fact_ids": [],
-          "observed_unit": null,
-          "observed_value": null,
-          "predicate_id": "predicate-exception-protocol_exception_documented-eq",
-          "reason_codes": [
-            "fact_not_observed"
-          ],
-          "schema_version": "fixture/v1",
-          "truth": "unknown"
-        },
-        {
-          "evidence_span_ids": [],
-          "fact_ids": [],
-          "observed_unit": null,
-          "observed_value": null,
-          "predicate_id": "predicate-investigator-exception_confirmed-eq",
-          "reason_codes": [
-            "professional_judgment_missing"
-          ],
-          "schema_version": "fixture/v1",
-          "truth": "unknown"
-        }
-      ],
-      "processed_predicate_ids": [
-        "predicate-investigator-unacceptable_participation_risk-eq",
-        "predicate-laboratory-target_ratio_uln-gte",
-        "predicate-medication-prohibited-window",
-        "predicate-laboratory-critical_measurement_invalid-eq",
-        "predicate-exception-protocol_exception_documented-eq",
-        "predicate-investigator-exception_confirmed-eq"
-      ],
+      "missing_predicate_ids": [],
+      "predicate_observations": [],
+      "processed_predicate_ids": [],
+      "project_id": "project-synthetic-phase-iii",
       "proposed_decision": "exclusion_not_triggered",
-      "reason_codes": [
-        "fact_not_observed",
-        "professional_judgment_missing"
-      ],
+      "protocol_version_id": "protocol-v1",
+      "reason_codes": [],
       "review_episode_id": "episode-clear",
+      "review_run_id": "run-clear",
       "rule_component_id": "component-ex-01",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
       "schema_version": "fixture/v1",
-      "uncertainty_codes": [
-        "fact_not_observed",
-        "professional_judgment_missing"
-      ],
+      "subject_id": "subject-clear",
+      "uncertainty_codes": [],
       "unresolved_items": [],
       "used_fact_ids": [
         "fact-clear-risk"
@@ -323,6 +239,110 @@
       "review_episode_id": "episode-clear",
       "schema_version": "fixture/v1",
       "status": "observed_weak"
+    }
+  ],
+  "evidence_normalization_candidates": [
+    {
+      "candidate_id": "evidence-candidate-episode-clear",
+      "clinical_event_candidates": [],
+      "clinical_fact_candidates": [
+        {
+          "certainty": 1.0,
+          "conflict_group_id": null,
+          "effective_date": null,
+          "evidence_snapshot_id": "snapshot-clear",
+          "evidence_span_ids": [
+            "span-clear-age"
+          ],
+          "fact_id": "fact-clear-age",
+          "fact_type": "demographics.age_years",
+          "polarity": "affirmed",
+          "project_id": "project-synthetic-phase-iii",
+          "review_episode_id": "episode-clear",
+          "schema_version": "fixture/v1",
+          "subject_id": "subject-clear",
+          "unit": "year",
+          "value": 36
+        },
+        {
+          "certainty": 0.95,
+          "conflict_group_id": null,
+          "effective_date": null,
+          "evidence_snapshot_id": "snapshot-clear",
+          "evidence_span_ids": [
+            "span-clear-history"
+          ],
+          "fact_id": "fact-clear-risk",
+          "fact_type": "investigator.unacceptable_participation_risk",
+          "polarity": "negated",
+          "project_id": "project-synthetic-phase-iii",
+          "review_episode_id": "episode-clear",
+          "schema_version": "fixture/v1",
+          "subject_id": "subject-clear",
+          "unit": null,
+          "value": true
+        }
+      ],
+      "conflict_candidates": [],
+      "coverage": {
+        "duplicate_refs": [],
+        "missing_refs": [],
+        "processed_refs": [
+          "document-clear"
+        ],
+        "schema_version": "fixture/v1"
+      },
+      "created_by_agent_call_id": "call-clear-1",
+      "evidence_snapshot_id": "snapshot-clear",
+      "evidence_span_candidates": [
+        {
+          "anchor_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bbox": {
+            "x0": 12.0,
+            "x1": 110.0,
+            "y0": 20.0,
+            "y1": 38.0
+          },
+          "degradation_reason": null,
+          "evidence_span_id": "span-clear-age",
+          "excerpt": "年龄：36岁",
+          "locator_algorithm_version": "locator-v1",
+          "match_confidence": 0.99,
+          "page_number": 1,
+          "precision": "bbox",
+          "schema_version": "fixture/v1",
+          "source_document_version_id": "document-clear",
+          "text_end": null,
+          "text_start": null
+        },
+        {
+          "anchor_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "bbox": null,
+          "degradation_reason": null,
+          "evidence_span_id": "span-clear-history",
+          "excerpt": "既往病程由筛选病历转述",
+          "locator_algorithm_version": "locator-v1",
+          "match_confidence": 0.96,
+          "page_number": 2,
+          "precision": "text_range",
+          "schema_version": "fixture/v1",
+          "source_document_version_id": "document-clear",
+          "text_end": 28,
+          "text_start": 10
+        }
+      ],
+      "medication_exposure_candidates": [],
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "referenced_document_candidates": [],
+      "review_episode_id": "episode-clear",
+      "schema_version": "fixture/v1",
+      "source_refs": [
+        "document-clear"
+      ],
+      "subject_id": "subject-clear",
+      "uncertainty_codes": [],
+      "unresolved_items": []
     }
   ],
   "evidence_snapshot": {
@@ -414,30 +434,34 @@
   ],
   "final_assessments": [
     {
-      "action_ids": [],
       "assessment_id": "assessment-clear-in",
       "blocking_level": "none",
       "decision": "inclusion_met",
+      "evidence_snapshot_id": "snapshot-clear",
       "evidence_span_ids": [
         "span-clear-age"
       ],
       "gap_types": [],
       "gate_result_id": "gate-clear-in",
-      "publication_fingerprint": "616af5f30afa0d7c1e2a54353394f51b3b36339670ca684abcc1370bacb7a64c",
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "publication_fingerprint": "0f2779cba2700995918eddeef1b4d7f3ebc3f4c201371a69969f025de94ac18b",
+      "review_episode_id": "episode-clear",
       "review_run_id": "run-clear",
       "rule_component_id": "component-in-01",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
       "schema_version": "fixture/v1",
+      "subject_id": "subject-clear",
       "used_fact_ids": [
         "fact-clear-age"
       ]
     },
     {
-      "action_ids": [
-        "action-clear-provenance"
-      ],
       "assessment_id": "assessment-clear-ex",
       "blocking_level": "attention",
       "decision": "exclusion_not_triggered",
+      "evidence_snapshot_id": "snapshot-clear",
       "evidence_span_ids": [
         "span-clear-history"
       ],
@@ -445,10 +469,16 @@
         "provenance_followup"
       ],
       "gate_result_id": "gate-clear-ex",
-      "publication_fingerprint": "4a0fb769eb1e5df75296522926eed77974b5795c3c44226c9f7627657fa2e1ef",
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "publication_fingerprint": "aaeadda419561f34dd5fd10f8b31bd52310ed212a8a09f0d88546703410ce20f",
+      "review_episode_id": "episode-clear",
       "review_run_id": "run-clear",
       "rule_component_id": "component-ex-01",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
       "schema_version": "fixture/v1",
+      "subject_id": "subject-clear",
       "used_fact_ids": [
         "fact-clear-risk"
       ]
@@ -516,6 +546,147 @@
     },
     {
       "accepted_entity_refs": [
+        "authority-protocol-v1-phase-iii"
+      ],
+      "affected_scope": [
+        "protocol-v1"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "protocol-authority-human-acceptance-gate",
+      "gate_result_id": "gate-authority-protocol-v1-phase-iii",
+      "idempotency_key": "protocol-authority:protocol-v1",
+      "input_entity_refs": [
+        "protocol-v1",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "IN-01",
+        "EX-01",
+        "EX-02",
+        "EX-03",
+        "EX-04",
+        "REQ-01",
+        "REQ-02"
+      ],
+      "input_revision_map": {
+        "protocol-v1": 1
+      },
+      "input_scope_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
+      "output_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "protocol-v1"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "manifest-protocol-v1-phase-iii",
+        "ruleset-synthetic-phase-iii"
+      ],
+      "affected_scope": [
+        "protocol-v1"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "protocol-integrity-gate",
+      "gate_result_id": "gate-integrity-protocol-v1-phase-iii",
+      "idempotency_key": "protocol-integrity:protocol-v1:1",
+      "input_entity_refs": [
+        "protocol-v1",
+        "authority-protocol-v1-phase-iii",
+        "gate-authority-protocol-v1-phase-iii",
+        "manifest-protocol-v1-phase-iii",
+        "ruleset-synthetic-phase-iii"
+      ],
+      "input_revision_map": {
+        "ruleset-synthetic-phase-iii": 1
+      },
+      "input_scope_hash": "9a628eaca71c15803f748b9ac512223e3684084af12f52dce8652c5cba4a71be",
+      "output_hash": "9a628eaca71c15803f748b9ac512223e3684084af12f52dce8652c5cba4a71be",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "protocol-v1"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "candidate-clear-in"
+      ],
+      "affected_scope": [
+        "component-in-01"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-candidate-gate",
+      "gate_result_id": "gate-candidate-clear-in",
+      "idempotency_key": "candidate:call-clear-2:candidate-clear-in",
+      "input_entity_refs": [
+        "call-clear-2",
+        "gate-clear-2"
+      ],
+      "input_revision_map": {
+        "snapshot-clear": 1
+      },
+      "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "output_hash": "f806e3de4c3beca4d3a56a450f2c69eded04618a59db8d7488549bdb5ff2c4af",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-in-01"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "evidence-candidate-episode-clear",
+        "fact-clear-age",
+        "fact-clear-risk",
+        "span-clear-age",
+        "span-clear-history"
+      ],
+      "affected_scope": [
+        "episode-clear"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "evidence-acceptance-gate",
+      "gate_result_id": "gate-evidence-assessment-clear-in",
+      "idempotency_key": "evidence:episode-clear:snapshot-clear:evidence-candidate-episode-clear",
+      "input_entity_refs": [
+        "call-clear-1",
+        "gate-clear-1",
+        "evidence-candidate-episode-clear",
+        "snapshot-clear",
+        "fact-clear-age",
+        "fact-clear-risk",
+        "span-clear-age",
+        "span-clear-history"
+      ],
+      "input_revision_map": {
+        "episode-clear": 1
+      },
+      "input_scope_hash": "0dcc0daf9980685f1b6e0cd8f6ea890a6f421eef3cbe47a9ecb187ac36b40b0a",
+      "output_hash": "0dcc0daf9980685f1b6e0cd8f6ea890a6f421eef3cbe47a9ecb187ac36b40b0a",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "episode-clear"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
         "assessment-clear-in"
       ],
       "affected_scope": [
@@ -529,17 +700,89 @@
       "idempotency_key": "assessment:run-clear:component-in-01",
       "input_entity_refs": [
         "candidate-clear-in",
+        "gate-candidate-clear-in",
+        "gate-evidence-assessment-clear-in",
         "component-in-01",
         "run-clear"
       ],
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "c70c68c25c462b1f6c9ff07e739b0f18d84967a6abc82d87073907d48117d044",
-      "output_hash": "41389dcb61bc91a18d3cc2e4b3ae2dd287f598983524cd6822f75819b16198d9",
+      "input_scope_hash": "aadd0cd0096cd883b2aef3b825e861a451879432a87e9c8b75ba09bc455ef369",
+      "output_hash": "634b460cc3bf4ccd9a76decd72f31a2e34815d25ae7ee321b204d3ec7f66e11a",
       "parent_event_id": null,
       "recompute_scope": [
         "component-in-01"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "candidate-clear-ex"
+      ],
+      "affected_scope": [
+        "component-ex-01"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-candidate-gate",
+      "gate_result_id": "gate-candidate-clear-ex",
+      "idempotency_key": "candidate:call-clear-2:candidate-clear-ex",
+      "input_entity_refs": [
+        "call-clear-2",
+        "gate-clear-2"
+      ],
+      "input_revision_map": {
+        "snapshot-clear": 1
+      },
+      "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "output_hash": "82fea84c41d9d69612cb9536a14f6a360fc2c67a9a9507d90cb1aafb6f48788e",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-ex-01"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "evidence-candidate-episode-clear",
+        "fact-clear-age",
+        "fact-clear-risk",
+        "span-clear-age",
+        "span-clear-history"
+      ],
+      "affected_scope": [
+        "episode-clear"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "evidence-acceptance-gate",
+      "gate_result_id": "gate-evidence-assessment-clear-ex",
+      "idempotency_key": "evidence:episode-clear:snapshot-clear:evidence-candidate-episode-clear",
+      "input_entity_refs": [
+        "call-clear-1",
+        "gate-clear-1",
+        "evidence-candidate-episode-clear",
+        "snapshot-clear",
+        "fact-clear-age",
+        "fact-clear-risk",
+        "span-clear-age",
+        "span-clear-history"
+      ],
+      "input_revision_map": {
+        "episode-clear": 1
+      },
+      "input_scope_hash": "0dcc0daf9980685f1b6e0cd8f6ea890a6f421eef3cbe47a9ecb187ac36b40b0a",
+      "output_hash": "0dcc0daf9980685f1b6e0cd8f6ea890a6f421eef3cbe47a9ecb187ac36b40b0a",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "episode-clear"
       ],
       "rejected_entity_refs": [],
       "result": "accepted",
@@ -560,14 +803,16 @@
       "idempotency_key": "assessment:run-clear:component-ex-01",
       "input_entity_refs": [
         "candidate-clear-ex",
+        "gate-candidate-clear-ex",
+        "gate-evidence-assessment-clear-ex",
         "component-ex-01",
         "run-clear"
       ],
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "66150380d5c0e602fd0d067b7f1482cfd730b4684026470bda8756ed5e380660",
-      "output_hash": "ccddbd0a284d994244094b040f6e38fc519a3730ef38ec7572d8d36f71add676",
+      "input_scope_hash": "4924e7176f059f9ef36ef865dedefb4b07e553029e7ce22d991b063aa9428868",
+      "output_hash": "641ee27d53ab7e0cbabf69f91aa3eac0e282a7c65c3bbc4320b10eb7b034a610",
       "parent_event_id": null,
       "recompute_scope": [
         "component-ex-01"
@@ -590,14 +835,14 @@
       "gate_result_id": "gate-action-clear-provenance",
       "idempotency_key": "action:action-clear-provenance:1",
       "input_entity_refs": [
-        "episode-clear",
-        "component-ex-01"
+        "assessment-clear-ex",
+        "gate-clear-ex"
       ],
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "be09c912f83877fd9fd28d5489722fb4fa8b8c0e6f31f6a36f04083d8d8526b1",
-      "output_hash": "560a68e4098b2e73b67d8edfd8f8b6b7a6f7b59e1a53e359bf99da8a92024d80",
+      "input_scope_hash": "cec449e383e095eaf483c326e73f8625ac1c24ac49c15300521736bb30e80ebb",
+      "output_hash": "1d5130fb142b8a6190d4ce0c129adc42eb34abaef113266ae69f92e8144c15c0",
       "parent_event_id": null,
       "recompute_scope": [
         "component-ex-01"
@@ -622,6 +867,9 @@
       "idempotency_key": "rollup:episode-clear:03f07222ca6c86227f5083fb817c3ddfdc0397865ac83690dc33bff8f29ec370",
       "input_entity_refs": [
         "episode-clear",
+        "gate-clear-in",
+        "gate-clear-ex",
+        "gate-action-clear-provenance",
         "assessment-clear-in",
         "assessment-clear-ex",
         "expectation-clear-age",
@@ -631,7 +879,7 @@
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "3a22cbef511821aa4593048165645a46e4713814dac48be138a9231311061e36",
+      "input_scope_hash": "ae8268f8acb6460a569dd4bbe1d5c75cfefb58df23519f3c7ddf767f6b400a01",
       "output_hash": "b2d6782d6d467758bc8594488fa7bcfe40cc603af381b9e21b4d4966db371f0d",
       "parent_event_id": null,
       "recompute_scope": [
@@ -731,7 +979,10 @@
     "project_id": "project-synthetic-phase-iii",
     "project_name": "合成Ⅲ期入排审核项目",
     "protocol_version": {
-      "integrity_manifest_sha256": "177db38602aeef7de9dca9ef0298cdfbe86f46c1c1f4c16c2ccf9ee70b199246",
+      "authority_gate_result_id": "gate-authority-protocol-v1-phase-iii",
+      "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+      "integrity_gate_result_id": "gate-integrity-protocol-v1-phase-iii",
+      "integrity_manifest_sha256": "2de5fd424882bff4d484a0f849e2a0f6e249ed9d7252391f334ac19f6d498135",
       "official_date": {
         "precision": "day",
         "source_text": null,
@@ -764,8 +1015,10 @@
       "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
     }
   ],
-  "protocol_integrity_manifest": {
-    "authoritative_rules": [
+  "protocol_authority_record": {
+    "authority_record_id": "authority-protocol-v1-phase-iii",
+    "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+    "official_rules": [
       {
         "components": [
           {
@@ -797,6 +1050,7 @@
                 "requires_professional_judgment": false,
                 "subject": "demographics",
                 "unit": "year",
+                "unit_match_policy": "exact_canonical_label",
                 "value": 18
               },
               "time_constraint": null
@@ -846,6 +1100,7 @@
                     "requires_professional_judgment": false,
                     "subject": "exception",
                     "unit": null,
+                    "unit_match_policy": "exact_canonical_label",
                     "value": true
                   },
                   "time_constraint": null
@@ -860,6 +1115,7 @@
                     "requires_professional_judgment": true,
                     "subject": "investigator",
                     "unit": null,
+                    "unit_match_policy": "exact_canonical_label",
                     "value": true
                   },
                   "time_constraint": null
@@ -880,6 +1136,7 @@
                     "requires_professional_judgment": true,
                     "subject": "investigator",
                     "unit": null,
+                    "unit_match_policy": "exact_canonical_label",
                     "value": true
                   },
                   "time_constraint": null
@@ -896,6 +1153,7 @@
                         "requires_professional_judgment": false,
                         "subject": "laboratory",
                         "unit": "xULN",
+                        "unit_match_policy": "exact_canonical_label",
                         "value": 1.5
                       },
                       "time_constraint": null
@@ -910,6 +1168,7 @@
                         "requires_professional_judgment": false,
                         "subject": "medication",
                         "unit": null,
+                        "unit_match_policy": "exact_canonical_label",
                         "value": true
                       },
                       "time_constraint": {
@@ -937,6 +1196,7 @@
                         "requires_professional_judgment": false,
                         "subject": "laboratory",
                         "unit": null,
+                        "unit_match_policy": "exact_canonical_label",
                         "value": true
                       },
                       "time_constraint": null
@@ -992,6 +1252,7 @@
                 "requires_professional_judgment": true,
                 "subject": "investigator",
                 "unit": null,
+                "unit_match_policy": "exact_canonical_label",
                 "value": true
               },
               "time_constraint": null
@@ -1039,6 +1300,7 @@
                 "requires_professional_judgment": false,
                 "subject": "baseline",
                 "unit": null,
+                "unit_match_policy": "exact_canonical_label",
                 "value": true
               },
               "time_constraint": null
@@ -1086,6 +1348,7 @@
                 "requires_professional_judgment": false,
                 "subject": "history",
                 "unit": null,
+                "unit_match_policy": "exact_canonical_label",
                 "value": true
               },
               "time_constraint": null
@@ -1133,6 +1396,7 @@
                 "requires_professional_judgment": false,
                 "subject": "procedure",
                 "unit": null,
+                "unit_match_policy": "exact_canonical_label",
                 "value": true
               },
               "time_constraint": null
@@ -1180,6 +1444,7 @@
                 "requires_professional_judgment": false,
                 "subject": "laboratory",
                 "unit": null,
+                "unit_match_policy": "exact_canonical_label",
                 "value": true
               },
               "time_constraint": null
@@ -1198,7 +1463,7 @@
         "study_phase": "phase_iii"
       }
     ],
-    "authoritative_workflow_stages": [
+    "official_workflow_stages": [
       {
         "display_name": "预筛期审核",
         "due_requirement_ids": [],
@@ -1245,8 +1510,44 @@
         "workflow_stage_id": "stage-baseline"
       }
     ],
+    "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "protocol_version_id": "protocol-v1",
+    "rule_source_anchor_refs": {
+      "EX-01": [
+        "protocol-v1:EX-01"
+      ],
+      "EX-02": [
+        "protocol-v1:EX-02"
+      ],
+      "EX-03": [
+        "protocol-v1:EX-03"
+      ],
+      "EX-04": [
+        "protocol-v1:EX-04"
+      ],
+      "IN-01": [
+        "protocol-v1:IN-01"
+      ],
+      "REQ-01": [
+        "protocol-v1:REQ-01"
+      ],
+      "REQ-02": [
+        "protocol-v1:REQ-02"
+      ]
+    },
+    "schema_version": "fixture/v1",
+    "study_phase": "phase_iii",
+    "verification_method": "human_verified_official_protocol",
+    "verified_at": "2026-08-12T12:00:00Z",
+    "verified_by": "synthetic-uat-human-acceptance"
+  },
+  "protocol_integrity_manifest": {
+    "authoritative_rule_set_sha256": "bf83d54fd8f132f92066ddd8abdd6a43710d21d23696eddd1c1bd40d8abcc1ee",
+    "authoritative_workflow_sha256": "a23d202d8be74ed1778906492e89e7c194371d702e13738c49362520154d9033",
+    "authority_record_id": "authority-protocol-v1-phase-iii",
+    "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
     "manifest_id": "manifest-protocol-v1-phase-iii",
-    "manifest_sha256": "177db38602aeef7de9dca9ef0298cdfbe86f46c1c1f4c16c2ccf9ee70b199246",
+    "manifest_sha256": "2de5fd424882bff4d484a0f849e2a0f6e249ed9d7252391f334ac19f6d498135",
     "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "protocol_version_id": "protocol-v1",
     "schema_version": "fixture/v1",
@@ -1328,6 +1629,7 @@
                 "requires_professional_judgment": false,
                 "subject": "demographics",
                 "unit": "year",
+                "unit_match_policy": "exact_canonical_label",
                 "value": 18
               },
               "time_constraint": null
@@ -1377,6 +1679,7 @@
                     "requires_professional_judgment": false,
                     "subject": "exception",
                     "unit": null,
+                    "unit_match_policy": "exact_canonical_label",
                     "value": true
                   },
                   "time_constraint": null
@@ -1391,6 +1694,7 @@
                     "requires_professional_judgment": true,
                     "subject": "investigator",
                     "unit": null,
+                    "unit_match_policy": "exact_canonical_label",
                     "value": true
                   },
                   "time_constraint": null
@@ -1411,6 +1715,7 @@
                     "requires_professional_judgment": true,
                     "subject": "investigator",
                     "unit": null,
+                    "unit_match_policy": "exact_canonical_label",
                     "value": true
                   },
                   "time_constraint": null
@@ -1427,6 +1732,7 @@
                         "requires_professional_judgment": false,
                         "subject": "laboratory",
                         "unit": "xULN",
+                        "unit_match_policy": "exact_canonical_label",
                         "value": 1.5
                       },
                       "time_constraint": null
@@ -1441,6 +1747,7 @@
                         "requires_professional_judgment": false,
                         "subject": "medication",
                         "unit": null,
+                        "unit_match_policy": "exact_canonical_label",
                         "value": true
                       },
                       "time_constraint": {
@@ -1468,6 +1775,7 @@
                         "requires_professional_judgment": false,
                         "subject": "laboratory",
                         "unit": null,
+                        "unit_match_policy": "exact_canonical_label",
                         "value": true
                       },
                       "time_constraint": null
@@ -1523,6 +1831,7 @@
                 "requires_professional_judgment": true,
                 "subject": "investigator",
                 "unit": null,
+                "unit_match_policy": "exact_canonical_label",
                 "value": true
               },
               "time_constraint": null
@@ -1570,6 +1879,7 @@
                 "requires_professional_judgment": false,
                 "subject": "baseline",
                 "unit": null,
+                "unit_match_policy": "exact_canonical_label",
                 "value": true
               },
               "time_constraint": null
@@ -1617,6 +1927,7 @@
                 "requires_professional_judgment": false,
                 "subject": "history",
                 "unit": null,
+                "unit_match_policy": "exact_canonical_label",
                 "value": true
               },
               "time_constraint": null
@@ -1664,6 +1975,7 @@
                 "requires_professional_judgment": false,
                 "subject": "procedure",
                 "unit": null,
+                "unit_match_policy": "exact_canonical_label",
                 "value": true
               },
               "time_constraint": null
@@ -1711,6 +2023,7 @@
                 "requires_professional_judgment": false,
                 "subject": "laboratory",
                 "unit": null,
+                "unit_match_policy": "exact_canonical_label",
                 "value": true
               },
               "time_constraint": null

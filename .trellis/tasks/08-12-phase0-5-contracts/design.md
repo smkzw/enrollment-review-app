@@ -3,7 +3,7 @@
 ## Contract Layers
 
 1. `app/domain/contracts/`：Pydantic 领域 DTO、稳定 enum、RuleExpression 递归结构。
-2. `app/domain/gates/`：纯函数校验状态/gap、Agent 写权限和规则结构。
+2. `app/domain/gates/`：确定性 Evaluator 与 Gate；每层发布都形成可重算的 accepted `GateResult` 闭包。
 3. `app/domain/rollup.py`：组件到节点主状态、计数和排序的确定性汇总。
 4. `contracts/v1/schema/`：由代码生成的 JSON Schema 与 OpenAPI 草案。
 5. `contracts/v1/fixtures/`：正常、明确障碍、缺口/冲突三个自包含受试者。
@@ -17,6 +17,9 @@
 - RuleExpression 使用可辨别联合；原子谓词只能引用自己的 subject/attribute/unit/anchor，不接受理由文本推导。
 - EvidenceSpan locator 只允许一个精度层并保存降级原因；没有 bbox 时前端不能显示坐标高亮。
 - AssessmentCandidate 与 FinalAssessment 类型分离；只有 Gate 输入能产生 FinalAssessment。
+- AgentCall Schema Gate -> Evidence/Assessment Candidate Gate -> FinalAssessment -> Action -> EpisodeRollup 必须逐层验证上游 publication；指纹不能替代 Gate。
+- 每个受试者输出都绑定 Project、ProtocolVersion、RuleSet revision、Subject、Episode、Run 和 Snapshot；不同期别、版本或阶段不能共享事实和判断。
+- ProtocolAuthorityRecord 必须保存人工核对元数据和逐规则来源锚点；Manifest/RuleSet/Workflow 由 Protocol Integrity Gate 对完整结构重算。
 - 节点汇总不读取 narrative/reasoning，只读取结构状态、gap、blocking 和 expectation。
 - Action 自动关闭只接受同一 rule_component_id 的 closure predicate；关闭不等于规则通过。
 

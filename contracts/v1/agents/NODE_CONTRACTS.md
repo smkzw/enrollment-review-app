@@ -106,13 +106,13 @@ sha256(contract_id | node_id | schema_version | prompt_or_code_version |
 | `output_kind`、`write_scope` | 该节点唯一允许的候选输出类型和写域 |
 | `prompt_version_id`、`model_config_id` | 分别引用不可变的 PromptVersion 与 ModelConfigContract |
 | `input_scope_hash`、`input_revision_map` | 输入范围及每个实体的 revision 哈希 |
-| `project_id`、`subject_id`、`review_episode_id`、`review_run_id` | 适用时必填；不适用明确写 `null` 原因 |
+| `project_id`、`protocol_version_id`、`subject_id`、`rule_set_id`、`rule_set_revision`、`review_episode_id`、`review_run_id` | 方案解构至少绑定项目和方案版本；受试者节点全部必填并与输出逐项一致 |
 | `evidence_snapshot_id`、`source_ids` | 事实或判断相关步骤必填 |
 | `idempotency_key` | 按 2.2 计算，重复运行必须可查 |
 | `attempt`、`max_attempts`、`same_session_group_id` | 记录传输重试和同会话修复归属 |
 | `started_at`、`finished_at`、`duration_ms` | 时间和耗时 |
 | `outcome`、`error_codes` | `accepted / rejected / stopped / cancelled / partial` 之一及结构化原因 |
-| `output_hash`、`gate_result_ids` | 输出完整性和所依赖 Gate |
+| `output_hash`、`gate_result_ids` | 输出完整性和所依赖 Gate；`gate_result_ids` 必须非空，不得由调用端省略 |
 | `recompute_scope` | 受影响的实体、规则组件、阶段或页面范围 |
 | `trigger`、`parent_event_id` | 触发来源和事件链 |
 | `input_tokens`、`output_tokens`、`estimated_cost` | 供应商可获得时记录；不可获得时保持 `null`，不补猜测 |
@@ -145,7 +145,6 @@ sha256(contract_id | node_id | schema_version | prompt_or_code_version |
 | `proposed_rules[]` | 完整的官方父级规则草案，保留 IN/EX/REQ 编号、原文、期别和父子树 |
 | `component_drafts[]` | `draft_component_id`、父级官方编号、子组件候选及其来源 |
 | `proposed_workflow_stages[]` | 预筛、筛选、导入/洗脱、基线/随机等完整阶段草案 |
-| `workflow_stage_drafts[]` | 预筛、筛选、导入/洗脱、基线/随机等节点候选、锚点和最晚完成点 |
 | `evidence_requirement_drafts[]` | 每个组件在各阶段应有的事实、文件、检查、评分或判断 |
 | `coverage` | 输入父级、组件、阶段和页范围的覆盖情况；必须能发现漏项和重复 |
 | `source_refs[]` | 每个规则、组件、阶段和要求对应的页码/文本定位 |
@@ -198,6 +197,8 @@ sha256(contract_id | node_id | schema_version | prompt_or_code_version |
 
 输出可以提出 `negated` 或 `unknown` 候选，但“完全未提及”只能提出记录完整性缺口线索，不能提出否定事实。
 
+所有候选都必须绑定 `project_id / protocol_version_id / subject_id / review_episode_id / evidence_snapshot_id / created_by_agent_call_id`。`ClinicalFact.polarity = unknown` 时不得同时携带 typed value 或单位；肯定/否定事实必须携带被断言的 typed value。数值事实必须声明规范单位，无量纲值显式写 `unitless`。
+
 ### 4.3 Gate、恢复和停止
 
 - `EvidenceSpanLocatorGate` 必须先验证来源、页码和实际定位精度；没有可靠坐标不得输出 `bbox`。
@@ -241,9 +242,11 @@ Assessor 不读取其他受试者、其他项目、未绑定阶段的资料、�
 
 Assessor 不得输出或写入 `FinalAssessment`、`ActionRequest.blocking_level`、节点汇总或报告。候选中的状态、缺口和理由均须由 Gate 重新计算，不能照抄为最终值。
 
+`EligibilityAssessmentOutput` 与每个候选必须完整共享 `project / protocol version / subject / rule_set + revision / episode / run / snapshot / AgentCall` 作用域。原子观察中的实际值、实际单位、事实 ID 与 Span ID 只能由确定性 Evaluator 从 accepted Evidence Gate 输入重建；候选不得自行提供另一个数值、相似指标或无关定位。
+
 ### 5.3 Gate、恢复和停止
 
-- `EligibilityAssessmentGate` 逐组件检查输入范围、事实引用、表达式、阈值/单位、时间窗、例外完整性、状态与缺口矩阵和 EvidenceSpan。
+- `EligibilityAssessmentGate` 逐组件检查输入范围、事实引用、表达式、阈值/单位、时间窗、例外完整性、状态与缺口矩阵和 EvidenceSpan。首版仅接受完全相同的规范单位标签，不做隐式换算；需要单位换算时必须先由独立、版本化的单位规范化步骤产生新事实。
 - 任何跨组件串项、漏规则、未知来源、冲突被自动择一、沉默被当作否认、缺锚点借用其他日期或不合法状态/缺口组合都会拒绝候选。
 - Gate 失败可请求同会话修复；修复只能补齐结构化引用和观察，不得直接修改最终状态。超过上限停在候选，转人工处理或补证。
 - 没有足够证据时允许候选“暂不能明确”，但最终的 `gap_type`、`blocking_level`、责任方和到期节点必须由确定性代码生成。
@@ -318,17 +321,20 @@ output_hash
 
 GateResult 是不可变审计事实。后续修正必须产生新 GateResult 和新 revision，不能修改旧结果。
 
+所有业务运行路径中的 Gate 都必须返回上述 `GateResult`。`assert_*` / `derive_*` 纯函数只负责 Gate 内部重算或测试断言，不是可绕过审计的另一条运行路径，也不能单独发布实体。
+
 ### 7.2 Gate 清单
 
 | `gate_id` | 输入实体范围 | 结构化输出 | 可写实体 | 重试/停止 | 禁止动作 |
 | --- | --- | --- | --- | --- | --- |
 | `contract_schema_gate` | 任一 Agent draft/candidate/CriticRun、fixture 或 Job 事件 | `GateResult`、字段级错误、接受/拒绝引用 | `GateResult`；通过后只允许建立对应 draft/candidate/critic 记录 | 纯函数重算；Schema 失败即拒绝，不能靠默认值补齐 | 不把非法 JSON 或未知枚举修成合法业务含义；不产生 FinalAssessment |
-| `protocol_integrity_gate` | `ProtocolDeconstructionDraft`、正式方案版本、Amendment、来源定位 | 父级编号/数量、树、逻辑、期别、阈值、单位、时间窗、例外和阶段覆盖的 `GateResult` | 通过的规则/组件/阶段草稿接受记录；不发布正式规则 | 错误修复后按同一输入重算；缺官方来源、编号或逻辑不完整即停 | 不猜期别、不合并独立期别、不弱化 AND/OR、不把解释材料改成方案版本 |
+| `protocol_authority_gate` | 用户在方案工作台核对后的完整规则/流程、正式方案哈希、逐规则来源锚点和确认元数据 | `ProtocolAuthorityRecord` 及绑定其内容哈希的 accepted `GateResult` | 只追加新的权威记录和验收 Gate；旧记录不可改写 | 缺来源锚点、规则/阶段覆盖不全或确认元数据不完整即停 | Agent 不得确认；API 调用方不得用编号清单代替完整权威结构；纯哈希不等于人工确认 |
+| `protocol_integrity_gate` | 已经人工核对并由 `protocol_authority_gate` 接受的 `ProtocolAuthorityRecord`、正式方案版本、Manifest、RuleSet、WorkflowStage | 对父级编号/数量、完整树、逻辑、期别、阈值、单位、时间窗、例外、来源定位和阶段覆盖重算得到的 `GateResult` | 只接受与权威记录逐项一致的 Manifest、RuleSet 和阶段闭包；不发布正式规则 | 任一哈希、来源锚点、结构或权威 Gate 不一致即停 | 不接受调用方自报“官方编号清单”；不猜期别、不合并独立期别、不弱化 AND/OR |
 | `protocol_publish_gate` | 用户已确认的规则草稿、`protocol_integrity_gate` 结果、正式方案版本 | 新 `RuleSet` revision 发布资格和差异摘要 | 绑定正式方案版本的新 `RuleSet` revision | 任何发布条件不满足即拒绝；只能重新编辑草稿后再提交 | 不由 Agent 发布；不覆盖旧 revision；不在发布时新增项目特异规则 |
 | `evidence_span_locator_gate` | 文件版本、页图/原文/OCR、Span 候选、校对 revision | 一个实际存在的定位层级、原文、降级原因和 `GateResult` | `EvidenceSpan` 接受记录 | 定位失败停在候选并生成解析待办；不得循环猜坐标 | 无坐标不得输出 bbox；不得用装饰性高亮伪造定位 |
-| `evidence_normalization_gate` | `EvidenceNormalizationCandidate`、已接受 `EvidenceSpan`、文件/页、校对记录 | `ClinicalFact`、`ClinicalEvent`、`MedicationExposure`、`ReferencedDocument` 或拒绝结果 | 只写接受的事实/事件/用药/引用文件和依赖关系 | 字段、来源、主体、单位、日期、极性或冲突失败即拒绝相应候选；不影响无关范围 | 不覆盖原 OCR；不把沉默写成否认；不自动择一冲突来源 |
+| `evidence_normalization_gate` | 绑定 Evidence Normalizer AgentCall 的 `EvidenceNormalizationCandidate`、候选内 `EvidenceSpan`、文件/页和校对记录 | accepted Candidate/Fact/Span 引用及其完整 payload hash | 只写候选中通过的事实/事件/用药/引用文件和依赖关系 | AgentCall、Candidate、Project/Subject/Episode/Snapshot/Source 任一不一致即停 | 不接受调用方在 Gate 外另传一组事实；不覆盖原 OCR；不把沉默写成否认；不自动择一冲突来源 |
 | `critic_admission_gate` | 风险旗标、候选、GateResult、错误族登记 | 是否触发 Critic、触发码、固定输入范围 | 触发记录和 `GateResult` | 条件不满足则跳过并记录；条件满足但输入缺失则阻断 Critic 运行 | 不强制所有规则运行 Critic；不把触发判断当最终临床判断 |
-| `eligibility_assessment_gate` | 已发布规则、一个 Episode、一个 Snapshot、接受事实/Span/Expectation、AssessmentCandidate、CriticRun | 逐组件 `FinalAssessment` 资格、状态/缺口一致性、阻断计算输入 | 仅在全部条件通过后写 `FinalAssessment`；拒绝只写 GateResult | 表达式、阈值、时间窗、证据、冲突或状态矩阵失败即停；不以文本修补 | Agent 不得写 FinalAssessment；不从 narrative/reasoning 或相似指标推导状态 |
+| `eligibility_assessment_gate` | 已发布规则、一个 Episode、一个 Snapshot、accepted Evidence Candidate/Gate、AssessmentCandidate/Gate、Expectation、Conflict 和 CriticRun | Gate 内重算逐谓词观察、evaluation、状态、缺口与阻断后发布 `FinalAssessment` | 仅在完整上游 publication 闭包通过后写 `FinalAssessment`；拒绝只写 GateResult | 表达式、阈值、时间窗、证据、冲突或状态矩阵失败即停；不以文本修补 | Agent/调用方不得提交最终 evaluation；不得从 narrative、相似指标或 Gate 外事实推导状态 |
 | `action_gate` | `FinalAssessment`、同组件 gap、EvidenceExpectation、规则要求、Critic信号和用户操作 | `ActionRequest`、`ActionTransition`、确定性责任方/证据/到期节点/阻断等级 | 写 Action 及不可变转移记录 | 自动关闭必须满足同组件专属谓词和新 ReviewRun；人工 override 需理由并记录 | 无关上传不得关闭；关闭不等于规则通过；不接受 Agent 的 blocking_level |
 | `stage_run_isolation_gate` | Project、正式方案、RuleSet revision、ReviewEpisode、EvidenceSnapshot、既有 ReviewRun | 新 `ReviewRun`、阶段隔离结果或 stale/diff 范围 | 只追加新的 ReviewRun、差异和 stale 标记 | 输入阶段/快照不一致即停；后续资料只能新运行或显式回顾重审 | 不覆盖早期运行；不借用其他阶段日期/文件名；不静默改写历史报告 |
 | `job_event_recovery_gate` | Job 命令、JobStep、Checkpoint、租约状态、幂等键和上一个事件 | 合法 Job 状态转移、`JobEvent`、Checkpoint、可恢复点、重试/取消结果 | 只写 Job 运行记录和 Checkpoint，不写临床真相 | 从最后成功 Checkpoint 恢复；非法转移、重复事件或租约失效即停并保留原因 | 不让浏览器/SSE拥有 Job 生命期；不产生永久 processing；不重复应用 Action |

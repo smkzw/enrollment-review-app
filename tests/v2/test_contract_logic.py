@@ -6,7 +6,9 @@ from typing import cast
 import pytest
 from pydantic import ValidationError
 
-from app.domain.contracts.agents import AgentCallContract, AgentPublishedEntity
+from app.domain.contracts.agents import AgentCallContract, AgentPublishedEntity, GateResult
+from app.domain.contracts.agent_io import CoverageSummary, EligibilityAssessmentOutput
+from app.domain.contracts.normalization import EvidenceNormalizationCandidate
 from app.domain.contracts.common import DateValue
 from app.domain.contracts.enums import (
     ActionState,
@@ -27,6 +29,7 @@ from app.domain.contracts.enums import (
     RuleKind,
     StudyPhase,
     TruthValue,
+    TimeDirection,
     UploadMode,
 )
 from app.domain.contracts.evidence import (
@@ -57,9 +60,8 @@ from app.domain.contracts.rules import (
     WorkflowStage,
 )
 from app.domain.expression import (
-    ComponentEvaluation,
     EvaluationContext,
-    EvaluationResult,
+    evaluate_component,
     evaluate_expression,
 )
 from app.domain.gates import (
@@ -70,12 +72,19 @@ from app.domain.gates import (
     derive_action_blocking_level,
     publish_action_request,
     publish_assessment,
+    publish_assessment_candidate_acceptance,
+    publish_evidence_acceptance,
+    validate_action_publication,
     require_agent_write_permission,
-    validate_action_request,
-    validate_protocol_integrity,
+    assert_protocol_integrity,
+    build_protocol_authority_record,
+    publish_protocol_authority_acceptance,
 )
 from app.domain.policies import derive_assessment_blocking_level
-from app.domain.publication import build_published_model
+from app.domain import publication as publication_module
+from app.domain.publication import _build_gate_owned_model, canonical_hash
+from app.domain.gates.actions import ActionPublication
+from app.domain.gates.assessment import AssessmentPublication
 from app.domain.rollup import publish_episode_rollup
 
 
@@ -118,6 +127,12 @@ def candidate(decision: ComponentDecision, gaps: list[GapType]) -> AssessmentCan
     return AssessmentCandidate(
         assessment_candidate_id="candidate-1",
         agent_call_id="call-1",
+        project_id="project-1",
+        protocol_version_id="protocol-1",
+        subject_id="subject-1",
+        rule_set_id="ruleset-1",
+        rule_set_revision=1,
+        review_run_id="run-1",
         rule_component_id="component-1",
         review_episode_id="episode-1",
         evidence_snapshot_id="snapshot-1",
@@ -137,41 +152,20 @@ def candidate(decision: ComponentDecision, gaps: list[GapType]) -> AssessmentCan
     )
 
 
-def component_evaluation(
-    trigger_truth: TruthValue,
-    *,
-    trigger_reasons: list[str] | None = None,
-    exception_truth: TruthValue | None = None,
-    exception_reasons: list[str] | None = None,
-) -> ComponentEvaluation:
-    trigger = EvaluationResult(
-        truth=trigger_truth,
-        reason_codes=trigger_reasons or [],
-    )
-    predicate_evaluations = {
-        "predicate-history-condition_present-eq": trigger,
-    }
-    exception = None
-    if exception_truth is not None:
-        exception = EvaluationResult(
-            truth=exception_truth,
-            reason_codes=exception_reasons or [],
-        )
-        predicate_evaluations["predicate-exception-documented-eq"] = exception
-    return ComponentEvaluation(
-        trigger=trigger,
-        exception=exception,
-        predicate_evaluations=predicate_evaluations,
-    )
-
-
 def final_assessment(decision: ComponentDecision, gaps: list[GapType]):
-    return build_published_model(
+    assessment = _build_gate_owned_model(
         FinalAssessment,
         entity_type="final_assessment",
         gate_result_id=f"gate-{decision.value}",
         data={
             "assessment_id": f"assessment-{decision.value}",
+            "project_id": "project-1",
+            "protocol_version_id": "protocol-1",
+            "subject_id": "subject-1",
+            "rule_set_id": "ruleset-1",
+            "rule_set_revision": 1,
+            "review_episode_id": "episode-1",
+            "evidence_snapshot_id": "snapshot-1",
             "review_run_id": "run-1",
             "rule_component_id": "component-1",
             "decision": decision,
@@ -179,9 +173,27 @@ def final_assessment(decision: ComponentDecision, gaps: list[GapType]):
             "blocking_level": derive_assessment_blocking_level(decision, set(gaps)),
             "used_fact_ids": ["fact-1"],
             "evidence_span_ids": ["span-1"],
-            "action_ids": [],
         },
     )
+    return assessment
+
+
+def assessment_publication(assessment: FinalAssessment) -> AssessmentPublication:
+    gate = GateResult(
+        gate_result_id=assessment.gate_result_id,
+        gate_name="assessment-publication-gate",
+        result="accepted",
+        input_scope_hash="a" * 64,
+        input_revision_map={assessment.review_episode_id: 1},
+        input_entity_refs=["candidate-1"],
+        accepted_entity_refs=[assessment.assessment_id],
+        affected_scope=[assessment.rule_component_id],
+        recompute_scope=[assessment.rule_component_id],
+        idempotency_key=f"test:{assessment.assessment_id}",
+        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        output_hash=canonical_hash(assessment.model_dump(mode="json")),
+    )
+    return AssessmentPublication(assessment=assessment, gate_result=gate)
 
 
 def gate_component(*, requirements=None, with_exception=False) -> RuleComponent:
@@ -214,8 +226,312 @@ def gate_component(*, requirements=None, with_exception=False) -> RuleComponent:
     )
 
 
-def action_request(gap: GapType) -> ActionRequest:
+def eligibility_call() -> AgentCallContract:
+    return AgentCallContract(
+        agent_call_id="call-1",
+        node=AgentNode.ELIGIBILITY_ASSESSOR,
+        output_kind=AgentOutputKind.CANDIDATE,
+        write_scope=AgentWriteScope.ASSESSMENT_CANDIDATE,
+        prompt_version_id="prompt-1",
+        model_config_id="model-1",
+        input_scope_hash="a" * 64,
+        input_revision_map={"episode-1": 1},
+        raw_output_hash="b" * 64,
+        output_hash="c" * 64,
+        idempotency_key="episode-1:assessment",
+        attempt=1,
+        max_attempts=2,
+        duration_ms=100,
+        started_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        outcome="accepted",
+        recompute_scope=["component-1"],
+        trigger="test",
+        project_id="project-1",
+        protocol_version_id="protocol-1",
+        rule_set_id="ruleset-1",
+        rule_set_revision=1,
+        subject_id="subject-1",
+        review_episode_id="episode-1",
+        review_run_id="run-1",
+        evidence_snapshot_id="snapshot-1",
+        source_ids=["document-1"],
+        gate_result_ids=["gate-call-1"],
+    )
+
+
+def evidence_span(span_id: str) -> EvidenceSpan:
+    return EvidenceSpan(
+        evidence_span_id=span_id,
+        source_document_version_id="document-1",
+        page_number=1,
+        precision=LocatorPrecision.PAGE_EXCERPT,
+        excerpt="合成测试证据",
+        locator_algorithm_version="test-v1",
+    )
+
+
+def evidence_normalizer_call() -> AgentCallContract:
+    return eligibility_call().model_copy(
+        update={
+            "agent_call_id": "call-evidence-1",
+            "node": AgentNode.EVIDENCE_NORMALIZER,
+            "output_kind": AgentOutputKind.CANDIDATE,
+            "write_scope": AgentWriteScope.EVIDENCE_CANDIDATE,
+            "idempotency_key": "episode-1:evidence",
+        }
+    )
+
+
+def agent_call_gate(call: AgentCallContract) -> GateResult:
+    return GateResult(
+        gate_result_id=call.gate_result_ids[0],
+        gate_name="agent-output-schema-gate",
+        result="accepted",
+        input_scope_hash=call.input_scope_hash,
+        input_revision_map=call.input_revision_map,
+        input_entity_refs=[call.agent_call_id],
+        accepted_entity_refs=[call.agent_call_id],
+        affected_scope=call.recompute_scope,
+        recompute_scope=call.recompute_scope,
+        idempotency_key=f"gate:{call.idempotency_key}",
+        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        output_hash=call.output_hash,
+    )
+
+
+def evidence_candidate(
+    facts: list[ClinicalFact], spans: list[EvidenceSpan]
+) -> EvidenceNormalizationCandidate:
+    return EvidenceNormalizationCandidate(
+        candidate_id="evidence-candidate-1",
+        protocol_version_id="protocol-1",
+        **EVALUATION_SCOPE,
+        clinical_fact_candidates=facts,
+        evidence_span_candidates=spans,
+        source_refs=["document-1"],
+        coverage=CoverageSummary(processed_refs=["document-1"]),
+        created_by_agent_call_id="call-evidence-1",
+    )
+
+
+def test_evidence_gate_rejects_candidate_from_another_agent_scope() -> None:
+    facts = [
+        clinical_fact(
+            fact_id="fact-evidence-scope",
+            fact_type="history.condition_present",
+            value=True,
+            polarity=FactPolarity.AFFIRMED,
+            certainty=1,
+            evidence_span_ids=["span-evidence-scope"],
+        )
+    ]
+    spans = [evidence_span("span-evidence-scope")]
+    normalized = evidence_candidate(facts, spans).model_copy(
+        update={"created_by_agent_call_id": "call-other"}
+    )
+    with pytest.raises(ValueError, match="AgentCall scope"):
+        publish_evidence_acceptance(
+            candidate=normalized,
+            agent_call=(call := evidence_normalizer_call()),
+            agent_call_gate_result=agent_call_gate(call),
+            gate_result_id="gate-evidence-scope",
+            input_revision_map={"episode-1": 1},
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        )
+
+
+def test_assessment_rejects_facts_not_in_accepted_evidence_candidate() -> None:
+    component = gate_component()
+    accepted_facts = [
+        clinical_fact(
+            fact_id="fact-accepted",
+            fact_type="history.condition_present",
+            value=False,
+            polarity=FactPolarity.AFFIRMED,
+            certainty=1,
+            evidence_span_ids=["span-accepted"],
+        )
+    ]
+    accepted_spans = [evidence_span("span-accepted")]
+    normalized = evidence_candidate(accepted_facts, accepted_spans)
+    evidence_call = evidence_normalizer_call()
+    evidence_gate = publish_evidence_acceptance(
+        candidate=normalized,
+        agent_call=evidence_call,
+        agent_call_gate_result=agent_call_gate(evidence_call),
+        gate_result_id="gate-evidence-accepted",
+        input_revision_map={"episode-1": 1},
+        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+    )
+    value = align_candidate(
+        candidate(ComponentDecision.EXCLUSION_NOT_TRIGGERED, []),
+        component,
+        accepted_facts,
+    )
+    call = eligibility_call()
+    candidate_gate = publish_assessment_candidate_acceptance(
+        value,
+        agent_call=call,
+        agent_call_gate_result=agent_call_gate(call),
+        gate_result_id="gate-candidate-evidence-substitution",
+        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+    )
+    substituted_facts = [
+        accepted_facts[0].model_copy(update={"value": True})
+    ]
+    with pytest.raises(ValueError, match="accepted Evidence Candidate"):
+        publish_assessment(
+            value,
+            agent_call=call,
+            agent_call_gate_result=agent_call_gate(call),
+            candidate_gate_result=candidate_gate,
+            evidence_gate_result=evidence_gate,
+            evidence_candidate=normalized,
+            evidence_agent_call=evidence_call,
+            evidence_agent_call_gate_result=agent_call_gate(evidence_call),
+            component=component,
+            rule_kind=RuleKind.EXCLUSION,
+            facts=substituted_facts,
+            evidence_spans=accepted_spans,
+            anchor_dates={},
+            episode_stage=ReviewStage.SCREENING,
+            expectations=[],
+            conflict_groups=[],
+            assessment_id="assessment-evidence-substitution",
+            gate_result_id="gate-assessment-evidence-substitution",
+            input_revision_map={"episode-1": 1},
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        )
+
+
+def align_candidate(
+    value: AssessmentCandidate,
+    component: RuleComponent,
+    facts: list[ClinicalFact],
+) -> AssessmentCandidate:
+    context = evaluation_context(facts=facts)
+    evaluation = evaluate_component(component, context)
+    facts_by_id = {item.fact_id: item for item in facts}
+    observations = [
+        PredicateObservation(
+            predicate_id=predicate_id,
+            truth=result.truth,
+            observed_value=result.observed_value,
+            observed_unit=result.observed_unit,
+            fact_ids=result.used_fact_ids,
+            evidence_span_ids=result.evidence_span_ids,
+            reason_codes=result.reason_codes,
+        )
+        for predicate_id, result in evaluation.predicate_evaluations.items()
+    ]
+    used_fact_ids = list(evaluation.trigger.used_fact_ids)
+    if evaluation.exception is not None and evaluation.trigger.truth == TruthValue.TRUE:
+        used_fact_ids.extend(evaluation.exception.used_fact_ids)
+    used_fact_ids = list(dict.fromkeys(used_fact_ids))
+    return value.model_copy(
+        update={
+            "used_fact_ids": used_fact_ids,
+            "evidence_span_ids": list(
+                dict.fromkeys(
+                    span_id
+                    for fact_id in used_fact_ids
+                    for span_id in facts_by_id[fact_id].evidence_span_ids
+                )
+            ),
+            "predicate_observations": observations,
+            "processed_predicate_ids": [item.predicate_id for item in observations],
+            "missing_predicate_ids": [
+                item.predicate_id
+                for item in observations
+                if item.truth == TruthValue.UNKNOWN
+            ],
+        }
+    )
+
+
+def publish_test_assessment(
+    value: AssessmentCandidate,
+    *,
+    component: RuleComponent,
+    facts: list[ClinicalFact],
+    rule_kind: RuleKind = RuleKind.EXCLUSION,
+    expectations: list[EvidenceExpectation] | None = None,
+    conflicts: list[ConflictGroup] | None = None,
+    stage: ReviewStage = ReviewStage.SCREENING,
+) -> AssessmentPublication:
+    call = eligibility_call()
+    evidence_call = evidence_normalizer_call()
+    spans = [
+        evidence_span(span_id)
+        for span_id in dict.fromkeys(
+            span_id for fact in facts for span_id in fact.evidence_span_ids
+        )
+    ]
+    candidate_gate = publish_assessment_candidate_acceptance(
+        value,
+        agent_call=call,
+        agent_call_gate_result=agent_call_gate(call),
+        gate_result_id=f"gate-{value.assessment_candidate_id}",
+        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+    )
+    normalized = evidence_candidate(facts, spans)
+    evidence_gate = publish_evidence_acceptance(
+        candidate=normalized,
+        agent_call=evidence_call,
+        agent_call_gate_result=agent_call_gate(evidence_call),
+        gate_result_id="gate-evidence-1",
+        input_revision_map={"episode-1": 1},
+        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+    )
+    return publish_assessment(
+        value,
+        agent_call=call,
+        agent_call_gate_result=agent_call_gate(call),
+        candidate_gate_result=candidate_gate,
+        evidence_gate_result=evidence_gate,
+        evidence_candidate=normalized,
+        evidence_agent_call=evidence_call,
+        evidence_agent_call_gate_result=agent_call_gate(evidence_call),
+        component=component,
+        rule_kind=rule_kind,
+        facts=facts,
+        evidence_spans=spans,
+        anchor_dates={},
+        episode_stage=stage,
+        expectations=expectations or [],
+        conflict_groups=conflicts or [],
+        assessment_id="assessment-test-1",
+        gate_result_id="gate-assessment-test-1",
+        input_revision_map={"episode-1": 1},
+        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+    )
+
+
+def decision_for_action_gap(gap: GapType) -> ComponentDecision:
+    return (
+        ComponentDecision.PROFESSIONAL_JUDGMENT
+        if gap == GapType.PROFESSIONAL_JUDGMENT
+        else ComponentDecision.CONFLICT
+        if gap in {GapType.SOURCE_CONFLICT, GapType.INTERPRETATION_CONFLICT}
+        else ComponentDecision.NOT_DUE
+        if gap == GapType.FUTURE_STAGE_NOT_DUE
+        else ComponentDecision.EXCLUSION_NOT_TRIGGERED
+        if gap == GapType.PROVENANCE_FOLLOWUP
+        else ComponentDecision.INDETERMINATE
+    )
+
+
+def action_source_assessment(gap: GapType) -> AssessmentPublication:
+    return assessment_publication(final_assessment(decision_for_action_gap(gap), [gap]))
+
+
+def action_request(gap: GapType) -> ActionPublication:
+    assessment_input = assessment_publication(
+        final_assessment(decision_for_action_gap(gap), [gap])
+    )
     return publish_action_request(
+        assessment_publication=assessment_input,
         action_id=f"action-{gap.value}",
         rule_component_id="component-1",
         gap_type=gap,
@@ -226,18 +542,41 @@ def action_request(gap: GapType) -> ActionRequest:
         state=ActionState.OPEN,
         recompute_scope=["component-1"],
         gate_result_id=f"gate-action-{gap.value}",
-        input_entity_refs=["component-1"],
         input_revision_map={"episode-1": 1},
         created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
-    ).action
+    )
 
 
 def episode_rollup(assessments, expectations, actions):
+    assessment_publications = [
+        item if isinstance(item, AssessmentPublication) else assessment_publication(item)
+        for item in assessments
+    ]
+    action_publications = []
+    for action in actions:
+        if isinstance(action, ActionPublication):
+            action_publications.append(action)
+            continue
+        gate = GateResult(
+            gate_result_id=action.gate_result_id,
+            gate_name="action-publication-gate",
+            result="accepted",
+            input_scope_hash="b" * 64,
+            input_revision_map={"episode-1": 1},
+            input_entity_refs=[action.assessment_id],
+            accepted_entity_refs=[action.action_id],
+            affected_scope=[action.rule_component_id],
+            recompute_scope=[action.rule_component_id],
+            idempotency_key=f"test:{action.action_id}",
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+            output_hash=canonical_hash(action.model_dump(mode="json")),
+        )
+        action_publications.append(ActionPublication(action=action, gate_result=gate))
     return publish_episode_rollup(
         review_episode_id="episode-1",
-        assessments=assessments,
+        assessment_publications=assessment_publications,
         expectations=expectations,
-        actions=actions,
+        action_publications=action_publications,
         gate_result_id="gate-rollup-1",
         input_revision_map={"episode-1": 1},
         created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
@@ -759,6 +1098,32 @@ def test_evidence_snapshot_full_and_incremental_lineage_are_distinct() -> None:
         EvidenceSnapshot(**base, upload_mode=UploadMode.FULL, prior_snapshot_id="snapshot-0")
 
 
+def test_unknown_fact_cannot_smuggle_typed_value_or_unit() -> None:
+    with pytest.raises(ValidationError, match="未知极性事实"):
+        clinical_fact(
+            fact_id="fact-unknown-with-value",
+            fact_type="laboratory.alt",
+            value=76.1,
+            unit="U/L",
+            polarity=FactPolarity.UNKNOWN,
+            certainty=0.5,
+            evidence_span_ids=["span-1"],
+        )
+
+
+@pytest.mark.parametrize(
+    "invalid_field",
+    ["lower_bound_days", "upper_bound_days", "half_life_multiplier"],
+)
+def test_on_time_constraint_rejects_window_and_half_life_parameters(invalid_field) -> None:
+    with pytest.raises(ValidationError, match="on 仅表示"):
+        TimeConstraint(
+            anchor_type="baseline_date",
+            direction=TimeDirection.ON,
+            **{invalid_field: 1},
+        )
+
+
 def test_rule_set_rejects_parent_phase_and_kind_prefix_drift() -> None:
     expression = AtomicExpression(
         predicate=AtomicPredicate(subject="x", attribute="present", comparator="eq", value=True)
@@ -874,11 +1239,15 @@ def test_agent_call_node_scope_and_retry_budget_are_enforced() -> None:
         "recompute_scope": ["component-1"],
         "trigger": "manual_test",
         "project_id": "project-1",
+        "protocol_version_id": "protocol-1",
+        "rule_set_id": "ruleset-1",
+        "rule_set_revision": 1,
         "subject_id": "subject-1",
         "review_episode_id": "episode-1",
         "review_run_id": "run-1",
         "evidence_snapshot_id": "snapshot-1",
         "source_ids": ["document-1"],
+        "gate_result_ids": ["gate-call-1"],
     }
     assert AgentCallContract(**base).node == AgentNode.ELIGIBILITY_ASSESSOR
     with pytest.raises(ValidationError, match="写入范围"):
@@ -887,6 +1256,29 @@ def test_agent_call_node_scope_and_retry_budget_are_enforced() -> None:
         AgentCallContract(**{**base, "attempt": 3})
     with pytest.raises(ValidationError, match="Subject/Episode/Run/Snapshot/Source"):
         AgentCallContract(**{**base, "subject_id": None})
+    with pytest.raises(ValidationError):
+        AgentCallContract(**{**base, "gate_result_ids": []})
+
+
+def test_eligibility_output_rejects_cross_scope_or_cross_call_candidate() -> None:
+    value = candidate(ComponentDecision.EXCLUSION_NOT_TRIGGERED, [])
+    base = {
+        "project_id": "project-1",
+        "protocol_version_id": "protocol-1",
+        "subject_id": "subject-1",
+        "rule_set_id": "ruleset-1",
+        "rule_set_revision": 1,
+        "review_episode_id": "episode-1",
+        "review_run_id": "run-1",
+        "evidence_snapshot_id": "snapshot-1",
+        "candidates": [value],
+        "coverage": CoverageSummary(),
+        "created_by_agent_call_id": "call-1",
+    }
+    EligibilityAssessmentOutput(**base)
+    forged = value.model_copy(update={"subject_id": "subject-other"})
+    with pytest.raises(ValidationError, match="scope/call"):
+        EligibilityAssessmentOutput(**{**base, "candidates": [forged]})
 
 
 def test_agent_cannot_publish_final_state_or_action() -> None:
@@ -899,10 +1291,37 @@ def test_agent_cannot_publish_final_state_or_action() -> None:
             )
 
 
+def test_candidate_gate_requires_accepted_agent_call_closure() -> None:
+    call = eligibility_call()
+    rejected_call_gate = agent_call_gate(call).model_copy(
+        update={
+            "result": "rejected",
+            "accepted_entity_refs": [],
+            "rejected_entity_refs": [call.agent_call_id],
+            "error_codes": ["schema_validation_failed"],
+        }
+    )
+    with pytest.raises(AgentPermissionError, match="AgentCall 未通过"):
+        publish_assessment_candidate_acceptance(
+            candidate(ComponentDecision.EXCLUSION_NOT_TRIGGERED, []),
+            agent_call=call,
+            agent_call_gate_result=rejected_call_gate,
+            gate_result_id="gate-candidate-rejected-call",
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        )
+
+
 def test_final_assessment_direct_construction_requires_gate_publication_fingerprint() -> None:
     with pytest.raises(ValidationError, match="publication_fingerprint"):
         FinalAssessment(
             assessment_id="assessment-invalid",
+            project_id="project-1",
+            protocol_version_id="protocol-1",
+            subject_id="subject-1",
+            rule_set_id="ruleset-1",
+            rule_set_revision=1,
+            review_episode_id="episode-1",
+            evidence_snapshot_id="snapshot-1",
             review_run_id="run-1",
             rule_component_id="component-1",
             decision=ComponentDecision.INCLUSION_MET,
@@ -912,198 +1331,86 @@ def test_final_assessment_direct_construction_requires_gate_publication_fingerpr
         )
 
 
-def test_agent_candidate_cannot_override_deterministic_component_result() -> None:
-    wrong = candidate(ComponentDecision.EXCLUSION_TRIGGERED, [])
-    with pytest.raises(AssessmentGateError, match="不一致"):
-        publish_assessment(
-            wrong,
-            component=gate_component(),
-            rule_kind=RuleKind.EXCLUSION,
-            evaluation=component_evaluation(TruthValue.FALSE),
-            assessment_id="assessment-wrong",
-            review_run_id="run-1",
-            gate_result_id="gate-1",
-            episode_stage=ReviewStage.SCREENING,
-            expectations=[],
-            conflict_groups=[],
-            input_revision_map={"episode-1": 1},
-            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+def test_gate_owned_publication_builder_is_not_public_api() -> None:
+    assert not hasattr(publication_module, "build_published_model")
+
+
+def test_assessment_gate_recomputes_and_rejects_wrong_agent_decision() -> None:
+    component = gate_component()
+    facts = [
+        clinical_fact(
+            fact_id="fact-condition-false",
+            fact_type="history.condition_present",
+            value=False,
+            polarity=FactPolarity.AFFIRMED,
+            certainty=1,
+            evidence_span_ids=["span-condition-false"],
         )
-
-
-def test_agent_candidate_fact_refs_must_equal_evaluator_dependencies() -> None:
-    manipulated = candidate(ComponentDecision.EXCLUSION_NOT_TRIGGERED, []).model_copy(
-        update={"used_fact_ids": ["fact-unrelated"]}
+    ]
+    wrong = align_candidate(
+        candidate(ComponentDecision.EXCLUSION_TRIGGERED, []), component, facts
     )
-    with pytest.raises(AssessmentGateError, match="used_fact_ids"):
-        publish_assessment(
-            manipulated,
-            component=gate_component(),
-            rule_kind=RuleKind.EXCLUSION,
-            evaluation=component_evaluation(TruthValue.FALSE),
-            assessment_id="assessment-fact-ref-mismatch",
-            review_run_id="run-1",
-            gate_result_id="gate-fact-ref-mismatch",
-            episode_stage=ReviewStage.SCREENING,
-            expectations=[],
-            conflict_groups=[],
-            input_revision_map={"episode-1": 1},
-            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+    with pytest.raises(AssessmentGateError, match="确定性结果"):
+        publish_test_assessment(wrong, component=component, facts=facts)
+
+
+def test_assessment_gate_rejects_forged_observed_value_unit_and_span() -> None:
+    component = gate_component()
+    facts = [
+        clinical_fact(
+            fact_id="fact-condition-false",
+            fact_type="history.condition_present",
+            value=False,
+            polarity=FactPolarity.AFFIRMED,
+            certainty=1,
+            evidence_span_ids=["span-condition-false"],
         )
-
-
-def test_agent_predicate_observations_cannot_omit_or_rewrite_evaluator_results() -> None:
-    base = candidate(ComponentDecision.EXCLUSION_NOT_TRIGGERED, [])
-    omitted = base.model_copy(
-        update={"predicate_observations": [], "processed_predicate_ids": []}
+    ]
+    aligned = align_candidate(
+        candidate(ComponentDecision.EXCLUSION_NOT_TRIGGERED, []), component, facts
     )
-    with pytest.raises(AssessmentGateError, match="逐项覆盖"):
-        publish_assessment(
-            omitted,
-            component=gate_component(),
-            rule_kind=RuleKind.EXCLUSION,
-            evaluation=component_evaluation(TruthValue.FALSE),
-            assessment_id="assessment-observation-omitted",
-            review_run_id="run-1",
-            gate_result_id="gate-observation-omitted",
-            episode_stage=ReviewStage.SCREENING,
-            expectations=[],
-            conflict_groups=[],
-            input_revision_map={"episode-1": 1},
-            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
-        )
-
-    rewritten = base.model_copy(
+    forged = aligned.model_copy(
         update={
             "predicate_observations": [
-                PredicateObservation(
-                    predicate_id="predicate-history-condition_present-eq",
-                    truth=TruthValue.TRUE,
+                aligned.predicate_observations[0].model_copy(
+                    update={
+                        "observed_value": 999,
+                        "observed_unit": "wrong-unit",
+                        "evidence_span_ids": ["unrelated-span"],
+                    }
                 )
             ]
         }
     )
     with pytest.raises(AssessmentGateError, match="Evaluator"):
-        publish_assessment(
-            rewritten,
-            component=gate_component(),
-            rule_kind=RuleKind.EXCLUSION,
-            evaluation=component_evaluation(TruthValue.FALSE),
-            assessment_id="assessment-observation-rewritten",
-            review_run_id="run-1",
-            gate_result_id="gate-observation-rewritten",
-            episode_stage=ReviewStage.SCREENING,
-            expectations=[],
-            conflict_groups=[],
-            input_revision_map={"episode-1": 1},
-            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        publish_test_assessment(forged, component=component, facts=facts)
+
+
+def test_missing_exception_cannot_be_silently_treated_as_exclusion_triggered() -> None:
+    component = gate_component(with_exception=True)
+    facts = [
+        clinical_fact(
+            fact_id="fact-condition-true",
+            fact_type="history.condition_present",
+            value=True,
+            polarity=FactPolarity.AFFIRMED,
+            certainty=1,
+            evidence_span_ids=["span-condition-true"],
         )
-
-
-def test_missing_exception_evidence_cannot_force_exclusion_triggered() -> None:
-    proposed = candidate(
-        ComponentDecision.INDETERMINATE,
-        [GapType.RECORD_INCOMPLETE],
-    ).model_copy(
-        update={
-            "predicate_observations": [
-                PredicateObservation(
-                    predicate_id="predicate-history-condition_present-eq",
-                    truth=TruthValue.TRUE,
-                ),
-                PredicateObservation(
-                    predicate_id="predicate-exception-documented-eq",
-                    truth=TruthValue.UNKNOWN,
-                    reason_codes=["fact_not_observed"],
-                ),
-            ],
-            "processed_predicate_ids": [
-                "predicate-history-condition_present-eq",
-                "predicate-exception-documented-eq",
-            ],
-            "missing_predicate_ids": ["predicate-exception-documented-eq"],
-        }
-    )
-    publication = publish_assessment(
-        proposed,
-        component=gate_component(with_exception=True),
-        rule_kind=RuleKind.EXCLUSION,
-        evaluation=component_evaluation(
-            TruthValue.TRUE,
-            exception_truth=TruthValue.UNKNOWN,
-            exception_reasons=["fact_not_observed"],
+    ]
+    aligned = align_candidate(
+        candidate(
+            ComponentDecision.INDETERMINATE,
+            [GapType.RECORD_INCOMPLETE],
         ),
-        assessment_id="assessment-exception-unknown",
-        review_run_id="run-1",
-        gate_result_id="gate-1",
-        episode_stage=ReviewStage.SCREENING,
-        expectations=[],
-        conflict_groups=[],
-        input_revision_map={"episode-1": 1},
-        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        component,
+        facts,
     )
+    publication = publish_test_assessment(aligned, component=component, facts=facts)
     assert publication.assessment.decision == ComponentDecision.INDETERMINATE
-    assert publication.gate_result.accepted_entity_refs == [publication.assessment.assessment_id]
 
 
-def test_agent_gap_suggestion_cannot_reclassify_unknown_result() -> None:
-    manipulated = candidate(
-        ComponentDecision.INDETERMINATE,
-        [GapType.FUTURE_STAGE_NOT_DUE],
-    )
-    with pytest.raises(AssessmentGateError, match="gap_types"):
-        publish_assessment(
-            manipulated,
-            component=gate_component(),
-            rule_kind=RuleKind.EXCLUSION,
-            evaluation=component_evaluation(
-                TruthValue.UNKNOWN,
-                trigger_reasons=["fact_not_observed"],
-            ),
-            episode_stage=ReviewStage.SCREENING,
-            expectations=[],
-            conflict_groups=[],
-            assessment_id="assessment-manipulated-gap",
-            review_run_id="run-1",
-            gate_result_id="gate-manipulated-gap",
-            input_revision_map={"episode-1": 1},
-            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
-        )
-
-
-def test_definitive_trigger_does_not_inherit_irrelevant_sibling_uncertainty() -> None:
-    proposed = candidate(ComponentDecision.EXCLUSION_NOT_TRIGGERED, []).model_copy(
-        update={
-            "predicate_observations": [
-                PredicateObservation(
-                    predicate_id="predicate-history-condition_present-eq",
-                    truth=TruthValue.FALSE,
-                    reason_codes=["date_or_anchor_missing"],
-                )
-            ]
-        }
-    )
-    publication = publish_assessment(
-        proposed,
-        component=gate_component(),
-        rule_kind=RuleKind.EXCLUSION,
-        evaluation=component_evaluation(
-            TruthValue.FALSE,
-            trigger_reasons=["date_or_anchor_missing"],
-        ),
-        episode_stage=ReviewStage.SCREENING,
-        expectations=[],
-        conflict_groups=[],
-        assessment_id="assessment-definitive-false",
-        review_run_id="run-1",
-        gate_result_id="gate-definitive-false",
-        input_revision_map={"episode-1": 1},
-        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
-    )
-    assert publication.assessment.gap_types == []
-
-
-def test_future_component_is_not_promoted_to_current_conflict() -> None:
+def test_future_component_remains_not_due_even_if_current_sources_conflict() -> None:
     requirement = EvidenceRequirement(
         requirement_id="requirement-future",
         rule_component_id="component-1",
@@ -1111,57 +1418,63 @@ def test_future_component_is_not_promoted_to_current_conflict() -> None:
         due_stage=ReviewStage.BASELINE,
         description="基线才到期的合成要求。",
     )
+    component = gate_component(requirements=[requirement])
+    facts = [
+        clinical_fact(
+            fact_id="fact-1",
+            fact_type="history.condition_present",
+            value=True,
+            polarity=FactPolarity.AFFIRMED,
+            certainty=1,
+            evidence_span_ids=["span-1"],
+            conflict_group_id="conflict-1",
+        ),
+        clinical_fact(
+            fact_id="fact-2",
+            fact_type="history.condition_present",
+            value=False,
+            polarity=FactPolarity.AFFIRMED,
+            certainty=1,
+            evidence_span_ids=["span-2"],
+            conflict_group_id="conflict-1",
+        ),
+    ]
     expectation = EvidenceExpectation(
         expectation_id="expectation-future",
-        requirement_id=requirement.requirement_id,
+        requirement_id="requirement-future",
         review_episode_id="episode-1",
         status=ExpectationStatus.NOT_DUE,
         gap_type=GapType.FUTURE_STAGE_NOT_DUE,
     )
-    conflict = ConflictGroup(
-        conflict_group_id="conflict-future",
-        fact_ids=["fact-1", "fact-2"],
-        affected_rule_component_ids=["component-1"],
+    aligned = align_candidate(
+        candidate(ComponentDecision.NOT_DUE, [GapType.FUTURE_STAGE_NOT_DUE]),
+        component,
+        facts,
     )
-    proposed = candidate(
-            ComponentDecision.NOT_DUE,
-            [GapType.FUTURE_STAGE_NOT_DUE],
-        ).model_copy(
-            update={
-                "predicate_observations": [
-                    PredicateObservation(
-                        predicate_id="predicate-history-condition_present-eq",
-                        truth=TruthValue.UNKNOWN,
-                        reason_codes=["source_conflict"],
-                    )
-                ]
-            }
-        )
-    publication = publish_assessment(
-        proposed,
-        component=gate_component(requirements=[requirement]),
-        rule_kind=RuleKind.EXCLUSION,
-        evaluation=component_evaluation(
-            TruthValue.UNKNOWN,
-            trigger_reasons=["source_conflict"],
-        ),
-        episode_stage=ReviewStage.SCREENING,
+    publication = publish_test_assessment(
+        aligned,
+        component=component,
+        facts=facts,
         expectations=[expectation],
-        conflict_groups=[conflict],
-        assessment_id="assessment-future",
-        review_run_id="run-1",
-        gate_result_id="gate-future",
-        input_revision_map={"episode-1": 1},
-        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        conflicts=[
+            ConflictGroup(
+                conflict_group_id="conflict-1",
+                fact_ids=["fact-1", "fact-2"],
+                affected_rule_component_ids=["component-1"],
+            )
+        ],
     )
     assert publication.assessment.decision == ComponentDecision.NOT_DUE
-    assert publication.assessment.gap_types == [GapType.FUTURE_STAGE_NOT_DUE]
 
 
 def test_rollup_priority_counts_and_provenance_are_deterministic() -> None:
     assessments = [
         final_assessment(ComponentDecision.INCLUSION_NOT_MET, []),
         final_assessment(ComponentDecision.CONFLICT, [GapType.SOURCE_CONFLICT]),
+        final_assessment(
+            ComponentDecision.EXCLUSION_NOT_TRIGGERED,
+            [GapType.PROVENANCE_FOLLOWUP],
+        ),
     ]
     expectation = EvidenceExpectation(
         expectation_id="expectation-1",
@@ -1221,6 +1534,42 @@ def test_rollup_precedence_is_stable_without_narrative_input() -> None:
     assert episode_rollup(assessments[3:], [], []).main_status == EpisodeMainStatus.FUTURE_ATTENTION
 
 
+def test_rollup_rejects_accepted_assessment_from_another_episode() -> None:
+    cross_episode_assessment = _build_gate_owned_model(
+        FinalAssessment,
+        entity_type="final_assessment",
+        gate_result_id="gate-cross-episode-assessment",
+        data={
+            "assessment_id": "assessment-cross-episode",
+            "project_id": "project-1",
+            "protocol_version_id": "protocol-1",
+            "subject_id": "subject-1",
+            "rule_set_id": "ruleset-1",
+            "rule_set_revision": 1,
+            "review_episode_id": "episode-other",
+            "evidence_snapshot_id": "snapshot-1",
+            "review_run_id": "run-1",
+            "rule_component_id": "component-1",
+            "decision": ComponentDecision.INCLUSION_MET,
+            "gap_types": [],
+            "blocking_level": BlockingLevel.NONE,
+            "used_fact_ids": ["fact-1"],
+            "evidence_span_ids": ["span-1"],
+        },
+    )
+    cross_episode_publication = assessment_publication(cross_episode_assessment)
+    with pytest.raises(ValueError, match="跨 Episode"):
+        publish_episode_rollup(
+            review_episode_id="episode-1",
+            assessment_publications=[cross_episode_publication],
+            expectations=[],
+            action_publications=[],
+            gate_result_id="gate-rollup-cross-episode",
+            input_revision_map={"episode-1": 1},
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        )
+
+
 def test_rollup_uses_expectation_blocking_policy_for_weak_and_provenance_evidence() -> None:
     provenance = EvidenceExpectation(
         expectation_id="expectation-provenance",
@@ -1249,7 +1598,7 @@ def test_rollup_uses_expectation_blocking_policy_for_weak_and_provenance_evidenc
 
 def test_episode_rollup_direct_construction_cannot_bypass_status_precedence() -> None:
     with pytest.raises(ValidationError, match="主状态"):
-        build_published_model(
+        _build_gate_owned_model(
             EpisodeRollup,
             entity_type="episode_rollup",
             gate_result_id="gate-rollup-invalid",
@@ -1319,14 +1668,30 @@ def test_protocol_integrity_uses_authoritative_manifest_not_caller_codes() -> No
             display_name="筛选期",
         )
     ]
+    authority = build_protocol_authority_record(
+        authority_record_id="authority-1",
+        protocol_version_id="protocol-1",
+        protocol_document_sha256="a" * 64,
+        study_phase=StudyPhase.PHASE_III,
+        official_rules=[trusted_rule],
+        official_workflow_stages=workflow,
+        rule_source_anchor_refs={"IN-01": ["protocol-1:p1"]},
+        verified_by="test-reviewer",
+        verified_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+    )
+    authority_gate = publish_protocol_authority_acceptance(
+        authority,
+        gate_result_id="gate-authority-1",
+        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+    )
     manifest = build_protocol_integrity_manifest(
         manifest_id="manifest-1",
         protocol_version_id="protocol-1",
         protocol_document_sha256="a" * 64,
         study_phase=StudyPhase.PHASE_III,
         source_refs=["protocol-1:p1"],
-        authoritative_rules=[trusted_rule],
-        authoritative_workflow_stages=workflow,
+        authority_record=authority,
+        authority_gate_result=authority_gate,
     )
     protocol = ProtocolDocumentVersion(
         protocol_version_id="protocol-1",
@@ -1335,13 +1700,18 @@ def test_protocol_integrity_uses_authoritative_manifest_not_caller_codes() -> No
         official_date=DateValue(value=date(2026, 8, 1), precision=DatePrecision.DAY),
         sha256="a" * 64,
         integrity_manifest_sha256=manifest.manifest_sha256,
+        authority_record_sha256=authority.authority_record_sha256,
+        authority_gate_result_id=authority_gate.gate_result_id,
+        integrity_gate_result_id="gate-integrity-1",
     )
     with pytest.raises(ValueError, match="官方规则编号"):
-        validate_protocol_integrity(
+        assert_protocol_integrity(
             rules,
             workflow_stages=workflow,
             protocol_version=protocol,
             manifest=manifest,
+            authority_record=authority,
+            authority_gate_result=authority_gate,
         )
 
 
@@ -1371,14 +1741,16 @@ def test_protocol_manifest_rejects_due_stage_drift() -> None:
         )
     ]
     with pytest.raises(ValidationError, match="due_stage"):
-        build_protocol_integrity_manifest(
-            manifest_id="manifest-due-drift",
+        build_protocol_authority_record(
+            authority_record_id="authority-due-drift",
             protocol_version_id="protocol-1",
             protocol_document_sha256="a" * 64,
             study_phase=StudyPhase.PHASE_III,
-            source_refs=["protocol-1:flow-table"],
-            authoritative_rules=[rule],
-            authoritative_workflow_stages=wrong_workflow,
+            official_rules=[rule],
+            official_workflow_stages=wrong_workflow,
+            rule_source_anchor_refs={"EX-01": ["protocol-1:p1"]},
+            verified_by="test-reviewer",
+            verified_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
         )
 
 
@@ -1398,10 +1770,29 @@ def test_protocol_manifest_rejects_due_stage_drift() -> None:
 )
 def test_action_blocking_level_is_deterministic(gap, expected) -> None:
     assert derive_action_blocking_level(gap) == expected
-    action = action_request(gap)
-    validate_action_request(action)
-    with pytest.raises(ActionGateError):
-        validate_action_request(action.model_copy(update={"blocking_level": BlockingLevel.NONE if expected != BlockingLevel.NONE else BlockingLevel.BLOCKING}))
+    publication = action_request(gap)
+    source_assessment = action_source_assessment(gap)
+    assert (
+        validate_action_publication(
+            publication,
+            assessment_publication=source_assessment,
+        )
+        == publication.gate_result
+    )
+    invalid = publication.action.model_copy(
+        update={
+            "blocking_level": (
+                BlockingLevel.NONE
+                if expected != BlockingLevel.NONE
+                else BlockingLevel.BLOCKING
+            )
+        }
+    )
+    with pytest.raises((ActionGateError, ValidationError)):
+        validate_action_publication(
+            ActionPublication(action=invalid, gate_result=publication.gate_result),
+            assessment_publication=source_assessment,
+        )
 
 
 def test_action_direct_construction_cannot_bypass_blocking_policy() -> None:

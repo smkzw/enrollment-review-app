@@ -1562,3 +1562,17 @@ OCR concurrency note:
 - UAT 生成器不再把筛选 Fixture 换 ID 后复制成基线；每个 Episode 都按当前阶段重新计算 Expectation、Candidate、FinalAssessment、Action 和 Rollup。当前 UAT 是 6 名主要受试者 x 筛选/基线 12 Episode，加预筛和导入/洗脱期 2 个模板，共 14 Episode。
 - ProtocolDiffExample 现携带当前和拟议两套真实 RuleSet，新增、删除和逻辑/时间窗变化编号由代码从实际结构差异验证，调用方无法自行“宣布”差异。
 - 当前合同专项验证为 `91 passed`，默认全套为 `227 passed, 1 skipped, 18 subtests`，legacy 只读回归为 `130 passed, 1 skipped`；编译、diff 检查和 8 个生成制品的两次哈希重现均通过。尚未完成同一 Luna checker 三次复核，因此 Phase 0.5 仍不可归档。
+
+2026-08-12 Phase 0.5 同一 Luna checker 第三次复核后的修复（进行中）：
+
+- 复核提交 `3eb994f` 仍被拒绝。真实问题不是文案矛盾，而是发布权边界仍有旁路：Assessment Gate 接受 caller-supplied evaluation；UNKNOWN 事实可夹带 typed value；`on` 时间方向忽略区间/半衰期；候选可伪造观察值、单位和 Span；Agent 输出 scope 不完整；方案 Manifest 仍可由调用方自证；Action/Rollup 未强制验证完整上游 publication。
+- Assessment Gate 已改为在 Gate 内从 accepted Evidence Gate、规则组件、事实、Span 和锚点独立重建 Evaluation；候选观察逐项对比 Evaluator 推导值、单位、fact/span 和 reason code。UNKNOWN 事实禁止携带 value/unit，`on` 禁止携带上下界或半衰期参数。
+- 新增 Evidence Acceptance Gate；AssessmentCandidate、FinalAssessment、ActionRequest、EpisodeRollup 形成逐层 accepted GateResult 闭包。Action 必须引用产生其 gap 的 AssessmentPublication，Rollup 必须验证同一 Episode 内 Assessment/Action publication，不能只凭自洽指纹进入汇总。
+- 新增 `ProtocolAuthorityRecord` 与独立 Authority Gate：记录正式方案哈希、期别、完整规则/流程、逐规则来源锚点及人工核对元数据；Manifest 只能从 accepted Authority Record 构建，Protocol Integrity Gate 再对 ProtocolVersion/RuleSet/Workflow/Manifest 闭包重算。
+- AgentCall 的 `gate_result_ids` 强制非空；受试者 Agent 及 Eligibility/Evidence/Critic 输出完整绑定 Project、RuleSet revision、Subject、Episode、Run、Snapshot、Source 和创建调用，跨 scope/call 候选被拒绝。
+- UAT 模型现强制实际覆盖 `ALL / ANY / NOT`、可执行时间窗、明确障碍/当前缺口/未见明确障碍、四类阶段及基线增量重算；新增语义退化测试，不能靠 14 个结构化 Fixture 的数量通过验收。
+- Evidence Gate 进一步封闭为 Normalizer AgentCall -> EvidenceNormalizationCandidate -> Fact/Span -> accepted GateResult；Fixture 保存候选并可重算闭包，Assessment 不能在 Gate 外替换另一组事实。FinalAssessment 与 ActionRequest 也补齐 RuleSet revision，Action 额外绑定 Snapshot。
+- AgentCall 进一步补入 `protocol_version_id`，并要求 Candidate Gate 依赖已接受的 Agent 输出 Schema Gate；FinalAssessment、ActionRequest 和相应 Agent 输出也完整携带 ProtocolVersion/RuleSet revision 作用域。
+- 新增回归后 V2 合同专项为 `106 passed, 2 subtests passed`；默认全套 `236 passed, 1 skipped, 18 subtests`；legacy Python 3.9 `130 passed, 1 skipped`。生成物双跑哈希一致，同一 Luna checker 四次复核尚未完成，Phase 0.5 继续冻结。
+- 用户已明确“不用再找 Qwen 3.8 会商”；Qwen 3.8 保持禁用，本轮仅复用原 Luna checker 会话。
+- 本轮本地全量验证的唯一跳过仍为既有 MG-K10-SAR/06003 OCR 缓存 Fixture 不存在。`compileall`、`git diff --check` 通过，4 个 Schema/OpenAPI 与 4 个 Fixture 连续两次生成 SHA-256 一致。

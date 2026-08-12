@@ -222,3 +222,15 @@ class GateOutcome(StableEnum):
     ACCEPTED = "accepted"
     REJECTED = "rejected"
     BLOCKED = "blocked"
+
+
+class ErrorCode(StableEnum):
+    INVALID_REQUEST = "invalid_request"
+    NOT_FOUND = "not_found"
+    SCOPE_MISMATCH = "scope_mismatch"
+    STALE_REVISION = "stale_revision"
+    CONTRACT_VALIDATION_FAILED = "contract_validation_failed"
+    PROTOCOL_INTEGRITY_FAILED = "protocol_integrity_failed"
+    PUBLICATION_INTEGRITY_FAILED = "publication_integrity_failed"
+    CONFLICT = "conflict"
+    JOB_FAILED = "job_failed"

@@ -37,7 +37,7 @@ def publication_fingerprint(
     )
 
 
-def build_published_model(
+def _build_gate_owned_model(
     model_type: type[PublishedModel],
     *,
     entity_type: str,

@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import Field, model_validator
 
-from app.domain.contracts.common import ContractModel, DateValue
+from app.domain.contracts.common import ContractModel, DateValue, ScalarValue
 from app.domain.contracts.enums import (
     AnchorType,
     Comparator,
@@ -59,6 +59,9 @@ class EvaluationResult(ContractModel):
     truth: TruthValue
     reason_codes: list[str] = Field(default_factory=list)
     used_fact_ids: list[str] = Field(default_factory=list)
+    observed_value: ScalarValue | None = None
+    observed_unit: str | None = None
+    evidence_span_ids: list[str] = Field(default_factory=list)
 
 
 class ComponentEvaluation(ContractModel):
@@ -72,11 +75,17 @@ def _result(
     truth: TruthValue,
     *reason_codes: str,
     used_fact_ids: list[str] | None = None,
+    observed_value: ScalarValue | None = None,
+    observed_unit: str | None = None,
+    evidence_span_ids: list[str] | None = None,
 ) -> EvaluationResult:
     return EvaluationResult(
         truth=truth,
         reason_codes=list(dict.fromkeys(reason_codes)),
         used_fact_ids=used_fact_ids or [],
+        observed_value=observed_value,
+        observed_unit=observed_unit,
+        evidence_span_ids=evidence_span_ids or [],
     )
 
 
@@ -85,6 +94,9 @@ def _merge(results: list[EvaluationResult], truth: TruthValue) -> EvaluationResu
         truth=truth,
         reason_codes=list(dict.fromkeys(code for item in results for code in item.reason_codes)),
         used_fact_ids=list(dict.fromkeys(fact_id for item in results for fact_id in item.used_fact_ids)),
+        evidence_span_ids=list(
+            dict.fromkeys(span_id for item in results for span_id in item.evidence_span_ids)
+        ),
     )
 
 
@@ -239,6 +251,9 @@ def _evaluate_atomic(expression: AtomicExpression, context: EvaluationContext) -
             TruthValue.UNKNOWN,
             "fact_polarity_unknown",
             used_fact_ids=[fact.fact_id for fact in matching],
+            evidence_span_ids=[
+                span_id for fact in matching for span_id in fact.evidence_span_ids
+            ],
         )
     observed_values = {
         (fact.value, _canonical_unit(fact.unit), fact.polarity)
@@ -249,10 +264,20 @@ def _evaluate_atomic(expression: AtomicExpression, context: EvaluationContext) -
             TruthValue.UNKNOWN,
             "source_conflict",
             used_fact_ids=[fact.fact_id for fact in matching],
+            evidence_span_ids=[
+                span_id for fact in matching for span_id in fact.evidence_span_ids
+            ],
         )
     fact = matching[0]
     if predicate.unit is not None and _canonical_unit(predicate.unit) != _canonical_unit(fact.unit):
-        return _result(TruthValue.UNKNOWN, "unit_mismatch", used_fact_ids=[fact.fact_id])
+        return _result(
+            TruthValue.UNKNOWN,
+            "unit_mismatch",
+            used_fact_ids=[fact.fact_id],
+            observed_value=fact.value,
+            observed_unit=fact.unit,
+            evidence_span_ids=fact.evidence_span_ids,
+        )
     comparison = _compare(predicate, fact.value)
     if fact.polarity == FactPolarity.NEGATED:
         comparison = {
@@ -262,7 +287,15 @@ def _evaluate_atomic(expression: AtomicExpression, context: EvaluationContext) -
         }[comparison]
     comparison_result = _result(comparison, used_fact_ids=[fact.fact_id])
     time_result = _evaluate_time(expression, fact, context)
-    return _evaluate_logical(LogicalOperator.ALL, [comparison_result, time_result])
+    combined = _evaluate_logical(LogicalOperator.ALL, [comparison_result, time_result])
+    return _result(
+        combined.truth,
+        *combined.reason_codes,
+        used_fact_ids=combined.used_fact_ids,
+        observed_value=fact.value,
+        observed_unit=fact.unit,
+        evidence_span_ids=fact.evidence_span_ids,
+    )
 
 
 def evaluate_expression(expression: RuleExpression, context: EvaluationContext) -> EvaluationResult:

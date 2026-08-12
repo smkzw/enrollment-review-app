@@ -4,9 +4,11 @@ from datetime import datetime
 
 from pydantic import Field
 
-from app.domain.contracts.agents import GateResult
-from app.domain.contracts.common import ContractModel
+from app.domain.contracts.agents import AgentCallContract, GateResult
+from app.domain.contracts.common import ContractModel, DateValue
 from app.domain.contracts.enums import (
+    AgentNode,
+    AnchorType,
     ComponentDecision,
     ExpectationStatus,
     GapType,
@@ -15,13 +17,21 @@ from app.domain.contracts.enums import (
     RuleKind,
     TruthValue,
 )
-from app.domain.contracts.evidence import ConflictGroup, EvidenceExpectation
+from app.domain.contracts.evidence import (
+    ClinicalFact,
+    ConflictGroup,
+    EvidenceExpectation,
+    EvidenceSpan,
+)
 from app.domain.contracts.review import AssessmentCandidate, FinalAssessment
+from app.domain.contracts.normalization import EvidenceNormalizationCandidate
 from app.domain.contracts.rules import RuleComponent
 from app.domain.contracts.rules import iter_atomic_predicates
-from app.domain.expression import ComponentEvaluation
+from app.domain.expression import ComponentEvaluation, EvaluationContext, evaluate_component
+from app.domain.gates.evidence import require_accepted_evidence_gate
+from .permissions import require_accepted_agent_call
 from app.domain.policies import derive_assessment_blocking_level, validate_decision_gap_matrix
-from app.domain.publication import build_published_model, canonical_hash
+from app.domain.publication import _build_gate_owned_model, canonical_hash
 
 
 class AssessmentGateError(ValueError):
@@ -31,6 +41,63 @@ class AssessmentGateError(ValueError):
 class AssessmentPublication(ContractModel):
     assessment: FinalAssessment
     gate_result: GateResult
+
+
+def publish_assessment_candidate_acceptance(
+    candidate: AssessmentCandidate,
+    *,
+    agent_call: AgentCallContract,
+    agent_call_gate_result: GateResult,
+    gate_result_id: str,
+    created_at: datetime,
+) -> GateResult:
+    require_accepted_agent_call(agent_call, agent_call_gate_result)
+    expected_scope = (
+        agent_call.project_id,
+        agent_call.protocol_version_id,
+        agent_call.subject_id,
+        agent_call.rule_set_id,
+        agent_call.rule_set_revision,
+        agent_call.review_episode_id,
+        agent_call.review_run_id,
+        agent_call.evidence_snapshot_id,
+    )
+    candidate_scope = (
+        candidate.project_id,
+        candidate.protocol_version_id,
+        candidate.subject_id,
+        candidate.rule_set_id,
+        candidate.rule_set_revision,
+        candidate.review_episode_id,
+        candidate.review_run_id,
+        candidate.evidence_snapshot_id,
+    )
+    if (
+        agent_call.node != AgentNode.ELIGIBILITY_ASSESSOR
+        or candidate.agent_call_id != agent_call.agent_call_id
+        or candidate_scope != expected_scope
+    ):
+        raise AssessmentGateError("AssessmentCandidate 与 Eligibility AgentCall scope 不一致")
+    payload = candidate.model_dump(mode="json")
+    return GateResult(
+        gate_result_id=gate_result_id,
+        gate_name="assessment-candidate-gate",
+        result=GateOutcome.ACCEPTED,
+        input_scope_hash=agent_call.input_scope_hash,
+        input_revision_map=agent_call.input_revision_map,
+        input_entity_refs=[
+            agent_call.agent_call_id,
+            agent_call_gate_result.gate_result_id,
+        ],
+        accepted_entity_refs=[candidate.assessment_candidate_id],
+        affected_scope=[candidate.rule_component_id],
+        recompute_scope=[candidate.rule_component_id],
+        idempotency_key=(
+            f"candidate:{agent_call.agent_call_id}:{candidate.assessment_candidate_id}"
+        ),
+        created_at=created_at,
+        output_hash=canonical_hash(payload),
+    )
 
 
 STAGE_RANK = {
@@ -234,6 +301,9 @@ def validate_assessment_candidate(
             observation.truth != result.truth
             or set(observation.fact_ids) != set(result.used_fact_ids)
             or set(observation.reason_codes) != set(result.reason_codes)
+            or observation.observed_value != result.observed_value
+            or observation.observed_unit != result.observed_unit
+            or set(observation.evidence_span_ids) != set(result.evidence_span_ids)
         ):
             raise AssessmentGateError(
                 "AssessmentCandidate 谓词观察必须与确定性 Evaluator 结果一致"
@@ -243,19 +313,86 @@ def validate_assessment_candidate(
 def publish_assessment(
     candidate: AssessmentCandidate,
     *,
+    agent_call: AgentCallContract,
+    agent_call_gate_result: GateResult,
+    candidate_gate_result: GateResult,
+    evidence_gate_result: GateResult,
+    evidence_candidate: EvidenceNormalizationCandidate,
+    evidence_agent_call: AgentCallContract,
+    evidence_agent_call_gate_result: GateResult,
     component: RuleComponent,
     rule_kind: RuleKind,
-    evaluation: ComponentEvaluation,
+    facts: list[ClinicalFact],
+    evidence_spans: list[EvidenceSpan],
+    anchor_dates: dict[AnchorType, DateValue],
+    half_life_days: dict[str, float] | None = None,
     episode_stage: ReviewStage,
     expectations: list[EvidenceExpectation],
     conflict_groups: list[ConflictGroup],
     assessment_id: str,
-    review_run_id: str,
     gate_result_id: str,
     input_revision_map: dict[str, int],
     created_at: datetime,
-    action_ids: list[str] | None = None,
 ) -> AssessmentPublication:
+    require_accepted_agent_call(agent_call, agent_call_gate_result)
+    candidate_payload = candidate.model_dump(mode="json")
+    if (
+        candidate_gate_result.gate_name != "assessment-candidate-gate"
+        or candidate_gate_result.result != GateOutcome.ACCEPTED
+        or candidate.assessment_candidate_id
+        not in candidate_gate_result.accepted_entity_refs
+        or agent_call.agent_call_id not in candidate_gate_result.input_entity_refs
+        or agent_call_gate_result.gate_result_id
+        not in candidate_gate_result.input_entity_refs
+        or candidate_gate_result.output_hash != canonical_hash(candidate_payload)
+    ):
+        raise AssessmentGateError("AssessmentCandidate 未通过绑定 AgentCall 的 accepted Gate")
+    expected_scope = (
+        agent_call.project_id,
+        agent_call.protocol_version_id,
+        agent_call.subject_id,
+        agent_call.rule_set_id,
+        agent_call.rule_set_revision,
+        agent_call.review_episode_id,
+        agent_call.review_run_id,
+        agent_call.evidence_snapshot_id,
+    )
+    candidate_scope = (
+        candidate.project_id,
+        candidate.protocol_version_id,
+        candidate.subject_id,
+        candidate.rule_set_id,
+        candidate.rule_set_revision,
+        candidate.review_episode_id,
+        candidate.review_run_id,
+        candidate.evidence_snapshot_id,
+    )
+    if candidate_scope != expected_scope:
+        raise AssessmentGateError("AssessmentCandidate 与 AgentCall scope 不一致")
+    require_accepted_evidence_gate(
+        evidence_gate_result,
+        candidate=evidence_candidate,
+        agent_call=evidence_agent_call,
+        agent_call_gate_result=evidence_agent_call_gate_result,
+    )
+    if (
+        facts != evidence_candidate.clinical_fact_candidates
+        or evidence_spans != evidence_candidate.evidence_span_candidates
+    ):
+        raise AssessmentGateError(
+            "Assessment 输入事实和 Span 必须来自 accepted Evidence Candidate"
+        )
+    context = EvaluationContext(
+        project_id=candidate.project_id,
+        subject_id=candidate.subject_id,
+        review_episode_id=candidate.review_episode_id,
+        evidence_snapshot_id=candidate.evidence_snapshot_id,
+        accepted_fact_ids=[item.fact_id for item in facts],
+        facts=facts,
+        anchor_dates=anchor_dates,
+        half_life_days=half_life_days or {},
+    )
+    evaluation = evaluate_component(component, context)
     if (component.exception_expression is None) != (evaluation.exception is None):
         raise AssessmentGateError(
             "ComponentEvaluation.exception 必须与 RuleComponent.exception_expression 结构一致"
@@ -283,24 +420,44 @@ def publish_assessment(
         evaluation=evaluation,
     )
     blocking_level = derive_assessment_blocking_level(decision, gaps)
-    assessment = build_published_model(
+    fact_by_id = {item.fact_id: item for item in facts}
+    derived_span_ids = list(
+        dict.fromkeys(
+            span_id
+            for fact_id in candidate.used_fact_ids
+            for span_id in fact_by_id[fact_id].evidence_span_ids
+        )
+    )
+    if set(candidate.evidence_span_ids) != set(derived_span_ids):
+        raise AssessmentGateError(
+            "AssessmentCandidate evidence_span_ids 必须由实际依赖事实推导"
+        )
+    assessment = _build_gate_owned_model(
         FinalAssessment,
         entity_type="final_assessment",
         gate_result_id=gate_result_id,
         data={
             "assessment_id": assessment_id,
-            "review_run_id": review_run_id,
+            "project_id": candidate.project_id,
+            "protocol_version_id": candidate.protocol_version_id,
+            "subject_id": candidate.subject_id,
+            "rule_set_id": candidate.rule_set_id,
+            "rule_set_revision": candidate.rule_set_revision,
+            "review_episode_id": candidate.review_episode_id,
+            "evidence_snapshot_id": candidate.evidence_snapshot_id,
+            "review_run_id": candidate.review_run_id,
             "rule_component_id": candidate.rule_component_id,
             "decision": decision,
             "gap_types": sorted(gaps, key=lambda item: item.value),
             "blocking_level": blocking_level,
             "used_fact_ids": candidate.used_fact_ids,
-            "evidence_span_ids": candidate.evidence_span_ids,
-            "action_ids": action_ids or [],
+            "evidence_span_ids": derived_span_ids,
         },
     )
     input_payload = {
         "candidate": candidate.model_dump(mode="json"),
+        "candidate_gate_result": candidate_gate_result.model_dump(mode="json"),
+        "evidence_gate_result": evidence_gate_result.model_dump(mode="json"),
         "component": component.model_dump(mode="json"),
         "evaluation": evaluation.model_dump(mode="json"),
         "episode_stage": episode_stage.value,
@@ -315,13 +472,17 @@ def publish_assessment(
         input_revision_map=input_revision_map,
         input_entity_refs=[
             candidate.assessment_candidate_id,
+            candidate_gate_result.gate_result_id,
+            evidence_gate_result.gate_result_id,
             component.rule_component_id,
-            review_run_id,
+            candidate.review_run_id,
         ],
         accepted_entity_refs=[assessment.assessment_id],
         affected_scope=[component.rule_component_id],
         recompute_scope=[component.rule_component_id],
-        idempotency_key=f"assessment:{review_run_id}:{component.rule_component_id}",
+        idempotency_key=(
+            f"assessment:{candidate.review_run_id}:{component.rule_component_id}"
+        ),
         created_at=created_at,
         output_hash=canonical_hash(assessment.model_dump(mode="json")),
     )

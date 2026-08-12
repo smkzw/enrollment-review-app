@@ -28,12 +28,15 @@
       "parent_event_id": null,
       "project_id": "project-synthetic-phase-iii",
       "prompt_version_id": "prompt-evidence_normalizer-v1",
+      "protocol_version_id": "protocol-v1",
       "raw_output_hash": "3333333333333333333333333333333333333333333333333333333333333333",
       "recompute_scope": [
         "subject-barrier"
       ],
       "review_episode_id": "episode-barrier",
       "review_run_id": "run-barrier",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
       "same_session_group_id": null,
       "schema_version": "fixture/v1",
       "source_ids": [
@@ -71,12 +74,15 @@
       "parent_event_id": null,
       "project_id": "project-synthetic-phase-iii",
       "prompt_version_id": "prompt-eligibility_assessor-v1",
+      "protocol_version_id": "protocol-v1",
       "raw_output_hash": "4444444444444444444444444444444444444444444444444444444444444444",
       "recompute_scope": [
         "subject-barrier"
       ],
       "review_episode_id": "episode-barrier",
       "review_run_id": "run-barrier",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
       "same_session_group_id": null,
       "schema_version": "fixture/v1",
       "source_ids": [
@@ -100,30 +106,19 @@
       ],
       "gap_types": [],
       "missing_predicate_ids": [],
-      "predicate_observations": [
-        {
-          "evidence_span_ids": [
-            "span-barrier-risk"
-          ],
-          "fact_ids": [
-            "fact-barrier-age"
-          ],
-          "observed_unit": "year",
-          "observed_value": 45,
-          "predicate_id": "predicate-demographics-age_years-gte",
-          "reason_codes": [],
-          "schema_version": "fixture/v1",
-          "truth": "true"
-        }
-      ],
-      "processed_predicate_ids": [
-        "predicate-demographics-age_years-gte"
-      ],
+      "predicate_observations": [],
+      "processed_predicate_ids": [],
+      "project_id": "project-synthetic-phase-iii",
       "proposed_decision": "inclusion_met",
+      "protocol_version_id": "protocol-v1",
       "reason_codes": [],
       "review_episode_id": "episode-barrier",
+      "review_run_id": "run-barrier",
       "rule_component_id": "component-in-01",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
       "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
       "uncertainty_codes": [],
       "unresolved_items": [],
       "used_fact_ids": [
@@ -140,112 +135,21 @@
         "span-barrier-risk"
       ],
       "gap_types": [],
-      "missing_predicate_ids": [
-        "predicate-medication-prohibited-window",
-        "predicate-investigator-exception_confirmed-eq"
-      ],
-      "predicate_observations": [
-        {
-          "evidence_span_ids": [
-            "span-barrier-risk"
-          ],
-          "fact_ids": [
-            "fact-barrier-risk"
-          ],
-          "observed_unit": null,
-          "observed_value": true,
-          "predicate_id": "predicate-investigator-unacceptable_participation_risk-eq",
-          "reason_codes": [],
-          "schema_version": "fixture/v1",
-          "truth": "true"
-        },
-        {
-          "evidence_span_ids": [
-            "span-barrier-risk"
-          ],
-          "fact_ids": [
-            "fact-barrier-lab"
-          ],
-          "observed_unit": "xULN",
-          "observed_value": 2.1,
-          "predicate_id": "predicate-laboratory-target_ratio_uln-gte",
-          "reason_codes": [],
-          "schema_version": "fixture/v1",
-          "truth": "true"
-        },
-        {
-          "evidence_span_ids": [],
-          "fact_ids": [],
-          "observed_unit": null,
-          "observed_value": null,
-          "predicate_id": "predicate-medication-prohibited-window",
-          "reason_codes": [
-            "fact_not_observed"
-          ],
-          "schema_version": "fixture/v1",
-          "truth": "unknown"
-        },
-        {
-          "evidence_span_ids": [
-            "span-barrier-risk"
-          ],
-          "fact_ids": [
-            "fact-barrier-measurement-invalid"
-          ],
-          "observed_unit": null,
-          "observed_value": true,
-          "predicate_id": "predicate-laboratory-critical_measurement_invalid-eq",
-          "reason_codes": [],
-          "schema_version": "fixture/v1",
-          "truth": "false"
-        },
-        {
-          "evidence_span_ids": [
-            "span-barrier-risk"
-          ],
-          "fact_ids": [
-            "fact-barrier-no-exception"
-          ],
-          "observed_unit": null,
-          "observed_value": true,
-          "predicate_id": "predicate-exception-protocol_exception_documented-eq",
-          "reason_codes": [],
-          "schema_version": "fixture/v1",
-          "truth": "false"
-        },
-        {
-          "evidence_span_ids": [],
-          "fact_ids": [],
-          "observed_unit": null,
-          "observed_value": null,
-          "predicate_id": "predicate-investigator-exception_confirmed-eq",
-          "reason_codes": [
-            "professional_judgment_missing"
-          ],
-          "schema_version": "fixture/v1",
-          "truth": "unknown"
-        }
-      ],
-      "processed_predicate_ids": [
-        "predicate-investigator-unacceptable_participation_risk-eq",
-        "predicate-laboratory-target_ratio_uln-gte",
-        "predicate-medication-prohibited-window",
-        "predicate-laboratory-critical_measurement_invalid-eq",
-        "predicate-exception-protocol_exception_documented-eq",
-        "predicate-investigator-exception_confirmed-eq"
-      ],
+      "missing_predicate_ids": [],
+      "predicate_observations": [],
+      "processed_predicate_ids": [],
+      "project_id": "project-synthetic-phase-iii",
       "proposed_decision": "exclusion_triggered",
-      "reason_codes": [
-        "fact_not_observed",
-        "professional_judgment_missing"
-      ],
+      "protocol_version_id": "protocol-v1",
+      "reason_codes": [],
       "review_episode_id": "episode-barrier",
+      "review_run_id": "run-barrier",
       "rule_component_id": "component-ex-01",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
       "schema_version": "fixture/v1",
-      "uncertainty_codes": [
-        "fact_not_observed",
-        "professional_judgment_missing"
-      ],
+      "subject_id": "subject-barrier",
+      "uncertainty_codes": [],
       "unresolved_items": [],
       "used_fact_ids": [
         "fact-barrier-lab",
@@ -302,6 +206,144 @@
       "review_episode_id": "episode-barrier",
       "schema_version": "fixture/v1",
       "status": "observed"
+    }
+  ],
+  "evidence_normalization_candidates": [
+    {
+      "candidate_id": "evidence-candidate-episode-barrier",
+      "clinical_event_candidates": [],
+      "clinical_fact_candidates": [
+        {
+          "certainty": 1.0,
+          "conflict_group_id": null,
+          "effective_date": null,
+          "evidence_snapshot_id": "snapshot-barrier",
+          "evidence_span_ids": [
+            "span-barrier-risk"
+          ],
+          "fact_id": "fact-barrier-age",
+          "fact_type": "demographics.age_years",
+          "polarity": "affirmed",
+          "project_id": "project-synthetic-phase-iii",
+          "review_episode_id": "episode-barrier",
+          "schema_version": "fixture/v1",
+          "subject_id": "subject-barrier",
+          "unit": "year",
+          "value": 45
+        },
+        {
+          "certainty": 1.0,
+          "conflict_group_id": null,
+          "effective_date": null,
+          "evidence_snapshot_id": "snapshot-barrier",
+          "evidence_span_ids": [
+            "span-barrier-risk"
+          ],
+          "fact_id": "fact-barrier-no-exception",
+          "fact_type": "exception.protocol_exception_documented",
+          "polarity": "negated",
+          "project_id": "project-synthetic-phase-iii",
+          "review_episode_id": "episode-barrier",
+          "schema_version": "fixture/v1",
+          "subject_id": "subject-barrier",
+          "unit": null,
+          "value": true
+        },
+        {
+          "certainty": 1.0,
+          "conflict_group_id": null,
+          "effective_date": null,
+          "evidence_snapshot_id": "snapshot-barrier",
+          "evidence_span_ids": [
+            "span-barrier-risk"
+          ],
+          "fact_id": "fact-barrier-lab",
+          "fact_type": "laboratory.target_ratio_uln",
+          "polarity": "affirmed",
+          "project_id": "project-synthetic-phase-iii",
+          "review_episode_id": "episode-barrier",
+          "schema_version": "fixture/v1",
+          "subject_id": "subject-barrier",
+          "unit": "xULN",
+          "value": 2.1
+        },
+        {
+          "certainty": 1.0,
+          "conflict_group_id": null,
+          "effective_date": null,
+          "evidence_snapshot_id": "snapshot-barrier",
+          "evidence_span_ids": [
+            "span-barrier-risk"
+          ],
+          "fact_id": "fact-barrier-risk",
+          "fact_type": "investigator.unacceptable_participation_risk",
+          "polarity": "affirmed",
+          "project_id": "project-synthetic-phase-iii",
+          "review_episode_id": "episode-barrier",
+          "schema_version": "fixture/v1",
+          "subject_id": "subject-barrier",
+          "unit": null,
+          "value": true
+        },
+        {
+          "certainty": 1.0,
+          "conflict_group_id": null,
+          "effective_date": null,
+          "evidence_snapshot_id": "snapshot-barrier",
+          "evidence_span_ids": [
+            "span-barrier-risk"
+          ],
+          "fact_id": "fact-barrier-measurement-invalid",
+          "fact_type": "laboratory.critical_measurement_invalid",
+          "polarity": "negated",
+          "project_id": "project-synthetic-phase-iii",
+          "review_episode_id": "episode-barrier",
+          "schema_version": "fixture/v1",
+          "subject_id": "subject-barrier",
+          "unit": null,
+          "value": true
+        }
+      ],
+      "conflict_candidates": [],
+      "coverage": {
+        "duplicate_refs": [],
+        "missing_refs": [],
+        "processed_refs": [
+          "document-barrier"
+        ],
+        "schema_version": "fixture/v1"
+      },
+      "created_by_agent_call_id": "call-barrier-1",
+      "evidence_snapshot_id": "snapshot-barrier",
+      "evidence_span_candidates": [
+        {
+          "anchor_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "bbox": null,
+          "degradation_reason": null,
+          "evidence_span_id": "span-barrier-risk",
+          "excerpt": "合成数据：指标超过阈值，研究者判断参与构成不可接受风险。",
+          "locator_algorithm_version": "locator-v1",
+          "match_confidence": 0.91,
+          "page_number": 3,
+          "precision": "page_excerpt",
+          "schema_version": "fixture/v1",
+          "source_document_version_id": "document-barrier",
+          "text_end": null,
+          "text_start": null
+        }
+      ],
+      "medication_exposure_candidates": [],
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "referenced_document_candidates": [],
+      "review_episode_id": "episode-barrier",
+      "schema_version": "fixture/v1",
+      "source_refs": [
+        "document-barrier"
+      ],
+      "subject_id": "subject-barrier",
+      "uncertainty_codes": [],
+      "unresolved_items": []
     }
   ],
   "evidence_snapshot": {
@@ -427,37 +469,49 @@
   ],
   "final_assessments": [
     {
-      "action_ids": [],
       "assessment_id": "assessment-barrier-in",
       "blocking_level": "none",
       "decision": "inclusion_met",
+      "evidence_snapshot_id": "snapshot-barrier",
       "evidence_span_ids": [
         "span-barrier-risk"
       ],
       "gap_types": [],
       "gate_result_id": "gate-barrier-in",
-      "publication_fingerprint": "71c5dbd88127dc25b5f926574da83d9b79948e9ebfcd06cf33016879b9412369",
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "publication_fingerprint": "ce8463bad94160eb5a2e372e4bb394f936ee4e1ff30a237fa94d7d6eea672d4d",
+      "review_episode_id": "episode-barrier",
       "review_run_id": "run-barrier",
       "rule_component_id": "component-in-01",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
       "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
       "used_fact_ids": [
         "fact-barrier-age"
       ]
     },
     {
-      "action_ids": [],
       "assessment_id": "assessment-barrier-ex",
       "blocking_level": "none",
       "decision": "exclusion_triggered",
+      "evidence_snapshot_id": "snapshot-barrier",
       "evidence_span_ids": [
         "span-barrier-risk"
       ],
       "gap_types": [],
       "gate_result_id": "gate-barrier-ex",
-      "publication_fingerprint": "6f5942bec5362bb81a7c8405038410a75405956e96bd5724d7aef5d9e8adce18",
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "publication_fingerprint": "56d3c1cb67cd674cea99ed57b95b29d2dc54d615d62dc15e76b02ccf3ba2fce9",
+      "review_episode_id": "episode-barrier",
       "review_run_id": "run-barrier",
       "rule_component_id": "component-ex-01",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
       "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
       "used_fact_ids": [
         "fact-barrier-lab",
         "fact-barrier-risk",
@@ -528,6 +582,151 @@
     },
     {
       "accepted_entity_refs": [
+        "authority-protocol-v1-phase-iii"
+      ],
+      "affected_scope": [
+        "protocol-v1"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "protocol-authority-human-acceptance-gate",
+      "gate_result_id": "gate-authority-protocol-v1-phase-iii",
+      "idempotency_key": "protocol-authority:protocol-v1",
+      "input_entity_refs": [
+        "protocol-v1",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "IN-01",
+        "EX-01",
+        "EX-02",
+        "EX-03",
+        "EX-04",
+        "REQ-01",
+        "REQ-02"
+      ],
+      "input_revision_map": {
+        "protocol-v1": 1
+      },
+      "input_scope_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
+      "output_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "protocol-v1"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "manifest-protocol-v1-phase-iii",
+        "ruleset-synthetic-phase-iii"
+      ],
+      "affected_scope": [
+        "protocol-v1"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "protocol-integrity-gate",
+      "gate_result_id": "gate-integrity-protocol-v1-phase-iii",
+      "idempotency_key": "protocol-integrity:protocol-v1:1",
+      "input_entity_refs": [
+        "protocol-v1",
+        "authority-protocol-v1-phase-iii",
+        "gate-authority-protocol-v1-phase-iii",
+        "manifest-protocol-v1-phase-iii",
+        "ruleset-synthetic-phase-iii"
+      ],
+      "input_revision_map": {
+        "ruleset-synthetic-phase-iii": 1
+      },
+      "input_scope_hash": "9a628eaca71c15803f748b9ac512223e3684084af12f52dce8652c5cba4a71be",
+      "output_hash": "9a628eaca71c15803f748b9ac512223e3684084af12f52dce8652c5cba4a71be",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "protocol-v1"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "candidate-barrier-in"
+      ],
+      "affected_scope": [
+        "component-in-01"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-candidate-gate",
+      "gate_result_id": "gate-candidate-barrier-in",
+      "idempotency_key": "candidate:call-barrier-2:candidate-barrier-in",
+      "input_entity_refs": [
+        "call-barrier-2",
+        "gate-barrier-2"
+      ],
+      "input_revision_map": {
+        "snapshot-barrier": 1
+      },
+      "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "output_hash": "a57cedf4131140df3269c5d00ae5cbb910808d2357b6c84ac1d4427b20578eb0",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-in-01"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "evidence-candidate-episode-barrier",
+        "fact-barrier-age",
+        "fact-barrier-no-exception",
+        "fact-barrier-lab",
+        "fact-barrier-risk",
+        "fact-barrier-measurement-invalid",
+        "span-barrier-risk"
+      ],
+      "affected_scope": [
+        "episode-barrier"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "evidence-acceptance-gate",
+      "gate_result_id": "gate-evidence-assessment-barrier-in",
+      "idempotency_key": "evidence:episode-barrier:snapshot-barrier:evidence-candidate-episode-barrier",
+      "input_entity_refs": [
+        "call-barrier-1",
+        "gate-barrier-1",
+        "evidence-candidate-episode-barrier",
+        "snapshot-barrier",
+        "fact-barrier-age",
+        "fact-barrier-no-exception",
+        "fact-barrier-lab",
+        "fact-barrier-risk",
+        "fact-barrier-measurement-invalid",
+        "span-barrier-risk"
+      ],
+      "input_revision_map": {
+        "episode-barrier": 1
+      },
+      "input_scope_hash": "410b3d88f8ce785d45d602f14df553f3a61e40bd5b4d45172910213744a57138",
+      "output_hash": "410b3d88f8ce785d45d602f14df553f3a61e40bd5b4d45172910213744a57138",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "episode-barrier"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
         "assessment-barrier-in"
       ],
       "affected_scope": [
@@ -541,17 +740,93 @@
       "idempotency_key": "assessment:run-barrier:component-in-01",
       "input_entity_refs": [
         "candidate-barrier-in",
+        "gate-candidate-barrier-in",
+        "gate-evidence-assessment-barrier-in",
         "component-in-01",
         "run-barrier"
       ],
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "baf418e154b172751fe9b59d68fa373779893ef5e05a0bb45bccc1817b638b82",
-      "output_hash": "f4ba07a4f809a641dae121d8e21c51d84fd9c81d36ffaee560bf09df77fc5c0c",
+      "input_scope_hash": "53e27bfc3fb8bdb6b2f33309ece85712d00239204e2ad267e9b5d43dec976644",
+      "output_hash": "d2163e8afe00e4038dd0cfbf8fb08828d4e4a5b694d5dca6f8f37d0bdf68ccea",
       "parent_event_id": null,
       "recompute_scope": [
         "component-in-01"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "candidate-barrier-ex"
+      ],
+      "affected_scope": [
+        "component-ex-01"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-candidate-gate",
+      "gate_result_id": "gate-candidate-barrier-ex",
+      "idempotency_key": "candidate:call-barrier-2:candidate-barrier-ex",
+      "input_entity_refs": [
+        "call-barrier-2",
+        "gate-barrier-2"
+      ],
+      "input_revision_map": {
+        "snapshot-barrier": 1
+      },
+      "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "output_hash": "7d40b9ce86a129141d1b7da57db28b868061dcad1ddf3ac5dc2f7d2590cf43df",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-ex-01"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "evidence-candidate-episode-barrier",
+        "fact-barrier-age",
+        "fact-barrier-no-exception",
+        "fact-barrier-lab",
+        "fact-barrier-risk",
+        "fact-barrier-measurement-invalid",
+        "span-barrier-risk"
+      ],
+      "affected_scope": [
+        "episode-barrier"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "evidence-acceptance-gate",
+      "gate_result_id": "gate-evidence-assessment-barrier-ex",
+      "idempotency_key": "evidence:episode-barrier:snapshot-barrier:evidence-candidate-episode-barrier",
+      "input_entity_refs": [
+        "call-barrier-1",
+        "gate-barrier-1",
+        "evidence-candidate-episode-barrier",
+        "snapshot-barrier",
+        "fact-barrier-age",
+        "fact-barrier-no-exception",
+        "fact-barrier-lab",
+        "fact-barrier-risk",
+        "fact-barrier-measurement-invalid",
+        "span-barrier-risk"
+      ],
+      "input_revision_map": {
+        "episode-barrier": 1
+      },
+      "input_scope_hash": "410b3d88f8ce785d45d602f14df553f3a61e40bd5b4d45172910213744a57138",
+      "output_hash": "410b3d88f8ce785d45d602f14df553f3a61e40bd5b4d45172910213744a57138",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "episode-barrier"
       ],
       "rejected_entity_refs": [],
       "result": "accepted",
@@ -572,14 +847,16 @@
       "idempotency_key": "assessment:run-barrier:component-ex-01",
       "input_entity_refs": [
         "candidate-barrier-ex",
+        "gate-candidate-barrier-ex",
+        "gate-evidence-assessment-barrier-ex",
         "component-ex-01",
         "run-barrier"
       ],
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "ce88b1a6b67ef3808da37ef4639afafd6f62b315aa632ccdb0569c113eb139c2",
-      "output_hash": "ad9278e472c88a4e1b4ae1bba72d0743abdb9a7da3798e68480ba9534ac3b1f0",
+      "input_scope_hash": "f7829185417b1315bc5721c5a827a6287efbaa48c86233459e181c97034478cc",
+      "output_hash": "4f4cdaa88cb729c8d94ee0e8627795fe8b5a829b2daaac4cc02ec64b6833bb82",
       "parent_event_id": null,
       "recompute_scope": [
         "component-ex-01"
@@ -604,6 +881,8 @@
       "idempotency_key": "rollup:episode-barrier:e5a3ece2d86e194838105c453f321e8bc58ddd7645bd9a8975b80e927360b4d7",
       "input_entity_refs": [
         "episode-barrier",
+        "gate-barrier-in",
+        "gate-barrier-ex",
         "assessment-barrier-in",
         "assessment-barrier-ex",
         "expectation-barrier-age",
@@ -612,7 +891,7 @@
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "6a0aca73c16994ca9d3c3d9e8acbcb5695475ab37cfa238a31023aea160d5bf0",
+      "input_scope_hash": "922bbbab8852e5d09b9ad92ef1e7d0804b844ba3846a8ad8111d44c13e24c123",
       "output_hash": "c4ca6d00c492524c7ff42d6fa2c3dcd3a56fd5a74f18286a180a402c2a84254f",
       "parent_event_id": null,
       "recompute_scope": [
@@ -716,7 +995,10 @@
     "project_id": "project-synthetic-phase-iii",
     "project_name": "合成Ⅲ期入排审核项目",
     "protocol_version": {
-      "integrity_manifest_sha256": "177db38602aeef7de9dca9ef0298cdfbe86f46c1c1f4c16c2ccf9ee70b199246",
+      "authority_gate_result_id": "gate-authority-protocol-v1-phase-iii",
+      "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+      "integrity_gate_result_id": "gate-integrity-protocol-v1-phase-iii",
+      "integrity_manifest_sha256": "2de5fd424882bff4d484a0f849e2a0f6e249ed9d7252391f334ac19f6d498135",
       "official_date": {
         "precision": "day",
         "source_text": null,
@@ -749,8 +1031,10 @@
       "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
     }
   ],
-  "protocol_integrity_manifest": {
-    "authoritative_rules": [
+  "protocol_authority_record": {
+    "authority_record_id": "authority-protocol-v1-phase-iii",
+    "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+    "official_rules": [
       {
         "components": [
           {
@@ -782,6 +1066,7 @@
                 "requires_professional_judgment": false,
                 "subject": "demographics",
                 "unit": "year",
+                "unit_match_policy": "exact_canonical_label",
                 "value": 18
               },
               "time_constraint": null
@@ -831,6 +1116,7 @@
                     "requires_professional_judgment": false,
                     "subject": "exception",
                     "unit": null,
+                    "unit_match_policy": "exact_canonical_label",
                     "value": true
                   },
                   "time_constraint": null
@@ -845,6 +1131,7 @@
                     "requires_professional_judgment": true,
                     "subject": "investigator",
                     "unit": null,
+                    "unit_match_policy": "exact_canonical_label",
                     "value": true
                   },
                   "time_constraint": null
@@ -865,6 +1152,7 @@
                     "requires_professional_judgment": true,
                     "subject": "investigator",
                     "unit": null,
+                    "unit_match_policy": "exact_canonical_label",
                     "value": true
                   },
                   "time_constraint": null
@@ -881,6 +1169,7 @@
                         "requires_professional_judgment": false,
                         "subject": "laboratory",
                         "unit": "xULN",
+                        "unit_match_policy": "exact_canonical_label",
                         "value": 1.5
                       },
                       "time_constraint": null
@@ -895,6 +1184,7 @@
                         "requires_professional_judgment": false,
                         "subject": "medication",
                         "unit": null,
+                        "unit_match_policy": "exact_canonical_label",
                         "value": true
                       },
                       "time_constraint": {
@@ -922,6 +1212,7 @@
                         "requires_professional_judgment": false,
                         "subject": "laboratory",
                         "unit": null,
+                        "unit_match_policy": "exact_canonical_label",
                         "value": true
                       },
                       "time_constraint": null
@@ -977,6 +1268,7 @@
                 "requires_professional_judgment": true,
                 "subject": "investigator",
                 "unit": null,
+                "unit_match_policy": "exact_canonical_label",
                 "value": true
               },
               "time_constraint": null
@@ -1024,6 +1316,7 @@
                 "requires_professional_judgment": false,
                 "subject": "baseline",
                 "unit": null,
+                "unit_match_policy": "exact_canonical_label",
                 "value": true
               },
               "time_constraint": null
@@ -1071,6 +1364,7 @@
                 "requires_professional_judgment": false,
                 "subject": "history",
                 "unit": null,
+                "unit_match_policy": "exact_canonical_label",
                 "value": true
               },
               "time_constraint": null
@@ -1118,6 +1412,7 @@
                 "requires_professional_judgment": false,
                 "subject": "procedure",
                 "unit": null,
+                "unit_match_policy": "exact_canonical_label",
                 "value": true
               },
               "time_constraint": null
@@ -1165,6 +1460,7 @@
                 "requires_professional_judgment": false,
                 "subject": "laboratory",
                 "unit": null,
+                "unit_match_policy": "exact_canonical_label",
                 "value": true
               },
               "time_constraint": null
@@ -1183,7 +1479,7 @@
         "study_phase": "phase_iii"
       }
     ],
-    "authoritative_workflow_stages": [
+    "official_workflow_stages": [
       {
         "display_name": "预筛期审核",
         "due_requirement_ids": [],
@@ -1230,8 +1526,44 @@
         "workflow_stage_id": "stage-baseline"
       }
     ],
+    "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "protocol_version_id": "protocol-v1",
+    "rule_source_anchor_refs": {
+      "EX-01": [
+        "protocol-v1:EX-01"
+      ],
+      "EX-02": [
+        "protocol-v1:EX-02"
+      ],
+      "EX-03": [
+        "protocol-v1:EX-03"
+      ],
+      "EX-04": [
+        "protocol-v1:EX-04"
+      ],
+      "IN-01": [
+        "protocol-v1:IN-01"
+      ],
+      "REQ-01": [
+        "protocol-v1:REQ-01"
+      ],
+      "REQ-02": [
+        "protocol-v1:REQ-02"
+      ]
+    },
+    "schema_version": "fixture/v1",
+    "study_phase": "phase_iii",
+    "verification_method": "human_verified_official_protocol",
+    "verified_at": "2026-08-12T12:00:00Z",
+    "verified_by": "synthetic-uat-human-acceptance"
+  },
+  "protocol_integrity_manifest": {
+    "authoritative_rule_set_sha256": "bf83d54fd8f132f92066ddd8abdd6a43710d21d23696eddd1c1bd40d8abcc1ee",
+    "authoritative_workflow_sha256": "a23d202d8be74ed1778906492e89e7c194371d702e13738c49362520154d9033",
+    "authority_record_id": "authority-protocol-v1-phase-iii",
+    "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
     "manifest_id": "manifest-protocol-v1-phase-iii",
-    "manifest_sha256": "177db38602aeef7de9dca9ef0298cdfbe86f46c1c1f4c16c2ccf9ee70b199246",
+    "manifest_sha256": "2de5fd424882bff4d484a0f849e2a0f6e249ed9d7252391f334ac19f6d498135",
     "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "protocol_version_id": "protocol-v1",
     "schema_version": "fixture/v1",
@@ -1313,6 +1645,7 @@
                 "requires_professional_judgment": false,
                 "subject": "demographics",
                 "unit": "year",
+                "unit_match_policy": "exact_canonical_label",
                 "value": 18
               },
               "time_constraint": null
@@ -1362,6 +1695,7 @@
                     "requires_professional_judgment": false,
                     "subject": "exception",
                     "unit": null,
+                    "unit_match_policy": "exact_canonical_label",
                     "value": true
                   },
                   "time_constraint": null
@@ -1376,6 +1710,7 @@
                     "requires_professional_judgment": true,
                     "subject": "investigator",
                     "unit": null,
+                    "unit_match_policy": "exact_canonical_label",
                     "value": true
                   },
                   "time_constraint": null
@@ -1396,6 +1731,7 @@
                     "requires_professional_judgment": true,
                     "subject": "investigator",
                     "unit": null,
+                    "unit_match_policy": "exact_canonical_label",
                     "value": true
                   },
                   "time_constraint": null
@@ -1412,6 +1748,7 @@
                         "requires_professional_judgment": false,
                         "subject": "laboratory",
                         "unit": "xULN",
+                        "unit_match_policy": "exact_canonical_label",
                         "value": 1.5
                       },
                       "time_constraint": null
@@ -1426,6 +1763,7 @@
                         "requires_professional_judgment": false,
                         "subject": "medication",
                         "unit": null,
+                        "unit_match_policy": "exact_canonical_label",
                         "value": true
                       },
                       "time_constraint": {
@@ -1453,6 +1791,7 @@
                         "requires_professional_judgment": false,
                         "subject": "laboratory",
                         "unit": null,
+                        "unit_match_policy": "exact_canonical_label",
                         "value": true
                       },
                       "time_constraint": null
@@ -1508,6 +1847,7 @@
                 "requires_professional_judgment": true,
                 "subject": "investigator",
                 "unit": null,
+                "unit_match_policy": "exact_canonical_label",
                 "value": true
               },
               "time_constraint": null
@@ -1555,6 +1895,7 @@
                 "requires_professional_judgment": false,
                 "subject": "baseline",
                 "unit": null,
+                "unit_match_policy": "exact_canonical_label",
                 "value": true
               },
               "time_constraint": null
@@ -1602,6 +1943,7 @@
                 "requires_professional_judgment": false,
                 "subject": "history",
                 "unit": null,
+                "unit_match_policy": "exact_canonical_label",
                 "value": true
               },
               "time_constraint": null
@@ -1649,6 +1991,7 @@
                 "requires_professional_judgment": false,
                 "subject": "procedure",
                 "unit": null,
+                "unit_match_policy": "exact_canonical_label",
                 "value": true
               },
               "time_constraint": null
@@ -1696,6 +2039,7 @@
                 "requires_professional_judgment": false,
                 "subject": "laboratory",
                 "unit": null,
+                "unit_match_policy": "exact_canonical_label",
                 "value": true
               },
               "time_constraint": null

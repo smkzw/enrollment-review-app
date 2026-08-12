@@ -3,7 +3,16 @@ from __future__ import annotations
 from pydantic import Field, model_validator
 
 from .common import VersionedModel
-from .enums import GapType, JobEventType, LocatorPrecision, ReviewStage, UploadMode
+from .enums import (
+    ComponentDecision,
+    EpisodeMainStatus,
+    GapType,
+    JobEventType,
+    LocatorPrecision,
+    LogicalOperator,
+    ReviewStage,
+    UploadMode,
+)
 from .review import FixtureV1
 from .rules import RuleSet
 
@@ -71,6 +80,19 @@ class UatWorkspaceFixture(VersionedModel):
         precisions: set[LocatorPrecision] = set()
         job_events: set[JobEventType] = set()
         max_profile_events = 0
+        logical_operators: set[LogicalOperator] = set()
+        time_constraint_count = 0
+        rollup_statuses: set[EpisodeMainStatus] = set()
+
+        def inspect_expression(expression) -> None:
+            nonlocal time_constraint_count
+            if expression.kind == "predicate":
+                if expression.time_constraint is not None:
+                    time_constraint_count += 1
+                return
+            logical_operators.add(expression.operator)
+            for child in expression.children:
+                inspect_expression(child)
 
         for fixture in self.episodes:
             subject_id = fixture.subject.subject_id
@@ -91,6 +113,12 @@ class UatWorkspaceFixture(VersionedModel):
             precisions.update(item.precision for item in fixture.evidence_spans)
             job_events.update(item.event_type for item in fixture.job_events)
             max_profile_events = max(max_profile_events, len(fixture.patient_profile.events))
+            rollup_statuses.add(fixture.episode_rollup.main_status)
+            for rule in fixture.rule_set.rules:
+                for component in rule.components:
+                    inspect_expression(component.expression)
+                    if component.exception_expression is not None:
+                        inspect_expression(component.exception_expression)
 
             if stage == ReviewStage.SCREENING:
                 if fixture.evidence_snapshot.upload_mode != UploadMode.FULL:
@@ -135,6 +163,23 @@ class UatWorkspaceFixture(VersionedModel):
                     raise ValueError("UAT 基线 Episode 必须演示增量快照")
                 if fixture.evidence_snapshot.prior_snapshot_id != screening_snapshots[fixture.subject.subject_id]:
                     raise ValueError("UAT 基线快照必须引用同一受试者的筛选快照")
+                if any(
+                    item.decision == ComponentDecision.NOT_DUE
+                    for item in fixture.final_assessments
+                ):
+                    raise ValueError("UAT 基线必须按当前快照重算，不能复制 not_due")
+
+        if logical_operators != set(LogicalOperator):
+            raise ValueError("UAT 工作区必须实际覆盖 ALL、ANY、NOT")
+        if time_constraint_count == 0:
+            raise ValueError("UAT 工作区必须包含可执行时间锚点/窗口")
+        required_rollup_statuses = {
+            EpisodeMainStatus.CLEAR_BARRIER,
+            EpisodeMainStatus.CURRENT_GAP,
+            EpisodeMainStatus.NO_CLEAR_BARRIER,
+        }
+        if not required_rollup_statuses <= rollup_statuses:
+            raise ValueError("UAT 工作区必须覆盖明确障碍、当前缺口和未见明确障碍")
 
         for label in ("episode", "snapshot", "run"):
             if len(local_ids[label]) != len(self.episodes):
