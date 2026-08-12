@@ -860,13 +860,15 @@
         "candidate-barrier-in",
         "gate-candidate-barrier-in",
         "gate-evidence-assessment-barrier-in",
+        "context-episode-barrier-assessment-barrier-in",
+        "gate-integrity-protocol-v1-phase-iii",
         "component-in-01",
         "run-barrier"
       ],
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "350949071973d75bc6f20f9b338964cee7b891ec018776fac558a32cf3c1d677",
+      "input_scope_hash": "ea16335ced70c9136a8c2b32689e8d3e5520d126b670ea70e374076a9d83a68e",
       "output_hash": "d2163e8afe00e4038dd0cfbf8fb08828d4e4a5b694d5dca6f8f37d0bdf68ccea",
       "parent_event_id": null,
       "recompute_scope": [
@@ -967,13 +969,15 @@
         "candidate-barrier-ex",
         "gate-candidate-barrier-ex",
         "gate-evidence-assessment-barrier-ex",
+        "context-episode-barrier-assessment-barrier-ex",
+        "gate-integrity-protocol-v1-phase-iii",
         "component-ex-01",
         "run-barrier"
       ],
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "9924f8eea80bef9a0fbb8e4360c58c0cb86865aedb82c1313d8cafb94c0d7b38",
+      "input_scope_hash": "1028876c9ca2ee7e4ac16dc56632eb56e0308814894b30d133e7720995dabe0c",
       "output_hash": "4f4cdaa88cb729c8d94ee0e8627795fe8b5a829b2daaac4cc02ec64b6833bb82",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1150,6 +1154,18 @@
       "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
     }
   ],
+  "protocol_authority_command": {
+    "action": "accept_protocol_authority",
+    "actor_id": "synthetic-uat-human-acceptance",
+    "authority_record_id": "authority-protocol-v1-phase-iii",
+    "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+    "command_id": "command-accept-protocol-v1-phase-iii",
+    "event_sha256": "ae94cdcbbb137aedd8f6176274ecc36043c2c0326f6f0cbfc001f2f0468bbda6",
+    "occurred_at": "2026-08-12T12:00:00Z",
+    "protocol_version_id": "protocol-v1",
+    "recorded_by_service": "enrollment-review-app",
+    "schema_version": "fixture/v1"
+  },
   "protocol_authority_confirmation": {
     "action": "accept_protocol_authority",
     "authority_record_id": "authority-protocol-v1-phase-iii",
@@ -1707,6 +1723,32 @@
     ],
     "study_phase": "phase_iii"
   },
+  "protocol_source_records": [
+    {
+      "locator": "p1",
+      "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "protocol_version_id": "protocol-v1",
+      "schema_version": "fixture/v1",
+      "source_record_sha256": "b491f1b1b8d4c378ee2881e01e35de62f60f4351d2ad0f836d0dcff6f39c8d90",
+      "source_ref": "protocol-v1:p1"
+    },
+    {
+      "locator": "p20-p24",
+      "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "protocol_version_id": "protocol-v1",
+      "schema_version": "fixture/v1",
+      "source_record_sha256": "66cf33d8f29b18ebaca9f7bf2ed0bc1908a23f04244ffd51d1afcbb131bae4af",
+      "source_ref": "protocol-v1:p20-p24"
+    },
+    {
+      "locator": "flow-table",
+      "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "protocol_version_id": "protocol-v1",
+      "schema_version": "fixture/v1",
+      "source_record_sha256": "09664b6640909010bd1b99de901f63f06586c9d30cebe137d690c2279e305b4f",
+      "source_ref": "protocol-v1:flow-table"
+    }
+  ],
   "review_episode": {
     "anchor_dates": {
       "screening_date": {

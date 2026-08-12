@@ -2,13 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import Field
-
 from app.domain.contracts.agents import AgentCallContract, GateResult
-from app.domain.contracts.common import ContractModel, DateValue
+from app.domain.contracts.common import ContractModel
+from app.domain.contracts.context import ReviewContextSnapshot
 from app.domain.contracts.enums import (
     AgentNode,
-    AnchorType,
     ComponentDecision,
     ExpectationStatus,
     GapType,
@@ -32,6 +30,7 @@ from app.domain.gates.evidence import require_accepted_evidence_gate
 from .permissions import require_accepted_agent_call
 from app.domain.policies import derive_assessment_blocking_level, validate_decision_gap_matrix
 from app.domain.publication import _build_gate_owned_model, canonical_hash
+from app.domain.registry import TrustedPublicationRegistry
 
 
 class AssessmentGateError(ValueError):
@@ -50,11 +49,38 @@ class AssessmentPublication(ContractModel):
     evidence_gate_result: GateResult
     evidence_agent_call: AgentCallContract
     evidence_agent_call_gate_result: GateResult
-    anchor_dates: dict[AnchorType, DateValue]
-    half_life_days: dict[str, float] = Field(default_factory=dict)
-    episode_stage: ReviewStage
-    expectations: list[EvidenceExpectation]
-    conflict_groups: list[ConflictGroup]
+    review_context: ReviewContextSnapshot
+    protocol_integrity_gate_result: GateResult
+
+
+def build_review_context_snapshot(
+    *,
+    context_id: str,
+    review_episode,
+    rule_set: RuleSet,
+    protocol_integrity_gate_result: GateResult,
+    evidence_gate_result: GateResult,
+    expectations: list[EvidenceExpectation],
+    conflict_groups: list[ConflictGroup],
+    half_life_days: dict[str, float] | None = None,
+) -> ReviewContextSnapshot:
+    data = {
+        "context_id": context_id,
+        "review_episode": review_episode,
+        "rule_set_sha256": canonical_hash(rule_set.model_dump(mode="json")),
+        "protocol_integrity_gate_result_id": protocol_integrity_gate_result.gate_result_id,
+        "evidence_gate_result_id": evidence_gate_result.gate_result_id,
+        "expectations": expectations,
+        "conflict_groups": conflict_groups,
+        "half_life_days": half_life_days or {},
+    }
+    draft = ReviewContextSnapshot.model_construct(**data, context_sha256="0" * 64)
+    return ReviewContextSnapshot(
+        **data,
+        context_sha256=canonical_hash(
+            draft.model_dump(mode="json", exclude={"context_sha256"})
+        ),
+    )
 
 
 def publish_assessment_candidate_acceptance(
@@ -341,17 +367,87 @@ def publish_assessment(
     evidence_agent_call: AgentCallContract,
     evidence_agent_call_gate_result: GateResult,
     rule_set: RuleSet,
-    anchor_dates: dict[AnchorType, DateValue],
-    half_life_days: dict[str, float] | None = None,
-    episode_stage: ReviewStage,
-    expectations: list[EvidenceExpectation],
-    conflict_groups: list[ConflictGroup],
+    review_context: ReviewContextSnapshot,
+    protocol_integrity_gate_result: GateResult,
+    registry: TrustedPublicationRegistry,
     assessment_id: str,
     gate_result_id: str,
     input_revision_map: dict[str, int],
     created_at: datetime,
 ) -> AssessmentPublication:
+    registry.require("agent_call", agent_call.agent_call_id, agent_call)
+    registry.require(
+        "gate_result", agent_call_gate_result.gate_result_id, agent_call_gate_result
+    )
+    registry.require(
+        "assessment_candidate", candidate.assessment_candidate_id, candidate
+    )
+    registry.require(
+        "gate_result", candidate_gate_result.gate_result_id, candidate_gate_result
+    )
+    registry.require(
+        "evidence_candidate", evidence_candidate.candidate_id, evidence_candidate
+    )
+    registry.require(
+        "agent_call", evidence_agent_call.agent_call_id, evidence_agent_call
+    )
+    registry.require(
+        "gate_result",
+        evidence_agent_call_gate_result.gate_result_id,
+        evidence_agent_call_gate_result,
+    )
+    registry.require("gate_result", evidence_gate_result.gate_result_id, evidence_gate_result)
+    registry.require("rule_set", rule_set.rule_set_id, rule_set)
+    registry.require(
+        "gate_result",
+        protocol_integrity_gate_result.gate_result_id,
+        protocol_integrity_gate_result,
+    )
+    registry.require_protocol_rule_binding(
+        protocol_integrity_gate_result.gate_result_id, rule_set
+    )
+    if (
+        protocol_integrity_gate_result.gate_name != "protocol-integrity-gate"
+        or protocol_integrity_gate_result.result != GateOutcome.ACCEPTED
+        or rule_set.rule_set_id
+        not in protocol_integrity_gate_result.accepted_entity_refs
+    ):
+        raise AssessmentGateError("当前规则集未通过方案完整性验收")
+    registry.require("review_context", review_context.context_id, review_context)
+    if (
+        review_context.rule_set_sha256
+        != canonical_hash(rule_set.model_dump(mode="json"))
+        or review_context.protocol_integrity_gate_result_id
+        != protocol_integrity_gate_result.gate_result_id
+        or review_context.evidence_gate_result_id != evidence_gate_result.gate_result_id
+        or review_context.review_episode.review_episode_id
+        != candidate.review_episode_id
+        or review_context.review_episode.evidence_snapshot_id
+        != candidate.evidence_snapshot_id
+        or review_context.review_episode.rule_set_id != candidate.rule_set_id
+        or review_context.review_episode.rule_set_revision
+        != candidate.rule_set_revision
+    ):
+        raise AssessmentGateError("审核上下文未绑定当前规则、证据和审核节点")
+    anchor_dates = review_context.review_episode.anchor_dates
+    half_life_days = review_context.half_life_days
+    episode_stage = review_context.review_episode.stage
+    expectations = review_context.expectations
+    conflict_groups = review_context.conflict_groups
     require_accepted_agent_call(agent_call, agent_call_gate_result)
+    if agent_call.typed_output_hashes.get(
+        candidate.assessment_candidate_id
+    ) != canonical_hash(candidate.model_dump(mode="json")):
+        raise AssessmentGateError("AssessmentCandidate 未绑定 AgentCall 实际 typed output")
+    expected_candidate_gate = publish_assessment_candidate_acceptance(
+        candidate,
+        agent_call=agent_call,
+        agent_call_gate_result=agent_call_gate_result,
+        gate_result_id=candidate_gate_result.gate_result_id,
+        created_at=candidate_gate_result.created_at,
+    )
+    if candidate_gate_result != expected_candidate_gate:
+        raise AssessmentGateError("AssessmentCandidate Gate 未通过精确重算")
     candidate_payload = candidate.model_dump(mode="json")
     if (
         candidate_gate_result.gate_name != "assessment-candidate-gate"
@@ -418,7 +514,7 @@ def publish_assessment(
         accepted_fact_ids=[item.fact_id for item in facts],
         facts=facts,
         anchor_dates=anchor_dates,
-        half_life_days=half_life_days or {},
+        half_life_days=half_life_days,
     )
     evaluation = evaluate_component(component, context)
     if (component.exception_expression is None) != (evaluation.exception is None):
@@ -493,6 +589,8 @@ def publish_assessment(
         "episode_stage": episode_stage.value,
         "expectations": [item.model_dump(mode="json") for item in expectations],
         "conflict_groups": [item.model_dump(mode="json") for item in conflict_groups],
+        "review_context_sha256": review_context.context_sha256,
+        "protocol_integrity_gate_result_id": protocol_integrity_gate_result.gate_result_id,
     }
     gate_result = GateResult(
         gate_result_id=gate_result_id,
@@ -504,6 +602,8 @@ def publish_assessment(
             candidate.assessment_candidate_id,
             candidate_gate_result.gate_result_id,
             evidence_gate_result.gate_result_id,
+            review_context.context_id,
+            protocol_integrity_gate_result.gate_result_id,
             component.rule_component_id,
             candidate.review_run_id,
         ],
@@ -528,17 +628,20 @@ def publish_assessment(
         evidence_gate_result=evidence_gate_result,
         evidence_agent_call=evidence_agent_call,
         evidence_agent_call_gate_result=evidence_agent_call_gate_result,
-        anchor_dates=anchor_dates,
-        half_life_days=half_life_days or {},
-        episode_stage=episode_stage,
-        expectations=expectations,
-        conflict_groups=conflict_groups,
+        review_context=review_context,
+        protocol_integrity_gate_result=protocol_integrity_gate_result,
     )
 
 
 def validate_assessment_publication(
     publication: AssessmentPublication,
+    registry: TrustedPublicationRegistry,
 ) -> GateResult:
+    review_context = registry.require(
+        "review_context",
+        publication.review_context.context_id,
+        publication.review_context,
+    )
     expected = publish_assessment(
         publication.candidate,
         agent_call=publication.agent_call,
@@ -549,11 +652,9 @@ def validate_assessment_publication(
         evidence_agent_call=publication.evidence_agent_call,
         evidence_agent_call_gate_result=publication.evidence_agent_call_gate_result,
         rule_set=publication.rule_set,
-        anchor_dates=publication.anchor_dates,
-        half_life_days=publication.half_life_days,
-        episode_stage=publication.episode_stage,
-        expectations=publication.expectations,
-        conflict_groups=publication.conflict_groups,
+        review_context=review_context,
+        protocol_integrity_gate_result=publication.protocol_integrity_gate_result,
+        registry=registry,
         assessment_id=publication.assessment.assessment_id,
         gate_result_id=publication.gate_result.gate_result_id,
         input_revision_map=publication.gate_result.input_revision_map,

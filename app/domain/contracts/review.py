@@ -32,7 +32,9 @@ from .rules import (
     ProtocolAuthorityConfirmation,
     ProtocolAuthorityRecord,
     ProtocolIntegrityManifest,
+    ProtocolSourceRecord,
     RuleSet,
+    ServiceCommandEvent,
     WorkflowStage,
 )
 from .projections import EpisodeRollup
@@ -240,7 +242,9 @@ class FixtureV1(VersionedModel):
     scenario: str = Field(min_length=1)
     project: Project
     protocol_authority_record: ProtocolAuthorityRecord
+    protocol_authority_command: ServiceCommandEvent
     protocol_authority_confirmation: ProtocolAuthorityConfirmation
+    protocol_source_records: list[ProtocolSourceRecord] = Field(min_length=1)
     protocol_integrity_manifest: ProtocolIntegrityManifest
     rule_set: RuleSet
     workflow_stages: list[WorkflowStage]

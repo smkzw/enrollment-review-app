@@ -6,3 +6,4 @@
 {"file":"docs/REARCHITECTURE_FINAL_DESIGN_20260812.md","reason":"领域、状态、Agent 和交互事实源"}
 {"file":"plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md","reason":"Phase 0.5 工作和退出门槛"}
 {"file":"docs/v2/phase0/DECISION_AND_REGRESSION_INDEX.md","reason":"合同必须覆盖的历史错误族"}
+{"checkpoint":"2026-08-13-fifth-review-remediation","status":"in_progress","evidence":"trusted registry, versioned review context, registered protocol command and sources, synchronous-rehash adversarial tests; V2 115 passed, full 245 passed 1 skipped, legacy 130 passed 1 skipped","next":"same Luna checker sixth review"}

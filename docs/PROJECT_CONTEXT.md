@@ -1588,3 +1588,21 @@ OCR concurrency note:
 - UAT 除统计运算符外，逐 Episode 校验关键复合排除规则为固定 `ALL(研究者判断, ANY(阈值, 随机前28天用药), NOT(测量无效))` 语义；新增保持 ALL/ANY 数量但互换位置及 28->29 天的变异测试，并由第 4 名合成受试者筛选 Episode 实际产生 `observed_weak + historical_source_unavailable`。
 - 当前验证：V2 `111 passed, 2 subtests`；默认全套 `241 passed, 1 skipped, 18 subtests`；legacy Python 3.9 `130 passed, 1 skipped`；唯一跳过仍为 06003 OCR 缓存缺失。生成器双跑 8 个制品 SHA-256 完全一致，`compileall` 与 `git diff --check` 通过。
 - 用户明确不再找 Qwen 3.8 会商；本轮未调用 Qwen，后续仅复用现有 Luna checker `019ff5fa-ccc9-7cc0-8f38-2cc489783423`。在该 checker 无阻断接受前，Phase 0.5 保持 `in_progress`，Phase 1 继续冻结。
+
+2026-08-13 Phase 0.5 同一 Luna checker 第五次复核：
+
+- 候选 `39fd4de` 被拒绝，Phase 0.5 继续 `in_progress`，不得进入 Phase 1。已关闭：Fixture 水合 Candidate、Agent Protocol/RuleSet scope、Schema/OpenAPI 条件、UAT 语义/历史来源场景、封闭错误码。
+- 仍开放的根因不是字段缺失，而是“调用方提供一整套可同步重算的自洽对象”仍可冒充服务端已接受状态：ReviewEpisode/锚点/Expectation/Conflict/半衰期、Agent Schema Gate、RuleSet/Integrity Gate、ProtocolAuthorityConfirmation 和来源清单均缺少只读服务注册表反查。
+- 具体 P1：Assessment 可接受伪阶段/锚点/Expectation；伪 Agent Schema Gate 可同步重算；最终 Assessment 未再次验证 typed Candidate；同 ID/revision RuleSet payload 可替换；Fixture 顶层 Fact/Span 只比 ID 不比 payload；Confirmation 与 Manifest source_refs 可自造。P2：Evidence 路径误用 `gate_result_ids[0]`；文档过早宣称闭环。
+- 下一修复不再继续堆哈希字段：建立服务端只读发布注册表和版本化 ReviewContext publication；所有发布路径按 ID 解析唯一上游。方案确认改为注册的命令事件，方案来源改为注册的来源目录；Fixture 对 Fact/Span 逐 payload 比较，并补“同步重算全部 Gate 仍拒绝”的对抗测试。
+- 用户要求继续严格按设计书/分阶段计划/Trellis 实施；最新全局与项目 `AGENTS.md` 已重读。所有用户文字保持中文临床语境，清除程序员/日志式界面术语；不扩展安全性测试，聚焦产品功能、临床逻辑、证据与真实可用性。测试与复核采用长等待，不因延迟随意 fallback；Qwen 3.8 继续禁用。
+
+2026-08-13 Phase 0.5 第五次拒绝后的根因修复（待第六次复核）：
+
+- 新增只读 `TrustedPublicationRegistry` 与版本化 `ReviewContextSnapshot`。Assessment 不再接受调用方重复提交阶段、日期锚点、Expectation、Conflict 或半衰期；这些输入只从已登记上下文派生。Action/Rollup 必须携带同一注册表重放完整发布链。
+- Agent Schema Gate 必须同时被 AgentCall 的 `gate_result_ids` 声明；Assessment 发布再次核对 typed Candidate 哈希并精确重算 Candidate Gate。同 ID/revision 的 RuleSet 仍按完整 payload 哈希核对，并绑定已登记的 Protocol Integrity Gate。
+- 方案权威确认改由已登记的服务操作事件派生确认人和时间；Manifest 的来源字符串改为可解析的登记来源记录。Fixture 额外持久化命令事件和来源记录，但验证时必须使用验证前已存在的注册表，禁止从待验证 Fixture 自建信任。
+- Fixture 顶层 Fact/Span 与 accepted Evidence Candidate 逐完整 payload 比对；Agent/Evidence Gate 不再依赖 `gate_result_ids[0]`，按门类型、调用声明和唯一性解析。
+- 新增同步重算对抗测试，覆盖伪 Evidence Candidate+AgentCall+Gate、伪 Assessment Candidate+AgentCall+Gate、同 ID/revision 替换 RuleSet、重算服务确认事件、重算方案来源记录。局部对象全部自洽仍不能替代服务端登记状态。
+- 当前验证：V2 `115 passed, 2 subtests`；默认全套 `245 passed, 1 skipped, 18 subtests`；legacy Python 3.9 `130 passed, 1 skipped`；唯一跳过仍为 06003 OCR 缓存缺失。8 个生成制品双跑哈希一致，`compileall` 与 `git diff --check` 通过。
+- Phase 0.5 仍为 `in_progress`，必须由同一 Luna checker 第六次无阻断接受后才可归档并创建 Phase 1 Trellis 子任务。Qwen 3.8 保持禁用。

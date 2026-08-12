@@ -1,7 +1,7 @@
 # Phase 0.5 合同候选实施证据
 
 **日期：** 2026-08-13
-**状态：** 待独立 checker 验收；本文件不表示 Phase 0.5 已冻结。
+**状态：** 第五次独立复核后的根因修复已完成，待同一 checker 第六次验收；本文件不表示 Phase 0.5 已冻结。
 
 ## 已形成的合同
 
@@ -18,8 +18,9 @@
 
 - Agent 只能产生草稿、候选或 CriticRun，不能写 FinalAssessment、Action 阻断等级或 EpisodeRollup。
 - FinalAssessment 的求值、状态、缺口矩阵和阻断等级由 Gate 内部重算；调用方不能提交自算 `evaluation`。FinalAssessment、ActionRequest 和 EpisodeRollup 只接受完整上游 publication 闭包。
+- Assessment 只能从应用服务已登记的版本化审核上下文读取阶段、日期锚点、证据要求、冲突组和半衰期；发布函数不再接受这些字段的调用方副本。Action 和节点汇总沿用同一只读注册表重放完整上游闭包。
 - EvidenceNormalizationCandidate、AssessmentCandidate、FinalAssessment、ActionRequest、EpisodeRollup 和 ProtocolIntegrity 均产生或验证 accepted GateResult；发布指纹只是实体自校验，不能替代 Gate 闭包。Evidence Gate 不再接受脱离 Normalizer AgentCall/Candidate 的另一组调用方事实。
-- `ProtocolAuthorityRecord` 绑定正式方案哈希、每条规则来源锚点及完整 Rule/Workflow；由服务记录的 `ProtocolAuthorityConfirmation` 精确绑定方案文件和权威记录，并携带确认命令、确认人、时间及自身哈希。Authority Gate 必须同时消费两者，之后才能构建 Manifest；Protocol Integrity Gate 再逐项重算并封闭 RuleSet/Workflow/ProtocolVersion。
+- `ProtocolAuthorityRecord` 绑定正式方案哈希、每条规则来源锚点及完整 Rule/Workflow；确认只能从服务端已登记的操作事件生成，确认人和时间由事件派生。Manifest 的每个来源必须解析到已登记且绑定同一方案文件的来源记录；Protocol Integrity Gate 再逐项重算并封闭 RuleSet/Workflow/ProtocolVersion。
 - AgentCall 的 `gate_result_ids` 非空；受试者 Agent 与其输出完整绑定 Project/ProtocolVersion/RuleSet revision/Subject/Episode/Run/Snapshot/Source。Agent 输出 Schema Gate 是后续 Candidate Gate 的强制上游，跨作用域、跨调用或未经接受的调用被拒绝。
 - UNKNOWN ClinicalFact 不能携带 typed value/unit；原子观察的值、单位、fact/span 引用由 Evaluator 从 accepted Evidence Gate 输入推导，拒绝候选伪造。
 - `provenance_followup` 单独计数且不阻断；`future_stage_not_due` 为关注；当前资料/判断/冲突缺口为阻断。
@@ -37,24 +38,26 @@ uv run --python 3.12.13 pytest -q
 /usr/bin/python3 -m pytest -q tests --ignore=tests/v2
 ```
 
-本轮候选生成与测试结果：
+第五次拒绝后的候选生成与测试结果：
 
-- Phase 0.5 合同专项：`111 passed`，另有 2 个 subtests。
-- V2 默认全套：`241 passed, 1 skipped`，另有 18 个 subtests；跳过项为既有 MG-K10-SAR/06003 OCR 缓存 Fixture 不存在。
+- Phase 0.5 合同专项：`115 passed`，另有 2 个 subtests。
+- V2 默认全套：`245 passed, 1 skipped`，另有 18 个 subtests；跳过项为既有 MG-K10-SAR/06003 OCR 缓存 Fixture 不存在。
 - legacy Python 3.9：`130 passed, 1 skipped`；跳过原因相同。
 - `compileall` 和 `git diff --check` 通过。
 - 生成器覆盖 4 个 Schema/OpenAPI 和 4 个 Fixture；连续两次生成的 8 个 SHA-256 完全一致：
   - `agent-contracts-v1.schema.json`: `9ecd1715febe2bcbc7fa4a6ca07dfdb11a8992a721506e5de1e7b49b9eb75595`
-  - `fixture-v1.schema.json`: `c0e184a99b886e77c0ebc531a7dd568b8ebed2ed1e19b99e93be26b3e6c4b2e1`
-  - `openapi-v1.draft.json`: `58a09301174681461a21e8609f14e61cec45677530e7b85eb419f18daf4fe18d`
-  - `uat-phase1-workspace.schema.json`: `95ffe351d797121bb74e77ecb0ff90d68b322f0a38ac92f2ec010006610fe361`
-  - `subject-barrier.json`: `8df5a08d5efeb654120d44a6b6fa42d058233a8080b4575dd379ec89871e0f2a`
-  - `subject-clear.json`: `757cae8857fa89032cd74f1ff764a12234c038df67a93c3b93495a7b29e021b1`
-  - `subject-gap_conflict.json`: `b7f53c6fbe5061da37f91e10b95ad4305cf17ba82d7bcb3a8581fbad5fb13ec0`
-  - `uat-phase1-workspace.json`: `c2e2151c217b6febbd9cf6a50f316a057606bfbceb440099b7fa0d31b07f8b11`
+  - `fixture-v1.schema.json`: `d8511d506c1a5b8fc3471bc0f6240e228c5f5113d37b6a06b2c0c099e42a058f`
+  - `openapi-v1.draft.json`: `ded66de3930a8e7517fe41b5ebfa35a9df8da4782b41e75dc6732a2150eaf933`
+  - `uat-phase1-workspace.schema.json`: `f5e1a49ca67c1751d566e3474dca50d0a614b1a2d8d077b25b6f239e3fc816f9`
+  - `subject-barrier.json`: `6ce4ec8be625f4e1348ab579ea9e71f3e4fd878966646050580ffec865bb50bd`
+  - `subject-clear.json`: `c5c2580f70367d5a62e6c73a8cf971e95f0a9198c18b10f1fd97acd7554312b7`
+  - `subject-gap_conflict.json`: `3ca1c1ec8842533e9014cfbef6ce4bf71b56dc4105613e04650162eea1392e7c`
+  - `uat-phase1-workspace.json`: `80436060faf047c011cc7526f6f0738fbaae228706028c55380b499560d6a997`
 - 第四次独立复核识别 7 个 P1 和 2 个 P2：Action/Rollup 只验局部 Gate、Agent 输出未绑定具体候选、Assessment 组件可替换、Fixture 候选未持久化为发布版本、Agent 方案 scope 未核对、权威记录缺服务侧确认事件、runtime validator 未进入 Schema，以及 UAT 只验计数、错误码开放字符串。
-- 根因修复：AssessmentPublication 与 ActionPublication 保存并重算完整上游闭包；Fixture 由最终 Gate 输入引用反向锁定唯一 Candidate/Evidence Gate；Agent typed output 哈希逐候选绑定；Fixture AgentCall 强制 Protocol/RuleSet revision scope 和唯一 Schema Gate；新增人工确认事件；Schema 条件与错误枚举机器可读；UAT 锁定关键 ALL/ANY/NOT 树和随机前 28 天窗口，并包含真实 `historical_source_unavailable` Episode。
-- 当前针对性 V2 契约测试、完整套件、legacy 回归和生成哈希均已更新；同一 checker 复核仍待完成。
+- 第五次独立复核结论为 `REJECT`。Schema、UAT、错误码与部分 scope 已关闭，但仅重算调用方传入的完整对象仍不能证明它们来自服务端已接受状态。当前测试证据有效，但不足以证明 Phase 0.5 完成。
+- 第五次拒绝项已按根因改造：新增应用服务签发的只读发布注册表与版本化审核上下文；Assessment/Action/Rollup 按 ID 反查唯一上游并重算 typed Candidate；RuleSet 用完整哈希绑定已登记 Protocol Integrity Gate；确认来自登记操作事件，来源来自登记目录；Fixture Fact/Span 逐 payload 比对；多 Gate 按类型、声明和唯一性解析。
+- 新增同步重算对抗测试：即使伪造方同时重算 Candidate、AgentCall、Schema/Candidate/Evidence Gate、自哈希确认事件或来源记录，只要与验证前的服务端注册表不一致仍被拒绝。`validate_fixture_scope` 不再从待验证 Fixture 反向构建信任。
+- 当前针对性 V2 契约测试、完整套件、legacy 回归和生成哈希均已更新；同一 checker 第六次复核仍待完成。
 - 本阶段未调用真实 LLM/OCR、未重审临床项目、未修改 legacy 项目数据、未调用 Qwen 3.8；用户已明确后续也不使用 Qwen 3.8 会商。
 
 ## 待验收

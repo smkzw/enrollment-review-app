@@ -820,13 +820,15 @@
             "candidate-uat-01-screening-clear-in",
             "gate-candidate-uat-01-screening-clear-in",
             "gate-evidence-uat-01-screening",
+            "context-episode-uat-01-screening-clear-assessment-uat-01-screening-clear-in",
+            "gate-uat-01-screening-integrity-protocol-v1-phase-iii",
             "component-in-01",
             "run-uat-01-screening-clear"
           ],
           "input_revision_map": {
             "episode-uat-01-screening-clear": 1
           },
-          "input_scope_hash": "d7bd562479ffe0c7e9dfe92d701575adb65d5ef581a300f318d944c09febb90d",
+          "input_scope_hash": "6ab0c88325042fb7087cbf13a80c638c687bce4bbafb138abfd1415b5b1bdf7c",
           "output_hash": "51374114bd1da72d09be4f06f53762c8ef515a8144f7a08f5cad6bbd73eadfc0",
           "parent_event_id": null,
           "recompute_scope": [
@@ -883,13 +885,15 @@
             "candidate-uat-01-screening-clear-ex",
             "gate-candidate-uat-01-screening-clear-ex",
             "gate-evidence-uat-01-screening",
+            "context-episode-uat-01-screening-clear-assessment-uat-01-screening-clear-ex",
+            "gate-uat-01-screening-integrity-protocol-v1-phase-iii",
             "component-ex-01",
             "run-uat-01-screening-clear"
           ],
           "input_revision_map": {
             "episode-uat-01-screening-clear": 1
           },
-          "input_scope_hash": "b0807903b589b67e923282bb2e87f901f61413be1a9ec0cd7812af4d87af5520",
+          "input_scope_hash": "eabdf5549aa023512e1c94ecb878016167b7c32ff5c917c0213e198b6083da47",
           "output_hash": "9637e72c74750f5e4ac1e0c25be9f5f841e4e595bf6acdb8795db5f16d75ebfd",
           "parent_event_id": null,
           "recompute_scope": [
@@ -1094,6 +1098,18 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_command": {
+        "action": "accept_protocol_authority",
+        "actor_id": "synthetic-uat-human-acceptance",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "event_sha256": "ae94cdcbbb137aedd8f6176274ecc36043c2c0326f6f0cbfc001f2f0468bbda6",
+        "occurred_at": "2026-08-12T12:00:00Z",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
@@ -1651,6 +1667,32 @@
         ],
         "study_phase": "phase_iii"
       },
+      "protocol_source_records": [
+        {
+          "locator": "p1",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "b491f1b1b8d4c378ee2881e01e35de62f60f4351d2ad0f836d0dcff6f39c8d90",
+          "source_ref": "protocol-v1:p1"
+        },
+        {
+          "locator": "p20-p24",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "66cf33d8f29b18ebaca9f7bf2ed0bc1908a23f04244ffd51d1afcbb131bae4af",
+          "source_ref": "protocol-v1:p20-p24"
+        },
+        {
+          "locator": "flow-table",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "09664b6640909010bd1b99de901f63f06586c9d30cebe137d690c2279e305b4f",
+          "source_ref": "protocol-v1:flow-table"
+        }
+      ],
       "review_episode": {
         "anchor_dates": {
           "screening_date": {
@@ -3031,13 +3073,15 @@
             "candidate-uat-01-baseline-clear-in",
             "gate-candidate-uat-01-baseline-clear-in",
             "gate-evidence-uat-01-baseline",
+            "context-episode-uat-01-baseline-clear-assessment-uat-01-baseline-clear-in",
+            "gate-uat-01-baseline-integrity-protocol-v1-phase-iii",
             "component-in-01",
             "run-uat-01-baseline-clear"
           ],
           "input_revision_map": {
             "episode-uat-01-baseline-clear": 1
           },
-          "input_scope_hash": "0de5f0b18442967df38fbac5302ffd5676e5ba8e6f0d99053355e0801ee31355",
+          "input_scope_hash": "ccbfa97b21756b301635772fc47e5ea610f488b4ffc9b7ac1210e8d33d0ee466",
           "output_hash": "ac22f06caa5aeac7ffa50707cd311be6121d6ca4a6d0bbd99321baac746d9417",
           "parent_event_id": null,
           "recompute_scope": [
@@ -3094,13 +3138,15 @@
             "candidate-uat-01-baseline-clear-ex",
             "gate-candidate-uat-01-baseline-clear-ex",
             "gate-evidence-uat-01-baseline",
+            "context-episode-uat-01-baseline-clear-assessment-uat-01-baseline-clear-ex",
+            "gate-uat-01-baseline-integrity-protocol-v1-phase-iii",
             "component-ex-01",
             "run-uat-01-baseline-clear"
           ],
           "input_revision_map": {
             "episode-uat-01-baseline-clear": 1
           },
-          "input_scope_hash": "60fbd9e65e18b806563dff32a45b98cb7486a5f43d059e8136c423a5ace5c99e",
+          "input_scope_hash": "40de0ea600c118b040b3994bee4448eb1eedf1771a7e126b4bc878d902c06222",
           "output_hash": "ec7da2b8647f9f42f3717f50176e570bcb30addf1cb29d865c0f649d28b85f64",
           "parent_event_id": null,
           "recompute_scope": [
@@ -3305,6 +3351,18 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_command": {
+        "action": "accept_protocol_authority",
+        "actor_id": "synthetic-uat-human-acceptance",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "event_sha256": "ae94cdcbbb137aedd8f6176274ecc36043c2c0326f6f0cbfc001f2f0468bbda6",
+        "occurred_at": "2026-08-12T12:00:00Z",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
@@ -3862,6 +3920,32 @@
         ],
         "study_phase": "phase_iii"
       },
+      "protocol_source_records": [
+        {
+          "locator": "p1",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "b491f1b1b8d4c378ee2881e01e35de62f60f4351d2ad0f836d0dcff6f39c8d90",
+          "source_ref": "protocol-v1:p1"
+        },
+        {
+          "locator": "p20-p24",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "66cf33d8f29b18ebaca9f7bf2ed0bc1908a23f04244ffd51d1afcbb131bae4af",
+          "source_ref": "protocol-v1:p20-p24"
+        },
+        {
+          "locator": "flow-table",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "09664b6640909010bd1b99de901f63f06586c9d30cebe137d690c2279e305b4f",
+          "source_ref": "protocol-v1:flow-table"
+        }
+      ],
       "review_episode": {
         "anchor_dates": {
           "baseline_date": {
@@ -5295,13 +5379,15 @@
             "candidate-uat-02-screening-barrier-in",
             "gate-candidate-uat-02-screening-barrier-in",
             "gate-evidence-uat-02-screening",
+            "context-episode-uat-02-screening-barrier-assessment-uat-02-screening-barrier-in",
+            "gate-uat-02-screening-integrity-protocol-v1-phase-iii",
             "component-in-01",
             "run-uat-02-screening-barrier"
           ],
           "input_revision_map": {
             "episode-uat-02-screening-barrier": 1
           },
-          "input_scope_hash": "a2a6a5de872aca7e3a4f78466365d3b90c1fbcf18cd961a17d7a8314b18dd4a9",
+          "input_scope_hash": "cbba9f457c24242bd01b332d9b0afb6c4675715d37a7ebf894004c2b3037da42",
           "output_hash": "98fed2450c56c5c8bc03dfa8fa68f10f381df0f1c6ba2e7e21a80c11f7d89b22",
           "parent_event_id": null,
           "recompute_scope": [
@@ -5358,13 +5444,15 @@
             "candidate-uat-02-screening-barrier-ex",
             "gate-candidate-uat-02-screening-barrier-ex",
             "gate-evidence-uat-02-screening",
+            "context-episode-uat-02-screening-barrier-assessment-uat-02-screening-barrier-ex",
+            "gate-uat-02-screening-integrity-protocol-v1-phase-iii",
             "component-ex-01",
             "run-uat-02-screening-barrier"
           ],
           "input_revision_map": {
             "episode-uat-02-screening-barrier": 1
           },
-          "input_scope_hash": "5f77d138580c74702f1fc55890966b23146f217faa4f0ca9d502830af99fac04",
+          "input_scope_hash": "22d36016087fd8fa4fd4b6bccf194d9a4db967d4e92b3e814626312760a33837",
           "output_hash": "4a590cef18b344b639640df6fc1e29dac07ebefd44b2f40d4c0377e71adca502",
           "parent_event_id": null,
           "recompute_scope": [
@@ -5541,6 +5629,18 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_command": {
+        "action": "accept_protocol_authority",
+        "actor_id": "synthetic-uat-human-acceptance",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "event_sha256": "ae94cdcbbb137aedd8f6176274ecc36043c2c0326f6f0cbfc001f2f0468bbda6",
+        "occurred_at": "2026-08-12T12:00:00Z",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
@@ -6098,6 +6198,32 @@
         ],
         "study_phase": "phase_iii"
       },
+      "protocol_source_records": [
+        {
+          "locator": "p1",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "b491f1b1b8d4c378ee2881e01e35de62f60f4351d2ad0f836d0dcff6f39c8d90",
+          "source_ref": "protocol-v1:p1"
+        },
+        {
+          "locator": "p20-p24",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "66cf33d8f29b18ebaca9f7bf2ed0bc1908a23f04244ffd51d1afcbb131bae4af",
+          "source_ref": "protocol-v1:p20-p24"
+        },
+        {
+          "locator": "flow-table",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "09664b6640909010bd1b99de901f63f06586c9d30cebe137d690c2279e305b4f",
+          "source_ref": "protocol-v1:flow-table"
+        }
+      ],
       "review_episode": {
         "anchor_dates": {
           "screening_date": {
@@ -7521,13 +7647,15 @@
             "candidate-uat-02-baseline-barrier-in",
             "gate-candidate-uat-02-baseline-barrier-in",
             "gate-evidence-uat-02-baseline",
+            "context-episode-uat-02-baseline-barrier-assessment-uat-02-baseline-barrier-in",
+            "gate-uat-02-baseline-integrity-protocol-v1-phase-iii",
             "component-in-01",
             "run-uat-02-baseline-barrier"
           ],
           "input_revision_map": {
             "episode-uat-02-baseline-barrier": 1
           },
-          "input_scope_hash": "915d44dbf80270820c34c6b4e07eed6e7af3a8b01ba19bf85649577fb30a1c8d",
+          "input_scope_hash": "e8e06aaaa1cd8aa97c094082ef6477a22c3f197af6d50f3a3525fbb0bd01d63d",
           "output_hash": "5474e9d601e97ba4c3f3723814d74a9b36878f179030b668bf251d744f9bab92",
           "parent_event_id": null,
           "recompute_scope": [
@@ -7584,13 +7712,15 @@
             "candidate-uat-02-baseline-barrier-ex",
             "gate-candidate-uat-02-baseline-barrier-ex",
             "gate-evidence-uat-02-baseline",
+            "context-episode-uat-02-baseline-barrier-assessment-uat-02-baseline-barrier-ex",
+            "gate-uat-02-baseline-integrity-protocol-v1-phase-iii",
             "component-ex-01",
             "run-uat-02-baseline-barrier"
           ],
           "input_revision_map": {
             "episode-uat-02-baseline-barrier": 1
           },
-          "input_scope_hash": "efd64ebccf22e9805d50842df3e60bba46750b55deb1daf188a7ffac637333b2",
+          "input_scope_hash": "dc830a34ba3e8af6eb676f095aa41acc2ba682ce10839486b2eba705ce2f4db1",
           "output_hash": "b2ae551a3ca9efc13d09bc4c10c331dd6533a120ffd8680bd5d7a5d6ba40077e",
           "parent_event_id": null,
           "recompute_scope": [
@@ -7767,6 +7897,18 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_command": {
+        "action": "accept_protocol_authority",
+        "actor_id": "synthetic-uat-human-acceptance",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "event_sha256": "ae94cdcbbb137aedd8f6176274ecc36043c2c0326f6f0cbfc001f2f0468bbda6",
+        "occurred_at": "2026-08-12T12:00:00Z",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
@@ -8324,6 +8466,32 @@
         ],
         "study_phase": "phase_iii"
       },
+      "protocol_source_records": [
+        {
+          "locator": "p1",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "b491f1b1b8d4c378ee2881e01e35de62f60f4351d2ad0f836d0dcff6f39c8d90",
+          "source_ref": "protocol-v1:p1"
+        },
+        {
+          "locator": "p20-p24",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "66cf33d8f29b18ebaca9f7bf2ed0bc1908a23f04244ffd51d1afcbb131bae4af",
+          "source_ref": "protocol-v1:p20-p24"
+        },
+        {
+          "locator": "flow-table",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "09664b6640909010bd1b99de901f63f06586c9d30cebe137d690c2279e305b4f",
+          "source_ref": "protocol-v1:flow-table"
+        }
+      ],
       "review_episode": {
         "anchor_dates": {
           "baseline_date": {
@@ -10299,13 +10467,15 @@
             "candidate-uat-03-screening-gap-in",
             "gate-candidate-uat-03-screening-gap-in",
             "gate-evidence-uat-03-screening",
+            "context-episode-uat-03-screening-gap_conflict-assessment-uat-03-screening-gap-in",
+            "gate-uat-03-screening-integrity-protocol-v1-phase-iii",
             "component-in-01",
             "run-uat-03-screening-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "e352ea4c2bd429aa7c958c5c8e4c73eb5955e5c60a852832e7a8261eee75df4c",
+          "input_scope_hash": "1fb8881a946926b395de318aa9bab60f95055e4c5ff9c31140c62ee1c099c11f",
           "output_hash": "2824a1b586b53a975035e1c33febfb5743313616fcdee42ca370aa0c0fcc3fe4",
           "parent_event_id": null,
           "recompute_scope": [
@@ -10362,13 +10532,15 @@
             "candidate-uat-03-screening-gap-ex",
             "gate-candidate-uat-03-screening-gap-ex",
             "gate-evidence-uat-03-screening",
+            "context-episode-uat-03-screening-gap_conflict-assessment-uat-03-screening-gap-ex",
+            "gate-uat-03-screening-integrity-protocol-v1-phase-iii",
             "component-ex-01",
             "run-uat-03-screening-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "ae0e8a5970b6cc73ba276fe4174409a84e494e2aaafd6294df1c4a5f50956503",
+          "input_scope_hash": "c32a16e4369eed0bc92151f0b88ab45f9f338bdc36b3de9bd32b5e15d79c607f",
           "output_hash": "d1f5c4c71f8a287783f69341c99cb7928b94fe8d641fde8519cacf9549b3b346",
           "parent_event_id": null,
           "recompute_scope": [
@@ -10425,13 +10597,15 @@
             "candidate-uat-03-screening-gap-professional",
             "gate-candidate-uat-03-screening-gap-professional",
             "gate-evidence-uat-03-screening",
+            "context-episode-uat-03-screening-gap_conflict-assessment-uat-03-screening-gap-professional",
+            "gate-uat-03-screening-integrity-protocol-v1-phase-iii",
             "component-ex-02",
             "run-uat-03-screening-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "2369e028506d1a77420b92d226598c0469a5a8c74a2c7a79f6f9ddbfa4596904",
+          "input_scope_hash": "70ff8b8b4e66d102efd362788ff29ddd1e14594173cac6559b2b5467df58167e",
           "output_hash": "67f08333bd1d3f654232247a4db40e48679bac95593bf43d5f4cdccb3566699e",
           "parent_event_id": null,
           "recompute_scope": [
@@ -10488,13 +10662,15 @@
             "candidate-uat-03-screening-gap-future",
             "gate-candidate-uat-03-screening-gap-future",
             "gate-evidence-uat-03-screening",
+            "context-episode-uat-03-screening-gap_conflict-assessment-uat-03-screening-gap-future",
+            "gate-uat-03-screening-integrity-protocol-v1-phase-iii",
             "component-ex-03",
             "run-uat-03-screening-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "35e645588f6c8b5cc3ccd339326a3eaf2321e5cf90e7bbeb2d80e8ddee4055b5",
+          "input_scope_hash": "75f59fef04354f46ca40e1443168f688a03ac6d5caf4b84cdd465fdd9c1c1d36",
           "output_hash": "1ba207df89e7e45852b9158826ab66fee497f1df537d808794f7a574f566e3d6",
           "parent_event_id": null,
           "recompute_scope": [
@@ -10551,13 +10727,15 @@
             "candidate-uat-03-screening-gap-referenced",
             "gate-candidate-uat-03-screening-gap-referenced",
             "gate-evidence-uat-03-screening",
+            "context-episode-uat-03-screening-gap_conflict-assessment-uat-03-screening-gap-referenced",
+            "gate-uat-03-screening-integrity-protocol-v1-phase-iii",
             "component-ex-04",
             "run-uat-03-screening-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "83ba134a629ea18370b297f4a1bd45474860cfca1714429b1459eb6351b38549",
+          "input_scope_hash": "c9f62aebb7a48a196388bdf020e4c520b2b4acaa492b7711568685bf7f4dd2d3",
           "output_hash": "5e2eff60873798df97e6f211b457d1dbe6fbfbe18d8acff4b11be4a421281ee8",
           "parent_event_id": null,
           "recompute_scope": [
@@ -10614,13 +10792,15 @@
             "candidate-uat-03-screening-gap-procedure",
             "gate-candidate-uat-03-screening-gap-procedure",
             "gate-evidence-uat-03-screening",
+            "context-episode-uat-03-screening-gap_conflict-assessment-uat-03-screening-gap-procedure",
+            "gate-uat-03-screening-integrity-protocol-v1-phase-iii",
             "component-req-01",
             "run-uat-03-screening-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "c179494a36a378c9b396215004aa944e1de8f1679b0257d927a30c40825bb9b2",
+          "input_scope_hash": "6c00eca56d84e0491796ee318451c6f2f414f004c1ecabd6b176ff764ca88c24",
           "output_hash": "6b5dac6f537c1880783bea2478e9bc9d6d2fb92455b0da664847dafd2eaa6f45",
           "parent_event_id": null,
           "recompute_scope": [
@@ -10677,13 +10857,15 @@
             "candidate-uat-03-screening-gap-result-fields",
             "gate-candidate-uat-03-screening-gap-result-fields",
             "gate-evidence-uat-03-screening",
+            "context-episode-uat-03-screening-gap_conflict-assessment-uat-03-screening-gap-result-fields",
+            "gate-uat-03-screening-integrity-protocol-v1-phase-iii",
             "component-req-02",
             "run-uat-03-screening-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "725c42649b645ce732238e91cd5dcefa9b39440c9f6eb950f19f7040b0a3b833",
+          "input_scope_hash": "4c81d1a0351ee683739ff87c467dccaa424539207634b4403393d8d1b7035c22",
           "output_hash": "fbff5cbef62dde830d75e9d8661b487169993e3cde98f60555b398a1a0504978",
           "parent_event_id": null,
           "recompute_scope": [
@@ -11302,6 +11484,18 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_command": {
+        "action": "accept_protocol_authority",
+        "actor_id": "synthetic-uat-human-acceptance",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "event_sha256": "ae94cdcbbb137aedd8f6176274ecc36043c2c0326f6f0cbfc001f2f0468bbda6",
+        "occurred_at": "2026-08-12T12:00:00Z",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
@@ -11859,6 +12053,32 @@
         ],
         "study_phase": "phase_iii"
       },
+      "protocol_source_records": [
+        {
+          "locator": "p1",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "b491f1b1b8d4c378ee2881e01e35de62f60f4351d2ad0f836d0dcff6f39c8d90",
+          "source_ref": "protocol-v1:p1"
+        },
+        {
+          "locator": "p20-p24",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "66cf33d8f29b18ebaca9f7bf2ed0bc1908a23f04244ffd51d1afcbb131bae4af",
+          "source_ref": "protocol-v1:p20-p24"
+        },
+        {
+          "locator": "flow-table",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "09664b6640909010bd1b99de901f63f06586c9d30cebe137d690c2279e305b4f",
+          "source_ref": "protocol-v1:flow-table"
+        }
+      ],
       "review_episode": {
         "anchor_dates": {
           "screening_date": {
@@ -13823,13 +14043,15 @@
             "candidate-uat-03-baseline-gap-in",
             "gate-candidate-uat-03-baseline-gap-in",
             "gate-evidence-uat-03-baseline",
+            "context-episode-uat-03-baseline-gap_conflict-assessment-uat-03-baseline-gap-in",
+            "gate-uat-03-baseline-integrity-protocol-v1-phase-iii",
             "component-in-01",
             "run-uat-03-baseline-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "8904e2a2c309af74a92deade01a444f59cc68bd9b0029cf2f9b1f5b83eb5fff2",
+          "input_scope_hash": "20f1713b6c47ff37237c9e6e5ce75919de1408046f209f42ef27f5c5722acbaf",
           "output_hash": "0e40c6e43bd74991086bb731d1f201f73e7efd53efd4a777847516c69e651fab",
           "parent_event_id": null,
           "recompute_scope": [
@@ -13886,13 +14108,15 @@
             "candidate-uat-03-baseline-gap-ex",
             "gate-candidate-uat-03-baseline-gap-ex",
             "gate-evidence-uat-03-baseline",
+            "context-episode-uat-03-baseline-gap_conflict-assessment-uat-03-baseline-gap-ex",
+            "gate-uat-03-baseline-integrity-protocol-v1-phase-iii",
             "component-ex-01",
             "run-uat-03-baseline-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "45078cf3a6e26b428f793916c5f8c1e3b90f5cff0eaba4ea9ea775ab524adda3",
+          "input_scope_hash": "5724a35548687a96c2dc5bfa116336dc1531c9bd8ced29affbbe1105e2c640e1",
           "output_hash": "7c92e598072db12060c13306d30ee38f3665e6a88a7b46cd986fb39ac2a5d697",
           "parent_event_id": null,
           "recompute_scope": [
@@ -13949,13 +14173,15 @@
             "candidate-uat-03-baseline-gap-professional",
             "gate-candidate-uat-03-baseline-gap-professional",
             "gate-evidence-uat-03-baseline",
+            "context-episode-uat-03-baseline-gap_conflict-assessment-uat-03-baseline-gap-professional",
+            "gate-uat-03-baseline-integrity-protocol-v1-phase-iii",
             "component-ex-02",
             "run-uat-03-baseline-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "5fba2d48bba599db210af4fecc0825ca4445aba5688697a281f720b2b622b0c3",
+          "input_scope_hash": "9172dcb15be6ae9d7f43a5ab8faeaeae216fe5eea77a6b41346d39faed99105f",
           "output_hash": "f06a43fa602933ead8bbcfbe323ff26781e6f0f1c973651f507d8655ec6f8409",
           "parent_event_id": null,
           "recompute_scope": [
@@ -14012,13 +14238,15 @@
             "candidate-uat-03-baseline-gap-future",
             "gate-candidate-uat-03-baseline-gap-future",
             "gate-evidence-uat-03-baseline",
+            "context-episode-uat-03-baseline-gap_conflict-assessment-uat-03-baseline-gap-future",
+            "gate-uat-03-baseline-integrity-protocol-v1-phase-iii",
             "component-ex-03",
             "run-uat-03-baseline-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "5a30811e000cdf60f7f894122d75a81df58ae5dae49b72bd8cfb17fee2999b3f",
+          "input_scope_hash": "76a9fe3b6dbfcb4f33d5ee9743bc866fb56bc8c135502c6729194838116e4d82",
           "output_hash": "d9c8f39745e12d4f14632967eb08f308ccb93bb0ff7c83db3173b72cb84a55b3",
           "parent_event_id": null,
           "recompute_scope": [
@@ -14075,13 +14303,15 @@
             "candidate-uat-03-baseline-gap-referenced",
             "gate-candidate-uat-03-baseline-gap-referenced",
             "gate-evidence-uat-03-baseline",
+            "context-episode-uat-03-baseline-gap_conflict-assessment-uat-03-baseline-gap-referenced",
+            "gate-uat-03-baseline-integrity-protocol-v1-phase-iii",
             "component-ex-04",
             "run-uat-03-baseline-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "cb27ae84ec01529a7accbe10d15085b3dc192c6c5d3e6457515fd1f9f79b9418",
+          "input_scope_hash": "90b085cdf214c8db28214913448550b64a259987446415cc2e44490b185c20b4",
           "output_hash": "9321455895ebab1e044d2a652209f54d2c3bc2c264b0b89192e457eb4108f47d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -14138,13 +14368,15 @@
             "candidate-uat-03-baseline-gap-procedure",
             "gate-candidate-uat-03-baseline-gap-procedure",
             "gate-evidence-uat-03-baseline",
+            "context-episode-uat-03-baseline-gap_conflict-assessment-uat-03-baseline-gap-procedure",
+            "gate-uat-03-baseline-integrity-protocol-v1-phase-iii",
             "component-req-01",
             "run-uat-03-baseline-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "0c387efad40aa8f21cff631c017b613c5446d48493788a1315a02600a8a69b48",
+          "input_scope_hash": "6e144c758cfe3288eb99c5efba6bc36432cc7d4e4a548ed8a3d0408dbe1f0e11",
           "output_hash": "29f0895ee8beec6527a78a0ea9ec0e4c5c78ca6696bf9fe0758f51b618136f3a",
           "parent_event_id": null,
           "recompute_scope": [
@@ -14201,13 +14433,15 @@
             "candidate-uat-03-baseline-gap-result-fields",
             "gate-candidate-uat-03-baseline-gap-result-fields",
             "gate-evidence-uat-03-baseline",
+            "context-episode-uat-03-baseline-gap_conflict-assessment-uat-03-baseline-gap-result-fields",
+            "gate-uat-03-baseline-integrity-protocol-v1-phase-iii",
             "component-req-02",
             "run-uat-03-baseline-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "6343c1cae7ecc0669e41cb1c96bcf41a8e1b068a7e5a1ad3bbbce2ca8577414b",
+          "input_scope_hash": "be5956cfd988bf6e1a8bc431c80fc0322bcf90b01410701de3c0312870cb4f25",
           "output_hash": "aa29fdaeaab79249ba366eee6b3b890020100f37c9a82dd93ad3a68052b314cb",
           "parent_event_id": null,
           "recompute_scope": [
@@ -14827,6 +15061,18 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_command": {
+        "action": "accept_protocol_authority",
+        "actor_id": "synthetic-uat-human-acceptance",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "event_sha256": "ae94cdcbbb137aedd8f6176274ecc36043c2c0326f6f0cbfc001f2f0468bbda6",
+        "occurred_at": "2026-08-12T12:00:00Z",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
@@ -15384,6 +15630,32 @@
         ],
         "study_phase": "phase_iii"
       },
+      "protocol_source_records": [
+        {
+          "locator": "p1",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "b491f1b1b8d4c378ee2881e01e35de62f60f4351d2ad0f836d0dcff6f39c8d90",
+          "source_ref": "protocol-v1:p1"
+        },
+        {
+          "locator": "p20-p24",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "66cf33d8f29b18ebaca9f7bf2ed0bc1908a23f04244ffd51d1afcbb131bae4af",
+          "source_ref": "protocol-v1:p20-p24"
+        },
+        {
+          "locator": "flow-table",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "09664b6640909010bd1b99de901f63f06586c9d30cebe137d690c2279e305b4f",
+          "source_ref": "protocol-v1:flow-table"
+        }
+      ],
       "review_episode": {
         "anchor_dates": {
           "baseline_date": {
@@ -17361,13 +17633,15 @@
             "candidate-uat-04-screening-gap-in",
             "gate-candidate-uat-04-screening-gap-in",
             "gate-evidence-uat-04-screening",
+            "context-episode-uat-04-screening-gap_conflict-assessment-uat-04-screening-gap-in",
+            "gate-uat-04-screening-integrity-protocol-v1-phase-iii",
             "component-in-01",
             "run-uat-04-screening-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "bee2aa64f37763fd666eb323010dedc2c8e5ecde20a437e424b8fa8be4e63457",
+          "input_scope_hash": "d49c1ed78bb9a14570773f0505ac295e17c56f5c024179dc8ff96e30e1c2fe66",
           "output_hash": "a91866e4258d1679bf56983e24f961a87ebb52ff927eaf159477014134d66862",
           "parent_event_id": null,
           "recompute_scope": [
@@ -17424,13 +17698,15 @@
             "candidate-uat-04-screening-gap-ex",
             "gate-candidate-uat-04-screening-gap-ex",
             "gate-evidence-uat-04-screening",
+            "context-episode-uat-04-screening-gap_conflict-assessment-uat-04-screening-gap-ex",
+            "gate-uat-04-screening-integrity-protocol-v1-phase-iii",
             "component-ex-01",
             "run-uat-04-screening-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "59c037698025637d2b78c8d682b3c25d98548281466cabab364235d6f5b3238a",
+          "input_scope_hash": "14065c0ff282b22baab20e84d91555ec9c28aa66c6fc9e26402282afe4c262a6",
           "output_hash": "e4874487d3acc746dfc97e844bc0643c25a898ca554c149bb512d5aaa00a920e",
           "parent_event_id": null,
           "recompute_scope": [
@@ -17487,13 +17763,15 @@
             "candidate-uat-04-screening-gap-professional",
             "gate-candidate-uat-04-screening-gap-professional",
             "gate-evidence-uat-04-screening",
+            "context-episode-uat-04-screening-gap_conflict-assessment-uat-04-screening-gap-professional",
+            "gate-uat-04-screening-integrity-protocol-v1-phase-iii",
             "component-ex-02",
             "run-uat-04-screening-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "ed037d6148a2c75dd713468b2269d020821657a20e1686a6fc057a6dfc3bc0ab",
+          "input_scope_hash": "66623fb423d41ab7447692db6e2dd16bcbac4321c510ec6dcbb9b34bb64e3395",
           "output_hash": "088d5518422673087298e0fcb16f2b6539eb0462c2aced8c102ec60dc4fbe30b",
           "parent_event_id": null,
           "recompute_scope": [
@@ -17550,13 +17828,15 @@
             "candidate-uat-04-screening-gap-future",
             "gate-candidate-uat-04-screening-gap-future",
             "gate-evidence-uat-04-screening",
+            "context-episode-uat-04-screening-gap_conflict-assessment-uat-04-screening-gap-future",
+            "gate-uat-04-screening-integrity-protocol-v1-phase-iii",
             "component-ex-03",
             "run-uat-04-screening-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "2f25ba46c692252b9ff6faba6b37b1534acc97cccaf3a71286e692da863277f3",
+          "input_scope_hash": "1797ccc64c9c442b18cc6f667cdb45513467f7c0f2e683e8740c14215f4003da",
           "output_hash": "2fcab52bb03d4e909e607e407930bb85e20704a9c255a62138e07ee1129bd99d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -17613,13 +17893,15 @@
             "candidate-uat-04-screening-gap-referenced",
             "gate-candidate-uat-04-screening-gap-referenced",
             "gate-evidence-uat-04-screening",
+            "context-episode-uat-04-screening-gap_conflict-assessment-uat-04-screening-gap-referenced",
+            "gate-uat-04-screening-integrity-protocol-v1-phase-iii",
             "component-ex-04",
             "run-uat-04-screening-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "82273ec5bd9ca8d04f072de987de40107dc74fdba61864452c8817d0a92464d3",
+          "input_scope_hash": "a49c05559c4bd2ee72888ed4574a95afe2d11c242409e96b7ce375e94f81b44b",
           "output_hash": "e09b5bf7965c23e8f49153849446ce557fcb3479d92dcb27ff2bb2d875cc508e",
           "parent_event_id": null,
           "recompute_scope": [
@@ -17676,13 +17958,15 @@
             "candidate-uat-04-screening-gap-procedure",
             "gate-candidate-uat-04-screening-gap-procedure",
             "gate-evidence-uat-04-screening",
+            "context-episode-uat-04-screening-gap_conflict-assessment-uat-04-screening-gap-procedure",
+            "gate-uat-04-screening-integrity-protocol-v1-phase-iii",
             "component-req-01",
             "run-uat-04-screening-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "b616f3405e37f8b1dbcb09b72b291e78144d4719c5b5292910a7c9da81f18d55",
+          "input_scope_hash": "8cc25b4519a3ae94ce5e1fafba70ba930c9e30c69c013f5e91189b1594fa7a75",
           "output_hash": "ac9f6de2891e846474fdf71f8623a11a608abae503246b76daf59b87dbbfe056",
           "parent_event_id": null,
           "recompute_scope": [
@@ -17739,13 +18023,15 @@
             "candidate-uat-04-screening-gap-result-fields",
             "gate-candidate-uat-04-screening-gap-result-fields",
             "gate-evidence-uat-04-screening",
+            "context-episode-uat-04-screening-gap_conflict-assessment-uat-04-screening-gap-result-fields",
+            "gate-uat-04-screening-integrity-protocol-v1-phase-iii",
             "component-req-02",
             "run-uat-04-screening-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "5804c322bac115c10d20b0f478109c33757bfcc797f1fdde1c56d57ab7d14d55",
+          "input_scope_hash": "c00898ca82a0a19b52864508ed0101035b41f03037f4923356db6fa74be13410",
           "output_hash": "f11039a7c60c792108d8ee8a440676052026b11116b78286d7077370e3879b01",
           "parent_event_id": null,
           "recompute_scope": [
@@ -18363,6 +18649,18 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_command": {
+        "action": "accept_protocol_authority",
+        "actor_id": "synthetic-uat-human-acceptance",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "event_sha256": "ae94cdcbbb137aedd8f6176274ecc36043c2c0326f6f0cbfc001f2f0468bbda6",
+        "occurred_at": "2026-08-12T12:00:00Z",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
@@ -18920,6 +19218,32 @@
         ],
         "study_phase": "phase_iii"
       },
+      "protocol_source_records": [
+        {
+          "locator": "p1",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "b491f1b1b8d4c378ee2881e01e35de62f60f4351d2ad0f836d0dcff6f39c8d90",
+          "source_ref": "protocol-v1:p1"
+        },
+        {
+          "locator": "p20-p24",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "66cf33d8f29b18ebaca9f7bf2ed0bc1908a23f04244ffd51d1afcbb131bae4af",
+          "source_ref": "protocol-v1:p20-p24"
+        },
+        {
+          "locator": "flow-table",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "09664b6640909010bd1b99de901f63f06586c9d30cebe137d690c2279e305b4f",
+          "source_ref": "protocol-v1:flow-table"
+        }
+      ],
       "review_episode": {
         "anchor_dates": {
           "screening_date": {
@@ -20884,13 +21208,15 @@
             "candidate-uat-04-baseline-gap-in",
             "gate-candidate-uat-04-baseline-gap-in",
             "gate-evidence-uat-04-baseline",
+            "context-episode-uat-04-baseline-gap_conflict-assessment-uat-04-baseline-gap-in",
+            "gate-uat-04-baseline-integrity-protocol-v1-phase-iii",
             "component-in-01",
             "run-uat-04-baseline-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "77af7f1756680ee4bf90a61ee65d50ee118511af3bd8367966e0b007718efbea",
+          "input_scope_hash": "1971df382b13760e535d2c276d9ccf23d8278b96d5ace0d9f1b2a28a41993496",
           "output_hash": "a20179a40e2ad9268225f10aa70cadeb729bc5e10679effd184cd2bcaaf71ccd",
           "parent_event_id": null,
           "recompute_scope": [
@@ -20947,13 +21273,15 @@
             "candidate-uat-04-baseline-gap-ex",
             "gate-candidate-uat-04-baseline-gap-ex",
             "gate-evidence-uat-04-baseline",
+            "context-episode-uat-04-baseline-gap_conflict-assessment-uat-04-baseline-gap-ex",
+            "gate-uat-04-baseline-integrity-protocol-v1-phase-iii",
             "component-ex-01",
             "run-uat-04-baseline-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "4cc36e91e74f327b00d5b3a2e9908a33afd0c247f446b29ddfdaa2d9309bf36a",
+          "input_scope_hash": "eaead60761977b7073eec7235231e3d189cd511cdccb3be38b138b183cc7da9e",
           "output_hash": "f51ff0d724ee13156f7283c4d93395251ec384da400e0f3d33e00094e726f9ae",
           "parent_event_id": null,
           "recompute_scope": [
@@ -21010,13 +21338,15 @@
             "candidate-uat-04-baseline-gap-professional",
             "gate-candidate-uat-04-baseline-gap-professional",
             "gate-evidence-uat-04-baseline",
+            "context-episode-uat-04-baseline-gap_conflict-assessment-uat-04-baseline-gap-professional",
+            "gate-uat-04-baseline-integrity-protocol-v1-phase-iii",
             "component-ex-02",
             "run-uat-04-baseline-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "b192f638dfa2e41037176ade977ee0f219969348fb92540a3fd0d8305a9507e2",
+          "input_scope_hash": "e6b270a6215bf19956af3c65b9a0517f924d4fa577627f286df7d1feb46924dc",
           "output_hash": "f336ce0e2ab66d63c5d3d8174ffd16a1cd4cf4b5dc8b920da59c1f196c0e1fb7",
           "parent_event_id": null,
           "recompute_scope": [
@@ -21073,13 +21403,15 @@
             "candidate-uat-04-baseline-gap-future",
             "gate-candidate-uat-04-baseline-gap-future",
             "gate-evidence-uat-04-baseline",
+            "context-episode-uat-04-baseline-gap_conflict-assessment-uat-04-baseline-gap-future",
+            "gate-uat-04-baseline-integrity-protocol-v1-phase-iii",
             "component-ex-03",
             "run-uat-04-baseline-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "d825d477bdb1c840dce5e3b505d2edcdd673035986e1034239d178edf375a99a",
+          "input_scope_hash": "329d56965ad76a5845244e987960147c9665fa38dec0505a867fc90df2ec2714",
           "output_hash": "b35cc39591fdd9760ec655a8604727ac13900adf2a10129a1d38762fde0d83d1",
           "parent_event_id": null,
           "recompute_scope": [
@@ -21136,13 +21468,15 @@
             "candidate-uat-04-baseline-gap-referenced",
             "gate-candidate-uat-04-baseline-gap-referenced",
             "gate-evidence-uat-04-baseline",
+            "context-episode-uat-04-baseline-gap_conflict-assessment-uat-04-baseline-gap-referenced",
+            "gate-uat-04-baseline-integrity-protocol-v1-phase-iii",
             "component-ex-04",
             "run-uat-04-baseline-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "17d9a4fb2100ab833eab777d637ba4b463c75b9420aa0ba13569b666f0510c12",
+          "input_scope_hash": "6af9582bc811b2b199f9398f04d391c297797586c35f75cb75d3995cb1b7d728",
           "output_hash": "3d04f90813442d1833aafa789f64be0efea095835eb211df97b9fd126e4c9127",
           "parent_event_id": null,
           "recompute_scope": [
@@ -21199,13 +21533,15 @@
             "candidate-uat-04-baseline-gap-procedure",
             "gate-candidate-uat-04-baseline-gap-procedure",
             "gate-evidence-uat-04-baseline",
+            "context-episode-uat-04-baseline-gap_conflict-assessment-uat-04-baseline-gap-procedure",
+            "gate-uat-04-baseline-integrity-protocol-v1-phase-iii",
             "component-req-01",
             "run-uat-04-baseline-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "8a61ab65ba591fc043768e4a10b6544d8e61cd6533beeac705d970770cea41a0",
+          "input_scope_hash": "62eeb7ad89255cdb1b8a0a92ba0ec995db4279b5667bfe287c2dc3ecc9c4f453",
           "output_hash": "57155fafdbddce22fcafdf17535704d904dc42fde9c6684845564dbd34f11c5b",
           "parent_event_id": null,
           "recompute_scope": [
@@ -21262,13 +21598,15 @@
             "candidate-uat-04-baseline-gap-result-fields",
             "gate-candidate-uat-04-baseline-gap-result-fields",
             "gate-evidence-uat-04-baseline",
+            "context-episode-uat-04-baseline-gap_conflict-assessment-uat-04-baseline-gap-result-fields",
+            "gate-uat-04-baseline-integrity-protocol-v1-phase-iii",
             "component-req-02",
             "run-uat-04-baseline-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "1a8ed92bb7045240de7011c370ee2f18b708539cde6e40ae24417d2aa33e0e3a",
+          "input_scope_hash": "9fd34797583af99f443e6cf5488b07adb6c779b2ed97330943901f1ace52c4eb",
           "output_hash": "31c89be13a6803e0a98afa35d183e32897cdef3d2afe0fd5664bc5ee045a796d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -21888,6 +22226,18 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_command": {
+        "action": "accept_protocol_authority",
+        "actor_id": "synthetic-uat-human-acceptance",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "event_sha256": "ae94cdcbbb137aedd8f6176274ecc36043c2c0326f6f0cbfc001f2f0468bbda6",
+        "occurred_at": "2026-08-12T12:00:00Z",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
@@ -22445,6 +22795,32 @@
         ],
         "study_phase": "phase_iii"
       },
+      "protocol_source_records": [
+        {
+          "locator": "p1",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "b491f1b1b8d4c378ee2881e01e35de62f60f4351d2ad0f836d0dcff6f39c8d90",
+          "source_ref": "protocol-v1:p1"
+        },
+        {
+          "locator": "p20-p24",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "66cf33d8f29b18ebaca9f7bf2ed0bc1908a23f04244ffd51d1afcbb131bae4af",
+          "source_ref": "protocol-v1:p20-p24"
+        },
+        {
+          "locator": "flow-table",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "09664b6640909010bd1b99de901f63f06586c9d30cebe137d690c2279e305b4f",
+          "source_ref": "protocol-v1:flow-table"
+        }
+      ],
       "review_episode": {
         "anchor_dates": {
           "baseline_date": {
@@ -23835,13 +24211,15 @@
             "candidate-uat-05-screening-clear-in",
             "gate-candidate-uat-05-screening-clear-in",
             "gate-evidence-uat-05-screening",
+            "context-episode-uat-05-screening-clear-assessment-uat-05-screening-clear-in",
+            "gate-uat-05-screening-integrity-protocol-v1-phase-iii",
             "component-in-01",
             "run-uat-05-screening-clear"
           ],
           "input_revision_map": {
             "episode-uat-05-screening-clear": 1
           },
-          "input_scope_hash": "416b30d5f6bfe4d0af7e585d2bc1a47f797a2e63cb827283b180093b526c4276",
+          "input_scope_hash": "db91151c590358deaa0ab425ceecaf82e0e25bb175de523a6058db82ca4301e9",
           "output_hash": "12e7ae897dcfe963c63bfc8ebe23752a69cadaef48b8d303462d8672b9fc633b",
           "parent_event_id": null,
           "recompute_scope": [
@@ -23898,13 +24276,15 @@
             "candidate-uat-05-screening-clear-ex",
             "gate-candidate-uat-05-screening-clear-ex",
             "gate-evidence-uat-05-screening",
+            "context-episode-uat-05-screening-clear-assessment-uat-05-screening-clear-ex",
+            "gate-uat-05-screening-integrity-protocol-v1-phase-iii",
             "component-ex-01",
             "run-uat-05-screening-clear"
           ],
           "input_revision_map": {
             "episode-uat-05-screening-clear": 1
           },
-          "input_scope_hash": "06f9c3a6d0fdaf1cb0b604f48a17fc353a83d3cb04a01ed3f9851f0f25621411",
+          "input_scope_hash": "1b95fb26e3526c8b1bc58d3e864d6b3e68b878041fcc5d4c3e45acf46bd1c269",
           "output_hash": "b7d60a24adc1812e57fd569898eb62742a3413074ff1db6aae47398542b662c2",
           "parent_event_id": null,
           "recompute_scope": [
@@ -24109,6 +24489,18 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_command": {
+        "action": "accept_protocol_authority",
+        "actor_id": "synthetic-uat-human-acceptance",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "event_sha256": "ae94cdcbbb137aedd8f6176274ecc36043c2c0326f6f0cbfc001f2f0468bbda6",
+        "occurred_at": "2026-08-12T12:00:00Z",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
@@ -24666,6 +25058,32 @@
         ],
         "study_phase": "phase_iii"
       },
+      "protocol_source_records": [
+        {
+          "locator": "p1",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "b491f1b1b8d4c378ee2881e01e35de62f60f4351d2ad0f836d0dcff6f39c8d90",
+          "source_ref": "protocol-v1:p1"
+        },
+        {
+          "locator": "p20-p24",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "66cf33d8f29b18ebaca9f7bf2ed0bc1908a23f04244ffd51d1afcbb131bae4af",
+          "source_ref": "protocol-v1:p20-p24"
+        },
+        {
+          "locator": "flow-table",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "09664b6640909010bd1b99de901f63f06586c9d30cebe137d690c2279e305b4f",
+          "source_ref": "protocol-v1:flow-table"
+        }
+      ],
       "review_episode": {
         "anchor_dates": {
           "screening_date": {
@@ -26046,13 +26464,15 @@
             "candidate-uat-05-baseline-clear-in",
             "gate-candidate-uat-05-baseline-clear-in",
             "gate-evidence-uat-05-baseline",
+            "context-episode-uat-05-baseline-clear-assessment-uat-05-baseline-clear-in",
+            "gate-uat-05-baseline-integrity-protocol-v1-phase-iii",
             "component-in-01",
             "run-uat-05-baseline-clear"
           ],
           "input_revision_map": {
             "episode-uat-05-baseline-clear": 1
           },
-          "input_scope_hash": "6a2334565942f83dea18361e86bafc518ac1abc5eba856522606294275038588",
+          "input_scope_hash": "52632c63b21938802f2341cf9a5c40983ecd957fd315ca6d356920fa17f1add1",
           "output_hash": "f98ea87492f98e75b2d6d30d75693b33fe779bf7b964888e431ff7143a095aed",
           "parent_event_id": null,
           "recompute_scope": [
@@ -26109,13 +26529,15 @@
             "candidate-uat-05-baseline-clear-ex",
             "gate-candidate-uat-05-baseline-clear-ex",
             "gate-evidence-uat-05-baseline",
+            "context-episode-uat-05-baseline-clear-assessment-uat-05-baseline-clear-ex",
+            "gate-uat-05-baseline-integrity-protocol-v1-phase-iii",
             "component-ex-01",
             "run-uat-05-baseline-clear"
           ],
           "input_revision_map": {
             "episode-uat-05-baseline-clear": 1
           },
-          "input_scope_hash": "5b8918ba43efdfb5c8f576a738791961bf9759d233008eb6fb6b97937b04b184",
+          "input_scope_hash": "9747e9d171ffc5aaa24d6b933d91cd1708091d11b88a9e3be60d88fd297bde16",
           "output_hash": "778da034aef43255fb959414e7d59d3e25d2d1a47651c931753a0d787e0fb4d2",
           "parent_event_id": null,
           "recompute_scope": [
@@ -26320,6 +26742,18 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_command": {
+        "action": "accept_protocol_authority",
+        "actor_id": "synthetic-uat-human-acceptance",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "event_sha256": "ae94cdcbbb137aedd8f6176274ecc36043c2c0326f6f0cbfc001f2f0468bbda6",
+        "occurred_at": "2026-08-12T12:00:00Z",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
@@ -26877,6 +27311,32 @@
         ],
         "study_phase": "phase_iii"
       },
+      "protocol_source_records": [
+        {
+          "locator": "p1",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "b491f1b1b8d4c378ee2881e01e35de62f60f4351d2ad0f836d0dcff6f39c8d90",
+          "source_ref": "protocol-v1:p1"
+        },
+        {
+          "locator": "p20-p24",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "66cf33d8f29b18ebaca9f7bf2ed0bc1908a23f04244ffd51d1afcbb131bae4af",
+          "source_ref": "protocol-v1:p20-p24"
+        },
+        {
+          "locator": "flow-table",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "09664b6640909010bd1b99de901f63f06586c9d30cebe137d690c2279e305b4f",
+          "source_ref": "protocol-v1:flow-table"
+        }
+      ],
       "review_episode": {
         "anchor_dates": {
           "baseline_date": {
@@ -28310,13 +28770,15 @@
             "candidate-uat-06-screening-barrier-in",
             "gate-candidate-uat-06-screening-barrier-in",
             "gate-evidence-uat-06-screening",
+            "context-episode-uat-06-screening-barrier-assessment-uat-06-screening-barrier-in",
+            "gate-uat-06-screening-integrity-protocol-v1-phase-iii",
             "component-in-01",
             "run-uat-06-screening-barrier"
           ],
           "input_revision_map": {
             "episode-uat-06-screening-barrier": 1
           },
-          "input_scope_hash": "561929cd72e36c10f67ae7670e8d96c9fd9b8ebb38bfe9c97c110eece817376c",
+          "input_scope_hash": "f3c8aa9ba7632b0548f9304c9c4df697046ca555781e9cfdf3cc37e840f6546a",
           "output_hash": "93bf381cb6a42c317384e599c959d329ce414db6eb6ee7a657b16e8d5e924043",
           "parent_event_id": null,
           "recompute_scope": [
@@ -28373,13 +28835,15 @@
             "candidate-uat-06-screening-barrier-ex",
             "gate-candidate-uat-06-screening-barrier-ex",
             "gate-evidence-uat-06-screening",
+            "context-episode-uat-06-screening-barrier-assessment-uat-06-screening-barrier-ex",
+            "gate-uat-06-screening-integrity-protocol-v1-phase-iii",
             "component-ex-01",
             "run-uat-06-screening-barrier"
           ],
           "input_revision_map": {
             "episode-uat-06-screening-barrier": 1
           },
-          "input_scope_hash": "449cd9266288dcb4135410427ad34760ed7ccc31ab09c9186dbc7a976a524fc9",
+          "input_scope_hash": "a4cafd588aa87665424c57597372b4aa7324dd137cac1b84838fe825bdf54fd5",
           "output_hash": "d907ec81db6be3df2761de63d0e4be2a0321a19ba750e90b275bdb6ae90f2845",
           "parent_event_id": null,
           "recompute_scope": [
@@ -28556,6 +29020,18 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_command": {
+        "action": "accept_protocol_authority",
+        "actor_id": "synthetic-uat-human-acceptance",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "event_sha256": "ae94cdcbbb137aedd8f6176274ecc36043c2c0326f6f0cbfc001f2f0468bbda6",
+        "occurred_at": "2026-08-12T12:00:00Z",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
@@ -29113,6 +29589,32 @@
         ],
         "study_phase": "phase_iii"
       },
+      "protocol_source_records": [
+        {
+          "locator": "p1",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "b491f1b1b8d4c378ee2881e01e35de62f60f4351d2ad0f836d0dcff6f39c8d90",
+          "source_ref": "protocol-v1:p1"
+        },
+        {
+          "locator": "p20-p24",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "66cf33d8f29b18ebaca9f7bf2ed0bc1908a23f04244ffd51d1afcbb131bae4af",
+          "source_ref": "protocol-v1:p20-p24"
+        },
+        {
+          "locator": "flow-table",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "09664b6640909010bd1b99de901f63f06586c9d30cebe137d690c2279e305b4f",
+          "source_ref": "protocol-v1:flow-table"
+        }
+      ],
       "review_episode": {
         "anchor_dates": {
           "screening_date": {
@@ -30536,13 +31038,15 @@
             "candidate-uat-06-baseline-barrier-in",
             "gate-candidate-uat-06-baseline-barrier-in",
             "gate-evidence-uat-06-baseline",
+            "context-episode-uat-06-baseline-barrier-assessment-uat-06-baseline-barrier-in",
+            "gate-uat-06-baseline-integrity-protocol-v1-phase-iii",
             "component-in-01",
             "run-uat-06-baseline-barrier"
           ],
           "input_revision_map": {
             "episode-uat-06-baseline-barrier": 1
           },
-          "input_scope_hash": "8eba2e9116ab39f7eaea41fa71ec64e19374b44ff564d4f202b2cc297e8919b4",
+          "input_scope_hash": "04c0eed57c050d71ce4e814e4c73f476cfe97e2ea849247ef70271c15b5d8a64",
           "output_hash": "10d667abe021fe9afbe273092e6f142b5b7c0a1ce60278cb62312e5167fffa28",
           "parent_event_id": null,
           "recompute_scope": [
@@ -30599,13 +31103,15 @@
             "candidate-uat-06-baseline-barrier-ex",
             "gate-candidate-uat-06-baseline-barrier-ex",
             "gate-evidence-uat-06-baseline",
+            "context-episode-uat-06-baseline-barrier-assessment-uat-06-baseline-barrier-ex",
+            "gate-uat-06-baseline-integrity-protocol-v1-phase-iii",
             "component-ex-01",
             "run-uat-06-baseline-barrier"
           ],
           "input_revision_map": {
             "episode-uat-06-baseline-barrier": 1
           },
-          "input_scope_hash": "af8923f4bde0d5a09dd69fe4c3bd7b8aa5dc163fa5e08c3818d3388d0f65171c",
+          "input_scope_hash": "bc7f7a4b06a7461d5a9c75f6a7b1a7569bcb5d190b222782602e17054011d15b",
           "output_hash": "805734165e407e99baa8a0a0d1164c49615319b8a1423b2f41f3cc5d59676327",
           "parent_event_id": null,
           "recompute_scope": [
@@ -30782,6 +31288,18 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_command": {
+        "action": "accept_protocol_authority",
+        "actor_id": "synthetic-uat-human-acceptance",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "event_sha256": "ae94cdcbbb137aedd8f6176274ecc36043c2c0326f6f0cbfc001f2f0468bbda6",
+        "occurred_at": "2026-08-12T12:00:00Z",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
@@ -31339,6 +31857,32 @@
         ],
         "study_phase": "phase_iii"
       },
+      "protocol_source_records": [
+        {
+          "locator": "p1",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "b491f1b1b8d4c378ee2881e01e35de62f60f4351d2ad0f836d0dcff6f39c8d90",
+          "source_ref": "protocol-v1:p1"
+        },
+        {
+          "locator": "p20-p24",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "66cf33d8f29b18ebaca9f7bf2ed0bc1908a23f04244ffd51d1afcbb131bae4af",
+          "source_ref": "protocol-v1:p20-p24"
+        },
+        {
+          "locator": "flow-table",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "09664b6640909010bd1b99de901f63f06586c9d30cebe137d690c2279e305b4f",
+          "source_ref": "protocol-v1:flow-table"
+        }
+      ],
       "review_episode": {
         "anchor_dates": {
           "baseline_date": {
@@ -32759,13 +33303,15 @@
             "candidate-uat-07-pre_screening-clear-in",
             "gate-candidate-uat-07-pre_screening-clear-in",
             "gate-evidence-uat-07-pre_screening",
+            "context-episode-uat-07-pre_screening-clear-assessment-uat-07-pre_screening-clear-in",
+            "gate-uat-07-pre_screening-integrity-protocol-v1-phase-iii",
             "component-in-01",
             "run-uat-07-pre_screening-clear"
           ],
           "input_revision_map": {
             "episode-uat-07-pre_screening-clear": 1
           },
-          "input_scope_hash": "e043f95c6dcd604335cbb401edd47f61bf5c7e128d63384b4ef0a8c24f83b22f",
+          "input_scope_hash": "c9252fe6d743d88877f0cc011a501ce407d1a067baf44c21ef3386f574578475",
           "output_hash": "a28c827ec386157297b691773cf93069d239a0beb3f0947f5adf4080945f5d66",
           "parent_event_id": null,
           "recompute_scope": [
@@ -32822,13 +33368,15 @@
             "candidate-uat-07-pre_screening-clear-ex",
             "gate-candidate-uat-07-pre_screening-clear-ex",
             "gate-evidence-uat-07-pre_screening",
+            "context-episode-uat-07-pre_screening-clear-assessment-uat-07-pre_screening-clear-ex",
+            "gate-uat-07-pre_screening-integrity-protocol-v1-phase-iii",
             "component-ex-01",
             "run-uat-07-pre_screening-clear"
           ],
           "input_revision_map": {
             "episode-uat-07-pre_screening-clear": 1
           },
-          "input_scope_hash": "ebde08f2065ef21bdd1afef0864aa95b84a80816033a03f012464f44d260efa9",
+          "input_scope_hash": "1a4888a32cb2072f530751e4fcc054d0f53df8580d5bbe6b5d54fa6dd6e13ac4",
           "output_hash": "ea136de1c47bc20601b195f73d74a06e3f0ec337285816ec6c5c884c0824016b",
           "parent_event_id": null,
           "recompute_scope": [
@@ -33065,6 +33613,18 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_command": {
+        "action": "accept_protocol_authority",
+        "actor_id": "synthetic-uat-human-acceptance",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "event_sha256": "ae94cdcbbb137aedd8f6176274ecc36043c2c0326f6f0cbfc001f2f0468bbda6",
+        "occurred_at": "2026-08-12T12:00:00Z",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
@@ -33622,6 +34182,32 @@
         ],
         "study_phase": "phase_iii"
       },
+      "protocol_source_records": [
+        {
+          "locator": "p1",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "b491f1b1b8d4c378ee2881e01e35de62f60f4351d2ad0f836d0dcff6f39c8d90",
+          "source_ref": "protocol-v1:p1"
+        },
+        {
+          "locator": "p20-p24",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "66cf33d8f29b18ebaca9f7bf2ed0bc1908a23f04244ffd51d1afcbb131bae4af",
+          "source_ref": "protocol-v1:p20-p24"
+        },
+        {
+          "locator": "flow-table",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "09664b6640909010bd1b99de901f63f06586c9d30cebe137d690c2279e305b4f",
+          "source_ref": "protocol-v1:flow-table"
+        }
+      ],
       "review_episode": {
         "anchor_dates": {
           "icf_date": {
@@ -35587,13 +36173,15 @@
             "candidate-uat-08-run_in-gap-in",
             "gate-candidate-uat-08-run_in-gap-in",
             "gate-evidence-uat-08-run_in",
+            "context-episode-uat-08-run_in-gap_conflict-assessment-uat-08-run_in-gap-in",
+            "gate-uat-08-run_in-integrity-protocol-v1-phase-iii",
             "component-in-01",
             "run-uat-08-run_in-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "ba7f9fd40a4afc2c3793364aa5aff3d808779fca7eac7c407776cede996945c3",
+          "input_scope_hash": "7427c6d7f1795ec993f7805e211d7b5154801f16afe277ccf046d072bb9362e1",
           "output_hash": "c0218efc4112973e5ab21c3ea74072f12c6f3c6e06a6ff41ec3e98a59c3b5a8a",
           "parent_event_id": null,
           "recompute_scope": [
@@ -35650,13 +36238,15 @@
             "candidate-uat-08-run_in-gap-ex",
             "gate-candidate-uat-08-run_in-gap-ex",
             "gate-evidence-uat-08-run_in",
+            "context-episode-uat-08-run_in-gap_conflict-assessment-uat-08-run_in-gap-ex",
+            "gate-uat-08-run_in-integrity-protocol-v1-phase-iii",
             "component-ex-01",
             "run-uat-08-run_in-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "4827eacc565358cf66166393d7cb749378c82da0595550ae0b00592e7d3e816e",
+          "input_scope_hash": "d18ec374b22b0a602b41cdba1cb718d055c8bead75818c7ef19e1eb08ade3376",
           "output_hash": "b86145f8ee8782a93015aad6251caa886e308459a78b1ac81f12a5054704a04e",
           "parent_event_id": null,
           "recompute_scope": [
@@ -35713,13 +36303,15 @@
             "candidate-uat-08-run_in-gap-professional",
             "gate-candidate-uat-08-run_in-gap-professional",
             "gate-evidence-uat-08-run_in",
+            "context-episode-uat-08-run_in-gap_conflict-assessment-uat-08-run_in-gap-professional",
+            "gate-uat-08-run_in-integrity-protocol-v1-phase-iii",
             "component-ex-02",
             "run-uat-08-run_in-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "421b5303d4fb4f8b7f408c38a6068fd22bf05b941d425c72d1bf9e50c49a088c",
+          "input_scope_hash": "8fe5e3a1c3da0a42541d79f9a7a4bec574f4c0140da60e7d04098a56ad6c1756",
           "output_hash": "6f5fd67f9e7653a7d8de47bb5b567cdebed5ee97c99e80ca92407caadaaafc16",
           "parent_event_id": null,
           "recompute_scope": [
@@ -35776,13 +36368,15 @@
             "candidate-uat-08-run_in-gap-future",
             "gate-candidate-uat-08-run_in-gap-future",
             "gate-evidence-uat-08-run_in",
+            "context-episode-uat-08-run_in-gap_conflict-assessment-uat-08-run_in-gap-future",
+            "gate-uat-08-run_in-integrity-protocol-v1-phase-iii",
             "component-ex-03",
             "run-uat-08-run_in-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "ffd66fcb8041736c77910ea253ed99ef3e341924549179b61780048c6a7bb96a",
+          "input_scope_hash": "c2f0b0b1f6677408b5a87c7023446c73bd5556966233e04b24b96cf42566cc03",
           "output_hash": "ee2f1f59caf02d3545ee5395bdafde7dec955c93e030f87c9738addee2a76321",
           "parent_event_id": null,
           "recompute_scope": [
@@ -35839,13 +36433,15 @@
             "candidate-uat-08-run_in-gap-referenced",
             "gate-candidate-uat-08-run_in-gap-referenced",
             "gate-evidence-uat-08-run_in",
+            "context-episode-uat-08-run_in-gap_conflict-assessment-uat-08-run_in-gap-referenced",
+            "gate-uat-08-run_in-integrity-protocol-v1-phase-iii",
             "component-ex-04",
             "run-uat-08-run_in-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "3ce0b2222cdd29ce514b513afec34bfb37298a6ac54d7fedee4331ff71c01e54",
+          "input_scope_hash": "790ce0f7d013febb957be766310e9c50223478fe9a373d39470702a4b7272459",
           "output_hash": "35a7c60fc54717bb34ee9fa819b7453cfc9054392b8d25ac78283f17a4ef7704",
           "parent_event_id": null,
           "recompute_scope": [
@@ -35902,13 +36498,15 @@
             "candidate-uat-08-run_in-gap-procedure",
             "gate-candidate-uat-08-run_in-gap-procedure",
             "gate-evidence-uat-08-run_in",
+            "context-episode-uat-08-run_in-gap_conflict-assessment-uat-08-run_in-gap-procedure",
+            "gate-uat-08-run_in-integrity-protocol-v1-phase-iii",
             "component-req-01",
             "run-uat-08-run_in-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "3a83d217543d0b5002c2aeb255652c049f19bb5b61a419a1ca74abeca36a2f78",
+          "input_scope_hash": "92b0fd332d8625a8eaaa49ba048e37cb968780fd3c0e0ca07bdb9ab26128493b",
           "output_hash": "0c3c68ba728038687bfedecfaa70a8fe2a78e14acb73386f1da7109630395708",
           "parent_event_id": null,
           "recompute_scope": [
@@ -35965,13 +36563,15 @@
             "candidate-uat-08-run_in-gap-result-fields",
             "gate-candidate-uat-08-run_in-gap-result-fields",
             "gate-evidence-uat-08-run_in",
+            "context-episode-uat-08-run_in-gap_conflict-assessment-uat-08-run_in-gap-result-fields",
+            "gate-uat-08-run_in-integrity-protocol-v1-phase-iii",
             "component-req-02",
             "run-uat-08-run_in-gap_conflict"
           ],
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "c7aee3fc902ce21a1c1e7ce1370dfe46e2fb8f95aecafbcb353bd9d5368f6834",
+          "input_scope_hash": "132bfb3b4838fec3841fc0d05ec0a4628bb2ade50f7a8c27dd2984caa0eb2107",
           "output_hash": "03a081fb603708620d8162dea8ab69a2409a04ee9ff55d53c76eb92fd950c00d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -36590,6 +37190,18 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_command": {
+        "action": "accept_protocol_authority",
+        "actor_id": "synthetic-uat-human-acceptance",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "event_sha256": "ae94cdcbbb137aedd8f6176274ecc36043c2c0326f6f0cbfc001f2f0468bbda6",
+        "occurred_at": "2026-08-12T12:00:00Z",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
@@ -37147,6 +37759,32 @@
         ],
         "study_phase": "phase_iii"
       },
+      "protocol_source_records": [
+        {
+          "locator": "p1",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "b491f1b1b8d4c378ee2881e01e35de62f60f4351d2ad0f836d0dcff6f39c8d90",
+          "source_ref": "protocol-v1:p1"
+        },
+        {
+          "locator": "p20-p24",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "66cf33d8f29b18ebaca9f7bf2ed0bc1908a23f04244ffd51d1afcbb131bae4af",
+          "source_ref": "protocol-v1:p20-p24"
+        },
+        {
+          "locator": "flow-table",
+          "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "protocol_version_id": "protocol-v1",
+          "schema_version": "fixture/v1",
+          "source_record_sha256": "09664b6640909010bd1b99de901f63f06586c9d30cebe137d690c2279e305b4f",
+          "source_ref": "protocol-v1:flow-table"
+        }
+      ],
       "review_episode": {
         "anchor_dates": {
           "screening_date": {

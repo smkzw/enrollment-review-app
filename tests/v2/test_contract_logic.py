@@ -47,6 +47,7 @@ from app.domain.contracts.review import (
     FinalAssessment,
     PredicateObservation,
     ProtocolDocumentVersion,
+    ReviewEpisode,
 )
 from app.domain.contracts.rules import (
     AtomicExpression,
@@ -70,6 +71,9 @@ from app.domain.gates import (
     AssessmentGateError,
     build_protocol_integrity_manifest,
     build_protocol_authority_confirmation,
+    build_protocol_source_record,
+    build_review_context_snapshot,
+    build_service_command_event,
     derive_action_blocking_level,
     publish_action_request,
     publish_assessment,
@@ -87,6 +91,7 @@ from app.domain.publication import _build_gate_owned_model, canonical_hash
 from app.domain.gates.actions import ActionPublication
 from app.domain.gates.assessment import AssessmentPublication
 from app.domain.rollup import derive_episode_rollup, publish_episode_rollup
+from app.domain.registry import _issue_trusted_registry
 
 
 EVALUATION_SCOPE = {
@@ -288,6 +293,7 @@ def evidence_normalizer_call() -> AgentCallContract:
             "output_kind": AgentOutputKind.CANDIDATE,
             "write_scope": AgentWriteScope.EVIDENCE_CANDIDATE,
             "idempotency_key": "episode-1:evidence",
+            "gate_result_ids": ["gate-call-evidence-1"],
         }
     )
 
@@ -378,58 +384,141 @@ def test_assessment_rejects_facts_not_in_accepted_evidence_candidate() -> None:
             evidence_span_ids=["span-accepted"],
         )
     ]
-    accepted_spans = [evidence_span("span-accepted")]
-    normalized = evidence_candidate(accepted_facts, accepted_spans)
-    evidence_call = bind_agent_call(evidence_normalizer_call(), normalized)
-    evidence_gate = publish_evidence_acceptance(
-        candidate=normalized,
-        agent_call=evidence_call,
-        agent_call_gate_result=agent_call_gate(evidence_call),
-        gate_result_id="gate-evidence-accepted",
-        input_revision_map={"episode-1": 1},
-        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
-    )
     value = align_candidate(
         candidate(ComponentDecision.EXCLUSION_NOT_TRIGGERED, []),
         component,
         accepted_facts,
     )
-    call = bind_agent_call(eligibility_call(), value)
-    candidate_gate = publish_assessment_candidate_acceptance(
-        value,
-        agent_call=call,
-        agent_call_gate_result=agent_call_gate(call),
-        gate_result_id="gate-candidate-evidence-substitution",
-        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+    legitimate = publish_test_assessment(
+        value, component=component, facts=accepted_facts
     )
-    substituted = normalized.model_copy(
+    substituted = legitimate.evidence_candidate.model_copy(
         update={
             "clinical_fact_candidates": [
                 accepted_facts[0].model_copy(update={"value": True})
             ]
         }
     )
+    forged_evidence_call = bind_agent_call(
+        evidence_normalizer_call(), substituted
+    )
+    forged_evidence_gate = publish_evidence_acceptance(
+        candidate=substituted,
+        agent_call=forged_evidence_call,
+        agent_call_gate_result=agent_call_gate(forged_evidence_call),
+        gate_result_id=legitimate.evidence_gate_result.gate_result_id,
+        input_revision_map={"episode-1": 1},
+        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+    )
     with pytest.raises(
-        ValueError, match="typed output|accepted Evidence Candidate"
+        ValueError, match="typed output|accepted Evidence Candidate|已登记版本"
     ):
         publish_assessment(
             value,
-            agent_call=call,
-            agent_call_gate_result=agent_call_gate(call),
-            candidate_gate_result=candidate_gate,
-            evidence_gate_result=evidence_gate,
+            agent_call=legitimate.agent_call,
+            agent_call_gate_result=legitimate.agent_call_gate_result,
+            candidate_gate_result=legitimate.candidate_gate_result,
+            evidence_gate_result=forged_evidence_gate,
             evidence_candidate=substituted,
-            evidence_agent_call=evidence_call,
-            evidence_agent_call_gate_result=agent_call_gate(evidence_call),
-            rule_set=gate_rule_set(component),
-            anchor_dates={},
-            episode_stage=ReviewStage.SCREENING,
-            expectations=[],
-            conflict_groups=[],
+            evidence_agent_call=forged_evidence_call,
+            evidence_agent_call_gate_result=agent_call_gate(forged_evidence_call),
+            rule_set=legitimate.rule_set,
+            review_context=legitimate.review_context,
+            protocol_integrity_gate_result=legitimate.protocol_integrity_gate_result,
+            registry=registry_for_test_assessment(legitimate),
             assessment_id="assessment-evidence-substitution",
             gate_result_id="gate-assessment-evidence-substitution",
             input_revision_map={"episode-1": 1},
             created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        )
+
+
+def test_assessment_rejects_synchronously_rehashed_agent_candidate_chain() -> None:
+    component = gate_component()
+    facts = [
+        clinical_fact(
+            fact_id="fact-accepted",
+            fact_type="history.condition_present",
+            value=False,
+            polarity=FactPolarity.AFFIRMED,
+            certainty=1,
+            evidence_span_ids=["span-accepted"],
+        )
+    ]
+    value = align_candidate(
+        candidate(ComponentDecision.EXCLUSION_NOT_TRIGGERED, []), component, facts
+    )
+    legitimate = publish_test_assessment(value, component=component, facts=facts)
+    forged_candidate = value.model_copy(
+        update={"candidate_rationale": "同步重算后的伪造候选"}
+    )
+    forged_call = bind_agent_call(eligibility_call(), forged_candidate)
+    forged_gate = publish_assessment_candidate_acceptance(
+        forged_candidate,
+        agent_call=forged_call,
+        agent_call_gate_result=agent_call_gate(forged_call),
+        gate_result_id=legitimate.candidate_gate_result.gate_result_id,
+        created_at=legitimate.candidate_gate_result.created_at,
+    )
+    with pytest.raises(ValueError, match="已登记版本"):
+        publish_assessment(
+            forged_candidate,
+            agent_call=forged_call,
+            agent_call_gate_result=agent_call_gate(forged_call),
+            candidate_gate_result=forged_gate,
+            evidence_gate_result=legitimate.evidence_gate_result,
+            evidence_candidate=legitimate.evidence_candidate,
+            evidence_agent_call=legitimate.evidence_agent_call,
+            evidence_agent_call_gate_result=legitimate.evidence_agent_call_gate_result,
+            rule_set=legitimate.rule_set,
+            review_context=legitimate.review_context,
+            protocol_integrity_gate_result=legitimate.protocol_integrity_gate_result,
+            registry=registry_for_test_assessment(legitimate),
+            assessment_id=legitimate.assessment.assessment_id,
+            gate_result_id=legitimate.gate_result.gate_result_id,
+            input_revision_map=legitimate.gate_result.input_revision_map,
+            created_at=legitimate.gate_result.created_at,
+        )
+
+
+def test_assessment_rejects_same_id_revision_rule_set_replacement() -> None:
+    component = gate_component()
+    facts = [
+        clinical_fact(
+            fact_id="fact-accepted",
+            fact_type="history.condition_present",
+            value=False,
+            polarity=FactPolarity.AFFIRMED,
+            certainty=1,
+            evidence_span_ids=["span-accepted"],
+        )
+    ]
+    value = align_candidate(
+        candidate(ComponentDecision.EXCLUSION_NOT_TRIGGERED, []), component, facts
+    )
+    legitimate = publish_test_assessment(value, component=component, facts=facts)
+    replaced_rule = legitimate.rule_set.rules[0].model_copy(
+        update={"source_text": "同一ID和revision下被替换的规则原文"}
+    )
+    replaced_rule_set = legitimate.rule_set.model_copy(update={"rules": [replaced_rule]})
+    with pytest.raises(ValueError, match="已登记版本|完整规则集"):
+        publish_assessment(
+            legitimate.candidate,
+            agent_call=legitimate.agent_call,
+            agent_call_gate_result=legitimate.agent_call_gate_result,
+            candidate_gate_result=legitimate.candidate_gate_result,
+            evidence_gate_result=legitimate.evidence_gate_result,
+            evidence_candidate=legitimate.evidence_candidate,
+            evidence_agent_call=legitimate.evidence_agent_call,
+            evidence_agent_call_gate_result=legitimate.evidence_agent_call_gate_result,
+            rule_set=replaced_rule_set,
+            review_context=legitimate.review_context,
+            protocol_integrity_gate_result=legitimate.protocol_integrity_gate_result,
+            registry=registry_for_test_assessment(legitimate),
+            assessment_id=legitimate.assessment.assessment_id,
+            gate_result_id=legitimate.gate_result.gate_result_id,
+            input_revision_map=legitimate.gate_result.input_revision_map,
+            created_at=legitimate.gate_result.created_at,
         )
 
 
@@ -512,6 +601,57 @@ def publish_test_assessment(
         input_revision_map={"episode-1": 1},
         created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
     )
+    rules = gate_rule_set(component, rule_kind)
+    integrity_gate = GateResult(
+        gate_result_id="gate-protocol-integrity-test",
+        gate_name="protocol-integrity-gate",
+        result="accepted",
+        input_scope_hash="f" * 64,
+        input_revision_map={rules.rule_set_id: rules.revision},
+        input_entity_refs=[rules.protocol_version_id, rules.rule_set_id],
+        accepted_entity_refs=["manifest-test", rules.rule_set_id],
+        affected_scope=[rules.protocol_version_id],
+        recompute_scope=[rules.protocol_version_id],
+        idempotency_key="protocol-integrity:test",
+        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        output_hash="e" * 64,
+    )
+    review_context = build_review_context_snapshot(
+        context_id="context-episode-1-assessment-test-1",
+        review_episode=ReviewEpisode(
+            review_episode_id="episode-1",
+            subject_id="subject-1",
+            project_id="project-1",
+            rule_set_id=rules.rule_set_id,
+            study_phase=StudyPhase.PHASE_III,
+            stage=stage,
+            protocol_version_id="protocol-1",
+            rule_set_revision=rules.revision,
+            evidence_snapshot_id="snapshot-1",
+        ),
+        rule_set=rules,
+        protocol_integrity_gate_result=integrity_gate,
+        evidence_gate_result=evidence_gate,
+        expectations=expectations or [],
+        conflict_groups=conflicts or [],
+    )
+    registry = _issue_trusted_registry(
+        agent_calls=[call, evidence_call],
+        gate_results=[
+            agent_call_gate(call),
+            candidate_gate,
+            agent_call_gate(evidence_call),
+            evidence_gate,
+            integrity_gate,
+        ],
+        evidence_candidates=[normalized],
+        assessment_candidates=[value],
+        rule_sets=[rules],
+        review_contexts=[review_context],
+        protocol_integrity_bindings={
+            integrity_gate.gate_result_id: canonical_hash(rules.model_dump(mode="json"))
+        },
+    )
     return publish_assessment(
         value,
         agent_call=call,
@@ -521,15 +661,36 @@ def publish_test_assessment(
         evidence_candidate=normalized,
         evidence_agent_call=evidence_call,
         evidence_agent_call_gate_result=agent_call_gate(evidence_call),
-        rule_set=gate_rule_set(component, rule_kind),
-        anchor_dates={},
-        episode_stage=stage,
-        expectations=expectations or [],
-        conflict_groups=conflicts or [],
+        rule_set=rules,
+        review_context=review_context,
+        protocol_integrity_gate_result=integrity_gate,
+        registry=registry,
         assessment_id="assessment-test-1",
         gate_result_id="gate-assessment-test-1",
         input_revision_map={"episode-1": 1},
         created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+    )
+
+
+def registry_for_test_assessment(publication: AssessmentPublication):
+    return _issue_trusted_registry(
+        agent_calls=[publication.agent_call, publication.evidence_agent_call],
+        gate_results=[
+            publication.agent_call_gate_result,
+            publication.candidate_gate_result,
+            publication.evidence_agent_call_gate_result,
+            publication.evidence_gate_result,
+            publication.protocol_integrity_gate_result,
+        ],
+        evidence_candidates=[publication.evidence_candidate],
+        assessment_candidates=[publication.candidate],
+        rule_sets=[publication.rule_set],
+        review_contexts=[publication.review_context],
+        protocol_integrity_bindings={
+            publication.protocol_integrity_gate_result.gate_result_id: canonical_hash(
+                publication.rule_set.model_dump(mode="json")
+            )
+        },
     )
 
 
@@ -595,6 +756,7 @@ def action_request(gap: GapType) -> ActionPublication:
         gate_result_id=f"gate-action-{gap.value}",
         input_revision_map={"episode-1": 1},
         created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        registry=registry_for_test_assessment(assessment_input),
     )
 
 
@@ -1585,6 +1747,7 @@ def test_rollup_rejects_accepted_assessment_from_another_episode() -> None:
             gate_result_id="gate-rollup-cross-episode",
             input_revision_map={"episode-1": 1},
             created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+            registry=registry_for_test_assessment(valid),
         )
 
 
@@ -1697,16 +1860,39 @@ def test_protocol_integrity_uses_authoritative_manifest_not_caller_codes() -> No
         verified_by="test-reviewer",
         verified_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
     )
-    authority_confirmation = build_protocol_authority_confirmation(
-        confirmation_id="confirmation-1",
+    command = build_service_command_event(
         command_id="command-accept-authority-1",
         record=authority,
-        confirmed_by="test-reviewer",
-        confirmed_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        actor_id="test-reviewer",
+        occurred_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+    )
+    authority_registry = _issue_trusted_registry(
+        protocol_authority_records=[authority],
+        service_command_events=[command],
+    )
+    authority_confirmation = build_protocol_authority_confirmation(
+        confirmation_id="confirmation-1",
+        command_event=command,
+        record=authority,
+        registry=authority_registry,
+    )
+    source = build_protocol_source_record(
+        source_ref="protocol-1:p1",
+        protocol_version_id="protocol-1",
+        protocol_document_sha256="a" * 64,
+        locator="p1",
+    )
+    protocol_registry = _issue_trusted_registry(
+        protocol_authority_records=[authority],
+        protocol_authority_confirmations=[authority_confirmation],
+        service_command_events=[command],
+        protocol_source_records=[source],
+        rule_sets=[rules],
     )
     authority_gate = publish_protocol_authority_acceptance(
         authority,
         confirmation=authority_confirmation,
+        registry=protocol_registry,
         gate_result_id="gate-authority-1",
         created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
     )
@@ -1719,6 +1905,7 @@ def test_protocol_integrity_uses_authoritative_manifest_not_caller_codes() -> No
         authority_record=authority,
         authority_confirmation=authority_confirmation,
         authority_gate_result=authority_gate,
+        registry=protocol_registry,
     )
     protocol = ProtocolDocumentVersion(
         protocol_version_id="protocol-1",
@@ -1735,10 +1922,11 @@ def test_protocol_integrity_uses_authoritative_manifest_not_caller_codes() -> No
     mismatched_confirmation = authority_confirmation.model_copy(
         update={"protocol_document_sha256": "b" * 64}
     )
-    with pytest.raises(ValueError, match="精确绑定"):
+    with pytest.raises(ValueError, match="精确绑定|已登记版本"):
         publish_protocol_authority_acceptance(
             authority,
             confirmation=mismatched_confirmation,
+            registry=protocol_registry,
             gate_result_id="gate-authority-mismatch",
             created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
         )
@@ -1751,6 +1939,7 @@ def test_protocol_integrity_uses_authoritative_manifest_not_caller_codes() -> No
             authority_record=authority,
             authority_confirmation=authority_confirmation,
             authority_gate_result=authority_gate,
+            registry=protocol_registry,
         )
 
 
@@ -1817,6 +2006,7 @@ def test_action_publication_round_trip_and_tamper_rejection() -> None:
     assert (
         validate_action_publication(
             publication,
+            registry_for_test_assessment(publication.assessment_publication),
         )
         == publication.gate_result
     )
@@ -1836,6 +2026,7 @@ def test_action_publication_round_trip_and_tamper_rejection() -> None:
                 gate_result=publication.gate_result,
                 assessment_publication=source_assessment,
             ),
+            registry_for_test_assessment(publication.assessment_publication),
         )
 
 

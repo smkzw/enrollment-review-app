@@ -9,3 +9,10 @@
 7. 编写设计 token、响应式、证据查看器、键盘和中文状态词合同。
 8. 编写 Phase 1 UAT 任务、指标、临时阈值和停止条件。
 9. 重跑完整测试、schema 重生成差异检查和独立 checker。
+
+## 2026-08-13 第五次复核后的检查点
+
+- 服务端只读发布注册表与版本化审核上下文已落地，发布函数不能再用待发布对象自建信任。
+- 方案确认事件、来源记录、RuleSet 完整哈希、typed Candidate 和 Fixture Fact/Span 已进入同一发布闭包。
+- V2 `115 passed + 2 subtests`；默认全套 `245 passed, 1 skipped + 18 subtests`；legacy `130 passed, 1 skipped`；8 个生成制品双跑一致。
+- 当前仍等待同一 Luna checker 第六次验收；任务保持 `in_progress`，Phase 1 未创建。

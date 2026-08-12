@@ -14,11 +14,16 @@ from app.domain.contracts.enums import ReviewStage
 from app.domain.gates import (
     assessment_publication_from_fixture,
     assert_protocol_integrity,
+    build_protocol_authority_confirmation,
+    build_protocol_source_record,
+    build_service_command_event,
     require_protocol_integrity_acceptance,
     validate_action_publication,
     validate_fixture_scope,
 )
 from app.domain.gates.actions import ActionPublication
+from app.domain.gates.integrity import _trusted_registry_from_fixture
+from app.domain.registry import _issue_trusted_registry
 from app.domain.rollup import publish_episode_rollup
 
 
@@ -77,8 +82,9 @@ def test_fixture_references_are_internally_consistent() -> None:
             authority_gate_result=gate_by_id[
                 fixture.project.protocol_version.authority_gate_result_id
             ],
+            registry=_trusted_registry_from_fixture(fixture),
         )
-        validate_fixture_scope(fixture)
+        validate_fixture_scope(fixture, _trusted_registry_from_fixture(fixture))
         span_ids = {item.evidence_span_id for item in fixture.evidence_spans}
         fact_ids = {item.fact_id for item in fixture.facts}
         component_ids = {
@@ -144,15 +150,16 @@ def test_fixture_references_are_internally_consistent() -> None:
             assert prompt_by_id[call.prompt_version_id].node == call.node
             assert call.model_config_id in model_ids
         for action in fixture.actions:
-            validate_action_publication(
+                validate_action_publication(
                 ActionPublication(
                     action=action,
                     gate_result=gate_by_id[action.gate_result_id],
                     assessment_publication=assessment_publication_from_fixture(
                         fixture, action.assessment_id
                     ),
-                ),
-            )
+                    ),
+                    _trusted_registry_from_fixture(fixture),
+                )
         for run in fixture.review_runs:
             assert run.review_episode_id == fixture.review_episode.review_episode_id
             assert run.protocol_version_id == fixture.review_episode.protocol_version_id
@@ -196,6 +203,7 @@ def test_fixture_rollups_match_scenario_semantics() -> None:
                 fixture.review_episode.review_episode_id: fixture.review_episode.revision
             },
             created_at=fixture.review_runs[0].started_at,
+            registry=_trusted_registry_from_fixture(fixture),
         )
         assert publication.rollup.main_status.value == expected[fixture.scenario]
         assert publication.rollup.model_dump(mode="json") == fixture.episode_rollup.model_dump(mode="json")
@@ -279,7 +287,7 @@ def test_uat_workspace_has_executable_multistage_coverage() -> None:
     assert len(workspace.primary_subject_ids) == 6
     assert {item.review_episode.stage for item in workspace.episodes} == set(ReviewStage)
     for fixture in workspace.episodes:
-        validate_fixture_scope(fixture)
+        validate_fixture_scope(fixture, _trusted_registry_from_fixture(fixture))
         gate_by_id = {item.gate_result_id: item for item in fixture.gate_results}
         assert_protocol_integrity(
             fixture.rule_set,
@@ -291,6 +299,7 @@ def test_uat_workspace_has_executable_multistage_coverage() -> None:
             authority_gate_result=gate_by_id[
                 fixture.project.protocol_version.authority_gate_result_id
             ],
+            registry=_trusted_registry_from_fixture(fixture),
         )
 
 
@@ -426,33 +435,38 @@ def test_protocol_integrity_gate_rejects_tampered_stored_closure() -> None:
             authority_record=fixture.protocol_authority_record,
             authority_confirmation=fixture.protocol_authority_confirmation,
             authority_gate_result=authority_gate,
+            registry=_trusted_registry_from_fixture(fixture),
         )
 
 
 def test_stage_isolation_gate_rejects_cross_project_episode() -> None:
     fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
+    registry = _trusted_registry_from_fixture(fixture)
     invalid_episode = fixture.review_episode.model_copy(update={"project_id": "project-other"})
     invalid_fixture = fixture.model_copy(update={"review_episode": invalid_episode})
     with pytest.raises(ValueError, match="project_id"):
-        validate_fixture_scope(invalid_fixture)
+        validate_fixture_scope(invalid_fixture, registry)
 
 
 def test_stage_isolation_gate_rejects_future_stage_source() -> None:
     fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
+    registry = _trusted_registry_from_fixture(fixture)
     future_document = fixture.source_documents[0].model_copy(update={"review_stage": "baseline"})
     invalid_fixture = fixture.model_copy(update={"source_documents": [future_document]})
     with pytest.raises(ValueError, match="未来阶段"):
-        validate_fixture_scope(invalid_fixture)
+        validate_fixture_scope(invalid_fixture, registry)
 
 
 def test_stage_isolation_rejects_cross_subject_fact_and_rejected_publication_gate() -> None:
     fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
+    registry = _trusted_registry_from_fixture(fixture)
     cross_subject_fact = fixture.facts[0].model_copy(update={"subject_id": "subject-other"})
-    with pytest.raises(ValueError, match="ClinicalFact 超出"):
+    with pytest.raises(ValueError, match="ClinicalFact 超出|accepted Evidence Candidate"):
         validate_fixture_scope(
             fixture.model_copy(
                 update={"facts": [cross_subject_fact, *fixture.facts[1:]]}
-            )
+            ),
+            registry,
         )
 
     assessment = fixture.final_assessments[0]
@@ -473,7 +487,9 @@ def test_stage_isolation_rejects_cross_subject_fact_and_rejected_publication_gat
         for gate in fixture.gate_results
     ]
     with pytest.raises(ValueError, match="FinalAssessment 未通过"):
-        validate_fixture_scope(fixture.model_copy(update={"gate_results": gates}))
+        validate_fixture_scope(
+            fixture.model_copy(update={"gate_results": gates}), registry
+        )
 
 
 def test_protocol_diff_codes_are_derived_from_real_rule_sets() -> None:
@@ -481,3 +497,54 @@ def test_protocol_diff_codes_are_derived_from_real_rule_sets() -> None:
     payload["protocol_diff"]["added_rule_codes"] = ["EX-99"]
     with pytest.raises(ValueError, match="实际差异"):
         UatWorkspaceFixture.model_validate(payload)
+
+
+def test_fixture_rejects_synchronously_rehashed_service_command() -> None:
+    fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
+    registry = _trusted_registry_from_fixture(fixture)
+    forged_command = build_service_command_event(
+        command_id=fixture.protocol_authority_command.command_id,
+        record=fixture.protocol_authority_record,
+        actor_id="other-reviewer",
+        occurred_at=fixture.protocol_authority_command.occurred_at,
+    )
+    forged_registry = _issue_trusted_registry(
+        protocol_authority_records=[fixture.protocol_authority_record],
+        service_command_events=[forged_command],
+    )
+    forged_confirmation = build_protocol_authority_confirmation(
+        confirmation_id=fixture.protocol_authority_confirmation.confirmation_id,
+        command_event=forged_command,
+        record=fixture.protocol_authority_record,
+        registry=forged_registry,
+    )
+    forged_fixture = fixture.model_copy(
+        update={
+            "protocol_authority_command": forged_command,
+            "protocol_authority_confirmation": forged_confirmation,
+        }
+    )
+    with pytest.raises(ValueError, match="已登记版本"):
+        validate_fixture_scope(forged_fixture, registry)
+
+
+def test_fixture_rejects_synchronously_rehashed_protocol_source() -> None:
+    fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
+    registry = _trusted_registry_from_fixture(fixture)
+    original = fixture.protocol_source_records[0]
+    forged_source = build_protocol_source_record(
+        source_ref=original.source_ref,
+        protocol_version_id=original.protocol_version_id,
+        protocol_document_sha256=original.protocol_document_sha256,
+        locator=f"{original.locator}-changed",
+    )
+    forged_fixture = fixture.model_copy(
+        update={
+            "protocol_source_records": [
+                forged_source,
+                *fixture.protocol_source_records[1:],
+            ]
+        }
+    )
+    with pytest.raises(ValueError, match="已登记版本"):
+        validate_fixture_scope(forged_fixture, registry)

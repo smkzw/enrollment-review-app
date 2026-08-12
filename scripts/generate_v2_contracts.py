@@ -88,9 +88,12 @@ from app.domain.contracts.rules import (
 from app.domain.contracts.uat import ProtocolDiffExample, UatWorkspaceFixture
 from app.domain.expression import EvaluationContext, evaluate_component, evaluate_expression
 from app.domain.gates import (
+    build_review_context_snapshot,
     build_protocol_authority_record,
     build_protocol_authority_confirmation,
     build_protocol_integrity_manifest,
+    build_protocol_source_record,
+    build_service_command_event,
     derive_component_decision,
     derive_gate_gap_types,
     publish_action_request,
@@ -104,6 +107,7 @@ from app.domain.gates.assessment import AssessmentPublication
 from app.domain.gates.actions import ActionPublication
 from app.domain.rollup import publish_episode_rollup
 from app.domain.publication import canonical_hash
+from app.domain.registry import _issue_trusted_registry
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -505,16 +509,43 @@ def base_objects(suffix: str, rules: RuleSet):
         verified_by="synthetic-uat-human-acceptance",
         verified_at=NOW,
     )
-    authority_confirmation = build_protocol_authority_confirmation(
-        confirmation_id="confirmation-protocol-v1-phase-iii",
+    authority_command = build_service_command_event(
         command_id="command-accept-protocol-v1-phase-iii",
         record=authority_record,
-        confirmed_by="synthetic-uat-human-acceptance",
-        confirmed_at=NOW,
+        actor_id="synthetic-uat-human-acceptance",
+        occurred_at=NOW,
+    )
+    authority_registry = _issue_trusted_registry(
+        protocol_authority_records=[authority_record],
+        service_command_events=[authority_command],
+    )
+    authority_confirmation = build_protocol_authority_confirmation(
+        confirmation_id="confirmation-protocol-v1-phase-iii",
+        command_event=authority_command,
+        record=authority_record,
+        registry=authority_registry,
+    )
+    source_refs = ["protocol-v1:p1", "protocol-v1:p20-p24", "protocol-v1:flow-table"]
+    source_records = [
+        build_protocol_source_record(
+            source_ref=source_ref,
+            protocol_version_id="protocol-v1",
+            protocol_document_sha256="a" * 64,
+            locator=source_ref.split(":", 1)[1],
+        )
+        for source_ref in source_refs
+    ]
+    protocol_registry = _issue_trusted_registry(
+        protocol_authority_records=[authority_record],
+        protocol_authority_confirmations=[authority_confirmation],
+        service_command_events=[authority_command],
+        protocol_source_records=source_records,
+        rule_sets=[rules],
     )
     authority_gate = publish_protocol_authority_acceptance(
         authority_record,
         confirmation=authority_confirmation,
+        registry=protocol_registry,
         gate_result_id="gate-authority-protocol-v1-phase-iii",
         created_at=NOW,
     )
@@ -523,10 +554,11 @@ def base_objects(suffix: str, rules: RuleSet):
         protocol_version_id="protocol-v1",
         protocol_document_sha256="a" * 64,
         study_phase=StudyPhase.PHASE_III,
-        source_refs=["protocol-v1:p1", "protocol-v1:p20-p24", "protocol-v1:flow-table"],
+        source_refs=source_refs,
         authority_record=authority_record,
         authority_confirmation=authority_confirmation,
         authority_gate_result=authority_gate,
+        registry=protocol_registry,
     )
     protocol = ProtocolDocumentVersion(
         protocol_version_id="protocol-v1",
@@ -548,6 +580,7 @@ def base_objects(suffix: str, rules: RuleSet):
         authority_record=authority_record,
         authority_confirmation=authority_confirmation,
         authority_gate_result=authority_gate,
+        registry=protocol_registry,
         gate_result_id=protocol.integrity_gate_result_id,
         input_revision_map={rules.rule_set_id: rules.revision},
         created_at=NOW,
@@ -610,7 +643,9 @@ def base_objects(suffix: str, rules: RuleSet):
     return (
         project,
         authority_record,
+        authority_command,
         authority_confirmation,
+        source_records,
         authority_gate,
         integrity_gate,
         manifest,
@@ -738,6 +773,7 @@ def publish_fixture_assessment(
     expectations: list[EvidenceExpectation],
     conflict_groups: list[ConflictGroup],
     gate_results: list[GateResult],
+    protocol_integrity_gate_result: GateResult,
     *,
     assessment_id: str,
     review_run_id: str,
@@ -782,6 +818,35 @@ def publish_fixture_assessment(
                     input_revision_map={episode.review_episode_id: episode.revision},
                     created_at=NOW,
                 )
+                review_context = build_review_context_snapshot(
+                    context_id=(
+                        f"context-{episode.review_episode_id}-{assessment_id}"
+                    ),
+                    review_episode=episode,
+                    rule_set=rules,
+                    protocol_integrity_gate_result=protocol_integrity_gate_result,
+                    evidence_gate_result=evidence_gate,
+                    expectations=expectations,
+                    conflict_groups=conflict_groups,
+                )
+                registry = _issue_trusted_registry(
+                    agent_calls=[agent_call, evidence_agent_call],
+                    gate_results=[
+                        agent_output_gate(agent_call),
+                        agent_output_gate(evidence_agent_call),
+                        candidate_gate,
+                        evidence_gate,
+                        protocol_integrity_gate_result,
+                    ],
+                    evidence_candidates=[normalized],
+                    assessment_candidates=[candidate],
+                    rule_sets=[rules],
+                    review_contexts=[review_context],
+                    protocol_integrity_bindings={
+                        protocol_integrity_gate_result.gate_result_id:
+                        canonical_hash(rules.model_dump(mode="json"))
+                    },
+                )
                 publication = publish_assessment(
                     candidate,
                     agent_call=agent_call,
@@ -794,10 +859,9 @@ def publish_fixture_assessment(
                         evidence_agent_call
                     ),
                     rule_set=rules,
-                    anchor_dates=episode.anchor_dates,
-                    episode_stage=episode.stage,
-                    expectations=expectations,
-                    conflict_groups=conflict_groups,
+                    review_context=review_context,
+                    protocol_integrity_gate_result=protocol_integrity_gate_result,
+                    registry=registry,
                     assessment_id=assessment_id,
                     gate_result_id=gate_result_id,
                     input_revision_map={episode.review_episode_id: episode.revision},
@@ -829,6 +893,7 @@ def fixture_action(
         gate_result_id=f"gate-{action_id}",
         input_revision_map={episode.review_episode_id: episode.revision},
         created_at=NOW,
+        registry=registry_for_assessments(assessments),
     )
     gate_results.append(publication.gate_result)
     return publication.action
@@ -846,12 +911,70 @@ def refresh_assessment_agent_gate(
     ]
 
 
+def registry_for_assessments(
+    publications: list[AssessmentPublication],
+):
+    def unique(values, id_field):
+        by_id = {}
+        for item in values:
+            entity_id = getattr(item, id_field)
+            prior = by_id.get(entity_id)
+            if prior is not None and canonical_hash(
+                prior.model_dump(mode="json")
+            ) != canonical_hash(item.model_dump(mode="json")):
+                raise ValueError(f"同一登记 ID 对应不同内容: {entity_id}")
+            by_id[entity_id] = item
+        return list(by_id.values())
+
+    contexts = [item.review_context for item in publications]
+    return _issue_trusted_registry(
+        agent_calls=unique(
+            [
+                value
+                for item in publications
+                for value in [item.agent_call, item.evidence_agent_call]
+            ],
+            "agent_call_id",
+        ),
+        gate_results=unique(
+            [
+                value
+                for item in publications
+                for value in [
+                    item.agent_call_gate_result,
+                    item.candidate_gate_result,
+                    item.evidence_agent_call_gate_result,
+                    item.evidence_gate_result,
+                    item.protocol_integrity_gate_result,
+                ]
+            ],
+            "gate_result_id",
+        ),
+        evidence_candidates=unique(
+            [item.evidence_candidate for item in publications], "candidate_id"
+        ),
+        assessment_candidates=unique(
+            [item.candidate for item in publications], "assessment_candidate_id"
+        ),
+        rule_sets=unique([item.rule_set for item in publications], "rule_set_id"),
+        review_contexts=unique(contexts, "context_id"),
+        protocol_integrity_bindings={
+            item.protocol_integrity_gate_result.gate_result_id: canonical_hash(
+                item.rule_set.model_dump(mode="json")
+            )
+            for item in publications
+        },
+    )
+
+
 def build_fixture(scenario: str) -> FixtureV1:
     rules = rule_set()
     (
         project,
         authority_record,
+        authority_command,
         authority_confirmation,
+        source_records,
         authority_gate,
         integrity_gate,
         manifest,
@@ -951,8 +1074,8 @@ def build_fixture(scenario: str) -> FixtureV1:
             ),
         ]
         final = [
-            publish_fixture_assessment(rules, candidates[0], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, assessment_id="assessment-clear-in", review_run_id=review_run.review_run_id, gate_result_id="gate-clear-in"),
-            publish_fixture_assessment(rules, candidates[1], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, assessment_id="assessment-clear-ex", review_run_id=review_run.review_run_id, gate_result_id="gate-clear-ex"),
+            publish_fixture_assessment(rules, candidates[0], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-clear-in", review_run_id=review_run.review_run_id, gate_result_id="gate-clear-in"),
+            publish_fixture_assessment(rules, candidates[1], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-clear-ex", review_run_id=review_run.review_run_id, gate_result_id="gate-clear-ex"),
         ]
         final = refresh_assessment_agent_gate(final, calls[1])
         actions = [
@@ -1068,8 +1191,8 @@ def build_fixture(scenario: str) -> FixtureV1:
             ),
         ]
         final = [
-            publish_fixture_assessment(rules, candidates[0], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, assessment_id="assessment-barrier-in", review_run_id=review_run.review_run_id, gate_result_id="gate-barrier-in"),
-            publish_fixture_assessment(rules, candidates[1], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, assessment_id="assessment-barrier-ex", review_run_id=review_run.review_run_id, gate_result_id="gate-barrier-ex"),
+            publish_fixture_assessment(rules, candidates[0], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-barrier-in", review_run_id=review_run.review_run_id, gate_result_id="gate-barrier-in"),
+            publish_fixture_assessment(rules, candidates[1], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-barrier-ex", review_run_id=review_run.review_run_id, gate_result_id="gate-barrier-ex"),
         ]
         final = refresh_assessment_agent_gate(final, calls[1])
     else:
@@ -1226,13 +1349,13 @@ def build_fixture(scenario: str) -> FixtureV1:
             ),
         ]
         final = [
-            publish_fixture_assessment(rules, candidates[0], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, assessment_id="assessment-gap-in", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-in"),
-            publish_fixture_assessment(rules, candidates[1], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, assessment_id="assessment-gap-ex", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-ex"),
-            publish_fixture_assessment(rules, candidates[2], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, assessment_id="assessment-gap-professional", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-professional"),
-            publish_fixture_assessment(rules, candidates[3], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, assessment_id="assessment-gap-future", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-future"),
-            publish_fixture_assessment(rules, candidates[4], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, assessment_id="assessment-gap-referenced", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-referenced"),
-            publish_fixture_assessment(rules, candidates[5], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, assessment_id="assessment-gap-procedure", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-procedure"),
-            publish_fixture_assessment(rules, candidates[6], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, assessment_id="assessment-gap-result-fields", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-result-fields"),
+            publish_fixture_assessment(rules, candidates[0], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-gap-in", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-in"),
+            publish_fixture_assessment(rules, candidates[1], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-gap-ex", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-ex"),
+            publish_fixture_assessment(rules, candidates[2], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-gap-professional", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-professional"),
+            publish_fixture_assessment(rules, candidates[3], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-gap-future", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-future"),
+            publish_fixture_assessment(rules, candidates[4], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-gap-referenced", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-referenced"),
+            publish_fixture_assessment(rules, candidates[5], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-gap-procedure", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-procedure"),
+            publish_fixture_assessment(rules, candidates[6], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-gap-result-fields", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-result-fields"),
         ]
         final = refresh_assessment_agent_gate(final, calls[1])
         actions = [
@@ -1393,6 +1516,7 @@ def build_fixture(scenario: str) -> FixtureV1:
         gate_result_id=f"gate-rollup-{scenario}",
         input_revision_map={episode.review_episode_id: episode.revision},
         created_at=NOW,
+        registry=registry_for_assessments(assessment_publications),
     )
     publication_gate_results.append(rollup_publication.gate_result)
     gates = [agent_output_gate(call) for call in calls] + [
@@ -1458,7 +1582,9 @@ def build_fixture(scenario: str) -> FixtureV1:
         scenario=scenario,
         project=project,
         protocol_authority_record=authority_record,
+        protocol_authority_command=authority_command,
         protocol_authority_confirmation=authority_confirmation,
+        protocol_source_records=source_records,
         protocol_integrity_manifest=manifest,
         rule_set=rules,
         workflow_stages=stages,
@@ -1677,6 +1803,19 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
     episode = ReviewEpisode.model_validate(payload["review_episode"])
     rules = RuleSet.model_validate(payload["rule_set"])
     authority_gate_for_namespace = GateResult.model_validate(authority_gate_payload)
+    authority_record_for_namespace = type(
+        base.protocol_authority_record
+    ).model_validate(payload["protocol_authority_record"])
+    authority_confirmation_for_namespace = type(
+        base.protocol_authority_confirmation
+    ).model_validate(payload["protocol_authority_confirmation"])
+    protocol_registry_for_namespace = _issue_trusted_registry(
+        protocol_authority_records=[authority_record_for_namespace],
+        protocol_authority_confirmations=[authority_confirmation_for_namespace],
+        service_command_events=[base.protocol_authority_command],
+        protocol_source_records=base.protocol_source_records,
+        rule_sets=[rules],
+    )
     integrity_gate_for_namespace = publish_protocol_integrity_acceptance(
         rules,
         workflow_stages=[
@@ -1688,13 +1827,10 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
         manifest=type(base.protocol_integrity_manifest).model_validate(
             payload["protocol_integrity_manifest"]
         ),
-        authority_record=type(base.protocol_authority_record).model_validate(
-            payload["protocol_authority_record"]
-        ),
-        authority_confirmation=type(
-            base.protocol_authority_confirmation
-        ).model_validate(payload["protocol_authority_confirmation"]),
+        authority_record=authority_record_for_namespace,
+        authority_confirmation=authority_confirmation_for_namespace,
         authority_gate_result=authority_gate_for_namespace,
+        registry=protocol_registry_for_namespace,
         gate_result_id=payload["project"]["protocol_version"][
             "integrity_gate_result_id"
         ],
@@ -1923,6 +2059,38 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
             gate_result_id=f"gate-{candidate.assessment_candidate_id}",
             created_at=NOW,
         )
+        review_context = build_review_context_snapshot(
+            context_id=(
+                f"context-{episode.review_episode_id}-{old['assessment_id']}"
+            ),
+            review_episode=episode,
+            rule_set=rules,
+            protocol_integrity_gate_result=integrity_gate_for_namespace,
+            evidence_gate_result=evidence_gate,
+            expectations=expectations,
+            conflict_groups=conflicts,
+        )
+        registry = _issue_trusted_registry(
+            agent_calls=[
+                call_by_id[candidate.agent_call_id], evidence_agent_call
+            ],
+            gate_results=[
+                agent_gate_by_call_id[candidate.agent_call_id],
+                candidate_gate,
+                agent_gate_by_call_id[evidence_agent_call.agent_call_id],
+                evidence_gate,
+                integrity_gate_for_namespace,
+            ],
+            evidence_candidates=[normalized],
+            assessment_candidates=[candidate],
+            rule_sets=[rules],
+            review_contexts=[review_context],
+            protocol_integrity_bindings={
+                integrity_gate_for_namespace.gate_result_id: canonical_hash(
+                    rules.model_dump(mode="json")
+                )
+            },
+        )
         publication = publish_assessment(
             candidate,
             agent_call=call_by_id[candidate.agent_call_id],
@@ -1937,10 +2105,9 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
                 evidence_agent_call.agent_call_id
             ],
             rule_set=rules,
-            anchor_dates=episode.anchor_dates,
-            episode_stage=stage,
-            expectations=expectations,
-            conflict_groups=conflicts,
+            review_context=review_context,
+            protocol_integrity_gate_result=integrity_gate_for_namespace,
+            registry=registry,
             assessment_id=old["assessment_id"],
             gate_result_id=old["gate_result_id"],
             input_revision_map={episode.review_episode_id: episode.revision},
@@ -1996,6 +2163,7 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
             gate_result_id=f"gate-{action_id}",
             input_revision_map={episode.review_episode_id: episode.revision},
             created_at=NOW,
+            registry=registry_for_assessments(assessment_publications),
         )
         actions.append(publication.action)
         action_publications.append(publication)
@@ -2010,6 +2178,7 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
         gate_result_id=rollup_gate_id,
         input_revision_map={episode.review_episode_id: episode.revision},
         created_at=NOW,
+        registry=registry_for_assessments(assessment_publications),
     )
     publication_gates.append(rollup_publication.gate_result)
 

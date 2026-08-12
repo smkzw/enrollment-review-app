@@ -5,7 +5,9 @@ from app.domain.contracts.rules import (
     ProtocolAuthorityConfirmation,
     ProtocolAuthorityRecord,
     ProtocolIntegrityManifest,
+    ProtocolSourceRecord,
     RuleSet,
+    ServiceCommandEvent,
     WorkflowStage,
 )
 from app.domain.contracts.agents import GateResult
@@ -25,6 +27,19 @@ class ProtocolIntegrityError(ValueError):
 
 class StageIsolationError(ValueError):
     pass
+
+
+def _agent_schema_gate(fixture: FixtureV1, agent_call):
+    matches = [
+        gate
+        for gate in fixture.gate_results
+        if gate.gate_result_id in agent_call.gate_result_ids
+        and gate.gate_name == "agent-output-schema-gate"
+        and agent_call.agent_call_id in gate.input_entity_refs
+    ]
+    if len(matches) != 1:
+        raise StageIsolationError("AgentCall 必须唯一绑定自己的结构化输出验收结果")
+    return matches[0]
 
 
 def assessment_publication_from_fixture(
@@ -70,6 +85,20 @@ def assessment_publication_from_fixture(
         and item.gate_name == "evidence-acceptance-gate"
         and evidence_candidate.candidate_id in item.accepted_entity_refs
     )
+    from app.domain.gates.assessment import build_review_context_snapshot
+
+    integrity_gate = gate_by_id[
+        fixture.project.protocol_version.integrity_gate_result_id
+    ]
+    review_context = build_review_context_snapshot(
+        context_id=f"context-{assessment.review_episode_id}-{assessment.assessment_id}",
+        review_episode=fixture.review_episode,
+        rule_set=fixture.rule_set,
+        protocol_integrity_gate_result=integrity_gate,
+        evidence_gate_result=evidence_gate,
+        expectations=fixture.evidence_expectations,
+        conflict_groups=fixture.conflict_groups,
+    )
     return AssessmentPublication(
         assessment=assessment,
         gate_result=assessment_gate,
@@ -77,17 +106,42 @@ def assessment_publication_from_fixture(
         candidate=candidate,
         candidate_gate_result=candidate_gate,
         agent_call=agent_call,
-        agent_call_gate_result=gate_by_id[agent_call.gate_result_ids[0]],
+        agent_call_gate_result=_agent_schema_gate(fixture, agent_call),
         evidence_candidate=evidence_candidate,
         evidence_gate_result=evidence_gate,
         evidence_agent_call=evidence_agent_call,
-        evidence_agent_call_gate_result=gate_by_id[
-            evidence_agent_call.gate_result_ids[0]
-        ],
-        anchor_dates=fixture.review_episode.anchor_dates,
-        episode_stage=fixture.review_episode.stage,
-        expectations=fixture.evidence_expectations,
-        conflict_groups=fixture.conflict_groups,
+        evidence_agent_call_gate_result=_agent_schema_gate(
+            fixture, evidence_agent_call
+        ),
+        review_context=review_context,
+        protocol_integrity_gate_result=integrity_gate,
+    )
+
+
+def _trusted_registry_from_fixture(fixture: FixtureV1):
+    """Test/bootstrap adapter for already persisted canonical fixtures only."""
+    from app.domain.registry import _issue_trusted_registry
+
+    contexts = [
+        assessment_publication_from_fixture(fixture, assessment.assessment_id).review_context
+        for assessment in fixture.final_assessments
+    ]
+    return _issue_trusted_registry(
+        agent_calls=fixture.agent_calls,
+        gate_results=fixture.gate_results,
+        evidence_candidates=fixture.evidence_normalization_candidates,
+        assessment_candidates=fixture.assessment_candidates,
+        rule_sets=[fixture.rule_set],
+        review_contexts=contexts,
+        protocol_authority_records=[fixture.protocol_authority_record],
+        protocol_authority_confirmations=[fixture.protocol_authority_confirmation],
+        service_command_events=[fixture.protocol_authority_command],
+        protocol_source_records=fixture.protocol_source_records,
+        protocol_integrity_bindings={
+            fixture.project.protocol_version.integrity_gate_result_id: canonical_hash(
+                fixture.rule_set.model_dump(mode="json")
+            )
+        },
     )
 
 
@@ -141,23 +195,84 @@ def build_protocol_authority_record(
     )
 
 
+def build_protocol_source_record(
+    *,
+    source_ref: str,
+    protocol_version_id: str,
+    protocol_document_sha256: str,
+    locator: str,
+) -> ProtocolSourceRecord:
+    data = {
+        "source_ref": source_ref,
+        "protocol_version_id": protocol_version_id,
+        "protocol_document_sha256": protocol_document_sha256,
+        "locator": locator,
+    }
+    draft = ProtocolSourceRecord.model_construct(
+        **data, source_record_sha256="0" * 64
+    )
+    return ProtocolSourceRecord(
+        **data,
+        source_record_sha256=canonical_hash(
+            draft.model_dump(mode="json", exclude={"source_record_sha256"})
+        ),
+    )
+
+
+def build_service_command_event(
+    *,
+    command_id: str,
+    record: ProtocolAuthorityRecord,
+    actor_id: str,
+    occurred_at: datetime,
+) -> ServiceCommandEvent:
+    data = {
+        "command_id": command_id,
+        "action": "accept_protocol_authority",
+        "protocol_version_id": record.protocol_version_id,
+        "authority_record_id": record.authority_record_id,
+        "authority_record_sha256": record.authority_record_sha256,
+        "actor_id": actor_id,
+        "occurred_at": occurred_at,
+        "recorded_by_service": "enrollment-review-app",
+    }
+    draft = ServiceCommandEvent.model_construct(**data, event_sha256="0" * 64)
+    return ServiceCommandEvent(
+        **data,
+        event_sha256=canonical_hash(
+            draft.model_dump(mode="json", exclude={"event_sha256"})
+        ),
+    )
+
+
 def build_protocol_authority_confirmation(
     *,
     confirmation_id: str,
-    command_id: str,
+    command_event: ServiceCommandEvent,
     record: ProtocolAuthorityRecord,
-    confirmed_by: str,
-    confirmed_at: datetime,
+    registry,
 ) -> ProtocolAuthorityConfirmation:
+    registry.require(
+        "protocol_authority_record", record.authority_record_id, record
+    )
+    registry.require(
+        "service_command_event", command_event.command_id, command_event
+    )
+    if (
+        command_event.protocol_version_id != record.protocol_version_id
+        or command_event.authority_record_id != record.authority_record_id
+        or command_event.authority_record_sha256 != record.authority_record_sha256
+    ):
+        raise ProtocolIntegrityError("应用服务操作事件未绑定当前方案权威记录")
     data = {
         "confirmation_id": confirmation_id,
-        "command_id": command_id,
+        "command_id": command_event.command_id,
         "protocol_version_id": record.protocol_version_id,
         "protocol_document_sha256": record.protocol_document_sha256,
         "authority_record_id": record.authority_record_id,
         "authority_record_sha256": record.authority_record_sha256,
-        "confirmed_by": confirmed_by,
-        "confirmed_at": confirmed_at,
+        "confirmed_by": command_event.actor_id,
+        "confirmed_at": command_event.occurred_at,
         "action": "accept_protocol_authority",
         "recorded_by_service": "enrollment-review-app",
     }
@@ -176,12 +291,31 @@ def build_protocol_authority_confirmation(
 def _require_authority_confirmation(
     record: ProtocolAuthorityRecord,
     confirmation: ProtocolAuthorityConfirmation,
+    *,
+    registry,
 ) -> None:
+    registry.require(
+        "protocol_authority_record", record.authority_record_id, record
+    )
+    registry.require(
+        "protocol_authority_confirmation",
+        confirmation.confirmation_id,
+        confirmation,
+    )
+    command_event = registry.require(
+        "service_command_event", confirmation.command_id
+    )
     if (
         confirmation.protocol_version_id != record.protocol_version_id
         or confirmation.protocol_document_sha256 != record.protocol_document_sha256
         or confirmation.authority_record_id != record.authority_record_id
         or confirmation.authority_record_sha256 != record.authority_record_sha256
+        or confirmation.confirmed_by != command_event.actor_id
+        or confirmation.confirmed_at != command_event.occurred_at
+        or confirmation.protocol_version_id != command_event.protocol_version_id
+        or confirmation.authority_record_id != command_event.authority_record_id
+        or confirmation.authority_record_sha256
+        != command_event.authority_record_sha256
     ):
         raise ProtocolIntegrityError(
             "人工确认事件必须精确绑定方案文件与 ProtocolAuthorityRecord"
@@ -192,10 +326,11 @@ def publish_protocol_authority_acceptance(
     record: ProtocolAuthorityRecord,
     *,
     confirmation: ProtocolAuthorityConfirmation,
+    registry,
     gate_result_id: str,
     created_at: datetime,
 ) -> GateResult:
-    _require_authority_confirmation(record, confirmation)
+    _require_authority_confirmation(record, confirmation, registry=registry)
     payload = {
         "authority_record": record.model_dump(mode="json"),
         "confirmation": confirmation.model_dump(mode="json"),
@@ -231,8 +366,19 @@ def assert_protocol_integrity(
     authority_record: ProtocolAuthorityRecord,
     authority_confirmation: ProtocolAuthorityConfirmation,
     authority_gate_result: GateResult,
+    registry,
 ) -> None:
-    _require_authority_confirmation(authority_record, authority_confirmation)
+    _require_authority_confirmation(
+        authority_record, authority_confirmation, registry=registry
+    )
+    registry.require("rule_set", rule_set.rule_set_id, rule_set)
+    for source_ref in manifest.source_refs:
+        source = registry.require("protocol_source_record", source_ref)
+        if (
+            source.protocol_version_id != protocol_version.protocol_version_id
+            or source.protocol_document_sha256 != protocol_version.sha256
+        ):
+            raise ProtocolIntegrityError("Manifest 来源未绑定当前正式方案文件")
     if (
         manifest.protocol_version_id != protocol_version.protocol_version_id
         or manifest.protocol_document_sha256 != protocol_version.sha256
@@ -253,6 +399,7 @@ def assert_protocol_integrity(
     expected_authority_gate = publish_protocol_authority_acceptance(
         authority_record,
         confirmation=authority_confirmation,
+        registry=registry,
         gate_result_id=protocol_version.authority_gate_result_id,
         created_at=authority_gate_result.created_at,
     )
@@ -292,6 +439,7 @@ def publish_protocol_integrity_acceptance(
     authority_record: ProtocolAuthorityRecord,
     authority_confirmation: ProtocolAuthorityConfirmation,
     authority_gate_result: GateResult,
+    registry,
     gate_result_id: str,
     input_revision_map: dict[str, int],
     created_at: datetime,
@@ -304,6 +452,7 @@ def publish_protocol_integrity_acceptance(
         authority_record=authority_record,
         authority_confirmation=authority_confirmation,
         authority_gate_result=authority_gate_result,
+        registry=registry,
     )
     if gate_result_id != protocol_version.integrity_gate_result_id:
         raise ProtocolIntegrityError("ProtocolVersion 未绑定当前 Integrity Gate ID")
@@ -352,6 +501,7 @@ def require_protocol_integrity_acceptance(
     authority_record: ProtocolAuthorityRecord,
     authority_confirmation: ProtocolAuthorityConfirmation,
     authority_gate_result: GateResult,
+    registry,
 ) -> None:
     expected = publish_protocol_integrity_acceptance(
         rule_set,
@@ -361,6 +511,7 @@ def require_protocol_integrity_acceptance(
         authority_record=authority_record,
         authority_confirmation=authority_confirmation,
         authority_gate_result=authority_gate_result,
+        registry=registry,
         gate_result_id=protocol_version.integrity_gate_result_id,
         input_revision_map=gate_result.input_revision_map,
         created_at=gate_result.created_at,
@@ -379,11 +530,22 @@ def build_protocol_integrity_manifest(
     authority_record: ProtocolAuthorityRecord,
     authority_confirmation: ProtocolAuthorityConfirmation,
     authority_gate_result: GateResult,
+    registry,
 ) -> ProtocolIntegrityManifest:
-    _require_authority_confirmation(authority_record, authority_confirmation)
+    _require_authority_confirmation(
+        authority_record, authority_confirmation, registry=registry
+    )
+    for source_ref in source_refs:
+        source = registry.require("protocol_source_record", source_ref)
+        if (
+            source.protocol_version_id != protocol_version_id
+            or source.protocol_document_sha256 != protocol_document_sha256
+        ):
+            raise ProtocolIntegrityError("Manifest 来源未绑定当前方案版本和文件")
     expected_authority_gate = publish_protocol_authority_acceptance(
         authority_record,
         confirmation=authority_confirmation,
+        registry=registry,
         gate_result_id=authority_gate_result.gate_result_id,
         created_at=authority_gate_result.created_at,
     )
@@ -425,7 +587,7 @@ def build_protocol_integrity_manifest(
     )
 
 
-def validate_fixture_scope(fixture: FixtureV1) -> None:
+def validate_fixture_scope(fixture: FixtureV1, registry) -> None:
     project = fixture.project
     episode = fixture.review_episode
     snapshot = fixture.evidence_snapshot
@@ -441,6 +603,17 @@ def validate_fixture_scope(fixture: FixtureV1) -> None:
     )
     if authority_gate_result is None:
         raise StageIsolationError("Fixture 缺少方案权威人工验收 Gate")
+    registry.require(
+        "service_command_event",
+        fixture.protocol_authority_command.command_id,
+        fixture.protocol_authority_command,
+    )
+    if set(fixture.protocol_integrity_manifest.source_refs) != {
+        item.source_ref for item in fixture.protocol_source_records
+    }:
+        raise StageIsolationError("Manifest 来源集合与服务端方案来源记录不一致")
+    for source in fixture.protocol_source_records:
+        registry.require("protocol_source_record", source.source_ref, source)
     assert_protocol_integrity(
         fixture.rule_set,
         workflow_stages=fixture.workflow_stages,
@@ -449,6 +622,7 @@ def validate_fixture_scope(fixture: FixtureV1) -> None:
         authority_record=fixture.protocol_authority_record,
         authority_confirmation=fixture.protocol_authority_confirmation,
         authority_gate_result=authority_gate_result,
+        registry=registry,
     )
     integrity_gate_result = next(
         (
@@ -470,6 +644,7 @@ def validate_fixture_scope(fixture: FixtureV1) -> None:
         authority_record=fixture.protocol_authority_record,
         authority_confirmation=fixture.protocol_authority_confirmation,
         authority_gate_result=authority_gate_result,
+        registry=registry,
     )
     if fixture.subject.project_id != project.project_id:
         raise StageIsolationError("Subject 必须属于当前 Project")
@@ -623,18 +798,40 @@ def validate_fixture_scope(fixture: FixtureV1) -> None:
                 "EvidenceNormalizationCandidate 未通过 Evidence Gate 发布"
             )
         try:
-            require_accepted_evidence_gate(
-                evidence_gates[0],
-                candidate=candidate,
-                agent_call=call,
-                agent_call_gate_result=gate_by_id[call.gate_result_ids[0]],
-            )
+            for evidence_gate in evidence_gates:
+                require_accepted_evidence_gate(
+                    evidence_gate,
+                    candidate=candidate,
+                    agent_call=call,
+                    agent_call_gate_result=_agent_schema_gate(fixture, call),
+                )
         except ValueError as exc:
             raise StageIsolationError(str(exc)) from exc
     if normalized_fact_ids != fact_ids or normalized_span_ids != span_ids:
         raise StageIsolationError(
             "Fixture 事实和 Span 必须完整来自 accepted Evidence Candidate"
         )
+    accepted_fact_by_id = {}
+    accepted_span_by_id = {}
+    for candidate in fixture.evidence_normalization_candidates:
+        for fact in candidate.clinical_fact_candidates:
+            if fact.fact_id in accepted_fact_by_id:
+                raise StageIsolationError("accepted Evidence Candidate 事实 ID 重复")
+            accepted_fact_by_id[fact.fact_id] = fact
+        for span in candidate.evidence_span_candidates:
+            if span.evidence_span_id in accepted_span_by_id:
+                raise StageIsolationError("accepted Evidence Candidate Span ID 重复")
+            accepted_span_by_id[span.evidence_span_id] = span
+    for fact in fixture.facts:
+        if canonical_hash(fact.model_dump(mode="json")) != canonical_hash(
+            accepted_fact_by_id[fact.fact_id].model_dump(mode="json")
+        ):
+            raise StageIsolationError("Fixture 事实与 accepted Evidence Candidate 内容不一致")
+    for span in fixture.evidence_spans:
+        if canonical_hash(span.model_dump(mode="json")) != canonical_hash(
+            accepted_span_by_id[span.evidence_span_id].model_dump(mode="json")
+        ):
+            raise StageIsolationError("Fixture Span 与 accepted Evidence Candidate 内容不一致")
     for fact in fixture.facts:
         if not set(fact.evidence_span_ids) <= span_ids:
             raise StageIsolationError("ClinicalFact 引用了当前快照外 EvidenceSpan")
@@ -711,7 +908,8 @@ def validate_fixture_scope(fixture: FixtureV1) -> None:
 
         try:
             validate_assessment_publication(
-                assessment_publication_from_fixture(fixture, assessment.assessment_id)
+                assessment_publication_from_fixture(fixture, assessment.assessment_id),
+                registry,
             )
         except ValueError as exc:
             raise StageIsolationError(str(exc)) from exc
@@ -757,7 +955,8 @@ def validate_fixture_scope(fixture: FixtureV1) -> None:
 
         try:
             validate_action_publication(
-                action_publication_from_fixture(fixture, action.action_id)
+                action_publication_from_fixture(fixture, action.action_id),
+                registry,
             )
         except ValueError as exc:
             raise StageIsolationError(str(exc)) from exc
@@ -826,6 +1025,7 @@ def validate_fixture_scope(fixture: FixtureV1) -> None:
             gate_result_id=rollup.gate_result_id,
             input_revision_map=rollup_gate.input_revision_map,
             created_at=rollup_gate.created_at,
+            registry=registry,
         )
     except ValueError as exc:
         raise StageIsolationError(str(exc)) from exc

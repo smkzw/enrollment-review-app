@@ -26,6 +26,7 @@ from app.domain.gates.assessment import (
 )
 from app.domain.policies import derive_expectation_blocking_level
 from app.domain.publication import _build_gate_owned_model, canonical_hash
+from app.domain.registry import TrustedPublicationRegistry
 
 
 class EpisodeRollupPublication(VersionedModel):
@@ -123,11 +124,12 @@ def publish_episode_rollup(
     gate_result_id: str,
     input_revision_map: dict[str, int],
     created_at: datetime,
+    registry: TrustedPublicationRegistry,
 ) -> EpisodeRollupPublication:
     assessments = [item.assessment for item in assessment_publications]
     actions = [item.action for item in action_publications]
     for publication in assessment_publications:
-        validate_assessment_publication(publication)
+        validate_assessment_publication(publication, registry)
         assessment = publication.assessment
         gate = publication.gate_result
         if (
@@ -145,7 +147,7 @@ def publish_episode_rollup(
         action = publication.action
         if action.assessment_id not in assessment_ids:
             raise ValueError("EpisodeRollup Action 未引用当前输入 Assessment")
-        validate_action_publication(publication)
+        validate_action_publication(publication, registry)
         if (
             action.review_episode_id != review_episode_id
             or action.assessment_id not in assessment_ids

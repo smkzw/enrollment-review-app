@@ -282,6 +282,50 @@ class ProtocolAuthorityRecord(VersionedModel):
         return self
 
 
+class ProtocolSourceRecord(VersionedModel):
+    source_ref: str = Field(min_length=1)
+    protocol_version_id: str = Field(min_length=1)
+    protocol_document_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    locator: str = Field(min_length=1)
+    source_record_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def validate_source_record(self) -> "ProtocolSourceRecord":
+        from app.domain.publication import canonical_hash
+
+        if not self.source_ref.startswith(f"{self.protocol_version_id}:"):
+            raise ValueError("方案来源定位必须绑定当前方案版本")
+        expected = canonical_hash(
+            self.model_dump(mode="json", exclude={"source_record_sha256"})
+        )
+        if self.source_record_sha256 != expected:
+            raise ValueError("方案来源记录哈希无效")
+        return self
+
+
+class ServiceCommandEvent(VersionedModel):
+    command_id: str = Field(min_length=1)
+    action: Literal["accept_protocol_authority"] = "accept_protocol_authority"
+    protocol_version_id: str = Field(min_length=1)
+    authority_record_id: str = Field(min_length=1)
+    authority_record_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    actor_id: str = Field(min_length=1)
+    occurred_at: datetime
+    recorded_by_service: Literal["enrollment-review-app"] = "enrollment-review-app"
+    event_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def validate_event_hash(self) -> "ServiceCommandEvent":
+        from app.domain.publication import canonical_hash
+
+        expected = canonical_hash(
+            self.model_dump(mode="json", exclude={"event_sha256"})
+        )
+        if self.event_sha256 != expected:
+            raise ValueError("应用服务操作事件哈希无效")
+        return self
+
+
 class ProtocolAuthorityConfirmation(VersionedModel):
     confirmation_id: str = Field(min_length=1)
     command_id: str = Field(min_length=1)

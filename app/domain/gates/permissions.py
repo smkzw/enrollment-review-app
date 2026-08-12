@@ -32,5 +32,6 @@ def require_accepted_agent_call(
         or gate_result.input_scope_hash != agent_call.input_scope_hash
         or gate_result.input_revision_map != agent_call.input_revision_map
         or gate_result.output_hash != agent_call.output_hash
+        or gate_result.gate_result_id not in agent_call.gate_result_ids
     ):
         raise AgentPermissionError("AgentCall 未通过绑定输出哈希的 accepted GateResult")

@@ -3168,6 +3168,51 @@
       "title": "ProtocolIntegrityManifest",
       "type": "object"
     },
+    "ProtocolSourceRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "locator": {
+          "minLength": 1,
+          "title": "Locator",
+          "type": "string"
+        },
+        "protocol_document_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Protocol Document Sha256",
+          "type": "string"
+        },
+        "protocol_version_id": {
+          "minLength": 1,
+          "title": "Protocol Version Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "fixture/v1",
+          "default": "fixture/v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_record_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Record Sha256",
+          "type": "string"
+        },
+        "source_ref": {
+          "minLength": 1,
+          "title": "Source Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_ref",
+        "protocol_version_id",
+        "protocol_document_sha256",
+        "locator",
+        "source_record_sha256"
+      ],
+      "title": "ProtocolSourceRecord",
+      "type": "object"
+    },
     "ReferencedDocumentCandidate": {
       "additionalProperties": false,
       "properties": {
@@ -3669,6 +3714,75 @@
       "title": "RuntimeErrorCode",
       "type": "string"
     },
+    "ServiceCommandEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "const": "accept_protocol_authority",
+          "default": "accept_protocol_authority",
+          "title": "Action",
+          "type": "string"
+        },
+        "actor_id": {
+          "minLength": 1,
+          "title": "Actor Id",
+          "type": "string"
+        },
+        "authority_record_id": {
+          "minLength": 1,
+          "title": "Authority Record Id",
+          "type": "string"
+        },
+        "authority_record_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Authority Record Sha256",
+          "type": "string"
+        },
+        "command_id": {
+          "minLength": 1,
+          "title": "Command Id",
+          "type": "string"
+        },
+        "event_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Event Sha256",
+          "type": "string"
+        },
+        "occurred_at": {
+          "format": "date-time",
+          "title": "Occurred At",
+          "type": "string"
+        },
+        "protocol_version_id": {
+          "minLength": 1,
+          "title": "Protocol Version Id",
+          "type": "string"
+        },
+        "recorded_by_service": {
+          "const": "enrollment-review-app",
+          "default": "enrollment-review-app",
+          "title": "Recorded By Service",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "fixture/v1",
+          "default": "fixture/v1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command_id",
+        "protocol_version_id",
+        "authority_record_id",
+        "authority_record_sha256",
+        "actor_id",
+        "occurred_at",
+        "event_sha256"
+      ],
+      "title": "ServiceCommandEvent",
+      "type": "object"
+    },
     "SourceDocumentVersion": {
       "additionalProperties": false,
       "properties": {
@@ -4140,6 +4254,9 @@
       "title": "Prompt Versions",
       "type": "array"
     },
+    "protocol_authority_command": {
+      "$ref": "#/$defs/ServiceCommandEvent"
+    },
     "protocol_authority_confirmation": {
       "$ref": "#/$defs/ProtocolAuthorityConfirmation"
     },
@@ -4148,6 +4265,14 @@
     },
     "protocol_integrity_manifest": {
       "$ref": "#/$defs/ProtocolIntegrityManifest"
+    },
+    "protocol_source_records": {
+      "items": {
+        "$ref": "#/$defs/ProtocolSourceRecord"
+      },
+      "minItems": 1,
+      "title": "Protocol Source Records",
+      "type": "array"
     },
     "review_episode": {
       "$ref": "#/$defs/ReviewEpisode"
@@ -4203,7 +4328,9 @@
     "scenario",
     "project",
     "protocol_authority_record",
+    "protocol_authority_command",
     "protocol_authority_confirmation",
+    "protocol_source_records",
     "protocol_integrity_manifest",
     "rule_set",
     "workflow_stages",

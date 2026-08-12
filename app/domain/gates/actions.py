@@ -19,6 +19,7 @@ from app.domain.gates.assessment import (
 )
 from app.domain.policies import derive_action_blocking_level
 from app.domain.publication import _build_gate_owned_model, canonical_hash
+from app.domain.registry import TrustedPublicationRegistry
 
 
 class ActionGateError(ValueError):
@@ -54,13 +55,14 @@ def publish_action_request(
     gate_result_id: str,
     input_revision_map: dict[str, int],
     created_at: datetime,
+    registry: TrustedPublicationRegistry,
     trigger_evidence_span_id: str | None = None,
     transitions: list[ActionTransition] | None = None,
     revision: int = 1,
 ) -> ActionPublication:
     assessment = assessment_publication.assessment
     assessment_gate = assessment_publication.gate_result
-    validate_assessment_publication(assessment_publication)
+    validate_assessment_publication(assessment_publication, registry)
     if (
         assessment_gate.gate_name != "assessment-publication-gate"
         or assessment_gate.result != GateOutcome.ACCEPTED
@@ -137,13 +139,14 @@ def publish_action_request(
 
 def validate_action_publication(
     publication: ActionPublication,
+    registry: TrustedPublicationRegistry,
 ) -> GateResult:
     action = publication.action
     gate = publication.gate_result
     assessment_publication = publication.assessment_publication
     assessment = assessment_publication.assessment
     assessment_gate = assessment_publication.gate_result
-    validate_assessment_publication(assessment_publication)
+    validate_assessment_publication(assessment_publication, registry)
     _validate_action_request_state(action)
     if (
         gate.gate_name != "action-publication-gate"
@@ -197,6 +200,7 @@ def validate_action_publication(
         trigger_evidence_span_id=action.trigger_evidence_span_id,
         transitions=action.transitions,
         revision=action.revision,
+        registry=registry,
     )
     if publication.model_dump(mode="json") != expected.model_dump(mode="json"):
         raise ActionGateError("ActionPublication 未通过完整上游 Gate 闭包重算")
