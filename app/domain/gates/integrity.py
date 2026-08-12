@@ -802,6 +802,10 @@ def validate_fixture_scope(fixture: FixtureV1, registry) -> None:
         raise StageIsolationError("ReviewEpisode stage 不在项目工作流中")
 
     documents = {item.source_document_version_id: item for item in fixture.source_documents}
+    if len(snapshot.source_document_version_ids) != len(
+        set(snapshot.source_document_version_ids)
+    ):
+        raise StageIsolationError("证据快照来源文件引用不得重复")
     if set(snapshot.source_document_version_ids) != set(documents):
         raise StageIsolationError("EvidenceSnapshot 文件版本集合不完整或越界")
     for span in fixture.evidence_spans:
@@ -849,6 +853,10 @@ def validate_fixture_scope(fixture: FixtureV1, registry) -> None:
     }
     assessment_ids = set(assessment_by_id)
     for call in fixture.agent_calls:
+        if len(call.gate_result_ids) != len(set(call.gate_result_ids)):
+            raise StageIsolationError("AgentCall 验收结果引用不得重复")
+        if len(call.source_ids) != len(set(call.source_ids)):
+            raise StageIsolationError("AgentCall 来源文件引用不得重复")
         if (
             call.prompt_version_id not in prompt_by_id
             or call.model_config_id not in model_ids

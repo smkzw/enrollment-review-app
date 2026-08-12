@@ -738,6 +738,44 @@ def test_fixture_scope_rejects_exact_duplicate_top_level_entities() -> None:
         )
 
 
+def test_fixture_scope_rejects_duplicate_snapshot_and_agent_gate_references() -> None:
+    fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
+    duplicate_snapshot = fixture.evidence_snapshot.model_copy(
+        update={
+            "source_document_version_ids": [
+                fixture.source_documents[0].source_document_version_id,
+                fixture.source_documents[0].source_document_version_id,
+            ]
+        }
+    )
+    snapshot_fixture = fixture.model_copy(
+        update={"evidence_snapshot": duplicate_snapshot}
+    )
+    with pytest.raises(ValueError, match="证据快照"):
+        validate_fixture_scope(
+            snapshot_fixture, _trusted_registry_from_fixture(snapshot_fixture)
+        )
+
+    original_call = fixture.agent_calls[0]
+    duplicate_gate_call = original_call.model_copy(
+        update={
+            "gate_result_ids": [
+                original_call.gate_result_ids[0],
+                original_call.gate_result_ids[0],
+            ]
+        }
+    )
+    calls = [
+        duplicate_gate_call if item.agent_call_id == original_call.agent_call_id else item
+        for item in fixture.agent_calls
+    ]
+    call_fixture = fixture.model_copy(update={"agent_calls": calls})
+    with pytest.raises(ValueError, match="验收结果引用不得重复"):
+        validate_fixture_scope(
+            call_fixture, _trusted_registry_from_fixture(call_fixture)
+        )
+
+
 def test_stage_isolation_gate_rejects_cross_project_episode() -> None:
     fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
     registry = _trusted_registry_from_fixture(fixture)

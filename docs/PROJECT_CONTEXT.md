@@ -1644,3 +1644,18 @@ OCR concurrency note:
 - Fixture 对 19 类顶层/嵌套实体列表在任何 set/dict 折叠前执行 ID 唯一性检查，覆盖 checker 复现的相同 Fact、Span、Call、Document、Prompt、Model 重复以及相邻实体。
 - 新增跨未登记 protocol、Prompt 节点漂移、ProtocolVersion/Manifest 替换和 11 类完全重复记录反向测试。本地 V2 `132 passed + 2 subtests`，默认 `262 passed, 1 skipped + 18 subtests`，legacy `130 passed, 1 skipped`；8 个制品双跑 SHA-256 一致，`compileall`、`uv lock --check`、`git diff --check` 通过。
 - 本节只记录本地候选，不宣称独立关闭；Phase 0.5 保持 `in_progress`，第八次只复用同一 Luna checker。
+
+2026-08-13 Phase 0.5 同一 Luna checker 第八次复核：
+
+- 候选 `6bfba2c` 被拒绝；第七次五类 finding 已全部确认关闭：未登记方案版本无法发布 Candidate/Evidence/Assessment；ProtocolVersion/Manifest 替换被拒绝；Prompt node 错配被拒绝；19 类 Fixture 实体重复 ID 被拒绝；文档正确区分本地候选与独立验收。
+- 新 P1：共享 scope 解析了 SourceDocumentVersion 但只比较 ID 集合，未比较 `source.review_stage <= episode.stage`，导致筛选 Episode 的直接 Candidate/Evidence/Assessment 发布可消费已登记的基线来源。
+- 新 P2：Snapshot 的 `source_document_version_ids` 可重复同一 ID；AgentCall 的 `gate_result_ids` 可重复同一 Schema Gate。set 比较和局部 Gate 检查会掩盖重复引用。
+- 下一修复在共享 scope 统一加入阶段排序、Snapshot/Agent 引用唯一性和唯一 Schema Gate 检查，并补三层直接发布负例。Phase 1 继续冻结，第九次仍只复用同一 checker，不调用 Qwen 3.8。
+
+2026-08-13 Phase 0.5 第八次拒绝后的本地根因修复（待第九次复核）：
+
+- 共享审核作用域新增来源阶段排序，当前 Episode 不能读取更晚节点的 SourceDocumentVersion；该检查位于直接发布共用路径，不再仅依赖 Fixture 完整性校验。
+- EvidenceSnapshot 的来源 ID、AgentCall 的来源 ID 和 Gate ID 均必须唯一；每个 AgentCall 必须且只能绑定一个结构化输出 Gate。Fixture 在进入 set/dict 处理前也显式检查相同引用基数。
+- 新增 Evidence 与 Candidate 直接发布未来来源负例、FinalAssessment 重放未来来源负例、重复 Snapshot 来源和重复 Gate 引用的直接发布及 Fixture 负例。
+- 本地验证为 V2 `135 passed + 2 subtests`、默认全套 `265 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`；8 个生成制品双跑 SHA-256 一致，`compileall`、`uv lock --check`、`git diff --check` 通过。
+- 本节仍只描述本地候选，Phase 0.5 保持 `in_progress`；第九次继续复用同一 Luna checker。

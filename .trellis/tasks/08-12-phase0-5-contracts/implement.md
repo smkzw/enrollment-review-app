@@ -51,3 +51,18 @@
 - 新增跨未登记方案版本、Prompt 节点错配、ProtocolVersion/Manifest 替换及完全重复记录对抗测试。
 - 本地验证：V2 `132 passed + 2 subtests`；默认全套 `262 passed, 1 skipped + 18 subtests`；legacy `130 passed, 1 skipped`；8 个生成制品连续两次 SHA-256 一致。
 - 上述仅为本地候选证据，状态继续 `in_progress`，等待同一 checker 第八次复核。
+
+## 2026-08-13 第八次复核结论
+
+- 候选 `6bfba2c` 被同一 checker 拒绝；第七次的跨方案 scope、ProtocolVersion/Manifest、Prompt 节点、Fixture 重复实体和文档状态五类 finding 均确认关闭。
+- 新 P1：共享审核作用域只比较来源 ID 集合，未拒绝当前筛选节点读取基线来源；Fixture 路径有阶段检查，直接 Candidate/Evidence/Assessment 发布路径没有。
+- 新 P2：EvidenceSnapshot 来源引用和 AgentCall Gate 引用允许重复；set 比较会掩盖 Snapshot 重复，Agent 发布未强制引用列表唯一且恰好一个结构化输出 Gate。
+- 下一候选只在共享 scope 根因层修复，不进入 Phase 1；第九次仍复用同一 checker。
+
+## 2026-08-13 第八次复核后的本地候选
+
+- 共享 scope 现在按预筛、筛选、导入/洗脱、基线顺序拒绝未来节点来源文件，直接 Candidate、Evidence 和 FinalAssessment 发布统一生效。
+- EvidenceSnapshot 来源引用、AgentCall 来源引用和 Gate 引用均强制唯一；AgentCall 必须且只能绑定一个结构化输出 Gate。Fixture 路径在集合化前也显式执行相同检查。
+- 新增直接发布与完整 Fixture 的未来来源、重复 Snapshot 来源、重复 Gate 引用负例。
+- 本地验证：V2 `135 passed + 2 subtests`；默认全套 `265 passed, 1 skipped + 18 subtests`；legacy `130 passed, 1 skipped`；8 个生成制品双跑一致。
+- 状态保持 `in_progress`，以上不代表独立验收通过。

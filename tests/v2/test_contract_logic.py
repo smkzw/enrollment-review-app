@@ -325,6 +325,7 @@ def publication_input_registry(
     evidence_expectations: list[EvidenceExpectation] | None = None,
     source_documents: list[SourceDocumentVersion] | None = None,
     prompt_versions: list[PromptVersion] | None = None,
+    snapshot_source_ids: list[str] | None = None,
     stage: ReviewStage = ReviewStage.SCREENING,
 ):
     registered_rule_sets = rule_sets or [gate_rule_set(gate_component())]
@@ -365,7 +366,7 @@ def publication_input_registry(
         evidence_snapshot_id="snapshot-1",
         subject_id="subject-1",
         review_episode_id="episode-1",
-        source_document_version_ids=["document-1"],
+        source_document_version_ids=snapshot_source_ids or ["document-1"],
         upload_mode=UploadMode.FULL,
         created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
     )
@@ -643,6 +644,110 @@ def test_evidence_gate_rejects_registered_objects_mixed_with_unknown_protocol() 
             input_revision_map={"episode-1": 1},
             created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
             registry=forged_registry,
+        )
+
+
+def test_direct_publication_rejects_future_stage_source_and_duplicate_refs() -> None:
+    facts = [
+        clinical_fact(
+            fact_id="fact-evidence-stage",
+            fact_type="history.condition_present",
+            value=False,
+            polarity=FactPolarity.AFFIRMED,
+            certainty=1,
+            evidence_span_ids=["span-evidence-stage"],
+        )
+    ]
+    normalized = evidence_candidate(facts, [evidence_span("span-evidence-stage")])
+    evidence_call = bind_agent_call(evidence_normalizer_call(), normalized)
+    evidence_call_gate = agent_call_gate(evidence_call)
+    future_source = SourceDocumentVersion(
+        source_document_version_id="document-1",
+        file_name="基线资料.pdf",
+        sha256="c" * 64,
+        document_type="baseline_record",
+        source_party="研究者方",
+        upload_mode=UploadMode.FULL,
+        review_stage=ReviewStage.BASELINE,
+    )
+    with pytest.raises(ValueError, match="未来节点"):
+        publish_evidence_acceptance(
+            candidate=normalized,
+            agent_call=evidence_call,
+            agent_call_gate_result=evidence_call_gate,
+            gate_result_id="gate-evidence-future-source",
+            input_revision_map={"episode-1": 1},
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+            registry=publication_input_registry(
+                calls=[evidence_call],
+                gates=[evidence_call_gate],
+                evidence_candidates=[normalized],
+                source_documents=[future_source],
+            ),
+        )
+
+    component = gate_component()
+    rules = gate_rule_set(component)
+    value = align_candidate(
+        candidate(ComponentDecision.EXCLUSION_NOT_TRIGGERED, []), component, facts
+    )
+    assessment_call = bind_agent_call(eligibility_call(), value)
+    assessment_call_gate = agent_call_gate(assessment_call)
+    with pytest.raises(ValueError, match="未来节点"):
+        publish_assessment_candidate_acceptance(
+            value,
+            agent_call=assessment_call,
+            agent_call_gate_result=assessment_call_gate,
+            gate_result_id="gate-candidate-future-source",
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+            registry=publication_input_registry(
+                calls=[assessment_call],
+                gates=[assessment_call_gate],
+                assessment_candidates=[value],
+                rule_sets=[rules],
+                source_documents=[future_source],
+            ),
+        )
+
+    duplicate_snapshot_registry = publication_input_registry(
+        calls=[evidence_call],
+        gates=[evidence_call_gate],
+        evidence_candidates=[normalized],
+        snapshot_source_ids=["document-1", "document-1"],
+    )
+    with pytest.raises(ValueError, match="证据快照"):
+        publish_evidence_acceptance(
+            candidate=normalized,
+            agent_call=evidence_call,
+            agent_call_gate_result=evidence_call_gate,
+            gate_result_id="gate-evidence-duplicate-source-ref",
+            input_revision_map={"episode-1": 1},
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+            registry=duplicate_snapshot_registry,
+        )
+
+    duplicate_gate_call = AgentCallContract.model_validate(
+        {
+            **evidence_call.model_dump(mode="json"),
+            "gate_result_ids": [
+                evidence_call_gate.gate_result_id,
+                evidence_call_gate.gate_result_id,
+            ],
+        }
+    )
+    with pytest.raises(ValueError, match="验收结果引用不得重复"):
+        publish_evidence_acceptance(
+            candidate=normalized,
+            agent_call=duplicate_gate_call,
+            agent_call_gate_result=evidence_call_gate,
+            gate_result_id="gate-evidence-duplicate-gate-ref",
+            input_revision_map={"episode-1": 1},
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+            registry=publication_input_registry(
+                calls=[duplicate_gate_call],
+                gates=[evidence_call_gate],
+                evidence_candidates=[normalized],
+            ),
         )
 
 
@@ -1050,6 +1155,68 @@ def registry_for_test_assessment(publication: AssessmentPublication):
         evidence_expectations=publication.review_context.expectations,
         stage=publication.review_context.review_episode.stage,
     )
+
+
+def test_final_assessment_publication_rejects_future_stage_source() -> None:
+    component = gate_component()
+    facts = [
+        clinical_fact(
+            fact_id="fact-final-stage",
+            fact_type="history.condition_present",
+            value=False,
+            polarity=FactPolarity.AFFIRMED,
+            certainty=1,
+            evidence_span_ids=["span-final-stage"],
+        )
+    ]
+    value = align_candidate(
+        candidate(ComponentDecision.EXCLUSION_NOT_TRIGGERED, []), component, facts
+    )
+    publication = publish_test_assessment(value, component=component, facts=facts)
+    future_source = SourceDocumentVersion(
+        source_document_version_id="document-1",
+        file_name="基线资料.pdf",
+        sha256="c" * 64,
+        document_type="baseline_record",
+        source_party="研究者方",
+        upload_mode=UploadMode.FULL,
+        review_stage=ReviewStage.BASELINE,
+    )
+    registry = publication_input_registry(
+        calls=[publication.agent_call, publication.evidence_agent_call],
+        gates=[
+            publication.agent_call_gate_result,
+            publication.candidate_gate_result,
+            publication.evidence_agent_call_gate_result,
+            publication.evidence_gate_result,
+            publication.protocol_integrity_gate_result,
+        ],
+        evidence_candidates=[publication.evidence_candidate],
+        assessment_candidates=[publication.candidate],
+        rule_sets=[publication.rule_set],
+        review_contexts=[publication.review_context],
+        evidence_expectations=publication.review_context.expectations,
+        source_documents=[future_source],
+    )
+    with pytest.raises(ValueError, match="未来节点"):
+        publish_assessment(
+            publication.candidate,
+            agent_call=publication.agent_call,
+            agent_call_gate_result=publication.agent_call_gate_result,
+            candidate_gate_result=publication.candidate_gate_result,
+            evidence_gate_result=publication.evidence_gate_result,
+            evidence_candidate=publication.evidence_candidate,
+            evidence_agent_call=publication.evidence_agent_call,
+            evidence_agent_call_gate_result=publication.evidence_agent_call_gate_result,
+            rule_set=publication.rule_set,
+            review_context=publication.review_context,
+            protocol_integrity_gate_result=publication.protocol_integrity_gate_result,
+            registry=registry,
+            assessment_id="assessment-final-future-source",
+            gate_result_id="gate-assessment-final-future-source",
+            input_revision_map={"episode-1": 1},
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        )
 
 
 def provenance_assessment_publication() -> AssessmentPublication:
