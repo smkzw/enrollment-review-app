@@ -12,6 +12,7 @@ from .enums import (
     AgentWriteScope,
     CriticAction,
     GateOutcome,
+    RuntimeErrorCode,
     RunOutcome,
 )
 
@@ -42,6 +43,7 @@ class AgentCallContract(VersionedModel):
     input_revision_map: dict[str, int] = Field(default_factory=dict)
     raw_output_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     output_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    typed_output_hashes: dict[str, str] = Field(min_length=1)
     idempotency_key: str = Field(min_length=1)
     attempt: int = Field(ge=1)
     max_attempts: int = Field(ge=1, le=3)
@@ -49,7 +51,7 @@ class AgentCallContract(VersionedModel):
     started_at: datetime
     finished_at: datetime
     outcome: RunOutcome
-    error_codes: list[str] = Field(default_factory=list)
+    error_codes: list[RuntimeErrorCode] = Field(default_factory=list)
     recompute_scope: list[str] = Field(min_length=1)
     trigger: str = Field(min_length=1)
     parent_event_id: str | None = None
@@ -70,6 +72,15 @@ class AgentCallContract(VersionedModel):
 
     @model_validator(mode="after")
     def validate_node_scope(self) -> "AgentCallContract":
+        from app.domain.publication import canonical_hash
+
+        if any(
+            len(value) != 64 or any(char not in "0123456789abcdef" for char in value)
+            for value in self.typed_output_hashes.values()
+        ):
+            raise ValueError("typed_output_hashes 必须使用小写 SHA-256")
+        if self.output_hash != canonical_hash(self.typed_output_hashes):
+            raise ValueError("AgentCall.output_hash 必须绑定实际 typed output 哈希表")
         expected = {
             AgentNode.PROTOCOL_DECONSTRUCTOR: (AgentOutputKind.DRAFT, AgentWriteScope.PROTOCOL_DRAFT),
             AgentNode.EVIDENCE_NORMALIZER: (AgentOutputKind.CANDIDATE, AgentWriteScope.EVIDENCE_CANDIDATE),
@@ -130,7 +141,7 @@ class GateResult(VersionedModel):
     input_scope_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     input_revision_map: dict[str, int] = Field(default_factory=dict)
     input_entity_refs: list[str] = Field(min_length=1)
-    error_codes: list[str] = Field(default_factory=list)
+    error_codes: list[RuntimeErrorCode] = Field(default_factory=list)
     accepted_entity_refs: list[str] = Field(default_factory=list)
     rejected_entity_refs: list[str] = Field(default_factory=list)
     affected_scope: list[str] = Field(min_length=1)

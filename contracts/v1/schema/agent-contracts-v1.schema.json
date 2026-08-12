@@ -20,7 +20,7 @@
         },
         "error_codes": {
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/RuntimeErrorCode"
           },
           "title": "Error Codes",
           "type": "array"
@@ -281,6 +281,14 @@
           "title": "Trigger",
           "type": "string"
         },
+        "typed_output_hashes": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "minProperties": 1,
+          "title": "Typed Output Hashes",
+          "type": "object"
+        },
         "write_scope": {
           "$ref": "#/$defs/AgentWriteScope"
         }
@@ -295,6 +303,7 @@
         "input_scope_hash",
         "raw_output_hash",
         "output_hash",
+        "typed_output_hashes",
         "idempotency_key",
         "attempt",
         "max_attempts",
@@ -759,6 +768,30 @@
     },
     "ClinicalFact": {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "polarity": {
+                "const": "unknown"
+              }
+            },
+            "required": [
+              "polarity"
+            ]
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "type": "null"
+              },
+              "value": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
       "properties": {
         "certainty": {
           "maximum": 1,
@@ -1835,7 +1868,7 @@
         },
         "error_codes": {
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/RuntimeErrorCode"
           },
           "title": "Error Codes",
           "type": "array"
@@ -2720,6 +2753,19 @@
       "title": "RunOutcome",
       "type": "string"
     },
+    "RuntimeErrorCode": {
+      "enum": [
+        "schema_validation_failed",
+        "scope_mismatch",
+        "upstream_gate_not_accepted",
+        "payload_hash_mismatch",
+        "protocol_integrity_failed",
+        "candidate_not_bound",
+        "synthetic_rejection"
+      ],
+      "title": "RuntimeErrorCode",
+      "type": "string"
+    },
     "SafetyProvenanceCriticInput": {
       "additionalProperties": false,
       "properties": {
@@ -2869,6 +2915,33 @@
     },
     "TimeConstraint": {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "direction": {
+                "const": "on"
+              }
+            },
+            "required": [
+              "direction"
+            ]
+          },
+          "then": {
+            "properties": {
+              "half_life_multiplier": {
+                "type": "null"
+              },
+              "lower_bound_days": {
+                "type": "null"
+              },
+              "upper_bound_days": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
       "properties": {
         "allow_partial_date": {
           "default": false,

@@ -28,7 +28,13 @@ from .evidence import (
 )
 from .jobs import JobEvent, ReviewRunDiff
 from .normalization import EvidenceNormalizationCandidate
-from .rules import ProtocolAuthorityRecord, ProtocolIntegrityManifest, RuleSet, WorkflowStage
+from .rules import (
+    ProtocolAuthorityConfirmation,
+    ProtocolAuthorityRecord,
+    ProtocolIntegrityManifest,
+    RuleSet,
+    WorkflowStage,
+)
 from .projections import EpisodeRollup
 
 
@@ -40,6 +46,7 @@ class ProtocolDocumentVersion(VersionedModel):
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     integrity_manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     authority_record_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    authority_confirmation_id: str = Field(min_length=1)
     authority_gate_result_id: str = Field(min_length=1)
     integrity_gate_result_id: str = Field(min_length=1)
 
@@ -233,6 +240,7 @@ class FixtureV1(VersionedModel):
     scenario: str = Field(min_length=1)
     project: Project
     protocol_authority_record: ProtocolAuthorityRecord
+    protocol_authority_confirmation: ProtocolAuthorityConfirmation
     protocol_integrity_manifest: ProtocolIntegrityManifest
     rule_set: RuleSet
     workflow_stages: list[WorkflowStage]

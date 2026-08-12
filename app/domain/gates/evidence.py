@@ -53,6 +53,12 @@ def publish_evidence_acceptance(
     created_at: datetime,
 ) -> GateResult:
     require_accepted_agent_call(agent_call, agent_call_gate_result)
+    if agent_call.typed_output_hashes.get(candidate.candidate_id) != canonical_hash(
+        candidate.model_dump(mode="json")
+    ):
+        raise EvidenceGateError(
+            "EvidenceNormalizationCandidate 未绑定 AgentCall 实际 typed output"
+        )
     expected_candidate_scope = (
         candidate.project_id,
         candidate.protocol_version_id,

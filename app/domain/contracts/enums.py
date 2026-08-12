@@ -218,6 +218,16 @@ class RunOutcome(StableEnum):
     PARTIAL = "partial"
 
 
+class RuntimeErrorCode(StableEnum):
+    SCHEMA_VALIDATION_FAILED = "schema_validation_failed"
+    SCOPE_MISMATCH = "scope_mismatch"
+    UPSTREAM_GATE_NOT_ACCEPTED = "upstream_gate_not_accepted"
+    PAYLOAD_HASH_MISMATCH = "payload_hash_mismatch"
+    PROTOCOL_INTEGRITY_FAILED = "protocol_integrity_failed"
+    CANDIDATE_NOT_BOUND = "candidate_not_bound"
+    SYNTHETIC_REJECTION = "synthetic_rejection"
+
+
 class GateOutcome(StableEnum):
     ACCEPTED = "accepted"
     REJECTED = "rejected"

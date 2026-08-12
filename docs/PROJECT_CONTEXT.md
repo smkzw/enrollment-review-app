@@ -1576,3 +1576,15 @@ OCR concurrency note:
 - 新增回归后 V2 合同专项为 `106 passed, 2 subtests passed`；默认全套 `236 passed, 1 skipped, 18 subtests`；legacy Python 3.9 `130 passed, 1 skipped`。生成物双跑哈希一致，同一 Luna checker 四次复核尚未完成，Phase 0.5 继续冻结。
 - 用户已明确“不用再找 Qwen 3.8 会商”；Qwen 3.8 保持禁用，本轮仅复用原 Luna checker 会话。
 - 本轮本地全量验证的唯一跳过仍为既有 MG-K10-SAR/06003 OCR 缓存 Fixture 不存在。`compileall`、`git diff --check` 通过，4 个 Schema/OpenAPI 与 4 个 Fixture 连续两次生成 SHA-256 一致。
+
+2026-08-13 Phase 0.5 同一 Luna checker 第四次复核后的根因修复（待第五次复核）：
+
+- 第四次复核拒绝 `e2cfd9c`，提出 7 个 P1、2 个 P2：下游只核局部 Gate；AgentCall 未绑定实际 typed Candidate；Assessment 可替换组件；Fixture 保存未水合 Candidate；AgentCall 未核 Protocol/RuleSet scope；方案权威缺服务侧确认事件；Pydantic 条件未进入 Schema；UAT 可在保持计数时改变语义且无真实 `historical_source_unavailable`；错误码仍是自由字符串。
+- AssessmentPublication 现保存 RuleSet、AssessmentCandidate、Evidence Candidate、两个 AgentCall、各层 Gate、锚点、Expectation 和 Conflict，并在验证时从完整闭包重算。ActionPublication 内嵌 AssessmentPublication 并重算；EpisodeRollup 对每条 Assessment/Action 完整闭包重放，不接受另一份调用方上游对象。
+- Fixture 重放不再按“第一个相同 Candidate”取 Gate，而从 FinalAssessment Gate 的输入引用反向锁定唯一 Candidate Gate 和 Evidence Gate。修复过程中还发现 AgentCall Gate 校验块误缩进在异常分支后、正常路径未执行，已纠正为每个调用核对 ProtocolVersion、RuleSet/revision 及唯一 accepted Schema Gate。
+- AgentCall 用 `typed_output_hashes` 逐实体绑定实际 Candidate；Fixture 持久化水合后的 AssessmentCandidate。`AgentCall.error_codes` 和 `GateResult.error_codes` 改为封闭 `RuntimeErrorCode` 枚举。
+- 新增由服务记录的 `ProtocolAuthorityConfirmation`，精确绑定方案 SHA、AuthorityRecord SHA/ID、确认命令、确认人和时间；Authority Gate、Manifest、ProtocolVersion 和 Integrity Gate 均纳入该事件。逐规则来源锚点必须以当前 `protocol_version_id` 为前缀。
+- UNKNOWN ClinicalFact 禁止 value/unit、`direction=on` 禁止时间窗/半衰期的约束已进入 JSON Schema/OpenAPI 条件语句，并由生成 Schema 的反例测试验证。
+- UAT 除统计运算符外，逐 Episode 校验关键复合排除规则为固定 `ALL(研究者判断, ANY(阈值, 随机前28天用药), NOT(测量无效))` 语义；新增保持 ALL/ANY 数量但互换位置及 28->29 天的变异测试，并由第 4 名合成受试者筛选 Episode 实际产生 `observed_weak + historical_source_unavailable`。
+- 当前验证：V2 `111 passed, 2 subtests`；默认全套 `241 passed, 1 skipped, 18 subtests`；legacy Python 3.9 `130 passed, 1 skipped`；唯一跳过仍为 06003 OCR 缓存缺失。生成器双跑 8 个制品 SHA-256 完全一致，`compileall` 与 `git diff --check` 通过。
+- 用户明确不再找 Qwen 3.8 会商；本轮未调用 Qwen，后续仅复用现有 Luna checker `019ff5fa-ccc9-7cc0-8f38-2cc489783423`。在该 checker 无阻断接受前，Phase 0.5 保持 `in_progress`，Phase 1 继续冻结。

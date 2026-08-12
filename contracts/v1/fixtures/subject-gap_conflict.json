@@ -226,7 +226,7 @@
       "model_config_id": "model-baseline-v1",
       "node": "evidence_normalizer",
       "outcome": "accepted",
-      "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "output_hash": "d2e2edca08305c7447c90f752b6a2dd5eb7a8cc9342a6d837abf016736022ada",
       "output_kind": "candidate",
       "output_tokens": 51,
       "parent_event_id": null,
@@ -249,6 +249,9 @@
       "started_at": "2026-08-12T12:00:00Z",
       "subject_id": "subject-gap_conflict",
       "trigger": "fixture_generation",
+      "typed_output_hashes": {
+        "evidence-candidate-episode-gap_conflict": "5029ea6c863bc9196266f009c6199c01d8d8500e3a9be5e1a64de33fb676f9a8"
+      },
       "write_scope": "evidence_candidate"
     },
     {
@@ -272,7 +275,7 @@
       "model_config_id": "model-baseline-v1",
       "node": "eligibility_assessor",
       "outcome": "accepted",
-      "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "output_hash": "d6ca244471278a510364949a973b1c2571f2d6bbf24a36618c8c3019f0715443",
       "output_kind": "candidate",
       "output_tokens": 52,
       "parent_event_id": null,
@@ -295,6 +298,15 @@
       "started_at": "2026-08-12T12:00:00Z",
       "subject_id": "subject-gap_conflict",
       "trigger": "fixture_generation",
+      "typed_output_hashes": {
+        "candidate-gap-ex": "73c61afb0580b3d1fe3b5c3ec9e3e2954c9cda78020eed4023d5713dec282318",
+        "candidate-gap-future": "fe32b5fb2a3b12855bef299c5dcbacee54bff19850327ee0df74e49adba73c14",
+        "candidate-gap-in": "d207b0cd8fc161492042465353c386475113b5391c02db8b0bf9e346745d4b52",
+        "candidate-gap-procedure": "b7523c8174b39149def53d2e54afd08d79a32681746631185e538fe92285b2fd",
+        "candidate-gap-professional": "d6e105877ec68d6eafbd30ec268401b676cf2e9d1ecc6c8aa534a51be6fba700",
+        "candidate-gap-referenced": "d6ae93b2366b8722b3940898d89c9900c0bfca068e90a4aa73a0d484ef20a816",
+        "candidate-gap-result-fields": "831dfc789cd05574d14d976a3b72bfb03bbefd5b7e6c1f8d6025c62d300454c9"
+      },
       "write_scope": "assessment_candidate"
     }
   ],
@@ -309,13 +321,32 @@
       "gap_types": [
         "record_incomplete"
       ],
-      "missing_predicate_ids": [],
-      "predicate_observations": [],
-      "processed_predicate_ids": [],
+      "missing_predicate_ids": [
+        "predicate-demographics-age_years-gte"
+      ],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [],
+          "fact_ids": [],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-demographics-age_years-gte",
+          "reason_codes": [
+            "fact_not_observed"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-demographics-age_years-gte"
+      ],
       "project_id": "project-synthetic-phase-iii",
       "proposed_decision": "indeterminate",
       "protocol_version_id": "protocol-v1",
-      "reason_codes": [],
+      "reason_codes": [
+        "fact_not_observed"
+      ],
       "review_episode_id": "episode-gap_conflict",
       "review_run_id": "run-gap_conflict",
       "rule_component_id": "component-in-01",
@@ -323,7 +354,9 @@
       "rule_set_revision": 1,
       "schema_version": "fixture/v1",
       "subject_id": "subject-gap_conflict",
-      "uncertainty_codes": [],
+      "uncertainty_codes": [
+        "fact_not_observed"
+      ],
       "unresolved_items": [],
       "used_fact_ids": []
     },
@@ -340,13 +373,109 @@
         "source_conflict",
         "ocr_or_parse_risk"
       ],
-      "missing_predicate_ids": [],
-      "predicate_observations": [],
-      "processed_predicate_ids": [],
+      "missing_predicate_ids": [
+        "predicate-investigator-unacceptable_participation_risk-eq",
+        "predicate-laboratory-target_ratio_uln-gte",
+        "predicate-medication-prohibited-window",
+        "predicate-laboratory-critical_measurement_invalid-eq",
+        "predicate-exception-protocol_exception_documented-eq",
+        "predicate-investigator-exception_confirmed-eq"
+      ],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [
+            "span-gap-page"
+          ],
+          "fact_ids": [
+            "fact-gap-risk-positive",
+            "fact-gap-risk-negative"
+          ],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-investigator-unacceptable_participation_risk-eq",
+          "reason_codes": [
+            "source_conflict"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        },
+        {
+          "evidence_span_ids": [],
+          "fact_ids": [],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-laboratory-target_ratio_uln-gte",
+          "reason_codes": [
+            "fact_not_observed"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        },
+        {
+          "evidence_span_ids": [],
+          "fact_ids": [],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-medication-prohibited-window",
+          "reason_codes": [
+            "fact_not_observed"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        },
+        {
+          "evidence_span_ids": [],
+          "fact_ids": [],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-laboratory-critical_measurement_invalid-eq",
+          "reason_codes": [
+            "fact_not_observed"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        },
+        {
+          "evidence_span_ids": [],
+          "fact_ids": [],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-exception-protocol_exception_documented-eq",
+          "reason_codes": [
+            "fact_not_observed"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        },
+        {
+          "evidence_span_ids": [],
+          "fact_ids": [],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-investigator-exception_confirmed-eq",
+          "reason_codes": [
+            "professional_judgment_missing"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-investigator-unacceptable_participation_risk-eq",
+        "predicate-laboratory-target_ratio_uln-gte",
+        "predicate-medication-prohibited-window",
+        "predicate-laboratory-critical_measurement_invalid-eq",
+        "predicate-exception-protocol_exception_documented-eq",
+        "predicate-investigator-exception_confirmed-eq"
+      ],
       "project_id": "project-synthetic-phase-iii",
       "proposed_decision": "conflict",
       "protocol_version_id": "protocol-v1",
-      "reason_codes": [],
+      "reason_codes": [
+        "source_conflict",
+        "fact_not_observed",
+        "professional_judgment_missing"
+      ],
       "review_episode_id": "episode-gap_conflict",
       "review_run_id": "run-gap_conflict",
       "rule_component_id": "component-ex-01",
@@ -354,7 +483,11 @@
       "rule_set_revision": 1,
       "schema_version": "fixture/v1",
       "subject_id": "subject-gap_conflict",
-      "uncertainty_codes": [],
+      "uncertainty_codes": [
+        "source_conflict",
+        "fact_not_observed",
+        "professional_judgment_missing"
+      ],
       "unresolved_items": [],
       "used_fact_ids": [
         "fact-gap-risk-positive",
@@ -367,20 +500,37 @@
       "candidate_confidence": 0.9,
       "candidate_rationale": "客观资料存在，但缺少针对本规则的研究者判断。",
       "evidence_snapshot_id": "snapshot-gap_conflict",
-      "evidence_span_ids": [
-        "span-gap-page"
-      ],
+      "evidence_span_ids": [],
       "gap_types": [
         "description_insufficient",
         "professional_judgment"
       ],
-      "missing_predicate_ids": [],
-      "predicate_observations": [],
-      "processed_predicate_ids": [],
+      "missing_predicate_ids": [
+        "predicate-investigator-rule_specific_judgment-eq"
+      ],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [],
+          "fact_ids": [],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-investigator-rule_specific_judgment-eq",
+          "reason_codes": [
+            "professional_judgment_missing"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-investigator-rule_specific_judgment-eq"
+      ],
       "project_id": "project-synthetic-phase-iii",
       "proposed_decision": "professional_judgment",
       "protocol_version_id": "protocol-v1",
-      "reason_codes": [],
+      "reason_codes": [
+        "professional_judgment_missing"
+      ],
       "review_episode_id": "episode-gap_conflict",
       "review_run_id": "run-gap_conflict",
       "rule_component_id": "component-ex-02",
@@ -388,7 +538,9 @@
       "rule_set_revision": 1,
       "schema_version": "fixture/v1",
       "subject_id": "subject-gap_conflict",
-      "uncertainty_codes": [],
+      "uncertainty_codes": [
+        "professional_judgment_missing"
+      ],
       "unresolved_items": [],
       "used_fact_ids": []
     },
@@ -402,13 +554,32 @@
       "gap_types": [
         "future_stage_not_due"
       ],
-      "missing_predicate_ids": [],
-      "predicate_observations": [],
-      "processed_predicate_ids": [],
+      "missing_predicate_ids": [
+        "predicate-baseline-future_assessment-eq"
+      ],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [],
+          "fact_ids": [],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-baseline-future_assessment-eq",
+          "reason_codes": [
+            "fact_not_observed"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-baseline-future_assessment-eq"
+      ],
       "project_id": "project-synthetic-phase-iii",
       "proposed_decision": "not_due",
       "protocol_version_id": "protocol-v1",
-      "reason_codes": [],
+      "reason_codes": [
+        "fact_not_observed"
+      ],
       "review_episode_id": "episode-gap_conflict",
       "review_run_id": "run-gap_conflict",
       "rule_component_id": "component-ex-03",
@@ -416,7 +587,9 @@
       "rule_set_revision": 1,
       "schema_version": "fixture/v1",
       "subject_id": "subject-gap_conflict",
-      "uncertainty_codes": [],
+      "uncertainty_codes": [
+        "fact_not_observed"
+      ],
       "unresolved_items": [],
       "used_fact_ids": []
     },
@@ -430,13 +603,32 @@
       "gap_types": [
         "referenced_file_missing"
       ],
-      "missing_predicate_ids": [],
-      "predicate_observations": [],
-      "processed_predicate_ids": [],
+      "missing_predicate_ids": [
+        "predicate-history-referenced_document-eq"
+      ],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [],
+          "fact_ids": [],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-history-referenced_document-eq",
+          "reason_codes": [
+            "fact_not_observed"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-history-referenced_document-eq"
+      ],
       "project_id": "project-synthetic-phase-iii",
       "proposed_decision": "indeterminate",
       "protocol_version_id": "protocol-v1",
-      "reason_codes": [],
+      "reason_codes": [
+        "fact_not_observed"
+      ],
       "review_episode_id": "episode-gap_conflict",
       "review_run_id": "run-gap_conflict",
       "rule_component_id": "component-ex-04",
@@ -444,7 +636,9 @@
       "rule_set_revision": 1,
       "schema_version": "fixture/v1",
       "subject_id": "subject-gap_conflict",
-      "uncertainty_codes": [],
+      "uncertainty_codes": [
+        "fact_not_observed"
+      ],
       "unresolved_items": [],
       "used_fact_ids": []
     },
@@ -458,13 +652,32 @@
       "gap_types": [
         "required_procedure_not_done"
       ],
-      "missing_predicate_ids": [],
-      "predicate_observations": [],
-      "processed_predicate_ids": [],
+      "missing_predicate_ids": [
+        "predicate-procedure-required_completed-eq"
+      ],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [],
+          "fact_ids": [],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-procedure-required_completed-eq",
+          "reason_codes": [
+            "fact_not_observed"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-procedure-required_completed-eq"
+      ],
       "project_id": "project-synthetic-phase-iii",
       "proposed_decision": "indeterminate",
       "protocol_version_id": "protocol-v1",
-      "reason_codes": [],
+      "reason_codes": [
+        "fact_not_observed"
+      ],
       "review_episode_id": "episode-gap_conflict",
       "review_run_id": "run-gap_conflict",
       "rule_component_id": "component-req-01",
@@ -472,7 +685,9 @@
       "rule_set_revision": 1,
       "schema_version": "fixture/v1",
       "subject_id": "subject-gap_conflict",
-      "uncertainty_codes": [],
+      "uncertainty_codes": [
+        "fact_not_observed"
+      ],
       "unresolved_items": [],
       "used_fact_ids": []
     },
@@ -486,13 +701,32 @@
       "gap_types": [
         "result_fields_missing"
       ],
-      "missing_predicate_ids": [],
-      "predicate_observations": [],
-      "processed_predicate_ids": [],
+      "missing_predicate_ids": [
+        "predicate-laboratory-required_fields_complete-eq"
+      ],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [],
+          "fact_ids": [],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-laboratory-required_fields_complete-eq",
+          "reason_codes": [
+            "fact_not_observed"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-laboratory-required_fields_complete-eq"
+      ],
       "project_id": "project-synthetic-phase-iii",
       "proposed_decision": "indeterminate",
       "protocol_version_id": "protocol-v1",
-      "reason_codes": [],
+      "reason_codes": [
+        "fact_not_observed"
+      ],
       "review_episode_id": "episode-gap_conflict",
       "review_run_id": "run-gap_conflict",
       "rule_component_id": "component-req-02",
@@ -500,7 +734,9 @@
       "rule_set_revision": 1,
       "schema_version": "fixture/v1",
       "subject_id": "subject-gap_conflict",
-      "uncertainty_codes": [],
+      "uncertainty_codes": [
+        "fact_not_observed"
+      ],
       "unresolved_items": [],
       "used_fact_ids": []
     }
@@ -975,7 +1211,7 @@
         "snapshot-gap_conflict": 1
       },
       "input_scope_hash": "1111111111111111111111111111111111111111111111111111111111111111",
-      "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "output_hash": "d2e2edca08305c7447c90f752b6a2dd5eb7a8cc9342a6d837abf016736022ada",
       "parent_event_id": null,
       "recompute_scope": [
         "subject-gap_conflict"
@@ -1004,7 +1240,7 @@
         "snapshot-gap_conflict": 1
       },
       "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
-      "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "output_hash": "d6ca244471278a510364949a973b1c2571f2d6bbf24a36618c8c3019f0715443",
       "parent_event_id": null,
       "recompute_scope": [
         "subject-gap_conflict"
@@ -1029,19 +1265,15 @@
       "input_entity_refs": [
         "protocol-v1",
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "IN-01",
-        "EX-01",
-        "EX-02",
-        "EX-03",
-        "EX-04",
-        "REQ-01",
-        "REQ-02"
+        "authority-protocol-v1-phase-iii",
+        "confirmation-protocol-v1-phase-iii",
+        "command-accept-protocol-v1-phase-iii"
       ],
       "input_revision_map": {
         "protocol-v1": 1
       },
-      "input_scope_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
-      "output_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
+      "input_scope_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
+      "output_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
       "parent_event_id": null,
       "recompute_scope": [
         "protocol-v1"
@@ -1067,6 +1299,7 @@
       "input_entity_refs": [
         "protocol-v1",
         "authority-protocol-v1-phase-iii",
+        "confirmation-protocol-v1-phase-iii",
         "gate-authority-protocol-v1-phase-iii",
         "manifest-protocol-v1-phase-iii",
         "ruleset-synthetic-phase-iii"
@@ -1074,8 +1307,8 @@
       "input_revision_map": {
         "ruleset-synthetic-phase-iii": 1
       },
-      "input_scope_hash": "9a628eaca71c15803f748b9ac512223e3684084af12f52dce8652c5cba4a71be",
-      "output_hash": "9a628eaca71c15803f748b9ac512223e3684084af12f52dce8652c5cba4a71be",
+      "input_scope_hash": "a192af76e77f4bfddf22e309e111386597ea88ac2d7d0bbeab054e5d99fe3946",
+      "output_hash": "a192af76e77f4bfddf22e309e111386597ea88ac2d7d0bbeab054e5d99fe3946",
       "parent_event_id": null,
       "recompute_scope": [
         "protocol-v1"
@@ -1142,8 +1375,8 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "5d41db700af09f82027fc93463033aa307d6d7d98db6dba95316701606af4097",
-      "output_hash": "5d41db700af09f82027fc93463033aa307d6d7d98db6dba95316701606af4097",
+      "input_scope_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
+      "output_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-gap_conflict"
@@ -1175,7 +1408,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "bfc0a18e588c9ccbc2c7515dc43d3e2d18c07da8e49b14a2060b1e7854cf2269",
+      "input_scope_hash": "d085c36ea379db304095d85442f4f718b54609bd01ce7ac95b87fc189a6e3c0e",
       "output_hash": "4ed9573f24a20808c32c383a18a86481219be0e94c099b1ec894808806cb9ac9",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1243,8 +1476,8 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "5d41db700af09f82027fc93463033aa307d6d7d98db6dba95316701606af4097",
-      "output_hash": "5d41db700af09f82027fc93463033aa307d6d7d98db6dba95316701606af4097",
+      "input_scope_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
+      "output_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-gap_conflict"
@@ -1276,7 +1509,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "95f785e13092aa1b58f1578ed0e7373164633b39b26b87efee83a4cc0a0c0184",
+      "input_scope_hash": "a21bb11d471382ef6b59b8b399d697972d5617796b5f14d05719bedfe57cf8ab",
       "output_hash": "de9bb690c59b3e46ea9cc11fa7a45ae858d37c44404423af2299558278460d60",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1344,8 +1577,8 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "5d41db700af09f82027fc93463033aa307d6d7d98db6dba95316701606af4097",
-      "output_hash": "5d41db700af09f82027fc93463033aa307d6d7d98db6dba95316701606af4097",
+      "input_scope_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
+      "output_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-gap_conflict"
@@ -1377,7 +1610,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "ed162b4b629cbab4cc6fc54a61bd51a1e947ed546cb6d4ea0e51f2202e072028",
+      "input_scope_hash": "76c70172e8557417e590d2e2e3eeda0d9685d998a88a81faeb8f61b8765c3ffa",
       "output_hash": "818ce8734c87504e13a2781aec38ad97bd21365246af8122328080b9203f66b0",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1445,8 +1678,8 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "5d41db700af09f82027fc93463033aa307d6d7d98db6dba95316701606af4097",
-      "output_hash": "5d41db700af09f82027fc93463033aa307d6d7d98db6dba95316701606af4097",
+      "input_scope_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
+      "output_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-gap_conflict"
@@ -1478,7 +1711,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "d22aae7f590686d07bc7c799985ec71bfb7914c2909ad6ae904582d24f6f8344",
+      "input_scope_hash": "ac6b8bae2dce0e617ad82d7867969c6ba398378b955c90374564c418794a8b4e",
       "output_hash": "9c2d82d0e16e8f963911fcf2ed1386af2cdaf251a792d4e0ea253c6197dd48b2",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1546,8 +1779,8 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "5d41db700af09f82027fc93463033aa307d6d7d98db6dba95316701606af4097",
-      "output_hash": "5d41db700af09f82027fc93463033aa307d6d7d98db6dba95316701606af4097",
+      "input_scope_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
+      "output_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-gap_conflict"
@@ -1579,7 +1812,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "4369cb58bffc05ad994e21a73504ef71ecbd53cfd7c2453701ae9c045a78f332",
+      "input_scope_hash": "52a006a714457d28bc855a58c6e48e5a4a51774777e7b2016112d29cad0c26b2",
       "output_hash": "e8f5bb2479759adaa83cff98628a22ae4b19b11b908f2bb338853ed2e17aadba",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1647,8 +1880,8 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "5d41db700af09f82027fc93463033aa307d6d7d98db6dba95316701606af4097",
-      "output_hash": "5d41db700af09f82027fc93463033aa307d6d7d98db6dba95316701606af4097",
+      "input_scope_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
+      "output_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-gap_conflict"
@@ -1680,7 +1913,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "86f9385ae8b05d0eb0d71c208fa7f65cc269fb9607a26d8b13a91f55570b4cac",
+      "input_scope_hash": "c70e68d7df0a66db9669f12ef0bedd0419210e899f3fc3d5f40a4ee7c8a2301b",
       "output_hash": "15a990b78062f019698aeef1ba7c6cf635ff4c289ba67eaedba01b76abf3e652",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1748,8 +1981,8 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "5d41db700af09f82027fc93463033aa307d6d7d98db6dba95316701606af4097",
-      "output_hash": "5d41db700af09f82027fc93463033aa307d6d7d98db6dba95316701606af4097",
+      "input_scope_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
+      "output_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-gap_conflict"
@@ -1781,7 +2014,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "114f74af8166138dfe81421369ec722782dd522704b9a0382a1fe3339e372422",
+      "input_scope_hash": "7f4b64a1f7fb76fea0a2a0a957b5639a87e8ba83b604ac15305c27eeb3584919",
       "output_hash": "2bbeab9ad4ab3a7138465046b663da6341165ee2b8afabba8ac5cf6ff3738198",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2362,6 +2595,7 @@
     "project_id": "project-synthetic-phase-iii",
     "project_name": "合成Ⅲ期入排审核项目",
     "protocol_version": {
+      "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
       "authority_gate_result_id": "gate-authority-protocol-v1-phase-iii",
       "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
       "integrity_gate_result_id": "gate-integrity-protocol-v1-phase-iii",
@@ -2398,6 +2632,20 @@
       "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
     }
   ],
+  "protocol_authority_confirmation": {
+    "action": "accept_protocol_authority",
+    "authority_record_id": "authority-protocol-v1-phase-iii",
+    "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+    "command_id": "command-accept-protocol-v1-phase-iii",
+    "confirmation_id": "confirmation-protocol-v1-phase-iii",
+    "confirmation_sha256": "1f213715bd1253931704f1aaee0fd985d1cb3192ac7e29e3773de220d914c9ac",
+    "confirmed_at": "2026-08-12T12:00:00Z",
+    "confirmed_by": "synthetic-uat-human-acceptance",
+    "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "protocol_version_id": "protocol-v1",
+    "recorded_by_service": "enrollment-review-app",
+    "schema_version": "fixture/v1"
+  },
   "protocol_authority_record": {
     "authority_record_id": "authority-protocol-v1-phase-iii",
     "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",

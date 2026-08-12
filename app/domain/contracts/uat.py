@@ -120,6 +120,49 @@ class UatWorkspaceFixture(VersionedModel):
                     if component.exception_expression is not None:
                         inspect_expression(component.exception_expression)
 
+            composite = next(
+                (
+                    component
+                    for rule in fixture.rule_set.rules
+                    for component in rule.components
+                    if component.rule_component_id == "component-ex-01"
+                ),
+                None,
+            )
+            if composite is None or composite.expression.kind != "logical":
+                raise ValueError("UAT 关键复合排除规则结构缺失")
+            root = composite.expression
+            if (
+                root.operator != LogicalOperator.ALL
+                or len(root.children) != 3
+                or root.children[0].kind != "predicate"
+                or not root.children[0].predicate.requires_professional_judgment
+                or root.children[1].kind != "logical"
+                or root.children[1].operator != LogicalOperator.ANY
+                or root.children[2].kind != "logical"
+                or root.children[2].operator != LogicalOperator.NOT
+            ):
+                raise ValueError("UAT 关键复合排除规则 ALL/ANY/NOT 语义漂移")
+            medication_node = next(
+                (
+                    child
+                    for child in root.children[1].children
+                    if child.kind == "predicate"
+                    and child.predicate.subject == "medication"
+                    and child.predicate.attribute == "prohibited_exposure"
+                ),
+                None,
+            )
+            window = medication_node.time_constraint if medication_node else None
+            if (
+                window is None
+                or window.anchor_type.value != "randomization_date"
+                or window.direction.value != "before"
+                or window.upper_bound_days != 28
+                or window.lower_bound_days is not None
+            ):
+                raise ValueError("UAT 关键随机前 28 天时间窗语义漂移")
+
             if stage == ReviewStage.SCREENING:
                 if fixture.evidence_snapshot.upload_mode != UploadMode.FULL:
                     raise ValueError("UAT 筛选 Episode 必须提供全量快照")
@@ -201,6 +244,7 @@ class UatWorkspaceFixture(VersionedModel):
             GapType.OCR_OR_PARSE_RISK,
             GapType.FUTURE_STAGE_NOT_DUE,
             GapType.PROVENANCE_FOLLOWUP,
+            GapType.HISTORICAL_SOURCE_UNAVAILABLE,
         }
         if not required_gaps <= gap_types:
             raise ValueError("UAT 工作区未覆盖全部核心缺口类型")

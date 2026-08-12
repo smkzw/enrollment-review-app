@@ -306,7 +306,7 @@
           },
           "error_codes": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/RuntimeErrorCode"
             },
             "title": "Error Codes",
             "type": "array"
@@ -567,6 +567,14 @@
             "title": "Trigger",
             "type": "string"
           },
+          "typed_output_hashes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "minProperties": 1,
+            "title": "Typed Output Hashes",
+            "type": "object"
+          },
           "write_scope": {
             "$ref": "#/components/schemas/AgentWriteScope"
           }
@@ -581,6 +589,7 @@
           "input_scope_hash",
           "raw_output_hash",
           "output_hash",
+          "typed_output_hashes",
           "idempotency_key",
           "attempt",
           "max_attempts",
@@ -1054,6 +1063,30 @@
       },
       "ClinicalFact": {
         "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "polarity": {
+                  "const": "unknown"
+                }
+              },
+              "required": [
+                "polarity"
+              ]
+            },
+            "then": {
+              "properties": {
+                "unit": {
+                  "type": "null"
+                },
+                "value": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ],
         "properties": {
           "certainty": {
             "maximum": 1,
@@ -2218,6 +2251,9 @@
             "title": "Prompt Versions",
             "type": "array"
           },
+          "protocol_authority_confirmation": {
+            "$ref": "#/components/schemas/ProtocolAuthorityConfirmation"
+          },
           "protocol_authority_record": {
             "$ref": "#/components/schemas/ProtocolAuthorityRecord"
           },
@@ -2278,6 +2314,7 @@
           "scenario",
           "project",
           "protocol_authority_record",
+          "protocol_authority_confirmation",
           "protocol_integrity_manifest",
           "rule_set",
           "workflow_stages",
@@ -2363,7 +2400,7 @@
           },
           "error_codes": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/RuntimeErrorCode"
             },
             "title": "Error Codes",
             "type": "array"
@@ -3194,6 +3231,87 @@
         "title": "PromptVersion",
         "type": "object"
       },
+      "ProtocolAuthorityConfirmation": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "accept_protocol_authority",
+            "default": "accept_protocol_authority",
+            "title": "Action",
+            "type": "string"
+          },
+          "authority_record_id": {
+            "minLength": 1,
+            "title": "Authority Record Id",
+            "type": "string"
+          },
+          "authority_record_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Authority Record Sha256",
+            "type": "string"
+          },
+          "command_id": {
+            "minLength": 1,
+            "title": "Command Id",
+            "type": "string"
+          },
+          "confirmation_id": {
+            "minLength": 1,
+            "title": "Confirmation Id",
+            "type": "string"
+          },
+          "confirmation_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Confirmation Sha256",
+            "type": "string"
+          },
+          "confirmed_at": {
+            "format": "date-time",
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "confirmed_by": {
+            "minLength": 1,
+            "title": "Confirmed By",
+            "type": "string"
+          },
+          "protocol_document_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Protocol Document Sha256",
+            "type": "string"
+          },
+          "protocol_version_id": {
+            "minLength": 1,
+            "title": "Protocol Version Id",
+            "type": "string"
+          },
+          "recorded_by_service": {
+            "const": "enrollment-review-app",
+            "default": "enrollment-review-app",
+            "title": "Recorded By Service",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmation_id",
+          "command_id",
+          "protocol_version_id",
+          "protocol_document_sha256",
+          "authority_record_id",
+          "authority_record_sha256",
+          "confirmed_by",
+          "confirmed_at",
+          "confirmation_sha256"
+        ],
+        "title": "ProtocolAuthorityConfirmation",
+        "type": "object"
+      },
       "ProtocolAuthorityRecord": {
         "additionalProperties": false,
         "properties": {
@@ -3287,6 +3405,11 @@
       "ProtocolDocumentVersion": {
         "additionalProperties": false,
         "properties": {
+          "authority_confirmation_id": {
+            "minLength": 1,
+            "title": "Authority Confirmation Id",
+            "type": "string"
+          },
           "authority_gate_result_id": {
             "minLength": 1,
             "title": "Authority Gate Result Id",
@@ -3345,6 +3468,7 @@
           "sha256",
           "integrity_manifest_sha256",
           "authority_record_sha256",
+          "authority_confirmation_id",
           "authority_gate_result_id",
           "integrity_gate_result_id"
         ],
@@ -3915,6 +4039,19 @@
         "title": "RunOutcome",
         "type": "string"
       },
+      "RuntimeErrorCode": {
+        "enum": [
+          "schema_validation_failed",
+          "scope_mismatch",
+          "upstream_gate_not_accepted",
+          "payload_hash_mismatch",
+          "protocol_integrity_failed",
+          "candidate_not_bound",
+          "synthetic_rejection"
+        ],
+        "title": "RuntimeErrorCode",
+        "type": "string"
+      },
       "SourceDocumentVersion": {
         "additionalProperties": false,
         "properties": {
@@ -4097,6 +4234,33 @@
       },
       "TimeConstraint": {
         "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "direction": {
+                  "const": "on"
+                }
+              },
+              "required": [
+                "direction"
+              ]
+            },
+            "then": {
+              "properties": {
+                "half_life_multiplier": {
+                  "type": "null"
+                },
+                "lower_bound_days": {
+                  "type": "null"
+                },
+                "upper_bound_days": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ],
         "properties": {
           "allow_partial_date": {
             "default": false,

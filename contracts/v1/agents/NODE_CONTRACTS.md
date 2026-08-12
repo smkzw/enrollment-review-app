@@ -321,6 +321,8 @@ output_hash
 
 GateResult 是不可变审计事实。后续修正必须产生新 GateResult 和新 revision，不能修改旧结果。
 
+`error_codes[]` 只能取版本化 `RuntimeErrorCode`：`schema_validation_failed`、`scope_mismatch`、`upstream_gate_not_accepted`、`payload_hash_mismatch`、`protocol_integrity_failed`、`candidate_not_bound`、`synthetic_rejection`。新增错误族必须先升级合同，运行时不得写入自由文本错误码。
+
 所有业务运行路径中的 Gate 都必须返回上述 `GateResult`。`assert_*` / `derive_*` 纯函数只负责 Gate 内部重算或测试断言，不是可绕过审计的另一条运行路径，也不能单独发布实体。
 
 ### 7.2 Gate 清单
@@ -328,14 +330,14 @@ GateResult 是不可变审计事实。后续修正必须产生新 GateResult 和
 | `gate_id` | 输入实体范围 | 结构化输出 | 可写实体 | 重试/停止 | 禁止动作 |
 | --- | --- | --- | --- | --- | --- |
 | `contract_schema_gate` | 任一 Agent draft/candidate/CriticRun、fixture 或 Job 事件 | `GateResult`、字段级错误、接受/拒绝引用 | `GateResult`；通过后只允许建立对应 draft/candidate/critic 记录 | 纯函数重算；Schema 失败即拒绝，不能靠默认值补齐 | 不把非法 JSON 或未知枚举修成合法业务含义；不产生 FinalAssessment |
-| `protocol_authority_gate` | 用户在方案工作台核对后的完整规则/流程、正式方案哈希、逐规则来源锚点和确认元数据 | `ProtocolAuthorityRecord` 及绑定其内容哈希的 accepted `GateResult` | 只追加新的权威记录和验收 Gate；旧记录不可改写 | 缺来源锚点、规则/阶段覆盖不全或确认元数据不完整即停 | Agent 不得确认；API 调用方不得用编号清单代替完整权威结构；纯哈希不等于人工确认 |
+| `protocol_authority_gate` | 用户在方案工作台核对后的完整规则/流程、正式方案哈希、逐规则来源锚点，以及由服务记录的 `ProtocolAuthorityConfirmation` | `ProtocolAuthorityRecord`、精确绑定该记录/方案文件/确认命令的确认事件及 accepted `GateResult` | 只追加新的权威记录、确认事件和验收 Gate；旧记录不可改写 | 缺来源锚点、规则/阶段覆盖不全、确认事件不匹配或确认元数据不完整即停 | Agent 不得确认；API 调用方不得用编号清单或自报布尔值代替确认命令；纯哈希不等于人工确认 |
 | `protocol_integrity_gate` | 已经人工核对并由 `protocol_authority_gate` 接受的 `ProtocolAuthorityRecord`、正式方案版本、Manifest、RuleSet、WorkflowStage | 对父级编号/数量、完整树、逻辑、期别、阈值、单位、时间窗、例外、来源定位和阶段覆盖重算得到的 `GateResult` | 只接受与权威记录逐项一致的 Manifest、RuleSet 和阶段闭包；不发布正式规则 | 任一哈希、来源锚点、结构或权威 Gate 不一致即停 | 不接受调用方自报“官方编号清单”；不猜期别、不合并独立期别、不弱化 AND/OR |
 | `protocol_publish_gate` | 用户已确认的规则草稿、`protocol_integrity_gate` 结果、正式方案版本 | 新 `RuleSet` revision 发布资格和差异摘要 | 绑定正式方案版本的新 `RuleSet` revision | 任何发布条件不满足即拒绝；只能重新编辑草稿后再提交 | 不由 Agent 发布；不覆盖旧 revision；不在发布时新增项目特异规则 |
 | `evidence_span_locator_gate` | 文件版本、页图/原文/OCR、Span 候选、校对 revision | 一个实际存在的定位层级、原文、降级原因和 `GateResult` | `EvidenceSpan` 接受记录 | 定位失败停在候选并生成解析待办；不得循环猜坐标 | 无坐标不得输出 bbox；不得用装饰性高亮伪造定位 |
 | `evidence_normalization_gate` | 绑定 Evidence Normalizer AgentCall 的 `EvidenceNormalizationCandidate`、候选内 `EvidenceSpan`、文件/页和校对记录 | accepted Candidate/Fact/Span 引用及其完整 payload hash | 只写候选中通过的事实/事件/用药/引用文件和依赖关系 | AgentCall、Candidate、Project/Subject/Episode/Snapshot/Source 任一不一致即停 | 不接受调用方在 Gate 外另传一组事实；不覆盖原 OCR；不把沉默写成否认；不自动择一冲突来源 |
 | `critic_admission_gate` | 风险旗标、候选、GateResult、错误族登记 | 是否触发 Critic、触发码、固定输入范围 | 触发记录和 `GateResult` | 条件不满足则跳过并记录；条件满足但输入缺失则阻断 Critic 运行 | 不强制所有规则运行 Critic；不把触发判断当最终临床判断 |
 | `eligibility_assessment_gate` | 已发布规则、一个 Episode、一个 Snapshot、accepted Evidence Candidate/Gate、AssessmentCandidate/Gate、Expectation、Conflict 和 CriticRun | Gate 内重算逐谓词观察、evaluation、状态、缺口与阻断后发布 `FinalAssessment` | 仅在完整上游 publication 闭包通过后写 `FinalAssessment`；拒绝只写 GateResult | 表达式、阈值、时间窗、证据、冲突或状态矩阵失败即停；不以文本修补 | Agent/调用方不得提交最终 evaluation；不得从 narrative、相似指标或 Gate 外事实推导状态 |
-| `action_gate` | `FinalAssessment`、同组件 gap、EvidenceExpectation、规则要求、Critic信号和用户操作 | `ActionRequest`、`ActionTransition`、确定性责任方/证据/到期节点/阻断等级 | 写 Action 及不可变转移记录 | 自动关闭必须满足同组件专属谓词和新 ReviewRun；人工 override 需理由并记录 | 无关上传不得关闭；关闭不等于规则通过；不接受 Agent 的 blocking_level |
+| `action_gate` | 完整 `AssessmentPublication` 上游闭包、同组件 gap、EvidenceExpectation、规则要求、Critic信号和用户操作 | 内嵌 Assessment 闭包的 `ActionPublication`、`ActionTransition`、确定性责任方/证据/到期节点/阻断等级 | 写 Action 及不可变转移记录 | 发布和重放均须从 Evidence/Agent/Candidate/Assessment 全链重算；自动关闭必须满足同组件专属谓词和新 ReviewRun；人工 override 需理由并记录 | 无关上传不得关闭；关闭不等于规则通过；不接受 Agent 的 blocking_level；不得由调用方替换上游 Assessment |
 | `stage_run_isolation_gate` | Project、正式方案、RuleSet revision、ReviewEpisode、EvidenceSnapshot、既有 ReviewRun | 新 `ReviewRun`、阶段隔离结果或 stale/diff 范围 | 只追加新的 ReviewRun、差异和 stale 标记 | 输入阶段/快照不一致即停；后续资料只能新运行或显式回顾重审 | 不覆盖早期运行；不借用其他阶段日期/文件名；不静默改写历史报告 |
 | `job_event_recovery_gate` | Job 命令、JobStep、Checkpoint、租约状态、幂等键和上一个事件 | 合法 Job 状态转移、`JobEvent`、Checkpoint、可恢复点、重试/取消结果 | 只写 Job 运行记录和 Checkpoint，不写临床真相 | 从最后成功 Checkpoint 恢复；非法转移、重复事件或租约失效即停并保留原因 | 不让浏览器/SSE拥有 Job 生命期；不产生永久 processing；不重复应用 Action |
 

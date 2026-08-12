@@ -5,19 +5,20 @@ from pathlib import Path
 
 import pytest
 from jsonschema import Draft202012Validator, FormatChecker
+from jsonschema.exceptions import ValidationError as JsonSchemaValidationError
 
 from app.domain.contracts.review import FixtureV1
 from app.domain.contracts.agent_io import AgentContractsV1
 from app.domain.contracts.uat import UatWorkspaceFixture
 from app.domain.contracts.enums import ReviewStage
 from app.domain.gates import (
+    assessment_publication_from_fixture,
     assert_protocol_integrity,
     require_protocol_integrity_acceptance,
     validate_action_publication,
     validate_fixture_scope,
 )
 from app.domain.gates.actions import ActionPublication
-from app.domain.gates.assessment import AssessmentPublication
 from app.domain.rollup import publish_episode_rollup
 
 
@@ -72,6 +73,7 @@ def test_fixture_references_are_internally_consistent() -> None:
             protocol_version=fixture.project.protocol_version,
             manifest=fixture.protocol_integrity_manifest,
             authority_record=fixture.protocol_authority_record,
+            authority_confirmation=fixture.protocol_authority_confirmation,
             authority_gate_result=gate_by_id[
                 fixture.project.protocol_version.authority_gate_result_id
             ],
@@ -142,19 +144,13 @@ def test_fixture_references_are_internally_consistent() -> None:
             assert prompt_by_id[call.prompt_version_id].node == call.node
             assert call.model_config_id in model_ids
         for action in fixture.actions:
-            assessment = next(
-                item
-                for item in fixture.final_assessments
-                if item.assessment_id == action.assessment_id
-            )
             validate_action_publication(
                 ActionPublication(
                     action=action,
                     gate_result=gate_by_id[action.gate_result_id],
-                ),
-                assessment_publication=AssessmentPublication(
-                    assessment=assessment,
-                    gate_result=gate_by_id[assessment.gate_result_id],
+                    assessment_publication=assessment_publication_from_fixture(
+                        fixture, action.assessment_id
+                    ),
                 ),
             )
         for run in fixture.review_runs:
@@ -175,26 +171,24 @@ def test_fixture_rollups_match_scenario_semantics() -> None:
         publication = publish_episode_rollup(
             review_episode_id=fixture.review_episode.review_episode_id,
             assessment_publications=[
-                AssessmentPublication(
-                    assessment=item,
-                    gate_result=next(
-                        gate
-                        for gate in fixture.gate_results
-                        if gate.gate_result_id == item.gate_result_id
-                    ),
+                assessment_publication_from_fixture(
+                    fixture, item.assessment_id
                 )
                 for item in fixture.final_assessments
             ],
             expectations=fixture.evidence_expectations,
             action_publications=[
-                ActionPublication(
-                    action=item,
-                    gate_result=next(
+                    ActionPublication(
+                        action=item,
+                        gate_result=next(
                         gate
                         for gate in fixture.gate_results
-                        if gate.gate_result_id == item.gate_result_id
-                    ),
-                )
+                            if gate.gate_result_id == item.gate_result_id
+                        ),
+                        assessment_publication=assessment_publication_from_fixture(
+                            fixture, item.assessment_id
+                        ),
+                    )
                 for item in fixture.actions
             ],
             gate_result_id=fixture.episode_rollup.gate_result_id,
@@ -293,6 +287,7 @@ def test_uat_workspace_has_executable_multistage_coverage() -> None:
             protocol_version=fixture.project.protocol_version,
             manifest=fixture.protocol_integrity_manifest,
             authority_record=fixture.protocol_authority_record,
+            authority_confirmation=fixture.protocol_authority_confirmation,
             authority_gate_result=gate_by_id[
                 fixture.project.protocol_version.authority_gate_result_id
             ],
@@ -319,8 +314,96 @@ def test_uat_workspace_rejects_semantic_operator_coverage_regression() -> None:
                         component["exception_expression"]
                     )
 
-    with pytest.raises(ValueError, match="ALL、ANY、NOT"):
+    with pytest.raises(ValueError, match="ALL[/、]ANY[/、]NOT"):
         UatWorkspaceFixture.model_validate(payload)
+
+
+def test_uat_workspace_rejects_semantic_change_with_same_operator_counts() -> None:
+    payload = load_json(UAT_FIXTURE_PATH)
+    for fixture in payload["episodes"]:
+        component = next(
+            component
+            for rule in fixture["rule_set"]["rules"]
+            for component in rule["components"]
+            if component["rule_component_id"] == "component-ex-01"
+        )
+        component["expression"]["operator"] = "any"
+        component["expression"]["children"][1]["operator"] = "all"
+    with pytest.raises(ValueError, match="语义漂移"):
+        UatWorkspaceFixture.model_validate(payload)
+
+
+def test_uat_workspace_rejects_time_window_semantic_drift() -> None:
+    payload = load_json(UAT_FIXTURE_PATH)
+    for fixture in payload["episodes"]:
+        component = next(
+            component
+            for rule in fixture["rule_set"]["rules"]
+            for component in rule["components"]
+            if component["rule_component_id"] == "component-ex-01"
+        )
+        component["expression"]["children"][1]["children"][1][
+            "time_constraint"
+        ]["upper_bound_days"] = 29
+    with pytest.raises(ValueError, match="28 天时间窗"):
+        UatWorkspaceFixture.model_validate(payload)
+
+
+def test_uat_contains_real_historical_source_unavailable_episode() -> None:
+    workspace = UatWorkspaceFixture.model_validate(load_json(UAT_FIXTURE_PATH))
+    matching = [
+            fixture
+            for fixture in workspace.episodes
+            if any(
+                item.gap_type is not None
+                and item.gap_type.value == "historical_source_unavailable"
+                for item in fixture.evidence_expectations
+            )
+    ]
+    assert matching
+    assert any(
+        item.status.value == "observed_weak" and item.evidence_span_ids
+        for fixture in matching
+        for item in fixture.evidence_expectations
+        if item.gap_type and item.gap_type.value == "historical_source_unavailable"
+    )
+
+
+def test_generated_json_schema_enforces_model_level_conditionals() -> None:
+    schema = load_json(SCHEMA_PATH)
+    openapi = load_json(OPENAPI_PATH)
+    clinical_fact_schemas = [
+        {"$defs": schema["$defs"], "$ref": "#/$defs/ClinicalFact"},
+        {
+            "components": openapi["components"],
+            "$ref": "#/components/schemas/ClinicalFact",
+        },
+    ]
+    invalid_fact = load_json(FIXTURE_PATHS[0])["facts"][0]
+    invalid_fact.update({"polarity": "unknown", "value": True, "unit": None})
+    for clinical_fact_schema in clinical_fact_schemas:
+        with pytest.raises(JsonSchemaValidationError):
+            Draft202012Validator(clinical_fact_schema).validate(invalid_fact)
+
+    time_constraint_schemas = [
+        {"$defs": schema["$defs"], "$ref": "#/$defs/TimeConstraint"},
+        {
+            "components": openapi["components"],
+            "$ref": "#/components/schemas/TimeConstraint",
+        },
+    ]
+    invalid_window = {
+        "schema_version": "fixture/v1",
+        "anchor_type": "baseline_date",
+        "direction": "on",
+        "lower_bound_days": 1,
+        "upper_bound_days": None,
+        "half_life_multiplier": None,
+        "allow_partial_date": False,
+    }
+    for time_constraint_schema in time_constraint_schemas:
+        with pytest.raises(JsonSchemaValidationError):
+            Draft202012Validator(time_constraint_schema).validate(invalid_window)
 
 
 def test_protocol_integrity_gate_rejects_tampered_stored_closure() -> None:
@@ -341,6 +424,7 @@ def test_protocol_integrity_gate_rejects_tampered_stored_closure() -> None:
             protocol_version=fixture.project.protocol_version,
             manifest=fixture.protocol_integrity_manifest,
             authority_record=fixture.protocol_authority_record,
+            authority_confirmation=fixture.protocol_authority_confirmation,
             authority_gate_result=authority_gate,
         )
 

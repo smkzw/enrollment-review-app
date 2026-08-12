@@ -89,6 +89,7 @@ from app.domain.contracts.uat import ProtocolDiffExample, UatWorkspaceFixture
 from app.domain.expression import EvaluationContext, evaluate_component, evaluate_expression
 from app.domain.gates import (
     build_protocol_authority_record,
+    build_protocol_authority_confirmation,
     build_protocol_integrity_manifest,
     derive_component_decision,
     derive_gate_gap_types,
@@ -504,8 +505,16 @@ def base_objects(suffix: str, rules: RuleSet):
         verified_by="synthetic-uat-human-acceptance",
         verified_at=NOW,
     )
+    authority_confirmation = build_protocol_authority_confirmation(
+        confirmation_id="confirmation-protocol-v1-phase-iii",
+        command_id="command-accept-protocol-v1-phase-iii",
+        record=authority_record,
+        confirmed_by="synthetic-uat-human-acceptance",
+        confirmed_at=NOW,
+    )
     authority_gate = publish_protocol_authority_acceptance(
         authority_record,
+        confirmation=authority_confirmation,
         gate_result_id="gate-authority-protocol-v1-phase-iii",
         created_at=NOW,
     )
@@ -516,6 +525,7 @@ def base_objects(suffix: str, rules: RuleSet):
         study_phase=StudyPhase.PHASE_III,
         source_refs=["protocol-v1:p1", "protocol-v1:p20-p24", "protocol-v1:flow-table"],
         authority_record=authority_record,
+        authority_confirmation=authority_confirmation,
         authority_gate_result=authority_gate,
     )
     protocol = ProtocolDocumentVersion(
@@ -526,6 +536,7 @@ def base_objects(suffix: str, rules: RuleSet):
         sha256="a" * 64,
         integrity_manifest_sha256=manifest.manifest_sha256,
         authority_record_sha256=authority_record.authority_record_sha256,
+        authority_confirmation_id=authority_confirmation.confirmation_id,
         authority_gate_result_id=authority_gate.gate_result_id,
         integrity_gate_result_id="gate-integrity-protocol-v1-phase-iii",
     )
@@ -535,6 +546,7 @@ def base_objects(suffix: str, rules: RuleSet):
         protocol_version=protocol,
         manifest=manifest,
         authority_record=authority_record,
+        authority_confirmation=authority_confirmation,
         authority_gate_result=authority_gate,
         gate_result_id=protocol.integrity_gate_result_id,
         input_revision_map={rules.rule_set_id: rules.revision},
@@ -598,6 +610,7 @@ def base_objects(suffix: str, rules: RuleSet):
     return (
         project,
         authority_record,
+        authority_confirmation,
         authority_gate,
         integrity_gate,
         manifest,
@@ -617,6 +630,7 @@ def agent_calls(suffix: str) -> list[AgentCallContract]:
         (AgentNode.ELIGIBILITY_ASSESSOR, AgentOutputKind.CANDIDATE, AgentWriteScope.ASSESSMENT_CANDIDATE),
     ]
     for index, (node, output_kind, write_scope) in enumerate(definitions, start=1):
+        initial_outputs = {"pending": digest(f"{suffix}:{node.value}:pending")}
         calls.append(
             AgentCallContract(
                 agent_call_id=f"call-{suffix}-{index}",
@@ -628,7 +642,8 @@ def agent_calls(suffix: str) -> list[AgentCallContract]:
                 input_scope_hash=str(index) * 64,
                 input_revision_map={f"snapshot-{suffix}": 1},
                 raw_output_hash=str(index + 2) * 64,
-                output_hash=str(index + 4) * 64,
+                output_hash=canonical_hash(initial_outputs),
+                typed_output_hashes=initial_outputs,
                 idempotency_key=f"{suffix}:{node.value}:v1",
                 attempt=1,
                 max_attempts=2,
@@ -654,6 +669,24 @@ def agent_calls(suffix: str) -> list[AgentCallContract]:
             )
         )
     return calls
+
+
+def bind_agent_typed_output(agent_call: AgentCallContract, entity) -> None:
+    entity_id = getattr(
+        entity,
+        "candidate_id",
+        getattr(entity, "assessment_candidate_id", None),
+    )
+    if not entity_id:
+        raise ValueError("typed output 缺少稳定候选 ID")
+    hashes = {
+        key: value
+        for key, value in agent_call.typed_output_hashes.items()
+        if key != "pending"
+    }
+    hashes[entity_id] = canonical_hash(entity.model_dump(mode="json"))
+    agent_call.typed_output_hashes = hashes
+    agent_call.output_hash = canonical_hash(hashes)
 
 
 def agent_output_gate(call: AgentCallContract) -> GateResult:
@@ -727,7 +760,9 @@ def publish_fixture_assessment(
                     component,
                     context,
                 )
-                candidate = AssessmentCandidate.model_validate(hydrated.model_dump())
+                for field_name, value in hydrated.__dict__.items():
+                    setattr(candidate, field_name, value)
+                bind_agent_typed_output(agent_call, candidate)
                 candidate_gate = publish_assessment_candidate_acceptance(
                     candidate,
                     agent_call=agent_call,
@@ -738,6 +773,7 @@ def publish_fixture_assessment(
                 normalized = evidence_candidate_for(
                     episode, facts, evidence_spans, evidence_agent_call
                 )
+                bind_agent_typed_output(evidence_agent_call, normalized)
                 evidence_gate = publish_evidence_acceptance(
                     candidate=normalized,
                     agent_call=evidence_agent_call,
@@ -757,10 +793,7 @@ def publish_fixture_assessment(
                     evidence_agent_call_gate_result=agent_output_gate(
                         evidence_agent_call
                     ),
-                    component=component,
-                    rule_kind=rule.kind,
-                    facts=facts,
-                    evidence_spans=evidence_spans,
+                    rule_set=rules,
                     anchor_dates=episode.anchor_dates,
                     episode_stage=episode.stage,
                     expectations=expectations,
@@ -773,7 +806,7 @@ def publish_fixture_assessment(
                 gate_results.extend(
                     [candidate_gate, evidence_gate, publication.gate_result]
                 )
-                return publication.assessment
+                return publication
     raise ValueError(f"未找到规则组件: {candidate.rule_component_id}")
 
 
@@ -785,20 +818,14 @@ def fixture_action(
     **kwargs,
 ) -> ActionRequest:
     action_id = kwargs["action_id"]
-    assessment = next(
+    assessment_publication = next(
         item
         for item in assessments
-        if item.rule_component_id == kwargs["rule_component_id"]
-    )
-    assessment_gate = next(
-        item for item in gate_results if item.gate_result_id == assessment.gate_result_id
+        if item.assessment.rule_component_id == kwargs["rule_component_id"]
     )
     publication = publish_action_request(
         **kwargs,
-        assessment_publication=AssessmentPublication(
-            assessment=assessment,
-            gate_result=assessment_gate,
-        ),
+        assessment_publication=assessment_publication,
         gate_result_id=f"gate-{action_id}",
         input_revision_map={episode.review_episode_id: episode.revision},
         created_at=NOW,
@@ -807,11 +834,24 @@ def fixture_action(
     return publication.action
 
 
+def refresh_assessment_agent_gate(
+    publications: list[AssessmentPublication], agent_call: AgentCallContract
+) -> list[AssessmentPublication]:
+    gate = agent_output_gate(agent_call)
+    return [
+        item.model_copy(
+            update={"agent_call": agent_call, "agent_call_gate_result": gate}
+        )
+        for item in publications
+    ]
+
+
 def build_fixture(scenario: str) -> FixtureV1:
     rules = rule_set()
     (
         project,
         authority_record,
+        authority_confirmation,
         authority_gate,
         integrity_gate,
         manifest,
@@ -914,6 +954,7 @@ def build_fixture(scenario: str) -> FixtureV1:
             publish_fixture_assessment(rules, candidates[0], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, assessment_id="assessment-clear-in", review_run_id=review_run.review_run_id, gate_result_id="gate-clear-in"),
             publish_fixture_assessment(rules, candidates[1], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, assessment_id="assessment-clear-ex", review_run_id=review_run.review_run_id, gate_result_id="gate-clear-ex"),
         ]
+        final = refresh_assessment_agent_gate(final, calls[1])
         actions = [
             fixture_action(publication_gate_results, episode=episode, assessments=final,
                 action_id="action-clear-provenance",
@@ -1030,6 +1071,7 @@ def build_fixture(scenario: str) -> FixtureV1:
             publish_fixture_assessment(rules, candidates[0], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, assessment_id="assessment-barrier-in", review_run_id=review_run.review_run_id, gate_result_id="gate-barrier-in"),
             publish_fixture_assessment(rules, candidates[1], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, assessment_id="assessment-barrier-ex", review_run_id=review_run.review_run_id, gate_result_id="gate-barrier-ex"),
         ]
+        final = refresh_assessment_agent_gate(final, calls[1])
     else:
         spans = [
             EvidenceSpan(
@@ -1192,6 +1234,7 @@ def build_fixture(scenario: str) -> FixtureV1:
             publish_fixture_assessment(rules, candidates[5], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, assessment_id="assessment-gap-procedure", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-procedure"),
             publish_fixture_assessment(rules, candidates[6], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, assessment_id="assessment-gap-result-fields", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-result-fields"),
         ]
+        final = refresh_assessment_agent_gate(final, calls[1])
         actions = [
             fixture_action(publication_gate_results, episode=episode, assessments=final,
                 action_id="action-gap-age",
@@ -1325,17 +1368,7 @@ def build_fixture(scenario: str) -> FixtureV1:
     normalization_candidates = [
         evidence_candidate_for(episode, facts, spans, calls[0])
     ]
-    assessment_publications = [
-        AssessmentPublication(
-            assessment=item,
-            gate_result=next(
-                gate
-                for gate in publication_gate_results
-                if gate.gate_result_id == item.gate_result_id
-            ),
-        )
-        for item in final
-    ]
+    assessment_publications = final
     action_publications = [
         ActionPublication(
             action=item,
@@ -1343,6 +1376,11 @@ def build_fixture(scenario: str) -> FixtureV1:
                 gate
                 for gate in publication_gate_results
                 if gate.gate_result_id == item.gate_result_id
+            ),
+            assessment_publication=next(
+                publication
+                for publication in assessment_publications
+                if publication.assessment.assessment_id == item.assessment_id
             ),
         )
         for item in actions
@@ -1420,6 +1458,7 @@ def build_fixture(scenario: str) -> FixtureV1:
         scenario=scenario,
         project=project,
         protocol_authority_record=authority_record,
+        protocol_authority_confirmation=authority_confirmation,
         protocol_integrity_manifest=manifest,
         rule_set=rules,
         workflow_stages=stages,
@@ -1435,7 +1474,7 @@ def build_fixture(scenario: str) -> FixtureV1:
         conflict_groups=conflict_groups,
         patient_profile=profile,
         assessment_candidates=candidates,
-        final_assessments=final,
+        final_assessments=[item.assessment for item in final],
         actions=actions,
         episode_rollup=rollup_publication.rollup,
         prompt_versions=[
@@ -1652,6 +1691,9 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
         authority_record=type(base.protocol_authority_record).model_validate(
             payload["protocol_authority_record"]
         ),
+        authority_confirmation=type(
+            base.protocol_authority_confirmation
+        ).model_validate(payload["protocol_authority_confirmation"]),
         authority_gate_result=authority_gate_for_namespace,
         gate_result_id=payload["project"]["protocol_version"][
             "integrity_gate_result_id"
@@ -1699,6 +1741,20 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
                     "gap_type": GapType.RECORD_INCOMPLETE,
                 }
             )
+        if (
+            subject_number == 4
+            and stage == ReviewStage.SCREENING
+            and expectation.requirement_id == "req-professional"
+        ):
+            expectation = expectation.model_copy(
+                update={
+                    "status": ExpectationStatus.OBSERVED_WEAK,
+                    "evidence_span_ids": [
+                        payload["evidence_spans"][0]["evidence_span_id"]
+                    ],
+                    "gap_type": GapType.HISTORICAL_SOURCE_UNAVAILABLE,
+                }
+            )
         expectations.append(EvidenceExpectation.model_validate(expectation.model_dump()))
 
     calls = []
@@ -1714,6 +1770,7 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
                 "input_revision_map": item["input_revision_map"],
             }
         )
+        item["output_hash"] = canonical_hash(item["typed_output_hashes"])
         call = AgentCallContract.model_validate(item)
         calls.append(call)
         agent_gates.append(
@@ -1744,6 +1801,10 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
     ]
     normalized = evidence_candidate_for(
         episode, facts, evidence_spans, evidence_agent_call
+    )
+    bind_agent_typed_output(evidence_agent_call, normalized)
+    agent_gate_by_call_id[evidence_agent_call.agent_call_id] = agent_output_gate(
+        evidence_agent_call
     )
     evidence_gate = publish_evidence_acceptance(
         candidate=normalized,
@@ -1797,6 +1858,12 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
         candidate = hydrate_candidate_observations(candidate, component, context)
         candidates.append(AssessmentCandidate.model_validate(candidate.model_dump()))
         derived_gaps[candidate.rule_component_id] = gaps
+
+    for candidate in candidates:
+        bind_agent_typed_output(call_by_id[candidate.agent_call_id], candidate)
+    for call in calls:
+        agent_gate_by_call_id[call.agent_call_id] = agent_output_gate(call)
+    agent_gates = [agent_gate_by_call_id[call.agent_call_id] for call in calls]
 
     old_actions_by_component = {
         item["rule_component_id"]: item for item in payload["actions"]
@@ -1869,10 +1936,7 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
             evidence_agent_call_gate_result=agent_gate_by_call_id[
                 evidence_agent_call.agent_call_id
             ],
-            component=component,
-            rule_kind=rule.kind,
-            facts=facts,
-            evidence_spans=evidence_spans,
+            rule_set=rules,
             anchor_dates=episode.anchor_dates,
             episode_stage=stage,
             expectations=expectations,

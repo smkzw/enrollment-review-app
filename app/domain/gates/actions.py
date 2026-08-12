@@ -13,7 +13,10 @@ from app.domain.contracts.enums import (
     ReviewStage,
 )
 from app.domain.contracts.review import ActionRequest, ActionTransition
-from app.domain.gates.assessment import AssessmentPublication
+from app.domain.gates.assessment import (
+    AssessmentPublication,
+    validate_assessment_publication,
+)
 from app.domain.policies import derive_action_blocking_level
 from app.domain.publication import _build_gate_owned_model, canonical_hash
 
@@ -25,6 +28,7 @@ class ActionGateError(ValueError):
 class ActionPublication(ContractModel):
     action: ActionRequest
     gate_result: GateResult
+    assessment_publication: AssessmentPublication
 
 
 def _validate_action_request_state(action: ActionRequest) -> None:
@@ -56,8 +60,10 @@ def publish_action_request(
 ) -> ActionPublication:
     assessment = assessment_publication.assessment
     assessment_gate = assessment_publication.gate_result
+    validate_assessment_publication(assessment_publication)
     if (
-        assessment_gate.result != GateOutcome.ACCEPTED
+        assessment_gate.gate_name != "assessment-publication-gate"
+        or assessment_gate.result != GateOutcome.ACCEPTED
         or assessment.assessment_id not in assessment_gate.accepted_entity_refs
         or assessment_gate.output_hash
         != canonical_hash(assessment.model_dump(mode="json"))
@@ -122,18 +128,22 @@ def publish_action_request(
         created_at=created_at,
         output_hash=canonical_hash(action.model_dump(mode="json")),
     )
-    return ActionPublication(action=action, gate_result=gate_result)
+    return ActionPublication(
+        action=action,
+        gate_result=gate_result,
+        assessment_publication=assessment_publication,
+    )
 
 
 def validate_action_publication(
     publication: ActionPublication,
-    *,
-    assessment_publication: AssessmentPublication,
 ) -> GateResult:
     action = publication.action
     gate = publication.gate_result
+    assessment_publication = publication.assessment_publication
     assessment = assessment_publication.assessment
     assessment_gate = assessment_publication.gate_result
+    validate_assessment_publication(assessment_publication)
     _validate_action_request_state(action)
     if (
         gate.gate_name != "action-publication-gate"
@@ -170,4 +180,24 @@ def validate_action_publication(
         )
     ):
         raise ActionGateError("ActionRequest 未通过 accepted GateResult 发布")
+    expected = publish_action_request(
+        assessment_publication=assessment_publication,
+        action_id=action.action_id,
+        rule_component_id=action.rule_component_id,
+        gap_type=action.gap_type,
+        target_party=action.target_party,
+        requested_action=action.requested_action,
+        acceptable_evidence=action.acceptable_evidence,
+        due_stage=action.due_stage,
+        state=action.state,
+        recompute_scope=action.recompute_scope,
+        gate_result_id=gate.gate_result_id,
+        input_revision_map=gate.input_revision_map,
+        created_at=gate.created_at,
+        trigger_evidence_span_id=action.trigger_evidence_span_id,
+        transitions=action.transitions,
+        revision=action.revision,
+    )
+    if publication.model_dump(mode="json") != expected.model_dump(mode="json"):
+        raise ActionGateError("ActionPublication 未通过完整上游 Gate 闭包重算")
     return gate

@@ -52,7 +52,7 @@
       "model_config_id": "model-baseline-v1",
       "node": "evidence_normalizer",
       "outcome": "accepted",
-      "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "output_hash": "9cf28953b661fa9711900c4c53af2ffc4127b9c09aa3906dd3abed7d0e31dc32",
       "output_kind": "candidate",
       "output_tokens": 51,
       "parent_event_id": null,
@@ -75,6 +75,9 @@
       "started_at": "2026-08-12T12:00:00Z",
       "subject_id": "subject-clear",
       "trigger": "fixture_generation",
+      "typed_output_hashes": {
+        "evidence-candidate-episode-clear": "f702741fbeaf42c87e1b1ca4daa99247b4a49425d05db19fa38b80bb2fb52117"
+      },
       "write_scope": "evidence_candidate"
     },
     {
@@ -98,7 +101,7 @@
       "model_config_id": "model-baseline-v1",
       "node": "eligibility_assessor",
       "outcome": "accepted",
-      "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "output_hash": "3e37d19f8a26e1087972c13f395b1a699a8efcec7b86f7580431a6c29bb8a232",
       "output_kind": "candidate",
       "output_tokens": 52,
       "parent_event_id": null,
@@ -121,6 +124,10 @@
       "started_at": "2026-08-12T12:00:00Z",
       "subject_id": "subject-clear",
       "trigger": "fixture_generation",
+      "typed_output_hashes": {
+        "candidate-clear-ex": "82fea84c41d9d69612cb9536a14f6a360fc2c67a9a9507d90cb1aafb6f48788e",
+        "candidate-clear-in": "f806e3de4c3beca4d3a56a450f2c69eded04618a59db8d7488549bdb5ff2c4af"
+      },
       "write_scope": "assessment_candidate"
     }
   ],
@@ -136,8 +143,25 @@
       ],
       "gap_types": [],
       "missing_predicate_ids": [],
-      "predicate_observations": [],
-      "processed_predicate_ids": [],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [
+            "span-clear-age"
+          ],
+          "fact_ids": [
+            "fact-clear-age"
+          ],
+          "observed_unit": "year",
+          "observed_value": 36,
+          "predicate_id": "predicate-demographics-age_years-gte",
+          "reason_codes": [],
+          "schema_version": "fixture/v1",
+          "truth": "true"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-demographics-age_years-gte"
+      ],
       "project_id": "project-synthetic-phase-iii",
       "proposed_decision": "inclusion_met",
       "protocol_version_id": "protocol-v1",
@@ -167,13 +191,104 @@
       "gap_types": [
         "provenance_followup"
       ],
-      "missing_predicate_ids": [],
-      "predicate_observations": [],
-      "processed_predicate_ids": [],
+      "missing_predicate_ids": [
+        "predicate-laboratory-target_ratio_uln-gte",
+        "predicate-medication-prohibited-window",
+        "predicate-laboratory-critical_measurement_invalid-eq",
+        "predicate-exception-protocol_exception_documented-eq",
+        "predicate-investigator-exception_confirmed-eq"
+      ],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [
+            "span-clear-history"
+          ],
+          "fact_ids": [
+            "fact-clear-risk"
+          ],
+          "observed_unit": null,
+          "observed_value": true,
+          "predicate_id": "predicate-investigator-unacceptable_participation_risk-eq",
+          "reason_codes": [],
+          "schema_version": "fixture/v1",
+          "truth": "false"
+        },
+        {
+          "evidence_span_ids": [],
+          "fact_ids": [],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-laboratory-target_ratio_uln-gte",
+          "reason_codes": [
+            "fact_not_observed"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        },
+        {
+          "evidence_span_ids": [],
+          "fact_ids": [],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-medication-prohibited-window",
+          "reason_codes": [
+            "fact_not_observed"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        },
+        {
+          "evidence_span_ids": [],
+          "fact_ids": [],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-laboratory-critical_measurement_invalid-eq",
+          "reason_codes": [
+            "fact_not_observed"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        },
+        {
+          "evidence_span_ids": [],
+          "fact_ids": [],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-exception-protocol_exception_documented-eq",
+          "reason_codes": [
+            "fact_not_observed"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        },
+        {
+          "evidence_span_ids": [],
+          "fact_ids": [],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-investigator-exception_confirmed-eq",
+          "reason_codes": [
+            "professional_judgment_missing"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-investigator-unacceptable_participation_risk-eq",
+        "predicate-laboratory-target_ratio_uln-gte",
+        "predicate-medication-prohibited-window",
+        "predicate-laboratory-critical_measurement_invalid-eq",
+        "predicate-exception-protocol_exception_documented-eq",
+        "predicate-investigator-exception_confirmed-eq"
+      ],
       "project_id": "project-synthetic-phase-iii",
       "proposed_decision": "exclusion_not_triggered",
       "protocol_version_id": "protocol-v1",
-      "reason_codes": [],
+      "reason_codes": [
+        "fact_not_observed",
+        "professional_judgment_missing"
+      ],
       "review_episode_id": "episode-clear",
       "review_run_id": "run-clear",
       "rule_component_id": "component-ex-01",
@@ -181,7 +296,10 @@
       "rule_set_revision": 1,
       "schema_version": "fixture/v1",
       "subject_id": "subject-clear",
-      "uncertainty_codes": [],
+      "uncertainty_codes": [
+        "fact_not_observed",
+        "professional_judgment_missing"
+      ],
       "unresolved_items": [],
       "used_fact_ids": [
         "fact-clear-risk"
@@ -506,7 +624,7 @@
         "snapshot-clear": 1
       },
       "input_scope_hash": "1111111111111111111111111111111111111111111111111111111111111111",
-      "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "output_hash": "9cf28953b661fa9711900c4c53af2ffc4127b9c09aa3906dd3abed7d0e31dc32",
       "parent_event_id": null,
       "recompute_scope": [
         "subject-clear"
@@ -535,7 +653,7 @@
         "snapshot-clear": 1
       },
       "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
-      "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "output_hash": "3e37d19f8a26e1087972c13f395b1a699a8efcec7b86f7580431a6c29bb8a232",
       "parent_event_id": null,
       "recompute_scope": [
         "subject-clear"
@@ -560,19 +678,15 @@
       "input_entity_refs": [
         "protocol-v1",
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "IN-01",
-        "EX-01",
-        "EX-02",
-        "EX-03",
-        "EX-04",
-        "REQ-01",
-        "REQ-02"
+        "authority-protocol-v1-phase-iii",
+        "confirmation-protocol-v1-phase-iii",
+        "command-accept-protocol-v1-phase-iii"
       ],
       "input_revision_map": {
         "protocol-v1": 1
       },
-      "input_scope_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
-      "output_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
+      "input_scope_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
+      "output_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
       "parent_event_id": null,
       "recompute_scope": [
         "protocol-v1"
@@ -598,6 +712,7 @@
       "input_entity_refs": [
         "protocol-v1",
         "authority-protocol-v1-phase-iii",
+        "confirmation-protocol-v1-phase-iii",
         "gate-authority-protocol-v1-phase-iii",
         "manifest-protocol-v1-phase-iii",
         "ruleset-synthetic-phase-iii"
@@ -605,8 +720,8 @@
       "input_revision_map": {
         "ruleset-synthetic-phase-iii": 1
       },
-      "input_scope_hash": "9a628eaca71c15803f748b9ac512223e3684084af12f52dce8652c5cba4a71be",
-      "output_hash": "9a628eaca71c15803f748b9ac512223e3684084af12f52dce8652c5cba4a71be",
+      "input_scope_hash": "a192af76e77f4bfddf22e309e111386597ea88ac2d7d0bbeab054e5d99fe3946",
+      "output_hash": "a192af76e77f4bfddf22e309e111386597ea88ac2d7d0bbeab054e5d99fe3946",
       "parent_event_id": null,
       "recompute_scope": [
         "protocol-v1"
@@ -675,8 +790,8 @@
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "0dcc0daf9980685f1b6e0cd8f6ea890a6f421eef3cbe47a9ecb187ac36b40b0a",
-      "output_hash": "0dcc0daf9980685f1b6e0cd8f6ea890a6f421eef3cbe47a9ecb187ac36b40b0a",
+      "input_scope_hash": "73c6e4e29985a99622bc70308be1195f786bbe2663b3ab7781d19f5eb3e620ef",
+      "output_hash": "73c6e4e29985a99622bc70308be1195f786bbe2663b3ab7781d19f5eb3e620ef",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-clear"
@@ -708,7 +823,7 @@
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "aadd0cd0096cd883b2aef3b825e861a451879432a87e9c8b75ba09bc455ef369",
+      "input_scope_hash": "c7108ad2e3e7741d77b5d3a0a706fac58d094d590908fd27705fd92e9084f531",
       "output_hash": "634b460cc3bf4ccd9a76decd72f31a2e34815d25ae7ee321b204d3ec7f66e11a",
       "parent_event_id": null,
       "recompute_scope": [
@@ -778,8 +893,8 @@
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "0dcc0daf9980685f1b6e0cd8f6ea890a6f421eef3cbe47a9ecb187ac36b40b0a",
-      "output_hash": "0dcc0daf9980685f1b6e0cd8f6ea890a6f421eef3cbe47a9ecb187ac36b40b0a",
+      "input_scope_hash": "73c6e4e29985a99622bc70308be1195f786bbe2663b3ab7781d19f5eb3e620ef",
+      "output_hash": "73c6e4e29985a99622bc70308be1195f786bbe2663b3ab7781d19f5eb3e620ef",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-clear"
@@ -811,7 +926,7 @@
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "4924e7176f059f9ef36ef865dedefb4b07e553029e7ce22d991b063aa9428868",
+      "input_scope_hash": "8945994ab17a6039551d9c1690470c1508600623660ed4f4b680e766591e2bc7",
       "output_hash": "641ee27d53ab7e0cbabf69f91aa3eac0e282a7c65c3bbc4320b10eb7b034a610",
       "parent_event_id": null,
       "recompute_scope": [
@@ -979,6 +1094,7 @@
     "project_id": "project-synthetic-phase-iii",
     "project_name": "合成Ⅲ期入排审核项目",
     "protocol_version": {
+      "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
       "authority_gate_result_id": "gate-authority-protocol-v1-phase-iii",
       "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
       "integrity_gate_result_id": "gate-integrity-protocol-v1-phase-iii",
@@ -1015,6 +1131,20 @@
       "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
     }
   ],
+  "protocol_authority_confirmation": {
+    "action": "accept_protocol_authority",
+    "authority_record_id": "authority-protocol-v1-phase-iii",
+    "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+    "command_id": "command-accept-protocol-v1-phase-iii",
+    "confirmation_id": "confirmation-protocol-v1-phase-iii",
+    "confirmation_sha256": "1f213715bd1253931704f1aaee0fd985d1cb3192ac7e29e3773de220d914c9ac",
+    "confirmed_at": "2026-08-12T12:00:00Z",
+    "confirmed_by": "synthetic-uat-human-acceptance",
+    "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "protocol_version_id": "protocol-v1",
+    "recorded_by_service": "enrollment-review-app",
+    "schema_version": "fixture/v1"
+  },
   "protocol_authority_record": {
     "authority_record_id": "authority-protocol-v1-phase-iii",
     "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",

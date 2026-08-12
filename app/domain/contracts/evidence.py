@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Literal
 from datetime import datetime
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from .common import ContractModel, DateValue, ScalarValue, VersionedModel
 from .enums import (
@@ -135,6 +135,25 @@ class EvidenceExpectation(VersionedModel):
 
 
 class ClinicalFact(VersionedModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {"polarity": {"const": "unknown"}},
+                        "required": ["polarity"],
+                    },
+                    "then": {
+                        "properties": {
+                            "value": {"type": "null"},
+                            "unit": {"type": "null"},
+                        }
+                    },
+                }
+            ]
+        },
+    )
     fact_id: str = Field(min_length=1)
     project_id: str = Field(min_length=1)
     subject_id: str = Field(min_length=1)

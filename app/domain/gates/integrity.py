@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.domain.contracts.review import FixtureV1, ProtocolDocumentVersion
 from app.domain.contracts.rules import (
+    ProtocolAuthorityConfirmation,
     ProtocolAuthorityRecord,
     ProtocolIntegrityManifest,
     RuleSet,
@@ -24,6 +25,84 @@ class ProtocolIntegrityError(ValueError):
 
 class StageIsolationError(ValueError):
     pass
+
+
+def assessment_publication_from_fixture(
+    fixture: FixtureV1, assessment_id: str
+):
+    from app.domain.gates.assessment import AssessmentPublication
+
+    gate_by_id = {item.gate_result_id: item for item in fixture.gate_results}
+    assessment = next(
+        item for item in fixture.final_assessments if item.assessment_id == assessment_id
+    )
+    assessment_gate = gate_by_id[assessment.gate_result_id]
+    candidate = next(
+        item
+        for item in fixture.assessment_candidates
+        if item.assessment_candidate_id in assessment_gate.input_entity_refs
+    )
+    agent_call = next(
+        item for item in fixture.agent_calls if item.agent_call_id == candidate.agent_call_id
+    )
+    candidate_gate = next(
+        item
+        for item in fixture.gate_results
+        if item.gate_result_id in assessment_gate.input_entity_refs
+        and item.gate_name == "assessment-candidate-gate"
+        and candidate.assessment_candidate_id in item.accepted_entity_refs
+    )
+    evidence_candidate = next(
+        item
+        for item in fixture.evidence_normalization_candidates
+        if item.review_episode_id == assessment.review_episode_id
+        and item.evidence_snapshot_id == assessment.evidence_snapshot_id
+    )
+    evidence_agent_call = next(
+        item
+        for item in fixture.agent_calls
+        if item.agent_call_id == evidence_candidate.created_by_agent_call_id
+    )
+    evidence_gate = next(
+        item
+        for item in fixture.gate_results
+        if item.gate_result_id in assessment_gate.input_entity_refs
+        and item.gate_name == "evidence-acceptance-gate"
+        and evidence_candidate.candidate_id in item.accepted_entity_refs
+    )
+    return AssessmentPublication(
+        assessment=assessment,
+        gate_result=assessment_gate,
+        rule_set=fixture.rule_set,
+        candidate=candidate,
+        candidate_gate_result=candidate_gate,
+        agent_call=agent_call,
+        agent_call_gate_result=gate_by_id[agent_call.gate_result_ids[0]],
+        evidence_candidate=evidence_candidate,
+        evidence_gate_result=evidence_gate,
+        evidence_agent_call=evidence_agent_call,
+        evidence_agent_call_gate_result=gate_by_id[
+            evidence_agent_call.gate_result_ids[0]
+        ],
+        anchor_dates=fixture.review_episode.anchor_dates,
+        episode_stage=fixture.review_episode.stage,
+        expectations=fixture.evidence_expectations,
+        conflict_groups=fixture.conflict_groups,
+    )
+
+
+def action_publication_from_fixture(fixture: FixtureV1, action_id: str):
+    from app.domain.gates.actions import ActionPublication
+
+    gate_by_id = {item.gate_result_id: item for item in fixture.gate_results}
+    action = next(item for item in fixture.actions if item.action_id == action_id)
+    return ActionPublication(
+        action=action,
+        gate_result=gate_by_id[action.gate_result_id],
+        assessment_publication=assessment_publication_from_fixture(
+            fixture, action.assessment_id
+        ),
+    )
 
 
 def build_protocol_authority_record(
@@ -62,13 +141,65 @@ def build_protocol_authority_record(
     )
 
 
+def build_protocol_authority_confirmation(
+    *,
+    confirmation_id: str,
+    command_id: str,
+    record: ProtocolAuthorityRecord,
+    confirmed_by: str,
+    confirmed_at: datetime,
+) -> ProtocolAuthorityConfirmation:
+    data = {
+        "confirmation_id": confirmation_id,
+        "command_id": command_id,
+        "protocol_version_id": record.protocol_version_id,
+        "protocol_document_sha256": record.protocol_document_sha256,
+        "authority_record_id": record.authority_record_id,
+        "authority_record_sha256": record.authority_record_sha256,
+        "confirmed_by": confirmed_by,
+        "confirmed_at": confirmed_at,
+        "action": "accept_protocol_authority",
+        "recorded_by_service": "enrollment-review-app",
+    }
+    draft = ProtocolAuthorityConfirmation.model_construct(
+        **data,
+        confirmation_sha256="0" * 64,
+    )
+    return ProtocolAuthorityConfirmation(
+        **data,
+        confirmation_sha256=canonical_hash(
+            draft.model_dump(mode="json", exclude={"confirmation_sha256"})
+        ),
+    )
+
+
+def _require_authority_confirmation(
+    record: ProtocolAuthorityRecord,
+    confirmation: ProtocolAuthorityConfirmation,
+) -> None:
+    if (
+        confirmation.protocol_version_id != record.protocol_version_id
+        or confirmation.protocol_document_sha256 != record.protocol_document_sha256
+        or confirmation.authority_record_id != record.authority_record_id
+        or confirmation.authority_record_sha256 != record.authority_record_sha256
+    ):
+        raise ProtocolIntegrityError(
+            "人工确认事件必须精确绑定方案文件与 ProtocolAuthorityRecord"
+        )
+
+
 def publish_protocol_authority_acceptance(
     record: ProtocolAuthorityRecord,
     *,
+    confirmation: ProtocolAuthorityConfirmation,
     gate_result_id: str,
     created_at: datetime,
 ) -> GateResult:
-    payload = record.model_dump(mode="json")
+    _require_authority_confirmation(record, confirmation)
+    payload = {
+        "authority_record": record.model_dump(mode="json"),
+        "confirmation": confirmation.model_dump(mode="json"),
+    }
     return GateResult(
         gate_result_id=gate_result_id,
         gate_name="protocol-authority-human-acceptance-gate",
@@ -78,7 +209,9 @@ def publish_protocol_authority_acceptance(
         input_entity_refs=[
             record.protocol_version_id,
             record.protocol_document_sha256,
-            *record.rule_source_anchor_refs,
+            record.authority_record_id,
+            confirmation.confirmation_id,
+            confirmation.command_id,
         ],
         accepted_entity_refs=[record.authority_record_id],
         affected_scope=[record.protocol_version_id],
@@ -96,8 +229,10 @@ def assert_protocol_integrity(
     protocol_version: ProtocolDocumentVersion,
     manifest: ProtocolIntegrityManifest,
     authority_record: ProtocolAuthorityRecord,
+    authority_confirmation: ProtocolAuthorityConfirmation,
     authority_gate_result: GateResult,
 ) -> None:
+    _require_authority_confirmation(authority_record, authority_confirmation)
     if (
         manifest.protocol_version_id != protocol_version.protocol_version_id
         or manifest.protocol_document_sha256 != protocol_version.sha256
@@ -109,21 +244,19 @@ def assert_protocol_integrity(
         != manifest.authority_record_sha256
         or authority_record.protocol_version_id != protocol_version.protocol_version_id
         or authority_record.protocol_document_sha256 != protocol_version.sha256
+        or authority_confirmation.confirmation_id
+        != protocol_version.authority_confirmation_id
         or rule_set.protocol_version_id != protocol_version.protocol_version_id
         or rule_set.study_phase != manifest.study_phase
     ):
         raise ProtocolIntegrityError("RuleSet、权威 Manifest 与正式方案版本闭包不一致")
-    if (
-        authority_gate_result.gate_result_id
-        != protocol_version.authority_gate_result_id
-        or authority_gate_result.gate_name
-        != "protocol-authority-human-acceptance-gate"
-        or authority_gate_result.result != GateOutcome.ACCEPTED
-        or authority_record.authority_record_id
-        not in authority_gate_result.accepted_entity_refs
-        or authority_gate_result.output_hash
-        != canonical_hash(authority_record.model_dump(mode="json"))
-    ):
+    expected_authority_gate = publish_protocol_authority_acceptance(
+        authority_record,
+        confirmation=authority_confirmation,
+        gate_result_id=protocol_version.authority_gate_result_id,
+        created_at=authority_gate_result.created_at,
+    )
+    if authority_gate_result.model_dump(mode="json") != expected_authority_gate.model_dump(mode="json"):
         raise ProtocolIntegrityError("正式方案权威记录未通过独立人工验收 Gate")
     actual_rules = [item.model_dump(mode="json") for item in rule_set.rules]
     expected_rules = [
@@ -157,6 +290,7 @@ def publish_protocol_integrity_acceptance(
     protocol_version: ProtocolDocumentVersion,
     manifest: ProtocolIntegrityManifest,
     authority_record: ProtocolAuthorityRecord,
+    authority_confirmation: ProtocolAuthorityConfirmation,
     authority_gate_result: GateResult,
     gate_result_id: str,
     input_revision_map: dict[str, int],
@@ -168,6 +302,7 @@ def publish_protocol_integrity_acceptance(
         protocol_version=protocol_version,
         manifest=manifest,
         authority_record=authority_record,
+        authority_confirmation=authority_confirmation,
         authority_gate_result=authority_gate_result,
     )
     if gate_result_id != protocol_version.integrity_gate_result_id:
@@ -178,6 +313,7 @@ def publish_protocol_integrity_acceptance(
         "protocol_version": protocol_version.model_dump(mode="json"),
         "manifest": manifest.model_dump(mode="json"),
         "authority_record": authority_record.model_dump(mode="json"),
+        "authority_confirmation": authority_confirmation.model_dump(mode="json"),
         "authority_gate_result_id": authority_gate_result.gate_result_id,
     }
     return GateResult(
@@ -189,6 +325,7 @@ def publish_protocol_integrity_acceptance(
         input_entity_refs=[
             protocol_version.protocol_version_id,
             authority_record.authority_record_id,
+            authority_confirmation.confirmation_id,
             authority_gate_result.gate_result_id,
             manifest.manifest_id,
             rule_set.rule_set_id,
@@ -213,6 +350,7 @@ def require_protocol_integrity_acceptance(
     protocol_version: ProtocolDocumentVersion,
     manifest: ProtocolIntegrityManifest,
     authority_record: ProtocolAuthorityRecord,
+    authority_confirmation: ProtocolAuthorityConfirmation,
     authority_gate_result: GateResult,
 ) -> None:
     expected = publish_protocol_integrity_acceptance(
@@ -221,6 +359,7 @@ def require_protocol_integrity_acceptance(
         protocol_version=protocol_version,
         manifest=manifest,
         authority_record=authority_record,
+        authority_confirmation=authority_confirmation,
         authority_gate_result=authority_gate_result,
         gate_result_id=protocol_version.integrity_gate_result_id,
         input_revision_map=gate_result.input_revision_map,
@@ -238,17 +377,17 @@ def build_protocol_integrity_manifest(
     study_phase,
     source_refs: list[str],
     authority_record: ProtocolAuthorityRecord,
+    authority_confirmation: ProtocolAuthorityConfirmation,
     authority_gate_result: GateResult,
 ) -> ProtocolIntegrityManifest:
-    if (
-        authority_gate_result.gate_name
-        != "protocol-authority-human-acceptance-gate"
-        or authority_gate_result.result != GateOutcome.ACCEPTED
-        or authority_record.authority_record_id
-        not in authority_gate_result.accepted_entity_refs
-        or authority_gate_result.output_hash
-        != canonical_hash(authority_record.model_dump(mode="json"))
-    ):
+    _require_authority_confirmation(authority_record, authority_confirmation)
+    expected_authority_gate = publish_protocol_authority_acceptance(
+        authority_record,
+        confirmation=authority_confirmation,
+        gate_result_id=authority_gate_result.gate_result_id,
+        created_at=authority_gate_result.created_at,
+    )
+    if authority_gate_result.model_dump(mode="json") != expected_authority_gate.model_dump(mode="json"):
         raise ProtocolIntegrityError("不能从未验收的 ProtocolAuthorityRecord 构建 Manifest")
     if (
         authority_record.protocol_version_id != protocol_version_id
@@ -308,6 +447,7 @@ def validate_fixture_scope(fixture: FixtureV1) -> None:
         protocol_version=project.protocol_version,
         manifest=fixture.protocol_integrity_manifest,
         authority_record=fixture.protocol_authority_record,
+        authority_confirmation=fixture.protocol_authority_confirmation,
         authority_gate_result=authority_gate_result,
     )
     integrity_gate_result = next(
@@ -328,6 +468,7 @@ def validate_fixture_scope(fixture: FixtureV1) -> None:
         protocol_version=fixture.project.protocol_version,
         manifest=fixture.protocol_integrity_manifest,
         authority_record=fixture.protocol_authority_record,
+        authority_confirmation=fixture.protocol_authority_confirmation,
         authority_gate_result=authority_gate_result,
     )
     if fixture.subject.project_id != project.project_id:
@@ -416,6 +557,9 @@ def validate_fixture_scope(fixture: FixtureV1) -> None:
             raise StageIsolationError("AgentCall 来源文件越界")
         if (
             call.project_id != project.project_id
+            or call.protocol_version_id != protocol_id
+            or call.rule_set_id != fixture.rule_set.rule_set_id
+            or call.rule_set_revision != fixture.rule_set.revision
             or call.subject_id != fixture.subject.subject_id
             or call.review_episode_id != episode.review_episode_id
             or call.review_run_id not in run_ids
@@ -430,6 +574,19 @@ def validate_fixture_scope(fixture: FixtureV1) -> None:
                 or gate.output_hash != call.output_hash
             ):
                 raise StageIsolationError("AgentCall 未通过 accepted GateResult 发布")
+        from app.domain.gates.permissions import require_accepted_agent_call
+
+        schema_gates = [
+            gate_by_id[gate_id]
+            for gate_id in call.gate_result_ids
+            if gate_by_id[gate_id].gate_name == "agent-output-schema-gate"
+        ]
+        if len(schema_gates) != 1:
+            raise StageIsolationError("AgentCall 必须且只能绑定一个输出 Schema Gate")
+        try:
+            require_accepted_agent_call(call, schema_gates[0])
+        except ValueError as exc:
+            raise StageIsolationError(str(exc)) from exc
     call_by_id = {item.agent_call_id: item for item in fixture.agent_calls}
     normalized_fact_ids: set[str] = set()
     normalized_span_ids: set[str] = set()
@@ -550,6 +707,14 @@ def validate_fixture_scope(fixture: FixtureV1) -> None:
             != canonical_hash(assessment.model_dump(mode="json"))
         ):
             raise StageIsolationError("FinalAssessment 未通过 accepted GateResult 发布")
+        from app.domain.gates.assessment import validate_assessment_publication
+
+        try:
+            validate_assessment_publication(
+                assessment_publication_from_fixture(fixture, assessment.assessment_id)
+            )
+        except ValueError as exc:
+            raise StageIsolationError(str(exc)) from exc
         component = component_by_id[assessment.rule_component_id]
         due_stages = [item.due_stage for item in component.evidence_requirements]
         all_future = bool(due_stages) and all(
@@ -588,6 +753,14 @@ def validate_fixture_scope(fixture: FixtureV1) -> None:
             or gate.output_hash != canonical_hash(action.model_dump(mode="json"))
         ):
             raise StageIsolationError("ActionRequest 未通过 accepted GateResult 发布")
+        from app.domain.gates.actions import validate_action_publication
+
+        try:
+            validate_action_publication(
+                action_publication_from_fixture(fixture, action.action_id)
+            )
+        except ValueError as exc:
+            raise StageIsolationError(str(exc)) from exc
     if fixture.patient_profile.subject_id != fixture.subject.subject_id:
         raise StageIsolationError("PatientProfile subject 不一致")
     if fixture.patient_profile.review_episode_id != episode.review_episode_id:
@@ -636,3 +809,30 @@ def validate_fixture_scope(fixture: FixtureV1) -> None:
         or rollup_gate.output_hash != canonical_hash(rollup.model_dump(mode="json"))
     ):
         raise StageIsolationError("EpisodeRollup 未通过 accepted Projection Gate 发布")
+    from app.domain.rollup import publish_episode_rollup
+
+    try:
+        expected_rollup = publish_episode_rollup(
+            review_episode_id=episode.review_episode_id,
+            assessment_publications=[
+                assessment_publication_from_fixture(fixture, item.assessment_id)
+                for item in fixture.final_assessments
+            ],
+            expectations=fixture.evidence_expectations,
+            action_publications=[
+                action_publication_from_fixture(fixture, item.action_id)
+                for item in fixture.actions
+            ],
+            gate_result_id=rollup.gate_result_id,
+            input_revision_map=rollup_gate.input_revision_map,
+            created_at=rollup_gate.created_at,
+        )
+    except ValueError as exc:
+        raise StageIsolationError(str(exc)) from exc
+    if (
+        expected_rollup.rollup.model_dump(mode="json")
+        != rollup.model_dump(mode="json")
+        or expected_rollup.gate_result.model_dump(mode="json")
+        != rollup_gate.model_dump(mode="json")
+    ):
+        raise StageIsolationError("EpisodeRollup 未通过完整上游 Gate 闭包重算")

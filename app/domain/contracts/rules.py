@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Literal, Union
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from .common import ContractModel, RevisionedModel, ScalarValue, VersionedModel
 from .enums import (
@@ -18,6 +18,26 @@ from .enums import (
 
 
 class TimeConstraint(ContractModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {"direction": {"const": "on"}},
+                        "required": ["direction"],
+                    },
+                    "then": {
+                        "properties": {
+                            "lower_bound_days": {"type": "null"},
+                            "upper_bound_days": {"type": "null"},
+                            "half_life_multiplier": {"type": "null"},
+                        }
+                    },
+                }
+            ]
+        },
+    )
     anchor_type: AnchorType
     direction: TimeDirection
     lower_bound_days: int | None = Field(default=None, ge=0)
@@ -224,6 +244,13 @@ class ProtocolAuthorityRecord(VersionedModel):
             raise ValueError("每条官方规则必须提供且只能提供自己的来源定位")
         if any(not self.rule_source_anchor_refs[code] for code in codes):
             raise ValueError("官方规则来源定位不能为空")
+        expected_prefix = f"{self.protocol_version_id}:"
+        if any(
+            not source_ref.startswith(expected_prefix)
+            for refs in self.rule_source_anchor_refs.values()
+            for source_ref in refs
+        ):
+            raise ValueError("官方规则来源定位必须绑定当前 protocol_version_id")
         if any(item.study_phase != self.study_phase for item in self.official_rules):
             raise ValueError("权威规则期别必须与 AuthorityRecord 一致")
         stage_by_value = {
@@ -252,6 +279,31 @@ class ProtocolAuthorityRecord(VersionedModel):
             for requirement_id, requirement in requirements.items()
         ):
             raise ValueError("WorkflowStage 到期阶段与 EvidenceRequirement.due_stage 不一致")
+        return self
+
+
+class ProtocolAuthorityConfirmation(VersionedModel):
+    confirmation_id: str = Field(min_length=1)
+    command_id: str = Field(min_length=1)
+    protocol_version_id: str = Field(min_length=1)
+    protocol_document_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    authority_record_id: str = Field(min_length=1)
+    authority_record_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    confirmed_by: str = Field(min_length=1)
+    confirmed_at: datetime
+    action: Literal["accept_protocol_authority"] = "accept_protocol_authority"
+    recorded_by_service: Literal["enrollment-review-app"] = "enrollment-review-app"
+    confirmation_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def validate_confirmation_hash(self) -> "ProtocolAuthorityConfirmation":
+        from app.domain.publication import canonical_hash
+
+        expected = canonical_hash(
+            self.model_dump(mode="json", exclude={"confirmation_sha256"})
+        )
+        if self.confirmation_sha256 != expected:
+            raise ValueError("方案权威确认事件哈希无效")
         return self
 
 

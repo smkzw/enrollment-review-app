@@ -54,7 +54,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "evidence_normalizer",
           "outcome": "accepted",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "c827db73210bfb2607568e0137234c447314e7417f1fb3609d54c12297f9464d",
           "output_kind": "candidate",
           "output_tokens": 51,
           "parent_event_id": null,
@@ -77,6 +77,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-01-clear",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "evidence-candidate-episode-clear": "f702741fbeaf42c87e1b1ca4daa99247b4a49425d05db19fa38b80bb2fb52117",
+            "evidence-candidate-episode-uat-01-screening-clear": "a4130e0d80ab26c76a367bb2d9b6b005ff4a5829cdce3f562ede2b6766d285ad"
+          },
           "write_scope": "evidence_candidate"
         },
         {
@@ -100,7 +104,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "eligibility_assessor",
           "outcome": "accepted",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "ee864c98523a7c1742a3ba4f8a9e567e7e5941ab5e9ec369e801c5a3450a234b",
           "output_kind": "candidate",
           "output_tokens": 52,
           "parent_event_id": null,
@@ -123,6 +127,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-01-clear",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "candidate-uat-01-screening-clear-ex": "5536277f4797257f7e1516be689361ba90110ab0a759cdfc6bc92063651b7aeb",
+            "candidate-uat-01-screening-clear-in": "75b166f15e721b52308204a4374d7bd54c77f1178e5ff43afd24f832da62d79b"
+          },
           "write_scope": "assessment_candidate"
         }
       ],
@@ -615,19 +623,15 @@
           "input_entity_refs": [
             "protocol-v1",
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "IN-01",
-            "EX-01",
-            "EX-02",
-            "EX-03",
-            "EX-04",
-            "REQ-01",
-            "REQ-02"
+            "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
+            "command-accept-protocol-v1-phase-iii"
           ],
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
-          "output_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
+          "input_scope_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
+          "output_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -653,6 +657,7 @@
           "input_entity_refs": [
             "protocol-v1",
             "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
             "gate-uat-01-screening-authority-protocol-v1-phase-iii",
             "manifest-protocol-v1-phase-iii",
             "ruleset-synthetic-phase-iii"
@@ -660,8 +665,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "c676c8f94a2d41c19b8dc04e51cf8ebb75eeb9968d60e1a90fcea405039c6775",
-          "output_hash": "c676c8f94a2d41c19b8dc04e51cf8ebb75eeb9968d60e1a90fcea405039c6775",
+          "input_scope_hash": "544c8ac6a0b71541a006291222376adff5e9560f3246ffa8d3e33c8d2d109fef",
+          "output_hash": "544c8ac6a0b71541a006291222376adff5e9560f3246ffa8d3e33c8d2d109fef",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -690,7 +695,7 @@
             "episode-uat-01-screening-clear": 1
           },
           "input_scope_hash": "55591aa5407c474c2847ad47d174b1d7d6f834f8b212a68744131cfb792539eb",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "c827db73210bfb2607568e0137234c447314e7417f1fb3609d54c12297f9464d",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-01-clear"
@@ -719,7 +724,7 @@
             "episode-uat-01-screening-clear": 1
           },
           "input_scope_hash": "55591aa5407c474c2847ad47d174b1d7d6f834f8b212a68744131cfb792539eb",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "ee864c98523a7c1742a3ba4f8a9e567e7e5941ab5e9ec369e801c5a3450a234b",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-01-clear"
@@ -758,8 +763,8 @@
           "input_revision_map": {
             "episode-uat-01-screening-clear": 1
           },
-          "input_scope_hash": "3d7ef43b05c8a25ca2935e2703344b80f8fc65c4f00fa0a6df166e0dfd374a17",
-          "output_hash": "3d7ef43b05c8a25ca2935e2703344b80f8fc65c4f00fa0a6df166e0dfd374a17",
+          "input_scope_hash": "e27023364eddb81a5a6847994389270474d2fe48e01c5c52dfc8b4285b57ba2e",
+          "output_hash": "e27023364eddb81a5a6847994389270474d2fe48e01c5c52dfc8b4285b57ba2e",
           "parent_event_id": null,
           "recompute_scope": [
             "episode-uat-01-screening-clear"
@@ -821,7 +826,7 @@
           "input_revision_map": {
             "episode-uat-01-screening-clear": 1
           },
-          "input_scope_hash": "0ee57f4d8e6fd3e9332d8feeaf95b579309a6a18660e0e484a1e880d59323ead",
+          "input_scope_hash": "d7bd562479ffe0c7e9dfe92d701575adb65d5ef581a300f318d944c09febb90d",
           "output_hash": "51374114bd1da72d09be4f06f53762c8ef515a8144f7a08f5cad6bbd73eadfc0",
           "parent_event_id": null,
           "recompute_scope": [
@@ -884,7 +889,7 @@
           "input_revision_map": {
             "episode-uat-01-screening-clear": 1
           },
-          "input_scope_hash": "e3675da117295665d7778cafc2c82871ae64af05a11cd1a3298324228767738d",
+          "input_scope_hash": "b0807903b589b67e923282bb2e87f901f61413be1a9ec0cd7812af4d87af5520",
           "output_hash": "9637e72c74750f5e4ac1e0c25be9f5f841e4e595bf6acdb8795db5f16d75ebfd",
           "parent_event_id": null,
           "recompute_scope": [
@@ -1052,6 +1057,7 @@
         "project_id": "project-synthetic-phase-iii",
         "project_name": "合成Ⅲ期入排审核项目",
         "protocol_version": {
+          "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-01-screening-authority-protocol-v1-phase-iii",
           "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
           "integrity_gate_result_id": "gate-uat-01-screening-integrity-protocol-v1-phase-iii",
@@ -1088,6 +1094,20 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_confirmation": {
+        "action": "accept_protocol_authority",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "confirmation_id": "confirmation-protocol-v1-phase-iii",
+        "confirmation_sha256": "1f213715bd1253931704f1aaee0fd985d1cb3192ac7e29e3773de220d914c9ac",
+        "confirmed_at": "2026-08-12T12:00:00Z",
+        "confirmed_by": "synthetic-uat-human-acceptance",
+        "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
         "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
@@ -2245,7 +2265,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "evidence_normalizer",
           "outcome": "accepted",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "450d57410f3b23c7f7c1fc3df14e275f5a5838baea7ad94b1dbc8bda8607c1d8",
           "output_kind": "candidate",
           "output_tokens": 51,
           "parent_event_id": null,
@@ -2268,6 +2288,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-01-clear",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "evidence-candidate-episode-clear": "f702741fbeaf42c87e1b1ca4daa99247b4a49425d05db19fa38b80bb2fb52117",
+            "evidence-candidate-episode-uat-01-baseline-clear": "3cdac45ff661145810733d0092375f7b73c50df1b4ab98f936ce881e304ad8d8"
+          },
           "write_scope": "evidence_candidate"
         },
         {
@@ -2291,7 +2315,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "eligibility_assessor",
           "outcome": "accepted",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "faa9374fdd5ae695a471bb9de1732ef63f7bc533d6490b9743e9dab310b3ab4b",
           "output_kind": "candidate",
           "output_tokens": 52,
           "parent_event_id": null,
@@ -2314,6 +2338,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-01-clear",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "candidate-uat-01-baseline-clear-ex": "51500753741f5bf82977701ffe5569dd6a6159bf902ba27a78d05df765dd8881",
+            "candidate-uat-01-baseline-clear-in": "65bb5433e7ac37afeba4f0bb1c074ba18b9e54a49b472f1ebc56e139815e6349"
+          },
           "write_scope": "assessment_candidate"
         }
       ],
@@ -2806,19 +2834,15 @@
           "input_entity_refs": [
             "protocol-v1",
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "IN-01",
-            "EX-01",
-            "EX-02",
-            "EX-03",
-            "EX-04",
-            "REQ-01",
-            "REQ-02"
+            "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
+            "command-accept-protocol-v1-phase-iii"
           ],
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
-          "output_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
+          "input_scope_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
+          "output_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -2844,6 +2868,7 @@
           "input_entity_refs": [
             "protocol-v1",
             "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
             "gate-uat-01-baseline-authority-protocol-v1-phase-iii",
             "manifest-protocol-v1-phase-iii",
             "ruleset-synthetic-phase-iii"
@@ -2851,8 +2876,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "e91b8fd86e9957657d2a0711176b35251d26a2cf52fb6f78a853cffdcfaa9a18",
-          "output_hash": "e91b8fd86e9957657d2a0711176b35251d26a2cf52fb6f78a853cffdcfaa9a18",
+          "input_scope_hash": "c31578a5247f37ce0c2f960d7dc6d49c80f444dc282860f8a0070fa4c075506b",
+          "output_hash": "c31578a5247f37ce0c2f960d7dc6d49c80f444dc282860f8a0070fa4c075506b",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -2881,7 +2906,7 @@
             "episode-uat-01-baseline-clear": 1
           },
           "input_scope_hash": "14779cc108aa44e65a1d31c0460e932dd2da8affa60bbbb94526348974cb2087",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "450d57410f3b23c7f7c1fc3df14e275f5a5838baea7ad94b1dbc8bda8607c1d8",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-01-clear"
@@ -2910,7 +2935,7 @@
             "episode-uat-01-baseline-clear": 1
           },
           "input_scope_hash": "14779cc108aa44e65a1d31c0460e932dd2da8affa60bbbb94526348974cb2087",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "faa9374fdd5ae695a471bb9de1732ef63f7bc533d6490b9743e9dab310b3ab4b",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-01-clear"
@@ -2949,8 +2974,8 @@
           "input_revision_map": {
             "episode-uat-01-baseline-clear": 1
           },
-          "input_scope_hash": "a9c3bcb7dd3eb32685e2d0fb8127d1fdadad4eb9e73234c6f55d10fc502f1cf1",
-          "output_hash": "a9c3bcb7dd3eb32685e2d0fb8127d1fdadad4eb9e73234c6f55d10fc502f1cf1",
+          "input_scope_hash": "3349a2f92d270ca52cc554b804bdb74c9c0a3599ce691c02fa8c65e733b46295",
+          "output_hash": "3349a2f92d270ca52cc554b804bdb74c9c0a3599ce691c02fa8c65e733b46295",
           "parent_event_id": null,
           "recompute_scope": [
             "episode-uat-01-baseline-clear"
@@ -3012,7 +3037,7 @@
           "input_revision_map": {
             "episode-uat-01-baseline-clear": 1
           },
-          "input_scope_hash": "48e11e693389d405d85b0f764af4ac13d344be97af42834a6c93d325b9afaa18",
+          "input_scope_hash": "0de5f0b18442967df38fbac5302ffd5676e5ba8e6f0d99053355e0801ee31355",
           "output_hash": "ac22f06caa5aeac7ffa50707cd311be6121d6ca4a6d0bbd99321baac746d9417",
           "parent_event_id": null,
           "recompute_scope": [
@@ -3075,7 +3100,7 @@
           "input_revision_map": {
             "episode-uat-01-baseline-clear": 1
           },
-          "input_scope_hash": "b69b4bb3be108ca5397e4046125fa2131d5a19d8e057f91529b3947e2381844f",
+          "input_scope_hash": "60fbd9e65e18b806563dff32a45b98cb7486a5f43d059e8136c423a5ace5c99e",
           "output_hash": "ec7da2b8647f9f42f3717f50176e570bcb30addf1cb29d865c0f649d28b85f64",
           "parent_event_id": null,
           "recompute_scope": [
@@ -3243,6 +3268,7 @@
         "project_id": "project-synthetic-phase-iii",
         "project_name": "合成Ⅲ期入排审核项目",
         "protocol_version": {
+          "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-01-baseline-authority-protocol-v1-phase-iii",
           "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
           "integrity_gate_result_id": "gate-uat-01-baseline-integrity-protocol-v1-phase-iii",
@@ -3279,6 +3305,20 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_confirmation": {
+        "action": "accept_protocol_authority",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "confirmation_id": "confirmation-protocol-v1-phase-iii",
+        "confirmation_sha256": "1f213715bd1253931704f1aaee0fd985d1cb3192ac7e29e3773de220d914c9ac",
+        "confirmed_at": "2026-08-12T12:00:00Z",
+        "confirmed_by": "synthetic-uat-human-acceptance",
+        "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
         "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
@@ -4416,7 +4456,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "evidence_normalizer",
           "outcome": "accepted",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "4e102214015824b698ee28addbd5cfccfcd0f7d3215ac9c0e0c9534fc9f8512a",
           "output_kind": "candidate",
           "output_tokens": 51,
           "parent_event_id": null,
@@ -4439,6 +4479,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-02-barrier",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "evidence-candidate-episode-barrier": "7fcd601cd200ae6952ecb4d51a9bf63ff29570ab3263dc5fb2722c842120eada",
+            "evidence-candidate-episode-uat-02-screening-barrier": "67b97c27b290826cd2ad84ab09d9e4c38a1cf2956e34457c06d676d1f6b4a42e"
+          },
           "write_scope": "evidence_candidate"
         },
         {
@@ -4462,7 +4506,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "eligibility_assessor",
           "outcome": "accepted",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "7786c5a76208c3b84e69514d923bf153e0a0a69ab249b9c5990dbecc83dd755b",
           "output_kind": "candidate",
           "output_tokens": 52,
           "parent_event_id": null,
@@ -4485,6 +4529,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-02-barrier",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "candidate-uat-02-screening-barrier-ex": "43d343c583e284e8c5ab0b517d1e8af3164f4beb79e642670800b40088afdfa1",
+            "candidate-uat-02-screening-barrier-in": "bbe1b60555c905d9c5426859a5cc2746f9f502cdec003a036ce39cf0d37f5473"
+          },
           "write_scope": "assessment_candidate"
         }
       ],
@@ -5046,19 +5094,15 @@
           "input_entity_refs": [
             "protocol-v1",
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "IN-01",
-            "EX-01",
-            "EX-02",
-            "EX-03",
-            "EX-04",
-            "REQ-01",
-            "REQ-02"
+            "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
+            "command-accept-protocol-v1-phase-iii"
           ],
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
-          "output_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
+          "input_scope_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
+          "output_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -5084,6 +5128,7 @@
           "input_entity_refs": [
             "protocol-v1",
             "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
             "gate-uat-02-screening-authority-protocol-v1-phase-iii",
             "manifest-protocol-v1-phase-iii",
             "ruleset-synthetic-phase-iii"
@@ -5091,8 +5136,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "7f2671eb17c84308a7921b9f266016afd57c37c487b6553743d993fba0090b87",
-          "output_hash": "7f2671eb17c84308a7921b9f266016afd57c37c487b6553743d993fba0090b87",
+          "input_scope_hash": "9e1d2368e7c76429a1c4dd1f35c8ce64e163777853331116117705caa372238c",
+          "output_hash": "9e1d2368e7c76429a1c4dd1f35c8ce64e163777853331116117705caa372238c",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -5121,7 +5166,7 @@
             "episode-uat-02-screening-barrier": 1
           },
           "input_scope_hash": "7b6c44efe22ab30fffaf0b7873b024f27b426bb01c4d7ee444517c8112e2035a",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "4e102214015824b698ee28addbd5cfccfcd0f7d3215ac9c0e0c9534fc9f8512a",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-02-barrier"
@@ -5150,7 +5195,7 @@
             "episode-uat-02-screening-barrier": 1
           },
           "input_scope_hash": "7b6c44efe22ab30fffaf0b7873b024f27b426bb01c4d7ee444517c8112e2035a",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "7786c5a76208c3b84e69514d923bf153e0a0a69ab249b9c5990dbecc83dd755b",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-02-barrier"
@@ -5193,8 +5238,8 @@
           "input_revision_map": {
             "episode-uat-02-screening-barrier": 1
           },
-          "input_scope_hash": "f5397c10f0c3135019b1ea1332ade40c1c586ec4ba006369b8a552a0e5f2e2e1",
-          "output_hash": "f5397c10f0c3135019b1ea1332ade40c1c586ec4ba006369b8a552a0e5f2e2e1",
+          "input_scope_hash": "604de4a20f3de062d39de4de33b785a7d093a3aa9b5037fb75f91b6675745226",
+          "output_hash": "604de4a20f3de062d39de4de33b785a7d093a3aa9b5037fb75f91b6675745226",
           "parent_event_id": null,
           "recompute_scope": [
             "episode-uat-02-screening-barrier"
@@ -5256,7 +5301,7 @@
           "input_revision_map": {
             "episode-uat-02-screening-barrier": 1
           },
-          "input_scope_hash": "cf02665190a41f7edb399a014c265418173b2f5b5aae06125bfd1590e64b1d21",
+          "input_scope_hash": "a2a6a5de872aca7e3a4f78466365d3b90c1fbcf18cd961a17d7a8314b18dd4a9",
           "output_hash": "98fed2450c56c5c8bc03dfa8fa68f10f381df0f1c6ba2e7e21a80c11f7d89b22",
           "parent_event_id": null,
           "recompute_scope": [
@@ -5319,7 +5364,7 @@
           "input_revision_map": {
             "episode-uat-02-screening-barrier": 1
           },
-          "input_scope_hash": "508c04618bc8c86add47e4674965ba977128970f407175014e9e5ac64270a132",
+          "input_scope_hash": "5f77d138580c74702f1fc55890966b23146f217faa4f0ca9d502830af99fac04",
           "output_hash": "4a590cef18b344b639640df6fc1e29dac07ebefd44b2f40d4c0377e71adca502",
           "parent_event_id": null,
           "recompute_scope": [
@@ -5459,6 +5504,7 @@
         "project_id": "project-synthetic-phase-iii",
         "project_name": "合成Ⅲ期入排审核项目",
         "protocol_version": {
+          "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-02-screening-authority-protocol-v1-phase-iii",
           "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
           "integrity_gate_result_id": "gate-uat-02-screening-integrity-protocol-v1-phase-iii",
@@ -5495,6 +5541,20 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_confirmation": {
+        "action": "accept_protocol_authority",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "confirmation_id": "confirmation-protocol-v1-phase-iii",
+        "confirmation_sha256": "1f213715bd1253931704f1aaee0fd985d1cb3192ac7e29e3773de220d914c9ac",
+        "confirmed_at": "2026-08-12T12:00:00Z",
+        "confirmed_by": "synthetic-uat-human-acceptance",
+        "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
         "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
@@ -6622,7 +6682,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "evidence_normalizer",
           "outcome": "accepted",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "f53fe26b6dd5ad497b4e99d198dcef0b37e1b1c0f3587829ded1321932fcbacc",
           "output_kind": "candidate",
           "output_tokens": 51,
           "parent_event_id": null,
@@ -6645,6 +6705,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-02-barrier",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "evidence-candidate-episode-barrier": "7fcd601cd200ae6952ecb4d51a9bf63ff29570ab3263dc5fb2722c842120eada",
+            "evidence-candidate-episode-uat-02-baseline-barrier": "c18f91b26b7d779472d16e371308c1344e5ba5e7e3f09b00371a68c3cacd2829"
+          },
           "write_scope": "evidence_candidate"
         },
         {
@@ -6668,7 +6732,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "eligibility_assessor",
           "outcome": "accepted",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "2505c93045a563259d12c4534397cd01354714f34ccafbfe319682f579e87272",
           "output_kind": "candidate",
           "output_tokens": 52,
           "parent_event_id": null,
@@ -6691,6 +6755,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-02-barrier",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "candidate-uat-02-baseline-barrier-ex": "822f545a536be781cb81c24efb933765ad737d7c4dd41af6a0aa6788c4a0c51d",
+            "candidate-uat-02-baseline-barrier-in": "a342d3d12d792d278868053e4fd0babdc39a870ea79277f0a890bd572bc6a437"
+          },
           "write_scope": "assessment_candidate"
         }
       ],
@@ -7252,19 +7320,15 @@
           "input_entity_refs": [
             "protocol-v1",
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "IN-01",
-            "EX-01",
-            "EX-02",
-            "EX-03",
-            "EX-04",
-            "REQ-01",
-            "REQ-02"
+            "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
+            "command-accept-protocol-v1-phase-iii"
           ],
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
-          "output_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
+          "input_scope_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
+          "output_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -7290,6 +7354,7 @@
           "input_entity_refs": [
             "protocol-v1",
             "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
             "gate-uat-02-baseline-authority-protocol-v1-phase-iii",
             "manifest-protocol-v1-phase-iii",
             "ruleset-synthetic-phase-iii"
@@ -7297,8 +7362,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "20836bfec71c0310aaefd44d12f6c3767193b24af7b3633eb36d7ec64da8e04e",
-          "output_hash": "20836bfec71c0310aaefd44d12f6c3767193b24af7b3633eb36d7ec64da8e04e",
+          "input_scope_hash": "20d63aa02316b35a704e3f9a62e6724e5292fb225bbe1c4ba1827c8bade29622",
+          "output_hash": "20d63aa02316b35a704e3f9a62e6724e5292fb225bbe1c4ba1827c8bade29622",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -7327,7 +7392,7 @@
             "episode-uat-02-baseline-barrier": 1
           },
           "input_scope_hash": "0c2829321f51b942ebc34ac176cb31f49f370d2fa9998d95a47865574e538997",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "f53fe26b6dd5ad497b4e99d198dcef0b37e1b1c0f3587829ded1321932fcbacc",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-02-barrier"
@@ -7356,7 +7421,7 @@
             "episode-uat-02-baseline-barrier": 1
           },
           "input_scope_hash": "0c2829321f51b942ebc34ac176cb31f49f370d2fa9998d95a47865574e538997",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "2505c93045a563259d12c4534397cd01354714f34ccafbfe319682f579e87272",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-02-barrier"
@@ -7399,8 +7464,8 @@
           "input_revision_map": {
             "episode-uat-02-baseline-barrier": 1
           },
-          "input_scope_hash": "b748c53c6f0bae9ec81f8e4046d8d2dfd90bf3ba3df1f0583cc26b7b7f8adef8",
-          "output_hash": "b748c53c6f0bae9ec81f8e4046d8d2dfd90bf3ba3df1f0583cc26b7b7f8adef8",
+          "input_scope_hash": "5f8a13ce4a03e0ecfc6c7e6f951abc207beff45607861693c2d37405cb6b17e0",
+          "output_hash": "5f8a13ce4a03e0ecfc6c7e6f951abc207beff45607861693c2d37405cb6b17e0",
           "parent_event_id": null,
           "recompute_scope": [
             "episode-uat-02-baseline-barrier"
@@ -7462,7 +7527,7 @@
           "input_revision_map": {
             "episode-uat-02-baseline-barrier": 1
           },
-          "input_scope_hash": "736784548f265c9e6de1ab473f1a75ea6d03bf30c9ade5498dd0b2e143b8dec9",
+          "input_scope_hash": "915d44dbf80270820c34c6b4e07eed6e7af3a8b01ba19bf85649577fb30a1c8d",
           "output_hash": "5474e9d601e97ba4c3f3723814d74a9b36878f179030b668bf251d744f9bab92",
           "parent_event_id": null,
           "recompute_scope": [
@@ -7525,7 +7590,7 @@
           "input_revision_map": {
             "episode-uat-02-baseline-barrier": 1
           },
-          "input_scope_hash": "bc7815d0604e3cc76a7816c035b0140a655c219ab42a35964636aebbb7361f3d",
+          "input_scope_hash": "efd64ebccf22e9805d50842df3e60bba46750b55deb1daf188a7ffac637333b2",
           "output_hash": "b2ae551a3ca9efc13d09bc4c10c331dd6533a120ffd8680bd5d7a5d6ba40077e",
           "parent_event_id": null,
           "recompute_scope": [
@@ -7665,6 +7730,7 @@
         "project_id": "project-synthetic-phase-iii",
         "project_name": "合成Ⅲ期入排审核项目",
         "protocol_version": {
+          "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-02-baseline-authority-protocol-v1-phase-iii",
           "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
           "integrity_gate_result_id": "gate-uat-02-baseline-integrity-protocol-v1-phase-iii",
@@ -7701,6 +7767,20 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_confirmation": {
+        "action": "accept_protocol_authority",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "confirmation_id": "confirmation-protocol-v1-phase-iii",
+        "confirmation_sha256": "1f213715bd1253931704f1aaee0fd985d1cb3192ac7e29e3773de220d914c9ac",
+        "confirmed_at": "2026-08-12T12:00:00Z",
+        "confirmed_by": "synthetic-uat-human-acceptance",
+        "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
         "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
@@ -9042,7 +9122,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "evidence_normalizer",
           "outcome": "accepted",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "af355276b89d83980b956bc8d12db60e2fcca09859cb28ba880194aa56544485",
           "output_kind": "candidate",
           "output_tokens": 51,
           "parent_event_id": null,
@@ -9065,6 +9145,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-03-gap_conflict",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "evidence-candidate-episode-gap_conflict": "5029ea6c863bc9196266f009c6199c01d8d8500e3a9be5e1a64de33fb676f9a8",
+            "evidence-candidate-episode-uat-03-screening-gap_conflict": "9dc8acd0b2a117e68710c5b32c5251048e84d7a18ebfc6b1c703d5c80d32b789"
+          },
           "write_scope": "evidence_candidate"
         },
         {
@@ -9088,7 +9172,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "eligibility_assessor",
           "outcome": "accepted",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "148e200c89662713eebd9b1f93068cc5d66474dad667c87123484e70f143407c",
           "output_kind": "candidate",
           "output_tokens": 52,
           "parent_event_id": null,
@@ -9111,6 +9195,15 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-03-gap_conflict",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "candidate-uat-03-screening-gap-ex": "ded283579ec945d027269cec5752cee1fe77589794e95bd10814e3cdae63f4c3",
+            "candidate-uat-03-screening-gap-future": "f921e9f2d15d064a0b1d8b7547a269e81cc07994ef346aa42f74031246d3aa20",
+            "candidate-uat-03-screening-gap-in": "4845b4936b51217bd43cf6333491c8255793e3d643e87ca01225c12d9a1b3ca9",
+            "candidate-uat-03-screening-gap-procedure": "8974bda61a7d978d7d181d7ebc776a9ce459db70972cb332b4c9ceae1f65dd57",
+            "candidate-uat-03-screening-gap-professional": "167e23acb127b5c9583a5f0c474555f580b7e2ad0b707c8c94c1efae2aac38c5",
+            "candidate-uat-03-screening-gap-referenced": "4cb10c1388493c11005d4e6e123b5076ea6b7ae48f6ea9fb6f561b6fba71f94e",
+            "candidate-uat-03-screening-gap-result-fields": "0cacffe5b664e97ac8a6f393179a932de97d4502fed3089b7054ac1c22f80244"
+          },
           "write_scope": "assessment_candidate"
         }
       ],
@@ -10011,19 +10104,15 @@
           "input_entity_refs": [
             "protocol-v1",
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "IN-01",
-            "EX-01",
-            "EX-02",
-            "EX-03",
-            "EX-04",
-            "REQ-01",
-            "REQ-02"
+            "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
+            "command-accept-protocol-v1-phase-iii"
           ],
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
-          "output_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
+          "input_scope_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
+          "output_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -10049,6 +10138,7 @@
           "input_entity_refs": [
             "protocol-v1",
             "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
             "gate-uat-03-screening-authority-protocol-v1-phase-iii",
             "manifest-protocol-v1-phase-iii",
             "ruleset-synthetic-phase-iii"
@@ -10056,8 +10146,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "df395d8d36688daf67882aae7f10e6e8ad16af227fa65da15b36c6752f1db1e8",
-          "output_hash": "df395d8d36688daf67882aae7f10e6e8ad16af227fa65da15b36c6752f1db1e8",
+          "input_scope_hash": "3429d4b63992c78d23cc2d4f6f9f7c6f246b5f37aee83884db9ddf8a50978631",
+          "output_hash": "3429d4b63992c78d23cc2d4f6f9f7c6f246b5f37aee83884db9ddf8a50978631",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -10086,7 +10176,7 @@
             "episode-uat-03-screening-gap_conflict": 1
           },
           "input_scope_hash": "e58467f32fd683839df4b42f6b993a2fb23e3316893eea0264117eeff9e7951a",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "af355276b89d83980b956bc8d12db60e2fcca09859cb28ba880194aa56544485",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-03-gap_conflict"
@@ -10115,7 +10205,7 @@
             "episode-uat-03-screening-gap_conflict": 1
           },
           "input_scope_hash": "e58467f32fd683839df4b42f6b993a2fb23e3316893eea0264117eeff9e7951a",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "148e200c89662713eebd9b1f93068cc5d66474dad667c87123484e70f143407c",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-03-gap_conflict"
@@ -10152,8 +10242,8 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "fedbbd2db30057995f8778a96a7018f5b4248be0962e84c44b7b87db693bb835",
-          "output_hash": "fedbbd2db30057995f8778a96a7018f5b4248be0962e84c44b7b87db693bb835",
+          "input_scope_hash": "00231cbe617387da3d187498ae955a05c6f81d3c80fbee0f351b084c2a268fd1",
+          "output_hash": "00231cbe617387da3d187498ae955a05c6f81d3c80fbee0f351b084c2a268fd1",
           "parent_event_id": null,
           "recompute_scope": [
             "episode-uat-03-screening-gap_conflict"
@@ -10215,7 +10305,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "066bdbc05a7bc7fe0ce0d6969523e329ee1a3ec5389524ca2eb47a9ffe726409",
+          "input_scope_hash": "e352ea4c2bd429aa7c958c5c8e4c73eb5955e5c60a852832e7a8261eee75df4c",
           "output_hash": "2824a1b586b53a975035e1c33febfb5743313616fcdee42ca370aa0c0fcc3fe4",
           "parent_event_id": null,
           "recompute_scope": [
@@ -10278,7 +10368,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "3c5a27e27d7b7995e58266f882933d68f9651d5ca0669d198830d443ee573dce",
+          "input_scope_hash": "ae0e8a5970b6cc73ba276fe4174409a84e494e2aaafd6294df1c4a5f50956503",
           "output_hash": "d1f5c4c71f8a287783f69341c99cb7928b94fe8d641fde8519cacf9549b3b346",
           "parent_event_id": null,
           "recompute_scope": [
@@ -10341,7 +10431,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "f337736ff8a34cfecd1a4ac0378d11d941982e0897422f8f7f03c3f9d5f44cd3",
+          "input_scope_hash": "2369e028506d1a77420b92d226598c0469a5a8c74a2c7a79f6f9ddbfa4596904",
           "output_hash": "67f08333bd1d3f654232247a4db40e48679bac95593bf43d5f4cdccb3566699e",
           "parent_event_id": null,
           "recompute_scope": [
@@ -10404,7 +10494,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "2c3787c6210be4164d83de06ba8cf8a288ee276c26be6e50ff28ba1abf1f6d0f",
+          "input_scope_hash": "35e645588f6c8b5cc3ccd339326a3eaf2321e5cf90e7bbeb2d80e8ddee4055b5",
           "output_hash": "1ba207df89e7e45852b9158826ab66fee497f1df537d808794f7a574f566e3d6",
           "parent_event_id": null,
           "recompute_scope": [
@@ -10467,7 +10557,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "3ca0af68af8a7004967432b05e616b359b5a72c91821ead739ed351e81ffec37",
+          "input_scope_hash": "83ba134a629ea18370b297f4a1bd45474860cfca1714429b1459eb6351b38549",
           "output_hash": "5e2eff60873798df97e6f211b457d1dbe6fbfbe18d8acff4b11be4a421281ee8",
           "parent_event_id": null,
           "recompute_scope": [
@@ -10530,7 +10620,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "8c6b91045480235390ced6d0a1fb15783830407603fb67be4427111fae5da580",
+          "input_scope_hash": "c179494a36a378c9b396215004aa944e1de8f1679b0257d927a30c40825bb9b2",
           "output_hash": "6b5dac6f537c1880783bea2478e9bc9d6d2fb92455b0da664847dafd2eaa6f45",
           "parent_event_id": null,
           "recompute_scope": [
@@ -10593,7 +10683,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "e4491cb2397e9783aa936dbb44207bf5274522895e405e66071b84964f39cbe4",
+          "input_scope_hash": "725c42649b645ce732238e91cd5dcefa9b39440c9f6eb950f19f7040b0a3b833",
           "output_hash": "fbff5cbef62dde830d75e9d8661b487169993e3cde98f60555b398a1a0504978",
           "parent_event_id": null,
           "recompute_scope": [
@@ -11175,6 +11265,7 @@
         "project_id": "project-synthetic-phase-iii",
         "project_name": "合成Ⅲ期入排审核项目",
         "protocol_version": {
+          "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-03-screening-authority-protocol-v1-phase-iii",
           "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
           "integrity_gate_result_id": "gate-uat-03-screening-integrity-protocol-v1-phase-iii",
@@ -11211,6 +11302,20 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_confirmation": {
+        "action": "accept_protocol_authority",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "confirmation_id": "confirmation-protocol-v1-phase-iii",
+        "confirmation_sha256": "1f213715bd1253931704f1aaee0fd985d1cb3192ac7e29e3773de220d914c9ac",
+        "confirmed_at": "2026-08-12T12:00:00Z",
+        "confirmed_by": "synthetic-uat-human-acceptance",
+        "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
         "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
@@ -12542,7 +12647,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "evidence_normalizer",
           "outcome": "accepted",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "457b2779b7dbcb96cc40dd77d765894c1c3027bf5a17f65d494edeba65bc3be3",
           "output_kind": "candidate",
           "output_tokens": 51,
           "parent_event_id": null,
@@ -12565,6 +12670,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-03-gap_conflict",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "evidence-candidate-episode-gap_conflict": "5029ea6c863bc9196266f009c6199c01d8d8500e3a9be5e1a64de33fb676f9a8",
+            "evidence-candidate-episode-uat-03-baseline-gap_conflict": "a35eedfd5a63f921eb4cbb754e100ef74f9f54a1b55366625422fe888b9e8e83"
+          },
           "write_scope": "evidence_candidate"
         },
         {
@@ -12588,7 +12697,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "eligibility_assessor",
           "outcome": "accepted",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "8c981f9edf33f47bae06b34178cab21373aa162da310a677118a62d213f10e05",
           "output_kind": "candidate",
           "output_tokens": 52,
           "parent_event_id": null,
@@ -12611,6 +12720,15 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-03-gap_conflict",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "candidate-uat-03-baseline-gap-ex": "a089735f8ab00e2acef259b476f2824c950251d2ea2296b9580ca847a073b1e9",
+            "candidate-uat-03-baseline-gap-future": "be3fcd8b7b711feb7a239bb9a75fb4f4418eceae64a00abf3f6132faef166034",
+            "candidate-uat-03-baseline-gap-in": "38be9df1795a6c2df97c92131708f2aa99e915435d169bb4498d48928d81a1e1",
+            "candidate-uat-03-baseline-gap-procedure": "021152b41e0fcdf862a61f74632150c3da2f03f09d9c1a6bfebccdcf0c1d94c7",
+            "candidate-uat-03-baseline-gap-professional": "1085d7e69649804dccc86557411af0298c51fed6155357a0c191e93281ef963d",
+            "candidate-uat-03-baseline-gap-referenced": "6ba011582ddfdc1df210c4e55ac89ddee202d0faa56f51968735adb6c7b6c704",
+            "candidate-uat-03-baseline-gap-result-fields": "aa2e1c303b02cde8f65c3918c5867d7db21dad46f476596cd8565f4b190b5c61"
+          },
           "write_scope": "assessment_candidate"
         }
       ],
@@ -13510,19 +13628,15 @@
           "input_entity_refs": [
             "protocol-v1",
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "IN-01",
-            "EX-01",
-            "EX-02",
-            "EX-03",
-            "EX-04",
-            "REQ-01",
-            "REQ-02"
+            "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
+            "command-accept-protocol-v1-phase-iii"
           ],
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
-          "output_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
+          "input_scope_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
+          "output_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -13548,6 +13662,7 @@
           "input_entity_refs": [
             "protocol-v1",
             "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
             "gate-uat-03-baseline-authority-protocol-v1-phase-iii",
             "manifest-protocol-v1-phase-iii",
             "ruleset-synthetic-phase-iii"
@@ -13555,8 +13670,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "1dbb0a396b31aa58cb4141f513763ef0425e64d63ed24f842c113f785100e370",
-          "output_hash": "1dbb0a396b31aa58cb4141f513763ef0425e64d63ed24f842c113f785100e370",
+          "input_scope_hash": "e9881ed7abeeeb26d681fa7e9f43773715b5581aa1ac07d4927ebfea5ef76817",
+          "output_hash": "e9881ed7abeeeb26d681fa7e9f43773715b5581aa1ac07d4927ebfea5ef76817",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -13585,7 +13700,7 @@
             "episode-uat-03-baseline-gap_conflict": 1
           },
           "input_scope_hash": "bac0981fdd221d43376304fe070e3bcaaf287f86cd5557d33197be5a5ada6b98",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "457b2779b7dbcb96cc40dd77d765894c1c3027bf5a17f65d494edeba65bc3be3",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-03-gap_conflict"
@@ -13614,7 +13729,7 @@
             "episode-uat-03-baseline-gap_conflict": 1
           },
           "input_scope_hash": "bac0981fdd221d43376304fe070e3bcaaf287f86cd5557d33197be5a5ada6b98",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "8c981f9edf33f47bae06b34178cab21373aa162da310a677118a62d213f10e05",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-03-gap_conflict"
@@ -13651,8 +13766,8 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "35cbd542254db8976dec0bd97e272343f8f0ef46f6f14e3a03939e691bc36612",
-          "output_hash": "35cbd542254db8976dec0bd97e272343f8f0ef46f6f14e3a03939e691bc36612",
+          "input_scope_hash": "9123dd1be21ef95e57f4dce025f9bf48763dac14d47e610c265e8a7b5ba61aab",
+          "output_hash": "9123dd1be21ef95e57f4dce025f9bf48763dac14d47e610c265e8a7b5ba61aab",
           "parent_event_id": null,
           "recompute_scope": [
             "episode-uat-03-baseline-gap_conflict"
@@ -13714,7 +13829,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "01aea77ef4ac6df1c4f462822df1731ee1f3bebc7a2f739374ea26b12a516279",
+          "input_scope_hash": "8904e2a2c309af74a92deade01a444f59cc68bd9b0029cf2f9b1f5b83eb5fff2",
           "output_hash": "0e40c6e43bd74991086bb731d1f201f73e7efd53efd4a777847516c69e651fab",
           "parent_event_id": null,
           "recompute_scope": [
@@ -13777,7 +13892,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "6a4b7f6a91798e07a442e29e86e4d6a85f3b320d7dc46047933260442d14e6b3",
+          "input_scope_hash": "45078cf3a6e26b428f793916c5f8c1e3b90f5cff0eaba4ea9ea775ab524adda3",
           "output_hash": "7c92e598072db12060c13306d30ee38f3665e6a88a7b46cd986fb39ac2a5d697",
           "parent_event_id": null,
           "recompute_scope": [
@@ -13840,7 +13955,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "71be7314faa969364422d90e476be4f741860700f074df8c1061558567190151",
+          "input_scope_hash": "5fba2d48bba599db210af4fecc0825ca4445aba5688697a281f720b2b622b0c3",
           "output_hash": "f06a43fa602933ead8bbcfbe323ff26781e6f0f1c973651f507d8655ec6f8409",
           "parent_event_id": null,
           "recompute_scope": [
@@ -13903,7 +14018,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "81021d7e8b27eae9c8f12db7bde4dd9bc53d458720878a49248019d4ded9b4da",
+          "input_scope_hash": "5a30811e000cdf60f7f894122d75a81df58ae5dae49b72bd8cfb17fee2999b3f",
           "output_hash": "d9c8f39745e12d4f14632967eb08f308ccb93bb0ff7c83db3173b72cb84a55b3",
           "parent_event_id": null,
           "recompute_scope": [
@@ -13966,7 +14081,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "79fec1c7265b0ce7c3dfc044932896c1efabd45eac3943d393333aa726bfd8bf",
+          "input_scope_hash": "cb27ae84ec01529a7accbe10d15085b3dc192c6c5d3e6457515fd1f9f79b9418",
           "output_hash": "9321455895ebab1e044d2a652209f54d2c3bc2c264b0b89192e457eb4108f47d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -14029,7 +14144,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "b6af4594ab7904160d9a5804ffbf9e88a8d958f842f49e8a4f99fd59b6d7eb23",
+          "input_scope_hash": "0c387efad40aa8f21cff631c017b613c5446d48493788a1315a02600a8a69b48",
           "output_hash": "29f0895ee8beec6527a78a0ea9ec0e4c5c78ca6696bf9fe0758f51b618136f3a",
           "parent_event_id": null,
           "recompute_scope": [
@@ -14092,7 +14207,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "fc6abeeaab82eac018a2d682cb3bb6e15925d8d6e65e9ddaf0699467b2e78977",
+          "input_scope_hash": "6343c1cae7ecc0669e41cb1c96bcf41a8e1b068a7e5a1ad3bbbce2ca8577414b",
           "output_hash": "aa29fdaeaab79249ba366eee6b3b890020100f37c9a82dd93ad3a68052b314cb",
           "parent_event_id": null,
           "recompute_scope": [
@@ -14675,6 +14790,7 @@
         "project_id": "project-synthetic-phase-iii",
         "project_name": "合成Ⅲ期入排审核项目",
         "protocol_version": {
+          "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-03-baseline-authority-protocol-v1-phase-iii",
           "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
           "integrity_gate_result_id": "gate-uat-03-baseline-integrity-protocol-v1-phase-iii",
@@ -14711,6 +14827,20 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_confirmation": {
+        "action": "accept_protocol_authority",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "confirmation_id": "confirmation-protocol-v1-phase-iii",
+        "confirmation_sha256": "1f213715bd1253931704f1aaee0fd985d1cb3192ac7e29e3773de220d914c9ac",
+        "confirmed_at": "2026-08-12T12:00:00Z",
+        "confirmed_by": "synthetic-uat-human-acceptance",
+        "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
         "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
@@ -16052,7 +16182,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "evidence_normalizer",
           "outcome": "accepted",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "f09791f708c164eee129228ab57b5ecf20df847c858e249fcafb14adfb2464c7",
           "output_kind": "candidate",
           "output_tokens": 51,
           "parent_event_id": null,
@@ -16075,6 +16205,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-04-gap_conflict",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "evidence-candidate-episode-gap_conflict": "5029ea6c863bc9196266f009c6199c01d8d8500e3a9be5e1a64de33fb676f9a8",
+            "evidence-candidate-episode-uat-04-screening-gap_conflict": "82510948e729cf59c797e07fac921223ff8a03a96eba356b4459c37cdc4120ed"
+          },
           "write_scope": "evidence_candidate"
         },
         {
@@ -16098,7 +16232,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "eligibility_assessor",
           "outcome": "accepted",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "158d2e2644189acc7008edc4ddc3d4297558dd757256ba4e6cc7dd17076bf8f9",
           "output_kind": "candidate",
           "output_tokens": 52,
           "parent_event_id": null,
@@ -16121,6 +16255,15 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-04-gap_conflict",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "candidate-uat-04-screening-gap-ex": "00ba7223833431d638c5ea7801cf89186d8f04e3330416a0ce570bd5e8ce6a89",
+            "candidate-uat-04-screening-gap-future": "06a4673dec16563810f4e934940b93e712b6574c2ed1665f92486e7cd8ed1280",
+            "candidate-uat-04-screening-gap-in": "29daae1a50287a6af015125c5cbd2e759f40969907a1d38c2f1e4d7bf0751f07",
+            "candidate-uat-04-screening-gap-procedure": "b58d47ed8fd942abd4816f3fd7eed97fe5c0105288135c590ce0efe376ff81c6",
+            "candidate-uat-04-screening-gap-professional": "f26907688f7dc7dadab8ac9ab3665f291d621135e732d52e5c468aac2cdce74d",
+            "candidate-uat-04-screening-gap-referenced": "b86b385501b241623c9efe50528ef0995160e71dfde2052e6034505bcd903736",
+            "candidate-uat-04-screening-gap-result-fields": "8c9d823117712130c1f70a9806fbb275572cb8fe176c441911bb3fd72251c28b"
+          },
           "write_scope": "assessment_candidate"
         }
       ],
@@ -16316,7 +16459,7 @@
           "evidence_snapshot_id": "snapshot-uat-04-screening-gap_conflict",
           "evidence_span_ids": [],
           "gap_types": [
-            "description_insufficient",
+            "historical_source_unavailable",
             "professional_judgment"
           ],
           "missing_predicate_ids": [
@@ -16576,8 +16719,8 @@
         "current_gap_count": 10,
         "future_attention_count": 2,
         "gap_counts": {
-          "description_insufficient": 2,
           "future_stage_not_due": 2,
+          "historical_source_unavailable": 2,
           "ocr_or_parse_risk": 2,
           "professional_judgment": 1,
           "record_incomplete": 2,
@@ -16617,7 +16760,7 @@
         "main_status": "current_gap",
         "professional_judgment_count": 1,
         "provenance_followup_count": 0,
-        "publication_fingerprint": "12f44c79bc09fd8d4b4975b3fba7ce4d2d8567ed8ba98883c6df4c1096b147b6",
+        "publication_fingerprint": "643e5d3cb9592045202253e2517bf1cfa3095938cb0a881146cccddca648eac7",
         "review_episode_id": "episode-uat-04-screening-gap_conflict",
         "schema_version": "fixture/v1",
         "sort_rank": 1
@@ -16644,13 +16787,15 @@
           "status": "observed_weak"
         },
         {
-          "evidence_span_ids": [],
+          "evidence_span_ids": [
+            "span-uat-04-screening-gap-page"
+          ],
           "expectation_id": "expectation-uat-04-screening-gap-professional",
-          "gap_type": "description_insufficient",
+          "gap_type": "historical_source_unavailable",
           "requirement_id": "req-professional",
           "review_episode_id": "episode-uat-04-screening-gap_conflict",
           "schema_version": "fixture/v1",
-          "status": "absent"
+          "status": "observed_weak"
         },
         {
           "evidence_span_ids": [],
@@ -16898,13 +17043,13 @@
           "evidence_snapshot_id": "snapshot-uat-04-screening-gap_conflict",
           "evidence_span_ids": [],
           "gap_types": [
-            "description_insufficient",
+            "historical_source_unavailable",
             "professional_judgment"
           ],
           "gate_result_id": "gate-uat-04-screening-gap-professional",
           "project_id": "project-synthetic-phase-iii",
           "protocol_version_id": "protocol-v1",
-          "publication_fingerprint": "6e5314c9579bc9adc7f7b2c4cf308b4db6413cde3dd55bc204882674ebd5b6e3",
+          "publication_fingerprint": "636ee393e69a8bba28c88f6054a0ab159a50a4c49da3617d8b7c556431b8be4b",
           "review_episode_id": "episode-uat-04-screening-gap_conflict",
           "review_run_id": "run-uat-04-screening-gap_conflict",
           "rule_component_id": "component-ex-02",
@@ -17021,19 +17166,15 @@
           "input_entity_refs": [
             "protocol-v1",
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "IN-01",
-            "EX-01",
-            "EX-02",
-            "EX-03",
-            "EX-04",
-            "REQ-01",
-            "REQ-02"
+            "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
+            "command-accept-protocol-v1-phase-iii"
           ],
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
-          "output_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
+          "input_scope_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
+          "output_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -17059,6 +17200,7 @@
           "input_entity_refs": [
             "protocol-v1",
             "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
             "gate-uat-04-screening-authority-protocol-v1-phase-iii",
             "manifest-protocol-v1-phase-iii",
             "ruleset-synthetic-phase-iii"
@@ -17066,8 +17208,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "52ec57235be9b87671d8fbc1b2b2df2c06f886b358da3169926de9efb1b54dba",
-          "output_hash": "52ec57235be9b87671d8fbc1b2b2df2c06f886b358da3169926de9efb1b54dba",
+          "input_scope_hash": "87bb5a031352ce502c23016f4db8e6f8303f1aa113989360ea59177281bbcf3e",
+          "output_hash": "87bb5a031352ce502c23016f4db8e6f8303f1aa113989360ea59177281bbcf3e",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -17096,7 +17238,7 @@
             "episode-uat-04-screening-gap_conflict": 1
           },
           "input_scope_hash": "0e6ecde21c2dc9d003666cf70a41c2b9055889cd24099f11730374ca2ca6a750",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "f09791f708c164eee129228ab57b5ecf20df847c858e249fcafb14adfb2464c7",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-04-gap_conflict"
@@ -17125,7 +17267,7 @@
             "episode-uat-04-screening-gap_conflict": 1
           },
           "input_scope_hash": "0e6ecde21c2dc9d003666cf70a41c2b9055889cd24099f11730374ca2ca6a750",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "158d2e2644189acc7008edc4ddc3d4297558dd757256ba4e6cc7dd17076bf8f9",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-04-gap_conflict"
@@ -17162,8 +17304,8 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "d0ff181161e5a1b76122bc28c98989c76d41958ed722c88c05bb459ee3979f3a",
-          "output_hash": "d0ff181161e5a1b76122bc28c98989c76d41958ed722c88c05bb459ee3979f3a",
+          "input_scope_hash": "658e2016bb54ec599962341ff6cfc5d22a53ad0400d8781edfee529a67916562",
+          "output_hash": "658e2016bb54ec599962341ff6cfc5d22a53ad0400d8781edfee529a67916562",
           "parent_event_id": null,
           "recompute_scope": [
             "episode-uat-04-screening-gap_conflict"
@@ -17225,7 +17367,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "a0e6a3201d161689de3c187d826e118e9449fcad18c8ac3cbe0cbdd7729deb3b",
+          "input_scope_hash": "bee2aa64f37763fd666eb323010dedc2c8e5ecde20a437e424b8fa8be4e63457",
           "output_hash": "a91866e4258d1679bf56983e24f961a87ebb52ff927eaf159477014134d66862",
           "parent_event_id": null,
           "recompute_scope": [
@@ -17288,7 +17430,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "6ef3889825fd12d24f306d7db4e3515bf494ae70e593b249c2f6a62b87065c9d",
+          "input_scope_hash": "59c037698025637d2b78c8d682b3c25d98548281466cabab364235d6f5b3238a",
           "output_hash": "e4874487d3acc746dfc97e844bc0643c25a898ca554c149bb512d5aaa00a920e",
           "parent_event_id": null,
           "recompute_scope": [
@@ -17319,7 +17461,7 @@
             "episode-uat-04-screening-gap_conflict": 1
           },
           "input_scope_hash": "0e6ecde21c2dc9d003666cf70a41c2b9055889cd24099f11730374ca2ca6a750",
-          "output_hash": "527c60dc21be72ea3086d947e14800231b44386ad3c64de4cd8e3c5c2eeb1d83",
+          "output_hash": "f26907688f7dc7dadab8ac9ab3665f291d621135e732d52e5c468aac2cdce74d",
           "parent_event_id": null,
           "recompute_scope": [
             "component-ex-02"
@@ -17351,8 +17493,8 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "9a2cd4182a184dbcc558d22a7b782da56c865e7042d15a5d41926760b1b8238e",
-          "output_hash": "9534799854520001a0213d3dd6580934e806b9528c2554c811873f81023ff659",
+          "input_scope_hash": "ed037d6148a2c75dd713468b2269d020821657a20e1686a6fc057a6dfc3bc0ab",
+          "output_hash": "088d5518422673087298e0fcb16f2b6539eb0462c2aced8c102ec60dc4fbe30b",
           "parent_event_id": null,
           "recompute_scope": [
             "component-ex-02"
@@ -17414,7 +17556,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "9132dd838d156fc4878a0411300a0f68a04b498f227950ac0dd85bf4ba75115f",
+          "input_scope_hash": "2f25ba46c692252b9ff6faba6b37b1534acc97cccaf3a71286e692da863277f3",
           "output_hash": "2fcab52bb03d4e909e607e407930bb85e20704a9c255a62138e07ee1129bd99d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -17477,7 +17619,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "af8d47d4bfe1dda5662693d632a5acf12d86f65420eeabaafdf72c32f66f8b74",
+          "input_scope_hash": "82273ec5bd9ca8d04f072de987de40107dc74fdba61864452c8817d0a92464d3",
           "output_hash": "e09b5bf7965c23e8f49153849446ce557fcb3479d92dcb27ff2bb2d875cc508e",
           "parent_event_id": null,
           "recompute_scope": [
@@ -17540,7 +17682,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "04b4b269b4a4ef12de481bdd1c426f6c85036ad049f9d7460b40347428e21d11",
+          "input_scope_hash": "b616f3405e37f8b1dbcb09b72b291e78144d4719c5b5292910a7c9da81f18d55",
           "output_hash": "ac9f6de2891e846474fdf71f8623a11a608abae503246b76daf59b87dbbfe056",
           "parent_event_id": null,
           "recompute_scope": [
@@ -17603,7 +17745,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "7de802300cb0e6ad0407859a0edb443e48bc3223b7fc2f5d703254becbd0fd53",
+          "input_scope_hash": "5804c322bac115c10d20b0f478109c33757bfcc797f1fdde1c56d57ab7d14d55",
           "output_hash": "f11039a7c60c792108d8ee8a440676052026b11116b78286d7077370e3879b01",
           "parent_event_id": null,
           "recompute_scope": [
@@ -17879,7 +18021,7 @@
             "episode-uat-04-screening-gap_conflict": 1
           },
           "input_scope_hash": "9df0715a6e19df2a3772cae97fa25c8a0b30d9b11345f1b7ab3a0049e649c20f",
-          "output_hash": "66ed311e27cccd098de726c614b8dc63619340b623580cdee3d50b68e93dd14e",
+          "output_hash": "4ba48cca2cc4be30f7925362bd507aae655609a56b8d26df361cd8e15f4b4655",
           "parent_event_id": null,
           "recompute_scope": [
             "episode-uat-04-screening-gap_conflict"
@@ -18169,7 +18311,6 @@
         ],
         "missing_expectation_ids": [
           "expectation-uat-04-screening-gap-age",
-          "expectation-uat-04-screening-gap-professional",
           "expectation-uat-04-screening-gap-referenced",
           "expectation-uat-04-screening-gap-procedure",
           "expectation-uat-04-screening-gap-result-fields"
@@ -18185,6 +18326,7 @@
         "project_id": "project-synthetic-phase-iii",
         "project_name": "合成Ⅲ期入排审核项目",
         "protocol_version": {
+          "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-04-screening-authority-protocol-v1-phase-iii",
           "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
           "integrity_gate_result_id": "gate-uat-04-screening-integrity-protocol-v1-phase-iii",
@@ -18221,6 +18363,20 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_confirmation": {
+        "action": "accept_protocol_authority",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "confirmation_id": "confirmation-protocol-v1-phase-iii",
+        "confirmation_sha256": "1f213715bd1253931704f1aaee0fd985d1cb3192ac7e29e3773de220d914c9ac",
+        "confirmed_at": "2026-08-12T12:00:00Z",
+        "confirmed_by": "synthetic-uat-human-acceptance",
+        "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
         "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
@@ -19552,7 +19708,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "evidence_normalizer",
           "outcome": "accepted",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "c9188b658c8632244b5735b20e7591f7b7e78888b0a6ffba39f89bde0ebb223d",
           "output_kind": "candidate",
           "output_tokens": 51,
           "parent_event_id": null,
@@ -19575,6 +19731,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-04-gap_conflict",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "evidence-candidate-episode-gap_conflict": "5029ea6c863bc9196266f009c6199c01d8d8500e3a9be5e1a64de33fb676f9a8",
+            "evidence-candidate-episode-uat-04-baseline-gap_conflict": "73962ebbbae737b700b73dd0519f5d10afb07c968b369e2f40cf511eaad6e7ae"
+          },
           "write_scope": "evidence_candidate"
         },
         {
@@ -19598,7 +19758,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "eligibility_assessor",
           "outcome": "accepted",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "1d32f4e83d6f840cd4a4b0031569025417ba63eacc5adda8305c556366efcd10",
           "output_kind": "candidate",
           "output_tokens": 52,
           "parent_event_id": null,
@@ -19621,6 +19781,15 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-04-gap_conflict",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "candidate-uat-04-baseline-gap-ex": "faf4cf4604a1053a5462a1225e062bf3fb1117b1c3db41386002ab62286fe353",
+            "candidate-uat-04-baseline-gap-future": "c7d0f1d44df7d2ddfc9b839c1d9f134f8ff71b47e1a4fc39f9513f092234f962",
+            "candidate-uat-04-baseline-gap-in": "aa66a093aa0a2838573c6fdb97369ab261217ca947447db473b96b9320754486",
+            "candidate-uat-04-baseline-gap-procedure": "2a43c92d3361d1954aab2fb6f943141e1f8f8ba48b976c7c52f07d62601e0361",
+            "candidate-uat-04-baseline-gap-professional": "76919e6e9db5f095485bbad1ef614804280298503976224279d5b0f20d8f09a4",
+            "candidate-uat-04-baseline-gap-referenced": "add8ff2366ca0f18c1a95ba8a75b486b7a23076d0b0346e6b321731f123b3897",
+            "candidate-uat-04-baseline-gap-result-fields": "50d006f5836304234d69957d3672a64117ba9054d525eefc2ac76172b82c0ed8"
+          },
           "write_scope": "assessment_candidate"
         }
       ],
@@ -20520,19 +20689,15 @@
           "input_entity_refs": [
             "protocol-v1",
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "IN-01",
-            "EX-01",
-            "EX-02",
-            "EX-03",
-            "EX-04",
-            "REQ-01",
-            "REQ-02"
+            "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
+            "command-accept-protocol-v1-phase-iii"
           ],
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
-          "output_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
+          "input_scope_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
+          "output_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -20558,6 +20723,7 @@
           "input_entity_refs": [
             "protocol-v1",
             "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
             "gate-uat-04-baseline-authority-protocol-v1-phase-iii",
             "manifest-protocol-v1-phase-iii",
             "ruleset-synthetic-phase-iii"
@@ -20565,8 +20731,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "646b10d3fe3a1d29f980d651e6694abebcad04fd780f841746c74617f0ed00ce",
-          "output_hash": "646b10d3fe3a1d29f980d651e6694abebcad04fd780f841746c74617f0ed00ce",
+          "input_scope_hash": "ba8d1fa6f2bea65eb2b72cdeebe8287df4c7e518d0b82162376bfd4764c16564",
+          "output_hash": "ba8d1fa6f2bea65eb2b72cdeebe8287df4c7e518d0b82162376bfd4764c16564",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -20595,7 +20761,7 @@
             "episode-uat-04-baseline-gap_conflict": 1
           },
           "input_scope_hash": "bfcf1118cd6379767e18b0ec94f64a1e6c4f6803ba301fb0fb0b0cfbf1704c49",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "c9188b658c8632244b5735b20e7591f7b7e78888b0a6ffba39f89bde0ebb223d",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-04-gap_conflict"
@@ -20624,7 +20790,7 @@
             "episode-uat-04-baseline-gap_conflict": 1
           },
           "input_scope_hash": "bfcf1118cd6379767e18b0ec94f64a1e6c4f6803ba301fb0fb0b0cfbf1704c49",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "1d32f4e83d6f840cd4a4b0031569025417ba63eacc5adda8305c556366efcd10",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-04-gap_conflict"
@@ -20661,8 +20827,8 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "1d8478da38a41effd1c1fb26193a68c20f072e7dbbcb981d63497388db696033",
-          "output_hash": "1d8478da38a41effd1c1fb26193a68c20f072e7dbbcb981d63497388db696033",
+          "input_scope_hash": "03cc7e3a16b12bbe30170d555d75494abf7a954863d2467b5497063da9afec58",
+          "output_hash": "03cc7e3a16b12bbe30170d555d75494abf7a954863d2467b5497063da9afec58",
           "parent_event_id": null,
           "recompute_scope": [
             "episode-uat-04-baseline-gap_conflict"
@@ -20724,7 +20890,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "5aedce8a996058b040328ce5b5621738db984a95e8dd407201041ffaf2fb6eb1",
+          "input_scope_hash": "77af7f1756680ee4bf90a61ee65d50ee118511af3bd8367966e0b007718efbea",
           "output_hash": "a20179a40e2ad9268225f10aa70cadeb729bc5e10679effd184cd2bcaaf71ccd",
           "parent_event_id": null,
           "recompute_scope": [
@@ -20787,7 +20953,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "3869c060b762f652964e07724be6770df97c07988868f492d6a76cb1ec62a971",
+          "input_scope_hash": "4cc36e91e74f327b00d5b3a2e9908a33afd0c247f446b29ddfdaa2d9309bf36a",
           "output_hash": "f51ff0d724ee13156f7283c4d93395251ec384da400e0f3d33e00094e726f9ae",
           "parent_event_id": null,
           "recompute_scope": [
@@ -20850,7 +21016,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "9d14bcb87a0e89133763899e3901ad200f2a0e1f954a83fab080a5e8490fcffb",
+          "input_scope_hash": "b192f638dfa2e41037176ade977ee0f219969348fb92540a3fd0d8305a9507e2",
           "output_hash": "f336ce0e2ab66d63c5d3d8174ffd16a1cd4cf4b5dc8b920da59c1f196c0e1fb7",
           "parent_event_id": null,
           "recompute_scope": [
@@ -20913,7 +21079,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "8ef90d5ecc07a5ea81d33451f24e55bc71bbe539b3f261286d7ea548206b09ec",
+          "input_scope_hash": "d825d477bdb1c840dce5e3b505d2edcdd673035986e1034239d178edf375a99a",
           "output_hash": "b35cc39591fdd9760ec655a8604727ac13900adf2a10129a1d38762fde0d83d1",
           "parent_event_id": null,
           "recompute_scope": [
@@ -20976,7 +21142,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "7e2ecfc9f24706c622f52719b945af5d7a0e9086b0f73f8d0a54ac48dafef8c6",
+          "input_scope_hash": "17d9a4fb2100ab833eab777d637ba4b463c75b9420aa0ba13569b666f0510c12",
           "output_hash": "3d04f90813442d1833aafa789f64be0efea095835eb211df97b9fd126e4c9127",
           "parent_event_id": null,
           "recompute_scope": [
@@ -21039,7 +21205,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "a533fcaa8e44704da45ed7facbf54a1785969e4f26d85bde54bdfcae93e4eda8",
+          "input_scope_hash": "8a61ab65ba591fc043768e4a10b6544d8e61cd6533beeac705d970770cea41a0",
           "output_hash": "57155fafdbddce22fcafdf17535704d904dc42fde9c6684845564dbd34f11c5b",
           "parent_event_id": null,
           "recompute_scope": [
@@ -21102,7 +21268,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "9f1903f4926183bfee88b75db6690df12ff8c6e340b146baf696b206bf9ff206",
+          "input_scope_hash": "1a8ed92bb7045240de7011c370ee2f18b708539cde6e40ae24417d2aa33e0e3a",
           "output_hash": "31c89be13a6803e0a98afa35d183e32897cdef3d2afe0fd5664bc5ee045a796d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -21685,6 +21851,7 @@
         "project_id": "project-synthetic-phase-iii",
         "project_name": "合成Ⅲ期入排审核项目",
         "protocol_version": {
+          "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-04-baseline-authority-protocol-v1-phase-iii",
           "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
           "integrity_gate_result_id": "gate-uat-04-baseline-integrity-protocol-v1-phase-iii",
@@ -21721,6 +21888,20 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_confirmation": {
+        "action": "accept_protocol_authority",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "confirmation_id": "confirmation-protocol-v1-phase-iii",
+        "confirmation_sha256": "1f213715bd1253931704f1aaee0fd985d1cb3192ac7e29e3773de220d914c9ac",
+        "confirmed_at": "2026-08-12T12:00:00Z",
+        "confirmed_by": "synthetic-uat-human-acceptance",
+        "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
         "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
@@ -22888,7 +23069,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "evidence_normalizer",
           "outcome": "accepted",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "74813b62a012e16906737a2e2ae9723e57adbb0a9567681abef5e860cbbfc68c",
           "output_kind": "candidate",
           "output_tokens": 51,
           "parent_event_id": null,
@@ -22911,6 +23092,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-05-clear",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "evidence-candidate-episode-clear": "f702741fbeaf42c87e1b1ca4daa99247b4a49425d05db19fa38b80bb2fb52117",
+            "evidence-candidate-episode-uat-05-screening-clear": "daeb216403c65955354193602b6594248370510bbb553c41e87258ba7e9ed00c"
+          },
           "write_scope": "evidence_candidate"
         },
         {
@@ -22934,7 +23119,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "eligibility_assessor",
           "outcome": "accepted",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "fad4540477999def8f204c8a2f0d40516ea9998490834365d36c179f19d34db1",
           "output_kind": "candidate",
           "output_tokens": 52,
           "parent_event_id": null,
@@ -22957,6 +23142,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-05-clear",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "candidate-uat-05-screening-clear-ex": "b2a331b05c95144ad2750e8ae8f1cf37a4a96e5abdb32ef22bcb7b1034b72ae4",
+            "candidate-uat-05-screening-clear-in": "44c967f8d1622edb724ae299a803544aabdea3586a304669361cda16827ec934"
+          },
           "write_scope": "assessment_candidate"
         }
       ],
@@ -23449,19 +23638,15 @@
           "input_entity_refs": [
             "protocol-v1",
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "IN-01",
-            "EX-01",
-            "EX-02",
-            "EX-03",
-            "EX-04",
-            "REQ-01",
-            "REQ-02"
+            "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
+            "command-accept-protocol-v1-phase-iii"
           ],
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
-          "output_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
+          "input_scope_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
+          "output_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -23487,6 +23672,7 @@
           "input_entity_refs": [
             "protocol-v1",
             "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
             "gate-uat-05-screening-authority-protocol-v1-phase-iii",
             "manifest-protocol-v1-phase-iii",
             "ruleset-synthetic-phase-iii"
@@ -23494,8 +23680,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "0c465071f0eb458b19d9cff2e67dbf5bffd85f135492b9adb0b3acf47cb1f4f6",
-          "output_hash": "0c465071f0eb458b19d9cff2e67dbf5bffd85f135492b9adb0b3acf47cb1f4f6",
+          "input_scope_hash": "55eb450f28bf542ea8ea9d7bbef2cea88f5c88cc650a141be2ba55650a4254a2",
+          "output_hash": "55eb450f28bf542ea8ea9d7bbef2cea88f5c88cc650a141be2ba55650a4254a2",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -23524,7 +23710,7 @@
             "episode-uat-05-screening-clear": 1
           },
           "input_scope_hash": "05536a8754e599c5548f07d5563724191c4cceb72ea5f06c36b02dc7c1f3fd35",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "74813b62a012e16906737a2e2ae9723e57adbb0a9567681abef5e860cbbfc68c",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-05-clear"
@@ -23553,7 +23739,7 @@
             "episode-uat-05-screening-clear": 1
           },
           "input_scope_hash": "05536a8754e599c5548f07d5563724191c4cceb72ea5f06c36b02dc7c1f3fd35",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "fad4540477999def8f204c8a2f0d40516ea9998490834365d36c179f19d34db1",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-05-clear"
@@ -23592,8 +23778,8 @@
           "input_revision_map": {
             "episode-uat-05-screening-clear": 1
           },
-          "input_scope_hash": "575304eb05e38df45b3cbf6846b87c0580cf55048cc30ccef7e4ad8faccd39f2",
-          "output_hash": "575304eb05e38df45b3cbf6846b87c0580cf55048cc30ccef7e4ad8faccd39f2",
+          "input_scope_hash": "79ebb36e570383af64f11c5bc87a24f02bbc6012e9fedffe49b54af8acacb857",
+          "output_hash": "79ebb36e570383af64f11c5bc87a24f02bbc6012e9fedffe49b54af8acacb857",
           "parent_event_id": null,
           "recompute_scope": [
             "episode-uat-05-screening-clear"
@@ -23655,7 +23841,7 @@
           "input_revision_map": {
             "episode-uat-05-screening-clear": 1
           },
-          "input_scope_hash": "d552349b2eb16ddea337da4edb33c945ca71074c0124042e9046cf9c6bc5c3bf",
+          "input_scope_hash": "416b30d5f6bfe4d0af7e585d2bc1a47f797a2e63cb827283b180093b526c4276",
           "output_hash": "12e7ae897dcfe963c63bfc8ebe23752a69cadaef48b8d303462d8672b9fc633b",
           "parent_event_id": null,
           "recompute_scope": [
@@ -23718,7 +23904,7 @@
           "input_revision_map": {
             "episode-uat-05-screening-clear": 1
           },
-          "input_scope_hash": "fe0ea4397ec6baf94aa7bb4a2697489bef0e2edfdea9e505fcfcc9e7523f7897",
+          "input_scope_hash": "06f9c3a6d0fdaf1cb0b604f48a17fc353a83d3cb04a01ed3f9851f0f25621411",
           "output_hash": "b7d60a24adc1812e57fd569898eb62742a3413074ff1db6aae47398542b662c2",
           "parent_event_id": null,
           "recompute_scope": [
@@ -23886,6 +24072,7 @@
         "project_id": "project-synthetic-phase-iii",
         "project_name": "合成Ⅲ期入排审核项目",
         "protocol_version": {
+          "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-05-screening-authority-protocol-v1-phase-iii",
           "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
           "integrity_gate_result_id": "gate-uat-05-screening-integrity-protocol-v1-phase-iii",
@@ -23922,6 +24109,20 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_confirmation": {
+        "action": "accept_protocol_authority",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "confirmation_id": "confirmation-protocol-v1-phase-iii",
+        "confirmation_sha256": "1f213715bd1253931704f1aaee0fd985d1cb3192ac7e29e3773de220d914c9ac",
+        "confirmed_at": "2026-08-12T12:00:00Z",
+        "confirmed_by": "synthetic-uat-human-acceptance",
+        "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
         "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
@@ -25079,7 +25280,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "evidence_normalizer",
           "outcome": "accepted",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "d4a394e36599670651b7307f823b750fbb334fcdd0b733e0896c10231bfa8fd2",
           "output_kind": "candidate",
           "output_tokens": 51,
           "parent_event_id": null,
@@ -25102,6 +25303,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-05-clear",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "evidence-candidate-episode-clear": "f702741fbeaf42c87e1b1ca4daa99247b4a49425d05db19fa38b80bb2fb52117",
+            "evidence-candidate-episode-uat-05-baseline-clear": "b46245b3bc8ac67c3b1444f99df7938f8fe4e9ed0951e94a14450c782538eaba"
+          },
           "write_scope": "evidence_candidate"
         },
         {
@@ -25125,7 +25330,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "eligibility_assessor",
           "outcome": "accepted",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "11871ff32e745e00e21efb0880feac8d00c46e479b25b419b4a80b6232219e46",
           "output_kind": "candidate",
           "output_tokens": 52,
           "parent_event_id": null,
@@ -25148,6 +25353,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-05-clear",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "candidate-uat-05-baseline-clear-ex": "6036ec3b7c1bb84ecdbd41da2546e47760aba0c51eac41f9c27af5e7989ee998",
+            "candidate-uat-05-baseline-clear-in": "b41d267d89a56a6bd10c758811f4c58bddcd8cd4e5ca08d7b4503400ea2dea67"
+          },
           "write_scope": "assessment_candidate"
         }
       ],
@@ -25640,19 +25849,15 @@
           "input_entity_refs": [
             "protocol-v1",
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "IN-01",
-            "EX-01",
-            "EX-02",
-            "EX-03",
-            "EX-04",
-            "REQ-01",
-            "REQ-02"
+            "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
+            "command-accept-protocol-v1-phase-iii"
           ],
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
-          "output_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
+          "input_scope_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
+          "output_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -25678,6 +25883,7 @@
           "input_entity_refs": [
             "protocol-v1",
             "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
             "gate-uat-05-baseline-authority-protocol-v1-phase-iii",
             "manifest-protocol-v1-phase-iii",
             "ruleset-synthetic-phase-iii"
@@ -25685,8 +25891,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "b263bc57f91577b72ac84c7a5921ddd0f87cf3b62a5c5697a136b07843bbe506",
-          "output_hash": "b263bc57f91577b72ac84c7a5921ddd0f87cf3b62a5c5697a136b07843bbe506",
+          "input_scope_hash": "f85e6ef86fa9fc8e1b5b181c092ae6da2c0ea90bce72e4e3c0485037e5163ece",
+          "output_hash": "f85e6ef86fa9fc8e1b5b181c092ae6da2c0ea90bce72e4e3c0485037e5163ece",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -25715,7 +25921,7 @@
             "episode-uat-05-baseline-clear": 1
           },
           "input_scope_hash": "19cb357c3c91d760ece5f5f099c4926c558cc0d84e4d7e41cbc7b9545dc371e9",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "d4a394e36599670651b7307f823b750fbb334fcdd0b733e0896c10231bfa8fd2",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-05-clear"
@@ -25744,7 +25950,7 @@
             "episode-uat-05-baseline-clear": 1
           },
           "input_scope_hash": "19cb357c3c91d760ece5f5f099c4926c558cc0d84e4d7e41cbc7b9545dc371e9",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "11871ff32e745e00e21efb0880feac8d00c46e479b25b419b4a80b6232219e46",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-05-clear"
@@ -25783,8 +25989,8 @@
           "input_revision_map": {
             "episode-uat-05-baseline-clear": 1
           },
-          "input_scope_hash": "eccc73a6960e2c2c2001c2d0a676281d8f52c0a0b3c208d9498d0c64c18c98b4",
-          "output_hash": "eccc73a6960e2c2c2001c2d0a676281d8f52c0a0b3c208d9498d0c64c18c98b4",
+          "input_scope_hash": "07b4939dbf800a2f597f74c0f2ae1d5d4832625e8b238a46b8b2346a246ec35a",
+          "output_hash": "07b4939dbf800a2f597f74c0f2ae1d5d4832625e8b238a46b8b2346a246ec35a",
           "parent_event_id": null,
           "recompute_scope": [
             "episode-uat-05-baseline-clear"
@@ -25846,7 +26052,7 @@
           "input_revision_map": {
             "episode-uat-05-baseline-clear": 1
           },
-          "input_scope_hash": "91bb29cbf5dd6a44ca48b30ed526c04d9c46cf9f4eee7b7001c8019066f74026",
+          "input_scope_hash": "6a2334565942f83dea18361e86bafc518ac1abc5eba856522606294275038588",
           "output_hash": "f98ea87492f98e75b2d6d30d75693b33fe779bf7b964888e431ff7143a095aed",
           "parent_event_id": null,
           "recompute_scope": [
@@ -25909,7 +26115,7 @@
           "input_revision_map": {
             "episode-uat-05-baseline-clear": 1
           },
-          "input_scope_hash": "5c339ff9e6ffdb0ce785315e62eebe12ea3e1789e355c2de2d0cb9dbf31c26da",
+          "input_scope_hash": "5b8918ba43efdfb5c8f576a738791961bf9759d233008eb6fb6b97937b04b184",
           "output_hash": "778da034aef43255fb959414e7d59d3e25d2d1a47651c931753a0d787e0fb4d2",
           "parent_event_id": null,
           "recompute_scope": [
@@ -26077,6 +26283,7 @@
         "project_id": "project-synthetic-phase-iii",
         "project_name": "合成Ⅲ期入排审核项目",
         "protocol_version": {
+          "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-05-baseline-authority-protocol-v1-phase-iii",
           "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
           "integrity_gate_result_id": "gate-uat-05-baseline-integrity-protocol-v1-phase-iii",
@@ -26113,6 +26320,20 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_confirmation": {
+        "action": "accept_protocol_authority",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "confirmation_id": "confirmation-protocol-v1-phase-iii",
+        "confirmation_sha256": "1f213715bd1253931704f1aaee0fd985d1cb3192ac7e29e3773de220d914c9ac",
+        "confirmed_at": "2026-08-12T12:00:00Z",
+        "confirmed_by": "synthetic-uat-human-acceptance",
+        "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
         "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
@@ -27250,7 +27471,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "evidence_normalizer",
           "outcome": "accepted",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "47b4105abfc9da8e7462c6bb32af19aef061ee3285c9295724284d08c05e9606",
           "output_kind": "candidate",
           "output_tokens": 51,
           "parent_event_id": null,
@@ -27273,6 +27494,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-06-barrier",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "evidence-candidate-episode-barrier": "7fcd601cd200ae6952ecb4d51a9bf63ff29570ab3263dc5fb2722c842120eada",
+            "evidence-candidate-episode-uat-06-screening-barrier": "16b0b331fe5ee0d6e6e8356c17379b8bfe263a554abc46bb535165fe9d437b65"
+          },
           "write_scope": "evidence_candidate"
         },
         {
@@ -27296,7 +27521,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "eligibility_assessor",
           "outcome": "accepted",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "785db7e3089eb3c91f77bff7b600ffa5e2f81e3a66933c42b98d7fc8a51cb14a",
           "output_kind": "candidate",
           "output_tokens": 52,
           "parent_event_id": null,
@@ -27319,6 +27544,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-06-barrier",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "candidate-uat-06-screening-barrier-ex": "eed1868b20630d2afa1ac14ecd015143ff196fa998bb18816a77ddf80bc2d1cf",
+            "candidate-uat-06-screening-barrier-in": "d68a51178379777a5dcda5c2a24c50e59e91707f9a758354ab5092e00536dc40"
+          },
           "write_scope": "assessment_candidate"
         }
       ],
@@ -27880,19 +28109,15 @@
           "input_entity_refs": [
             "protocol-v1",
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "IN-01",
-            "EX-01",
-            "EX-02",
-            "EX-03",
-            "EX-04",
-            "REQ-01",
-            "REQ-02"
+            "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
+            "command-accept-protocol-v1-phase-iii"
           ],
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
-          "output_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
+          "input_scope_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
+          "output_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -27918,6 +28143,7 @@
           "input_entity_refs": [
             "protocol-v1",
             "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
             "gate-uat-06-screening-authority-protocol-v1-phase-iii",
             "manifest-protocol-v1-phase-iii",
             "ruleset-synthetic-phase-iii"
@@ -27925,8 +28151,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "7c06670f45233e4e3ccd86d93fabe0dad980f8a83845e0b53ba35a920165a5fa",
-          "output_hash": "7c06670f45233e4e3ccd86d93fabe0dad980f8a83845e0b53ba35a920165a5fa",
+          "input_scope_hash": "2c4757d7570b2e13af3093e61e899ce56c78774353eab9147ffa43c3ab87d2f3",
+          "output_hash": "2c4757d7570b2e13af3093e61e899ce56c78774353eab9147ffa43c3ab87d2f3",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -27955,7 +28181,7 @@
             "episode-uat-06-screening-barrier": 1
           },
           "input_scope_hash": "b5bc03e41035ffe5309af4773b5e7a9bdd19f5a1efc1e0275b4bac0ae1099324",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "47b4105abfc9da8e7462c6bb32af19aef061ee3285c9295724284d08c05e9606",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-06-barrier"
@@ -27984,7 +28210,7 @@
             "episode-uat-06-screening-barrier": 1
           },
           "input_scope_hash": "b5bc03e41035ffe5309af4773b5e7a9bdd19f5a1efc1e0275b4bac0ae1099324",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "785db7e3089eb3c91f77bff7b600ffa5e2f81e3a66933c42b98d7fc8a51cb14a",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-06-barrier"
@@ -28027,8 +28253,8 @@
           "input_revision_map": {
             "episode-uat-06-screening-barrier": 1
           },
-          "input_scope_hash": "4c4a87975c193a8cc0e4b64e7113d77b01588fa6e839aeb27c659de450ea3344",
-          "output_hash": "4c4a87975c193a8cc0e4b64e7113d77b01588fa6e839aeb27c659de450ea3344",
+          "input_scope_hash": "0f4c1e3a0b58bb5b02cd51b85fe2dc33f54db90fddb41a7025fe279d7a1a6a44",
+          "output_hash": "0f4c1e3a0b58bb5b02cd51b85fe2dc33f54db90fddb41a7025fe279d7a1a6a44",
           "parent_event_id": null,
           "recompute_scope": [
             "episode-uat-06-screening-barrier"
@@ -28090,7 +28316,7 @@
           "input_revision_map": {
             "episode-uat-06-screening-barrier": 1
           },
-          "input_scope_hash": "875d92e31e39917d481c82b3d24ce38609ff0a0f9818cb3917af1ecda163f903",
+          "input_scope_hash": "561929cd72e36c10f67ae7670e8d96c9fd9b8ebb38bfe9c97c110eece817376c",
           "output_hash": "93bf381cb6a42c317384e599c959d329ce414db6eb6ee7a657b16e8d5e924043",
           "parent_event_id": null,
           "recompute_scope": [
@@ -28153,7 +28379,7 @@
           "input_revision_map": {
             "episode-uat-06-screening-barrier": 1
           },
-          "input_scope_hash": "d6de152890c33b0237c1f7f93471d7a26df0e753366335c72d15991228f9e6d6",
+          "input_scope_hash": "449cd9266288dcb4135410427ad34760ed7ccc31ab09c9186dbc7a976a524fc9",
           "output_hash": "d907ec81db6be3df2761de63d0e4be2a0321a19ba750e90b275bdb6ae90f2845",
           "parent_event_id": null,
           "recompute_scope": [
@@ -28293,6 +28519,7 @@
         "project_id": "project-synthetic-phase-iii",
         "project_name": "合成Ⅲ期入排审核项目",
         "protocol_version": {
+          "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-06-screening-authority-protocol-v1-phase-iii",
           "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
           "integrity_gate_result_id": "gate-uat-06-screening-integrity-protocol-v1-phase-iii",
@@ -28329,6 +28556,20 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_confirmation": {
+        "action": "accept_protocol_authority",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "confirmation_id": "confirmation-protocol-v1-phase-iii",
+        "confirmation_sha256": "1f213715bd1253931704f1aaee0fd985d1cb3192ac7e29e3773de220d914c9ac",
+        "confirmed_at": "2026-08-12T12:00:00Z",
+        "confirmed_by": "synthetic-uat-human-acceptance",
+        "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
         "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
@@ -29456,7 +29697,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "evidence_normalizer",
           "outcome": "accepted",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "4a023e330f3b50d734eb07dc946d009fa99fc1d78e2fbf26d6c1f50409ef8610",
           "output_kind": "candidate",
           "output_tokens": 51,
           "parent_event_id": null,
@@ -29479,6 +29720,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-06-barrier",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "evidence-candidate-episode-barrier": "7fcd601cd200ae6952ecb4d51a9bf63ff29570ab3263dc5fb2722c842120eada",
+            "evidence-candidate-episode-uat-06-baseline-barrier": "559f6c733a672efc85ecb05d2414a010405b8981cd92d886cd7d9e2dc38a44e4"
+          },
           "write_scope": "evidence_candidate"
         },
         {
@@ -29502,7 +29747,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "eligibility_assessor",
           "outcome": "accepted",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "4543ada6d150db166e9bf66f1e0e06ea5b9fc5a071634efd49f27a155ca32c32",
           "output_kind": "candidate",
           "output_tokens": 52,
           "parent_event_id": null,
@@ -29525,6 +29770,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-06-barrier",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "candidate-uat-06-baseline-barrier-ex": "49058ca9737fae90b161d8a041703f97ed58aec32f98d7a1f526ccec00ac0f17",
+            "candidate-uat-06-baseline-barrier-in": "494a178f96bbe51765034c45a4de642d558ea930a2700dd754bf152bc7315522"
+          },
           "write_scope": "assessment_candidate"
         }
       ],
@@ -30086,19 +30335,15 @@
           "input_entity_refs": [
             "protocol-v1",
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "IN-01",
-            "EX-01",
-            "EX-02",
-            "EX-03",
-            "EX-04",
-            "REQ-01",
-            "REQ-02"
+            "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
+            "command-accept-protocol-v1-phase-iii"
           ],
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
-          "output_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
+          "input_scope_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
+          "output_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -30124,6 +30369,7 @@
           "input_entity_refs": [
             "protocol-v1",
             "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
             "gate-uat-06-baseline-authority-protocol-v1-phase-iii",
             "manifest-protocol-v1-phase-iii",
             "ruleset-synthetic-phase-iii"
@@ -30131,8 +30377,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "56e88bc37f84d7b7b31ef461a09d0daaabddfa9891ddf397a2e330ceba724ec1",
-          "output_hash": "56e88bc37f84d7b7b31ef461a09d0daaabddfa9891ddf397a2e330ceba724ec1",
+          "input_scope_hash": "63ab40cc1eff9a0d10db37246a90b77b911f4aa129d1e3a128687134a013a34f",
+          "output_hash": "63ab40cc1eff9a0d10db37246a90b77b911f4aa129d1e3a128687134a013a34f",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -30161,7 +30407,7 @@
             "episode-uat-06-baseline-barrier": 1
           },
           "input_scope_hash": "a0f9d8ea71f6818eaa4c5e1670e4e50a11bedfabf391dce58c332231088c7710",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "4a023e330f3b50d734eb07dc946d009fa99fc1d78e2fbf26d6c1f50409ef8610",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-06-barrier"
@@ -30190,7 +30436,7 @@
             "episode-uat-06-baseline-barrier": 1
           },
           "input_scope_hash": "a0f9d8ea71f6818eaa4c5e1670e4e50a11bedfabf391dce58c332231088c7710",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "4543ada6d150db166e9bf66f1e0e06ea5b9fc5a071634efd49f27a155ca32c32",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-06-barrier"
@@ -30233,8 +30479,8 @@
           "input_revision_map": {
             "episode-uat-06-baseline-barrier": 1
           },
-          "input_scope_hash": "67a0b0db6da0fd729df88b327ec3677c991d760659b890158789409fd89e2830",
-          "output_hash": "67a0b0db6da0fd729df88b327ec3677c991d760659b890158789409fd89e2830",
+          "input_scope_hash": "c0764fc2f8df46544e7d9e5877d49c5463e4dab92ad59e13acd097b980b11b61",
+          "output_hash": "c0764fc2f8df46544e7d9e5877d49c5463e4dab92ad59e13acd097b980b11b61",
           "parent_event_id": null,
           "recompute_scope": [
             "episode-uat-06-baseline-barrier"
@@ -30296,7 +30542,7 @@
           "input_revision_map": {
             "episode-uat-06-baseline-barrier": 1
           },
-          "input_scope_hash": "06e7ed3328014c55c016ea0144e85871fa5fb3516217ef17238e0b387888578e",
+          "input_scope_hash": "8eba2e9116ab39f7eaea41fa71ec64e19374b44ff564d4f202b2cc297e8919b4",
           "output_hash": "10d667abe021fe9afbe273092e6f142b5b7c0a1ce60278cb62312e5167fffa28",
           "parent_event_id": null,
           "recompute_scope": [
@@ -30359,7 +30605,7 @@
           "input_revision_map": {
             "episode-uat-06-baseline-barrier": 1
           },
-          "input_scope_hash": "fb32e00a5095697b05c6123a5b11b4c6a77a79706694194a5b9b11d295e3040b",
+          "input_scope_hash": "af8923f4bde0d5a09dd69fe4c3bd7b8aa5dc163fa5e08c3818d3388d0f65171c",
           "output_hash": "805734165e407e99baa8a0a0d1164c49615319b8a1423b2f41f3cc5d59676327",
           "parent_event_id": null,
           "recompute_scope": [
@@ -30499,6 +30745,7 @@
         "project_id": "project-synthetic-phase-iii",
         "project_name": "合成Ⅲ期入排审核项目",
         "protocol_version": {
+          "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-06-baseline-authority-protocol-v1-phase-iii",
           "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
           "integrity_gate_result_id": "gate-uat-06-baseline-integrity-protocol-v1-phase-iii",
@@ -30535,6 +30782,20 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_confirmation": {
+        "action": "accept_protocol_authority",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "confirmation_id": "confirmation-protocol-v1-phase-iii",
+        "confirmation_sha256": "1f213715bd1253931704f1aaee0fd985d1cb3192ac7e29e3773de220d914c9ac",
+        "confirmed_at": "2026-08-12T12:00:00Z",
+        "confirmed_by": "synthetic-uat-human-acceptance",
+        "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
         "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
@@ -31731,7 +31992,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "evidence_normalizer",
           "outcome": "accepted",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "aa239056429d05dae1f44a32ba6afcbbc1f41a7b3b593801fa5948dcade43bbd",
           "output_kind": "candidate",
           "output_tokens": 51,
           "parent_event_id": null,
@@ -31754,6 +32015,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-07-clear",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "evidence-candidate-episode-clear": "f702741fbeaf42c87e1b1ca4daa99247b4a49425d05db19fa38b80bb2fb52117",
+            "evidence-candidate-episode-uat-07-pre_screening-clear": "381686567b2881d018975a616e5677c09e6182bfea9a2de0109b6427e08a62de"
+          },
           "write_scope": "evidence_candidate"
         },
         {
@@ -31777,7 +32042,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "eligibility_assessor",
           "outcome": "accepted",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "85dea2d1d035fc5046d66504e0a50b37973761e538254cc04e77536460e23cdb",
           "output_kind": "candidate",
           "output_tokens": 52,
           "parent_event_id": null,
@@ -31800,6 +32065,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-07-clear",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "candidate-uat-07-pre_screening-clear-ex": "4d5d4c5f1d6fd1dba0ce3421150004080b1c471941bc180bc2e63b610e1af603",
+            "candidate-uat-07-pre_screening-clear-in": "07cac5c8d8d31da138edcc42ae748931b92acb51a341a5c79f0dc2d1acf4d850"
+          },
           "write_scope": "assessment_candidate"
         }
       ],
@@ -32293,19 +32562,15 @@
           "input_entity_refs": [
             "protocol-v1",
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "IN-01",
-            "EX-01",
-            "EX-02",
-            "EX-03",
-            "EX-04",
-            "REQ-01",
-            "REQ-02"
+            "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
+            "command-accept-protocol-v1-phase-iii"
           ],
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
-          "output_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
+          "input_scope_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
+          "output_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -32331,6 +32596,7 @@
           "input_entity_refs": [
             "protocol-v1",
             "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
             "gate-uat-07-pre_screening-authority-protocol-v1-phase-iii",
             "manifest-protocol-v1-phase-iii",
             "ruleset-synthetic-phase-iii"
@@ -32338,8 +32604,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "1ce558e4bf40f2ff366dc78c62e1b647d37cb4cffafeb7710c02f2fd8310888f",
-          "output_hash": "1ce558e4bf40f2ff366dc78c62e1b647d37cb4cffafeb7710c02f2fd8310888f",
+          "input_scope_hash": "a4956e0812e09dc0d1da56e401abc3132b1980b76f9d7f53c7f828e1bdcc145d",
+          "output_hash": "a4956e0812e09dc0d1da56e401abc3132b1980b76f9d7f53c7f828e1bdcc145d",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -32368,7 +32634,7 @@
             "episode-uat-07-pre_screening-clear": 1
           },
           "input_scope_hash": "9b2723fdd85bb612f3da308909f63bb03d9c6332d2ec00c239f9ed84cd27c567",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "aa239056429d05dae1f44a32ba6afcbbc1f41a7b3b593801fa5948dcade43bbd",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-07-clear"
@@ -32397,7 +32663,7 @@
             "episode-uat-07-pre_screening-clear": 1
           },
           "input_scope_hash": "9b2723fdd85bb612f3da308909f63bb03d9c6332d2ec00c239f9ed84cd27c567",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "85dea2d1d035fc5046d66504e0a50b37973761e538254cc04e77536460e23cdb",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-07-clear"
@@ -32436,8 +32702,8 @@
           "input_revision_map": {
             "episode-uat-07-pre_screening-clear": 1
           },
-          "input_scope_hash": "e23b153cb5e73a42c2cb060dfe72829e71cd9e4c60b289ad1f7b4a00a734c5ee",
-          "output_hash": "e23b153cb5e73a42c2cb060dfe72829e71cd9e4c60b289ad1f7b4a00a734c5ee",
+          "input_scope_hash": "74b7b37691460f08ca9c24add7edfc4c516e3e3169d32038ba4a8c494de81200",
+          "output_hash": "74b7b37691460f08ca9c24add7edfc4c516e3e3169d32038ba4a8c494de81200",
           "parent_event_id": null,
           "recompute_scope": [
             "episode-uat-07-pre_screening-clear"
@@ -32499,7 +32765,7 @@
           "input_revision_map": {
             "episode-uat-07-pre_screening-clear": 1
           },
-          "input_scope_hash": "08ed8bd2c6d9a53527b7537d382859511bf57d2b9e47b0b2ba6cb2c6e531158a",
+          "input_scope_hash": "e043f95c6dcd604335cbb401edd47f61bf5c7e128d63384b4ef0a8c24f83b22f",
           "output_hash": "a28c827ec386157297b691773cf93069d239a0beb3f0947f5adf4080945f5d66",
           "parent_event_id": null,
           "recompute_scope": [
@@ -32562,7 +32828,7 @@
           "input_revision_map": {
             "episode-uat-07-pre_screening-clear": 1
           },
-          "input_scope_hash": "f6f6e27fa53f28aa95fe1231c73c91c7db47a5f26d20749160d830d9c6d3cca0",
+          "input_scope_hash": "ebde08f2065ef21bdd1afef0864aa95b84a80816033a03f012464f44d260efa9",
           "output_hash": "ea136de1c47bc20601b195f73d74a06e3f0ec337285816ec6c5c884c0824016b",
           "parent_event_id": null,
           "recompute_scope": [
@@ -32762,6 +33028,7 @@
         "project_id": "project-synthetic-phase-iii",
         "project_name": "合成Ⅲ期入排审核项目",
         "protocol_version": {
+          "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-07-pre_screening-authority-protocol-v1-phase-iii",
           "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
           "integrity_gate_result_id": "gate-uat-07-pre_screening-integrity-protocol-v1-phase-iii",
@@ -32798,6 +33065,20 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_confirmation": {
+        "action": "accept_protocol_authority",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "confirmation_id": "confirmation-protocol-v1-phase-iii",
+        "confirmation_sha256": "1f213715bd1253931704f1aaee0fd985d1cb3192ac7e29e3773de220d914c9ac",
+        "confirmed_at": "2026-08-12T12:00:00Z",
+        "confirmed_by": "synthetic-uat-human-acceptance",
+        "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
         "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
@@ -34129,7 +34410,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "evidence_normalizer",
           "outcome": "accepted",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "2f3a77094d6ad3530117a6613f2ca35c4b6a319b10a9818d9f5f509d7ee22cdd",
           "output_kind": "candidate",
           "output_tokens": 51,
           "parent_event_id": null,
@@ -34152,6 +34433,10 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-08-gap_conflict",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "evidence-candidate-episode-gap_conflict": "5029ea6c863bc9196266f009c6199c01d8d8500e3a9be5e1a64de33fb676f9a8",
+            "evidence-candidate-episode-uat-08-run_in-gap_conflict": "423f975830aedcd064bff77fdb63942f0f397b9251f7bc74b06b8f2b779b4aef"
+          },
           "write_scope": "evidence_candidate"
         },
         {
@@ -34175,7 +34460,7 @@
           "model_config_id": "model-baseline-v1",
           "node": "eligibility_assessor",
           "outcome": "accepted",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "7fb89142fca0a79fcf17b9fcafd2c651b2cba7ef4ed56afee8a353f85b7ae6a0",
           "output_kind": "candidate",
           "output_tokens": 52,
           "parent_event_id": null,
@@ -34198,6 +34483,15 @@
           "started_at": "2026-08-12T12:00:00Z",
           "subject_id": "subject-uat-08-gap_conflict",
           "trigger": "fixture_generation",
+          "typed_output_hashes": {
+            "candidate-uat-08-run_in-gap-ex": "5c63154f363da370e961b1559ee8a5390897c3261cb14b6dc8597a4c824a431c",
+            "candidate-uat-08-run_in-gap-future": "8119077c928f4dd0acd3423535142cc40bb4c7da1d7d48300ef231fce9e71451",
+            "candidate-uat-08-run_in-gap-in": "5736a95c7f3b1194f6bca10098be44718b819a2694654497e36eeeedb3af0b0b",
+            "candidate-uat-08-run_in-gap-procedure": "f1a0edda5f1b69778dd58c75ac3b0aa9863549a299d7f18eda8662b9b6f015ad",
+            "candidate-uat-08-run_in-gap-professional": "249522fce11acf60c2e09b84b75390bd628afa847e82c4f9b852ab9f76827025",
+            "candidate-uat-08-run_in-gap-referenced": "f6f2bbed0539b2674edeb1be34a4e12558d65a0a032d3951fd2bfe1f6f2161f4",
+            "candidate-uat-08-run_in-gap-result-fields": "05a5325aa7ed1837651fc4299070a6cfdffb206420e68b9f7d17f51b0bb2f644"
+          },
           "write_scope": "assessment_candidate"
         }
       ],
@@ -35098,19 +35392,15 @@
           "input_entity_refs": [
             "protocol-v1",
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "IN-01",
-            "EX-01",
-            "EX-02",
-            "EX-03",
-            "EX-04",
-            "REQ-01",
-            "REQ-02"
+            "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
+            "command-accept-protocol-v1-phase-iii"
           ],
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
-          "output_hash": "686fc81b78cbc97d13f08f6a66d58a151ce9260638045924d57a7cd2502e14f9",
+          "input_scope_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
+          "output_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -35136,6 +35426,7 @@
           "input_entity_refs": [
             "protocol-v1",
             "authority-protocol-v1-phase-iii",
+            "confirmation-protocol-v1-phase-iii",
             "gate-uat-08-run_in-authority-protocol-v1-phase-iii",
             "manifest-protocol-v1-phase-iii",
             "ruleset-synthetic-phase-iii"
@@ -35143,8 +35434,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "9092e9865e18950f41e55baee34036004e12015df946bc10232459960037b411",
-          "output_hash": "9092e9865e18950f41e55baee34036004e12015df946bc10232459960037b411",
+          "input_scope_hash": "4422aa5efc5e5c277cbf8d8fd365f535e20d0b6a36f0b4a1a60866a3e410496d",
+          "output_hash": "4422aa5efc5e5c277cbf8d8fd365f535e20d0b6a36f0b4a1a60866a3e410496d",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -35173,7 +35464,7 @@
             "episode-uat-08-run_in-gap_conflict": 1
           },
           "input_scope_hash": "ce527a0ca6a5d00aa03de0e09d459e97f40d765370e5977a63fd0225dc781ef1",
-          "output_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "output_hash": "2f3a77094d6ad3530117a6613f2ca35c4b6a319b10a9818d9f5f509d7ee22cdd",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-08-gap_conflict"
@@ -35202,7 +35493,7 @@
             "episode-uat-08-run_in-gap_conflict": 1
           },
           "input_scope_hash": "ce527a0ca6a5d00aa03de0e09d459e97f40d765370e5977a63fd0225dc781ef1",
-          "output_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "output_hash": "7fb89142fca0a79fcf17b9fcafd2c651b2cba7ef4ed56afee8a353f85b7ae6a0",
           "parent_event_id": null,
           "recompute_scope": [
             "subject-uat-08-gap_conflict"
@@ -35239,8 +35530,8 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "92d742a6588ea754c3edc6984dd7f1227bee9866c964c494d0831c48317f84f2",
-          "output_hash": "92d742a6588ea754c3edc6984dd7f1227bee9866c964c494d0831c48317f84f2",
+          "input_scope_hash": "de6a3f7d5975cd2116d0bc66ad3e558152a51c02f832cac55a1e72d50ebfcab3",
+          "output_hash": "de6a3f7d5975cd2116d0bc66ad3e558152a51c02f832cac55a1e72d50ebfcab3",
           "parent_event_id": null,
           "recompute_scope": [
             "episode-uat-08-run_in-gap_conflict"
@@ -35302,7 +35593,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "e7e14951102a5220e6482bca5c321162c3aa8c0eb58bdd25e722abb7f2b38af9",
+          "input_scope_hash": "ba7f9fd40a4afc2c3793364aa5aff3d808779fca7eac7c407776cede996945c3",
           "output_hash": "c0218efc4112973e5ab21c3ea74072f12c6f3c6e06a6ff41ec3e98a59c3b5a8a",
           "parent_event_id": null,
           "recompute_scope": [
@@ -35365,7 +35656,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "be24d44baca3a5cbbdeb63c68165375cd278b0708c920e1a9ee777b47c2dc4e1",
+          "input_scope_hash": "4827eacc565358cf66166393d7cb749378c82da0595550ae0b00592e7d3e816e",
           "output_hash": "b86145f8ee8782a93015aad6251caa886e308459a78b1ac81f12a5054704a04e",
           "parent_event_id": null,
           "recompute_scope": [
@@ -35428,7 +35719,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "510c00ca879621fd97fe562316e3b7d30661acbb55adcd80246de7db564b1339",
+          "input_scope_hash": "421b5303d4fb4f8b7f408c38a6068fd22bf05b941d425c72d1bf9e50c49a088c",
           "output_hash": "6f5fd67f9e7653a7d8de47bb5b567cdebed5ee97c99e80ca92407caadaaafc16",
           "parent_event_id": null,
           "recompute_scope": [
@@ -35491,7 +35782,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "0fbe35f3a0ed40d34a5abe6f82b41e8ee51df96de4d5682401a35ca5b3513330",
+          "input_scope_hash": "ffd66fcb8041736c77910ea253ed99ef3e341924549179b61780048c6a7bb96a",
           "output_hash": "ee2f1f59caf02d3545ee5395bdafde7dec955c93e030f87c9738addee2a76321",
           "parent_event_id": null,
           "recompute_scope": [
@@ -35554,7 +35845,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "2d267f7f4808c2ff866515233c49b8a69c86ca02d51a0b4d82525248f06282ac",
+          "input_scope_hash": "3ce0b2222cdd29ce514b513afec34bfb37298a6ac54d7fedee4331ff71c01e54",
           "output_hash": "35a7c60fc54717bb34ee9fa819b7453cfc9054392b8d25ac78283f17a4ef7704",
           "parent_event_id": null,
           "recompute_scope": [
@@ -35617,7 +35908,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "aba6b65eb2f319f156b2e4b94639792a016c6d1ed30ead75a1c1910cfe30f6b0",
+          "input_scope_hash": "3a83d217543d0b5002c2aeb255652c049f19bb5b61a419a1ca74abeca36a2f78",
           "output_hash": "0c3c68ba728038687bfedecfaa70a8fe2a78e14acb73386f1da7109630395708",
           "parent_event_id": null,
           "recompute_scope": [
@@ -35680,7 +35971,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "4d5b9cfa3b850b70f10a23726426faa593752752c0f0e1d03e6e24171673bfa6",
+          "input_scope_hash": "c7aee3fc902ce21a1c1e7ce1370dfe46e2fb8f95aecafbcb353bd9d5368f6834",
           "output_hash": "03a081fb603708620d8162dea8ab69a2409a04ee9ff55d53c76eb92fd950c00d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -36262,6 +36553,7 @@
         "project_id": "project-synthetic-phase-iii",
         "project_name": "合成Ⅲ期入排审核项目",
         "protocol_version": {
+          "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-08-run_in-authority-protocol-v1-phase-iii",
           "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
           "integrity_gate_result_id": "gate-uat-08-run_in-integrity-protocol-v1-phase-iii",
@@ -36298,6 +36590,20 @@
           "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         }
       ],
+      "protocol_authority_confirmation": {
+        "action": "accept_protocol_authority",
+        "authority_record_id": "authority-protocol-v1-phase-iii",
+        "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+        "command_id": "command-accept-protocol-v1-phase-iii",
+        "confirmation_id": "confirmation-protocol-v1-phase-iii",
+        "confirmation_sha256": "1f213715bd1253931704f1aaee0fd985d1cb3192ac7e29e3773de220d914c9ac",
+        "confirmed_at": "2026-08-12T12:00:00Z",
+        "confirmed_by": "synthetic-uat-human-acceptance",
+        "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "protocol_version_id": "protocol-v1",
+        "recorded_by_service": "enrollment-review-app",
+        "schema_version": "fixture/v1"
+      },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
         "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
