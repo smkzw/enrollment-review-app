@@ -31,6 +31,7 @@ from .permissions import require_accepted_agent_call
 from app.domain.policies import derive_assessment_blocking_level, validate_decision_gap_matrix
 from app.domain.publication import _build_gate_owned_model, canonical_hash
 from app.domain.registry import TrustedPublicationRegistry
+from .scope import require_registered_review_scope
 
 
 class AssessmentGateError(ValueError):
@@ -99,25 +100,34 @@ def publish_assessment_candidate_acceptance(
     registry.require(
         "assessment_candidate", candidate.assessment_candidate_id, candidate
     )
-    registry.require("prompt_version", agent_call.prompt_version_id)
-    registry.require("model_config", agent_call.model_config_id)
-    subject = registry.require("subject", candidate.subject_id)
-    episode = registry.require("review_episode", candidate.review_episode_id)
-    snapshot = registry.require("evidence_snapshot", candidate.evidence_snapshot_id)
-    review_run = registry.require("review_run", candidate.review_run_id)
+    scope = require_registered_review_scope(
+        agent_call,
+        registry=registry,
+        expected_schema_version=candidate.schema_version,
+    )
     if (
-        subject.project_id != candidate.project_id
-        or episode.subject_id != candidate.subject_id
-        or episode.rule_set_id != candidate.rule_set_id
-        or episode.rule_set_revision != candidate.rule_set_revision
-        or episode.evidence_snapshot_id != candidate.evidence_snapshot_id
-        or snapshot.subject_id != candidate.subject_id
-        or snapshot.review_episode_id != candidate.review_episode_id
-        or review_run.review_episode_id != candidate.review_episode_id
-        or review_run.evidence_snapshot_id != candidate.evidence_snapshot_id
+        scope.project.project_id != candidate.project_id
+        or scope.protocol_version.protocol_version_id
+        != candidate.protocol_version_id
+        or scope.rule_set.rule_set_id != candidate.rule_set_id
+        or scope.rule_set.revision != candidate.rule_set_revision
+        or scope.subject.subject_id != candidate.subject_id
+        or scope.episode.review_episode_id != candidate.review_episode_id
+        or scope.snapshot.evidence_snapshot_id != candidate.evidence_snapshot_id
+        or scope.review_run.review_run_id != candidate.review_run_id
     ):
         raise AssessmentGateError(
             "AssessmentCandidate 未绑定服务端登记的受试者、审核节点、运行和证据快照"
+        )
+    component_matches = [
+        component
+        for rule in scope.rule_set.rules
+        for component in rule.components
+        if component.rule_component_id == candidate.rule_component_id
+    ]
+    if len(component_matches) != 1:
+        raise AssessmentGateError(
+            "AssessmentCandidate 规则组件不唯一属于服务端登记的规则集"
         )
     require_accepted_agent_call(agent_call, agent_call_gate_result)
     if agent_call.typed_output_hashes.get(
@@ -450,6 +460,10 @@ def publish_assessment(
         or review_context.evidence_gate_result_id != evidence_gate_result.gate_result_id
         or review_context.review_episode.review_episode_id
         != candidate.review_episode_id
+        or review_context.review_episode.project_id != candidate.project_id
+        or review_context.review_episode.protocol_version_id
+        != candidate.protocol_version_id
+        or review_context.review_episode.subject_id != candidate.subject_id
         or review_context.review_episode.evidence_snapshot_id
         != candidate.evidence_snapshot_id
         or review_context.review_episode.rule_set_id != candidate.rule_set_id
@@ -514,6 +528,7 @@ def publish_assessment(
     if (
         rule_set.rule_set_id != candidate.rule_set_id
         or rule_set.revision != candidate.rule_set_revision
+        or rule_set.protocol_version_id != candidate.protocol_version_id
     ):
         raise AssessmentGateError("AssessmentCandidate 与 RuleSet ID/revision 不一致")
     matches = [

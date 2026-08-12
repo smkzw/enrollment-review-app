@@ -29,6 +29,12 @@ class StageIsolationError(ValueError):
     pass
 
 
+def _require_unique_entity_ids(label: str, values, id_field: str) -> None:
+    entity_ids = [getattr(item, id_field) for item in values]
+    if len(entity_ids) != len(set(entity_ids)):
+        raise StageIsolationError(f"{label} ID 必须唯一")
+
+
 def _agent_schema_gate(fixture: FixtureV1, agent_call):
     matches = [
         gate
@@ -136,6 +142,7 @@ def _trusted_registry_from_fixture(fixture: FixtureV1):
         rule_sets=[fixture.rule_set],
         review_contexts=contexts,
         projects=[fixture.project],
+        protocol_document_versions=[fixture.project.protocol_version],
         subjects=[fixture.subject],
         review_episodes=[fixture.review_episode],
         evidence_snapshots=[fixture.evidence_snapshot],
@@ -382,6 +389,14 @@ def assert_protocol_integrity(
     registry,
 ) -> None:
     registry.require(
+        "protocol_document_version",
+        protocol_version.protocol_version_id,
+        protocol_version,
+    )
+    registry.require(
+        "protocol_integrity_manifest", manifest.manifest_id, manifest
+    )
+    registry.require(
         "gate_result", authority_gate_result.gate_result_id, authority_gate_result
     )
     _require_authority_confirmation(
@@ -604,6 +619,46 @@ def build_protocol_integrity_manifest(
 
 
 def validate_fixture_scope(fixture: FixtureV1, registry) -> None:
+    unique_collections = [
+        ("ProtocolSourceRecord", fixture.protocol_source_records, "source_ref"),
+        ("WorkflowStage", fixture.workflow_stages, "workflow_stage_id"),
+        ("ReviewRun", fixture.review_runs, "review_run_id"),
+        (
+            "SourceDocumentVersion",
+            fixture.source_documents,
+            "source_document_version_id",
+        ),
+        ("EvidenceSpan", fixture.evidence_spans, "evidence_span_id"),
+        (
+            "EvidenceNormalizationCandidate",
+            fixture.evidence_normalization_candidates,
+            "candidate_id",
+        ),
+        (
+            "EvidenceExpectation",
+            fixture.evidence_expectations,
+            "expectation_id",
+        ),
+        ("ClinicalFact", fixture.facts, "fact_id"),
+        ("ConflictGroup", fixture.conflict_groups, "conflict_group_id"),
+        ("PatientProfileEvent", fixture.patient_profile.events, "event_id"),
+        (
+            "AssessmentCandidate",
+            fixture.assessment_candidates,
+            "assessment_candidate_id",
+        ),
+        ("FinalAssessment", fixture.final_assessments, "assessment_id"),
+        ("ActionRequest", fixture.actions, "action_id"),
+        ("PromptVersion", fixture.prompt_versions, "prompt_version_id"),
+        ("ModelConfig", fixture.model_configs, "model_config_id"),
+        ("AgentCall", fixture.agent_calls, "agent_call_id"),
+        ("GateResult", fixture.gate_results, "gate_result_id"),
+        ("JobEvent", fixture.job_events, "job_event_id"),
+        ("ReviewRunDiff", fixture.review_run_diffs, "review_run_diff_id"),
+    ]
+    for label, values, id_field in unique_collections:
+        _require_unique_entity_ids(label, values, id_field)
+
     project = fixture.project
     episode = fixture.review_episode
     snapshot = fixture.evidence_snapshot
@@ -784,7 +839,9 @@ def validate_fixture_scope(fixture: FixtureV1, registry) -> None:
     if len(gate_ids) != len(fixture.gate_results):
         raise StageIsolationError("GateResult ID 必须唯一")
     gate_by_id = {item.gate_result_id: item for item in fixture.gate_results}
-    prompt_ids = {item.prompt_version_id for item in fixture.prompt_versions}
+    prompt_by_id = {
+        item.prompt_version_id: item for item in fixture.prompt_versions
+    }
     model_ids = {item.model_config_id for item in fixture.model_configs}
     run_ids = {item.review_run_id for item in fixture.review_runs}
     assessment_by_id = {
@@ -792,8 +849,13 @@ def validate_fixture_scope(fixture: FixtureV1, registry) -> None:
     }
     assessment_ids = set(assessment_by_id)
     for call in fixture.agent_calls:
-        if call.prompt_version_id not in prompt_ids or call.model_config_id not in model_ids:
+        if (
+            call.prompt_version_id not in prompt_by_id
+            or call.model_config_id not in model_ids
+        ):
             raise StageIsolationError("AgentCall PromptVersion 或 ModelConfig 越界")
+        if prompt_by_id[call.prompt_version_id].node != call.node:
+            raise StageIsolationError("PromptVersion 所属节点与 AgentCall 不一致")
         if not set(call.gate_result_ids) <= gate_ids:
             raise StageIsolationError("AgentCall GateResult 越界")
         if not set(call.source_ids) <= set(documents):

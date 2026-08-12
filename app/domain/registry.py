@@ -22,6 +22,7 @@ from app.domain.contracts.review import (
     AssessmentCandidate,
     FinalAssessment,
     Project,
+    ProtocolDocumentVersion,
     ReviewEpisode,
     ReviewRun,
     Subject,
@@ -65,6 +66,7 @@ class TrustedPublicationRegistry:
         rule_sets: Iterable[RuleSet] = (),
         review_contexts: Iterable[ReviewContextSnapshot] = (),
         projects: Iterable[Project] = (),
+        protocol_document_versions: Iterable[ProtocolDocumentVersion] = (),
         subjects: Iterable[Subject] = (),
         review_episodes: Iterable[ReviewEpisode] = (),
         evidence_snapshots: Iterable[EvidenceSnapshot] = (),
@@ -102,6 +104,9 @@ class TrustedPublicationRegistry:
                 "rule_set": self._index(rule_sets, "rule_set_id"),
                 "review_context": self._index(review_contexts, "context_id"),
                 "project": self._index(projects, "project_id"),
+                "protocol_document_version": self._index(
+                    protocol_document_versions, "protocol_version_id"
+                ),
                 "subject": self._index(subjects, "subject_id"),
                 "review_episode": self._index(
                     review_episodes, "review_episode_id"

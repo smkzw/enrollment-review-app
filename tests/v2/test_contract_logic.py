@@ -55,6 +55,7 @@ from app.domain.contracts.review import (
     AssessmentCandidate,
     FinalAssessment,
     PredicateObservation,
+    Project,
     ProtocolDocumentVersion,
     ReviewEpisode,
     ReviewRun,
@@ -323,8 +324,32 @@ def publication_input_registry(
     action_requests: list[ActionRequest] | None = None,
     evidence_expectations: list[EvidenceExpectation] | None = None,
     source_documents: list[SourceDocumentVersion] | None = None,
+    prompt_versions: list[PromptVersion] | None = None,
     stage: ReviewStage = ReviewStage.SCREENING,
 ):
+    registered_rule_sets = rule_sets or [gate_rule_set(gate_component())]
+    protocol_version = ProtocolDocumentVersion(
+        protocol_version_id="protocol-1",
+        protocol_code="SYNTHETIC-001",
+        official_version="V1.0",
+        official_date=DateValue(
+            value=date(2026, 8, 1), precision=DatePrecision.DAY
+        ),
+        sha256="a" * 64,
+        integrity_manifest_sha256="b" * 64,
+        authority_record_sha256="c" * 64,
+        authority_confirmation_id="confirmation-1",
+        authority_gate_result_id="gate-authority-1",
+        integrity_gate_result_id="gate-protocol-integrity-test",
+    )
+    project = Project(
+        project_id="project-1",
+        project_code="SYNTHETIC-001-III",
+        project_name="合成Ⅲ期测试项目",
+        study_phase=StudyPhase.PHASE_III,
+        protocol_version=protocol_version,
+        rule_set_id=registered_rule_sets[0].rule_set_id,
+    )
     episode = ReviewEpisode(
         review_episode_id="episode-1",
         subject_id="subject-1",
@@ -344,7 +369,7 @@ def publication_input_registry(
         upload_mode=UploadMode.FULL,
         created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
     )
-    prompts = [
+    prompts = prompt_versions or [
         PromptVersion(
             prompt_version_id=call.prompt_version_id,
             node=call.node,
@@ -362,8 +387,10 @@ def publication_input_registry(
         assessment_candidates=assessment_candidates or [],
         final_assessments=final_assessments or [],
         action_requests=action_requests or [],
-        rule_sets=rule_sets or [],
+        rule_sets=registered_rule_sets,
         review_contexts=review_contexts or [],
+        projects=[project],
+        protocol_document_versions=[protocol_version],
         subjects=[Subject(subject_id="subject-1", subject_code="001", project_id="project-1")],
         review_episodes=[episode],
         evidence_snapshots=[snapshot],
@@ -581,6 +608,44 @@ def test_evidence_gate_binds_registered_source_document_payload() -> None:
         )
 
 
+def test_evidence_gate_rejects_registered_objects_mixed_with_unknown_protocol() -> None:
+    facts = [
+        clinical_fact(
+            fact_id="fact-evidence-protocol",
+            fact_type="history.condition_present",
+            value=False,
+            polarity=FactPolarity.AFFIRMED,
+            certainty=1,
+            evidence_span_ids=["span-evidence-protocol"],
+        )
+    ]
+    forged_candidate = evidence_candidate(
+        facts, [evidence_span("span-evidence-protocol")]
+    ).model_copy(update={"protocol_version_id": "protocol-evil"})
+    forged_call = bind_agent_call(
+        evidence_normalizer_call().model_copy(
+            update={"protocol_version_id": "protocol-evil"}
+        ),
+        forged_candidate,
+    )
+    forged_gate = agent_call_gate(forged_call)
+    forged_registry = publication_input_registry(
+        calls=[forged_call],
+        gates=[forged_gate],
+        evidence_candidates=[forged_candidate],
+    )
+    with pytest.raises(ValueError, match="protocol_document_version"):
+        publish_evidence_acceptance(
+            candidate=forged_candidate,
+            agent_call=forged_call,
+            agent_call_gate_result=forged_gate,
+            gate_result_id="gate-evidence-protocol-evil",
+            input_revision_map={"episode-1": 1},
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+            registry=forged_registry,
+        )
+
+
 def test_assessment_rejects_facts_not_in_accepted_evidence_candidate() -> None:
     component = gate_component()
     accepted_facts = [
@@ -696,6 +761,73 @@ def test_assessment_candidate_gate_rejects_unregistered_chain_members() -> None:
             )
 
 
+def test_assessment_candidate_rejects_unknown_protocol_and_prompt_node_drift() -> None:
+    component = gate_component()
+    rules = gate_rule_set(component)
+    facts = [
+        clinical_fact(
+            fact_id="fact-candidate-protocol",
+            fact_type="history.condition_present",
+            value=False,
+            polarity=FactPolarity.AFFIRMED,
+            certainty=1,
+            evidence_span_ids=["span-candidate-protocol"],
+        )
+    ]
+    value = align_candidate(
+        candidate(ComponentDecision.EXCLUSION_NOT_TRIGGERED, []), component, facts
+    )
+
+    forged_candidate = value.model_copy(
+        update={"protocol_version_id": "protocol-evil"}
+    )
+    forged_call = bind_agent_call(
+        eligibility_call().model_copy(
+            update={"protocol_version_id": "protocol-evil"}
+        ),
+        forged_candidate,
+    )
+    forged_gate = agent_call_gate(forged_call)
+    with pytest.raises(ValueError, match="protocol_document_version"):
+        publish_assessment_candidate_acceptance(
+            forged_candidate,
+            agent_call=forged_call,
+            agent_call_gate_result=forged_gate,
+            gate_result_id="gate-candidate-protocol-evil",
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+            registry=publication_input_registry(
+                calls=[forged_call],
+                gates=[forged_gate],
+                assessment_candidates=[forged_candidate],
+                rule_sets=[rules],
+            ),
+        )
+
+    call = bind_agent_call(eligibility_call(), value)
+    call_gate = agent_call_gate(call)
+    wrong_prompt = PromptVersion(
+        prompt_version_id=call.prompt_version_id,
+        node=AgentNode.EVIDENCE_NORMALIZER,
+        template_sha256="f" * 64,
+        schema_version_id=value.schema_version,
+    )
+    with pytest.raises(ValueError, match="提示词版本所属节点"):
+        publish_assessment_candidate_acceptance(
+            value,
+            agent_call=call,
+            agent_call_gate_result=call_gate,
+            gate_result_id="gate-candidate-prompt-drift",
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+            registry=publication_input_registry(
+                calls=[call],
+                gates=[call_gate],
+                assessment_candidates=[value],
+                rule_sets=[rules],
+                prompt_versions=[wrong_prompt],
+            ),
+        )
+
+
 def test_assessment_rejects_same_id_revision_rule_set_replacement() -> None:
     component = gate_component()
     facts = [
@@ -792,6 +924,7 @@ def publish_test_assessment(
     conflicts: list[ConflictGroup] | None = None,
     stage: ReviewStage = ReviewStage.SCREENING,
 ) -> AssessmentPublication:
+    rules = gate_rule_set(component, rule_kind)
     call = bind_agent_call(eligibility_call(), value)
     spans = [
         evidence_span(span_id)
@@ -808,6 +941,7 @@ def publish_test_assessment(
         gates=[call_gate, evidence_call_gate],
         evidence_candidates=[normalized],
         assessment_candidates=[value],
+        rule_sets=[rules],
         evidence_expectations=expectations or [],
         stage=stage,
     )
@@ -828,7 +962,6 @@ def publish_test_assessment(
         created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
         registry=initial_registry,
     )
-    rules = gate_rule_set(component, rule_kind)
     integrity_gate = GateResult(
         gate_result_id="gate-protocol-integrity-test",
         gate_name="protocol-integrity-gate",
@@ -2174,6 +2307,16 @@ def test_protocol_integrity_uses_authoritative_manifest_not_caller_codes() -> No
         authority_confirmation_id=authority_confirmation.confirmation_id,
         authority_gate_result_id=authority_gate.gate_result_id,
         integrity_gate_result_id="gate-integrity-1",
+    )
+    protocol_registry = _issue_trusted_registry(
+        gate_results=[authority_gate],
+        protocol_authority_records=[authority],
+        protocol_authority_confirmations=[authority_confirmation],
+        service_command_events=[command],
+        protocol_source_records=[source],
+        protocol_integrity_manifests=[manifest],
+        protocol_document_versions=[protocol],
+        rule_sets=[rules],
     )
     mismatched_confirmation = authority_confirmation.model_copy(
         update={"protocol_document_sha256": "b" * 64}

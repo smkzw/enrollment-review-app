@@ -21,6 +21,7 @@ from app.domain.gates import (
     assessment_publication_from_fixture,
     assert_protocol_integrity,
     build_protocol_authority_confirmation,
+    build_protocol_integrity_manifest,
     build_protocol_source_record,
     build_service_command_event,
     require_protocol_integrity_acceptance,
@@ -549,6 +550,52 @@ def test_protocol_integrity_binds_full_authority_gate_payload() -> None:
         )
 
 
+def test_protocol_integrity_rejects_unregistered_protocol_or_manifest_payload() -> None:
+    fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
+    registry = _trusted_registry_from_fixture(fixture)
+    gate_by_id = {item.gate_result_id: item for item in fixture.gate_results}
+    authority_gate = gate_by_id[
+        fixture.project.protocol_version.authority_gate_result_id
+    ]
+    changed_protocol = fixture.project.protocol_version.model_copy(
+        update={"official_version": "V9.9-caller"}
+    )
+    with pytest.raises(ValueError, match="protocol_document_version.*已登记版本"):
+        assert_protocol_integrity(
+            fixture.rule_set,
+            workflow_stages=fixture.workflow_stages,
+            protocol_version=changed_protocol,
+            manifest=fixture.protocol_integrity_manifest,
+            authority_record=fixture.protocol_authority_record,
+            authority_confirmation=fixture.protocol_authority_confirmation,
+            authority_gate_result=authority_gate,
+            registry=registry,
+        )
+
+    new_manifest = build_protocol_integrity_manifest(
+        manifest_id="manifest-caller-replacement",
+        protocol_version_id=fixture.project.protocol_version.protocol_version_id,
+        protocol_document_sha256=fixture.project.protocol_version.sha256,
+        study_phase=fixture.project.study_phase,
+        source_refs=fixture.protocol_integrity_manifest.source_refs,
+        authority_record=fixture.protocol_authority_record,
+        authority_confirmation=fixture.protocol_authority_confirmation,
+        authority_gate_result=authority_gate,
+        registry=registry,
+    )
+    with pytest.raises(ValueError, match="未找到服务端已登记.*manifest"):
+        assert_protocol_integrity(
+            fixture.rule_set,
+            workflow_stages=fixture.workflow_stages,
+            protocol_version=fixture.project.protocol_version,
+            manifest=new_manifest,
+            authority_record=fixture.protocol_authority_record,
+            authority_confirmation=fixture.protocol_authority_confirmation,
+            authority_gate_result=authority_gate,
+            registry=registry,
+        )
+
+
 def test_fixture_scope_rejects_same_id_registered_entity_replacements() -> None:
     fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
     registry = _trusted_registry_from_fixture(fixture)
@@ -644,6 +691,49 @@ def test_fixture_scope_rejects_extra_unregistered_calls_and_gates() -> None:
             fixture.model_copy(
                 update={"gate_results": [*fixture.gate_results, extra_gate]}
             ),
+            registry,
+        )
+
+
+def test_fixture_scope_rejects_exact_duplicate_top_level_entities() -> None:
+    fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
+    registry = _trusted_registry_from_fixture(fixture)
+    duplicate_cases = [
+        ("facts", fixture.facts, "ClinicalFact"),
+        ("evidence_spans", fixture.evidence_spans, "EvidenceSpan"),
+        ("agent_calls", fixture.agent_calls, "AgentCall"),
+        (
+            "source_documents",
+            fixture.source_documents,
+            "SourceDocumentVersion",
+        ),
+        ("prompt_versions", fixture.prompt_versions, "PromptVersion"),
+        ("model_configs", fixture.model_configs, "ModelConfig"),
+        ("review_runs", fixture.review_runs, "ReviewRun"),
+        ("assessment_candidates", fixture.assessment_candidates, "AssessmentCandidate"),
+        ("final_assessments", fixture.final_assessments, "FinalAssessment"),
+        ("actions", fixture.actions, "ActionRequest"),
+    ]
+    for field_name, values, label in duplicate_cases:
+        with pytest.raises(ValueError, match=f"{label} ID 必须唯一"):
+            validate_fixture_scope(
+                fixture.model_copy(
+                    update={field_name: [*values, values[0]]}
+                ),
+                registry,
+            )
+
+    duplicate_profile = fixture.patient_profile.model_copy(
+        update={
+            "events": [
+                *fixture.patient_profile.events,
+                fixture.patient_profile.events[0],
+            ]
+        }
+    )
+    with pytest.raises(ValueError, match="PatientProfileEvent ID 必须唯一"):
+        validate_fixture_scope(
+            fixture.model_copy(update={"patient_profile": duplicate_profile}),
             registry,
         )
 

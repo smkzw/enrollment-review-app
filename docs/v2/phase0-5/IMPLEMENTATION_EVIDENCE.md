@@ -1,7 +1,7 @@
 # Phase 0.5 合同候选实施证据
 
 **日期：** 2026-08-13
-**状态：** 同一 checker 第六次复核为 `REJECT`；第六次拒绝项已完成本地根因修复，等待同一 checker 第七次复核。本文件不表示本阶段已冻结。
+**状态：** 同一 checker 第七次复核为 `REJECT`；Phase 0.5 继续修复，本文件不表示本阶段已冻结。
 
 ## 已形成的合同
 
@@ -57,9 +57,13 @@ uv run --python 3.12.13 pytest -q
 - 第五次独立复核结论为 `REJECT`。Schema、UAT、错误码与部分 scope 已关闭，但仅重算调用方传入的完整对象仍不能证明它们来自服务端已接受状态。当前测试证据有效，但不足以证明 Phase 0.5 完成。
 - 第五次拒绝项已按根因改造：新增应用服务签发的只读发布注册表与版本化审核上下文；Assessment 按 ID 反查唯一上游并重算 typed Candidate；RuleSet 用完整哈希绑定已登记 Protocol Integrity Gate；确认来自登记操作事件，方案来源来自登记目录；Fixture Fact/Span 逐 payload 比对；多 Gate 按类型、声明和唯一性解析。
 - 新增同步重算对抗测试：即使伪造方同时重算 Candidate、AgentCall、Schema/Candidate/Evidence Gate、自哈希确认事件或来源记录，只要与验证前的服务端注册表不一致仍被拒绝。`validate_fixture_scope` 不再从待验证 Fixture 反向构建信任。
-- 第六次 checker 复现的开放项已按统一根因关闭：Candidate/Evidence/Authority Gate 精确反查注册表；Rollup 拒绝空、不完整或重复集合；Action 接口不再接受调用方业务文案和范围；来源文件、Prompt、Model、Subject、Episode、Snapshot、Run 均按完整 payload 登记；Fixture 夹带未登记调用或 Gate 会被拒绝。
+- 第六次 checker 的 Rollup 完整集合和 Action 确定性字段已由第七次 checker 确认关闭。Candidate/Evidence 已增加实体反查，但 Project/ProtocolVersion/RuleSet/Episode/Run 之间的跨方案完整作用域仍未封闭；Protocol Integrity 也尚未反查独立 ProtocolVersion 与 Manifest payload，因此这两组只算部分关闭。
 - 新增 13 项对抗场景，覆盖未登记 AgentCall/Schema Gate/Candidate、来源文件同 ID 哈希替换、Authority Gate 时间戳替换后完整性 Gate 失效、Assessment/Expectation/Action 缺件与重复、Action 六类业务字段替换、Fixture 额外未登记调用/Gate，以及临床和审计实体同 ID payload 替换。
-- 本地测试与确定性生成只证明候选满足当前自动化合同，不代替独立 checker 验收；Phase 0.5 在同一 checker 明确接受前继续保持 `in_progress`。
+- Fixture 已拒绝额外未登记 AgentCall/Gate 及同 ID payload 替换，但完全相同 ID 的重复顶层记录仍可能被 set/dict 折叠；PromptVersion 已登记但尚未强制 `prompt.node == agent_call.node`。
+- 本地测试与确定性生成只证明候选满足当时自动化合同，不代替独立 checker 验收；第七次复核已证明前述闭环表述过早。Phase 0.5 在同一 checker 明确接受前继续保持 `in_progress`。
+- 第七次复核后的本地候选新增共享审核作用域解析器，要求 AgentCall、Candidate、Evidence 与最终 Assessment 同时落在已登记 Project、ProtocolVersion、RuleSet、Subject、Episode、Run、Snapshot、SourceDocument、Prompt 和 Model 的同一闭包；未登记方案版本即使同步重算 Candidate/AgentCall/Gate 也会在发布前失败。
+- Protocol Integrity 现在先精确反查独立登记的 ProtocolVersion 和 Manifest；Prompt 节点及候选 Schema 合同必须与 AgentCall 匹配；Fixture 的 19 类实体列表（含 EvidenceCandidate、AssessmentCandidate 与 FinalAssessment）在集合化前统一检查 ID 唯一。
+- 新增 4 个测试函数、覆盖 16 个反向变体。当前本地验证为 V2 `132 passed + 2 subtests`、默认全套 `262 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`，8 个生成制品双跑一致。是否关闭第七次 finding 仍待同一 checker 第八次复核。
 - 本阶段未调用真实 LLM/OCR、未重审临床项目、未修改 legacy 项目数据、未调用 Qwen 3.8；用户已明确后续也不使用 Qwen 3.8 会商。
 
 ## 待验收

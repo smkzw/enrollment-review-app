@@ -8,6 +8,7 @@ from app.domain.contracts.evidence import ClinicalFact, EvidenceSpan
 from app.domain.contracts.normalization import EvidenceNormalizationCandidate
 from app.domain.publication import canonical_hash
 from app.domain.registry import TrustedPublicationRegistry
+from .scope import require_registered_review_scope
 from .permissions import require_accepted_agent_call
 
 
@@ -67,26 +68,26 @@ def publish_evidence_acceptance(
         "gate_result", agent_call_gate_result.gate_result_id, agent_call_gate_result
     )
     registry.require("evidence_candidate", candidate.candidate_id, candidate)
-    registry.require("prompt_version", agent_call.prompt_version_id)
-    registry.require("model_config", agent_call.model_config_id)
-    subject = registry.require("subject", candidate.subject_id)
-    episode = registry.require("review_episode", candidate.review_episode_id)
-    snapshot = registry.require("evidence_snapshot", candidate.evidence_snapshot_id)
     if agent_call.review_run_id is None:
         raise EvidenceGateError("Evidence AgentCall 缺少 ReviewRun")
-    registry.require("review_run", agent_call.review_run_id)
+    scope = require_registered_review_scope(
+        agent_call,
+        registry=registry,
+        expected_schema_version=candidate.schema_version,
+    )
     source_documents = [
         registry.require("source_document_version", source_id)
         for source_id in agent_call.source_ids
     ]
     if (
-        subject.project_id != candidate.project_id
-        or episode.subject_id != candidate.subject_id
-        or episode.evidence_snapshot_id != candidate.evidence_snapshot_id
-        or snapshot.subject_id != candidate.subject_id
-        or snapshot.review_episode_id != candidate.review_episode_id
-        or set(snapshot.source_document_version_ids) != set(agent_call.source_ids)
+        scope.project.project_id != candidate.project_id
+        or scope.protocol_version.protocol_version_id
+        != candidate.protocol_version_id
+        or scope.subject.subject_id != candidate.subject_id
+        or scope.episode.review_episode_id != candidate.review_episode_id
+        or scope.snapshot.evidence_snapshot_id != candidate.evidence_snapshot_id
         or set(candidate.source_refs) != set(agent_call.source_ids)
+        or len(candidate.source_refs) != len(set(candidate.source_refs))
     ):
         raise EvidenceGateError(
             "Evidence Candidate 未绑定服务端登记的受试者、审核节点、证据快照和完整文件集合"

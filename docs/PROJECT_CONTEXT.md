@@ -1625,3 +1625,22 @@ OCR concurrency note:
 - 修复过程发现 UAT 基线新增的后续节点事实只进入 Evidence Candidate、未回写 Fixture 顶层事实，导致完整 payload 集合不一致；已从生成源修复并补回归测试，而非放宽校验。
 - 新增 13 项对抗场景；当前 V2 `128 passed + 2 subtests`，默认全套 `258 passed, 1 skipped + 18 subtests`，legacy Python 3.9 `130 passed, 1 skipped`。8 个 Schema/OpenAPI/Fixture 连续两次生成的 SHA-256 完全一致，`compileall`、`uv lock --check`、`git diff --check` 通过。
 - Phase 0.5 仍为 `in_progress`，不得创建 Phase 1；下一动作是提交本候选并复用同一 Luna checker `019ff5fa-ccc9-7cc0-8f38-2cc489783423` 进行第七次验收。Qwen 3.8 保持禁用。
+
+2026-08-13 Phase 0.5 同一 Luna checker 第七次复核：
+
+- 候选 `ac0e982` 被拒绝，Phase 0.5 继续 `in_progress`，不得进入 Phase 1。已确认关闭：EpisodeRollup 的完整 Assessment/Expectation/Action 集合；Action 责任方、动作、证据形式、到期节点、触发定位和重算范围的确定性派生。
+- P1 根因仍是完整作用域图未成为同一个注册表不变量：Candidate、Evidence、AgentCall 可以同步改成未登记的 `protocol_version_id`，同时保留原 Episode/Run/Project/RuleSet，局部对象仍会被接受。Registry 尚未独立登记 `ProtocolDocumentVersion`。
+- 另一个 P1：Protocol Integrity 虽已绑定完整 Authority Gate，但仍未对调用方传入的 ProtocolVersion 与 ProtocolIntegrityManifest 执行完整 payload 反查，可替换版本号或新建自洽 Manifest。
+- P2：PromptVersion 只按 ID 存在性查找，尚未强制节点与 AgentCall 一致；Fixture 对完全相同 ID 的 Fact、Span、Call、SourceDocument、Prompt、Model 等重复记录会先经 set/dict 折叠；实施证据文档把“本地已修”写成“已关闭”过早。
+- 下一轮统一改造：新增独立 ProtocolVersion 注册实体和共享审核作用域解析器；Evidence、Candidate、Assessment 统一核对 Project/ProtocolVersion/RuleSet/Episode/Run/Snapshot/Prompt；Integrity 先反查 ProtocolVersion 与 Manifest；Fixture 所有顶层实体先做 ID 一对一基数检查。
+- 同一 checker 实测 V2 `128 passed + 2 subtests`、8 个生成物一致、`uv lock --check`/`git diff --check` 通过；这些绿灯没有覆盖上述绕过。第八次仍复用同一 checker，不调用 Qwen 3.8，不 fallback。
+
+2026-08-13 Phase 0.5 第七次拒绝后的本地根因修复（待第八次复核）：
+
+- 新增 `app/domain/gates/scope.py`，把 Project、独立 ProtocolDocumentVersion、RuleSet、Subject、ReviewEpisode、ReviewRun、EvidenceSnapshot、SourceDocumentVersion、PromptVersion 和 ModelConfig 解析为一个不可混搭的已登记审核作用域。Evidence、AssessmentCandidate 和最终 Assessment 均复用同一校验，不再各自维护局部 ID 比较。
+- Registry 新增独立 `protocol_document_version` 类型。Project 内嵌方案版本必须与该登记 payload 完全一致；Episode、Run、RuleSet、Snapshot 与 AgentCall 的 protocol/project/revision/source 集合必须构成同一图。
+- Protocol Integrity 在重算前精确反查 ProtocolVersion 与 ProtocolIntegrityManifest；调用方替换版本名、重算自洽 Manifest 或更换 Manifest ID 均不能成为新信任根。
+- PromptVersion 必须满足 `prompt.node == agent_call.node` 且 Schema 合同版本与候选一致；ModelConfig 仍由已登记 ID 唯一解析。
+- Fixture 对 19 类顶层/嵌套实体列表在任何 set/dict 折叠前执行 ID 唯一性检查，覆盖 checker 复现的相同 Fact、Span、Call、Document、Prompt、Model 重复以及相邻实体。
+- 新增跨未登记 protocol、Prompt 节点漂移、ProtocolVersion/Manifest 替换和 11 类完全重复记录反向测试。本地 V2 `132 passed + 2 subtests`，默认 `262 passed, 1 skipped + 18 subtests`，legacy `130 passed, 1 skipped`；8 个制品双跑 SHA-256 一致，`compileall`、`uv lock --check`、`git diff --check` 通过。
+- 本节只记录本地候选，不宣称独立关闭；Phase 0.5 保持 `in_progress`，第八次只复用同一 Luna checker。

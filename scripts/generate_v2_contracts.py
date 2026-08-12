@@ -608,6 +608,16 @@ def base_objects(suffix: str, rules: RuleSet):
         authority_gate_result_id=authority_gate.gate_result_id,
         integrity_gate_result_id="gate-integrity-protocol-v1-phase-iii",
     )
+    protocol_registry = _issue_trusted_registry(
+        gate_results=[authority_gate],
+        protocol_authority_records=[authority_record],
+        protocol_authority_confirmations=[authority_confirmation],
+        service_command_events=[authority_command],
+        protocol_source_records=source_records,
+        protocol_integrity_manifests=[manifest],
+        protocol_document_versions=[protocol],
+        rule_sets=[rules],
+    )
     integrity_gate = publish_protocol_integrity_acceptance(
         rules,
         workflow_stages=workflow_stages,
@@ -847,6 +857,7 @@ def publish_fixture_assessment(
                     gate_results=[assessment_agent_gate, evidence_agent_gate],
                     evidence_candidates=[normalized],
                     assessment_candidates=[candidate],
+                    rule_sets=[rules],
                     **registry_inputs,
                 )
                 candidate_gate = publish_assessment_candidate_acceptance(
@@ -1151,6 +1162,8 @@ def build_fixture(scenario: str) -> FixtureV1:
     prompt_versions = fixture_prompt_versions()
     model_configs = fixture_model_configs()
     registry_inputs = {
+        "projects": [project],
+        "protocol_document_versions": [project.protocol_version],
         "subjects": [subject],
         "review_episodes": [episode],
         "evidence_snapshots": [snapshot],
@@ -2005,12 +2018,20 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
     authority_confirmation_for_namespace = type(
         base.protocol_authority_confirmation
     ).model_validate(payload["protocol_authority_confirmation"])
+    protocol_version_for_namespace = ProtocolDocumentVersion.model_validate(
+        payload["project"]["protocol_version"]
+    )
+    manifest_for_namespace = type(base.protocol_integrity_manifest).model_validate(
+        payload["protocol_integrity_manifest"]
+    )
     protocol_registry_for_namespace = _issue_trusted_registry(
         gate_results=[authority_gate_for_namespace],
         protocol_authority_records=[authority_record_for_namespace],
         protocol_authority_confirmations=[authority_confirmation_for_namespace],
         service_command_events=[base.protocol_authority_command],
         protocol_source_records=base.protocol_source_records,
+        protocol_integrity_manifests=[manifest_for_namespace],
+        protocol_document_versions=[protocol_version_for_namespace],
         rule_sets=[rules],
     )
     integrity_gate_for_namespace = publish_protocol_integrity_acceptance(
@@ -2018,12 +2039,8 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
         workflow_stages=[
             WorkflowStage.model_validate(item) for item in payload["workflow_stages"]
         ],
-        protocol_version=ProtocolDocumentVersion.model_validate(
-            payload["project"]["protocol_version"]
-        ),
-        manifest=type(base.protocol_integrity_manifest).model_validate(
-            payload["protocol_integrity_manifest"]
-        ),
+        protocol_version=protocol_version_for_namespace,
+        manifest=manifest_for_namespace,
         authority_record=authority_record_for_namespace,
         authority_confirmation=authority_confirmation_for_namespace,
         authority_gate_result=authority_gate_for_namespace,
@@ -2165,6 +2182,8 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
         evidence_agent_call
     )
     namespace_registry_inputs = {
+        "projects": [Project.model_validate(payload["project"])],
+        "protocol_document_versions": [protocol_version_for_namespace],
         "subjects": [Subject.model_validate(payload["subject"])],
         "review_episodes": [episode],
         "evidence_snapshots": [
@@ -2190,6 +2209,7 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
         agent_calls=[evidence_agent_call],
         gate_results=[agent_gate_by_call_id[evidence_agent_call.agent_call_id]],
         evidence_candidates=[normalized],
+        rule_sets=[rules],
         **namespace_registry_inputs,
     )
     evidence_gate = publish_evidence_acceptance(
@@ -2282,6 +2302,7 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
             ],
             evidence_candidates=[normalized],
             assessment_candidates=[candidate],
+            rule_sets=[rules],
             **namespace_registry_inputs,
         )
         candidate_gate = publish_assessment_candidate_acceptance(
