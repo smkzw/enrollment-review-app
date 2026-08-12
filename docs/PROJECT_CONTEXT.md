@@ -1659,3 +1659,16 @@ OCR concurrency note:
 - 新增 Evidence 与 Candidate 直接发布未来来源负例、FinalAssessment 重放未来来源负例、重复 Snapshot 来源和重复 Gate 引用的直接发布及 Fixture 负例。
 - 本地验证为 V2 `135 passed + 2 subtests`、默认全套 `265 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`；8 个生成制品双跑 SHA-256 一致，`compileall`、`uv lock --check`、`git diff --check` 通过。
 - 本节仍只描述本地候选，Phase 0.5 保持 `in_progress`；第九次继续复用同一 Luna checker。
+
+2026-08-13 Phase 0.5 同一 Luna checker 第九次复核：
+
+- 候选 `e12b88e` 被拒绝；第八次所有 finding 已确认关闭，包括 Candidate/Evidence/FinalAssessment 的未来节点来源、Snapshot/Gate/Source 重复引用、零个或多个 Schema Gate 及三组相邻阶段边界。
+- 唯一 P2：共享 scope 只保证恰好一个 Schema Gate，未验证 AgentCall.gate_result_ids 中额外声明的 Gate。直接发布可夹带一个 rejected 或 scope/hash 错配的额外 Gate，Fixture 路径则会拒绝。
+- 下一修复统一直接发布与 Fixture 合同：共享 scope 对每个声明 Gate 逐一检查 accepted、AgentCall 引用、input scope、revision map 和 output hash。Phase 1 继续冻结，第十次仍复用同一 checker。
+
+2026-08-13 Phase 0.5 第九次拒绝后的本地修复（待第十次复核）：
+
+- 共享 scope 现在逐一读取 AgentCall.gate_result_ids 的所有已登记 Gate，不再只挑选唯一 Schema Gate；每项必须 accepted，input/accepted refs 必须包含当前调用，input_scope_hash、input_revision_map 和 output_hash 必须与 AgentCall 完全一致。
+- 新增 Evidence 直接发布夹带 rejected Gate、夹带 scope 错配但 accepted 的 Gate，以及 FinalAssessment 夹带 rejected Gate 的反向测试；Fixture 与直接发布合同现使用同一严格度。
+- 本地验证为 V2 `137 passed + 2 subtests`、默认 `267 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`；8 个生成制品双跑一致，`compileall`、`uv lock --check`、`git diff --check` 通过。
+- Phase 0.5 仍为 `in_progress`；第十次继续复用同一 Luna checker，不调用 Qwen 3.8。

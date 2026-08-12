@@ -66,3 +66,16 @@
 - 新增直接发布与完整 Fixture 的未来来源、重复 Snapshot 来源、重复 Gate 引用负例。
 - 本地验证：V2 `135 passed + 2 subtests`；默认全套 `265 passed, 1 skipped + 18 subtests`；legacy `130 passed, 1 skipped`；8 个生成制品双跑一致。
 - 状态保持 `in_progress`，以上不代表独立验收通过。
+
+## 2026-08-13 第九次复核结论
+
+- 候选 `e12b88e` 被拒绝；第八次的未来阶段来源、重复 Snapshot 来源、重复 Agent Gate/Source、零个或多个结构化输出 Gate 及相邻阶段边界均确认关闭。
+- 唯一 P2：直接发布只验证唯一 Schema Gate，未逐一验证 AgentCall 另外声明的 Gate；Fixture 会验证全部声明 Gate，形成合同漂移。
+- 下一候选在共享 scope 中逐一核对全部声明 Gate 的接受状态、AgentCall 引用、作用域、版本映射与输出哈希。任务保持 `in_progress`。
+
+## 2026-08-13 第九次复核后的本地候选
+
+- 共享 scope 逐一验证 AgentCall 声明的每个 GateResult：必须 accepted、输入和接受引用均包含当前调用、作用域哈希/版本映射/输出哈希与调用一致。
+- 新增额外 rejected Gate、表面 accepted 但 scope 错配 Gate 的 Evidence 发布负例，以及 FinalAssessment 夹带 rejected Gate 负例。
+- 本地验证：V2 `137 passed + 2 subtests`；默认全套 `267 passed, 1 skipped + 18 subtests`；legacy `130 passed, 1 skipped`；8 个生成制品双跑一致。
+- 状态仍为 `in_progress`，等待同一 checker 第十次复核。

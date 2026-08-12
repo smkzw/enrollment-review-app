@@ -751,6 +751,97 @@ def test_direct_publication_rejects_future_stage_source_and_duplicate_refs() -> 
         )
 
 
+def rejected_extra_agent_gate(call: AgentCallContract, gate_id: str) -> GateResult:
+    return GateResult(
+        gate_result_id=gate_id,
+        gate_name="additional-output-gate",
+        result=GateOutcome.REJECTED,
+        input_scope_hash=call.input_scope_hash,
+        input_revision_map=call.input_revision_map,
+        input_entity_refs=[call.agent_call_id],
+        error_codes=[RuntimeErrorCode.SCOPE_MISMATCH],
+        rejected_entity_refs=[call.agent_call_id],
+        affected_scope=call.recompute_scope,
+        recompute_scope=call.recompute_scope,
+        idempotency_key=f"gate-extra:{call.agent_call_id}",
+        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        output_hash=call.output_hash,
+    )
+
+
+def test_direct_publication_rejects_any_declared_gate_that_did_not_accept_call() -> None:
+    facts = [
+        clinical_fact(
+            fact_id="fact-extra-gate",
+            fact_type="history.condition_present",
+            value=False,
+            polarity=FactPolarity.AFFIRMED,
+            certainty=1,
+            evidence_span_ids=["span-extra-gate"],
+        )
+    ]
+    normalized = evidence_candidate(facts, [evidence_span("span-extra-gate")])
+    base_call = bind_agent_call(evidence_normalizer_call(), normalized)
+    schema_gate = agent_call_gate(base_call)
+    extra_gate = rejected_extra_agent_gate(base_call, "gate-extra-evidence")
+    call = base_call.model_copy(
+        update={
+            "gate_result_ids": [schema_gate.gate_result_id, extra_gate.gate_result_id]
+        }
+    )
+    with pytest.raises(ValueError, match="每项验收结果都必须完整接受"):
+        publish_evidence_acceptance(
+            candidate=normalized,
+            agent_call=call,
+            agent_call_gate_result=schema_gate,
+            gate_result_id="gate-evidence-extra-rejected",
+            input_revision_map={"episode-1": 1},
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+            registry=publication_input_registry(
+                calls=[call],
+                gates=[schema_gate, extra_gate],
+                evidence_candidates=[normalized],
+            ),
+        )
+
+    mismatched_gate = GateResult(
+        gate_result_id="gate-extra-evidence-mismatched",
+        gate_name="additional-output-gate",
+        result=GateOutcome.ACCEPTED,
+        input_scope_hash="f" * 64,
+        input_revision_map=base_call.input_revision_map,
+        input_entity_refs=[base_call.agent_call_id],
+        accepted_entity_refs=[base_call.agent_call_id],
+        affected_scope=base_call.recompute_scope,
+        recompute_scope=base_call.recompute_scope,
+        idempotency_key="gate-extra:evidence-mismatched",
+        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        output_hash=base_call.output_hash,
+    )
+    mismatched_call = base_call.model_copy(
+        update={
+            "gate_result_ids": [
+                schema_gate.gate_result_id,
+                mismatched_gate.gate_result_id,
+            ]
+        }
+    )
+    with pytest.raises(ValueError, match="每项验收结果都必须完整接受"):
+        publish_evidence_acceptance(
+            candidate=normalized,
+            agent_call=mismatched_call,
+            agent_call_gate_result=schema_gate,
+            gate_result_id="gate-evidence-extra-mismatched",
+            input_revision_map={"episode-1": 1},
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+            registry=publication_input_registry(
+                calls=[mismatched_call],
+                gates=[schema_gate, mismatched_gate],
+                evidence_candidates=[normalized],
+            ),
+        )
+
+
 def test_assessment_rejects_facts_not_in_accepted_evidence_candidate() -> None:
     component = gate_component()
     accepted_facts = [
@@ -1214,6 +1305,70 @@ def test_final_assessment_publication_rejects_future_stage_source() -> None:
             registry=registry,
             assessment_id="assessment-final-future-source",
             gate_result_id="gate-assessment-final-future-source",
+            input_revision_map={"episode-1": 1},
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        )
+
+
+def test_final_assessment_rejects_rejected_gate_declared_by_agent_call() -> None:
+    component = gate_component()
+    facts = [
+        clinical_fact(
+            fact_id="fact-final-extra-gate",
+            fact_type="history.condition_present",
+            value=False,
+            polarity=FactPolarity.AFFIRMED,
+            certainty=1,
+            evidence_span_ids=["span-final-extra-gate"],
+        )
+    ]
+    value = align_candidate(
+        candidate(ComponentDecision.EXCLUSION_NOT_TRIGGERED, []), component, facts
+    )
+    publication = publish_test_assessment(value, component=component, facts=facts)
+    extra_gate = rejected_extra_agent_gate(
+        publication.agent_call, "gate-extra-final-assessment"
+    )
+    agent_call = publication.agent_call.model_copy(
+        update={
+            "gate_result_ids": [
+                publication.agent_call_gate_result.gate_result_id,
+                extra_gate.gate_result_id,
+            ]
+        }
+    )
+    registry = publication_input_registry(
+        calls=[agent_call, publication.evidence_agent_call],
+        gates=[
+            publication.agent_call_gate_result,
+            extra_gate,
+            publication.candidate_gate_result,
+            publication.evidence_agent_call_gate_result,
+            publication.evidence_gate_result,
+            publication.protocol_integrity_gate_result,
+        ],
+        evidence_candidates=[publication.evidence_candidate],
+        assessment_candidates=[publication.candidate],
+        rule_sets=[publication.rule_set],
+        review_contexts=[publication.review_context],
+        evidence_expectations=publication.review_context.expectations,
+    )
+    with pytest.raises(ValueError, match="每项验收结果都必须完整接受"):
+        publish_assessment(
+            publication.candidate,
+            agent_call=agent_call,
+            agent_call_gate_result=publication.agent_call_gate_result,
+            candidate_gate_result=publication.candidate_gate_result,
+            evidence_gate_result=publication.evidence_gate_result,
+            evidence_candidate=publication.evidence_candidate,
+            evidence_agent_call=publication.evidence_agent_call,
+            evidence_agent_call_gate_result=publication.evidence_agent_call_gate_result,
+            rule_set=publication.rule_set,
+            review_context=publication.review_context,
+            protocol_integrity_gate_result=publication.protocol_integrity_gate_result,
+            registry=registry,
+            assessment_id="assessment-final-extra-gate",
+            gate_result_id="gate-assessment-final-extra-gate",
             input_revision_map={"episode-1": 1},
             created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
         )

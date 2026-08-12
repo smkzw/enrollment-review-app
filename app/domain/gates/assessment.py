@@ -100,6 +100,7 @@ def publish_assessment_candidate_acceptance(
     registry.require(
         "assessment_candidate", candidate.assessment_candidate_id, candidate
     )
+    require_accepted_agent_call(agent_call, agent_call_gate_result)
     scope = require_registered_review_scope(
         agent_call,
         registry=registry,
@@ -129,7 +130,6 @@ def publish_assessment_candidate_acceptance(
         raise AssessmentGateError(
             "AssessmentCandidate 规则组件不唯一属于服务端登记的规则集"
         )
-    require_accepted_agent_call(agent_call, agent_call_gate_result)
     if agent_call.typed_output_hashes.get(
         candidate.assessment_candidate_id
     ) != canonical_hash(candidate.model_dump(mode="json")):

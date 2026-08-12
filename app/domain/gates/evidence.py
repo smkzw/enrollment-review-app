@@ -68,6 +68,7 @@ def publish_evidence_acceptance(
         "gate_result", agent_call_gate_result.gate_result_id, agent_call_gate_result
     )
     registry.require("evidence_candidate", candidate.candidate_id, candidate)
+    require_accepted_agent_call(agent_call, agent_call_gate_result)
     if agent_call.review_run_id is None:
         raise EvidenceGateError("Evidence AgentCall 缺少 ReviewRun")
     scope = require_registered_review_scope(
@@ -92,7 +93,6 @@ def publish_evidence_acceptance(
         raise EvidenceGateError(
             "Evidence Candidate 未绑定服务端登记的受试者、审核节点、证据快照和完整文件集合"
         )
-    require_accepted_agent_call(agent_call, agent_call_gate_result)
     if agent_call.typed_output_hashes.get(candidate.candidate_id) != canonical_hash(
         candidate.model_dump(mode="json")
     ):

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from app.domain.contracts.agents import AgentCallContract, ModelConfigContract, PromptVersion
 from app.domain.contracts.evidence import EvidenceSnapshot
-from app.domain.contracts.enums import ReviewStage
+from app.domain.contracts.enums import GateOutcome, ReviewStage
 from app.domain.contracts.review import (
     Project,
     ProtocolDocumentVersion,
@@ -124,6 +124,18 @@ def require_registered_review_scope(
         raise ReviewScopeError("当前审核节点不得读取未来节点的来源文件")
     if len(agent_call.gate_result_ids) != len(set(agent_call.gate_result_ids)):
         raise ReviewScopeError("审核调用的验收结果引用不得重复")
+    for gate in gate_results:
+        if (
+            gate.result != GateOutcome.ACCEPTED
+            or agent_call.agent_call_id not in gate.input_entity_refs
+            or agent_call.agent_call_id not in gate.accepted_entity_refs
+            or gate.input_scope_hash != agent_call.input_scope_hash
+            or gate.input_revision_map != agent_call.input_revision_map
+            or gate.output_hash != agent_call.output_hash
+        ):
+            raise ReviewScopeError(
+                "审核调用声明的每项验收结果都必须完整接受当前结构化输出"
+            )
     schema_gates = [
         gate for gate in gate_results if gate.gate_name == "agent-output-schema-gate"
     ]
