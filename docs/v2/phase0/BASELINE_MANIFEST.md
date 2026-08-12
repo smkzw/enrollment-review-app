@@ -90,7 +90,7 @@ git show --stat --oneline a02b833
 # 0.39.0
 ```
 
-这只是当前 legacy 解释器的导入证据，不是 V2 依赖锁定或许可证验收。V2 依赖、版本和许可证应在独立决策文档和 Phase 0 checker 中单独验收；不能把并行工作流的未跟踪锁文件倒写成 legacy 基线。
+这只是当前 legacy 解释器的导入证据，不是 V2 依赖锁定或许可证验收。V2 依赖、版本和许可证已在独立决策文档中记录，并需由 Phase 0 checker 单独验收；不能把 V2 锁文件倒写成 legacy 基线。
 
 ### 3.3 环境误用边界
 
@@ -100,7 +100,7 @@ git show --stat --oneline a02b833
 
 ### 4.1 当前 legacy 测试结果
 
-为避免当前未跟踪 pyproject.toml 的 testpaths 改变根目录入口，legacy 测试必须显式指定文件：
+为独立确认 legacy 基线、不受 V2 新测试数量影响，legacy 测试使用实际运行时并显式指定文件：
 
 ```bash
 env PYTHONDONTWRITEBYTECODE=1 \
@@ -224,11 +224,11 @@ du -sh logs/*
 
 ## 9. 残余不确定性与未完成项
 
-- 当前工作树有并行工作流的未跟踪 V2/Phase 0 文件；本清单不判断其内容是否已验收，也不把当前工作树称为干净。
+- 首次记录本清单时 V2 文件尚未提交；`97dbadd` 和后续修订已将其纳入 Git。当前工作树状态以实时 `git status` 为准，不从本段历史描述推断。
 - legacy 测试仍有 1 个 OCR fixture 跳过项；“131 用例”不等于 131 个全部执行。
 - compileall 的状态来自已验证证据，本 Worker 未重复执行；需要后续 checker 在允许写缓存的隔离环境中重跑。
 - /api/health 只验证服务和依赖探针，不验证规则逻辑、证据定位、任务恢复或临床结论。
-- 依赖许可证、V2 目录方向、写保护、清理 manifest 和独立 checker 仍是 Phase 0 的独立门槛；本 Worker 不声称这些门槛已全部通过。
+- 依赖许可证、V2 目录方向、写保护和清理 manifest 已形成候选证据；仍需独立 checker 复验后才能关闭 Phase 0。
 - 现有测试对 legacy 审计资产有写入副作用，后续需要隔离测试 root 或增加可证明的只读测试夹具。
 - 没有执行新的临床重审、浏览器 UAT、V2 端到端流程、数据库迁移或生产切换。
 

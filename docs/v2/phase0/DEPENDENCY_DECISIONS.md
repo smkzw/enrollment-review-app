@@ -54,6 +54,19 @@
 
 为保证默认 `pytest` 不静默绕过旧系统，V2 开发组额外固定 `pytest 9.0.2`、`httpx 0.28.1`、`openai 2.37.0`、`PyMuPDF 1.26.4`、`python-docx 1.2.0`、`openpyxl 3.1.5`、`python-multipart 0.0.20` 和 `requests 2.32.4`。它们用于测试收集、旧适配器导入、方案/Excel 夹具或本地 API 测试，不改变 V2 领域边界。默认测试入口必须同时收集 `tests/test_phase_workflow.py` 与 `tests/v2/`。
 
+| 开发依赖 | 许可证 | 分发与边界决定 |
+|---|---|---|
+| pytest 9.0.2 | MIT | 仅测试，不进入预构建产品 |
+| httpx 0.28.1 | BSD-3-Clause | legacy API 测试依赖；V2 若作为运行时使用需在相应阶段重新登记 |
+| openai 2.37.0 | Apache-2.0 | 仅用于导入 legacy 模型适配器；不代表 V2 已选定模型 SDK |
+| PyMuPDF 1.26.4 | AGPL-3.0 或 Artifex 商业许可 | **仅本机 legacy 回归测试**，不进入 V2 产品运行时或分发物；Phase 4 重新评估许可证更适合的 PDF 解析器。若未来必须分发 PyMuPDF，则先满足 AGPL 源码义务或另购商业许可 |
+| python-docx 1.2.0 | MIT | 读取 legacy 方案夹具；未来方案解析层可复评 |
+| openpyxl 3.1.5 | MIT | 读取 legacy 人工对照 Excel 夹具 |
+| python-multipart 0.0.20 | Apache-2.0 | FastAPI 上传测试 |
+| requests 2.32.4 | Apache-2.0 | legacy 批处理脚本导入测试 |
+
+开发依赖通过 `dependency-groups.dev` 隔离。桌面产品安装/打包必须排除 dev group；删除这些依赖会失去 legacy 回归收集能力，因此移除前先以等价 fixture 或替代解析器覆盖相同测试。PyMuPDF 的双许可来自其[官方许可说明](https://pymupdf.readthedocs.io/en/latest/about.html)，不能按普通宽松许可处理。
+
 ## 更新与回滚
 
 - 依赖只通过锁文件更新；一次升级一个依赖族并重跑合同、构建、E2E 和视觉检查。
