@@ -843,6 +843,27 @@ def validate_fixture_scope(fixture: FixtureV1, registry) -> None:
     if len(gate_ids) != len(fixture.gate_results):
         raise StageIsolationError("GateResult ID 必须唯一")
     gate_by_id = {item.gate_result_id: item for item in fixture.gate_results}
+    assessment_publications = {
+        assessment.assessment_id: assessment_publication_from_fixture(
+            fixture, assessment.assessment_id
+        )
+        for assessment in fixture.final_assessments
+    }
+    published_candidate_ids = [
+        publication.candidate.assessment_candidate_id
+        for publication in assessment_publications.values()
+    ]
+    fixture_candidate_ids = {
+        item.assessment_candidate_id for item in fixture.assessment_candidates
+    }
+    if len(published_candidate_ids) != len(set(published_candidate_ids)):
+        raise StageIsolationError(
+            "每个 AssessmentCandidate 必须唯一进入一个 FinalAssessment 发布链"
+        )
+    if set(published_candidate_ids) != fixture_candidate_ids:
+        raise StageIsolationError(
+            "Fixture AssessmentCandidate 必须完整进入 FinalAssessment 发布链"
+        )
     owned_gate_ids = {
         fixture.project.protocol_version.authority_gate_result_id,
         fixture.project.protocol_version.integrity_gate_result_id,
@@ -851,10 +872,7 @@ def validate_fixture_scope(fixture: FixtureV1, registry) -> None:
         *[item.gate_result_id for item in fixture.final_assessments],
         *[item.gate_result_id for item in fixture.actions],
     }
-    for assessment in fixture.final_assessments:
-        publication = assessment_publication_from_fixture(
-            fixture, assessment.assessment_id
-        )
+    for publication in assessment_publications.values():
         owned_gate_ids.update(
             {
                 publication.gate_result.gate_result_id,
@@ -1080,7 +1098,7 @@ def validate_fixture_scope(fixture: FixtureV1, registry) -> None:
 
         try:
             validate_assessment_publication(
-                assessment_publication_from_fixture(fixture, assessment.assessment_id),
+                assessment_publications[assessment.assessment_id],
                 registry,
             )
         except ValueError as exc:

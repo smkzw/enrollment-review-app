@@ -909,6 +909,28 @@ def test_fixture_scope_rejects_orphan_gate_and_orphan_gate_subgraph() -> None:
         )
 
 
+def test_fixture_scope_rejects_registered_unpublished_assessment_candidate() -> None:
+    fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
+    source_candidate = fixture.assessment_candidates[0]
+    unpublished_candidate = source_candidate.model_copy(
+        update={"assessment_candidate_id": "candidate-registered-unpublished"}
+    )
+    invalid_fixture = fixture.model_copy(
+        update={
+            "assessment_candidates": [
+                *fixture.assessment_candidates,
+                unpublished_candidate,
+            ]
+        }
+    )
+
+    with pytest.raises(ValueError, match="必须完整进入 FinalAssessment 发布链"):
+        validate_fixture_scope(
+            invalid_fixture,
+            _trusted_registry_from_fixture(invalid_fixture),
+        )
+
+
 def test_stage_isolation_gate_rejects_cross_project_episode() -> None:
     fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
     registry = _trusted_registry_from_fixture(fixture)

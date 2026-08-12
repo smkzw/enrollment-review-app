@@ -1698,3 +1698,17 @@ OCR concurrency note:
 - 新增单个孤立 Gate、互相引用的孤立 Gate 子图、以及向合法 Schema Gate 注入孤立 Gate ID 的反向测试，三者均在发布前拒绝。
 - 本地验证为 V2 `139 passed + 2 subtests`、默认 `269 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`；8 个生成制品双跑一致，`compileall`、`uv lock --check`、`git diff --check` 通过。
 - Phase 0.5 保持 `in_progress`，第十二次继续复用同一 Luna checker，不调用 Qwen 3.8。
+
+2026-08-13 Phase 0.5 同一 Luna checker 第十二次复核：
+
+- 候选 `c22b4bb` 被拒绝；第十一次的孤立 Gate、孤立子图和自由引用绕过均确认关闭。
+- 唯一 P2：可向 Fixture 与既存 registry 同时追加一个 scope 合法的 AssessmentCandidate，而不提供 Candidate Gate、不绑定 AgentCall typed output、也不进入 FinalAssessment，当前仍会接受。
+- 下一修复从每个已验证 FinalAssessment 发布链反向取得 Candidate 与 Candidate Gate，要求 Fixture 候选集合精确等于已发布候选集合，且每个候选只进入一个最终发布链。Phase 1 继续冻结，第十三次仍复用同一 checker。
+
+2026-08-13 Phase 0.5 第十二次拒绝后的本地修复（待第十三次复核）：
+
+- Fixture 先为每个 FinalAssessment 构造完整 AssessmentPublication，再反向汇总已发布 AssessmentCandidate；候选 ID 不得重复进入多个发布链，且集合必须与 Fixture 的候选集合完全相等。
+- 新增“registry 中已登记、scope 合法，但无 Candidate Gate、无 AgentCall typed output、无 FinalAssessment”的候选负例。
+- EvidenceNormalizationCandidate 已由 Evidence Gate 与 Fact/Span 全集相等约束覆盖，不存在同构的空候选夹带路径。
+- 本地验证为 V2 `140 passed + 2 subtests`、默认 `270 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`；8 个生成制品双跑一致，`compileall`、`uv lock --check`、`git diff --check` 通过。
+- Phase 0.5 保持 `in_progress`，第十三次继续复用同一 Luna checker，不调用 Qwen 3.8。

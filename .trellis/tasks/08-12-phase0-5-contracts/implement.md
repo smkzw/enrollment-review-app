@@ -106,3 +106,18 @@
 - 新增单个孤立 Gate、两个 Gate 互相引用的孤立子图、以及合法 Schema Gate 引用孤立 Gate 三类反向测试。
 - 本地验证：V2 `139 passed + 2 subtests`；默认 `269 passed, 1 skipped + 18 subtests`；legacy `130 passed, 1 skipped`；8 个生成制品双跑一致，`compileall`、`uv lock --check`、`git diff --check` 通过。
 - 状态保持 `in_progress`，等待同一 checker 第十二次复核。
+
+## 2026-08-13 第十二次复核结论
+
+- 候选 `c22b4bb` 被拒绝；单个孤立 Gate、孤立 Gate 子图和自由引用伪造归属均确认关闭。
+- 唯一 P2：Fixture 可追加一个已登记但未被 Candidate Gate 接受、未绑定 AgentCall typed output、也未进入 FinalAssessment 发布链的 AssessmentCandidate。
+- 根因是当前只封闭 Gate 集合，AssessmentCandidate 循环仍把“已登记且 scope 合法”误当成“属于当前发布集合”。下一候选必须从已验证 FinalAssessment 发布链反推候选全集并与 Fixture 候选集合精确相等。
+- 任务保持 `in_progress`，Phase 1 继续冻结；第十三次仍复用同一 checker。
+
+## 2026-08-13 第十二次复核后的本地候选
+
+- 先从每个 FinalAssessment 构造并验证唯一 AssessmentPublication，再反向汇总其 AssessmentCandidate；Fixture 候选集合必须与该已发布候选集合精确相等。
+- 同一候选若进入多个 FinalAssessment 发布链会被拒绝；已登记但没有 Candidate Gate、AgentCall typed output 或最终发布链的候选也会被拒绝。
+- EvidenceNormalizationCandidate 已由 Evidence Gate 加 Fact/Span 全集等价约束封闭，本轮未复制另一套候选规则。
+- 本地验证：V2 `140 passed + 2 subtests`；默认 `270 passed, 1 skipped + 18 subtests`；legacy `130 passed, 1 skipped`；8 个生成制品双跑一致，`compileall`、`uv lock --check`、`git diff --check` 通过。
+- 状态保持 `in_progress`，等待同一 checker 第十三次复核。

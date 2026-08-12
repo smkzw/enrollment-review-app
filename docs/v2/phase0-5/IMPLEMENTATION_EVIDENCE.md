@@ -72,6 +72,8 @@ uv run --python 3.12.13 pytest -q
 - 第十次复核后的本地候选已让 Fixture 每个 AgentCall 无条件复用共享 scope/Gate 闭包，并新增未参与下游发布的额外调用负例。当前本地 V2 `138 passed + 2 subtests`、默认 `268 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`，生成制品双跑一致；仍待同一 checker 第十一次复核。
 - 第十一次 checker 已确认上述 AgentCall finding 关闭。唯一剩余 P2 是 Fixture 可夹带不被当前发布图引用的孤立 GateResult；存在于 registry 不能代替其属于当前发布闭包。Phase 0.5 继续 `in_progress`。
 - 第十一次复核后的本地候选改为显式发布归属：方案验收、AgentCall、Assessment 候选/证据/最终发布、Action 与 Rollup 共同定义当前 Gate 集合，额外 Gate、互相引用的孤立子图、以及经合法 Gate 自由引用伪装归属的 Gate 均被拒绝。当前本地 V2 `139 passed + 2 subtests`、默认 `269 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`；8 个生成制品双跑一致，仍待同一 checker 第十二次复核。
+- 第十二次 checker 确认孤立 Gate finding 已关闭，但发现 Fixture 仍可夹带已登记而未被 Candidate Gate 接受、未绑定 AgentCall typed output、未进入 FinalAssessment 的 AssessmentCandidate。说明发布闭包不仅要约束 Gate 全集，也必须约束候选实体全集；Phase 0.5 继续 `in_progress`。
+- 第十二次复核后的本地候选从每个 FinalAssessment 的完整 AssessmentPublication 反推唯一候选，要求 Fixture AssessmentCandidate 集合与已发布候选集合完全相等；新增已登记未发布候选负例。当前本地 V2 `140 passed + 2 subtests`、默认 `270 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`；8 个生成制品双跑一致，仍待同一 checker 第十三次复核。
 - 本阶段未调用真实 LLM/OCR、未重审临床项目、未修改 legacy 项目数据、未调用 Qwen 3.8；用户已明确后续也不使用 Qwen 3.8 会商。
 
 ## 待验收
