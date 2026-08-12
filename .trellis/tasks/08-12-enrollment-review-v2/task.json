@@ -3,7 +3,7 @@
   "name": "enrollment-review-v2",
   "title": "入排审核系统 V2 分阶段构建",
   "description": "基于最终设计完成本地单用户、AI lead、多 Agent 协同但确定性门禁裁决的 V2 系统，并通过真实临床回归与浏览器验收。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -20,10 +20,15 @@
   "subtasks": [],
   "children": [
     "08-12-phase0-foundation",
-    "08-12-phase0-5-contracts"
+    "08-12-phase0-5-contracts",
+    "08-13-phase1-frontend-shell"
   ],
   "parent": null,
   "relatedFiles": [],
-  "notes": "",
-  "meta": {}
+  "notes": "Phase 0、0.5、1 已完成。当前硬停止点为 Phase 1.5 用户验收；未获用户确认前不进入 Phase 2 数据层。",
+  "meta": {
+    "current_phase": "1.5",
+    "gate": "awaiting_user_uat",
+    "last_checkpoint": "2026-08-13-phase1-accepted"
+  }
 }

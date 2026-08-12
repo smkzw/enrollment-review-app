@@ -1,0 +1,149 @@
+/* 方案工作台：版本对比与规则差异（UAT-P1-03）。 */
+
+.protocol-versions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.protocol-version {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-l);
+  padding: var(--space-3) var(--space-4);
+  min-width: 0;
+}
+
+.protocol-version--current {
+  border-top: 3px solid var(--color-teal);
+}
+
+.protocol-version--draft {
+  border-top: 3px solid var(--color-amber);
+}
+
+.protocol-version__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-title);
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+.protocol-version__name {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-num);
+  font-weight: 600;
+}
+
+.protocol-version__meta {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+.protocol-version__note {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+
+.protocol-changes {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-l);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  min-width: 0;
+}
+
+.protocol-section__title {
+  font-size: var(--font-size-title);
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.protocol-change-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.protocol-change {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-line);
+  flex-wrap: wrap;
+}
+
+.protocol-change:last-child {
+  border-bottom: none;
+}
+
+.protocol-change__badge {
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  padding: 0 8px;
+  border-radius: var(--radius-s);
+  white-space: nowrap;
+}
+
+.protocol-change--added .protocol-change__badge {
+  color: var(--color-green);
+  background: var(--color-green-bg);
+}
+
+.protocol-change--deleted .protocol-change__badge {
+  color: var(--color-red);
+  background: var(--color-red-bg);
+}
+
+.protocol-change--changed .protocol-change__badge {
+  color: var(--color-amber);
+  background: var(--color-amber-bg);
+}
+
+.protocol-change__code {
+  font-weight: 700;
+  color: var(--color-teal);
+}
+
+.protocol-change__desc {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+
+.protocol-source-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: var(--space-2) 0;
+}
+
+.protocol-source {
+  display: flex;
+  gap: var(--space-2);
+  font-size: var(--font-size-small);
+}
+
+.protocol-source__label {
+  color: var(--color-ink);
+}
+
+.protocol-source__page {
+  color: var(--color-muted);
+}
+
+.protocol-changes__note {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}

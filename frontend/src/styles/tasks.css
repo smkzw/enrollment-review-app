@@ -1,0 +1,171 @@
+/* 任务与系统：任务列表、任务详情时间线、原型状态演示（合同 §8）。 */
+
+.tasks-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-l);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  min-width: 0;
+}
+
+.tasks-section__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-line);
+  flex-wrap: wrap;
+}
+
+.tasks-section__title {
+  font-size: var(--font-size-title);
+  font-weight: 600;
+}
+
+.tasks-section__note {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+
+/* 任务行（复用 today-row 结构） */
+
+.task-row {
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-m);
+}
+
+.task-row:hover {
+  background: var(--color-muted-bg);
+}
+
+.task-row--selected {
+  background: var(--color-teal-bg);
+  border-color: #9fd4cf;
+}
+
+/* 任务详情 */
+
+.job-detail {
+  margin-top: var(--space-2);
+}
+
+.job-detail__progress {
+  font-size: var(--font-size-base);
+}
+
+.job-detail__checkpoint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+  font-size: var(--font-size-small);
+  color: var(--color-teal);
+}
+
+.job-detail__subtitle {
+  font-size: var(--font-size-title);
+  font-weight: 600;
+  margin: var(--space-3) 0 var(--space-2);
+}
+
+.job-timeline {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.job-timeline__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-left: 3px solid var(--color-line);
+  padding-left: var(--space-3);
+}
+
+.job-timeline__type {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.job-timeline__time {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+.job-timeline__meta {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.job-detail__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-line);
+}
+
+.job-detail__note {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+
+/* 原型状态演示 */
+
+.demo-job {
+  margin-top: var(--space-3);
+  border: 1px dashed var(--color-line);
+  border-radius: var(--radius-l);
+  padding: var(--space-3);
+  background: var(--color-canvas);
+}
+
+.demo-job__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.demo-job__subject {
+  font-weight: 600;
+}
+
+.demo-job__stage {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+.demo-job__progress {
+  margin-left: auto;
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+.demo-job__desc {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-small);
+  overflow-wrap: anywhere;
+}
+
+.demo-job__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
+}

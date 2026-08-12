@@ -1,0 +1,405 @@
+/* 受试者与资料页 + Patient Profile（合同 §4.2）。
+   桌面两列（列表 + Profile）；窄屏纵向堆叠，无页面级横向滚动。 */
+
+.subjects-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+/* ---------- 受试者列表 ---------- */
+
+.subjects-list {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-l);
+  padding: var(--space-3);
+  min-width: 0;
+}
+
+.subjects-list__title {
+  font-size: var(--font-size-title);
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.subjects-list__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  margin: var(--space-1) 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-m);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.subjects-list__item:hover {
+  background: var(--color-muted-bg);
+}
+
+.subjects-list__item--active {
+  background: var(--color-teal-bg);
+  border-color: #9fd4cf;
+}
+
+.subjects-list__code {
+  font-weight: 600;
+  font-size: var(--font-size-title);
+}
+
+.subjects-list__center {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+.subjects-list__item .count-chip {
+  margin-top: 2px;
+}
+
+/* 紧凑受试者选择器：仅窄屏显示（桌面隐藏，侧栏列表保持） */
+.subjects-picker {
+  display: none;
+}
+
+.subjects-picker__label {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+  flex-shrink: 0;
+}
+
+.subjects-picker__select {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-m);
+  background: var(--color-surface);
+  font: inherit;
+}
+
+.subjects-picker__select:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* ---------- Profile 主体 ---------- */
+
+.profile {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-l);
+  padding: var(--space-4);
+  min-width: 0;
+}
+
+.profile-stale {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+  background: var(--color-amber-bg);
+  border: 1px solid #ecd6ac;
+  border-radius: var(--radius-m);
+  font-size: var(--font-size-small);
+}
+
+.profile-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-line);
+  margin-bottom: var(--space-3);
+}
+
+.profile-head__subject {
+  font-size: var(--font-size-page-title);
+  font-weight: 600;
+}
+
+.profile-head__meta {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+.profile-head__node {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.profile-head__stage {
+  font-weight: 600;
+}
+
+.profile-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+
+.profile-toolbar__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.profile-toolbar__switch {
+  flex-shrink: 0;
+}
+
+.profile-section {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-line);
+}
+
+.profile-section__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-title);
+  font-weight: 600;
+  margin-bottom: var(--space-3);
+}
+
+/* 事件列表（密集时间轴行：标题/风险/来源在左列，证据按钮右列） */
+
+.profile-event-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.profile-event {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-3);
+  row-gap: 2px;
+  align-items: center;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-m);
+  padding: var(--space-2) var(--space-3);
+  min-width: 0;
+}
+
+.profile-event__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.profile-event__title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.profile-event__lane {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+.profile-event__risks {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.profile-event__risk-chip {
+  background: var(--color-amber-bg);
+  color: var(--color-amber);
+  line-height: 1.5;
+}
+
+.profile-event__meta {
+  grid-column: 1;
+  grid-row: 3;
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+.profile-event__foot {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+}
+
+.profile-event__rules {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.profile-event__evidence {
+  flex-shrink: 0;
+}
+
+/* 完整明细：按主题分节 */
+
+.profile-lane {
+  margin-bottom: var(--space-4);
+}
+
+.profile-lane__title {
+  font-size: var(--font-size-title);
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.profile-lane__muted {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+/* 应备证据覆盖 */
+
+.expectation-cover__summary {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+  margin-bottom: var(--space-2);
+}
+
+.expectation-cover__list {
+  display: flex;
+  flex-direction: column;
+}
+
+.expectation-cover__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-line);
+  min-width: 0;
+}
+
+.expectation-cover__row:last-child {
+  border-bottom: none;
+}
+
+.expectation-cover__gap {
+  font-size: var(--font-size-small);
+  flex: 1 1 12rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.expectation-cover__note {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+  flex: 1 1 18rem;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.expectation-cover__muted {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+/* 应备证据状态徽标（色调 + 文字，不单独依赖颜色） */
+.status-badge--expectation {
+  border: 1px solid var(--color-line);
+}
+
+.status-badge--expectation-observed {
+  color: var(--color-green);
+  background: var(--color-green-bg);
+  border-color: #bfddcd;
+}
+
+.status-badge--expectation-observed_weak {
+  color: var(--color-amber);
+  background: var(--color-amber-bg);
+  border-color: #ecd6ac;
+}
+
+.status-badge--expectation-referenced_missing {
+  color: var(--color-blue);
+  background: var(--color-blue-bg);
+  border-color: #c5d4f2;
+}
+
+.status-badge--expectation-absent {
+  color: var(--color-red);
+  background: var(--color-red-bg);
+  border-color: #f2c1bd;
+}
+
+.status-badge--expectation-not_due {
+  color: var(--color-muted);
+  background: var(--color-muted-bg);
+  border-color: var(--color-line);
+}
+
+/* 窄屏：受试者选择改为紧凑下拉，列表收起；Profile 首屏可见 */
+@media (max-width: 880px) {
+  .subjects-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .subjects-list {
+    display: none;
+  }
+
+  .subjects-picker {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-l);
+  }
+
+  .profile-event {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .profile-event__foot {
+    grid-column: 1;
+    grid-row: auto;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .profile-event__rules {
+    text-align: left;
+  }
+
+  .profile-head {
+    flex-direction: column;
+  }
+}

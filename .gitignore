@@ -21,6 +21,7 @@ output/
 node_modules/
 frontend/node_modules/
 frontend/dist/
+frontend/e2e/test-results/
 .pytest_cache/
 .coverage
 htmlcov/

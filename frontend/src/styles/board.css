@@ -1,0 +1,249 @@
+/* 项目看板页：阶段汇总条、筛选工具栏、受试者 × 节点矩阵。
+   页面消费 AppShell 全宽；密集矩阵只在表格容器内横向滚动（§3.2）。 */
+
+/* ---------- 阶段汇总条（合同 §4.1 六类计数） ---------- */
+
+.stage-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.stage-summary__item {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-l);
+  padding: var(--space-2) var(--space-3);
+  min-width: 0;
+}
+
+.stage-summary__name {
+  font-weight: 600;
+  margin-right: var(--space-2);
+}
+
+.stage-summary__total {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+.stage-summary__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.stage-summary__none {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+/* ---------- 工具栏 ---------- */
+
+.board-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-l);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.board-toolbar__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.board-toolbar__label {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+  flex-shrink: 0;
+}
+
+.board-search {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+.board-search input {
+  width: 170px;
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-m);
+  background: var(--color-surface);
+  font-size: var(--font-size-base);
+}
+
+.board-search input:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.board-toolbar__hint {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+/* ---------- 勾选摘要（§4.1：显示“已选择 n 项”和范围） ---------- */
+
+.board-selection {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-teal-bg);
+  border: 1px solid #9fd4cf;
+  border-radius: var(--radius-m);
+  margin-bottom: var(--space-3);
+  font-size: var(--font-size-small);
+  color: var(--color-teal);
+}
+
+.board-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+/* ---------- 矩阵表 ---------- */
+
+.board-table-wrap {
+  overflow-x: auto; /* 密集表格允许组件内横向滚动（§3.2），页面本身无横向滚动 */
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-l);
+}
+
+.board-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 0;
+}
+
+.board-table__th {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-line);
+  background: #fafbfc;
+  font-weight: 600;
+  font-size: var(--font-size-small);
+  vertical-align: bottom;
+  min-width: 0;
+}
+
+.board-table__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.board-table__sort:hover {
+  color: var(--color-teal);
+}
+
+.board-table__td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-line);
+  vertical-align: top;
+}
+
+.board-table tbody tr:last-child .board-table__td {
+  border-bottom: none;
+}
+
+/* 受试者列 */
+.board-subject {
+  display: flex;
+  flex-direction: column;
+  min-width: 96px;
+}
+
+.board-subject__code {
+  font-weight: 600;
+  font-size: var(--font-size-title);
+}
+
+.board-subject__center {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+.board-cell__muted {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+/* 阶段列头 */
+.board-stage-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.board-stage-head__name {
+  font-size: var(--font-size-title);
+}
+
+.board-stage-head__count {
+  font-weight: 400;
+  color: var(--color-muted);
+}
+
+/* 阶段单元格：状态 + 计数 + 直达入口 */
+.episode-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  min-width: 170px;
+  min-height: 58px;
+}
+
+.episode-cell__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+.episode-cell__open {
+  align-self: flex-end;
+  margin-top: 2px;
+}
+
+.episode-cell--empty {
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+  padding-top: var(--space-1);
+}
+
+/* 窄内容：矩阵保留，仅压缩间距；阶段聚焦片负责窄屏切换（合同 §3.3） */
+@container (max-width: 760px) {
+  .board-table__th,
+  .board-table__td {
+    padding: var(--space-2);
+  }
+
+  .episode-cell {
+    min-width: 150px;
+  }
+}

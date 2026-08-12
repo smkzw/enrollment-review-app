@@ -36,6 +36,7 @@
 | TypeScript | 7.0.2 | Apache-2.0 | strict 类型检查 |
 | `@vitejs/plugin-react` | 6.0.5 | MIT | React/Vite 官方插件 |
 | TanStack React Table | 9.1.2 | MIT | 逐列排序、筛选、选择和受控状态；[官方说明](https://tanstack.com/table/latest) |
+| Lucide React | 1.31.0 | ISC；部分 Feather 衍生图标为 MIT | 统一使用熟悉图标并保留中文可访问名称；[官方许可证](https://github.com/lucide-icons/lucide/blob/main/LICENSE) |
 | React 类型定义 | 19.2.18 / 19.2.4 | MIT | React/DOM 类型 |
 
 版本和许可证元数据通过 2026-08-12 本机 npm 配置的 `registry.npmmirror.com` 获取，随后以 React、Vite、TanStack 和 TypeScript 官方文档/仓库交叉核对。`frontend/package-lock.json` 因本机 registry 配置记录 npmmirror 下载地址并固定传递依赖；切换 registry 后必须重新生成和复核锁文件，不能把镜像地址误称为官方 npm registry。当前 Node 22.22.3、npm 10.9.8 满足要求。
@@ -43,6 +44,19 @@
 **维护与适配：** React 19.2 是官方 Latest 稳定线；Vite 8 是官方支持线；TanStack Table 是活跃维护的无头表格引擎，允许自有临床视觉和受控状态；TypeScript 7 提供 strict 类型。以上依赖仅在开发/本机构建下载代码，预构建前端在桌面运行时不访问包 registry，也不发送临床数据。
 
 **替代方案：** 原生 DOM 或继续扩展单文件 SPA 会放大状态和可测试性问题；完整 UI/数据网格组件库会限制响应式临床工作台。React + 无头 TanStack Table 保留布局和交互控制。若移除 TanStack Table，可由自有列表组件替代而不改变 API 合同；若回退构建栈，则恢复上一锁文件和预构建产物。
+
+### 前端测试依赖
+
+| 测试依赖 | 固定版本 | 许可证 | 边界决定 |
+|---|---:|---|---|
+| Vitest | 4.1.10 | MIT | 单元和组件测试；只在开发阶段运行 |
+| Testing Library（DOM / jest-dom / React / user-event） | 10.4.1 / 7.0.1 / 16.3.2 / 14.6.4 | MIT | 以用户可见行为和可访问名称测试交互 |
+| jsdom | 30.0.1 | MIT | 单元测试浏览器环境 |
+| Playwright Test | 1.62.1 | Apache-2.0 | 真实浏览器、多视口、键盘路径与截图验收；[官方仓库](https://github.com/microsoft/playwright) |
+| axe-core / axe Playwright | 4.13.0 / 4.13.0 | MPL-2.0 | 仅在 Playwright 测试中检查严重可访问性问题；[官方许可证](https://github.com/dequelabs/axe-core/blob/develop/LICENSE) |
+| Node 类型定义 | 26.2.0 | MIT | 测试配置与构建脚本类型 |
+
+axe-core 只存在于 `devDependencies`，不会进入 Vite 的预构建产品代码，也不会随本地医学监查员入口启动。MPL-2.0 允许将其作为较大作品的一部分使用，但若未来分发测试工具或 axe-core 本身，必须保留许可证通知，并按许可证提供对应源代码获取方式；本项目不修改 axe-core 源码。回滚方式为删除 axe 两个开发依赖及 `frontend/e2e/axe.spec.ts`，不影响其余浏览器用例。选择 axe 是因为它能稳定自动发现严重的可访问名称、焦点和结构问题；它不能替代键盘实测与视觉复核。
 
 ## 未采纳
 

@@ -1,0 +1,89 @@
+/* 系统帮助：步骤化说明（面向不熟悉电脑的用户）。 */
+
+.help-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.help-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-l);
+  padding: var(--space-3) var(--space-4);
+  min-width: 0;
+}
+
+.help-section__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-title);
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.help-section__number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-teal);
+  color: #fff;
+  font-size: var(--font-size-small);
+  flex-shrink: 0;
+}
+
+.help-section__steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.help-section__step {
+  padding-left: var(--space-3);
+  position: relative;
+  overflow-wrap: anywhere;
+}
+
+.help-section__step::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-line);
+}
+
+.help-section__tip {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-amber-bg);
+  border-radius: var(--radius-m);
+  font-size: var(--font-size-small);
+  color: var(--color-amber);
+  overflow-wrap: anywhere;
+}
+
+.help-links {
+  margin-top: var(--space-4);
+}
+
+.help-links__title {
+  font-size: var(--font-size-title);
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+
+.help-links__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

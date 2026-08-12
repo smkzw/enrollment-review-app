@@ -1,0 +1,123 @@
+/* 今日工作页：区块式列表，容器查询两列排布（§3.2/§3.3）。
+   页面消费 AppShell 全宽（1920 与 200% 缩放均无页面级横向滚动、无空白上限）。 */
+
+.today-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+@container (min-width: 1240px) {
+  .today-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.today-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-l);
+  padding: var(--space-3) var(--space-4);
+  min-width: 0;
+}
+
+.today-section__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.today-section__title {
+  font-size: var(--font-size-title);
+  font-weight: 600;
+}
+
+.today-section__more {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+.today-section__more a {
+  margin: 0 4px;
+}
+
+/* 行式列表 */
+.today-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.today-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.today-row:last-child {
+  border-bottom: none;
+}
+
+.today-row__codes {
+  display: flex;
+  flex-direction: column;
+  min-width: 72px;
+}
+
+.today-row__subject {
+  font-weight: 600;
+  font-size: var(--font-size-title);
+}
+
+.today-row__stage {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+.today-row__main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.today-row__text {
+  line-height: var(--line-height-body);
+  overflow-wrap: anywhere;
+}
+
+.today-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+.today-row__action {
+  flex-shrink: 0;
+}
+
+.today-row__action-placeholder {
+  width: 1px;
+}
+
+@media (max-width: 560px) {
+  .today-row {
+    /* 单列堆叠：避免 auto 列被长文本撑宽导致横向溢出 */
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+
+  .today-row .today-row__action {
+    grid-column: 1;
+    justify-self: start;
+  }
+}

@@ -1,0 +1,84 @@
+/* 报告：报告入口卡片与原型说明。 */
+
+.reports-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.report-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-l);
+  padding: var(--space-3) var(--space-4);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.report-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.report-card__title {
+  font-size: var(--font-size-title);
+  font-weight: 600;
+}
+
+.report-card__contents {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+  flex: 1;
+}
+
+.report-card__contents li::before {
+  content: "·";
+  margin-right: var(--space-2);
+  color: var(--color-teal);
+}
+
+.report-card .button {
+  align-self: flex-start;
+}
+
+.reports-notice {
+  margin-bottom: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-amber-bg);
+  border: 1px solid #ecd6ac;
+  border-radius: var(--radius-m);
+  font-size: var(--font-size-small);
+  color: var(--color-amber);
+  overflow-wrap: anywhere;
+}
+
+.reports-help {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-l);
+  padding: var(--space-3) var(--space-4);
+}
+
+.reports-help__title {
+  font-size: var(--font-size-title);
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+
+.reports-help__text {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+
+.reports-help__text a {
+  margin: 0 2px;
+}

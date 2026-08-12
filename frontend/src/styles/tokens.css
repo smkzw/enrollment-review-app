@@ -1,0 +1,51 @@
+/* 设计 Token：值取自 contracts/v1/interaction/DESIGN_CONTRACT.md §2.1/2.2。
+   页面与组件不得定义另一套颜色、间距或状态词（spec: directory-structure）。 */
+
+:root {
+  /* 色彩（§2.1） */
+  --color-canvas: #f5f6f7;
+  --color-surface: #ffffff;
+  --color-ink: #1f2933;
+  --color-muted: #52606d;
+  --color-line: #d6dce2;
+  --color-teal: #0f766e;
+  --color-blue: #1d4ed8;
+  --color-amber: #b45309;
+  --color-red: #b42318;
+  --color-green: #237a57;
+  --color-violet: #6d28d9;
+
+  /* 状态底色（浅色辅助，不单独表达状态） */
+  --color-red-bg: #fdecea;
+  --color-amber-bg: #fdf3e0;
+  --color-green-bg: #e8f4ee;
+  --color-teal-bg: #e6f4f3;
+  --color-blue-bg: #eaf0fd;
+  --color-muted-bg: #eef1f4;
+
+  /* 字号（§2.2，rem 级别，不使用 vw 字号） */
+  --font-size-base: 0.875rem; /* 正文 */
+  --font-size-small: 0.75rem; /* 辅助 */
+  --font-size-title: 1rem; /* 工作区标题 */
+  --font-size-page-title: 1.375rem; /* 页面标题 */
+  --font-size-num: 1.125rem; /* 关键数字 */
+
+  /* 行高与间距节奏（§2.2） */
+  --line-height-body: 1.55;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* 形状（§2.2：圆角不超过 8px） */
+  --radius-s: 4px;
+  --radius-m: 6px;
+  --radius-l: 8px;
+
+  /* 布局 */
+  --sidebar-width: 232px;
+  --topbar-height: 52px;
+  --focus-ring: 2px solid var(--color-violet);
+}

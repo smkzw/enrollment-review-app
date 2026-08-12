@@ -1,0 +1,154 @@
+/* 基础样式：重置、排版、焦点与无障碍基础。 */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family:
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Microsoft YaHei",
+    "Noto Sans CJK SC",
+    system-ui,
+    sans-serif;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-body);
+  color: var(--color-ink);
+  background: var(--color-canvas);
+  /* 页面级禁止横向滚动（§3.2） */
+  overflow-x: hidden;
+}
+
+h1,
+h2,
+h3,
+p,
+ul,
+ol,
+figure {
+  margin: 0;
+}
+
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--color-blue);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* 文本块内的链接：下划线区分，不依赖颜色（axe link-in-text-block） */
+p a:not(.button):not(.icon-button),
+dd a:not(.button):not(.icon-button),
+blockquote a:not(.button):not(.icon-button),
+.feedback__hint a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* 键盘焦点：清晰可见（§7.1） */
+:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-s);
+}
+
+/* 图形按钮与链接按钮：无文本时必须有中文可访问名称 */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: var(--color-muted-bg);
+  color: var(--color-ink);
+}
+
+.icon-button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+/* 主操作按钮（明确命令才使用） */
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 30px;
+  padding: 4px 12px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-m);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.button:hover {
+  border-color: var(--color-teal);
+  color: var(--color-teal);
+}
+
+.button--primary {
+  background: var(--color-teal);
+  border-color: var(--color-teal);
+  color: #fff;
+}
+
+.button--primary:hover {
+  background: var(--color-teal);
+  color: #fff;
+  text-decoration: none;
+}
+
+.button--quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-blue);
+}
+
+.skip-link {
+  position: absolute;
+  left: var(--space-2);
+  top: -100%;
+  z-index: 100;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-m);
+}
+
+.skip-link:focus {
+  top: var(--space-2);
+}

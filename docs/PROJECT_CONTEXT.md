@@ -1,5 +1,34 @@
 # Enrollment Review App Project Context
 
+## 2026-08-13 Milestone: Phase 1 Frontend Shell Accepted, Phase 1.5 User Gate
+
+Completed:
+
+- Built the no-login React/Vite frontend shell against frozen `fixture/v1` and a typed stub repository, without reading legacy Markdown or old SPA state.
+- Implemented nine Chinese-first work surfaces: 今日工作、项目看板、方案工作台、受试者与资料、入排工作台、行动中心、报告、任务与系统、系统帮助。
+- Added risk-first Patient Profile, staged rule/evidence/action workbench, parent-child rule rollups, evidence precision, responsibility/action detail, deep links, narrow layout and keyboard paths.
+- Independent Kimi K3 visual review first blocked the phase on an `undefined` time-window defect, then accepted the corrected shell in the same session. Codex closed two additional nonblocking findings before archival.
+
+Important root causes retained:
+
+- The time-window defect came from a Wire contract that assumed obsolete fields instead of the frozen fixture's anchor/direction/bounds model. Contract, ViewModel, mapper, UI and regression coverage were corrected together.
+- A protocol-diff path bypassed the shared display-code mapper and leaked `REQ-02`; all user-facing required-check codes now display as `必做-xx` while internal IDs remain unchanged.
+- Hash navigation plus `networkidle` can measure the prior/loading page and produce false visual-test passes. Route checks now await the new page heading, key content and loading-state exit.
+- CSS `body.zoom` does not reproduce browser zoom media-query behavior. The acceptance test now uses the equivalent CSS layout viewport for a 1440 physical display at 150%/200%.
+
+Verification:
+
+- 19 unit/component test files, 137 tests passed.
+- Build passed; known fixture-bundle warning remains nonblocking for this read-only phase.
+- Playwright: 153 passed, 27 viewport-specific skips, 0 failed across 1280/1440/1920/390, keyboard, evidence paths, accessibility and screenshots.
+- 38 screenshots regenerated; Codex visually accepted representative desktop, narrow and 200% equivalent-zoom pages.
+
+Current hold point:
+
+- Phase 1 is complete. The local trial site remains at `http://127.0.0.1:4173/` for Phase 1.5.
+- User must compare 今日工作 vs 项目看板 and complete the scripted workflow UAT before Phase 2.
+- Do not begin the database, real OCR/LLM, durable Graph workflow or legacy migration until the user explicitly accepts Phase 1.5.
+
 ## 2026-08-12 Milestone: Launcher Recovery And V2 Design Approval Checkpoint
 
 User request:

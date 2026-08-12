@@ -1,0 +1,8 @@
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"检查中文界面、响应式、证据可达和真实浏览器证据"}
+{"file":"contracts/v1/interaction/DESIGN_CONTRACT.md","reason":"核对信息密度、定位精度、键盘和窄屏合同"}
+{"file":"contracts/v1/interaction/UAT_PHASE1.md","reason":"核对 10 类以上场景和量化任务可执行性"}
+{"file":"docs/REARCHITECTURE_FINAL_DESIGN_20260812.md","reason":"检查未继承旧 SPA、未越过 Phase 1 边界"}
+{"file":"plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md","reason":"检查 Phase 1 退出门槛和 Phase 1.5 停止点"}
+{"file":"runs/conference/enrollment_phase1_visual_acceptance/visual_pi_k3_256k_round2.md","reason":"独立检查者同会话复核后明确接受进入 Phase 1.5"}
+{"file":"frontend/e2e/screenshots/","reason":"Codex 复看桌面、390 窄屏及 150%/200% 等效缩放真实截图"}
+{"file":".trellis/tasks/08-13-phase1-frontend-shell/checkpoint.md","reason":"记录通过证据、关键坑点、清理边界和下一安全动作"}

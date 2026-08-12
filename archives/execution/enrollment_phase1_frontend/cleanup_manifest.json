@@ -1,0 +1,15 @@
+{
+  "task_id": "enrollment_phase1_frontend",
+  "mode": "apply",
+  "sources": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/prompts/execution/enrollment_phase1_frontend",
+    "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/runs/execution/enrollment_phase1_frontend",
+    "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/logs/execution/enrollment_phase1_frontend"
+  ],
+  "archive_root": "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/archives/execution/enrollment_phase1_frontend",
+  "archived": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/archives/execution/enrollment_phase1_frontend/enrollment_phase1_frontend",
+    "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/archives/execution/enrollment_phase1_frontend/enrollment_phase1_frontend_20260813_072446",
+    "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/archives/execution/enrollment_phase1_frontend/enrollment_phase1_frontend_20260813_072446"
+  ]
+}
