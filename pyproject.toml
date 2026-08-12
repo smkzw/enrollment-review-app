@@ -1,0 +1,25 @@
+[project]
+name = "enrollment-review-v2"
+version = "0.1.0"
+description = "本地临床试验入排审核工作台 V2"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "alembic==1.19.1",
+  "fastapi==0.128.8",
+  "pydantic==2.13.3",
+  "sqlalchemy==2.0.52",
+  "uvicorn==0.39.0",
+]
+
+[dependency-groups]
+dev = [
+  "pytest==9.0.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/v2"]
+addopts = "-ra"
+pythonpath = ["."]
+
+[tool.uv]
+package = false
