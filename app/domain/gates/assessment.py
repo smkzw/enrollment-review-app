@@ -90,7 +90,35 @@ def publish_assessment_candidate_acceptance(
     agent_call_gate_result: GateResult,
     gate_result_id: str,
     created_at: datetime,
+    registry: TrustedPublicationRegistry,
 ) -> GateResult:
+    registry.require("agent_call", agent_call.agent_call_id, agent_call)
+    registry.require(
+        "gate_result", agent_call_gate_result.gate_result_id, agent_call_gate_result
+    )
+    registry.require(
+        "assessment_candidate", candidate.assessment_candidate_id, candidate
+    )
+    registry.require("prompt_version", agent_call.prompt_version_id)
+    registry.require("model_config", agent_call.model_config_id)
+    subject = registry.require("subject", candidate.subject_id)
+    episode = registry.require("review_episode", candidate.review_episode_id)
+    snapshot = registry.require("evidence_snapshot", candidate.evidence_snapshot_id)
+    review_run = registry.require("review_run", candidate.review_run_id)
+    if (
+        subject.project_id != candidate.project_id
+        or episode.subject_id != candidate.subject_id
+        or episode.rule_set_id != candidate.rule_set_id
+        or episode.rule_set_revision != candidate.rule_set_revision
+        or episode.evidence_snapshot_id != candidate.evidence_snapshot_id
+        or snapshot.subject_id != candidate.subject_id
+        or snapshot.review_episode_id != candidate.review_episode_id
+        or review_run.review_episode_id != candidate.review_episode_id
+        or review_run.evidence_snapshot_id != candidate.evidence_snapshot_id
+    ):
+        raise AssessmentGateError(
+            "AssessmentCandidate 未绑定服务端登记的受试者、审核节点、运行和证据快照"
+        )
     require_accepted_agent_call(agent_call, agent_call_gate_result)
     if agent_call.typed_output_hashes.get(
         candidate.assessment_candidate_id
@@ -445,6 +473,7 @@ def publish_assessment(
         agent_call_gate_result=agent_call_gate_result,
         gate_result_id=candidate_gate_result.gate_result_id,
         created_at=candidate_gate_result.created_at,
+        registry=registry,
     )
     if candidate_gate_result != expected_candidate_gate:
         raise AssessmentGateError("AssessmentCandidate Gate 未通过精确重算")
@@ -503,6 +532,7 @@ def publish_assessment(
         candidate=evidence_candidate,
         agent_call=evidence_agent_call,
         agent_call_gate_result=evidence_agent_call_gate_result,
+        registry=registry,
     )
     facts = evidence_candidate.clinical_fact_candidates
     evidence_spans = evidence_candidate.evidence_span_candidates
@@ -637,6 +667,16 @@ def validate_assessment_publication(
     publication: AssessmentPublication,
     registry: TrustedPublicationRegistry,
 ) -> GateResult:
+    registry.require(
+        "final_assessment",
+        publication.assessment.assessment_id,
+        publication.assessment,
+    )
+    registry.require(
+        "gate_result",
+        publication.gate_result.gate_result_id,
+        publication.gate_result,
+    )
     review_context = registry.require(
         "review_context",
         publication.review_context.context_id,

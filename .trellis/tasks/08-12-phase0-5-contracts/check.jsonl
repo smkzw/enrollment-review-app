@@ -3,3 +3,5 @@
 {"file":"docs/REARCHITECTURE_FINAL_DESIGN_20260812.md","reason":"逐项核对冻结状态、Agent 和 EvidenceSpan"}
 {"file":"plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md","reason":"检查 Phase 0.5 退出门槛"}
 {"file":"docs/v2/phase0/DECISION_AND_REGRESSION_INDEX.md","reason":"检查历史错误族是否进入合同测试"}
+{"candidate":"9becd6b","checker":"019ff5fa-ccc9-7cc0-8f38-2cc489783423","round":6,"result":"REJECT","open":"Candidate/Evidence/Authority registry lookup; complete Rollup set; deterministic Action fields; clinical source and audit registry; reject extra Fixture records","status":"in_progress"}
+{"candidate":"working-tree","checker":"pending-same-checker","round":7,"result":"READY_FOR_LOCAL_ACCEPTANCE","closed":"registered Candidate/Evidence/Authority chain; complete Rollup set; deterministic Action fields; complete clinical and audit registry; reject extra Fixture records","tests":"v2 128+2; default 258/1 skipped+18; legacy 130/1 skipped; 8 generated artifacts deterministic","status":"in_progress"}

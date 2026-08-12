@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -10,7 +11,12 @@ from jsonschema.exceptions import ValidationError as JsonSchemaValidationError
 from app.domain.contracts.review import FixtureV1
 from app.domain.contracts.agent_io import AgentContractsV1
 from app.domain.contracts.uat import UatWorkspaceFixture
-from app.domain.contracts.enums import ReviewStage
+from app.domain.contracts.enums import (
+    GateOutcome,
+    ReviewStage,
+    RuntimeErrorCode,
+    UploadMode,
+)
 from app.domain.gates import (
     assessment_publication_from_fixture,
     assert_protocol_integrity,
@@ -170,7 +176,7 @@ def test_fixture_references_are_internally_consistent() -> None:
 def test_fixture_rollups_match_scenario_semantics() -> None:
     expected = {
         "barrier": "clear_barrier",
-        "clear": "no_clear_barrier",
+        "clear": "future_attention",
         "gap_conflict": "current_gap",
     }
     for path in FIXTURE_PATHS:
@@ -207,6 +213,77 @@ def test_fixture_rollups_match_scenario_semantics() -> None:
         )
         assert publication.rollup.main_status.value == expected[fixture.scenario]
         assert publication.rollup.model_dump(mode="json") == fixture.episode_rollup.model_dump(mode="json")
+
+
+def test_rollup_publication_rejects_incomplete_or_duplicate_inputs() -> None:
+    fixture = FixtureV1.model_validate(
+        load_json(next(path for path in FIXTURE_PATHS if "gap_conflict" in path.name))
+    )
+    assessment_publications = [
+        assessment_publication_from_fixture(fixture, item.assessment_id)
+        for item in fixture.final_assessments
+    ]
+    gate_by_id = {item.gate_result_id: item for item in fixture.gate_results}
+    action_publications = [
+        ActionPublication(
+            action=item,
+            gate_result=gate_by_id[item.gate_result_id],
+            assessment_publication=assessment_publication_from_fixture(
+                fixture, item.assessment_id
+            ),
+        )
+        for item in fixture.actions
+    ]
+    common = {
+        "review_episode_id": fixture.review_episode.review_episode_id,
+        "gate_result_id": "gate-rollup-adversarial",
+        "input_revision_map": {
+            fixture.review_episode.review_episode_id: fixture.review_episode.revision
+        },
+        "created_at": fixture.review_runs[0].started_at,
+        "registry": _trusted_registry_from_fixture(fixture),
+    }
+    invalid_inputs = [
+        {
+            "assessment_publications": [],
+            "expectations": fixture.evidence_expectations,
+            "action_publications": action_publications,
+        },
+        {
+            "assessment_publications": [
+                *assessment_publications,
+                assessment_publications[0],
+            ],
+            "expectations": fixture.evidence_expectations,
+            "action_publications": action_publications,
+        },
+        {
+            "assessment_publications": assessment_publications,
+            "expectations": fixture.evidence_expectations[:-1],
+            "action_publications": action_publications,
+        },
+        {
+            "assessment_publications": assessment_publications,
+            "expectations": [
+                *fixture.evidence_expectations,
+                fixture.evidence_expectations[0],
+            ],
+            "action_publications": action_publications,
+        },
+        {
+            "assessment_publications": assessment_publications,
+            "expectations": fixture.evidence_expectations,
+            "action_publications": action_publications[:-1],
+        },
+        {
+            "assessment_publications": assessment_publications,
+            "expectations": fixture.evidence_expectations,
+            "action_publications": [*action_publications, action_publications[0]],
+        },
+    ]
+    for invalid in invalid_inputs:
+        with pytest.raises(ValueError):
+            publish_episode_rollup(**common, **invalid)
 
 
 def test_openapi_refs_target_existing_components() -> None:
@@ -439,21 +516,158 @@ def test_protocol_integrity_gate_rejects_tampered_stored_closure() -> None:
         )
 
 
+def test_protocol_integrity_binds_full_authority_gate_payload() -> None:
+    fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
+    gate_by_id = {item.gate_result_id: item for item in fixture.gate_results}
+    authority_gate = gate_by_id[
+        fixture.project.protocol_version.authority_gate_result_id
+    ]
+    changed_authority_gate = authority_gate.model_copy(
+        update={"created_at": authority_gate.created_at + timedelta(seconds=1)}
+    )
+    changed_gates = [
+        changed_authority_gate
+        if item.gate_result_id == changed_authority_gate.gate_result_id
+        else item
+        for item in fixture.gate_results
+    ]
+    changed_fixture = fixture.model_copy(update={"gate_results": changed_gates})
+    stored_integrity_gate = gate_by_id[
+        fixture.project.protocol_version.integrity_gate_result_id
+    ]
+    with pytest.raises(ValueError, match="闭包无效"):
+        require_protocol_integrity_acceptance(
+            stored_integrity_gate,
+            rule_set=fixture.rule_set,
+            workflow_stages=fixture.workflow_stages,
+            protocol_version=fixture.project.protocol_version,
+            manifest=fixture.protocol_integrity_manifest,
+            authority_record=fixture.protocol_authority_record,
+            authority_confirmation=fixture.protocol_authority_confirmation,
+            authority_gate_result=changed_authority_gate,
+            registry=_trusted_registry_from_fixture(changed_fixture),
+        )
+
+
+def test_fixture_scope_rejects_same_id_registered_entity_replacements() -> None:
+    fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
+    registry = _trusted_registry_from_fixture(fixture)
+    invalid_fixtures = [
+        fixture.model_copy(
+            update={
+                "subject": fixture.subject.model_copy(
+                    update={"subject_code": "被替换的受试者编号"}
+                )
+            }
+        ),
+        fixture.model_copy(
+            update={
+                "evidence_snapshot": fixture.evidence_snapshot.model_copy(
+                    update={"upload_mode": UploadMode.INCREMENTAL}
+                )
+            }
+        ),
+        fixture.model_copy(
+            update={
+                "review_runs": [
+                    fixture.review_runs[0].model_copy(
+                        update={
+                            "started_at": fixture.review_runs[0].started_at
+                            + timedelta(seconds=1)
+                        }
+                    )
+                ]
+            }
+        ),
+        fixture.model_copy(
+            update={
+                "prompt_versions": [
+                    fixture.prompt_versions[0].model_copy(
+                        update={"template_sha256": "f" * 64}
+                    ),
+                    *fixture.prompt_versions[1:],
+                ]
+            }
+        ),
+        fixture.model_copy(
+            update={
+                "model_configs": [
+                    fixture.model_configs[0].model_copy(
+                        update={"model": "被替换的模型配置"}
+                    ),
+                    *fixture.model_configs[1:],
+                ]
+            }
+        ),
+        fixture.model_copy(
+            update={
+                "source_documents": [
+                    fixture.source_documents[0].model_copy(
+                        update={"sha256": "f" * 64}
+                    )
+                ]
+            }
+        ),
+    ]
+    for invalid_fixture in invalid_fixtures:
+        with pytest.raises(ValueError, match="已登记版本不一致"):
+            validate_fixture_scope(invalid_fixture, registry)
+
+
+def test_fixture_scope_rejects_extra_unregistered_calls_and_gates() -> None:
+    fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
+    registry = _trusted_registry_from_fixture(fixture)
+    source_call = fixture.agent_calls[0]
+    extra_call = source_call.model_copy(
+        update={
+            "agent_call_id": "call-extra-unregistered",
+            "gate_result_ids": ["gate-extra-unregistered"],
+        }
+    )
+    source_gate = fixture.gate_results[0]
+    extra_gate = source_gate.model_copy(
+        update={
+            "gate_result_id": "gate-extra-unregistered",
+            "input_entity_refs": ["call-extra-unregistered"],
+            "accepted_entity_refs": ["call-extra-unregistered"],
+        }
+    )
+    with pytest.raises(ValueError, match="未找到服务端已登记的 agent_call"):
+        validate_fixture_scope(
+            fixture.model_copy(
+                update={"agent_calls": [*fixture.agent_calls, extra_call]}
+            ),
+            registry,
+        )
+    with pytest.raises(ValueError, match="未找到服务端已登记的 gate_result"):
+        validate_fixture_scope(
+            fixture.model_copy(
+                update={"gate_results": [*fixture.gate_results, extra_gate]}
+            ),
+            registry,
+        )
+
+
 def test_stage_isolation_gate_rejects_cross_project_episode() -> None:
     fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
     registry = _trusted_registry_from_fixture(fixture)
     invalid_episode = fixture.review_episode.model_copy(update={"project_id": "project-other"})
     invalid_fixture = fixture.model_copy(update={"review_episode": invalid_episode})
-    with pytest.raises(ValueError, match="project_id"):
+    with pytest.raises(ValueError, match="review_episode 与服务端已登记版本不一致"):
         validate_fixture_scope(invalid_fixture, registry)
 
 
 def test_stage_isolation_gate_rejects_future_stage_source() -> None:
     fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
     registry = _trusted_registry_from_fixture(fixture)
-    future_document = fixture.source_documents[0].model_copy(update={"review_stage": "baseline"})
+    future_document = fixture.source_documents[0].model_copy(
+        update={"review_stage": ReviewStage.BASELINE}
+    )
     invalid_fixture = fixture.model_copy(update={"source_documents": [future_document]})
-    with pytest.raises(ValueError, match="未来阶段"):
+    with pytest.raises(
+        ValueError,
+        match="source_document_version 与服务端已登记版本不一致",
+    ):
         validate_fixture_scope(invalid_fixture, registry)
 
 
@@ -476,17 +690,17 @@ def test_stage_isolation_rejects_cross_subject_fact_and_rejected_publication_gat
         if gate.gate_result_id == assessment.gate_result_id
     ).model_copy(
         update={
-            "result": "rejected",
+            "result": GateOutcome.REJECTED,
             "accepted_entity_refs": [],
             "rejected_entity_refs": [assessment.assessment_id],
-            "error_codes": ["synthetic_rejection"],
+            "error_codes": [RuntimeErrorCode.SYNTHETIC_REJECTION],
         }
     )
     gates = [
         rejected if gate.gate_result_id == rejected.gate_result_id else gate
         for gate in fixture.gate_results
     ]
-    with pytest.raises(ValueError, match="FinalAssessment 未通过"):
+    with pytest.raises(ValueError, match="gate_result 与服务端已登记版本不一致"):
         validate_fixture_scope(
             fixture.model_copy(update={"gate_results": gates}), registry
         )

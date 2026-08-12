@@ -131,12 +131,25 @@ def _trusted_registry_from_fixture(fixture: FixtureV1):
         gate_results=fixture.gate_results,
         evidence_candidates=fixture.evidence_normalization_candidates,
         assessment_candidates=fixture.assessment_candidates,
+        final_assessments=fixture.final_assessments,
+        action_requests=fixture.actions,
         rule_sets=[fixture.rule_set],
         review_contexts=contexts,
+        projects=[fixture.project],
+        subjects=[fixture.subject],
+        review_episodes=[fixture.review_episode],
+        evidence_snapshots=[fixture.evidence_snapshot],
+        review_runs=fixture.review_runs,
+        source_document_versions=fixture.source_documents,
+        evidence_expectations=fixture.evidence_expectations,
+        prompt_versions=fixture.prompt_versions,
+        model_configs=fixture.model_configs,
         protocol_authority_records=[fixture.protocol_authority_record],
         protocol_authority_confirmations=[fixture.protocol_authority_confirmation],
         service_command_events=[fixture.protocol_authority_command],
         protocol_source_records=fixture.protocol_source_records,
+        protocol_integrity_manifests=[fixture.protocol_integrity_manifest],
+        workflow_stages=fixture.workflow_stages,
         protocol_integrity_bindings={
             fixture.project.protocol_version.integrity_gate_result_id: canonical_hash(
                 fixture.rule_set.model_dump(mode="json")
@@ -368,6 +381,9 @@ def assert_protocol_integrity(
     authority_gate_result: GateResult,
     registry,
 ) -> None:
+    registry.require(
+        "gate_result", authority_gate_result.gate_result_id, authority_gate_result
+    )
     _require_authority_confirmation(
         authority_record, authority_confirmation, registry=registry
     )
@@ -463,7 +479,7 @@ def publish_protocol_integrity_acceptance(
         "manifest": manifest.model_dump(mode="json"),
         "authority_record": authority_record.model_dump(mode="json"),
         "authority_confirmation": authority_confirmation.model_dump(mode="json"),
-        "authority_gate_result_id": authority_gate_result.gate_result_id,
+        "authority_gate_result": authority_gate_result.model_dump(mode="json"),
     }
     return GateResult(
         gate_result_id=gate_result_id,
@@ -592,6 +608,58 @@ def validate_fixture_scope(fixture: FixtureV1, registry) -> None:
     episode = fixture.review_episode
     snapshot = fixture.evidence_snapshot
     protocol_id = project.protocol_version.protocol_version_id
+    registry.require("project", project.project_id, project)
+    registry.require("subject", fixture.subject.subject_id, fixture.subject)
+    registry.require(
+        "review_episode", fixture.review_episode.review_episode_id, fixture.review_episode
+    )
+    registry.require(
+        "evidence_snapshot",
+        fixture.evidence_snapshot.evidence_snapshot_id,
+        fixture.evidence_snapshot,
+    )
+    registry.require("rule_set", fixture.rule_set.rule_set_id, fixture.rule_set)
+    registry.require(
+        "protocol_integrity_manifest",
+        fixture.protocol_integrity_manifest.manifest_id,
+        fixture.protocol_integrity_manifest,
+    )
+    for workflow_stage in fixture.workflow_stages:
+        registry.require(
+            "workflow_stage", workflow_stage.workflow_stage_id, workflow_stage
+        )
+    for prompt_version in fixture.prompt_versions:
+        registry.require(
+            "prompt_version", prompt_version.prompt_version_id, prompt_version
+        )
+    for model_config in fixture.model_configs:
+        registry.require("model_config", model_config.model_config_id, model_config)
+    for review_run in fixture.review_runs:
+        registry.require("review_run", review_run.review_run_id, review_run)
+    for source_document in fixture.source_documents:
+        registry.require(
+            "source_document_version",
+            source_document.source_document_version_id,
+            source_document,
+        )
+    for expectation in fixture.evidence_expectations:
+        registry.require(
+            "evidence_expectation", expectation.expectation_id, expectation
+        )
+    for candidate in fixture.evidence_normalization_candidates:
+        registry.require("evidence_candidate", candidate.candidate_id, candidate)
+    for candidate in fixture.assessment_candidates:
+        registry.require(
+            "assessment_candidate", candidate.assessment_candidate_id, candidate
+        )
+    for assessment in fixture.final_assessments:
+        registry.require("final_assessment", assessment.assessment_id, assessment)
+    for action in fixture.actions:
+        registry.require("action_request", action.action_id, action)
+    for call in fixture.agent_calls:
+        registry.require("agent_call", call.agent_call_id, call)
+    for gate in fixture.gate_results:
+        registry.require("gate_result", gate.gate_result_id, gate)
     authority_gate_result = next(
         (
             item
@@ -804,6 +872,7 @@ def validate_fixture_scope(fixture: FixtureV1, registry) -> None:
                     candidate=candidate,
                     agent_call=call,
                     agent_call_gate_result=_agent_schema_gate(fixture, call),
+                    registry=registry,
                 )
         except ValueError as exc:
             raise StageIsolationError(str(exc)) from exc

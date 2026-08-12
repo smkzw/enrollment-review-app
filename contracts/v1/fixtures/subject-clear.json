@@ -1,21 +1,21 @@
 {
   "actions": [
     {
-      "acceptable_evidence": "来源链接或核对记录。",
+      "acceptable_evidence": "原始来源，或具名、具日期的溯源核对记录。",
       "action_id": "action-clear-provenance",
-      "assessment_id": "assessment-clear-ex",
+      "assessment_id": "assessment-clear-ex-01",
       "blocking_level": "none",
-      "due_stage": "baseline",
+      "due_stage": "screening",
       "evidence_snapshot_id": "snapshot-clear",
       "gap_type": "provenance_followup",
       "gate_result_id": "gate-action-clear-provenance",
       "project_id": "project-synthetic-phase-iii",
       "protocol_version_id": "protocol-v1",
-      "publication_fingerprint": "ca0c6017b86b31023d52da677ccebe1e51c55243c8fbd98c42e9135613c60b70",
+      "publication_fingerprint": "accbba4f53175762a249a6933deb7f1e06a28c2046269a527fd890f15a5cb1d0",
       "recompute_scope": [
         "component-ex-01"
       ],
-      "requested_action": "在后续阶段核对阳性既往史转述来源。",
+      "requested_action": "核对当前病历转述所依据的原始来源。",
       "review_episode_id": "episode-clear",
       "review_run_id": "run-clear",
       "revision": 1,
@@ -28,6 +28,35 @@
       "target_party": "cra",
       "transitions": [],
       "trigger_evidence_span_id": "span-clear-history"
+    },
+    {
+      "acceptable_evidence": "对应审核节点的日期锚点及完整评估记录。",
+      "action_id": "action-clear-future",
+      "assessment_id": "assessment-clear-ex-03",
+      "blocking_level": "attention",
+      "due_stage": "baseline",
+      "evidence_snapshot_id": "snapshot-clear",
+      "gap_type": "future_stage_not_due",
+      "gate_result_id": "gate-action-clear-future",
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "publication_fingerprint": "587e880ff7f211af6694cb53fdfce995eafdf3d4832289d3713ce1636744c1f8",
+      "recompute_scope": [
+        "component-ex-03"
+      ],
+      "requested_action": "在本条要求到期的后续审核节点完成评估。",
+      "review_episode_id": "episode-clear",
+      "review_run_id": "run-clear",
+      "revision": 1,
+      "rule_component_id": "component-ex-03",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "state": "open",
+      "subject_id": "subject-clear",
+      "target_party": "investigator",
+      "transitions": [],
+      "trigger_evidence_span_id": null
     }
   ],
   "agent_calls": [
@@ -52,7 +81,7 @@
       "model_config_id": "model-baseline-v1",
       "node": "evidence_normalizer",
       "outcome": "accepted",
-      "output_hash": "9cf28953b661fa9711900c4c53af2ffc4127b9c09aa3906dd3abed7d0e31dc32",
+      "output_hash": "b9e9ca91b1a215af5a919db56712cd1c2f06542e6c1c802acc7028a24bbf961b",
       "output_kind": "candidate",
       "output_tokens": 51,
       "parent_event_id": null,
@@ -76,7 +105,7 @@
       "subject_id": "subject-clear",
       "trigger": "fixture_generation",
       "typed_output_hashes": {
-        "evidence-candidate-episode-clear": "f702741fbeaf42c87e1b1ca4daa99247b4a49425d05db19fa38b80bb2fb52117"
+        "evidence-candidate-episode-clear": "4e9dec7cad98a13a68c071bd50083972cdd731852d6793fc12e5f5411290a9dd"
       },
       "write_scope": "evidence_candidate"
     },
@@ -101,7 +130,7 @@
       "model_config_id": "model-baseline-v1",
       "node": "eligibility_assessor",
       "outcome": "accepted",
-      "output_hash": "3e37d19f8a26e1087972c13f395b1a699a8efcec7b86f7580431a6c29bb8a232",
+      "output_hash": "b0fdc9b84f4563bd82da21556e27caef06e61a3ac67884b635e8ed9ab2a0b295",
       "output_kind": "candidate",
       "output_tokens": 52,
       "parent_event_id": null,
@@ -126,7 +155,12 @@
       "trigger": "fixture_generation",
       "typed_output_hashes": {
         "candidate-clear-ex": "82fea84c41d9d69612cb9536a14f6a360fc2c67a9a9507d90cb1aafb6f48788e",
-        "candidate-clear-in": "f806e3de4c3beca4d3a56a450f2c69eded04618a59db8d7488549bdb5ff2c4af"
+        "candidate-clear-ex-02": "156c374c6cef41613cff8d2d44b2f8f5acc8393235bb98d9e515dd52873071ac",
+        "candidate-clear-ex-04": "4e0282527a7640922959b272dd9976643ae635549899e4d54a0e09f04126ea34",
+        "candidate-clear-future": "73ffcfa16035ba6ddadb0174f17853f439f7943279f990585aa893f5bd82c534",
+        "candidate-clear-in": "f806e3de4c3beca4d3a56a450f2c69eded04618a59db8d7488549bdb5ff2c4af",
+        "candidate-clear-req-01": "e454657cf641b48e4cc33ab93575bc087bb7e5eaca8938df7d8181ed53e66dfd",
+        "candidate-clear-req-02": "926d2c80d5c0bb7b3dd36b408f7dcd2877565633a4ccd5d126cee9a07dfd8219"
       },
       "write_scope": "assessment_candidate"
     }
@@ -304,6 +338,243 @@
       "used_fact_ids": [
         "fact-clear-risk"
       ]
+    },
+    {
+      "agent_call_id": "call-clear-2",
+      "assessment_candidate_id": "candidate-clear-ex-02",
+      "candidate_confidence": 0.9,
+      "candidate_rationale": "当前资料能够支持该组件的确定性判断。",
+      "evidence_snapshot_id": "snapshot-clear",
+      "evidence_span_ids": [
+        "span-clear-history"
+      ],
+      "gap_types": [],
+      "missing_predicate_ids": [],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [
+            "span-clear-history"
+          ],
+          "fact_ids": [
+            "fact-clear-ex-02"
+          ],
+          "observed_unit": null,
+          "observed_value": false,
+          "predicate_id": "predicate-investigator-rule_specific_judgment-eq",
+          "reason_codes": [],
+          "schema_version": "fixture/v1",
+          "truth": "false"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-investigator-rule_specific_judgment-eq"
+      ],
+      "project_id": "project-synthetic-phase-iii",
+      "proposed_decision": "exclusion_not_triggered",
+      "protocol_version_id": "protocol-v1",
+      "reason_codes": [],
+      "review_episode_id": "episode-clear",
+      "review_run_id": "run-clear",
+      "rule_component_id": "component-ex-02",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-clear",
+      "uncertainty_codes": [],
+      "unresolved_items": [],
+      "used_fact_ids": [
+        "fact-clear-ex-02"
+      ]
+    },
+    {
+      "agent_call_id": "call-clear-2",
+      "assessment_candidate_id": "candidate-clear-ex-04",
+      "candidate_confidence": 0.9,
+      "candidate_rationale": "当前资料能够支持该组件的确定性判断。",
+      "evidence_snapshot_id": "snapshot-clear",
+      "evidence_span_ids": [
+        "span-clear-history"
+      ],
+      "gap_types": [],
+      "missing_predicate_ids": [],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [
+            "span-clear-history"
+          ],
+          "fact_ids": [
+            "fact-clear-ex-04"
+          ],
+          "observed_unit": null,
+          "observed_value": false,
+          "predicate_id": "predicate-history-referenced_document-eq",
+          "reason_codes": [],
+          "schema_version": "fixture/v1",
+          "truth": "false"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-history-referenced_document-eq"
+      ],
+      "project_id": "project-synthetic-phase-iii",
+      "proposed_decision": "exclusion_not_triggered",
+      "protocol_version_id": "protocol-v1",
+      "reason_codes": [],
+      "review_episode_id": "episode-clear",
+      "review_run_id": "run-clear",
+      "rule_component_id": "component-ex-04",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-clear",
+      "uncertainty_codes": [],
+      "unresolved_items": [],
+      "used_fact_ids": [
+        "fact-clear-ex-04"
+      ]
+    },
+    {
+      "agent_call_id": "call-clear-2",
+      "assessment_candidate_id": "candidate-clear-req-01",
+      "candidate_confidence": 0.9,
+      "candidate_rationale": "当前资料能够支持该组件的确定性判断。",
+      "evidence_snapshot_id": "snapshot-clear",
+      "evidence_span_ids": [
+        "span-clear-history"
+      ],
+      "gap_types": [],
+      "missing_predicate_ids": [],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [
+            "span-clear-history"
+          ],
+          "fact_ids": [
+            "fact-clear-req-01"
+          ],
+          "observed_unit": null,
+          "observed_value": true,
+          "predicate_id": "predicate-procedure-required_completed-eq",
+          "reason_codes": [],
+          "schema_version": "fixture/v1",
+          "truth": "true"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-procedure-required_completed-eq"
+      ],
+      "project_id": "project-synthetic-phase-iii",
+      "proposed_decision": "requirement_met",
+      "protocol_version_id": "protocol-v1",
+      "reason_codes": [],
+      "review_episode_id": "episode-clear",
+      "review_run_id": "run-clear",
+      "rule_component_id": "component-req-01",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-clear",
+      "uncertainty_codes": [],
+      "unresolved_items": [],
+      "used_fact_ids": [
+        "fact-clear-req-01"
+      ]
+    },
+    {
+      "agent_call_id": "call-clear-2",
+      "assessment_candidate_id": "candidate-clear-req-02",
+      "candidate_confidence": 0.9,
+      "candidate_rationale": "当前资料能够支持该组件的确定性判断。",
+      "evidence_snapshot_id": "snapshot-clear",
+      "evidence_span_ids": [
+        "span-clear-history"
+      ],
+      "gap_types": [],
+      "missing_predicate_ids": [],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [
+            "span-clear-history"
+          ],
+          "fact_ids": [
+            "fact-clear-req-02"
+          ],
+          "observed_unit": null,
+          "observed_value": true,
+          "predicate_id": "predicate-laboratory-required_fields_complete-eq",
+          "reason_codes": [],
+          "schema_version": "fixture/v1",
+          "truth": "true"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-laboratory-required_fields_complete-eq"
+      ],
+      "project_id": "project-synthetic-phase-iii",
+      "proposed_decision": "requirement_met",
+      "protocol_version_id": "protocol-v1",
+      "reason_codes": [],
+      "review_episode_id": "episode-clear",
+      "review_run_id": "run-clear",
+      "rule_component_id": "component-req-02",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-clear",
+      "uncertainty_codes": [],
+      "unresolved_items": [],
+      "used_fact_ids": [
+        "fact-clear-req-02"
+      ]
+    },
+    {
+      "agent_call_id": "call-clear-2",
+      "assessment_candidate_id": "candidate-clear-future",
+      "candidate_confidence": 0.9,
+      "candidate_rationale": "该组件在基线审核节点到期。",
+      "evidence_snapshot_id": "snapshot-clear",
+      "evidence_span_ids": [],
+      "gap_types": [
+        "future_stage_not_due"
+      ],
+      "missing_predicate_ids": [
+        "predicate-baseline-future_assessment-eq"
+      ],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [],
+          "fact_ids": [],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-baseline-future_assessment-eq",
+          "reason_codes": [
+            "fact_not_observed"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-baseline-future_assessment-eq"
+      ],
+      "project_id": "project-synthetic-phase-iii",
+      "proposed_decision": "not_due",
+      "protocol_version_id": "protocol-v1",
+      "reason_codes": [
+        "fact_not_observed"
+      ],
+      "review_episode_id": "episode-clear",
+      "review_run_id": "run-clear",
+      "rule_component_id": "component-ex-03",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-clear",
+      "uncertainty_codes": [
+        "fact_not_observed"
+      ],
+      "unresolved_items": [],
+      "used_fact_ids": []
     }
   ],
   "conflict_groups": [],
@@ -311,29 +582,41 @@
     "barrier_count": 0,
     "conflict_count": 0,
     "current_gap_count": 0,
-    "future_attention_count": 0,
+    "future_attention_count": 2,
     "gap_counts": {
+      "future_stage_not_due": 2,
       "provenance_followup": 2
     },
     "gate_result_id": "gate-rollup-clear",
     "input_action_ids": [
-      "action-clear-provenance"
+      "action-clear-provenance",
+      "action-clear-future"
     ],
     "input_assessment_ids": [
-      "assessment-clear-in",
-      "assessment-clear-ex"
+      "assessment-clear-in-01",
+      "assessment-clear-ex-01",
+      "assessment-clear-ex-02",
+      "assessment-clear-ex-04",
+      "assessment-clear-req-01",
+      "assessment-clear-req-02",
+      "assessment-clear-ex-03"
     ],
     "input_expectation_ids": [
       "expectation-clear-age",
-      "expectation-clear-history"
+      "expectation-clear-history",
+      "expectation-clear-ex-02",
+      "expectation-clear-ex-04",
+      "expectation-clear-req-01",
+      "expectation-clear-req-02",
+      "expectation-clear-future"
     ],
-    "main_status": "no_clear_barrier",
+    "main_status": "future_attention",
     "professional_judgment_count": 0,
     "provenance_followup_count": 1,
-    "publication_fingerprint": "9b7ad786f7ac40e8556d8303bc28df882626b5378acf54b19fe2273bcfbb712e",
+    "publication_fingerprint": "69d80846dd98b7abbd0b9adfddfd7eb4aa00d3f0a74cf5a44930dea932fa10c7",
     "review_episode_id": "episode-clear",
     "schema_version": "fixture/v1",
-    "sort_rank": 5
+    "sort_rank": 4
   },
   "evidence_expectations": [
     {
@@ -357,6 +640,59 @@
       "review_episode_id": "episode-clear",
       "schema_version": "fixture/v1",
       "status": "observed_weak"
+    },
+    {
+      "evidence_span_ids": [
+        "span-clear-history"
+      ],
+      "expectation_id": "expectation-clear-ex-02",
+      "gap_type": null,
+      "requirement_id": "req-professional",
+      "review_episode_id": "episode-clear",
+      "schema_version": "fixture/v1",
+      "status": "observed"
+    },
+    {
+      "evidence_span_ids": [
+        "span-clear-history"
+      ],
+      "expectation_id": "expectation-clear-ex-04",
+      "gap_type": null,
+      "requirement_id": "req-referenced",
+      "review_episode_id": "episode-clear",
+      "schema_version": "fixture/v1",
+      "status": "observed"
+    },
+    {
+      "evidence_span_ids": [
+        "span-clear-history"
+      ],
+      "expectation_id": "expectation-clear-req-01",
+      "gap_type": null,
+      "requirement_id": "req-procedure",
+      "review_episode_id": "episode-clear",
+      "schema_version": "fixture/v1",
+      "status": "observed"
+    },
+    {
+      "evidence_span_ids": [
+        "span-clear-history"
+      ],
+      "expectation_id": "expectation-clear-req-02",
+      "gap_type": null,
+      "requirement_id": "req-result-fields",
+      "review_episode_id": "episode-clear",
+      "schema_version": "fixture/v1",
+      "status": "observed"
+    },
+    {
+      "evidence_span_ids": [],
+      "expectation_id": "expectation-clear-future",
+      "gap_type": "future_stage_not_due",
+      "requirement_id": "req-future",
+      "review_episode_id": "episode-clear",
+      "schema_version": "fixture/v1",
+      "status": "not_due"
     }
   ],
   "evidence_normalization_candidates": [
@@ -393,6 +729,78 @@
           "fact_id": "fact-clear-risk",
           "fact_type": "investigator.unacceptable_participation_risk",
           "polarity": "negated",
+          "project_id": "project-synthetic-phase-iii",
+          "review_episode_id": "episode-clear",
+          "schema_version": "fixture/v1",
+          "subject_id": "subject-clear",
+          "unit": null,
+          "value": true
+        },
+        {
+          "certainty": 1.0,
+          "conflict_group_id": null,
+          "effective_date": null,
+          "evidence_snapshot_id": "snapshot-clear",
+          "evidence_span_ids": [
+            "span-clear-history"
+          ],
+          "fact_id": "fact-clear-ex-02",
+          "fact_type": "investigator.rule_specific_judgment",
+          "polarity": "affirmed",
+          "project_id": "project-synthetic-phase-iii",
+          "review_episode_id": "episode-clear",
+          "schema_version": "fixture/v1",
+          "subject_id": "subject-clear",
+          "unit": null,
+          "value": false
+        },
+        {
+          "certainty": 1.0,
+          "conflict_group_id": null,
+          "effective_date": null,
+          "evidence_snapshot_id": "snapshot-clear",
+          "evidence_span_ids": [
+            "span-clear-history"
+          ],
+          "fact_id": "fact-clear-ex-04",
+          "fact_type": "history.referenced_document",
+          "polarity": "affirmed",
+          "project_id": "project-synthetic-phase-iii",
+          "review_episode_id": "episode-clear",
+          "schema_version": "fixture/v1",
+          "subject_id": "subject-clear",
+          "unit": null,
+          "value": false
+        },
+        {
+          "certainty": 1.0,
+          "conflict_group_id": null,
+          "effective_date": null,
+          "evidence_snapshot_id": "snapshot-clear",
+          "evidence_span_ids": [
+            "span-clear-history"
+          ],
+          "fact_id": "fact-clear-req-01",
+          "fact_type": "procedure.required_completed",
+          "polarity": "affirmed",
+          "project_id": "project-synthetic-phase-iii",
+          "review_episode_id": "episode-clear",
+          "schema_version": "fixture/v1",
+          "subject_id": "subject-clear",
+          "unit": null,
+          "value": true
+        },
+        {
+          "certainty": 1.0,
+          "conflict_group_id": null,
+          "effective_date": null,
+          "evidence_snapshot_id": "snapshot-clear",
+          "evidence_span_ids": [
+            "span-clear-history"
+          ],
+          "fact_id": "fact-clear-req-02",
+          "fact_type": "laboratory.required_fields_complete",
+          "polarity": "affirmed",
           "project_id": "project-synthetic-phase-iii",
           "review_episode_id": "episode-clear",
           "schema_version": "fixture/v1",
@@ -548,11 +956,83 @@
       "subject_id": "subject-clear",
       "unit": null,
       "value": true
+    },
+    {
+      "certainty": 1.0,
+      "conflict_group_id": null,
+      "effective_date": null,
+      "evidence_snapshot_id": "snapshot-clear",
+      "evidence_span_ids": [
+        "span-clear-history"
+      ],
+      "fact_id": "fact-clear-ex-02",
+      "fact_type": "investigator.rule_specific_judgment",
+      "polarity": "affirmed",
+      "project_id": "project-synthetic-phase-iii",
+      "review_episode_id": "episode-clear",
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-clear",
+      "unit": null,
+      "value": false
+    },
+    {
+      "certainty": 1.0,
+      "conflict_group_id": null,
+      "effective_date": null,
+      "evidence_snapshot_id": "snapshot-clear",
+      "evidence_span_ids": [
+        "span-clear-history"
+      ],
+      "fact_id": "fact-clear-ex-04",
+      "fact_type": "history.referenced_document",
+      "polarity": "affirmed",
+      "project_id": "project-synthetic-phase-iii",
+      "review_episode_id": "episode-clear",
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-clear",
+      "unit": null,
+      "value": false
+    },
+    {
+      "certainty": 1.0,
+      "conflict_group_id": null,
+      "effective_date": null,
+      "evidence_snapshot_id": "snapshot-clear",
+      "evidence_span_ids": [
+        "span-clear-history"
+      ],
+      "fact_id": "fact-clear-req-01",
+      "fact_type": "procedure.required_completed",
+      "polarity": "affirmed",
+      "project_id": "project-synthetic-phase-iii",
+      "review_episode_id": "episode-clear",
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-clear",
+      "unit": null,
+      "value": true
+    },
+    {
+      "certainty": 1.0,
+      "conflict_group_id": null,
+      "effective_date": null,
+      "evidence_snapshot_id": "snapshot-clear",
+      "evidence_span_ids": [
+        "span-clear-history"
+      ],
+      "fact_id": "fact-clear-req-02",
+      "fact_type": "laboratory.required_fields_complete",
+      "polarity": "affirmed",
+      "project_id": "project-synthetic-phase-iii",
+      "review_episode_id": "episode-clear",
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-clear",
+      "unit": null,
+      "value": true
     }
   ],
   "final_assessments": [
     {
-      "assessment_id": "assessment-clear-in",
+      "assessment_id": "assessment-clear-in-01",
       "blocking_level": "none",
       "decision": "inclusion_met",
       "evidence_snapshot_id": "snapshot-clear",
@@ -560,10 +1040,10 @@
         "span-clear-age"
       ],
       "gap_types": [],
-      "gate_result_id": "gate-clear-in",
+      "gate_result_id": "gate-clear-in-01",
       "project_id": "project-synthetic-phase-iii",
       "protocol_version_id": "protocol-v1",
-      "publication_fingerprint": "0f2779cba2700995918eddeef1b4d7f3ebc3f4c201371a69969f025de94ac18b",
+      "publication_fingerprint": "661c36a2ce1f7734d7af4e87581d2760360f4fc9700e6deacbc35955f03bb0f0",
       "review_episode_id": "episode-clear",
       "review_run_id": "run-clear",
       "rule_component_id": "component-in-01",
@@ -576,7 +1056,7 @@
       ]
     },
     {
-      "assessment_id": "assessment-clear-ex",
+      "assessment_id": "assessment-clear-ex-01",
       "blocking_level": "attention",
       "decision": "exclusion_not_triggered",
       "evidence_snapshot_id": "snapshot-clear",
@@ -586,10 +1066,10 @@
       "gap_types": [
         "provenance_followup"
       ],
-      "gate_result_id": "gate-clear-ex",
+      "gate_result_id": "gate-clear-ex-01",
       "project_id": "project-synthetic-phase-iii",
       "protocol_version_id": "protocol-v1",
-      "publication_fingerprint": "aaeadda419561f34dd5fd10f8b31bd52310ed212a8a09f0d88546703410ce20f",
+      "publication_fingerprint": "3bf95fd28607e278eb80dc2d76979ce9761b54ca83f636aabddb25bd7649394f",
       "review_episode_id": "episode-clear",
       "review_run_id": "run-clear",
       "rule_component_id": "component-ex-01",
@@ -600,6 +1080,124 @@
       "used_fact_ids": [
         "fact-clear-risk"
       ]
+    },
+    {
+      "assessment_id": "assessment-clear-ex-02",
+      "blocking_level": "none",
+      "decision": "exclusion_not_triggered",
+      "evidence_snapshot_id": "snapshot-clear",
+      "evidence_span_ids": [
+        "span-clear-history"
+      ],
+      "gap_types": [],
+      "gate_result_id": "gate-clear-ex-02",
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "publication_fingerprint": "56f897210c7cfbbd7dd0be9944a1e70d0f57384ed123e5dbead828a37d31f39d",
+      "review_episode_id": "episode-clear",
+      "review_run_id": "run-clear",
+      "rule_component_id": "component-ex-02",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-clear",
+      "used_fact_ids": [
+        "fact-clear-ex-02"
+      ]
+    },
+    {
+      "assessment_id": "assessment-clear-ex-04",
+      "blocking_level": "none",
+      "decision": "exclusion_not_triggered",
+      "evidence_snapshot_id": "snapshot-clear",
+      "evidence_span_ids": [
+        "span-clear-history"
+      ],
+      "gap_types": [],
+      "gate_result_id": "gate-clear-ex-04",
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "publication_fingerprint": "e168c18cff6ee66aa12d16cedb7314f950fe85d7832db37be369a22e65f65711",
+      "review_episode_id": "episode-clear",
+      "review_run_id": "run-clear",
+      "rule_component_id": "component-ex-04",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-clear",
+      "used_fact_ids": [
+        "fact-clear-ex-04"
+      ]
+    },
+    {
+      "assessment_id": "assessment-clear-req-01",
+      "blocking_level": "none",
+      "decision": "requirement_met",
+      "evidence_snapshot_id": "snapshot-clear",
+      "evidence_span_ids": [
+        "span-clear-history"
+      ],
+      "gap_types": [],
+      "gate_result_id": "gate-clear-req-01",
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "publication_fingerprint": "6c43a437ea246f106bbe358ac49a2826912cb918bd671791147d695bb4b5df0e",
+      "review_episode_id": "episode-clear",
+      "review_run_id": "run-clear",
+      "rule_component_id": "component-req-01",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-clear",
+      "used_fact_ids": [
+        "fact-clear-req-01"
+      ]
+    },
+    {
+      "assessment_id": "assessment-clear-req-02",
+      "blocking_level": "none",
+      "decision": "requirement_met",
+      "evidence_snapshot_id": "snapshot-clear",
+      "evidence_span_ids": [
+        "span-clear-history"
+      ],
+      "gap_types": [],
+      "gate_result_id": "gate-clear-req-02",
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "publication_fingerprint": "19bb55c0d6d42b8d4695a0efcc3bbd1ab022f9c8521a33e5354f6a1154de8aed",
+      "review_episode_id": "episode-clear",
+      "review_run_id": "run-clear",
+      "rule_component_id": "component-req-02",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-clear",
+      "used_fact_ids": [
+        "fact-clear-req-02"
+      ]
+    },
+    {
+      "assessment_id": "assessment-clear-ex-03",
+      "blocking_level": "attention",
+      "decision": "not_due",
+      "evidence_snapshot_id": "snapshot-clear",
+      "evidence_span_ids": [],
+      "gap_types": [
+        "future_stage_not_due"
+      ],
+      "gate_result_id": "gate-clear-ex-03",
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "publication_fingerprint": "8c498f385c80bce17d61b1ba602704bdbbe17ba3a7b345ff94b4df92cae26db5",
+      "review_episode_id": "episode-clear",
+      "review_run_id": "run-clear",
+      "rule_component_id": "component-ex-03",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-clear",
+      "used_fact_ids": []
     }
   ],
   "fixture_id": "fixture-clear",
@@ -624,7 +1222,7 @@
         "snapshot-clear": 1
       },
       "input_scope_hash": "1111111111111111111111111111111111111111111111111111111111111111",
-      "output_hash": "9cf28953b661fa9711900c4c53af2ffc4127b9c09aa3906dd3abed7d0e31dc32",
+      "output_hash": "b9e9ca91b1a215af5a919db56712cd1c2f06542e6c1c802acc7028a24bbf961b",
       "parent_event_id": null,
       "recompute_scope": [
         "subject-clear"
@@ -653,7 +1251,7 @@
         "snapshot-clear": 1
       },
       "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
-      "output_hash": "3e37d19f8a26e1087972c13f395b1a699a8efcec7b86f7580431a6c29bb8a232",
+      "output_hash": "b0fdc9b84f4563bd82da21556e27caef06e61a3ac67884b635e8ed9ab2a0b295",
       "parent_event_id": null,
       "recompute_scope": [
         "subject-clear"
@@ -720,8 +1318,8 @@
       "input_revision_map": {
         "ruleset-synthetic-phase-iii": 1
       },
-      "input_scope_hash": "a192af76e77f4bfddf22e309e111386597ea88ac2d7d0bbeab054e5d99fe3946",
-      "output_hash": "a192af76e77f4bfddf22e309e111386597ea88ac2d7d0bbeab054e5d99fe3946",
+      "input_scope_hash": "a9ad5c4a209027491d695ea64f400df0afc378cd3f9afbece5e269c76fe4507d",
+      "output_hash": "a9ad5c4a209027491d695ea64f400df0afc378cd3f9afbece5e269c76fe4507d",
       "parent_event_id": null,
       "recompute_scope": [
         "protocol-v1"
@@ -765,6 +1363,10 @@
         "evidence-candidate-episode-clear",
         "fact-clear-age",
         "fact-clear-risk",
+        "fact-clear-ex-02",
+        "fact-clear-ex-04",
+        "fact-clear-req-01",
+        "fact-clear-req-02",
         "span-clear-age",
         "span-clear-history"
       ],
@@ -775,7 +1377,7 @@
       "created_at": "2026-08-12T12:00:00Z",
       "error_codes": [],
       "gate_name": "evidence-acceptance-gate",
-      "gate_result_id": "gate-evidence-assessment-clear-in",
+      "gate_result_id": "gate-evidence-assessment-clear-in-01",
       "idempotency_key": "evidence:episode-clear:snapshot-clear:evidence-candidate-episode-clear",
       "input_entity_refs": [
         "call-clear-1",
@@ -784,14 +1386,18 @@
         "snapshot-clear",
         "fact-clear-age",
         "fact-clear-risk",
+        "fact-clear-ex-02",
+        "fact-clear-ex-04",
+        "fact-clear-req-01",
+        "fact-clear-req-02",
         "span-clear-age",
         "span-clear-history"
       ],
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "73c6e4e29985a99622bc70308be1195f786bbe2663b3ab7781d19f5eb3e620ef",
-      "output_hash": "73c6e4e29985a99622bc70308be1195f786bbe2663b3ab7781d19f5eb3e620ef",
+      "input_scope_hash": "fbbe6e883ca3c9266c312999c55ab371734f95bdc9a80a71b6ee616b06eaae2f",
+      "output_hash": "fbbe6e883ca3c9266c312999c55ab371734f95bdc9a80a71b6ee616b06eaae2f",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-clear"
@@ -802,7 +1408,7 @@
     },
     {
       "accepted_entity_refs": [
-        "assessment-clear-in"
+        "assessment-clear-in-01"
       ],
       "affected_scope": [
         "component-in-01"
@@ -811,13 +1417,13 @@
       "created_at": "2026-08-12T12:00:00Z",
       "error_codes": [],
       "gate_name": "assessment-publication-gate",
-      "gate_result_id": "gate-clear-in",
+      "gate_result_id": "gate-clear-in-01",
       "idempotency_key": "assessment:run-clear:component-in-01",
       "input_entity_refs": [
         "candidate-clear-in",
         "gate-candidate-clear-in",
-        "gate-evidence-assessment-clear-in",
-        "context-episode-clear-assessment-clear-in",
+        "gate-evidence-assessment-clear-in-01",
+        "context-episode-clear-assessment-clear-in-01",
         "gate-integrity-protocol-v1-phase-iii",
         "component-in-01",
         "run-clear"
@@ -825,8 +1431,8 @@
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "8068068b57e0da02489bfe08fd31ca2ca0f60f77eb782782ecb06f7af1702cd3",
-      "output_hash": "634b460cc3bf4ccd9a76decd72f31a2e34815d25ae7ee321b204d3ec7f66e11a",
+      "input_scope_hash": "34c9c48b3290358cdc3e6d56ff0c5926508f9330a0f466df885ebe4b5713e835",
+      "output_hash": "3c4df37be5b09d64901efd817132013bbad2c12cec018a26dedff5c2a79a3830",
       "parent_event_id": null,
       "recompute_scope": [
         "component-in-01"
@@ -870,6 +1476,10 @@
         "evidence-candidate-episode-clear",
         "fact-clear-age",
         "fact-clear-risk",
+        "fact-clear-ex-02",
+        "fact-clear-ex-04",
+        "fact-clear-req-01",
+        "fact-clear-req-02",
         "span-clear-age",
         "span-clear-history"
       ],
@@ -880,7 +1490,7 @@
       "created_at": "2026-08-12T12:00:00Z",
       "error_codes": [],
       "gate_name": "evidence-acceptance-gate",
-      "gate_result_id": "gate-evidence-assessment-clear-ex",
+      "gate_result_id": "gate-evidence-assessment-clear-ex-01",
       "idempotency_key": "evidence:episode-clear:snapshot-clear:evidence-candidate-episode-clear",
       "input_entity_refs": [
         "call-clear-1",
@@ -889,14 +1499,18 @@
         "snapshot-clear",
         "fact-clear-age",
         "fact-clear-risk",
+        "fact-clear-ex-02",
+        "fact-clear-ex-04",
+        "fact-clear-req-01",
+        "fact-clear-req-02",
         "span-clear-age",
         "span-clear-history"
       ],
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "73c6e4e29985a99622bc70308be1195f786bbe2663b3ab7781d19f5eb3e620ef",
-      "output_hash": "73c6e4e29985a99622bc70308be1195f786bbe2663b3ab7781d19f5eb3e620ef",
+      "input_scope_hash": "fbbe6e883ca3c9266c312999c55ab371734f95bdc9a80a71b6ee616b06eaae2f",
+      "output_hash": "fbbe6e883ca3c9266c312999c55ab371734f95bdc9a80a71b6ee616b06eaae2f",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-clear"
@@ -907,7 +1521,7 @@
     },
     {
       "accepted_entity_refs": [
-        "assessment-clear-ex"
+        "assessment-clear-ex-01"
       ],
       "affected_scope": [
         "component-ex-01"
@@ -916,13 +1530,13 @@
       "created_at": "2026-08-12T12:00:00Z",
       "error_codes": [],
       "gate_name": "assessment-publication-gate",
-      "gate_result_id": "gate-clear-ex",
+      "gate_result_id": "gate-clear-ex-01",
       "idempotency_key": "assessment:run-clear:component-ex-01",
       "input_entity_refs": [
         "candidate-clear-ex",
         "gate-candidate-clear-ex",
-        "gate-evidence-assessment-clear-ex",
-        "context-episode-clear-assessment-clear-ex",
+        "gate-evidence-assessment-clear-ex-01",
+        "context-episode-clear-assessment-clear-ex-01",
         "gate-integrity-protocol-v1-phase-iii",
         "component-ex-01",
         "run-clear"
@@ -930,11 +1544,576 @@
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "6995d2ed4fa6290beef733c42662d6e56dc4b82b25fafaa8810100d1e61bf031",
-      "output_hash": "641ee27d53ab7e0cbabf69f91aa3eac0e282a7c65c3bbc4320b10eb7b034a610",
+      "input_scope_hash": "4d2e0217955ca6f121d77c49d62d31ccc991806d12ab2c6fec7dac8fe5c9639e",
+      "output_hash": "643d7d43bfe502c2c041c4fe0c0bb5cb9fe86177dfae0d5ff43910aa7daa639c",
       "parent_event_id": null,
       "recompute_scope": [
         "component-ex-01"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "candidate-clear-ex-02"
+      ],
+      "affected_scope": [
+        "component-ex-02"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-candidate-gate",
+      "gate_result_id": "gate-candidate-clear-ex-02",
+      "idempotency_key": "candidate:call-clear-2:candidate-clear-ex-02",
+      "input_entity_refs": [
+        "call-clear-2",
+        "gate-clear-2"
+      ],
+      "input_revision_map": {
+        "snapshot-clear": 1
+      },
+      "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "output_hash": "156c374c6cef41613cff8d2d44b2f8f5acc8393235bb98d9e515dd52873071ac",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-ex-02"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "evidence-candidate-episode-clear",
+        "fact-clear-age",
+        "fact-clear-risk",
+        "fact-clear-ex-02",
+        "fact-clear-ex-04",
+        "fact-clear-req-01",
+        "fact-clear-req-02",
+        "span-clear-age",
+        "span-clear-history"
+      ],
+      "affected_scope": [
+        "episode-clear"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "evidence-acceptance-gate",
+      "gate_result_id": "gate-evidence-assessment-clear-ex-02",
+      "idempotency_key": "evidence:episode-clear:snapshot-clear:evidence-candidate-episode-clear",
+      "input_entity_refs": [
+        "call-clear-1",
+        "gate-clear-1",
+        "evidence-candidate-episode-clear",
+        "snapshot-clear",
+        "fact-clear-age",
+        "fact-clear-risk",
+        "fact-clear-ex-02",
+        "fact-clear-ex-04",
+        "fact-clear-req-01",
+        "fact-clear-req-02",
+        "span-clear-age",
+        "span-clear-history"
+      ],
+      "input_revision_map": {
+        "episode-clear": 1
+      },
+      "input_scope_hash": "fbbe6e883ca3c9266c312999c55ab371734f95bdc9a80a71b6ee616b06eaae2f",
+      "output_hash": "fbbe6e883ca3c9266c312999c55ab371734f95bdc9a80a71b6ee616b06eaae2f",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "episode-clear"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "assessment-clear-ex-02"
+      ],
+      "affected_scope": [
+        "component-ex-02"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-publication-gate",
+      "gate_result_id": "gate-clear-ex-02",
+      "idempotency_key": "assessment:run-clear:component-ex-02",
+      "input_entity_refs": [
+        "candidate-clear-ex-02",
+        "gate-candidate-clear-ex-02",
+        "gate-evidence-assessment-clear-ex-02",
+        "context-episode-clear-assessment-clear-ex-02",
+        "gate-integrity-protocol-v1-phase-iii",
+        "component-ex-02",
+        "run-clear"
+      ],
+      "input_revision_map": {
+        "episode-clear": 1
+      },
+      "input_scope_hash": "6ad9fa06d6abd95640ff653ac0e5587a86f48c7e9021fe172c6188c441d163e6",
+      "output_hash": "229f9e3cdfe746b2cabd2675adbdd3cc1ee45580b5902a2b7f40a5e5d502699e",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-ex-02"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "candidate-clear-ex-04"
+      ],
+      "affected_scope": [
+        "component-ex-04"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-candidate-gate",
+      "gate_result_id": "gate-candidate-clear-ex-04",
+      "idempotency_key": "candidate:call-clear-2:candidate-clear-ex-04",
+      "input_entity_refs": [
+        "call-clear-2",
+        "gate-clear-2"
+      ],
+      "input_revision_map": {
+        "snapshot-clear": 1
+      },
+      "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "output_hash": "4e0282527a7640922959b272dd9976643ae635549899e4d54a0e09f04126ea34",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-ex-04"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "evidence-candidate-episode-clear",
+        "fact-clear-age",
+        "fact-clear-risk",
+        "fact-clear-ex-02",
+        "fact-clear-ex-04",
+        "fact-clear-req-01",
+        "fact-clear-req-02",
+        "span-clear-age",
+        "span-clear-history"
+      ],
+      "affected_scope": [
+        "episode-clear"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "evidence-acceptance-gate",
+      "gate_result_id": "gate-evidence-assessment-clear-ex-04",
+      "idempotency_key": "evidence:episode-clear:snapshot-clear:evidence-candidate-episode-clear",
+      "input_entity_refs": [
+        "call-clear-1",
+        "gate-clear-1",
+        "evidence-candidate-episode-clear",
+        "snapshot-clear",
+        "fact-clear-age",
+        "fact-clear-risk",
+        "fact-clear-ex-02",
+        "fact-clear-ex-04",
+        "fact-clear-req-01",
+        "fact-clear-req-02",
+        "span-clear-age",
+        "span-clear-history"
+      ],
+      "input_revision_map": {
+        "episode-clear": 1
+      },
+      "input_scope_hash": "fbbe6e883ca3c9266c312999c55ab371734f95bdc9a80a71b6ee616b06eaae2f",
+      "output_hash": "fbbe6e883ca3c9266c312999c55ab371734f95bdc9a80a71b6ee616b06eaae2f",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "episode-clear"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "assessment-clear-ex-04"
+      ],
+      "affected_scope": [
+        "component-ex-04"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-publication-gate",
+      "gate_result_id": "gate-clear-ex-04",
+      "idempotency_key": "assessment:run-clear:component-ex-04",
+      "input_entity_refs": [
+        "candidate-clear-ex-04",
+        "gate-candidate-clear-ex-04",
+        "gate-evidence-assessment-clear-ex-04",
+        "context-episode-clear-assessment-clear-ex-04",
+        "gate-integrity-protocol-v1-phase-iii",
+        "component-ex-04",
+        "run-clear"
+      ],
+      "input_revision_map": {
+        "episode-clear": 1
+      },
+      "input_scope_hash": "ff6696d77908b754d411e76f5581e882083e789cac5d28fd2011008244aa4700",
+      "output_hash": "4311ce16b4b554cb9bc7a4a0d51f9485cd988434df4b63feac8df37f0310ae32",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-ex-04"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "candidate-clear-req-01"
+      ],
+      "affected_scope": [
+        "component-req-01"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-candidate-gate",
+      "gate_result_id": "gate-candidate-clear-req-01",
+      "idempotency_key": "candidate:call-clear-2:candidate-clear-req-01",
+      "input_entity_refs": [
+        "call-clear-2",
+        "gate-clear-2"
+      ],
+      "input_revision_map": {
+        "snapshot-clear": 1
+      },
+      "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "output_hash": "e454657cf641b48e4cc33ab93575bc087bb7e5eaca8938df7d8181ed53e66dfd",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-req-01"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "evidence-candidate-episode-clear",
+        "fact-clear-age",
+        "fact-clear-risk",
+        "fact-clear-ex-02",
+        "fact-clear-ex-04",
+        "fact-clear-req-01",
+        "fact-clear-req-02",
+        "span-clear-age",
+        "span-clear-history"
+      ],
+      "affected_scope": [
+        "episode-clear"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "evidence-acceptance-gate",
+      "gate_result_id": "gate-evidence-assessment-clear-req-01",
+      "idempotency_key": "evidence:episode-clear:snapshot-clear:evidence-candidate-episode-clear",
+      "input_entity_refs": [
+        "call-clear-1",
+        "gate-clear-1",
+        "evidence-candidate-episode-clear",
+        "snapshot-clear",
+        "fact-clear-age",
+        "fact-clear-risk",
+        "fact-clear-ex-02",
+        "fact-clear-ex-04",
+        "fact-clear-req-01",
+        "fact-clear-req-02",
+        "span-clear-age",
+        "span-clear-history"
+      ],
+      "input_revision_map": {
+        "episode-clear": 1
+      },
+      "input_scope_hash": "fbbe6e883ca3c9266c312999c55ab371734f95bdc9a80a71b6ee616b06eaae2f",
+      "output_hash": "fbbe6e883ca3c9266c312999c55ab371734f95bdc9a80a71b6ee616b06eaae2f",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "episode-clear"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "assessment-clear-req-01"
+      ],
+      "affected_scope": [
+        "component-req-01"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-publication-gate",
+      "gate_result_id": "gate-clear-req-01",
+      "idempotency_key": "assessment:run-clear:component-req-01",
+      "input_entity_refs": [
+        "candidate-clear-req-01",
+        "gate-candidate-clear-req-01",
+        "gate-evidence-assessment-clear-req-01",
+        "context-episode-clear-assessment-clear-req-01",
+        "gate-integrity-protocol-v1-phase-iii",
+        "component-req-01",
+        "run-clear"
+      ],
+      "input_revision_map": {
+        "episode-clear": 1
+      },
+      "input_scope_hash": "476747ee6922aefdad0abf9a44ca833f8c8d9dfed9b264e76202191d26c069ce",
+      "output_hash": "6e0e877065a79e1f6478e5d9a1632ce06f67f0ce293af05346eff5bf6802cfe6",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-req-01"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "candidate-clear-req-02"
+      ],
+      "affected_scope": [
+        "component-req-02"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-candidate-gate",
+      "gate_result_id": "gate-candidate-clear-req-02",
+      "idempotency_key": "candidate:call-clear-2:candidate-clear-req-02",
+      "input_entity_refs": [
+        "call-clear-2",
+        "gate-clear-2"
+      ],
+      "input_revision_map": {
+        "snapshot-clear": 1
+      },
+      "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "output_hash": "926d2c80d5c0bb7b3dd36b408f7dcd2877565633a4ccd5d126cee9a07dfd8219",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-req-02"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "evidence-candidate-episode-clear",
+        "fact-clear-age",
+        "fact-clear-risk",
+        "fact-clear-ex-02",
+        "fact-clear-ex-04",
+        "fact-clear-req-01",
+        "fact-clear-req-02",
+        "span-clear-age",
+        "span-clear-history"
+      ],
+      "affected_scope": [
+        "episode-clear"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "evidence-acceptance-gate",
+      "gate_result_id": "gate-evidence-assessment-clear-req-02",
+      "idempotency_key": "evidence:episode-clear:snapshot-clear:evidence-candidate-episode-clear",
+      "input_entity_refs": [
+        "call-clear-1",
+        "gate-clear-1",
+        "evidence-candidate-episode-clear",
+        "snapshot-clear",
+        "fact-clear-age",
+        "fact-clear-risk",
+        "fact-clear-ex-02",
+        "fact-clear-ex-04",
+        "fact-clear-req-01",
+        "fact-clear-req-02",
+        "span-clear-age",
+        "span-clear-history"
+      ],
+      "input_revision_map": {
+        "episode-clear": 1
+      },
+      "input_scope_hash": "fbbe6e883ca3c9266c312999c55ab371734f95bdc9a80a71b6ee616b06eaae2f",
+      "output_hash": "fbbe6e883ca3c9266c312999c55ab371734f95bdc9a80a71b6ee616b06eaae2f",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "episode-clear"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "assessment-clear-req-02"
+      ],
+      "affected_scope": [
+        "component-req-02"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-publication-gate",
+      "gate_result_id": "gate-clear-req-02",
+      "idempotency_key": "assessment:run-clear:component-req-02",
+      "input_entity_refs": [
+        "candidate-clear-req-02",
+        "gate-candidate-clear-req-02",
+        "gate-evidence-assessment-clear-req-02",
+        "context-episode-clear-assessment-clear-req-02",
+        "gate-integrity-protocol-v1-phase-iii",
+        "component-req-02",
+        "run-clear"
+      ],
+      "input_revision_map": {
+        "episode-clear": 1
+      },
+      "input_scope_hash": "cc41888172d56073c5d45afcba84513277ecbd3e663ebf29f61f19e8fc5c8900",
+      "output_hash": "1a3c4c4f022bd6e48acee2629c54363825d72ac3ac3135bba6de2a9d21c002dd",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-req-02"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "candidate-clear-future"
+      ],
+      "affected_scope": [
+        "component-ex-03"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-candidate-gate",
+      "gate_result_id": "gate-candidate-clear-future",
+      "idempotency_key": "candidate:call-clear-2:candidate-clear-future",
+      "input_entity_refs": [
+        "call-clear-2",
+        "gate-clear-2"
+      ],
+      "input_revision_map": {
+        "snapshot-clear": 1
+      },
+      "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "output_hash": "73ffcfa16035ba6ddadb0174f17853f439f7943279f990585aa893f5bd82c534",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-ex-03"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "evidence-candidate-episode-clear",
+        "fact-clear-age",
+        "fact-clear-risk",
+        "fact-clear-ex-02",
+        "fact-clear-ex-04",
+        "fact-clear-req-01",
+        "fact-clear-req-02",
+        "span-clear-age",
+        "span-clear-history"
+      ],
+      "affected_scope": [
+        "episode-clear"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "evidence-acceptance-gate",
+      "gate_result_id": "gate-evidence-assessment-clear-ex-03",
+      "idempotency_key": "evidence:episode-clear:snapshot-clear:evidence-candidate-episode-clear",
+      "input_entity_refs": [
+        "call-clear-1",
+        "gate-clear-1",
+        "evidence-candidate-episode-clear",
+        "snapshot-clear",
+        "fact-clear-age",
+        "fact-clear-risk",
+        "fact-clear-ex-02",
+        "fact-clear-ex-04",
+        "fact-clear-req-01",
+        "fact-clear-req-02",
+        "span-clear-age",
+        "span-clear-history"
+      ],
+      "input_revision_map": {
+        "episode-clear": 1
+      },
+      "input_scope_hash": "fbbe6e883ca3c9266c312999c55ab371734f95bdc9a80a71b6ee616b06eaae2f",
+      "output_hash": "fbbe6e883ca3c9266c312999c55ab371734f95bdc9a80a71b6ee616b06eaae2f",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "episode-clear"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "assessment-clear-ex-03"
+      ],
+      "affected_scope": [
+        "component-ex-03"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-publication-gate",
+      "gate_result_id": "gate-clear-ex-03",
+      "idempotency_key": "assessment:run-clear:component-ex-03",
+      "input_entity_refs": [
+        "candidate-clear-future",
+        "gate-candidate-clear-future",
+        "gate-evidence-assessment-clear-ex-03",
+        "context-episode-clear-assessment-clear-ex-03",
+        "gate-integrity-protocol-v1-phase-iii",
+        "component-ex-03",
+        "run-clear"
+      ],
+      "input_revision_map": {
+        "episode-clear": 1
+      },
+      "input_scope_hash": "2f7c2eee7cdef8ec7d636471976220e05c665d692a119bb06dd7574df55f5c7b",
+      "output_hash": "6df8a4e0d96fda6f60127392873ef751f287b2f2660094c2ab50399ef056be2c",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-ex-03"
       ],
       "rejected_entity_refs": [],
       "result": "accepted",
@@ -954,17 +2133,53 @@
       "gate_result_id": "gate-action-clear-provenance",
       "idempotency_key": "action:action-clear-provenance:1",
       "input_entity_refs": [
-        "assessment-clear-ex",
-        "gate-clear-ex"
+        "assessment-clear-ex-01",
+        "gate-clear-ex-01",
+        "context-episode-clear-assessment-clear-ex-01",
+        "component-ex-01",
+        "expectation-clear-history"
       ],
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "cec449e383e095eaf483c326e73f8625ac1c24ac49c15300521736bb30e80ebb",
-      "output_hash": "1d5130fb142b8a6190d4ce0c129adc42eb34abaef113266ae69f92e8144c15c0",
+      "input_scope_hash": "393272540b5f4286cad2740b9a59c48653e090d2c7f95d81d0e8a8beee32c04b",
+      "output_hash": "380fa44e116526a7c318cd5e497ea666836e0511cfe161363b9b25260e9e9f65",
       "parent_event_id": null,
       "recompute_scope": [
         "component-ex-01"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "action-clear-future"
+      ],
+      "affected_scope": [
+        "component-ex-03"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "action-publication-gate",
+      "gate_result_id": "gate-action-clear-future",
+      "idempotency_key": "action:action-clear-future:1",
+      "input_entity_refs": [
+        "assessment-clear-ex-03",
+        "gate-clear-ex-03",
+        "context-episode-clear-assessment-clear-ex-03",
+        "component-ex-03",
+        "expectation-clear-future"
+      ],
+      "input_revision_map": {
+        "episode-clear": 1
+      },
+      "input_scope_hash": "3ac8d4df8234f10e0fb5f6d11b119bf2c45e68adf404e46e8b95630ce3dcacac",
+      "output_hash": "0d60e8a907a0f71be6f6a792dc212700aeaf10d77df4d89350eda1cae72d5d94",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-ex-03"
       ],
       "rejected_entity_refs": [],
       "result": "accepted",
@@ -986,20 +2201,37 @@
       "idempotency_key": "rollup:episode-clear:03f07222ca6c86227f5083fb817c3ddfdc0397865ac83690dc33bff8f29ec370",
       "input_entity_refs": [
         "episode-clear",
-        "gate-clear-in",
-        "gate-clear-ex",
+        "gate-clear-in-01",
+        "gate-clear-ex-01",
+        "gate-clear-ex-02",
+        "gate-clear-ex-04",
+        "gate-clear-req-01",
+        "gate-clear-req-02",
+        "gate-clear-ex-03",
         "gate-action-clear-provenance",
-        "assessment-clear-in",
-        "assessment-clear-ex",
+        "gate-action-clear-future",
+        "assessment-clear-in-01",
+        "assessment-clear-ex-01",
+        "assessment-clear-ex-02",
+        "assessment-clear-ex-04",
+        "assessment-clear-req-01",
+        "assessment-clear-req-02",
+        "assessment-clear-ex-03",
         "expectation-clear-age",
         "expectation-clear-history",
-        "action-clear-provenance"
+        "expectation-clear-ex-02",
+        "expectation-clear-ex-04",
+        "expectation-clear-req-01",
+        "expectation-clear-req-02",
+        "expectation-clear-future",
+        "action-clear-provenance",
+        "action-clear-future"
       ],
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "ae8268f8acb6460a569dd4bbe1d5c75cfefb58df23519f3c7ddf767f6b400a01",
-      "output_hash": "b2d6782d6d467758bc8594488fa7bcfe40cc603af381b9e21b4d4966db371f0d",
+      "input_scope_hash": "63c9c57a601eb31799c24b9180edb0e6ef24849830a79a2e8d2a71566bb15dd4",
+      "output_hash": "d7e17f516a49cb13310a99a60d428e8753a4b1e075190da361dc8af0eaf0412e",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-clear"
@@ -1063,7 +2295,11 @@
         ],
         "fact_ids": [
           "fact-clear-age",
-          "fact-clear-risk"
+          "fact-clear-risk",
+          "fact-clear-ex-02",
+          "fact-clear-ex-04",
+          "fact-clear-req-01",
+          "fact-clear-req-02"
         ],
         "has_trend_change": false,
         "is_abnormal": false,

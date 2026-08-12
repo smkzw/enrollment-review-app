@@ -29,8 +29,6 @@ from app.domain.contracts.api import (
 )
 from app.domain.contracts.common import DateValue, ErrorEnvelope
 from app.domain.contracts.enums import (
-    ActionState,
-    ActionTarget,
     AgentNode,
     AgentOutputKind,
     AgentWriteScope,
@@ -48,6 +46,7 @@ from app.domain.contracts.enums import (
     RuleKind,
     RunOutcome,
     StudyPhase,
+    TruthValue,
     UploadMode,
 )
 from app.domain.contracts.evidence import (
@@ -115,6 +114,35 @@ CONTRACT_ROOT = ROOT / "contracts" / "v1"
 SCHEMA_ROOT = CONTRACT_ROOT / "schema"
 FIXTURE_ROOT = CONTRACT_ROOT / "fixtures"
 NOW = datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc)
+
+
+def fixture_prompt_versions() -> list[PromptVersion]:
+    return [
+        PromptVersion(
+            prompt_version_id="prompt-evidence_normalizer-v1",
+            node=AgentNode.EVIDENCE_NORMALIZER,
+            template_sha256="d" * 64,
+            schema_version_id="fixture/v1",
+        ),
+        PromptVersion(
+            prompt_version_id="prompt-eligibility_assessor-v1",
+            node=AgentNode.ELIGIBILITY_ASSESSOR,
+            template_sha256="e" * 64,
+            schema_version_id="fixture/v1",
+        ),
+    ]
+
+
+def fixture_model_configs() -> list[ModelConfigContract]:
+    return [
+        ModelConfigContract(
+            model_config_id="model-baseline-v1",
+            provider="configured-review-provider",
+            model="configured-review-model",
+            reasoning_effort="max",
+            parameters={"temperature": 0},
+        )
+    ]
 
 
 def digest(label: str) -> str:
@@ -549,6 +577,14 @@ def base_objects(suffix: str, rules: RuleSet):
         gate_result_id="gate-authority-protocol-v1-phase-iii",
         created_at=NOW,
     )
+    protocol_registry = _issue_trusted_registry(
+        gate_results=[authority_gate],
+        protocol_authority_records=[authority_record],
+        protocol_authority_confirmations=[authority_confirmation],
+        service_command_events=[authority_command],
+        protocol_source_records=source_records,
+        rule_sets=[rules],
+    )
     manifest = build_protocol_integrity_manifest(
         manifest_id="manifest-protocol-v1-phase-iii",
         protocol_version_id="protocol-v1",
@@ -774,6 +810,7 @@ def publish_fixture_assessment(
     conflict_groups: list[ConflictGroup],
     gate_results: list[GateResult],
     protocol_integrity_gate_result: GateResult,
+    registry_inputs: dict,
     *,
     assessment_id: str,
     review_run_id: str,
@@ -799,24 +836,35 @@ def publish_fixture_assessment(
                 for field_name, value in hydrated.__dict__.items():
                     setattr(candidate, field_name, value)
                 bind_agent_typed_output(agent_call, candidate)
-                candidate_gate = publish_assessment_candidate_acceptance(
-                    candidate,
-                    agent_call=agent_call,
-                    agent_call_gate_result=agent_output_gate(agent_call),
-                    gate_result_id=f"gate-{candidate.assessment_candidate_id}",
-                    created_at=NOW,
-                )
                 normalized = evidence_candidate_for(
                     episode, facts, evidence_spans, evidence_agent_call
                 )
                 bind_agent_typed_output(evidence_agent_call, normalized)
+                assessment_agent_gate = agent_output_gate(agent_call)
+                evidence_agent_gate = agent_output_gate(evidence_agent_call)
+                candidate_registry = _issue_trusted_registry(
+                    agent_calls=[agent_call, evidence_agent_call],
+                    gate_results=[assessment_agent_gate, evidence_agent_gate],
+                    evidence_candidates=[normalized],
+                    assessment_candidates=[candidate],
+                    **registry_inputs,
+                )
+                candidate_gate = publish_assessment_candidate_acceptance(
+                    candidate,
+                    agent_call=agent_call,
+                    agent_call_gate_result=assessment_agent_gate,
+                    gate_result_id=f"gate-{candidate.assessment_candidate_id}",
+                    created_at=NOW,
+                    registry=candidate_registry,
+                )
                 evidence_gate = publish_evidence_acceptance(
                     candidate=normalized,
                     agent_call=evidence_agent_call,
-                    agent_call_gate_result=agent_output_gate(evidence_agent_call),
+                    agent_call_gate_result=evidence_agent_gate,
                     gate_result_id=f"gate-evidence-{assessment_id}",
                     input_revision_map={episode.review_episode_id: episode.revision},
                     created_at=NOW,
+                    registry=candidate_registry,
                 )
                 review_context = build_review_context_snapshot(
                     context_id=(
@@ -833,7 +881,7 @@ def publish_fixture_assessment(
                     agent_calls=[agent_call, evidence_agent_call],
                     gate_results=[
                         agent_output_gate(agent_call),
-                        agent_output_gate(evidence_agent_call),
+                        evidence_agent_gate,
                         candidate_gate,
                         evidence_gate,
                         protocol_integrity_gate_result,
@@ -846,6 +894,7 @@ def publish_fixture_assessment(
                         protocol_integrity_gate_result.gate_result_id:
                         canonical_hash(rules.model_dump(mode="json"))
                     },
+                    **registry_inputs,
                 )
                 publication = publish_assessment(
                     candidate,
@@ -879,21 +928,26 @@ def fixture_action(
     *,
     episode: ReviewEpisode,
     assessments: list,
-    **kwargs,
+    registry_inputs: dict,
+    action_id: str,
+    rule_component_id: str,
+    gap_type: GapType,
 ) -> ActionRequest:
-    action_id = kwargs["action_id"]
     assessment_publication = next(
         item
         for item in assessments
-        if item.assessment.rule_component_id == kwargs["rule_component_id"]
+        if item.assessment.rule_component_id == rule_component_id
     )
     publication = publish_action_request(
-        **kwargs,
         assessment_publication=assessment_publication,
+        action_id=action_id,
+        gap_type=gap_type,
         gate_result_id=f"gate-{action_id}",
         input_revision_map={episode.review_episode_id: episode.revision},
         created_at=NOW,
-        registry=registry_for_assessments(assessments),
+        registry=registry_for_assessments(
+            assessments, registry_inputs=registry_inputs
+        ),
     )
     gate_results.append(publication.gate_result)
     return publication.action
@@ -913,6 +967,9 @@ def refresh_assessment_agent_gate(
 
 def registry_for_assessments(
     publications: list[AssessmentPublication],
+    *,
+    registry_inputs: dict,
+    action_publications: list[ActionPublication] | None = None,
 ):
     def unique(values, id_field):
         by_id = {}
@@ -946,8 +1003,10 @@ def registry_for_assessments(
                     item.evidence_agent_call_gate_result,
                     item.evidence_gate_result,
                     item.protocol_integrity_gate_result,
+                    item.gate_result,
                 ]
-            ],
+            ]
+            + [item.gate_result for item in (action_publications or [])],
             "gate_result_id",
         ),
         evidence_candidates=unique(
@@ -955,6 +1014,12 @@ def registry_for_assessments(
         ),
         assessment_candidates=unique(
             [item.candidate for item in publications], "assessment_candidate_id"
+        ),
+        final_assessments=unique(
+            [item.assessment for item in publications], "assessment_id"
+        ),
+        action_requests=unique(
+            [item.action for item in (action_publications or [])], "action_id"
         ),
         rule_sets=unique([item.rule_set for item in publications], "rule_set_id"),
         review_contexts=unique(contexts, "context_id"),
@@ -964,7 +1029,104 @@ def registry_for_assessments(
             )
             for item in publications
         },
+        **registry_inputs,
     )
+
+
+def completed_auxiliary_inputs(
+    episode: ReviewEpisode,
+    *,
+    scenario: str,
+    span_id: str,
+    agent_call_id: str,
+):
+    specs = [
+        (
+            "component-ex-02",
+            "req-professional",
+            "investigator.rule_specific_judgment",
+            False,
+            ComponentDecision.EXCLUSION_NOT_TRIGGERED,
+        ),
+        (
+            "component-ex-04",
+            "req-referenced",
+            "history.referenced_document",
+            False,
+            ComponentDecision.EXCLUSION_NOT_TRIGGERED,
+        ),
+        (
+            "component-req-01",
+            "req-procedure",
+            "procedure.required_completed",
+            True,
+            ComponentDecision.REQUIREMENT_MET,
+        ),
+        (
+            "component-req-02",
+            "req-result-fields",
+            "laboratory.required_fields_complete",
+            True,
+            ComponentDecision.REQUIREMENT_MET,
+        ),
+    ]
+    facts = []
+    expectations = []
+    candidates = []
+    for component_id, requirement_id, fact_type, value, decision in specs:
+        suffix = component_id.removeprefix("component-")
+        fact = clinical_fact_for(
+            episode,
+            fact_id=f"fact-{scenario}-{suffix}",
+            fact_type=fact_type,
+            value=value,
+            polarity=FactPolarity.AFFIRMED,
+            certainty=1,
+            evidence_span_ids=[span_id],
+        )
+        facts.append(fact)
+        expectations.append(
+            EvidenceExpectation(
+                expectation_id=f"expectation-{scenario}-{suffix}",
+                requirement_id=requirement_id,
+                review_episode_id=episode.review_episode_id,
+                status=ExpectationStatus.OBSERVED,
+                evidence_span_ids=[span_id],
+            )
+        )
+        candidates.append(
+            assessment_candidate_for(
+                episode,
+                assessment_candidate_id=f"candidate-{scenario}-{suffix}",
+                agent_call_id=agent_call_id,
+                rule_component_id=component_id,
+                proposed_decision=decision,
+                used_fact_ids=[fact.fact_id],
+                evidence_span_ids=[span_id],
+                candidate_rationale="当前资料能够支持该组件的确定性判断。",
+            )
+        )
+    expectations.append(
+        EvidenceExpectation(
+            expectation_id=f"expectation-{scenario}-future",
+            requirement_id="req-future",
+            review_episode_id=episode.review_episode_id,
+            status=ExpectationStatus.NOT_DUE,
+            gap_type=GapType.FUTURE_STAGE_NOT_DUE,
+        )
+    )
+    candidates.append(
+        assessment_candidate_for(
+            episode,
+            assessment_candidate_id=f"candidate-{scenario}-future",
+            agent_call_id=agent_call_id,
+            rule_component_id="component-ex-03",
+            proposed_decision=ComponentDecision.NOT_DUE,
+            gap_types=[GapType.FUTURE_STAGE_NOT_DUE],
+            candidate_rationale="该组件在基线审核节点到期。",
+        )
+    )
+    return facts, expectations, candidates
 
 
 def build_fixture(scenario: str) -> FixtureV1:
@@ -986,6 +1148,18 @@ def build_fixture(scenario: str) -> FixtureV1:
         review_run,
     ) = base_objects(scenario, rules)
     calls = agent_calls(scenario)
+    prompt_versions = fixture_prompt_versions()
+    model_configs = fixture_model_configs()
+    registry_inputs = {
+        "subjects": [subject],
+        "review_episodes": [episode],
+        "evidence_snapshots": [snapshot],
+        "review_runs": [review_run],
+        "source_document_versions": [document],
+        "evidence_expectations": [],
+        "prompt_versions": prompt_versions,
+        "model_configs": model_configs,
+    }
     conflict_groups: list[ConflictGroup] = []
     actions: list[ActionRequest] = []
     publication_gate_results: list[GateResult] = []
@@ -1073,25 +1247,57 @@ def build_fixture(scenario: str) -> FixtureV1:
                 candidate_rationale="复合排除条件未同时满足。",
             ),
         ]
+        extra_facts, extra_expectations, extra_candidates = completed_auxiliary_inputs(
+            episode,
+            scenario=scenario,
+            span_id="span-clear-history",
+            agent_call_id=calls[1].agent_call_id,
+        )
+        facts.extend(extra_facts)
+        expectations.extend(extra_expectations)
+        candidates.extend(extra_candidates)
         final = [
-            publish_fixture_assessment(rules, candidates[0], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-clear-in", review_run_id=review_run.review_run_id, gate_result_id="gate-clear-in"),
-            publish_fixture_assessment(rules, candidates[1], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-clear-ex", review_run_id=review_run.review_run_id, gate_result_id="gate-clear-ex"),
+            publish_fixture_assessment(
+                rules, item, facts, spans, calls[1], calls[0], episode,
+                expectations, conflict_groups, publication_gate_results,
+                integrity_gate,
+                {**registry_inputs, "evidence_expectations": expectations},
+                assessment_id=f"assessment-clear-{item.rule_component_id.removeprefix('component-')}",
+                review_run_id=review_run.review_run_id,
+                gate_result_id=f"gate-clear-{item.rule_component_id.removeprefix('component-')}",
+            )
+            for item in candidates
         ]
         final = refresh_assessment_agent_gate(final, calls[1])
         actions = [
-            fixture_action(publication_gate_results, episode=episode, assessments=final,
+            fixture_action(publication_gate_results, episode=episode, assessments=final, registry_inputs={**registry_inputs, "evidence_expectations": expectations},
                 action_id="action-clear-provenance",
                 rule_component_id="component-ex-01",
                 gap_type=GapType.PROVENANCE_FOLLOWUP,
-                target_party=ActionTarget.CRA,
-                requested_action="在后续阶段核对阳性既往史转述来源。",
-                acceptable_evidence="来源链接或核对记录。",
-                due_stage=ReviewStage.BASELINE,
-                trigger_evidence_span_id="span-clear-history",
-                state=ActionState.OPEN,
-                recompute_scope=["component-ex-01"],
             )
         ]
+        future_assessment = next(
+            item
+            for item in final
+            if item.assessment.rule_component_id == "component-ex-03"
+        )
+        future_action = publish_action_request(
+            assessment_publication=future_assessment,
+            action_id="action-clear-future",
+            gap_type=GapType.FUTURE_STAGE_NOT_DUE,
+            gate_result_id="gate-action-clear-future",
+            input_revision_map={episode.review_episode_id: episode.revision},
+            created_at=NOW,
+            registry=registry_for_assessments(
+                final,
+                registry_inputs={
+                    **registry_inputs,
+                    "evidence_expectations": expectations,
+                },
+            ),
+        )
+        publication_gate_results.append(future_action.gate_result)
+        actions.append(future_action.action)
     elif scenario == "barrier":
         spans = [
             EvidenceSpan(
@@ -1190,11 +1396,50 @@ def build_fixture(scenario: str) -> FixtureV1:
                 candidate_rationale="阈值和研究者判断两个 AND 组件均满足。",
             ),
         ]
+        extra_facts, extra_expectations, extra_candidates = completed_auxiliary_inputs(
+            episode,
+            scenario=scenario,
+            span_id="span-barrier-risk",
+            agent_call_id=calls[1].agent_call_id,
+        )
+        facts.extend(extra_facts)
+        expectations.extend(extra_expectations)
+        candidates.extend(extra_candidates)
         final = [
-            publish_fixture_assessment(rules, candidates[0], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-barrier-in", review_run_id=review_run.review_run_id, gate_result_id="gate-barrier-in"),
-            publish_fixture_assessment(rules, candidates[1], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-barrier-ex", review_run_id=review_run.review_run_id, gate_result_id="gate-barrier-ex"),
+            publish_fixture_assessment(
+                rules, item, facts, spans, calls[1], calls[0], episode,
+                expectations, conflict_groups, publication_gate_results,
+                integrity_gate,
+                {**registry_inputs, "evidence_expectations": expectations},
+                assessment_id=f"assessment-barrier-{item.rule_component_id.removeprefix('component-')}",
+                review_run_id=review_run.review_run_id,
+                gate_result_id=f"gate-barrier-{item.rule_component_id.removeprefix('component-')}",
+            )
+            for item in candidates
         ]
         final = refresh_assessment_agent_gate(final, calls[1])
+        future_assessment = next(
+            item
+            for item in final
+            if item.assessment.rule_component_id == "component-ex-03"
+        )
+        future_action = publish_action_request(
+            assessment_publication=future_assessment,
+            action_id="action-barrier-future",
+            gap_type=GapType.FUTURE_STAGE_NOT_DUE,
+            gate_result_id="gate-action-barrier-future",
+            input_revision_map={episode.review_episode_id: episode.revision},
+            created_at=NOW,
+            registry=registry_for_assessments(
+                final,
+                registry_inputs={
+                    **registry_inputs,
+                    "evidence_expectations": expectations,
+                },
+            ),
+        )
+        publication_gate_results.append(future_action.gate_result)
+        actions.append(future_action.action)
     else:
         spans = [
             EvidenceSpan(
@@ -1349,95 +1594,60 @@ def build_fixture(scenario: str) -> FixtureV1:
             ),
         ]
         final = [
-            publish_fixture_assessment(rules, candidates[0], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-gap-in", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-in"),
-            publish_fixture_assessment(rules, candidates[1], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-gap-ex", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-ex"),
-            publish_fixture_assessment(rules, candidates[2], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-gap-professional", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-professional"),
-            publish_fixture_assessment(rules, candidates[3], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-gap-future", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-future"),
-            publish_fixture_assessment(rules, candidates[4], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-gap-referenced", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-referenced"),
-            publish_fixture_assessment(rules, candidates[5], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-gap-procedure", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-procedure"),
-            publish_fixture_assessment(rules, candidates[6], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, assessment_id="assessment-gap-result-fields", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-result-fields"),
+            publish_fixture_assessment(rules, candidates[0], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, {**registry_inputs, "evidence_expectations": expectations}, assessment_id="assessment-gap-in", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-in"),
+            publish_fixture_assessment(rules, candidates[1], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, {**registry_inputs, "evidence_expectations": expectations}, assessment_id="assessment-gap-ex", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-ex"),
+            publish_fixture_assessment(rules, candidates[2], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, {**registry_inputs, "evidence_expectations": expectations}, assessment_id="assessment-gap-professional", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-professional"),
+            publish_fixture_assessment(rules, candidates[3], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, {**registry_inputs, "evidence_expectations": expectations}, assessment_id="assessment-gap-future", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-future"),
+            publish_fixture_assessment(rules, candidates[4], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, {**registry_inputs, "evidence_expectations": expectations}, assessment_id="assessment-gap-referenced", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-referenced"),
+            publish_fixture_assessment(rules, candidates[5], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, {**registry_inputs, "evidence_expectations": expectations}, assessment_id="assessment-gap-procedure", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-procedure"),
+            publish_fixture_assessment(rules, candidates[6], facts, spans, calls[1], calls[0], episode, expectations, conflict_groups, publication_gate_results, integrity_gate, {**registry_inputs, "evidence_expectations": expectations}, assessment_id="assessment-gap-result-fields", review_run_id=review_run.review_run_id, gate_result_id="gate-gap-result-fields"),
         ]
         final = refresh_assessment_agent_gate(final, calls[1])
         actions = [
-            fixture_action(publication_gate_results, episode=episode, assessments=final,
+            fixture_action(publication_gate_results, episode=episode, assessments=final, registry_inputs={**registry_inputs, "evidence_expectations": expectations},
                 action_id="action-gap-age",
                 rule_component_id="component-in-01",
                 gap_type=GapType.RECORD_INCOMPLETE,
-                target_party=ActionTarget.INVESTIGATOR,
-                requested_action="在筛选病历补充受试者年龄及来源。",
-                acceptable_evidence="具日期和来源的年龄记录。",
-                due_stage=ReviewStage.SCREENING,
-                state=ActionState.OPEN,
-                recompute_scope=["component-in-01"],
             ),
-            fixture_action(publication_gate_results, episode=episode, assessments=final,
+            fixture_action(publication_gate_results, episode=episode, assessments=final, registry_inputs={**registry_inputs, "evidence_expectations": expectations},
                 action_id="action-gap-conflict",
                 rule_component_id="component-ex-01",
                 gap_type=GapType.SOURCE_CONFLICT,
-                target_party=ActionTarget.INVESTIGATOR,
-                requested_action="核实并记录针对本条的研究者判断。",
-                acceptable_evidence="具名、具日期且链接来源的冲突核实记录。",
-                due_stage=ReviewStage.SCREENING,
-                trigger_evidence_span_id="span-gap-page",
-                state=ActionState.OPEN,
-                recompute_scope=["component-ex-01"],
             ),
-            fixture_action(publication_gate_results, episode=episode, assessments=final,
+            fixture_action(publication_gate_results, episode=episode, assessments=final, registry_inputs={**registry_inputs, "evidence_expectations": expectations},
+                action_id="action-gap-ocr",
+                rule_component_id="component-ex-01",
+                gap_type=GapType.OCR_OR_PARSE_RISK,
+            ),
+            fixture_action(publication_gate_results, episode=episode, assessments=final, registry_inputs={**registry_inputs, "evidence_expectations": expectations},
                 action_id="action-gap-professional",
                 rule_component_id="component-ex-02",
                 gap_type=GapType.PROFESSIONAL_JUDGMENT,
-                target_party=ActionTarget.INVESTIGATOR,
-                requested_action="研究者针对本规则记录是否构成方案所述风险。",
-                acceptable_evidence="具名、具日期并关联本规则的研究者判断。",
-                due_stage=ReviewStage.SCREENING,
-                trigger_evidence_span_id="span-gap-page",
-                state=ActionState.OPEN,
-                recompute_scope=["component-ex-02"],
             ),
-            fixture_action(publication_gate_results, episode=episode, assessments=final,
+            fixture_action(publication_gate_results, episode=episode, assessments=final, registry_inputs={**registry_inputs, "evidence_expectations": expectations},
+                action_id="action-gap-description",
+                rule_component_id="component-ex-02",
+                gap_type=GapType.DESCRIPTION_INSUFFICIENT,
+            ),
+            fixture_action(publication_gate_results, episode=episode, assessments=final, registry_inputs={**registry_inputs, "evidence_expectations": expectations},
                 action_id="action-gap-future",
                 rule_component_id="component-ex-03",
                 gap_type=GapType.FUTURE_STAGE_NOT_DUE,
-                target_party=ActionTarget.CRC,
-                requested_action="在基线节点完成并上传该项评估。",
-                acceptable_evidence="基线日期锚点和对应评估记录。",
-                due_stage=ReviewStage.BASELINE,
-                state=ActionState.OPEN,
-                recompute_scope=["component-ex-03"],
             ),
-            fixture_action(publication_gate_results, episode=episode, assessments=final,
+            fixture_action(publication_gate_results, episode=episode, assessments=final, registry_inputs={**registry_inputs, "evidence_expectations": expectations},
                 action_id="action-gap-referenced",
                 rule_component_id="component-ex-04",
                 gap_type=GapType.REFERENCED_FILE_MISSING,
-                target_party=ActionTarget.CRC,
-                requested_action="补充病历中明确引用的原始资料。",
-                acceptable_evidence="被引用文件及其日期、版本和来源。",
-                due_stage=ReviewStage.SCREENING,
-                trigger_evidence_span_id="span-gap-page",
-                state=ActionState.OPEN,
-                recompute_scope=["component-ex-04"],
             ),
-            fixture_action(publication_gate_results, episode=episode, assessments=final,
+            fixture_action(publication_gate_results, episode=episode, assessments=final, registry_inputs={**registry_inputs, "evidence_expectations": expectations},
                 action_id="action-gap-procedure",
                 rule_component_id="component-req-01",
                 gap_type=GapType.REQUIRED_PROCEDURE_NOT_DONE,
-                target_party=ActionTarget.CRC,
-                requested_action="完成当前节点必做检查。",
-                acceptable_evidence="检查执行记录和完整结果。",
-                due_stage=ReviewStage.SCREENING,
-                state=ActionState.OPEN,
-                recompute_scope=["component-req-01"],
             ),
-            fixture_action(publication_gate_results, episode=episode, assessments=final,
+            fixture_action(publication_gate_results, episode=episode, assessments=final, registry_inputs={**registry_inputs, "evidence_expectations": expectations},
                 action_id="action-gap-result-fields",
                 rule_component_id="component-req-02",
                 gap_type=GapType.RESULT_FIELDS_MISSING,
-                target_party=ActionTarget.CRC,
-                requested_action="补充检验结果的数值、单位和参考范围。",
-                acceptable_evidence="同一检验报告中的完整结果字段。",
-                due_stage=ReviewStage.SCREENING,
-                state=ActionState.OPEN,
-                recompute_scope=["component-req-02"],
             ),
         ]
 
@@ -1516,7 +1726,14 @@ def build_fixture(scenario: str) -> FixtureV1:
         gate_result_id=f"gate-rollup-{scenario}",
         input_revision_map={episode.review_episode_id: episode.revision},
         created_at=NOW,
-        registry=registry_for_assessments(assessment_publications),
+        registry=registry_for_assessments(
+            assessment_publications,
+            registry_inputs={
+                **registry_inputs,
+                "evidence_expectations": expectations,
+            },
+            action_publications=action_publications,
+        ),
     )
     publication_gate_results.append(rollup_publication.gate_result)
     gates = [agent_output_gate(call) for call in calls] + [
@@ -1603,29 +1820,8 @@ def build_fixture(scenario: str) -> FixtureV1:
         final_assessments=[item.assessment for item in final],
         actions=actions,
         episode_rollup=rollup_publication.rollup,
-        prompt_versions=[
-            PromptVersion(
-                prompt_version_id="prompt-evidence_normalizer-v1",
-                node=AgentNode.EVIDENCE_NORMALIZER,
-                template_sha256="d" * 64,
-                schema_version_id="fixture/v1",
-            ),
-            PromptVersion(
-                prompt_version_id="prompt-eligibility_assessor-v1",
-                node=AgentNode.ELIGIBILITY_ASSESSOR,
-                template_sha256="e" * 64,
-                schema_version_id="fixture/v1",
-            ),
-        ],
-        model_configs=[
-            ModelConfigContract(
-                model_config_id="model-baseline-v1",
-                provider="configured-review-provider",
-                model="configured-review-model",
-                reasoning_effort="max",
-                parameters={"temperature": 0},
-            )
-        ],
+        prompt_versions=prompt_versions,
+        model_configs=model_configs,
         agent_calls=calls,
         gate_results=gates,
         job_events=jobs,
@@ -1810,6 +2006,7 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
         base.protocol_authority_confirmation
     ).model_validate(payload["protocol_authority_confirmation"])
     protocol_registry_for_namespace = _issue_trusted_registry(
+        gate_results=[authority_gate_for_namespace],
         protocol_authority_records=[authority_record_for_namespace],
         protocol_authority_confirmations=[authority_confirmation_for_namespace],
         service_command_events=[base.protocol_authority_command],
@@ -1838,6 +2035,18 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
         created_at=NOW,
     )
     facts = [ClinicalFact.model_validate(item) for item in payload["facts"]]
+    if stage == ReviewStage.BASELINE:
+        facts.append(
+            clinical_fact_for(
+                episode,
+                fact_id=f"fact-{episode_namespace}-future-assessment",
+                fact_type="baseline.future_assessment",
+                value=False,
+                polarity=FactPolarity.AFFIRMED,
+                certainty=1,
+                evidence_span_ids=[payload["evidence_spans"][0]["evidence_span_id"]],
+            )
+        )
     conflicts = [ConflictGroup.model_validate(item) for item in payload["conflict_groups"]]
     requirement_by_id = {
         requirement.requirement_id: requirement
@@ -1867,6 +2076,19 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
                     "status": ExpectationStatus.NOT_DUE,
                     "evidence_span_ids": [],
                     "gap_type": GapType.FUTURE_STAGE_NOT_DUE,
+                }
+            )
+        elif (
+            stage == ReviewStage.BASELINE
+            and expectation.requirement_id == "req-future"
+        ):
+            expectation = expectation.model_copy(
+                update={
+                    "status": ExpectationStatus.OBSERVED,
+                    "evidence_span_ids": [
+                        payload["evidence_spans"][0]["evidence_span_id"]
+                    ],
+                    "gap_type": None,
                 }
             )
         elif expectation.status == ExpectationStatus.NOT_DUE:
@@ -1942,6 +2164,34 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
     agent_gate_by_call_id[evidence_agent_call.agent_call_id] = agent_output_gate(
         evidence_agent_call
     )
+    namespace_registry_inputs = {
+        "subjects": [Subject.model_validate(payload["subject"])],
+        "review_episodes": [episode],
+        "evidence_snapshots": [
+            EvidenceSnapshot.model_validate(payload["evidence_snapshot"])
+        ],
+        "review_runs": [
+            ReviewRun.model_validate(item) for item in payload["review_runs"]
+        ],
+        "source_document_versions": [
+            SourceDocumentVersion.model_validate(item)
+            for item in payload["source_documents"]
+        ],
+        "evidence_expectations": expectations,
+        "prompt_versions": [
+            PromptVersion.model_validate(item) for item in payload["prompt_versions"]
+        ],
+        "model_configs": [
+            ModelConfigContract.model_validate(item)
+            for item in payload["model_configs"]
+        ],
+    }
+    evidence_registry = _issue_trusted_registry(
+        agent_calls=[evidence_agent_call],
+        gate_results=[agent_gate_by_call_id[evidence_agent_call.agent_call_id]],
+        evidence_candidates=[normalized],
+        **namespace_registry_inputs,
+    )
     evidence_gate = publish_evidence_acceptance(
         candidate=normalized,
         agent_call=evidence_agent_call,
@@ -1951,6 +2201,7 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
         gate_result_id=f"gate-evidence-{episode_namespace}",
         input_revision_map={episode.review_episode_id: episode.revision},
         created_at=NOW,
+        registry=evidence_registry,
     )
 
     context = EvaluationContext(
@@ -1980,12 +2231,19 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
             evaluation=evaluation,
             gaps=gaps,
         )
+        used_fact_ids = list(evaluation.trigger.used_fact_ids)
+        if (
+            evaluation.exception is not None
+            and evaluation.trigger.truth == TruthValue.TRUE
+        ):
+            used_fact_ids.extend(evaluation.exception.used_fact_ids)
         candidate = candidate.model_copy(
             update={
                 "review_episode_id": episode.review_episode_id,
                 "evidence_snapshot_id": episode.evidence_snapshot_id,
                 "proposed_decision": decision,
                 "gap_types": sorted(gaps, key=lambda value: value.value),
+                "used_fact_ids": list(dict.fromkeys(used_fact_ids)),
                 "candidate_rationale": (
                     f"合成 UAT 候选：{stage.value} 阶段按当前快照重新求值。"
                 ),
@@ -2001,46 +2259,10 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
         agent_gate_by_call_id[call.agent_call_id] = agent_output_gate(call)
     agent_gates = [agent_gate_by_call_id[call.agent_call_id] for call in calls]
 
-    old_actions_by_component = {
-        item["rule_component_id"]: item for item in payload["actions"]
+    old_actions_by_key = {
+        (item["rule_component_id"], GapType(item["gap_type"])): item
+        for item in payload["actions"]
     }
-    gap_defaults = {
-        GapType.RECORD_INCOMPLETE: (
-            ActionTarget.INVESTIGATOR,
-            "补充当前阶段未记录的关键信息及来源。",
-            "可定位、具日期的完整病历或结果记录。",
-        ),
-        GapType.DESCRIPTION_INSUFFICIENT: (
-            ActionTarget.INVESTIGATOR,
-            "补充足以判定本规则的病历描述。",
-            "具名、具日期且对应本规则的病历记录。",
-        ),
-        GapType.PROFESSIONAL_JUDGMENT: (
-            ActionTarget.INVESTIGATOR,
-            "研究者针对本规则完成明确的临床判断。",
-            "具名、具日期并关联本规则的研究者判断。",
-        ),
-        GapType.SOURCE_CONFLICT: (
-            ActionTarget.INVESTIGATOR,
-            "核实相互冲突的来源并记录结论。",
-            "具名、具日期且链接原始来源的核实记录。",
-        ),
-        GapType.FUTURE_STAGE_NOT_DUE: (
-            ActionTarget.CRC,
-            "在规则到期的后续阶段完成评估。",
-            "对应阶段日期锚点与完整评估记录。",
-        ),
-        GapType.PROVENANCE_FOLLOWUP: (
-            ActionTarget.CRA,
-            "核对筛选病历转述所依据的原始来源。",
-            "原始来源或已签名的溯源核对记录。",
-        ),
-    }
-    fallback_default = (
-        ActionTarget.CRC,
-        "补充或核对本规则判定所需资料。",
-        "可定位、具日期且能闭环当前缺口的资料。",
-    )
     old_assessment_by_component = {
         item["rule_component_id"]: item for item in payload["final_assessments"]
     }
@@ -2050,6 +2272,18 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
     for candidate in candidates:
         component, rule = component_to_rule[candidate.rule_component_id]
         old = old_assessment_by_component[candidate.rule_component_id]
+        candidate_registry = _issue_trusted_registry(
+            agent_calls=[
+                call_by_id[candidate.agent_call_id], evidence_agent_call
+            ],
+            gate_results=[
+                agent_gate_by_call_id[candidate.agent_call_id],
+                agent_gate_by_call_id[evidence_agent_call.agent_call_id],
+            ],
+            evidence_candidates=[normalized],
+            assessment_candidates=[candidate],
+            **namespace_registry_inputs,
+        )
         candidate_gate = publish_assessment_candidate_acceptance(
             candidate,
             agent_call=call_by_id[candidate.agent_call_id],
@@ -2058,6 +2292,7 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
             ],
             gate_result_id=f"gate-{candidate.assessment_candidate_id}",
             created_at=NOW,
+            registry=candidate_registry,
         )
         review_context = build_review_context_snapshot(
             context_id=(
@@ -2090,6 +2325,7 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
                     rules.model_dump(mode="json")
                 )
             },
+            **namespace_registry_inputs,
         )
         publication = publish_assessment(
             candidate,
@@ -2126,48 +2362,33 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
         gaps = derived_gaps[candidate.rule_component_id]
         if not gaps:
             continue
-        old = old_actions_by_component.get(candidate.rule_component_id)
-        old_gap = GapType(old["gap_type"]) if old is not None else None
-        chosen_gap = (
-            old_gap
-            if old_gap in gaps
-            else sorted(gaps, key=lambda value: value.value)[0]
-        )
-        target, requested, acceptable = gap_defaults.get(chosen_gap, fallback_default)
-        component, _ = component_to_rule[candidate.rule_component_id]
-        due_stage = max(
-            (requirement.due_stage for requirement in component.evidence_requirements),
-            key=lambda value: stage_rank[value],
-            default=stage,
-        )
-        action_id = (
-            old["action_id"]
-            if old is not None
-            else f"action-{episode_namespace}-{candidate.rule_component_id}"
-        )
-        trigger_span = old.get("trigger_evidence_span_id") if old is not None else None
-        publication = publish_action_request(
-            assessment_publication=assessment_publication_by_component[
-                candidate.rule_component_id
-            ],
-            action_id=action_id,
-            rule_component_id=candidate.rule_component_id,
-            gap_type=chosen_gap,
-            target_party=target,
-            requested_action=requested,
-            acceptable_evidence=acceptable,
-            due_stage=due_stage,
-            state=ActionState.OPEN,
-            recompute_scope=[candidate.rule_component_id],
-            trigger_evidence_span_id=trigger_span,
-            gate_result_id=f"gate-{action_id}",
-            input_revision_map={episode.review_episode_id: episode.revision},
-            created_at=NOW,
-            registry=registry_for_assessments(assessment_publications),
-        )
-        actions.append(publication.action)
-        action_publications.append(publication)
-        publication_gates.append(publication.gate_result)
+        for gap in sorted(gaps, key=lambda value: value.value):
+            old = old_actions_by_key.get((candidate.rule_component_id, gap))
+            action_id = (
+                old["action_id"]
+                if old is not None
+                else (
+                    f"action-{episode_namespace}-{candidate.rule_component_id}-"
+                    f"{gap.value}"
+                )
+            )
+            publication = publish_action_request(
+                assessment_publication=assessment_publication_by_component[
+                    candidate.rule_component_id
+                ],
+                action_id=action_id,
+                gap_type=gap,
+                gate_result_id=f"gate-{action_id}",
+                input_revision_map={episode.review_episode_id: episode.revision},
+                created_at=NOW,
+                registry=registry_for_assessments(
+                    assessment_publications,
+                    registry_inputs=namespace_registry_inputs,
+                ),
+            )
+            actions.append(publication.action)
+            action_publications.append(publication)
+            publication_gates.append(publication.gate_result)
 
     rollup_gate_id = payload["episode_rollup"]["gate_result_id"]
     rollup_publication = publish_episode_rollup(
@@ -2178,13 +2399,18 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
         gate_result_id=rollup_gate_id,
         input_revision_map={episode.review_episode_id: episode.revision},
         created_at=NOW,
-        registry=registry_for_assessments(assessment_publications),
+        registry=registry_for_assessments(
+            assessment_publications,
+            registry_inputs=namespace_registry_inputs,
+            action_publications=action_publications,
+        ),
     )
     publication_gates.append(rollup_publication.gate_result)
 
     payload["evidence_expectations"] = [
         item.model_dump(mode="json") for item in expectations
     ]
+    payload["facts"] = [item.model_dump(mode="json") for item in facts]
     payload["evidence_normalization_candidates"] = [
         normalized.model_dump(mode="json")
     ]

@@ -6,7 +6,13 @@ from typing import cast
 import pytest
 from pydantic import ValidationError
 
-from app.domain.contracts.agents import AgentCallContract, AgentPublishedEntity, GateResult
+from app.domain.contracts.agents import (
+    AgentCallContract,
+    AgentPublishedEntity,
+    GateResult,
+    ModelConfigContract,
+    PromptVersion,
+)
 from app.domain.contracts.agent_io import CoverageSummary, EligibilityAssessmentOutput
 from app.domain.contracts.normalization import EvidenceNormalizationCandidate
 from app.domain.contracts.common import DateValue
@@ -23,10 +29,12 @@ from app.domain.contracts.enums import (
     ExpectationStatus,
     FactPolarity,
     GapType,
+    GateOutcome,
     LocatorPrecision,
     LogicalOperator,
     ReviewStage,
     RuleKind,
+    RuntimeErrorCode,
     StudyPhase,
     TruthValue,
     TimeDirection,
@@ -39,6 +47,7 @@ from app.domain.contracts.evidence import (
     EvidenceExpectation,
     EvidenceSnapshot,
     EvidenceSpan,
+    SourceDocumentVersion,
 )
 from app.domain.contracts.projections import EpisodeRollup
 from app.domain.contracts.review import (
@@ -48,6 +57,8 @@ from app.domain.contracts.review import (
     PredicateObservation,
     ProtocolDocumentVersion,
     ReviewEpisode,
+    ReviewRun,
+    Subject,
 )
 from app.domain.contracts.rules import (
     AtomicExpression,
@@ -79,6 +90,7 @@ from app.domain.gates import (
     publish_assessment,
     publish_assessment_candidate_acceptance,
     publish_evidence_acceptance,
+    require_accepted_evidence_gate,
     validate_action_publication,
     require_agent_write_permission,
     assert_protocol_integrity,
@@ -292,9 +304,106 @@ def evidence_normalizer_call() -> AgentCallContract:
             "node": AgentNode.EVIDENCE_NORMALIZER,
             "output_kind": AgentOutputKind.CANDIDATE,
             "write_scope": AgentWriteScope.EVIDENCE_CANDIDATE,
+            "prompt_version_id": "prompt-evidence-1",
             "idempotency_key": "episode-1:evidence",
             "gate_result_ids": ["gate-call-evidence-1"],
         }
+    )
+
+
+def publication_input_registry(
+    *,
+    calls: list[AgentCallContract],
+    gates: list[GateResult],
+    evidence_candidates: list[EvidenceNormalizationCandidate] | None = None,
+    assessment_candidates: list[AssessmentCandidate] | None = None,
+    rule_sets: list[RuleSet] | None = None,
+    review_contexts=None,
+    final_assessments: list[FinalAssessment] | None = None,
+    action_requests: list[ActionRequest] | None = None,
+    evidence_expectations: list[EvidenceExpectation] | None = None,
+    source_documents: list[SourceDocumentVersion] | None = None,
+    stage: ReviewStage = ReviewStage.SCREENING,
+):
+    episode = ReviewEpisode(
+        review_episode_id="episode-1",
+        subject_id="subject-1",
+        project_id="project-1",
+        rule_set_id="ruleset-1",
+        study_phase=StudyPhase.PHASE_III,
+        stage=stage,
+        protocol_version_id="protocol-1",
+        rule_set_revision=1,
+        evidence_snapshot_id="snapshot-1",
+    )
+    snapshot = EvidenceSnapshot(
+        evidence_snapshot_id="snapshot-1",
+        subject_id="subject-1",
+        review_episode_id="episode-1",
+        source_document_version_ids=["document-1"],
+        upload_mode=UploadMode.FULL,
+        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+    )
+    prompts = [
+        PromptVersion(
+            prompt_version_id=call.prompt_version_id,
+            node=call.node,
+            template_sha256=("a" if call.node == AgentNode.ELIGIBILITY_ASSESSOR else "b")
+            * 64,
+            schema_version_id="fixture/v1",
+        )
+        for call in calls
+    ]
+    prompts = list({item.prompt_version_id: item for item in prompts}.values())
+    return _issue_trusted_registry(
+        agent_calls=calls,
+        gate_results=gates,
+        evidence_candidates=evidence_candidates or [],
+        assessment_candidates=assessment_candidates or [],
+        final_assessments=final_assessments or [],
+        action_requests=action_requests or [],
+        rule_sets=rule_sets or [],
+        review_contexts=review_contexts or [],
+        subjects=[Subject(subject_id="subject-1", subject_code="001", project_id="project-1")],
+        review_episodes=[episode],
+        evidence_snapshots=[snapshot],
+        review_runs=[
+            ReviewRun(
+                review_run_id="run-1",
+                review_episode_id="episode-1",
+                protocol_version_id="protocol-1",
+                rule_set_revision=1,
+                evidence_snapshot_id="snapshot-1",
+                started_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+            )
+        ],
+        source_document_versions=source_documents or [
+            SourceDocumentVersion(
+                source_document_version_id="document-1",
+                file_name="合成病历.pdf",
+                sha256="c" * 64,
+                document_type="screening_record",
+                source_party="研究者方",
+                upload_mode=UploadMode.FULL,
+                review_stage=stage,
+            )
+        ],
+        evidence_expectations=evidence_expectations or [],
+        prompt_versions=prompts,
+        model_configs=[
+            ModelConfigContract(
+                model_config_id="model-1",
+                provider="synthetic",
+                model="synthetic",
+                reasoning_effort="test",
+            )
+        ],
+        protocol_integrity_bindings={
+            gate.gate_result_id: canonical_hash(rule_set.model_dump(mode="json"))
+            for gate in gates
+            if gate.gate_name == "protocol-integrity-gate"
+            for rule_set in (rule_sets or [])
+        },
     )
 
 
@@ -361,14 +470,114 @@ def test_evidence_gate_rejects_candidate_from_another_agent_scope() -> None:
     normalized = evidence_candidate(facts, spans).model_copy(
         update={"created_by_agent_call_id": "call-other"}
     )
+    call = bind_agent_call(evidence_normalizer_call(), normalized)
+    call_gate = agent_call_gate(call)
     with pytest.raises(ValueError, match="AgentCall scope"):
         publish_evidence_acceptance(
             candidate=normalized,
-            agent_call=(call := bind_agent_call(evidence_normalizer_call(), normalized)),
-            agent_call_gate_result=agent_call_gate(call),
+            agent_call=call,
+            agent_call_gate_result=call_gate,
             gate_result_id="gate-evidence-scope",
             input_revision_map={"episode-1": 1},
             created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+            registry=publication_input_registry(
+                calls=[call],
+                gates=[call_gate],
+                evidence_candidates=[normalized],
+            ),
+        )
+
+
+def test_evidence_gate_rejects_unregistered_publication_chain_members() -> None:
+    facts = [
+        clinical_fact(
+            fact_id="fact-evidence-registered",
+            fact_type="history.condition_present",
+            value=False,
+            polarity=FactPolarity.AFFIRMED,
+            certainty=1,
+            evidence_span_ids=["span-evidence-registered"],
+        )
+    ]
+    normalized = evidence_candidate(
+        facts, [evidence_span("span-evidence-registered")]
+    )
+    call = bind_agent_call(evidence_normalizer_call(), normalized)
+    call_gate = agent_call_gate(call)
+    registries = [
+        publication_input_registry(
+            calls=[], gates=[], evidence_candidates=[normalized]
+        ),
+        publication_input_registry(
+            calls=[call], gates=[], evidence_candidates=[normalized]
+        ),
+        publication_input_registry(
+            calls=[call], gates=[call_gate], evidence_candidates=[]
+        ),
+    ]
+    for registry in registries:
+        with pytest.raises(ValueError, match="未找到服务端已登记"):
+            publish_evidence_acceptance(
+                candidate=normalized,
+                agent_call=call,
+                agent_call_gate_result=call_gate,
+                gate_result_id="gate-evidence-unregistered",
+                input_revision_map={"episode-1": 1},
+                created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+                registry=registry,
+            )
+
+
+def test_evidence_gate_binds_registered_source_document_payload() -> None:
+    facts = [
+        clinical_fact(
+            fact_id="fact-evidence-source",
+            fact_type="history.condition_present",
+            value=False,
+            polarity=FactPolarity.AFFIRMED,
+            certainty=1,
+            evidence_span_ids=["span-evidence-source"],
+        )
+    ]
+    normalized = evidence_candidate(facts, [evidence_span("span-evidence-source")])
+    call = bind_agent_call(evidence_normalizer_call(), normalized)
+    call_gate = agent_call_gate(call)
+    registry = publication_input_registry(
+        calls=[call],
+        gates=[call_gate],
+        evidence_candidates=[normalized],
+    )
+    accepted = publish_evidence_acceptance(
+        candidate=normalized,
+        agent_call=call,
+        agent_call_gate_result=call_gate,
+        gate_result_id="gate-evidence-source",
+        input_revision_map={"episode-1": 1},
+        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        registry=registry,
+    )
+    changed_source = SourceDocumentVersion(
+        source_document_version_id="document-1",
+        file_name="合成病历.pdf",
+        sha256="d" * 64,
+        document_type="screening_record",
+        source_party="研究者方",
+        upload_mode=UploadMode.FULL,
+        review_stage=ReviewStage.SCREENING,
+    )
+    changed_registry = publication_input_registry(
+        calls=[call],
+        gates=[call_gate],
+        evidence_candidates=[normalized],
+        source_documents=[changed_source],
+    )
+    with pytest.raises(ValueError, match="Evidence Gate 闭包"):
+        require_accepted_evidence_gate(
+            accepted,
+            candidate=normalized,
+            agent_call=call,
+            agent_call_gate_result=call_gate,
+            registry=changed_registry,
         )
 
 
@@ -402,34 +611,17 @@ def test_assessment_rejects_facts_not_in_accepted_evidence_candidate() -> None:
     forged_evidence_call = bind_agent_call(
         evidence_normalizer_call(), substituted
     )
-    forged_evidence_gate = publish_evidence_acceptance(
-        candidate=substituted,
-        agent_call=forged_evidence_call,
-        agent_call_gate_result=agent_call_gate(forged_evidence_call),
-        gate_result_id=legitimate.evidence_gate_result.gate_result_id,
-        input_revision_map={"episode-1": 1},
-        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
-    )
     with pytest.raises(
-        ValueError, match="typed output|accepted Evidence Candidate|已登记版本"
+        ValueError, match="已登记版本"
     ):
-        publish_assessment(
-            value,
-            agent_call=legitimate.agent_call,
-            agent_call_gate_result=legitimate.agent_call_gate_result,
-            candidate_gate_result=legitimate.candidate_gate_result,
-            evidence_gate_result=forged_evidence_gate,
-            evidence_candidate=substituted,
-            evidence_agent_call=forged_evidence_call,
-            evidence_agent_call_gate_result=agent_call_gate(forged_evidence_call),
-            rule_set=legitimate.rule_set,
-            review_context=legitimate.review_context,
-            protocol_integrity_gate_result=legitimate.protocol_integrity_gate_result,
-            registry=registry_for_test_assessment(legitimate),
-            assessment_id="assessment-evidence-substitution",
-            gate_result_id="gate-assessment-evidence-substitution",
+        publish_evidence_acceptance(
+            candidate=substituted,
+            agent_call=forged_evidence_call,
+            agent_call_gate_result=agent_call_gate(forged_evidence_call),
+            gate_result_id=legitimate.evidence_gate_result.gate_result_id,
             input_revision_map={"episode-1": 1},
             created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+            registry=registry_for_test_assessment(legitimate),
         )
 
 
@@ -453,32 +645,55 @@ def test_assessment_rejects_synchronously_rehashed_agent_candidate_chain() -> No
         update={"candidate_rationale": "同步重算后的伪造候选"}
     )
     forged_call = bind_agent_call(eligibility_call(), forged_candidate)
-    forged_gate = publish_assessment_candidate_acceptance(
-        forged_candidate,
-        agent_call=forged_call,
-        agent_call_gate_result=agent_call_gate(forged_call),
-        gate_result_id=legitimate.candidate_gate_result.gate_result_id,
-        created_at=legitimate.candidate_gate_result.created_at,
-    )
     with pytest.raises(ValueError, match="已登记版本"):
-        publish_assessment(
+        publish_assessment_candidate_acceptance(
             forged_candidate,
             agent_call=forged_call,
             agent_call_gate_result=agent_call_gate(forged_call),
-            candidate_gate_result=forged_gate,
-            evidence_gate_result=legitimate.evidence_gate_result,
-            evidence_candidate=legitimate.evidence_candidate,
-            evidence_agent_call=legitimate.evidence_agent_call,
-            evidence_agent_call_gate_result=legitimate.evidence_agent_call_gate_result,
-            rule_set=legitimate.rule_set,
-            review_context=legitimate.review_context,
-            protocol_integrity_gate_result=legitimate.protocol_integrity_gate_result,
+            gate_result_id=legitimate.candidate_gate_result.gate_result_id,
+            created_at=legitimate.candidate_gate_result.created_at,
             registry=registry_for_test_assessment(legitimate),
-            assessment_id=legitimate.assessment.assessment_id,
-            gate_result_id=legitimate.gate_result.gate_result_id,
-            input_revision_map=legitimate.gate_result.input_revision_map,
-            created_at=legitimate.gate_result.created_at,
         )
+
+
+def test_assessment_candidate_gate_rejects_unregistered_chain_members() -> None:
+    component = gate_component()
+    facts = [
+        clinical_fact(
+            fact_id="fact-candidate-registered",
+            fact_type="history.condition_present",
+            value=False,
+            polarity=FactPolarity.AFFIRMED,
+            certainty=1,
+            evidence_span_ids=["span-candidate-registered"],
+        )
+    ]
+    value = align_candidate(
+        candidate(ComponentDecision.EXCLUSION_NOT_TRIGGERED, []), component, facts
+    )
+    call = bind_agent_call(eligibility_call(), value)
+    call_gate = agent_call_gate(call)
+    registries = [
+        publication_input_registry(
+            calls=[], gates=[], assessment_candidates=[value]
+        ),
+        publication_input_registry(
+            calls=[call], gates=[], assessment_candidates=[value]
+        ),
+        publication_input_registry(
+            calls=[call], gates=[call_gate], assessment_candidates=[]
+        ),
+    ]
+    for registry in registries:
+        with pytest.raises(ValueError, match="未找到服务端已登记"):
+            publish_assessment_candidate_acceptance(
+                value,
+                agent_call=call,
+                agent_call_gate_result=call_gate,
+                gate_result_id="gate-candidate-unregistered",
+                created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+                registry=registry,
+            )
 
 
 def test_assessment_rejects_same_id_revision_rule_set_replacement() -> None:
@@ -584,22 +799,34 @@ def publish_test_assessment(
             span_id for fact in facts for span_id in fact.evidence_span_ids
         )
     ]
+    normalized = evidence_candidate(facts, spans)
+    evidence_call = bind_agent_call(evidence_normalizer_call(), normalized)
+    call_gate = agent_call_gate(call)
+    evidence_call_gate = agent_call_gate(evidence_call)
+    initial_registry = publication_input_registry(
+        calls=[call, evidence_call],
+        gates=[call_gate, evidence_call_gate],
+        evidence_candidates=[normalized],
+        assessment_candidates=[value],
+        evidence_expectations=expectations or [],
+        stage=stage,
+    )
     candidate_gate = publish_assessment_candidate_acceptance(
         value,
         agent_call=call,
-        agent_call_gate_result=agent_call_gate(call),
+        agent_call_gate_result=call_gate,
         gate_result_id=f"gate-{value.assessment_candidate_id}",
         created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        registry=initial_registry,
     )
-    normalized = evidence_candidate(facts, spans)
-    evidence_call = bind_agent_call(evidence_normalizer_call(), normalized)
     evidence_gate = publish_evidence_acceptance(
         candidate=normalized,
         agent_call=evidence_call,
-        agent_call_gate_result=agent_call_gate(evidence_call),
+        agent_call_gate_result=evidence_call_gate,
         gate_result_id="gate-evidence-1",
         input_revision_map={"episode-1": 1},
         created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        registry=initial_registry,
     )
     rules = gate_rule_set(component, rule_kind)
     integrity_gate = GateResult(
@@ -635,12 +862,12 @@ def publish_test_assessment(
         expectations=expectations or [],
         conflict_groups=conflicts or [],
     )
-    registry = _issue_trusted_registry(
-        agent_calls=[call, evidence_call],
-        gate_results=[
-            agent_call_gate(call),
+    registry = publication_input_registry(
+        calls=[call, evidence_call],
+        gates=[
+            call_gate,
             candidate_gate,
-            agent_call_gate(evidence_call),
+            evidence_call_gate,
             evidence_gate,
             integrity_gate,
         ],
@@ -648,19 +875,18 @@ def publish_test_assessment(
         assessment_candidates=[value],
         rule_sets=[rules],
         review_contexts=[review_context],
-        protocol_integrity_bindings={
-            integrity_gate.gate_result_id: canonical_hash(rules.model_dump(mode="json"))
-        },
+        evidence_expectations=expectations or [],
+        stage=stage,
     )
     return publish_assessment(
         value,
         agent_call=call,
-        agent_call_gate_result=agent_call_gate(call),
+        agent_call_gate_result=call_gate,
         candidate_gate_result=candidate_gate,
         evidence_gate_result=evidence_gate,
         evidence_candidate=normalized,
         evidence_agent_call=evidence_call,
-        evidence_agent_call_gate_result=agent_call_gate(evidence_call),
+        evidence_agent_call_gate_result=evidence_call_gate,
         rule_set=rules,
         review_context=review_context,
         protocol_integrity_gate_result=integrity_gate,
@@ -673,24 +899,23 @@ def publish_test_assessment(
 
 
 def registry_for_test_assessment(publication: AssessmentPublication):
-    return _issue_trusted_registry(
-        agent_calls=[publication.agent_call, publication.evidence_agent_call],
-        gate_results=[
+    return publication_input_registry(
+        calls=[publication.agent_call, publication.evidence_agent_call],
+        gates=[
             publication.agent_call_gate_result,
             publication.candidate_gate_result,
             publication.evidence_agent_call_gate_result,
             publication.evidence_gate_result,
             publication.protocol_integrity_gate_result,
+            publication.gate_result,
         ],
         evidence_candidates=[publication.evidence_candidate],
         assessment_candidates=[publication.candidate],
+        final_assessments=[publication.assessment],
         rule_sets=[publication.rule_set],
         review_contexts=[publication.review_context],
-        protocol_integrity_bindings={
-            publication.protocol_integrity_gate_result.gate_result_id: canonical_hash(
-                publication.rule_set.model_dump(mode="json")
-            )
-        },
+        evidence_expectations=publication.review_context.expectations,
+        stage=publication.review_context.review_episode.stage,
     )
 
 
@@ -745,18 +970,35 @@ def action_request(gap: GapType) -> ActionPublication:
     return publish_action_request(
         assessment_publication=assessment_input,
         action_id=f"action-{gap.value}",
-        rule_component_id="component-1",
         gap_type=gap,
-        target_party=ActionTarget.INVESTIGATOR,
-        requested_action="补充可核对的信息",
-        acceptable_evidence="含日期及来源定位的记录",
-        due_stage=ReviewStage.BASELINE,
-        state=ActionState.OPEN,
-        recompute_scope=["component-1"],
         gate_result_id=f"gate-action-{gap.value}",
         input_revision_map={"episode-1": 1},
         created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
         registry=registry_for_test_assessment(assessment_input),
+    )
+
+
+def registry_for_test_action(publication: ActionPublication):
+    assessment = publication.assessment_publication
+    return publication_input_registry(
+        calls=[assessment.agent_call, assessment.evidence_agent_call],
+        gates=[
+            assessment.agent_call_gate_result,
+            assessment.candidate_gate_result,
+            assessment.evidence_agent_call_gate_result,
+            assessment.evidence_gate_result,
+            assessment.protocol_integrity_gate_result,
+            assessment.gate_result,
+            publication.gate_result,
+        ],
+        evidence_candidates=[assessment.evidence_candidate],
+        assessment_candidates=[assessment.candidate],
+        final_assessments=[assessment.assessment],
+        action_requests=[publication.action],
+        rule_sets=[assessment.rule_set],
+        review_contexts=[assessment.review_context],
+        evidence_expectations=assessment.review_context.expectations,
+        stage=assessment.review_context.review_episode.stage,
     )
 
 
@@ -1488,13 +1730,14 @@ def test_agent_cannot_publish_final_state_or_action() -> None:
 
 
 def test_candidate_gate_requires_accepted_agent_call_closure() -> None:
-    call = eligibility_call()
+    value = candidate(ComponentDecision.EXCLUSION_NOT_TRIGGERED, [])
+    call = bind_agent_call(eligibility_call(), value)
     rejected_call_gate = agent_call_gate(call).model_copy(
         update={
-            "result": "rejected",
+            "result": GateOutcome.REJECTED,
             "accepted_entity_refs": [],
             "rejected_entity_refs": [call.agent_call_id],
-            "error_codes": ["schema_validation_failed"],
+            "error_codes": [RuntimeErrorCode.SCHEMA_VALIDATION_FAILED],
         }
     )
     with pytest.raises(AgentPermissionError, match="AgentCall 未通过"):
@@ -1504,6 +1747,11 @@ def test_candidate_gate_requires_accepted_agent_call_closure() -> None:
             agent_call_gate_result=rejected_call_gate,
             gate_result_id="gate-candidate-rejected-call",
             created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+            registry=publication_input_registry(
+                calls=[call],
+                gates=[rejected_call_gate],
+                assessment_candidates=[value],
+            ),
         )
 
 
@@ -1738,7 +1986,7 @@ def test_rollup_rejects_accepted_assessment_from_another_episode() -> None:
     cross_episode_publication = valid.model_copy(
         update={"assessment": cross_episode_assessment}
     )
-    with pytest.raises(ValueError, match="闭包重算"):
+    with pytest.raises(ValueError, match="已登记版本|闭包重算"):
         publish_episode_rollup(
             review_episode_id="episode-1",
             assessment_publications=[cross_episode_publication],
@@ -1896,6 +2144,14 @@ def test_protocol_integrity_uses_authoritative_manifest_not_caller_codes() -> No
         gate_result_id="gate-authority-1",
         created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
     )
+    protocol_registry = _issue_trusted_registry(
+        gate_results=[authority_gate],
+        protocol_authority_records=[authority],
+        protocol_authority_confirmations=[authority_confirmation],
+        service_command_events=[command],
+        protocol_source_records=[source],
+        rule_sets=[rules],
+    )
     manifest = build_protocol_integrity_manifest(
         manifest_id="manifest-1",
         protocol_version_id="protocol-1",
@@ -2006,7 +2262,7 @@ def test_action_publication_round_trip_and_tamper_rejection() -> None:
     assert (
         validate_action_publication(
             publication,
-            registry_for_test_assessment(publication.assessment_publication),
+            registry_for_test_action(publication),
         )
         == publication.gate_result
     )
@@ -2026,7 +2282,31 @@ def test_action_publication_round_trip_and_tamper_rejection() -> None:
                 gate_result=publication.gate_result,
                 assessment_publication=source_assessment,
             ),
-            registry_for_test_assessment(publication.assessment_publication),
+            registry_for_test_action(publication),
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("target_party", ActionTarget.INVESTIGATOR),
+        ("requested_action", "调用方自行填写的待办内容"),
+        ("acceptable_evidence", "调用方自行填写的证据要求"),
+        ("due_stage", ReviewStage.BASELINE),
+        ("recompute_scope", ["component-other"]),
+        ("trigger_evidence_span_id", "span-other"),
+    ],
+)
+def test_action_clinical_fields_cannot_be_replaced_by_caller(
+    field, replacement
+) -> None:
+    publication = action_request(GapType.PROVENANCE_FOLLOWUP)
+    invalid_action = publication.action.model_copy(update={field: replacement})
+    invalid_publication = publication.model_copy(update={"action": invalid_action})
+    with pytest.raises(ValueError, match="已登记版本|完整上游 Gate 闭包重算"):
+        validate_action_publication(
+            invalid_publication,
+            registry_for_test_action(publication),
         )
 
 

@@ -126,8 +126,30 @@ def publish_episode_rollup(
     created_at: datetime,
     registry: TrustedPublicationRegistry,
 ) -> EpisodeRollupPublication:
+    episode = registry.require("review_episode", review_episode_id)
+    rule_set = registry.require("rule_set", episode.rule_set_id)
+    expected_component_ids = {
+        component.rule_component_id
+        for rule in rule_set.rules
+        for component in rule.components
+    }
     assessments = [item.assessment for item in assessment_publications]
     actions = [item.action for item in action_publications]
+    assessment_ids = [item.assessment_id for item in assessments]
+    assessment_component_ids = [item.rule_component_id for item in assessments]
+    if len(assessment_ids) != len(set(assessment_ids)) or len(
+        assessment_component_ids
+    ) != len(set(assessment_component_ids)):
+        raise ValueError("EpisodeRollup 不接受重复 Assessment 或重复规则组件")
+    if set(assessment_component_ids) != expected_component_ids:
+        raise ValueError("EpisodeRollup 必须包含当前规则集全部规则组件的审核结果")
+    registered_assessments = {
+        item.assessment_id: item
+        for item in registry.all("final_assessment")
+        if item.review_episode_id == review_episode_id
+    }
+    if set(assessment_ids) != set(registered_assessments):
+        raise ValueError("EpisodeRollup Assessment 集合与服务端已登记结果不一致")
     for publication in assessment_publications:
         validate_assessment_publication(publication, registry)
         assessment = publication.assessment
@@ -140,17 +162,63 @@ def publish_episode_rollup(
             or assessment.review_episode_id != review_episode_id
         ):
             raise ValueError("EpisodeRollup 输入包含未验收或跨 Episode 的 Assessment")
-    assessment_ids = {
+    assessment_id_set = {
         item.assessment.assessment_id for item in assessment_publications
     }
+    expected_expectations = {
+        item.expectation_id: item
+        for item in registry.all("evidence_expectation")
+        if item.review_episode_id == review_episode_id
+    }
+    expectation_ids = [item.expectation_id for item in expectations]
+    expectation_requirement_ids = [item.requirement_id for item in expectations]
+    expected_requirement_ids = {
+        requirement.requirement_id
+        for rule in rule_set.rules
+        for component in rule.components
+        for requirement in component.evidence_requirements
+    }
+    if len(expectation_ids) != len(set(expectation_ids)):
+        raise ValueError("EpisodeRollup 不接受重复 EvidenceExpectation")
+    if len(expectation_requirement_ids) != len(set(expectation_requirement_ids)):
+        raise ValueError("EpisodeRollup 每项证据要求必须且只能对应一个覆盖状态")
+    if set(expectation_requirement_ids) != expected_requirement_ids:
+        raise ValueError("EpisodeRollup 必须包含当前规则集全部应备证据状态")
+    if set(expectation_ids) != set(expected_expectations):
+        raise ValueError("EpisodeRollup EvidenceExpectation 集合不完整")
+    for expectation in expectations:
+        registry.require(
+            "evidence_expectation", expectation.expectation_id, expectation
+        )
+
+    action_ids = [item.action_id for item in actions]
+    action_keys = [(item.assessment_id, item.gap_type) for item in actions]
+    if len(action_ids) != len(set(action_ids)) or len(action_keys) != len(
+        set(action_keys)
+    ):
+        raise ValueError("EpisodeRollup 不接受重复 ActionRequest")
+    expected_action_keys = {
+        (assessment.assessment_id, gap_type)
+        for assessment in assessments
+        for gap_type in assessment.gap_types
+    }
+    if set(action_keys) != expected_action_keys:
+        raise ValueError("EpisodeRollup 必须为每个已确认缺口包含一项对应待办")
+    registered_actions = {
+        item.action_id: item
+        for item in registry.all("action_request")
+        if item.review_episode_id == review_episode_id
+    }
+    if set(action_ids) != set(registered_actions):
+        raise ValueError("EpisodeRollup ActionRequest 集合与服务端已登记结果不一致")
     for publication in action_publications:
         action = publication.action
-        if action.assessment_id not in assessment_ids:
+        if action.assessment_id not in assessment_id_set:
             raise ValueError("EpisodeRollup Action 未引用当前输入 Assessment")
         validate_action_publication(publication, registry)
         if (
             action.review_episode_id != review_episode_id
-            or action.assessment_id not in assessment_ids
+            or action.assessment_id not in assessment_id_set
         ):
             raise ValueError("EpisodeRollup 输入包含跨 Episode/Assessment 的 Action")
     if any(item.review_episode_id != review_episode_id for item in expectations):

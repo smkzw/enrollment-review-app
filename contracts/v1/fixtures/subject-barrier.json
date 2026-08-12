@@ -1,5 +1,35 @@
 {
-  "actions": [],
+  "actions": [
+    {
+      "acceptable_evidence": "对应审核节点的日期锚点及完整评估记录。",
+      "action_id": "action-barrier-future",
+      "assessment_id": "assessment-barrier-ex-03",
+      "blocking_level": "attention",
+      "due_stage": "baseline",
+      "evidence_snapshot_id": "snapshot-barrier",
+      "gap_type": "future_stage_not_due",
+      "gate_result_id": "gate-action-barrier-future",
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "publication_fingerprint": "2676560fb1cdefe969f2143a06537eb397f38139cbcfe6bdf0f9bc8d1057c86c",
+      "recompute_scope": [
+        "component-ex-03"
+      ],
+      "requested_action": "在本条要求到期的后续审核节点完成评估。",
+      "review_episode_id": "episode-barrier",
+      "review_run_id": "run-barrier",
+      "revision": 1,
+      "rule_component_id": "component-ex-03",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "state": "open",
+      "subject_id": "subject-barrier",
+      "target_party": "investigator",
+      "transitions": [],
+      "trigger_evidence_span_id": null
+    }
+  ],
   "agent_calls": [
     {
       "agent_call_id": "call-barrier-1",
@@ -22,7 +52,7 @@
       "model_config_id": "model-baseline-v1",
       "node": "evidence_normalizer",
       "outcome": "accepted",
-      "output_hash": "1cffd14c04b8b67cb0ce347dbafce1559cca2c5be0776863c0f16cc20723217f",
+      "output_hash": "a222520806b47b0a08ada3a9f1a391b5c9990e67ba5e7e09e6f0c6803c3f17f6",
       "output_kind": "candidate",
       "output_tokens": 51,
       "parent_event_id": null,
@@ -46,7 +76,7 @@
       "subject_id": "subject-barrier",
       "trigger": "fixture_generation",
       "typed_output_hashes": {
-        "evidence-candidate-episode-barrier": "7fcd601cd200ae6952ecb4d51a9bf63ff29570ab3263dc5fb2722c842120eada"
+        "evidence-candidate-episode-barrier": "b3b51432a1b6b9a968a959159779e547da14db2dcdbfaf032e84420d78e742b5"
       },
       "write_scope": "evidence_candidate"
     },
@@ -71,7 +101,7 @@
       "model_config_id": "model-baseline-v1",
       "node": "eligibility_assessor",
       "outcome": "accepted",
-      "output_hash": "82f4d8113ad939523489e63a6900bb1044b73c6f32e82bcd587466afdef35d13",
+      "output_hash": "a46270163f1082566cc134a44ad6f5389081f292e6c5ebab24b5ac60282719c1",
       "output_kind": "candidate",
       "output_tokens": 52,
       "parent_event_id": null,
@@ -96,7 +126,12 @@
       "trigger": "fixture_generation",
       "typed_output_hashes": {
         "candidate-barrier-ex": "7d40b9ce86a129141d1b7da57db28b868061dcad1ddf3ac5dc2f7d2590cf43df",
-        "candidate-barrier-in": "a57cedf4131140df3269c5d00ae5cbb910808d2357b6c84ac1d4427b20578eb0"
+        "candidate-barrier-ex-02": "ce5cca0d0b7f402756d153066643098c147ca40f9e366ee176487dd54c09ef46",
+        "candidate-barrier-ex-04": "938b5e13e67251cb109b8549b4228f6071f98e732e544f0676e67c5f1527cdd6",
+        "candidate-barrier-future": "d22baa6633cbc4096e579b2c79896d163c5e8bff80d51bc901958f690bedd940",
+        "candidate-barrier-in": "a57cedf4131140df3269c5d00ae5cbb910808d2357b6c84ac1d4427b20578eb0",
+        "candidate-barrier-req-01": "ccd0e9f4179d3f3264193b40d2c3944a8c645d8fba3d20440faf498b1adaf1d8",
+        "candidate-barrier-req-02": "6535d957f9d1c47e10b479bce609681f5e8b7c1edd0968bb6b089ba6e646452f"
       },
       "write_scope": "assessment_candidate"
     }
@@ -278,6 +313,243 @@
         "fact-barrier-measurement-invalid",
         "fact-barrier-no-exception"
       ]
+    },
+    {
+      "agent_call_id": "call-barrier-2",
+      "assessment_candidate_id": "candidate-barrier-ex-02",
+      "candidate_confidence": 0.9,
+      "candidate_rationale": "当前资料能够支持该组件的确定性判断。",
+      "evidence_snapshot_id": "snapshot-barrier",
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "gap_types": [],
+      "missing_predicate_ids": [],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [
+            "span-barrier-risk"
+          ],
+          "fact_ids": [
+            "fact-barrier-ex-02"
+          ],
+          "observed_unit": null,
+          "observed_value": false,
+          "predicate_id": "predicate-investigator-rule_specific_judgment-eq",
+          "reason_codes": [],
+          "schema_version": "fixture/v1",
+          "truth": "false"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-investigator-rule_specific_judgment-eq"
+      ],
+      "project_id": "project-synthetic-phase-iii",
+      "proposed_decision": "exclusion_not_triggered",
+      "protocol_version_id": "protocol-v1",
+      "reason_codes": [],
+      "review_episode_id": "episode-barrier",
+      "review_run_id": "run-barrier",
+      "rule_component_id": "component-ex-02",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
+      "uncertainty_codes": [],
+      "unresolved_items": [],
+      "used_fact_ids": [
+        "fact-barrier-ex-02"
+      ]
+    },
+    {
+      "agent_call_id": "call-barrier-2",
+      "assessment_candidate_id": "candidate-barrier-ex-04",
+      "candidate_confidence": 0.9,
+      "candidate_rationale": "当前资料能够支持该组件的确定性判断。",
+      "evidence_snapshot_id": "snapshot-barrier",
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "gap_types": [],
+      "missing_predicate_ids": [],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [
+            "span-barrier-risk"
+          ],
+          "fact_ids": [
+            "fact-barrier-ex-04"
+          ],
+          "observed_unit": null,
+          "observed_value": false,
+          "predicate_id": "predicate-history-referenced_document-eq",
+          "reason_codes": [],
+          "schema_version": "fixture/v1",
+          "truth": "false"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-history-referenced_document-eq"
+      ],
+      "project_id": "project-synthetic-phase-iii",
+      "proposed_decision": "exclusion_not_triggered",
+      "protocol_version_id": "protocol-v1",
+      "reason_codes": [],
+      "review_episode_id": "episode-barrier",
+      "review_run_id": "run-barrier",
+      "rule_component_id": "component-ex-04",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
+      "uncertainty_codes": [],
+      "unresolved_items": [],
+      "used_fact_ids": [
+        "fact-barrier-ex-04"
+      ]
+    },
+    {
+      "agent_call_id": "call-barrier-2",
+      "assessment_candidate_id": "candidate-barrier-req-01",
+      "candidate_confidence": 0.9,
+      "candidate_rationale": "当前资料能够支持该组件的确定性判断。",
+      "evidence_snapshot_id": "snapshot-barrier",
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "gap_types": [],
+      "missing_predicate_ids": [],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [
+            "span-barrier-risk"
+          ],
+          "fact_ids": [
+            "fact-barrier-req-01"
+          ],
+          "observed_unit": null,
+          "observed_value": true,
+          "predicate_id": "predicate-procedure-required_completed-eq",
+          "reason_codes": [],
+          "schema_version": "fixture/v1",
+          "truth": "true"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-procedure-required_completed-eq"
+      ],
+      "project_id": "project-synthetic-phase-iii",
+      "proposed_decision": "requirement_met",
+      "protocol_version_id": "protocol-v1",
+      "reason_codes": [],
+      "review_episode_id": "episode-barrier",
+      "review_run_id": "run-barrier",
+      "rule_component_id": "component-req-01",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
+      "uncertainty_codes": [],
+      "unresolved_items": [],
+      "used_fact_ids": [
+        "fact-barrier-req-01"
+      ]
+    },
+    {
+      "agent_call_id": "call-barrier-2",
+      "assessment_candidate_id": "candidate-barrier-req-02",
+      "candidate_confidence": 0.9,
+      "candidate_rationale": "当前资料能够支持该组件的确定性判断。",
+      "evidence_snapshot_id": "snapshot-barrier",
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "gap_types": [],
+      "missing_predicate_ids": [],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [
+            "span-barrier-risk"
+          ],
+          "fact_ids": [
+            "fact-barrier-req-02"
+          ],
+          "observed_unit": null,
+          "observed_value": true,
+          "predicate_id": "predicate-laboratory-required_fields_complete-eq",
+          "reason_codes": [],
+          "schema_version": "fixture/v1",
+          "truth": "true"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-laboratory-required_fields_complete-eq"
+      ],
+      "project_id": "project-synthetic-phase-iii",
+      "proposed_decision": "requirement_met",
+      "protocol_version_id": "protocol-v1",
+      "reason_codes": [],
+      "review_episode_id": "episode-barrier",
+      "review_run_id": "run-barrier",
+      "rule_component_id": "component-req-02",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
+      "uncertainty_codes": [],
+      "unresolved_items": [],
+      "used_fact_ids": [
+        "fact-barrier-req-02"
+      ]
+    },
+    {
+      "agent_call_id": "call-barrier-2",
+      "assessment_candidate_id": "candidate-barrier-future",
+      "candidate_confidence": 0.9,
+      "candidate_rationale": "该组件在基线审核节点到期。",
+      "evidence_snapshot_id": "snapshot-barrier",
+      "evidence_span_ids": [],
+      "gap_types": [
+        "future_stage_not_due"
+      ],
+      "missing_predicate_ids": [
+        "predicate-baseline-future_assessment-eq"
+      ],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [],
+          "fact_ids": [],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-baseline-future_assessment-eq",
+          "reason_codes": [
+            "fact_not_observed"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-baseline-future_assessment-eq"
+      ],
+      "project_id": "project-synthetic-phase-iii",
+      "proposed_decision": "not_due",
+      "protocol_version_id": "protocol-v1",
+      "reason_codes": [
+        "fact_not_observed"
+      ],
+      "review_episode_id": "episode-barrier",
+      "review_run_id": "run-barrier",
+      "rule_component_id": "component-ex-03",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
+      "uncertainty_codes": [
+        "fact_not_observed"
+      ],
+      "unresolved_items": [],
+      "used_fact_ids": []
     }
   ],
   "conflict_groups": [],
@@ -285,22 +557,36 @@
     "barrier_count": 1,
     "conflict_count": 0,
     "current_gap_count": 0,
-    "future_attention_count": 0,
-    "gap_counts": {},
+    "future_attention_count": 2,
+    "gap_counts": {
+      "future_stage_not_due": 2
+    },
     "gate_result_id": "gate-rollup-barrier",
-    "input_action_ids": [],
+    "input_action_ids": [
+      "action-barrier-future"
+    ],
     "input_assessment_ids": [
-      "assessment-barrier-in",
-      "assessment-barrier-ex"
+      "assessment-barrier-in-01",
+      "assessment-barrier-ex-01",
+      "assessment-barrier-ex-02",
+      "assessment-barrier-ex-04",
+      "assessment-barrier-req-01",
+      "assessment-barrier-req-02",
+      "assessment-barrier-ex-03"
     ],
     "input_expectation_ids": [
       "expectation-barrier-age",
-      "expectation-barrier-risk"
+      "expectation-barrier-risk",
+      "expectation-barrier-ex-02",
+      "expectation-barrier-ex-04",
+      "expectation-barrier-req-01",
+      "expectation-barrier-req-02",
+      "expectation-barrier-future"
     ],
     "main_status": "clear_barrier",
     "professional_judgment_count": 0,
     "provenance_followup_count": 0,
-    "publication_fingerprint": "7e7359b193304f4c9be29f6ea14fe80daf0c2a48a1938ef0dfd1bdec58392fc6",
+    "publication_fingerprint": "4e60660eb26be552740cba54231adc1dceac333630b782ab02af92cd8074ed4f",
     "review_episode_id": "episode-barrier",
     "schema_version": "fixture/v1",
     "sort_rank": 0
@@ -327,6 +613,59 @@
       "review_episode_id": "episode-barrier",
       "schema_version": "fixture/v1",
       "status": "observed"
+    },
+    {
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "expectation_id": "expectation-barrier-ex-02",
+      "gap_type": null,
+      "requirement_id": "req-professional",
+      "review_episode_id": "episode-barrier",
+      "schema_version": "fixture/v1",
+      "status": "observed"
+    },
+    {
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "expectation_id": "expectation-barrier-ex-04",
+      "gap_type": null,
+      "requirement_id": "req-referenced",
+      "review_episode_id": "episode-barrier",
+      "schema_version": "fixture/v1",
+      "status": "observed"
+    },
+    {
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "expectation_id": "expectation-barrier-req-01",
+      "gap_type": null,
+      "requirement_id": "req-procedure",
+      "review_episode_id": "episode-barrier",
+      "schema_version": "fixture/v1",
+      "status": "observed"
+    },
+    {
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "expectation_id": "expectation-barrier-req-02",
+      "gap_type": null,
+      "requirement_id": "req-result-fields",
+      "review_episode_id": "episode-barrier",
+      "schema_version": "fixture/v1",
+      "status": "observed"
+    },
+    {
+      "evidence_span_ids": [],
+      "expectation_id": "expectation-barrier-future",
+      "gap_type": "future_stage_not_due",
+      "requirement_id": "req-future",
+      "review_episode_id": "episode-barrier",
+      "schema_version": "fixture/v1",
+      "status": "not_due"
     }
   ],
   "evidence_normalization_candidates": [
@@ -417,6 +756,78 @@
           "fact_id": "fact-barrier-measurement-invalid",
           "fact_type": "laboratory.critical_measurement_invalid",
           "polarity": "negated",
+          "project_id": "project-synthetic-phase-iii",
+          "review_episode_id": "episode-barrier",
+          "schema_version": "fixture/v1",
+          "subject_id": "subject-barrier",
+          "unit": null,
+          "value": true
+        },
+        {
+          "certainty": 1.0,
+          "conflict_group_id": null,
+          "effective_date": null,
+          "evidence_snapshot_id": "snapshot-barrier",
+          "evidence_span_ids": [
+            "span-barrier-risk"
+          ],
+          "fact_id": "fact-barrier-ex-02",
+          "fact_type": "investigator.rule_specific_judgment",
+          "polarity": "affirmed",
+          "project_id": "project-synthetic-phase-iii",
+          "review_episode_id": "episode-barrier",
+          "schema_version": "fixture/v1",
+          "subject_id": "subject-barrier",
+          "unit": null,
+          "value": false
+        },
+        {
+          "certainty": 1.0,
+          "conflict_group_id": null,
+          "effective_date": null,
+          "evidence_snapshot_id": "snapshot-barrier",
+          "evidence_span_ids": [
+            "span-barrier-risk"
+          ],
+          "fact_id": "fact-barrier-ex-04",
+          "fact_type": "history.referenced_document",
+          "polarity": "affirmed",
+          "project_id": "project-synthetic-phase-iii",
+          "review_episode_id": "episode-barrier",
+          "schema_version": "fixture/v1",
+          "subject_id": "subject-barrier",
+          "unit": null,
+          "value": false
+        },
+        {
+          "certainty": 1.0,
+          "conflict_group_id": null,
+          "effective_date": null,
+          "evidence_snapshot_id": "snapshot-barrier",
+          "evidence_span_ids": [
+            "span-barrier-risk"
+          ],
+          "fact_id": "fact-barrier-req-01",
+          "fact_type": "procedure.required_completed",
+          "polarity": "affirmed",
+          "project_id": "project-synthetic-phase-iii",
+          "review_episode_id": "episode-barrier",
+          "schema_version": "fixture/v1",
+          "subject_id": "subject-barrier",
+          "unit": null,
+          "value": true
+        },
+        {
+          "certainty": 1.0,
+          "conflict_group_id": null,
+          "effective_date": null,
+          "evidence_snapshot_id": "snapshot-barrier",
+          "evidence_span_ids": [
+            "span-barrier-risk"
+          ],
+          "fact_id": "fact-barrier-req-02",
+          "fact_type": "laboratory.required_fields_complete",
+          "polarity": "affirmed",
           "project_id": "project-synthetic-phase-iii",
           "review_episode_id": "episode-barrier",
           "schema_version": "fixture/v1",
@@ -586,11 +997,83 @@
       "subject_id": "subject-barrier",
       "unit": null,
       "value": true
+    },
+    {
+      "certainty": 1.0,
+      "conflict_group_id": null,
+      "effective_date": null,
+      "evidence_snapshot_id": "snapshot-barrier",
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "fact_id": "fact-barrier-ex-02",
+      "fact_type": "investigator.rule_specific_judgment",
+      "polarity": "affirmed",
+      "project_id": "project-synthetic-phase-iii",
+      "review_episode_id": "episode-barrier",
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
+      "unit": null,
+      "value": false
+    },
+    {
+      "certainty": 1.0,
+      "conflict_group_id": null,
+      "effective_date": null,
+      "evidence_snapshot_id": "snapshot-barrier",
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "fact_id": "fact-barrier-ex-04",
+      "fact_type": "history.referenced_document",
+      "polarity": "affirmed",
+      "project_id": "project-synthetic-phase-iii",
+      "review_episode_id": "episode-barrier",
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
+      "unit": null,
+      "value": false
+    },
+    {
+      "certainty": 1.0,
+      "conflict_group_id": null,
+      "effective_date": null,
+      "evidence_snapshot_id": "snapshot-barrier",
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "fact_id": "fact-barrier-req-01",
+      "fact_type": "procedure.required_completed",
+      "polarity": "affirmed",
+      "project_id": "project-synthetic-phase-iii",
+      "review_episode_id": "episode-barrier",
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
+      "unit": null,
+      "value": true
+    },
+    {
+      "certainty": 1.0,
+      "conflict_group_id": null,
+      "effective_date": null,
+      "evidence_snapshot_id": "snapshot-barrier",
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "fact_id": "fact-barrier-req-02",
+      "fact_type": "laboratory.required_fields_complete",
+      "polarity": "affirmed",
+      "project_id": "project-synthetic-phase-iii",
+      "review_episode_id": "episode-barrier",
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
+      "unit": null,
+      "value": true
     }
   ],
   "final_assessments": [
     {
-      "assessment_id": "assessment-barrier-in",
+      "assessment_id": "assessment-barrier-in-01",
       "blocking_level": "none",
       "decision": "inclusion_met",
       "evidence_snapshot_id": "snapshot-barrier",
@@ -598,10 +1081,10 @@
         "span-barrier-risk"
       ],
       "gap_types": [],
-      "gate_result_id": "gate-barrier-in",
+      "gate_result_id": "gate-barrier-in-01",
       "project_id": "project-synthetic-phase-iii",
       "protocol_version_id": "protocol-v1",
-      "publication_fingerprint": "ce8463bad94160eb5a2e372e4bb394f936ee4e1ff30a237fa94d7d6eea672d4d",
+      "publication_fingerprint": "bd95ca013722e113606a97e3845914cab6676f050563a284060e2d8b4a375a8b",
       "review_episode_id": "episode-barrier",
       "review_run_id": "run-barrier",
       "rule_component_id": "component-in-01",
@@ -614,7 +1097,7 @@
       ]
     },
     {
-      "assessment_id": "assessment-barrier-ex",
+      "assessment_id": "assessment-barrier-ex-01",
       "blocking_level": "none",
       "decision": "exclusion_triggered",
       "evidence_snapshot_id": "snapshot-barrier",
@@ -622,10 +1105,10 @@
         "span-barrier-risk"
       ],
       "gap_types": [],
-      "gate_result_id": "gate-barrier-ex",
+      "gate_result_id": "gate-barrier-ex-01",
       "project_id": "project-synthetic-phase-iii",
       "protocol_version_id": "protocol-v1",
-      "publication_fingerprint": "56d3c1cb67cd674cea99ed57b95b29d2dc54d615d62dc15e76b02ccf3ba2fce9",
+      "publication_fingerprint": "d32651781c053d7c3dcee6aead01d0fb6a970b5cea1b30b7fc2817bdfcd8ceb5",
       "review_episode_id": "episode-barrier",
       "review_run_id": "run-barrier",
       "rule_component_id": "component-ex-01",
@@ -639,6 +1122,124 @@
         "fact-barrier-measurement-invalid",
         "fact-barrier-no-exception"
       ]
+    },
+    {
+      "assessment_id": "assessment-barrier-ex-02",
+      "blocking_level": "none",
+      "decision": "exclusion_not_triggered",
+      "evidence_snapshot_id": "snapshot-barrier",
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "gap_types": [],
+      "gate_result_id": "gate-barrier-ex-02",
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "publication_fingerprint": "9602f350dd58eed7c54d9438e9cf8e11baf428d34f296a657af59951d9023a3a",
+      "review_episode_id": "episode-barrier",
+      "review_run_id": "run-barrier",
+      "rule_component_id": "component-ex-02",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
+      "used_fact_ids": [
+        "fact-barrier-ex-02"
+      ]
+    },
+    {
+      "assessment_id": "assessment-barrier-ex-04",
+      "blocking_level": "none",
+      "decision": "exclusion_not_triggered",
+      "evidence_snapshot_id": "snapshot-barrier",
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "gap_types": [],
+      "gate_result_id": "gate-barrier-ex-04",
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "publication_fingerprint": "03b2a4c08f62798bb6406cc09e53e1c6b42c41f558afa13e70220abaf0b3adbc",
+      "review_episode_id": "episode-barrier",
+      "review_run_id": "run-barrier",
+      "rule_component_id": "component-ex-04",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
+      "used_fact_ids": [
+        "fact-barrier-ex-04"
+      ]
+    },
+    {
+      "assessment_id": "assessment-barrier-req-01",
+      "blocking_level": "none",
+      "decision": "requirement_met",
+      "evidence_snapshot_id": "snapshot-barrier",
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "gap_types": [],
+      "gate_result_id": "gate-barrier-req-01",
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "publication_fingerprint": "73b00e2a3eb4339d08a1826c6513677d3e6cbf718850b394c7e918e500a05e49",
+      "review_episode_id": "episode-barrier",
+      "review_run_id": "run-barrier",
+      "rule_component_id": "component-req-01",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
+      "used_fact_ids": [
+        "fact-barrier-req-01"
+      ]
+    },
+    {
+      "assessment_id": "assessment-barrier-req-02",
+      "blocking_level": "none",
+      "decision": "requirement_met",
+      "evidence_snapshot_id": "snapshot-barrier",
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "gap_types": [],
+      "gate_result_id": "gate-barrier-req-02",
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "publication_fingerprint": "5c5e99c6d770d7e143d310fbf385e14cd8956842911b3fb95ff49a3ed437e0fc",
+      "review_episode_id": "episode-barrier",
+      "review_run_id": "run-barrier",
+      "rule_component_id": "component-req-02",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
+      "used_fact_ids": [
+        "fact-barrier-req-02"
+      ]
+    },
+    {
+      "assessment_id": "assessment-barrier-ex-03",
+      "blocking_level": "attention",
+      "decision": "not_due",
+      "evidence_snapshot_id": "snapshot-barrier",
+      "evidence_span_ids": [],
+      "gap_types": [
+        "future_stage_not_due"
+      ],
+      "gate_result_id": "gate-barrier-ex-03",
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "publication_fingerprint": "48762896d72e0105d20f322ac1fb0409b9b5de5da14d5cb9ecdebe363c8cc520",
+      "review_episode_id": "episode-barrier",
+      "review_run_id": "run-barrier",
+      "rule_component_id": "component-ex-03",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
+      "used_fact_ids": []
     }
   ],
   "fixture_id": "fixture-barrier",
@@ -663,7 +1264,7 @@
         "snapshot-barrier": 1
       },
       "input_scope_hash": "1111111111111111111111111111111111111111111111111111111111111111",
-      "output_hash": "1cffd14c04b8b67cb0ce347dbafce1559cca2c5be0776863c0f16cc20723217f",
+      "output_hash": "a222520806b47b0a08ada3a9f1a391b5c9990e67ba5e7e09e6f0c6803c3f17f6",
       "parent_event_id": null,
       "recompute_scope": [
         "subject-barrier"
@@ -692,7 +1293,7 @@
         "snapshot-barrier": 1
       },
       "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
-      "output_hash": "82f4d8113ad939523489e63a6900bb1044b73c6f32e82bcd587466afdef35d13",
+      "output_hash": "a46270163f1082566cc134a44ad6f5389081f292e6c5ebab24b5ac60282719c1",
       "parent_event_id": null,
       "recompute_scope": [
         "subject-barrier"
@@ -759,8 +1360,8 @@
       "input_revision_map": {
         "ruleset-synthetic-phase-iii": 1
       },
-      "input_scope_hash": "a192af76e77f4bfddf22e309e111386597ea88ac2d7d0bbeab054e5d99fe3946",
-      "output_hash": "a192af76e77f4bfddf22e309e111386597ea88ac2d7d0bbeab054e5d99fe3946",
+      "input_scope_hash": "a9ad5c4a209027491d695ea64f400df0afc378cd3f9afbece5e269c76fe4507d",
+      "output_hash": "a9ad5c4a209027491d695ea64f400df0afc378cd3f9afbece5e269c76fe4507d",
       "parent_event_id": null,
       "recompute_scope": [
         "protocol-v1"
@@ -807,6 +1408,10 @@
         "fact-barrier-lab",
         "fact-barrier-risk",
         "fact-barrier-measurement-invalid",
+        "fact-barrier-ex-02",
+        "fact-barrier-ex-04",
+        "fact-barrier-req-01",
+        "fact-barrier-req-02",
         "span-barrier-risk"
       ],
       "affected_scope": [
@@ -816,7 +1421,7 @@
       "created_at": "2026-08-12T12:00:00Z",
       "error_codes": [],
       "gate_name": "evidence-acceptance-gate",
-      "gate_result_id": "gate-evidence-assessment-barrier-in",
+      "gate_result_id": "gate-evidence-assessment-barrier-in-01",
       "idempotency_key": "evidence:episode-barrier:snapshot-barrier:evidence-candidate-episode-barrier",
       "input_entity_refs": [
         "call-barrier-1",
@@ -828,13 +1433,17 @@
         "fact-barrier-lab",
         "fact-barrier-risk",
         "fact-barrier-measurement-invalid",
+        "fact-barrier-ex-02",
+        "fact-barrier-ex-04",
+        "fact-barrier-req-01",
+        "fact-barrier-req-02",
         "span-barrier-risk"
       ],
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "a1c66fcdf590c5451c56685688be13b3b4e099bc6319cab35a7954ed80b857bd",
-      "output_hash": "a1c66fcdf590c5451c56685688be13b3b4e099bc6319cab35a7954ed80b857bd",
+      "input_scope_hash": "4a979d510ab72cd6adbf1211ef0d4b977eddcbb2700083314fb1801b6e7b017a",
+      "output_hash": "4a979d510ab72cd6adbf1211ef0d4b977eddcbb2700083314fb1801b6e7b017a",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-barrier"
@@ -845,7 +1454,7 @@
     },
     {
       "accepted_entity_refs": [
-        "assessment-barrier-in"
+        "assessment-barrier-in-01"
       ],
       "affected_scope": [
         "component-in-01"
@@ -854,13 +1463,13 @@
       "created_at": "2026-08-12T12:00:00Z",
       "error_codes": [],
       "gate_name": "assessment-publication-gate",
-      "gate_result_id": "gate-barrier-in",
+      "gate_result_id": "gate-barrier-in-01",
       "idempotency_key": "assessment:run-barrier:component-in-01",
       "input_entity_refs": [
         "candidate-barrier-in",
         "gate-candidate-barrier-in",
-        "gate-evidence-assessment-barrier-in",
-        "context-episode-barrier-assessment-barrier-in",
+        "gate-evidence-assessment-barrier-in-01",
+        "context-episode-barrier-assessment-barrier-in-01",
         "gate-integrity-protocol-v1-phase-iii",
         "component-in-01",
         "run-barrier"
@@ -868,8 +1477,8 @@
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "ea16335ced70c9136a8c2b32689e8d3e5520d126b670ea70e374076a9d83a68e",
-      "output_hash": "d2163e8afe00e4038dd0cfbf8fb08828d4e4a5b694d5dca6f8f37d0bdf68ccea",
+      "input_scope_hash": "14f630836a1c65d5a341ade1d2ad8914078516495ed797baba8be222f6bd5d59",
+      "output_hash": "072759fd9b6c36adbe63ce15afdcb02d3309458253e87c85125d17cfe61e9c86",
       "parent_event_id": null,
       "recompute_scope": [
         "component-in-01"
@@ -916,6 +1525,10 @@
         "fact-barrier-lab",
         "fact-barrier-risk",
         "fact-barrier-measurement-invalid",
+        "fact-barrier-ex-02",
+        "fact-barrier-ex-04",
+        "fact-barrier-req-01",
+        "fact-barrier-req-02",
         "span-barrier-risk"
       ],
       "affected_scope": [
@@ -925,7 +1538,7 @@
       "created_at": "2026-08-12T12:00:00Z",
       "error_codes": [],
       "gate_name": "evidence-acceptance-gate",
-      "gate_result_id": "gate-evidence-assessment-barrier-ex",
+      "gate_result_id": "gate-evidence-assessment-barrier-ex-01",
       "idempotency_key": "evidence:episode-barrier:snapshot-barrier:evidence-candidate-episode-barrier",
       "input_entity_refs": [
         "call-barrier-1",
@@ -937,13 +1550,17 @@
         "fact-barrier-lab",
         "fact-barrier-risk",
         "fact-barrier-measurement-invalid",
+        "fact-barrier-ex-02",
+        "fact-barrier-ex-04",
+        "fact-barrier-req-01",
+        "fact-barrier-req-02",
         "span-barrier-risk"
       ],
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "a1c66fcdf590c5451c56685688be13b3b4e099bc6319cab35a7954ed80b857bd",
-      "output_hash": "a1c66fcdf590c5451c56685688be13b3b4e099bc6319cab35a7954ed80b857bd",
+      "input_scope_hash": "4a979d510ab72cd6adbf1211ef0d4b977eddcbb2700083314fb1801b6e7b017a",
+      "output_hash": "4a979d510ab72cd6adbf1211ef0d4b977eddcbb2700083314fb1801b6e7b017a",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-barrier"
@@ -954,7 +1571,7 @@
     },
     {
       "accepted_entity_refs": [
-        "assessment-barrier-ex"
+        "assessment-barrier-ex-01"
       ],
       "affected_scope": [
         "component-ex-01"
@@ -963,13 +1580,13 @@
       "created_at": "2026-08-12T12:00:00Z",
       "error_codes": [],
       "gate_name": "assessment-publication-gate",
-      "gate_result_id": "gate-barrier-ex",
+      "gate_result_id": "gate-barrier-ex-01",
       "idempotency_key": "assessment:run-barrier:component-ex-01",
       "input_entity_refs": [
         "candidate-barrier-ex",
         "gate-candidate-barrier-ex",
-        "gate-evidence-assessment-barrier-ex",
-        "context-episode-barrier-assessment-barrier-ex",
+        "gate-evidence-assessment-barrier-ex-01",
+        "context-episode-barrier-assessment-barrier-ex-01",
         "gate-integrity-protocol-v1-phase-iii",
         "component-ex-01",
         "run-barrier"
@@ -977,11 +1594,629 @@
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "1028876c9ca2ee7e4ac16dc56632eb56e0308814894b30d133e7720995dabe0c",
-      "output_hash": "4f4cdaa88cb729c8d94ee0e8627795fe8b5a829b2daaac4cc02ec64b6833bb82",
+      "input_scope_hash": "2f4b03e0945bd4b7b1bdc129c4e55443efe2992cdbe4c05b61296058ff01ba1c",
+      "output_hash": "3e6d65136ec8e39b8ea564bc7b4af27a9743dd01d1f07322ef52a56300c428fd",
       "parent_event_id": null,
       "recompute_scope": [
         "component-ex-01"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "candidate-barrier-ex-02"
+      ],
+      "affected_scope": [
+        "component-ex-02"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-candidate-gate",
+      "gate_result_id": "gate-candidate-barrier-ex-02",
+      "idempotency_key": "candidate:call-barrier-2:candidate-barrier-ex-02",
+      "input_entity_refs": [
+        "call-barrier-2",
+        "gate-barrier-2"
+      ],
+      "input_revision_map": {
+        "snapshot-barrier": 1
+      },
+      "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "output_hash": "ce5cca0d0b7f402756d153066643098c147ca40f9e366ee176487dd54c09ef46",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-ex-02"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "evidence-candidate-episode-barrier",
+        "fact-barrier-age",
+        "fact-barrier-no-exception",
+        "fact-barrier-lab",
+        "fact-barrier-risk",
+        "fact-barrier-measurement-invalid",
+        "fact-barrier-ex-02",
+        "fact-barrier-ex-04",
+        "fact-barrier-req-01",
+        "fact-barrier-req-02",
+        "span-barrier-risk"
+      ],
+      "affected_scope": [
+        "episode-barrier"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "evidence-acceptance-gate",
+      "gate_result_id": "gate-evidence-assessment-barrier-ex-02",
+      "idempotency_key": "evidence:episode-barrier:snapshot-barrier:evidence-candidate-episode-barrier",
+      "input_entity_refs": [
+        "call-barrier-1",
+        "gate-barrier-1",
+        "evidence-candidate-episode-barrier",
+        "snapshot-barrier",
+        "fact-barrier-age",
+        "fact-barrier-no-exception",
+        "fact-barrier-lab",
+        "fact-barrier-risk",
+        "fact-barrier-measurement-invalid",
+        "fact-barrier-ex-02",
+        "fact-barrier-ex-04",
+        "fact-barrier-req-01",
+        "fact-barrier-req-02",
+        "span-barrier-risk"
+      ],
+      "input_revision_map": {
+        "episode-barrier": 1
+      },
+      "input_scope_hash": "4a979d510ab72cd6adbf1211ef0d4b977eddcbb2700083314fb1801b6e7b017a",
+      "output_hash": "4a979d510ab72cd6adbf1211ef0d4b977eddcbb2700083314fb1801b6e7b017a",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "episode-barrier"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "assessment-barrier-ex-02"
+      ],
+      "affected_scope": [
+        "component-ex-02"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-publication-gate",
+      "gate_result_id": "gate-barrier-ex-02",
+      "idempotency_key": "assessment:run-barrier:component-ex-02",
+      "input_entity_refs": [
+        "candidate-barrier-ex-02",
+        "gate-candidate-barrier-ex-02",
+        "gate-evidence-assessment-barrier-ex-02",
+        "context-episode-barrier-assessment-barrier-ex-02",
+        "gate-integrity-protocol-v1-phase-iii",
+        "component-ex-02",
+        "run-barrier"
+      ],
+      "input_revision_map": {
+        "episode-barrier": 1
+      },
+      "input_scope_hash": "c7b14840c98d6fdc6cba5fffb1fe273daf0bbc4fba0f155edc405ae309bd68e4",
+      "output_hash": "14386fc30b4e112a4f199dbd970a3742a1ac3803e5def89bf93201286e90f218",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-ex-02"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "candidate-barrier-ex-04"
+      ],
+      "affected_scope": [
+        "component-ex-04"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-candidate-gate",
+      "gate_result_id": "gate-candidate-barrier-ex-04",
+      "idempotency_key": "candidate:call-barrier-2:candidate-barrier-ex-04",
+      "input_entity_refs": [
+        "call-barrier-2",
+        "gate-barrier-2"
+      ],
+      "input_revision_map": {
+        "snapshot-barrier": 1
+      },
+      "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "output_hash": "938b5e13e67251cb109b8549b4228f6071f98e732e544f0676e67c5f1527cdd6",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-ex-04"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "evidence-candidate-episode-barrier",
+        "fact-barrier-age",
+        "fact-barrier-no-exception",
+        "fact-barrier-lab",
+        "fact-barrier-risk",
+        "fact-barrier-measurement-invalid",
+        "fact-barrier-ex-02",
+        "fact-barrier-ex-04",
+        "fact-barrier-req-01",
+        "fact-barrier-req-02",
+        "span-barrier-risk"
+      ],
+      "affected_scope": [
+        "episode-barrier"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "evidence-acceptance-gate",
+      "gate_result_id": "gate-evidence-assessment-barrier-ex-04",
+      "idempotency_key": "evidence:episode-barrier:snapshot-barrier:evidence-candidate-episode-barrier",
+      "input_entity_refs": [
+        "call-barrier-1",
+        "gate-barrier-1",
+        "evidence-candidate-episode-barrier",
+        "snapshot-barrier",
+        "fact-barrier-age",
+        "fact-barrier-no-exception",
+        "fact-barrier-lab",
+        "fact-barrier-risk",
+        "fact-barrier-measurement-invalid",
+        "fact-barrier-ex-02",
+        "fact-barrier-ex-04",
+        "fact-barrier-req-01",
+        "fact-barrier-req-02",
+        "span-barrier-risk"
+      ],
+      "input_revision_map": {
+        "episode-barrier": 1
+      },
+      "input_scope_hash": "4a979d510ab72cd6adbf1211ef0d4b977eddcbb2700083314fb1801b6e7b017a",
+      "output_hash": "4a979d510ab72cd6adbf1211ef0d4b977eddcbb2700083314fb1801b6e7b017a",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "episode-barrier"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "assessment-barrier-ex-04"
+      ],
+      "affected_scope": [
+        "component-ex-04"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-publication-gate",
+      "gate_result_id": "gate-barrier-ex-04",
+      "idempotency_key": "assessment:run-barrier:component-ex-04",
+      "input_entity_refs": [
+        "candidate-barrier-ex-04",
+        "gate-candidate-barrier-ex-04",
+        "gate-evidence-assessment-barrier-ex-04",
+        "context-episode-barrier-assessment-barrier-ex-04",
+        "gate-integrity-protocol-v1-phase-iii",
+        "component-ex-04",
+        "run-barrier"
+      ],
+      "input_revision_map": {
+        "episode-barrier": 1
+      },
+      "input_scope_hash": "b748e6773f5a8eda5bbbc6947904d9e2ac18f249e8301102618c6f338d707f69",
+      "output_hash": "18c13d3fe42dbb1533f873dc952d00283dbca8b19cac4550042f42b4dce9ff5f",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-ex-04"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "candidate-barrier-req-01"
+      ],
+      "affected_scope": [
+        "component-req-01"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-candidate-gate",
+      "gate_result_id": "gate-candidate-barrier-req-01",
+      "idempotency_key": "candidate:call-barrier-2:candidate-barrier-req-01",
+      "input_entity_refs": [
+        "call-barrier-2",
+        "gate-barrier-2"
+      ],
+      "input_revision_map": {
+        "snapshot-barrier": 1
+      },
+      "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "output_hash": "ccd0e9f4179d3f3264193b40d2c3944a8c645d8fba3d20440faf498b1adaf1d8",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-req-01"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "evidence-candidate-episode-barrier",
+        "fact-barrier-age",
+        "fact-barrier-no-exception",
+        "fact-barrier-lab",
+        "fact-barrier-risk",
+        "fact-barrier-measurement-invalid",
+        "fact-barrier-ex-02",
+        "fact-barrier-ex-04",
+        "fact-barrier-req-01",
+        "fact-barrier-req-02",
+        "span-barrier-risk"
+      ],
+      "affected_scope": [
+        "episode-barrier"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "evidence-acceptance-gate",
+      "gate_result_id": "gate-evidence-assessment-barrier-req-01",
+      "idempotency_key": "evidence:episode-barrier:snapshot-barrier:evidence-candidate-episode-barrier",
+      "input_entity_refs": [
+        "call-barrier-1",
+        "gate-barrier-1",
+        "evidence-candidate-episode-barrier",
+        "snapshot-barrier",
+        "fact-barrier-age",
+        "fact-barrier-no-exception",
+        "fact-barrier-lab",
+        "fact-barrier-risk",
+        "fact-barrier-measurement-invalid",
+        "fact-barrier-ex-02",
+        "fact-barrier-ex-04",
+        "fact-barrier-req-01",
+        "fact-barrier-req-02",
+        "span-barrier-risk"
+      ],
+      "input_revision_map": {
+        "episode-barrier": 1
+      },
+      "input_scope_hash": "4a979d510ab72cd6adbf1211ef0d4b977eddcbb2700083314fb1801b6e7b017a",
+      "output_hash": "4a979d510ab72cd6adbf1211ef0d4b977eddcbb2700083314fb1801b6e7b017a",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "episode-barrier"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "assessment-barrier-req-01"
+      ],
+      "affected_scope": [
+        "component-req-01"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-publication-gate",
+      "gate_result_id": "gate-barrier-req-01",
+      "idempotency_key": "assessment:run-barrier:component-req-01",
+      "input_entity_refs": [
+        "candidate-barrier-req-01",
+        "gate-candidate-barrier-req-01",
+        "gate-evidence-assessment-barrier-req-01",
+        "context-episode-barrier-assessment-barrier-req-01",
+        "gate-integrity-protocol-v1-phase-iii",
+        "component-req-01",
+        "run-barrier"
+      ],
+      "input_revision_map": {
+        "episode-barrier": 1
+      },
+      "input_scope_hash": "32397fee62a3085836308fa8465f70cf9f7ac3b225306e02b8a71a2ac884f33f",
+      "output_hash": "e4c5b93abae0a3fa9dfe9bd51a2f8b053826d311056eaa36569663dc47b37f28",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-req-01"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "candidate-barrier-req-02"
+      ],
+      "affected_scope": [
+        "component-req-02"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-candidate-gate",
+      "gate_result_id": "gate-candidate-barrier-req-02",
+      "idempotency_key": "candidate:call-barrier-2:candidate-barrier-req-02",
+      "input_entity_refs": [
+        "call-barrier-2",
+        "gate-barrier-2"
+      ],
+      "input_revision_map": {
+        "snapshot-barrier": 1
+      },
+      "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "output_hash": "6535d957f9d1c47e10b479bce609681f5e8b7c1edd0968bb6b089ba6e646452f",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-req-02"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "evidence-candidate-episode-barrier",
+        "fact-barrier-age",
+        "fact-barrier-no-exception",
+        "fact-barrier-lab",
+        "fact-barrier-risk",
+        "fact-barrier-measurement-invalid",
+        "fact-barrier-ex-02",
+        "fact-barrier-ex-04",
+        "fact-barrier-req-01",
+        "fact-barrier-req-02",
+        "span-barrier-risk"
+      ],
+      "affected_scope": [
+        "episode-barrier"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "evidence-acceptance-gate",
+      "gate_result_id": "gate-evidence-assessment-barrier-req-02",
+      "idempotency_key": "evidence:episode-barrier:snapshot-barrier:evidence-candidate-episode-barrier",
+      "input_entity_refs": [
+        "call-barrier-1",
+        "gate-barrier-1",
+        "evidence-candidate-episode-barrier",
+        "snapshot-barrier",
+        "fact-barrier-age",
+        "fact-barrier-no-exception",
+        "fact-barrier-lab",
+        "fact-barrier-risk",
+        "fact-barrier-measurement-invalid",
+        "fact-barrier-ex-02",
+        "fact-barrier-ex-04",
+        "fact-barrier-req-01",
+        "fact-barrier-req-02",
+        "span-barrier-risk"
+      ],
+      "input_revision_map": {
+        "episode-barrier": 1
+      },
+      "input_scope_hash": "4a979d510ab72cd6adbf1211ef0d4b977eddcbb2700083314fb1801b6e7b017a",
+      "output_hash": "4a979d510ab72cd6adbf1211ef0d4b977eddcbb2700083314fb1801b6e7b017a",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "episode-barrier"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "assessment-barrier-req-02"
+      ],
+      "affected_scope": [
+        "component-req-02"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-publication-gate",
+      "gate_result_id": "gate-barrier-req-02",
+      "idempotency_key": "assessment:run-barrier:component-req-02",
+      "input_entity_refs": [
+        "candidate-barrier-req-02",
+        "gate-candidate-barrier-req-02",
+        "gate-evidence-assessment-barrier-req-02",
+        "context-episode-barrier-assessment-barrier-req-02",
+        "gate-integrity-protocol-v1-phase-iii",
+        "component-req-02",
+        "run-barrier"
+      ],
+      "input_revision_map": {
+        "episode-barrier": 1
+      },
+      "input_scope_hash": "1be42633a07ee42e5884d3ef2961294ccac8c2d66a0c089987114678ddfb5650",
+      "output_hash": "e58aed7a124b97066c47ea1a88b1a8cfa7e488ef7ae58d9782a823b2d1358e9b",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-req-02"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "candidate-barrier-future"
+      ],
+      "affected_scope": [
+        "component-ex-03"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-candidate-gate",
+      "gate_result_id": "gate-candidate-barrier-future",
+      "idempotency_key": "candidate:call-barrier-2:candidate-barrier-future",
+      "input_entity_refs": [
+        "call-barrier-2",
+        "gate-barrier-2"
+      ],
+      "input_revision_map": {
+        "snapshot-barrier": 1
+      },
+      "input_scope_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "output_hash": "d22baa6633cbc4096e579b2c79896d163c5e8bff80d51bc901958f690bedd940",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-ex-03"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "evidence-candidate-episode-barrier",
+        "fact-barrier-age",
+        "fact-barrier-no-exception",
+        "fact-barrier-lab",
+        "fact-barrier-risk",
+        "fact-barrier-measurement-invalid",
+        "fact-barrier-ex-02",
+        "fact-barrier-ex-04",
+        "fact-barrier-req-01",
+        "fact-barrier-req-02",
+        "span-barrier-risk"
+      ],
+      "affected_scope": [
+        "episode-barrier"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "evidence-acceptance-gate",
+      "gate_result_id": "gate-evidence-assessment-barrier-ex-03",
+      "idempotency_key": "evidence:episode-barrier:snapshot-barrier:evidence-candidate-episode-barrier",
+      "input_entity_refs": [
+        "call-barrier-1",
+        "gate-barrier-1",
+        "evidence-candidate-episode-barrier",
+        "snapshot-barrier",
+        "fact-barrier-age",
+        "fact-barrier-no-exception",
+        "fact-barrier-lab",
+        "fact-barrier-risk",
+        "fact-barrier-measurement-invalid",
+        "fact-barrier-ex-02",
+        "fact-barrier-ex-04",
+        "fact-barrier-req-01",
+        "fact-barrier-req-02",
+        "span-barrier-risk"
+      ],
+      "input_revision_map": {
+        "episode-barrier": 1
+      },
+      "input_scope_hash": "4a979d510ab72cd6adbf1211ef0d4b977eddcbb2700083314fb1801b6e7b017a",
+      "output_hash": "4a979d510ab72cd6adbf1211ef0d4b977eddcbb2700083314fb1801b6e7b017a",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "episode-barrier"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "assessment-barrier-ex-03"
+      ],
+      "affected_scope": [
+        "component-ex-03"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "assessment-publication-gate",
+      "gate_result_id": "gate-barrier-ex-03",
+      "idempotency_key": "assessment:run-barrier:component-ex-03",
+      "input_entity_refs": [
+        "candidate-barrier-future",
+        "gate-candidate-barrier-future",
+        "gate-evidence-assessment-barrier-ex-03",
+        "context-episode-barrier-assessment-barrier-ex-03",
+        "gate-integrity-protocol-v1-phase-iii",
+        "component-ex-03",
+        "run-barrier"
+      ],
+      "input_revision_map": {
+        "episode-barrier": 1
+      },
+      "input_scope_hash": "78f4f4a448387e2295a9422e69dde8d93d1c0ae7454f65911c1273e893a3d618",
+      "output_hash": "9e42fd5bafe3872476e88ce97201f8bd821615f06b94a084d222b74b139767dc",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-ex-03"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "action-barrier-future"
+      ],
+      "affected_scope": [
+        "component-ex-03"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "action-publication-gate",
+      "gate_result_id": "gate-action-barrier-future",
+      "idempotency_key": "action:action-barrier-future:1",
+      "input_entity_refs": [
+        "assessment-barrier-ex-03",
+        "gate-barrier-ex-03",
+        "context-episode-barrier-assessment-barrier-ex-03",
+        "component-ex-03",
+        "expectation-barrier-future"
+      ],
+      "input_revision_map": {
+        "episode-barrier": 1
+      },
+      "input_scope_hash": "861ef818eb70aebbbf0fc778038303475593b50a1c49056a643a60a4fac857e7",
+      "output_hash": "0c1458884e342f11270ea4e52d26143bf8ade73b875f16d7edee3b20a59ef6ff",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-ex-03"
       ],
       "rejected_entity_refs": [],
       "result": "accepted",
@@ -1003,18 +2238,35 @@
       "idempotency_key": "rollup:episode-barrier:e5a3ece2d86e194838105c453f321e8bc58ddd7645bd9a8975b80e927360b4d7",
       "input_entity_refs": [
         "episode-barrier",
-        "gate-barrier-in",
-        "gate-barrier-ex",
-        "assessment-barrier-in",
-        "assessment-barrier-ex",
+        "gate-barrier-in-01",
+        "gate-barrier-ex-01",
+        "gate-barrier-ex-02",
+        "gate-barrier-ex-04",
+        "gate-barrier-req-01",
+        "gate-barrier-req-02",
+        "gate-barrier-ex-03",
+        "gate-action-barrier-future",
+        "assessment-barrier-in-01",
+        "assessment-barrier-ex-01",
+        "assessment-barrier-ex-02",
+        "assessment-barrier-ex-04",
+        "assessment-barrier-req-01",
+        "assessment-barrier-req-02",
+        "assessment-barrier-ex-03",
         "expectation-barrier-age",
-        "expectation-barrier-risk"
+        "expectation-barrier-risk",
+        "expectation-barrier-ex-02",
+        "expectation-barrier-ex-04",
+        "expectation-barrier-req-01",
+        "expectation-barrier-req-02",
+        "expectation-barrier-future",
+        "action-barrier-future"
       ],
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "922bbbab8852e5d09b9ad92ef1e7d0804b844ba3846a8ad8111d44c13e24c123",
-      "output_hash": "c4ca6d00c492524c7ff42d6fa2c3dcd3a56fd5a74f18286a180a402c2a84254f",
+      "input_scope_hash": "38e52294a372c2e93bf91937b5e9b43fc50d9bd7665954891cacf5d24536222e",
+      "output_hash": "ae1be34126a0a73c9224b115b83c1a985bd7255999d45bb346f5188e8ab307a3",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-barrier"
@@ -1080,7 +2332,11 @@
           "fact-barrier-no-exception",
           "fact-barrier-lab",
           "fact-barrier-risk",
-          "fact-barrier-measurement-invalid"
+          "fact-barrier-measurement-invalid",
+          "fact-barrier-ex-02",
+          "fact-barrier-ex-04",
+          "fact-barrier-req-01",
+          "fact-barrier-req-02"
         ],
         "has_trend_change": false,
         "is_abnormal": true,

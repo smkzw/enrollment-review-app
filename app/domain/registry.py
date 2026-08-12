@@ -4,16 +4,36 @@ from collections.abc import Iterable
 from types import MappingProxyType
 from typing import Any
 
-from app.domain.contracts.agents import AgentCallContract, GateResult
+from app.domain.contracts.agents import (
+    AgentCallContract,
+    GateResult,
+    ModelConfigContract,
+    PromptVersion,
+)
 from app.domain.contracts.context import ReviewContextSnapshot
+from app.domain.contracts.evidence import (
+    EvidenceExpectation,
+    EvidenceSnapshot,
+    SourceDocumentVersion,
+)
 from app.domain.contracts.normalization import EvidenceNormalizationCandidate
-from app.domain.contracts.review import AssessmentCandidate
+from app.domain.contracts.review import (
+    ActionRequest,
+    AssessmentCandidate,
+    FinalAssessment,
+    Project,
+    ReviewEpisode,
+    ReviewRun,
+    Subject,
+)
 from app.domain.contracts.rules import (
     ProtocolAuthorityConfirmation,
     ProtocolAuthorityRecord,
+    ProtocolIntegrityManifest,
     ProtocolSourceRecord,
     RuleSet,
     ServiceCommandEvent,
+    WorkflowStage,
 )
 from app.domain.publication import canonical_hash
 
@@ -40,14 +60,27 @@ class TrustedPublicationRegistry:
         gate_results: Iterable[GateResult] = (),
         evidence_candidates: Iterable[EvidenceNormalizationCandidate] = (),
         assessment_candidates: Iterable[AssessmentCandidate] = (),
+        final_assessments: Iterable[FinalAssessment] = (),
+        action_requests: Iterable[ActionRequest] = (),
         rule_sets: Iterable[RuleSet] = (),
         review_contexts: Iterable[ReviewContextSnapshot] = (),
+        projects: Iterable[Project] = (),
+        subjects: Iterable[Subject] = (),
+        review_episodes: Iterable[ReviewEpisode] = (),
+        evidence_snapshots: Iterable[EvidenceSnapshot] = (),
+        review_runs: Iterable[ReviewRun] = (),
+        source_document_versions: Iterable[SourceDocumentVersion] = (),
+        evidence_expectations: Iterable[EvidenceExpectation] = (),
+        prompt_versions: Iterable[PromptVersion] = (),
+        model_configs: Iterable[ModelConfigContract] = (),
         protocol_authority_records: Iterable[ProtocolAuthorityRecord] = (),
         protocol_authority_confirmations: Iterable[
             ProtocolAuthorityConfirmation
         ] = (),
         service_command_events: Iterable[ServiceCommandEvent] = (),
         protocol_source_records: Iterable[ProtocolSourceRecord] = (),
+        protocol_integrity_manifests: Iterable[ProtocolIntegrityManifest] = (),
+        workflow_stages: Iterable[WorkflowStage] = (),
         protocol_integrity_bindings: dict[str, str] | None = None,
     ) -> None:
         if issuer is not _SERVICE_ISSUER:
@@ -62,8 +95,31 @@ class TrustedPublicationRegistry:
                 "assessment_candidate": self._index(
                     assessment_candidates, "assessment_candidate_id"
                 ),
+                "final_assessment": self._index(
+                    final_assessments, "assessment_id"
+                ),
+                "action_request": self._index(action_requests, "action_id"),
                 "rule_set": self._index(rule_sets, "rule_set_id"),
                 "review_context": self._index(review_contexts, "context_id"),
+                "project": self._index(projects, "project_id"),
+                "subject": self._index(subjects, "subject_id"),
+                "review_episode": self._index(
+                    review_episodes, "review_episode_id"
+                ),
+                "evidence_snapshot": self._index(
+                    evidence_snapshots, "evidence_snapshot_id"
+                ),
+                "review_run": self._index(review_runs, "review_run_id"),
+                "source_document_version": self._index(
+                    source_document_versions, "source_document_version_id"
+                ),
+                "evidence_expectation": self._index(
+                    evidence_expectations, "expectation_id"
+                ),
+                "prompt_version": self._index(
+                    prompt_versions, "prompt_version_id"
+                ),
+                "model_config": self._index(model_configs, "model_config_id"),
                 "protocol_authority_record": self._index(
                     protocol_authority_records, "authority_record_id"
                 ),
@@ -75,6 +131,12 @@ class TrustedPublicationRegistry:
                 ),
                 "protocol_source_record": self._index(
                     protocol_source_records, "source_ref"
+                ),
+                "protocol_integrity_manifest": self._index(
+                    protocol_integrity_manifests, "manifest_id"
+                ),
+                "workflow_stage": self._index(
+                    workflow_stages, "workflow_stage_id"
                 ),
             }
         )
@@ -106,6 +168,15 @@ class TrustedPublicationRegistry:
                 f"{entity_type} 与服务端已登记版本不一致: {entity_id}"
             )
         return entity.model_copy(deep=True)
+
+    def all(self, entity_type: str):
+        """Return immutable-snapshot copies for deterministic completeness checks."""
+
+        try:
+            values = self._entities[entity_type].values()
+        except KeyError as exc:
+            raise RegistryLookupError(f"未知发布实体类型: {entity_type}") from exc
+        return tuple(value.model_copy(deep=True) for value in values)
 
     def require_protocol_rule_binding(
         self, gate_result_id: str, rule_set: RuleSet

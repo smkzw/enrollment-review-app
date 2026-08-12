@@ -7,6 +7,7 @@ from app.domain.contracts.enums import AgentNode, GateOutcome
 from app.domain.contracts.evidence import ClinicalFact, EvidenceSpan
 from app.domain.contracts.normalization import EvidenceNormalizationCandidate
 from app.domain.publication import canonical_hash
+from app.domain.registry import TrustedPublicationRegistry
 from .permissions import require_accepted_agent_call
 
 
@@ -19,6 +20,7 @@ def evidence_scope_payload(
     candidate: EvidenceNormalizationCandidate,
     agent_call: AgentCallContract,
     agent_call_gate_result: GateResult,
+    source_documents,
 ) -> dict:
     return {
         "candidate": candidate.model_dump(mode="json"),
@@ -26,6 +28,13 @@ def evidence_scope_payload(
         "agent_call_gate_result_id": agent_call_gate_result.gate_result_id,
         "agent_call_input_scope_hash": agent_call.input_scope_hash,
         "agent_call_output_hash": agent_call.output_hash,
+        "source_documents": [
+            item.model_dump(mode="json")
+            for item in sorted(
+                source_documents,
+                key=lambda value: value.source_document_version_id,
+            )
+        ],
         "facts": [
             item.model_dump(mode="json")
             for item in sorted(
@@ -51,7 +60,37 @@ def publish_evidence_acceptance(
     gate_result_id: str,
     input_revision_map: dict[str, int],
     created_at: datetime,
+    registry: TrustedPublicationRegistry,
 ) -> GateResult:
+    registry.require("agent_call", agent_call.agent_call_id, agent_call)
+    registry.require(
+        "gate_result", agent_call_gate_result.gate_result_id, agent_call_gate_result
+    )
+    registry.require("evidence_candidate", candidate.candidate_id, candidate)
+    registry.require("prompt_version", agent_call.prompt_version_id)
+    registry.require("model_config", agent_call.model_config_id)
+    subject = registry.require("subject", candidate.subject_id)
+    episode = registry.require("review_episode", candidate.review_episode_id)
+    snapshot = registry.require("evidence_snapshot", candidate.evidence_snapshot_id)
+    if agent_call.review_run_id is None:
+        raise EvidenceGateError("Evidence AgentCall 缺少 ReviewRun")
+    registry.require("review_run", agent_call.review_run_id)
+    source_documents = [
+        registry.require("source_document_version", source_id)
+        for source_id in agent_call.source_ids
+    ]
+    if (
+        subject.project_id != candidate.project_id
+        or episode.subject_id != candidate.subject_id
+        or episode.evidence_snapshot_id != candidate.evidence_snapshot_id
+        or snapshot.subject_id != candidate.subject_id
+        or snapshot.review_episode_id != candidate.review_episode_id
+        or set(snapshot.source_document_version_ids) != set(agent_call.source_ids)
+        or set(candidate.source_refs) != set(agent_call.source_ids)
+    ):
+        raise EvidenceGateError(
+            "Evidence Candidate 未绑定服务端登记的受试者、审核节点、证据快照和完整文件集合"
+        )
     require_accepted_agent_call(agent_call, agent_call_gate_result)
     if agent_call.typed_output_hashes.get(candidate.candidate_id) != canonical_hash(
         candidate.model_dump(mode="json")
@@ -137,6 +176,7 @@ def publish_evidence_acceptance(
         candidate=candidate,
         agent_call=agent_call,
         agent_call_gate_result=agent_call_gate_result,
+        source_documents=source_documents,
     )
     accepted_refs = [candidate.candidate_id, *fact_ids, *span_ids]
     if not accepted_refs:
@@ -173,6 +213,7 @@ def require_accepted_evidence_gate(
     candidate: EvidenceNormalizationCandidate,
     agent_call: AgentCallContract,
     agent_call_gate_result: GateResult,
+    registry: TrustedPublicationRegistry,
 ) -> None:
     expected = publish_evidence_acceptance(
         candidate=candidate,
@@ -181,11 +222,16 @@ def require_accepted_evidence_gate(
         gate_result_id=gate_result.gate_result_id,
         input_revision_map=gate_result.input_revision_map,
         created_at=gate_result.created_at,
+        registry=registry,
     )
     payload = evidence_scope_payload(
         candidate=candidate,
         agent_call=agent_call,
         agent_call_gate_result=agent_call_gate_result,
+        source_documents=[
+            registry.require("source_document_version", source_id)
+            for source_id in agent_call.source_ids
+        ],
     )
     accepted_refs = {
         candidate.candidate_id,

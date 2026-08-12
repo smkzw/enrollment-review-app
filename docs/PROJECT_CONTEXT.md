@@ -1606,3 +1606,22 @@ OCR concurrency note:
 - 新增同步重算对抗测试，覆盖伪 Evidence Candidate+AgentCall+Gate、伪 Assessment Candidate+AgentCall+Gate、同 ID/revision 替换 RuleSet、重算服务确认事件、重算方案来源记录。局部对象全部自洽仍不能替代服务端登记状态。
 - 当前验证：V2 `115 passed, 2 subtests`；默认全套 `245 passed, 1 skipped, 18 subtests`；legacy Python 3.9 `130 passed, 1 skipped`；唯一跳过仍为 06003 OCR 缓存缺失。8 个生成制品双跑哈希一致，`compileall` 与 `git diff --check` 通过。
 - Phase 0.5 仍为 `in_progress`，必须由同一 Luna checker 第六次无阻断接受后才可归档并创建 Phase 1 Trellis 子任务。Qwen 3.8 保持禁用。
+
+2026-08-13 Phase 0.5 同一 Luna checker 第六次复核：
+
+- 候选 `9becd6b` 被拒绝，任务继续 `in_progress`。第五轮的审核上下文、typed Candidate、同 ID/revision RuleSet、Fixture Fact/Span 和 Gate 顺序问题已关闭；服务事件/来源与既存注册表只部分关闭。
+- 真实 P1：Candidate/Evidence Gate 自身仍未反查注册表；Authority Gate 可只改时间戳后由调用方重算；EpisodeRollup 接受空 Assessment/Expectation/Action 并发布“未发现明确障碍”；Action 的责任方、动作、可接受证据、到期阶段和重算范围仍由调用方任意填写；临床 SourceDocumentVersion、PromptVersion、ModelConfig、Subject、Snapshot、Run 未进入注册表完整 payload 闭包。
+- P2：Fixture 可附加未登记但自洽的额外 AgentCall/Schema Gate；证据文档对 Action/Rollup 闭包表述过早。
+- 根因统一为：仍有发布函数只验证调用方传入对象的内部一致性，或只验证“被选中路径”，没有证明全集来自验证前既存服务状态。下一轮必须让 Candidate/Evidence/Authority/Action/Rollup 全部消费注册表解析出的唯一实体和完整期望集合。
+- 第六轮独立复核自行确认 V2 `115 passed + 2 subtests`、8 个生成物逐字节一致、`compileall`/`git diff --check`/`uv lock --check` 通过；测试绿灯不构成验收。Phase 1 继续冻结，Qwen 3.8 继续禁用。
+
+2026-08-13 Phase 0.5 第六次拒绝后的根因修复（待第七次复核）：
+
+- `TrustedPublicationRegistry` 已扩展到 Candidate、Evidence、Assessment、Action、RuleSet、ReviewContext、Project、Subject、Episode、Snapshot、Run、SourceDocumentVersion、Expectation、Prompt、ModelConfig 及方案权威/来源/完整性审计实体；所有读取均返回深拷贝，只能由应用服务签发。
+- Candidate Gate、Evidence Gate 和 Authority/Integrity Gate 均反查验证前已登记的完整 payload。Evidence Gate 的闭包包含完整来源文件版本；Integrity Gate 的闭包含完整 Authority Gate，而非仅绑定 ID。
+- Action 发布接口只接受最终判断、缺口类型与服务生成 ID；责任方、补充内容、可接受证据、到期节点、触发证据和重算范围由规则组件、证据要求、当前节点和已发布判断确定性派生。旧生成器中已失效的人工文案参数与映射已清理。
+- EpisodeRollup 必须一一覆盖 RuleSet 全部组件和全部 EvidenceRequirement，并为每个最终判断缺口包含唯一 Action；空集合、不完整、重复、跨节点或与注册表全集不一致均拒绝。
+- Fixture 完整性校验要求其全部 AgentCall、Gate、Candidate、Assessment、Action、临床来源与审计对象已预先登记；夹带内部自洽的额外记录不能成为信任来源。
+- 修复过程发现 UAT 基线新增的后续节点事实只进入 Evidence Candidate、未回写 Fixture 顶层事实，导致完整 payload 集合不一致；已从生成源修复并补回归测试，而非放宽校验。
+- 新增 13 项对抗场景；当前 V2 `128 passed + 2 subtests`，默认全套 `258 passed, 1 skipped + 18 subtests`，legacy Python 3.9 `130 passed, 1 skipped`。8 个 Schema/OpenAPI/Fixture 连续两次生成的 SHA-256 完全一致，`compileall`、`uv lock --check`、`git diff --check` 通过。
+- Phase 0.5 仍为 `in_progress`，不得创建 Phase 1；下一动作是提交本候选并复用同一 Luna checker `019ff5fa-ccc9-7cc0-8f38-2cc489783423` 进行第七次验收。Qwen 3.8 保持禁用。

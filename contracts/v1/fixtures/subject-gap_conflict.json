@@ -1,7 +1,7 @@
 {
   "actions": [
     {
-      "acceptable_evidence": "具日期和来源的年龄记录。",
+      "acceptable_evidence": "可定位、具日期且能够回答本条要求的完整病历记录。",
       "action_id": "action-gap-age",
       "assessment_id": "assessment-gap-in",
       "blocking_level": "blocking",
@@ -11,11 +11,11 @@
       "gate_result_id": "gate-action-gap-age",
       "project_id": "project-synthetic-phase-iii",
       "protocol_version_id": "protocol-v1",
-      "publication_fingerprint": "544fca482285ccac34d8c8e44041f30cc5ead34583fb0269f1e9688694622410",
+      "publication_fingerprint": "6d6dc3a503443d51ffabcf96aef22467bcdb90ce846fe06e9fb8c2c14c5202fd",
       "recompute_scope": [
         "component-in-01"
       ],
-      "requested_action": "在筛选病历补充受试者年龄及来源。",
+      "requested_action": "补充当前审核节点未记录的关键信息，并注明信息来源。",
       "review_episode_id": "episode-gap_conflict",
       "review_run_id": "run-gap_conflict",
       "revision": 1,
@@ -30,7 +30,7 @@
       "trigger_evidence_span_id": null
     },
     {
-      "acceptable_evidence": "具名、具日期且链接来源的冲突核实记录。",
+      "acceptable_evidence": "具名、具日期且能够回到冲突原始来源的核实记录。",
       "action_id": "action-gap-conflict",
       "assessment_id": "assessment-gap-ex",
       "blocking_level": "blocking",
@@ -40,11 +40,11 @@
       "gate_result_id": "gate-action-gap-conflict",
       "project_id": "project-synthetic-phase-iii",
       "protocol_version_id": "protocol-v1",
-      "publication_fingerprint": "764bfb1bea0525028e3144b4d382c96e01ba23e904fb0cc006a64af89dd32410",
+      "publication_fingerprint": "6c6468509939b0ac03978b7766df409392132cd3487ffd131ed5d21177c913bb",
       "recompute_scope": [
         "component-ex-01"
       ],
-      "requested_action": "核实并记录针对本条的研究者判断。",
+      "requested_action": "核实相互冲突的资料，并记录针对本条要求的结论。",
       "review_episode_id": "episode-gap_conflict",
       "review_run_id": "run-gap_conflict",
       "revision": 1,
@@ -59,7 +59,36 @@
       "trigger_evidence_span_id": "span-gap-page"
     },
     {
-      "acceptable_evidence": "具名、具日期并关联本规则的研究者判断。",
+      "acceptable_evidence": "清晰原件或经原始资料逐项核对的更正记录。",
+      "action_id": "action-gap-ocr",
+      "assessment_id": "assessment-gap-ex",
+      "blocking_level": "blocking",
+      "due_stage": "screening",
+      "evidence_snapshot_id": "snapshot-gap_conflict",
+      "gap_type": "ocr_or_parse_risk",
+      "gate_result_id": "gate-action-gap-ocr",
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "publication_fingerprint": "3479f064708d59d3b78c0e5e6f839777f615c3d5d41cc054b8575161dccf0501",
+      "recompute_scope": [
+        "component-ex-01"
+      ],
+      "requested_action": "核对识别不清或结构不完整的原始资料，并补充清晰版本。",
+      "review_episode_id": "episode-gap_conflict",
+      "review_run_id": "run-gap_conflict",
+      "revision": 1,
+      "rule_component_id": "component-ex-01",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "state": "open",
+      "subject_id": "subject-gap_conflict",
+      "target_party": "crc",
+      "transitions": [],
+      "trigger_evidence_span_id": "span-gap-page"
+    },
+    {
+      "acceptable_evidence": "具名、具日期并直接关联本条要求的研究者判断。",
       "action_id": "action-gap-professional",
       "assessment_id": "assessment-gap-professional",
       "blocking_level": "blocking",
@@ -69,11 +98,11 @@
       "gate_result_id": "gate-action-gap-professional",
       "project_id": "project-synthetic-phase-iii",
       "protocol_version_id": "protocol-v1",
-      "publication_fingerprint": "4504c777359c059ac329735b4d95e27f2640091a2a90f47b9b347cdfe5b9d40b",
+      "publication_fingerprint": "e072315bad17724cea7ab6bfe75e8d70a3f3fe53e6b1b5f60b1d74a847e5ba5e",
       "recompute_scope": [
         "component-ex-02"
       ],
-      "requested_action": "研究者针对本规则记录是否构成方案所述风险。",
+      "requested_action": "研究者针对本条要求作出并记录明确的临床判断。",
       "review_episode_id": "episode-gap_conflict",
       "review_run_id": "run-gap_conflict",
       "revision": 1,
@@ -85,10 +114,39 @@
       "subject_id": "subject-gap_conflict",
       "target_party": "investigator",
       "transitions": [],
-      "trigger_evidence_span_id": "span-gap-page"
+      "trigger_evidence_span_id": null
     },
     {
-      "acceptable_evidence": "基线日期锚点和对应评估记录。",
+      "acceptable_evidence": "具名、具日期并直接对应本条要求的病历记录。",
+      "action_id": "action-gap-description",
+      "assessment_id": "assessment-gap-professional",
+      "blocking_level": "blocking",
+      "due_stage": "screening",
+      "evidence_snapshot_id": "snapshot-gap_conflict",
+      "gap_type": "description_insufficient",
+      "gate_result_id": "gate-action-gap-description",
+      "project_id": "project-synthetic-phase-iii",
+      "protocol_version_id": "protocol-v1",
+      "publication_fingerprint": "29adb206dbef3818f03896058b5821d94cb98a12085e78a07f5ffbac45228b9c",
+      "recompute_scope": [
+        "component-ex-02"
+      ],
+      "requested_action": "补充足以判断本条要求的病历描述。",
+      "review_episode_id": "episode-gap_conflict",
+      "review_run_id": "run-gap_conflict",
+      "revision": 1,
+      "rule_component_id": "component-ex-02",
+      "rule_set_id": "ruleset-synthetic-phase-iii",
+      "rule_set_revision": 1,
+      "schema_version": "fixture/v1",
+      "state": "open",
+      "subject_id": "subject-gap_conflict",
+      "target_party": "investigator",
+      "transitions": [],
+      "trigger_evidence_span_id": null
+    },
+    {
+      "acceptable_evidence": "对应审核节点的日期锚点及完整评估记录。",
       "action_id": "action-gap-future",
       "assessment_id": "assessment-gap-future",
       "blocking_level": "attention",
@@ -98,11 +156,11 @@
       "gate_result_id": "gate-action-gap-future",
       "project_id": "project-synthetic-phase-iii",
       "protocol_version_id": "protocol-v1",
-      "publication_fingerprint": "1a09546001742fbc2f9f03a4b0d480efe17db8f5dee11034c433f4c29923d5b7",
+      "publication_fingerprint": "4af09548016c8819cfe4e5f4db1077073dfa31d908d476fd37033524131e9b14",
       "recompute_scope": [
         "component-ex-03"
       ],
-      "requested_action": "在基线节点完成并上传该项评估。",
+      "requested_action": "在本条要求到期的后续审核节点完成评估。",
       "review_episode_id": "episode-gap_conflict",
       "review_run_id": "run-gap_conflict",
       "revision": 1,
@@ -112,7 +170,7 @@
       "schema_version": "fixture/v1",
       "state": "open",
       "subject_id": "subject-gap_conflict",
-      "target_party": "crc",
+      "target_party": "investigator",
       "transitions": [],
       "trigger_evidence_span_id": null
     },
@@ -127,11 +185,11 @@
       "gate_result_id": "gate-action-gap-referenced",
       "project_id": "project-synthetic-phase-iii",
       "protocol_version_id": "protocol-v1",
-      "publication_fingerprint": "abd94444cf67398118929b40d4b52e6f3b7889032dbbb577448be4c6778b0f0c",
+      "publication_fingerprint": "83e1db6f71a4dd8317497b669e27b7e09b3bc11bbfa0c717eaee521707d56fcb",
       "recompute_scope": [
         "component-ex-04"
       ],
-      "requested_action": "补充病历中明确引用的原始资料。",
+      "requested_action": "补充病历或现有资料中已经明确引用的原始文件。",
       "review_episode_id": "episode-gap_conflict",
       "review_run_id": "run-gap_conflict",
       "revision": 1,
@@ -143,10 +201,10 @@
       "subject_id": "subject-gap_conflict",
       "target_party": "crc",
       "transitions": [],
-      "trigger_evidence_span_id": "span-gap-page"
+      "trigger_evidence_span_id": null
     },
     {
-      "acceptable_evidence": "检查执行记录和完整结果。",
+      "acceptable_evidence": "执行记录及能够支持本条判断的完整结果。",
       "action_id": "action-gap-procedure",
       "assessment_id": "assessment-gap-procedure",
       "blocking_level": "blocking",
@@ -156,11 +214,11 @@
       "gate_result_id": "gate-action-gap-procedure",
       "project_id": "project-synthetic-phase-iii",
       "protocol_version_id": "protocol-v1",
-      "publication_fingerprint": "9aeeaad04b760c0a0d25e6efa325bd3fd441e1a228f28baea4a41e88068b708a",
+      "publication_fingerprint": "1bae086a984583f461861cbb34eee70d4828128145705bfd802f5502d38a3bd7",
       "recompute_scope": [
         "component-req-01"
       ],
-      "requested_action": "完成当前节点必做检查。",
+      "requested_action": "完成当前审核节点要求的检查、检验或评分。",
       "review_episode_id": "episode-gap_conflict",
       "review_run_id": "run-gap_conflict",
       "revision": 1,
@@ -170,12 +228,12 @@
       "schema_version": "fixture/v1",
       "state": "open",
       "subject_id": "subject-gap_conflict",
-      "target_party": "crc",
+      "target_party": "investigator",
       "transitions": [],
       "trigger_evidence_span_id": null
     },
     {
-      "acceptable_evidence": "同一检验报告中的完整结果字段。",
+      "acceptable_evidence": "同一份报告中的结果、单位、参考范围及检查日期。",
       "action_id": "action-gap-result-fields",
       "assessment_id": "assessment-gap-result-fields",
       "blocking_level": "blocking",
@@ -185,11 +243,11 @@
       "gate_result_id": "gate-action-gap-result-fields",
       "project_id": "project-synthetic-phase-iii",
       "protocol_version_id": "protocol-v1",
-      "publication_fingerprint": "b52003773b360aeda875ff9069f84c811b22282eac8fcbb3f566240fb113765b",
+      "publication_fingerprint": "dbeb45714ea83ed6bb9284f637071e643ffab9b0125459da55365d94dd3020fb",
       "recompute_scope": [
         "component-req-02"
       ],
-      "requested_action": "补充检验结果的数值、单位和参考范围。",
+      "requested_action": "补充本条判断所需的完整结果字段。",
       "review_episode_id": "episode-gap_conflict",
       "review_run_id": "run-gap_conflict",
       "revision": 1,
@@ -776,7 +834,9 @@
     "input_action_ids": [
       "action-gap-age",
       "action-gap-conflict",
+      "action-gap-ocr",
       "action-gap-professional",
+      "action-gap-description",
       "action-gap-future",
       "action-gap-referenced",
       "action-gap-procedure",
@@ -803,7 +863,7 @@
     "main_status": "current_gap",
     "professional_judgment_count": 1,
     "provenance_followup_count": 0,
-    "publication_fingerprint": "35f0a6773473209f89808a25ceea81f66d82ef703e6d8b44de26d8fd22c4461d",
+    "publication_fingerprint": "67c3371b962bac193396a60cbab1b650d704dc3a8f55c4cea4f1394d87d6b16c",
     "review_episode_id": "episode-gap_conflict",
     "schema_version": "fixture/v1",
     "sort_rank": 1
@@ -1307,8 +1367,8 @@
       "input_revision_map": {
         "ruleset-synthetic-phase-iii": 1
       },
-      "input_scope_hash": "a192af76e77f4bfddf22e309e111386597ea88ac2d7d0bbeab054e5d99fe3946",
-      "output_hash": "a192af76e77f4bfddf22e309e111386597ea88ac2d7d0bbeab054e5d99fe3946",
+      "input_scope_hash": "a9ad5c4a209027491d695ea64f400df0afc378cd3f9afbece5e269c76fe4507d",
+      "output_hash": "a9ad5c4a209027491d695ea64f400df0afc378cd3f9afbece5e269c76fe4507d",
       "parent_event_id": null,
       "recompute_scope": [
         "protocol-v1"
@@ -1375,8 +1435,8 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
-      "output_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
+      "input_scope_hash": "671623200bfd5702ceb49f9473f3aa90899250a42d55971d88c80c2581b0eecd",
+      "output_hash": "671623200bfd5702ceb49f9473f3aa90899250a42d55971d88c80c2581b0eecd",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-gap_conflict"
@@ -1410,7 +1470,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "60a4dec8abf5c3e85b9326f8322cae92897d87bbd362078203e558e19aa3d56c",
+      "input_scope_hash": "6079d72676f89268a589fe72965029574a7a67be62a22e48fab22d4aa10eeb36",
       "output_hash": "4ed9573f24a20808c32c383a18a86481219be0e94c099b1ec894808806cb9ac9",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1478,8 +1538,8 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
-      "output_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
+      "input_scope_hash": "671623200bfd5702ceb49f9473f3aa90899250a42d55971d88c80c2581b0eecd",
+      "output_hash": "671623200bfd5702ceb49f9473f3aa90899250a42d55971d88c80c2581b0eecd",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-gap_conflict"
@@ -1513,7 +1573,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "ff906f02f5da7f3992fdfd72d92430ce68a03ffa6a2c1587a5d2fc1e337010fc",
+      "input_scope_hash": "4ea1862837d5befdc58eac842ce70dce1943b4007e0a17fca14f41185eca1a7f",
       "output_hash": "de9bb690c59b3e46ea9cc11fa7a45ae858d37c44404423af2299558278460d60",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1581,8 +1641,8 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
-      "output_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
+      "input_scope_hash": "671623200bfd5702ceb49f9473f3aa90899250a42d55971d88c80c2581b0eecd",
+      "output_hash": "671623200bfd5702ceb49f9473f3aa90899250a42d55971d88c80c2581b0eecd",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-gap_conflict"
@@ -1616,7 +1676,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "d822d2a2d2b4dc532a203f83833050721df6bff343bb7fdb878d50ec30291a33",
+      "input_scope_hash": "eafa0dbc00c26d3cc59909ceefcf8a42e97307a7205c36898a6aa5fad8a7b4a1",
       "output_hash": "818ce8734c87504e13a2781aec38ad97bd21365246af8122328080b9203f66b0",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1684,8 +1744,8 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
-      "output_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
+      "input_scope_hash": "671623200bfd5702ceb49f9473f3aa90899250a42d55971d88c80c2581b0eecd",
+      "output_hash": "671623200bfd5702ceb49f9473f3aa90899250a42d55971d88c80c2581b0eecd",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-gap_conflict"
@@ -1719,7 +1779,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "ff3610779ed1ff98e6f220cd59c01448ca2b8a5c1b4a8ba1b49f00d0ae0920b5",
+      "input_scope_hash": "7d664541487495631a74ebe67b9037c638da7f22c69b752d826ff62f4c75f43b",
       "output_hash": "9c2d82d0e16e8f963911fcf2ed1386af2cdaf251a792d4e0ea253c6197dd48b2",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1787,8 +1847,8 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
-      "output_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
+      "input_scope_hash": "671623200bfd5702ceb49f9473f3aa90899250a42d55971d88c80c2581b0eecd",
+      "output_hash": "671623200bfd5702ceb49f9473f3aa90899250a42d55971d88c80c2581b0eecd",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-gap_conflict"
@@ -1822,7 +1882,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "f36d2be6aba39ac7b6dcb5075fe02ffe6f42cbe92463724397e6739c48230b9a",
+      "input_scope_hash": "9d281222371856f0d90dcd19b4e60ca404e9329721e8d6af8beb48f099e052b7",
       "output_hash": "e8f5bb2479759adaa83cff98628a22ae4b19b11b908f2bb338853ed2e17aadba",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1890,8 +1950,8 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
-      "output_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
+      "input_scope_hash": "671623200bfd5702ceb49f9473f3aa90899250a42d55971d88c80c2581b0eecd",
+      "output_hash": "671623200bfd5702ceb49f9473f3aa90899250a42d55971d88c80c2581b0eecd",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-gap_conflict"
@@ -1925,7 +1985,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "f7b03a4d1581197b5126f5056f0d792bd6ea0c7e13c8a659cc944e4f145bc869",
+      "input_scope_hash": "879d000ac2f7581de66558ac8c7b9ff38169025e770ae422be5096baf17266d4",
       "output_hash": "15a990b78062f019698aeef1ba7c6cf635ff4c289ba67eaedba01b76abf3e652",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1993,8 +2053,8 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
-      "output_hash": "84341b5ad68c538908ecd0c69ef77bc564742a2d0b61693377e3cf89a114e8f8",
+      "input_scope_hash": "671623200bfd5702ceb49f9473f3aa90899250a42d55971d88c80c2581b0eecd",
+      "output_hash": "671623200bfd5702ceb49f9473f3aa90899250a42d55971d88c80c2581b0eecd",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-gap_conflict"
@@ -2028,7 +2088,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "5bddc60116457d0d422dd7dfe261ce1605ce68ccc0757985f1b12846a95e296a",
+      "input_scope_hash": "ff6d2706fd99df3fe226f0a4c1d9d6a28fe2d51d4592ce1780d0449241867f7a",
       "output_hash": "2bbeab9ad4ab3a7138465046b663da6341165ee2b8afabba8ac5cf6ff3738198",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2053,13 +2113,16 @@
       "idempotency_key": "action:action-gap-age:1",
       "input_entity_refs": [
         "assessment-gap-in",
-        "gate-gap-in"
+        "gate-gap-in",
+        "context-episode-gap_conflict-assessment-gap-in",
+        "component-in-01",
+        "expectation-gap-age"
       ],
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "90fb2fa4984e780f12d73ef93e1d4cbcc5c50958734ec1cf8a260b727267a214",
-      "output_hash": "2923911148ffa8c61cb2ad9bfba19abb40a31466676e375da11956b6ab8293ab",
+      "input_scope_hash": "e3077ab875ba7cb84372215e52252d9300f8f4ec60ff12b8fe2be87a7bc920e6",
+      "output_hash": "9d6748904367c1279c9ffd93d61a1cdf7d953d07fa71df8383d54136acd7f9ad",
       "parent_event_id": null,
       "recompute_scope": [
         "component-in-01"
@@ -2083,13 +2146,49 @@
       "idempotency_key": "action:action-gap-conflict:1",
       "input_entity_refs": [
         "assessment-gap-ex",
-        "gate-gap-ex"
+        "gate-gap-ex",
+        "context-episode-gap_conflict-assessment-gap-ex",
+        "component-ex-01",
+        "expectation-gap-risk"
       ],
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "109ee30dd8ca0e4607fee21b80d692597d4cd5072941039333a3bca94d20792c",
-      "output_hash": "bd623b1f5964acf4ea66c35e823133c4fdd5465aa8907c82c86c71e76f5954c7",
+      "input_scope_hash": "6797c62a65f5cb4c705f8d31cacdc53227a537771679471ab466d8e9345da4a9",
+      "output_hash": "27c294307407bb94e66f797ac551e58f68696854c327046ecaf0ef779ed53697",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-ex-01"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "action-gap-ocr"
+      ],
+      "affected_scope": [
+        "component-ex-01"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "action-publication-gate",
+      "gate_result_id": "gate-action-gap-ocr",
+      "idempotency_key": "action:action-gap-ocr:1",
+      "input_entity_refs": [
+        "assessment-gap-ex",
+        "gate-gap-ex",
+        "context-episode-gap_conflict-assessment-gap-ex",
+        "component-ex-01",
+        "expectation-gap-risk"
+      ],
+      "input_revision_map": {
+        "episode-gap_conflict": 1
+      },
+      "input_scope_hash": "859026dda46f7cc5f7ae6212e1f6c413529c935364ea52adfd1f0536077b0924",
+      "output_hash": "1b834c555a2104273912feb9531993bc49eda21a5cbd1946ea2c37857bfa4388",
       "parent_event_id": null,
       "recompute_scope": [
         "component-ex-01"
@@ -2113,13 +2212,49 @@
       "idempotency_key": "action:action-gap-professional:1",
       "input_entity_refs": [
         "assessment-gap-professional",
-        "gate-gap-professional"
+        "gate-gap-professional",
+        "context-episode-gap_conflict-assessment-gap-professional",
+        "component-ex-02",
+        "expectation-gap-professional"
       ],
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "4de2430a9695bc6939b0d73d7823ec9d094fe7d577560068e510dc1031d7fb64",
-      "output_hash": "98447ca02867eb5db39281579cf1744a4f9360738185862276f912c6d0c56089",
+      "input_scope_hash": "7472271ccf6938b0db96981545fa788e439e5c2fd144bfe29ffb5f06154ed1fa",
+      "output_hash": "7298028a64c0a49d3d4b574f0da50a5e5d91812765cef2059086010fba490649",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "component-ex-02"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "action-gap-description"
+      ],
+      "affected_scope": [
+        "component-ex-02"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "action-publication-gate",
+      "gate_result_id": "gate-action-gap-description",
+      "idempotency_key": "action:action-gap-description:1",
+      "input_entity_refs": [
+        "assessment-gap-professional",
+        "gate-gap-professional",
+        "context-episode-gap_conflict-assessment-gap-professional",
+        "component-ex-02",
+        "expectation-gap-professional"
+      ],
+      "input_revision_map": {
+        "episode-gap_conflict": 1
+      },
+      "input_scope_hash": "70e4b58317e3af01da1ff65a05ae60923e25ec4c6d33d21646bfec634e0d86aa",
+      "output_hash": "f41dd124b4ed9d2757cfebefef7afb6662088b8b90e0aedc7cce2c1002a8d983",
       "parent_event_id": null,
       "recompute_scope": [
         "component-ex-02"
@@ -2143,13 +2278,16 @@
       "idempotency_key": "action:action-gap-future:1",
       "input_entity_refs": [
         "assessment-gap-future",
-        "gate-gap-future"
+        "gate-gap-future",
+        "context-episode-gap_conflict-assessment-gap-future",
+        "component-ex-03",
+        "expectation-gap-future"
       ],
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "5c7578c197bb7f9318cab9c7db6547d77c911c32965dc000a6e8006f9089befd",
-      "output_hash": "e5e973c0150b37a7448ed8ab8485eecd696c33947b45cc38adcb05144106689f",
+      "input_scope_hash": "cd90f3dd75bce1e5c162467898d28d5b0e9cbc5a2138059c86078269a997e5ae",
+      "output_hash": "f7dbae695b1b1aae18cf66be73a5bf9aee19b595a2a5e2dce4f01f34e8767d61",
       "parent_event_id": null,
       "recompute_scope": [
         "component-ex-03"
@@ -2173,13 +2311,16 @@
       "idempotency_key": "action:action-gap-referenced:1",
       "input_entity_refs": [
         "assessment-gap-referenced",
-        "gate-gap-referenced"
+        "gate-gap-referenced",
+        "context-episode-gap_conflict-assessment-gap-referenced",
+        "component-ex-04",
+        "expectation-gap-referenced"
       ],
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "46511eb7d2f14104e74b23ee86a5e2a24f8756262b3dd22ffb863317ceff5d1c",
-      "output_hash": "434cbcdebcdaeb690bb324cab6b964397d58fdcade74fe4c1cd83226b798613b",
+      "input_scope_hash": "d96bc0798dd2a9a133098b75fd78744011a5a2aa6ab4254b8a8a2d3cb321d2cc",
+      "output_hash": "29c583f66e2f3ed8957003c37e691d666dbb1e212e03eebbdc55cbead4ab7cec",
       "parent_event_id": null,
       "recompute_scope": [
         "component-ex-04"
@@ -2203,13 +2344,16 @@
       "idempotency_key": "action:action-gap-procedure:1",
       "input_entity_refs": [
         "assessment-gap-procedure",
-        "gate-gap-procedure"
+        "gate-gap-procedure",
+        "context-episode-gap_conflict-assessment-gap-procedure",
+        "component-req-01",
+        "expectation-gap-procedure"
       ],
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "0e6e563db85f173d292702ea4373b72ffdd1c4589a32ac9bcf70be17d779660c",
-      "output_hash": "dcf7a13abcb86e1380203c259ecf2a3b9b028bddb5dbfaba86117b483c3c5416",
+      "input_scope_hash": "55df0a7acdca13b513c2dbe74231ad2bffe764c4c00b4109533bf51412254f01",
+      "output_hash": "2c0dfa6931f3f1b599d60c25a2884d2a16f1c872a5c77db391fc983cffc28a37",
       "parent_event_id": null,
       "recompute_scope": [
         "component-req-01"
@@ -2233,13 +2377,16 @@
       "idempotency_key": "action:action-gap-result-fields:1",
       "input_entity_refs": [
         "assessment-gap-result-fields",
-        "gate-gap-result-fields"
+        "gate-gap-result-fields",
+        "context-episode-gap_conflict-assessment-gap-result-fields",
+        "component-req-02",
+        "expectation-gap-result-fields"
       ],
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "21eafadc2bd485264005826b25e2d0b1d29ce33947725080224638b906a8aa28",
-      "output_hash": "dc2bd40f640fb34c2776fb30eeeeb46be1edadc17cbc1d6ab1d2cd36a2a50afd",
+      "input_scope_hash": "94d6c3a35be48e359bf97b0b15d0a589dcb80177b3464b913704273b443c2720",
+      "output_hash": "dd4750c2e42381e2dc9009053dc3dc6daa8283e37202b680123a9624f0f26a42",
       "parent_event_id": null,
       "recompute_scope": [
         "component-req-02"
@@ -2273,7 +2420,9 @@
         "gate-gap-result-fields",
         "gate-action-gap-age",
         "gate-action-gap-conflict",
+        "gate-action-gap-ocr",
         "gate-action-gap-professional",
+        "gate-action-gap-description",
         "gate-action-gap-future",
         "gate-action-gap-referenced",
         "gate-action-gap-procedure",
@@ -2294,7 +2443,9 @@
         "expectation-gap-result-fields",
         "action-gap-age",
         "action-gap-conflict",
+        "action-gap-ocr",
         "action-gap-professional",
+        "action-gap-description",
         "action-gap-future",
         "action-gap-referenced",
         "action-gap-procedure",
@@ -2303,8 +2454,8 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "e1068ceb0e9f131eacce9c1dbe103b743b7e326f352823c07e1f9e37125cf4ec",
-      "output_hash": "cd614c4f8bdc111ab1085bbb7c40cfdc2e5a75291e2179ea4838bb5a80344ba7",
+      "input_scope_hash": "5754c5625eca12586a821ae9fea65ad06514f71cccd06d6d2e517470129f5d94",
+      "output_hash": "ce6c76e2ad4a179e683404539432d05150543b90cbc23a5b7c2fcf9d946ed1f5",
       "parent_event_id": null,
       "recompute_scope": [
         "episode-gap_conflict"
