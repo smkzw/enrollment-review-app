@@ -323,9 +323,20 @@
           "title": "Assessment Candidate Id",
           "type": "string"
         },
+        "candidate_confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Candidate Confidence",
+          "type": "number"
+        },
         "candidate_rationale": {
           "minLength": 1,
           "title": "Candidate Rationale",
+          "type": "string"
+        },
+        "evidence_snapshot_id": {
+          "minLength": 1,
+          "title": "Evidence Snapshot Id",
           "type": "string"
         },
         "evidence_span_ids": {
@@ -342,8 +353,41 @@
           "title": "Gap Types",
           "type": "array"
         },
+        "missing_predicate_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Predicate Ids",
+          "type": "array"
+        },
+        "predicate_observations": {
+          "items": {
+            "$ref": "#/$defs/PredicateObservation"
+          },
+          "title": "Predicate Observations",
+          "type": "array"
+        },
+        "processed_predicate_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Processed Predicate Ids",
+          "type": "array"
+        },
         "proposed_decision": {
           "$ref": "#/$defs/ComponentDecision"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "review_episode_id": {
+          "minLength": 1,
+          "title": "Review Episode Id",
+          "type": "string"
         },
         "rule_component_id": {
           "minLength": 1,
@@ -355,6 +399,20 @@
           "default": "fixture/v1",
           "title": "Schema Version",
           "type": "string"
+        },
+        "uncertainty_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Uncertainty Codes",
+          "type": "array"
+        },
+        "unresolved_items": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unresolved Items",
+          "type": "array"
         },
         "used_fact_ids": {
           "items": {
@@ -368,8 +426,11 @@
         "assessment_candidate_id",
         "agent_call_id",
         "rule_component_id",
+        "review_episode_id",
+        "evidence_snapshot_id",
         "proposed_decision",
-        "candidate_rationale"
+        "candidate_rationale",
+        "candidate_confidence"
       ],
       "title": "AssessmentCandidate",
       "type": "object"
@@ -426,6 +487,11 @@
         },
         "comparator": {
           "$ref": "#/$defs/Comparator"
+        },
+        "predicate_id": {
+          "minLength": 1,
+          "title": "Predicate Id",
+          "type": "string"
         },
         "requires_professional_judgment": {
           "default": false,
@@ -491,6 +557,7 @@
         }
       },
       "required": [
+        "predicate_id",
         "subject",
         "attribute",
         "comparator"
@@ -531,6 +598,84 @@
       "title": "BoundingBox",
       "type": "object"
     },
+    "ClinicalEventCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "event_candidate_id": {
+          "minLength": 1,
+          "title": "Event Candidate Id",
+          "type": "string"
+        },
+        "event_date_lower": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Event Date Lower"
+        },
+        "event_date_upper": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Event Date Upper"
+        },
+        "event_type": {
+          "minLength": 1,
+          "title": "Event Type",
+          "type": "string"
+        },
+        "evidence_span_ids": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Evidence Span Ids",
+          "type": "array"
+        },
+        "schema_version": {
+          "const": "fixture/v1",
+          "default": "fixture/v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "stage_candidate": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stage Candidate"
+        },
+        "subject_role": {
+          "minLength": 1,
+          "title": "Subject Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_candidate_id",
+        "event_type",
+        "subject_role",
+        "evidence_span_ids"
+      ],
+      "title": "ClinicalEventCandidate",
+      "type": "object"
+    },
     "ClinicalFact": {
       "additionalProperties": false,
       "properties": {
@@ -563,6 +708,11 @@
           ],
           "default": null
         },
+        "evidence_snapshot_id": {
+          "minLength": 1,
+          "title": "Evidence Snapshot Id",
+          "type": "string"
+        },
         "evidence_span_ids": {
           "items": {
             "type": "string"
@@ -584,10 +734,25 @@
         "polarity": {
           "$ref": "#/$defs/FactPolarity"
         },
+        "project_id": {
+          "minLength": 1,
+          "title": "Project Id",
+          "type": "string"
+        },
+        "review_episode_id": {
+          "minLength": 1,
+          "title": "Review Episode Id",
+          "type": "string"
+        },
         "schema_version": {
           "const": "fixture/v1",
           "default": "fixture/v1",
           "title": "Schema Version",
+          "type": "string"
+        },
+        "subject_id": {
+          "minLength": 1,
+          "title": "Subject Id",
           "type": "string"
         },
         "unit": {
@@ -626,6 +791,10 @@
       },
       "required": [
         "fact_id",
+        "project_id",
+        "subject_id",
+        "review_episode_id",
+        "evidence_snapshot_id",
         "fact_type",
         "polarity",
         "certainty",
@@ -782,6 +951,12 @@
           "title": "Created By Agent Call Id",
           "type": "string"
         },
+        "critic_revision": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Critic Revision",
+          "type": "integer"
+        },
         "critic_run_id": {
           "minLength": 1,
           "title": "Critic Run Id",
@@ -797,11 +972,11 @@
           "title": "Evidence Span Ids",
           "type": "array"
         },
-        "gate_result_ids": {
+        "gate_result_refs": {
           "items": {
             "type": "string"
           },
-          "title": "Gate Result Ids",
+          "title": "Gate Result Refs",
           "type": "array"
         },
         "input_scope_hash": {
@@ -829,17 +1004,27 @@
           "title": "Required Followup",
           "type": "array"
         },
-        "revision": {
-          "default": 1,
-          "minimum": 1,
-          "title": "Revision",
-          "type": "integer"
-        },
         "schema_version": {
           "const": "fixture/v1",
           "default": "fixture/v1",
           "title": "Schema Version",
           "type": "string"
+        },
+        "source_refs": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Source Refs",
+          "type": "array"
+        },
+        "target_refs": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Target Refs",
+          "type": "array"
         },
         "trigger_codes": {
           "items": {
@@ -853,9 +1038,11 @@
       "required": [
         "critic_run_id",
         "assessment_candidate_id",
+        "target_refs",
         "disposition",
         "trigger_codes",
         "reason_codes",
+        "source_refs",
         "rationale",
         "affected_scope",
         "input_scope_hash",
@@ -1028,6 +1215,13 @@
           "title": "Candidate Id",
           "type": "string"
         },
+        "clinical_event_candidates": {
+          "items": {
+            "$ref": "#/$defs/ClinicalEventCandidate"
+          },
+          "title": "Clinical Event Candidates",
+          "type": "array"
+        },
         "clinical_fact_candidates": {
           "items": {
             "$ref": "#/$defs/ClinicalFact"
@@ -1057,11 +1251,40 @@
           "title": "Evidence Span Candidates",
           "type": "array"
         },
+        "medication_exposure_candidates": {
+          "items": {
+            "$ref": "#/$defs/MedicationExposureCandidate"
+          },
+          "title": "Medication Exposure Candidates",
+          "type": "array"
+        },
+        "referenced_document_candidates": {
+          "items": {
+            "$ref": "#/$defs/ReferencedDocumentCandidate"
+          },
+          "title": "Referenced Document Candidates",
+          "type": "array"
+        },
         "schema_version": {
           "const": "fixture/v1",
           "default": "fixture/v1",
           "title": "Schema Version",
           "type": "string"
+        },
+        "source_refs": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Source Refs",
+          "type": "array"
+        },
+        "uncertainty_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Uncertainty Codes",
+          "type": "array"
         },
         "unresolved_items": {
           "items": {
@@ -1073,6 +1296,7 @@
       },
       "required": [
         "candidate_id",
+        "source_refs",
         "coverage",
         "created_by_agent_call_id"
       ],
@@ -1194,6 +1418,46 @@
         "description"
       ],
       "title": "EvidenceRequirement",
+      "type": "object"
+    },
+    "EvidenceRequirementDraft": {
+      "additionalProperties": false,
+      "properties": {
+        "draft_component_id": {
+          "minLength": 1,
+          "title": "Draft Component Id",
+          "type": "string"
+        },
+        "draft_requirement_id": {
+          "minLength": 1,
+          "title": "Draft Requirement Id",
+          "type": "string"
+        },
+        "proposed_requirement": {
+          "$ref": "#/$defs/EvidenceRequirement"
+        },
+        "schema_version": {
+          "const": "fixture/v1",
+          "default": "fixture/v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_refs": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Source Refs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "draft_requirement_id",
+        "draft_component_id",
+        "proposed_requirement",
+        "source_refs"
+      ],
+      "title": "EvidenceRequirementDraft",
       "type": "object"
     },
     "EvidenceSpan": {
@@ -1551,6 +1815,114 @@
       "title": "LogicalOperator",
       "type": "string"
     },
+    "MedicationExposureCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "dose": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dose"
+        },
+        "end_date_upper": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End Date Upper"
+        },
+        "evidence_span_ids": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Evidence Span Ids",
+          "type": "array"
+        },
+        "exposure_candidate_id": {
+          "minLength": 1,
+          "title": "Exposure Candidate Id",
+          "type": "string"
+        },
+        "frequency": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frequency"
+        },
+        "indication": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Indication"
+        },
+        "medication_or_class": {
+          "minLength": 1,
+          "title": "Medication Or Class",
+          "type": "string"
+        },
+        "route": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Route"
+        },
+        "schema_version": {
+          "const": "fixture/v1",
+          "default": "fixture/v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "start_date_lower": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start Date Lower"
+        }
+      },
+      "required": [
+        "exposure_candidate_id",
+        "medication_or_class",
+        "evidence_span_ids"
+      ],
+      "title": "MedicationExposureCandidate",
+      "type": "object"
+    },
     "ModelConfigContract": {
       "additionalProperties": false,
       "properties": {
@@ -1610,6 +1982,85 @@
       "title": "ModelConfigContract",
       "type": "object"
     },
+    "PredicateObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_span_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Span Ids",
+          "type": "array"
+        },
+        "fact_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fact Ids",
+          "type": "array"
+        },
+        "observed_unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observed Unit"
+        },
+        "observed_value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observed Value"
+        },
+        "predicate_id": {
+          "minLength": 1,
+          "title": "Predicate Id",
+          "type": "string"
+        },
+        "reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "schema_version": {
+          "const": "fixture/v1",
+          "default": "fixture/v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "truth": {
+          "$ref": "#/$defs/TruthValue"
+        }
+      },
+      "required": [
+        "predicate_id",
+        "truth"
+      ],
+      "title": "PredicateObservation",
+      "type": "object"
+    },
     "PromptVersion": {
       "additionalProperties": false,
       "properties": {
@@ -1650,6 +2101,13 @@
     "ProtocolDeconstructionDraft": {
       "additionalProperties": false,
       "properties": {
+        "component_drafts": {
+          "items": {
+            "$ref": "#/$defs/RuleComponentDraft"
+          },
+          "title": "Component Drafts",
+          "type": "array"
+        },
         "coverage": {
           "$ref": "#/$defs/CoverageSummary"
         },
@@ -1662,6 +2120,13 @@
           "minLength": 1,
           "title": "Draft Id",
           "type": "string"
+        },
+        "evidence_requirement_drafts": {
+          "items": {
+            "$ref": "#/$defs/EvidenceRequirementDraft"
+          },
+          "title": "Evidence Requirement Drafts",
+          "type": "array"
         },
         "proposed_rules": {
           "items": {
@@ -1676,6 +2141,9 @@
           },
           "title": "Proposed Workflow Stages",
           "type": "array"
+        },
+        "protocol_metadata": {
+          "$ref": "#/$defs/ProtocolMetadataDraft"
         },
         "schema_version": {
           "const": "fixture/v1",
@@ -1703,6 +2171,9 @@
         "draft_id",
         "proposed_rules",
         "proposed_workflow_stages",
+        "protocol_metadata",
+        "component_drafts",
+        "evidence_requirement_drafts",
         "coverage",
         "source_refs",
         "created_by_agent_call_id"
@@ -1757,6 +2228,96 @@
         "source_page_refs"
       ],
       "title": "ProtocolDeconstructionInput",
+      "type": "object"
+    },
+    "ProtocolMetadataDraft": {
+      "additionalProperties": false,
+      "properties": {
+        "date_candidate": {
+          "minLength": 1,
+          "title": "Date Candidate",
+          "type": "string"
+        },
+        "protocol_code_candidate": {
+          "minLength": 1,
+          "title": "Protocol Code Candidate",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "fixture/v1",
+          "default": "fixture/v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_refs": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Source Refs",
+          "type": "array"
+        },
+        "study_phase_candidates": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Study Phase Candidates",
+          "type": "array"
+        },
+        "title_candidate": {
+          "minLength": 1,
+          "title": "Title Candidate",
+          "type": "string"
+        },
+        "version_candidate": {
+          "minLength": 1,
+          "title": "Version Candidate",
+          "type": "string"
+        }
+      },
+      "required": [
+        "protocol_code_candidate",
+        "title_candidate",
+        "version_candidate",
+        "date_candidate",
+        "study_phase_candidates",
+        "source_refs"
+      ],
+      "title": "ProtocolMetadataDraft",
+      "type": "object"
+    },
+    "ReferencedDocumentCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "referenced_by_evidence_span_id": {
+          "minLength": 1,
+          "title": "Referenced By Evidence Span Id",
+          "type": "string"
+        },
+        "referenced_document_candidate_id": {
+          "minLength": 1,
+          "title": "Referenced Document Candidate Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "fixture/v1",
+          "default": "fixture/v1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "referenced_document_candidate_id",
+        "description",
+        "referenced_by_evidence_span_id"
+      ],
+      "title": "ReferencedDocumentCandidate",
       "type": "object"
     },
     "ReviewStage": {
@@ -1908,6 +2469,46 @@
         "expression"
       ],
       "title": "RuleComponent",
+      "type": "object"
+    },
+    "RuleComponentDraft": {
+      "additionalProperties": false,
+      "properties": {
+        "draft_component_id": {
+          "minLength": 1,
+          "title": "Draft Component Id",
+          "type": "string"
+        },
+        "parent_official_code": {
+          "minLength": 1,
+          "title": "Parent Official Code",
+          "type": "string"
+        },
+        "proposed_component": {
+          "$ref": "#/$defs/RuleComponent"
+        },
+        "schema_version": {
+          "const": "fixture/v1",
+          "default": "fixture/v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_refs": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Source Refs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "draft_component_id",
+        "parent_official_code",
+        "proposed_component",
+        "source_refs"
+      ],
+      "title": "RuleComponentDraft",
       "type": "object"
     },
     "RuleKind": {
@@ -2091,6 +2692,15 @@
         "on"
       ],
       "title": "TimeDirection",
+      "type": "string"
+    },
+    "TruthValue": {
+      "enum": [
+        "true",
+        "false",
+        "unknown"
+      ],
+      "title": "TruthValue",
       "type": "string"
     },
     "UnresolvedItem": {

@@ -88,9 +88,6 @@ def derive_expectation_blocking_level(
         return BlockingLevel.NONE
     if status == ExpectationStatus.NOT_DUE:
         return BlockingLevel.ATTENTION
-    if status == ExpectationStatus.OBSERVED_WEAK and gap_type in {
-        GapType.PROVENANCE_FOLLOWUP,
-        GapType.HISTORICAL_SOURCE_UNAVAILABLE,
-    }:
+    if status == ExpectationStatus.OBSERVED_WEAK and gap_type == GapType.PROVENANCE_FOLLOWUP:
         return BlockingLevel.ATTENTION
     return BlockingLevel.BLOCKING

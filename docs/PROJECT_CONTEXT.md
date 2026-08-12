@@ -1543,3 +1543,22 @@ OCR concurrency note:
 - 复核前最后一次测试收集发现 `AgentContractsV1.model_config` 与 Pydantic v2 保留配置名冲突；复合合同字段改为 `model_configuration`，底层审计引用仍为 `AgentCall.model_config_id`，并通过生成器、Schema 和全套回归重新验证。
 - 本阶段没有调用真实 LLM/OCR、没有临床重审、没有修改 legacy 项目数据；用户明确要求不再找 Qwen 3.8 会商，后续执行与 checker 路由均排除 Qwen 3.8。
 - 下一硬门槛：新上下文独立 checker 无阻断 finding，Codex 接受后才归档 Phase 0.5；Phase 1 只构建真实 React 产品壳和 stub API，Phase 1.5 仍需用户批准后才进入后端业务层。
+
+2026-08-12 Phase 0.5 同一 Luna checker 二次复核：
+
+- 修复提交 `9a47bbc` 仍被拒绝；OpenAPI 可消费性已确认关闭，其余边界只有部分关闭。
+- 新的根因级 finding：数值谓词单位可省略且 Evaluator 没有事实 scope；事实极性仍允许空值 fail-open；AssessmentCandidate 可用 gap 改写 UNKNOWN；`historical_source_unavailable` 被错误降级；角色 I/O 与 GateResult runtime 仍未完全兑现；UAT 只有筛选/基线且复制了错误的 baseline `not_due`；ProtocolIntegrity 依赖调用方给出编号答案；Final/Action/Rollup 可用内部一致但未经 accepted Gate 的对象绕过。
+- 决定按四组处理：事实/求值范围、Gate 发布链、权威方案与阶段闭包、真实 UAT 前置条件。Phase 1 继续冻结，Qwen 3.8 继续禁用。
+
+2026-08-12 Phase 0.5 二次拒绝后的根因修复（进行中）：
+
+- 用户再次明确“不用再找 Qwen 3.8 会商”；本轮未调用 Qwen，后续仅复用已存在的同一 Luna checker 会话。
+- ClinicalFact 已强制 Project/Subject/Episode/Snapshot 范围和 typed polarity；数值事实/谓词必须有显式单位，无量纲使用 `unitless`。Evaluator 只能读取 Gate 接受且与当前范围一致的事实。
+- Assessment Gate 现在独立从 EvidenceRequirement/EvidenceExpectation、阶段、冲突和三值求值重建 gap 和 decision；Agent 候选不能用 gap 改写 UNKNOWN。得到确定 TRUE/FALSE 的逻辑树不会继承不影响结果的兄弟分支不确定原因。
+- 纯未到期组件在当前阶段直接发布 `not_due + future_stage_not_due`，不被当前证据冲突提前升级为阻断；到期后必须重新投影为当前证据状态。
+- FinalAssessment、ActionRequest 和 EpisodeRollup 均由发布函数生成指纹及 accepted GateResult；Fixture 完整性校验会拒绝被拒 Gate、输出哈希不符或跨范围引用。
+- ProtocolIntegrity 不再接受调用方填写的官方编号清单；改为对比绑定正式方案哈希的 ProtocolIntegrityManifest，逐项校验完整 Rule 树、逻辑、单位、时间窗、例外、EvidenceRequirement 和 WorkflowStage。
+- 合成规则已实际包含嵌套 `ALL/ANY/NOT`、研究者专业判断和随机日期时间窗，不再只是 Schema 理论能表达。
+- UAT 生成器不再把筛选 Fixture 换 ID 后复制成基线；每个 Episode 都按当前阶段重新计算 Expectation、Candidate、FinalAssessment、Action 和 Rollup。当前 UAT 是 6 名主要受试者 x 筛选/基线 12 Episode，加预筛和导入/洗脱期 2 个模板，共 14 Episode。
+- ProtocolDiffExample 现携带当前和拟议两套真实 RuleSet，新增、删除和逻辑/时间窗变化编号由代码从实际结构差异验证，调用方无法自行“宣布”差异。
+- 当前合同专项验证为 `91 passed`，默认全套为 `227 passed, 1 skipped, 18 subtests`，legacy 只读回归为 `130 passed, 1 skipped`；编译、diff 检查和 8 个生成制品的两次哈希重现均通过。尚未完成同一 Luna checker 三次复核，因此 Phase 0.5 仍不可归档。

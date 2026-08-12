@@ -7,7 +7,7 @@
 | 合同标识 | `enrollment-review/v1/agents` |
 | 领域版本 | `schema_version = fixture/v1` |
 | 适用范围 | 方案解构、证据规范化、入排判断候选、溯源批评、确定性 Gate、确定性 Projection、Job 运行边界 |
-| 当前状态 | Phase 0.5 合同草案；须经用户批准后才可作为 Phase 1 原型的输入，不表示代码已经实现 |
+| 当前状态 | Phase 0.5 已实现合同候选；独立 checker 与用户批准前不冻结、不进入 Phase 1 |
 | 权威来源 | 研究方案与当前正式修订案决定标准；其他解释材料只能解释歧义，不能改写标准 |
 | 写入范围 | 本合同只规定允许的结构化写入；原方案、原始受试者文件、原 OCR、旧项目和既有临床报告保持只读 |
 | 本阶段边界 | 不调用真实 LLM/OCR，不进行新的临床重审，不把旧结论迁移为 V2 真相 |
@@ -80,7 +80,7 @@ sha256(contract_id | node_id | schema_version | prompt_or_code_version |
 - Agent 的 `model_config_id` 必须参与幂等键；Gate 和 Projection 使用 `code_version` 代替模型配置。
 - 重试使用同一幂等键；只有输入范围、版本、模型配置或业务 revision 改变时才能产生新键。
 - 同一幂等键不得产生两个生效的接受实体。重复请求只能返回既有运行记录或既有接受结果。
-- `attempt_no` 不参与幂等键，它只用于运行审计和恢复判断。
+- `attempt` 不参与幂等键，它只用于运行审计和恢复判断。
 
 ### 2.3 重试、同会话修复和停止
 
@@ -141,15 +141,16 @@ sha256(contract_id | node_id | schema_version | prompt_or_code_version |
 | 字段 | 内容要求 |
 | --- | --- |
 | `draft_id`、`schema_version` | 草稿身份和 `fixture/v1` |
-| `protocol_metadata_draft` | 项目名称、方案编号、版本、日期、研究期别候选及其来源 |
-| `rule_drafts[]` | 官方 IN/EX 父级编号、原文、适用范围、父子关系候选 |
-| `rule_component_drafts[]` | 子组件、有限 `ALL/ANY/NOT` 表达式、阈值、单位、时间锚点/窗口、例外树、研究者判断要求 |
+| `protocol_metadata` | 项目名称、方案编号、版本、日期、研究期别候选及其来源 |
+| `proposed_rules[]` | 完整的官方父级规则草案，保留 IN/EX/REQ 编号、原文、期别和父子树 |
+| `component_drafts[]` | `draft_component_id`、父级官方编号、子组件候选及其来源 |
+| `proposed_workflow_stages[]` | 预筛、筛选、导入/洗脱、基线/随机等完整阶段草案 |
 | `workflow_stage_drafts[]` | 预筛、筛选、导入/洗脱、基线/随机等节点候选、锚点和最晚完成点 |
 | `evidence_requirement_drafts[]` | 每个组件在各阶段应有的事实、文件、检查、评分或判断 |
 | `coverage` | 输入父级、组件、阶段和页范围的覆盖情况；必须能发现漏项和重复 |
 | `source_refs[]` | 每个规则、组件、阶段和要求对应的页码/文本定位 |
 | `unresolved_items[]` | 不能由方案确定的期别、逻辑、单位、时间窗或解释冲突，使用结构化错误码 |
-| `draft_revision`、`created_by_agent_call_id` | 草稿 revision 和运行关联 |
+| `created_by_agent_call_id` | 产生草稿的 AgentCall；后续编辑以新草稿实体留痕 |
 
 草稿可以提出候选结构，但不得写 `FinalAssessment`、`ActionRequest`、`blocking_level`、节点汇总或正式发布状态。
 
@@ -227,16 +228,16 @@ Assessor 不读取其他受试者、其他项目、未绑定阶段的资料、�
 
 | 字段 | 内容要求 |
 | --- | --- |
-| `candidate_id`、`schema_version` | 候选身份和 `fixture/v1` |
+| `assessment_candidate_id`、`schema_version` | 候选身份和 `fixture/v1` |
 | `rule_component_id`、`review_episode_id`、`evidence_snapshot_id` | 目标范围，必须唯一对应 |
-| `candidate_state` | 入选/排除组件的候选状态；不是 `FinalAssessment` |
-| `fact_refs[]`、`evidence_span_refs[]` | 实际使用的事实和证据定位 |
-| `candidate_gap_types[]` | 结构化缺口建议；不计算阻断等级 |
+| `proposed_decision` | 入选/排除/必做组件的候选状态；不是 `FinalAssessment` |
+| `used_fact_ids[]`、`evidence_span_ids[]` | 实际使用的事实和证据定位 |
+| `gap_types[]` | 结构化缺口建议；不计算阻断等级，Gate 必须独立重建 |
 | `predicate_observations[]` | 原子谓词、阈值、单位、时间锚点、例外和研究者判断的逐项观察 |
-| `coverage` | 规则组件覆盖、缺失、重复和越界引用 |
+| `processed_predicate_ids[]`、`missing_predicate_ids[]` | 候选内的谓词覆盖；整体覆盖由 `EligibilityAssessmentOutput.coverage` 记录 |
 | `uncertainty_codes[]`、`reason_codes[]` | 证据不足、冲突、OCR/解析风险或来源较弱等结构化原因 |
 | `candidate_confidence` | 仅为候选质量字段，不得成为临床状态阈值 |
-| `unresolved_items[]` | 仍需 Gate 或研究者处理的字段 |
+| `unresolved_items[]`、`candidate_rationale` | 仍需 Gate/研究者处理的字段与仅供审计的候选说明 |
 
 Assessor 不得输出或写入 `FinalAssessment`、`ActionRequest.blocking_level`、节点汇总或报告。候选中的状态、缺口和理由均须由 Gate 重新计算，不能照抄为最终值。
 
@@ -265,11 +266,12 @@ Critic 不接受全项目自由文本，不读取 Agent scratchpad，不读取�
 
 | 字段 | 内容要求 |
 | --- | --- |
-| `critic_run_id`、`schema_version` | 不可变批评运行身份 |
+| `critic_run_id`、`assessment_candidate_id`、`schema_version` | 不可变批评运行及被审候选身份 |
 | `target_refs[]` | 目标 `rule_component_id`、`candidate_id` 和相关事实/Span |
 | `trigger_codes[]` | 触发原因和风险类别 |
 | `disposition` | 仅允许 `veto / downrank / open_action / none` |
 | `reason_codes[]`、`source_refs[]` | 可核验的批评原因和证据定位 |
+| `evidence_span_ids[]`、`rationale` | 直接证据定位和仅供审计的批评说明 |
 | `required_followup[]` | 需要补充的证据或人工核对，不含自由行动命令 |
 | `affected_scope` | 受影响组件和需要重算的范围 |
 | `input_scope_hash`、`gate_result_refs[]` | 输入和门控关联 |

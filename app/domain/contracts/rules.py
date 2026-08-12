@@ -36,6 +36,7 @@ class TimeConstraint(ContractModel):
 
 
 class AtomicPredicate(ContractModel):
+    predicate_id: str = Field(min_length=1)
     subject: str = Field(min_length=1)
     attribute: str = Field(min_length=1)
     comparator: Comparator
@@ -54,6 +55,14 @@ class AtomicPredicate(ContractModel):
             raise ValueError("in/not_in 比较器必须提供值列表")
         if self.comparator not in {"in", "not_in"} and isinstance(self.value, list):
             raise ValueError("只有 in/not_in 比较器可以使用值列表")
+        values = self.value if isinstance(self.value, list) else [self.value]
+        has_numeric_value = any(
+            isinstance(item, (int, float)) and not isinstance(item, bool)
+            for item in values
+            if item is not None
+        )
+        if has_numeric_value and not self.unit:
+            raise ValueError("数值谓词必须声明单位；无量纲值显式使用 unitless")
         return self
 
 
@@ -80,6 +89,14 @@ class LogicalExpression(ContractModel):
 RuleExpression = Annotated[
     Union[AtomicExpression, LogicalExpression], Field(discriminator="kind")
 ]
+
+
+def iter_atomic_predicates(expression: RuleExpression):
+    if expression.kind == "predicate":
+        yield expression.predicate
+        return
+    for child in expression.children:
+        yield from iter_atomic_predicates(child)
 
 
 class EvidenceRequirement(VersionedModel):
@@ -123,6 +140,7 @@ class RuleSet(RevisionedModel):
         rule_ids: set[str] = set()
         official_codes: set[str] = set()
         component_ids: set[str] = set()
+        predicate_ids: set[str] = set()
         for rule in self.rules:
             if rule.rule_id in rule_ids or rule.official_code in official_codes:
                 raise ValueError("RuleSet 中的规则 ID 和官方编号必须唯一")
@@ -148,6 +166,14 @@ class RuleSet(RevisionedModel):
                     for requirement in component.evidence_requirements
                 ):
                     raise ValueError("证据要求必须指向所在规则组件")
+                expressions = [component.expression]
+                if component.exception_expression is not None:
+                    expressions.append(component.exception_expression)
+                for expression in expressions:
+                    for predicate in iter_atomic_predicates(expression):
+                        if predicate.predicate_id in predicate_ids:
+                            raise ValueError("RuleSet 中的原子谓词 ID 必须唯一")
+                        predicate_ids.add(predicate.predicate_id)
         return self
 
 
@@ -158,6 +184,56 @@ class WorkflowStage(VersionedModel):
     visit_window: str | None = None
     review_required: bool = True
     due_requirement_ids: list[str] = Field(default_factory=list)
+
+
+class ProtocolIntegrityManifest(VersionedModel):
+    manifest_id: str = Field(min_length=1)
+    protocol_version_id: str = Field(min_length=1)
+    protocol_document_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    study_phase: StudyPhase
+    source_refs: list[str] = Field(min_length=1)
+    authoritative_rules: list[Rule] = Field(min_length=1)
+    authoritative_workflow_stages: list[WorkflowStage] = Field(min_length=1)
+    manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def validate_manifest_hash(self) -> "ProtocolIntegrityManifest":
+        from app.domain.publication import canonical_hash
+
+        expected = canonical_hash(
+            self.model_dump(mode="json", exclude={"manifest_sha256"})
+        )
+        if self.manifest_sha256 != expected:
+            raise ValueError("ProtocolIntegrityManifest 与权威结构哈希不一致")
+        if any(rule.study_phase != self.study_phase for rule in self.authoritative_rules):
+            raise ValueError("权威规则期别必须与 Manifest 一致")
+        stage_by_value = {
+            workflow.stage: workflow for workflow in self.authoritative_workflow_stages
+        }
+        if len(stage_by_value) != len(self.authoritative_workflow_stages):
+            raise ValueError("ProtocolIntegrityManifest 不得包含重复审核阶段")
+        requirements = {
+            requirement.requirement_id: requirement
+            for rule in self.authoritative_rules
+            for component in rule.components
+            for requirement in component.evidence_requirements
+        }
+        listed_due_stages: dict[str, ReviewStage] = {}
+        for workflow in self.authoritative_workflow_stages:
+            for requirement_id in workflow.due_requirement_ids:
+                if requirement_id in listed_due_stages:
+                    raise ValueError("EvidenceRequirement 不得在多个阶段重复到期")
+                if requirement_id not in requirements:
+                    raise ValueError("WorkflowStage 引用了不存在的 EvidenceRequirement")
+                listed_due_stages[requirement_id] = workflow.stage
+        if set(listed_due_stages) != set(requirements):
+            raise ValueError("每个 EvidenceRequirement 必须在 WorkflowStage 中且仅到期一次")
+        if any(
+            listed_due_stages[requirement_id] != requirement.due_stage
+            for requirement_id, requirement in requirements.items()
+        ):
+            raise ValueError("WorkflowStage 到期阶段与 EvidenceRequirement.due_stage 不一致")
+        return self
 
 
 LogicalExpression.model_rebuild()

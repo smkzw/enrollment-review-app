@@ -5,7 +5,7 @@ from datetime import datetime
 from pydantic import Field, model_validator
 
 from .agents import AgentCallContract, GateResult, ModelConfigContract, PromptVersion
-from .common import DateValue, RevisionedModel, VersionedModel
+from .common import DateValue, RevisionedModel, ScalarValue, VersionedModel
 from .enums import (
     AnchorType,
     ActionState,
@@ -15,6 +15,7 @@ from .enums import (
     GapType,
     ReviewStage,
     StudyPhase,
+    TruthValue,
 )
 from .evidence import (
     ClinicalFact,
@@ -26,7 +27,8 @@ from .evidence import (
     SourceDocumentVersion,
 )
 from .jobs import JobEvent, ReviewRunDiff
-from .rules import RuleSet, WorkflowStage
+from .rules import ProtocolIntegrityManifest, RuleSet, WorkflowStage
+from .projections import EpisodeRollup
 
 
 class ProtocolDocumentVersion(VersionedModel):
@@ -35,6 +37,7 @@ class ProtocolDocumentVersion(VersionedModel):
     official_version: str = Field(min_length=1)
     official_date: DateValue
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    integrity_manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class Project(RevisionedModel):
@@ -81,15 +84,34 @@ class ReviewRun(VersionedModel):
     supersedes_review_run_id: str | None = None
 
 
+class PredicateObservation(VersionedModel):
+    predicate_id: str = Field(min_length=1)
+    truth: TruthValue
+    observed_value: ScalarValue | None = None
+    observed_unit: str | None = None
+    fact_ids: list[str] = Field(default_factory=list)
+    evidence_span_ids: list[str] = Field(default_factory=list)
+    reason_codes: list[str] = Field(default_factory=list)
+
+
 class AssessmentCandidate(VersionedModel):
     assessment_candidate_id: str = Field(min_length=1)
     agent_call_id: str = Field(min_length=1)
     rule_component_id: str = Field(min_length=1)
+    review_episode_id: str = Field(min_length=1)
+    evidence_snapshot_id: str = Field(min_length=1)
     proposed_decision: ComponentDecision
     gap_types: list[GapType] = Field(default_factory=list)
     used_fact_ids: list[str] = Field(default_factory=list)
     evidence_span_ids: list[str] = Field(default_factory=list)
     candidate_rationale: str = Field(min_length=1)
+    predicate_observations: list[PredicateObservation] = Field(default_factory=list)
+    processed_predicate_ids: list[str] = Field(default_factory=list)
+    missing_predicate_ids: list[str] = Field(default_factory=list)
+    uncertainty_codes: list[str] = Field(default_factory=list)
+    reason_codes: list[str] = Field(default_factory=list)
+    candidate_confidence: float = Field(ge=0, le=1)
+    unresolved_items: list[str] = Field(default_factory=list)
 
 
 class FinalAssessment(VersionedModel):
@@ -103,6 +125,7 @@ class FinalAssessment(VersionedModel):
     evidence_span_ids: list[str] = Field(default_factory=list)
     action_ids: list[str] = Field(default_factory=list)
     gate_result_id: str = Field(min_length=1)
+    publication_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
     def validate_gate_owned_state(self) -> "FinalAssessment":
@@ -111,6 +134,19 @@ class FinalAssessment(VersionedModel):
         expected = derive_assessment_blocking_level(self.decision, set(self.gap_types))
         if self.blocking_level != expected:
             raise ValueError(f"FinalAssessment blocking_level 必须由 Gate 推导为 {expected.value}")
+        from app.domain.publication import publication_fingerprint
+
+        payload = self.model_dump(
+            mode="json",
+            exclude={"publication_fingerprint"},
+        )
+        expected_fingerprint = publication_fingerprint(
+            entity_type="final_assessment",
+            gate_result_id=self.gate_result_id,
+            payload=payload,
+        )
+        if self.publication_fingerprint != expected_fingerprint:
+            raise ValueError("FinalAssessment 缺少有效的确定性 Gate 发布指纹")
         return self
 
 
@@ -136,6 +172,8 @@ class ActionRequest(RevisionedModel):
     state: ActionState
     recompute_scope: list[str] = Field(min_length=1)
     transitions: list[ActionTransition] = Field(default_factory=list)
+    gate_result_id: str = Field(min_length=1)
+    publication_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
     def validate_gate_owned_blocking(self) -> "ActionRequest":
@@ -144,6 +182,24 @@ class ActionRequest(RevisionedModel):
         expected = derive_action_blocking_level(self.gap_type)
         if self.blocking_level != expected:
             raise ValueError(f"ActionRequest blocking_level 必须由 Gate 推导为 {expected.value}")
+        if self.state == ActionState.CLOSED_SYSTEM and not any(
+            transition.to_state == ActionState.CLOSED_SYSTEM
+            for transition in self.transitions
+        ):
+            raise ValueError("系统自动关闭 Action 必须保留状态转换记录")
+        from app.domain.publication import publication_fingerprint
+
+        payload = self.model_dump(
+            mode="json",
+            exclude={"publication_fingerprint"},
+        )
+        expected_fingerprint = publication_fingerprint(
+            entity_type="action_request",
+            gate_result_id=self.gate_result_id,
+            payload=payload,
+        )
+        if self.publication_fingerprint != expected_fingerprint:
+            raise ValueError("ActionRequest 缺少有效的确定性 Gate 发布指纹")
         return self
 
 
@@ -151,6 +207,7 @@ class FixtureV1(VersionedModel):
     fixture_id: str = Field(min_length=1)
     scenario: str = Field(min_length=1)
     project: Project
+    protocol_integrity_manifest: ProtocolIntegrityManifest
     rule_set: RuleSet
     workflow_stages: list[WorkflowStage]
     subject: Subject
@@ -166,6 +223,7 @@ class FixtureV1(VersionedModel):
     assessment_candidates: list[AssessmentCandidate]
     final_assessments: list[FinalAssessment]
     actions: list[ActionRequest]
+    episode_rollup: EpisodeRollup
     prompt_versions: list[PromptVersion]
     model_configs: list[ModelConfigContract]
     agent_calls: list[AgentCallContract]

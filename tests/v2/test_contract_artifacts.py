@@ -9,8 +9,9 @@ from jsonschema import Draft202012Validator, FormatChecker
 from app.domain.contracts.review import FixtureV1
 from app.domain.contracts.agent_io import AgentContractsV1
 from app.domain.contracts.uat import UatWorkspaceFixture
+from app.domain.contracts.enums import ReviewStage
 from app.domain.gates import validate_action_request, validate_fixture_scope, validate_protocol_integrity
-from app.domain.rollup import rollup_episode
+from app.domain.rollup import publish_episode_rollup
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -59,15 +60,9 @@ def test_fixture_references_are_internally_consistent() -> None:
         fixture = FixtureV1.model_validate(load_json(path))
         validate_protocol_integrity(
             fixture.rule_set,
-            expected_official_codes=[
-                "IN-01",
-                "EX-01",
-                "EX-02",
-                "EX-03",
-                "EX-04",
-                "REQ-01",
-                "REQ-02",
-            ],
+            workflow_stages=fixture.workflow_stages,
+            protocol_version=fixture.project.protocol_version,
+            manifest=fixture.protocol_integrity_manifest,
         )
         validate_fixture_scope(fixture)
         span_ids = {item.evidence_span_id for item in fixture.evidence_spans}
@@ -143,12 +138,19 @@ def test_fixture_rollups_match_scenario_semantics() -> None:
     }
     for path in FIXTURE_PATHS:
         fixture = FixtureV1.model_validate(load_json(path))
-        rollup = rollup_episode(
-            fixture.final_assessments,
-            fixture.evidence_expectations,
-            fixture.actions,
+        publication = publish_episode_rollup(
+            review_episode_id=fixture.review_episode.review_episode_id,
+            assessments=fixture.final_assessments,
+            expectations=fixture.evidence_expectations,
+            actions=fixture.actions,
+            gate_result_id=fixture.episode_rollup.gate_result_id,
+            input_revision_map={
+                fixture.review_episode.review_episode_id: fixture.review_episode.revision
+            },
+            created_at=fixture.review_runs[0].started_at,
         )
-        assert rollup.main_status.value == expected[fixture.scenario]
+        assert publication.rollup.main_status.value == expected[fixture.scenario]
+        assert publication.rollup.model_dump(mode="json") == fixture.episode_rollup.model_dump(mode="json")
 
 
 def test_openapi_refs_target_existing_components() -> None:
@@ -225,21 +227,16 @@ def test_uat_workspace_has_executable_multistage_coverage() -> None:
     schema = load_json(UAT_SCHEMA_PATH)
     Draft202012Validator(schema, format_checker=FormatChecker()).validate(payload)
     workspace = UatWorkspaceFixture.model_validate(payload)
-    assert len(workspace.episodes) == 12
-    assert len({item.subject.subject_id for item in workspace.episodes}) == 6
+    assert len(workspace.episodes) == 14
+    assert len(workspace.primary_subject_ids) == 6
+    assert {item.review_episode.stage for item in workspace.episodes} == set(ReviewStage)
     for fixture in workspace.episodes:
         validate_fixture_scope(fixture)
         validate_protocol_integrity(
             fixture.rule_set,
-            expected_official_codes=[
-                "IN-01",
-                "EX-01",
-                "EX-02",
-                "EX-03",
-                "EX-04",
-                "REQ-01",
-                "REQ-02",
-            ],
+            workflow_stages=fixture.workflow_stages,
+            protocol_version=fixture.project.protocol_version,
+            manifest=fixture.protocol_integrity_manifest,
         )
 
 
@@ -257,3 +254,41 @@ def test_stage_isolation_gate_rejects_future_stage_source() -> None:
     invalid_fixture = fixture.model_copy(update={"source_documents": [future_document]})
     with pytest.raises(ValueError, match="未来阶段"):
         validate_fixture_scope(invalid_fixture)
+
+
+def test_stage_isolation_rejects_cross_subject_fact_and_rejected_publication_gate() -> None:
+    fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
+    cross_subject_fact = fixture.facts[0].model_copy(update={"subject_id": "subject-other"})
+    with pytest.raises(ValueError, match="ClinicalFact 超出"):
+        validate_fixture_scope(
+            fixture.model_copy(
+                update={"facts": [cross_subject_fact, *fixture.facts[1:]]}
+            )
+        )
+
+    assessment = fixture.final_assessments[0]
+    rejected = next(
+        gate
+        for gate in fixture.gate_results
+        if gate.gate_result_id == assessment.gate_result_id
+    ).model_copy(
+        update={
+            "result": "rejected",
+            "accepted_entity_refs": [],
+            "rejected_entity_refs": [assessment.assessment_id],
+            "error_codes": ["synthetic_rejection"],
+        }
+    )
+    gates = [
+        rejected if gate.gate_result_id == rejected.gate_result_id else gate
+        for gate in fixture.gate_results
+    ]
+    with pytest.raises(ValueError, match="FinalAssessment 未通过"):
+        validate_fixture_scope(fixture.model_copy(update={"gate_results": gates}))
+
+
+def test_protocol_diff_codes_are_derived_from_real_rule_sets() -> None:
+    payload = load_json(UAT_FIXTURE_PATH)
+    payload["protocol_diff"]["added_rule_codes"] = ["EX-99"]
+    with pytest.raises(ValueError, match="实际差异"):
+        UatWorkspaceFixture.model_validate(payload)

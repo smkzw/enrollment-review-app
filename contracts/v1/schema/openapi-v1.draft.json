@@ -80,6 +80,16 @@
           "gap_type": {
             "$ref": "#/components/schemas/GapType"
           },
+          "gate_result_id": {
+            "minLength": 1,
+            "title": "Gate Result Id",
+            "type": "string"
+          },
+          "publication_fingerprint": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Publication Fingerprint",
+            "type": "string"
+          },
           "recompute_scope": {
             "items": {
               "type": "string"
@@ -146,7 +156,9 @@
           "due_stage",
           "blocking_level",
           "state",
-          "recompute_scope"
+          "recompute_scope",
+          "gate_result_id",
+          "publication_fingerprint"
         ],
         "title": "ActionRequest",
         "type": "object"
@@ -543,9 +555,20 @@
             "title": "Assessment Candidate Id",
             "type": "string"
           },
+          "candidate_confidence": {
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Candidate Confidence",
+            "type": "number"
+          },
           "candidate_rationale": {
             "minLength": 1,
             "title": "Candidate Rationale",
+            "type": "string"
+          },
+          "evidence_snapshot_id": {
+            "minLength": 1,
+            "title": "Evidence Snapshot Id",
             "type": "string"
           },
           "evidence_span_ids": {
@@ -562,8 +585,41 @@
             "title": "Gap Types",
             "type": "array"
           },
+          "missing_predicate_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Predicate Ids",
+            "type": "array"
+          },
+          "predicate_observations": {
+            "items": {
+              "$ref": "#/components/schemas/PredicateObservation"
+            },
+            "title": "Predicate Observations",
+            "type": "array"
+          },
+          "processed_predicate_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Processed Predicate Ids",
+            "type": "array"
+          },
           "proposed_decision": {
             "$ref": "#/components/schemas/ComponentDecision"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "review_episode_id": {
+            "minLength": 1,
+            "title": "Review Episode Id",
+            "type": "string"
           },
           "rule_component_id": {
             "minLength": 1,
@@ -575,6 +631,20 @@
             "default": "fixture/v1",
             "title": "Schema Version",
             "type": "string"
+          },
+          "uncertainty_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Uncertainty Codes",
+            "type": "array"
+          },
+          "unresolved_items": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unresolved Items",
+            "type": "array"
           },
           "used_fact_ids": {
             "items": {
@@ -588,8 +658,11 @@
           "assessment_candidate_id",
           "agent_call_id",
           "rule_component_id",
+          "review_episode_id",
+          "evidence_snapshot_id",
           "proposed_decision",
-          "candidate_rationale"
+          "candidate_rationale",
+          "candidate_confidence"
         ],
         "title": "AssessmentCandidate",
         "type": "object"
@@ -646,6 +719,11 @@
           },
           "comparator": {
             "$ref": "#/components/schemas/Comparator"
+          },
+          "predicate_id": {
+            "minLength": 1,
+            "title": "Predicate Id",
+            "type": "string"
           },
           "requires_professional_judgment": {
             "default": false,
@@ -711,6 +789,7 @@
           }
         },
         "required": [
+          "predicate_id",
           "subject",
           "attribute",
           "comparator"
@@ -792,6 +871,11 @@
             ],
             "default": null
           },
+          "evidence_snapshot_id": {
+            "minLength": 1,
+            "title": "Evidence Snapshot Id",
+            "type": "string"
+          },
           "evidence_span_ids": {
             "items": {
               "type": "string"
@@ -813,10 +897,25 @@
           "polarity": {
             "$ref": "#/components/schemas/FactPolarity"
           },
+          "project_id": {
+            "minLength": 1,
+            "title": "Project Id",
+            "type": "string"
+          },
+          "review_episode_id": {
+            "minLength": 1,
+            "title": "Review Episode Id",
+            "type": "string"
+          },
           "schema_version": {
             "const": "fixture/v1",
             "default": "fixture/v1",
             "title": "Schema Version",
+            "type": "string"
+          },
+          "subject_id": {
+            "minLength": 1,
+            "title": "Subject Id",
             "type": "string"
           },
           "unit": {
@@ -855,6 +954,10 @@
         },
         "required": [
           "fact_id",
+          "project_id",
+          "subject_id",
+          "review_episode_id",
+          "evidence_snapshot_id",
           "fact_type",
           "polarity",
           "certainty",
@@ -992,6 +1095,126 @@
           "precision"
         ],
         "title": "DateValue",
+        "type": "object"
+      },
+      "EpisodeMainStatus": {
+        "enum": [
+          "clear_barrier",
+          "current_gap",
+          "conflict",
+          "professional_judgment",
+          "future_attention",
+          "no_clear_barrier"
+        ],
+        "title": "EpisodeMainStatus",
+        "type": "string"
+      },
+      "EpisodeRollup": {
+        "additionalProperties": false,
+        "properties": {
+          "barrier_count": {
+            "minimum": 0,
+            "title": "Barrier Count",
+            "type": "integer"
+          },
+          "conflict_count": {
+            "minimum": 0,
+            "title": "Conflict Count",
+            "type": "integer"
+          },
+          "current_gap_count": {
+            "minimum": 0,
+            "title": "Current Gap Count",
+            "type": "integer"
+          },
+          "future_attention_count": {
+            "minimum": 0,
+            "title": "Future Attention Count",
+            "type": "integer"
+          },
+          "gap_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Gap Counts",
+            "type": "object"
+          },
+          "gate_result_id": {
+            "minLength": 1,
+            "title": "Gate Result Id",
+            "type": "string"
+          },
+          "input_action_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Input Action Ids",
+            "type": "array"
+          },
+          "input_assessment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Input Assessment Ids",
+            "type": "array"
+          },
+          "input_expectation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Input Expectation Ids",
+            "type": "array"
+          },
+          "main_status": {
+            "$ref": "#/components/schemas/EpisodeMainStatus"
+          },
+          "professional_judgment_count": {
+            "minimum": 0,
+            "title": "Professional Judgment Count",
+            "type": "integer"
+          },
+          "provenance_followup_count": {
+            "minimum": 0,
+            "title": "Provenance Followup Count",
+            "type": "integer"
+          },
+          "publication_fingerprint": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Publication Fingerprint",
+            "type": "string"
+          },
+          "review_episode_id": {
+            "minLength": 1,
+            "title": "Review Episode Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "sort_rank": {
+            "minimum": 0,
+            "title": "Sort Rank",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "review_episode_id",
+          "main_status",
+          "sort_rank",
+          "barrier_count",
+          "current_gap_count",
+          "conflict_count",
+          "professional_judgment_count",
+          "future_attention_count",
+          "provenance_followup_count",
+          "gap_counts",
+          "gate_result_id",
+          "publication_fingerprint"
+        ],
+        "title": "EpisodeRollup",
         "type": "object"
       },
       "ErrorDetail": {
@@ -1421,6 +1644,11 @@
             "title": "Gate Result Id",
             "type": "string"
           },
+          "publication_fingerprint": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Publication Fingerprint",
+            "type": "string"
+          },
           "review_run_id": {
             "minLength": 1,
             "title": "Review Run Id",
@@ -1451,7 +1679,8 @@
           "rule_component_id",
           "decision",
           "blocking_level",
-          "gate_result_id"
+          "gate_result_id",
+          "publication_fingerprint"
         ],
         "title": "FinalAssessment",
         "type": "object"
@@ -1486,6 +1715,9 @@
             },
             "title": "Conflict Groups",
             "type": "array"
+          },
+          "episode_rollup": {
+            "$ref": "#/components/schemas/EpisodeRollup"
           },
           "evidence_expectations": {
             "items": {
@@ -1557,6 +1789,9 @@
             "title": "Prompt Versions",
             "type": "array"
           },
+          "protocol_integrity_manifest": {
+            "$ref": "#/components/schemas/ProtocolIntegrityManifest"
+          },
           "review_episode": {
             "$ref": "#/components/schemas/ReviewEpisode"
           },
@@ -1610,6 +1845,7 @@
           "fixture_id",
           "scenario",
           "project",
+          "protocol_integrity_manifest",
           "rule_set",
           "workflow_stages",
           "subject",
@@ -1624,6 +1860,7 @@
           "assessment_candidates",
           "final_assessments",
           "actions",
+          "episode_rollup",
           "prompt_versions",
           "model_configs",
           "agent_calls",
@@ -2204,6 +2441,85 @@
         "title": "PatientProfileEvent",
         "type": "object"
       },
+      "PredicateObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_span_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Span Ids",
+            "type": "array"
+          },
+          "fact_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fact Ids",
+            "type": "array"
+          },
+          "observed_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Observed Unit"
+          },
+          "observed_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Observed Value"
+          },
+          "predicate_id": {
+            "minLength": 1,
+            "title": "Predicate Id",
+            "type": "string"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "truth": {
+            "$ref": "#/components/schemas/TruthValue"
+          }
+        },
+        "required": [
+          "predicate_id",
+          "truth"
+        ],
+        "title": "PredicateObservation",
+        "type": "object"
+      },
       "ProfileLane": {
         "enum": [
           "study_milestone",
@@ -2339,6 +2655,11 @@
       "ProtocolDocumentVersion": {
         "additionalProperties": false,
         "properties": {
+          "integrity_manifest_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Integrity Manifest Sha256",
+            "type": "string"
+          },
           "official_date": {
             "$ref": "#/components/schemas/DateValue"
           },
@@ -2374,9 +2695,80 @@
           "protocol_code",
           "official_version",
           "official_date",
-          "sha256"
+          "sha256",
+          "integrity_manifest_sha256"
         ],
         "title": "ProtocolDocumentVersion",
+        "type": "object"
+      },
+      "ProtocolIntegrityManifest": {
+        "additionalProperties": false,
+        "properties": {
+          "authoritative_rules": {
+            "items": {
+              "$ref": "#/components/schemas/Rule"
+            },
+            "minItems": 1,
+            "title": "Authoritative Rules",
+            "type": "array"
+          },
+          "authoritative_workflow_stages": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowStage"
+            },
+            "minItems": 1,
+            "title": "Authoritative Workflow Stages",
+            "type": "array"
+          },
+          "manifest_id": {
+            "minLength": 1,
+            "title": "Manifest Id",
+            "type": "string"
+          },
+          "manifest_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Manifest Sha256",
+            "type": "string"
+          },
+          "protocol_document_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Protocol Document Sha256",
+            "type": "string"
+          },
+          "protocol_version_id": {
+            "minLength": 1,
+            "title": "Protocol Version Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "fixture/v1",
+            "default": "fixture/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_refs": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "study_phase": {
+            "$ref": "#/components/schemas/StudyPhase"
+          }
+        },
+        "required": [
+          "manifest_id",
+          "protocol_version_id",
+          "protocol_document_sha256",
+          "study_phase",
+          "source_refs",
+          "authoritative_rules",
+          "authoritative_workflow_stages",
+          "manifest_sha256"
+        ],
+        "title": "ProtocolIntegrityManifest",
         "type": "object"
       },
       "ReviewEpisode": {
@@ -3082,6 +3474,15 @@
           "on"
         ],
         "title": "TimeDirection",
+        "type": "string"
+      },
+      "TruthValue": {
+        "enum": [
+          "true",
+          "false",
+          "unknown"
+        ],
+        "title": "TruthValue",
         "type": "string"
       },
       "UploadMode": {

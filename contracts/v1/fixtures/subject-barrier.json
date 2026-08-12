@@ -92,14 +92,40 @@
     {
       "agent_call_id": "call-barrier-2",
       "assessment_candidate_id": "candidate-barrier-in",
+      "candidate_confidence": 0.9,
       "candidate_rationale": "年龄达到合成规则阈值。",
+      "evidence_snapshot_id": "snapshot-barrier",
       "evidence_span_ids": [
         "span-barrier-risk"
       ],
       "gap_types": [],
+      "missing_predicate_ids": [],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [
+            "span-barrier-risk"
+          ],
+          "fact_ids": [
+            "fact-barrier-age"
+          ],
+          "observed_unit": "year",
+          "observed_value": 45,
+          "predicate_id": "predicate-demographics-age_years-gte",
+          "reason_codes": [],
+          "schema_version": "fixture/v1",
+          "truth": "true"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-demographics-age_years-gte"
+      ],
       "proposed_decision": "inclusion_met",
+      "reason_codes": [],
+      "review_episode_id": "episode-barrier",
       "rule_component_id": "component-in-01",
       "schema_version": "fixture/v1",
+      "uncertainty_codes": [],
+      "unresolved_items": [],
       "used_fact_ids": [
         "fact-barrier-age"
       ]
@@ -107,22 +133,165 @@
     {
       "agent_call_id": "call-barrier-2",
       "assessment_candidate_id": "candidate-barrier-ex",
+      "candidate_confidence": 0.9,
       "candidate_rationale": "阈值和研究者判断两个 AND 组件均满足。",
+      "evidence_snapshot_id": "snapshot-barrier",
       "evidence_span_ids": [
         "span-barrier-risk"
       ],
       "gap_types": [],
+      "missing_predicate_ids": [
+        "predicate-medication-prohibited-window",
+        "predicate-investigator-exception_confirmed-eq"
+      ],
+      "predicate_observations": [
+        {
+          "evidence_span_ids": [
+            "span-barrier-risk"
+          ],
+          "fact_ids": [
+            "fact-barrier-risk"
+          ],
+          "observed_unit": null,
+          "observed_value": true,
+          "predicate_id": "predicate-investigator-unacceptable_participation_risk-eq",
+          "reason_codes": [],
+          "schema_version": "fixture/v1",
+          "truth": "true"
+        },
+        {
+          "evidence_span_ids": [
+            "span-barrier-risk"
+          ],
+          "fact_ids": [
+            "fact-barrier-lab"
+          ],
+          "observed_unit": "xULN",
+          "observed_value": 2.1,
+          "predicate_id": "predicate-laboratory-target_ratio_uln-gte",
+          "reason_codes": [],
+          "schema_version": "fixture/v1",
+          "truth": "true"
+        },
+        {
+          "evidence_span_ids": [],
+          "fact_ids": [],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-medication-prohibited-window",
+          "reason_codes": [
+            "fact_not_observed"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        },
+        {
+          "evidence_span_ids": [
+            "span-barrier-risk"
+          ],
+          "fact_ids": [
+            "fact-barrier-measurement-invalid"
+          ],
+          "observed_unit": null,
+          "observed_value": true,
+          "predicate_id": "predicate-laboratory-critical_measurement_invalid-eq",
+          "reason_codes": [],
+          "schema_version": "fixture/v1",
+          "truth": "false"
+        },
+        {
+          "evidence_span_ids": [
+            "span-barrier-risk"
+          ],
+          "fact_ids": [
+            "fact-barrier-no-exception"
+          ],
+          "observed_unit": null,
+          "observed_value": true,
+          "predicate_id": "predicate-exception-protocol_exception_documented-eq",
+          "reason_codes": [],
+          "schema_version": "fixture/v1",
+          "truth": "false"
+        },
+        {
+          "evidence_span_ids": [],
+          "fact_ids": [],
+          "observed_unit": null,
+          "observed_value": null,
+          "predicate_id": "predicate-investigator-exception_confirmed-eq",
+          "reason_codes": [
+            "professional_judgment_missing"
+          ],
+          "schema_version": "fixture/v1",
+          "truth": "unknown"
+        }
+      ],
+      "processed_predicate_ids": [
+        "predicate-investigator-unacceptable_participation_risk-eq",
+        "predicate-laboratory-target_ratio_uln-gte",
+        "predicate-medication-prohibited-window",
+        "predicate-laboratory-critical_measurement_invalid-eq",
+        "predicate-exception-protocol_exception_documented-eq",
+        "predicate-investigator-exception_confirmed-eq"
+      ],
       "proposed_decision": "exclusion_triggered",
+      "reason_codes": [
+        "fact_not_observed",
+        "professional_judgment_missing"
+      ],
+      "review_episode_id": "episode-barrier",
       "rule_component_id": "component-ex-01",
       "schema_version": "fixture/v1",
+      "uncertainty_codes": [
+        "fact_not_observed",
+        "professional_judgment_missing"
+      ],
+      "unresolved_items": [],
       "used_fact_ids": [
         "fact-barrier-lab",
-        "fact-barrier-risk"
+        "fact-barrier-risk",
+        "fact-barrier-measurement-invalid",
+        "fact-barrier-no-exception"
       ]
     }
   ],
   "conflict_groups": [],
+  "episode_rollup": {
+    "barrier_count": 1,
+    "conflict_count": 0,
+    "current_gap_count": 0,
+    "future_attention_count": 0,
+    "gap_counts": {},
+    "gate_result_id": "gate-rollup-barrier",
+    "input_action_ids": [],
+    "input_assessment_ids": [
+      "assessment-barrier-in",
+      "assessment-barrier-ex"
+    ],
+    "input_expectation_ids": [
+      "expectation-barrier-age",
+      "expectation-barrier-risk"
+    ],
+    "main_status": "clear_barrier",
+    "professional_judgment_count": 0,
+    "provenance_followup_count": 0,
+    "publication_fingerprint": "7e7359b193304f4c9be29f6ea14fe80daf0c2a48a1938ef0dfd1bdec58392fc6",
+    "review_episode_id": "episode-barrier",
+    "schema_version": "fixture/v1",
+    "sort_rank": 0
+  },
   "evidence_expectations": [
+    {
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "expectation_id": "expectation-barrier-age",
+      "gap_type": null,
+      "requirement_id": "req-age",
+      "review_episode_id": "episode-barrier",
+      "schema_version": "fixture/v1",
+      "status": "observed"
+    },
     {
       "evidence_span_ids": [
         "span-barrier-risk"
@@ -169,13 +338,17 @@
       "certainty": 1.0,
       "conflict_group_id": null,
       "effective_date": null,
+      "evidence_snapshot_id": "snapshot-barrier",
       "evidence_span_ids": [
         "span-barrier-risk"
       ],
       "fact_id": "fact-barrier-age",
       "fact_type": "demographics.age_years",
       "polarity": "affirmed",
+      "project_id": "project-synthetic-phase-iii",
+      "review_episode_id": "episode-barrier",
       "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
       "unit": "year",
       "value": 45
     },
@@ -183,27 +356,35 @@
       "certainty": 1.0,
       "conflict_group_id": null,
       "effective_date": null,
+      "evidence_snapshot_id": "snapshot-barrier",
       "evidence_span_ids": [
         "span-barrier-risk"
       ],
       "fact_id": "fact-barrier-no-exception",
       "fact_type": "exception.protocol_exception_documented",
       "polarity": "negated",
+      "project_id": "project-synthetic-phase-iii",
+      "review_episode_id": "episode-barrier",
       "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
       "unit": null,
-      "value": false
+      "value": true
     },
     {
       "certainty": 1.0,
       "conflict_group_id": null,
       "effective_date": null,
+      "evidence_snapshot_id": "snapshot-barrier",
       "evidence_span_ids": [
         "span-barrier-risk"
       ],
       "fact_id": "fact-barrier-lab",
       "fact_type": "laboratory.target_ratio_uln",
       "polarity": "affirmed",
+      "project_id": "project-synthetic-phase-iii",
+      "review_episode_id": "episode-barrier",
       "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
       "unit": "xULN",
       "value": 2.1
     },
@@ -211,13 +392,35 @@
       "certainty": 1.0,
       "conflict_group_id": null,
       "effective_date": null,
+      "evidence_snapshot_id": "snapshot-barrier",
       "evidence_span_ids": [
         "span-barrier-risk"
       ],
       "fact_id": "fact-barrier-risk",
       "fact_type": "investigator.unacceptable_participation_risk",
       "polarity": "affirmed",
+      "project_id": "project-synthetic-phase-iii",
+      "review_episode_id": "episode-barrier",
       "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
+      "unit": null,
+      "value": true
+    },
+    {
+      "certainty": 1.0,
+      "conflict_group_id": null,
+      "effective_date": null,
+      "evidence_snapshot_id": "snapshot-barrier",
+      "evidence_span_ids": [
+        "span-barrier-risk"
+      ],
+      "fact_id": "fact-barrier-measurement-invalid",
+      "fact_type": "laboratory.critical_measurement_invalid",
+      "polarity": "negated",
+      "project_id": "project-synthetic-phase-iii",
+      "review_episode_id": "episode-barrier",
+      "schema_version": "fixture/v1",
+      "subject_id": "subject-barrier",
       "unit": null,
       "value": true
     }
@@ -233,6 +436,7 @@
       ],
       "gap_types": [],
       "gate_result_id": "gate-barrier-in",
+      "publication_fingerprint": "71c5dbd88127dc25b5f926574da83d9b79948e9ebfcd06cf33016879b9412369",
       "review_run_id": "run-barrier",
       "rule_component_id": "component-in-01",
       "schema_version": "fixture/v1",
@@ -250,12 +454,15 @@
       ],
       "gap_types": [],
       "gate_result_id": "gate-barrier-ex",
+      "publication_fingerprint": "6f5942bec5362bb81a7c8405038410a75405956e96bd5724d7aef5d9e8adce18",
       "review_run_id": "run-barrier",
       "rule_component_id": "component-ex-01",
       "schema_version": "fixture/v1",
       "used_fact_ids": [
         "fact-barrier-lab",
-        "fact-barrier-risk"
+        "fact-barrier-risk",
+        "fact-barrier-measurement-invalid",
+        "fact-barrier-no-exception"
       ]
     }
   ],
@@ -329,18 +536,19 @@
       "code_version": "gate_contract/v1",
       "created_at": "2026-08-12T12:00:00Z",
       "error_codes": [],
-      "gate_name": "fixture-assessment-gate",
+      "gate_name": "assessment-publication-gate",
       "gate_result_id": "gate-barrier-in",
-      "idempotency_key": "gate:assessment-barrier-in",
+      "idempotency_key": "assessment:run-barrier:component-in-01",
       "input_entity_refs": [
-        "run-barrier",
-        "component-in-01"
+        "candidate-barrier-in",
+        "component-in-01",
+        "run-barrier"
       ],
       "input_revision_map": {
-        "run-barrier": 1
+        "episode-barrier": 1
       },
-      "input_scope_hash": "7a04a2ce5c4306fbeb006be48398133b97960790e133529494dbbacffb71d3c3",
-      "output_hash": "ba219270f5016beca4fcf5f3e7fd5a774a5d4b3e19b72e1c5367260e2cf978dd",
+      "input_scope_hash": "baf418e154b172751fe9b59d68fa373779893ef5e05a0bb45bccc1817b638b82",
+      "output_hash": "f4ba07a4f809a641dae121d8e21c51d84fd9c81d36ffaee560bf09df77fc5c0c",
       "parent_event_id": null,
       "recompute_scope": [
         "component-in-01"
@@ -359,21 +567,56 @@
       "code_version": "gate_contract/v1",
       "created_at": "2026-08-12T12:00:00Z",
       "error_codes": [],
-      "gate_name": "fixture-assessment-gate",
+      "gate_name": "assessment-publication-gate",
       "gate_result_id": "gate-barrier-ex",
-      "idempotency_key": "gate:assessment-barrier-ex",
+      "idempotency_key": "assessment:run-barrier:component-ex-01",
       "input_entity_refs": [
-        "run-barrier",
-        "component-ex-01"
+        "candidate-barrier-ex",
+        "component-ex-01",
+        "run-barrier"
       ],
       "input_revision_map": {
-        "run-barrier": 1
+        "episode-barrier": 1
       },
-      "input_scope_hash": "ddcd3b84cf4f2adb545b0ac09a69966fc7517114f79391fbfcb82d2b10b09c61",
-      "output_hash": "25b5852a2f7746b3d0f62521bf4bb8d7078bb5ec6e40cd0a413e15f4762128ac",
+      "input_scope_hash": "ce88b1a6b67ef3808da37ef4639afafd6f62b315aa632ccdb0569c113eb139c2",
+      "output_hash": "ad9278e472c88a4e1b4ae1bba72d0743abdb9a7da3798e68480ba9534ac3b1f0",
       "parent_event_id": null,
       "recompute_scope": [
         "component-ex-01"
+      ],
+      "rejected_entity_refs": [],
+      "result": "accepted",
+      "schema_version": "fixture/v1"
+    },
+    {
+      "accepted_entity_refs": [
+        "episode-barrier",
+        "rollup:episode-barrier"
+      ],
+      "affected_scope": [
+        "episode-barrier"
+      ],
+      "code_version": "gate_contract/v1",
+      "created_at": "2026-08-12T12:00:00Z",
+      "error_codes": [],
+      "gate_name": "episode-rollup-projection-gate",
+      "gate_result_id": "gate-rollup-barrier",
+      "idempotency_key": "rollup:episode-barrier:e5a3ece2d86e194838105c453f321e8bc58ddd7645bd9a8975b80e927360b4d7",
+      "input_entity_refs": [
+        "episode-barrier",
+        "assessment-barrier-in",
+        "assessment-barrier-ex",
+        "expectation-barrier-age",
+        "expectation-barrier-risk"
+      ],
+      "input_revision_map": {
+        "episode-barrier": 1
+      },
+      "input_scope_hash": "6a0aca73c16994ca9d3c3d9e8acbcb5695475ab37cfa238a31023aea160d5bf0",
+      "output_hash": "c4ca6d00c492524c7ff42d6fa2c3dcd3a56fd5a74f18286a180a402c2a84254f",
+      "parent_event_id": null,
+      "recompute_scope": [
+        "episode-barrier"
       ],
       "rejected_entity_refs": [],
       "result": "accepted",
@@ -435,7 +678,8 @@
           "fact-barrier-age",
           "fact-barrier-no-exception",
           "fact-barrier-lab",
-          "fact-barrier-risk"
+          "fact-barrier-risk",
+          "fact-barrier-measurement-invalid"
         ],
         "has_trend_change": false,
         "is_abnormal": true,
@@ -472,6 +716,7 @@
     "project_id": "project-synthetic-phase-iii",
     "project_name": "合成Ⅲ期入排审核项目",
     "protocol_version": {
+      "integrity_manifest_sha256": "177db38602aeef7de9dca9ef0298cdfbe86f46c1c1f4c16c2ccf9ee70b199246",
       "official_date": {
         "precision": "day",
         "source_text": null,
@@ -504,6 +749,499 @@
       "template_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
     }
   ],
+  "protocol_integrity_manifest": {
+    "authoritative_rules": [
+      {
+        "components": [
+          {
+            "display_code": "IN-01",
+            "evidence_requirements": [
+              {
+                "allows_screening_record_transcription": true,
+                "description": "筛选节点应有可定位的年龄记录。",
+                "due_stage": "screening",
+                "fact_type": "demographics.age_years",
+                "required_source_types": [
+                  "screening_record",
+                  "identity_record"
+                ],
+                "requirement_id": "req-age",
+                "requires_contemporaneous_objective_source": false,
+                "rule_component_id": "component-in-01",
+                "schema_version": "fixture/v1"
+              }
+            ],
+            "exception_expression": null,
+            "expression": {
+              "kind": "predicate",
+              "predicate": {
+                "applicable_population": null,
+                "attribute": "age_years",
+                "comparator": "gte",
+                "predicate_id": "predicate-demographics-age_years-gte",
+                "requires_professional_judgment": false,
+                "subject": "demographics",
+                "unit": "year",
+                "value": 18
+              },
+              "time_constraint": null
+            },
+            "parent_rule_id": "rule-in-01",
+            "rule_component_id": "component-in-01",
+            "schema_version": "fixture/v1",
+            "title": "年龄要求"
+          }
+        ],
+        "kind": "inclusion",
+        "official_code": "IN-01",
+        "rule_id": "rule-in-01",
+        "schema_version": "fixture/v1",
+        "source_text": "合成规则：年龄应不低于18岁。",
+        "study_phase": "phase_iii"
+      },
+      {
+        "components": [
+          {
+            "display_code": "EX-01a",
+            "evidence_requirements": [
+              {
+                "allows_screening_record_transcription": true,
+                "description": "异常指标与研究者不可接受风险判断必须同时有证据。",
+                "due_stage": "screening",
+                "fact_type": "laboratory_and_investigator_risk",
+                "required_source_types": [
+                  "laboratory_report",
+                  "investigator_assessment"
+                ],
+                "requirement_id": "req-composite-risk",
+                "requires_contemporaneous_objective_source": false,
+                "rule_component_id": "component-ex-01",
+                "schema_version": "fixture/v1"
+              }
+            ],
+            "exception_expression": {
+              "children": [
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "applicable_population": null,
+                    "attribute": "protocol_exception_documented",
+                    "comparator": "eq",
+                    "predicate_id": "predicate-exception-protocol_exception_documented-eq",
+                    "requires_professional_judgment": false,
+                    "subject": "exception",
+                    "unit": null,
+                    "value": true
+                  },
+                  "time_constraint": null
+                },
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "applicable_population": null,
+                    "attribute": "exception_confirmed",
+                    "comparator": "eq",
+                    "predicate_id": "predicate-investigator-exception_confirmed-eq",
+                    "requires_professional_judgment": true,
+                    "subject": "investigator",
+                    "unit": null,
+                    "value": true
+                  },
+                  "time_constraint": null
+                }
+              ],
+              "kind": "logical",
+              "operator": "all"
+            },
+            "expression": {
+              "children": [
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "applicable_population": null,
+                    "attribute": "unacceptable_participation_risk",
+                    "comparator": "eq",
+                    "predicate_id": "predicate-investigator-unacceptable_participation_risk-eq",
+                    "requires_professional_judgment": true,
+                    "subject": "investigator",
+                    "unit": null,
+                    "value": true
+                  },
+                  "time_constraint": null
+                },
+                {
+                  "children": [
+                    {
+                      "kind": "predicate",
+                      "predicate": {
+                        "applicable_population": null,
+                        "attribute": "target_ratio_uln",
+                        "comparator": "gte",
+                        "predicate_id": "predicate-laboratory-target_ratio_uln-gte",
+                        "requires_professional_judgment": false,
+                        "subject": "laboratory",
+                        "unit": "xULN",
+                        "value": 1.5
+                      },
+                      "time_constraint": null
+                    },
+                    {
+                      "kind": "predicate",
+                      "predicate": {
+                        "applicable_population": null,
+                        "attribute": "prohibited_exposure",
+                        "comparator": "eq",
+                        "predicate_id": "predicate-medication-prohibited-window",
+                        "requires_professional_judgment": false,
+                        "subject": "medication",
+                        "unit": null,
+                        "value": true
+                      },
+                      "time_constraint": {
+                        "allow_partial_date": false,
+                        "anchor_type": "randomization_date",
+                        "direction": "before",
+                        "half_life_multiplier": null,
+                        "lower_bound_days": null,
+                        "upper_bound_days": 28
+                      }
+                    }
+                  ],
+                  "kind": "logical",
+                  "operator": "any"
+                },
+                {
+                  "children": [
+                    {
+                      "kind": "predicate",
+                      "predicate": {
+                        "applicable_population": null,
+                        "attribute": "critical_measurement_invalid",
+                        "comparator": "eq",
+                        "predicate_id": "predicate-laboratory-critical_measurement_invalid-eq",
+                        "requires_professional_judgment": false,
+                        "subject": "laboratory",
+                        "unit": null,
+                        "value": true
+                      },
+                      "time_constraint": null
+                    }
+                  ],
+                  "kind": "logical",
+                  "operator": "not"
+                }
+              ],
+              "kind": "logical",
+              "operator": "all"
+            },
+            "parent_rule_id": "rule-ex-01",
+            "rule_component_id": "component-ex-01",
+            "schema_version": "fixture/v1",
+            "title": "实验室异常与研究者风险的复合条件"
+          }
+        ],
+        "kind": "exclusion",
+        "official_code": "EX-01",
+        "rule_id": "rule-ex-01",
+        "schema_version": "fixture/v1",
+        "source_text": "合成规则：研究者判断构成不可接受风险，且实验室指标达到阈值或随机前28天内存在禁用用药，且关键测量未被判定无效时排除。",
+        "study_phase": "phase_iii"
+      },
+      {
+        "components": [
+          {
+            "display_code": "EX-02a",
+            "evidence_requirements": [
+              {
+                "allows_screening_record_transcription": true,
+                "description": "待研究者判断的合成规则",
+                "due_stage": "screening",
+                "fact_type": "investigator.rule_specific_judgment",
+                "required_source_types": [
+                  "screening_record"
+                ],
+                "requirement_id": "req-professional",
+                "requires_contemporaneous_objective_source": false,
+                "rule_component_id": "component-ex-02",
+                "schema_version": "fixture/v1"
+              }
+            ],
+            "exception_expression": null,
+            "expression": {
+              "kind": "predicate",
+              "predicate": {
+                "applicable_population": null,
+                "attribute": "rule_specific_judgment",
+                "comparator": "eq",
+                "predicate_id": "predicate-investigator-rule_specific_judgment-eq",
+                "requires_professional_judgment": true,
+                "subject": "investigator",
+                "unit": null,
+                "value": true
+              },
+              "time_constraint": null
+            },
+            "parent_rule_id": "rule-ex-02",
+            "rule_component_id": "component-ex-02",
+            "schema_version": "fixture/v1",
+            "title": "待研究者判断的合成规则"
+          }
+        ],
+        "kind": "exclusion",
+        "official_code": "EX-02",
+        "rule_id": "rule-ex-02",
+        "schema_version": "fixture/v1",
+        "source_text": "待研究者判断的合成规则",
+        "study_phase": "phase_iii"
+      },
+      {
+        "components": [
+          {
+            "display_code": "EX-03a",
+            "evidence_requirements": [
+              {
+                "allows_screening_record_transcription": true,
+                "description": "后续节点才到期的合成规则",
+                "due_stage": "baseline",
+                "fact_type": "baseline.future_assessment",
+                "required_source_types": [
+                  "screening_record"
+                ],
+                "requirement_id": "req-future",
+                "requires_contemporaneous_objective_source": false,
+                "rule_component_id": "component-ex-03",
+                "schema_version": "fixture/v1"
+              }
+            ],
+            "exception_expression": null,
+            "expression": {
+              "kind": "predicate",
+              "predicate": {
+                "applicable_population": null,
+                "attribute": "future_assessment",
+                "comparator": "eq",
+                "predicate_id": "predicate-baseline-future_assessment-eq",
+                "requires_professional_judgment": false,
+                "subject": "baseline",
+                "unit": null,
+                "value": true
+              },
+              "time_constraint": null
+            },
+            "parent_rule_id": "rule-ex-03",
+            "rule_component_id": "component-ex-03",
+            "schema_version": "fixture/v1",
+            "title": "后续节点才到期的合成规则"
+          }
+        ],
+        "kind": "exclusion",
+        "official_code": "EX-03",
+        "rule_id": "rule-ex-03",
+        "schema_version": "fixture/v1",
+        "source_text": "后续节点才到期的合成规则",
+        "study_phase": "phase_iii"
+      },
+      {
+        "components": [
+          {
+            "display_code": "EX-04a",
+            "evidence_requirements": [
+              {
+                "allows_screening_record_transcription": true,
+                "description": "病历引用资料必须提供的合成规则",
+                "due_stage": "screening",
+                "fact_type": "history.referenced_document",
+                "required_source_types": [
+                  "screening_record"
+                ],
+                "requirement_id": "req-referenced",
+                "requires_contemporaneous_objective_source": false,
+                "rule_component_id": "component-ex-04",
+                "schema_version": "fixture/v1"
+              }
+            ],
+            "exception_expression": null,
+            "expression": {
+              "kind": "predicate",
+              "predicate": {
+                "applicable_population": null,
+                "attribute": "referenced_document",
+                "comparator": "eq",
+                "predicate_id": "predicate-history-referenced_document-eq",
+                "requires_professional_judgment": false,
+                "subject": "history",
+                "unit": null,
+                "value": true
+              },
+              "time_constraint": null
+            },
+            "parent_rule_id": "rule-ex-04",
+            "rule_component_id": "component-ex-04",
+            "schema_version": "fixture/v1",
+            "title": "病历引用资料必须提供的合成规则"
+          }
+        ],
+        "kind": "exclusion",
+        "official_code": "EX-04",
+        "rule_id": "rule-ex-04",
+        "schema_version": "fixture/v1",
+        "source_text": "病历引用资料必须提供的合成规则",
+        "study_phase": "phase_iii"
+      },
+      {
+        "components": [
+          {
+            "display_code": "REQ-01a",
+            "evidence_requirements": [
+              {
+                "allows_screening_record_transcription": true,
+                "description": "当前节点必做检查的合成规则",
+                "due_stage": "screening",
+                "fact_type": "procedure.required_completed",
+                "required_source_types": [
+                  "screening_record"
+                ],
+                "requirement_id": "req-procedure",
+                "requires_contemporaneous_objective_source": false,
+                "rule_component_id": "component-req-01",
+                "schema_version": "fixture/v1"
+              }
+            ],
+            "exception_expression": null,
+            "expression": {
+              "kind": "predicate",
+              "predicate": {
+                "applicable_population": null,
+                "attribute": "required_completed",
+                "comparator": "eq",
+                "predicate_id": "predicate-procedure-required_completed-eq",
+                "requires_professional_judgment": false,
+                "subject": "procedure",
+                "unit": null,
+                "value": true
+              },
+              "time_constraint": null
+            },
+            "parent_rule_id": "rule-req-01",
+            "rule_component_id": "component-req-01",
+            "schema_version": "fixture/v1",
+            "title": "当前节点必做检查的合成规则"
+          }
+        ],
+        "kind": "required_procedure",
+        "official_code": "REQ-01",
+        "rule_id": "rule-req-01",
+        "schema_version": "fixture/v1",
+        "source_text": "当前节点必做检查的合成规则",
+        "study_phase": "phase_iii"
+      },
+      {
+        "components": [
+          {
+            "display_code": "REQ-02a",
+            "evidence_requirements": [
+              {
+                "allows_screening_record_transcription": true,
+                "description": "检验结果关键字段的合成规则",
+                "due_stage": "screening",
+                "fact_type": "laboratory.required_fields_complete",
+                "required_source_types": [
+                  "screening_record"
+                ],
+                "requirement_id": "req-result-fields",
+                "requires_contemporaneous_objective_source": false,
+                "rule_component_id": "component-req-02",
+                "schema_version": "fixture/v1"
+              }
+            ],
+            "exception_expression": null,
+            "expression": {
+              "kind": "predicate",
+              "predicate": {
+                "applicable_population": null,
+                "attribute": "required_fields_complete",
+                "comparator": "eq",
+                "predicate_id": "predicate-laboratory-required_fields_complete-eq",
+                "requires_professional_judgment": false,
+                "subject": "laboratory",
+                "unit": null,
+                "value": true
+              },
+              "time_constraint": null
+            },
+            "parent_rule_id": "rule-req-02",
+            "rule_component_id": "component-req-02",
+            "schema_version": "fixture/v1",
+            "title": "检验结果关键字段的合成规则"
+          }
+        ],
+        "kind": "required_procedure",
+        "official_code": "REQ-02",
+        "rule_id": "rule-req-02",
+        "schema_version": "fixture/v1",
+        "source_text": "检验结果关键字段的合成规则",
+        "study_phase": "phase_iii"
+      }
+    ],
+    "authoritative_workflow_stages": [
+      {
+        "display_name": "预筛期审核",
+        "due_requirement_ids": [],
+        "review_required": true,
+        "schema_version": "fixture/v1",
+        "stage": "pre_screening",
+        "visit_window": "签署知情同意前",
+        "workflow_stage_id": "stage-pre-screening"
+      },
+      {
+        "display_name": "筛选期审核",
+        "due_requirement_ids": [
+          "req-age",
+          "req-composite-risk",
+          "req-professional",
+          "req-referenced",
+          "req-procedure",
+          "req-result-fields"
+        ],
+        "review_required": true,
+        "schema_version": "fixture/v1",
+        "stage": "screening",
+        "visit_window": "D-28至D-1",
+        "workflow_stage_id": "stage-screening"
+      },
+      {
+        "display_name": "导入/洗脱期审核",
+        "due_requirement_ids": [],
+        "review_required": true,
+        "schema_version": "fixture/v1",
+        "stage": "run_in",
+        "visit_window": "筛选后至基线前",
+        "workflow_stage_id": "stage-run-in"
+      },
+      {
+        "display_name": "基线/随机前审核",
+        "due_requirement_ids": [
+          "req-future"
+        ],
+        "review_required": true,
+        "schema_version": "fixture/v1",
+        "stage": "baseline",
+        "visit_window": "D1随机前",
+        "workflow_stage_id": "stage-baseline"
+      }
+    ],
+    "manifest_id": "manifest-protocol-v1-phase-iii",
+    "manifest_sha256": "177db38602aeef7de9dca9ef0298cdfbe86f46c1c1f4c16c2ccf9ee70b199246",
+    "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "protocol_version_id": "protocol-v1",
+    "schema_version": "fixture/v1",
+    "source_refs": [
+      "protocol-v1:p1",
+      "protocol-v1:p20-p24",
+      "protocol-v1:flow-table"
+    ],
+    "study_phase": "phase_iii"
+  },
   "review_episode": {
     "anchor_dates": {
       "screening_date": {
@@ -571,6 +1309,7 @@
                 "applicable_population": null,
                 "attribute": "age_years",
                 "comparator": "gte",
+                "predicate_id": "predicate-demographics-age_years-gte",
                 "requires_professional_judgment": false,
                 "subject": "demographics",
                 "unit": "year",
@@ -599,7 +1338,7 @@
               {
                 "allows_screening_record_transcription": true,
                 "description": "异常指标与研究者不可接受风险判断必须同时有证据。",
-                "due_stage": "baseline",
+                "due_stage": "screening",
                 "fact_type": "laboratory_and_investigator_risk",
                 "required_source_types": [
                   "laboratory_report",
@@ -619,6 +1358,7 @@
                     "applicable_population": null,
                     "attribute": "protocol_exception_documented",
                     "comparator": "eq",
+                    "predicate_id": "predicate-exception-protocol_exception_documented-eq",
                     "requires_professional_judgment": false,
                     "subject": "exception",
                     "unit": null,
@@ -632,6 +1372,7 @@
                     "applicable_population": null,
                     "attribute": "exception_confirmed",
                     "comparator": "eq",
+                    "predicate_id": "predicate-investigator-exception_confirmed-eq",
                     "requires_professional_judgment": true,
                     "subject": "investigator",
                     "unit": null,
@@ -649,27 +1390,76 @@
                   "kind": "predicate",
                   "predicate": {
                     "applicable_population": null,
-                    "attribute": "target_ratio_uln",
-                    "comparator": "gte",
-                    "requires_professional_judgment": false,
-                    "subject": "laboratory",
-                    "unit": "xULN",
-                    "value": 1.5
-                  },
-                  "time_constraint": null
-                },
-                {
-                  "kind": "predicate",
-                  "predicate": {
-                    "applicable_population": null,
                     "attribute": "unacceptable_participation_risk",
                     "comparator": "eq",
+                    "predicate_id": "predicate-investigator-unacceptable_participation_risk-eq",
                     "requires_professional_judgment": true,
                     "subject": "investigator",
                     "unit": null,
                     "value": true
                   },
                   "time_constraint": null
+                },
+                {
+                  "children": [
+                    {
+                      "kind": "predicate",
+                      "predicate": {
+                        "applicable_population": null,
+                        "attribute": "target_ratio_uln",
+                        "comparator": "gte",
+                        "predicate_id": "predicate-laboratory-target_ratio_uln-gte",
+                        "requires_professional_judgment": false,
+                        "subject": "laboratory",
+                        "unit": "xULN",
+                        "value": 1.5
+                      },
+                      "time_constraint": null
+                    },
+                    {
+                      "kind": "predicate",
+                      "predicate": {
+                        "applicable_population": null,
+                        "attribute": "prohibited_exposure",
+                        "comparator": "eq",
+                        "predicate_id": "predicate-medication-prohibited-window",
+                        "requires_professional_judgment": false,
+                        "subject": "medication",
+                        "unit": null,
+                        "value": true
+                      },
+                      "time_constraint": {
+                        "allow_partial_date": false,
+                        "anchor_type": "randomization_date",
+                        "direction": "before",
+                        "half_life_multiplier": null,
+                        "lower_bound_days": null,
+                        "upper_bound_days": 28
+                      }
+                    }
+                  ],
+                  "kind": "logical",
+                  "operator": "any"
+                },
+                {
+                  "children": [
+                    {
+                      "kind": "predicate",
+                      "predicate": {
+                        "applicable_population": null,
+                        "attribute": "critical_measurement_invalid",
+                        "comparator": "eq",
+                        "predicate_id": "predicate-laboratory-critical_measurement_invalid-eq",
+                        "requires_professional_judgment": false,
+                        "subject": "laboratory",
+                        "unit": null,
+                        "value": true
+                      },
+                      "time_constraint": null
+                    }
+                  ],
+                  "kind": "logical",
+                  "operator": "not"
                 }
               ],
               "kind": "logical",
@@ -685,7 +1475,7 @@
         "official_code": "EX-01",
         "rule_id": "rule-ex-01",
         "schema_version": "fixture/v1",
-        "source_text": "合成规则：异常达到阈值且研究者判断构成不可接受风险时排除。",
+        "source_text": "合成规则：研究者判断构成不可接受风险，且实验室指标达到阈值或随机前28天内存在禁用用药，且关键测量未被判定无效时排除。",
         "study_phase": "phase_iii"
       },
       {
@@ -714,6 +1504,7 @@
                 "applicable_population": null,
                 "attribute": "rule_specific_judgment",
                 "comparator": "eq",
+                "predicate_id": "predicate-investigator-rule_specific_judgment-eq",
                 "requires_professional_judgment": true,
                 "subject": "investigator",
                 "unit": null,
@@ -760,6 +1551,7 @@
                 "applicable_population": null,
                 "attribute": "future_assessment",
                 "comparator": "eq",
+                "predicate_id": "predicate-baseline-future_assessment-eq",
                 "requires_professional_judgment": false,
                 "subject": "baseline",
                 "unit": null,
@@ -806,6 +1598,7 @@
                 "applicable_population": null,
                 "attribute": "referenced_document",
                 "comparator": "eq",
+                "predicate_id": "predicate-history-referenced_document-eq",
                 "requires_professional_judgment": false,
                 "subject": "history",
                 "unit": null,
@@ -852,6 +1645,7 @@
                 "applicable_population": null,
                 "attribute": "required_completed",
                 "comparator": "eq",
+                "predicate_id": "predicate-procedure-required_completed-eq",
                 "requires_professional_judgment": false,
                 "subject": "procedure",
                 "unit": null,
@@ -898,6 +1692,7 @@
                 "applicable_population": null,
                 "attribute": "required_fields_complete",
                 "comparator": "eq",
+                "predicate_id": "predicate-laboratory-required_fields_complete-eq",
                 "requires_professional_judgment": false,
                 "subject": "laboratory",
                 "unit": null,
@@ -949,9 +1744,23 @@
   },
   "workflow_stages": [
     {
+      "display_name": "预筛期审核",
+      "due_requirement_ids": [],
+      "review_required": true,
+      "schema_version": "fixture/v1",
+      "stage": "pre_screening",
+      "visit_window": "签署知情同意前",
+      "workflow_stage_id": "stage-pre-screening"
+    },
+    {
       "display_name": "筛选期审核",
       "due_requirement_ids": [
-        "req-age"
+        "req-age",
+        "req-composite-risk",
+        "req-professional",
+        "req-referenced",
+        "req-procedure",
+        "req-result-fields"
       ],
       "review_required": true,
       "schema_version": "fixture/v1",
@@ -960,9 +1769,18 @@
       "workflow_stage_id": "stage-screening"
     },
     {
-      "display_name": "基线期审核",
+      "display_name": "导入/洗脱期审核",
+      "due_requirement_ids": [],
+      "review_required": true,
+      "schema_version": "fixture/v1",
+      "stage": "run_in",
+      "visit_window": "筛选后至基线前",
+      "workflow_stage_id": "stage-run-in"
+    },
+    {
+      "display_name": "基线/随机前审核",
       "due_requirement_ids": [
-        "req-composite-risk"
+        "req-future"
       ],
       "review_required": true,
       "schema_version": "fixture/v1",

@@ -25,6 +25,7 @@ from .evidence import (
     PatientProfileEvent,
 )
 from .jobs import JobEvent, ReviewRunDiff
+from .projections import EpisodeRollup
 from .review import (
     ActionRequest,
     AssessmentCandidate,
@@ -35,7 +36,15 @@ from .review import (
     ReviewRun,
     Subject,
 )
-from .rules import EvidenceRequirement, Rule, RuleComponent, RuleExpression, RuleSet, WorkflowStage
+from .rules import (
+    EvidenceRequirement,
+    ProtocolIntegrityManifest,
+    Rule,
+    RuleComponent,
+    RuleExpression,
+    RuleSet,
+    WorkflowStage,
+)
 from .uat import UatWorkspaceFixture
 
 __all__ = [
@@ -54,6 +63,7 @@ __all__ = [
     "EvidenceSnapshot",
     "EvidenceRequirement",
     "EvidenceSpan",
+    "EpisodeRollup",
     "ErrorDetail",
     "ErrorEnvelope",
     "FinalAssessment",
@@ -65,6 +75,7 @@ __all__ = [
     "PatientProfileEvent",
     "Project",
     "ProjectListResponse",
+    "ProtocolIntegrityManifest",
     "PromptVersion",
     "ReviewEpisode",
     "ReviewRun",

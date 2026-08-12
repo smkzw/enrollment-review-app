@@ -79,23 +79,42 @@ class AgentCallContract(VersionedModel):
             raise ValueError("attempt 不能大于 max_attempts")
         if self.finished_at < self.started_at:
             raise ValueError("finished_at 不能早于 started_at")
+        if not self.project_id:
+            raise ValueError("AgentCall 必须绑定 project_id")
+        if self.node == AgentNode.PROTOCOL_DECONSTRUCTOR:
+            if not self.source_ids:
+                raise ValueError("方案解构 AgentCall 必须绑定方案来源")
+        elif not all(
+            [
+                self.subject_id,
+                self.review_episode_id,
+                self.review_run_id,
+                self.evidence_snapshot_id,
+                self.source_ids,
+            ]
+        ):
+            raise ValueError(
+                "受试者 AgentCall 必须绑定 Subject/Episode/Run/Snapshot/Source"
+            )
         return self
 
 
 class CriticRun(VersionedModel):
     critic_run_id: str = Field(min_length=1)
     assessment_candidate_id: str = Field(min_length=1)
+    target_refs: list[str] = Field(min_length=1)
     disposition: CriticAction
     trigger_codes: list[str] = Field(min_length=1)
     reason_codes: list[str] = Field(min_length=1)
     evidence_span_ids: list[str] = Field(default_factory=list)
+    source_refs: list[str] = Field(min_length=1)
     rationale: str = Field(min_length=1)
     affected_scope: list[str] = Field(min_length=1)
     required_followup: list[str] = Field(default_factory=list)
     input_scope_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
-    gate_result_ids: list[str] = Field(default_factory=list)
+    gate_result_refs: list[str] = Field(default_factory=list)
     created_by_agent_call_id: str = Field(min_length=1)
-    revision: int = Field(default=1, ge=1)
+    critic_revision: int = Field(default=1, ge=1)
 
 
 class GateResult(VersionedModel):
@@ -115,6 +134,15 @@ class GateResult(VersionedModel):
     parent_event_id: str | None = None
     created_at: datetime
     output_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def validate_outcome_refs(self) -> "GateResult":
+        if self.result == GateOutcome.ACCEPTED:
+            if not self.accepted_entity_refs or self.rejected_entity_refs or self.error_codes:
+                raise ValueError("accepted GateResult 必须仅包含已接受实体")
+        elif not self.rejected_entity_refs or not self.error_codes:
+            raise ValueError("rejected/blocked GateResult 必须说明被拒实体与错误代码")
+        return self
 
 
 AgentPublishedEntity = Literal[

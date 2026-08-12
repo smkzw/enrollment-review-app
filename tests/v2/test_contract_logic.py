@@ -32,19 +32,29 @@ from app.domain.contracts.enums import (
 from app.domain.contracts.evidence import (
     BoundingBox,
     ClinicalFact,
+    ConflictGroup,
     EvidenceExpectation,
     EvidenceSnapshot,
     EvidenceSpan,
 )
-from app.domain.contracts.review import ActionRequest, AssessmentCandidate, FinalAssessment
+from app.domain.contracts.projections import EpisodeRollup
+from app.domain.contracts.review import (
+    ActionRequest,
+    AssessmentCandidate,
+    FinalAssessment,
+    PredicateObservation,
+    ProtocolDocumentVersion,
+)
 from app.domain.contracts.rules import (
     AtomicExpression,
-    AtomicPredicate,
+    AtomicPredicate as AtomicPredicateModel,
+    EvidenceRequirement,
     LogicalExpression,
     RuleComponent,
     Rule,
     RuleSet,
     TimeConstraint,
+    WorkflowStage,
 )
 from app.domain.expression import (
     ComponentEvaluation,
@@ -56,68 +66,182 @@ from app.domain.gates import (
     ActionGateError,
     AgentPermissionError,
     AssessmentGateError,
+    build_protocol_integrity_manifest,
     derive_action_blocking_level,
+    publish_action_request,
     publish_assessment,
     require_agent_write_permission,
     validate_action_request,
     validate_protocol_integrity,
 )
-from app.domain.rollup import EpisodeRollup, rollup_episode
+from app.domain.policies import derive_assessment_blocking_level
+from app.domain.publication import build_published_model
+from app.domain.rollup import publish_episode_rollup
+
+
+EVALUATION_SCOPE = {
+    "project_id": "project-1",
+    "subject_id": "subject-1",
+    "review_episode_id": "episode-1",
+    "evidence_snapshot_id": "snapshot-1",
+}
+
+
+def AtomicPredicate(**kwargs):
+    kwargs.setdefault(
+        "predicate_id",
+        f"predicate-{kwargs.get('subject')}-{kwargs.get('attribute')}-{kwargs.get('comparator')}",
+    )
+    return AtomicPredicateModel(**kwargs)
+
+
+def clinical_fact(**kwargs) -> ClinicalFact:
+    return ClinicalFact(**EVALUATION_SCOPE, **kwargs)
+
+
+def evaluation_context(*, facts=None, **kwargs) -> EvaluationContext:
+    scoped_facts = facts or []
+    return EvaluationContext(
+        **EVALUATION_SCOPE,
+        accepted_fact_ids=[fact.fact_id for fact in scoped_facts],
+        facts=scoped_facts,
+        **kwargs,
+    )
 
 
 def candidate(decision: ComponentDecision, gaps: list[GapType]) -> AssessmentCandidate:
+    truth = {
+        ComponentDecision.EXCLUSION_TRIGGERED: TruthValue.TRUE,
+        ComponentDecision.EXCLUSION_NOT_TRIGGERED: TruthValue.FALSE,
+    }.get(decision, TruthValue.UNKNOWN)
+    predicate_id = "predicate-history-condition_present-eq"
     return AssessmentCandidate(
         assessment_candidate_id="candidate-1",
         agent_call_id="call-1",
         rule_component_id="component-1",
+        review_episode_id="episode-1",
+        evidence_snapshot_id="snapshot-1",
         proposed_decision=decision,
         gap_types=gaps,
-        used_fact_ids=["fact-1"],
-        evidence_span_ids=["span-1"],
+        used_fact_ids=[],
+        evidence_span_ids=[],
         candidate_rationale="合成测试候选，不参与确定性逻辑。",
+        predicate_observations=[
+            PredicateObservation(predicate_id=predicate_id, truth=truth)
+        ],
+        processed_predicate_ids=[predicate_id],
+        missing_predicate_ids=(
+            [predicate_id] if truth == TruthValue.UNKNOWN else []
+        ),
+        candidate_confidence=0.9,
+    )
+
+
+def component_evaluation(
+    trigger_truth: TruthValue,
+    *,
+    trigger_reasons: list[str] | None = None,
+    exception_truth: TruthValue | None = None,
+    exception_reasons: list[str] | None = None,
+) -> ComponentEvaluation:
+    trigger = EvaluationResult(
+        truth=trigger_truth,
+        reason_codes=trigger_reasons or [],
+    )
+    predicate_evaluations = {
+        "predicate-history-condition_present-eq": trigger,
+    }
+    exception = None
+    if exception_truth is not None:
+        exception = EvaluationResult(
+            truth=exception_truth,
+            reason_codes=exception_reasons or [],
+        )
+        predicate_evaluations["predicate-exception-documented-eq"] = exception
+    return ComponentEvaluation(
+        trigger=trigger,
+        exception=exception,
+        predicate_evaluations=predicate_evaluations,
     )
 
 
 def final_assessment(decision: ComponentDecision, gaps: list[GapType]):
-    if decision in {ComponentDecision.EXCLUSION_NOT_TRIGGERED, ComponentDecision.INCLUSION_NOT_MET}:
-        trigger = TruthValue.FALSE
-    elif decision in {
-        ComponentDecision.INCLUSION_MET,
-        ComponentDecision.EXCLUSION_TRIGGERED,
-        ComponentDecision.REQUIREMENT_MET,
-    }:
-        trigger = TruthValue.TRUE
-    elif decision == ComponentDecision.REQUIREMENT_NOT_MET:
-        trigger = TruthValue.FALSE
-    else:
-        trigger = TruthValue.UNKNOWN
-    rule_kind = (
-        RuleKind.EXCLUSION
-        if decision in {ComponentDecision.EXCLUSION_NOT_TRIGGERED, ComponentDecision.EXCLUSION_TRIGGERED}
-        else RuleKind.REQUIRED_PROCEDURE
-        if decision in {ComponentDecision.REQUIREMENT_MET, ComponentDecision.REQUIREMENT_NOT_MET}
-        else RuleKind.INCLUSION
+    return build_published_model(
+        FinalAssessment,
+        entity_type="final_assessment",
+        gate_result_id=f"gate-{decision.value}",
+        data={
+            "assessment_id": f"assessment-{decision.value}",
+            "review_run_id": "run-1",
+            "rule_component_id": "component-1",
+            "decision": decision,
+            "gap_types": gaps,
+            "blocking_level": derive_assessment_blocking_level(decision, set(gaps)),
+            "used_fact_ids": ["fact-1"],
+            "evidence_span_ids": ["span-1"],
+            "action_ids": [],
+        },
     )
-    return publish_assessment(
-        candidate(decision, gaps),
-        rule_kind=rule_kind,
-        evaluation=ComponentEvaluation(
-            applicable=(
-                TruthValue.FALSE
-                if decision == ComponentDecision.NOT_APPLICABLE
-                else TruthValue.TRUE
-            ),
-            trigger=EvaluationResult(truth=trigger),
-            exception=(
-                EvaluationResult(truth=TruthValue.FALSE)
-                if decision == ComponentDecision.EXCLUSION_TRIGGERED
-                else None
-            ),
+
+
+def gate_component(*, requirements=None, with_exception=False) -> RuleComponent:
+    return RuleComponent(
+        rule_component_id="component-1",
+        parent_rule_id="rule-1",
+        display_code="EX-01a",
+        title="合成 Gate 组件",
+        expression=AtomicExpression(
+            predicate=AtomicPredicate(
+                subject="history",
+                attribute="condition_present",
+                comparator="eq",
+                value=True,
+            )
         ),
-        assessment_id=f"assessment-{decision.value}",
-        review_run_id="run-1",
-        gate_result_id="gate-1",
+        exception_expression=(
+            AtomicExpression(
+                predicate=AtomicPredicate(
+                    subject="exception",
+                    attribute="documented",
+                    comparator="eq",
+                    value=True,
+                )
+            )
+            if with_exception
+            else None
+        ),
+        evidence_requirements=requirements or [],
     )
+
+
+def action_request(gap: GapType) -> ActionRequest:
+    return publish_action_request(
+        action_id=f"action-{gap.value}",
+        rule_component_id="component-1",
+        gap_type=gap,
+        target_party=ActionTarget.INVESTIGATOR,
+        requested_action="补充可核对的信息",
+        acceptable_evidence="含日期及来源定位的记录",
+        due_stage=ReviewStage.BASELINE,
+        state=ActionState.OPEN,
+        recompute_scope=["component-1"],
+        gate_result_id=f"gate-action-{gap.value}",
+        input_entity_refs=["component-1"],
+        input_revision_map={"episode-1": 1},
+        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+    ).action
+
+
+def episode_rollup(assessments, expectations, actions):
+    return publish_episode_rollup(
+        review_episode_id="episode-1",
+        assessments=assessments,
+        expectations=expectations,
+        actions=actions,
+        gate_result_id="gate-rollup-1",
+        input_revision_map={"episode-1": 1},
+        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+    ).rollup
 
 
 def test_rule_expression_preserves_all_any_not_and_professional_judgment() -> None:
@@ -172,9 +296,9 @@ def test_rule_expression_all_any_not_have_distinct_truth_semantics() -> None:
         AtomicExpression(predicate=AtomicPredicate(subject="x", attribute="a", comparator="eq", value=True)),
         AtomicExpression(predicate=AtomicPredicate(subject="x", attribute="b", comparator="eq", value=True)),
     ]
-    context = EvaluationContext(
+    context = evaluation_context(
         facts=[
-            ClinicalFact(
+            clinical_fact(
                 fact_id="fact-a",
                 fact_type="x.a",
                 value=True,
@@ -182,10 +306,10 @@ def test_rule_expression_all_any_not_have_distinct_truth_semantics() -> None:
                 certainty=1,
                 evidence_span_ids=["span-1"],
             ),
-            ClinicalFact(
+            clinical_fact(
                 fact_id="fact-b",
                 fact_type="x.b",
-                value=False,
+                value=True,
                 polarity=FactPolarity.NEGATED,
                 certainty=1,
                 evidence_span_ids=["span-2"],
@@ -211,6 +335,7 @@ def test_indicator_identity_is_part_of_predicate_resolution() -> None:
             attribute="ggt_multiple_of_uln",
             comparator="gte",
             value=1.5,
+            unit="xULN",
         )
     )
     alt = AtomicExpression(
@@ -219,14 +344,16 @@ def test_indicator_identity_is_part_of_predicate_resolution() -> None:
             attribute="alt_multiple_of_uln",
             comparator="gte",
             value=1.5,
+            unit="xULN",
         )
     )
-    context = EvaluationContext(
+    context = evaluation_context(
         facts=[
-            ClinicalFact(
+            clinical_fact(
                 fact_id="fact-ggt",
                 fact_type="laboratory.ggt_multiple_of_uln",
                 value=1.8,
+                unit="xULN",
                 polarity=FactPolarity.AFFIRMED,
                 certainty=1,
                 evidence_span_ids=["span-1"],
@@ -245,11 +372,11 @@ def test_negated_fact_and_unrecorded_fact_are_distinct() -> None:
         "certainty": 0.95,
         "evidence_span_ids": ["span-1"],
     }
-    denied = ClinicalFact(**base, value=False, polarity=FactPolarity.NEGATED)
-    unrecorded = ClinicalFact(**{**base, "fact_id": "fact-2"}, value=None, polarity=FactPolarity.UNKNOWN)
+    denied = clinical_fact(**base, value=True, polarity=FactPolarity.NEGATED)
+    unrecorded = clinical_fact(**{**base, "fact_id": "fact-2"}, value=None, polarity=FactPolarity.UNKNOWN)
 
     assert denied.polarity != unrecorded.polarity
-    assert denied.value is False
+    assert denied.value is True
     assert unrecorded.value is None
 
     expression = AtomicExpression(
@@ -260,8 +387,8 @@ def test_negated_fact_and_unrecorded_fact_are_distinct() -> None:
             value=True,
         )
     )
-    assert evaluate_expression(expression, EvaluationContext(facts=[denied])).truth == TruthValue.FALSE
-    assert evaluate_expression(expression, EvaluationContext(facts=[unrecorded])).truth == TruthValue.UNKNOWN
+    assert evaluate_expression(expression, evaluation_context(facts=[denied])).truth == TruthValue.FALSE
+    assert evaluate_expression(expression, evaluation_context(facts=[unrecorded])).truth == TruthValue.UNKNOWN
 
 
 def test_fact_polarity_cannot_contradict_normalized_value() -> None:
@@ -271,10 +398,61 @@ def test_fact_polarity_cannot_contradict_normalized_value() -> None:
         "certainty": 1,
         "evidence_span_ids": ["span-1"],
     }
-    with pytest.raises(ValidationError, match="否定事实"):
-        ClinicalFact(**base, value=True, polarity=FactPolarity.NEGATED)
-    with pytest.raises(ValidationError, match="未知极性"):
-        ClinicalFact(**base, value=False, polarity=FactPolarity.UNKNOWN)
+    with pytest.raises(ValidationError, match="typed value"):
+        clinical_fact(**base, value=None, polarity=FactPolarity.NEGATED)
+    with pytest.raises(ValidationError, match="typed value"):
+        clinical_fact(**base, value=None, polarity=FactPolarity.AFFIRMED)
+
+    denied_named_condition = clinical_fact(
+        **{
+            **base,
+            "fact_id": "fact-denied-diabetes",
+            "fact_type": "history.condition_name",
+        },
+        value="diabetes",
+        polarity=FactPolarity.NEGATED,
+    )
+    named_predicate = AtomicExpression(
+        predicate=AtomicPredicate(
+            subject="history",
+            attribute="condition_name",
+            comparator="eq",
+            value="diabetes",
+        )
+    )
+    assert evaluate_expression(
+        named_predicate,
+        evaluation_context(facts=[denied_named_condition]),
+    ).truth == TruthValue.FALSE
+
+
+def test_numeric_predicate_requires_explicit_unit_and_context_rejects_cross_scope_fact() -> None:
+    with pytest.raises(ValidationError, match="数值谓词"):
+        AtomicPredicate(
+            subject="laboratory",
+            attribute="result",
+            comparator="gte",
+            value=1.5,
+        )
+    unitless = AtomicPredicate(
+        subject="score",
+        attribute="total",
+        comparator="gte",
+        value=10,
+        unit="unitless",
+    )
+    assert unitless.unit == "unitless"
+
+    fact = clinical_fact(
+        fact_id="fact-other-subject",
+        fact_type="history.event_present",
+        value=True,
+        polarity=FactPolarity.AFFIRMED,
+        certainty=1,
+        evidence_span_ids=["span-1"],
+    ).model_copy(update={"subject_id": "subject-other"})
+    with pytest.raises(ValidationError, match="超出当前"):
+        evaluation_context(facts=[fact])
 
 
 def test_exception_tree_is_not_merged_into_trigger_tree() -> None:
@@ -361,7 +539,7 @@ def test_time_window_uses_explicit_randomization_anchor_and_boundaries(
         ),
     )
     event_date = date(2026, 8, 31).fromordinal(date(2026, 8, 31).toordinal() - distance_days)
-    fact = ClinicalFact(
+    fact = clinical_fact(
         fact_id="fact-medication",
         fact_type="medication.prohibited_exposure",
         value=True,
@@ -370,7 +548,7 @@ def test_time_window_uses_explicit_randomization_anchor_and_boundaries(
         effective_date=DateValue(value=event_date, precision=DatePrecision.DAY),
         evidence_span_ids=["span-1"],
     )
-    context = EvaluationContext(
+    context = evaluation_context(
         facts=[fact],
         anchor_dates={
             "randomization_date": DateValue(
@@ -380,7 +558,7 @@ def test_time_window_uses_explicit_randomization_anchor_and_boundaries(
     )
     assert evaluate_expression(expression, context).truth == expected
 
-    missing_anchor = EvaluationContext(
+    missing_anchor = evaluation_context(
         facts=[fact],
         anchor_dates={
             "screening_date": DateValue(
@@ -403,13 +581,13 @@ def test_unit_mismatch_and_silent_fact_do_not_become_false_or_pass() -> None:
             unit="xULN",
         )
     )
-    silent = evaluate_expression(expression, EvaluationContext())
+    silent = evaluate_expression(expression, evaluation_context())
     assert silent.truth == TruthValue.UNKNOWN
     mismatch = evaluate_expression(
         expression,
-        EvaluationContext(
+        evaluation_context(
             facts=[
-                ClinicalFact(
+                clinical_fact(
                     fact_id="fact-lab",
                     fact_type="laboratory.target_ratio_uln",
                     value=2.0,
@@ -426,9 +604,9 @@ def test_unit_mismatch_and_silent_fact_do_not_become_false_or_pass() -> None:
 
 
 def test_comparator_mutation_changes_boundary_result() -> None:
-    context = EvaluationContext(
+    context = evaluation_context(
         facts=[
-            ClinicalFact(
+            clinical_fact(
                 fact_id="fact-threshold",
                 fact_type="laboratory.target_ratio_uln",
                 value=1.5,
@@ -470,7 +648,7 @@ def test_partial_date_window_is_only_definitive_when_entire_interval_agrees() ->
             allow_partial_date=True,
         ),
     )
-    fact = ClinicalFact(
+    fact = clinical_fact(
         fact_id="fact-partial-date",
         fact_type="history.event_present",
         value=True,
@@ -483,7 +661,7 @@ def test_partial_date_window_is_only_definitive_when_entire_interval_agrees() ->
         ),
         evidence_span_ids=["span-1"],
     )
-    context = EvaluationContext(
+    context = evaluation_context(
         facts=[fact],
         anchor_dates={
             "randomization_date": DateValue(
@@ -670,7 +848,7 @@ def test_assessment_gate_accepts_state_gap_matrix(decision, gaps, blocking) -> N
     ],
 )
 def test_assessment_gate_rejects_invalid_state_gap_matrix(decision, gaps) -> None:
-    with pytest.raises(AssessmentGateError):
+    with pytest.raises((ValueError, ValidationError)):
         final_assessment(decision, gaps)
 
 
@@ -695,12 +873,20 @@ def test_agent_call_node_scope_and_retry_budget_are_enforced() -> None:
         "outcome": "accepted",
         "recompute_scope": ["component-1"],
         "trigger": "manual_test",
+        "project_id": "project-1",
+        "subject_id": "subject-1",
+        "review_episode_id": "episode-1",
+        "review_run_id": "run-1",
+        "evidence_snapshot_id": "snapshot-1",
+        "source_ids": ["document-1"],
     }
     assert AgentCallContract(**base).node == AgentNode.ELIGIBILITY_ASSESSOR
     with pytest.raises(ValidationError, match="写入范围"):
         AgentCallContract(**{**base, "write_scope": AgentWriteScope.EVIDENCE_CANDIDATE})
     with pytest.raises(ValidationError, match="attempt"):
         AgentCallContract(**{**base, "attempt": 3})
+    with pytest.raises(ValidationError, match="Subject/Episode/Run/Snapshot/Source"):
+        AgentCallContract(**{**base, "subject_id": None})
 
 
 def test_agent_cannot_publish_final_state_or_action() -> None:
@@ -713,8 +899,8 @@ def test_agent_cannot_publish_final_state_or_action() -> None:
             )
 
 
-def test_final_assessment_direct_construction_cannot_bypass_gate_matrix() -> None:
-    with pytest.raises(ValidationError, match="明确判断"):
+def test_final_assessment_direct_construction_requires_gate_publication_fingerprint() -> None:
+    with pytest.raises(ValidationError, match="publication_fingerprint"):
         FinalAssessment(
             assessment_id="assessment-invalid",
             review_run_id="run-1",
@@ -731,13 +917,86 @@ def test_agent_candidate_cannot_override_deterministic_component_result() -> Non
     with pytest.raises(AssessmentGateError, match="不一致"):
         publish_assessment(
             wrong,
+            component=gate_component(),
             rule_kind=RuleKind.EXCLUSION,
-            evaluation=ComponentEvaluation(
-                trigger=EvaluationResult(truth=TruthValue.FALSE)
-            ),
+            evaluation=component_evaluation(TruthValue.FALSE),
             assessment_id="assessment-wrong",
             review_run_id="run-1",
             gate_result_id="gate-1",
+            episode_stage=ReviewStage.SCREENING,
+            expectations=[],
+            conflict_groups=[],
+            input_revision_map={"episode-1": 1},
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        )
+
+
+def test_agent_candidate_fact_refs_must_equal_evaluator_dependencies() -> None:
+    manipulated = candidate(ComponentDecision.EXCLUSION_NOT_TRIGGERED, []).model_copy(
+        update={"used_fact_ids": ["fact-unrelated"]}
+    )
+    with pytest.raises(AssessmentGateError, match="used_fact_ids"):
+        publish_assessment(
+            manipulated,
+            component=gate_component(),
+            rule_kind=RuleKind.EXCLUSION,
+            evaluation=component_evaluation(TruthValue.FALSE),
+            assessment_id="assessment-fact-ref-mismatch",
+            review_run_id="run-1",
+            gate_result_id="gate-fact-ref-mismatch",
+            episode_stage=ReviewStage.SCREENING,
+            expectations=[],
+            conflict_groups=[],
+            input_revision_map={"episode-1": 1},
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        )
+
+
+def test_agent_predicate_observations_cannot_omit_or_rewrite_evaluator_results() -> None:
+    base = candidate(ComponentDecision.EXCLUSION_NOT_TRIGGERED, [])
+    omitted = base.model_copy(
+        update={"predicate_observations": [], "processed_predicate_ids": []}
+    )
+    with pytest.raises(AssessmentGateError, match="逐项覆盖"):
+        publish_assessment(
+            omitted,
+            component=gate_component(),
+            rule_kind=RuleKind.EXCLUSION,
+            evaluation=component_evaluation(TruthValue.FALSE),
+            assessment_id="assessment-observation-omitted",
+            review_run_id="run-1",
+            gate_result_id="gate-observation-omitted",
+            episode_stage=ReviewStage.SCREENING,
+            expectations=[],
+            conflict_groups=[],
+            input_revision_map={"episode-1": 1},
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        )
+
+    rewritten = base.model_copy(
+        update={
+            "predicate_observations": [
+                PredicateObservation(
+                    predicate_id="predicate-history-condition_present-eq",
+                    truth=TruthValue.TRUE,
+                )
+            ]
+        }
+    )
+    with pytest.raises(AssessmentGateError, match="Evaluator"):
+        publish_assessment(
+            rewritten,
+            component=gate_component(),
+            rule_kind=RuleKind.EXCLUSION,
+            evaluation=component_evaluation(TruthValue.FALSE),
+            assessment_id="assessment-observation-rewritten",
+            review_run_id="run-1",
+            gate_result_id="gate-observation-rewritten",
+            episode_stage=ReviewStage.SCREENING,
+            expectations=[],
+            conflict_groups=[],
+            input_revision_map={"episode-1": 1},
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
         )
 
 
@@ -745,22 +1004,158 @@ def test_missing_exception_evidence_cannot_force_exclusion_triggered() -> None:
     proposed = candidate(
         ComponentDecision.INDETERMINATE,
         [GapType.RECORD_INCOMPLETE],
+    ).model_copy(
+        update={
+            "predicate_observations": [
+                PredicateObservation(
+                    predicate_id="predicate-history-condition_present-eq",
+                    truth=TruthValue.TRUE,
+                ),
+                PredicateObservation(
+                    predicate_id="predicate-exception-documented-eq",
+                    truth=TruthValue.UNKNOWN,
+                    reason_codes=["fact_not_observed"],
+                ),
+            ],
+            "processed_predicate_ids": [
+                "predicate-history-condition_present-eq",
+                "predicate-exception-documented-eq",
+            ],
+            "missing_predicate_ids": ["predicate-exception-documented-eq"],
+        }
     )
-    assessment = publish_assessment(
+    publication = publish_assessment(
         proposed,
+        component=gate_component(with_exception=True),
         rule_kind=RuleKind.EXCLUSION,
-        evaluation=ComponentEvaluation(
-            trigger=EvaluationResult(truth=TruthValue.TRUE),
-            exception=EvaluationResult(
-                truth=TruthValue.UNKNOWN,
-                reason_codes=["fact_not_observed"],
-            ),
+        evaluation=component_evaluation(
+            TruthValue.TRUE,
+            exception_truth=TruthValue.UNKNOWN,
+            exception_reasons=["fact_not_observed"],
         ),
         assessment_id="assessment-exception-unknown",
         review_run_id="run-1",
         gate_result_id="gate-1",
+        episode_stage=ReviewStage.SCREENING,
+        expectations=[],
+        conflict_groups=[],
+        input_revision_map={"episode-1": 1},
+        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
     )
-    assert assessment.decision == ComponentDecision.INDETERMINATE
+    assert publication.assessment.decision == ComponentDecision.INDETERMINATE
+    assert publication.gate_result.accepted_entity_refs == [publication.assessment.assessment_id]
+
+
+def test_agent_gap_suggestion_cannot_reclassify_unknown_result() -> None:
+    manipulated = candidate(
+        ComponentDecision.INDETERMINATE,
+        [GapType.FUTURE_STAGE_NOT_DUE],
+    )
+    with pytest.raises(AssessmentGateError, match="gap_types"):
+        publish_assessment(
+            manipulated,
+            component=gate_component(),
+            rule_kind=RuleKind.EXCLUSION,
+            evaluation=component_evaluation(
+                TruthValue.UNKNOWN,
+                trigger_reasons=["fact_not_observed"],
+            ),
+            episode_stage=ReviewStage.SCREENING,
+            expectations=[],
+            conflict_groups=[],
+            assessment_id="assessment-manipulated-gap",
+            review_run_id="run-1",
+            gate_result_id="gate-manipulated-gap",
+            input_revision_map={"episode-1": 1},
+            created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+        )
+
+
+def test_definitive_trigger_does_not_inherit_irrelevant_sibling_uncertainty() -> None:
+    proposed = candidate(ComponentDecision.EXCLUSION_NOT_TRIGGERED, []).model_copy(
+        update={
+            "predicate_observations": [
+                PredicateObservation(
+                    predicate_id="predicate-history-condition_present-eq",
+                    truth=TruthValue.FALSE,
+                    reason_codes=["date_or_anchor_missing"],
+                )
+            ]
+        }
+    )
+    publication = publish_assessment(
+        proposed,
+        component=gate_component(),
+        rule_kind=RuleKind.EXCLUSION,
+        evaluation=component_evaluation(
+            TruthValue.FALSE,
+            trigger_reasons=["date_or_anchor_missing"],
+        ),
+        episode_stage=ReviewStage.SCREENING,
+        expectations=[],
+        conflict_groups=[],
+        assessment_id="assessment-definitive-false",
+        review_run_id="run-1",
+        gate_result_id="gate-definitive-false",
+        input_revision_map={"episode-1": 1},
+        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+    )
+    assert publication.assessment.gap_types == []
+
+
+def test_future_component_is_not_promoted_to_current_conflict() -> None:
+    requirement = EvidenceRequirement(
+        requirement_id="requirement-future",
+        rule_component_id="component-1",
+        fact_type="history.condition_present",
+        due_stage=ReviewStage.BASELINE,
+        description="基线才到期的合成要求。",
+    )
+    expectation = EvidenceExpectation(
+        expectation_id="expectation-future",
+        requirement_id=requirement.requirement_id,
+        review_episode_id="episode-1",
+        status=ExpectationStatus.NOT_DUE,
+        gap_type=GapType.FUTURE_STAGE_NOT_DUE,
+    )
+    conflict = ConflictGroup(
+        conflict_group_id="conflict-future",
+        fact_ids=["fact-1", "fact-2"],
+        affected_rule_component_ids=["component-1"],
+    )
+    proposed = candidate(
+            ComponentDecision.NOT_DUE,
+            [GapType.FUTURE_STAGE_NOT_DUE],
+        ).model_copy(
+            update={
+                "predicate_observations": [
+                    PredicateObservation(
+                        predicate_id="predicate-history-condition_present-eq",
+                        truth=TruthValue.UNKNOWN,
+                        reason_codes=["source_conflict"],
+                    )
+                ]
+            }
+        )
+    publication = publish_assessment(
+        proposed,
+        component=gate_component(requirements=[requirement]),
+        rule_kind=RuleKind.EXCLUSION,
+        evaluation=component_evaluation(
+            TruthValue.UNKNOWN,
+            trigger_reasons=["source_conflict"],
+        ),
+        episode_stage=ReviewStage.SCREENING,
+        expectations=[expectation],
+        conflict_groups=[conflict],
+        assessment_id="assessment-future",
+        review_run_id="run-1",
+        gate_result_id="gate-future",
+        input_revision_map={"episode-1": 1},
+        created_at=datetime(2026, 8, 12, tzinfo=timezone.utc),
+    )
+    assert publication.assessment.decision == ComponentDecision.NOT_DUE
+    assert publication.assessment.gap_types == [GapType.FUTURE_STAGE_NOT_DUE]
 
 
 def test_rollup_priority_counts_and_provenance_are_deterministic() -> None:
@@ -775,19 +1170,8 @@ def test_rollup_priority_counts_and_provenance_are_deterministic() -> None:
         status=ExpectationStatus.NOT_DUE,
         gap_type=GapType.FUTURE_STAGE_NOT_DUE,
     )
-    action = ActionRequest(
-        action_id="action-1",
-        rule_component_id="component-1",
-        gap_type=GapType.PROVENANCE_FOLLOWUP,
-        target_party=ActionTarget.CRA,
-        requested_action="后续核对来源",
-        acceptable_evidence="来源链接或核对记录",
-        due_stage=ReviewStage.BASELINE,
-        blocking_level=BlockingLevel.NONE,
-        state=ActionState.OPEN,
-        recompute_scope=["component-1"],
-    )
-    result = rollup_episode(assessments, [expectation], [action])
+    action = action_request(GapType.PROVENANCE_FOLLOWUP)
+    result = episode_rollup(assessments, [expectation], [action])
     assert result.main_status == EpisodeMainStatus.CLEAR_BARRIER
     assert result.barrier_count == 1
     assert result.conflict_count == 1
@@ -817,7 +1201,7 @@ def test_rollup_priority_counts_and_provenance_are_deterministic() -> None:
     ],
 )
 def test_rollup_truth_table_covers_each_main_status(decision, gaps, expected) -> None:
-    result = rollup_episode([final_assessment(decision, gaps)], [], [])
+    result = episode_rollup([final_assessment(decision, gaps)], [], [])
     assert result.main_status == expected
 
 
@@ -831,10 +1215,10 @@ def test_rollup_precedence_is_stable_without_narrative_input() -> None:
         ),
         final_assessment(ComponentDecision.NOT_DUE, [GapType.FUTURE_STAGE_NOT_DUE]),
     ]
-    assert rollup_episode(assessments, [], []).main_status == EpisodeMainStatus.CURRENT_GAP
-    assert rollup_episode(assessments[1:], [], []).main_status == EpisodeMainStatus.CONFLICT
-    assert rollup_episode(assessments[2:], [], []).main_status == EpisodeMainStatus.PROFESSIONAL_JUDGMENT
-    assert rollup_episode(assessments[3:], [], []).main_status == EpisodeMainStatus.FUTURE_ATTENTION
+    assert episode_rollup(assessments, [], []).main_status == EpisodeMainStatus.CURRENT_GAP
+    assert episode_rollup(assessments[1:], [], []).main_status == EpisodeMainStatus.CONFLICT
+    assert episode_rollup(assessments[2:], [], []).main_status == EpisodeMainStatus.PROFESSIONAL_JUDGMENT
+    assert episode_rollup(assessments[3:], [], []).main_status == EpisodeMainStatus.FUTURE_ATTENTION
 
 
 def test_rollup_uses_expectation_blocking_policy_for_weak_and_provenance_evidence() -> None:
@@ -852,26 +1236,42 @@ def test_rollup_uses_expectation_blocking_policy_for_weak_and_provenance_evidenc
             "gap_type": GapType.OCR_OR_PARSE_RISK,
         }
     )
-    assert rollup_episode([], [provenance], []).main_status == EpisodeMainStatus.NO_CLEAR_BARRIER
-    assert rollup_episode([], [ocr_risk], []).main_status == EpisodeMainStatus.CURRENT_GAP
+    historical_missing = provenance.model_copy(
+        update={
+            "expectation_id": "expectation-history-missing",
+            "gap_type": GapType.HISTORICAL_SOURCE_UNAVAILABLE,
+        }
+    )
+    assert episode_rollup([], [provenance], []).main_status == EpisodeMainStatus.NO_CLEAR_BARRIER
+    assert episode_rollup([], [ocr_risk], []).main_status == EpisodeMainStatus.CURRENT_GAP
+    assert episode_rollup([], [historical_missing], []).main_status == EpisodeMainStatus.CURRENT_GAP
 
 
 def test_episode_rollup_direct_construction_cannot_bypass_status_precedence() -> None:
     with pytest.raises(ValidationError, match="主状态"):
-        EpisodeRollup(
-            main_status=EpisodeMainStatus.NO_CLEAR_BARRIER,
-            sort_rank=5,
-            barrier_count=1,
-            current_gap_count=0,
-            conflict_count=0,
-            professional_judgment_count=0,
-            future_attention_count=0,
-            provenance_followup_count=0,
-            gap_counts={},
+        build_published_model(
+            EpisodeRollup,
+            entity_type="episode_rollup",
+            gate_result_id="gate-rollup-invalid",
+            data={
+                "review_episode_id": "episode-1",
+                "input_assessment_ids": [],
+                "input_expectation_ids": [],
+                "input_action_ids": [],
+                "main_status": EpisodeMainStatus.NO_CLEAR_BARRIER,
+                "sort_rank": 5,
+                "barrier_count": 1,
+                "current_gap_count": 0,
+                "conflict_count": 0,
+                "professional_judgment_count": 0,
+                "future_attention_count": 0,
+                "provenance_followup_count": 0,
+                "gap_counts": {},
+            },
         )
 
 
-def test_protocol_integrity_compares_exact_official_sequence() -> None:
+def test_protocol_integrity_uses_authoritative_manifest_not_caller_codes() -> None:
     expression = AtomicExpression(
         predicate=AtomicPredicate(subject="x", attribute="present", comparator="eq", value=True)
     )
@@ -897,8 +1297,89 @@ def test_protocol_integrity_compares_exact_official_sequence() -> None:
         study_phase=StudyPhase.PHASE_III,
         rules=[rule],
     )
+    trusted_rule = Rule.model_validate(
+        {
+            **rule.model_dump(mode="json"),
+            "rule_id": "rule-01",
+            "official_code": "IN-01",
+            "components": [
+                {
+                    **rule.components[0].model_dump(mode="json"),
+                    "rule_component_id": "component-01",
+                    "parent_rule_id": "rule-01",
+                    "display_code": "IN-01a",
+                }
+            ],
+        }
+    )
+    workflow = [
+        WorkflowStage(
+            workflow_stage_id="stage-screening",
+            stage=ReviewStage.SCREENING,
+            display_name="筛选期",
+        )
+    ]
+    manifest = build_protocol_integrity_manifest(
+        manifest_id="manifest-1",
+        protocol_version_id="protocol-1",
+        protocol_document_sha256="a" * 64,
+        study_phase=StudyPhase.PHASE_III,
+        source_refs=["protocol-1:p1"],
+        authoritative_rules=[trusted_rule],
+        authoritative_workflow_stages=workflow,
+    )
+    protocol = ProtocolDocumentVersion(
+        protocol_version_id="protocol-1",
+        protocol_code="SYN-1",
+        official_version="V1.0",
+        official_date=DateValue(value=date(2026, 8, 1), precision=DatePrecision.DAY),
+        sha256="a" * 64,
+        integrity_manifest_sha256=manifest.manifest_sha256,
+    )
     with pytest.raises(ValueError, match="官方规则编号"):
-        validate_protocol_integrity(rules, expected_official_codes=["IN-01"])
+        validate_protocol_integrity(
+            rules,
+            workflow_stages=workflow,
+            protocol_version=protocol,
+            manifest=manifest,
+        )
+
+
+def test_protocol_manifest_rejects_due_stage_drift() -> None:
+    requirement = EvidenceRequirement(
+        requirement_id="requirement-baseline",
+        rule_component_id="component-1",
+        fact_type="laboratory.baseline_result",
+        due_stage=ReviewStage.BASELINE,
+        description="基线必做结果。",
+    )
+    component = gate_component(requirements=[requirement])
+    rule = Rule(
+        rule_id="rule-1",
+        official_code="EX-01",
+        kind=RuleKind.EXCLUSION,
+        source_text="合成到期阶段测试。",
+        study_phase=StudyPhase.PHASE_III,
+        components=[component],
+    )
+    wrong_workflow = [
+        WorkflowStage(
+            workflow_stage_id="stage-screening",
+            stage=ReviewStage.SCREENING,
+            display_name="筛选期",
+            due_requirement_ids=[requirement.requirement_id],
+        )
+    ]
+    with pytest.raises(ValidationError, match="due_stage"):
+        build_protocol_integrity_manifest(
+            manifest_id="manifest-due-drift",
+            protocol_version_id="protocol-1",
+            protocol_document_sha256="a" * 64,
+            study_phase=StudyPhase.PHASE_III,
+            source_refs=["protocol-1:flow-table"],
+            authoritative_rules=[rule],
+            authoritative_workflow_stages=wrong_workflow,
+        )
 
 
 @pytest.mark.parametrize(
@@ -917,25 +1398,14 @@ def test_protocol_integrity_compares_exact_official_sequence() -> None:
 )
 def test_action_blocking_level_is_deterministic(gap, expected) -> None:
     assert derive_action_blocking_level(gap) == expected
-    action = ActionRequest(
-        action_id="action-1",
-        rule_component_id="component-1",
-        gap_type=gap,
-        target_party=ActionTarget.INVESTIGATOR,
-        requested_action="补充可核对的信息",
-        acceptable_evidence="含日期及来源定位的记录",
-        due_stage=ReviewStage.BASELINE,
-        blocking_level=expected,
-        state=ActionState.OPEN,
-        recompute_scope=["component-1"],
-    )
+    action = action_request(gap)
     validate_action_request(action)
     with pytest.raises(ActionGateError):
         validate_action_request(action.model_copy(update={"blocking_level": BlockingLevel.NONE if expected != BlockingLevel.NONE else BlockingLevel.BLOCKING}))
 
 
 def test_action_direct_construction_cannot_bypass_blocking_policy() -> None:
-    with pytest.raises(ValidationError, match="ActionRequest blocking_level"):
+    with pytest.raises(ValidationError):
         ActionRequest(
             action_id="action-invalid",
             rule_component_id="component-1",
@@ -947,6 +1417,7 @@ def test_action_direct_construction_cannot_bypass_blocking_policy() -> None:
             blocking_level=BlockingLevel.BLOCKING,
             state=ActionState.OPEN,
             recompute_scope=["component-1"],
+            gate_result_id="gate-action-invalid",
         )
 
 

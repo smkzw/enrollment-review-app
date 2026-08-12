@@ -136,6 +136,10 @@ class EvidenceExpectation(VersionedModel):
 
 class ClinicalFact(VersionedModel):
     fact_id: str = Field(min_length=1)
+    project_id: str = Field(min_length=1)
+    subject_id: str = Field(min_length=1)
+    review_episode_id: str = Field(min_length=1)
+    evidence_snapshot_id: str = Field(min_length=1)
     fact_type: str = Field(min_length=1)
     value: ScalarValue | None = None
     unit: str | None = None
@@ -147,10 +151,14 @@ class ClinicalFact(VersionedModel):
 
     @model_validator(mode="after")
     def validate_polarity_value(self) -> "ClinicalFact":
-        if self.polarity == FactPolarity.NEGATED and self.value is not False:
-            raise ValueError("否定事实必须规范化为布尔 false")
-        if self.polarity == FactPolarity.UNKNOWN and self.value is not None:
-            raise ValueError("未知极性不能携带确定值")
+        if self.polarity in {FactPolarity.AFFIRMED, FactPolarity.NEGATED} and self.value is None:
+            raise ValueError("肯定或否定事实必须携带被断言的 typed value")
+        if (
+            isinstance(self.value, (int, float))
+            and not isinstance(self.value, bool)
+            and not self.unit
+        ):
+            raise ValueError("数值事实必须声明单位；无量纲值显式使用 unitless")
         return self
 
 

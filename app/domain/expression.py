@@ -5,7 +5,7 @@ from calendar import monthrange
 from math import ceil
 from typing import Any
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.domain.contracts.common import ContractModel, DateValue
 from app.domain.contracts.enums import (
@@ -21,9 +21,38 @@ from app.domain.contracts.rules import AtomicExpression, AtomicPredicate, RuleCo
 
 
 class EvaluationContext(ContractModel):
+    project_id: str = Field(min_length=1)
+    subject_id: str = Field(min_length=1)
+    review_episode_id: str = Field(min_length=1)
+    evidence_snapshot_id: str = Field(min_length=1)
+    accepted_fact_ids: list[str] = Field(default_factory=list)
     facts: list[ClinicalFact] = Field(default_factory=list)
     anchor_dates: dict[AnchorType, DateValue] = Field(default_factory=dict)
     half_life_days: dict[str, float] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_fact_scope(self) -> "EvaluationContext":
+        fact_ids = [fact.fact_id for fact in self.facts]
+        if len(fact_ids) != len(set(fact_ids)):
+            raise ValueError("EvaluationContext 不能包含重复 fact_id")
+        if set(fact_ids) != set(self.accepted_fact_ids):
+            raise ValueError("Evaluator 只能读取当前 Gate 已接受的事实集合")
+        expected_scope = (
+            self.project_id,
+            self.subject_id,
+            self.review_episode_id,
+            self.evidence_snapshot_id,
+        )
+        for fact in self.facts:
+            actual_scope = (
+                fact.project_id,
+                fact.subject_id,
+                fact.review_episode_id,
+                fact.evidence_snapshot_id,
+            )
+            if actual_scope != expected_scope:
+                raise ValueError("ClinicalFact 超出当前项目、受试者、Episode 或快照范围")
+        return self
 
 
 class EvaluationResult(ContractModel):
@@ -36,6 +65,7 @@ class ComponentEvaluation(ContractModel):
     applicable: TruthValue = TruthValue.TRUE
     trigger: EvaluationResult
     exception: EvaluationResult | None = None
+    predicate_evaluations: dict[str, EvaluationResult]
 
 
 def _result(
@@ -92,7 +122,7 @@ def _compare(predicate: AtomicPredicate, observed: Any) -> TruthValue:
     expected = predicate.value
     try:
         if predicate.comparator == Comparator.EXISTS:
-            return TruthValue.TRUE
+            return TruthValue.UNKNOWN if observed is None else TruthValue.TRUE
         if predicate.comparator == Comparator.EQ:
             return TruthValue.TRUE if observed == expected else TruthValue.FALSE
         if predicate.comparator == Comparator.NE:
@@ -198,14 +228,22 @@ def _evaluate_atomic(expression: AtomicExpression, context: EvaluationContext) -
     fact_type = f"{predicate.subject}.{predicate.attribute}"
     matching = [fact for fact in context.facts if fact.fact_type == fact_type]
     if not matching:
-        return _result(TruthValue.UNKNOWN, "fact_not_observed")
+        reason = (
+            "professional_judgment_missing"
+            if predicate.requires_professional_judgment
+            else "fact_not_observed"
+        )
+        return _result(TruthValue.UNKNOWN, reason)
     if any(fact.polarity == FactPolarity.UNKNOWN for fact in matching):
         return _result(
             TruthValue.UNKNOWN,
             "fact_polarity_unknown",
             used_fact_ids=[fact.fact_id for fact in matching],
         )
-    observed_values = {(fact.value, _canonical_unit(fact.unit)) for fact in matching}
+    observed_values = {
+        (fact.value, _canonical_unit(fact.unit), fact.polarity)
+        for fact in matching
+    }
     if len(observed_values) != 1 or any(fact.conflict_group_id for fact in matching):
         return _result(
             TruthValue.UNKNOWN,
@@ -216,6 +254,12 @@ def _evaluate_atomic(expression: AtomicExpression, context: EvaluationContext) -
     if predicate.unit is not None and _canonical_unit(predicate.unit) != _canonical_unit(fact.unit):
         return _result(TruthValue.UNKNOWN, "unit_mismatch", used_fact_ids=[fact.fact_id])
     comparison = _compare(predicate, fact.value)
+    if fact.polarity == FactPolarity.NEGATED:
+        comparison = {
+            TruthValue.TRUE: TruthValue.FALSE,
+            TruthValue.FALSE: TruthValue.TRUE,
+            TruthValue.UNKNOWN: TruthValue.UNKNOWN,
+        }[comparison]
     comparison_result = _result(comparison, used_fact_ids=[fact.fact_id])
     time_result = _evaluate_time(expression, fact, context)
     return _evaluate_logical(LogicalOperator.ALL, [comparison_result, time_result])
@@ -229,6 +273,14 @@ def evaluate_expression(expression: RuleExpression, context: EvaluationContext) 
 
 
 def evaluate_component(component: RuleComponent, context: EvaluationContext) -> ComponentEvaluation:
+    expressions = [component.expression]
+    if component.exception_expression is not None:
+        expressions.append(component.exception_expression)
+    predicate_evaluations = {
+        atomic.predicate.predicate_id: evaluate_expression(atomic, context)
+        for expression in expressions
+        for atomic in _iter_atomic_expressions(expression)
+    }
     return ComponentEvaluation(
         applicable=TruthValue.TRUE,
         trigger=evaluate_expression(component.expression, context),
@@ -237,4 +289,13 @@ def evaluate_component(component: RuleComponent, context: EvaluationContext) -> 
             if component.exception_expression is not None
             else None
         ),
+        predicate_evaluations=predicate_evaluations,
     )
+
+
+def _iter_atomic_expressions(expression: RuleExpression):
+    if expression.kind == "predicate":
+        yield expression
+        return
+    for child in expression.children:
+        yield from _iter_atomic_expressions(child)
