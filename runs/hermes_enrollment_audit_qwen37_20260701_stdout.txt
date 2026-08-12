@@ -1,0 +1,34 @@
+Audit report written.
+
+**Output file:**
+/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/runs/hermes_enrollment_audit_qwen37_20260701.md
+
+**Summary of findings (15 total):**
+
+- **P0 (1):** Mobile horizontal overflow clips table content — system unusable on phones/tablets
+- **P1 (4):** Anchor date placeholder mixed-language, redundant global stage selector, test username "smkzw" visible, help page is a text-heavy wall
+- **P2 (8):** "Export Markdown" uses technical terminology, rules table dense without grouping, warning box text small, project titles not truncated, action buttons many/small, no visual separation IN/EX in report, column headers too long
+- **P3 (3):** UI looks dated, help page has 11 sections, warning box contrast could be improved
+
+**Top 5 usability improvements (without destabilizing clinical logic):**
+1. Fix mobile overflow (add `overflow-x: auto` to table containers)
+2. Remove redundant global "审核阶段" selector
+3. Rename "Export Markdown" to "导出审核报告" (or convert to Word/PDF)
+4. Add visual grouping to rules table (collapsible sections + summary bar)
+5. Convert help page to collapsible accordion
+
+**What should NOT be changed:**
+- Phase-specific review architecture (screening vs baseline as separate cells)
+- Baseline anchor date mechanism (per-row input, evidence-insufficient when missing)
+- Evidence hierarchy (bundler priority)
+- pass_verify as reminder (not hard block)
+- Three-workflow entry point architecture
+
+**Disagreements/uncertainties flagged for other reviewers:**
+- Is the global stage selector truly redundant, or does it filter rows?
+- Is rules table density a problem, or do monitors prefer flat checklists?
+- Is mobile support a priority, or is this desktop-only?
+- Do users know what "Markdown" means, or is it a problem?
+- Do users prefer long scrollable help, or collapsible accordion?
+
+**Visual analysis note:** The contact sheet image was analyzed via vision model. All findings are based on visual observation + snapshot data + context file. No source code was read. This report is advisory only; Codex owns final verification.

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72" role="img" aria-label="ER">
+  <defs>
+    <linearGradient id="shield" x1="8" y1="8" x2="56" y2="62" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#17324D"/>
+      <stop offset="0.62" stop-color="#1E6E78"/>
+      <stop offset="1" stop-color="#2B8C72"/>
+    </linearGradient>
+  </defs>
+  <path d="M32 5.5 56.5 14v18.8c0 16.5-9.2 27-24.5 32.7C16.7 59.8 7.5 49.3 7.5 32.8V14L32 5.5Z" fill="url(#shield)"/>
+  <path d="M32 12.4 50.2 18.7v14c0 12.3-6.6 20.2-18.2 25C20.4 52.9 13.8 45 13.8 32.7v-14L32 12.4Z" fill="#F8FBFC"/>
+  <text x="32" y="36" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="22" fill="#17324D">ER</text>
+  <path d="M21 42.5h20.5" stroke="#1E8A86" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M21 49h12.5" stroke="#1E8A86" stroke-width="3.2" stroke-linecap="round"/>
+  <circle cx="49" cy="47" r="8.2" fill="#FFFFFF" stroke="#17324D" stroke-width="3"/>
+  <path d="m54.8 52.8 7.7 7.7" stroke="#17324D" stroke-width="3.2" stroke-linecap="round"/>
+  <circle cx="53.4" cy="14.8" r="8.1" fill="#C58A2A"/>
+  <path d="m49.7 14.7 2.6 2.7 5.2-5.5" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

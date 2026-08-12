@@ -1,0 +1,3115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>临床试验入排审核系统</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--primary:#FF9900;--secondary:#336699;--success:#28a745;--danger:#dc3545;--warning:#fd7e14;--info:#17a2b8;--gray-100:#f8f9fa;--gray-200:#e9ecef;--gray-300:#dee2e6;--gray-400:#ced4da;--gray-500:#adb5bd;--gray-600:#6c757d;--gray-700:#495057;--gray-800:#343a40;--gray-900:#212529;--font:system-ui,-apple-system,"微软雅黑","Microsoft YaHei","Segoe UI",Roboto,sans-serif;--shadow:0 2px 8px rgba(0,0,0,0.1);--shadow-lg:0 8px 24px rgba(0,0,0,0.15);--radius:8px}
+html{width:100%;min-width:100%;max-width:100%;overflow-x:hidden}
+body{font-family:var(--font);background:var(--gray-100);color:var(--gray-800);line-height:1.6;min-height:100vh;width:100%;min-width:100%;max-width:100%;overflow-x:hidden}
+a{color:var(--secondary);text-decoration:none}
+a:hover{text-decoration:underline}
+button{font-family:var(--font);cursor:pointer;border:none;border-radius:var(--radius);padding:8px 16px;font-size:14px;transition:all .2s}
+button:disabled{opacity:.6;cursor:not-allowed}
+input,textarea,select{font-family:var(--font);border:1px solid var(--gray-400);border-radius:var(--radius);padding:8px 12px;font-size:14px;outline:none;transition:border .2s;max-width:100%;min-width:0}
+select{width:100%}
+input:focus,textarea:focus,select:focus{border-color:var(--secondary);box-shadow:0 0 0 3px rgba(51,102,153,.15)}
+table{width:100%;border-collapse:collapse}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--gray-200);font-size:14px;vertical-align:middle}
+th{background:var(--gray-100);font-weight:600;color:var(--gray-700);position:sticky;top:0}
+.btn{display:inline-flex;align-items:center;gap:6px;font-weight:500;white-space:nowrap}
+.btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:#e68a00}
+.btn-secondary{background:var(--secondary);color:#fff}.btn-secondary:hover{background:#2a5a8a}
+.btn-success{background:var(--success);color:#fff}.btn-success:hover{background:#218838}
+.btn-danger{background:var(--danger);color:#fff}.btn-danger:hover{background:#c82333}
+.btn-warning{background:var(--warning);color:#fff}.btn-warning:hover{background:#e0691a}
+.btn-outline{background:transparent;border:1px solid var(--gray-400);color:var(--gray-700)}.btn-outline:hover{background:var(--gray-100)}
+.btn-sm{padding:4px 10px;font-size:12px}
+.btn-lg{padding:12px 24px;font-size:16px}
+
+/* Layout */
+#app{width:100%;max-width:none;margin:0;padding:0 32px;min-width:0}
+.header{width:100%;max-width:none;background:#fff;border-bottom:2px solid var(--primary);padding:16px 24px;margin-bottom:24px;box-shadow:var(--shadow)}
+.header-inner{width:100%;max-width:none;margin:0;display:flex;align-items:center;justify-content:space-between;gap:16px;min-width:0}
+.header h1{font-size:20px;color:var(--gray-900);display:flex;align-items:center;gap:10px;min-width:0;line-height:1.35}
+.header h1 .logo{color:var(--primary);font-size:24px}
+.header-sub{color:var(--gray-600);font-size:12px;margin-top:2px}
+.header-right{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:flex-end;min-width:0}
+.brand-logo{height:42px;width:auto;max-width:min(240px,42vw);object-fit:contain}
+
+/* Toast */
+.toast-container{position:fixed;top:20px;right:20px;z-index:10000;display:flex;flex-direction:column;gap:8px;max-width:380px}
+.toast{padding:12px 16px;border-radius:var(--radius);color:#fff;font-size:14px;box-shadow:var(--shadow-lg);animation:slideIn .3s ease;display:flex;align-items:flex-start;gap:10px;position:relative}
+.toast.success{background:var(--success)}.toast.error{background:var(--danger)}.toast.info{background:var(--info)}.toast.warning{background:var(--warning)}
+.toast .close{position:absolute;top:6px;right:8px;background:none;color:#fff;font-size:16px;padding:0;opacity:.7}.toast .close:hover{opacity:1}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes fadeOut{from{opacity:1}to{opacity:0;transform:translateX(100%)}}
+
+/* Cards */
+.card{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;margin-bottom:16px;transition:box-shadow .2s;min-width:0;overflow-wrap:anywhere}
+.card:hover{box-shadow:var(--shadow-lg)}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.card-title{font-size:16px;font-weight:600;color:var(--gray-900)}
+
+/* Badge */
+.badge{display:inline-flex;align-items:center;justify-content:center;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:500;white-space:nowrap;line-height:1.6}
+.badge-pending{background:#e9ecef;color:#6c757d}.badge-processing{background:#cce5ff;color:#004085}
+.badge-reviewed{background:#d4edda;color:#155724}.badge-error{background:#f8d7da;color:#721c24}
+.badge-pass{background:#d4edda;color:#155724}.badge-fail{background:#f8d7da;color:#721c24}
+.badge-insufficient{background:#fff3cd;color:#856404}.badge-investigator{background:#fff3cd;color:#856404}.badge-verify{background:#f0fdf4;color:#3f6212}
+
+/* Verdict */
+.verdict-card{text-align:center;padding:32px;margin-bottom:24px;border-radius:var(--radius);border:2px solid}
+.verdict-pass{background:#f0fff4;border-color:var(--success)}.verdict-fail{background:#fff5f5;border-color:var(--danger)}
+.verdict-insufficient{background:#fffaf0;border-color:var(--warning)}
+.verdict-icon{font-size:48px;margin-bottom:8px}.verdict-text{font-size:22px;font-weight:700}
+.verdict-summary{margin-top:8px;color:var(--gray-600);font-size:14px}
+
+/* Tabs */
+.tabs{display:flex;border-bottom:2px solid var(--gray-200);margin-bottom:20px}
+.tab{padding:10px 20px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;font-weight:500;color:var(--gray-600);transition:all .2s;background:none}
+.tab:hover{color:var(--gray-800)}
+.tab.active{color:var(--secondary);border-bottom-color:var(--secondary)}
+.tab-content{display:none}.tab-content.active{display:block}
+
+/* Upload Zone */
+.upload-zone{border:2px dashed var(--gray-400);border-radius:var(--radius);padding:40px;text-align:center;cursor:pointer;transition:all .2s;background:var(--gray-100);margin-bottom:16px}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--primary);background:#fff8eb}
+.upload-zone .icon{font-size:48px;margin-bottom:12px;opacity:.5}
+.upload-zone p{color:var(--gray-600);font-size:14px}
+.upload-zone .hint{font-size:12px;color:var(--gray-500);margin-top:8px}
+.file-list{margin-top:12px}
+.file-item{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--gray-100);border-radius:var(--radius);margin-bottom:4px;font-size:13px}
+
+/* Expandable Row */
+.expand-row{cursor:pointer;transition:background .15s}
+.expand-row:hover{background:#f8f9fa}
+.expand-row td:first-child{position:relative;padding-left:28px}
+.expand-row td:first-child::before{content:'▶';position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--gray-500);transition:transform .2s}
+.expand-row.open td:first-child::before{transform:translateY(-50%) rotate(90deg)}
+.expand-detail{display:none}
+.expand-detail.show{display:table-row}
+.expand-detail td{padding:16px 28px;background:#fafbfc;border-bottom:2px solid var(--gray-200)}
+.expand-content{font-size:13px;line-height:1.8}
+.expand-content .reasoning{margin-bottom:8px}
+.expand-content .evidence{background:#f0f4f8;padding:12px;border-radius:var(--radius);border-left:3px solid var(--secondary);font-size:13px;white-space:pre-wrap}
+
+/* Progress Overlay */
+.overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:9000;display:flex;align-items:center;justify-content:center;animation:fadeIn .3s}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.overlay-content{background:#fff;border-radius:12px;padding:40px;width:480px;box-shadow:var(--shadow-lg);text-align:center}
+.overlay-content h3{font-size:18px;margin-bottom:20px;color:var(--gray-900)}
+.progress-stages{display:flex;justify-content:space-between;margin-bottom:24px;position:relative}
+.progress-stages::before{content:'';position:absolute;top:16px;left:40px;right:40px;height:3px;background:var(--gray-300);z-index:0}
+.stage-item{display:flex;flex-direction:column;align-items:center;z-index:1;gap:6px}
+.stage-dot{width:32px;height:32px;border-radius:50%;background:var(--gray-300);display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;font-weight:600;transition:all .3s}
+.stage-dot.active{background:var(--primary);animation:pulse 1.5s infinite}
+.stage-dot.done{background:var(--success)}
+.stage-label{font-size:11px;color:var(--gray-600);white-space:nowrap}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,153,0,.4)}50%{box-shadow:0 0 0 8px rgba(255,153,0,0)}}
+.progress-bar-wrap{height:8px;background:var(--gray-200);border-radius:4px;overflow:hidden;margin-bottom:12px}
+.progress-bar{height:100%;background:linear-gradient(90deg,var(--primary),#ffb84d);border-radius:4px;transition:width .5s ease;width:0}
+.progress-text{font-size:14px;color:var(--gray-600);margin-bottom:20px}
+.progress-stage-text{font-size:13px;color:var(--gray-500);margin-bottom:16px}
+.progress-container .progress-bar{height:8px;background:var(--gray-200);border-radius:4px;overflow:hidden;width:100%;margin-bottom:8px}
+.progress-container .progress-fill{height:100%;background:linear-gradient(90deg,var(--primary),#ffb84d);border-radius:4px;transition:width .4s ease}
+
+/* Modal */
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);z-index:8000;display:flex;align-items:center;justify-content:center;animation:fadeIn .2s}
+.modal{background:#fff;border-radius:12px;box-shadow:var(--shadow-lg);width:500px;max-width:90vw;max-height:90vh;overflow:auto;animation:modalIn .3s ease}
+@keyframes modalIn{from{transform:scale(.95);opacity:0}to{transform:scale(1);opacity:1}}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--gray-200)}
+.modal-header h3{font-size:16px}
+.modal-body{padding:24px}
+.modal-footer{display:flex;justify-content:flex-end;gap:10px;padding:16px 24px;border-top:1px solid var(--gray-200)}
+.form-group{margin-bottom:16px;min-width:0}
+.form-group label{display:block;margin-bottom:6px;font-size:14px;font-weight:500;color:var(--gray-700)}
+.form-group input,.form-group textarea{width:100%}
+
+/* Callout */
+.callout{padding:14px 18px;border-radius:var(--radius);margin:12px 0;font-size:14px;display:flex;gap:10px;align-items:flex-start}
+.callout-warning{background:#fff3cd;border-left:4px solid var(--warning);color:#856404}
+.callout-info{background:#cce5ff;border-left:4px solid var(--info);color:#004085}
+.callout-success{background:#d4edda;border-left:4px solid var(--success);color:#155724}
+
+/* Breadcrumb */
+.breadcrumb{display:flex;align-items:center;gap:8px;margin-bottom:20px;font-size:14px;color:var(--gray-600)}
+.breadcrumb a{color:var(--secondary)}
+.breadcrumb .sep{color:var(--gray-400)}
+
+/* Rule Textarea */
+.rule-editor{width:100%;min-height:400px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.6;padding:16px;border:1px solid var(--gray-300);border-radius:var(--radius);resize:vertical}
+
+/* Stats */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin:12px 0}
+.stat-item{text-align:center;padding:12px;background:var(--gray-100);border-radius:var(--radius)}
+.stat-value{font-size:24px;font-weight:700;color:var(--gray-900)}
+.stat-label{font-size:12px;color:var(--gray-600);margin-top:4px}
+
+/* Empty State */
+.empty-state{text-align:center;padding:60px 20px;color:var(--gray-500)}
+.empty-state .icon{font-size:64px;margin-bottom:16px;opacity:.4}
+.empty-state h3{font-size:18px;color:var(--gray-700);margin-bottom:8px}
+
+/* Loading Spinner */
+.spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--gray-300);border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{display:flex;align-items:center;gap:10px;color:var(--gray-600);font-size:14px}
+
+/* Project Card */
+.project-card{display:flex;justify-content:space-between;align-items:center;gap:16px;min-width:0}
+.project-card .info{flex:1;min-width:0}
+.project-card .info h3{font-size:16px;margin-bottom:4px;color:var(--gray-900);overflow-wrap:anywhere;line-height:1.5}
+.project-card .info .meta{font-size:12px;color:var(--gray-500)}
+.project-card .actions{display:flex;gap:8px;flex-shrink:0}
+
+/* Protocol Workbench */
+.protocol-workbench{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;margin-bottom:18px;min-width:0;overflow-wrap:anywhere}
+.workbench-grid{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.5fr) minmax(0,.9fr);gap:14px;align-items:stretch;min-width:0}
+.workbench-panel{border:1px solid var(--gray-200);border-radius:var(--radius);padding:14px;background:#fff;min-width:0;overflow-wrap:anywhere}
+.workbench-panel h3{font-size:14px;color:var(--gray-800);margin-bottom:10px}
+.workbench-meta{display:flex;flex-direction:column;gap:6px;margin-top:10px;font-size:12px;color:var(--gray-600)}
+.workbench-meta div{display:grid;grid-template-columns:minmax(96px,180px) minmax(0,1fr);gap:12px;align-items:start;border-bottom:1px solid var(--gray-100);padding-bottom:4px}
+.workbench-meta strong{min-width:0;text-align:left;color:var(--gray-700);overflow-wrap:anywhere;word-break:break-word}
+.workbench-editor{width:100%;min-height:520px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;padding:12px;border:1px solid var(--gray-300);border-radius:var(--radius);resize:vertical}
+.workbench-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.workbench-chat{height:210px;overflow:auto;border:1px solid var(--gray-200);border-radius:var(--radius);padding:10px;background:var(--gray-100);font-size:13px;margin-bottom:10px}
+.chat-row{margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--gray-200)}
+.chat-row:last-child{border-bottom:none}
+.chat-role{font-weight:600;color:var(--secondary);font-size:12px;margin-bottom:3px}
+.status-line{font-size:12px;color:var(--gray-600);margin-top:8px;min-height:18px}
+.task-grid{display:grid;grid-template-columns:repeat(3,minmax(220px,1fr));gap:16px;margin:18px 0}
+.task-card{background:#fff;border:1px solid var(--gray-200);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;min-height:180px;display:flex;flex-direction:column;justify-content:space-between;min-width:0;overflow-wrap:anywhere}
+.task-card h3{font-size:17px;color:var(--gray-900);margin-bottom:8px}
+.task-card p{font-size:13px;color:var(--gray-600);line-height:1.7}
+.auth-shell{max-width:520px;margin:42px auto;background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);padding:28px}
+.auth-shell h2{font-size:22px;margin-bottom:8px;color:var(--gray-900)}
+.help-section{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);padding:22px;margin-bottom:16px;min-width:0;overflow-wrap:anywhere}
+.help-section h2{font-size:20px;margin-bottom:12px}
+.help-section h3{font-size:15px;margin:14px 0 6px;color:var(--gray-800)}
+.help-section li{margin-left:18px;margin-bottom:6px;color:var(--gray-700);font-size:14px}
+.help-manual-intro{color:var(--gray-600);font-size:14px;margin-bottom:14px}
+.help-manual-grid{display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:14px;margin:14px 0}
+.help-manual-card{border:1px solid var(--gray-200);border-radius:var(--radius);padding:14px;background:#fff}
+.help-manual-card h3{margin-top:0;color:var(--secondary)}
+.help-manual-card ol,.help-manual-card ul{margin-top:8px}
+.help-manual-note{background:#f7f9fb;border-left:4px solid var(--secondary);border-radius:var(--radius);padding:12px 14px;margin:12px 0;color:var(--gray-700);font-size:14px}
+.help-troubleshoot{width:100%;border:1px solid var(--gray-200);border-radius:var(--radius);overflow:hidden;margin-top:10px}
+.help-troubleshoot table{margin:0}
+.help-troubleshoot th{position:static;background:#f1f5f9}
+.help-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.revision-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.diff-list{background:#fff7e6;border-left:4px solid var(--primary);padding:12px 14px;border-radius:var(--radius);font-size:13px;color:var(--gray-800);margin:12px 0}
+.guide-card{background:#eef6ff;border-left:4px solid var(--secondary);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;color:var(--gray-800);font-size:14px}
+.header-user{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--gray-600);flex-wrap:wrap;justify-content:flex-end}
+.page-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;min-width:0}
+.project-picker{flex:1 1 420px;min-width:min(320px,100%);max-width:100%}
+.project-summary-title{font-size:18px;margin-bottom:10px;line-height:1.55;overflow-wrap:anywhere}
+.project-summary-meta{width:100%;max-width:none}
+.project-header-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;min-width:0}
+.project-header-main{min-width:0;flex:1 1 360px}
+.project-header-main h2{font-size:20px;color:var(--gray-900);line-height:1.45;overflow-wrap:anywhere}
+.project-header-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.rules-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.rules-toolbar p{color:var(--gray-600);font-size:14px;flex:1 1 360px;min-width:0}
+.rules-toolbar .actions{display:flex;gap:8px;flex-wrap:wrap}
+.management-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:16px;align-items:start}
+.form-grid{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:12px}
+.center-row-actions{display:flex;gap:6px;flex-wrap:wrap}
+.center-draft-editor{width:100%;min-height:220px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55}
+.export-grid{display:grid;grid-template-columns:repeat(3,minmax(220px,1fr));gap:14px}
+.export-card{border:1px solid var(--gray-200);border-radius:var(--radius);padding:16px;background:#fff;min-width:0}
+.export-card h3{font-size:15px;color:var(--gray-900);margin-bottom:8px}
+.export-card p{font-size:13px;color:var(--gray-600);margin-bottom:12px;line-height:1.7}
+
+/* Responsive Table Wrapper */
+.table-wrap{width:100%;max-width:100%;overflow-x:auto;overflow-y:visible;background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);-webkit-overflow-scrolling:touch}
+.table-wrap table{margin:0}
+.data-table{width:100%;min-width:0;table-layout:auto}
+.data-table th{white-space:nowrap}
+.data-table td{overflow-wrap:anywhere}
+.cell-nowrap{white-space:nowrap}
+.cell-center{word-break:normal;overflow-wrap:break-word}
+.row-actions{display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;min-width:0}
+.row-actions .btn-sm{padding:.35rem .5rem;font-size:.78rem;line-height:1.2}
+.subjects-toolbar{display:flex;justify-content:space-between;gap:.75rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:.75rem}
+.subjects-filter{display:flex;gap:.5rem;align-items:flex-end;flex-wrap:wrap}
+.subjects-filter .form-group{margin-bottom:0}
+.subjects-bulk-actions{display:flex;gap:.45rem;flex-wrap:wrap;align-items:center}
+.selected-count{color:var(--gray-500);font-size:.82rem}
+	.subjects-table{width:100%;min-width:0}
+	.subjects-table th,.subjects-table td{padding:.75rem .65rem;vertical-align:middle}
+	.subjects-table th{white-space:normal}
+	.subjects-table .sort-header{white-space:normal;text-align:left}
+.subjects-table .table-filter-row th{padding-block:.35rem;background:#fbfcfd}
+.sort-header{display:inline-flex;align-items:center;gap:.25rem;border:0;background:transparent;color:inherit;font:inherit;font-weight:700;padding:0;cursor:pointer;white-space:nowrap}
+.sort-header:hover{color:var(--secondary)}
+.sort-icon{color:var(--gray-500);font-size:.72rem}
+.column-filter{inline-size:100%;min-inline-size:0;border:1px solid var(--gray-300);border-radius:.35rem;padding:.35rem .45rem;font-size:.78rem;background:#fff;color:var(--gray-800)}
+.column-filter:focus{outline:none;border-color:var(--secondary);box-shadow:0 0 0 2px rgba(21,101,192,.12)}
+.subjects-table .col-select,.subjects-table .select-cell{white-space:nowrap;text-align:center}
+.subject-id-cell{font-weight:700;white-space:nowrap}
+.center-cell{line-height:1.35;min-width:0}
+.center-cell .center-code{font-weight:700;color:var(--gray-800);white-space:nowrap}
+.center-cell .center-name{font-size:.78rem;color:var(--gray-500);overflow-wrap:anywhere;margin-top:.1rem}
+.icf-cell{display:flex;gap:.35rem;align-items:center;flex-wrap:wrap}
+.icon-btn{border:1px solid var(--gray-300);background:#fff;color:var(--gray-600);border-radius:.35rem;padding:.2rem .35rem;line-height:1;cursor:pointer}
+.icon-btn:hover{background:var(--gray-100);color:var(--gray-900)}
+.tooltip-wrap{position:relative;display:inline-flex}
+.tooltip-card{display:none;position:absolute;z-index:30;inset-block-start:calc(100% + .45rem);inset-inline-end:0;background:#fff;border:1px solid var(--gray-200);box-shadow:var(--shadow-lg);border-radius:var(--radius);padding:.75rem;color:var(--gray-700);font-size:.82rem;line-height:1.55;max-inline-size:min(38rem,calc(100vw - 2rem));min-inline-size:min(28rem,calc(100vw - 2rem))}
+.tooltip-wrap:hover .tooltip-card{display:block}
+	.report-rules-table{min-width:0}
+	.report-rules-table .col-rule-id{width:86px}
+	.report-rules-table .col-rule-type{width:80px}
+	.report-rules-table .col-rule-verdict{width:150px}
+	.report-rules-table .col-rule-name{width:260px}
+	.phase-review-cell{display:flex;flex-direction:column;gap:.35rem;min-inline-size:10rem;max-inline-size:18rem}
+	.phase-review-top{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap}
+	.phase-review-actions{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap}
+	.phase-anchor-date{inline-size:100%;max-inline-size:11rem;padding:.3rem .45rem;font-size:.78rem}
+	.phase-anchor-hint{font-size:.72rem;color:var(--gray-500);line-height:1.35}
+	.report-rules-table tr.rule-parent-row td{background:#fbfcfd;font-weight:600}
+	.report-rules-table tr.rule-child-row td:first-child{padding-left:1.5rem}
+	.rule-child-marker{color:var(--gray-500);margin-right:.25rem}
+	.rule-parent-marker{color:var(--secondary);font-size:.72rem;margin-left:.25rem}
+.mobile-scroll-hint{display:none;color:var(--gray-500);font-size:.78rem;margin:.25rem 0 .5rem}
+
+/* Evidence Viewer */
+.evidence-section{margin-top:16px}
+.evidence-toggle{cursor:pointer;padding:10px 14px;background:var(--gray-100);border-radius:var(--radius);display:flex;justify-content:space-between;align-items:center;font-weight:500;font-size:14px}
+.evidence-toggle:hover{background:var(--gray-200)}
+.evidence-body{display:none;padding:16px;background:#fff;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 var(--radius) var(--radius)}
+.evidence-body.show{display:block}
+.evidence-chunk{padding:12px;margin-bottom:12px;background:#f8f9fa;border-radius:var(--radius);border-left:3px solid var(--info)}
+.evidence-chunk .chunk-header{font-size:12px;color:var(--gray-500);margin-bottom:6px;font-weight:600}
+.evidence-chunk pre{font-size:13px;white-space:pre-wrap;word-break:break-all;line-height:1.7;color:var(--gray-800)}
+
+/* Toolbar */
+.toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px}
+@media(max-width:980px){.workbench-grid,.task-grid,.revision-grid,.help-manual-grid,.management-grid,.export-grid{grid-template-columns:1fr!important}.workbench-editor{min-height:360px}.project-card{align-items:flex-start;gap:12px;flex-wrap:wrap}.project-card .actions{flex-direction:row!important;flex-wrap:wrap}.header-inner{align-items:flex-start;gap:12px}.brand-logo{height:34px;max-width:180px}}
+@media(max-width:640px){#app{padding:0 14px}.header{padding:14px}.header-inner{flex-direction:column}.header-right{justify-content:flex-start}.task-card{min-height:auto}.project-picker{flex-basis:100%;min-width:0}.workbench-meta div,.form-grid{grid-template-columns:1fr}.project-header-actions{justify-content:flex-start}.brand-logo{max-width:78vw}.mobile-scroll-hint{display:block}.subjects-table,.report-rules-table{min-width:max-content}.table-wrap{scrollbar-width:thin}}
+</style>
+</head>
+<body>
+
+<div class="toast-container" id="toastContainer"></div>
+<div id="overlayContainer"></div>
+<div id="modalContainer"></div>
+
+<div class="header">
+  <div class="header-inner">
+    <div>
+      <h1><span class="logo">⚕</span> 临床试验入排审核系统</h1>
+      <div class="header-sub">Clinical Trial Enrollment Review System</div>
+    </div>
+    <div class="header-right">
+      <img class="brand-logo" src="/static/header_logo.svg" alt="ER入排审核标志">
+      <div id="headerNav"></div>
+    </div>
+  </div>
+</div>
+
+<div id="app"></div>
+
+<script>
+const API = '/api';
+const app = document.getElementById('app');
+
+/* ============ State ============ */
+let state = {
+  view: '',
+  projects: [],
+  currentProject: null,
+  currentSubject: null,
+  subjects: [],
+  subjectTableFilters: {},
+  subjectTableSort: {},
+  selectedSubjects: {},
+  report: null,
+  auth: {
+    loaded: false,
+    hasUsers: true,
+    user: localStorage.getItem('enrollmentReviewUser') || '',
+    token: localStorage.getItem('enrollmentReviewToken') || '',
+    role: localStorage.getItem('enrollmentReviewRole') || '',
+  },
+  protocolWorkbench: {
+    file: null,
+    metadata: null,
+    workflow: null,
+    studyStage: '',
+    rules: '',
+    chatLog: [],
+    lastProjectCode: '',
+  },
+  reDeconstruct: {
+    projectCode: '',
+    project: null,
+    originalRules: '',
+    revisedRules: '',
+    workflow: null,
+    metadata: null,
+    file: null,
+    studyStage: '',
+    changes: [],
+  },
+};
+
+/* ============ Toast ============ */
+function toast(msg, type = 'info', duration = 4000) {
+  const container = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span>${msg}</span><button class="close" onclick="this.parentElement.remove()">&times;</button>`;
+  container.appendChild(el);
+  setTimeout(() => { el.style.animation = 'fadeOut .3s ease forwards'; setTimeout(() => el.remove(), 300); }, duration);
+}
+
+/* ============ Modal ============ */
+function showModal(title, bodyHtml, footerHtml) {
+  const c = document.getElementById('modalContainer');
+  c.innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-header"><h3>${title}</h3><button onclick="closeModal()" style="background:none;font-size:20px;padding:0;color:var(--gray-500)">&times;</button></div>
+      <div class="modal-body">${bodyHtml}</div>
+      ${footerHtml ? `<div class="modal-footer">${footerHtml}</div>` : ''}
+    </div>
+  </div>`;
+}
+function closeModal() { document.getElementById('modalContainer').innerHTML = ''; }
+
+/* ============ Overlay ============ */
+function showProgressOverlay() {
+  document.getElementById('overlayContainer').innerHTML = `<div class="overlay" id="progressOverlay">
+    <div class="overlay-content">
+      <h3>正在处理受试者资料</h3>
+      <div class="progress-stages">
+        <div class="stage-item"><div class="stage-dot" id="stage0">1</div><div class="stage-label">分类</div></div>
+        <div class="stage-item"><div class="stage-dot" id="stage1">2</div><div class="stage-label">OCR</div></div>
+        <div class="stage-item"><div class="stage-dot" id="stage2">3</div><div class="stage-label">组包</div></div>
+        <div class="stage-item"><div class="stage-dot" id="stage3">4</div><div class="stage-label">智能审核</div></div>
+      </div>
+      <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
+      <div class="progress-text" id="progressPercent">0%</div>
+      <div class="progress-stage-text" id="progressStageText">准备中...</div>
+      <button class="btn btn-outline" onclick="cancelProcessing()" id="cancelBtn">取消</button>
+    </div>
+  </div>`;
+}
+function updateProgress(data) {
+  const stageMap = { classify: 0, ocr: 1, bundle: 2, review: 3 };
+  const idx = stageMap[data.stage];
+  if (idx !== undefined) {
+    for (let i = 0; i < idx; i++) { const d = document.getElementById('stage' + i); if (d) { d.classList.remove('active'); d.classList.add('done'); d.textContent = '✓'; } }
+    const cur = document.getElementById('stage' + idx);
+    if (cur) { cur.classList.add('active'); cur.classList.remove('done'); }
+  }
+  // Calculate percentage from progress/total
+  const progress = data.progress || 0;
+  const total = data.total || 1;
+  const pct = total > 0 ? Math.round((progress / total) * 100) : 0;
+  const bar = document.getElementById('progressBar');
+  const pctEl = document.getElementById('progressPercent');
+  const stageText = document.getElementById('progressStageText');
+  if (bar) bar.style.width = pct + '%';
+  if (pctEl) pctEl.textContent = pct + '%';
+  if (stageText && data.message) {
+    stageText.textContent = data.message;
+    // Color code VLM status
+    if (data.message.includes('✅')) stageText.style.color = '#28a745';
+    else if (data.message.includes('❌')) stageText.style.color = '#dc3545';
+    else stageText.style.color = '';
+  }
+}
+function hideProgress() { document.getElementById('overlayContainer').innerHTML = ''; }
+let currentEventSource = null;
+function cancelProcessing() { if (currentEventSource) { currentEventSource.close(); currentEventSource = null; } hideProgress(); toast('已取消处理', 'info'); }
+
+/* ============ API ============ */
+function authHeaders() {
+  const user = state.auth.user || localStorage.getItem('enrollmentReviewUser') || '';
+  const token = state.auth.token || localStorage.getItem('enrollmentReviewToken') || '';
+  const headers = {};
+  if (user && token) {
+    headers['X-Enrollment-User'] = user;
+    headers['X-Enrollment-Token'] = token;
+  }
+  return headers;
+}
+function withAuthOptions(opts = {}) {
+  const auth = authHeaders();
+  if (!Object.keys(auth).length) return opts;
+  const headers = new Headers(opts.headers || {});
+  Object.entries(auth).forEach(([k, v]) => headers.set(k, v));
+  return { ...opts, headers };
+}
+async function apiFetch(url, opts = {}) {
+  try {
+    const { skipAuth, ...fetchOpts } = opts;
+    const r = await fetch(url, skipAuth ? fetchOpts : withAuthOptions(fetchOpts));
+    if (r.status === 401 && !url.includes('/api/auth/')) {
+      logoutUser(false);
+      renderHeaderNav();
+      renderAuth('login');
+      toast('登录状态已失效，请重新登录', 'warning');
+    }
+    if (!r.ok) {
+      const t = await r.text();
+      let message = t || r.statusText;
+      try {
+        const data = JSON.parse(t);
+        if (typeof data.detail === 'string') message = data.detail;
+        else if (data.detail?.message) message = data.detail.message;
+      } catch { /* keep raw text */ }
+      throw new Error(message);
+    }
+    return r;
+  } catch (e) { toast('请求失败: ' + e.message, 'error'); throw e; }
+}
+async function listProjects() { const r = await apiFetch(`${API}/projects`); return r.json(); }
+async function authStatus() { const r = await apiFetch(`${API}/auth/status`, { skipAuth: true }); return r.json(); }
+async function registerUser(username, password = '') { const r = await apiFetch(`${API}/auth/register`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username, password }), skipAuth: true }); return r.json(); }
+async function loginUser(username, password = '') { const r = await apiFetch(`${API}/auth/login`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username, password }), skipAuth: true }); return r.json(); }
+async function markHelpSeen(username = '') { const r = await apiFetch(`${API}/auth/help-seen`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username }) }); return r.json(); }
+async function createProject(data) { const r = await apiFetch(`${API}/projects`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); return r.json(); }
+async function createProjectFromProtocol(file, studyStage = '') { const fd = new FormData(); fd.append('file', file); if (studyStage) fd.append('study_stage', studyStage); const r = await apiFetch(`${API}/projects/from-protocol`, { method: 'POST', body: fd }); return r.json(); }
+async function deconstructProtocolDraft(file, feedback = '', currentRules = '', studyStage = '') {
+  const fd = new FormData();
+  fd.append('file', file);
+  if (feedback) fd.append('feedback', feedback);
+  if (currentRules) fd.append('current_rules', currentRules);
+  if (studyStage) fd.append('study_stage', studyStage);
+  const r = await apiFetch(`${API}/projects/deconstruct-draft`, { method: 'POST', body: fd });
+  return r.json();
+}
+async function saveProtocolDraft(file, rules, metadata, workflow, targetProjectCode = '') {
+  const fd = new FormData();
+  if (file) fd.append('file', file);
+  fd.append('rules', rules);
+  fd.append('metadata_json', JSON.stringify(metadata || {}));
+  fd.append('workflow_json', JSON.stringify(workflow || {}));
+  if (targetProjectCode) fd.append('target_project_code', targetProjectCode);
+  const r = await apiFetch(`${API}/projects/save-protocol-draft`, { method: 'POST', body: fd });
+  return r.json();
+}
+async function deconstructProjectRevision(pc, file, feedback, currentRules, useCurrentProtocol, studyStage = '') {
+  const fd = new FormData();
+  if (file) fd.append('file', file);
+  fd.append('feedback', feedback || '');
+  fd.append('current_rules', currentRules || '');
+  fd.append('use_current_protocol', useCurrentProtocol ? 'true' : 'false');
+  if (studyStage) fd.append('study_stage', studyStage);
+  const r = await apiFetch(`${API}/projects/${pc}/deconstruct-revision`, { method:'POST', body: fd });
+  return r.json();
+}
+async function getProject(pc) { const r = await apiFetch(`${API}/projects/${pc}`); return r.json(); }
+async function updateProjectInfo(pc, data) { const r = await apiFetch(`${API}/projects/${pc}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) }); return r.json(); }
+async function deleteProject(pc) { const r = await apiFetch(`${API}/projects/${pc}`, { method: 'DELETE' }); return r.json(); }
+async function deleteSubject(pc, sid) { const r = await apiFetch(`${API}/projects/${pc}/subjects/${sid}`, { method: 'DELETE' }); return r.json(); }
+async function updateSubject(pc, sid, data) { const r = await apiFetch(`${API}/projects/${pc}/subjects/${sid}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) }); return r.json(); }
+async function listSubjects(pc) { const r = await apiFetch(`${API}/projects/${pc}/subjects`); return r.json(); }
+async function uploadFiles(pc, sid, files) { const fd = new FormData(); for (const f of files) fd.append('files', f); const r = await apiFetch(`${API}/projects/${pc}/subjects/${sid}/upload`, { method: 'POST', body: fd }); return r.json(); }
+async function getCenters(pc) { const r = await apiFetch(`${API}/projects/${pc}/centers`); return r.json(); }
+async function saveCenters(pc, centers) { const r = await apiFetch(`${API}/projects/${pc}/centers`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ centers }) }); return r.json(); }
+async function deconstructCenters(pc, file = null, draftText = '', feedback = '') {
+  const fd = new FormData();
+  if (file) fd.append('file', file);
+  if (draftText) fd.append('draft_text', draftText);
+  if (feedback) fd.append('feedback', feedback);
+  const r = await apiFetch(`${API}/projects/${pc}/centers/deconstruct`, { method:'POST', body: fd });
+  return r.json();
+}
+async function getProjectPhases(pc) { const r = await apiFetch(`${API}/projects/${pc}/phases`); return r.json(); }
+async function getReport(pc, sid, phase = 'full') { const r = await apiFetch(`${API}/projects/${pc}/subjects/${sid}/report?phase=${encodeURIComponent(phase || 'full')}`); return r.json(); }
+async function getBundle(pc, sid, phase = 'full') { const r = await apiFetch(`${API}/projects/${pc}/subjects/${sid}/bundle?phase=${encodeURIComponent(phase || 'full')}`); return r.text(); }
+async function saveRules(pc, rules) { const r = await apiFetch(`${API}/projects/${pc}/rules`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rules }) }); return r.json(); }
+async function getRules(pc) { const r = await apiFetch(`${API}/projects/${pc}/rules`); return r.json(); }
+async function fetchMarkdownReport(pc, opts = {}) {
+  const params = new URLSearchParams();
+  params.set('scope', opts.scope || 'project');
+  params.set('phase', opts.phase || 'full');
+  if (opts.centerCode) params.set('center_code', opts.centerCode);
+  if (opts.subjectId) params.set('subject_id', opts.subjectId);
+  const r = await apiFetch(`${API}/projects/${pc}/reports/markdown?${params.toString()}`);
+  return r.text();
+}
+
+function processSubject(pc, sid, onProgress, onDone, onError, opts = {}) {
+  let retryCount = 0;
+  const maxRetries = 3;
+  let lastProgress = null;
+
+  function connect() {
+    const params = new URLSearchParams();
+    params.set('phase', opts.phase || 'full');
+    if (opts.studyStage) params.set('study_stage', opts.studyStage);
+    const user = state.auth.user || localStorage.getItem('enrollmentReviewUser') || '';
+    const token = state.auth.token || localStorage.getItem('enrollmentReviewToken') || '';
+    if (user) params.set('user', user);
+    if (token) params.set('token', token);
+    const es = new EventSource(`${API}/projects/${pc}/subjects/${sid}/process?${params.toString()}`);
+    currentEventSource = es;
+
+    es.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      lastProgress = data;
+      retryCount = 0; // reset retry count on successful message
+      onProgress(data);
+      if (data.stage === 'done') { es.close(); currentEventSource = null; onDone(data); }
+      if (data.stage === 'error') { es.close(); currentEventSource = null; onError(data); }
+    };
+
+    es.onerror = () => {
+      es.close();
+      currentEventSource = null;
+      // If we already got a 'done' or 'error' message, don't retry
+      if (lastProgress && (lastProgress.stage === 'done' || lastProgress.stage === 'error')) return;
+      // Retry on connection error
+      if (retryCount < maxRetries) {
+        retryCount++;
+        onProgress({ stage: lastProgress?.stage || 'ocr', progress: lastProgress?.progress || 0, total: lastProgress?.total || 1, message: `连接中断，正在重试(${retryCount}/${maxRetries})...` });
+        setTimeout(connect, 2000); // retry after 2 seconds
+      } else {
+        onError({ message: '连接中断，已重试多次仍失败' });
+      }
+    };
+  }
+
+  connect();
+  return { close: () => { if (currentEventSource) { currentEventSource.close(); currentEventSource = null; } } };
+}
+
+/* ============ Routing ============ */
+function navigate(hash) { window.location.hash = hash; }
+window.addEventListener('hashchange', route);
+let _routeRunning = false;
+let _routeQueued = false;
+async function route() {
+  if (_routeRunning) {
+    _routeQueued = true;
+    return;
+  }
+  _routeRunning = true;
+  try {
+    do {
+      _routeQueued = false;
+      await routeOnce();
+    } while (_routeQueued);
+  } finally {
+    _routeRunning = false;
+  }
+}
+async function routeOnce() {
+  await ensureAuthStatus();
+  renderHeaderNav();
+  if (!hasAuthSession()) return renderAuth();
+  const hash = location.hash || '#/';
+  const cleanHash = hash.split('?')[0]; // strip query params
+  const parts = cleanHash.replace('#/', '').split('/');
+  if (parts[0] === '' || parts[0] === 'dashboard' || parts[0] === 'task') return renderTaskHome();
+  if (parts[0] === 'help') return renderHelpPage(false);
+  if (parts[0] === 'first-deconstruct') return renderFirstDeconstructPage();
+  if (parts[0] === 're-deconstruct') return renderReDeconstructPage();
+  if (parts[0] === 'audit') return renderAuditProjectList();
+  if (parts[0] === 'project' && parts[1] && parts[2] === 'subject' && parts[3]) return renderReport(parts[1], parts[3]);
+  if (parts[0] === 'project' && parts[1]) return renderProject(parts[1]);
+  renderTaskHome();
+}
+
+/* ============ Helpers ============ */
+function statusBadge(status) {
+  const map = { pending: ['badge-pending', '待处理'], processing: ['badge-processing', '处理中'], reviewed: ['badge-reviewed', '已审核'], error: ['badge-error', '错误'] };
+  const [cls, label] = map[status] || ['badge-pending', status];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+function verdictBadge(verdict) {
+  if (!verdict) return '<span class="badge badge-pending">未审核</span>';
+  const map = { pass: ['badge-pass', '✅ 可入组'], pass_verify: ['badge-verify', '✓ 可入组（需验证）'], fail: ['badge-fail', '❌ 不可入组'], insufficient: ['badge-insufficient', '⚠️ 证据不足'], needs_evidence: ['badge-insufficient', '⚠️ 需处理'], investigator: ['badge-investigator', '🟡 需研究者判定'] };
+  const [cls, label] = map[verdict] || ['badge-pending', verdict];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+function ruleResultBadge(result) {
+  const map = { pass: ['badge-pass', '✅ 通过'], pass_verify: ['badge-verify', '✓ 通过（需验证）'], fail: ['badge-fail', '❌ 不通过'], insufficient: ['badge-insufficient', '⚠️ 证据不足'], investigator: ['badge-investigator', '🟡 需研究者判定'] };
+  const [cls, label] = map[result] || ['badge-pending', result || '未评估'];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+function verificationType(rule) {
+  if (!rule || rule.result !== 'pass_verify') return '';
+  if (rule.verification_type) return rule.verification_type;
+  const text = rule.reasoning || '';
+  if (/后续阶段复核|后续阶段待复核|基线待后续阶段复核|基线\/D1\/随机前尚未到达/.test(text)) return 'future_phase';
+  if (/(基线|D1|随机前).{0,24}(尚未|未到|未发生|待复核|后续阶段)/.test(text)) return 'future_phase';
+  if (/溯源|既往源文件|更早.{0,8}(病历|诊断|检查|处方)|病史来源/.test(text)) return 'source_traceability';
+  return 'other';
+}
+function ruleResultBadgeForRule(rule) {
+  if (!rule || rule.result !== 'pass_verify') return ruleResultBadge(rule?.result);
+  const type = verificationType(rule);
+  const label = type === 'future_phase' ? '✓ 通过（后续阶段复核）'
+    : type === 'source_traceability' ? '✓ 通过（溯源提醒）'
+    : '✓ 通过（需验证）';
+  return `<span class="badge badge-verify">${label}</span>`;
+}
+function ruleRowClass(rule) {
+  if (rule?.is_child_rule) return 'expand-row rule-child-row';
+  if (rule?.is_parent_rule) return 'expand-row rule-parent-row';
+  return 'expand-row';
+}
+function ruleIdHtml(rule) {
+  const id = escapeHtml(rule?.rule_id || '-');
+  if (rule?.is_child_rule) return `<span class="rule-child-marker">↳</span><strong>${id}</strong>`;
+  if (rule?.is_parent_rule) return `<strong>${id}</strong><span class="rule-parent-marker">父级</span>`;
+  return `<strong>${id}</strong>`;
+}
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+function renderReviewScopeControls(workflow, project = null) {
+  const phases = workflow?.review_phases || [{ phase_id: 'full', name: '全量审核' }];
+  const fixedStage = projectStudyStage(project, workflow);
+  const defaultPhase = phases.find(p => p.phase_id !== 'full')?.phase_id || phases[0]?.phase_id || 'full';
+  const phaseOptions = phases.map(p => {
+    const label = [p.name || p.phase_id, p.visit, p.day_window].filter(Boolean).join(' · ');
+    return `<option value="${escapeHtml(p.phase_id)}" ${p.phase_id === defaultPhase ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+  }).join('');
+  return `<div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
+      <div class="form-group" style="margin-bottom:0;min-width:240px">
+        <label>批量操作阶段</label>
+        <select id="reviewPhaseSelect">${phaseOptions}</select>
+      </div>
+      ${fixedStage ? `<div class="status-line" style="margin:0 0 8px 0">项目期别：<strong>${escapeHtml(fixedStage)}</strong>（解构时已固定，受试者不与其他期别项目共享）。此下拉仅影响批量审核、批量重新审核和批量导出；每行可直接进入对应阶段。</div>` : ''}
+      ${!fixedStage && workflow?.requires_study_stage_selection ? `<div class="callout callout-warning" style="margin:0;flex:1 1 320px">该项目仍是旧的多期混合配置。请先进入“方案重新解构”，选择Ⅱ期或Ⅲ期后保存为独立项目，再添加或审核受试者。</div>` : ''}
+    </div>
+  </div>`;
+}
+function getSelectedReviewScope() {
+  const phaseEl = document.getElementById('reviewPhaseSelect');
+  const phase = phaseEl?.value || 'full';
+  const studyStage = projectStudyStage();
+  if (state.currentWorkflow?.requires_study_stage_selection && !studyStage) {
+    toast('该项目未固定研究期别，请先重新解构为Ⅱ期或Ⅲ期独立项目', 'warning');
+    return null;
+  }
+  return { phase, studyStage };
+}
+function reviewScopeQuery(scope) {
+  const params = new URLSearchParams();
+  if (scope?.phase) params.set('phase', scope.phase);
+  if (scope?.studyStage) params.set('study_stage', scope.studyStage);
+  const q = params.toString();
+  return q ? '?' + q : '';
+}
+function reportUrl(pc, sid) {
+  const scope = getSelectedReviewScope() || { phase: 'full', studyStage: '' };
+  return `#/project/${escapeHtml(pc)}/subject/${escapeHtml(sid)}${reviewScopeQuery(scope)}`;
+}
+function reportUrlForPhase(pc, sid, phaseId) {
+  const scope = { phase: phaseId || 'full', studyStage: projectStudyStage() || '' };
+  return `#/project/${escapeHtml(pc)}/subject/${escapeHtml(sid)}${reviewScopeQuery(scope)}`;
+}
+function phaseReviewCellHtml(pc, subject, phase) {
+  const sid = subject.subject_id || '';
+  const phaseId = phase.phase_id || 'full';
+  const review = phaseReview(subject, phaseId);
+  const hasReport = !!review.has_report;
+  const phaseStatus = hasReport ? verdictBadge(review.verdict || '') : '<span class="badge badge-pending">未审核</span>';
+  const anchor = phaseRequiresAnchor(phase) ? `
+    <div>
+      <input class="phase-anchor-date" type="date" value="${escapeAttr(phaseAnchorValue(subject, phaseId))}" ${subject.can_modify ? '' : 'disabled'}
+        title="基线/随机前锚点日期；不填时，随机前/基线前时间窗不能自动判定通过"
+        onclick="event.stopPropagation()"
+        onchange="updatePhaseAnchorDate('${escapeAttr(pc)}','${escapeAttr(sid)}','${escapeAttr(phaseId)}',this.value)">
+      <div class="phase-anchor-hint">基线/随机前锚点</div>
+    </div>` : '';
+  const reviewBtn = subject.can_modify ? `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); startProcessingWithScope('${escapeHtml(pc)}','${escapeHtml(sid)}','${escapeHtml(phaseId)}','${escapeHtml(projectStudyStage())}')">${hasReport ? '重新审核' : '审核'}</button>` : '';
+  const reportBtn = hasReport ? `<button class="btn btn-success btn-sm" onclick="event.stopPropagation(); navigate(reportUrlForPhase('${escapeHtml(pc)}','${escapeHtml(sid)}','${escapeHtml(phaseId)}'))">报告</button>` : '';
+  return `<div class="phase-review-cell">
+    <div class="phase-review-top">${phaseStatus}</div>
+    ${anchor}
+    <div class="phase-review-actions">${reportBtn}${reviewBtn}</div>
+  </div>`;
+}
+async function updatePhaseAnchorDate(pc, sid, phaseId, value) {
+  try {
+    const subject = (state.subjects || []).find(s => s.subject_id === sid);
+    if (subject) {
+      subject.phase_anchor_dates = { ...(subject.phase_anchor_dates || {}), [phaseId]: value || '' };
+    }
+    await updateSubject(pc, sid, { phase_anchor_dates: { [phaseId]: value || '' } });
+    toast(value ? '基线/随机前锚点日期已保存' : '已清空该阶段锚点日期', 'success');
+  } catch (err) {
+    toast('保存阶段锚点失败: ' + err.message, 'error');
+  }
+}
+function escapeHtml(text) {
+  const d = document.createElement('div');
+  d.textContent = text;
+  return d.innerHTML;
+}
+function escapeAttr(text) {
+  return escapeHtml(text).replace(/"/g, '&quot;');
+}
+function renderMarkdown(text) {
+  if (!text) return '';
+  return escapeHtml(text).replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+}
+
+const GENERIC_PROTOCOL_TITLES = new Set(['临床研究方案', '研究方案', '方案', 'clinicalstudyprotocol', 'protocol']);
+function isGenericProtocolTitle(value) {
+  return GENERIC_PROTOCOL_TITLES.has(String(value || '').replace(/\s+/g, '').replace(/[：:]/g, '').toLowerCase());
+}
+function displayProjectName(project) {
+  if (!project) return '未选择项目';
+  const name = (project.name || '').trim();
+  if (name && !isGenericProtocolTitle(name)) return name;
+  return project.project_code || project.protocol_id || '未命名项目';
+}
+function projectStudyStage(project = null, workflow = null) {
+  const p = project || state.currentProjectInfo || {};
+  const w = workflow || state.currentWorkflow || {};
+  return p.study_stage || w.study_stage || ((w.study_stages || []).length === 1 ? w.study_stages[0] : '');
+}
+function compactProjectOptionLabel(project) {
+  if (!project) return '未选择项目';
+  const suffix = [
+    project.protocol_id,
+    project.protocol_version,
+    project.protocol_date,
+    project.study_stage
+  ].filter(Boolean).join(' · ');
+  return suffix ? `${project.project_code || displayProjectName(project)} · ${suffix}` : displayProjectName(project);
+}
+function centerDisplay(centerCode = '', centerName = '') {
+  if (centerCode && centerName) return `${centerCode}｜${centerName}`;
+  return centerCode || centerName || '-';
+}
+function centerCellHtml(subject) {
+  const code = subject.center_code || '-';
+  const name = subject.center_name || '';
+  return `<div class="center-cell">
+    <div class="center-code">${escapeHtml(code)}</div>
+    ${name ? `<div class="center-name">${escapeHtml(name)}</div>` : ''}
+  </div>`;
+}
+function subjectSelectionSet(pc) {
+  if (!state.selectedSubjects[pc]) state.selectedSubjects[pc] = {};
+  return state.selectedSubjects[pc];
+}
+function selectedSubjectIds(pc) {
+  const selected = subjectSelectionSet(pc);
+  return Object.keys(selected).filter(id => selected[id]);
+}
+function subjectTableFilters(pc) {
+  if (!state.subjectTableFilters[pc]) state.subjectTableFilters[pc] = {};
+  return state.subjectTableFilters[pc];
+}
+function subjectTableSort(pc) {
+  if (!state.subjectTableSort[pc]) state.subjectTableSort[pc] = { key: '', dir: '' };
+  return state.subjectTableSort[pc];
+}
+function subjectStatusLabel(status) {
+  const map = { pending: '待处理', processing: '处理中', reviewed: '已审核', error: '错误' };
+  return map[status] || status || '';
+}
+function subjectVerdictLabel(verdict) {
+  const map = { pass: '可入组', pass_verify: '可入组 需验证', fail: '不可入组', insufficient: '证据不足', investigator: '需研究者判定', needs_evidence: '需处理', '': '未审核' };
+  return map[verdict || ''] || verdict || '未审核';
+}
+function displayReviewPhases(workflow = null) {
+  const phases = (workflow || state.currentWorkflow || {})?.review_phases || [{ phase_id: 'full', name: '全量审核' }];
+  const nonFull = phases.filter(p => p.phase_id !== 'full');
+  return nonFull.length ? nonFull : phases;
+}
+function phaseLabel(phase) {
+  return [phase?.name || phase?.phase_id || '审核阶段', phase?.visit, phase?.day_window].filter(Boolean).join(' · ');
+}
+function phaseRequiresAnchor(phase) {
+  const text = [phase?.phase_id, phase?.name, phase?.visit, phase?.day_window, phase?.description, ...(phase?.required_items || [])].filter(Boolean).join(' ');
+  return /(baseline|random|基线|随机|给药前|D1)/i.test(text);
+}
+function phaseReview(subject, phaseId) {
+  return (subject.phase_reviews || {})[phaseId] || {};
+}
+function phaseAnchorValue(subject, phaseId) {
+  return (subject.phase_anchor_dates || {})[phaseId] || '';
+}
+function phaseDataKey(phaseId) {
+  return 'phase-' + String(phaseId || 'full').replace(/[^A-Za-z0-9_-]+/g, '-').toLowerCase();
+}
+function subjectTableValue(subject, key, phases = displayReviewPhases()) {
+  if (key === 'subject_id') return subject.subject_id || '';
+  if (key === 'center') return centerDisplay(subject.center_code || '', subject.center_name || '');
+  if (key === 'owner') return subject.owner_username || '';
+  if (key === 'icf_date') return subject.icf_date || '';
+  if (key === 'status') return `${subject.status || ''} ${subjectStatusLabel(subject.status)}`;
+  if (key === 'verdict') return `${subject.overall_verdict || ''} ${subjectVerdictLabel(subject.overall_verdict)}`;
+  if (key.startsWith('phase:')) {
+    const phaseId = key.slice(6);
+    const review = phaseReview(subject, phaseId);
+    const phase = phases.find(p => p.phase_id === phaseId) || { phase_id: phaseId };
+    return `${phaseLabel(phase)} ${review.verdict || ''} ${subjectVerdictLabel(review.verdict || '')} ${review.status || ''}`;
+  }
+  return '';
+}
+function normalizeFilterText(value) {
+  return String(value || '').trim().toLowerCase();
+}
+function subjectFilterKeys(phases = displayReviewPhases()) {
+  return ['subject_id', 'center', 'owner', 'icf_date', 'status', ...phases.map(p => `phase:${p.phase_id}`)];
+}
+function subjectMatchesFilters(subject, filters, phases = displayReviewPhases()) {
+  return subjectFilterKeys(phases).every(key => {
+    const needle = normalizeFilterText(filters[key]);
+    if (!needle) return true;
+    return normalizeFilterText(subjectTableValue(subject, key, phases)).includes(needle);
+  });
+}
+function applySubjectTableState(pc, subjects, phases = displayReviewPhases()) {
+  const filters = subjectTableFilters(pc);
+  const sort = subjectTableSort(pc);
+  const filtered = (subjects || []).filter(s => subjectMatchesFilters(s, filters, phases));
+  if (!sort.key || !sort.dir) return filtered;
+  return [...filtered].sort((a, b) => {
+    const av = subjectTableValue(a, sort.key, phases);
+    const bv = subjectTableValue(b, sort.key, phases);
+    if (!av && bv) return 1;
+    if (av && !bv) return -1;
+    const cmp = String(av).localeCompare(String(bv), 'zh-Hans-CN', { numeric: true, sensitivity: 'base' });
+    return sort.dir === 'desc' ? -cmp : cmp;
+  });
+}
+function hasSubjectTableFilters(pc) {
+  return Object.values(subjectTableFilters(pc)).some(v => String(v || '').trim());
+}
+function setSubjectTableFilter(pc, key, value) {
+  subjectTableFilters(pc)[key] = value || '';
+  applySubjectTableDomFilters(pc);
+}
+function clearSubjectTableFilters(pc) {
+  state.subjectTableFilters[pc] = {};
+  document.querySelectorAll('.column-filter').forEach(input => { input.value = ''; });
+  applySubjectTableDomFilters(pc);
+}
+function toggleSubjectSort(pc, key) {
+  const sort = subjectTableSort(pc);
+  if (sort.key !== key) {
+    sort.key = key;
+    sort.dir = 'asc';
+  } else if (sort.dir === 'asc') {
+    sort.dir = 'desc';
+  } else {
+    sort.key = '';
+    sort.dir = '';
+  }
+  sortSubjectTableDom(pc);
+}
+function subjectSortIcon(pc, key) {
+  const sort = subjectTableSort(pc);
+  if (sort.key !== key) return '↕';
+  return sort.dir === 'desc' ? '▼' : '▲';
+}
+function subjectSortHeader(pc, key, label) {
+  return `<button type="button" class="sort-header" onclick="toggleSubjectSort('${escapeHtml(pc)}','${key}')"><span>${label}</span><span class="sort-icon" data-sort-key="${key}">${subjectSortIcon(pc, key)}</span></button>`;
+}
+function subjectFilterInput(pc, key, placeholder) {
+  const value = subjectTableFilters(pc)[key] || '';
+  return `<input class="column-filter" data-filter-key="${key}" value="${escapeAttr(value)}" placeholder="${escapeAttr(placeholder)}" oninput="setSubjectTableFilter('${escapeAttr(pc)}','${key}',this.value)">`;
+}
+function subjectRowDataset(subject, phases = displayReviewPhases()) {
+  const attrs = [
+    `data-subject-row="1"`,
+    `data-subject-id="${escapeAttr(subject.subject_id || '')}"`,
+    `data-center="${escapeAttr(subjectTableValue(subject, 'center'))}"`,
+    `data-owner="${escapeAttr(subjectTableValue(subject, 'owner'))}"`,
+    `data-icf-date="${escapeAttr(subjectTableValue(subject, 'icf_date'))}"`,
+    `data-status="${escapeAttr(subjectTableValue(subject, 'status'))}"`,
+  ];
+  for (const phase of phases) {
+    attrs.push(`data-${phaseDataKey(phase.phase_id)}="${escapeAttr(subjectTableValue(subject, `phase:${phase.phase_id}`, phases))}"`);
+  }
+  return attrs.join(' ');
+}
+function rowValue(row, key) {
+  if (key === 'subject_id') return row.dataset.subjectId || '';
+  if (key === 'center') return row.dataset.center || '';
+  if (key === 'owner') return row.dataset.owner || '';
+  if (key === 'icf_date') return row.dataset.icfDate || '';
+  if (key === 'status') return row.dataset.status || '';
+  if (key === 'verdict') return row.dataset.verdict || '';
+  if (key.startsWith('phase:')) return row.getAttribute(`data-${phaseDataKey(key.slice(6))}`) || '';
+  return '';
+}
+function applySubjectTableDomFilters(pc) {
+  const filtered = applySubjectTableState(pc, state.subjects || []);
+  state.filteredSubjects = filtered;
+  const visibleIds = new Set(filtered.map(s => s.subject_id));
+  document.querySelectorAll('#subjectTableBody tr[data-subject-row]').forEach(row => {
+    row.style.display = visibleIds.has(row.dataset.subjectId) ? '' : 'none';
+  });
+  const empty = document.getElementById('subjectFilteredEmpty');
+  if (empty) empty.style.display = filtered.length === 0 ? '' : 'none';
+  const clearFiltersBtn = document.getElementById('clearTableFiltersBtn');
+  if (clearFiltersBtn) clearFiltersBtn.style.display = hasSubjectTableFilters(pc) ? '' : 'none';
+  updateSubjectSelectionControls(pc);
+}
+function sortSubjectTableDom(pc) {
+  const sort = subjectTableSort(pc);
+  const tbody = document.getElementById('subjectTableBody');
+  if (tbody && sort.key && sort.dir) {
+    const rows = Array.from(tbody.querySelectorAll('tr[data-subject-row]'));
+    rows.sort((a, b) => {
+      const av = rowValue(a, sort.key);
+      const bv = rowValue(b, sort.key);
+      if (!av && bv) return 1;
+      if (av && !bv) return -1;
+      const cmp = av.localeCompare(bv, 'zh-Hans-CN', { numeric: true, sensitivity: 'base' });
+      return sort.dir === 'desc' ? -cmp : cmp;
+    });
+    rows.forEach(row => tbody.appendChild(row));
+  }
+  document.querySelectorAll('.sort-icon').forEach(icon => {
+    icon.textContent = subjectSortIcon(pc, icon.dataset.sortKey);
+  });
+  applySubjectTableDomFilters(pc);
+}
+function toggleSubjectSelection(pc, sid, checked) {
+  subjectSelectionSet(pc)[sid] = !!checked;
+  updateSubjectSelectionControls(pc);
+}
+function toggleAllSubjectSelection(pc, checked) {
+  const visible = state.filteredSubjects || [];
+  const selected = subjectSelectionSet(pc);
+  for (const subject of visible) selected[subject.subject_id] = !!checked;
+  document.querySelectorAll('.subject-check').forEach(cb => { cb.checked = !!checked; });
+  updateSubjectSelectionControls(pc);
+}
+function clearSubjectSelection(pc) {
+  state.selectedSubjects[pc] = {};
+  document.querySelectorAll('.subject-check').forEach(cb => { cb.checked = false; });
+  updateSubjectSelectionControls(pc);
+}
+function updateSubjectSelectionControls(pc) {
+  const selectedIds = selectedSubjectIds(pc);
+  const visible = state.filteredSubjects || [];
+  const visibleIds = visible.map(s => s.subject_id);
+  const selected = subjectSelectionSet(pc);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selected[id]);
+  const countEl = document.getElementById('selectedCountText');
+  if (countEl) countEl.textContent = `当前显示 ${visible.length} 名，已勾选 ${selectedIds.length} 名`;
+  const clearBtn = document.getElementById('clearSelectionBtn');
+  if (clearBtn) clearBtn.style.display = selectedIds.length ? '' : 'none';
+  const selectAll = document.getElementById('selectAllSubjects');
+  if (selectAll) selectAll.checked = allVisibleSelected;
+  ['bulkRerunBtn', 'bulkResetBtn', 'bulkMdBtn'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = selectedIds.length === 0;
+  });
+}
+function centerOptionsHtml(centers = [], selectedCode = '', selectedName = '') {
+  const opts = ['<option value="">选择已有中心，或在下方新建</option>'];
+  for (const center of centers || []) {
+    const value = JSON.stringify({ code: center.center_code || '', name: center.center_name || '' }).replace(/"/g, '&quot;');
+    const selected = (center.center_code || '') === selectedCode && (!selectedName || (center.center_name || '') === selectedName) ? 'selected' : '';
+    opts.push(`<option value="${value}" ${selected}>${escapeHtml(centerDisplay(center.center_code || '', center.center_name || ''))}</option>`);
+  }
+  return opts.join('');
+}
+function applyCenterSelect(prefix) {
+  const select = document.getElementById(prefix + '_center_select');
+  if (!select || !select.value) return;
+  try {
+    const data = JSON.parse(select.value);
+    document.getElementById(prefix + '_center_code').value = data.code || '';
+    document.getElementById(prefix + '_center_name').value = data.name || '';
+  } catch { /* ignore */ }
+}
+function currentUserName() {
+  const token = state.auth.token || localStorage.getItem('enrollmentReviewToken') || '';
+  if (!token) return '';
+  return state.auth.user || localStorage.getItem('enrollmentReviewUser') || '';
+}
+function currentAuthToken() {
+  return state.auth.token || localStorage.getItem('enrollmentReviewToken') || '';
+}
+function currentUserRole() {
+  if (!currentUserName()) return '';
+  return state.auth.role || localStorage.getItem('enrollmentReviewRole') || '';
+}
+function hasAuthSession() {
+  return !!(currentUserName() && currentAuthToken());
+}
+function persistAuth(result) {
+  state.auth.user = result.username || '';
+  state.auth.token = result.token || '';
+  state.auth.role = result.role || '';
+  localStorage.setItem('enrollmentReviewUser', state.auth.user);
+  localStorage.setItem('enrollmentReviewToken', state.auth.token);
+  localStorage.setItem('enrollmentReviewRole', state.auth.role);
+}
+function refreshCurrentPage() {
+  if (state.view === 'first-deconstruct') return renderFirstDeconstructPage();
+  if (state.view === 're-deconstruct') return renderReDeconstructPage();
+  if (state.view === 'audit' || state.view === 'dashboard') return renderAuditProjectList();
+  if (state.view === 'project' && state.currentProject) return renderProject(state.currentProject);
+  return renderTaskHome();
+}
+
+async function ensureAuthStatus() {
+  if (state.auth.loaded) return;
+  try {
+    const status = await authStatus();
+    state.auth.hasUsers = !!status.has_users;
+    if (!state.auth.hasUsers && currentUserName() !== 'admin') {
+      state.auth.user = '';
+      state.auth.token = '';
+      state.auth.role = '';
+      localStorage.removeItem('enrollmentReviewUser');
+      localStorage.removeItem('enrollmentReviewToken');
+      localStorage.removeItem('enrollmentReviewRole');
+    }
+    if (!hasAuthSession()) {
+      state.auth.user = '';
+      state.auth.token = '';
+      state.auth.role = '';
+      localStorage.removeItem('enrollmentReviewUser');
+      localStorage.removeItem('enrollmentReviewToken');
+      localStorage.removeItem('enrollmentReviewRole');
+    }
+  } catch {
+    state.auth.hasUsers = true;
+  }
+  state.auth.loaded = true;
+}
+
+function renderHeaderNav() {
+  const nav = document.getElementById('headerNav');
+  if (!nav) return;
+  const user = currentUserName();
+  if (!user) {
+    nav.innerHTML = '<div class="header-user"><span>未登录</span></div>';
+    return;
+  }
+  nav.innerHTML = `<div class="header-user">
+    <span>${escapeHtml(user)}${currentUserRole() === 'admin' ? '（超级管理员）' : ''}</span>
+    <button class="btn btn-outline btn-sm" onclick="navigate('#/task')">首页</button>
+    <button class="btn btn-outline btn-sm" onclick="navigate('#/help')">帮助</button>
+    <button class="btn btn-outline btn-sm" onclick="logoutUser()">退出</button>
+  </div>`;
+}
+
+function logoutUser(doRoute = true) {
+  localStorage.removeItem('enrollmentReviewUser');
+  localStorage.removeItem('enrollmentReviewToken');
+  localStorage.removeItem('enrollmentReviewRole');
+  state.auth.user = '';
+  state.auth.token = '';
+  state.auth.role = '';
+  if (doRoute) {
+    navigate('#/');
+    route();
+  }
+}
+
+function renderAuth(mode = '') {
+  state.view = 'auth';
+  const isRegister = mode === 'register' || !state.auth.hasUsers;
+  const title = isRegister ? '首次注册' : '登录系统';
+  const action = isRegister ? 'submitRegister()' : 'submitLogin()';
+  const buttonText = isRegister ? '注册' : '登录';
+  const switcher = isRegister
+    ? '<button class="btn btn-outline" onclick="renderAuth(\'login\')">已有账号/管理员登录</button>'
+    : (!isRegister ? '<button class="btn btn-outline" onclick="renderAuth(\'register\')">注册新用户</button>' : '');
+  app.innerHTML = `<div class="auth-shell">
+    <h2>${title}</h2>
+    <p style="color:var(--gray-600);font-size:14px;margin-bottom:18px">本系统为本机轻量登录，用于区分操作人和进入帮助流程。密码可不填。</p>
+    <div class="form-group">
+      <label>用户名 <span style="color:var(--danger)">*</span></label>
+      <input id="authUsername" autocomplete="username" placeholder="请输入用户名">
+    </div>
+    <div class="form-group">
+      <label>密码（可选）</label>
+      <input id="authPassword" type="password" autocomplete="current-password" placeholder="可留空">
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="${action}">${buttonText}</button>
+      ${switcher}
+    </div>
+  </div>`;
+}
+
+async function submitRegister() {
+  const username = document.getElementById('authUsername')?.value.trim() || '';
+  const password = document.getElementById('authPassword')?.value || '';
+  if (!username) { toast('请输入用户名', 'warning'); return; }
+  try {
+    const result = await registerUser(username, password);
+    state.auth.hasUsers = true;
+    state.auth.user = '';
+    state.auth.token = '';
+    state.auth.role = '';
+    localStorage.removeItem('enrollmentReviewUser');
+    localStorage.removeItem('enrollmentReviewToken');
+    localStorage.removeItem('enrollmentReviewRole');
+    toast('注册完成，请先阅读帮助页后登录', 'success');
+    renderHeaderNav();
+    renderHelpPage(true, result.username);
+  } catch { /* handled */ }
+}
+
+async function submitLogin() {
+  const username = document.getElementById('authUsername')?.value.trim() || '';
+  const password = document.getElementById('authPassword')?.value || '';
+  if (!username) { toast('请输入用户名', 'warning'); return; }
+  try {
+    const result = await loginUser(username, password);
+    persistAuth(result);
+    renderHeaderNav();
+    if (result.requires_help) {
+      renderHelpPage(true, result.username, 'login');
+      return;
+    }
+    if ((location.hash || '#/') === '#/task') {
+      await route();
+    } else {
+      navigate('#/task');
+    }
+  } catch { /* handled */ }
+}
+
+function renderTaskHome() {
+  state.view = 'task';
+  app.innerHTML = `
+    <div class="guide-card">
+      请选择本次要做的工作。首次方案解构不会覆盖既有项目；既有项目重新解构会先并列展示新旧结果，确认后才保存。
+    </div>
+    <div class="task-grid">
+      <div class="task-card">
+        <div>
+          <h3>新项目-首次方案解构</h3>
+          <p>上传研究方案原文，自动提取项目编号、方案编号、版本、日期，并生成可编辑的入排审核规则和基线前流程核查项。</p>
+        </div>
+        <button class="btn btn-primary" onclick="navigate('#/first-deconstruct')">进入</button>
+      </div>
+      <div class="task-card">
+        <div>
+          <h3>已有项目-方案重新解构</h3>
+          <p>选择已有项目，基于新方案或人工反馈重新解构；新旧草稿并列展示，变动逐条提示，确认后再保存。</p>
+        </div>
+        <button class="btn btn-secondary" onclick="navigate('#/re-deconstruct')">进入</button>
+      </div>
+      <div class="task-card">
+        <div>
+          <h3>已有项目-开始入排审核</h3>
+          <p>进入项目列表后添加受试者、分类上传源文件，按筛选期、基线期等阶段执行单例或批量审核。</p>
+        </div>
+        <button class="btn btn-success" onclick="navigate('#/audit')">进入</button>
+      </div>
+    </div>
+    <div class="help-section">
+      <h2>操作提醒</h2>
+      <ul>
+        <li>若方案同时包含Ⅱ期和Ⅲ期，审核前必须选择本次适用阶段。</li>
+        <li>入排审核不是只看固定入排条文，还要核对筛选期、基线期及基线前必须完成的检查、检验、评分和时间窗。</li>
+        <li>批量审核前建议先跑 1 名受试者，确认 OCR、分类、阶段选择和规则拆解无明显偏差。</li>
+      </ul>
+    </div>
+  `;
+}
+
+function renderHelpPage(firstRegistration = false, username = '', source = '') {
+  state.view = 'help';
+  let nextButton = '<button class="btn btn-primary" onclick="navigate(\'#/task\')">返回首页</button>';
+  if (firstRegistration && source === 'login') {
+    nextButton = '<button class="btn btn-primary" onclick="completeLoginHelp()">已阅读，进入系统</button>';
+  } else if (firstRegistration) {
+    nextButton = `<button class="btn btn-primary" onclick="completeRegistrationHelp(decodeURIComponent('${encodeURIComponent(username || '')}'))">已阅读，去登录</button>`;
+  }
+  app.innerHTML = `<div class="help-section">
+    <h2>全系统操作帮助</h2>
+    ${firstRegistration ? `<p class="help-manual-intro">${escapeHtml(username || '用户')} 已注册。第一次使用请先按下面流程了解系统，再登录进入首页。</p>` : ''}
+    <p class="help-manual-intro">
+      这套系统用于把研究方案中的入排标准、筛选期/基线期及基线前必须完成的检查检验评分，转成可审核规则；再把每名受试者的原始资料经过分类上传、OCR识别、证据提取和规则审核，形成可复核的入排结论。
+    </p>
+    <div class="help-manual-note">
+      使用原则：先小样本试跑，再批量；先核对方案解构，再审核受试者；“不通过、证据不足、证据冲突、需研究者判定”优先回到原始文件复核，“通过需验证”作为溯源提醒处理。
+    </div>
+
+    <div class="help-manual-grid">
+      <div class="help-manual-card">
+        <h3>一、打开系统和登录</h3>
+        <ol>
+          <li>在桌面双击“启动入排审核系统”。系统会启动本机服务，并打开入排审核网页。</li>
+          <li>如果网页没有自动打开，在浏览器地址栏输入 <strong>http://127.0.0.1:8900</strong> 后回车。</li>
+          <li>第一次使用时点击注册，输入自己的用户名即可；密码可以不填。</li>
+          <li>注册后先阅读本帮助页，再返回登录页，用同一个用户名登录。</li>
+          <li>以后再次登录不会重复强制进入帮助页；右上角“帮助”可随时重新查看。</li>
+        </ol>
+      </div>
+      <div class="help-manual-card">
+        <h3>二、首页三个入口怎么选</h3>
+        <ul>
+          <li><strong>新项目-首次方案解构：</strong>第一次建立某个研究项目时使用，只上传方案，不会覆盖已有项目。</li>
+          <li><strong>已有项目-方案重新解构：</strong>项目已存在，但方案版本更新、前次解构有遗漏，或需要按反馈让系统继续补充拆解时使用。</li>
+          <li><strong>已有项目-开始入排审核：</strong>方案规则已确认，开始添加受试者、上传原始资料并执行审核时使用。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="help-manual-grid">
+      <div class="help-manual-card">
+        <h3>三、首次方案解构</h3>
+        <ol>
+          <li>准备研究方案原文，优先使用正式DOCX或PDF版本。</li>
+          <li>进入“新项目-首次方案解构”，点击上传区，选择方案文件。</li>
+          <li>点击自动解构，等待系统提取项目编号、方案编号、版本、日期、研究期别和审核阶段；如果同一方案包含Ⅱ期和Ⅲ期，必须先选择本次解构哪一期。</li>
+          <li>先核对元信息：项目编号不能是“临床研究方案”这类通用标题；版本和日期优先应来自首页、页眉或页脚。</li>
+          <li>再核对规则编辑栏：除入选/排除条文外，筛选期、基线期、随机前、知情同意、实验室、评分、检查、时间窗等基线及以前要求也应出现。</li>
+          <li>如果发现遗漏，在右侧反馈框写清楚，例如“请继续拆解研究流程表中筛选期和基线期必须完成的检查、评分和时间窗”，再重新解构。</li>
+          <li>确认后点击保存到项目；需要马上审核时可点击保存并进入项目。</li>
+        </ol>
+      </div>
+      <div class="help-manual-card">
+        <h3>四、已有项目重新解构</h3>
+        <ol>
+          <li>进入“已有项目-方案重新解构”，先选择需要修订的项目。</li>
+          <li>查看当前项目信息和现有方案规则，确认修订对象是否正确。</li>
+          <li>如果有新版方案，上传新方案；如果没有新方案，只是在原方案基础上补充要求，可直接在反馈框说明。</li>
+          <li>选择“基于新上传方案解构”或“按反馈基于原有方案修改”。</li>
+          <li>点击解构/修改后，新结果会和原结果并列展示，并逐条提示变动。</li>
+          <li>先人工编辑新结果，再决定保存或取消。取消不会影响原项目。</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="help-manual-grid">
+      <div class="help-manual-card">
+        <h3>五、开始单名受试者审核</h3>
+        <ol>
+          <li>进入“已有项目-开始入排审核”，选择项目。</li>
+          <li>如果方案包含Ⅱ期和Ⅲ期，系统会在方案解构时把Ⅱ期、Ⅲ期保存为不同项目；进入受试者列表后不再选择研究期别。</li>
+          <li>点击添加受试者，输入筛选号或受试者编号，例如06002、06003、06004；可同时选择已有中心或新建中心。</li>
+          <li>进入受试者页面后上传源文件。建议按资料类型选择分类：病历、实验室报告、检查报告、评分/量表、既往资料、沟通记录等。</li>
+          <li>上传资料时也可以补充或修改该受试者中心；中心格式建议为“06｜南方医科大学南方医院”。</li>
+          <li>只拿到筛选期资料时，先选择筛选期审核；拿到基线/随机前资料后，再选择基线期或后续阶段审核。</li>
+          <li>先对1名受试者点击处理/审核，观察OCR、证据引用和结论是否符合医学逻辑。</li>
+        </ol>
+      </div>
+      <div class="help-manual-card">
+        <h3>六、批量审核</h3>
+        <ol>
+          <li>在项目页只需选择本次审核阶段（例如筛选/导入期、基线/随机前）；研究期别已经由项目固定。</li>
+          <li>确认每名受试者均已上传本阶段需要的资料；缺资料的受试者先不要批量。</li>
+          <li>先完成1名受试者试跑并人工复核；没有明显分类/OCR/规则问题后，再点击批量处理。</li>
+          <li>批量处理只会处理你有权限修改的待处理或错误状态受试者。已审核受试者如果要重跑，先点击重新审核或清除缓存。</li>
+          <li>批量结束后按优先级复核：不通过、证据不足、证据冲突、需研究者判定、通过需验证、通过。通过需验证不单独改变整体通过结论。</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="help-manual-grid">
+      <div class="help-manual-card">
+        <h3>七、怎么看审核报告</h3>
+        <ul>
+          <li><strong>可入组：</strong>系统认为当前资料支持入组，但仍建议抽查关键证据。</li>
+          <li><strong>不可入组：</strong>至少一条入选未满足或排除触发，必须查看具体规则和引用原文。</li>
+          <li><strong>证据不足：</strong>系统没有找到足够证据，不等于受试者一定不可入组，通常需要补源文件或人工核对。</li>
+          <li><strong>需研究者判定：</strong>方案要求医学判断，系统只能提示需由研究者/医学监查确认。</li>
+          <li><strong>通过需验证：</strong>溯源提醒，结论可按通过走，但建议在最终归档前回看原始病历/报告。</li>
+        </ul>
+      </div>
+      <div class="help-manual-card">
+        <h3>八、权限和删除</h3>
+        <ul>
+          <li>所有登录用户都可以只读查看系统内项目、受试者列表和已有审核结果，便于跨项目、跨中心查阅。</li>
+          <li>项目名称、项目编号、方案版本、入排规则等项目信息只能由项目创建者或超级管理员修改。</li>
+          <li>受试者资料、OCR缓存、重新审核和删除操作，只能由该受试者创建/上传者或超级管理员执行。</li>
+          <li>中心名单是全系统共享的；你创建的中心别人可以选择使用，但不能修改或删除。</li>
+          <li>删除前请确认项目编号、受试者编号和中心归属，真实项目不要用删除功能做测试。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="help-manual-grid">
+      <div class="help-manual-card">
+        <h3>九、中心名单维护</h3>
+        <ol>
+          <li>进入项目页，点击“项目信息”。</li>
+          <li>在“全系统中心名单”中可以查看所有已建中心，格式为“中心代号｜中心名称”。</li>
+          <li>新增中心时填写中心代号和中心名称后保存；保存后其他用户上传受试者时也可选择该中心。</li>
+          <li>批量导入时，准备Excel，第一行建议写“中心代号”“中心名称”；上传后系统会生成草稿。</li>
+          <li>先检查草稿，必要时在评论框写修改意见并重新解构；确认无误后再保存中心名单。</li>
+          <li>你只能修改或删除自己创建的中心；别人创建的中心会显示为只读。</li>
+        </ol>
+      </div>
+      <div class="help-manual-card">
+        <h3>十、报告导出</h3>
+        <ol>
+          <li>进入项目页，点击“报告导出”。</li>
+          <li>先选择审核阶段，例如筛选/导入期或基线/随机前。</li>
+          <li>按项目导出：包含项目内所有已有受试者结论，只列不符合、证据不足和需研究者判定条目。</li>
+          <li>按中心导出：选择中心后导出该中心受试者整改清单，符合条目不显示。</li>
+          <li>按个人导出：选择受试者后导出完整逐条报告，通过、不适用、不符合、证据不足和需研究者判定条目都会显示。</li>
+          <li>导出的报告文件可直接发给CRA/CRC/医学监查人员继续补证和整改跟踪；当前保存为通用文本报告格式。</li>
+        </ol>
+      </div>
+    </div>
+
+    <h3>十一、常见问题和处理方式</h3>
+    <div class="help-troubleshoot">
+      <table>
+        <thead><tr><th>遇到的问题</th><th>先检查什么</th><th>建议处理</th></tr></thead>
+        <tbody>
+          <tr><td>双击后网页没打开</td><td>服务是否启动、浏览器是否被拦截</td><td>等待10秒；再手动打开 http://127.0.0.1:8900；仍失败则重新双击桌面入口。</td></tr>
+          <tr><td>提示登录状态失效</td><td>是否长时间未操作、是否清空过浏览器数据</td><td>重新登录即可；普通账号密码留空时也要使用原用户名。</td></tr>
+          <tr><td>看不到项目</td><td>是否已经登录、服务是否刷新到最新版本</td><td>所有登录用户应能只读看到项目；如看不到，先刷新网页并重新登录。</td></tr>
+          <tr><td>项目或受试者只能查看不能操作</td><td>当前账号是否为项目创建者或该受试者上传者</td><td>这是权限控制。项目规则/项目信息由项目创建者或管理员修改；受试者资料由上传者或管理员修改。</td></tr>
+          <tr><td>项目代号识别异常</td><td>方案首页、页眉页脚、方案编号字段是否清楚</td><td>先不要保存；在反馈框要求按首页“方案版本/日期、方案编号、项目编号”重新提取，再解构一次。</td></tr>
+          <tr><td>方案阶段没有拆出来</td><td>研究流程表、筛选/基线/随机前访视是否在方案中</td><td>在重新解构反馈中明确要求“按研究流程表拆解需要入排审核的分期和各期必做项目”。</td></tr>
+          <tr><td>OCR很慢</td><td>文件是否很大、扫描页是否很多、图片是否倾斜</td><td>先单名试跑；等待进度完成；扫描件过大时分批上传或减少无关页。</td></tr>
+          <tr><td>OCR结果明显不对</td><td>关键数值、日期、单位、阴阳性是否识别错</td><td>补充更清晰文件；必要时清除缓存后重跑；结论按证据不足或人工复核处理。</td></tr>
+          <tr><td>报告显示证据不足</td><td>是否缺少对应阶段资料，或资料没有被分到正确类型</td><td>补传原始病历/报告/评分表；确认阶段选择正确后重新审核。</td></tr>
+          <tr><td>批量审核结果异常多</td><td>是否在错误阶段批量、规则是否遗漏基线前检查</td><td>暂停批量；回到方案重新解构或规则编辑；先重跑1名受试者确认后再继续。</td></tr>
+          <tr><td>无法删除项目或受试者</td><td>当前账号是否为对应内容创建/上传者或超级管理员</td><td>项目只能由项目创建者/管理员删除；受试者只能由该受试者创建/上传者/管理员删除。</td></tr>
+          <tr><td>中心名单无法修改</td><td>该中心是否由其他用户创建</td><td>别人创建的中心可以选择使用，但不能修改或删除；需要调整时联系创建者或管理员。</td></tr>
+          <tr><td>报告导出没有某些通过条目</td><td>导出粒度是否为项目/中心</td><td>项目和中心报告只展示需处理条目；如需所有条目，请按个人导出。</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="help-actions">
+      ${nextButton}
+      <button class="btn btn-outline" onclick="window.print()">打印/另存帮助页</button>
+    </div>
+  </div>`;
+}
+
+async function completeRegistrationHelp(username) {
+  try {
+    await markHelpSeen(username);
+  } catch { /* non-blocking */ }
+  renderAuth('login');
+}
+
+async function completeLoginHelp() {
+  try {
+    await markHelpSeen();
+  } catch { /* non-blocking */ }
+  navigate('#/task');
+}
+
+function protocolWorkbenchState() {
+  if (!state.protocolWorkbench) {
+    state.protocolWorkbench = { file: null, metadata: null, workflow: null, studyStage: '', rules: '', chatLog: [], lastProjectCode: '' };
+  }
+  return state.protocolWorkbench;
+}
+
+function renderWorkbenchMeta(meta) {
+  if (!meta) return '<div class="status-line">尚未识别方案元信息</div>';
+  const rows = [
+    ['项目编号', meta.project_code || '-'],
+    ['方案编号', meta.protocol_id || '-'],
+    ['方案版本', meta.protocol_version || '-'],
+    ['方案日期', meta.protocol_date || '-'],
+    ['本次解构期别', meta.study_stage || '-'],
+  ];
+  return `<div class="workbench-meta">${rows.map(([k, v]) => `<div><span>${k}</span><strong>${escapeHtml(v)}</strong></div>`).join('')}</div>`;
+}
+
+function renderDeconstructStageSelect(id, selected = '') {
+  return `<div class="form-group" style="margin-top:12px">
+    <label>本次解构期别</label>
+    <select id="${id}">
+      <option value="" ${selected ? '' : 'selected'}>自动识别；如方案含Ⅱ/Ⅲ期会要求选择</option>
+      <option value="Ⅱ期" ${selected === 'Ⅱ期' ? 'selected' : ''}>Ⅱ期</option>
+      <option value="Ⅲ期" ${selected === 'Ⅲ期' ? 'selected' : ''}>Ⅲ期</option>
+    </select>
+    <div class="hint" style="margin-top:6px">若同一方案同时包含Ⅱ期和Ⅲ期，必须先选择本次解构哪一期；系统不会混合解构。</div>
+  </div>`;
+}
+
+function renderWorkbenchChat(log) {
+  if (!log || log.length === 0) {
+    return '<div style="color:var(--gray-500)">可要求系统针对某个标准、时间窗、流程表项目或多阶段差异继续细化。</div>';
+  }
+  return log.map(item => `<div class="chat-row">
+    <div class="chat-role">${escapeHtml(item.role)}</div>
+    <div>${renderMarkdown(item.text || '')}</div>
+  </div>`).join('');
+}
+
+function renderProtocolWorkbench(projects) {
+  const wb = protocolWorkbenchState();
+  const projectOptions = [
+    '<option value="">保存为新项目</option>',
+    ...(projects || []).map(p => `<option value="${escapeHtml(p.project_code)}" ${wb.lastProjectCode === p.project_code ? 'selected' : ''}>覆盖保存到 ${escapeHtml(p.project_code)}</option>`)
+  ].join('');
+  const fileName = wb.file ? `${escapeHtml(wb.file.name)} (${formatFileSize(wb.file.size)})` : '未选择方案文件';
+  const hasFile = !!wb.file;
+  const hasRules = !!(wb.rules && wb.rules.trim());
+  return `<div class="protocol-workbench">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px;flex-wrap:wrap">
+      <div>
+        <h2 style="font-size:18px;color:var(--gray-900)">方案解构工作台</h2>
+        <div style="font-size:12px;color:var(--gray-500);margin-top:2px">先把方案拆成可审核规则，再决定保存到哪个项目。</div>
+      </div>
+      <button class="btn btn-outline" onclick="clearProtocolWorkbench()">清空草稿</button>
+    </div>
+    <div class="workbench-grid">
+      <div class="workbench-panel">
+        <h3>1. 方案文件</h3>
+        <div class="upload-zone" style="padding:22px;margin-bottom:10px" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="protocolWorkbenchDrop(event)">
+          <div style="font-size:30px;margin-bottom:6px">📄</div>
+          <p><label style="color:var(--primary);cursor:pointer;text-decoration:underline" for="protocolWorkbenchFileInput">选择研究方案</label> 或拖放到此处</p>
+          <p class="hint">PDF / DOCX / TXT</p>
+          <input type="file" id="protocolWorkbenchFileInput" accept=".pdf,.docx,.doc,.txt" style="display:none" onchange="protocolWorkbenchFileSelected(this)">
+        </div>
+        <div class="file-item"><span>${fileName}</span></div>
+        ${renderDeconstructStageSelect('protocolWorkbenchStage', wb.studyStage || wb.metadata?.study_stage || '')}
+        ${renderWorkbenchMeta(wb.metadata)}
+        <div class="workbench-actions">
+          <button class="btn btn-primary" onclick="runProtocolWorkbenchDeconstruct('initial')" ${hasFile ? '' : 'disabled'}>上传并解构</button>
+          <button class="btn btn-outline" onclick="runProtocolWorkbenchDeconstruct('reset')" ${hasFile ? '' : 'disabled'}>重新审核解构</button>
+        </div>
+        <div class="status-line" id="protocolWorkbenchStatus"></div>
+      </div>
+      <div class="workbench-panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px">
+          <h3 style="margin-bottom:0">2. 解构规则草稿</h3>
+          <button class="btn btn-outline btn-sm" onclick="syncProtocolWorkbenchDraft()">保存编辑</button>
+        </div>
+        <textarea class="workbench-editor" id="protocolDraftEditor" placeholder="上传方案后，这里会显示可编辑的入排审核规则草稿。">${escapeHtml(wb.rules || '')}</textarea>
+      </div>
+      <div class="workbench-panel">
+        <h3>3. 进一步解构与保存</h3>
+        <div class="workbench-chat" id="protocolWorkbenchChat">${renderWorkbenchChat(wb.chatLog)}</div>
+        <textarea id="protocolWorkbenchFeedback" style="width:100%;min-height:120px;resize:vertical" placeholder="例如：请把筛选期和基线期分别列出必须完成的检查；请检查 III 期 EOS 阈值；请不要把流程表项目混进正式入选标准编号。"></textarea>
+        <div class="workbench-actions">
+          <button class="btn btn-secondary" onclick="applyProtocolWorkbenchFeedback()" ${hasFile && hasRules ? '' : 'disabled'}>按反馈修改</button>
+          <button class="btn btn-outline" onclick="syncProtocolWorkbenchDraft()">保存当前编辑</button>
+        </div>
+        <div style="margin-top:12px">
+          <label style="font-size:13px;font-weight:600;color:var(--gray-700)">保存位置</label>
+          <select id="protocolSaveTarget" style="width:100%;margin-top:6px">${projectOptions}</select>
+        </div>
+        <div class="workbench-actions">
+          <button class="btn btn-primary" onclick="saveWorkbenchToProject(false)" ${hasRules ? '' : 'disabled'}>保存到项目</button>
+          <button class="btn btn-success" onclick="saveWorkbenchToProject(true)" ${hasRules ? '' : 'disabled'}>保存并进入项目</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function loadProjectsForPage() {
+  try {
+    const projects = await listProjects();
+    state.projects = projects;
+    return projects;
+  } catch {
+    state.projects = [];
+    return [];
+  }
+}
+
+function renderProjectCards(projects) {
+  if (!projects || projects.length === 0) {
+    return `<div class="empty-state"><div class="icon">📋</div><h3>暂无项目</h3><p>请先在“新项目-首次方案解构”中创建项目。</p></div>`;
+  }
+  return projects.map(p => {
+    const pass = p.stats?.pass || 0, fail = p.stats?.fail || 0, insufficient = p.stats?.insufficient || 0, investigator = p.stats?.investigator || 0;
+    const pending = p.stats?.pending || 0, total = p.subject_count || 0;
+    const metaParts = [
+      `项目编号: ${escapeHtml(p.project_code)}`,
+      `方案编号: ${escapeHtml(p.protocol_id || '-')}`
+    ];
+    if (p.protocol_version) metaParts.push(`版本: ${escapeHtml(p.protocol_version)}`);
+    if (p.protocol_date) metaParts.push(`方案日期: ${escapeHtml(p.protocol_date)}`);
+    if (p.study_stage) metaParts.push(`解构期别: ${escapeHtml(p.study_stage)}`);
+    return `<div class="card">
+      <div class="project-card">
+        <div class="info">
+          <h3>${escapeHtml(displayProjectName(p))}</h3>
+          <div class="meta">${metaParts.join(' | ')}</div>
+          <div class="stats-grid">
+            <div class="stat-item"><div class="stat-value">${total}</div><div class="stat-label">受试者总数</div></div>
+            <div class="stat-item"><div class="stat-value" style="color:var(--success)">${pass}</div><div class="stat-label">可入组</div></div>
+            <div class="stat-item"><div class="stat-value" style="color:var(--danger)">${fail}</div><div class="stat-label">不可入组</div></div>
+            <div class="stat-item"><div class="stat-value" style="color:var(--warning)">${insufficient}</div><div class="stat-label">证据不足</div></div>
+            <div class="stat-item"><div class="stat-value" style="color:var(--warning)">${investigator}</div><div class="stat-label">需研究者</div></div>
+            <div class="stat-item"><div class="stat-value" style="color:var(--gray-500)">${pending}</div><div class="stat-label">未审核</div></div>
+          </div>
+        </div>
+        <div class="actions" style="flex-direction:column">
+          <button class="btn btn-secondary" onclick="navigate('#/project/${escapeHtml(p.project_code)}')">查看受试者</button>
+          <button class="btn btn-outline" onclick="navigate('#/project/${escapeHtml(p.project_code)}?tab=info')">项目信息</button>
+          <button class="btn btn-outline" onclick="navigate('#/project/${escapeHtml(p.project_code)}?tab=rules')">管理规则</button>
+          <button class="btn btn-outline" onclick="navigate('#/project/${escapeHtml(p.project_code)}?tab=export')">导出报告</button>
+          ${p.can_delete ? `<button class="btn btn-danger" onclick="confirmDeleteProject('${escapeHtml(p.project_code)}')">删除项目</button>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function renderFirstDeconstructPage() {
+  state.view = 'first-deconstruct';
+  app.innerHTML = `<div class="loading-text"><span class="spinner"></span> 加载首次方案解构工作台...</div>`;
+  await loadProjectsForPage();
+  app.innerHTML = `
+    <div class="breadcrumb">
+      <a href="#/task">首页</a><span class="sep">›</span>
+      <span>新项目-首次方案解构</span>
+    </div>
+    <div class="guide-card">
+      此页面仅用于创建新项目。保存时不会覆盖已有项目；项目编号、方案编号、版本和日期会从方案原文中自动提取。
+    </div>
+    ${renderProtocolWorkbench([])}
+  `;
+}
+
+async function renderAuditProjectList() {
+  state.view = 'audit';
+  app.innerHTML = `<div class="loading-text"><span class="spinner"></span> 加载审核项目列表...</div>`;
+  const projects = await loadProjectsForPage();
+  app.innerHTML = `
+    <div class="breadcrumb">
+      <a href="#/task">首页</a><span class="sep">›</span>
+      <span>已有项目-开始入排审核</span>
+    </div>
+    <div class="guide-card">
+      <strong>批量审核入口：</strong>进入项目后选择本次审核阶段，再点击“批量处理”。项目期别在方案解构时已经固定；建议先单个受试者试跑，确认资料分类、OCR和阶段规则无明显偏差后再批量。
+    </div>
+    <div class="toolbar">
+      <h2 style="font-size:18px;color:var(--gray-800)">项目列表</h2>
+      <button class="btn btn-outline" onclick="navigate('#/first-deconstruct')">新项目-首次方案解构</button>
+    </div>
+    ${renderProjectCards(projects)}
+  `;
+}
+
+async function renderReDeconstructPage() {
+  state.view = 're-deconstruct';
+  app.innerHTML = `<div class="loading-text"><span class="spinner"></span> 加载重新解构工作台...</div>`;
+  const projects = await loadProjectsForPage();
+  const selected = state.reDeconstruct.projectCode || projects[0]?.project_code || '';
+  if (selected && selected !== state.reDeconstruct.projectCode) {
+    await selectReDeconstructProject(selected, false);
+  }
+  const projectOptions = projects.map(p => `<option value="${escapeHtml(p.project_code)}" ${p.project_code === selected ? 'selected' : ''}>${escapeHtml(compactProjectOptionLabel(p))}</option>`).join('');
+  const rd = state.reDeconstruct;
+  const project = rd.project;
+  const originalRules = rd.originalRules || '';
+  const revisedRules = rd.revisedRules || '';
+  const selectedStage = rd.studyStage || rd.project?.study_stage || rd.metadata?.study_stage || '';
+  const changesHtml = rd.changes && rd.changes.length
+    ? `<div class="diff-list"><strong>本次变动提示</strong><ul style="margin-top:6px;margin-left:18px">${rd.changes.map(c => `<li>${escapeHtml(c)}</li>`).join('')}</ul></div>`
+    : '<div class="diff-list">尚未生成新结果。点击“解构/修改”后会在这里逐条提示变化。</div>';
+  const fileLabel = rd.file ? `${escapeHtml(rd.file.name)} (${formatFileSize(rd.file.size)})` : '未上传新方案';
+  app.innerHTML = `
+    <div class="breadcrumb">
+      <a href="#/task">首页</a><span class="sep">›</span>
+      <span>已有项目-方案重新解构</span>
+    </div>
+    <div class="guide-card">
+      重新解构不会自动覆盖项目。系统会把原解构结果和新结果并列展示，只有点击“保存新结果到项目”后才写入。
+    </div>
+    <div class="card">
+      <div class="page-row">
+        <div class="form-group project-picker" style="margin-bottom:0">
+          <label>选择项目</label>
+          <select id="reProjectSelect" onchange="selectReDeconstructProject(this.value)" ${projects.length ? '' : 'disabled'}>
+            ${projectOptions || '<option value="">暂无项目</option>'}
+          </select>
+        </div>
+        <button class="btn btn-outline" onclick="navigate('#/audit')">查看审核项目列表</button>
+      </div>
+    </div>
+    ${project ? `<div class="card">
+      <h2 class="project-summary-title">${escapeHtml(displayProjectName(project))}</h2>
+      <div class="workbench-meta project-summary-meta">
+        <div><span>项目编号</span><strong>${escapeHtml(project.project_code || '-')}</strong></div>
+        <div><span>方案编号</span><strong>${escapeHtml(project.protocol_id || '-')}</strong></div>
+        <div><span>当前版本/日期</span><strong>${escapeHtml([project.protocol_version, project.protocol_date].filter(Boolean).join(' / ') || '-')}</strong></div>
+        <div><span>当前解构期别</span><strong>${escapeHtml(project.study_stage || '-')}</strong></div>
+        <div><span>当前方案文件</span><strong>${escapeHtml(project.protocol_source_filename || '-')}</strong></div>
+        <div><span>当前规则字数</span><strong>${originalRules.length}</strong></div>
+      </div>
+    </div>
+    <div class="protocol-workbench">
+      <div class="workbench-grid" style="grid-template-columns:minmax(260px,.8fr) minmax(360px,1.2fr) minmax(360px,1.2fr)">
+        <div class="workbench-panel">
+          <h3>1. 重新解构方式</h3>
+          <label style="display:block;margin-bottom:8px"><input type="radio" name="revisionMode" value="upload" ${rd.file ? 'checked' : ''}> 基于新上传方案重新解构</label>
+          <label style="display:block;margin-bottom:12px"><input type="radio" name="revisionMode" value="current" ${rd.file ? '' : 'checked'}> 基于原项目方案 + 反馈修订</label>
+          <div class="upload-zone" style="padding:20px;margin-bottom:10px" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="reDeconstructDrop(event)">
+            <div style="font-size:28px;margin-bottom:6px">📄</div>
+            <p><label style="color:var(--primary);cursor:pointer;text-decoration:underline" for="reProtocolFileInput">选择新方案</label> 或拖放到此处</p>
+            <input type="file" id="reProtocolFileInput" accept=".pdf,.docx,.doc,.txt" style="display:none" onchange="reDeconstructFileSelected(this)">
+          </div>
+          <div class="file-item"><span>${fileLabel}</span>${rd.file ? '<button class="btn btn-sm btn-outline" onclick="clearReDeconstructFile()">移除</button>' : ''}</div>
+          ${renderDeconstructStageSelect('revisionStudyStage', selectedStage)}
+          <div class="form-group" style="margin-top:12px">
+            <label>解析反馈/修订要求</label>
+            <textarea id="revisionFeedback" style="width:100%;min-height:140px;resize:vertical" placeholder="例如：按 III 期重审 EOS 阈值；把筛选期和基线期必做检查分开；新增流程表中基线前评分核查项。"></textarea>
+          </div>
+          <div class="workbench-actions">
+            <button class="btn btn-secondary" onclick="runReDeconstruct()">解构/修改</button>
+            <button class="btn btn-outline" onclick="resetReDeconstructDraft()">取消本次修订</button>
+          </div>
+          <div class="status-line" id="revisionStatus"></div>
+          ${changesHtml}
+        </div>
+        <div class="workbench-panel">
+          <h3>2. 原解构结果</h3>
+          <textarea class="workbench-editor" readonly>${escapeHtml(originalRules)}</textarea>
+        </div>
+        <div class="workbench-panel">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:10px">
+            <h3 style="margin-bottom:0">3. 新解构/修订结果</h3>
+            <button class="btn btn-outline btn-sm" onclick="syncRevisedRules()">保存页面编辑</button>
+          </div>
+          <textarea class="workbench-editor" id="revisionEditor" placeholder="生成后可在此手动编辑，再继续要求系统修订。">${escapeHtml(revisedRules)}</textarea>
+          <div class="workbench-actions">
+            <button class="btn btn-primary" onclick="saveReDeconstructRevision()" ${revisedRules.trim() ? '' : 'disabled'}>保存新结果到项目</button>
+            <button class="btn btn-outline" onclick="navigate('#/project/${escapeHtml(project.project_code)}?tab=rules')">查看当前项目规则</button>
+          </div>
+        </div>
+      </div>
+    </div>` : '<div class="empty-state"><div class="icon">📋</div><h3>暂无可重新解构的项目</h3><p>请先创建项目。</p></div>'}
+  `;
+}
+
+async function selectReDeconstructProject(code, rerender = true) {
+  if (!code) return;
+  state.reDeconstruct = { projectCode: code, project: null, originalRules: '', revisedRules: '', workflow: null, metadata: null, file: null, studyStage: '', changes: [] };
+  try {
+    const [project, rulesData] = await Promise.all([getProject(code), getRules(code)]);
+    state.reDeconstruct.project = project;
+    state.reDeconstruct.originalRules = rulesData.rules || '';
+    state.reDeconstruct.studyStage = project.study_stage || '';
+  } catch { /* handled */ }
+  if (rerender) renderReDeconstructPage();
+}
+
+function reDeconstructDrop(e) {
+  e.preventDefault();
+  e.target.closest('.upload-zone').classList.remove('dragover');
+  if (e.dataTransfer.files.length > 0) setReDeconstructFile(e.dataTransfer.files[0]);
+}
+function reDeconstructFileSelected(input) {
+  if (input.files.length > 0) setReDeconstructFile(input.files[0]);
+}
+function setReDeconstructFile(file) {
+  state.reDeconstruct.file = file;
+  renderReDeconstructPage();
+}
+function clearReDeconstructFile() {
+  state.reDeconstruct.file = null;
+  renderReDeconstructPage();
+}
+function resetReDeconstructDraft() {
+  const code = state.reDeconstruct.projectCode;
+  if (!code) return renderReDeconstructPage();
+  selectReDeconstructProject(code);
+}
+function syncRevisedRules() {
+  const editor = document.getElementById('revisionEditor');
+  if (editor) state.reDeconstruct.revisedRules = editor.value;
+  toast('新结果编辑已保存在页面草稿中', 'success');
+}
+function setRevisionStatus(text, type = '') {
+  const el = document.getElementById('revisionStatus');
+  if (!el) return;
+  el.textContent = text || '';
+  el.style.color = type === 'error' ? 'var(--danger)' : type === 'success' ? 'var(--success)' : 'var(--gray-600)';
+}
+async function runReDeconstruct() {
+  const rd = state.reDeconstruct;
+  if (!rd.projectCode) { toast('请先选择项目', 'warning'); return; }
+  const editor = document.getElementById('revisionEditor');
+  if (editor) rd.revisedRules = editor.value;
+  const feedback = document.getElementById('revisionFeedback')?.value.trim() || '';
+  const mode = document.querySelector('input[name="revisionMode"]:checked')?.value || 'current';
+  if (mode === 'upload' && !rd.file) { toast('请选择新方案文件，或切换为基于原项目方案修订', 'warning'); return; }
+  const currentRules = rd.revisedRules || rd.originalRules;
+  rd.studyStage = document.getElementById('revisionStudyStage')?.value || rd.studyStage || rd.project?.study_stage || '';
+  setRevisionStatus(mode === 'upload' ? '正在基于新方案重新解构...' : '正在基于原方案和反馈修订...');
+  try {
+    const data = await deconstructProjectRevision(rd.projectCode, mode === 'upload' ? rd.file : null, feedback, currentRules, mode !== 'upload', rd.studyStage);
+    rd.revisedRules = data.rules || '';
+    rd.workflow = data.workflow || rd.workflow;
+    rd.metadata = data.metadata || rd.metadata;
+    rd.studyStage = data.study_stage || rd.metadata?.study_stage || rd.studyStage;
+    rd.changes = data.changes || [];
+    setRevisionStatus('重新解构完成', 'success');
+    toast('新解构结果已生成，请并列复核后再保存', 'success');
+    renderReDeconstructPage();
+  } catch {
+    setRevisionStatus('重新解构失败', 'error');
+  }
+}
+async function saveReDeconstructRevision() {
+  const rd = state.reDeconstruct;
+  const editor = document.getElementById('revisionEditor');
+  if (editor) rd.revisedRules = editor.value;
+  if (!rd.projectCode || !rd.revisedRules.trim()) { toast('没有可保存的新结果', 'warning'); return; }
+  const metadata = Object.assign({}, rd.project || {}, rd.metadata || {});
+  metadata.study_stage = rd.studyStage || metadata.study_stage || '';
+  const workflow = rd.workflow || {};
+  try {
+    const result = await saveProtocolDraft(rd.file, rd.revisedRules, metadata, workflow, rd.projectCode);
+    toast(`已保存新解构结果到项目 ${result.project_code}`, 'success');
+    await selectReDeconstructProject(rd.projectCode, false);
+    navigate(`#/project/${rd.projectCode}?tab=rules`);
+  } catch { /* handled */ }
+}
+
+function setProtocolWorkbenchStatus(text, type = '') {
+  const el = document.getElementById('protocolWorkbenchStatus');
+  if (!el) return;
+  el.textContent = text || '';
+  el.style.color = type === 'error' ? 'var(--danger)' : type === 'success' ? 'var(--success)' : 'var(--gray-600)';
+}
+
+function protocolWorkbenchDrop(e) {
+  e.preventDefault();
+  e.target.closest('.upload-zone').classList.remove('dragover');
+  if (e.dataTransfer.files.length > 0) setProtocolWorkbenchFile(e.dataTransfer.files[0]);
+}
+
+function protocolWorkbenchFileSelected(input) {
+  if (input.files.length > 0) setProtocolWorkbenchFile(input.files[0]);
+}
+
+function setProtocolWorkbenchFile(file) {
+  const wb = protocolWorkbenchState();
+  wb.file = file;
+  wb.metadata = null;
+  wb.workflow = null;
+  wb.studyStage = '';
+  wb.rules = '';
+  wb.chatLog = [];
+  refreshCurrentPage();
+}
+
+function syncProtocolWorkbenchDraft() {
+  const editor = document.getElementById('protocolDraftEditor');
+  const wb = protocolWorkbenchState();
+  if (editor) wb.rules = editor.value;
+  toast('当前编辑已保存在页面草稿中', 'success');
+}
+
+function clearProtocolWorkbench() {
+  state.protocolWorkbench = { file: null, metadata: null, workflow: null, studyStage: '', rules: '', chatLog: [], lastProjectCode: '' };
+  refreshCurrentPage();
+}
+
+async function runProtocolWorkbenchDeconstruct(mode) {
+  const wb = protocolWorkbenchState();
+  if (!wb.file) { toast('请先选择研究方案', 'warning'); return; }
+  const editor = document.getElementById('protocolDraftEditor');
+  if (editor) wb.rules = editor.value;
+  wb.studyStage = document.getElementById('protocolWorkbenchStage')?.value || wb.studyStage || '';
+  const feedback = mode === 'reset' ? '' : '';
+  const currentRules = mode === 'reset' ? '' : wb.rules;
+  setProtocolWorkbenchStatus(mode === 'reset' ? '正在重新解构方案...' : '正在上传并解构方案...');
+  try {
+    const data = await deconstructProtocolDraft(wb.file, feedback, currentRules, wb.studyStage);
+    wb.metadata = data.metadata || wb.metadata;
+    wb.workflow = data.workflow || wb.workflow;
+    wb.studyStage = data.study_stage || wb.metadata?.study_stage || wb.studyStage;
+    wb.rules = data.rules || '';
+    wb.chatLog.push({ role: mode === 'reset' ? '系统' : '系统', text: `已完成方案解构，共 ${data.char_count || wb.rules.length} 字符。` });
+    refreshCurrentPage();
+    toast('方案解构完成，可继续编辑或保存到项目', 'success');
+  } catch {
+    setProtocolWorkbenchStatus('方案解构失败', 'error');
+  }
+}
+
+async function applyProtocolWorkbenchFeedback() {
+  const wb = protocolWorkbenchState();
+  const feedbackEl = document.getElementById('protocolWorkbenchFeedback');
+  const feedback = (feedbackEl?.value || '').trim();
+  const editor = document.getElementById('protocolDraftEditor');
+  if (!wb.file) { toast('请先选择研究方案', 'warning'); return; }
+  if (!feedback) { toast('请输入需要进一步解构或修改的点', 'warning'); return; }
+  wb.rules = editor ? editor.value : wb.rules;
+  wb.studyStage = document.getElementById('protocolWorkbenchStage')?.value || wb.studyStage || '';
+  wb.chatLog.push({ role: '你', text: feedback });
+  setProtocolWorkbenchStatus('正在按反馈修订解构草稿...');
+  try {
+    const data = await deconstructProtocolDraft(wb.file, feedback, wb.rules, wb.studyStage);
+    wb.metadata = data.metadata || wb.metadata;
+    wb.workflow = data.workflow || wb.workflow;
+    wb.studyStage = data.study_stage || wb.metadata?.study_stage || wb.studyStage;
+    wb.rules = data.rules || '';
+    wb.chatLog.push({ role: '系统', text: `已按反馈修订。当前草稿 ${data.char_count || wb.rules.length} 字符。` });
+    if (feedbackEl) feedbackEl.value = '';
+    refreshCurrentPage();
+    toast('已按反馈修改草稿', 'success');
+  } catch {
+    setProtocolWorkbenchStatus('反馈修订失败', 'error');
+  }
+}
+
+async function saveWorkbenchToProject(openAfterSave) {
+  const wb = protocolWorkbenchState();
+  const editor = document.getElementById('protocolDraftEditor');
+  if (editor) wb.rules = editor.value;
+  wb.studyStage = document.getElementById('protocolWorkbenchStage')?.value || wb.studyStage || wb.metadata?.study_stage || '';
+  if (!wb.rules.trim()) { toast('没有可保存的规则草稿', 'warning'); return; }
+  const target = document.getElementById('protocolSaveTarget')?.value || '';
+  wb.lastProjectCode = target;
+  const metadata = Object.assign({}, wb.metadata || {}, { study_stage: wb.studyStage });
+  setProtocolWorkbenchStatus(target ? `正在保存到 ${target}...` : '正在保存为新项目...');
+  try {
+    const result = await saveProtocolDraft(wb.file, wb.rules, metadata, wb.workflow, target);
+    wb.lastProjectCode = result.project_code;
+    toast(`已保存到项目 ${result.project_code}`, 'success');
+    if (openAfterSave) {
+      navigate(`#/project/${result.project_code}?tab=rules`);
+    } else {
+      await refreshCurrentPage();
+    }
+  } catch {
+    setProtocolWorkbenchStatus('保存失败', 'error');
+  }
+}
+
+/* ============ Dashboard ============ */
+async function renderDashboard() {
+  return renderAuditProjectList();
+  state.view = 'dashboard';
+  app.innerHTML = `<div class="loading-text"><span class="spinner"></span> 加载项目列表...</div>`;
+  try {
+    const projects = await listProjects();
+    state.projects = projects;
+  } catch { state.projects = []; }
+
+  let cardsHtml = '';
+  if (state.projects.length === 0) {
+    cardsHtml = `<div class="empty-state"><div class="icon">📋</div><h3>暂无项目</h3><p>点击"新建项目"开始创建您的第一个临床试验项目</p></div>`;
+  } else {
+    cardsHtml = state.projects.map(p => {
+      const pass = p.stats?.pass || 0, fail = p.stats?.fail || 0, pending = p.stats?.pending || 0, total = p.subject_count || 0;
+      const metaParts = [
+        `项目编号: ${escapeHtml(p.project_code)}`,
+        `方案编号: ${escapeHtml(p.protocol_id || '-')}`
+      ];
+      if (p.protocol_version) metaParts.push(`版本: ${escapeHtml(p.protocol_version)}`);
+      if (p.protocol_date) metaParts.push(`方案日期: ${escapeHtml(p.protocol_date)}`);
+      if (p.study_stage) metaParts.push(`解构期别: ${escapeHtml(p.study_stage)}`);
+      return `<div class="card">
+        <div class="project-card">
+          <div class="info">
+            <h3>${escapeHtml(p.name || p.project_code)}</h3>
+            <div class="meta">${metaParts.join(' | ')}</div>
+            <div class="stats-grid">
+              <div class="stat-item"><div class="stat-value">${total}</div><div class="stat-label">受试者总数</div></div>
+              <div class="stat-item"><div class="stat-value" style="color:var(--success)">${pass}</div><div class="stat-label">可入组</div></div>
+              <div class="stat-item"><div class="stat-value" style="color:var(--danger)">${fail}</div><div class="stat-label">不可入组</div></div>
+              <div class="stat-item"><div class="stat-value" style="color:var(--gray-500)">${pending}</div><div class="stat-label">待处理</div></div>
+            </div>
+          </div>
+          <div class="actions" style="flex-direction:column">
+            <button class="btn btn-secondary" onclick="navigate('#/project/${escapeHtml(p.project_code)}')">📂 查看受试者</button>
+            <button class="btn btn-outline" onclick="navigate('#/project/${escapeHtml(p.project_code)}?tab=rules')">⚙ 管理规则</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  app.innerHTML = `
+    ${renderProtocolWorkbench(state.projects)}
+    <div class="toolbar">
+      <h2 style="font-size:18px;color:var(--gray-800)">项目列表</h2>
+      <button class="btn btn-primary btn-lg" onclick="showNewProjectModal()">＋ 新建项目</button>
+    </div>
+    ${cardsHtml}
+  `;
+}
+
+/* ============ New Project Modal ============ */
+let newProjectProtocolFile = null;
+let newProjectStudyStage = '';
+
+function showNewProjectModal() {
+  newProjectProtocolFile = null;
+  newProjectStudyStage = '';
+  showModal('新建项目', `
+    <p style="margin-bottom:16px;color:var(--gray-600);font-size:14px">上传研究方案原文，系统会自动识别项目编号、方案编号、版本和方案日期，并同步解构入排规则。</p>
+    <div class="upload-zone" id="newProjectDropZone" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="newProjectDrop(event)">
+      <div style="font-size:36px;margin-bottom:8px">📄</div>
+      <p>拖放研究方案到此处，或 <label style="color:var(--primary);cursor:pointer;text-decoration:underline" for="newProjectFileInput">点击选择文件</label></p>
+      <p class="hint">支持 PDF、DOCX、TXT；建议上传方案正文原文</p>
+      <input type="file" id="newProjectFileInput" accept=".pdf,.docx,.doc,.txt" style="display:none" onchange="newProjectFileSelected(this)">
+    </div>
+    <div id="newProjectSelectedFile" class="file-list"></div>
+    ${renderDeconstructStageSelect('newProjectStudyStage', newProjectStudyStage)}
+    <div id="newProjectStatus" style="display:none;margin-top:16px">
+      <div class="progress-container">
+        <div class="progress-bar"><div class="progress-fill" id="newProjectProgress" style="width:0%"></div></div>
+        <div class="progress-text" id="newProjectProgressText">准备中...</div>
+      </div>
+    </div>
+  `, `
+    <button class="btn btn-outline" onclick="closeModal()">取消</button>
+    <button class="btn btn-primary" id="btnCreateProject" onclick="submitNewProject()" disabled>创建并解构</button>
+  `);
+}
+
+function newProjectDrop(e) {
+  e.preventDefault();
+  e.target.closest('.upload-zone').classList.remove('dragover');
+  const files = e.dataTransfer.files;
+  if (files.length > 0) setNewProjectProtocolFile(files[0]);
+}
+
+function newProjectFileSelected(input) {
+  if (input.files.length > 0) setNewProjectProtocolFile(input.files[0]);
+}
+
+function setNewProjectProtocolFile(file) {
+  newProjectProtocolFile = file;
+  const list = document.getElementById('newProjectSelectedFile');
+  if (list) {
+    list.innerHTML = `<div class="file-item"><span>📄 ${escapeHtml(file.name)}</span><span>${formatFileSize(file.size)}</span></div>`;
+  }
+  const btn = document.getElementById('btnCreateProject');
+  if (btn) btn.disabled = false;
+}
+
+async function submitNewProject() {
+  if (!newProjectProtocolFile) { toast('请先上传研究方案原文', 'warning'); return; }
+  newProjectStudyStage = document.getElementById('newProjectStudyStage')?.value || '';
+  const btn = document.getElementById('btnCreateProject');
+  const statusDiv = document.getElementById('newProjectStatus');
+  const progressFill = document.getElementById('newProjectProgress');
+  const progressText = document.getElementById('newProjectProgressText');
+  if (btn) { btn.disabled = true; btn.textContent = '处理中...'; }
+  if (statusDiv) statusDiv.style.display = 'block';
+  if (progressFill) progressFill.style.width = '35%';
+  if (progressText) progressText.textContent = '正在上传方案并识别项目信息...';
+  try {
+    if (progressFill) progressFill.style.width = '60%';
+    if (progressText) progressText.textContent = '正在解构入排规则和审核阶段，请稍候...';
+    const result = await createProjectFromProtocol(newProjectProtocolFile, newProjectStudyStage);
+    const projectCode = result.project_code || result.project?.project_code;
+    if (progressFill) progressFill.style.width = '100%';
+    if (progressText) progressText.textContent = result.deconstruct_error ? '项目已创建，但方案解构需要稍后重试。' : '项目创建和方案解构完成。';
+    closeModal();
+    if (result.deconstruct_error) {
+      toast(`项目已创建，方案解构失败: ${result.deconstruct_error}`, 'warning', 7000);
+    } else {
+      toast('项目创建成功，入排规则已自动生成', 'success');
+    }
+    if (projectCode) navigate(`#/project/${projectCode}?tab=rules`);
+    else renderAuditProjectList();
+  } catch { /* toast shown by apiFetch */ }
+  finally {
+    if (btn) { btn.disabled = false; btn.textContent = '创建并解构'; }
+  }
+}
+
+/* ============ Project Detail ============ */
+async function renderProject(projectCode) {
+  state.view = 'project';
+  state.currentProject = projectCode;
+  const urlParams = new URLSearchParams(location.hash.split('?')[1] || '');
+  const activeTab = urlParams.get('tab') || 'subjects';
+
+  app.innerHTML = `<div class="loading-text"><span class="spinner"></span> 加载受试者数据...</div>`;
+  let projectInfo = { project_code: projectCode, can_delete: false, owner_username: '' };
+  try {
+    projectInfo = await getProject(projectCode);
+  } catch { /* handled below by subjects/rules fallback */ }
+  state.currentProjectInfo = projectInfo;
+  try {
+    const subjects = await listSubjects(projectCode);
+    state.subjects = subjects;
+  } catch { state.subjects = []; }
+  let workflow = { review_phases: [{ phase_id: 'full', name: '全量审核' }], study_stages: [], requires_study_stage_selection: false };
+  try {
+    workflow = await getProjectPhases(projectCode);
+  } catch { /* fallback above */ }
+  state.currentWorkflow = workflow;
+  const reviewPhases = displayReviewPhases(workflow);
+
+  let subjectsHtml = '';
+  const selectedMap = subjectSelectionSet(projectCode);
+  const subjectIds = new Set(state.subjects.map(s => s.subject_id));
+  Object.keys(selectedMap).forEach(id => { if (!subjectIds.has(id)) delete selectedMap[id]; });
+  const filteredSubjects = applySubjectTableState(projectCode, state.subjects, reviewPhases);
+  state.filteredSubjects = filteredSubjects;
+  const selectedIds = selectedSubjectIds(projectCode);
+  const visibleIds = filteredSubjects.map(s => s.subject_id);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedMap[id]);
+  const centerFilterHtml = `<div class="subjects-toolbar">
+    <div class="subjects-filter">
+      <span class="selected-count" id="selectedCountText">当前显示 ${filteredSubjects.length} 名，已勾选 ${selectedIds.length} 名</span>
+      <button id="clearTableFiltersBtn" class="btn btn-outline btn-sm" onclick="clearSubjectTableFilters('${escapeHtml(projectCode)}')" style="${hasSubjectTableFilters(projectCode) ? '' : 'display:none'}">清除筛选</button>
+      <button id="clearSelectionBtn" class="btn btn-outline btn-sm" onclick="clearSubjectSelection('${escapeHtml(projectCode)}')" style="${selectedIds.length ? '' : 'display:none'}">清除勾选</button>
+    </div>
+    <div class="subjects-bulk-actions">
+      <button class="btn btn-primary btn-sm" onclick="batchProcess('${escapeHtml(projectCode)}')">⚡ 批量审核</button>
+      <button id="bulkRerunBtn" class="btn btn-outline btn-sm" onclick="bulkRerunSelected('${escapeHtml(projectCode)}')" ${selectedIds.length ? '' : 'disabled'}>🔄 批量重新审核</button>
+      <button id="bulkResetBtn" class="btn btn-outline btn-sm" onclick="bulkResetCacheSelected('${escapeHtml(projectCode)}')" ${selectedIds.length ? '' : 'disabled'}>🗑 批量重置OCR</button>
+      <button id="bulkMdBtn" class="btn btn-outline btn-sm" onclick="bulkDownloadSelectedMd('${escapeHtml(projectCode)}')" ${selectedIds.length ? '' : 'disabled'}>📥 批量个人报告</button>
+    </div>
+  </div>`;
+  if (state.subjects.length === 0) {
+    subjectsHtml = `<div class="empty-state"><div class="icon">👤</div><h3>暂无受试者</h3><p>请上传受试者资料开始审核</p></div>`;
+  } else if (filteredSubjects.length === 0) {
+    subjectsHtml = `${centerFilterHtml}<div class="empty-state"><div class="icon">🔎</div><h3>当前筛选条件下无受试者</h3><p>请调整表头筛选条件或清除筛选</p></div>`;
+  } else {
+    const phaseHeaders = reviewPhases.map(p => `<th>${subjectSortHeader(projectCode, `phase:${p.phase_id}`, phaseLabel(p))}</th>`).join('');
+    const phaseFilters = reviewPhases.map(p => `<th>${subjectFilterInput(projectCode, `phase:${p.phase_id}`, '筛阶段')}</th>`).join('');
+    const phaseCells = (subject) => reviewPhases.map(p => `<td>${phaseReviewCellHtml(projectCode, subject, p)}</td>`).join('');
+    subjectsHtml = `${centerFilterHtml}<div class="mobile-scroll-hint">表格列较多，可左右滑动查看更多阶段和操作。</div><div class="table-wrap"><table class="data-table subjects-table">
+      <thead>
+        <tr>
+          <th class="col-select"><input id="selectAllSubjects" type="checkbox" ${allVisibleSelected ? 'checked' : ''} onchange="toggleAllSubjectSelection('${escapeHtml(projectCode)}', this.checked)" aria-label="勾选当前显示受试者"></th>
+          <th>${subjectSortHeader(projectCode, 'subject_id', '受试者ID')}</th>
+          <th>${subjectSortHeader(projectCode, 'center', '中心')}</th>
+          <th>${subjectSortHeader(projectCode, 'owner', '上传/创建者')}</th>
+          <th>${subjectSortHeader(projectCode, 'icf_date', 'ICF日期')}</th>
+          <th>${subjectSortHeader(projectCode, 'status', '状态')}</th>
+          ${phaseHeaders}
+          <th>操作</th>
+        </tr>
+        <tr class="table-filter-row">
+          <th></th>
+          <th>${subjectFilterInput(projectCode, 'subject_id', '筛ID')}</th>
+          <th>${subjectFilterInput(projectCode, 'center', '筛中心')}</th>
+          <th>${subjectFilterInput(projectCode, 'owner', '筛创建者')}</th>
+          <th>${subjectFilterInput(projectCode, 'icf_date', '筛日期')}</th>
+          <th>${subjectFilterInput(projectCode, 'status', '筛状态')}</th>
+          ${phaseFilters}
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="subjectTableBody">${filteredSubjects.map(s => `<tr ${subjectRowDataset(s, reviewPhases)}>
+        <td class="select-cell"><input class="subject-check" data-subject-id="${escapeHtml(s.subject_id)}" type="checkbox" ${selectedMap[s.subject_id] ? 'checked' : ''} onclick="event.stopPropagation()" onchange="toggleSubjectSelection('${escapeHtml(projectCode)}','${escapeHtml(s.subject_id)}', this.checked)" aria-label="勾选${escapeHtml(s.subject_id)}"></td>
+        <td><span class="subject-id-cell">${escapeHtml(s.subject_id)}</span></td>
+        <td>${centerCellHtml(s)}</td>
+        <td class="cell-nowrap">${escapeHtml(s.owner_username || '-')}</td>
+        <td><div class="icf-cell"><span>${escapeHtml(s.icf_date || '-')}</span>${s.can_modify ? `<button class="icon-btn" title="编辑ICF日期/中心" onclick="showEditSubjectMetaModal('${escapeHtml(projectCode)}','${escapeHtml(s.subject_id)}')">✎</button>` : ''}</div></td>
+        <td class="cell-nowrap">${statusBadge(s.status)}</td>
+        ${phaseCells(s)}
+        <td>
+          <div class="row-actions">
+            ${s.can_modify ? `<button class="btn btn-outline btn-sm" onclick="showUploadModal('${escapeHtml(projectCode)}','${escapeHtml(s.subject_id)}')">📤 增量上传</button>` : '<span class="badge badge-pending">只读</span>'}
+            ${s.can_modify && s.status === 'processing' ? `<button class="btn btn-warning btn-sm" onclick="resetSubject('${escapeHtml(projectCode)}','${escapeHtml(s.subject_id)}')">🔄 重置状态</button>` : ''}
+            ${s.status === 'reviewed' ? `<button class="btn btn-outline btn-sm" onclick="downloadMarkdownReport('${escapeHtml(projectCode)}',{scope:'subject',subjectId:'${escapeHtml(s.subject_id)}'})">📥 个人报告</button>` : ''}
+            ${s.can_modify && (s.status === 'reviewed' || s.status === 'error') ? `<button class="btn btn-outline btn-sm" onclick="resetCache('${escapeHtml(projectCode)}','${escapeHtml(s.subject_id)}')">🗑 重置OCR</button>` : ''}
+            ${s.can_modify ? `<button class="btn btn-sm" style="background:var(--gray-200);color:var(--gray-700)" onclick="confirmDeleteSubject('${escapeHtml(projectCode)}','${escapeHtml(s.subject_id)}')">🗑 删除</button>` : ''}
+          </div>
+        </td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+  }
+
+  let rulesContent = '';
+  try {
+    const rulesData = await getRules(projectCode);
+    rulesContent = rulesData.rules || '';
+  } catch { rulesContent = '# 请在此编辑入排标准规则\n\n格式请参考标准入排标准文档。'; }
+
+  app.innerHTML = `
+    <div class="breadcrumb">
+      <a href="#/audit">项目列表</a><span class="sep">›</span>
+      <span>${escapeHtml(projectCode)}</span>
+    </div>
+    <div class="card" style="margin-bottom:20px">
+      <div class="project-header-row">
+        <div class="project-header-main">
+          <h2>项目: ${escapeHtml(projectCode)}</h2>
+          <div style="color:var(--gray-500);font-size:13px;margin-top:4px">共 ${state.subjects.length} 名受试者${filteredSubjects.length !== state.subjects.length ? ` | 当前显示 ${filteredSubjects.length} 名` : ''}${projectInfo.owner_username ? ` | 创建者: ${escapeHtml(projectInfo.owner_username)}` : ''}</div>
+        </div>
+        <div class="project-header-actions">
+          <button class="btn btn-outline" onclick="showAddSubjectModal('${escapeHtml(projectCode)}')">＋ 添加受试者</button>
+          <span class="tooltip-wrap">
+            <button class="btn btn-primary" onclick="batchProcess('${escapeHtml(projectCode)}')">⚡ 批量审核</button>
+            <span class="tooltip-card">先选择本次审核阶段；项目期别已由本项目方案解构固定，受试者不会与其他期别项目共享。上传资料后建议先对 1 名受试者执行审核，确认 OCR、资料分类和证据引用可接受，再批量处理待处理/错误状态受试者；如已勾选受试者，则仅处理勾选范围内可处理的受试者。</span>
+          </span>
+          <button class="btn btn-outline" onclick="switchTab('export','${escapeHtml(projectCode)}')">📥 导出报告</button>
+          ${projectInfo.can_delete ? `<button class="btn btn-danger" onclick="confirmDeleteProject('${escapeHtml(projectCode)}')">删除项目</button>` : ''}
+        </div>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab ${activeTab === 'subjects' ? 'active' : ''}" onclick="switchTab('subjects','${escapeHtml(projectCode)}')">📋 受试者列表</button>
+      <button class="tab ${activeTab === 'info' ? 'active' : ''}" onclick="switchTab('info','${escapeHtml(projectCode)}')">🧾 项目信息</button>
+      <button class="tab ${activeTab === 'rules' ? 'active' : ''}" onclick="switchTab('rules','${escapeHtml(projectCode)}')">⚙ 入排规则</button>
+      <button class="tab ${activeTab === 'export' ? 'active' : ''}" onclick="switchTab('export','${escapeHtml(projectCode)}')">📥 报告导出</button>
+    </div>
+	    <div class="tab-content ${activeTab === 'subjects' ? 'active' : ''}" id="tab-subjects">
+	      ${renderReviewScopeControls(workflow, projectInfo)}
+	      ${subjectsHtml}
+	    </div>
+    <div class="tab-content ${activeTab === 'info' ? 'active' : ''}" id="tab-info">
+      ${renderProjectInfoManagement(projectInfo)}
+    </div>
+    <div class="tab-content ${activeTab === 'rules' ? 'active' : ''}" id="tab-rules">
+      <div class="card">
+        <div class="rules-toolbar">
+          <p>入排标准规则文本。项目创建者或超级管理员可手动编辑，或从研究方案自动解构；其他用户只读。</p>
+          <div class="actions">
+            ${projectInfo.can_modify ? `<button class="btn btn-secondary" onclick="goProjectRevision('${escapeHtml(projectCode)}')">📄 进入重新解构工作台</button>
+            <button class="btn btn-primary" onclick="saveProjectRules('${escapeHtml(projectCode)}')">💾 保存规则</button>` : '<span class="badge badge-pending">只读权限</span>'}
+          </div>
+        </div>
+        <textarea class="rule-editor" id="rulesEditor" ${projectInfo.can_modify ? '' : 'readonly'}>${escapeHtml(rulesContent)}</textarea>
+      </div>
+    </div>
+    <div class="tab-content ${activeTab === 'export' ? 'active' : ''}" id="tab-export">
+      ${renderMarkdownExportPanel(projectInfo, state.subjects, workflow)}
+    </div>
+  `;
+}
+
+function renderProjectInfoManagement(project) {
+  const canModifyProject = !!project.can_modify;
+  const centers = project.centers || [];
+  const centerRows = centers.length ? centers.map((c, i) => `
+    <tr class="center-row" data-owner="${escapeHtml(c.owner_username || '')}" data-can-modify="${c.can_modify ? '1' : '0'}">
+      <td><input value="${escapeHtml(c.center_code || '')}" data-field="center_code" ${c.can_modify ? '' : 'readonly'}></td>
+      <td><input value="${escapeHtml(c.center_name || '')}" data-field="center_name" ${c.can_modify ? '' : 'readonly'}></td>
+      <td>${escapeHtml(c.owner_username || '-')}</td>
+      <td><div class="center-row-actions">
+        ${c.can_modify ? `<button class="btn btn-sm btn-outline" onclick="removeCenterRow(this)">删除</button>` : '<span class="badge badge-pending">只读</span>'}
+      </div></td>
+    </tr>
+  `).join('') : `<tr><td colspan="4" style="color:var(--gray-500)">暂无中心。可新增，或上传中心名单Excel后解构。</td></tr>`;
+  return `<div class="management-grid">
+    <div class="card">
+      <h3 style="font-size:16px;margin-bottom:12px">项目信息</h3>
+      ${canModifyProject ? '<div class="status-line">你是项目创建者或超级管理员，可以修改项目名称、编号、方案版本等信息。</div>' : '<div class="callout callout-info">你可以查看该项目和审核结果，但不是项目创建者，不能修改项目信息或入排规则。</div>'}
+      <div class="form-grid" style="margin-top:12px">
+        <div class="form-group"><label>项目编号</label><input id="pm_project_code" value="${escapeHtml(project.project_code || '')}" ${canModifyProject ? '' : 'readonly'}></div>
+        <div class="form-group"><label>方案编号</label><input id="pm_protocol_id" value="${escapeHtml(project.protocol_id || '')}" ${canModifyProject ? '' : 'readonly'}></div>
+        <div class="form-group"><label>方案版本</label><input id="pm_protocol_version" value="${escapeHtml(project.protocol_version || '')}" ${canModifyProject ? '' : 'readonly'}></div>
+        <div class="form-group"><label>方案日期</label><input id="pm_protocol_date" value="${escapeHtml(project.protocol_date || '')}" ${canModifyProject ? '' : 'readonly'}></div>
+        <div class="form-group"><label>解构期别</label><input id="pm_study_stage" value="${escapeHtml(project.study_stage || '')}" ${canModifyProject ? '' : 'readonly'}></div>
+        <div class="form-group" style="grid-column:1/-1"><label>当前方案文件</label><input id="pm_protocol_source_filename" value="${escapeHtml(project.protocol_source_filename || '')}" ${canModifyProject ? '' : 'readonly'}></div>
+      </div>
+      <div class="form-group">
+        <label>项目名称</label>
+        <textarea id="pm_name" style="width:100%;min-height:86px;resize:vertical" ${canModifyProject ? '' : 'readonly'}>${escapeHtml(displayProjectName(project))}</textarea>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${canModifyProject ? `<button class="btn btn-primary" onclick="submitProjectInfo('${escapeHtml(project.project_code)}')">保存项目信息</button>` : ''}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="font-size:16px;margin-bottom:12px">全系统中心名单</h3>
+      <div class="guide-card" style="margin-bottom:12px">中心库全系统共享。你可以新增中心并用于任何项目；其他用户可以选择你创建的中心，但不能修改或删除它。</div>
+      <div class="table-wrap" style="box-shadow:none;border:1px solid var(--gray-200)">
+        <table>
+          <thead><tr><th style="width:120px">中心代号</th><th>中心名称</th><th style="width:120px">创建者</th><th style="width:100px">操作</th></tr></thead>
+          <tbody id="centerTableBody">${centerRows}</tbody>
+        </table>
+      </div>
+      <div class="workbench-actions">
+        <button class="btn btn-outline" onclick="addCenterRow()">新增中心</button>
+        <button class="btn btn-primary" onclick="submitCenters('${escapeHtml(project.project_code)}')">保存中心名单</button>
+      </div>
+      <div style="margin-top:16px;border-top:1px solid var(--gray-200);padding-top:14px">
+        <h3 style="font-size:14px">批量导入中心名单</h3>
+        <p style="font-size:13px;color:var(--gray-600);margin:6px 0">Excel建议格式：第一行为表头，至少包含“中心代号”和“中心名称”两列，例如 06｜南方医科大学南方医院。上传后先生成草稿，请确认/修改后再保存。</p>
+        <div class="form-group"><input id="centerImportFile" type="file" accept=".xlsx,.xls,.csv,.txt"></div>
+        <textarea id="centerImportDraft" class="center-draft-editor" placeholder="也可直接粘贴中心名单，例如：&#10;06｜南方医科大学南方医院&#10;08｜某某医院"></textarea>
+        <textarea id="centerImportFeedback" style="width:100%;min-height:72px;resize:vertical;margin-top:8px" placeholder="对本次中心名单解构的补充说明/修改意见，例如：请把第8中心代号规范为08。"></textarea>
+        <div class="workbench-actions">
+          <button class="btn btn-secondary" onclick="runCenterDeconstruct('${escapeHtml(project.project_code)}')">解构/重新解构中心名单</button>
+          <button class="btn btn-outline" onclick="applyCenterDraftToTable()">把草稿填入上方表格</button>
+        </div>
+        <div class="status-line" id="centerImportStatus"></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderMarkdownExportPanel(project, subjects, workflow) {
+  const phases = workflow?.review_phases || [{ phase_id: 'full', name: '全量审核' }];
+  const phaseOptions = phases.map(p => `<option value="${escapeHtml(p.phase_id)}">${escapeHtml(p.name || p.phase_id)}</option>`).join('');
+  const centers = project.centers || [];
+  const centerOptions = centers.map(c => `<option value="${escapeHtml(c.center_code || '')}">${escapeHtml(centerDisplay(c.center_code || '', c.center_name || ''))}</option>`).join('');
+  const subjectOptions = (subjects || []).map(s => `<option value="${escapeHtml(s.subject_id || '')}">${escapeHtml([s.subject_id, centerDisplay(s.center_code || '', s.center_name || '')].filter(Boolean).join(' · '))}</option>`).join('');
+  return `<div class="card">
+    <h3 style="font-size:16px;margin-bottom:12px">入排审核报告导出</h3>
+    <div class="form-group" style="max-width:360px">
+      <label>审核阶段</label>
+      <select id="exportPhaseSelect">${phaseOptions}</select>
+    </div>
+    <div class="export-grid">
+      <div class="export-card">
+        <h3>按项目导出</h3>
+        <p>导出当前项目所有已有受试者审核结果；只展示不符合、证据不足和需研究者判定条目。</p>
+        <button class="btn btn-primary" onclick="downloadMarkdownReport('${escapeHtml(project.project_code)}',{scope:'project'})">导出项目报告</button>
+      </div>
+      <div class="export-card">
+        <h3>按中心导出</h3>
+        <p>选择一个中心，仅导出该中心受试者；符合条目不展示，便于中心整改跟踪。</p>
+        <select id="exportCenterSelect" style="margin-bottom:10px">${centerOptions || '<option value="">暂无中心</option>'}</select>
+        <button class="btn btn-secondary" onclick="downloadMarkdownReport('${escapeHtml(project.project_code)}',{scope:'center',centerCode:document.getElementById('exportCenterSelect').value})">导出中心报告</button>
+      </div>
+      <div class="export-card">
+        <h3>按个人导出</h3>
+        <p>导出单名受试者完整审核报告；每个规则条目都会展示，包括通过和不适用条目。</p>
+        <select id="exportSubjectSelect" style="margin-bottom:10px">${subjectOptions || '<option value="">暂无受试者</option>'}</select>
+        <button class="btn btn-success" onclick="downloadMarkdownReport('${escapeHtml(project.project_code)}',{scope:'subject',subjectId:document.getElementById('exportSubjectSelect').value})">导出个人报告</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function submitProjectInfo(oldProjectCode) {
+  const payload = {
+    project_code: document.getElementById('pm_project_code')?.value.trim() || '',
+    protocol_id: document.getElementById('pm_protocol_id')?.value.trim() || '',
+    protocol_version: document.getElementById('pm_protocol_version')?.value.trim() || '',
+    protocol_date: document.getElementById('pm_protocol_date')?.value.trim() || '',
+    protocol_source_filename: document.getElementById('pm_protocol_source_filename')?.value.trim() || '',
+    study_stage: document.getElementById('pm_study_stage')?.value.trim() || '',
+    name: document.getElementById('pm_name')?.value.trim() || '',
+  };
+  if (!payload.project_code) { toast('项目编号不能为空', 'warning'); return; }
+  try {
+    const data = await updateProjectInfo(oldProjectCode, payload);
+    toast('项目信息已保存', 'success');
+    const newCode = data.project_code || oldProjectCode;
+    navigate(`#/project/${newCode}?tab=info`);
+    renderProject(newCode);
+  } catch { /* handled */ }
+}
+
+function addCenterRow(center = {}) {
+  const body = document.getElementById('centerTableBody');
+  if (!body) return;
+  if (body.children.length === 1 && body.textContent.includes('暂无中心')) body.innerHTML = '';
+  const tr = document.createElement('tr');
+  tr.className = 'center-row';
+  tr.dataset.canModify = '1';
+  tr.innerHTML = `
+    <td><input value="${escapeHtml(center.center_code || '')}" data-field="center_code"></td>
+    <td><input value="${escapeHtml(center.center_name || '')}" data-field="center_name"></td>
+    <td>${escapeHtml(currentUserName() || '-')}</td>
+    <td><div class="center-row-actions"><button class="btn btn-sm btn-outline" onclick="removeCenterRow(this)">删除</button></div></td>
+  `;
+  body.appendChild(tr);
+}
+
+function removeCenterRow(btn) {
+  const row = btn.closest('tr');
+  if (row) row.remove();
+}
+
+function collectCenterRows() {
+  const rows = [];
+  document.querySelectorAll('#centerTableBody tr.center-row').forEach(row => {
+    const code = row.querySelector('[data-field="center_code"]')?.value.trim() || '';
+    const name = row.querySelector('[data-field="center_name"]')?.value.trim() || '';
+    const owner = row.dataset.owner || '';
+    if (code || name) rows.push({ center_code: code, center_name: name, owner_username: owner });
+  });
+  return rows;
+}
+
+async function submitCenters(pc) {
+  const centers = collectCenterRows();
+  try {
+    const data = await saveCenters(pc, centers);
+    toast(`中心名单已保存，共 ${data.count} 个中心`, 'success');
+    renderProject(pc);
+    setTimeout(() => switchTab('info', pc), 0);
+  } catch { /* handled */ }
+}
+
+async function runCenterDeconstruct(pc) {
+  const file = document.getElementById('centerImportFile')?.files?.[0] || null;
+  const draftText = document.getElementById('centerImportDraft')?.value || '';
+  const feedback = document.getElementById('centerImportFeedback')?.value || '';
+  const status = document.getElementById('centerImportStatus');
+  if (!file && !draftText.trim() && !feedback.trim()) { toast('请上传Excel/CSV，或粘贴中心名单文字', 'warning'); return; }
+  if (status) status.textContent = '正在解构中心名单...';
+  try {
+    const data = await deconstructCenters(pc, file, draftText, feedback);
+    const draft = data.draft_markdown || centersToDraftText(data.centers || []);
+    const editor = document.getElementById('centerImportDraft');
+    if (editor) editor.value = draft;
+    if (status) status.textContent = `已生成草稿：${data.count || (data.centers || []).length} 个中心。请确认/修改后保存。`;
+    toast('中心名单草稿已生成', 'success');
+  } catch {
+    if (status) status.textContent = '中心名单解构失败';
+  }
+}
+
+function centersToDraftText(centers) {
+  return (centers || []).map(c => `${c.center_code || ''}｜${c.center_name || ''}`).join('\n');
+}
+
+function parseCenterDraftText(text) {
+  const rows = [];
+  for (const raw of String(text || '').split(/\n+/)) {
+    const line = raw.trim().replace(/^\||\|$/g, '');
+    if (!line || line.includes('---') || /中心代号|中心名称/.test(line)) continue;
+    const parts = line.split(/[|｜,\t]/).map(x => x.trim()).filter(Boolean);
+    if (parts.length >= 2) rows.push({ center_code: parts[0], center_name: parts[1] });
+  }
+  return rows;
+}
+
+function applyCenterDraftToTable() {
+  const text = document.getElementById('centerImportDraft')?.value || '';
+  const centers = parseCenterDraftText(text);
+  if (!centers.length) { toast('草稿中没有识别到中心代号/名称', 'warning'); return; }
+  for (const center of centers) addCenterRow(center);
+  toast(`已加入 ${centers.length} 个中心到上方表格，请确认后保存`, 'success');
+}
+
+async function downloadMarkdownReport(pc, opts = {}) {
+  const phase = document.getElementById('exportPhaseSelect')?.value || document.getElementById('reviewPhaseSelect')?.value || 'full';
+  const payload = { ...opts, phase };
+  if (payload.scope === 'center' && !payload.centerCode) { toast('请选择中心', 'warning'); return; }
+  if (payload.scope === 'subject' && !payload.subjectId) { toast('请选择受试者', 'warning'); return; }
+  try {
+    const text = await fetchMarkdownReport(pc, payload);
+    const suffix = [payload.scope || 'project', payload.centerCode || '', payload.subjectId || ''].filter(Boolean).join('_');
+    downloadText(`${pc}_${suffix || 'report'}_入排审核报告.md`, text, 'text/markdown;charset=utf-8');
+    toast('审核报告已导出', 'success');
+  } catch { /* handled */ }
+}
+
+function downloadText(filename, text, type = 'text/plain;charset=utf-8') {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function showDeconstructModal(pc) {
+  showModal('从研究方案解构入排规则', `
+    <p style="margin-bottom:16px;color:var(--gray-600)">上传研究方案文档（PDF/DOCX），系统将自动提取并解构入选排除标准。</p>
+    <div class="upload-zone" id="deconstructDropZone" ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="deconstructDrop(event,'${escapeHtml(pc)}')">
+      <div style="font-size:36px;margin-bottom:8px">📄</div>
+      <p>拖放方案文件到此处，或 <label style="color:var(--primary);cursor:pointer;text-decoration:underline" for="deconstructFileInput">点击选择文件</label></p>
+      <p style="font-size:12px;color:var(--gray-500);margin-top:4px">支持 PDF、DOCX、TXT 格式</p>
+      <input type="file" id="deconstructFileInput" accept=".pdf,.docx,.doc,.txt" style="display:none" onchange="deconstructFileSelected(this,'${escapeHtml(pc)}')">
+    </div>
+    <div style="margin-top:16px">
+      <label style="font-weight:500;font-size:14px;color:var(--gray-700)">反馈/修正指令（可选）</label>
+      <textarea id="deconstructFeedback" style="width:100%;min-height:80px;margin-top:6px;padding:10px;border:1px solid var(--gray-300);border-radius:var(--radius);font-size:13px;resize:vertical" placeholder="如果解构结果有问题，在此输入修正要求，如：&#10;- 排除标准应该是30条，不是32条&#10;- 第20条实验室检查应该合并为一条&#10;- 结核筛查的子项不要拆开"></textarea>
+    </div>
+    ${renderDeconstructStageSelect('projectDeconstructStage', state.currentProjectInfo?.study_stage || '')}
+    <div id="deconstructStatus" style="margin-top:16px;display:none">
+      <div class="progress-container">
+        <div class="progress-bar"><div class="progress-fill" id="deconstructProgress" style="width:0%"></div></div>
+        <div class="progress-text" id="deconstructProgressText">准备中...</div>
+      </div>
+    </div>
+  `);
+}
+
+function goProjectRevision(pc) {
+  state.reDeconstruct.projectCode = pc;
+  navigate('#/re-deconstruct');
+}
+
+function deconstructDrop(e, pc) {
+  e.preventDefault();
+  e.target.closest('.upload-zone').classList.remove('dragover');
+  const files = e.dataTransfer.files;
+  if (files.length > 0) runDeconstruct(files[0], pc);
+}
+
+function deconstructFileSelected(input, pc) {
+  if (input.files.length > 0) runDeconstruct(input.files[0], pc);
+}
+
+async function runDeconstruct(file, pc) {
+  const statusDiv = document.getElementById('deconstructStatus');
+  const progressFill = document.getElementById('deconstructProgress');
+  const progressText = document.getElementById('deconstructProgressText');
+  const feedback = document.getElementById('deconstructFeedback')?.value || '';
+  const studyStage = document.getElementById('projectDeconstructStage')?.value || '';
+  statusDiv.style.display = 'block';
+  progressFill.style.width = '30%';
+  progressText.textContent = '正在上传并解析方案文档...';
+
+  const fd = new FormData();
+  fd.append('file', file);
+  if (feedback) fd.append('feedback', feedback);
+  if (studyStage) fd.append('study_stage', studyStage);
+
+  try {
+    progressFill.style.width = '50%';
+    progressText.textContent = '正在智能解构入选排除标准（可能需要1-2分钟）...';
+
+    const resp = await fetch(`/api/projects/${pc}/deconstruct`, withAuthOptions({ method: 'POST', body: fd }));
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      throw new Error(typeof data.detail === 'string' ? data.detail : (data.detail?.message || '解构失败'));
+    }
+
+    progressFill.style.width = '100%';
+    progressText.textContent = `解构完成！共提取 ${data.char_count} 字符的规则。`;
+
+    // Update the rules editor with the new content
+    const editor = document.getElementById('rulesEditor');
+    if (editor) editor.value = data.rules;
+
+    toast('方案解构完成，规则已加载到编辑器', 'success');
+
+    // Close modal after a short delay
+    setTimeout(() => { closeModal(); }, 1500);
+  } catch (err) {
+    progressFill.style.width = '100%';
+    progressFill.style.background = 'var(--danger)';
+    progressText.textContent = `解构失败: ${err.message}`;
+    toast(`方案解构失败: ${err.message}`, 'error');
+  }
+}
+
+function switchTab(tab, pc) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  const tabs = ['subjects', 'info', 'rules', 'export'];
+  const idx = Math.max(0, tabs.indexOf(tab));
+  const tabEls = document.querySelectorAll('.tab');
+  if (tabEls[idx]) tabEls[idx].classList.add('active');
+  const content = document.getElementById('tab-' + tabs[idx]);
+  if (content) content.classList.add('active');
+  history.replaceState(null, '', `#/project/${pc}${tabs[idx] === 'subjects' ? '' : '?tab=' + tabs[idx]}`);
+}
+
+async function saveProjectRules(pc) {
+  const rules = document.getElementById('rulesEditor').value;
+  try { await saveRules(pc, rules); toast('规则已保存', 'success'); } catch { /* handled */ }
+}
+
+async function showAddSubjectModal(pc) {
+  let centers = [];
+  try {
+    const data = await getCenters(pc);
+    centers = data.centers || [];
+  } catch { centers = []; }
+  showModal('添加受试者', `
+    <div class="form-group">
+      <label>受试者编号 <span style="color:var(--danger)">*</span></label>
+      <input type="text" id="inp_subject_id" placeholder="例: SUBJ-001" style="font-size:16px">
+    </div>
+    <div class="form-group">
+      <label>研究中心（可选）</label>
+      <select id="add_center_select" onchange="applyCenterSelect('add')">${centerOptionsHtml(centers)}</select>
+    </div>
+    <div class="form-grid">
+      <div class="form-group"><label>中心代号</label><input id="add_center_code" placeholder="例: 06"></div>
+      <div class="form-group"><label>中心名称</label><input id="add_center_name" placeholder="例: 南方医科大学南方医院"></div>
+    </div>
+    <p style="color:var(--gray-500);font-size:12px;margin-top:8px">中心库全系统共享；若输入新中心，后续其他用户也可下拉选择。ICF日期、筛选日期等由系统从证据中自动识别。</p>
+  `, `
+    <button class="btn btn-outline" onclick="closeModal()">取消</button>
+    <button class="btn btn-primary" onclick="submitAddSubject('${escapeHtml(pc)}')">添加</button>
+  `);
+}
+
+async function submitAddSubject(pc) {
+  const sid = document.getElementById('inp_subject_id').value.trim();
+  const centerCode = document.getElementById('add_center_code')?.value.trim() || '';
+  const centerName = document.getElementById('add_center_name')?.value.trim() || '';
+  if (!sid) { toast('请输入受试者编号', 'warning'); return; }
+  try {
+    await apiFetch(`${API}/projects/${pc}/subjects`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subject_id: sid, center_code: centerCode, center_name: centerName }) });
+    closeModal();
+    toast('受试者已添加', 'success');
+    renderProject(pc);
+  } catch { /* handled */ }
+}
+
+async function showEditSubjectMetaModal(pc, sid) {
+  let centers = [];
+  try {
+    const data = await getCenters(pc);
+    centers = data.centers || [];
+  } catch { centers = []; }
+  const subj = (state.subjects || []).find(s => s.subject_id === sid) || {};
+  showModal(`编辑受试者信息 — ${escapeHtml(sid)}`, `
+    <div class="form-group">
+      <label>ICF日期</label>
+      <input id="edit_icf_date" value="${escapeHtml(subj.icf_date || '')}" placeholder="例: 2026-01-05">
+      <p style="color:var(--gray-500);font-size:12px;margin-top:6px">手动保存后，后续OCR自动识别不会覆盖该日期；清空并保存后可回到自动提取逻辑。</p>
+    </div>
+    <div class="form-group">
+      <label>研究中心</label>
+      <select id="edit_center_select" onchange="applyCenterSelect('edit')">${centerOptionsHtml(centers, subj.center_code || '', subj.center_name || '')}</select>
+    </div>
+    <div class="form-grid">
+      <div class="form-group"><label>中心代号</label><input id="edit_center_code" value="${escapeHtml(subj.center_code || '')}" placeholder="例: 06"></div>
+      <div class="form-group"><label>中心名称</label><input id="edit_center_name" value="${escapeHtml(subj.center_name || '')}" placeholder="例: 南方医科大学南方医院"></div>
+    </div>
+  `, `
+    <button class="btn btn-outline" onclick="closeModal()">取消</button>
+    <button class="btn btn-primary" onclick="submitSubjectMeta('${escapeHtml(pc)}','${escapeHtml(sid)}')">保存</button>
+  `);
+}
+
+async function submitSubjectMeta(pc, sid) {
+  const payload = {
+    icf_date: document.getElementById('edit_icf_date')?.value.trim() || '',
+    center_code: document.getElementById('edit_center_code')?.value.trim() || '',
+    center_name: document.getElementById('edit_center_name')?.value.trim() || '',
+  };
+  try {
+    await updateSubject(pc, sid, payload);
+    closeModal();
+    toast('受试者信息已保存', 'success');
+    renderProject(pc);
+  } catch { /* handled */ }
+}
+
+function confirmDeleteSubject(pc, sid) {
+  showModal('确认删除', `<p>确定要删除受试者 <strong>${escapeHtml(sid)}</strong> 吗？此操作不可撤销。</p>`, `
+    <button class="btn btn-outline" onclick="closeModal()">取消</button>
+    <button class="btn btn-danger" onclick="doDeleteSubject('${escapeHtml(pc)}','${escapeHtml(sid)}')">确认删除</button>
+  `);
+}
+async function doDeleteSubject(pc, sid) {
+  try { await deleteSubject(pc, sid); closeModal(); toast('已删除', 'success'); renderProject(pc); } catch { /* handled */ }
+}
+
+function confirmDeleteProject(pc) {
+  showModal('确认删除项目', `<p>确定要删除项目 <strong>${escapeHtml(pc)}</strong> 吗？项目下的受试者资料、OCR缓存和审核结果都会删除。此操作不可撤销。</p>`, `
+    <button class="btn btn-outline" onclick="closeModal()">取消</button>
+    <button class="btn btn-danger" onclick="doDeleteProject('${escapeHtml(pc)}')">确认删除项目</button>
+  `);
+}
+
+async function doDeleteProject(pc) {
+  try {
+    await deleteProject(pc);
+    closeModal();
+    toast(`项目 ${pc} 已删除`, 'success');
+    navigate('#/audit');
+    renderAuditProjectList();
+  } catch { /* handled */ }
+}
+async function resetSubject(pc, sid) {
+  try {
+    await apiFetch(`${API}/projects/${pc}/subjects/${sid}/reset`, { method: 'POST' });
+    toast('状态已重置为待处理', 'success');
+    renderProject(pc);
+  } catch (err) {
+    toast('重置失败: ' + err.message, 'error');
+  }
+}
+async function resetCache(pc, sid) {
+  try {
+    await apiFetch(`${API}/projects/${pc}/subjects/${sid}/reset-cache`, { method: 'POST' });
+    toast('OCR缓存已清除，可重新执行审核', 'success');
+    renderProject(pc);
+  } catch (err) {
+    toast('重置失败: ' + err.message, 'error');
+  }
+}
+async function rerunSubject(pc, sid) {
+  try {
+    await apiFetch(`${API}/projects/${pc}/subjects/${sid}/rerun`, { method: 'POST' });
+    toast('已清除缓存并重置状态，点击"执行审核"重新处理', 'success');
+    renderProject(pc);
+  } catch (err) {
+    toast('重置失败: ' + err.message, 'error');
+  }
+}
+async function rerunAndProcessSubject(pc, sid) {
+  try {
+    await apiFetch(`${API}/projects/${pc}/subjects/${sid}/rerun`, { method: 'POST' });
+    startProcessing(pc, sid);
+  } catch (err) {
+    toast('重新审核准备失败: ' + err.message, 'error');
+  }
+}
+
+function selectedSubjectsForProject(pc) {
+  const ids = new Set(selectedSubjectIds(pc));
+  return (state.subjects || []).filter(s => ids.has(s.subject_id));
+}
+
+async function bulkResetCacheSelected(pc) {
+  const targets = selectedSubjectsForProject(pc).filter(s => s.can_modify);
+  if (!targets.length) { toast('请先勾选你有权限操作的受试者', 'warning'); return; }
+  for (const subject of targets) {
+    await apiFetch(`${API}/projects/${pc}/subjects/${subject.subject_id}/reset-cache`, { method: 'POST' });
+  }
+  toast(`已重置 ${targets.length} 名受试者OCR/审核缓存`, 'success');
+  renderProject(pc);
+}
+
+async function bulkDownloadSelectedMd(pc) {
+  const phase = document.getElementById('reviewPhaseSelect')?.value || 'full';
+  const targets = selectedSubjectsForProject(pc).filter(s => s.status === 'reviewed');
+  if (!targets.length) { toast('已勾选受试者中没有可导出的已审核报告', 'warning'); return; }
+  for (const subject of targets) {
+    const text = await fetchMarkdownReport(pc, { scope:'subject', subjectId: subject.subject_id, phase });
+    downloadText(`${pc}_subject_${subject.subject_id}_入排审核报告.md`, text, 'text/markdown;charset=utf-8');
+    await new Promise(resolve => setTimeout(resolve, 180));
+  }
+  toast(`已导出 ${targets.length} 份个人报告`, 'success');
+}
+
+async function bulkRerunSelected(pc) {
+  const scope = getSelectedReviewScope();
+  if (!scope) return;
+  const targets = selectedSubjectsForProject(pc).filter(s => s.can_modify);
+  if (!targets.length) { toast('请先勾选你有权限重新审核的受试者', 'warning'); return; }
+  showProgressOverlay();
+  let done = 0;
+  const total = targets.length;
+  const stageText = document.getElementById('progressStageText');
+  const bar = document.getElementById('progressBar');
+  const pctEl = document.getElementById('progressPercent');
+  for (const subject of targets) {
+    if (stageText) stageText.textContent = `正在重新审核 ${subject.subject_id} (${done + 1}/${total})`;
+    try {
+      await apiFetch(`${API}/projects/${pc}/subjects/${subject.subject_id}/rerun`, { method: 'POST' });
+      await new Promise((resolve) => {
+        processSubject(pc, subject.subject_id,
+          (data) => updateProgress(data),
+          () => { done++; if (bar) bar.style.width = (done / total * 100) + '%'; if (pctEl) pctEl.textContent = Math.round(done / total * 100) + '%'; resolve(); },
+          () => { done++; resolve(); },
+          scope
+        );
+      });
+    } catch {
+      done++;
+    }
+  }
+  hideProgress();
+  toast(`批量重新审核完成，共处理 ${total} 名受试者`, 'success');
+  renderProject(pc);
+}
+
+/* ============ Upload Modal ============ */
+let uploadFiles_ = [];
+const UPLOAD_CATEGORIES = [
+  { key:'screening_record', label:'筛选-基线病历', icon:'📋', desc:'筛选期研究病历、基线评估记录', color:'#d4edda' },
+  { key:'screening_lab',    label:'筛选-基线检验报告单', icon:'🔬', desc:'筛选期实验室/影像/心电图', color:'#d4edda' },
+  { key:'prior_record',     label:'既往病历', icon:'📄', desc:'既往就诊病历、诊断记录', color:'#e9ecef' },
+  { key:'prior_lab',        label:'既往检验检查报告单', icon:'🧪', desc:'既往实验室检查、影像', color:'#e9ecef' },
+  { key:'enrollment_comm',  label:'入组审核邮件/沟通记录/Q&A', icon:'✉️', desc:'监查员沟通、Q&A、审核过程邮件', color:'#fff3cd' },
+];
+
+async function showUploadModal(pc, sid) {
+  uploadFiles_ = [];
+  let centers = [];
+  try {
+    const data = await getCenters(pc);
+    centers = data.centers || [];
+  } catch { centers = []; }
+  const subj = (state.subjects || []).find(s => s.subject_id === sid) || {};
+  let zones = UPLOAD_CATEGORIES.map((cat, i) => `
+    <div class="upload-cat-zone" id="zone-${cat.key}" 
+         style="border:2px dashed #ccc;border-radius:8px;padding:16px;margin-bottom:8px;cursor:pointer;background:${cat.color};transition:all .2s"
+         onclick="document.getElementById('fileInput-${cat.key}').click()"
+         ondragover="event.preventDefault();this.style.borderColor='var(--primary)';this.style.background='#fff8eb'"
+         ondragleave="this.style.borderColor='#ccc';this.style.background='${cat.color}'"
+         ondrop="event.preventDefault();this.style.borderColor='#ccc';this.style.background='${cat.color}';handleCatDrop(event.dataTransfer.files,'${cat.key}')">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:24px">${cat.icon}</span>
+        <div>
+          <strong>${cat.label}</strong>
+          <div style="font-size:12px;color:#666">${cat.desc}</div>
+        </div>
+        <span id="count-${cat.key}" style="margin-left:auto;font-size:13px;color:var(--gray-500)">0个文件</span>
+      </div>
+      <input type="file" id="fileInput-${cat.key}" multiple accept=".pdf,.jpg,.jpeg,.png,.tiff,.doc,.docx" 
+             style="display:none" onchange="handleCatSelect(event,'${cat.key}')">
+    </div>
+  `).join('');
+
+  const centerBlock = `<div class="card" style="box-shadow:none;border:1px solid var(--gray-200);margin-bottom:12px">
+    <h3 style="font-size:14px;margin-bottom:10px">受试者中心（可选）</h3>
+    <div class="form-group">
+      <label>选择已有中心</label>
+      <select id="upload_center_select" onchange="applyCenterSelect('upload')">${centerOptionsHtml(centers, subj.center_code || '', subj.center_name || '')}</select>
+    </div>
+    <div class="form-grid">
+      <div class="form-group"><label>中心代号</label><input id="upload_center_code" value="${escapeHtml(subj.center_code || '')}" placeholder="例: 06"></div>
+      <div class="form-group"><label>中心名称</label><input id="upload_center_name" value="${escapeHtml(subj.center_name || '')}" placeholder="例: 南方医科大学南方医院"></div>
+    </div>
+    <p style="color:var(--gray-500);font-size:12px;margin-top:6px">本入口为增量上传：新文件会合并到既有资料中；若同名文件已存在，系统会自动保留原文件并为新文件加序号。已审核受试者新增资料后，旧结论会标记为待重新审核。</p>
+  </div>`;
+
+  showModal(`增量上传资料 — ${escapeHtml(sid)}`, centerBlock + zones + `<div id="fileDetailArea" style="margin-top:8px"></div>`, `
+    <button class="btn btn-outline" onclick="closeModal()">取消</button>
+    <button class="btn btn-primary" id="uploadBtn" onclick="doUpload('${escapeHtml(pc)}','${escapeHtml(sid)}')" disabled>增量上传 (0 个文件)</button>
+  `);
+}
+
+function handleCatSelect(e, catKey) { handleCatDrop(e.target.files, catKey); }
+function handleCatDrop(fileList, catKey) {
+  const allowed = ['.pdf','.jpg','.jpeg','.png','.tiff','.doc','.docx'];
+  for (const f of fileList) {
+    const ext = '.' + f.name.split('.').pop().toLowerCase();
+    if (!allowed.includes(ext)) { toast(`不支持: ${f.name}`, 'warning'); continue; }
+    if (!uploadFiles_.some(x => x.name === f.name && x.size === f.size)) {
+      uploadFiles_.push({ file: f, category: catKey });
+    }
+  }
+  updateFileList();
+}
+function updateFileList() {
+  // Update per-category counts
+  const counts = {};
+  for (const uf of uploadFiles_) {
+    counts[uf.category] = (counts[uf.category] || 0) + 1;
+  }
+  for (const cat of UPLOAD_CATEGORIES) {
+    const el = document.getElementById('count-' + cat.key);
+    if (el) el.textContent = (counts[cat.key] || 0) + '个文件';
+  }
+  // Update detail area
+  const area = document.getElementById('fileDetailArea');
+  const btn = document.getElementById('uploadBtn');
+  if (uploadFiles_.length === 0) {
+    area.innerHTML = '';
+    btn.disabled = true;
+    btn.textContent = '增量上传 (0 个文件)';
+    return;
+  }
+  area.innerHTML = '<div class="file-list">' + uploadFiles_.map((uf, i) => {
+    const cat = UPLOAD_CATEGORIES.find(c => c.key === uf.category);
+    return `<div class="file-item"><span>${cat?.icon||'📄'} <strong>[${cat?.label||uf.category}]</strong> ${escapeHtml(uf.file.name)} (${formatFileSize(uf.file.size)})</span><button class="btn btn-sm" style="background:none;color:var(--danger);padding:0" onclick="removeUploadFile(${i})">✕</button></div>`;
+  }).join('') + '</div>';
+  btn.disabled = false;
+  btn.textContent = `增量上传 (${uploadFiles_.length} 个文件)`;
+}
+function removeUploadFile(i) { uploadFiles_.splice(i, 1); updateFileList(); }
+
+async function doUpload(pc, sid) {
+  if (uploadFiles_.length === 0) return;
+  const btn = document.getElementById('uploadBtn');
+  btn.disabled = true; btn.textContent = '上传中...';
+  try {
+    // Build FormData with files
+    const fd = new FormData();
+    for (const uf of uploadFiles_) {
+      fd.append('files', uf.file);
+      fd.append('categories', uf.category);
+    }
+    const centerCode = document.getElementById('upload_center_code')?.value.trim() || '';
+    const centerName = document.getElementById('upload_center_name')?.value.trim() || '';
+    if (centerCode) fd.append('center_code', centerCode);
+    if (centerName) fd.append('center_name', centerName);
+    await apiFetch(`${API}/projects/${pc}/subjects/${sid}/upload`, { method: 'POST', body: fd });
+    closeModal();
+    toast(`成功增量上传 ${uploadFiles_.length} 个文件；如已有审核结论，请重新审核`, 'success');
+    renderProject(pc);
+  } catch {
+    btn.disabled = false;
+    btn.textContent = `增量上传 (${uploadFiles_.length} 个文件)`;
+  }
+}
+
+/* ============ Processing ============ */
+async function startProcessing(pc, sid) {
+  const scope = getSelectedReviewScope();
+  if (!scope) return;
+  startProcessingWithScope(pc, sid, scope.phase, scope.studyStage);
+}
+
+async function startProcessingWithScope(pc, sid, phase = 'full', studyStage = '') {
+  const scope = { phase: phase || 'full', studyStage: studyStage || projectStudyStage() || '' };
+  showProgressOverlay();
+  processSubject(pc, sid,
+    (data) => updateProgress(data),
+    async (data) => {
+      hideProgress();
+      toast('处理完成！', 'success');
+      navigate(`#/project/${pc}/subject/${sid}${reviewScopeQuery(scope)}`);
+    },
+    (data) => {
+      hideProgress();
+      toast('处理失败: ' + (data.message || '未知错误'), 'error');
+    },
+    scope
+  );
+}
+
+async function batchProcess(pc) {
+  const scope = getSelectedReviewScope();
+  if (!scope) return;
+  const selected = selectedSubjectIds(pc);
+  const source = selected.length ? selectedSubjectsForProject(pc) : state.subjects;
+  const pendingSubjects = source.filter(s => s.can_modify && (s.status === 'pending' || s.status === 'error'));
+  if (pendingSubjects.length === 0) {
+    toast(selected.length ? '勾选范围内没有你可处理的待处理/错误受试者' : '没有你可处理的待处理/错误受试者', 'info');
+    return;
+  }
+  showProgressOverlay();
+  let done = 0;
+  const total = pendingSubjects.length;
+  const stageText = document.getElementById('progressStageText');
+  const bar = document.getElementById('progressBar');
+  const pctEl = document.getElementById('progressPercent');
+
+  for (const subj of pendingSubjects) {
+    if (stageText) stageText.textContent = `正在处理 ${subj.subject_id} (${done + 1}/${total})`;
+    await new Promise((resolve) => {
+      processSubject(pc, subj.subject_id,
+        (data) => updateProgress(data),
+        () => { done++; if (bar) bar.style.width = (done / total * 100) + '%'; if (pctEl) pctEl.textContent = Math.round(done / total * 100) + '%'; resolve(); },
+        () => { done++; resolve(); },
+        scope
+      );
+    });
+  }
+  hideProgress();
+  toast(`批量处理完成，共处理 ${total} 名受试者`, 'success');
+  renderProject(pc);
+}
+
+/* ============ Report ============ */
+async function renderReport(projectCode, subjectId) {
+  state.view = 'report';
+  state.currentProject = projectCode;
+  state.currentSubject = subjectId;
+  const urlParams = new URLSearchParams(location.hash.split('?')[1] || '');
+  let workflow = { review_phases: [{ phase_id: 'full', name: '全量审核' }] };
+  try {
+    workflow = await getProjectPhases(projectCode);
+  } catch { /* fallback above */ }
+  const defaultReportPhase = (workflow.review_phases || []).find(p => p.phase_id !== 'full')?.phase_id
+    || workflow.review_phases?.[0]?.phase_id
+    || 'full';
+  const reportPhase = urlParams.get('phase') || defaultReportPhase;
+  const reportStudyStage = urlParams.get('study_stage') || projectStudyStage(null, workflow) || '';
+  app.innerHTML = `<div class="loading-text"><span class="spinner"></span> 加载审核报告...</div>`;
+
+  let report;
+  try {
+    report = await getReport(projectCode, subjectId, reportPhase);
+    state.report = report;
+  } catch {
+    app.innerHTML = `<div class="empty-state"><div class="icon">📄</div><h3>暂无报告</h3><p>该受试者尚未完成审核</p><br><button class="btn btn-secondary" onclick="navigate('#/project/${escapeHtml(projectCode)}')">返回项目</button></div>`;
+    return;
+  }
+
+  const verdict = report.verdict || 'unknown';
+  let verdictCardClass = 'verdict-insufficient', verdictIcon = '⚠️', verdictText = '需处理';
+  if (verdict === 'pass') { verdictCardClass = 'verdict-pass'; verdictIcon = '✅'; verdictText = '可入组'; }
+  else if (verdict === 'pass_verify') { verdictCardClass = 'verdict-pass'; verdictIcon = '✅'; verdictText = '可入组（需验证）'; }
+  else if (verdict === 'fail') { verdictCardClass = 'verdict-fail'; verdictIcon = '❌'; verdictText = '不可入组'; }
+  else if (verdict === 'insufficient') { verdictCardClass = 'verdict-insufficient'; verdictIcon = '⚠️'; verdictText = '证据不足'; }
+  else if (verdict === 'investigator') { verdictCardClass = 'verdict-insufficient'; verdictIcon = '🟡'; verdictText = '需研究者判定'; }
+
+  // Pass-with-reminder rules callouts
+  const verifyRules = (report.rule_results || []).filter(r => r.result === 'pass_verify');
+  const sourceVerifyRules = verifyRules.filter(r => verificationType(r) !== 'future_phase');
+  const futureVerifyRules = verifyRules.filter(r => verificationType(r) === 'future_phase');
+  let verifyCallout = '';
+  if (sourceVerifyRules.length > 0) {
+    verifyCallout += `<div class="callout callout-success">
+      <span>✓</span>
+      <div><strong>溯源提醒</strong> — 以下 ${sourceVerifyRules.length} 条标准按通过处理，但建议在最终归档前补充或核对更早的既往病历、诊断证明、既往检查报告、处方或病程记录：
+        <ul style="margin:8px 0 0 16px">${sourceVerifyRules.map(r => `<li>${escapeHtml(r.rule_name || r.rule_id || '未知规则')}</li>`).join('')}</ul>
+      </div>
+    </div>`;
+  }
+  if (futureVerifyRules.length > 0) {
+    verifyCallout += `<div class="callout callout-success">
+      <span>✓</span>
+      <div><strong>后续阶段复核提醒</strong> — 以下 ${futureVerifyRules.length} 条标准当前阶段按通过处理，基线/D1/随机前资料到达后需在对应阶段复核：
+        <ul style="margin:8px 0 0 16px">${futureVerifyRules.map(r => `<li>${escapeHtml(r.rule_name || r.rule_id || '未知规则')}</li>`).join('')}</ul>
+      </div>
+    </div>`;
+  }
+
+  // Insufficient rules callout
+  const insufficientRules = (report.rule_results || []).filter(r => r.result === 'insufficient');
+  let insufficientCallout = '';
+  if (insufficientRules.length > 0) {
+    insufficientCallout = `<div class="callout callout-warning">
+      <span>⚠️</span>
+      <div><strong>需补充资料</strong> — 以下 ${insufficientRules.length} 条标准证据不足，请补充相关文件后重新审核：
+        <ul style="margin:8px 0 0 16px">${insufficientRules.map(r => `<li>${escapeHtml(r.rule_name || r.rule_id || '未知规则')}</li>`).join('')}</ul>
+      </div>
+    </div>`;
+  }
+  const investigatorRules = (report.rule_results || []).filter(r => r.result === 'investigator');
+  let investigatorCallout = '';
+  if (investigatorRules.length > 0) {
+    investigatorCallout = `<div class="callout callout-warning">
+      <span>🟡</span>
+      <div><strong>需研究者判定</strong> — 以下 ${investigatorRules.length} 条标准已有资料不足以由系统直接给出最终医学判断，请研究者或医学监查确认：
+        <ul style="margin:8px 0 0 16px">${investigatorRules.map(r => `<li>${escapeHtml(r.rule_name || r.rule_id || '未知规则')}</li>`).join('')}</ul>
+      </div>
+    </div>`;
+  }
+
+  // Rules table
+  let rulesTable = '';
+  if (report.rule_results && report.rule_results.length > 0) {
+    rulesTable = `<h3 style="margin:24px 0 12px;font-size:16px">逐条审核结果</h3>
+    <div class="mobile-scroll-hint">表格列较多，可左右滑动查看完整推理依据。</div>
+    <div class="table-wrap"><table class="data-table report-rules-table">
+      <thead><tr><th class="col-rule-id">规则ID</th><th class="col-rule-name">标准名称</th><th class="col-rule-type">类别</th><th class="col-rule-verdict">结论</th><th>推理依据（点击展开）</th></tr></thead>
+	      <tbody>${report.rule_results.map((r, i) => `
+	        <tr class="${ruleRowClass(r)}" onclick="toggleExpand('rule-${i}')">
+	          <td class="cell-nowrap">${ruleIdHtml(r)}</td>
+	          <td>${escapeHtml(r.rule_name || '-')}</td>
+          <td class="cell-nowrap">${r.rule_type === 'inclusion' ? '入选' : r.rule_type === 'exclusion' ? '排除' : escapeHtml(r.rule_type || '-')}</td>
+          <td class="cell-nowrap">${ruleResultBadgeForRule(r)}</td>
+          <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml((r.reasoning || '').substring(0, 80))}${(r.reasoning||'').length > 80 ? '...' : ''}</td>
+        </tr>
+        <tr class="expand-detail" id="detail-rule-${i}">
+          <td colspan="5">
+            <div class="expand-content">
+              <div class="reasoning" style="line-height:1.8"><strong>🔍 推理过程：</strong><br>${renderMarkdown(r.reasoning || '暂无详细说明')}</div>
+            </div>
+          </td>
+        </tr>
+      `).join('')}</tbody>
+    </table></div><div id="subjectFilteredEmpty" class="empty-state" style="display:none"><div class="icon">🔎</div><h3>当前筛选条件下无受试者</h3><p>请调整表头筛选条件或清除筛选</p></div>`;
+  }
+
+  // Group results
+  let groupResults = '';
+  if (report.group_results && report.group_results.length > 0) {
+    groupResults = `<h3 style="margin:24px 0 12px;font-size:16px">分组审核结果</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>分组</th><th>结论</th><th>说明</th></tr></thead>
+      <tbody>${report.group_results.map(g => `<tr>
+        <td>${escapeHtml(g.group_name || g.group_id || '-')}</td>
+        <td>${ruleResultBadge(g.result)}</td>
+        <td>${escapeHtml(g.summary || '-')}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+  }
+
+  // Evidence viewer
+  let evidenceViewer = '';
+  if (report.chunks && report.chunks.length > 0) {
+    evidenceViewer = `<div class="evidence-section">
+      <div class="evidence-toggle" onclick="toggleEvidence()">
+        <span>📄 原始证据 (共 ${report.chunks.length} 个文档片段)</span>
+        <span id="evidenceArrow">▶</span>
+      </div>
+      <div class="evidence-body" id="evidenceBody">
+        ${report.chunks.map((c, i) => `<div class="evidence-chunk">
+          <div class="chunk-header">${escapeHtml(c.source || c.filename || '文档')} — 片段 ${i + 1}${c.page ? ' (第' + c.page + '页)' : ''}</div>
+          <pre>${escapeHtml(c.text || c.content || '')}</pre>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  app.innerHTML = `
+    <div class="breadcrumb">
+      <a href="#/audit">项目列表</a><span class="sep">›</span>
+      <a href="#/project/${escapeHtml(projectCode)}">${escapeHtml(projectCode)}</a><span class="sep">›</span>
+      <span>受试者 ${escapeHtml(subjectId)}</span>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <div>
+          <h2 style="font-size:18px">受试者: ${escapeHtml(subjectId)}</h2>
+          <div style="color:var(--gray-500);font-size:13px;margin-top:4px">
+            筛选日期: ${escapeHtml(report.screening_date || '-')} | 知情同意日期: ${escapeHtml(report.icf_date || '-')} | 首次给药日期: ${escapeHtml(report.first_dosing_date || '-')} | 出生日期: ${escapeHtml(report.birth_date || '-')} | 审核时间: ${escapeHtml(report.review_time || report.created_at || '-')}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline" onclick="exportReportMd('${escapeHtml(projectCode)}','${escapeHtml(subjectId)}','${escapeHtml(reportPhase)}')">📥 导出报告</button>
+          <button class="btn btn-primary" onclick="startProcessingWithScope('${escapeHtml(projectCode)}','${escapeHtml(subjectId)}','${escapeHtml(reportPhase)}','${escapeHtml(reportStudyStage)}')">🔄 重新审核</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="verdict-card ${verdictCardClass}">
+      <div class="verdict-icon">${verdictIcon}</div>
+      <div class="verdict-text">${verdictText}</div>
+      <div class="verdict-summary">${escapeHtml(report.summary || report.overall_summary || '')}</div>
+    </div>
+
+    ${verifyCallout}
+    ${insufficientCallout}
+    ${investigatorCallout}
+    ${rulesTable}
+    ${groupResults}
+    ${evidenceViewer}
+  `;
+}
+
+function toggleExpand(id) {
+  const row = document.querySelector(`tr[onclick="toggleExpand('${id}')"]`);
+  const detail = document.getElementById('detail-' + id);
+  if (!row || !detail) return;
+  row.classList.toggle('open');
+  detail.classList.toggle('show');
+}
+
+function toggleEvidence() {
+  const body = document.getElementById('evidenceBody');
+  const arrow = document.getElementById('evidenceArrow');
+  if (body.classList.contains('show')) {
+    body.classList.remove('show');
+    arrow.textContent = '▶';
+  } else {
+    body.classList.add('show');
+    arrow.textContent = '▼';
+  }
+}
+
+async function exportReportMd(pc, sid, phase = 'full') {
+  try {
+    const r = await apiFetch(`${API}/projects/${pc}/subjects/${sid}/report/md?phase=${encodeURIComponent(phase || 'full')}`);
+    if (!r.ok) throw new Error('获取报告失败');
+    const text = await r.text();
+    const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${sid}_审核报告.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('报告已导出', 'success');
+  } catch (err) {
+    toast('导出失败: ' + err.message, 'error');
+  }
+}
+
+/* ============ Init ============ */
+route();
+/* Error boundary */
+window.addEventListener('error', function(e) {
+  console.error('Unhandled error:', e.error || e.message);
+  var msg = e.error ? (e.error.message || String(e.error)) : (e.message || '未知错误');
+  var existing = document.querySelector('.toast.error');
+  if (!existing || !existing.textContent.includes(msg.substring(0,30))) {
+    toast('系统错误: ' + msg.substring(0,100), 'error');
+  }
+});
+window.addEventListener('unhandledrejection', function(e) {
+  console.error('Unhandled rejection:', e.reason);
+  toast('请求失败: ' + (e.reason?.message || String(e.reason)).substring(0,100), 'error');
+});
+</script>
+</body>
+</html>

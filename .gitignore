@@ -1,0 +1,31 @@
+# 环境变量（含API密钥）
+.env
+
+# 日志
+server.log
+*.log
+logs/
+
+# Python
+__pycache__/
+*.pyc
+
+# 项目数据（受试者资料）
+projects/
+
+# 测试与运行生成物（由清单和归档记录管理，不进入源码版本）
+output/
+.playwright-cli/
+
+# 前端与Python构建缓存
+node_modules/
+frontend/node_modules/
+frontend/dist/
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# macOS
+.DS_Store
