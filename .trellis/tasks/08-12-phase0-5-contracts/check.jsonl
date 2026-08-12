@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"检查确定性逻辑、泛化和测试"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"检查交互合同和 UAT 可执行性"}
+{"file":"docs/REARCHITECTURE_FINAL_DESIGN_20260812.md","reason":"逐项核对冻结状态、Agent 和 EvidenceSpan"}
+{"file":"plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md","reason":"检查 Phase 0.5 退出门槛"}
+{"file":"docs/v2/phase0/DECISION_AND_REGRESSION_INDEX.md","reason":"检查历史错误族是否进入合同测试"}

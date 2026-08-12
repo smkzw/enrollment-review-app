@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/directory-structure.md","reason":"合同目录与依赖方向"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Agent/Gate 和临床回归门禁"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Schema 与 TypeScript 边界"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"证据、规则层级和响应式交互"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"真实浏览器和中文 UI 验收"}
+{"file":"docs/REARCHITECTURE_FINAL_DESIGN_20260812.md","reason":"领域、状态、Agent 和交互事实源"}
+{"file":"plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md","reason":"Phase 0.5 工作和退出门槛"}
+{"file":"docs/v2/phase0/DECISION_AND_REGRESSION_INDEX.md","reason":"合同必须覆盖的历史错误族"}
