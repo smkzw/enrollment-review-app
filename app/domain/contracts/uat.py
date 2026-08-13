@@ -26,6 +26,7 @@ class ProtocolDiffExample(VersionedModel):
     deleted_rule_codes: list[str] = Field(min_length=1)
     changed_logic_or_window_codes: list[str] = Field(min_length=1)
     source_refs: list[str] = Field(min_length=1)
+    source_refs_by_rule_code: dict[str, list[str]]
 
     @model_validator(mode="after")
     def validate_rule_set_diff(self) -> "ProtocolDiffExample":
@@ -55,6 +56,14 @@ class ProtocolDiffExample(VersionedModel):
             raise ValueError("删除规则编号必须由两版 RuleSet 实际差异推导")
         if self.changed_logic_or_window_codes != changed:
             raise ValueError("逻辑或时间窗变更必须由两版 RuleSet 实际差异推导")
+        changed_codes = set(added + deleted + changed)
+        if set(self.source_refs_by_rule_code) != changed_codes:
+            raise ValueError("每条新增、删除或变更规则必须分别提供方案原文定位")
+        for code, refs in self.source_refs_by_rule_code.items():
+            if not refs:
+                raise ValueError(f"规则 {code} 的方案原文定位不能为空")
+            if not set(refs).issubset(set(self.source_refs)):
+                raise ValueError(f"规则 {code} 使用了未登记的方案原文定位")
         return self
 
 

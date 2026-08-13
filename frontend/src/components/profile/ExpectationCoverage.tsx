@@ -62,7 +62,7 @@ export function ExpectationCoverage({
             <span className="expectation-cover__gap">{expectation.gapLabel}</span>
             {expectation.status === "absent" && (
               <span className="expectation-cover__note">
-                资料中未见这项记录，需要核对是否实际询问或产生过
+                资料中未见这项记录，只表示当前资料缺少记录，不等于明确否认；需要核对是否实际询问或产生过
               </span>
             )}
             {expectation.status === "referenced_missing" && (

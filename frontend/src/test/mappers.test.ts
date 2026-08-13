@@ -404,6 +404,12 @@ describe("今日工作与方案差异", () => {
     expect(diff.currentProtocolVersionId).toBe("protocol-v1");
     expect(diff.proposedProtocolVersionId).toBe("protocol-v2-draft");
     expect(diff.sourceRefs).toContain("protocol-v1:p10");
+    expect(diff.sourceRefsByRuleCode["EX-05"]).toEqual(["protocol-v2-draft:p12"]);
+    expect(diff.sourceRefsByRuleCode["必做-02"]).toEqual(["protocol-v1:p10"]);
+    expect(diff.sourceRefsByRuleCode["EX-01"]).toEqual([
+      "protocol-v1:p10",
+      "protocol-v2-draft:p12",
+    ]);
     const changes = mapTodayWork(workspaceFixture).recentChanges;
     expect(changes.some((change) => change.title.includes("方案新增条件 EX-05"))).toBe(
       true,

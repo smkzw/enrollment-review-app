@@ -2531,6 +2531,11 @@ def build_uat_workspace() -> UatWorkspaceFixture:
             deleted_rule_codes=["REQ-02"],
             changed_logic_or_window_codes=["EX-01"],
             source_refs=["protocol-v1:p10", "protocol-v2-draft:p12"],
+            source_refs_by_rule_code={
+                "EX-05": ["protocol-v2-draft:p12"],
+                "REQ-02": ["protocol-v1:p10"],
+                "EX-01": ["protocol-v1:p10", "protocol-v2-draft:p12"],
+            },
         ),
         primary_subject_ids=primary_subject_ids,
         stage_template_episode_ids=[

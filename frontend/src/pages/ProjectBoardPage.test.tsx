@@ -120,12 +120,30 @@ describe("项目看板页", () => {
       name: "选择 UAT-01",
     });
     await user.click(checkbox);
-    expect(screen.getByText("已选择 1 项（当前筛选范围）")).toBeInTheDocument();
+    expect(screen.getByText("已选择 1 位受试者（只处理明确勾选对象）")).toBeInTheDocument();
     const selectAll = screen.getByRole("checkbox", {
       name: "全选当前筛选范围",
     });
     await user.click(selectAll);
-    expect(screen.getByText("已选择 8 项（当前筛选范围）")).toBeInTheDocument();
+    expect(screen.getByText("已选择 8 位受试者（只处理明确勾选对象）")).toBeInTheDocument();
+  });
+
+  it("批量操作先核对明确范围，完成摘要不扩大勾选对象", async () => {
+    const user = userEvent.setup();
+    render(<ProjectBoardPage />);
+    await user.click(await screen.findByRole("checkbox", { name: "选择 UAT-03" }));
+    await user.click(screen.getByRole("checkbox", { name: "选择 UAT-04" }));
+    await user.click(screen.getByRole("button", { name: "批量回看审核摘要" }));
+    const dialog = screen.getByRole("dialog", { name: "确认批量操作范围" });
+    expect(dialog).toHaveTextContent("UAT-03");
+    expect(dialog).toHaveTextContent("UAT-04");
+    expect(dialog).not.toHaveTextContent("UAT-01");
+    await user.click(screen.getByRole("button", { name: "确认回看" }));
+    const result = screen.getByText("批量操作完成").closest("section");
+    expect(result).toHaveTextContent("UAT-03、UAT-04");
+    expect(result).not.toHaveTextContent("UAT-01");
+    await user.click(screen.getByRole("button", { name: "阻断程度" }));
+    expect(screen.getByText("已选择 2 位受试者（只处理明确勾选对象）")).toBeInTheDocument();
   });
 
   it("筛选无结果时显示空集合文案与清除筛选", async () => {

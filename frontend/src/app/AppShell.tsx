@@ -70,7 +70,11 @@ export function AppShell() {
       </a>
       <SideNav currentPath={path} />
       <div className="app-shell__main">
-        <TopBar positionLabel={positionLabel} />
+        <TopBar
+          positionLabel={positionLabel}
+          showProjectCreation={path === "/board"}
+          showProjectContext={path !== "/projects/new"}
+        />
         <main id="main-content" tabIndex={-1} className="app-shell__content">
           <CurrentPage />
         </main>

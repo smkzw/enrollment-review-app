@@ -1,14 +1,15 @@
 /**
  * 截图收集（供 Codex 视觉复核；本角色不做最终视觉验收）。
- * 每个视口项目输出关键页面截图；1440 项目额外输出 150%/200% 缩放截图。
+ * 每个视口项目输出关键页面截图；1440 项目额外输出两档布局压力截图。
  */
 
 import { test } from "@playwright/test";
-import { openRoute, setZoom } from "./helpers";
+import { openRoute, setLayoutStressFactor } from "./helpers";
 
 const SHOT_PAGES = [
   { hash: "/today", name: "today" },
   { hash: "/board", name: "board" },
+  { hash: "/projects/new", name: "project-create" },
   { hash: "/subjects?subject=subject-uat-03-gap_conflict&stage=screening", name: "subjects-profile" },
   { hash: "/workbench?episode=episode-uat-03-screening-gap_conflict", name: "workbench" },
   { hash: "/actions", name: "actions" },
@@ -31,24 +32,43 @@ test.describe("截图收集", () => {
     });
   }
 
-  test("1440 物理宽度工作台 150%/200% 等效缩放截图", async ({ page }) => {
+  test("1440 物理宽度工作台两档布局压力截图", async ({ page }) => {
     test.skip(
       test.info().project.name !== "desktop-1440",
-      "仅 1440 项目执行缩放截图",
+      "仅 1440 项目执行布局压力截图",
     );
     await openRoute(
       page,
       "/workbench?episode=episode-uat-03-screening-gap_conflict",
     );
-    await setZoom(page, 1.5);
+    await setLayoutStressFactor(page, 1.5);
     await page.waitForTimeout(200);
     await page.screenshot({
-      path: "e2e/screenshots/desktop-1440-workbench-zoom150.png",
+      path: "e2e/screenshots/desktop-1440-workbench-layout-stress-960.png",
     });
-    await setZoom(page, 2);
+    await setLayoutStressFactor(page, 2);
     await page.waitForTimeout(200);
     await page.screenshot({
-      path: "e2e/screenshots/desktop-1440-workbench-zoom200.png",
+      path: "e2e/screenshots/desktop-1440-workbench-layout-stress-720.png",
     });
+  });
+
+  test("1440 与窄屏关键确认弹窗截图", async ({ page }) => {
+    const project = test.info().project.name;
+    test.skip(
+      project !== "desktop-1440" && project !== "narrow-390",
+      "仅保留代表性桌面与窄屏确认弹窗",
+    );
+
+    await openRoute(page, "/board");
+    await page.getByRole("checkbox", { name: "选择 UAT-03" }).check();
+    await page.getByRole("checkbox", { name: "选择 UAT-04" }).check();
+    await page.getByRole("button", { name: "批量回看审核摘要" }).click();
+    await page.screenshot({ path: `e2e/screenshots/${project}-batch-confirm.png` });
+
+    await openRoute(page, "/actions?action=action-uat-03-screening-gap-professional");
+    await page.getByLabel("确认理由（必填）").fill("研究者已补充书面判断，并完成签名和日期。");
+    await page.getByRole("button", { name: "核对确认内容" }).click();
+    await page.screenshot({ path: `e2e/screenshots/${project}-manual-confirm.png` });
   });
 });

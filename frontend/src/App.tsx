@@ -14,6 +14,7 @@ import "./styles/workbench.css";
 import "./styles/actions.css";
 import "./styles/tasks.css";
 import "./styles/protocols.css";
+import "./styles/project-creation.css";
 import "./styles/reports.css";
 import "./styles/help.css";
 import { AppShell } from "./app/AppShell";

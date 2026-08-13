@@ -723,6 +723,12 @@ export function mapProtocolDiff(diff: ProtocolDiffWire): ProtocolDiffView {
     deletedRuleCodes: diff.deleted_rule_codes.map(displayRuleCode),
     changedRuleCodes: diff.changed_logic_or_window_codes.map(displayRuleCode),
     sourceRefs: [...diff.source_refs],
+    sourceRefsByRuleCode: Object.fromEntries(
+      Object.entries(diff.source_refs_by_rule_code).map(([code, refs]) => [
+        displayRuleCode(code),
+        [...refs],
+      ]),
+    ),
     currentRuleSetId: toId<RuleSetId>(diff.current_rule_set.rule_set_id),
     proposedRuleSetRevision: diff.proposed_rule_set_draft.revision,
   };

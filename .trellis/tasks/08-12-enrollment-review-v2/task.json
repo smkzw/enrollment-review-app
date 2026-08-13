@@ -21,7 +21,8 @@
   "children": [
     "08-12-phase0-foundation",
     "08-12-phase0-5-contracts",
-    "08-13-phase1-frontend-shell"
+    "08-13-phase1-frontend-shell",
+    "08-13-phase1-5-uat-readiness"
   ],
   "parent": null,
   "relatedFiles": [],

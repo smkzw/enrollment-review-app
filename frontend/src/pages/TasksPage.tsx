@@ -6,10 +6,10 @@
  * - URL 契约：/tasks?job=<JobId>。
  */
 
-import { useState } from "react";
 import { getDefaultRepository } from "../api";
 import { RouteLink, updateParams, useHashRoute } from "../app/router";
 import { useLoad } from "../app/useLoad";
+import { useSessionState } from "../app/useSessionState";
 import { EmptyState, ErrorState, LoadingState } from "../components/shell/Feedback";
 import { TaskStateBadge } from "../components/shell/StatusBadge";
 import { OpenIcon, ResumeIcon, RunningIcon, StaleIcon } from "../components/shell/icons";
@@ -25,6 +25,120 @@ function formatTime(iso: string): string {
 /** 处理状态试用区的整理总数 */
 export const DEMO_TOTAL = 3;
 
+interface DemoTaskProgress {
+  state: TaskState;
+  fileStates: Record<DemoFileId, DemoFileState>;
+}
+
+type DemoFileId = "screening" | "laboratory" | "medication";
+type DemoFileState = "completed" | "pending" | "failed";
+
+const DEMO_FILES: ReadonlyArray<{ id: DemoFileId; name: string }> = [
+  { id: "screening", name: "筛选病历.pdf" },
+  { id: "laboratory", name: "实验室检查.pdf" },
+  { id: "medication", name: "既往用药记录.pdf" },
+];
+
+const INITIAL_DEMO_PROGRESS: DemoTaskProgress = {
+  state: "partial",
+  fileStates: {
+    screening: "completed",
+    laboratory: "pending",
+    medication: "failed",
+  },
+};
+
+const TASK_STATES: ReadonlyArray<TaskState> = [
+  "queued", "running", "partial", "failed", "resumable", "cancelled", "stale", "completed",
+];
+
+function parseDemoTaskProgress(value: unknown): DemoTaskProgress | null {
+  if (typeof value !== "object" || value === null) return null;
+  const candidate = value as Record<string, unknown>;
+  const files = candidate.fileStates;
+  if (!TASK_STATES.includes(candidate.state as TaskState) || typeof files !== "object" || files === null) {
+    return null;
+  }
+  const states = files as Record<string, unknown>;
+  const valid = (item: unknown): item is DemoFileState =>
+    item === "completed" || item === "pending" || item === "failed";
+  if (!valid(states.screening) || !valid(states.laboratory) || !valid(states.medication)) {
+    return null;
+  }
+  const progress: DemoTaskProgress = {
+    state: candidate.state as TaskState,
+    fileStates: {
+      screening: states.screening,
+      laboratory: states.laboratory,
+      medication: states.medication,
+    },
+  };
+  return isDemoTaskProgressConsistent(progress) ? progress : null;
+}
+
+function completedCount(fileStates: DemoTaskProgress["fileStates"]): number {
+  return Object.values(fileStates).filter((state) => state === "completed").length;
+}
+
+function isDemoTaskProgressConsistent(progress: DemoTaskProgress): boolean {
+  const states = Object.values(progress.fileStates);
+  const allCompleted = states.every((state) => state === "completed");
+  const allPending = states.every((state) => state === "pending");
+  const hasFailed = states.some((state) => state === "failed");
+
+  switch (progress.state) {
+    case "queued":
+      return allPending;
+    case "running":
+      return !allCompleted;
+    case "partial":
+    case "failed":
+      return !allCompleted && hasFailed;
+    case "resumable":
+    case "cancelled":
+      return !allCompleted;
+    case "stale":
+      return !allPending;
+    case "completed":
+      return allCompleted;
+  }
+}
+
+function withCompletedCount(
+  current: DemoTaskProgress["fileStates"],
+  target: number,
+): DemoTaskProgress["fileStates"] {
+  const next = { ...current };
+  if (target <= 0) {
+    for (const file of DEMO_FILES) next[file.id] = "pending";
+    return next;
+  }
+  let completed = completedCount(next);
+  for (const file of DEMO_FILES) {
+    if (completed >= target) break;
+    if (next[file.id] !== "completed") {
+      next[file.id] = "completed";
+      completed += 1;
+    }
+  }
+  return next;
+}
+
+function markNextIncompleteFailed(
+  current: DemoTaskProgress["fileStates"],
+): DemoTaskProgress["fileStates"] {
+  const next = { ...current };
+  const target = DEMO_FILES.find((file) => next[file.id] === "pending");
+  if (target !== undefined) next[target.id] = "failed";
+  return next;
+}
+
+function demoFileStateLabel(state: DemoFileState): string {
+  if (state === "completed") return "已完成，继续时不会重复";
+  if (state === "failed") return "上次处理失败，可稍后再试";
+  return "尚未处理";
+}
+
 export function TasksPage() {
   const { params } = useHashRoute();
   const jobParam = params.get("job");
@@ -32,12 +146,25 @@ export function TasksPage() {
   const jobs = useLoad(() => getDefaultRepository().getJobs(), []);
 
   // ---- 处理状态试用：本地状态机覆盖 8 个任务状态边界 ----
-  const [demoState, setDemoState] = useState<TaskState>("queued");
-  const [demoProgress, setDemoProgress] = useState(0);
+  const [demoProgressState, setDemoProgressState, resetDemoProgress] =
+    useSessionState<DemoTaskProgress>(
+      "eligibility-review:uat:task-progress",
+      INITIAL_DEMO_PROGRESS,
+      parseDemoTaskProgress,
+    );
+  const demoState = demoProgressState.state;
+  const demoProgress = completedCount(demoProgressState.fileStates);
 
   const advanceDemo = (next: TaskState, progress?: number) => {
-    if (progress !== undefined) setDemoProgress(progress);
-    setDemoState(next);
+    setDemoProgressState((current) => ({
+      state: next,
+      fileStates:
+        next === "failed" || next === "partial"
+          ? markNextIncompleteFailed(current.fileStates)
+          : progress === undefined
+            ? current.fileStates
+            : withCompletedCount(current.fileStates, progress),
+    }));
   };
 
   if (jobs.state.status === "loading") {
@@ -66,10 +193,63 @@ export function TasksPage() {
         </p>
       </header>
 
+      <section className="tasks-section" aria-labelledby="tasks-demo-title">
+        <div className="tasks-section__head">
+          <h2 id="tasks-demo-title" className="tasks-section__title">
+            继续未完成事项
+          </h2>
+          <span className="section-count">8 种状态</span>
+        </div>
+        <p className="tasks-section__note">
+          以下演示覆盖准备中、正在整理、部分资料尚未处理、处理失败可重试、已保存进度可继续、
+          已取消、资料发生变化需重新核对与已完成八种状态；仅用于查看操作反馈，
+          <strong>不会实际运行文字识别或审核</strong>。
+        </p>
+        <div className="demo-job">
+          <div className="demo-job__head">
+            <span className="demo-job__subject">试用受试者</span>
+            <span className="demo-job__stage">筛选期</span>
+            <TaskStateBadge state={demoState} />
+            <span className="demo-job__progress">
+              已整理 {demoProgress} / {DEMO_TOTAL} 项资料
+            </span>
+          </div>
+          <p className="demo-job__desc">{demoStateDescription(demoState)}</p>
+          <ul className="demo-job__files" aria-label="资料处理范围">
+            {DEMO_FILES.map((file) => (
+              <li key={file.id}>
+                <span>{file.name}</span>
+                <strong>{demoFileStateLabel(demoProgressState.fileStates[file.id])}</strong>
+              </li>
+            ))}
+          </ul>
+          <div className="demo-job__actions">
+            {demoActions(
+              demoState,
+              demoProgress,
+              DEMO_TOTAL,
+              advanceDemo,
+              <RouteLink
+                to="/workbench"
+                params={{ episode: "episode-uat-03-screening-gap_conflict" }}
+                className="button button--quiet"
+                ariaLabel="查看差异对应的审核节点"
+              >
+                <OpenIcon size={13} />
+                查看差异
+              </RouteLink>,
+            )}
+          </div>
+          <button type="button" className="button button--quiet" onClick={resetDemoProgress}>
+            恢复试用初始状态
+          </button>
+        </div>
+      </section>
+
       <section className="tasks-section" aria-labelledby="tasks-real-title">
         <div className="tasks-section__head">
           <h2 id="tasks-real-title" className="tasks-section__title">
-            资料整理任务
+            资料整理记录
           </h2>
           <span className="section-count">{allJobs.length}</span>
         </div>
@@ -104,48 +284,6 @@ export function TasksPage() {
       </section>
 
       {selectedJob !== null && <JobDetail job={selectedJob} />}
-
-      <section className="tasks-section" aria-labelledby="tasks-demo-title">
-        <div className="tasks-section__head">
-          <h2 id="tasks-demo-title" className="tasks-section__title">
-            处理状态试用
-          </h2>
-          <span className="section-count">8 种状态</span>
-        </div>
-        <p className="tasks-section__note">
-          以下演示覆盖准备中、正在整理、部分资料尚未处理、处理失败可重试、已保存进度可继续、
-          已取消、资料发生变化需重新核对与已完成八种状态；仅用于查看操作反馈，
-          <strong>不会实际运行文字识别或审核</strong>。
-        </p>
-        <div className="demo-job">
-          <div className="demo-job__head">
-            <span className="demo-job__subject">试用受试者</span>
-            <span className="demo-job__stage">筛选期</span>
-            <TaskStateBadge state={demoState} />
-            <span className="demo-job__progress">
-              已整理 {demoProgress} / {DEMO_TOTAL} 项资料
-            </span>
-          </div>
-          <p className="demo-job__desc">{demoStateDescription(demoState)}</p>
-          <div className="demo-job__actions">
-            {demoActions(
-              demoState,
-              demoProgress,
-              DEMO_TOTAL,
-              advanceDemo,
-              <RouteLink
-                to="/workbench"
-                params={{ episode: "episode-uat-03-screening-gap_conflict" }}
-                className="button button--quiet"
-                ariaLabel="查看差异对应的审核节点"
-              >
-                <OpenIcon size={13} />
-                查看差异
-              </RouteLink>,
-            )}
-          </div>
-        </div>
-      </section>
 
       <section className="tasks-section" aria-labelledby="tasks-help-title">
         <h2 id="tasks-help-title" className="tasks-section__title">
@@ -229,7 +367,7 @@ function demoStateDescription(state: TaskState): string {
     case "running":
       return "正在逐项整理资料；进度会实时显示。";
     case "partial":
-      return "部分资料已整理完成，部分资料尚未处理；可继续未完成部分。";
+      return "有资料处理失败或尚未处理；可继续未完成部分。";
     case "failed":
       return "一项资料整理失败；可以稍后再试，已保存的进度不丢失。";
     case "resumable":

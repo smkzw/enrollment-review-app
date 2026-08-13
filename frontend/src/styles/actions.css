@@ -217,6 +217,75 @@
   margin-top: var(--space-2);
 }
 
+/* 共用确认弹窗：用于人工确认和批量范围核对。 */
+.confirmation-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: rgb(20 34 46 / 44%);
+}
+
+.confirmation-dialog {
+  width: min(620px, 100%);
+  max-height: min(80vh, 720px);
+  overflow: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-l);
+  padding: var(--space-4);
+  box-shadow: 0 16px 44px rgb(20 34 46 / 20%);
+}
+
+.confirmation-dialog h2 {
+  font-size: var(--font-size-page-title);
+  margin-bottom: var(--space-3);
+}
+
+.confirmation-dialog__details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.confirmation-dialog__details dt {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+.confirmation-dialog__details dd {
+  margin: var(--space-1) 0 0;
+  overflow-wrap: anywhere;
+}
+
+.confirmation-dialog__list {
+  margin: var(--space-2) 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.confirmation-dialog__list li {
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-muted-bg);
+  border-radius: var(--radius-m);
+}
+
+.confirmation-dialog__note {
+  margin-top: var(--space-3);
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+}
+
+.confirmation-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  flex-wrap: wrap;
+}
+
 @media (max-width: 900px) {
   .actions-layout {
     grid-template-columns: minmax(0, 1fr);
@@ -227,6 +296,10 @@
   }
 
   .action-detail__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .confirmation-dialog__details {
     grid-template-columns: minmax(0, 1fr);
   }
 }

@@ -49015,7 +49015,19 @@
     "source_refs": [
       "protocol-v1:p10",
       "protocol-v2-draft:p12"
-    ]
+    ],
+    "source_refs_by_rule_code": {
+      "EX-01": [
+        "protocol-v1:p10",
+        "protocol-v2-draft:p12"
+      ],
+      "EX-05": [
+        "protocol-v2-draft:p12"
+      ],
+      "REQ-02": [
+        "protocol-v1:p10"
+      ]
+    }
   },
   "schema_version": "fixture/v1",
   "stage_template_episode_ids": [

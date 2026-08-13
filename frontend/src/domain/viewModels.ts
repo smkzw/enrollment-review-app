@@ -338,6 +338,7 @@ export interface ProtocolDiffView {
   deletedRuleCodes: ReadonlyArray<string>;
   changedRuleCodes: ReadonlyArray<string>;
   sourceRefs: ReadonlyArray<string>;
+  sourceRefsByRuleCode: Readonly<Record<string, ReadonlyArray<string>>>;
   currentRuleSetId: RuleSetId;
   proposedRuleSetRevision: number;
 }

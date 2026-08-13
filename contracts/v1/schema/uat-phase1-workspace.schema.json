@@ -3290,6 +3290,16 @@
           "minItems": 1,
           "title": "Source Refs",
           "type": "array"
+        },
+        "source_refs_by_rule_code": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": "Source Refs By Rule Code",
+          "type": "object"
         }
       },
       "required": [
@@ -3300,7 +3310,8 @@
         "added_rule_codes",
         "deleted_rule_codes",
         "changed_logic_or_window_codes",
-        "source_refs"
+        "source_refs",
+        "source_refs_by_rule_code"
       ],
       "title": "ProtocolDiffExample",
       "type": "object"

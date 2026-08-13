@@ -107,6 +107,19 @@
   margin-bottom: var(--space-3);
   font-size: var(--font-size-small);
   color: var(--color-teal);
+  flex-wrap: wrap;
+}
+
+.board-batch-result {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-muted-bg);
+  border-left: 3px solid var(--color-teal);
+  font-size: var(--font-size-small);
 }
 
 .board-empty {

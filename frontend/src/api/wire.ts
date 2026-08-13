@@ -379,6 +379,7 @@ export interface ProtocolDiffWire {
   current_rule_set: RuleSetWire;
   proposed_rule_set_draft: RuleSetWire;
   source_refs: string[];
+  source_refs_by_rule_code: Record<string, string[]>;
   schema_version: string;
 }
 

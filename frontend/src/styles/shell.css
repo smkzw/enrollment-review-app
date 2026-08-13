@@ -160,6 +160,29 @@
   font-size: var(--font-size-small);
 }
 
+.topbar__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-left: var(--space-3);
+  flex-shrink: 0;
+}
+
+.topbar__create {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-teal);
+  font-size: var(--font-size-small);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.topbar__create:hover {
+  color: var(--color-blue);
+  text-decoration: none;
+}
+
 .topbar__help:hover {
   color: var(--color-blue);
   text-decoration: none;
@@ -237,6 +260,16 @@
     padding: var(--space-1);
   }
 
+  .topbar__actions {
+    gap: var(--space-1);
+  }
+
+  .topbar__create,
+  .topbar__help {
+    padding: var(--space-1);
+  }
+
+  .topbar__create span,
   .topbar__help span {
     display: none;
   }

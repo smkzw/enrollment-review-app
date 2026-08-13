@@ -5,10 +5,11 @@
  * - URL 契约：/actions?action=<ActionId> 直达行动详情。
  */
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getDefaultRepository } from "../api";
 import { updateParams, useHashRoute } from "../app/router";
 import { useLoad } from "../app/useLoad";
+import { useSessionState } from "../app/useSessionState";
 import { EmptyState, ErrorState, LoadingState } from "../components/shell/Feedback";
 import { BlockingBadge } from "../components/shell/StatusBadge";
 import { OpenIcon } from "../components/shell/icons";
@@ -17,6 +18,43 @@ import type { ActionId } from "../domain/ids";
 import type { ActionState } from "../domain/enums";
 
 type StateFilter = "all" | ActionState;
+
+interface ManualActionRecord {
+  actionId: ActionId;
+  transition: "closed" | "reopened";
+  reason: string;
+  at: string;
+  operator: string;
+  reviewLabel: string;
+}
+
+function parseManualActionRecords(value: unknown): ReadonlyArray<ManualActionRecord> | null {
+  if (!Array.isArray(value)) return null;
+  const records: ManualActionRecord[] = [];
+  for (const item of value) {
+    if (typeof item !== "object" || item === null) return null;
+    const candidate = item as Record<string, unknown>;
+    if (
+      typeof candidate.actionId !== "string" ||
+      (candidate.transition !== "closed" && candidate.transition !== "reopened") ||
+      typeof candidate.reason !== "string" ||
+      typeof candidate.at !== "string" ||
+      typeof candidate.operator !== "string" ||
+      typeof candidate.reviewLabel !== "string"
+    ) {
+      return null;
+    }
+    records.push({
+      actionId: candidate.actionId as ActionId,
+      transition: candidate.transition,
+      reason: candidate.reason,
+      at: candidate.at,
+      operator: candidate.operator,
+      reviewLabel: candidate.reviewLabel,
+    });
+  }
+  return records;
+}
 
 const STATE_FILTERS: ReadonlyArray<{ key: StateFilter; label: string }> = [
   { key: "all", label: "全部" },
@@ -86,12 +124,33 @@ export function ActionsPage() {
     [selectedAction?.actionId, selectedEpisode?.subjectId, selectedEpisode?.stage],
   );
 
-  // 人工确认试用的本地状态：actionId → 理由
-  const [confirmed, setConfirmed] = useState<
-    ReadonlyMap<ActionId, { reason: string; at: string }>
-  >(new Map());
+  // 仅保存本次浏览器会话中的操作记录；临床事实仍来自仓储。
+  const [manualRecords, setManualRecords, resetManualRecords] = useSessionState<
+    ReadonlyArray<ManualActionRecord>
+  >("eligibility-review:uat:manual-actions", [], parseManualActionRecords);
   const [draftReason, setDraftReason] = useState("");
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const confirmTriggerRef = useRef<HTMLButtonElement>(null);
+  const confirmBackRef = useRef<HTMLButtonElement>(null);
+
+  const closeConfirmation = useCallback(() => {
+    setShowConfirmation(false);
+    requestAnimationFrame(() => confirmTriggerRef.current?.focus());
+  }, []);
+
+  useEffect(() => {
+    if (!showConfirmation) return;
+    confirmBackRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeConfirmation();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [closeConfirmation, showConfirmation]);
 
   if (actions.state.status === "loading" || board.state.status === "loading") {
     return <LoadingState />;
@@ -117,7 +176,7 @@ export function ActionsPage() {
           return null;
         })();
 
-  const confirmAction = () => {
+  const reviewConfirmation = () => {
     if (selectedAction === null) return;
     const reason = draftReason.trim();
     if (reason === "") {
@@ -125,35 +184,57 @@ export function ActionsPage() {
       return;
     }
     setConfirmError(null);
-    setConfirmed((current) =>
-      new Map(current).set(selectedAction.actionId, {
+    setShowConfirmation(true);
+  };
+
+  const confirmAction = () => {
+    if (selectedAction === null) return;
+    const reason = draftReason.trim();
+    const nextIndex = manualRecords.length + 1;
+    setManualRecords((current) => [
+      ...current,
+      {
+        actionId: selectedAction.actionId,
+        transition: "closed",
         reason,
         at: new Date().toLocaleString("zh-CN", { hour12: false }),
-      }),
-    );
+        operator: "本机用户",
+        reviewLabel: `第 ${nextIndex} 次重新核对`,
+      },
+    ]);
     setDraftReason("");
+    setShowConfirmation(false);
   };
 
   const reopenAction = () => {
     if (selectedAction === null) return;
-    setConfirmed((current) => {
-      const next = new Map(current);
-      next.delete(selectedAction.actionId);
-      return next;
-    });
+    const nextIndex = manualRecords.length + 1;
+    setManualRecords((current) => [
+      ...current,
+      {
+        actionId: selectedAction.actionId,
+        transition: "reopened",
+        reason: "试用中重新打开，保留此前确认记录。",
+        at: new Date().toLocaleString("zh-CN", { hour12: false }),
+        operator: "本机用户",
+        reviewLabel: `第 ${nextIndex} 次重新核对`,
+      },
+    ]);
   };
 
-  const isConfirmedLocally =
-    selectedAction !== null && confirmed.has(selectedAction.actionId);
-  const confirmRecord =
-    selectedAction === null ? null : confirmed.get(selectedAction.actionId) ?? null;
+  const selectedRecords =
+    selectedAction === null
+      ? []
+      : manualRecords.filter((record) => record.actionId === selectedAction.actionId);
+  const latestRecord = selectedRecords.at(-1) ?? null;
+  const isConfirmedLocally = latestRecord?.transition === "closed";
 
   return (
     <div className="actions">
       <header className="page-head">
         <h1 className="page-head__title">行动中心</h1>
         <p className="page-head__note">
-          {UI_PHRASES.prototypeOnly}：展示合成示例数据。人工确认仅在当前页面暂时生效，不写入项目资料。
+          {UI_PHRASES.prototypeOnly}：展示合成示例数据。人工确认会保留到本次浏览器会话结束，但不写入项目资料。
         </p>
       </header>
 
@@ -200,7 +281,10 @@ export function ActionsPage() {
           ) : (
             <ul>
               {filtered.map((action) => {
-                const locallyClosed = confirmed.has(action.actionId);
+                const actionRecords = manualRecords.filter(
+                  (record) => record.actionId === action.actionId,
+                );
+                const locallyClosed = actionRecords.at(-1)?.transition === "closed";
                 const displayState = locallyClosed
                   ? ("已在本次试用中关闭" as string)
                   : action.stateLabel;
@@ -303,15 +387,21 @@ export function ActionsPage() {
                 </section>
               )}
 
-              {confirmRecord !== null && (
+              {selectedRecords.length > 0 && (
                 <section className="action-detail__section">
-                  <h3 className="action-detail__subtitle">人工确认记录（本次试用）</h3>
+                  <h3 className="action-detail__subtitle">人工操作记录（本次试用）</h3>
                   <ul className="action-detail__record">
-                    <li>时间：{confirmRecord.at}</li>
-                    <li>操作者：本机用户</li>
-                    <li>理由：{confirmRecord.reason}</li>
-                    <li>说明：本次确认未写入项目资料；刷新页面后恢复原始状态。</li>
+                    {selectedRecords.map((record, index) => (
+                      <li key={`${record.actionId}-${index}-${record.at}`}>
+                        时间：{record.at} · 操作者：{record.operator} · 操作：{record.transition === "closed" ? "确认关闭" : "重新打开"}<br />
+                        理由：{record.reason}<br />
+                        后续：{record.reviewLabel}
+                      </li>
+                    ))}
                   </ul>
+                  <p className="action-detail__note">
+                    记录按发生顺序保留；重新打开不会删除此前记录。当前试用记录未写入项目资料。
+                  </p>
                 </section>
               )}
 
@@ -360,11 +450,12 @@ export function ActionsPage() {
                     </p>
                   )}
                   <button
+                    ref={confirmTriggerRef}
                     type="button"
                     className="button button--primary"
-                    onClick={confirmAction}
+                    onClick={reviewConfirmation}
                   >
-                    确认关闭
+                    核对确认内容
                   </button>
                   <p className="action-detail__note">
                     本次确认只在当前页面暂时生效；无关文件不会关闭该行动。
@@ -381,10 +472,51 @@ export function ActionsPage() {
                   重新打开
                 </button>
               )}
+
+              {manualRecords.length > 0 && (
+                <button
+                  type="button"
+                  className="button button--quiet"
+                  onClick={resetManualRecords}
+                >
+                  恢复试用初始状态
+                </button>
+              )}
             </article>
           )}
         </aside>
       </div>
+
+      {showConfirmation && selectedAction !== null && (
+        <div className="confirmation-scrim" onClick={closeConfirmation}>
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="manual-confirm-title"
+            className="confirmation-dialog"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="manual-confirm-title">确认本次人工处理</h2>
+            <dl className="confirmation-dialog__details">
+              <div><dt>对象</dt><dd>{selectedAction.subjectCode} · {selectedAction.displayCode}</dd></div>
+              <div><dt>处理事项</dt><dd>{selectedAction.requestedAction}</dd></div>
+              <div><dt>当前影响</dt><dd>{selectedAction.blockingLabel}；关闭行动不等于规则通过</dd></div>
+              <div><dt>确认理由</dt><dd>{draftReason.trim()}</dd></div>
+            </dl>
+            <p className="confirmation-dialog__note">
+              确认后将新增一条操作记录，并提示重新核对关联规则；原判断不会被直接改成通过。
+            </p>
+            <div className="confirmation-dialog__actions">
+              <button ref={confirmBackRef} type="button" className="button" onClick={closeConfirmation}>
+                返回修改
+              </button>
+              <button type="button" className="button button--primary" onClick={confirmAction}>
+                确认关闭并重新核对
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

@@ -35,10 +35,9 @@ export async function openRoute(page: Page, hash: string) {
 }
 
 /**
- * 以布局视口模拟浏览器缩放。1440px 屏幕在 150%/200% 缩放时分别提供
- * 960px/720px CSS 布局宽度，媒体查询行为与真实浏览器缩放一致。
+ * 以缩小布局视口做响应式压力测试。此检查不能替代真实浏览器 150%/200% 缩放验收。
  */
-export async function setZoom(page: Page, factor: 1 | 1.5 | 2) {
+export async function setLayoutStressFactor(page: Page, factor: 1 | 1.5 | 2) {
   let baseViewport = baseViewportByPage.get(page);
   if (baseViewport === undefined) {
     const currentViewport = page.viewportSize();
@@ -58,4 +57,14 @@ export async function setZoom(page: Page, factor: 1 | 1.5 | 2) {
         requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
       }),
   );
+}
+
+/** 收集浏览器控制台错误与未捕获脚本错误。调用方必须在打开页面前安装。 */
+export function collectRuntimeErrors(page: Page): string[] {
+  const errors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(`控制台：${message.text()}`);
+  });
+  page.on("pageerror", (error) => errors.push(`页面脚本：${error.message}`));
+  return errors;
 }

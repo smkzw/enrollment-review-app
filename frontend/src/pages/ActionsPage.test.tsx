@@ -12,6 +12,7 @@ import { ActionsPage } from "./ActionsPage";
 describe("行动中心", () => {
   beforeEach(() => {
     window.location.hash = "";
+    window.sessionStorage.clear();
   });
 
   it("列表展示对象、缺口、责任方、关联规则与阻断程度", async () => {
@@ -57,7 +58,7 @@ describe("行动中心", () => {
       .getAllByRole("button")
       .find((button) => button.textContent?.includes("补充当前审核节点未记录的关键信息"));
     await user.click(row as HTMLElement);
-    await user.click(await screen.findByRole("button", { name: "确认关闭" }));
+    await user.click(await screen.findByRole("button", { name: "核对确认内容" }));
     expect(
       await screen.findByText("请填写确认理由后再确认关闭。"),
     ).toBeInTheDocument();
@@ -73,14 +74,33 @@ describe("行动中心", () => {
     await user.click(row as HTMLElement);
     const reason = await screen.findByLabelText("确认理由（必填）");
     await user.type(reason, "已核对筛选病历与知情同意，确认年龄记录来源可靠。");
-    await user.click(screen.getByRole("button", { name: "确认关闭" }));
-    expect(await screen.findByText(/人工确认记录（本次试用）/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "核对确认内容" }));
+    const dialog = await screen.findByRole("dialog", { name: "确认本次人工处理" });
+    expect(dialog).toHaveTextContent("UAT-03 · IN-01");
+    expect(dialog).toHaveTextContent("关闭行动不等于规则通过");
+    await user.click(screen.getByRole("button", { name: "确认关闭并重新核对" }));
+    expect(await screen.findByText(/人工操作记录（本次试用）/)).toBeInTheDocument();
     expect(screen.getByText(/理由：已核对筛选病历与知情同意/)).toBeInTheDocument();
     expect(screen.getByText(/操作者：本机用户/)).toBeInTheDocument();
     // 本次确认前后差异与诚实说明
     expect(screen.getByText("本次确认前后差异")).toBeInTheDocument();
     expect(screen.getByText(/不等于规则自动通过/)).toBeInTheDocument();
     expect(screen.getByText(/未写入项目资料/)).toBeInTheDocument();
+  });
+
+  it("重新打开会追加记录而不删除此前确认", async () => {
+    const user = userEvent.setup();
+    render(<ActionsPage />);
+    await screen.findByRole("heading", { name: /行动列表/ });
+    const reason = await screen.findByLabelText("确认理由（必填）");
+    await user.type(reason, "研究者已补充书面判断并完成签名日期。");
+    await user.click(screen.getByRole("button", { name: "核对确认内容" }));
+    await user.click(screen.getByRole("button", { name: "确认关闭并重新核对" }));
+    await user.click(await screen.findByRole("button", { name: "重新打开" }));
+    const records = screen.getByRole("heading", { name: /人工操作记录/ }).closest("section");
+    expect(records).toHaveTextContent("确认关闭");
+    expect(records).toHaveTextContent("重新打开");
+    expect(records).toHaveTextContent("保留此前确认记录");
   });
 
   it("无 URL 参数时默认选中首项并显示为什么/谁/补什么/可关闭证据", async () => {

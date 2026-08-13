@@ -30,6 +30,8 @@ export interface AppRoute {
   component: LazyExoticComponent<ComponentType> | null;
   /** 是否默认首屏 */
   defaultPath?: boolean;
+  /** 仅作为上下文页面访问，不在主导航重复占位 */
+  showInNavigation?: boolean;
 }
 
 export const NAV_GROUPS: ReadonlyArray<{ id: NavGroup; label: string }> = [
@@ -53,6 +55,14 @@ export const APP_ROUTES: readonly AppRoute[] = [
     description: "项目、受试者和各审核节点的全局状态",
     group: "work",
     component: lazy(() => import("../pages/ProjectBoardPage")),
+  },
+  {
+    path: "/projects/new",
+    label: "新建项目",
+    description: "从方案确认研究期别并选择独立审核节点",
+    group: "work",
+    component: lazy(() => import("../pages/ProjectCreationPage")),
+    showInNavigation: false,
   },
   {
     path: "/protocols",
@@ -115,7 +125,9 @@ export function isImplemented(route: AppRoute): boolean {
 
 /** 已注册页面的入口：主导航只展示这些（未注册模块不出现假入口） */
 export function implementedRoutes(): ReadonlyArray<AppRoute> {
-  return APP_ROUTES.filter(isImplemented);
+  return APP_ROUTES.filter(
+    (route) => isImplemented(route) && route.showInNavigation !== false,
+  );
 }
 
 export function defaultRoute(): AppRoute {

@@ -4,7 +4,12 @@
  */
 
 import { test, expect } from "@playwright/test";
-import { expectNoPageOverflow, openRoute, setZoom } from "./helpers";
+import {
+  collectRuntimeErrors,
+  expectNoPageOverflow,
+  openRoute,
+  setLayoutStressFactor,
+} from "./helpers";
 
 const ROUTES = [
   { hash: "today", title: "今日工作", key: "待处理事项" },
@@ -14,19 +19,21 @@ const ROUTES = [
   { hash: "workbench", title: "入排工作台", key: "规则与判断状态" },
   { hash: "actions", title: "行动中心", key: "行动列表" },
   { hash: "reports", title: "报告", key: "生成报告" },
-  { hash: "tasks", title: "任务与系统", key: "资料整理任务" },
+  { hash: "tasks", title: "任务与系统", key: "继续未完成事项" },
   { hash: "help", title: "系统帮助", key: "从这里开始" },
 ];
 
 test.describe("一级路由", () => {
   for (const route of ROUTES) {
     test(`${route.title} 可达且无页面级横向滚动`, async ({ page }) => {
+      const runtimeErrors = collectRuntimeErrors(page);
       await openRoute(page, `/${route.hash}`);
       await expect(
         page.getByRole("heading", { name: route.title, level: 1 }),
       ).toBeVisible();
       await expect(page.getByText(route.key).first()).toBeVisible();
       await expectNoPageOverflow(page);
+      expect(runtimeErrors).toEqual([]);
     });
   }
 
@@ -73,7 +80,7 @@ test.describe("一级路由", () => {
     await expect(detail).toContainText("UAT-03");
   });
 
-  test("1440 物理宽度全部一级页面在 150%/200% 等效缩放下无页面级横向滚动", async ({ page }) => {
+  test("1440 物理宽度在缩小布局视口压力下无页面级横向滚动", async ({ page }) => {
     test.skip(page.viewportSize()?.width !== 1440, "仅 1440 项目执行");
     for (const route of ROUTES) {
       await openRoute(page, `/${route.hash}`);
@@ -81,9 +88,9 @@ test.describe("一级路由", () => {
         page.getByRole("heading", { name: route.title, level: 1 }),
       ).toBeVisible();
       await expect(page.getByText(route.key).first()).toBeVisible();
-      await setZoom(page, 1.5);
+      await setLayoutStressFactor(page, 1.5);
       await expectNoPageOverflow(page);
-      await setZoom(page, 2);
+      await setLayoutStressFactor(page, 2);
       await expectNoPageOverflow(page);
       const visibleText = await page.locator("#main-content").innerText();
       expect(visibleText).not.toMatch(/\bREQ-/);

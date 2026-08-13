@@ -5,7 +5,7 @@
  * - 每格直达该受试者该审核节点；阶段永不合并为一个总状态。
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RowSelectionState, SortingState, Updater } from "@tanstack/react-table";
 import { getDefaultRepository } from "../api";
 import { updateParams, useHashRoute } from "../app/router";
@@ -166,9 +166,32 @@ export function ProjectBoardPage() {
 
   /** 勾选：以受试者 ID 为键，排序/筛选后不丢失（§7.2） */
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const selectedCount = filteredSubjects.filter(
+  const selectedSubjects = board?.subjects.filter(
     (subject) => rowSelection[subject.subjectId] === true,
-  ).length;
+  ) ?? [];
+  const selectedCount = selectedSubjects.length;
+  const [showBatchConfirmation, setShowBatchConfirmation] = useState(false);
+  const [batchSummary, setBatchSummary] = useState<ReadonlyArray<string>>([]);
+  const batchTriggerRef = useRef<HTMLButtonElement>(null);
+  const batchBackRef = useRef<HTMLButtonElement>(null);
+
+  const closeBatchConfirmation = useCallback(() => {
+    setShowBatchConfirmation(false);
+    requestAnimationFrame(() => batchTriggerRef.current?.focus());
+  }, []);
+
+  useEffect(() => {
+    if (!showBatchConfirmation) return;
+    batchBackRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeBatchConfirmation();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [closeBatchConfirmation, showBatchConfirmation]);
 
   const handleSelectionChange = useCallback(
     (updater: Updater<RowSelectionState>) => {
@@ -231,8 +254,16 @@ export function ProjectBoardPage() {
       {selectedCount > 0 && (
         <div className="board-selection" role="status">
           <span>
-            已选择 {selectedCount} 项（当前筛选范围）
+            已选择 {selectedCount} 位受试者（只处理明确勾选对象）
           </span>
+          <button
+            ref={batchTriggerRef}
+            type="button"
+            className="button button--primary"
+            onClick={() => setShowBatchConfirmation(true)}
+          >
+            批量回看审核摘要
+          </button>
           <button
             type="button"
             className="button button--quiet"
@@ -241,6 +272,14 @@ export function ProjectBoardPage() {
             清除选择
           </button>
         </div>
+      )}
+
+      {batchSummary.length > 0 && (
+        <section className="board-batch-result" aria-live="polite">
+          <strong>批量操作完成</strong>
+          <span>本次只回看以下 {batchSummary.length} 位受试者，不改变任何审核结论：</span>
+          <span>{batchSummary.join("、")}</span>
+        </section>
       )}
 
       {filteredSubjects.length === 0 ? (
@@ -268,6 +307,45 @@ export function ProjectBoardPage() {
           rowSelection={rowSelection}
           onRowSelectionChange={handleSelectionChange}
         />
+      )}
+
+      {showBatchConfirmation && (
+        <div className="confirmation-scrim" onClick={closeBatchConfirmation}>
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="batch-confirm-title"
+            className="confirmation-dialog"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="batch-confirm-title">确认批量操作范围</h2>
+            <p>本次操作：回看审核摘要，不改变审核结论。</p>
+            <p>明确勾选 {selectedSubjects.length} 位受试者：</p>
+            <ul className="confirmation-dialog__list">
+              {selectedSubjects.map((subject) => (
+                <li key={subject.subjectId}>{subject.subjectCode} · {subject.centerCode} {subject.centerName}</li>
+              ))}
+            </ul>
+            <p className="confirmation-dialog__note">
+              未显示或未勾选的受试者不会被加入。排序和筛选不会扩大以上范围。
+            </p>
+            <div className="confirmation-dialog__actions">
+              <button ref={batchBackRef} type="button" className="button" onClick={closeBatchConfirmation}>
+                返回检查
+              </button>
+              <button
+                type="button"
+                className="button button--primary"
+                onClick={() => {
+                  setBatchSummary(selectedSubjects.map((subject) => subject.subjectCode));
+                  setShowBatchConfirmation(false);
+                }}
+              >
+                确认回看
+              </button>
+            </div>
+          </section>
+        </div>
       )}
     </div>
   );

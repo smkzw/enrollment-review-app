@@ -381,6 +381,18 @@ def test_uat_workspace_has_executable_multistage_coverage() -> None:
         )
 
 
+def test_protocol_diff_requires_rule_scoped_source_locations() -> None:
+    payload = load_json(UAT_FIXTURE_PATH)
+    refs = payload["protocol_diff"]["source_refs_by_rule_code"]
+    assert refs["EX-05"] == ["protocol-v2-draft:p12"]
+    assert refs["REQ-02"] == ["protocol-v1:p10"]
+    assert refs["EX-01"] == ["protocol-v1:p10", "protocol-v2-draft:p12"]
+
+    del payload["protocol_diff"]["source_refs_by_rule_code"]["EX-05"]
+    with pytest.raises(ValueError, match="每条新增、删除或变更规则"):
+        UatWorkspaceFixture.model_validate(payload)
+
+
 def test_uat_workspace_rejects_semantic_operator_coverage_regression() -> None:
     payload = load_json(UAT_FIXTURE_PATH)
 
