@@ -73,3 +73,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 3: Phase 1.5 多模型医学监查员验收与根因修订
+
+**Date**: 2026-08-14
+**Task**: Phase 1.5 多模型医学监查员验收与根因修订
+**Branch**: `codex/v2-phase0-foundation`
+
+### Summary
+
+完成真实浏览器独立审评、共享根因修订、事件证据归属合同、全量确定性与视觉验收；Phase 1.5 通过并将父任务推进到 Phase 2 ready。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4c89da8` | (see git log) |
+
+### Status
+
+[OK] **Completed**
