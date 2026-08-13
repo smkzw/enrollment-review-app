@@ -53,7 +53,6 @@
 
 [OK] **Completed**
 
-
 ## Session 2: 补齐正式界面试用桌面入口与窄屏复位验收
 
 **Date**: 2026-08-13
@@ -94,3 +93,18 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 4: Phase 2 最终规划 checkpoint
+
+**Date**: 2026-08-14
+**Task**: Phase 2 SQLite领域层与持久任务规划
+**Branch**: `codex/v2-phase0-foundation`
+
+### Summary
+
+已创建 Trellis 子任务 `08-14-phase2-sqlite-domain-jobs` 并完成 PRD、设计、实施清单及执行/检查上下文清单。规划确定独立 `data_v2/`、同步 SQLAlchemy 2、SQLite WAL、Alembic 一致备份、不可变领域历史、持久任务、租约恢复、幂等、乐观并发和结构化过期范围；不提前接入真实方案解析、OCR 或医学审核。
+
+### Status
+
+[WAIT] **Planning approved summary presented; explicit user approval required before `task.py start`**

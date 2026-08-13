@@ -1,0 +1,6 @@
+{"file":"docs/REARCHITECTURE_FINAL_DESIGN_20260812.md","reason":"V2领域、运行图、持久化、恢复和旧系统隔离的权威设计"}
+{"file":"plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md","reason":"Phase 2范围、退出门槛与后续阶段边界"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"SQLite、事务、迁移、版本与不可变历史规范"}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"V2层次和依赖方向"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"恢复、并发和中文错误信封"}
+{"file":".trellis/spec/backend/logging-guidelines.md","reason":"Job事件与技术日志边界"}

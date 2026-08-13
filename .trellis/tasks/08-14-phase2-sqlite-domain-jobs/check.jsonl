@@ -1,0 +1,6 @@
+{"file":"docs/REARCHITECTURE_FINAL_DESIGN_20260812.md","reason":"检查实现未越过Phase 2或削弱确定性门禁"}
+{"file":"plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md","reason":"检查全部Phase 2退出门槛"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"检查事务、迁移、备份和历史不覆盖"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"检查scope、版本、证据和测试覆盖"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"检查API、服务、工作流、存储和前端订阅边界"}
+{"file":"reviews/codex_conference_phase1_5_agent_monitor_retest_review.md","reason":"保持Phase 1.5已验收交互与明确的Phase 2承接项"}

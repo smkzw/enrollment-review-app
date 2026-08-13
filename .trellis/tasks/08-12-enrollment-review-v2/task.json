@@ -23,7 +23,8 @@
     "08-12-phase0-5-contracts",
     "08-13-phase1-frontend-shell",
     "08-13-phase1-5-uat-readiness",
-    "08-13-phase1-5-agent-monitor-uat"
+    "08-13-phase1-5-agent-monitor-uat",
+    "08-14-phase2-sqlite-domain-jobs"
   ],
   "parent": null,
   "relatedFiles": [],
