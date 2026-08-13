@@ -21,10 +21,10 @@
   "children": [],
   "parent": "08-12-enrollment-review-v2",
   "relatedFiles": [],
-  "notes": "2026-08-13 Phase 1.5 构建者预试与返工已完成；同一独立复核会话最终 ACCEPT，P0/P1/P2 均为0。当前只等待正式用户UAT，未经用户明确批准不得启动Phase 2。",
+  "notes": "2026-08-13 Phase 1.5 构建者预试、正式界面试用任务包和统一复位已完成；独立最终复核 ACCEPT，P0=0、P1=0、P2=2（仅试用组织注意事项）。当前等待不少于10名目标用户的正式试用和用户明确批准，未经批准不得启动Phase 2。",
   "meta": {
     "gate": "awaiting_user_uat",
     "independent_review": "accepted",
-    "last_checkpoint": "2026-08-13-phase1-5-uat-ready"
+    "last_checkpoint": "2026-08-13-phase1-5-formal-uat-package-ready"
   }
 }

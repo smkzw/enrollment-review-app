@@ -144,4 +144,12 @@ function assertZoomMetrics(label, metrics) {
   if (metrics.hasPageOverflow) {
     throw new Error(`${label} 在 ${zoomLabel}% 缩放下出现页面级横向滚动。`);
   }
+  if (
+    metrics.dialogRect !== null &&
+    (metrics.dialogRect.left < 0 || metrics.dialogRect.right > metrics.innerWidth)
+  ) {
+    throw new Error(
+      `${label} 在 ${zoomLabel}% 缩放下超出可视区：左侧 ${metrics.dialogRect.left}，右侧 ${metrics.dialogRect.right}，可视宽度 ${metrics.innerWidth}。`,
+    );
+  }
 }

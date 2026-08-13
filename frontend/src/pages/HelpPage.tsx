@@ -5,7 +5,9 @@
  *   键盘操作和遇到问题怎么办。
  */
 
-import { RouteLink } from "../app/router";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { navigate, RouteLink } from "../app/router";
+import { resetUatTrialState, UAT_PAGE_VERSION } from "../app/uatTrialState";
 import { HelpIcon } from "../components/shell/icons";
 
 interface HelpStep {
@@ -122,6 +124,35 @@ const HELP_SECTIONS: ReadonlyArray<HelpStep> = [
 ];
 
 export function HelpPage() {
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const confirmBackRef = useRef<HTMLButtonElement>(null);
+  const resetTriggerRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+
+  const closeResetConfirm = useCallback(() => {
+    setShowResetConfirm(false);
+    requestAnimationFrame(() => resetTriggerRef.current?.focus());
+  }, []);
+
+  const confirmReset = useCallback(() => {
+    resetUatTrialState();
+    setShowResetConfirm(false);
+    navigate("/today");
+  }, []);
+
+  useEffect(() => {
+    if (!showResetConfirm) return;
+    confirmBackRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeResetConfirm();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [closeResetConfirm, showResetConfirm]);
+
   return (
     <div className="help">
       <header className="page-head">
@@ -131,6 +162,9 @@ export function HelpPage() {
         </h1>
         <p className="page-head__note">
           按顺序阅读即可完成日常工作；所有说明均为当前版本的真实操作。
+        </p>
+        <p className="page-head__meta">
+          页面版本：{UAT_PAGE_VERSION}
         </p>
       </header>
 
@@ -154,6 +188,24 @@ export function HelpPage() {
           </li>
         ))}
       </ol>
+
+      <section className="help-reset" aria-labelledby="help-reset-title">
+        <h2 id="help-reset-title" className="help-reset__title">
+          开始新的界面试用
+        </h2>
+        <p className="help-reset__note">
+          每位参与者开始前，记录人员可以用这里把演示内容恢复成同一起点。
+          只清除本系统在本次会话中保存的演示状态，不影响其他页面和数据。
+        </p>
+        <button
+          ref={resetTriggerRef}
+          type="button"
+          className="button button--quiet"
+          onClick={() => setShowResetConfirm(true)}
+        >
+          开始新的界面试用
+        </button>
+      </section>
 
       <section className="help-links" aria-labelledby="help-links-title">
         <h2 id="help-links-title" className="help-links__title">
@@ -186,6 +238,43 @@ export function HelpPage() {
           </RouteLink>
         </div>
       </section>
+
+      {showResetConfirm && (
+        <div className="confirmation-scrim" onClick={closeResetConfirm}>
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            className="confirmation-dialog"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id={titleId}>开始新的界面试用</h2>
+            <p className="confirmation-dialog__note">
+              这一步会把本次会话中已经保存的演示状态清除，回到每位参与者的同一起点。
+            </p>
+            <p className="confirmation-dialog__note">
+              当前页面版本：{UAT_PAGE_VERSION}
+            </p>
+            <div className="confirmation-dialog__actions">
+              <button
+                ref={confirmBackRef}
+                type="button"
+                className="button"
+                onClick={closeResetConfirm}
+              >
+                先不要
+              </button>
+              <button
+                type="button"
+                className="button button--primary"
+                onClick={confirmReset}
+              >
+                确认并回到今日工作
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

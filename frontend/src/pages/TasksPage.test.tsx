@@ -8,6 +8,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, beforeEach } from "vitest";
 import { TasksPage } from "./TasksPage";
+import { UAT_KEY_TASK_PROGRESS } from "../app/uatTrialState";
 
 async function openTasks(user: ReturnType<typeof userEvent.setup>) {
   render(<TasksPage />);
@@ -144,7 +145,7 @@ describe("任务与系统", () => {
     ["completed", ["pending", "pending", "pending"]],
   ] as const)("拒绝与资料进度矛盾的 %s 状态并恢复可信初始状态", async (state, fileStates) => {
     window.sessionStorage.setItem(
-      "eligibility-review:uat:task-progress",
+      UAT_KEY_TASK_PROGRESS,
       JSON.stringify({
         state,
         fileStates: {

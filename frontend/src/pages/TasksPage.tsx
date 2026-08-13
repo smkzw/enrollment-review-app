@@ -10,6 +10,7 @@ import { getDefaultRepository } from "../api";
 import { RouteLink, updateParams, useHashRoute } from "../app/router";
 import { useLoad } from "../app/useLoad";
 import { useSessionState } from "../app/useSessionState";
+import { UAT_KEY_TASK_PROGRESS } from "../app/uatTrialState";
 import { EmptyState, ErrorState, LoadingState } from "../components/shell/Feedback";
 import { TaskStateBadge } from "../components/shell/StatusBadge";
 import { OpenIcon, ResumeIcon, RunningIcon, StaleIcon } from "../components/shell/icons";
@@ -148,7 +149,7 @@ export function TasksPage() {
   // ---- 处理状态试用：本地状态机覆盖 8 个任务状态边界 ----
   const [demoProgressState, setDemoProgressState, resetDemoProgress] =
     useSessionState<DemoTaskProgress>(
-      "eligibility-review:uat:task-progress",
+      UAT_KEY_TASK_PROGRESS,
       INITIAL_DEMO_PROGRESS,
       parseDemoTaskProgress,
     );

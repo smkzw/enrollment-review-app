@@ -8,6 +8,7 @@ import { useState } from "react";
 import { getDefaultRepository } from "../api";
 import { useLoad } from "../app/useLoad";
 import { useSessionState } from "../app/useSessionState";
+import { UAT_KEY_PROTOCOL_DRAFT_SAVED } from "../app/uatTrialState";
 import { EmptyState, ErrorState, LoadingState } from "../components/shell/Feedback";
 import { ProtocolSourceDialog, type ProtocolSourceLocation } from "../components/protocols/ProtocolSourceDialog";
 import { CheckIcon, OpenIcon, ProtocolFileIcon, ReportFileIcon } from "../components/shell/icons";
@@ -120,7 +121,7 @@ export function ProtocolsPage() {
     [],
   );
   const [draftSaved, setDraftSaved, resetDraftSaved] = useSessionState(
-    "eligibility-review:uat:protocol-draft-saved",
+    UAT_KEY_PROTOCOL_DRAFT_SAVED,
     false,
     (value) => (typeof value === "boolean" ? value : null),
   );

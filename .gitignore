@@ -16,6 +16,7 @@ projects/
 # 测试与运行生成物（由清单和归档记录管理，不进入源码版本）
 output/
 .playwright-cli/
+archives/execution/
 
 # 前端与Python构建缓存
 node_modules/

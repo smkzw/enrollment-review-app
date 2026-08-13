@@ -16,7 +16,7 @@ describe("顶栏", () => {
   it("显示中文项目展示名与方案版本，不暴露原始项目代号", async () => {
     render(<TopBar positionLabel="今日工作" />);
     expect(
-      await screen.findByText("界面试用项目 · III期"),
+      await screen.findByText("界面试用项目 · Ⅲ期"),
     ).toBeInTheDocument();
     expect(screen.getByText("方案 V1.0")).toBeInTheDocument();
     expect(screen.queryByText(/SYNTHETIC/)).not.toBeInTheDocument();

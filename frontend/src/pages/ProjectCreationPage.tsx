@@ -8,6 +8,7 @@ import { getDefaultRepository } from "../api";
 import { navigate, RouteLink } from "../app/router";
 import { useLoad } from "../app/useLoad";
 import { useSessionState } from "../app/useSessionState";
+import { UAT_KEY_CREATED_PROJECT } from "../app/uatTrialState";
 import {
   ProjectCreationDialog,
   type CreatedProjectView,
@@ -55,7 +56,7 @@ export function ProjectCreationPage() {
   );
   const [createdProject, setCreatedProject, resetCreatedProject] =
     useSessionState<CreatedProjectView | null>(
-      "eligibility-review:uat:created-project",
+      UAT_KEY_CREATED_PROJECT,
       null,
       (value) => (value === null ? null : parseCreatedProject(value)),
     );

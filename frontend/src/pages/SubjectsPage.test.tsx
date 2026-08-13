@@ -52,7 +52,7 @@ describe("受试者与资料页", () => {
 
   it("资料页元信息使用中文项目展示名，不暴露原始项目代号", async () => {
     render(<SubjectsPage />);
-    expect(await screen.findByText(/界面试用项目 · III期/)).toBeInTheDocument();
+    expect(await screen.findByText(/界面试用项目 · Ⅲ期/)).toBeInTheDocument();
     expect(screen.queryByText(/SYNTHETIC-001-III/)).not.toBeInTheDocument();
   });
 

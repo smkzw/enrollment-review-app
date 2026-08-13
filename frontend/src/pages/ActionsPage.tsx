@@ -10,6 +10,7 @@ import { getDefaultRepository } from "../api";
 import { updateParams, useHashRoute } from "../app/router";
 import { useLoad } from "../app/useLoad";
 import { useSessionState } from "../app/useSessionState";
+import { UAT_KEY_MANUAL_ACTIONS } from "../app/uatTrialState";
 import { EmptyState, ErrorState, LoadingState } from "../components/shell/Feedback";
 import { BlockingBadge } from "../components/shell/StatusBadge";
 import { OpenIcon } from "../components/shell/icons";
@@ -127,7 +128,7 @@ export function ActionsPage() {
   // 仅保存本次浏览器会话中的操作记录；临床事实仍来自仓储。
   const [manualRecords, setManualRecords, resetManualRecords] = useSessionState<
     ReadonlyArray<ManualActionRecord>
-  >("eligibility-review:uat:manual-actions", [], parseManualActionRecords);
+  >(UAT_KEY_MANUAL_ACTIONS, [], parseManualActionRecords);
   const [draftReason, setDraftReason] = useState("");
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
