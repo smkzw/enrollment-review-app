@@ -2,7 +2,7 @@
   "id": "phase1-5-uat-readiness",
   "name": "phase1-5-uat-readiness",
   "title": "Phase 1.5 用户验收预试与返工",
-  "description": "逐项核对14项正式UAT任务的真实可操作性，补齐Phase 1交互缺口并完成预试；停在用户明确批准门前，不进入Phase 2。",
+  "description": "逐项核对14项界面试用任务的真实可操作性，补齐Phase 1交互缺口并完成技术预试与记录工具；最终角色验收另设任务。",
   "status": "in_progress",
   "dev_type": null,
   "scope": null,
@@ -21,9 +21,9 @@
   "children": [],
   "parent": "08-12-enrollment-review-v2",
   "relatedFiles": [],
-  "notes": "2026-08-13 Phase 1.5 构建者预试、正式界面试用任务包、统一复位、桌面一键启动及独立中文记录工作台已完成。记录工作台支持自动保存、派生统计、四类导出和备份恢复；浏览器测试发现的记录数口径与计时同步问题已关闭。当前等待不少于10名目标用户的正式试用和用户明确批准，未经批准不得启动Phase 2。",
+  "notes": "2026-08-13 Phase 1.5 构建者预试、界面试用任务包、统一复位、桌面一键启动及独立中文记录工作台已完成。用户随后终止真人试用路径，改由独立多模型以资深医学监查员角色进行真实浏览器验收；该工作另设任务。",
   "meta": {
-    "gate": "awaiting_user_uat",
+    "gate": "superseded_by_agent_monitor_uat",
     "independent_review": "accepted",
     "last_checkpoint": "2026-08-13-phase1-5-uat-recorder-ready"
   }
