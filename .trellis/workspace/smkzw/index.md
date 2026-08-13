@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 1
+- **Total Sessions**: 2
 - **Last Active**: 2026-08-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~54 | Active |
+| `journal-1.md` | ~75 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 2 | 2026-08-13 | 补齐正式界面试用桌面入口与窄屏复位验收 | `756004d` | `codex/v2-phase0-foundation` |
 | 1 | 2026-08-13 | Phase 1.5 正式界面试用任务包就绪 | `e598c9e`, `b6580e9` | `codex/v2-phase0-foundation` |
 <!-- @@@/auto:session-history -->
 

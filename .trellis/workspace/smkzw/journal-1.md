@@ -52,3 +52,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 2: 补齐正式界面试用桌面入口与窄屏复位验收
+
+**Date**: 2026-08-13
+**Task**: 补齐正式界面试用桌面入口与窄屏复位验收
+**Branch**: `codex/v2-phase0-foundation`
+
+### Summary
+
+新增V2预构建页面一键启动/停止入口与服务归属合同；完成390像素复位交互、状态边界、视觉证据和Finder实点；门状态保持awaiting_user_uat。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `756004d` | (see git log) |
+
+### Status
+
+[OK] **Completed**
