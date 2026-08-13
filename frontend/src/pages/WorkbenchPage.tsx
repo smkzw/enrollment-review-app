@@ -7,6 +7,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getDefaultRepository } from "../api";
+import { readLastWorkbenchEpisode, writeLastWorkbenchEpisode } from "../app/lastWorkbenchEpisode";
 import { RouteLink, updateParams, useHashRoute } from "../app/router";
 import { useLoad } from "../app/useLoad";
 import { EmptyState, ErrorState, LoadingState } from "../components/shell/Feedback";
@@ -30,23 +31,37 @@ export function WorkbenchPage() {
   const board = useLoad(() => getDefaultRepository().getBoard(), []);
   const diffs = useLoad(() => getDefaultRepository().getReviewDiffs(), []);
 
-  /** URL 中的审核节点；无效时回退到第一个有资料的节点 */
+  /**
+   * URL 中的审核节点：
+   * - 显式指定但无效 → null（渲染明确未找到状态，绝不静默回落到其他受试者）；
+   * - 未指定（裸导航）→ 恢复最近一次有效审核节点；无记录时才回落到首个节点。
+   */
   const episodeId: ReviewEpisodeId | null = useMemo(() => {
     if (board.state.status !== "success") return null;
-    if (
-      episodeParam !== null &&
-      board.state.data.episodes.some((episode) => episode.episodeId === episodeParam)
-    ) {
-      return episodeParam as ReviewEpisodeId;
+    const episodes = board.state.data.episodes;
+    const hasEpisode = (id: string | null): id is ReviewEpisodeId =>
+      id !== null && episodes.some((episode) => episode.episodeId === id);
+    if (episodeParam !== null) {
+      return hasEpisode(episodeParam) ? episodeParam : null;
     }
+    const last = readLastWorkbenchEpisode();
+    if (hasEpisode(last)) return last;
     return (
-      [...board.state.data.episodes].sort(
+      [...episodes].sort(
         (a, b) =>
           a.sortRank - b.sortRank ||
           a.subjectCode.localeCompare(b.subjectCode, "zh"),
       )[0]?.episodeId ?? null
     );
   }, [board.state, episodeParam]);
+
+  /** 记录最近一次有效审核节点：无效 URL 不覆盖，避免裸导航误跳其他受试者 */
+  useEffect(() => {
+    if (episodeId !== null) writeLastWorkbenchEpisode(episodeId);
+  }, [episodeId]);
+
+  /** URL 显式指定了审核节点但无效 */
+  const invalidEpisode = episodeParam !== null && episodeId === null;
 
   const episode: EpisodeSummaryView | null = useMemo(() => {
     if (board.state.status !== "success" || episodeId === null) return null;
@@ -83,6 +98,25 @@ export function WorkbenchPage() {
   }
   if (diffs.state.status === "error") {
     return <ErrorState message={diffs.state.message} onRetry={diffs.retry} />;
+  }
+
+  if (invalidEpisode) {
+    return (
+      <div className="workbench">
+        <header className="page-head">
+          <h1 className="page-head__title">入排工作台</h1>
+        </header>
+        <EmptyState
+          message={UI_PHRASES.workbenchEpisodeNotFound}
+          hint={UI_PHRASES.workbenchEpisodeNotFoundHint}
+        />
+        <p className="workbench-notfound-action">
+          <RouteLink to="/board" className="button button--primary">
+            返回项目看板
+          </RouteLink>
+        </p>
+      </div>
+    );
   }
 
   if (episodeId === null || episode === null) {
@@ -159,6 +193,7 @@ export function WorkbenchPage() {
     fileName: document.fileName,
     documentType: document.documentType,
     sourceParty: document.sourceParty,
+    snapshotVersion: document.snapshotVersion,
   }));
 
   const tabs: ReadonlyArray<{ id: WorkbenchTab; label: string }> = [
@@ -252,6 +287,7 @@ export function WorkbenchPage() {
           <EvidencePane
             component={selectedComponent}
             expectations={episodeData.expectations}
+            conflicts={episodeData.conflicts}
             sourceDocuments={sourceDocuments}
             focusSpanId={evidenceParam}
           />

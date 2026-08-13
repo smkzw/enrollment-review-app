@@ -116,18 +116,19 @@ blockquote a:not(.button):not(.icon-button),
 }
 
 .button:hover {
-  border-color: var(--color-teal);
-  color: var(--color-teal);
+  border-color: var(--color-brand-dark);
+  color: var(--color-brand-dark);
 }
 
 .button--primary {
-  background: var(--color-teal);
-  border-color: var(--color-teal);
-  color: #fff;
+  background: var(--color-brand);
+  border-color: var(--color-brand);
+  color: var(--color-ink);
 }
 
 .button--primary:hover {
-  background: var(--color-teal);
+  background: var(--color-brand-dark);
+  border-color: var(--color-brand-dark);
   color: #fff;
   text-decoration: none;
 }

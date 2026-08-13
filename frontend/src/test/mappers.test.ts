@@ -9,6 +9,7 @@ import {
   deriveTaskState,
   mapAction,
   mapBoard,
+  mapConflictGroup,
   mapEpisodeDetail,
   mapEvidenceLocator,
   mapJob,
@@ -18,7 +19,7 @@ import {
   mapWorkspace,
 } from "../domain/mappers";
 import { toId } from "../domain/ids";
-import type { JobEventWire } from "../api/wire";
+import type { ConflictGroupWire, JobEventWire } from "../api/wire";
 
 const episodeById = (id: string) => {
   const episode = workspaceFixture.episodes.find(
@@ -205,9 +206,7 @@ describe("Patient Profile 映射", () => {
     const episode = episodeById("episode-uat-03-screening-gap_conflict");
     const profile = mapPatientProfile(
       episode.patient_profile,
-      episode.evidence_spans,
-      episode.source_documents,
-      episode.evidence_expectations,
+      episode,
     );
     expect(profile.subjectId).toBe(toId("subject-uat-03-gap_conflict"));
     expect(profile.highlightedEventIds).toHaveLength(1);
@@ -229,9 +228,7 @@ describe("Patient Profile 映射", () => {
     const episode = episodeById("episode-uat-03-screening-gap_conflict");
     const profile = mapPatientProfile(
       episode.patient_profile,
-      episode.evidence_spans,
-      episode.source_documents,
-      episode.evidence_expectations,
+      episode,
     );
     const eventsWithEvidence = profile.lanes.flatMap((lane) => lane.events);
     expect(eventsWithEvidence.length).toBeGreaterThan(0);
@@ -242,6 +239,38 @@ describe("Patient Profile 映射", () => {
         );
       }
     }
+  });
+
+  it("区分事件原始依据、审核判断依据、关联规则资料与无独立定位", () => {
+    const clearEpisode = episodeById("episode-uat-01-screening-clear");
+    const clearProfile = mapPatientProfile(
+      clearEpisode.patient_profile,
+      clearEpisode,
+    );
+    const clearEvents = clearProfile.lanes.flatMap((lane) => lane.events);
+    expect(
+      clearEvents.find((event) => event.title === "当前未发现明确障碍")
+        ?.evidenceRelation,
+    ).toBe("review_basis");
+    expect(
+      clearEvents.find((event) => event.title === "阑尾切除术")
+        ?.evidenceRelation,
+    ).toBe("unavailable");
+
+    const gapEpisode = episodeById("episode-uat-03-screening-gap_conflict");
+    const gapProfile = mapPatientProfile(
+      gapEpisode.patient_profile,
+      gapEpisode,
+    );
+    const gapEvents = gapProfile.lanes.flatMap((lane) => lane.events);
+    expect(
+      gapEvents.find((event) => event.title === "合并用药时间轴待核对")
+        ?.evidenceRelation,
+    ).toBe("related_rule");
+    expect(
+      gapEvents.find((event) => event.title === "资料缺口与冲突待处理")
+        ?.evidenceTargetComponentId,
+    ).toBe(toId("component-ex-01"));
   });
 });
 
@@ -309,6 +338,105 @@ describe("规则树映射", () => {
       .filter((value): value is string => value !== null);
     expect(timeWindows).toContain("随机前 28 天内");
     expect(JSON.stringify(detail)).not.toMatch(/undefined/);
+  });
+});
+
+describe("冲突来源并列映射（B1）", () => {
+  const gapDetail = () =>
+    mapEpisodeDetail(episodeById("episode-uat-03-screening-gap_conflict"));
+
+  it("未解决冲突组并列投影每个事实：立场/值 + 来源文件、页码、摘录、精度", () => {
+    const conflicts = gapDetail().conflicts;
+    expect(conflicts).toHaveLength(1);
+    const group = conflicts[0];
+    expect(group.resolved).toBe(false);
+    // 两个事实并列，不自动选择来源
+    expect(group.facts).toHaveLength(2);
+    expect(group.facts.map((fact) => fact.polarityLabel).sort()).toEqual([
+      "明确否认",
+      "明确记载",
+    ]);
+    for (const fact of group.facts) {
+      expect(fact.evidence.length).toBeGreaterThan(0);
+      for (const locator of fact.evidence) {
+        expect(locator.fileName).toBe("合成筛选资料.pdf");
+        expect(locator.pageNumber).toBe(4);
+        expect(locator.precisionLabel).toBe("仅页码");
+      }
+    }
+  });
+
+  it("受影响子项显示编号与资料快照版本为人读中文，原始 ID 不作为标签", () => {
+    const group = gapDetail().conflicts[0];
+    expect(group.affectedDisplayCodes).toEqual(["EX-01a"]);
+    expect(group.snapshotVersion).toBe("第 1 版（2026-08-12 整理）");
+    // 显示层投影为中文编号，原始组件 ID 不作为主标签出现
+    expect(group.affectedDisplayCodes.join(" ")).not.toMatch(/component-/);
+    expect(group.affectedDisplayCodes.join(" ")).not.toMatch(/^REQ-/);
+  });
+
+  it("已解决冲突组不被当作未解决冲突展示", () => {
+    const resolved: ConflictGroupWire = {
+      conflict_group_id: "conflict-resolved",
+      fact_ids: [],
+      affected_rule_component_ids: ["component-in-01"],
+      resolution_evidence_span_ids: [],
+      resolved: true,
+      schema_version: "fixture/v1",
+    };
+    const view = mapConflictGroup(resolved, episodeById("episode-uat-03-screening-gap_conflict"));
+    expect(view.resolved).toBe(true);
+    expect(view.facts).toHaveLength(0);
+  });
+});
+
+describe("应备证据与资料快照版本映射（I3/I4）", () => {
+  it("期望条目投影所属规则编号、具体要求与到期节点", () => {
+    const detail = mapEpisodeDetail(
+      episodeById("episode-uat-03-screening-gap_conflict"),
+    );
+    const expectations = detail.expectations;
+    const age = expectations.find(
+      (item) => item.requirementId === toId("req-age"),
+    );
+    expect(age?.displayCode).toBe("IN-01");
+    expect(age?.requirementDescription).toBe(
+      "筛选节点应有可定位的年龄记录。",
+    );
+    expect(age?.dueStageLabel).toBe("筛选期");
+    const risk = expectations.find(
+      (item) => item.requirementId === toId("req-composite-risk"),
+    );
+    expect(risk?.displayCode).toBe("EX-01a");
+    const future = expectations.find(
+      (item) => item.requirementId === toId("req-future"),
+    );
+    expect(future?.displayCode).toBe("EX-03a");
+    expect(future?.dueStageLabel).toBe("基线/随机前");
+  });
+
+  it("资料详情来源文档与冲突组携带同一人读快照版本", () => {
+    const episode = episodeById("episode-uat-03-screening-gap_conflict");
+    const detail = mapEpisodeDetail(episode);
+    expect(detail.sourceDocuments[0].snapshotVersion).toBe(
+      "第 1 版（2026-08-12 整理）",
+    );
+    expect(detail.conflicts[0].snapshotVersion).toBe(
+      "第 1 版（2026-08-12 整理）",
+    );
+  });
+
+  it("Patient Profile 应备证据同样带规则编号与到期节点", () => {
+    const episode = episodeById("episode-uat-03-screening-gap_conflict");
+    const profile = mapPatientProfile(
+      episode.patient_profile,
+      episode,
+    );
+    const age = profile.expectations.find(
+      (item) => item.requirementId === toId("req-age"),
+    );
+    expect(age?.displayCode).toBe("IN-01");
+    expect(age?.dueStageLabel).toBe("筛选期");
   });
 });
 

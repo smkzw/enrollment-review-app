@@ -750,6 +750,38 @@ def test_fixture_scope_rejects_exact_duplicate_top_level_entities() -> None:
         )
 
 
+def test_fixture_scope_rejects_profile_event_span_outside_linked_facts() -> None:
+    fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[1]))
+    registry = _trusted_registry_from_fixture(fixture)
+    event = fixture.patient_profile.events[0]
+    age_fact = next(fact for fact in fixture.facts if fact.fact_id == "fact-clear-age")
+    unrelated_span = next(
+        span_id
+        for span_id in {span.evidence_span_id for span in fixture.evidence_spans}
+        if span_id not in age_fact.evidence_span_ids
+    )
+    mismatched_event = event.model_copy(
+        update={
+            "fact_ids": [age_fact.fact_id],
+            "evidence_span_ids": [unrelated_span],
+        }
+    )
+    profile = fixture.patient_profile.model_copy(
+        update={
+            "events": [
+                mismatched_event,
+                *fixture.patient_profile.events[1:],
+            ]
+        }
+    )
+
+    with pytest.raises(ValueError, match="原始依据未包含在关联事实证据中"):
+        validate_fixture_scope(
+            fixture.model_copy(update={"patient_profile": profile}),
+            registry,
+        )
+
+
 def test_fixture_scope_rejects_duplicate_snapshot_and_agent_gate_references() -> None:
     fixture = FixtureV1.model_validate(load_json(FIXTURE_PATHS[0]))
     duplicate_snapshot = fixture.evidence_snapshot.model_copy(
@@ -1057,3 +1089,123 @@ def test_fixture_rejects_synchronously_rehashed_protocol_source() -> None:
     )
     with pytest.raises(ValueError, match="已登记版本"):
         validate_fixture_scope(forged_fixture, registry)
+
+
+# ---------------------------------------------------------------------------
+# Patient Profile 与合成时序数据不变量（I6/I7 修复）
+# ---------------------------------------------------------------------------
+
+
+def _episode_pairs(payload: dict):
+    """(review_episode, patient_profile, final_assessments) 组合。"""
+    if "episodes" in payload:
+        for episode in payload["episodes"]:
+            yield (
+                episode["review_episode"],
+                episode["patient_profile"],
+                episode["final_assessments"],
+            )
+    else:
+        yield (
+            payload["review_episode"],
+            payload["patient_profile"],
+            payload["final_assessments"],
+        )
+
+
+def _review_anchor_value(review_episode: dict) -> str | None:
+    """按审核阶段取锚点：预筛=知情同意日，筛选/导入=筛选日，基线=基线日。"""
+    anchor = review_episode["anchor_dates"]
+    key_by_stage = {
+        "pre_screening": "icf_date",
+        "screening": "screening_date",
+        "run_in": "screening_date",
+        "baseline": "baseline_date",
+    }
+    key = key_by_stage[review_episode["stage"]]
+    return anchor[key]["value"] if key in anchor else None
+
+
+BARRIER_DECISIONS = {
+    "exclusion_triggered",
+    "inclusion_not_met",
+    "requirement_not_met",
+}
+
+
+def test_barrier_decisions_never_pair_with_none_blocking() -> None:
+    """I7 不变量：明确障碍判断（exclusion_triggered / inclusion_not_met /
+    requirement_not_met）不得与 blocking_level=none 配对。"""
+    for path in [*FIXTURE_PATHS, UAT_FIXTURE_PATH]:
+        payload = load_json(path)
+        for review_episode, _profile, assessments in _episode_pairs(payload):
+            for assessment in assessments:
+                if assessment["decision"] in BARRIER_DECISIONS:
+                    assert assessment["blocking_level"] != "none", (
+                        f"{path.name} {assessment['assessment_id']} "
+                        f"{assessment['decision']} 不得配 blocking_level=none"
+                    )
+
+
+def test_profile_risk_or_gap_events_carry_no_date() -> None:
+    """I6 不变量：缺口/行动摘要（risk_or_gap）没有临床事件日期，
+    不得盖上筛选/审核锚点日期。"""
+    for path in [*FIXTURE_PATHS, UAT_FIXTURE_PATH]:
+        payload = load_json(path)
+        for _episode, profile, _assessments in _episode_pairs(payload):
+            for event in profile["events"]:
+                if event["event_type"] == "risk_or_gap":
+                    assert event["start_date"] is None and event["end_date"] is None, (
+                        f"{path.name} {event['event_id']} risk_or_gap 不得携带日期"
+                    )
+
+
+def test_profile_summary_events_anchor_to_review_episode() -> None:
+    """I6 不变量：审核摘要（review_summary）属于审核产物，日期必须等于
+    当前审核节点的锚点时间（预筛/筛选/基线），且位于研究节点泳道。"""
+    for path in [*FIXTURE_PATHS, UAT_FIXTURE_PATH]:
+        payload = load_json(path)
+        for review_episode, profile, _assessments in _episode_pairs(payload):
+            anchor = _review_anchor_value(review_episode)
+            for event in profile["events"]:
+                if event["event_type"] == "review_summary":
+                    assert event["lane"] == "study_milestone", (
+                        f"{path.name} {event['event_id']} 审核摘要应位于研究节点泳道"
+                    )
+                    assert event["start_date"] is not None, (
+                        f"{path.name} {event['event_id']} 审核摘要必须携带审核节点日期"
+                    )
+                    assert event["start_date"]["value"] == anchor, (
+                        f"{path.name} {event['event_id']} 审核摘要日期应等于审核节点锚点"
+                    )
+
+
+REPRESENTATIVE_LANES = {
+    "study_milestone",
+    "demographics",
+    "target_disease",
+    "medical_history",
+    "medication",
+    "test_exam_score",
+}
+
+
+def test_workspace_covers_representative_longitudinal_lanes() -> None:
+    """I6 合同：合成 Patient Profile 至少提供人口学、目标疾病、既往史、
+    用药/治疗、检查评分与研究节点的代表性时序事件（含真实临床日期）；
+    人口学为空泳道仅在 gap_conflict 场景作为“缺年龄”演示出现。"""
+    payload = load_json(UAT_FIXTURE_PATH)
+    lanes_with_dated_events: set[str] = set()
+    gap_conflict_demographics_has_event = False
+    for _episode, profile, _assessments in _episode_pairs(payload):
+        for event in profile["events"]:
+            if event["event_type"] != "risk_or_gap" and event["start_date"] is not None:
+                lanes_with_dated_events.add(event["lane"])
+            if "gap_conflict" in event["event_id"] and event["lane"] == "demographics":
+                gap_conflict_demographics_has_event = True
+    assert REPRESENTATIVE_LANES <= lanes_with_dated_events, (
+        f"代表性纵向泳道缺失：{sorted(REPRESENTATIVE_LANES - lanes_with_dated_events)}"
+    )
+    # gap_conflict 场景故意缺少人口学（筛选记录未提供年龄 → 空泳道演示），
+    # 空泳道只表示没有结构化事件，不由系统自动生成资料缺口结论。
+    assert gap_conflict_demographics_has_event is False

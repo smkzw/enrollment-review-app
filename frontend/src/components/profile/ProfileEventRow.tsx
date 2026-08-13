@@ -34,11 +34,16 @@ export function ProfileEventRow({
 }: ProfileEventRowProps) {
   const codes = event.relatedRuleComponentIds.map(componentCodeOf);
   const time = dateText(event);
-  const firstComponent =
-    event.relatedRuleComponentIds.length > 0
-      ? event.relatedRuleComponentIds[0]
-      : undefined;
+  const firstComponent = event.evidenceTargetComponentId ?? undefined;
   const firstSpan = event.evidence.length > 0 ? event.evidence[0].spanId : undefined;
+  const evidenceAction =
+    event.evidenceRelation === "direct"
+      ? "打开原始依据"
+      : event.evidenceRelation === "review_basis"
+        ? "查看判断依据"
+        : event.evidenceRelation === "related_rule"
+          ? "查看关联规则资料"
+          : null;
 
   return (
     <article className="profile-event">
@@ -62,7 +67,7 @@ export function ProfileEventRow({
             关联规则：{codes.join("、")}
           </span>
         )}
-        {firstSpan !== undefined && (
+        {firstSpan !== undefined && evidenceAction !== null && (
           <RouteLink
             to="/workbench"
             params={{
@@ -71,12 +76,17 @@ export function ProfileEventRow({
               evidence: firstSpan,
             }}
             className="button button--quiet profile-event__evidence"
-            ariaLabel={`打开证据：${event.title}`}
-            title={`打开证据：${event.evidence.length} 处定位`}
+            ariaLabel={`${evidenceAction}：${event.title}`}
+            title={`${evidenceAction}：${event.evidence.length} 处定位`}
           >
             <OpenIcon size={13} />
-            打开证据
+            {evidenceAction}
           </RouteLink>
+        )}
+        {event.evidenceRelation === "unavailable" && (
+          <span className="profile-event__evidence-note">
+            尚无该事件的独立原始资料定位
+          </span>
         )}
       </div>
     </article>

@@ -1098,7 +1098,7 @@
     },
     {
       "assessment_id": "assessment-barrier-ex-01",
-      "blocking_level": "none",
+      "blocking_level": "blocking",
       "decision": "exclusion_triggered",
       "evidence_snapshot_id": "snapshot-barrier",
       "evidence_span_ids": [
@@ -1108,7 +1108,7 @@
       "gate_result_id": "gate-barrier-ex-01",
       "project_id": "project-synthetic-phase-iii",
       "protocol_version_id": "protocol-v1",
-      "publication_fingerprint": "d32651781c053d7c3dcee6aead01d0fb6a970b5cea1b30b7fc2817bdfcd8ceb5",
+      "publication_fingerprint": "204037577b7cbb7a9827e890c5ffa2c24d929026c8949218dc3b33ea98b4935d",
       "review_episode_id": "episode-barrier",
       "review_run_id": "run-barrier",
       "rule_component_id": "component-ex-01",
@@ -1595,7 +1595,7 @@
         "episode-barrier": 1
       },
       "input_scope_hash": "2f4b03e0945bd4b7b1bdc129c4e55443efe2992cdbe4c05b61296058ff01ba1c",
-      "output_hash": "3e6d65136ec8e39b8ea564bc7b4af27a9743dd01d1f07322ef52a56300c428fd",
+      "output_hash": "dafa20fa5c997c0450d1b611e8d91e4cef5329158d28a1eef00939e0e7b4b805",
       "parent_event_id": null,
       "recompute_scope": [
         "component-ex-01"
@@ -2323,7 +2323,7 @@
       {
         "end_date": null,
         "event_id": "event-barrier-summary",
-        "event_type": "screening_summary",
+        "event_type": "review_summary",
         "evidence_span_ids": [
           "span-barrier-risk"
         ],
@@ -2341,7 +2341,7 @@
         "has_trend_change": false,
         "is_abnormal": true,
         "is_critical": true,
-        "lane": "demographics",
+        "lane": "study_milestone",
         "related_rule_component_ids": [
           "component-in-01",
           "component-ex-01"
@@ -2356,6 +2356,168 @@
           "value": "2026-08-10"
         },
         "title": "发现明确排除障碍"
+      },
+      {
+        "end_date": null,
+        "event_id": "event-barrier-timeline-1",
+        "event_type": "study_milestone",
+        "evidence_span_ids": [
+          "span-barrier-risk"
+        ],
+        "fact_ids": [],
+        "has_trend_change": false,
+        "is_abnormal": false,
+        "is_critical": false,
+        "lane": "study_milestone",
+        "related_rule_component_ids": [],
+        "risk_labels": [],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2026-08-08"
+        },
+        "title": "签署知情同意书"
+      },
+      {
+        "end_date": null,
+        "event_id": "event-barrier-timeline-2",
+        "event_type": "study_milestone",
+        "evidence_span_ids": [
+          "span-barrier-risk"
+        ],
+        "fact_ids": [],
+        "has_trend_change": false,
+        "is_abnormal": false,
+        "is_critical": false,
+        "lane": "study_milestone",
+        "related_rule_component_ids": [],
+        "risk_labels": [],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2026-08-31"
+        },
+        "title": "基线/随机前检查预约"
+      },
+      {
+        "end_date": null,
+        "event_id": "event-barrier-timeline-3",
+        "event_type": "demographics",
+        "evidence_span_ids": [
+          "span-barrier-risk"
+        ],
+        "fact_ids": [],
+        "has_trend_change": false,
+        "is_abnormal": false,
+        "is_critical": false,
+        "lane": "demographics",
+        "related_rule_component_ids": [],
+        "risk_labels": [],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "1981-02-14"
+        },
+        "title": "出生日期（人口学）"
+      },
+      {
+        "end_date": null,
+        "event_id": "event-barrier-timeline-4",
+        "event_type": "target_disease",
+        "evidence_span_ids": [
+          "span-barrier-risk"
+        ],
+        "fact_ids": [],
+        "has_trend_change": false,
+        "is_abnormal": false,
+        "is_critical": false,
+        "lane": "target_disease",
+        "related_rule_component_ids": [],
+        "risk_labels": [],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2026-03-12"
+        },
+        "title": "目标疾病确诊"
+      },
+      {
+        "end_date": null,
+        "event_id": "event-barrier-timeline-5",
+        "event_type": "medical_history",
+        "evidence_span_ids": [
+          "span-barrier-risk"
+        ],
+        "fact_ids": [],
+        "has_trend_change": false,
+        "is_abnormal": false,
+        "is_critical": false,
+        "lane": "medical_history",
+        "related_rule_component_ids": [],
+        "risk_labels": [],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2020-08-01"
+        },
+        "title": "高血压病史"
+      },
+      {
+        "end_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2026-07-31"
+        },
+        "event_id": "event-barrier-timeline-6",
+        "event_type": "medication",
+        "evidence_span_ids": [
+          "span-barrier-risk"
+        ],
+        "fact_ids": [],
+        "has_trend_change": false,
+        "is_abnormal": false,
+        "is_critical": false,
+        "lane": "medication",
+        "related_rule_component_ids": [],
+        "risk_labels": [],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2020-09-01"
+        },
+        "title": "降压药物疗程"
+      },
+      {
+        "end_date": null,
+        "event_id": "event-barrier-timeline-7",
+        "event_type": "test_exam_score",
+        "evidence_span_ids": [
+          "span-barrier-risk"
+        ],
+        "fact_ids": [],
+        "has_trend_change": false,
+        "is_abnormal": true,
+        "is_critical": true,
+        "lane": "test_exam_score",
+        "related_rule_component_ids": [
+          "component-ex-01"
+        ],
+        "risk_labels": [
+          "入排相关"
+        ],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2026-07-28"
+        },
+        "title": "筛选前实验室检查（2.1×ULN）"
       }
     ],
     "highlighted_event_ids": [

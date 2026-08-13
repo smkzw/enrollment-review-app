@@ -22,14 +22,15 @@
     "08-12-phase0-foundation",
     "08-12-phase0-5-contracts",
     "08-13-phase1-frontend-shell",
-    "08-13-phase1-5-uat-readiness"
+    "08-13-phase1-5-uat-readiness",
+    "08-13-phase1-5-agent-monitor-uat"
   ],
   "parent": null,
   "relatedFiles": [],
-  "notes": "Phase 0、0.5、1 已完成。当前硬停止点为 Phase 1.5 用户验收；未获用户确认前不进入 Phase 2 数据层。",
+  "notes": "Phase 0、0.5、1 及 Phase 1.5 已完成并通过独立模型医学监查员角色验收。下一阶段按实施计划进入 Phase 2 SQLite 领域层与持久任务；不得把 Phase 1 合成原型验收解释为真实方案、OCR、事实抽取或临床审核已完成。",
   "meta": {
-    "current_phase": "1.5",
-    "gate": "awaiting_user_uat",
-    "last_checkpoint": "2026-08-13-phase1-accepted"
+    "current_phase": "2",
+    "gate": "phase2_ready",
+    "last_checkpoint": "2026-08-14-phase1-5-agent-monitor-accepted"
   }
 }

@@ -13,7 +13,8 @@ export const PRECISION_DESCRIPTIONS: Record<LocatorPrecision, string> = {
   bbox: "可定位到原始页图上的具体文字位置（坐标区域）。当前界面未附带页图，不绘制坐标框。",
   text_range: "可定位到识别文字中的一段文字范围，并显示页码与摘录。",
   page_excerpt: "可定位到页内摘录区域，但不能精确到具体字符位置。",
-  page_only: "只能确定到整页，没有文字坐标或文本高亮；可打开整页查看。",
+  page_only:
+    "只能确定到整页，没有文字坐标或文本高亮；界面试用阶段未附带原始页图，不提供整页预览。",
 };
 
 export const PRECISION_ORDER: readonly LocatorPrecision[] = [

@@ -2556,7 +2556,7 @@
       {
         "end_date": null,
         "event_id": "event-gap_conflict-summary",
-        "event_type": "screening_summary",
+        "event_type": "review_summary",
         "evidence_span_ids": [
           "span-gap-page"
         ],
@@ -2567,7 +2567,7 @@
         "has_trend_change": false,
         "is_abnormal": false,
         "is_critical": false,
-        "lane": "evidence_quality",
+        "lane": "study_milestone",
         "related_rule_component_ids": [
           "component-in-01",
           "component-ex-01"
@@ -2582,6 +2582,142 @@
           "value": "2026-08-10"
         },
         "title": "资料缺口与冲突待处理"
+      },
+      {
+        "end_date": null,
+        "event_id": "event-gap_conflict-timeline-1",
+        "event_type": "study_milestone",
+        "evidence_span_ids": [
+          "span-gap-page"
+        ],
+        "fact_ids": [],
+        "has_trend_change": false,
+        "is_abnormal": false,
+        "is_critical": false,
+        "lane": "study_milestone",
+        "related_rule_component_ids": [],
+        "risk_labels": [],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2026-08-08"
+        },
+        "title": "签署知情同意书"
+      },
+      {
+        "end_date": null,
+        "event_id": "event-gap_conflict-timeline-2",
+        "event_type": "study_milestone",
+        "evidence_span_ids": [
+          "span-gap-page"
+        ],
+        "fact_ids": [],
+        "has_trend_change": false,
+        "is_abnormal": false,
+        "is_critical": false,
+        "lane": "study_milestone",
+        "related_rule_component_ids": [],
+        "risk_labels": [],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2026-08-31"
+        },
+        "title": "基线/随机前检查预约"
+      },
+      {
+        "end_date": null,
+        "event_id": "event-gap_conflict-timeline-3",
+        "event_type": "target_disease",
+        "evidence_span_ids": [
+          "span-gap-page"
+        ],
+        "fact_ids": [],
+        "has_trend_change": false,
+        "is_abnormal": false,
+        "is_critical": false,
+        "lane": "target_disease",
+        "related_rule_component_ids": [],
+        "risk_labels": [],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2026-06-20"
+        },
+        "title": "目标疾病确诊"
+      },
+      {
+        "end_date": null,
+        "event_id": "event-gap_conflict-timeline-4",
+        "event_type": "medical_history",
+        "evidence_span_ids": [
+          "span-gap-page"
+        ],
+        "fact_ids": [],
+        "has_trend_change": false,
+        "is_abnormal": false,
+        "is_critical": false,
+        "lane": "medical_history",
+        "related_rule_component_ids": [],
+        "risk_labels": [],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2025-03-10"
+        },
+        "title": "手术史"
+      },
+      {
+        "end_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2026-07-31"
+        },
+        "event_id": "event-gap_conflict-timeline-5",
+        "event_type": "medication",
+        "evidence_span_ids": [
+          "span-gap-page"
+        ],
+        "fact_ids": [],
+        "has_trend_change": false,
+        "is_abnormal": false,
+        "is_critical": false,
+        "lane": "medication",
+        "related_rule_component_ids": [],
+        "risk_labels": [],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2025-04-01"
+        },
+        "title": "降压药物疗程"
+      },
+      {
+        "end_date": null,
+        "event_id": "event-gap_conflict-timeline-6",
+        "event_type": "test_exam_score",
+        "evidence_span_ids": [
+          "span-gap-page"
+        ],
+        "fact_ids": [],
+        "has_trend_change": false,
+        "is_abnormal": false,
+        "is_critical": false,
+        "lane": "test_exam_score",
+        "related_rule_component_ids": [],
+        "risk_labels": [],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2026-07-28"
+        },
+        "title": "筛选前实验室检查"
       },
       {
         "end_date": null,
@@ -2602,11 +2738,7 @@
           "阶段隔离"
         ],
         "schema_version": "fixture/v1",
-        "start_date": {
-          "precision": "day",
-          "source_text": null,
-          "value": "2026-08-10"
-        },
+        "start_date": null,
         "title": "筛选节点"
       },
       {
@@ -2628,11 +2760,7 @@
           "记录不完整"
         ],
         "schema_version": "fixture/v1",
-        "start_date": {
-          "precision": "day",
-          "source_text": null,
-          "value": "2026-08-10"
-        },
+        "start_date": null,
         "title": "目标疾病病程待补充"
       },
       {
@@ -2654,11 +2782,7 @@
           "日期锚点"
         ],
         "schema_version": "fixture/v1",
-        "start_date": {
-          "precision": "day",
-          "source_text": null,
-          "value": "2026-08-10"
-        },
+        "start_date": null,
         "title": "合并用药时间轴待核对"
       },
       {
@@ -2680,11 +2804,7 @@
           "当前节点缺口"
         ],
         "schema_version": "fixture/v1",
-        "start_date": {
-          "precision": "day",
-          "source_text": null,
-          "value": "2026-08-10"
-        },
+        "start_date": null,
         "title": "必做检查和结果字段待补"
       },
       {
@@ -2706,11 +2826,7 @@
           "来源缺失"
         ],
         "schema_version": "fixture/v1",
-        "start_date": {
-          "precision": "day",
-          "source_text": null,
-          "value": "2026-08-10"
-        },
+        "start_date": null,
         "title": "既往资料被引用但未提供"
       },
       {
@@ -2732,11 +2848,7 @@
           "来源冲突"
         ],
         "schema_version": "fixture/v1",
-        "start_date": {
-          "precision": "day",
-          "source_text": null,
-          "value": "2026-08-10"
-        },
+        "start_date": null,
         "title": "同一判断存在冲突来源"
       }
     ],

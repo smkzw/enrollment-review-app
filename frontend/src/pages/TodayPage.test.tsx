@@ -23,6 +23,13 @@ describe("今日工作页", () => {
       name: /待处理事项/,
     });
     expect(due.parentElement).toHaveTextContent("40");
+    // 待处理事项口径中文说明（I5）
+    expect(
+      screen.getByText(/今日工作只统计当前审核节点到期、尚未处理且需关注或阻断的开放行动/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/请在行动中心查看/),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: /明确障碍/ }),
     ).toBeInTheDocument();
@@ -108,7 +115,8 @@ describe("今日工作页", () => {
       within(rows[0]).getByRole("link", { name: /打开 UAT-02 筛选期审核/ }),
     ).toHaveAttribute(
       "href",
-      "#/workbench?episode=episode-uat-02-screening-barrier&component=component-ex-03",
+      // I7 修复：明确障碍直达触发排除的组件（EX-01a），不再回落到未到期的 EX-03
+      "#/workbench?episode=episode-uat-02-screening-barrier&component=component-ex-01",
     );
   });
 

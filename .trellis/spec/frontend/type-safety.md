@@ -43,3 +43,26 @@ type LoadState<T> =
 - 把 API 原始对象直接传遍组件树。
 - 用 `Date` 隐式解析无时区或不完整临床日期。
 - 省略未知状态的 `default` 处理后静默显示为通过。
+
+## Patient Profile 事件证据合同
+
+事件视图必须显式包含：
+
+```ts
+type EventEvidenceRelation =
+  | "direct"
+  | "review_basis"
+  | "related_rule"
+  | "unavailable";
+
+type ProfileEventEvidenceTarget = {
+  evidenceRelation: EventEvidenceRelation;
+  evidenceSpanId: EvidenceSpanId | null;
+  evidenceTargetComponentId: RuleComponentId | null;
+};
+```
+
+- `direct` 只能来自事件事实自身的 EvidenceSpan。
+- `review_basis` 和 `related_rule` 必须使用相应中文动作，不得显示为事件“原始依据”。
+- `unavailable` 不得生成可点击入口。
+- `evidenceSpanId` 与 `evidenceTargetComponentId` 同时存在时，二者必须属于同一 FinalAssessment；不能依赖工作台收到冲突参数后静默决定优先级。

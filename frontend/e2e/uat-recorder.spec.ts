@@ -70,7 +70,7 @@ async function openRecorder(page: Page): Promise<void> {
     page.getByRole("heading", { name: "入排审核界面试用记录", level: 1 }),
   ).toBeVisible();
   await expect(page.locator(".rec-task-card")).toHaveCount(14);
-  await expect(page.locator("#rec-page-version")).toHaveText("界面试用版 1.5.1");
+  await expect(page.locator("#rec-page-version")).toHaveText("界面试用版 1.5.2");
 }
 
 /** 增加参与者（自动编号 P01、P02……），可选覆盖代号。 */
@@ -476,7 +476,7 @@ test.describe("记录工作台端到端（桌面）", () => {
     await expect(page.locator("#rec-dialog-title")).toHaveText("导入本机备份（预览）");
     const body = page.locator("#rec-dialog-body");
     await expect(body).toContainText("2026-08-13-B");
-    await expect(body).toContainText("界面试用版 1.5.1");
+    await expect(body).toContainText("界面试用版 1.5.2");
     await expect(body).toContainText("参与者数");
     await expect(body).toContainText("1 人");
     await expect(body).toContainText("任务记录数");

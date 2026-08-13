@@ -7,7 +7,7 @@
  */
 
 /** 稳定中文页面版本：变更任务语义、示例数据或主要交互时必须显式更新。 */
-export const UAT_PAGE_VERSION = "界面试用版 1.5.1";
+export const UAT_PAGE_VERSION = "界面试用版 1.5.2";
 
 /** 行动中心的人工确认记录 */
 export const UAT_KEY_MANUAL_ACTIONS = "eligibility-review:uat:manual-actions";
@@ -18,6 +18,9 @@ export const UAT_KEY_PROTOCOL_DRAFT_SAVED =
   "eligibility-review:uat:protocol-draft-saved";
 /** 资料整理任务的试用进度 */
 export const UAT_KEY_TASK_PROGRESS = "eligibility-review:uat:task-progress";
+/** 入排工作台最近一次有效审核节点（裸导航恢复上下文，B4） */
+export const UAT_KEY_LAST_WORKBENCH_EPISODE =
+  "eligibility-review:uat:last-workbench-episode";
 
 /** 中央状态清单：新增可复位状态时在此登记，四个页面调用点不得另写键名。 */
 export const UAT_TRIAL_STATE_KEYS: ReadonlyArray<string> = [
@@ -25,6 +28,7 @@ export const UAT_TRIAL_STATE_KEYS: ReadonlyArray<string> = [
   UAT_KEY_CREATED_PROJECT,
   UAT_KEY_PROTOCOL_DRAFT_SAVED,
   UAT_KEY_TASK_PROGRESS,
+  UAT_KEY_LAST_WORKBENCH_EPISODE,
 ];
 
 /** 复位登记在册的全部界面试用状态；只删除清单内的键，不影响其他数据。 */

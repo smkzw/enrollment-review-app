@@ -9,7 +9,7 @@ import {
 } from "../../public/uat-recorder-core.js";
 
 function completedParticipant(code: string) {
-  const participant = createEmptyParticipant({ code, pageVersion: "界面试用版 1.5.1" });
+  const participant = createEmptyParticipant({ code, pageVersion: "界面试用版 1.5.2" });
   for (const task of TASKS) {
     participant.taskRecords[task.id] = {
       ...participant.taskRecords[task.id],

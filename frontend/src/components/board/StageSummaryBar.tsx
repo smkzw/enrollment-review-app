@@ -4,6 +4,8 @@
  */
 
 import type { StageCountSummary } from "../../domain/counts";
+import { isAdditiveCategory } from "../../domain/counts";
+import { UI_PHRASES } from "../../domain/labels";
 
 export function StageSummaryBar({
   summaries,
@@ -24,8 +26,16 @@ export function StageSummaryBar({
               {visible.length === 0 ? (
                 <span className="stage-summary__none">无节点</span>
               ) : (
-                visible.map(({ label, count }) => (
-                  <span key={label} className="count-chip" title={label}>
+                visible.map(({ status, label, count }) => (
+                  <span
+                    key={label}
+                    className="count-chip"
+                    title={
+                      isAdditiveCategory(status)
+                        ? `${label}：${UI_PHRASES.additiveCategoryTitle}`
+                        : label
+                    }
+                  >
                     {label} {count}
                   </span>
                 ))

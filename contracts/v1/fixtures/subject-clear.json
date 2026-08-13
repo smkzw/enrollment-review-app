@@ -2288,7 +2288,7 @@
       {
         "end_date": null,
         "event_id": "event-clear-summary",
-        "event_type": "screening_summary",
+        "event_type": "review_summary",
         "evidence_span_ids": [
           "span-clear-age",
           "span-clear-history"
@@ -2304,7 +2304,7 @@
         "has_trend_change": false,
         "is_abnormal": false,
         "is_critical": false,
-        "lane": "demographics",
+        "lane": "study_milestone",
         "related_rule_component_ids": [
           "component-in-01",
           "component-ex-01"
@@ -2317,6 +2317,164 @@
           "value": "2026-08-10"
         },
         "title": "当前未发现明确障碍"
+      },
+      {
+        "end_date": null,
+        "event_id": "event-clear-timeline-1",
+        "event_type": "study_milestone",
+        "evidence_span_ids": [
+          "span-clear-age"
+        ],
+        "fact_ids": [],
+        "has_trend_change": false,
+        "is_abnormal": false,
+        "is_critical": false,
+        "lane": "study_milestone",
+        "related_rule_component_ids": [],
+        "risk_labels": [],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2026-08-08"
+        },
+        "title": "签署知情同意书"
+      },
+      {
+        "end_date": null,
+        "event_id": "event-clear-timeline-2",
+        "event_type": "study_milestone",
+        "evidence_span_ids": [
+          "span-clear-age"
+        ],
+        "fact_ids": [],
+        "has_trend_change": false,
+        "is_abnormal": false,
+        "is_critical": false,
+        "lane": "study_milestone",
+        "related_rule_component_ids": [],
+        "risk_labels": [],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2026-08-31"
+        },
+        "title": "基线/随机前检查预约"
+      },
+      {
+        "end_date": null,
+        "event_id": "event-clear-timeline-3",
+        "event_type": "demographics",
+        "evidence_span_ids": [
+          "span-clear-age"
+        ],
+        "fact_ids": [],
+        "has_trend_change": false,
+        "is_abnormal": false,
+        "is_critical": false,
+        "lane": "demographics",
+        "related_rule_component_ids": [],
+        "risk_labels": [],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "1990-05-18"
+        },
+        "title": "出生日期（人口学）"
+      },
+      {
+        "end_date": null,
+        "event_id": "event-clear-timeline-4",
+        "event_type": "target_disease",
+        "evidence_span_ids": [
+          "span-clear-age"
+        ],
+        "fact_ids": [],
+        "has_trend_change": false,
+        "is_abnormal": false,
+        "is_critical": false,
+        "lane": "target_disease",
+        "related_rule_component_ids": [],
+        "risk_labels": [],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2026-06-20"
+        },
+        "title": "目标疾病确诊"
+      },
+      {
+        "end_date": null,
+        "event_id": "event-clear-timeline-5",
+        "event_type": "medical_history",
+        "evidence_span_ids": [
+          "span-clear-age"
+        ],
+        "fact_ids": [],
+        "has_trend_change": false,
+        "is_abnormal": false,
+        "is_critical": false,
+        "lane": "medical_history",
+        "related_rule_component_ids": [],
+        "risk_labels": [],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2024-11-15"
+        },
+        "title": "阑尾切除术"
+      },
+      {
+        "end_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2025-05-31"
+        },
+        "event_id": "event-clear-timeline-6",
+        "event_type": "medication",
+        "evidence_span_ids": [
+          "span-clear-age"
+        ],
+        "fact_ids": [],
+        "has_trend_change": false,
+        "is_abnormal": false,
+        "is_critical": false,
+        "lane": "medication",
+        "related_rule_component_ids": [],
+        "risk_labels": [],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2025-02-01"
+        },
+        "title": "术后抗菌药物疗程"
+      },
+      {
+        "end_date": null,
+        "event_id": "event-clear-timeline-7",
+        "event_type": "test_exam_score",
+        "evidence_span_ids": [
+          "span-clear-age"
+        ],
+        "fact_ids": [],
+        "has_trend_change": false,
+        "is_abnormal": false,
+        "is_critical": false,
+        "lane": "test_exam_score",
+        "related_rule_component_ids": [],
+        "risk_labels": [],
+        "schema_version": "fixture/v1",
+        "start_date": {
+          "precision": "day",
+          "source_text": null,
+          "value": "2026-07-28"
+        },
+        "title": "筛选前血常规"
       }
     ],
     "highlighted_event_ids": [

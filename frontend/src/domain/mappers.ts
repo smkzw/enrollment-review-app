@@ -23,7 +23,9 @@ import {
   ruleKindLabel,
   stageLabel,
   taskStateLabel,
+  formatSnapshotVersion,
 } from "./labels";
+import { isTodayWorkDueAction } from "./counts";
 import {
   toId,
   type ActionId,
@@ -46,7 +48,7 @@ import {
   type SubjectId,
   type WorkflowStageId,
 } from "./ids";
-import type { GapType, ProfileLane, TaskState } from "./enums";
+import type { GapType, ProfileLane, ReviewStage, TaskState } from "./enums";
 import type {
   ActionView,
   BoardView,
@@ -329,9 +331,44 @@ export function mapEvidenceLocator(
   };
 }
 
+/**
+ * 应备证据要求索引：requirement_id → 所属子项显示编号 + 具体要求 + 到期节点。
+ * 期望条目（evidence_expectations）是节点级；具体要求定义在规则子项的
+ * evidence_requirements 中，映射时投影关联信息（I4 修复）。
+ */
+function requirementIndex(
+  episode: EpisodeFixtureWire,
+): Map<RequirementId, {
+  displayCode: string;
+  description: string;
+  dueStage: ReviewStage;
+}> {
+  const index = new Map<
+    RequirementId,
+    { displayCode: string; description: string; dueStage: ReviewStage }
+  >();
+  for (const rule of episode.rule_set.rules) {
+    for (const component of rule.components) {
+      const displayCode = displayRuleCode(component.display_code);
+      for (const requirement of component.evidence_requirements) {
+        index.set(toId<RequirementId>(requirement.requirement_id), {
+          displayCode,
+          description: requirement.description,
+          dueStage: requirement.due_stage,
+        });
+      }
+    }
+  }
+  return index;
+}
+
 export function mapExpectation(
   expectation: EpisodeFixtureWire["evidence_expectations"][number],
+  episode: EpisodeFixtureWire,
 ): EvidenceExpectationView {
+  const requirement = requirementIndex(episode).get(
+    toId<RequirementId>(expectation.requirement_id),
+  );
   return {
     expectationId: toId<ExpectationId>(expectation.expectation_id),
     requirementId: toId<RequirementId>(expectation.requirement_id),
@@ -342,14 +379,35 @@ export function mapExpectation(
     evidenceSpanIds: expectation.evidence_span_ids.map((id) =>
       toId<EvidenceSpanId>(id),
     ),
+    displayCode: requirement?.displayCode ?? "节点级要求",
+    requirementDescription: requirement?.description ?? "",
+    dueStage: requirement?.dueStage ?? null,
+    dueStageLabel:
+      requirement === undefined ? "未指定" : stageLabel[requirement.dueStage],
   };
 }
 
 export function mapProfileEvent(
   event: PatientProfileWire["events"][number],
-  spans: ReadonlyArray<EvidenceSpanWire>,
-  documents: ReadonlyArray<SourceDocumentWire>,
+  episode: EpisodeFixtureWire,
 ): ProfileEventView {
+  const evidenceRelation: ProfileEventView["evidenceRelation"] =
+    event.event_type === "review_summary"
+      ? "review_basis"
+      : event.fact_ids.length > 0
+        ? "direct"
+        : event.related_rule_component_ids.length > 0
+          ? "related_rule"
+          : "unavailable";
+  const firstSpanId = event.evidence_span_ids[0];
+  const evidenceOwner = episode.final_assessments.find(
+    (assessment) =>
+      firstSpanId !== undefined &&
+      assessment.evidence_span_ids.includes(firstSpanId) &&
+      event.related_rule_component_ids.includes(assessment.rule_component_id),
+  );
+  const evidenceTargetComponentId =
+    evidenceOwner?.rule_component_id ?? event.related_rule_component_ids[0] ?? null;
   return {
     eventId: toId<ProfileEventId>(event.event_id),
     lane: event.lane,
@@ -368,10 +426,15 @@ export function mapProfileEvent(
     factIds: event.fact_ids.map((id) => toId(id)),
     evidence: event.evidence_span_ids
       .map((id) =>
-        spans.find((span) => span.evidence_span_id === id),
+        episode.evidence_spans.find((span) => span.evidence_span_id === id),
       )
       .filter((span): span is EvidenceSpanWire => span !== undefined)
-      .map((span) => mapEvidenceLocator(span, documents)),
+      .map((span) => mapEvidenceLocator(span, episode.source_documents)),
+    evidenceRelation,
+    evidenceTargetComponentId:
+      evidenceTargetComponentId === null
+        ? null
+        : toId<RuleComponentId>(evidenceTargetComponentId),
   };
 }
 
@@ -393,13 +456,11 @@ const PROFILE_LANE_ORDER: readonly ProfileLane[] = [
 
 export function mapPatientProfile(
   profile: PatientProfileWire,
-  spans: ReadonlyArray<EvidenceSpanWire>,
-  documents: ReadonlyArray<SourceDocumentWire>,
-  expectations: ReadonlyArray<EpisodeFixtureWire["evidence_expectations"][number]>,
+  episode: EpisodeFixtureWire,
 ): PatientProfileView {
   const grouped = new Map<ProfileLane, ProfileEventView[]>();
   for (const event of profile.events) {
-    const view = mapProfileEvent(event, spans, documents);
+    const view = mapProfileEvent(event, episode);
     const list = grouped.get(event.lane) ?? [];
     list.push(view);
     grouped.set(event.lane, list);
@@ -426,7 +487,9 @@ export function mapPatientProfile(
       toId<ExpectationId>(id),
     ),
     lanes,
-    expectations: expectations.map(mapExpectation),
+    expectations: episode.evidence_expectations.map((expectation) =>
+      mapExpectation(expectation, episode),
+    ),
   };
 }
 
@@ -448,16 +511,39 @@ export function mapConflictGroup(
   group: ConflictGroupWire,
   episode: EpisodeFixtureWire,
 ): ConflictGroupView {
+  const componentCodes = componentDisplayCodeIndex(episode);
   return {
     conflictGroupId: toId<ConflictGroupId>(group.conflict_group_id),
     factIds: group.fact_ids.map((id) => toId<FactId>(id)),
     affectedRuleComponentIds: group.affected_rule_component_ids.map((id) =>
       toId<RuleComponentId>(id),
     ),
+    affectedDisplayCodes: group.affected_rule_component_ids.map(
+      (id) => componentCodes.get(toId<RuleComponentId>(id)) ?? "未关联子项",
+    ),
     resolved: group.resolved,
+    snapshotVersion: formatSnapshotVersion(
+      episode.review_episode.revision,
+      episode.evidence_snapshot.created_at,
+    ),
     facts: episode.facts
       .filter((fact) => group.fact_ids.includes(fact.fact_id))
-      .map(mapFact),
+      .map((fact) => ({
+        factId: toId<FactId>(fact.fact_id),
+        factType: fact.fact_type,
+        polarity: fact.polarity,
+        polarityLabel: polarityLabel[fact.polarity],
+        certainty: fact.certainty,
+        value: fact.value,
+        evidence: fact.evidence_span_ids
+          .map((spanId) =>
+            episode.evidence_spans.find(
+              (span) => span.evidence_span_id === spanId,
+            ),
+          )
+          .filter((span): span is EvidenceSpanWire => span !== undefined)
+          .map((span) => mapEvidenceLocator(span, episode.source_documents)),
+      })),
   };
 }
 
@@ -757,13 +843,10 @@ export function mapTodayWork(workspace: WorkspaceFixtureWire): TodayWorkView {
   const dueActions: ActionView[] = episodes
     .flatMap((episode) =>
       episode.actions
-        .filter(
-          (action) =>
-            action.state === "open" &&
-            action.blocking_level !== "none" &&
-            action.due_stage === episode.review_episode.stage,
-        )
-        .map((action) => mapAction(action, episode)),
+        .map((action) => mapAction(action, episode))
+        .filter((action) =>
+          isTodayWorkDueAction(action, episode.review_episode.stage),
+        ),
     )
     .sort(
       (a, b) =>
@@ -841,7 +924,9 @@ export function mapEpisodeDetail(
       mapConflictGroup(group, episode),
     ),
     facts: episode.facts.map(mapFact),
-    expectations: episode.evidence_expectations.map(mapExpectation),
+    expectations: episode.evidence_expectations.map((expectation) =>
+      mapExpectation(expectation, episode),
+    ),
     sourceDocuments: episode.source_documents.map((doc) => ({
       documentVersionId: toId<SourceDocumentVersionId>(
         doc.source_document_version_id,
@@ -849,6 +934,10 @@ export function mapEpisodeDetail(
       fileName: displayFixtureFileName(doc.file_name),
       documentType: doc.document_type,
       sourceParty: doc.source_party,
+      snapshotVersion: formatSnapshotVersion(
+        episode.review_episode.revision,
+        episode.evidence_snapshot.created_at,
+      ),
     })),
     reviewRunId:
       episode.review_runs.length > 0

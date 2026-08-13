@@ -14,11 +14,15 @@ import { UAT_KEY_MANUAL_ACTIONS } from "../app/uatTrialState";
 import { EmptyState, ErrorState, LoadingState } from "../components/shell/Feedback";
 import { BlockingBadge } from "../components/shell/StatusBadge";
 import { OpenIcon } from "../components/shell/icons";
+import { isProvenanceAction } from "../domain/counts";
 import { UI_PHRASES } from "../domain/labels";
 import type { ActionId } from "../domain/ids";
 import type { ActionState } from "../domain/enums";
 
 type StateFilter = "all" | ActionState;
+
+/** 独立行动类别筛选：溯源提醒保持独立，不并入阻断或笼统关注（I1）。 */
+type CategoryFilter = "all" | "provenance";
 
 interface ManualActionRecord {
   actionId: ActionId;
@@ -72,6 +76,11 @@ const BLOCKING_FILTERS: ReadonlyArray<{ key: "all" | "blocking" | "attention"; l
   { key: "attention", label: "不阻断，需关注" },
 ];
 
+const CATEGORY_FILTERS: ReadonlyArray<{ key: CategoryFilter; label: string }> = [
+  { key: "all", label: "全部类别" },
+  { key: "provenance", label: UI_PHRASES.provenanceFilterLabel },
+];
+
 export function ActionsPage() {
   const { params } = useHashRoute();
   const actionParam = params.get("action");
@@ -89,6 +98,7 @@ export function ActionsPage() {
 
   const [stateFilter, setStateFilter] = useState<StateFilter>("all");
   const [blockingFilter, setBlockingFilter] = useState<"all" | "blocking" | "attention">("all");
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
 
   const sortedActions = [...allActions].sort(
     (a, b) =>
@@ -100,6 +110,9 @@ export function ActionsPage() {
   const filtered = sortedActions.filter((action) => {
     if (stateFilter !== "all" && action.state !== stateFilter) return false;
     if (blockingFilter !== "all" && action.blockingLevel !== blockingFilter) {
+      return false;
+    }
+    if (categoryFilter === "provenance" && !isProvenanceAction(action)) {
       return false;
     }
     return true;
@@ -266,7 +279,23 @@ export function ActionsPage() {
             </button>
           ))}
         </div>
+        <div className="chip-group" role="group" aria-label="按类别筛选">
+          {CATEGORY_FILTERS.map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              className="chip"
+              aria-pressed={categoryFilter === option.key}
+              onClick={() => setCategoryFilter(option.key)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
       </div>
+      <p className="actions-toolbar__hint">
+        {UI_PHRASES.actionCenterDenominator} {UI_PHRASES.provenanceFilterHint}
+      </p>
 
       <div className="actions-layout">
         <section className="actions-list" aria-label="行动列表">
@@ -277,7 +306,7 @@ export function ActionsPage() {
           {filtered.length === 0 ? (
             <EmptyState
               message={UI_PHRASES.noTodos}
-              hint="可调整状态或阻断程度筛选后再看。"
+              hint="可调整状态、阻断程度或类别筛选后再看。"
             />
           ) : (
             <ul>

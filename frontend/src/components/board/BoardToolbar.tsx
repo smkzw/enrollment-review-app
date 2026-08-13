@@ -3,8 +3,8 @@
  * 全部为受控筛选，状态经 URL 参数保存（合同 §4.1/7.2：返回列表后筛选保留）。
  */
 
-import { MAIN_STATUS_ORDER } from "../../domain/counts";
-import { mainStatusLabel } from "../../domain/labels";
+import { isAdditiveCategory, MAIN_STATUS_ORDER } from "../../domain/counts";
+import { mainStatusLabel, UI_PHRASES } from "../../domain/labels";
 import type { EpisodeMainStatus, ReviewStage } from "../../domain/enums";
 
 export interface StatusFilterOption {
@@ -88,6 +88,11 @@ export function BoardToolbar({
               type="button"
               className="chip"
               aria-pressed={statusFocus === status}
+              title={
+                isAdditiveCategory(status)
+                  ? UI_PHRASES.additiveCategoryTitle
+                  : undefined
+              }
               onClick={() =>
                 onStatusChange(statusFocus === status ? null : status)
               }
@@ -109,9 +114,7 @@ export function BoardToolbar({
           />
         </label>
       </div>
-      <p className="board-toolbar__hint">
-        状态计数为该范围内审核节点数；筛选与排序只改变显示，不影响资料本身。
-      </p>
+      <p className="board-toolbar__hint">{UI_PHRASES.boardCountHint}</p>
     </div>
   );
 }

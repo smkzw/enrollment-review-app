@@ -159,12 +159,7 @@ export function createStubRepository(): EnrollmentRepository {
     ): Promise<PatientProfileView> {
       await simulateLatency();
       const episode = findEpisode(subjectId, stage);
-      return mapPatientProfile(
-        episode.patient_profile,
-        episode.evidence_spans,
-        episode.source_documents,
-        episode.evidence_expectations,
-      );
+      return mapPatientProfile(episode.patient_profile, episode);
     },
 
     async getProtocolDiff(): Promise<ProtocolDiffView> {

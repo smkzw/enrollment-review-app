@@ -34,6 +34,16 @@ INDETERMINATE_GAPS = {
     GapType.OCR_OR_PARSE_RISK,
 }
 
+# 明确障碍判断（I7 修复）：exclusion_triggered / inclusion_not_met /
+# requirement_not_met 属于决定性障碍结论，即使没有任何缺口也绝不派生为
+# blocking_level=none；derive_assessment_blocking_level 与
+# FinalAssessment.validate_gate_owned_state 共同构成确定性拒绝不变量。
+BARRIER_DECISIONS = {
+    ComponentDecision.EXCLUSION_TRIGGERED,
+    ComponentDecision.INCLUSION_NOT_MET,
+    ComponentDecision.REQUIREMENT_NOT_MET,
+}
+
 
 STAGE_RANK = {
     ReviewStage.PRE_SCREENING: 0,
@@ -214,6 +224,9 @@ def derive_assessment_blocking_level(
     gaps: set[GapType],
 ) -> BlockingLevel:
     validate_decision_gap_matrix(decision, gaps)
+    if decision in BARRIER_DECISIONS and not gaps:
+        # 明确障碍结论：无缺口也不得显示“不阻断”（I7 修复）
+        return BlockingLevel.BLOCKING
     if not gaps:
         return BlockingLevel.NONE
     if gaps in (

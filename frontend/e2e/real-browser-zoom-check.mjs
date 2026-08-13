@@ -38,7 +38,7 @@ try {
   await page.getByText("关键事件与风险").waitFor();
 
   const profileMetrics = await readMetrics(page);
-  await page.getByRole("link", { name: /打开证据/ }).first().click();
+  await page.getByRole("link", { name: /查看判断依据/ }).first().click();
   await page.waitForLoadState("networkidle");
 
   if (await page.locator(".workbench-tabs").isVisible()) {

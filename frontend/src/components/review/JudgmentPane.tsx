@@ -13,7 +13,8 @@ import type {
 } from "../../domain/viewModels";
 import { BlockingBadge } from "../shell/StatusBadge";
 import { OpenIcon } from "../shell/icons";
-import { attributeDisplayName } from "./attributes";
+import { UI_PHRASES } from "../../domain/labels";
+import { factTypeDisplayName } from "./attributes";
 import { ExpressionView } from "./ExpressionView";
 
 export interface JudgmentPaneProps {
@@ -112,21 +113,34 @@ export function JudgmentPane({
       </div>
 
       <div className="judgment-pane__section">
-        <h3 className="judgment-pane__subtitle">应备证据</h3>
+        <h3 className="judgment-pane__subtitle">
+          {UI_PHRASES.expectationComponentTitle}
+        </h3>
+        <p className="judgment-pane__muted">
+          {UI_PHRASES.expectationComponentHint}
+        </p>
         {component.evidenceRequirements.length === 0 ? (
           <p className="judgment-pane__muted">该规则子项没有额外的应备证据要求。</p>
         ) : (
           <ul className="judgment-pane__requirements">
             {component.evidenceRequirements.map((requirement) => {
-              const displayName = attributeDisplayName(
-                requirement.factType.split(".")[0],
-                requirement.factType,
-              );
+              // factType 为 "subject.attribute"；须走 factTypeDisplayName，
+              // 不能把整串当作 attribute 传给 attributeDisplayName（会永远查不到）。
+              const displayName = factTypeDisplayName(requirement.factType);
               return (
                 <li key={requirement.requirementId} className="judgment-requirement">
-                  <span className="judgment-requirement__name">
-                    {displayName ?? requirement.description}
-                  </span>
+                  <div className="judgment-requirement__main">
+                    {displayName !== null && (
+                      <span className="judgment-requirement__name">
+                        {displayName}
+                      </span>
+                    )}
+                    {requirement.description !== "" && (
+                      <p className="judgment-requirement__desc">
+                        {requirement.description}
+                      </p>
+                    )}
+                  </div>
                   <span className="judgment-requirement__stage">
                     到期节点：{requirement.dueStageLabel}
                   </span>

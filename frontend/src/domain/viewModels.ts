@@ -154,6 +154,10 @@ export interface ProfileEventView {
   relatedRuleComponentIds: ReadonlyArray<RuleComponentId>;
   factIds: ReadonlyArray<FactId>;
   evidence: ReadonlyArray<EvidenceLocatorView>;
+  /** 事件与定位的关系，避免把规则资料冒充为事件本身的原始依据。 */
+  evidenceRelation: "direct" | "review_basis" | "related_rule" | "unavailable";
+  /** 与首个证据定位实际对应的规则子项；避免 URL 中规则与证据分属不同子项。 */
+  evidenceTargetComponentId: RuleComponentId | null;
 }
 
 export interface ProfileLaneView {
@@ -170,6 +174,13 @@ export interface EvidenceExpectationView {
   status: ExpectationStatus;
   statusLabel: string;
   evidenceSpanIds: ReadonlyArray<EvidenceSpanId>;
+  /** 所属规则子项显示编号（如“IN-01”“必做-01a”）；无关联子项时为节点级标记（I4 修复） */
+  displayCode: string;
+  /** 具体要求描述（来自规则子项的 evidence_requirements） */
+  requirementDescription: string;
+  /** 要求到期节点；无关联要求时为 null */
+  dueStage: ReviewStage | null;
+  dueStageLabel: string;
 }
 
 export interface PatientProfileView {
@@ -183,13 +194,29 @@ export interface PatientProfileView {
   expectations: ReadonlyArray<EvidenceExpectationView>;
 }
 
+/** 冲突组内单个事实的可见形态：立场/值与每条来源定位并列投影（B1 修复） */
+export interface ConflictFactView {
+  factId: FactId;
+  factType: string;
+  polarity: FactPolarity;
+  polarityLabel: string;
+  certainty: number | null;
+  value: boolean | number | string | null;
+  /** 该事实的来源定位（文件、资料快照版本、页码、摘录、精度）；不自动选择来源 */
+  evidence: ReadonlyArray<EvidenceLocatorView>;
+}
+
 export interface ConflictGroupView {
   conflictGroupId: ConflictGroupId;
   factIds: ReadonlyArray<FactId>;
   affectedRuleComponentIds: ReadonlyArray<RuleComponentId>;
+  /** 受影响子项的显示编号（如“EX-01a”）；原始组件 ID 不进入界面 */
+  affectedDisplayCodes: ReadonlyArray<string>;
   resolved: boolean;
+  /** 资料快照版本（人读，如“第 1 版（2026-08-12 整理）”） */
+  snapshotVersion: string;
   /** 冲突来源并列展示，不隐藏为“系统选择” */
-  facts: ReadonlyArray<FactView>;
+  facts: ReadonlyArray<ConflictFactView>;
 }
 
 export interface FactView {
@@ -327,6 +354,8 @@ export interface EpisodeDetailView {
     fileName: string;
     documentType: string;
     sourceParty: string;
+    /** 资料快照版本（人读，如“第 1 版（2026-08-12 整理）”；I3 修复） */
+    snapshotVersion: string;
   }>;
   reviewRunId: ReviewRunId | null;
 }

@@ -1,5 +1,5 @@
 /**
- * 状态计数与排序辅助：供项目看板筛选/排序/分类计数使用。
+ * 状态计数与排序辅助：供项目看板筛选/排序/分类计数、行动中心分类与今日工作口径使用。
  * 全部为纯函数；计数以 fixture rollup 的确定性数值为准，
  * 前端不重新推导审核结论（后端 rollup 是唯一事实源）。
  */
@@ -7,6 +7,7 @@
 import { gapTypeLabel, mainStatusLabel, stageLabel } from "./labels";
 import type { EpisodeMainStatus, GapType, ReviewStage } from "./enums";
 import type {
+  ActionView,
   EpisodeCountsView,
   EpisodeSummaryView,
   GapCountItemView,
@@ -41,6 +42,61 @@ export const MAIN_STATUS_ORDER: readonly EpisodeMainStatus[] = [
 /** 阻断程度排序：0=明确障碍 … 5=未发现明确障碍，与 fixture sort_rank 语义一致 */
 export function blockingRank(episode: EpisodeSummaryView): number {
   return MAIN_STATUS_ORDER.indexOf(episode.mainStatus);
+}
+
+/**
+ * 可叠加的关注类别：同一审核节点可同时命中多个类别，
+ * 类别计数与筛选必须共用 episodeMatchesCategory，不能只按唯一主状态匹配。
+ */
+const ADDITIVE_CATEGORIES: ReadonlySet<EpisodeMainStatus> = new Set([
+  "conflict",
+  "professional_judgment",
+]);
+
+/** 该类别是否可叠加命中（同一节点可同时计入多个类别） */
+export function isAdditiveCategory(status: EpisodeMainStatus): boolean {
+  return ADDITIVE_CATEGORIES.has(status);
+}
+
+/**
+ * 审核节点是否命中某个关注类别（看板筛选与计数唯一共享入口）。
+ * - 可叠加类别（存在冲突/需专业判断）：主状态命中或分类计数大于零即命中；
+ * - 其余类别：只按主状态唯一命中。
+ */
+export function episodeMatchesCategory(
+  episode: EpisodeSummaryView,
+  category: EpisodeMainStatus,
+): boolean {
+  if (episode.mainStatus === category) return true;
+  if (!ADDITIVE_CATEGORIES.has(category)) return false;
+  if (category === "conflict") return episode.counts.conflict > 0;
+  if (category === "professional_judgment") {
+    return episode.counts.professionalJudgment > 0;
+  }
+  return false;
+}
+
+/**
+ * 行动是否属于「溯源提醒」类别：独立筛选类别，
+ * 不并入阻断、也不并入笼统的「需关注」。
+ */
+export function isProvenanceAction(action: ActionView): boolean {
+  return action.gapType === "provenance_followup";
+}
+
+/**
+ * 今日工作「待处理事项」口径：当前审核节点到期、尚未处理、且需关注或阻断的开放行动。
+ * 行动中心展示全部行动（含已处理与溯源提醒等不阻断事项），两者口径差异在界面上有中文说明。
+ */
+export function isTodayWorkDueAction(
+  action: ActionView,
+  episodeStage: ReviewStage,
+): boolean {
+  return (
+    action.state === "open" &&
+    action.blockingLevel !== "none" &&
+    action.dueStage === episodeStage
+  );
 }
 
 /** 按阻断程度升序（明确障碍最前）；同级别按受试者代号稳定排序 */
@@ -81,7 +137,8 @@ export function countByStage(
   const byMainStatus = MAIN_STATUS_ORDER.map((status) => ({
     status,
     label: mainStatusLabel[status],
-    count: selected.filter((episode) => episode.mainStatus === status).length,
+    count: selected.filter((episode) => episodeMatchesCategory(episode, status))
+      .length,
   }));
   const category = (predicate: (counts: EpisodeCountsView) => number) =>
     selected.reduce((sum, episode) => sum + predicate(episode.counts), 0);

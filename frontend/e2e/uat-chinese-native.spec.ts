@@ -20,6 +20,8 @@ const DOC_DIR = path.resolve(
   "..",
   ".trellis",
   "tasks",
+  "archive",
+  "2026-08",
   "08-13-phase1-5-uat-readiness",
 );
 

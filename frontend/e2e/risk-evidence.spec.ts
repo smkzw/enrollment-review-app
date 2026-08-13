@@ -46,9 +46,9 @@ test.describe("风险到证据路径", () => {
 
   test("受试者资料页事件 → 证据直达（URL 定位，≤3 次操作）", async ({ page }) => {
     await openRoute(page, "/subjects?subject=subject-uat-03-gap_conflict&stage=screening");
-    // 操作 1：点击事件上的“打开证据”直达工作台证据区
+    // 操作 1：点击汇总事件的“查看判断依据”直达工作台证据区
     await page
-      .getByRole("link", { name: /打开证据：资料缺口与冲突待处理/ })
+      .getByRole("link", { name: /查看判断依据：资料缺口与冲突待处理/ })
       .first()
       .click();
     // 证据卡自动定位（高亮）且文件/页码/精度可见
@@ -56,6 +56,50 @@ test.describe("风险到证据路径", () => {
     await expect(page.locator(".evidence-pane__item--focus")).toBeVisible();
     await expect(
       page.getByText("合成筛选资料.pdf").first(),
+    ).toBeVisible();
+  });
+
+  test("个例事件只提供与证据关系相符的入口，不用共享片段冒充原始依据", async ({
+    page,
+  }) => {
+    await openRoute(
+      page,
+      "/subjects?subject=subject-uat-01-clear&stage=screening&all=1",
+    );
+    const surgery = page
+      .getByRole("heading", { name: "阑尾切除术" })
+      .locator("xpath=ancestor::article");
+    await expect(surgery).toContainText("尚无该事件的独立原始资料定位");
+    await expect(surgery.getByRole("link")).toHaveCount(0);
+
+    await openRoute(
+      page,
+      "/subjects?subject=subject-uat-03-gap_conflict&stage=screening",
+    );
+    const summaryLink = page.getByRole("link", {
+      name: "查看判断依据：资料缺口与冲突待处理",
+    });
+    await expect(summaryLink).toHaveAttribute("href", /component=component-ex-01/);
+    await summaryLink.click();
+    await expect(page).toHaveURL(/component=component-ex-01/);
+    await expect(page.locator(".workbench-episode__subject")).toHaveText("UAT-03");
+    if (await page.locator(".workbench-tabs").isVisible()) {
+      await page.getByRole("tab", { name: "规则" }).click();
+    }
+    await expect(
+      page.getByRole("button", {
+        name: /EX-01a 实验室异常与研究者风险的复合条件/,
+      }),
+    ).toHaveAttribute("aria-current", "true");
+
+    await openRoute(
+      page,
+      "/subjects?subject=subject-uat-03-gap_conflict&stage=screening",
+    );
+    await expect(
+      page.getByRole("link", {
+        name: "查看关联规则资料：合并用药时间轴待核对",
+      }),
     ).toBeVisible();
   });
 });

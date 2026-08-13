@@ -43,7 +43,9 @@ test.describe("Phase 1.5 交互预试", () => {
     await expect(page.getByRole("heading", { name: "完整明细" })).toHaveCount(0);
     await page.getByRole("button", { name: "完整明细" }).click();
     await expect(page.getByRole("heading", { name: /完整明细/ })).toBeVisible();
-    await expect(page.getByText(/未记录按资料缺口处理，不等于“正常”或“否认”/).first()).toBeVisible();
+    // B3：空泳道只表示当前没有结构化事件，不再一律写成资料缺口
+    await expect(page.getByText(/当前没有已整理的结构化事件/).first()).toBeVisible();
+    await expect(page.getByText(/按资料缺口处理/)).toHaveCount(0);
     await page.getByRole("button", { name: "返回风险视图" }).click();
     await expect(page.getByRole("heading", { name: /关键事件与风险/ })).toBeVisible();
     await expect(page.getByText(/当前资料缺少记录，不等于明确否认/).first()).toBeVisible();
@@ -180,7 +182,7 @@ test.describe("Phase 1.5 交互预试", () => {
       await setLayoutStressFactor(page, factor);
       await openRoute(page, "/subjects?subject=subject-uat-02-barrier&stage=screening");
       await expect(page.getByText("关键事件与风险")).toBeVisible();
-      const evidenceLink = page.getByRole("link", { name: /打开证据/ }).first();
+      const evidenceLink = page.getByRole("link", { name: /查看判断依据/ }).first();
       await evidenceLink.click();
       if (await page.locator(".workbench-tabs").isVisible()) {
         await page.getByRole("tab", { name: "证据" }).click();

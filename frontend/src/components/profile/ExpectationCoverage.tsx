@@ -53,6 +53,9 @@ export function ExpectationCoverage({
       <ul className="expectation-cover__list">
         {sorted.map((expectation) => (
           <li key={expectation.expectationId} className="expectation-cover__row">
+            <span className="expectation-cover__code">
+              {expectation.displayCode}
+            </span>
             <span
               className={`status-badge status-badge--expectation status-badge--expectation-${expectation.status}`}
             >
@@ -60,6 +63,14 @@ export function ExpectationCoverage({
               <span>{expectation.statusLabel}</span>
             </span>
             <span className="expectation-cover__gap">{expectation.gapLabel}</span>
+            {expectation.requirementDescription !== "" && (
+              <span className="expectation-cover__desc">
+                {expectation.requirementDescription}
+              </span>
+            )}
+            <span className="expectation-cover__stage">
+              到期节点：{expectation.dueStageLabel}
+            </span>
             {expectation.status === "absent" && (
               <span className="expectation-cover__note">
                 资料中未见这项记录，只表示当前资料缺少记录，不等于明确否认；需要核对是否实际询问或产生过

@@ -105,6 +105,25 @@ Current hold point:
 - Wait for explicit user approval of the final design and Phase 0-9 plan before starting V2 implementation.
 - No V2 business code, old project state or clinical review result has been changed at this checkpoint. The repaired legacy service remains available at `http://127.0.0.1:8901` when running.
 
+## 2026-08-13 Milestone: Phase 1.5 Acceptance Method Changed
+
+User decision:
+
+- The user will not organize or personally perform a human medical-monitor UAT round for the Phase 1 prototype.
+- Phase 1.5 final acceptance is instead performed by multiple independent model reviewers role-playing a lazy but expert Chinese senior clinical-trial medical monitor in the real local browser.
+- Reviewers must freely explore clinical comprehension, evidence traceability, rule hierarchy, Patient Profile, interaction and visual quality. They must distinguish current synthetic-prototype behavior from Phase 2-8 capabilities that are not implemented yet.
+- Exact model names requested by the user are used only when the current global route manifest registers them; actual provider, model, session and fallback evidence must be retained and no route may be impersonated or force-bypassed.
+
+Completed technical preparation:
+
+- Phase 1.5 scripted tasks, reset path, desktop launcher and independent Chinese UAT recorder are implemented and verified.
+- The former human-UAT task was closed as technical preparation and archived. Its historical evidence remains immutable; its requirement for at least ten human participants was superseded by the later user decision.
+
+Current hold point:
+
+- Active task: `.trellis/tasks/08-13-phase1-5-agent-monitor-uat`.
+- Phase 2 remains blocked until independent visual/interaction and clinical/evidence role reviews complete, current-phase blockers are corrected and retested, and Codex records a final acceptance decision.
+
 ## 2026-07-02 Milestone: Hermes Multi-Model UI/Product Audit And Narrow Fix Loop
 
 User request:
@@ -1747,3 +1766,12 @@ OCR concurrency note:
 - 候选 `efbebe6` 获得 `ACCEPT`，无 P1/P2/P3 阻断 finding；第十二次的 AssessmentCandidate 发布全集问题及前十二轮回归面均确认关闭。
 - 独立复现覆盖已登记未发布候选、Candidate Gate 无 FinalAssessment、候选重复发布、同步替换、额外 AgentCall 与 EvidenceNormalizationCandidate；独立测试为 V2 `140 passed + 2 subtests`、默认 `270 passed, 1 skipped + 18 subtests`、legacy `130 passed, 1 skipped`、定向 `21 passed`，8 个制品逐字节一致。
 - Phase 0.5 已满足退出门槛，按 Trellis 归档；Phase 1 不混入本阶段提交。
+
+2026-08-14 Phase 1.5 多模型医学监查员角色验收：
+
+- Phase 1 合成交互原型经 Kimi K3-256K 真实浏览器视觉/交互审评、独立临床逻辑审评、Codex 根因修订和新鲜 Kimi 会话复测。Grok Build 会话两次被运行时取消，不计端到端覆盖；Cursor/Grok 后备因浏览器权限受限，只计静态审查。
+- 已从共享层关闭看板关注类别计数、冲突来源并列、父子/例外语义、无效导航回落、空 Profile 主题误判、溯源分类、证据快照/应备要求、合成时序与阻断不变量、布局跳动等问题。
+- 复测发现并关闭 Patient Profile 事件借用同节点其他证据的问题：事件证据关系分为原始依据、判断依据、关联规则资料和无独立定位；可点击事件的规则组件必须与 EvidenceSpan 实际属主一致。
+- 最终确定性证据：前端 205 项测试、后端 281 项测试、Playwright 283 项、桌面启动器 14 项全部通过；1 项历史 OCR 固定样本因文件不存在按条件跳过。真实 Chrome 100%/150%/200% 和 1280/1440/1920/390 视口无关键溢出、裁切或重叠。
+- Phase 1.5 裁决为可进入 Phase 2。该裁决只接受信息架构、中文交互、证据诚实性和合成数据工作流，不代表真实方案解析、OCR、事实抽取、模型审核、持久化或真实报告已实现。
+- Phase 2 必须承接：SQLite 领域层与持久任务；冲突同页来源的可区分摘录；Patient Journey 真实事件时间/精度；390px 长规则名称的渐进展示。V2 继续与 legacy 写路径物理隔离。

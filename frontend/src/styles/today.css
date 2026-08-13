@@ -42,6 +42,12 @@
   color: var(--color-muted);
 }
 
+.today-section__note {
+  margin-bottom: var(--space-2);
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
 .today-section__more a {
   margin: 0 4px;
 }

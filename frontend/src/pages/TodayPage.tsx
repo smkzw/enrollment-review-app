@@ -216,6 +216,7 @@ export function TodayPage() {
           </h2>
           <span className="section-count">{dueActions.length}</span>
         </div>
+        <p className="today-section__note">{UI_PHRASES.todayWorkDenominator}</p>
         {dueActions.length === 0 ? (
           <EmptyState message={UI_PHRASES.noTodos} hint="当前审核节点没有到期行动。" />
         ) : (

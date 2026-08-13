@@ -16,6 +16,8 @@ export interface SourceDocumentView {
   fileName: string;
   documentType: string;
   sourceParty: string;
+  /** 资料快照版本（人读，如“第 1 版（2026-08-12 整理）”；I3 修复） */
+  snapshotVersion: string;
 }
 
 export interface EvidenceDialogProps {
@@ -81,6 +83,12 @@ export function EvidenceDialog({
                 {documentTypeLabel(source.documentType)} · 来源方：
                 {sourcePartyLabel(source.sourceParty)}
               </dd>
+            </div>
+          )}
+          {source !== undefined && (
+            <div className="evidence-detail__row">
+              <dt>资料快照</dt>
+              <dd>{source.snapshotVersion}</dd>
             </div>
           )}
           <div className="evidence-detail__row">

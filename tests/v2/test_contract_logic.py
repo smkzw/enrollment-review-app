@@ -2071,9 +2071,10 @@ def test_rule_set_rejects_parent_phase_and_kind_prefix_drift() -> None:
     ("decision", "gaps", "blocking"),
     [
         (ComponentDecision.INCLUSION_MET, [], BlockingLevel.NONE),
-        (ComponentDecision.INCLUSION_NOT_MET, [], BlockingLevel.NONE),
+        # 明确障碍结论无缺口也不得为 none（I7 修复）
+        (ComponentDecision.INCLUSION_NOT_MET, [], BlockingLevel.BLOCKING),
         (ComponentDecision.EXCLUSION_NOT_TRIGGERED, [GapType.PROVENANCE_FOLLOWUP], BlockingLevel.ATTENTION),
-        (ComponentDecision.EXCLUSION_TRIGGERED, [], BlockingLevel.NONE),
+        (ComponentDecision.EXCLUSION_TRIGGERED, [], BlockingLevel.BLOCKING),
         (ComponentDecision.INDETERMINATE, [GapType.RECORD_INCOMPLETE], BlockingLevel.BLOCKING),
         (ComponentDecision.PROFESSIONAL_JUDGMENT, [GapType.PROFESSIONAL_JUDGMENT], BlockingLevel.BLOCKING),
         (ComponentDecision.CONFLICT, [GapType.SOURCE_CONFLICT], BlockingLevel.BLOCKING),
@@ -2091,6 +2092,52 @@ def test_assessment_gate_accepts_state_gap_matrix(decision, gaps, blocking) -> N
     assessment = final_assessment(decision, gaps)
     assert assessment.decision == decision
     assert assessment.blocking_level == blocking
+
+
+@pytest.mark.parametrize(
+    ("decision", "gaps"),
+    [
+        (ComponentDecision.EXCLUSION_TRIGGERED, [GapType.RECORD_INCOMPLETE]),
+        (ComponentDecision.REQUIREMENT_NOT_MET, [GapType.PROVENANCE_FOLLOWUP]),
+    ],
+)
+def test_barrier_decision_with_gaps_is_rejected(decision, gaps) -> None:
+    """明确障碍判断携带阻断/关注缺口与判定互斥，不得构造（I7 不变量的一部分）。"""
+    with pytest.raises((ValueError, ValidationError)):
+        final_assessment(decision, gaps)
+
+
+@pytest.mark.parametrize(
+    "decision",
+    [
+        ComponentDecision.EXCLUSION_TRIGGERED,
+        ComponentDecision.INCLUSION_NOT_MET,
+        ComponentDecision.REQUIREMENT_NOT_MET,
+    ],
+)
+def test_barrier_decision_cannot_pair_with_none_blocking(decision) -> None:
+    """I7 确定性拒绝不变量：显式障碍判断 + blocking_level=none 直接构造即失败，
+    无法通过任何路径（含 fixture 生成）把“已触发/不满足”标成“不阻断”。"""
+    with pytest.raises(ValidationError, match="Value error"):
+        FinalAssessment(
+            assessment_id=f"assessment-invalid-{decision.value}",
+            project_id="project-1",
+            protocol_version_id="protocol-1",
+            subject_id="subject-1",
+            rule_set_id="ruleset-1",
+            rule_set_revision=1,
+            review_episode_id="episode-1",
+            evidence_snapshot_id="snapshot-1",
+            review_run_id="run-1",
+            rule_component_id="component-1",
+            decision=decision,
+            gap_types=[],
+            blocking_level=BlockingLevel.NONE,
+            used_fact_ids=[],
+            evidence_span_ids=[],
+            gate_result_id="gate-invalid",
+            publication_fingerprint="0" * 64,
+        )
 
 
 @pytest.mark.parametrize(

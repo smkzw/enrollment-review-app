@@ -229,7 +229,7 @@ test.describe("14 项任务目标可达性", () => {
     await openRoute(page, "/subjects?subject=subject-uat-02-barrier&stage=screening");
     await expect(page.getByText("关键事件与风险")).toBeVisible();
     await expect(
-      page.getByRole("link", { name: /打开证据/ }).first(),
+      page.getByRole("link", { name: /查看判断依据/ }).first(),
     ).toBeVisible();
     await expectNoPageOverflow(page);
   });

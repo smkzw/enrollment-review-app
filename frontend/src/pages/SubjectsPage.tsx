@@ -1,6 +1,7 @@
 /**
  * 受试者与资料（合同 §3.1/§4.2）：受试者选择 + Patient Profile。
  * - 首屏默认只突出入排相关、异常、临界、趋势、冲突与资料缺口事件；完整明细按需展开。
+ * - 未解决冲突在风险视图内并列展示来源（复用 ConflictSources，不跳工作台；UAT-P1-06）。
  * - 应备证据覆盖与“资料中未提到 ≠ 明确否认”显式区分。
  * - URL 契约：/subjects?subject=<SubjectId>&stage=<ReviewStage>；证据直达 /workbench。
  */
@@ -11,6 +12,7 @@ import { updateParams, useHashRoute } from "../app/router";
 import { useLoad } from "../app/useLoad";
 import { EmptyState, ErrorState, LoadingState } from "../components/shell/Feedback";
 import { ExpectationCoverage } from "../components/profile/ExpectationCoverage";
+import { ConflictSources } from "../components/evidence/ConflictSources";
 import {
   PROFILE_FILTERS,
   eventFilterKeys,
@@ -351,6 +353,13 @@ export function SubjectsPage() {
             </section>
           )}
 
+          {!showAll && (
+            <ConflictSources
+              conflicts={detail.state.data.conflicts}
+              sourceDocuments={detail.state.data.sourceDocuments}
+            />
+          )}
+
           {showAll && (
             <section className="profile-section" aria-labelledby="profile-all-title">
               <h3 id="profile-all-title" className="profile-section__title">
@@ -369,7 +378,7 @@ export function SubjectsPage() {
                     <h4 className="profile-lane__title">{laneLabelOf}</h4>
                     {lane === undefined || lane.events.length === 0 ? (
                       <p className="profile-lane__muted">
-                        该主题下当前没有记录。未记录按资料缺口处理，不等于“正常”或“否认”。
+                        {UI_PHRASES.profileLaneEmpty}
                       </p>
                     ) : (
                       <ul className="profile-event-list">

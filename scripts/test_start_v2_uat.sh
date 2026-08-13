@@ -79,6 +79,7 @@ start_dummy() { # $1=port —— 系统 python3 http.server，绝无 V2 标记
   DUMMY_PIDS="$DUMMY_PIDS $!"
   local i=0
   while [ "$i" -lt 20 ] && ! port_in_use "$1"; do sleep 0.3; i=$((i + 1)); done
+  port_in_use "$1"
 }
 
 marker_of() {
@@ -198,14 +199,22 @@ log "3b) 候选端口全部被其他服务占用"
 S3B="$(mktemp -d /tmp/v2uat_test.XXXXXX)"
 STATE_DIRS="$STATE_DIRS $S3B"
 P3B="$(free_range 3)"
+B3_PIDS=""
+B3_READY=1
 for i in 0 1 2; do
-  start_dummy $((P3B + i))
+  if start_dummy $((P3B + i)); then
+    B3_PIDS="$B3_PIDS $(echo "$DUMMY_PIDS" | awk '{print $NF}')"
+  else
+    B3_READY=0
+  fi
 done
 run_launcher "$P3B" "$S3B"
 ALIVE=1
-for p in $DUMMY_PIDS; do kill -0 "$p" 2>/dev/null || ALIVE=0; done
+for p in $B3_PIDS; do kill -0 "$p" 2>/dev/null || ALIVE=0; done
+for i in 0 1 2; do port_in_use $((P3B + i)) || ALIVE=0; done
 if [ "$LAUNCH_EXIT" -ne 0 ] \
   && [ "$(echo "$LAUNCH_OUT" | grep -c '均被其他程序占用')" -ge 1 ] \
+  && [ "$B3_READY" = "1" ] \
   && [ "$ALIVE" = "1" ]; then
   ok "候选端口全部占用时报错退出，未结束任何占用方进程"
 else
@@ -266,7 +275,7 @@ S6="$(mktemp -d /tmp/v2uat_test.XXXXXX)"
 STATE_DIRS="$STATE_DIRS $S6"
 S6D="$(mktemp -d /tmp/v2uat_dist.XXXXXX)"
 STATE_DIRS="$STATE_DIRS $S6D"
-printf '{"service":"enrollment-review-v2","pageVersion":"界面试用版 1.5.1"}\n' > "$S6D/uat-status.json"
+printf '{"service":"enrollment-review-v2","pageVersion":"界面试用版 1.5.2"}\n' > "$S6D/uat-status.json"
 printf '<!doctype html><html><body>fake</body></html>\n' > "$S6D/index.html"
 printf '<!doctype html><html><body>recorder</body></html>\n' > "$S6D/uat-recorder.html"
 P6="$(free_range 1)"

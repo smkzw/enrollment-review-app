@@ -7,6 +7,11 @@
   margin-bottom: var(--space-3);
 }
 
+.actions-toolbar__hint {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
 .actions-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(340px, 1fr);

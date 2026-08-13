@@ -7,11 +7,13 @@
 
 import { useState } from "react";
 import type {
+  ConflictGroupView,
   EvidenceExpectationView,
   EvidenceLocatorView,
   RuleComponentView,
 } from "../../domain/viewModels";
 import type { SourceDocumentView } from "../evidence/EvidenceDialog";
+import { ConflictSources } from "../evidence/ConflictSources";
 import { EvidenceCard } from "../evidence/EvidenceCard";
 import { PrecisionLegend } from "../evidence/PrecisionBadge";
 import { EmptyState } from "../shell/Feedback";
@@ -20,6 +22,8 @@ import { UI_PHRASES } from "../../domain/labels";
 export interface EvidencePaneProps {
   component: RuleComponentView | null;
   expectations: ReadonlyArray<EvidenceExpectationView>;
+  /** 节点全部未解决冲突组（并列来源展示） */
+  conflicts: ReadonlyArray<ConflictGroupView>;
   sourceDocuments: ReadonlyArray<SourceDocumentView>;
   /** 从其他页面直达的证据（自动展开定位到该条） */
   focusSpanId?: string | null;
@@ -32,6 +36,7 @@ const EXPECTATION_ORDER = ["observed", "observed_weak", "referenced_missing", "a
 export function EvidencePane({
   component,
   expectations,
+  conflicts,
   sourceDocuments,
   focusSpanId,
   paneTabIndex = 0,
@@ -75,10 +80,15 @@ export function EvidencePane({
         </h2>
       </header>
 
+      <ConflictSources
+        conflicts={conflicts}
+        sourceDocuments={sourceDocuments}
+      />
+
       <PrecisionLegend />
 
       <div className="workbench-pane__section">
-        <h3 className="workbench-pane__subtitle">相关证据</h3>
+        <h3 className="workbench-pane__subtitle">相关证据（当前子项）</h3>
         {evidence.length === 0 ? (
           <EmptyState message={UI_PHRASES.empty} hint="该子项尚无可用证据定位。" />
         ) : (
@@ -104,7 +114,10 @@ export function EvidencePane({
       </div>
 
       <div className="workbench-pane__section">
-        <h3 className="workbench-pane__subtitle">应备证据覆盖</h3>
+        <h3 className="workbench-pane__subtitle">
+          {UI_PHRASES.expectationNodeWideTitle}
+        </h3>
+        <p className="workbench-pane__muted">{UI_PHRASES.expectationNodeWideHint}</p>
         {expectations.length === 0 ? (
           <p className="workbench-pane__muted">当前没有应备证据要求。</p>
         ) : (
@@ -117,12 +130,23 @@ export function EvidencePane({
               )
               .map((expectation) => (
                 <li key={expectation.expectationId} className="expectation-row">
+                  <span className="expectation-row__code">
+                    {expectation.displayCode}
+                  </span>
                   <span
                     className={`status-badge status-badge--expectation status-badge--expectation-${expectation.status}`}
                   >
                     {expectation.statusLabel}
                   </span>
                   <span className="expectation-row__gap">{expectation.gapLabel}</span>
+                  {expectation.requirementDescription !== "" && (
+                    <span className="expectation-row__desc">
+                      {expectation.requirementDescription}
+                    </span>
+                  )}
+                  <span className="expectation-row__stage">
+                    到期节点：{expectation.dueStageLabel}
+                  </span>
                   {expectation.evidenceSpanIds.length > 0 && (
                     <span className="expectation-row__count">
                       {expectation.evidenceSpanIds.length} 处证据

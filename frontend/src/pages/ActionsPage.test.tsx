@@ -129,4 +129,63 @@ describe("行动中心", () => {
       .parentElement?.querySelector(".section-count")?.textContent;
     expect(allCount).not.toBe(closedCount);
   });
+
+  it("溯源提醒为独立类别：可单独筛选出全部溯源行动（I1）", async () => {
+    const user = userEvent.setup();
+    render(<ActionsPage />);
+    await screen.findByRole("heading", { name: /行动列表/ });
+    await user.click(screen.getByRole("button", { name: "溯源提醒" }));
+    const list = screen
+      .getByRole("heading", { name: /行动列表/ })
+      .closest("section");
+    expect(list).not.toBeNull();
+    // 四例溯源行动：UAT-01 与 UAT-05 的筛选期/基线期
+    expect(list).toHaveTextContent("UAT-01");
+    expect(list).toHaveTextContent("UAT-05");
+    expect(list).toHaveTextContent("核对当前病历转述所依据的原始来源");
+    const countEl = screen
+      .getByRole("heading", { name: /行动列表/ })
+      .parentElement?.querySelector(".section-count");
+    expect(countEl?.textContent).toBe("4");
+    // 阻断行动不被混入
+    expect(list).not.toHaveTextContent("补充当前审核节点未记录的关键信息");
+  });
+
+  it("溯源提醒不并入阻断或笼统关注（I1）", async () => {
+    const user = userEvent.setup();
+    render(<ActionsPage />);
+    await screen.findByRole("heading", { name: /行动列表/ });
+    // 阻断当前节点筛选不含溯源行动
+    await user.click(screen.getByRole("button", { name: "阻断当前节点" }));
+    const list = screen
+      .getByRole("heading", { name: /行动列表/ })
+      .closest("section");
+    expect(list).not.toHaveTextContent("核对当前病历转述所依据的原始来源");
+    // 不阻断需关注筛选也不含溯源行动（溯源是独立类别，不是笼统关注）
+    await user.click(screen.getByRole("button", { name: "不阻断，需关注" }));
+    expect(list).not.toHaveTextContent("核对当前病历转述所依据的原始来源");
+    // 全部类别下溯源行动可见，且标记为「无」而非「阻断」
+    await user.click(screen.getByRole("button", { name: "全部程度" }));
+    await user.click(screen.getByRole("button", { name: "全部类别" }));
+    const provenanceRow = screen
+      .getAllByRole("button")
+      .find((button) =>
+        button.textContent?.includes("核对当前病历转述所依据的原始来源"),
+      );
+    expect(provenanceRow).not.toBeUndefined();
+    expect(provenanceRow?.textContent).not.toContain("阻断");
+  });
+
+  it("行动中心与今日工作口径有中文说明（I5）", async () => {
+    render(<ActionsPage />);
+    expect(
+      await screen.findByText(/行动中心统计全部行动/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/今日工作只统计当前审核节点到期且需关注或阻断的开放行动/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/「溯源提醒」是独立类别/),
+    ).toBeInTheDocument();
+  });
 });

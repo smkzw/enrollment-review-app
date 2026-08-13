@@ -14,7 +14,7 @@ import { EmptyState, ErrorState, LoadingState } from "../components/shell/Feedba
 import { BoardTable, cellKey } from "../components/board/BoardTable";
 import { BoardToolbar, isStatusOption } from "../components/board/BoardToolbar";
 import { StageSummaryBar } from "../components/board/StageSummaryBar";
-import { blockingRank, countAllStages, MAIN_STATUS_ORDER } from "../domain/counts";
+import { blockingRank, countAllStages, episodeMatchesCategory, MAIN_STATUS_ORDER } from "../domain/counts";
 import { mainStatusLabel, stageLabel, UI_PHRASES } from "../domain/labels";
 import type { ReviewStage } from "../domain/enums";
 import type {
@@ -93,8 +93,9 @@ export function ProjectBoardPage() {
   const statusOptions = useMemo(() => {
     return MAIN_STATUS_ORDER.map((status) => ({
       status,
-      count: visibleEpisodes.filter((episode) => episode.mainStatus === status)
-        .length,
+      count: visibleEpisodes.filter((episode) =>
+        episodeMatchesCategory(episode, status),
+      ).length,
     }));
   }, [visibleEpisodes]);
 
@@ -109,7 +110,7 @@ export function ProjectBoardPage() {
         .filter((episode): episode is EpisodeSummaryView => episode !== undefined);
       if (episodes.length === 0) return false;
       if (statusFocus !== null) {
-        if (!episodes.some((episode) => episode.mainStatus === statusFocus)) {
+        if (!episodes.some((episode) => episodeMatchesCategory(episode, statusFocus))) {
           return false;
         }
       }

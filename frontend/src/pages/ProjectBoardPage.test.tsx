@@ -36,7 +36,7 @@ describe("项目看板页", () => {
     expect(table).toHaveTextContent("UAT-08");
   });
 
-  it("阶段汇总条显示筛选期计数（明确障碍 2、当前节点缺口 2、后续节点关注 2）", async () => {
+  it("阶段汇总条显示筛选期计数（含可叠加的存在冲突/需专业判断）", async () => {
     render(<ProjectBoardPage />);
     const summary = (await screen.findByLabelText("各审核阶段节点汇总"));
     const screening = Array.from(summary.querySelectorAll(".stage-summary__item"))
@@ -46,6 +46,35 @@ describe("项目看板页", () => {
     expect(screening).toHaveTextContent("明确障碍 2");
     expect(screening).toHaveTextContent("当前节点缺口 2");
     expect(screening).toHaveTextContent("后续节点关注 2");
+    // 可叠加类别：同一节点可同时命中，计数与主状态分别统计
+    expect(screening).toHaveTextContent("存在冲突 2");
+    expect(screening).toHaveTextContent("需专业判断 2");
+  });
+
+  it("状态筛选：存在冲突按可叠加类别命中 UAT-03、UAT-04、UAT-08", async () => {
+    const user = userEvent.setup();
+    render(<ProjectBoardPage />);
+    await user.click(await screen.findByRole("button", { name: /存在冲突 5/ }));
+    const table = await screen.findByRole("table");
+    const rows = rowsOfTable(table);
+    expect(rows).toHaveLength(3);
+    const texts = rows.map((row) => row.textContent ?? "");
+    expect(texts.some((text) => text.includes("UAT-03"))).toBe(true);
+    expect(texts.some((text) => text.includes("UAT-04"))).toBe(true);
+    expect(texts.some((text) => text.includes("UAT-08"))).toBe(true);
+    expect(
+      screen.getByText(/当前范围：全部阶段 · 存在冲突/),
+    ).toBeInTheDocument();
+  });
+
+  it("看板说明冲突/专业判断为可叠加类别，计数可大于节点数", async () => {
+    render(<ProjectBoardPage />);
+    expect(
+      await screen.findByText(/「存在冲突」「需专业判断」是可叠加的关注类别/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/同一节点可同时命中多个类别/),
+    ).toBeInTheDocument();
   });
 
   it("阶段聚焦：点击筛选期后只显示该阶段列，其余阶段列隐藏", async () => {

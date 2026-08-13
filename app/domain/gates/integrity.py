@@ -1159,6 +1159,16 @@ def validate_fixture_scope(fixture: FixtureV1, registry) -> None:
             raise StageIsolationError("PatientProfileEvent 事实或 Span 越界")
         if not set(event.related_rule_component_ids) <= component_ids:
             raise StageIsolationError("PatientProfileEvent 规则组件越界")
+        if event.fact_ids:
+            linked_span_ids = {
+                span_id
+                for fact_id in event.fact_ids
+                for span_id in accepted_fact_by_id[fact_id].evidence_span_ids
+            }
+            if not set(event.evidence_span_ids) <= linked_span_ids:
+                raise StageIsolationError(
+                    "PatientProfileEvent 的原始依据未包含在关联事实证据中"
+                )
     for conflict in fixture.conflict_groups:
         if not set(conflict.fact_ids) <= fact_ids:
             raise StageIsolationError("ConflictGroup 事实越界")

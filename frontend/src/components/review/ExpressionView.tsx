@@ -7,48 +7,15 @@
 
 import type { ExpressionNodeView, PredicateNodeView } from "../../domain/viewModels";
 import { JudgmentIcon } from "../shell/icons";
-import { attributeDisplayName } from "./attributes";
-
-function attributeLabel(predicate: PredicateNodeView): string | null {
-  return attributeDisplayName(predicate.subject, predicate.attribute);
-}
-
-const unitLabel: Record<string, string> = {
-  year: "岁",
-  xULN: "倍正常上限",
-};
-
-function formatValue(
-  predicate: PredicateNodeView,
-  attribute: string | null,
-): string {
-  const { value, unit } = predicate;
-  if (value === null || value === undefined) {
-    return "（未给出具体值）";
-  }
-  if (typeof value === "boolean") {
-    return value ? "是" : "否";
-  }
-  const localizedUnit = unit === null || unit === undefined ? null : (unitLabel[unit] ?? unit);
-  const unitAlreadyInAttribute =
-    localizedUnit !== null && attribute?.includes(`（${localizedUnit}）`) === true;
-  return `${String(value)}${localizedUnit !== null && !unitAlreadyInAttribute ? ` ${localizedUnit}` : ""}`;
-}
+import { UI_PHRASES } from "../../domain/labels";
+import { formatPredicateStatement } from "./attributes";
 
 function PredicateRow({ predicate }: { predicate: PredicateNodeView }) {
-  const attribute = attributeLabel(predicate);
+  const statement = formatPredicateStatement(predicate);
   return (
     <li className="expr-node expr-node--predicate">
       <span className="expr-node__condition">
-        {attribute !== null && (
-          <span className="expr-node__attribute">
-            {attribute}
-            {predicate.comparator === "eq" ? "为" : ""}
-          </span>
-        )}
-        <span className="expr-node__compare">
-          {predicate.comparatorLabel} {formatValue(predicate, attribute)}
-        </span>
+        <span className="expr-node__attribute">{statement}</span>
       </span>
       {predicate.requiresProfessionalJudgment && (
         <span className="expr-node__judgment">
@@ -105,9 +72,15 @@ export function ExpressionView({
       {exception !== null && (
         <div className="expression-view__exception">
           <span className="expression-view__exception-label">例外条件</span>
+          <p className="expression-view__exception-connective">
+            {UI_PHRASES.exceptionConnective}
+          </p>
           <ul className="expr-children">
             <ExpressionViewInner node={exception} depth={0} />
           </ul>
+          <p className="expression-view__exception-note">
+            {UI_PHRASES.exceptionEffectHint}
+          </p>
         </div>
       )}
     </div>

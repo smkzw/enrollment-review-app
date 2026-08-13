@@ -1140,6 +1140,74 @@ def completed_auxiliary_inputs(
     return facts, expectations, candidates
 
 
+def longitudinal_profile_events(
+    scenario: str,
+    *,
+    span_id: str,
+) -> list[PatientProfileEvent]:
+    """代表性合成纵向时序事件（I6 修复）。
+
+    - 覆盖研究节点、人口学、目标疾病、既往史、用药、检查与评分六类代表泳道；
+    - 日期为临床事件/计划时间，与审核节点锚点日期分离（锚点 2026-08-10/2026-08-31）；
+    - 事件本身不带风险标签：正常历史进入完整明细，不挤占首屏风险视图；
+    - barrier 的异常检查事件显式带异常/临界标记并关联排除规则，作为触发判断的时序证据；
+    - 全部为合成试用资料，页面级“界面试用”标记保持可见，不宣称真实抽取。
+    """
+    specs: dict[str, list[tuple]] = {
+        "clear": [
+            # (lane, event_type, title, start, end, risk_labels, abnormal, critical, components)
+            (ProfileLane.STUDY_MILESTONE, "study_milestone", "签署知情同意书", date(2026, 8, 8), None, [], False, False, []),
+            (ProfileLane.STUDY_MILESTONE, "study_milestone", "基线/随机前检查预约", date(2026, 8, 31), None, [], False, False, []),
+            (ProfileLane.DEMOGRAPHICS, "demographics", "出生日期（人口学）", date(1990, 5, 18), None, [], False, False, []),
+            (ProfileLane.TARGET_DISEASE, "target_disease", "目标疾病确诊", date(2026, 6, 20), None, [], False, False, []),
+            (ProfileLane.MEDICAL_HISTORY, "medical_history", "阑尾切除术", date(2024, 11, 15), None, [], False, False, []),
+            (ProfileLane.MEDICATION, "medication", "术后抗菌药物疗程", date(2025, 2, 1), date(2025, 5, 31), [], False, False, []),
+            (ProfileLane.TEST_EXAM_SCORE, "test_exam_score", "筛选前血常规", date(2026, 7, 28), None, [], False, False, []),
+        ],
+        "barrier": [
+            (ProfileLane.STUDY_MILESTONE, "study_milestone", "签署知情同意书", date(2026, 8, 8), None, [], False, False, []),
+            (ProfileLane.STUDY_MILESTONE, "study_milestone", "基线/随机前检查预约", date(2026, 8, 31), None, [], False, False, []),
+            (ProfileLane.DEMOGRAPHICS, "demographics", "出生日期（人口学）", date(1981, 2, 14), None, [], False, False, []),
+            (ProfileLane.TARGET_DISEASE, "target_disease", "目标疾病确诊", date(2026, 3, 12), None, [], False, False, []),
+            (ProfileLane.MEDICAL_HISTORY, "medical_history", "高血压病史", date(2020, 8, 1), None, [], False, False, []),
+            (ProfileLane.MEDICATION, "medication", "降压药物疗程", date(2020, 9, 1), date(2026, 7, 31), [], False, False, []),
+            (ProfileLane.TEST_EXAM_SCORE, "test_exam_score", "筛选前实验室检查（2.1×ULN）", date(2026, 7, 28), None, ["入排相关"], True, True, ["component-ex-01"]),
+        ],
+        "gap_conflict": [
+            (ProfileLane.STUDY_MILESTONE, "study_milestone", "签署知情同意书", date(2026, 8, 8), None, [], False, False, []),
+            (ProfileLane.STUDY_MILESTONE, "study_milestone", "基线/随机前检查预约", date(2026, 8, 31), None, [], False, False, []),
+            (ProfileLane.TARGET_DISEASE, "target_disease", "目标疾病确诊", date(2026, 6, 20), None, [], False, False, []),
+            (ProfileLane.MEDICAL_HISTORY, "medical_history", "手术史", date(2025, 3, 10), None, [], False, False, []),
+            (ProfileLane.MEDICATION, "medication", "降压药物疗程", date(2025, 4, 1), date(2026, 7, 31), [], False, False, []),
+            (ProfileLane.TEST_EXAM_SCORE, "test_exam_score", "筛选前实验室检查", date(2026, 7, 28), None, [], False, False, []),
+        ],
+    }
+    events = []
+    for index, (lane, event_type, title, start, end, risk_labels, abnormal, critical, components) in enumerate(
+        specs[scenario], start=1
+    ):
+        events.append(
+            PatientProfileEvent(
+                event_id=f"event-{scenario}-timeline-{index}",
+                lane=lane,
+                event_type=event_type,
+                title=title,
+                start_date=DateValue(value=start, precision=DatePrecision.DAY),
+                end_date=(
+                    DateValue(value=end, precision=DatePrecision.DAY)
+                    if end is not None
+                    else None
+                ),
+                evidence_span_ids=[span_id],
+                related_rule_component_ids=components,
+                risk_labels=risk_labels,
+                is_abnormal=abnormal,
+                is_critical=critical,
+            )
+        )
+    return events
+
+
 def build_fixture(scenario: str) -> FixtureV1:
     rules = rule_set()
     (
@@ -1664,20 +1732,32 @@ def build_fixture(scenario: str) -> FixtureV1:
             ),
         ]
 
+    # ---- 合成时序资料（I6 修复）----
+    # 临床事件时间与审核节点锚点时间分离：
+    # - review_summary 使用本节点审核锚点日期（阶段命名空间时按节点重新投影）；
+    # - risk_or_gap 摘要为审核动作结论，不带任何临床日期，不得盖上筛选日期；
+    # - 代表性纵向事件使用真实临床/计划日期，只进完整明细（barrier 异常检查除外）。
     events = [
         PatientProfileEvent(
             event_id=f"event-{scenario}-summary",
-            lane=ProfileLane.DEMOGRAPHICS if scenario != "gap_conflict" else ProfileLane.EVIDENCE_QUALITY,
-            event_type="screening_summary",
+            lane=ProfileLane.STUDY_MILESTONE,
+            event_type="review_summary",
             title={"clear": "当前未发现明确障碍", "barrier": "发现明确排除障碍"}.get(scenario, "资料缺口与冲突待处理"),
-            start_date=DateValue(value=date(2026, 8, 10), precision=DatePrecision.DAY),
+            start_date=DateValue(
+                value=episode.anchor_dates["screening_date"].value,
+                precision=DatePrecision.DAY,
+            ),
             fact_ids=[fact.fact_id for fact in facts],
             evidence_span_ids=[span.evidence_span_id for span in spans],
             related_rule_component_ids=["component-in-01", "component-ex-01"],
             risk_labels=[] if scenario == "clear" else ["入排相关"],
             is_abnormal=scenario == "barrier",
             is_critical=scenario == "barrier",
-        )
+        ),
+        *longitudinal_profile_events(
+            scenario,
+            span_id=spans[0].evidence_span_id,
+        ),
     ]
     if scenario == "gap_conflict":
         profile_event_specs = [
@@ -1695,7 +1775,7 @@ def build_fixture(scenario: str) -> FixtureV1:
                     lane=lane,
                     event_type="risk_or_gap",
                     title=title,
-                    start_date=DateValue(value=date(2026, 8, 10), precision=DatePrecision.DAY),
+                    start_date=None,
                     evidence_span_ids=["span-gap-page"],
                     related_rule_component_ids=["component-ex-01"],
                     risk_labels=labels,
@@ -2002,6 +2082,20 @@ def namespace_fixture(base: FixtureV1, *, subject_number: int, stage: ReviewStag
                 value=date(2026, 8, 31), precision=DatePrecision.DAY
             ).model_dump(mode="json"),
         }
+    # 审核摘要事件按当前审核节点锚点时间重新投影（I6 修复）：临床事件时间
+    # 与审核节点时间分离，review_summary 属于审核产物，日期跟随本节点锚点。
+    anchor_key_by_stage = {
+        ReviewStage.PRE_SCREENING: "icf_date",
+        ReviewStage.SCREENING: "screening_date",
+        ReviewStage.RUN_IN: "screening_date",
+        ReviewStage.BASELINE: "baseline_date",
+    }
+    review_anchor = DateValue.model_validate(
+        payload["review_episode"]["anchor_dates"][anchor_key_by_stage[stage]]
+    )
+    for event in payload["patient_profile"]["events"]:
+        if event["event_type"] == "review_summary":
+            event["start_date"] = review_anchor.model_dump(mode="json")
     if stage == ReviewStage.BASELINE:
         payload["evidence_snapshot"]["upload_mode"] = UploadMode.INCREMENTAL.value
         payload["evidence_snapshot"]["prior_snapshot_id"] = (
