@@ -56,13 +56,16 @@ free_range() {
 }
 
 DIST_OVERRIDE=""
+OPEN_PAGE_OVERRIDE=""
 run_launcher() { # $1=port  $2=state_dir
   local out
   if [ -n "$DIST_OVERRIDE" ]; then
     out="$(V2_UAT_DIST_DIR="$DIST_OVERRIDE" V2_UAT_STATE_DIR="$2" V2_UAT_NO_BROWSER=1 \
+           V2_UAT_OPEN_PAGE="$OPEN_PAGE_OVERRIDE" \
            V2_UAT_PORT="$1" V2_UAT_PORT_SCAN_COUNT="$SCAN" zsh "$LAUNCHER" 2>&1)"
   else
     out="$(V2_UAT_STATE_DIR="$2" V2_UAT_NO_BROWSER=1 \
+           V2_UAT_OPEN_PAGE="$OPEN_PAGE_OVERRIDE" \
            V2_UAT_PORT="$1" V2_UAT_PORT_SCAN_COUNT="$SCAN" zsh "$LAUNCHER" 2>&1)"
   fi
   LAUNCH_EXIT=$?
@@ -257,6 +260,115 @@ else
   echo "$STOP_OUT" | sed 's/^/      | /'
 fi
 
+# 6) 打开路径只允许 "/" 与 "/uat-recorder.html"：记录工作台首次启动
+log "6) 记录工作台打开路径首次启动"
+S6="$(mktemp -d /tmp/v2uat_test.XXXXXX)"
+STATE_DIRS="$STATE_DIRS $S6"
+S6D="$(mktemp -d /tmp/v2uat_dist.XXXXXX)"
+STATE_DIRS="$STATE_DIRS $S6D"
+printf '{"service":"enrollment-review-v2","pageVersion":"界面试用版 1.5.1"}\n' > "$S6D/uat-status.json"
+printf '<!doctype html><html><body>fake</body></html>\n' > "$S6D/index.html"
+printf '<!doctype html><html><body>recorder</body></html>\n' > "$S6D/uat-recorder.html"
+P6="$(free_range 1)"
+DIST_OVERRIDE="$S6D"
+OPEN_PAGE_OVERRIDE="/uat-recorder.html"
+run_launcher "$P6" "$S6"
+if [ "$LAUNCH_EXIT" -eq 0 ] \
+  && [ "$(echo "$LAUNCH_OUT" | grep -c '记录工作台启动完成')" -ge 1 ] \
+  && [ "$(echo "$LAUNCH_OUT" | grep -c "http://127.0.0.1:$P6/uat-recorder.html")" -ge 1 ] \
+  && [ "$(marker_of "$P6")" = "enrollment-review-v2" ]; then
+  V2_PIDS="$V2_PIDS $(awk 'NR==1{print $1}' "$S6/server.pid")"
+  ok "记录工作台路径启动成功：端口 ${P6}，地址指向 /uat-recorder.html"
+else
+  no "行为6失败：exit=$LAUNCH_EXIT"
+  echo "$LAUNCH_OUT" | sed 's/^/      | /'
+fi
+
+# 7) 已在运行时用记录工作台路径复用，不新建服务
+log "7) 记录工作台路径重复启动（复用服务）"
+if [ -f "$S6/server.pid" ]; then
+  PID_BEFORE="$(awk 'NR==1{print $1}' "$S6/server.pid")"
+  run_launcher "$P6" "$S6"
+  PID_AFTER="$(awk 'NR==1{print $1}' "$S6/server.pid")"
+  CNT="$(listener_count "$P6")"
+  if [ "$LAUNCH_EXIT" -eq 0 ] \
+    && [ "$(echo "$LAUNCH_OUT" | grep -c '已经在运行')" -ge 1 ] \
+    && [ "$(echo "$LAUNCH_OUT" | grep -c "http://127.0.0.1:$P6/uat-recorder.html")" -ge 1 ] \
+    && [ "$PID_BEFORE" = "$PID_AFTER" ] \
+    && [ "$CNT" -eq 1 ]; then
+    ok "记录工作台路径复用已运行服务：PID 不变、监听数=1"
+  else
+    no "行为7失败：exit=$LAUNCH_EXIT 监听数=$CNT"
+    echo "$LAUNCH_OUT" | sed 's/^/      | /'
+  fi
+else
+  no "行为7跳过：行为6未留下 pid 文件"
+fi
+DIST_OVERRIDE=""
+OPEN_PAGE_OVERRIDE=""
+
+# 8) 非法打开路径：中文报错退出，不启动服务
+log "8) 非法打开路径（只允许 / 与 /uat-recorder.html）"
+S8="$(mktemp -d /tmp/v2uat_test.XXXXXX)"
+STATE_DIRS="$STATE_DIRS $S8"
+P8="$(free_range 1)"
+OPEN_PAGE_OVERRIDE="/secret"
+run_launcher "$P8" "$S8"
+if [ "$LAUNCH_EXIT" -ne 0 ] \
+  && [ "$(echo "$LAUNCH_OUT" | grep -c '打开页面不正确')" -ge 1 ] \
+  && [ ! -f "$S8/server.pid" ] \
+  && ! port_in_use "$P8"; then
+  ok "非法路径被拒绝：中文报错且未启动任何服务"
+else
+  no "行为8失败：exit=$LAUNCH_EXIT"
+  echo "$LAUNCH_OUT" | sed 's/^/      | /'
+fi
+OPEN_PAGE_OVERRIDE=""
+
+# 9) 记录工作台文件缺失：中文报错退出，不启动服务
+log "9) 记录工作台文件缺失"
+S9="$(mktemp -d /tmp/v2uat_test.XXXXXX)"
+STATE_DIRS="$STATE_DIRS $S9"
+S9D="$(mktemp -d /tmp/v2uat_dist.XXXXXX)"
+STATE_DIRS="$STATE_DIRS $S9D"
+printf '{"service":"enrollment-review-v2"}\n' > "$S9D/uat-status.json"
+printf '<!doctype html><html><body>fake</body></html>\n' > "$S9D/index.html"
+P9="$(free_range 1)"
+DIST_OVERRIDE="$S9D"
+OPEN_PAGE_OVERRIDE="/uat-recorder.html"
+run_launcher "$P9" "$S9"
+if [ "$LAUNCH_EXIT" -ne 0 ] \
+  && [ "$(echo "$LAUNCH_OUT" | grep -c '记录工作台程序文件')" -ge 1 ] \
+  && [ ! -f "$S9/server.pid" ] \
+  && ! port_in_use "$P9"; then
+  ok "记录工作台文件缺失被拒绝：中文报错且未启动任何服务"
+else
+  no "行为9失败：exit=$LAUNCH_EXIT"
+  echo "$LAUNCH_OUT" | sed 's/^/      | /'
+fi
+DIST_OVERRIDE=""
+OPEN_PAGE_OVERRIDE=""
+
+# 10) 显式首页路径 "/"：与默认行为一致
+log "10) 显式首页路径"
+S10="$(mktemp -d /tmp/v2uat_test.XXXXXX)"
+STATE_DIRS="$STATE_DIRS $S10"
+P10="$(free_range 1)"
+DIST_OVERRIDE="$S6D"
+OPEN_PAGE_OVERRIDE="/"
+run_launcher "$P10" "$S10"
+if [ "$LAUNCH_EXIT" -eq 0 ] \
+  && [ "$(echo "$LAUNCH_OUT" | grep -c '入排审核工作台（界面试用）启动完成')" -ge 1 ] \
+  && [ "$(echo "$LAUNCH_OUT" | grep -c "http://127.0.0.1:$P10/")" -ge 1 ] \
+  && [ "$(marker_of "$P10")" = "enrollment-review-v2" ]; then
+  V2_PIDS="$V2_PIDS $(awk 'NR==1{print $1}' "$S10/server.pid")"
+  ok "显式首页路径启动成功：端口 ${P10}，地址指向 /"
+else
+  no "行为10失败：exit=$LAUNCH_EXIT"
+  echo "$LAUNCH_OUT" | sed 's/^/      | /'
+fi
+DIST_OVERRIDE=""
+OPEN_PAGE_OVERRIDE=""
 echo ""
 echo "=============================================="
 echo " 结果：通过 $PASS 项，失败 $FAIL 项"

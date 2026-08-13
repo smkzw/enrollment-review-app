@@ -15,9 +15,11 @@
 #   V2_UAT_PORT              起始端口（默认 4173）
 #   V2_UAT_PORT_SCAN_COUNT   顺延尝试的端口数量（默认 7）
 #   V2_UAT_NO_BROWSER=1      不自动打开浏览器
+#   V2_UAT_OPEN_PAGE         打开页面路径：只允许 "/"（参与者界面）或
+#                            "/uat-recorder.html"（记录工作台），默认 "/"。
+#                            供记录工作台桌面入口使用；其他值一律报错退出。
 #   V2_UAT_HEALTH_TIMEOUT_SEC 健康检查等待秒数（默认 15）
 # ============================================================
-set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -28,6 +30,20 @@ BASE_PORT="${V2_UAT_PORT:-4173}"
 NO_BROWSER="${V2_UAT_NO_BROWSER:-0}"
 PORT_SCAN_COUNT="${V2_UAT_PORT_SCAN_COUNT:-7}"
 HEALTH_TIMEOUT_SEC="${V2_UAT_HEALTH_TIMEOUT_SEC:-15}"
+OPEN_PAGE="${V2_UAT_OPEN_PAGE:-/}"
+
+if [[ "$OPEN_PAGE" != "/" && "$OPEN_PAGE" != "/uat-recorder.html" ]]; then
+  echo "" >&2
+  echo "【启动失败】打开页面不正确：${OPEN_PAGE}" >&2
+  echo "只允许打开界面试用首页（/）或记录工作台（/uat-recorder.html），请联系管理员。" >&2
+  exit 1
+fi
+if [ "$OPEN_PAGE" = "/uat-recorder.html" ]; then
+  ENTRY_NAME="入排审核界面试用记录工作台"
+else
+  ENTRY_NAME="入排审核工作台（界面试用）"
+fi
+
 V2_SERVICE_ID="enrollment-review-v2"
 
 PID_FILE="$STATE_DIR/server.pid"
@@ -40,7 +56,6 @@ is_number() { [[ "$1" =~ ^[0-9]+$ ]]; }
 
 is_number "$BASE_PORT" || { echo "【启动失败】端口设置不正确，请联系管理员。" >&2; exit 1; }
 is_number "$PORT_SCAN_COUNT" || { echo "【启动失败】端口数量设置不正确，请联系管理员。" >&2; exit 1; }
-is_number "$HEALTH_TIMEOUT_SEC" || { echo "【启动失败】等待时间设置不正确，请联系管理员。" >&2; exit 1; }
 
 fail() {
   echo "" >&2
@@ -54,6 +69,7 @@ PYTHON_BIN="/usr/bin/python3"
 [ -x "$PYTHON_BIN" ] || fail "未找到系统自带的页面运行组件。请联系管理员处理。"
 [ -f "$DIST_DIR/index.html" ] || fail "缺少界面试用程序文件（frontend/dist 尚未构建或已被移动）。请由管理员完成构建后再开始试用。"
 [ -f "$DIST_DIR/uat-status.json" ] || fail "界面试用程序文件版本不完整（缺少试用品版本标记）。请由管理员重新构建后再开始试用。"
+[ "$OPEN_PAGE" = "/" ] || [ -f "$DIST_DIR/uat-recorder.html" ] || fail "缺少记录工作台程序文件（frontend/dist 尚未包含记录工作台）。请由管理员重新构建后再开始试用。"
 
 # ---- 版本标记健康检查：只有标记为 V2 的服务才算数 ----
 marker_service() {
@@ -89,10 +105,10 @@ if [ -f "$PID_FILE" ]; then
      && [ "$(listener_pid_on "$OLD_PORT")" = "$OLD_PID" ] \
      && is_v2_at "$OLD_PORT"; then
     PORT="$OLD_PORT"
-    echo "入排审核工作台（界面试用）已经在运行：http://127.0.0.1:$PORT/"
+    echo "${ENTRY_NAME}已经在运行：http://127.0.0.1:$PORT$OPEN_PAGE"
     echo "不再重复启动，直接为您打开浏览器。"
     if [ "$NO_BROWSER" != "1" ]; then
-      /usr/bin/open "http://127.0.0.1:$PORT/" 2>/dev/null
+      /usr/bin/open "http://127.0.0.1:$PORT$OPEN_PAGE" 2>/dev/null
     fi
     exit 0
   fi
@@ -118,8 +134,8 @@ nohup "$PYTHON_BIN" -m http.server "$PORT" --bind 127.0.0.1 --directory "$DIST_D
 SERVER_PID=$!
 printf '%s\n%s\n' "$SERVER_PID" "$PORT" > "$PID_FILE"
 
-echo "正在启动入排审核工作台（界面试用）…"
-echo "访问地址：http://127.0.0.1:$PORT/"
+echo "正在启动${ENTRY_NAME}…"
+echo "访问地址：http://127.0.0.1:$PORT$OPEN_PAGE"
 
 # ---- 等待服务就绪（用版本标记确认是 V2，而非其他程序）----
 WAITED=0
@@ -154,17 +170,17 @@ fi
 
 echo ""
 echo "=========================================="
-echo "  入排审核工作台（界面试用）启动完成"
+echo "  ${ENTRY_NAME}启动完成"
 echo "=========================================="
 echo "  界面版本：$PAGE_VERSION"
-echo "  访问地址：http://127.0.0.1:$PORT/"
+echo "  访问地址：http://127.0.0.1:$PORT$OPEN_PAGE"
 echo ""
 echo "  本窗口可以关闭，试用服务会继续运行。"
 echo "  如需停止试用，请双击「停止试用」入口。"
 echo "=========================================="
 
 if [ "$NO_BROWSER" != "1" ]; then
-  /usr/bin/open "http://127.0.0.1:$PORT/" 2>/dev/null \
+  /usr/bin/open "http://127.0.0.1:$PORT$OPEN_PAGE" 2>/dev/null \
     || echo "（未能自动打开浏览器，请手动输入上方地址。）"
 fi
 exit 0

@@ -21,6 +21,7 @@
 | [Quality Guidelines](./quality-guidelines.md) | 视觉、交互和浏览器验收 | 已定义 |
 | [Type Safety](./type-safety.md) | TypeScript 与运行时契约 | 已定义 |
 | [本地界面试用启动](./local-trial-launcher.md) | 预构建页面、服务归属、桌面入口和验收矩阵 | 已定义 |
+| [界面试用记录](./uat-recorder.md) | 独立记录、派生统计、本机备份恢复和正式试用门禁 | 已定义 |
 
 ## Current And Target State
 
