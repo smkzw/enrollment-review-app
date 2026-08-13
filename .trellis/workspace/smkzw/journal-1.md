@@ -30,3 +30,25 @@
 - 原 checker 第二次定向复验无阻断 findings，明确结论为“Phase 0 候选可接受”。
 - Codex 复核锚点：默认测试 136 通过、1 跳过；legacy 单独 130 通过、1 跳过；锁文件可复现；服务 8901 健康；工作树干净。
 - Phase 0 可归档。下一步只进入 Phase 0.5 合同设计，不跨越到 Phase 2 数据层。
+
+
+## Session 1: Phase 1.5 正式界面试用任务包就绪
+
+**Date**: 2026-08-13
+**Task**: Phase 1.5 正式界面试用任务包就绪
+**Branch**: `codex/v2-phase0-foundation`
+
+### Summary
+
+补齐14项独立可执行任务、记录人员指南和批次汇总；增加统一界面试用复位与版本；修正显示码、期别及缩放证据口径；全量测试与独立复核通过，继续停在正式用户试用批准门。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e598c9e` | (see git log) |
+| `b6580e9` | (see git log) |
+
+### Status
+
+[OK] **Completed**
