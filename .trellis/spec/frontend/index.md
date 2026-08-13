@@ -20,6 +20,7 @@
 | [State Management](./state-management.md) | 服务端、URL、本地状态边界 | 已定义 |
 | [Quality Guidelines](./quality-guidelines.md) | 视觉、交互和浏览器验收 | 已定义 |
 | [Type Safety](./type-safety.md) | TypeScript 与运行时契约 | 已定义 |
+| [本地界面试用启动](./local-trial-launcher.md) | 预构建页面、服务归属、桌面入口和验收矩阵 | 已定义 |
 
 ## Current And Target State
 

@@ -3,8 +3,21 @@
  * 页面级无横向滚动，当前选择跨标签切换保持。
  */
 
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { expectNoPageOverflow, openRoute } from "./helpers";
+import { UAT_PAGE_VERSION, UAT_TRIAL_STATE_KEYS } from "../src/app/uatTrialState";
+
+/** 会话存储全量导出：复位边界断言直接引用中央清单，不在测试中复制存储键。 */
+function sessionDump(page: Page): Promise<Record<string, string | null>> {
+  return page.evaluate(() => {
+    const all: Record<string, string | null> = {};
+    for (let index = 0; index < window.sessionStorage.length; index += 1) {
+      const key = window.sessionStorage.key(index);
+      if (key !== null) all[key] = window.sessionStorage.getItem(key);
+    }
+    return all;
+  });
+}
 
 test.describe("窄屏（390px）", () => {
   test.skip(({ viewport }) => viewport?.width !== 390, "仅窄屏项目执行");
@@ -134,6 +147,82 @@ test.describe("窄屏（390px）", () => {
     await expectNoPageOverflow(page);
     await openRoute(page, "/tasks");
     await expect(page.getByRole("heading", { name: "任务与系统" })).toBeVisible();
+    await expectNoPageOverflow(page);
+  });
+
+  test("帮助页复位：滚动到入口并取消，状态不变且焦点回到触发按钮", async ({
+    page,
+  }) => {
+    // 先加载应用源（sessionStorage 按源生效），再注入登记键与无关键
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+    await page.evaluate(() => window.sessionStorage.clear());
+    await page.evaluate((keys) => {
+      for (const key of keys) window.sessionStorage.setItem(key, "narrow-x");
+      window.sessionStorage.setItem("unrelated:preference", "keep");
+    }, UAT_TRIAL_STATE_KEYS);
+
+    await openRoute(page, "/help");
+    const trigger = page.getByRole("button", { name: "开始新的界面试用" });
+    await trigger.scrollIntoViewIfNeeded();
+    await trigger.click();
+    const dialog = page.getByRole("dialog", { name: "开始新的界面试用" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(UAT_PAGE_VERSION);
+    await expectNoPageOverflow(page);
+
+    await page.getByRole("button", { name: "先不要" }).click();
+    await expect(dialog).toHaveCount(0);
+    // 取消后登记键与无关键均不变
+    const after = await sessionDump(page);
+    for (const key of UAT_TRIAL_STATE_KEYS) {
+      expect(after[key] ?? null, `取消不应改变 ${key}`).toBe("narrow-x");
+    }
+    expect(after["unrelated:preference"]).toBe("keep");
+    // 焦点回到触发按钮，且未离开帮助页
+    await expect(trigger).toBeFocused();
+    await expect(page).toHaveURL(/\/help$/);
+    await expectNoPageOverflow(page);
+  });
+
+  test("帮助页复位：确认只清除登记键、保留无关键并返回今日工作，无横向溢出", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+    await page.evaluate(() => window.sessionStorage.clear());
+    await page.evaluate((keys) => {
+      for (const key of keys) window.sessionStorage.setItem(key, "narrow-y");
+      window.sessionStorage.setItem("unrelated:preference", "keep");
+      window.sessionStorage.setItem("eligibility-review:other", "keep2");
+      window.sessionStorage.setItem("plain-key", "keep3");
+    }, UAT_TRIAL_STATE_KEYS);
+
+    await openRoute(page, "/help");
+    const trigger = page.getByRole("button", { name: "开始新的界面试用" });
+    await trigger.scrollIntoViewIfNeeded();
+    await trigger.click();
+    await expect(
+      page.getByRole("dialog", { name: "开始新的界面试用" }),
+    ).toBeVisible();
+    // 确认界面自身无页面级横向溢出
+    await expectNoPageOverflow(page);
+
+    await page.getByRole("button", { name: "确认并回到今日工作" }).click();
+    await expect(page).toHaveURL(/\/today$/);
+    await expect(
+      page.getByRole("heading", { name: "今日工作", level: 1 }),
+    ).toBeVisible();
+
+    // 状态边界：只删除登记在册的键，其余会话数据保留
+    const after = await sessionDump(page);
+    for (const key of UAT_TRIAL_STATE_KEYS) {
+      expect(after[key] ?? null, `确认后应删除登记键 ${key}`).toBeNull();
+    }
+    expect(after["unrelated:preference"]).toBe("keep");
+    expect(after["eligibility-review:other"]).toBe("keep2");
+    expect(after["plain-key"]).toBe("keep3");
+    // 返回的今日工作页无横向溢出
     await expectNoPageOverflow(page);
   });
 });

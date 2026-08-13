@@ -3,8 +3,9 @@
  * 每个视口项目输出关键页面截图；1440 项目额外输出两档布局压力截图。
  */
 
-import { test } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { openRoute, setLayoutStressFactor } from "./helpers";
+import { UAT_TRIAL_STATE_KEYS } from "../src/app/uatTrialState";
 
 const SHOT_PAGES = [
   { hash: "/today", name: "today" },
@@ -70,5 +71,46 @@ test.describe("截图收集", () => {
     await page.getByLabel("确认理由（必填）").fill("研究者已补充书面判断，并完成签名和日期。");
     await page.getByRole("button", { name: "核对确认内容" }).click();
     await page.screenshot({ path: `e2e/screenshots/${project}-manual-confirm.png` });
+  });
+
+  test("窄屏帮助页复位确认界面与复位后今日工作截图", async ({ page }) => {
+    test.skip(
+      test.info().project.name !== "narrow-390",
+      "仅窄屏项目执行复位截图",
+    );
+    // 先注入登记键：截图必须来自真实复位路径，不得用首屏帮助页冒充复位证据。
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+    await page.evaluate((keys) => {
+      for (const key of keys) window.sessionStorage.setItem(key, "shot");
+    }, UAT_TRIAL_STATE_KEYS);
+
+    await openRoute(page, "/help");
+    const trigger = page.getByRole("button", { name: "开始新的界面试用" });
+    await trigger.scrollIntoViewIfNeeded();
+    await trigger.click();
+    await expect(
+      page.getByRole("dialog", { name: "开始新的界面试用" }),
+    ).toBeVisible();
+    await page.waitForTimeout(300);
+    await page.screenshot({
+      path: "e2e/screenshots/narrow-390-help-reset-confirm.png",
+      fullPage: false,
+    });
+
+    await page.getByRole("button", { name: "确认并回到今日工作" }).click();
+    await expect(page).toHaveURL(/\/today$/);
+    await page.waitForTimeout(500);
+    await page.screenshot({
+      path: "e2e/screenshots/narrow-390-today-after-reset.png",
+      fullPage: false,
+    });
+
+    // 与截图同帧证明复位真实生效：登记键已被清除。
+    const cleared = await page.evaluate(
+      (keys) => keys.every((key) => window.sessionStorage.getItem(key) === null),
+      UAT_TRIAL_STATE_KEYS,
+    );
+    expect(cleared).toBe(true);
   });
 });
