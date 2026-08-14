@@ -108,3 +108,20 @@
 ### Status
 
 [WAIT] **Planning approved summary presented; explicit user approval required before `task.py start`**
+
+
+## Session 5: Phase 2 worker_01 存储基础设施
+
+**Date**: 2026-08-14
+**Task**: Phase 2 SQLite领域层与持久任务（worker_01：SQLite 配置、SQLAlchemy 基础设施、Alembic 迁移、备份恢复与写边界测试）
+**Branch**: `codex/v2-phase0-foundation`
+
+### Summary
+
+完成 V2 持久化基础设施：`ENROLLMENT_V2_DATA_DIR` 数据根配置与 SQLite >=3.51.3 运行时门禁（`app/storage/config.py`）；SQLAlchemy Base/命名约定/Engine/Session 工厂与连接 PRAGMA 合同（WAL、foreign_keys、synchronous=FULL、busy_timeout=10000，`app/storage/db.py`）；Alembic 配置与空基线迁移 `0001`（`alembic.ini` + `app/storage/migrations/`，batch mode）；迁移编排器（`app/storage/migrate.py`：flock 迁移锁、sqlite3 backup API 一致备份 + integrity_check + 清单、upgrade/downgrade/restore、schema/metadata 一致性校验、`upgrade_or_fail` 启动入口）与运维 CLI（`python -m app.storage.cli`）。
+
+验证：`tests/v2/storage` 37 项新测试通过（升级/降级/再升级、失败注入保留原库、恢复、PRAGMA 实测、版本门禁、写边界与 legacy `projects/` 树哈希不变性）；全套 312 passed / 1 skipped；真实数据根 `data_v2/`（已 gitignore）完成 CLI upgrade→verify→downgrade→upgrade→restore→upgrade 闭环，legacy 树 8797 项哈希一致。
+
+### Status
+
+[OK] **Completed**（worker_01 切片完成；领域 ORM/仓储与 Job 工作流留待 worker_02/03）

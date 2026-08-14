@@ -3,7 +3,7 @@
   "name": "phase2-sqlite-domain-jobs",
   "title": "Phase 2 SQLite领域层与持久任务",
   "description": "建立V2 SQLite领域持久化、Alembic迁移、Job/Checkpoint生命周期、幂等、恢复、乐观并发与SSE订阅基础。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
