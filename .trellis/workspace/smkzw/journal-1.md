@@ -141,3 +141,26 @@
 ### Status
 
 [OK] **Completed**（worker_02 切片完成；持久 Job 状态机/租约恢复/取消重试/V2 API/SSE 留待 worker_03）
+
+
+## Session 4: Phase 2 SQLite领域层与持久任务完成
+
+**Date**: 2026-08-14
+**Task**: Phase 2 SQLite领域层与持久任务完成
+**Branch**: `codex/v2-phase0-foundation`
+
+### Summary
+
+完成独立V2 SQLite领域持久化、Alembic备份恢复、幂等与乐观并发、stale、持久Job/Checkpoint/租约恢复、中文V2 API与SSE；多模型审评后修复并发幂等、终败事件、恢复进度、退避保护和字段定位；后端467项、前端207项、Playwright283项通过，Phase 2归档。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `02b2936` | (see git log) |
+| `07f8b45` | (see git log) |
+| `9edc7b3` | (see git log) |
+
+### Status
+
+[OK] **Completed**
