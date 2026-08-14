@@ -125,3 +125,19 @@
 ### Status
 
 [OK] **Completed**（worker_01 切片完成；领域 ORM/仓储与 Job 工作流留待 worker_02/03）
+
+## Session 6: Phase 2 worker_02 领域ORM、合同编解码、仓储、幂等、乐观并发与过期范围
+
+**Date**: 2026-08-14
+**Task**: Phase 2 SQLite领域层与持久任务（worker_02：领域 ORM、合同编解码、仓储、幂等、乐观并发与过期范围）
+**Branch**: `codex/v2-phase0-foundation`
+
+### Summary
+
+完成 worker_02 切片：`app/storage/models.py` 51 张表（5 个可变根 revision+version_id 乐观并发；协议/规则/证据/审核/Agent/Gate/Job 追加写记录 canonical JSON payload+hash；9 张有序 association table；`entity_staleness` 与 `idempotency_records`；episode<->snapshot 双向 DEFERRED 外键解环）；`app/storage/codecs.py`（canonical 编解码、哈希校验、列/payload 镜像交叉核对，`PersistedContractInvalid` 阻止发布）；`app/storage/concurrency.py`（`StaleRevisionError` 中文差异信封 + mapper versioning 兜底）；`app/storage/idempotency.py`（同键同哈希复用、异哈希冲突）；`app/storage/staleness.py`（开/查/按 ReviewRun 覆盖范围精确关闭）；`app/storage/repositories.py`（追加写仓储骨架 + Project/Subject/Episode/Expectation/Action 可变仓储 + 规则集树/协议权威链组合写入 + 跨 scope 服务校验 + Job 存储原语 + `persist_fixture` 三 fixture 播种）；迁移 `0002_domain_schema.py`（由 metadata 生成后冻结，upgrade/downgrade，schema↔metadata 一致）。
+
+验证：`tests/v2/storage` 106 项新测试（三 fixture 完整往返、跨 scope 反向拒绝、N+1 常量查询、编解码篡改、幂等、两会话 revision 冲突、stale 精确关闭、Job 事件单调序号/after_seq）；全套 387 passed / 1 skipped；`git diff --check`、`uv lock --check` 通过；真实数据根升级至 head `0002` 且 CLI verify 通过；legacy `projects/` 8797 项哈希一致。
+
+### Status
+
+[OK] **Completed**（worker_02 切片完成；持久 Job 状态机/租约恢复/取消重试/V2 API/SSE 留待 worker_03）

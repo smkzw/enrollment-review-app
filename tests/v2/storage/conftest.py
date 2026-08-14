@@ -27,6 +27,29 @@ def engine(data_paths):
     engine.dispose()
 
 
-@pytest.fixture
 def manager(data_paths) -> MigrationManager:
     return MigrationManager(data_paths)
+
+
+@pytest.fixture
+def migrated_engine(data_paths):
+    """迁移到 head（含 0002 领域 schema）的临时库 Engine。"""
+    MigrationManager(data_paths).upgrade("head")
+    engine = build_engine(data_paths.db_path)
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture
+def session_factory(migrated_engine):
+    from app.storage.db import build_session_factory
+
+    return build_session_factory(migrated_engine)
+
+
+@pytest.fixture
+def session(session_factory):
+    """单测试事务会话：测试结束时回滚，不污染临时库。"""
+    with session_factory() as current:
+        yield current
+        current.rollback()

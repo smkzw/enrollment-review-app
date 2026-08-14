@@ -134,7 +134,7 @@ def test_empty_database_upgrade_downgrade_upgrade_cycle(data_paths):
 
     first = manager.upgrade("head")
     assert first.from_revision == "base"
-    assert first.to_revision == "0001"
+    assert first.to_revision == "0002"
     assert first.backup is None  # 空库首次初始化无备份
 
     engine = build_engine(data_paths.db_path)
@@ -146,7 +146,7 @@ def test_empty_database_upgrade_downgrade_upgrade_cycle(data_paths):
 
     second = manager.upgrade("head")
     assert second.from_revision == "base"
-    assert second.to_revision == "0001"
+    assert second.to_revision == "0002"
     assert second.backup is not None
     assert second.backup.source_revision == "base"
     assert second.backup.integrity == "ok"
@@ -180,13 +180,13 @@ def test_upgraded_database_connection_contract(data_paths):
 def test_noop_upgrade_verifies_without_creating_redundant_backup(data_paths):
     manager = MigrationManager(data_paths)
     first = manager.upgrade("head")
-    assert first.to_revision == "0001"
+    assert first.to_revision == "0002"
     before = sorted(data_paths.backups_dir.glob("*.sqlite3"))
 
     second = manager.upgrade("head")
 
-    assert second.from_revision == "0001"
-    assert second.to_revision == "0001"
+    assert second.from_revision == "0002"
+    assert second.to_revision == "0002"
     assert second.backup is None
     assert sorted(data_paths.backups_dir.glob("*.sqlite3")) == before
 
