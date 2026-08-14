@@ -10,3 +10,10 @@ export {
   type EnrollmentRepository,
 } from "./stubRepository";
 export { FIXTURE_SCHEMA_VERSION } from "./fixtureAssets";
+export {
+  subscribeJobEvents,
+  type JobEventSubscription,
+  type PersistentJobDone,
+  type PersistentJobEvent,
+  type SubscribeJobEventsOptions,
+} from "./jobEvents";

@@ -8,6 +8,7 @@
 |---|---|
 | [目录结构](./directory-structure.md) | 模块职责和依赖方向 |
 | [数据库](./database-guidelines.md) | SQLite/WAL、迁移、事务和不可变历史 |
+| [持久任务](./persistent-jobs.md) | Job、步骤、租约、检查点、事件与断线恢复 |
 | [错误处理](./error-handling.md) | 用户可理解的错误与任务恢复 |
 | [质量要求](./quality-guidelines.md) | 临床逻辑、证据、测试与审查 |
 | [运行记录](./logging-guidelines.md) | Job/Agent审计与敏感信息边界 |

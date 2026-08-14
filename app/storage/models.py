@@ -875,10 +875,10 @@ class JobRecord(RevisionedRecordMixin, Base):
 class JobStepRecord(RevisionedRecordMixin, Base):
     __tablename__ = "job_steps"
 
-    step_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     job_id: Mapped[str] = mapped_column(
-        String(128), ForeignKey("jobs.job_id"), nullable=False
+        String(128), ForeignKey("jobs.job_id"), primary_key=True
     )
+    step_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     state: Mapped[str] = mapped_column(String(32), nullable=False)
     attempt: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -888,6 +888,7 @@ class JobStepRecord(RevisionedRecordMixin, Base):
     progress_total: Mapped[int] = mapped_column(Integer, nullable=False)
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     error_classification: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    retry_not_before: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     __table_args__ = (Index("ix_job_steps_job_id", "job_id"),)
 
@@ -899,11 +900,14 @@ class JobCheckpointRecord(AppendedRecordMixin, Base):
     job_id: Mapped[str] = mapped_column(
         String(128), ForeignKey("jobs.job_id"), nullable=False
     )
-    step_id: Mapped[str] = mapped_column(
-        String(128), ForeignKey("job_steps.step_id"), nullable=False
-    )
+    step_id: Mapped[str] = mapped_column(String(128), nullable=False)
 
-    __table_args__ = (Index("ix_job_checkpoints_job_id", "job_id"),)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["job_id", "step_id"], ["job_steps.job_id", "job_steps.step_id"]
+        ),
+        Index("ix_job_checkpoints_job_id", "job_id"),
+    )
 
 
 class JobEventRecord(AppendedRecordMixin, Base):
@@ -915,9 +919,7 @@ class JobEventRecord(AppendedRecordMixin, Base):
     )
     event_seq: Mapped[int] = mapped_column(Integer, nullable=False)
     event_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    step_id: Mapped[str | None] = mapped_column(
-        String(128), ForeignKey("job_steps.step_id"), nullable=True
-    )
+    step_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     occurred_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     attempt: Mapped[int] = mapped_column(Integer, nullable=False)
     checkpoint_id: Mapped[str | None] = mapped_column(
@@ -928,6 +930,9 @@ class JobEventRecord(AppendedRecordMixin, Base):
     progress_total: Mapped[int] = mapped_column(Integer, nullable=False)
 
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["job_id", "step_id"], ["job_steps.job_id", "job_steps.step_id"]
+        ),
         UniqueConstraint("job_id", "event_seq"),
         Index("ix_job_events_job_id", "job_id"),
     )
@@ -1074,16 +1079,19 @@ agent_call_gate_results = _assoc_table(
 job_step_dependencies = Table(
     "job_step_dependencies",
     Base.metadata,
-    Column("step_id", String(128), ForeignKey("job_steps.step_id"), nullable=False),
-    Column(
-        "depends_on_step_id",
-        String(128),
-        ForeignKey("job_steps.step_id"),
-        nullable=False,
-    ),
+    Column("job_id", String(128), nullable=False),
+    Column("step_id", String(128), nullable=False),
+    Column("depends_on_step_id", String(128), nullable=False),
     Column("position", Integer, nullable=False),
-    UniqueConstraint("step_id", "depends_on_step_id"),
-    UniqueConstraint("step_id", "position"),
+    ForeignKeyConstraint(
+        ["job_id", "step_id"], ["job_steps.job_id", "job_steps.step_id"]
+    ),
+    ForeignKeyConstraint(
+        ["job_id", "depends_on_step_id"],
+        ["job_steps.job_id", "job_steps.step_id"],
+    ),
+    UniqueConstraint("job_id", "step_id", "depends_on_step_id"),
+    UniqueConstraint("job_id", "step_id", "position"),
 )
 workflow_stage_requirements = Table(
     "workflow_stage_requirements",

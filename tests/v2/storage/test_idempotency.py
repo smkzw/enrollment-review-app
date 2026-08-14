@@ -1,6 +1,8 @@
 """幂等仓储：同键同内容复用同一结果，同键不同内容明确冲突。"""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 
 from app.domain.publication import canonical_hash
@@ -152,3 +154,26 @@ def test_unique_race_with_same_payload_reuses_committed_result(session, monkeypa
     )
     assert created is False
     assert record.result_id == "document-winner"
+
+
+def test_concurrent_same_key_same_payload_has_one_winner_without_errors(session_factory) -> None:
+    """真实并发争抢同一键：只有一个赢家，其余复用且不破坏各自事务。"""
+    digest = request_hash({"document_ids": ["d1"]})
+
+    def submit(index: int) -> tuple[str, bool]:
+        with session_factory() as current:
+            with current.begin():
+                record, created = IdempotencyRepository(current).resolve(
+                    scope="document:ingest",
+                    idempotency_key="concurrent-key",
+                    submitted_hash=digest,
+                    result_type="document",
+                    result_id=f"document-{index}",
+                )
+                return record.result_id, created
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(submit, range(8)))
+
+    assert sum(created for _result_id, created in results) == 1
+    assert len({result_id for result_id, _created in results}) == 1

@@ -257,8 +257,8 @@ evidence_spans = Table(
 job_steps = Table(
         "job_steps",
         metadata,
+        Column("job_id", String(128), nullable=False, primary_key=True),
         Column("step_id", String(128), nullable=False, primary_key=True),
-        Column("job_id", String(128), nullable=False),
         Column("name", String(128), nullable=False),
         Column("state", String(32), nullable=False),
         Column("attempt", Integer, nullable=False),
@@ -392,20 +392,21 @@ job_checkpoints = Table(
         Column("payload_sha256", String(64), nullable=False),
         Column("created_at", DateTime, nullable=False),
         ForeignKeyConstraint(["job_id"], ["jobs.job_id"]),
-        ForeignKeyConstraint(["step_id"], ["job_steps.step_id"]),
+        ForeignKeyConstraint(["job_id", "step_id"], ["job_steps.job_id", "job_steps.step_id"]),
     )
 
 
 job_step_dependencies = Table(
         "job_step_dependencies",
         metadata,
+        Column("job_id", String(128), nullable=False),
         Column("step_id", String(128), nullable=False),
         Column("depends_on_step_id", String(128), nullable=False),
         Column("position", Integer, nullable=False),
-        ForeignKeyConstraint(["step_id"], ["job_steps.step_id"]),
-        UniqueConstraint("step_id", "depends_on_step_id"),
-        UniqueConstraint("step_id", "position"),
-        ForeignKeyConstraint(["depends_on_step_id"], ["job_steps.step_id"]),
+        ForeignKeyConstraint(["job_id", "step_id"], ["job_steps.job_id", "job_steps.step_id"]),
+        UniqueConstraint("job_id", "step_id", "depends_on_step_id"),
+        UniqueConstraint("job_id", "step_id", "position"),
+        ForeignKeyConstraint(["job_id", "depends_on_step_id"], ["job_steps.job_id", "job_steps.step_id"]),
     )
 
 
@@ -519,7 +520,7 @@ job_events = Table(
         Column("created_at", DateTime, nullable=False),
         ForeignKeyConstraint(["checkpoint_id"], ["job_checkpoints.checkpoint_id"]),
         ForeignKeyConstraint(["job_id"], ["jobs.job_id"]),
-        ForeignKeyConstraint(["step_id"], ["job_steps.step_id"]),
+        ForeignKeyConstraint(["job_id", "step_id"], ["job_steps.job_id", "job_steps.step_id"]),
         UniqueConstraint("job_id", "event_seq"),
     )
 

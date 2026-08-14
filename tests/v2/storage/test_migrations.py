@@ -105,6 +105,63 @@ def downgrade() -> None:
     pass
 '''
 
+MISMATCH_0002 = '''\
+"""模拟迁移成功但结构校验失败
+
+Revision ID: demo02
+Revises: demo01
+Create Date: 2026-08-14
+
+"""
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+
+revision: str = "demo02"
+down_revision: Union[str, None] = "demo01"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    op.create_table(
+        "unexpected_table",
+        sa.Column("id", sa.Integer(), primary_key=True),
+    )
+
+
+def downgrade() -> None:
+    op.drop_table("unexpected_table")
+'''
+
+BROKEN_0001 = '''\
+"""模拟首次迁移中途失败
+
+Revision ID: broken01
+Revises:
+Create Date: 2026-08-14
+
+"""
+from typing import Sequence, Union
+
+from alembic import op
+
+revision: str = "broken01"
+down_revision: Union[str, None] = None
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    op.execute("CREATE TABLE partial_item (id INTEGER PRIMARY KEY)")
+    op.execute("SELECT this_sql_fails")
+
+
+def downgrade() -> None:
+    pass
+'''
+
 
 def _demo_metadata() -> MetaData:
     metadata = MetaData()
@@ -134,7 +191,7 @@ def test_empty_database_upgrade_downgrade_upgrade_cycle(data_paths):
 
     first = manager.upgrade("head")
     assert first.from_revision == "base"
-    assert first.to_revision == "0002"
+    assert first.to_revision == "0003"
     assert first.backup is None  # 空库首次初始化无备份
 
     engine = build_engine(data_paths.db_path)
@@ -146,7 +203,7 @@ def test_empty_database_upgrade_downgrade_upgrade_cycle(data_paths):
 
     second = manager.upgrade("head")
     assert second.from_revision == "base"
-    assert second.to_revision == "0002"
+    assert second.to_revision == "0003"
     assert second.backup is not None
     assert second.backup.source_revision == "base"
     assert second.backup.integrity == "ok"
@@ -180,13 +237,13 @@ def test_upgraded_database_connection_contract(data_paths):
 def test_noop_upgrade_verifies_without_creating_redundant_backup(data_paths):
     manager = MigrationManager(data_paths)
     first = manager.upgrade("head")
-    assert first.to_revision == "0002"
+    assert first.to_revision == "0003"
     before = sorted(data_paths.backups_dir.glob("*.sqlite3"))
 
     second = manager.upgrade("head")
 
-    assert second.from_revision == "0002"
-    assert second.to_revision == "0002"
+    assert second.from_revision == "0003"
+    assert second.to_revision == "0003"
     assert second.backup is None
     assert sorted(data_paths.backups_dir.glob("*.sqlite3")) == before
 
@@ -240,6 +297,62 @@ def test_failed_migration_preserves_original_database_and_backup(data_paths, tmp
         upgrade_or_fail(
             data_paths, metadata=_demo_metadata(), script_location=location
         )
+
+
+def test_failed_first_migration_removes_partial_database(data_paths, tmp_path):
+    """首次迁移没有旧库可备份时，失败后应恢复为“数据库不存在”。"""
+    location = tmp_path / "broken-migrations"
+    (location / "versions").mkdir(parents=True)
+    (location / "env.py").write_text(TEMP_ENV_PY, encoding="utf-8")
+    (location / "versions" / "broken01.py").write_text(
+        BROKEN_0001, encoding="utf-8"
+    )
+    manager = MigrationManager(data_paths, script_location=location)
+
+    with pytest.raises(MigrationFailure, match="已清除未完成的数据库"):
+        manager.upgrade("head")
+
+    assert not data_paths.db_path.exists()
+    assert not Path(f"{data_paths.db_path}-wal").exists()
+    assert not Path(f"{data_paths.db_path}-shm").exists()
+
+
+def test_post_migration_verification_failure_restores_backup(data_paths, tmp_path):
+    """DDL 已提交但 metadata 校验失败时，也自动恢复迁移前数据库。"""
+    location = write_temp_migrations(tmp_path)
+    manager = MigrationManager(
+        data_paths, script_location=location, metadata=_demo_metadata()
+    )
+    manager.upgrade("demo01")
+    engine = build_engine(data_paths.db_path)
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "INSERT INTO demo_items (id, value, created_at) "
+            "VALUES ('kept', 'before', '2026-08-14T00:00:00Z')"
+        )
+    engine.dispose()
+
+    (location / "versions" / "demo02_mismatch.py").write_text(
+        MISMATCH_0002, encoding="utf-8"
+    )
+    with pytest.raises(MigrationFailure, match="已自动恢复"):
+        manager.upgrade("head")
+
+    assert manager.read_revision(data_paths.db_path) == "demo01"
+    connection = sqlite3.connect(data_paths.db_path)
+    try:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        assert "unexpected_table" not in tables
+        assert connection.execute(
+            "SELECT value FROM demo_items WHERE id = 'kept'"
+        ).fetchone()[0] == "before"
+    finally:
+        connection.close()
 
 
 # ------------------------------------------------------------------ 恢复

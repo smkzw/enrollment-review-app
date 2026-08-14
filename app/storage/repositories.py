@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from pydantic import BaseModel
-from sqlalchemy import delete, func, insert, select
+from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -1916,11 +1916,27 @@ class JobRepository:
         )
         self.session.add(row)
         _flush_guarded(self.session)
+        self.add_step_dependencies(
+            job_id=job_id,
+            step_id=step_id,
+            depends_on=depends_on,
+        )
+        return row
+
+    def add_step_dependencies(
+        self,
+        *,
+        job_id: str,
+        step_id: str,
+        depends_on: list[str] | tuple[str, ...],
+    ) -> None:
+        """在同一任务范围内添加有序依赖；可在所有步骤落库后调用。"""
         for position, depends_on_step in enumerate(depends_on):
             self.session.execute(
                 insert(job_step_dependencies),
                 [
                     {
+                        "job_id": job_id,
                         "step_id": step_id,
                         "depends_on_step_id": depends_on_step,
                         "position": position,
@@ -1928,10 +1944,14 @@ class JobRepository:
                 ],
             )
         _flush_guarded(self.session)
-        return row
 
-    def get_step(self, step_id: str) -> JobStepRecord:
-        return _get_required(self.session, JobStepRecord, step_id, "JobStep")
+    def get_step(self, job_id: str, step_id: str) -> JobStepRecord:
+        return _get_required(
+            self.session,
+            JobStepRecord,
+            {"job_id": job_id, "step_id": step_id},
+            "JobStep",
+        )
 
     def create_checkpoint(
         self,
@@ -1942,7 +1962,12 @@ class JobRepository:
         payload: dict[str, Any],
     ) -> JobCheckpointRecord:
         _get_required(self.session, JobRecord, job_id, "Job")
-        _get_required(self.session, JobStepRecord, step_id, "JobStep")
+        _get_required(
+            self.session,
+            JobStepRecord,
+            {"job_id": job_id, "step_id": step_id},
+            "JobStep",
+        )
         payload_json, payload_sha256 = encode_value(payload)
         row = JobCheckpointRecord(
             checkpoint_id=checkpoint_id,
@@ -1961,12 +1986,16 @@ class JobRepository:
         _get_required(self.session, JobRecord, event.job_id, "Job")
         payload_json, payload_sha256 = encode_contract(event)
         payload = json.loads(payload_json)
-        max_seq = self.session.execute(
-            select(func.coalesce(func.max(JobEventRecord.event_seq), 0)).where(
-                JobEventRecord.job_id == event.job_id
-            )
+        # SQLite 同一时刻只有一个写者。用 jobs 水位的单条 UPDATE 分配序号，
+        # 让并发会话在数据库写锁处排队；“查 max + 1”会让两个会话读到
+        # 相同旧值，导致唯一约束冲突或快照升级失败。
+        seq = self.session.execute(
+            update(JobRecord)
+            .where(JobRecord.job_id == event.job_id)
+            .values(last_event_seq=JobRecord.last_event_seq + 1)
+            .returning(JobRecord.last_event_seq)
+            .execution_options(synchronize_session=False)
         ).scalar_one()
-        seq = int(max_seq) + 1
         self.session.add(
             JobEventRecord(
                 job_id=payload["job_id"],
@@ -1984,10 +2013,8 @@ class JobRepository:
                 created_at=utc_now(),
             )
         )
-        job = self.get_job(event.job_id)
-        job.last_event_seq = seq
         _flush_guarded(self.session)
-        return seq
+        return int(seq)
 
     def list_events(self, job_id: str, after_seq: int = 0) -> list[JobEvent]:
         rows = self.session.execute(
@@ -1997,6 +2024,18 @@ class JobRepository:
         ).scalars().all()
         return [
             decode_contract(JobEvent, row.payload_json, row.payload_sha256) for row in rows
+        ]
+
+    def list_event_rows(self, job_id: str, after_seq: int = 0) -> list[tuple[int, JobEvent]]:
+        """返回 ``(event_seq, JobEvent)`` 有序行；seq 供 SSE ``after_seq`` 续订。"""
+        rows = self.session.execute(
+            select(JobEventRecord)
+            .where(JobEventRecord.job_id == job_id, JobEventRecord.event_seq > after_seq)
+            .order_by(JobEventRecord.event_seq)
+        ).scalars().all()
+        return [
+            (row.event_seq, decode_contract(JobEvent, row.payload_json, row.payload_sha256))
+            for row in rows
         ]
 
     def seed_fixture_events(self, events: list[JobEvent]) -> None:

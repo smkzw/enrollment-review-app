@@ -175,6 +175,7 @@ class JobEventType(StableEnum):
     CANCEL_REQUESTED = "cancel_requested"
     CANCELLED = "cancelled"
     COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class AgentNode(StableEnum):

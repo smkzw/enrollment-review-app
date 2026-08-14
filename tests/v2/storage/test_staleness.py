@@ -47,6 +47,39 @@ def test_reopen_same_source_revision_is_idempotent(session) -> None:
     assert len(repo.list_open()) == 1
 
 
+def test_covered_immutable_cause_stays_closed_until_source_revision_changes(session) -> None:
+    """同一不可变原因不重复提醒；新来源修订才构成新的 stale 原因。"""
+    from app.storage.repositories import persist_fixture
+    from tests.v2.storage.test_repositories_roundtrip import FIXTURES
+
+    fixture = FIXTURES[0]
+    persist_fixture(session, fixture)
+    repo = StalenessRepository(session)
+    kwargs = dict(
+        target_type="rule_component",
+        target_id="component-in-01",
+        reason="规则逻辑变更",
+        source_entity_type="rule_set",
+        source_entity_id="ruleset-1",
+    )
+    first = repo.open(**kwargs, source_revision=2)
+    session.commit()
+    assert repo.close_covered(
+        review_run_id=fixture.review_runs[0].review_run_id,
+        covered=[("rule_component", "component-in-01")],
+    ) == 1
+    session.commit()
+
+    same_cause = repo.open(**kwargs, source_revision=2)
+    assert same_cause.id == first.id
+    assert same_cause.open is False
+    assert repo.list_open(target_id="component-in-01") == []
+
+    new_cause = repo.open(**kwargs, source_revision=3)
+    assert new_cause.id != first.id
+    assert new_cause.open is True
+
+
 def test_close_covered_only_clears_covered_targets(session) -> None:
     from app.storage.repositories import persist_fixture
     from tests.v2.storage.test_repositories_roundtrip import FIXTURES

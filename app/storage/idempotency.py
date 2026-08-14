@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app.domain.publication import canonical_hash
@@ -110,8 +110,8 @@ class IdempotencyRepository:
     ) -> tuple[IdempotencyRecord, bool]:
         """返回 ``(record, created)``；同键同哈希复用，同键异哈希抛冲突。
 
-        必须在与结果写入相同的外层事务中调用。并发重复插入（唯一约束）同样
-        映射为 :class:`IdempotencyConflict`，并要求调用方以新事务重试。
+        必须在与结果写入相同的外层事务中调用。SQLite 的冲突忽略语义用于
+        原子争抢唯一键；失败方读取赢家记录，不回滚调用方的外层事务。
         """
         existing = self.get(scope, idempotency_key)
         if existing is not None:
@@ -123,34 +123,42 @@ class IdempotencyRepository:
                     submitted_sha256=submitted_hash,
                 )
             return existing, False
-        row = IdempotencyRecordRow(
+        created_at = utc_now()
+        inserted = self.session.execute(
+            sqlite_insert(IdempotencyRecordRow)
+            .values(
+                scope=scope,
+                idempotency_key=idempotency_key,
+                request_sha256=submitted_hash,
+                result_type=result_type,
+                result_id=result_id,
+                status=STATUS_COMMITTED,
+                created_at=created_at,
+            )
+            .on_conflict_do_nothing(index_elements=["scope", "idempotency_key"])
+            .returning(IdempotencyRecordRow.scope)
+        ).scalar_one_or_none()
+        if inserted is not None:
+            return IdempotencyRecord(
+                scope=scope,
+                idempotency_key=idempotency_key,
+                request_sha256=submitted_hash,
+                result_type=result_type,
+                result_id=result_id,
+                status=STATUS_COMMITTED,
+                created_at=created_at,
+            ), True
+
+        committed = self.get(scope, idempotency_key)
+        if committed is not None and committed.request_sha256 == submitted_hash:
+            return committed, False
+        raise IdempotencyConflict(
             scope=scope,
             idempotency_key=idempotency_key,
-            request_sha256=submitted_hash,
-            result_type=result_type,
-            result_id=result_id,
-            status=STATUS_COMMITTED,
-            created_at=utc_now(),
+            existing_sha256=(
+                committed.request_sha256
+                if committed is not None
+                else "(并发提交记录暂不可读)"
+            ),
+            submitted_sha256=submitted_hash,
         )
-        self.session.add(row)
-        try:
-            self.session.flush()
-        except IntegrityError as exc:
-            self.session.rollback()
-            message = str(exc.orig) if exc.orig is not None else str(exc)
-            if "UNIQUE" in message.upper():
-                committed = self.get(scope, idempotency_key)
-                if committed is not None and committed.request_sha256 == submitted_hash:
-                    return committed, False
-                raise IdempotencyConflict(
-                    scope=scope,
-                    idempotency_key=idempotency_key,
-                    existing_sha256=(
-                        committed.request_sha256
-                        if committed is not None
-                        else "(并发提交记录暂不可读)"
-                    ),
-                    submitted_sha256=submitted_hash,
-                ) from exc
-            raise
-        return _to_record(row), True

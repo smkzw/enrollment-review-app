@@ -2608,7 +2608,8 @@
           "retry_scheduled",
           "cancel_requested",
           "cancelled",
-          "completed"
+          "completed",
+          "failed"
         ],
         "title": "JobEventType",
         "type": "string"

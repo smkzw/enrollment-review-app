@@ -1,0 +1,1 @@
+上一轮在完成仓库读取前被运行时取消，没有形成验收结论。请在同一会话继续完成原始 Phase 2 修复后独立验收任务。当前又增加了三项修订：`next_runnable_step` 跳过未到退避时间的步骤且释放为 `failed_retryable`；422 返回中文字段定位；规范与测试明确同一不可变 stale 原因保持关闭、ReviewRun 通过 ReviewEpisode 规范化继承 rule_set_id。请核验这些修订并输出完整的 ACCEPT/REVISE 报告。不得修改文件，不做安全测试。

@@ -213,13 +213,14 @@ class MigrationManager:
         from_revision = backup.source_revision if backup else "base"
         try:
             alembic.command.upgrade(self._alembic_config(), revision)
+            self._verify_migrated_database(require_revision=True, check_metadata=True)
         except Exception as exc:
+            restored, restore_error = self._rollback_failed_migration(backup)
             raise MigrationFailure(
-                "数据库迁移失败，V2 写服务不会启动。原数据库保持迁移前状态"
-                + (f"，可从备份 {backup.path.name} 恢复" if backup else "（首次初始化无备份）")
+                "数据库迁移或迁移后校验失败，V2 写服务不会启动。"
+                + self._rollback_message(backup, restored, restore_error, "迁移")
                 + "。"
             ) from exc
-        self._verify_migrated_database(require_revision=True, check_metadata=True)
         to_revision = self.read_revision(self.paths.db_path)
         return UpgradeResult(backup=backup, from_revision=from_revision, to_revision=to_revision)
 
@@ -230,16 +231,17 @@ class MigrationManager:
             from_revision = backup.source_revision if backup else "base"
             try:
                 alembic.command.downgrade(self._alembic_config(), revision)
+                # 降级后的 schema 不代表当前 ORM metadata（head），只做基础验证。
+                self._verify_migrated_database(
+                    require_revision=revision != "base", check_metadata=False
+                )
             except Exception as exc:
+                restored, restore_error = self._rollback_failed_migration(backup)
                 raise MigrationFailure(
-                    "数据库降级失败，V2 写服务不会启动。原数据库保持降级前状态"
-                    + (f"，可从备份 {backup.path.name} 恢复" if backup else "")
+                    "数据库降级或降级后校验失败，V2 写服务不会启动。"
+                    + self._rollback_message(backup, restored, restore_error, "降级")
                     + "。"
                 ) from exc
-            # 降级后的 schema 不代表当前 ORM metadata（head），只做 PRAGMA 与基础读写验证
-            self._verify_migrated_database(
-                require_revision=revision != "base", check_metadata=False
-            )
             to_revision = self.read_revision(self.paths.db_path)
             return UpgradeResult(backup=backup, from_revision=from_revision, to_revision=to_revision)
 
@@ -247,6 +249,12 @@ class MigrationManager:
 
     def restore(self, backup_path: Path) -> BackupRecord:
         """从经过完整性校验的备份恢复数据库（创建/覆盖主库并清除残留 WAL）。"""
+        record = self._validate_backup(Path(backup_path))
+        with MigrationLock(self.paths.migration_lock_path):
+            return self._restore_locked(record)
+
+    def _validate_backup(self, backup_path: Path) -> BackupRecord:
+        """在触碰当前数据库之前验证备份文件和清单。"""
         backup_path = Path(backup_path)
         if not backup_path.is_file():
             raise MigrationFailure(f"备份文件不存在：{backup_path}")
@@ -269,22 +277,6 @@ class MigrationManager:
             if expected_integrity != "ok":
                 raise BackupIntegrityError("备份清单未记录完整性校验通过，拒绝恢复。")
             verified_manifest = manifest
-        self.paths.ensure_directories()
-        db_path = self.paths.boundary.require_v2_target(self.paths.db_path)
-        with MigrationLock(self.paths.migration_lock_path):
-            target = sqlite3.connect(str(db_path), timeout=BUSY_TIMEOUT_MS / 1000)
-            try:
-                source = sqlite3.connect(str(backup_path))
-                try:
-                    source.backup(target)
-                finally:
-                    source.close()
-            finally:
-                target.close()
-            for stale in (Path(f"{db_path}-wal"), Path(f"{db_path}-shm")):
-                stale.unlink(missing_ok=True)
-        self._integrity_check(db_path)
-        restored_revision = self.read_revision(db_path)
         if verified_manifest is not None:
             return BackupRecord(
                 path=backup_path,
@@ -299,10 +291,74 @@ class MigrationManager:
             path=backup_path,
             manifest_path=manifest_path,
             created_at_utc="",
-            source_revision=restored_revision,
+            source_revision=self.read_revision(backup_path),
             size_bytes=backup_path.stat().st_size,
             sha256=backup_sha256,
             integrity="ok",
+        )
+
+    def _restore_locked(self, record: BackupRecord) -> BackupRecord:
+        """持有迁移锁时恢复已验证备份，供自动回滚与显式恢复复用。"""
+        self.paths.ensure_directories()
+        db_path = self.paths.boundary.require_v2_target(self.paths.db_path)
+        target = sqlite3.connect(str(db_path), timeout=BUSY_TIMEOUT_MS / 1000)
+        try:
+            source = sqlite3.connect(str(record.path))
+            try:
+                source.backup(target)
+            finally:
+                source.close()
+        finally:
+            target.close()
+        for stale in (Path(f"{db_path}-wal"), Path(f"{db_path}-shm")):
+            stale.unlink(missing_ok=True)
+        self._integrity_check(db_path)
+        return record
+
+    def _rollback_failed_migration(
+        self, backup: BackupRecord | None
+    ) -> tuple[bool, Exception | None]:
+        if backup is None:
+            # No backup means the database did not exist before this first
+            # migration attempt. Restore that exact state instead of leaving a
+            # partially initialized file for the next startup to inspect.
+            try:
+                for candidate in (
+                    self.paths.db_path,
+                    Path(f"{self.paths.db_path}-wal"),
+                    Path(f"{self.paths.db_path}-shm"),
+                ):
+                    self.paths.boundary.require_v2_target(candidate).unlink(
+                        missing_ok=True
+                    )
+                return True, None
+            except Exception as exc:
+                return False, exc
+        try:
+            self._restore_locked(self._validate_backup(backup.path))
+            return True, None
+        except Exception as exc:
+            return False, exc
+
+    @staticmethod
+    def _rollback_message(
+        backup: BackupRecord | None,
+        restored: bool,
+        restore_error: Exception | None,
+        operation: str,
+    ) -> str:
+        if restored and backup is not None:
+            return f"已自动恢复到{operation}前状态（备份 {backup.path.name}）"
+        if backup is not None:
+            return (
+                f"自动恢复失败，请使用备份 {backup.path.name} 手动恢复"
+                + (f"：{restore_error}" if restore_error is not None else "")
+            )
+        if restored:
+            return f"首次{operation}失败，已清除未完成的数据库"
+        return (
+            f"首次{operation}失败且无法清除未完成的数据库"
+            + (f"：{restore_error}" if restore_error is not None else "")
         )
 
     # ------------------------------------------------------------------ 验证
