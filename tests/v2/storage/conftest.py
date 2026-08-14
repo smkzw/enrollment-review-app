@@ -33,7 +33,7 @@ def manager(data_paths) -> MigrationManager:
 
 @pytest.fixture
 def migrated_engine(data_paths):
-    """迁移到 head（含 0002 领域 schema）的临时库 Engine。"""
+    """迁移到 head（含领域 schema 与方案提取表）的临时库 Engine。"""
     MigrationManager(data_paths).upgrade("head")
     engine = build_engine(data_paths.db_path)
     yield engine

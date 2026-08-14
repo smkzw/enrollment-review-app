@@ -12,11 +12,15 @@ from app.storage.migrate import (
     BackupIntegrityError,
     MigrationFailure,
     MigrationManager,
+    resolve_head_revision,
     upgrade_or_fail,
     verify_schema_matches_metadata,
 )
 
 from .conftest import REPO_ROOT
+
+# 迁移 head 不得硬编码：动态读取，迁移前进时无需改写断言。
+HEAD_REVISION = resolve_head_revision()
 
 TEMP_ENV_PY = '''\
 from alembic import context
@@ -191,7 +195,7 @@ def test_empty_database_upgrade_downgrade_upgrade_cycle(data_paths):
 
     first = manager.upgrade("head")
     assert first.from_revision == "base"
-    assert first.to_revision == "0003"
+    assert first.to_revision == HEAD_REVISION
     assert first.backup is None  # 空库首次初始化无备份
 
     engine = build_engine(data_paths.db_path)
@@ -203,7 +207,7 @@ def test_empty_database_upgrade_downgrade_upgrade_cycle(data_paths):
 
     second = manager.upgrade("head")
     assert second.from_revision == "base"
-    assert second.to_revision == "0003"
+    assert second.to_revision == HEAD_REVISION
     assert second.backup is not None
     assert second.backup.source_revision == "base"
     assert second.backup.integrity == "ok"
@@ -237,13 +241,13 @@ def test_upgraded_database_connection_contract(data_paths):
 def test_noop_upgrade_verifies_without_creating_redundant_backup(data_paths):
     manager = MigrationManager(data_paths)
     first = manager.upgrade("head")
-    assert first.to_revision == "0003"
+    assert first.to_revision == HEAD_REVISION
     before = sorted(data_paths.backups_dir.glob("*.sqlite3"))
 
     second = manager.upgrade("head")
 
-    assert second.from_revision == "0003"
-    assert second.to_revision == "0003"
+    assert second.from_revision == HEAD_REVISION
+    assert second.to_revision == HEAD_REVISION
     assert second.backup is None
     assert sorted(data_paths.backups_dir.glob("*.sqlite3")) == before
 

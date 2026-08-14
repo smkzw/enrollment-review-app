@@ -73,7 +73,6 @@
 
 [OK] **Completed**
 
-
 ## Session 3: Phase 1.5 多模型医学监查员验收与根因修订
 
 **Date**: 2026-08-14
@@ -164,3 +163,26 @@
 ### Status
 
 [OK] **Completed**
+
+## Session 7: Phase 3 切片 1 方案文档与来源基座
+
+**Date**: 2026-08-14
+**Task**: Phase 3 方案解构V2（切片 1）
+**Branch**: `codex/v2-phase0-foundation`
+
+### Summary
+
+完成不可变方案登记、DOCX/OOXML 结构提取、LibreOffice 受控渲染、双通道来源对齐、
+领域契约和 Alembic `0004`。独立审查推动修复重复文本伪精确、跨结构块共享物理范围、
+源哈希分叉、可变渲染件、CJK 字距、编号继承、内容控件和未支持容器静默漏提。
+两份真实方案只读回归中，保留的精确范围碰撞和页面摘录回验失败均为 0；全仓
+`514 passed, 1 skipped, 18 subtests passed`，唯一跳过为遗留 OCR 缓存夹具缺失。
+
+### Next
+
+进入切片 2：方案身份元信息、研究期别和权威解释材料。必须把页眉/页脚的身份字段
+权威性与规则正文的定位精度分开；降级或插值页只能作提示，不能单独满足规则发布门槛。
+
+### Status
+
+[OK] **Slice 1 accepted; Slice 2 next**

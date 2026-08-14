@@ -245,3 +245,63 @@ class ErrorCode(StableEnum):
     PUBLICATION_INTEGRITY_FAILED = "publication_integrity_failed"
     CONFLICT = "conflict"
     JOB_FAILED = "job_failed"
+
+
+# ---------------------------------------------------------------------------
+# 方案文档提取（Phase 3 切片 1）：渲染、提取、来源定位与冻结目录
+# ---------------------------------------------------------------------------
+
+
+class RenderStatus(StableEnum):
+    PENDING = "pending"
+    SUCCEEDED = "succeeded"
+    DEGRADED = "degraded"
+    FAILED = "failed"
+
+
+class ExtractionStatus(StableEnum):
+    COMPLETED = "completed"
+    NEEDS_REVIEW = "needs_review"
+    FAILED = "failed"
+
+
+class AlignmentStatus(StableEnum):
+    """结构通道与渲染通道的对齐状态；未对齐时仍保留结构通道定位。"""
+
+    ALIGNED = "aligned"
+    DEGRADED = "degraded"
+    UNALIGNED = "unaligned"
+
+
+class DocumentPart(StableEnum):
+    """方案文档部件（OOXML document part 语义）。"""
+
+    BODY = "body"
+    HEADER = "header"
+    FOOTER = "footer"
+    FOOTNOTE = "footnote"
+    ENDNOTE = "endnote"
+    TEXTBOX = "textbox"
+    OTHER = "other"
+
+
+class SourceLocatorPrecision(StableEnum):
+    """方案来源定位精度；block 为结构通道兜底，其余依赖渲染通道。"""
+
+    BLOCK = "block"
+    TEXT_RANGE = "text_range"
+    PAGE_EXCERPT = "page_excerpt"
+    PAGE_ONLY = "page_only"
+    BBOX = "bbox"
+
+
+class CatalogKind(StableEnum):
+    """Agent 调用前冻结的两份目录类型。"""
+
+    OFFICIAL_PARENT_RULES = "official_parent_rules"
+    REQUIRED_PROCEDURES = "required_procedures"
+
+
+class CatalogItemKind(StableEnum):
+    PARENT_RULE = "parent_rule"
+    REQUIRED_PROCEDURE = "required_procedure"

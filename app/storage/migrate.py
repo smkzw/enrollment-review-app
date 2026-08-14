@@ -46,6 +46,23 @@ DEFAULT_ALEMBIC_INI = REPO_ROOT / "alembic.ini"
 DEFAULT_SCRIPT_LOCATION = REPO_ROOT / "app" / "storage" / "migrations"
 
 
+def resolve_head_revision(script_location: Path | None = None) -> str:
+    """返回迁移脚本唯一的 head 版本；多个 head 抛 :class:`MigrationFailure`。
+
+    供测试与工具层动态读取当前 head，避免在断言中硬编码版本号。
+    """
+    location = script_location or DEFAULT_SCRIPT_LOCATION
+    config = alembic.config.Config()
+    config.set_main_option("script_location", str(location))
+    script = ScriptDirectory.from_config(config)
+    heads = script.get_heads()
+    if len(heads) != 1:
+        raise MigrationFailure(
+            "迁移脚本存在多个 head，无法确定唯一目标版本。"
+        )
+    return str(heads[0])
+
+
 class MigrationLockHeld(RuntimeError):
     """迁移锁被其他进程持有。"""
 
@@ -432,14 +449,9 @@ class MigrationManager:
         return config
 
     def _resolve_target_revision(self, revision: str) -> str:
-        script = ScriptDirectory.from_config(self._alembic_config())
         if revision == "head":
-            heads = script.get_heads()
-            if len(heads) != 1:
-                raise MigrationFailure(
-                    "迁移脚本存在多个 head，无法确定唯一目标版本，V2 写服务不会启动。"
-                )
-            return str(heads[0])
+            return resolve_head_revision(self.script_location)
+        script = ScriptDirectory.from_config(self._alembic_config())
         resolved = script.get_revision(revision)
         if resolved is None:
             raise MigrationFailure(f"找不到目标数据库版本 {revision}，V2 写服务不会启动。")

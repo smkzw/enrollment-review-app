@@ -28,6 +28,10 @@
     "app/domain/contracts/agent_io.py",
     "frontend/src/pages/ProtocolsPage.tsx"
   ],
-  "notes": "2026-08-14 已完成真实方案结构探查和开源解析路线初筛；待用户审阅完整规划后再执行 task.py start。",
-  "meta": {}
+  "notes": "2026-08-14 用户已批准并启动实施。切片1已完成且经独立复核通过：不可变方案登记、DOCX/OOXML结构提取、受控渲染、保守来源对齐、迁移与两份真实方案只读回归。下一步为切片2元信息、研究期别与权威解释材料；身份字段权威性必须与规则正文定位精度分级。",
+  "meta": {
+    "completed_slice": "1",
+    "next_slice": "2",
+    "last_checkpoint": "2026-08-14T14:40:00+08:00"
+  }
 }

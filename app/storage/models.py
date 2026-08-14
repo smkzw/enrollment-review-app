@@ -433,6 +433,105 @@ class ProtocolIntegrityManifestRecord(AppendedRecordMixin, Base):
 
 
 # ---------------------------------------------------------------------------
+# 方案文档提取（Phase 3 切片 1，追加写）
+# ---------------------------------------------------------------------------
+
+
+class ProtocolSourceArtifactRecord(AppendedRecordMixin, Base):
+    __tablename__ = "protocol_source_artifacts"
+
+    source_artifact_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    sha256: Mapped[str] = mapped_column(String(PAYLOAD_SHA_LEN), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    storage_ref: Mapped[str] = mapped_column(String(512), nullable=False)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+    # 内容身份去重：相同 SHA-256 的不可变工件只登记一次。
+    __table_args__ = (UniqueConstraint("sha256"),)
+
+
+class ProtocolRenderArtifactRecord(AppendedRecordMixin, Base):
+    __tablename__ = "protocol_render_artifacts"
+
+    render_artifact_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    source_artifact_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("protocol_source_artifacts.source_artifact_id"), nullable=False
+    )
+    source_sha256: Mapped[str] = mapped_column(String(PAYLOAD_SHA_LEN), nullable=False)
+    renderer: Mapped[str] = mapped_column(String(64), nullable=False)
+    renderer_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    pdf_sha256: Mapped[str | None] = mapped_column(String(PAYLOAD_SHA_LEN), nullable=True)
+    page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    storage_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    render_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("ix_protocol_render_artifacts_source_artifact_id", "source_artifact_id"),
+    )
+
+
+class ProtocolExtractionSnapshotRecord(AppendedRecordMixin, Base):
+    __tablename__ = "protocol_extraction_snapshots"
+
+    snapshot_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    source_artifact_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("protocol_source_artifacts.source_artifact_id"), nullable=False
+    )
+    source_sha256: Mapped[str] = mapped_column(String(PAYLOAD_SHA_LEN), nullable=False)
+    parser_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    parser_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(PAYLOAD_SHA_LEN), nullable=False)
+    content_storage_ref: Mapped[str] = mapped_column(String(512), nullable=False)
+
+    __table_args__ = (
+        Index("ix_protocol_extraction_snapshots_source_artifact_id", "source_artifact_id"),
+    )
+
+
+class ProtocolSourceSpanRecord(AppendedRecordMixin, Base):
+    __tablename__ = "protocol_source_spans"
+
+    source_span_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    snapshot_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("protocol_extraction_snapshots.snapshot_id"), nullable=False
+    )
+    source_ref: Mapped[str] = mapped_column(String(256), nullable=False)
+    document_part: Mapped[str] = mapped_column(String(32), nullable=False)
+    precision: Mapped[str] = mapped_column(String(32), nullable=False)
+    alignment_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    render_artifact_id: Mapped[str | None] = mapped_column(
+        String(128), ForeignKey("protocol_render_artifacts.render_artifact_id"), nullable=True
+    )
+    render_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    table_path: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("snapshot_id", "source_ref"),
+        Index("ix_protocol_source_spans_source_ref", "source_ref"),
+    )
+
+
+class FrozenProtocolCatalogRecord(AppendedRecordMixin, Base):
+    __tablename__ = "frozen_protocol_catalogs"
+
+    catalog_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    snapshot_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("protocol_extraction_snapshots.snapshot_id"), nullable=False
+    )
+    catalog_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    study_phase: Mapped[str] = mapped_column(String(32), nullable=False)
+    frozen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("snapshot_id", "catalog_kind", "study_phase"),
+        Index("ix_frozen_protocol_catalogs_snapshot_id", "snapshot_id"),
+    )
+
+
+# ---------------------------------------------------------------------------
 # 证据链（追加写）
 # ---------------------------------------------------------------------------
 

@@ -27,6 +27,16 @@ from .evidence import (
 from .jobs import JobEvent, ReviewRunDiff
 from .normalization import EvidenceNormalizationCandidate
 from .projections import EpisodeRollup
+from .protocol_ingestion import (
+    ExtractionAnomaly,
+    ExtractionCoverage,
+    FrozenCatalogItem,
+    FrozenProtocolCatalog,
+    ProtocolExtractionSnapshot,
+    ProtocolRenderArtifact,
+    ProtocolSourceArtifact,
+    ProtocolSourceSpan,
+)
 from .review import (
     ActionRequest,
     AssessmentCandidate,
@@ -69,8 +79,12 @@ __all__ = [
     "EpisodeRollup",
     "ErrorDetail",
     "ErrorEnvelope",
+    "ExtractionAnomaly",
+    "ExtractionCoverage",
     "FinalAssessment",
     "FixtureV1",
+    "FrozenCatalogItem",
+    "FrozenProtocolCatalog",
     "JobEvent",
     "JobStatusResponse",
     "ModelConfigContract",
@@ -78,8 +92,12 @@ __all__ = [
     "PatientProfileEvent",
     "Project",
     "ProjectListResponse",
+    "ProtocolExtractionSnapshot",
     "ProtocolIntegrityManifest",
     "ProtocolAuthorityRecord",
+    "ProtocolRenderArtifact",
+    "ProtocolSourceArtifact",
+    "ProtocolSourceSpan",
     "PromptVersion",
     "ReviewEpisode",
     "ReviewRun",

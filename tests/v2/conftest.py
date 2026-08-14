@@ -34,7 +34,7 @@ def engine(data_paths):
 
 @pytest.fixture
 def migrated_engine(data_paths):
-    """迁移到 head（0003）的临时库 Engine。"""
+    """迁移到 head 的临时库 Engine。"""
     MigrationManager(data_paths).upgrade("head")
     engine = build_engine(data_paths.db_path)
     yield engine
