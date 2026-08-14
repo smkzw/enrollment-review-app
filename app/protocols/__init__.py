@@ -46,6 +46,22 @@ from .source_alignment import (
     find_block_by_ref,
     verify_excerpt_against_blocks,
 )
+from .metadata import (
+    MetadataExtractionError,
+    MetadataExtractionResult,
+    confirm_protocol_identity,
+    extract_metadata_candidates,
+    extract_protocol_metadata,
+    resolve_identity_candidates,
+    resolve_protocol_identity,
+)
+from .phase_detection import (
+    PhaseDetectionResult,
+    build_phase_applicability_graph,
+    detect_phase_applicability,
+    project_phase_applicability,
+    project_single_phase,
+)
 
 __all__ = [
     "AlignmentResult",
@@ -74,4 +90,16 @@ __all__ = [
     "serialize_blocks",
     "utc_now",
     "verify_excerpt_against_blocks",
+    "MetadataExtractionError",
+    "MetadataExtractionResult",
+    "confirm_protocol_identity",
+    "extract_metadata_candidates",
+    "extract_protocol_metadata",
+    "resolve_identity_candidates",
+    "resolve_protocol_identity",
+    "PhaseDetectionResult",
+    "build_phase_applicability_graph",
+    "detect_phase_applicability",
+    "project_phase_applicability",
+    "project_single_phase",
 ]

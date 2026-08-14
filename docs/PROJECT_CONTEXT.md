@@ -1,5 +1,45 @@
 # Enrollment Review App Project Context
 
+## 2026-08-14 Milestone: Phase 3 Slice 2 Implemented, Pending Independent Acceptance
+
+Implemented the reviewed slice 2 boundary only:
+
+- Added traceable protocol metadata candidates with deterministic source priority,
+  template/protocol separation, conflict records, explicit identity confirmation,
+  and independent identity authority versus rule-locator precision.
+- Added paragraph/table-row/visit-column phase applicability, strict single-phase
+  projection, and a seamless candidate gate requiring explicit design plus the same
+  subject cohort; operation seamlessness, dose handoff, and new Phase III subjects
+  do not qualify.
+- Added `InterpretationSource`/`InterpretationConflict` authority checks: only the
+  current amendment may change formal requirements; other interpretation material
+  can clarify an ambiguous source only, with conflicts remaining publication blockers.
+- Added the append-only ORM/repository mappings and Alembic `0005` migration, plus
+  focused contract/property/storage/real-protocol read-only tests.
+
+返修 evidence after the main-venue rejection:
+
+- Table cells are now atomic paragraph source blocks. Row/visit-column aggregates
+  inherit only when all local children agree; mixed/unknown aggregates are excluded
+  from ordinary single-phase projections and retain child block IDs plus source spans.
+- `PhaseApplicabilityBlock.text` remains source text. Single-phase display changes are
+  derived only in `projection_text`; real MG/D001 projections contain zero opposite-
+  phase markers in their consumer-facing text and zero opposite-only or mixed/unknown
+  blocks. Shared source blocks that mention both phases remain explicitly marked as
+  shared/comparison evidence.
+- Metadata conflicts now compare only the highest formal/non-fallback priority layer.
+  D001 formal `D001-02-002` no longer conflicts with filename fallback `CMS-D001`; the
+  D001 template version `00` and formal protocol version `1.0` remain separate, with no
+  spurious version/date confirmation.
+- Added a synthetic large-table counterexample and stronger real-protocol text,
+  source-ownership, and read-only hash/stat/directory assertions.
+
+Verification: `tests/v2/protocols` 59 passed; `tests/v2` 396 passed; compileall and
+`git diff --check` passed. Both real protocol source files were hash/stat/directory
+checked before and after read-only extraction. Slice 3 Agent deconstruction, API,
+frontend, subject OCR, and clinical eligibility review remain unstarted. Independent
+acceptance is still required before treating this slice as released.
+
 ## 2026-08-13 Milestone: Phase 1 Frontend Shell Accepted, Phase 1.5 User Gate
 
 Completed:
@@ -1827,3 +1867,13 @@ OCR concurrency note:
 - 已知限制：MG/D001 仍约有 1954/2120 个非空正文段落无可靠渲染页，均为诚实拒绝而非伪造页面。切片 3 前做带逆序检测的受限邻块插值 spike；插值/降级页不得单独满足 `source_coverage` 发布门槛。
 - 最终确定性证据：协议测试 `47 passed`；全仓 `514 passed, 1 skipped, 18 subtests passed`。唯一跳过为遗留 06003 OCR 缓存夹具缺失。Grok 4.6 的有效静态发现已纳入，后续不完整输出不计最终放行；Pi 最终给出无 P0/P1 的独立放行结论。
 - 下一动作：提交切片 1，随后进入切片 2 元信息、研究期别与权威解释材料；明确区分“身份来源权威性”和“规则正文定位精度”。
+
+## 2026-08-14 Phase 3 切片 2 完成裁决
+
+- 已完成方案身份元信息候选、正式方案与模板字段分离、优先级/同级冲突、II/III/共同/混合/未知适用图、严格单期投影、真正无缝候选和解释材料权威边界；对应 Alembic `0005` 与追加写仓储已建立。
+- 主会场从真实 MG-K10 方案发现首轮投影会丢失整组共同排除标准；根因是整表聚合污染、同一表格单元格无局部上下文、共同适用语义过窄。现已改为原子段落先分类、同单元格最近标题继承，行/访视列仅在子块一致时聚合。
+- 共同语义保守化：裸“共同排除标准”可建立共享上下文；“III期共同适用”仍属 III 期；同时出现 II/III 但没有明确两期配对+共享语义时必须为 `mixed`，不进入任一单期 Agent 输入。
+- 元信息不再由低优先级文件名制造伪冲突；文件名兜底分开编号/版本/日期。确认后决策不得仍携带未解决冲突，必须精确选中候选并保留既往解决历史、显式项目代号与 day/month/year 日期精度。
+- 来源 `text/source_ref` 始终不变，`projection_text` 只能是跨期原文的派生显示；项目代号、官方日期和确认时间均加入列/payload 镜像检查。未增加 SQLite UPDATE/DELETE 触发器：本地单用户且不做安全性测试，继续遵循 Phase 2 已冻结的仓储追加写+读取哈希/镜像拒绝边界，不为本切片另造全库触发器。
+- 新鲜独立 Luna 审查会话三轮拒绝，逐次揭示冲突状态、单期共同词泄漏、裸共同标题丢失、日期精度和混合语句过宽等边界；第四轮给出无 P1/P2 的 `ACCEPT`。最终协议切片 `63 passed`，全仓 `530 passed, 1 skipped, 18 subtests passed`；唯一跳过仍为既有 06003 OCR 缓存夹具不存在。
+- 下一安全动作：切片 3 先执行有停止条件的页定位恢复 spike，再冻结官方父规则目录和基线及以前必做项目录；未完成目录对账前不进入 Agent 发布。

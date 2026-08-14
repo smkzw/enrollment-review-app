@@ -305,3 +305,102 @@ class CatalogKind(StableEnum):
 class CatalogItemKind(StableEnum):
     PARENT_RULE = "parent_rule"
     REQUIRED_PROCEDURE = "required_procedure"
+
+
+# ---------------------------------------------------------------------------
+# 方案元信息、期别适用范围与解释材料（Phase 3 切片 2）
+# ---------------------------------------------------------------------------
+
+
+class ProtocolMetadataField(StableEnum):
+    """方案身份候选的字段类别。
+
+    模板字段与正式方案字段必须在结构上分开；不能因为同一页同时出现两个
+    ``版本号`` 就采信文档中排在前面的值。
+    """
+
+    PROJECT_NAME = "project_name"
+    PROJECT_CODE = "project_code"
+    DOCUMENT_TITLE = "document_title"
+    PROTOCOL_CODE = "protocol_code"
+    PROTOCOL_VERSION = "protocol_version"
+    PROTOCOL_DATE = "protocol_date"
+    STUDY_PHASE = "study_phase"
+    TEMPLATE_CODE = "template_code"
+    TEMPLATE_VERSION = "template_version"
+
+
+class MetadataSourceKind(StableEnum):
+    """元信息来源位置；顺序由确定性解析器映射到 priority_rank。"""
+
+    HEADER_FOOTER = "header_footer"
+    FIRST_PAGE = "first_page"
+    SIGNATURE_PAGE = "signature_page"
+    BODY = "body"
+    FILENAME = "filename"
+    USER_CONFIRMATION = "user_confirmation"
+
+
+class IdentityAuthority(StableEnum):
+    """身份字段权威级别，与规则正文页级定位精度独立。"""
+
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class MetadataResolutionStatus(StableEnum):
+    NEEDS_CONFIRMATION = "needs_confirmation"
+    CONFIRMED = "confirmed"
+    REJECTED = "rejected"
+
+
+class PhaseDesignType(StableEnum):
+    INDEPENDENT = "independent"
+    SHARED_CONTENT = "shared_content"
+    SEAMLESS_CANDIDATE = "seamless_candidate"
+    UNKNOWN = "unknown"
+
+
+class ApplicabilityGranularity(StableEnum):
+    PARAGRAPH = "paragraph"
+    TABLE_ROW = "table_row"
+    VISIT_COLUMN = "visit_column"
+
+
+class PhaseScope(StableEnum):
+    PHASE_II = "phase_ii"
+    PHASE_III = "phase_iii"
+    SHARED = "shared"
+    SEAMLESS_CANDIDATE = "seamless_candidate"
+    MIXED = "mixed"
+    UNKNOWN = "unknown"
+
+
+class InterpretationSourceType(StableEnum):
+    AMENDMENT = "amendment"
+    QA = "qa"
+    CLARIFICATION_LETTER = "clarification_letter"
+    EMAIL = "email"
+    MEDICAL_INTERPRETATION = "medical_interpretation"
+
+
+class InterpretationAuthority(StableEnum):
+    FORMAL_REQUIREMENT = "formal_requirement"
+    CLARIFICATION_ONLY = "clarification_only"
+
+
+class InterpretationConflictStatus(StableEnum):
+    OPEN = "open"
+    ACKNOWLEDGED = "acknowledged"
+    RESOLVED_BY_CURRENT_AMENDMENT = "resolved_by_current_amendment"
+
+
+class InterpretationChangeField(StableEnum):
+    CLARIFICATION_NOTE = "clarification_note"
+    OFFICIAL_CODE = "official_code"
+    THRESHOLD = "threshold"
+    BOOLEAN_LOGIC = "boolean_logic"
+    WORKFLOW_NODE = "workflow_node"
+    DUE_STAGE = "due_stage"
+    FORMAL_REQUIREMENT = "formal_requirement"

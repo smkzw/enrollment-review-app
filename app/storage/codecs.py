@@ -121,7 +121,15 @@ def check_column_mirrors(
     for column_attr, payload_path in mirrors.items():
         column_value = getattr(record, column_attr)
         payload_value = payload_get(payload, payload_path)
-        if mirror_json(column_value) != mirror_json(payload_value):
+        if isinstance(column_value, datetime) and isinstance(payload_value, str):
+            try:
+                parsed_payload = parse_datetime_column(payload_value)
+            except ValueError:
+                parsed_payload = payload_value
+            equal = to_utc_naive(column_value) == parsed_payload
+        else:
+            equal = mirror_json(column_value) == mirror_json(payload_value)
+        if not equal:
             raise PersistedContractInvalid(
                 f"{entity_name} 列 {column_attr} 与已验证 payload 不一致，拒绝还原合同"
             )

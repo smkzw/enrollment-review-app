@@ -532,6 +532,159 @@ class FrozenProtocolCatalogRecord(AppendedRecordMixin, Base):
 
 
 # ---------------------------------------------------------------------------
+# 方案元信息、期别适用图与解释材料（Phase 3 切片 2，追加写）
+# ---------------------------------------------------------------------------
+
+
+class ProtocolMetadataCandidateRecord(AppendedRecordMixin, Base):
+    __tablename__ = "protocol_metadata_candidates"
+
+    candidate_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    snapshot_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("protocol_extraction_snapshots.snapshot_id"), nullable=False
+    )
+    field_category: Mapped[str] = mapped_column(String(32), nullable=False)
+    normalized_value: Mapped[str] = mapped_column(String(512), nullable=False)
+    source_ref: Mapped[str] = mapped_column(String(256), nullable=False)
+    source_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    identity_authority: Mapped[str] = mapped_column(String(16), nullable=False)
+    priority_rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    conflict_group_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+    __table_args__ = (
+        Index("ix_protocol_metadata_candidates_snapshot_id", "snapshot_id"),
+        Index("ix_protocol_metadata_candidates_field_category", "field_category"),
+    )
+
+
+class ProtocolMetadataConflictRecord(AppendedRecordMixin, Base):
+    __tablename__ = "protocol_metadata_conflicts"
+
+    conflict_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    snapshot_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("protocol_extraction_snapshots.snapshot_id"), nullable=False
+    )
+    field_category: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    selected_candidate_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("snapshot_id", "field_category", "status"),
+        Index("ix_protocol_metadata_conflicts_snapshot_id", "snapshot_id"),
+    )
+
+
+class ProtocolIdentityDecisionRecord(AppendedRecordMixin, Base):
+    __tablename__ = "protocol_identity_decisions"
+
+    identity_decision_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    snapshot_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("protocol_extraction_snapshots.snapshot_id"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    project_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    project_code: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    protocol_code: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    official_version: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    official_date_value: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    official_date_precision: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    study_phase: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    __table_args__ = (Index("ix_protocol_identity_decisions_snapshot_id", "snapshot_id"),)
+
+
+class StudyPhaseCandidateRecord(AppendedRecordMixin, Base):
+    __tablename__ = "study_phase_candidates"
+
+    candidate_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    snapshot_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("protocol_extraction_snapshots.snapshot_id"), nullable=False
+    )
+    design_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_ref: Mapped[str] = mapped_column(String(256), nullable=False)
+    priority_rank: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    __table_args__ = (Index("ix_study_phase_candidates_snapshot_id", "snapshot_id"),)
+
+
+class StudyPhaseSelectionRecord(AppendedRecordMixin, Base):
+    __tablename__ = "study_phase_selections"
+
+    selection_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    snapshot_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("protocol_extraction_snapshots.snapshot_id"), nullable=False
+    )
+    selected_phase: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    __table_args__ = (Index("ix_study_phase_selections_snapshot_id", "snapshot_id"),)
+
+
+class ProtocolPhaseApplicabilityGraphRecord(AppendedRecordMixin, Base):
+    __tablename__ = "protocol_phase_applicability_graphs"
+
+    graph_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    snapshot_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("protocol_extraction_snapshots.snapshot_id"), nullable=False
+    )
+    default_design_type: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    __table_args__ = (UniqueConstraint("snapshot_id"),)
+
+
+class ProtocolPhaseProjectionRecord(AppendedRecordMixin, Base):
+    __tablename__ = "protocol_phase_projections"
+
+    projection_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    graph_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("protocol_phase_applicability_graphs.graph_id"), nullable=False
+    )
+    selected_phase: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("graph_id", "selected_phase"),
+        Index("ix_protocol_phase_projections_graph_id", "graph_id"),
+    )
+
+
+class InterpretationSourceRecord(AppendedRecordMixin, Base):
+    __tablename__ = "interpretation_sources"
+
+    interpretation_source_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    protocol_version_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("protocol_document_versions.protocol_version_id"), nullable=False
+    )
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    file_sha256: Mapped[str] = mapped_column(String(PAYLOAD_SHA_LEN), nullable=False)
+    authority: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_ref: Mapped[str] = mapped_column(String(256), nullable=False)
+    is_current_amendment: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
+    __table_args__ = (Index("ix_interpretation_sources_protocol_version_id", "protocol_version_id"),)
+
+
+class InterpretationConflictRecord(AppendedRecordMixin, Base):
+    __tablename__ = "interpretation_conflicts"
+
+    conflict_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    protocol_version_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("protocol_document_versions.protocol_version_id"), nullable=False
+    )
+    interpretation_source_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("interpretation_sources.interpretation_source_id"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(48), nullable=False)
+    blocks_publication: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
+    __table_args__ = (
+        Index("ix_interpretation_conflicts_protocol_version_id", "protocol_version_id"),
+        Index("ix_interpretation_conflicts_source_id", "interpretation_source_id"),
+    )
+
+
+# ---------------------------------------------------------------------------
 # 证据链（追加写）
 # ---------------------------------------------------------------------------
 

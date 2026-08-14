@@ -42,6 +42,11 @@ from app.domain.contracts import (
     PromptVersion,
     ProtocolAuthorityRecord,
     ProtocolIntegrityManifest,
+    ProtocolIdentityDecision,
+    ProtocolMetadataCandidate,
+    ProtocolMetadataConflict,
+    PhaseApplicabilityGraph,
+    PhaseProjection,
     ReviewEpisode,
     ReviewRun,
     ReviewRunDiff,
@@ -49,11 +54,14 @@ from app.domain.contracts import (
     RuleComponent,
     RuleSet,
     Subject,
+    StudyPhaseCandidate,
+    StudyPhaseSelection,
     WorkflowStage,
 )
 from app.domain.contracts.agents import CriticRun, GateResult
 from app.domain.contracts.context import ReviewContextSnapshot
 from app.domain.contracts.evidence import ConflictGroup, SourceDocumentVersion
+from app.domain.contracts.protocol_metadata import InterpretationConflict, InterpretationSource
 from app.domain.contracts.review import ActionTransition, ProtocolDocumentVersion
 from app.domain.contracts.rules import (
     ProtocolAuthorityConfirmation,
@@ -99,7 +107,14 @@ from app.storage.models import (
     ProtocolAuthorityRecordRow,
     ProtocolDocumentVersionRecord,
     ProtocolIntegrityManifestRecord,
+    ProtocolIdentityDecisionRecord,
+    ProtocolMetadataCandidateRecord,
+    ProtocolMetadataConflictRecord,
+    ProtocolPhaseApplicabilityGraphRecord,
+    ProtocolPhaseProjectionRecord,
     ProtocolSourceRecordRow,
+    InterpretationConflictRecord,
+    InterpretationSourceRecord,
     ReviewContextSnapshotRecord,
     ReviewEpisodeRecord,
     ReviewRunDiffRecord,
@@ -110,6 +125,8 @@ from app.storage.models import (
     ServiceCommandEventRecord,
     SourceDocumentVersionRecord,
     SubjectRecord,
+    StudyPhaseCandidateRecord,
+    StudyPhaseSelectionRecord,
     WorkflowStageRecord,
     action_transition_spans,
     agent_call_gate_results,
@@ -556,6 +573,186 @@ PROTOCOL_DOC_CONFIG = _config(
         "authority_confirmation_id": "authority_confirmation_id",
         "authority_gate_result_id": "authority_gate_result_id",
         "integrity_gate_result_id": "integrity_gate_result_id",
+    },
+)
+
+PROTOCOL_METADATA_CANDIDATE_CONFIG = _config(
+    ProtocolMetadataCandidateRecord,
+    ProtocolMetadataCandidate,
+    {
+        "candidate_id": "candidate_id",
+        "snapshot_id": "snapshot_id",
+        "field_category": "field_category",
+        "normalized_value": "normalized_value",
+        "source_ref": "source_ref",
+        "source_kind": "source_kind",
+        "identity_authority": "identity_authority",
+        "priority_rank": "priority_rank",
+        "conflict_group_id": "conflict_group_id",
+    },
+    mirrors={
+        "snapshot_id": "snapshot_id",
+        "field_category": "field_category",
+        "normalized_value": "normalized_value",
+        "source_ref": "source_ref",
+        "source_kind": "source_kind",
+        "identity_authority": "identity_authority",
+        "priority_rank": "priority_rank",
+        "conflict_group_id": "conflict_group_id",
+    },
+)
+
+PROTOCOL_METADATA_CONFLICT_CONFIG = _config(
+    ProtocolMetadataConflictRecord,
+    ProtocolMetadataConflict,
+    {
+        "conflict_id": "conflict_id",
+        "snapshot_id": "snapshot_id",
+        "field_category": "field_category",
+        "status": "status",
+        "selected_candidate_id": "selected_candidate_id",
+    },
+    mirrors={
+        "snapshot_id": "snapshot_id",
+        "field_category": "field_category",
+        "status": "status",
+        "selected_candidate_id": "selected_candidate_id",
+    },
+)
+
+PROTOCOL_IDENTITY_DECISION_CONFIG = _config(
+    ProtocolIdentityDecisionRecord,
+    ProtocolIdentityDecision,
+    {
+        "identity_decision_id": "identity_decision_id",
+        "snapshot_id": "snapshot_id",
+        "status": "status",
+        "project_name": "project_name",
+        "project_code": "project_code",
+        "protocol_code": "protocol_code",
+        "official_version": "official_version",
+        "official_date_value": "official_date.value",
+        "official_date_precision": "official_date.precision",
+        "study_phase": "study_phase",
+        "confirmed_at": "confirmed_at",
+    },
+    datetime_cols=frozenset({"official_date_value", "confirmed_at"}),
+    mirrors={
+        "snapshot_id": "snapshot_id",
+        "status": "status",
+        "project_name": "project_name",
+        "project_code": "project_code",
+        "protocol_code": "protocol_code",
+        "official_version": "official_version",
+        "official_date_value": "official_date.value",
+        "official_date_precision": "official_date.precision",
+        "study_phase": "study_phase",
+        "confirmed_at": "confirmed_at",
+    },
+)
+
+STUDY_PHASE_CANDIDATE_CONFIG = _config(
+    StudyPhaseCandidateRecord,
+    StudyPhaseCandidate,
+    {
+        "candidate_id": "candidate_id",
+        "snapshot_id": "snapshot_id",
+        "design_type": "design_type",
+        "source_ref": "source_ref",
+        "priority_rank": "priority_rank",
+    },
+    mirrors={
+        "snapshot_id": "snapshot_id",
+        "design_type": "design_type",
+        "source_ref": "source_ref",
+        "priority_rank": "priority_rank",
+    },
+)
+
+STUDY_PHASE_SELECTION_CONFIG = _config(
+    StudyPhaseSelectionRecord,
+    StudyPhaseSelection,
+    {
+        "selection_id": "selection_id",
+        "snapshot_id": "snapshot_id",
+        "selected_phase": "selected_phase",
+        "status": "status",
+        "confirmed_at": "confirmed_at",
+    },
+    datetime_cols=frozenset({"confirmed_at"}),
+    mirrors={
+        "snapshot_id": "snapshot_id",
+        "selected_phase": "selected_phase",
+        "status": "status",
+        "confirmed_at": "confirmed_at",
+    },
+)
+
+PROTOCOL_PHASE_GRAPH_CONFIG = _config(
+    ProtocolPhaseApplicabilityGraphRecord,
+    PhaseApplicabilityGraph,
+    {
+        "graph_id": "graph_id",
+        "snapshot_id": "snapshot_id",
+        "default_design_type": "default_design_type",
+    },
+    mirrors={
+        "snapshot_id": "snapshot_id",
+        "default_design_type": "default_design_type",
+    },
+)
+
+PROTOCOL_PHASE_PROJECTION_CONFIG = _config(
+    ProtocolPhaseProjectionRecord,
+    PhaseProjection,
+    {
+        "projection_id": "projection_id",
+        "graph_id": "graph_id",
+        "selected_phase": "selected_phase",
+    },
+    mirrors={
+        "graph_id": "graph_id",
+        "selected_phase": "selected_phase",
+    },
+)
+
+INTERPRETATION_SOURCE_CONFIG = _config(
+    InterpretationSourceRecord,
+    InterpretationSource,
+    {
+        "interpretation_source_id": "interpretation_source_id",
+        "protocol_version_id": "protocol_version_id",
+        "source_type": "source_type",
+        "file_sha256": "file_sha256",
+        "authority": "authority",
+        "source_ref": "source_ref",
+        "is_current_amendment": "is_current_amendment",
+    },
+    mirrors={
+        "protocol_version_id": "protocol_version_id",
+        "source_type": "source_type",
+        "file_sha256": "file_sha256",
+        "authority": "authority",
+        "source_ref": "source_ref",
+        "is_current_amendment": "is_current_amendment",
+    },
+)
+
+INTERPRETATION_CONFLICT_CONFIG = _config(
+    InterpretationConflictRecord,
+    InterpretationConflict,
+    {
+        "conflict_id": "conflict_id",
+        "protocol_version_id": "protocol_version_id",
+        "interpretation_source_id": "interpretation_source_id",
+        "status": "status",
+        "blocks_publication": "blocks_publication",
+    },
+    mirrors={
+        "protocol_version_id": "protocol_version_id",
+        "interpretation_source_id": "interpretation_source_id",
+        "status": "status",
+        "blocks_publication": "blocks_publication",
     },
 )
 

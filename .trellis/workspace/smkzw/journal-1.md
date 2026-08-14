@@ -186,3 +186,26 @@
 ### Status
 
 [OK] **Slice 1 accepted; Slice 2 next**
+
+## Session 8: Phase 3 切片 2 方案身份、期别与解释权威
+
+**Date**: 2026-08-14
+**Task**: Phase 3 方案解构V2（切片 2）
+**Branch**: `codex/v2-phase0-foundation`
+
+### Summary
+
+完成可追溯方案身份候选、模板/正式字段分离、严格期别适用图、单期投影、
+真无缝候选、解释材料权威边界和 `0005` 持久化。真实 MG-K10 检查暴露了“共同
+排除标准整组丢失”，又经独立审查四轮发现并关闭冲突确认、单期共同词泄漏、
+裸共同标题、日期精度和混合语句过宽等系统缺陷。最终 `63` 项协议测试及全仓
+`530 passed, 1 skipped, 18 subtests passed`，独立审查 `ACCEPT`。
+
+### Next
+
+进入切片 3：先做受限页定位恢复 spike，然后冻结官方父规则目录和基线及以前必做
+项目录，再开始 Protocol Deconstructor/Agent 合同与 12 类确定性检查。
+
+### Status
+
+[OK] **Slice 2 accepted; Slice 3 next**

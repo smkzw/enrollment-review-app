@@ -28,10 +28,10 @@
     "app/domain/contracts/agent_io.py",
     "frontend/src/pages/ProtocolsPage.tsx"
   ],
-  "notes": "2026-08-14 用户已批准并启动实施。切片1已完成且经独立复核通过：不可变方案登记、DOCX/OOXML结构提取、受控渲染、保守来源对齐、迁移与两份真实方案只读回归。下一步为切片2元信息、研究期别与权威解释材料；身份字段权威性必须与规则正文定位精度分级。",
+  "notes": "2026-08-14 用户已批准并启动实施。切片1完成不可变方案/来源基座；切片2完成元信息权威层、模板/正式字段分离、细粒度期别适用图、严格单期投影和解释材料边界。真实MG/D001与全仓530项测试通过，独立审查最终ACCEPT。下一步为切片3页定位恢复spike、官方目录、Protocol Deconstructor与确定性检查。",
   "meta": {
-    "completed_slice": "1",
-    "next_slice": "2",
-    "last_checkpoint": "2026-08-14T14:40:00+08:00"
+    "completed_slice": "2",
+    "next_slice": "3",
+    "last_checkpoint": "2026-08-14T23:50:00+08:00"
   }
 }
