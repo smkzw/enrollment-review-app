@@ -1,0 +1,6 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"独立核对规则逻辑、来源、失败状态和跨项目泛化。"}
+{"file":".trellis/spec/backend/persistent-jobs.md","reason":"独立验证中断恢复、幂等、检查点和永久处理中状态。"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"真实浏览器核对中文、响应式、来源跳转和工作台效率。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"核对父子层级、逻辑标签、焦点与窄屏交互。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"检查每个字段和状态是否在跨层传递中丢失或重复实现。"}
+{"file":".trellis/tasks/08-14-phase3-protocol-deconstruction/research.md","reason":"复核依赖许可、文档保真假设和真实方案失败证据。"}

@@ -1,0 +1,11 @@
+{"file":".trellis/spec/backend/directory-structure.md","reason":"约束 V2 新代码边界与依赖方向，避免继续扩大旧 deconstructor。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"定义不可变方案版本、草稿 revision、发布事务和迁移回滚。"}
+{"file":".trellis/spec/backend/persistent-jobs.md","reason":"方案解构必须可恢复、幂等并支持等待用户确认。"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"解析为空、期别不明和 Agent 校验失败不得伪装成功。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"确保临床逻辑、来源和确定性门禁不被自由文本替代。"}
+{"file":".trellis/spec/frontend/directory-structure.md","reason":"方案工作台按 protocols 功能域组织并使用类型化 API。"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"约束父子规则、来源联动、响应式布局和焦点行为。"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"区分持久草稿、Job、URL 选择和局部编辑状态。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"跨 API/Agent 边界使用共享 schema 和运行时校验。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"规划文档到存储、API、前端和发布的完整数据流。"}
+{"file":".trellis/tasks/08-14-phase3-protocol-deconstruction/research.md","reason":"提供文档解析候选、真实方案观察和采用/拒绝依据。"}

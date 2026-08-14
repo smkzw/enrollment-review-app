@@ -1,0 +1,33 @@
+{
+  "id": "phase3-protocol-deconstruction",
+  "name": "phase3-protocol-deconstruction",
+  "title": "Phase 3 方案解构V2",
+  "description": "从正式研究方案建立可追溯、可校验、分期明确的结构化规则集，并提供首次解构和重新解构工作台。",
+  "status": "in_progress",
+  "dev_type": "feature",
+  "scope": "Phase 3：方案文档提取、结构化规则解构、确定性门禁、解释材料边界、首次/重新解构工作台与真实方案验收",
+  "package": "backend, frontend, protocol-agent, clinical-regression",
+  "priority": "P1",
+  "creator": "smkzw",
+  "assignee": "smkzw",
+  "createdAt": "2026-08-14",
+  "completedAt": null,
+  "branch": "codex/v2-phase0-foundation",
+  "base_branch": "codex/v2-phase0-foundation",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "08-12-enrollment-review-v2",
+  "relatedFiles": [
+    "docs/REARCHITECTURE_FINAL_DESIGN_20260812.md",
+    "plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md",
+    "docs/PROJECT_CONTEXT.md",
+    "app/domain/contracts/rules.py",
+    "app/domain/contracts/agent_io.py",
+    "frontend/src/pages/ProtocolsPage.tsx"
+  ],
+  "notes": "2026-08-14 已完成真实方案结构探查和开源解析路线初筛；待用户审阅完整规划后再执行 task.py start。",
+  "meta": {}
+}

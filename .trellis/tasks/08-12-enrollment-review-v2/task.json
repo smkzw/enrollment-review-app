@@ -24,14 +24,15 @@
     "08-13-phase1-frontend-shell",
     "08-13-phase1-5-uat-readiness",
     "08-13-phase1-5-agent-monitor-uat",
-    "08-14-phase2-sqlite-domain-jobs"
+    "08-14-phase2-sqlite-domain-jobs",
+    "08-14-phase3-protocol-deconstruction"
   ],
   "parent": null,
   "relatedFiles": [],
-  "notes": "Phase 0、0.5、1 及 Phase 1.5 已完成并通过独立模型医学监查员角色验收。下一阶段按实施计划进入 Phase 2 SQLite 领域层与持久任务；不得把 Phase 1 合成原型验收解释为真实方案、OCR、事实抽取或临床审核已完成。",
+  "notes": "Phase 0、0.5、1、1.5、2 已完成。Phase 3 方案解构 V2 的 PRD、技术设计、实施计划和文档解析调研已完成三模型独立审评并按根因修订，当前等待用户批准后启动；尚未实现真实方案解析、规则发布、OCR、事实抽取或临床审核。",
   "meta": {
-    "current_phase": "2",
-    "gate": "phase2_ready",
-    "last_checkpoint": "2026-08-14-phase1-5-agent-monitor-accepted"
+    "current_phase": "3",
+    "gate": "phase3_plan_awaiting_user_approval",
+    "last_checkpoint": "2026-08-14-phase3-protocol-plan-reviewed"
   }
 }

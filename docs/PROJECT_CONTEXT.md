@@ -1805,3 +1805,15 @@ OCR concurrency note:
 - CodeBuddy/Kimi 2.6给出静态`ACCEPT`；Pi/Minimax在运行全套测试后给出`REVISE`，其真实发现已修复，争议项由Codex按领域合同裁决。Grok 4.6修复后复核连续两次由自身运行时取消，没有终局结论，明确不计为通过；其上一轮完整报告中的真实问题均已纳入修复。
 - 临时V2验收服务、临时数据库、测试结果目录和模型原始stdout已经清理；既有4173前端服务及两张并行修改的截图未触碰。
 - Phase 2仅完成SQLite领域持久化与持久任务底座，不代表真实方案解析、OCR、Patient Journey、模型审核或真实入排项目已完成。下一阶段必须从Phase 3方案权威链与规则解构开始，不得将旧项目写回V2。
+
+## 2026-08-14 Phase 3 最终规划与独立审评检查点
+
+- 当前子任务：`.trellis/tasks/08-14-phase3-protocol-deconstruction`，状态 `planning`；尚未执行 `task.py start`，未写入 Phase 3 产品代码。
+- 已完成 `prd.md`、`design.md`、`implement.md`、`research.md` 及 implement/check 上下文清单。真实只读探查确认：MG-K10-SAR 页眉可直接取得 `MG-K10-SAR-001`、`V2.1//2025年09月19日`；D001 页眉同时含模板版本和正式方案 `D001-02-002/V1.0/2025-12-10`，必须进行字段分类而非采信第一个版本号。
+- 已复现旧链路的系统级失败：MG-K10-SAR III 可得到 IN 7/EX 16，D001 II 可得到 IN 6/EX 30，但两份研究流程表均返回空节点。Phase 3 因此把“流程表非空”升级为 Agent 前冻结并逐项核对的基线及以前必做项目录，漏项、占位项、跨访视误去重或来源只指向标题均阻止发布。
+- 冻结两份目录：官方父规则目录；按研究期别和访视实例拆分的基线及以前必做项目录。Agent、手工修订和同会话修复不得增删目录项；相同检查在筛选和基线重复执行时保留两个 requirement 实例。
+- II、III 默认独立项目和受试者空间；“操作无缝”、剂量选择衔接或继续纳入新的 III 期受试者均不构成合并依据。只有同一受试者队列连续跨期才可提出合并候选，且默认仍为独立、需二次确认。
+- 来源采用 python-docx/OOXML 结构通道和 LibreOffice 派生 PDF 渲染通道；结构定位为主，“本次渲染页”为辅助。Docling-slim 与 pdfplumber 只在切片 1 用两份真实方案做有停止条件的许可/保真 spike，不预设采用。
+- 首次解构和重新解构分开；同方案编号+同一期别已有正式项目时首次入口不得再建平行项目。重新解构要求同方案谱系和研究期别，合法新版本允许版本、日期、哈希变化，跨方案/跨期文件拒绝发布。
+- CodeBuddy CLI/kimi-k2.6、Pi/cms-router/minimax-m3、Grok Build/grok-4.6 均以用户指定模型完成只读规划审评，无 fallback，均结论“修订后可开始”。共同根因已采纳；未采纳会阻断合法修订、写死子编号或复制事实源的建议。会商门禁已通过，精简证据位于 `reviews/codex_conference_phase3-protocol-plan-review_review.md` 和 `metrics/phase3-protocol-plan-review_conference_metrics.md`。
+- 下一安全动作：等待用户审阅 Phase 3 最终规划并明确批准；获批后执行 `task.py start`，从切片 1 文档结构/开源候选 spike 开始，不跳到 Agent、前端或真实受试者审核。
