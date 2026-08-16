@@ -48,7 +48,15 @@ class AnchorType(StableEnum):
     SCREENING_DATE = "screening_date"
     BASELINE_DATE = "baseline_date"
     RANDOMIZATION_DATE = "randomization_date"
+    FIRST_DOSE_DATE = "first_dose_date"
+    LAST_DOSE_DATE = "last_dose_date"
+    STUDY_COMPLETION_DATE = "study_completion_date"
     EVENT_DATE = "event_date"
+
+
+class ProtocolPeriod(StableEnum):
+    TREATMENT_PERIOD = "treatment_period"
+    STUDY_PERIOD = "study_period"
 
 
 class TimeDirection(StableEnum):

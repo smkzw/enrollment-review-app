@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from .common import ContractModel, VersionedModel
 from .enums import (
@@ -26,6 +26,7 @@ from .enums import (
     DocumentPart,
     ExtractionStatus,
     RenderStatus,
+    ReviewStage,
     SourceLocatorPrecision,
     StudyPhase,
 )
@@ -218,13 +219,16 @@ class ProtocolExtractionSnapshot(VersionedModel):
 class FrozenCatalogItem(ContractModel):
     """冻结目录项：稳定 ID、原文范围与来源片段（期别继承自所属目录）。"""
 
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
     item_id: str = Field(min_length=1)
     kind: CatalogItemKind
     official_code: str | None = None
     label: str = Field(min_length=1)
     visit_instance: str | None = None
+    review_stage: ReviewStage | None = None
     position: int = Field(ge=0)
-    source_span_ids: list[str] = Field(min_length=1)
+    source_span_ids: tuple[str, ...] = Field(min_length=1)
 
 
 class FrozenProtocolCatalog(VersionedModel):
@@ -235,11 +239,13 @@ class FrozenProtocolCatalog(VersionedModel):
     回路均不得增删目录成员。
     """
 
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
     catalog_id: str = Field(min_length=1)
     snapshot_id: str = Field(min_length=1)
     catalog_kind: CatalogKind
     study_phase: StudyPhase
-    items: list[FrozenCatalogItem] = Field(min_length=1)
+    items: tuple[FrozenCatalogItem, ...] = Field(min_length=1)
     frozen_at: datetime
     frozen_by: str = Field(min_length=1)
     catalog_sha256: str = Field(pattern=_SHA256)
@@ -265,11 +271,15 @@ class FrozenProtocolCatalog(VersionedModel):
                     raise ValueError("官方父规则目录只能包含 parent_rule 项")
                 if not item.official_code:
                     raise ValueError("官方父规则目录项必须提供 official_code")
+                if item.review_stage is not None:
+                    raise ValueError("官方父规则目录项不能携带审核阶段")
             else:
                 if item.kind != CatalogItemKind.REQUIRED_PROCEDURE:
                     raise ValueError("必做项目录只能包含 required_procedure 项")
                 if not item.visit_instance:
                     raise ValueError("必做项目录项必须提供 visit_instance")
+                if item.review_stage is None:
+                    raise ValueError("必做项目录项必须提供结构化审核阶段")
             if len(item.source_span_ids) != len(set(item.source_span_ids)):
                 raise ValueError("目录项来源片段引用不得重复")
         return self

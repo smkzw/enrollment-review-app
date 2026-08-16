@@ -1,6 +1,7 @@
 """DOCX 结构提取的结构不变量测试：嵌套表格路径、gridSpan、页眉页脚、编号、修订。"""
 from __future__ import annotations
 
+from docx import Document
 from docx.oxml import parse_xml
 from docx.oxml.ns import nsdecls
 
@@ -60,6 +61,28 @@ def test_gridspan_table_size(tmp_path):
     # 合并单元格右边缘为 col + span = 3，而非 col + 1
     assert table[0].table_cols == 3
     assert table[0].table_rows == 1
+
+
+def test_superscript_and_subscript_are_preserved_as_semantic_text(tmp_path):
+    def build(path):
+        document = Document()
+        paragraph = document.add_paragraph("ANC<1.2×10")
+        superscript = paragraph.add_run("9")
+        superscript.font.superscript = True
+        paragraph.add_run("/L，H")
+        subscript = paragraph.add_run("2")
+        subscript.font.subscript = True
+        paragraph.add_run("O")
+        footnote = document.add_paragraph("胸片（正侧位）")
+        for digit in "14":
+            run = footnote.add_run(digit)
+            run.font.superscript = True
+        document.save(path)
+
+    ext = _extract(tmp_path, "vertical-align", build)
+
+    assert any(block.text == "ANC<1.2×10^9/L，H_2O" for block in ext.blocks)
+    assert any(block.text == "胸片（正侧位）^14" for block in ext.blocks)
 
 
 def test_headers_capture_default_first_even_and_dedup(tmp_path):

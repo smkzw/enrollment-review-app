@@ -639,6 +639,9 @@
           "screening_date",
           "baseline_date",
           "randomization_date",
+          "first_dose_date",
+          "last_dose_date",
+          "study_completion_date",
           "event_date"
         ],
         "title": "AnchorType",
@@ -858,15 +861,81 @@
           "comparator": {
             "$ref": "#/components/schemas/Comparator"
           },
+          "occurrence_window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OccurrenceWindow"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "predicate_id": {
             "minLength": 1,
             "title": "Predicate Id",
             "type": "string"
           },
+          "prospective_period": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProspectivePeriod"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "prospective_window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProspectiveWindow"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "requires_professional_judgment": {
             "default": false,
             "title": "Requires Professional Judgment",
             "type": "boolean"
+          },
+          "source_clause": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Clause"
+          },
+          "source_clauses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Clauses",
+            "type": "array"
+          },
+          "source_term": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Term"
           },
           "subject": {
             "minLength": 1,
@@ -1770,6 +1839,19 @@
             "title": "Fact Type",
             "type": "string"
           },
+          "procedure_catalog_item_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Procedure Catalog Item Id"
+          },
           "required_source_types": {
             "items": {
               "type": "string"
@@ -1788,9 +1870,17 @@
             "type": "boolean"
           },
           "rule_component_id": {
-            "minLength": 1,
-            "title": "Rule Component Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Rule Component Id"
           },
           "schema_version": {
             "const": "fixture/v1",
@@ -1801,7 +1891,6 @@
         },
         "required": [
           "requirement_id",
-          "rule_component_id",
           "fact_type",
           "due_stage",
           "description"
@@ -2870,6 +2959,33 @@
         "title": "ModelConfigContract",
         "type": "object"
       },
+      "OccurrenceWindow": {
+        "additionalProperties": false,
+        "description": "Rolling duration used by frequency definitions.",
+        "properties": {
+          "duration": {
+            "$ref": "#/components/schemas/TimeQuantity"
+          },
+          "minimum_count": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Minimum Count"
+          }
+        },
+        "required": [
+          "duration"
+        ],
+        "title": "OccurrenceWindow",
+        "type": "object"
+      },
       "PatientProfile": {
         "additionalProperties": false,
         "properties": {
@@ -3245,6 +3361,38 @@
         "title": "PromptVersion",
         "type": "object"
       },
+      "ProspectivePeriod": {
+        "additionalProperties": false,
+        "description": "Named protocol interval used by a future plan or intended action.",
+        "properties": {
+          "period": {
+            "$ref": "#/components/schemas/ProtocolPeriod"
+          }
+        },
+        "required": [
+          "period"
+        ],
+        "title": "ProspectivePeriod",
+        "type": "object"
+      },
+      "ProspectiveWindow": {
+        "additionalProperties": false,
+        "description": "Future horizon anchored to a named protocol milestone.",
+        "properties": {
+          "anchor_type": {
+            "$ref": "#/components/schemas/AnchorType"
+          },
+          "upper_bound": {
+            "$ref": "#/components/schemas/TimeQuantity"
+          }
+        },
+        "required": [
+          "anchor_type",
+          "upper_bound"
+        ],
+        "title": "ProspectiveWindow",
+        "type": "object"
+      },
       "ProtocolAuthorityConfirmation": {
         "additionalProperties": false,
         "properties": {
@@ -3564,6 +3712,14 @@
         ],
         "title": "ProtocolIntegrityManifest",
         "type": "object"
+      },
+      "ProtocolPeriod": {
+        "enum": [
+          "treatment_period",
+          "study_period"
+        ],
+        "title": "ProtocolPeriod",
+        "type": "string"
       },
       "ProtocolSourceRecord": {
         "additionalProperties": false,
@@ -4379,7 +4535,13 @@
                 "half_life_multiplier": {
                   "type": "null"
                 },
+                "lower_bound": {
+                  "type": "null"
+                },
                 "lower_bound_days": {
+                  "type": "null"
+                },
+                "upper_bound": {
                   "type": "null"
                 },
                 "upper_bound_days": {
@@ -4414,6 +4576,17 @@
             "default": null,
             "title": "Half Life Multiplier"
           },
+          "lower_bound": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TimeQuantity"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "lower_bound_days": {
             "anyOf": [
               {
@@ -4426,6 +4599,17 @@
             ],
             "default": null,
             "title": "Lower Bound Days"
+          },
+          "upper_bound": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TimeQuantity"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           },
           "upper_bound_days": {
             "anyOf": [
@@ -4455,6 +4639,37 @@
           "on"
         ],
         "title": "TimeDirection",
+        "type": "string"
+      },
+      "TimeQuantity": {
+        "additionalProperties": false,
+        "description": "带单位的正整数时间数量，例如 ``3 个月``或 ``4 周``。",
+        "properties": {
+          "unit": {
+            "$ref": "#/components/schemas/TimeUnit"
+          },
+          "value": {
+            "exclusiveMinimum": 0,
+            "title": "Value",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "value",
+          "unit"
+        ],
+        "title": "TimeQuantity",
+        "type": "object"
+      },
+      "TimeUnit": {
+        "description": "时间窗使用的临床日历单位。\n\n月和年不是固定天数的别名；评估器会按日历边界处理它们。",
+        "enum": [
+          "day",
+          "week",
+          "month",
+          "year"
+        ],
+        "title": "TimeUnit",
         "type": "string"
       },
       "TruthValue": {

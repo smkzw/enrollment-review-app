@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from calendar import monthrange
 from math import ceil
 from typing import Any
@@ -17,7 +17,14 @@ from app.domain.contracts.enums import (
     TruthValue,
 )
 from app.domain.contracts.evidence import ClinicalFact
-from app.domain.contracts.rules import AtomicExpression, AtomicPredicate, RuleComponent, RuleExpression
+from app.domain.contracts.rules import (
+    AtomicExpression,
+    AtomicPredicate,
+    RuleComponent,
+    RuleExpression,
+    TimeQuantity,
+    TimeUnit,
+)
 
 
 class EvaluationContext(ContractModel):
@@ -156,12 +163,100 @@ def _compare(predicate: AtomicPredicate, observed: Any) -> TruthValue:
     raise ValueError(f"不支持的比较器: {predicate.comparator}")
 
 
-def _date_bounds(
-    value: DateValue | None,
+def _add_months(value: date, months: int) -> date:
+    month_index = value.year * 12 + value.month - 1 + months
+    year, month_index = divmod(month_index, 12)
+    month = month_index + 1
+    day = min(value.day, monthrange(year, month)[1])
+    return date(year, month, day)
+
+
+def _shift_date(value: date, quantity: TimeQuantity, *, sign: int = 1) -> date:
+    """Shift a complete calendar date without flattening months or years to days."""
+
+    amount = sign * quantity.value
+    if quantity.unit == TimeUnit.DAY:
+        return value + timedelta(days=amount)
+    if quantity.unit == TimeUnit.WEEK:
+        return value + timedelta(days=amount * 7)
+    if quantity.unit == TimeUnit.MONTH:
+        return _add_months(value, amount)
+    if quantity.unit == TimeUnit.YEAR:
+        target_year = value.year + amount
+        day = min(value.day, monthrange(target_year, value.month)[1])
+        return date(target_year, value.month, day)
+    raise ValueError(f"不支持的时间单位: {quantity.unit}")
+
+
+def _is_end_of_month(value: date) -> bool:
+    return value.day == monthrange(value.year, value.month)[1]
+
+
+def _calendar_shift_is_boundary(
+    event_date: date,
+    anchor_date: date,
+    shifted_event_date: date,
+    quantity: TimeQuantity,
+) -> bool:
+    """Treat matching month-end dates as the same calendar boundary.
+
+    For example, 2023-02-28 to 2024-02-29 is one calendar year even though
+    the direct year shift clamps the intermediate date to 2024-02-28.
+    """
+
+    if shifted_event_date == anchor_date:
+        return True
+    return (
+        quantity.unit in {TimeUnit.MONTH, TimeUnit.YEAR}
+        and _is_end_of_month(event_date)
+        and _is_end_of_month(anchor_date)
+        and (shifted_event_date.year, shifted_event_date.month)
+        == (anchor_date.year, anchor_date.month)
+    )
+
+
+def _calendar_bound_satisfied(
+    event_date: date,
+    anchor_date: date,
+    direction: str,
+    quantity: TimeQuantity,
     *,
-    allow_partial: bool,
-) -> tuple[date, date] | None:
-    if value is None or value.value is None:
+    is_lower_bound: bool,
+) -> bool:
+    """Evaluate a month/year boundary using calendar arithmetic.
+
+    A lower ``before`` bound asks whether adding the duration to the event
+    still lands on or before the anchor; an upper bound uses the opposite
+    inequality.  The ``after`` case mirrors this by shifting the event back.
+    """
+
+    if direction == "before":
+        shifted_event_date = _shift_date(event_date, quantity)
+        if _calendar_shift_is_boundary(
+            event_date, anchor_date, shifted_event_date, quantity
+        ):
+            return True
+        return (
+            shifted_event_date <= anchor_date
+            if is_lower_bound
+            else shifted_event_date >= anchor_date
+        )
+    shifted_event_date = _shift_date(event_date, quantity, sign=-1)
+    if _calendar_shift_is_boundary(
+        event_date, anchor_date, shifted_event_date, quantity
+    ):
+        return True
+    return (
+        shifted_event_date >= anchor_date
+        if is_lower_bound
+        else shifted_event_date <= anchor_date
+    )
+
+
+def _date_bounds(value: DateValue, *, allow_partial: bool) -> tuple[date, date] | None:
+    """Return the complete range represented by a clinical date value."""
+
+    if value.value is None:
         return None
     if value.precision == DatePrecision.DAY:
         return value.value, value.value
@@ -169,10 +264,55 @@ def _date_bounds(
         return None
     if value.precision == DatePrecision.MONTH:
         first = value.value.replace(day=1)
-        last = value.value.replace(day=monthrange(value.value.year, value.value.month)[1])
+        last = value.value.replace(
+            day=monthrange(value.value.year, value.value.month)[1]
+        )
         return first, last
     if value.precision == DatePrecision.YEAR:
         return date(value.value.year, 1, 1), date(value.value.year, 12, 31)
+    return None
+
+
+def _calendar_bound_truth(
+    event_bounds: tuple[date, date],
+    anchor_bounds: tuple[date, date],
+    direction: str,
+    quantity: TimeQuantity,
+    *,
+    is_lower_bound: bool,
+) -> TruthValue:
+    """Evaluate every endpoint combination represented by partial dates.
+
+    The result is definitive only when the whole possible interval agrees. This
+    preserves calendar-month/year semantics without inventing an exact day for
+    a month-only or year-only source date.
+    """
+
+    outcomes = {
+        _calendar_bound_satisfied(
+            event_date,
+            anchor_date,
+            direction,
+            quantity,
+            is_lower_bound=is_lower_bound,
+        )
+        for event_date in event_bounds
+        for anchor_date in anchor_bounds
+    }
+    if outcomes == {True}:
+        return TruthValue.TRUE
+    if outcomes == {False}:
+        return TruthValue.FALSE
+    return TruthValue.UNKNOWN
+
+
+def _quantity_in_days(quantity: TimeQuantity | None) -> int | None:
+    if quantity is None:
+        return None
+    if quantity.unit == TimeUnit.DAY:
+        return quantity.value
+    if quantity.unit == TimeUnit.WEEK:
+        return quantity.value * 7
     return None
 
 
@@ -184,19 +324,42 @@ def _evaluate_time(
     constraint = expression.time_constraint
     if constraint is None:
         return _result(TruthValue.TRUE, used_fact_ids=[fact.fact_id])
-    event_bounds = _date_bounds(fact.effective_date, allow_partial=constraint.allow_partial_date)
-    anchor_bounds = _date_bounds(
-        context.anchor_dates.get(constraint.anchor_type),
-        allow_partial=constraint.allow_partial_date,
-    )
-    if event_bounds is None or anchor_bounds is None:
+    event_value = fact.effective_date
+    anchor_value = context.anchor_dates.get(constraint.anchor_type)
+    if (
+        event_value is None
+        or event_value.value is None
+        or anchor_value is None
+        or anchor_value.value is None
+    ):
         return _result(
             TruthValue.UNKNOWN,
             "date_or_anchor_missing",
             used_fact_ids=[fact.fact_id],
         )
+    event_bounds = _date_bounds(
+        event_value, allow_partial=constraint.allow_partial_date
+    )
+    anchor_bounds = _date_bounds(
+        anchor_value, allow_partial=constraint.allow_partial_date
+    )
+    if event_bounds is None or anchor_bounds is None:
+        return _result(
+            TruthValue.UNKNOWN,
+            "ambiguous_partial_date",
+            "ambiguous_time_window",
+            used_fact_ids=[fact.fact_id],
+        )
     event_min, event_max = event_bounds
     anchor_min, anchor_max = anchor_bounds
+    partial_reason_codes = (
+        ("ambiguous_time_window", "ambiguous_partial_date")
+        if (
+            event_value.precision != DatePrecision.DAY
+            or anchor_value.precision != DatePrecision.DAY
+        )
+        else ("ambiguous_time_window",)
+    )
     if constraint.direction == "before":
         distance_min = (anchor_min - event_max).days
         distance_max = (anchor_max - event_min).days
@@ -207,14 +370,33 @@ def _evaluate_time(
         if event_min == event_max == anchor_min == anchor_max:
             return _result(TruthValue.TRUE, used_fact_ids=[fact.fact_id])
         if event_max < anchor_min or anchor_max < event_min:
-            return _result(TruthValue.FALSE, "outside_time_window", used_fact_ids=[fact.fact_id])
-        return _result(TruthValue.UNKNOWN, "ambiguous_partial_date", used_fact_ids=[fact.fact_id])
+            return _result(
+                TruthValue.FALSE,
+                "outside_time_window",
+                used_fact_ids=[fact.fact_id],
+            )
+        return _result(
+            TruthValue.UNKNOWN,
+            "ambiguous_partial_date",
+            used_fact_ids=[fact.fact_id],
+        )
     if distance_max < 0:
         return _result(TruthValue.FALSE, "wrong_time_direction", used_fact_ids=[fact.fact_id])
     if distance_min < 0 <= distance_max:
         return _result(TruthValue.UNKNOWN, "ambiguous_time_direction", used_fact_ids=[fact.fact_id])
 
     lower_bound = constraint.lower_bound_days
+    lower_quantity_days = _quantity_in_days(constraint.lower_bound)
+    if lower_quantity_days is not None:
+        lower_bound = max(lower_bound or 0, lower_quantity_days)
+    upper_bound = constraint.upper_bound_days
+    upper_quantity_days = _quantity_in_days(constraint.upper_bound)
+    if upper_quantity_days is not None:
+        upper_bound = (
+            upper_quantity_days
+            if upper_bound is None
+            else min(upper_bound, upper_quantity_days)
+        )
     if constraint.half_life_multiplier is not None:
         fact_type = f"{expression.predicate.subject}.{expression.predicate.attribute}"
         half_life = context.half_life_days.get(fact_type)
@@ -227,11 +409,57 @@ def _evaluate_time(
             return _result(TruthValue.FALSE, "below_time_window", used_fact_ids=[fact.fact_id])
         if distance_min < lower_bound <= distance_max:
             return _result(TruthValue.UNKNOWN, "ambiguous_time_window", used_fact_ids=[fact.fact_id])
-    if constraint.upper_bound_days is not None:
-        if distance_min > constraint.upper_bound_days:
+    if upper_bound is not None:
+        if distance_min > upper_bound:
             return _result(TruthValue.FALSE, "above_time_window", used_fact_ids=[fact.fact_id])
-        if distance_min <= constraint.upper_bound_days < distance_max:
+        if distance_min <= upper_bound < distance_max:
             return _result(TruthValue.UNKNOWN, "ambiguous_time_window", used_fact_ids=[fact.fact_id])
+    if constraint.lower_bound is not None and constraint.lower_bound.unit in {
+        TimeUnit.MONTH,
+        TimeUnit.YEAR,
+    }:
+        lower_truth = _calendar_bound_truth(
+            event_bounds,
+            anchor_bounds,
+            constraint.direction.value,
+            constraint.lower_bound,
+            is_lower_bound=True,
+        )
+        if lower_truth == TruthValue.FALSE:
+            return _result(
+                TruthValue.FALSE,
+                "below_time_window",
+                used_fact_ids=[fact.fact_id],
+            )
+        if lower_truth == TruthValue.UNKNOWN:
+            return _result(
+                TruthValue.UNKNOWN,
+                *partial_reason_codes,
+                used_fact_ids=[fact.fact_id],
+            )
+    if constraint.upper_bound is not None and constraint.upper_bound.unit in {
+        TimeUnit.MONTH,
+        TimeUnit.YEAR,
+    }:
+        upper_truth = _calendar_bound_truth(
+            event_bounds,
+            anchor_bounds,
+            constraint.direction.value,
+            constraint.upper_bound,
+            is_lower_bound=False,
+        )
+        if upper_truth == TruthValue.FALSE:
+            return _result(
+                TruthValue.FALSE,
+                "above_time_window",
+                used_fact_ids=[fact.fact_id],
+            )
+        if upper_truth == TruthValue.UNKNOWN:
+            return _result(
+                TruthValue.UNKNOWN,
+                *partial_reason_codes,
+                used_fact_ids=[fact.fact_id],
+            )
     return _result(TruthValue.TRUE, used_fact_ids=[fact.fact_id])
 
 

@@ -489,6 +489,69 @@ def test_same_table_cell_inherits_nearest_phase_or_shared_criteria_lead_in() -> 
     assert bare_by_ref["body.t1.r0.c0.p1"].phase_scopes == [PhaseScope.SHARED]
 
 
+def test_visit_table_inherits_single_phase_from_its_structural_heading() -> None:
+    blocks = [
+        _block("body.p0", "表 1 Ⅱ期临床研究阶段流程表", 0),
+        _block("body.t0", "", 1),
+        _block("body.t0.r0.c0.p0", "访视", 2, table_path=(0, 0)),
+        _block("body.t0.r0.c1.p0", "筛选", 3, table_path=(0, 1)),
+        _block("body.t0.r1.c0.p0", "入排标准审核", 4, table_path=(1, 0)),
+        _block("body.t0.r1.c1.p0", "X", 5, table_path=(1, 1)),
+    ]
+
+    graph = build_phase_applicability_graph(blocks, snapshot_id="phase-heading-table").graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+
+    assert atomic["body.t0.r1.c0.p0"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.t0.r1.c1.p0"].phase_scopes == [PhaseScope.PHASE_II]
+    phase_ii_refs = {
+        item.source_ref for item in project_single_phase(graph, StudyPhase.PHASE_II).blocks
+    }
+    assert "body.t0.c1" in phase_ii_refs
+    assert not any(
+        item.phase_scopes == [PhaseScope.PHASE_III] for item in graph.blocks
+    )
+
+
+def test_visit_table_for_both_phases_is_shared_without_cross_phase_noise() -> None:
+    blocks = [
+        _block("body.p0", "研究日程表（Ⅱ期/Ⅲ期）", 0),
+        _block("body.t0", "", 1),
+        _block("body.t0.r0.c0.p0", "访视", 2, table_path=(0, 0)),
+        _block("body.t0.r0.c1.p0", "基线", 3, table_path=(0, 1)),
+        _block("body.t0.r1.c0.p0", "入排标准审核", 4, table_path=(1, 0)),
+        _block("body.t0.r1.c1.p0", "X", 5, table_path=(1, 1)),
+    ]
+
+    graph = build_phase_applicability_graph(blocks, snapshot_id="shared-heading-table").graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+
+    assert atomic["body.t0.r1.c0.p0"].phase_scopes == [PhaseScope.SHARED]
+    assert atomic["body.t0.r1.c1.p0"].phase_scopes == [PhaseScope.SHARED]
+    for selected in (StudyPhase.PHASE_II, StudyPhase.PHASE_III):
+        projection = project_single_phase(graph, selected)
+        assert "body.t0.c1" in {item.source_ref for item in projection.blocks}
+        assert all("与另一研究期别" not in (item.projection_text or "") for item in projection.blocks)
+
+
+def test_nearby_phase_narrative_does_not_retag_following_visit_table() -> None:
+    blocks = [
+        _block("body.p0", "Ⅱ期受试者完成后将进行阶段性分析。", 0),
+        _block("body.p1", "受试者访视安排说明", 1),
+        _block("body.t0", "", 2),
+        _block("body.t0.r0.c0.p0", "访视", 3, table_path=(0, 0)),
+        _block("body.t0.r0.c1.p0", "筛选", 4, table_path=(0, 1)),
+        _block("body.t0.r1.c0.p0", "入排标准审核", 5, table_path=(1, 0)),
+        _block("body.t0.r1.c1.p0", "X", 6, table_path=(1, 1)),
+    ]
+
+    graph = build_phase_applicability_graph(blocks, snapshot_id="narrative-table").graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+
+    assert atomic["body.t0.r1.c0.p0"].phase_scopes == [PhaseScope.UNKNOWN]
+    assert atomic["body.t0.r1.c1.p0"].phase_scopes == [PhaseScope.UNKNOWN]
+
+
 def test_single_phase_common_wording_does_not_leak_and_projection_text_is_derived_only() -> None:
     blocks = [
         _block("body.p0", "Ⅲ期共同适用标准", 0),

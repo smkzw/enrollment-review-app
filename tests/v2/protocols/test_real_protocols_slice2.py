@@ -211,6 +211,19 @@ def test_real_protocol_metadata_phase_is_read_only(
         assert all(block.phase_scopes == [PhaseScope.SHARED] for block in shared_exclusion)
         projected_ids = {block.block_id for block in projection.blocks}
         assert all(block.block_id in projected_ids for block in shared_exclusion)
+        flow_blocks = [
+            block
+            for block in projection.blocks
+            if block.is_aggregate and block.source_ref.startswith("body.t3.c")
+        ]
+        assert len(flow_blocks) == 9
+        assert all(block.phase_scopes == [PhaseScope.SHARED] for block in flow_blocks)
+    if label == "CMS-D001":
+        projected_refs = {
+            block.source_ref for block in projection.blocks if block.is_aggregate
+        }
+        assert len([ref for ref in projected_refs if ref.startswith("body.t5.c")]) == 10
+        assert not any(ref.startswith("body.t6.") for ref in projected_refs)
     for block in projection.blocks:
         if block.is_aggregate:
             child_ids = set(block.child_block_ids)

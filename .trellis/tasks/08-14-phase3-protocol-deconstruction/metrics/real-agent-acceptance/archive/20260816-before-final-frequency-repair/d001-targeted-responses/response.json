@@ -1,0 +1,156 @@
+{
+  "candidate_id": "phase3-acceptance-d001-ii-identity",
+  "schema_version": "fixture/v1",
+  "replacement_rules": [
+    {
+      "official_code": "EX-04",
+      "components": [
+        {
+          "title": "严重带状疱疹或严重单纯疱疹既往史或单纯疱疹、带状疱疹感染现病史",
+          "expression": {
+            "kind": "logical",
+            "operator": "any",
+            "children": [
+              {
+                "kind": "logical",
+                "operator": "any",
+                "children": [
+                  {
+                    "kind": "predicate",
+                    "predicate": {
+                      "predicate_id": "ex04_disseminated",
+                      "subject": "播散型带状疱疹",
+                      "attribute": "存在既往史",
+                      "comparator": "eq",
+                      "value": true,
+                      "source_clauses": [
+                        "有严重带状疱疹或严重单纯疱疹既往史",
+                        "播散型带状疱疹"
+                      ]
+                    },
+                    "time_constraint": null
+                  },
+                  {
+                    "kind": "predicate",
+                    "predicate": {
+                      "predicate_id": "ex04_generalized",
+                      "subject": "泛发型带状疱疹",
+                      "attribute": "存在既往史",
+                      "comparator": "eq",
+                      "value": true,
+                      "source_clauses": [
+                        "有严重带状疱疹或严重单纯疱疹既往史",
+                        "泛发型带状疱疹"
+                      ]
+                    },
+                    "time_constraint": null
+                  },
+                  {
+                    "kind": "predicate",
+                    "predicate": {
+                      "predicate_id": "ex04_cns",
+                      "subject": "中枢神经系统带状疱疹",
+                      "attribute": "存在既往史",
+                      "comparator": "eq",
+                      "value": true,
+                      "source_clauses": [
+                        "有严重带状疱疹或严重单纯疱疹既往史",
+                        "中枢神经系统带状疱疹"
+                      ]
+                    },
+                    "time_constraint": null
+                  },
+                  {
+                    "kind": "predicate",
+                    "predicate": {
+                      "predicate_id": "ex04_ophthalmic",
+                      "subject": "眼带状疱疹",
+                      "attribute": "存在既往史",
+                      "comparator": "eq",
+                      "value": true,
+                      "source_clauses": [
+                        "有严重带状疱疹或严重单纯疱疹既往史",
+                        "眼带状疱疹"
+                      ]
+                    },
+                    "time_constraint": null
+                  },
+                  {
+                    "kind": "predicate",
+                    "predicate": {
+                      "predicate_id": "ex04_recurrent",
+                      "subject": "复发性带状疱疹",
+                      "attribute": "发生次数",
+                      "comparator": "gte",
+                      "value": 2,
+                      "unit": "次",
+                      "occurrence_window": {
+                        "duration": {
+                          "value": 2,
+                          "unit": "year"
+                        },
+                        "minimum_count": 2
+                      },
+                      "source_clauses": [
+                        "有严重带状疱疹或严重单纯疱疹既往史",
+                        "复发性带状疱疹（2年内发生2次或以上）"
+                      ]
+                    },
+                    "time_constraint": null
+                  }
+                ]
+              },
+              {
+                "kind": "predicate",
+                "predicate": {
+                  "predicate_id": "ex04_herpes_simplex_history",
+                  "subject": "严重单纯疱疹",
+                  "attribute": "存在既往史",
+                  "comparator": "eq",
+                  "value": true,
+                  "source_clauses": [
+                    "有严重带状疱疹或严重单纯疱疹既往史",
+                    "严重单纯疱疹"
+                  ]
+                },
+                "time_constraint": null
+              },
+              {
+                "kind": "predicate",
+                "predicate": {
+                  "predicate_id": "ex04_active_infection",
+                  "subject": "参与者",
+                  "attribute": "有单纯疱疹、带状疱疹感染现病史",
+                  "comparator": "eq",
+                  "value": true,
+                  "source_clause": "有单纯疱疹、带状疱疹感染现病史"
+                },
+                "time_constraint": null
+              }
+            ]
+          },
+          "evidence_requirements": [
+            {
+              "fact_type": "既往感染史和现感染史记录",
+              "due_stage": "screening",
+              "description": "需评估是否存在严重带状疱疹/严重单纯疱疹既往史或单纯疱疹/带状疱疹感染现病史"
+            }
+          ],
+          "source_span_ids": [
+            "phase3-acceptance-d001-ii-snapshot::body.p644"
+          ],
+          "source_excerpts": [
+            "有严重带状疱疹或严重单纯疱疹既往史",
+            "播散型带状疱疹",
+            "泛发型带状疱疹",
+            "中枢神经系统带状疱疹",
+            "眼带状疱疹",
+            "复发性带状疱疹（2年内发生2次或以上）",
+            "有单纯疱疹、带状疱疹感染现病史"
+          ],
+          "exception_expression": null
+        }
+      ]
+    }
+  ]
+}

@@ -48,7 +48,7 @@ from .ingestion import (
 )
 
 PARSER_NAME = "docx-ooxml"
-PARSER_VERSION = "1.2.0"
+PARSER_VERSION = "1.3.0"
 
 # OOXML 限定名
 _W_P = qn("w:p")
@@ -56,6 +56,9 @@ _W_TBL = qn("w:tbl")
 _W_TR = qn("w:tr")
 _W_TC = qn("w:tc")
 _W_T = qn("w:t")
+_W_R = qn("w:r")
+_W_RPR = qn("w:rPr")
+_W_VERT_ALIGN = qn("w:vertAlign")
 _W_TAB = qn("w:tab")
 _W_BR = qn("w:br")
 _W_CR = qn("w:cr")
@@ -171,15 +174,33 @@ def _int_attr(element, attr_qname: str) -> int | None:
 
 
 def _para_text(p_el) -> str:
-    """按阅读顺序提取段落文本：``w:t`` 文本 + 制表符 + 换行。"""
+    """按阅读顺序提取文本，并保留上下标这一临床数值语义。"""
     parts: list[str] = []
+    active_script: str | None = None
     for node in p_el.iter():
         if node.tag == _W_T:
+            run = node.getparent()
+            while run is not None and run.tag != _W_R:
+                run = run.getparent()
+            script: str | None = None
+            if run is not None:
+                rpr = run.find(_W_RPR)
+                vert_align = rpr.find(_W_VERT_ALIGN) if rpr is not None else None
+                value = vert_align.get(_W_VAL) if vert_align is not None else None
+                if value == "superscript":
+                    script = "^"
+                elif value == "subscript":
+                    script = "_"
+            if script is not None and script != active_script:
+                parts.append(script)
             parts.append(node.text or "")
+            active_script = script
         elif node.tag == _W_TAB:
             parts.append("\t")
+            active_script = None
         elif node.tag in (_W_BR, _W_CR):
             parts.append("\n")
+            active_script = None
     return "".join(parts)
 
 

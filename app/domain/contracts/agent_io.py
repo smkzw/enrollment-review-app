@@ -3,8 +3,9 @@ from __future__ import annotations
 from pydantic import Field, model_validator
 
 from .agents import AgentCallContract, CriticRun, GateResult, ModelConfigContract, PromptVersion
-from .common import VersionedModel
+from .common import ContractModel, VersionedModel
 from .evidence import EvidenceExpectation, EvidenceSpan
+from .enums import CatalogKind, MetadataResolutionStatus, ReviewStage, StudyPhase
 from .normalization import (
     ClinicalEventCandidate,
     CoverageSummary,
@@ -14,7 +15,15 @@ from .normalization import (
     UnresolvedItem,
 )
 from .review import AssessmentCandidate
-from .rules import EvidenceRequirement, Rule, RuleComponent, WorkflowStage
+from .rules import (
+    EvidenceRequirement,
+    Rule,
+    RuleComponent,
+    RuleExpression,
+    WorkflowStage,
+)
+from .protocol_ingestion import FrozenProtocolCatalog
+from .protocol_metadata import ProtocolIdentityDecision, StudyPhaseSelection
 
 
 class ProtocolMetadataDraft(VersionedModel):
@@ -31,36 +40,212 @@ class RuleComponentDraft(VersionedModel):
     parent_official_code: str = Field(min_length=1)
     proposed_component: RuleComponent
     source_refs: list[str] = Field(min_length=1)
+    source_excerpts: list[str] = Field(default_factory=list)
 
 
 class EvidenceRequirementDraft(VersionedModel):
     draft_requirement_id: str = Field(min_length=1)
-    draft_component_id: str = Field(min_length=1)
+    draft_component_id: str | None = Field(default=None, min_length=1)
+    procedure_catalog_item_id: str | None = Field(default=None, min_length=1)
     proposed_requirement: EvidenceRequirement
     source_refs: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_requirement_origin(self) -> "EvidenceRequirementDraft":
+        if (self.draft_component_id is None) == (
+            self.procedure_catalog_item_id is None
+        ):
+            raise ValueError("资料要求草稿必须且只能绑定子规则或流程必做项目之一")
+        if (
+            self.procedure_catalog_item_id is not None
+            and self.proposed_requirement.procedure_catalog_item_id
+            != self.procedure_catalog_item_id
+        ):
+            raise ValueError("流程资料要求草稿与必做项目目录项不一致")
+        return self
+
+
+class ParentRuleCatalogMapping(VersionedModel):
+    """One frozen official parent rule mapped to exactly one proposed Rule."""
+
+    catalog_item_id: str = Field(min_length=1)
+    proposed_rule_id: str = Field(min_length=1)
+    source_span_ids: list[str] = Field(min_length=1)
+
+
+class ProcedureCatalogMapping(VersionedModel):
+    """One frozen visit-operation instance mapped into the draft workflow."""
+
+    catalog_item_id: str = Field(min_length=1)
+    proposed_requirement_ids: list[str] = Field(min_length=1)
+    proposed_workflow_stage_id: str = Field(min_length=1)
+    source_span_ids: list[str] = Field(min_length=1)
+
+
+class ProtocolSourceMaterial(VersionedModel):
+    """One selected-phase source block supplied to the semantic Agent."""
+
+    source_span_id: str = Field(min_length=1)
+    source_ref: str = Field(min_length=1)
+    block_order: int = Field(ge=0)
+    text: str = Field(min_length=1)
+    projection_text: str | None = None
+
+
+class SemanticEvidenceRequirement(ContractModel):
+    fact_type: str = Field(min_length=1)
+    required_source_types: list[str] = Field(default_factory=list)
+    allows_screening_record_transcription: bool = True
+    requires_contemporaneous_objective_source: bool = False
+    due_stage: ReviewStage
+    description: str = Field(min_length=1)
+
+
+class SemanticRuleComponent(ContractModel):
+    title: str = Field(min_length=1)
+    expression: RuleExpression
+    exception_expression: RuleExpression | None = None
+    evidence_requirements: list[SemanticEvidenceRequirement] = Field(min_length=1)
+    source_span_ids: list[str] = Field(min_length=1)
+    source_excerpts: list[str] = Field(min_length=1)
+
+
+class SemanticRule(ContractModel):
+    official_code: str = Field(pattern=r"^(IN|EX)-\d{2}$")
+    components: list[SemanticRuleComponent] = Field(min_length=1)
 
 
 class ProtocolDeconstructionInput(VersionedModel):
     project_id: str = Field(min_length=1)
     protocol_version_id: str = Field(min_length=1)
     protocol_file_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    source_page_refs: list[str] = Field(min_length=1)
+    extraction_snapshot_id: str = Field(min_length=1)
+    phase_projection_id: str = Field(min_length=1)
+    selected_phase: StudyPhase
+    identity_decision: ProtocolIdentityDecision
+    phase_selection: StudyPhaseSelection
+    allowed_source_span_ids: list[str] = Field(min_length=1)
+    source_materials: list[ProtocolSourceMaterial] = Field(min_length=1)
+    parent_rule_catalog: FrozenProtocolCatalog
+    required_procedure_catalog: FrozenProtocolCatalog
     interpretation_source_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_frozen_scope(self) -> "ProtocolDeconstructionInput":
+        if self.selected_phase == StudyPhase.OTHER:
+            raise ValueError("方案解构必须使用已确认的明确研究期别")
+        if (
+            self.identity_decision.status != MetadataResolutionStatus.CONFIRMED
+            or self.identity_decision.snapshot_id != self.extraction_snapshot_id
+            or self.identity_decision.study_phase != self.selected_phase
+        ):
+            raise ValueError("方案解构输入必须绑定本次快照已确认的方案身份和期别")
+        if (
+            self.phase_selection.status != MetadataResolutionStatus.CONFIRMED
+            or self.phase_selection.snapshot_id != self.extraction_snapshot_id
+            or self.phase_selection.selected_phase != self.selected_phase
+        ):
+            raise ValueError("方案解构输入必须绑定已确认的单一期别选择")
+        catalogs = (self.parent_rule_catalog, self.required_procedure_catalog)
+        expected_kinds = (
+            CatalogKind.OFFICIAL_PARENT_RULES,
+            CatalogKind.REQUIRED_PROCEDURES,
+        )
+        allowed = set(self.allowed_source_span_ids)
+        if len(allowed) != len(self.allowed_source_span_ids):
+            raise ValueError("允许的方案来源片段不得重复")
+        material_ids = [item.source_span_id for item in self.source_materials]
+        if len(material_ids) != len(set(material_ids)):
+            raise ValueError("发送给方案解构的原文材料不得重复")
+        if set(material_ids) != allowed:
+            raise ValueError("允许引用的来源片段必须与实际发送的单期原文材料完全一致")
+        for catalog, expected_kind in zip(catalogs, expected_kinds, strict=True):
+            if catalog.catalog_kind != expected_kind:
+                raise ValueError("方案解构输入的冻结目录类型不匹配")
+            if catalog.study_phase != self.selected_phase:
+                raise ValueError("冻结目录期别必须与本次解构期别一致")
+            if catalog.snapshot_id != self.extraction_snapshot_id:
+                raise ValueError("冻结目录必须来自本次提取快照")
+            catalog_spans = {
+                span_id for item in catalog.items for span_id in item.source_span_ids
+            }
+            if not catalog_spans <= allowed:
+                raise ValueError("冻结目录引用了本次单期投影之外的来源片段")
+        return self
 
 
 class ProtocolDeconstructionDraft(VersionedModel):
     draft_id: str = Field(min_length=1)
     project_id: str = Field(min_length=1)
     protocol_version_id: str = Field(min_length=1)
+    selected_phase: StudyPhase
+    draft_revision: int = Field(ge=1)
+    previous_draft_id: str | None = None
     proposed_rules: list[Rule]
     proposed_workflow_stages: list[WorkflowStage]
     protocol_metadata: ProtocolMetadataDraft
     component_drafts: list[RuleComponentDraft]
     evidence_requirement_drafts: list[EvidenceRequirementDraft]
+    parent_catalog_mappings: list[ParentRuleCatalogMapping]
+    procedure_catalog_mappings: list[ProcedureCatalogMapping]
     coverage: CoverageSummary
+    structural_warnings: list[UnresolvedItem] = Field(default_factory=list)
     unresolved_items: list[UnresolvedItem] = Field(default_factory=list)
     source_refs: list[str] = Field(min_length=1)
     created_by_agent_call_id: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_mapping_identity(self) -> "ProtocolDeconstructionDraft":
+        if self.selected_phase == StudyPhase.OTHER:
+            raise ValueError("方案解构草稿必须绑定明确研究期别")
+        if self.draft_revision == 1 and self.previous_draft_id is not None:
+            raise ValueError("首稿不能引用前序草稿")
+        if self.draft_revision > 1 and not self.previous_draft_id:
+            raise ValueError("修订稿必须引用前序草稿")
+        for name, values in (
+            (
+                "父规则目录映射",
+                [item.catalog_item_id for item in self.parent_catalog_mappings],
+            ),
+            (
+                "必做项目录映射",
+                [item.catalog_item_id for item in self.procedure_catalog_mappings],
+            ),
+        ):
+            if len(values) != len(set(values)):
+                raise ValueError(f"{name}不得重复")
+        return self
+
+
+class ProtocolSemanticDeconstructionCandidate(VersionedModel):
+    """Lean Agent output containing only non-deterministic rule semantics."""
+
+    candidate_id: str = Field(min_length=1)
+    proposed_rules: list[SemanticRule] = Field(min_length=1)
+    structural_warnings: list[UnresolvedItem] = Field(default_factory=list)
+    unresolved_items: list[UnresolvedItem] = Field(default_factory=list)
+    created_by_agent_call_id: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_component_source_coverage(self) -> "ProtocolSemanticDeconstructionCandidate":
+        codes = [rule.official_code for rule in self.proposed_rules]
+        if len(codes) != len(set(codes)):
+            raise ValueError("语义草稿中的官方父规则编号不得重复")
+        return self
+
+
+class ProtocolSemanticRuleRepair(VersionedModel):
+    """Same-session replacement for only the parent rules named by the gate."""
+
+    candidate_id: str = Field(min_length=1)
+    replacement_rules: list[SemanticRule] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_unique_codes(self) -> "ProtocolSemanticRuleRepair":
+        codes = [rule.official_code for rule in self.replacement_rules]
+        if len(codes) != len(set(codes)):
+            raise ValueError("局部修正中的官方父规则编号不得重复")
+        return self
 
 
 class EvidenceNormalizationInput(VersionedModel):

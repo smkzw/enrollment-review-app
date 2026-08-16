@@ -1,0 +1,41 @@
+{
+  "allowed_source_total": 100,
+  "build_seconds": 8.935,
+  "identity": {
+    "confirmation_required": false,
+    "confirmed_at": "2026-08-15T17:28:27.343365Z",
+    "confirmed_by": "deterministic-resolver",
+    "conflict_ids": [],
+    "identity_decision_id": "phase3-acceptance-mg-iii-identity",
+    "official_date": {
+      "precision": "day",
+      "source_text": "2025年09月19日",
+      "value": "2025-09-19"
+    },
+    "official_version": "V2.1",
+    "project_code": "MG-K10-SAR",
+    "project_name": "一项评价MG-K10人源化单抗注射液治疗季节性过敏性鼻炎的有效性、安全性、药代动力学（PK）特征、药效动力学（PD）特征和免疫原性的多中心、随机、双盲、安慰剂对照的Ⅱ/Ⅲ期操作无缝临床研究",
+    "protocol_code": "MG-K10-SAR-001",
+    "resolved_conflict_ids": [],
+    "schema_version": "fixture/v1",
+    "selected_candidate_ids": [
+      "metadata-46c11c26f4524a8a3811",
+      "metadata-14a4f231e24c7674af57",
+      "metadata-2be963094b003b031c24"
+    ],
+    "snapshot_id": "phase3-acceptance-mg-iii-snapshot",
+    "status": "confirmed",
+    "study_phase": "phase_iii"
+  },
+  "parent_counts": {
+    "EX": 16,
+    "IN": 7
+  },
+  "parent_total": 23,
+  "phase": "phase_iii",
+  "procedure_total": 41,
+  "prompt_payload_characters": 53951,
+  "protocol": "mg-iii",
+  "source_material_total": 100,
+  "source_unchanged": true
+}

@@ -3,18 +3,39 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Literal, Union
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import AliasChoices, ConfigDict, Field, StrictInt, model_validator
 
 from .common import ContractModel, RevisionedModel, ScalarValue, VersionedModel
 from .enums import (
     AnchorType,
     Comparator,
     LogicalOperator,
+    ProtocolPeriod,
     ReviewStage,
     RuleKind,
+    StableEnum,
     StudyPhase,
     TimeDirection,
 )
+
+
+class TimeUnit(StableEnum):
+    """时间窗使用的临床日历单位。
+
+    月和年不是固定天数的别名；评估器会按日历边界处理它们。
+    """
+
+    DAY = "day"
+    WEEK = "week"
+    MONTH = "month"
+    YEAR = "year"
+
+
+class TimeQuantity(ContractModel):
+    """带单位的正整数时间数量，例如 ``3 个月``或 ``4 周``。"""
+
+    value: StrictInt = Field(gt=0)
+    unit: TimeUnit
 
 
 class TimeConstraint(ContractModel):
@@ -31,6 +52,8 @@ class TimeConstraint(ContractModel):
                         "properties": {
                             "lower_bound_days": {"type": "null"},
                             "upper_bound_days": {"type": "null"},
+                            "lower_bound": {"type": "null"},
+                            "upper_bound": {"type": "null"},
                             "half_life_multiplier": {"type": "null"},
                         }
                     },
@@ -42,15 +65,34 @@ class TimeConstraint(ContractModel):
     direction: TimeDirection
     lower_bound_days: int | None = Field(default=None, ge=0)
     upper_bound_days: int | None = Field(default=None, ge=0)
+    lower_bound: TimeQuantity | None = Field(
+        default=None,
+        validation_alias=AliasChoices("lower_bound", "lower_bound_quantity"),
+    )
+    upper_bound: TimeQuantity | None = Field(
+        default=None,
+        validation_alias=AliasChoices("upper_bound", "upper_bound_quantity"),
+    )
     half_life_multiplier: float | None = Field(default=None, gt=0)
     allow_partial_date: bool = False
 
     @model_validator(mode="after")
     def validate_window(self) -> "TimeConstraint":
+        if self.lower_bound_days is not None and self.lower_bound is not None:
+            raise ValueError("时间窗下界不能同时使用 lower_bound_days 和带单位数量")
+        if self.upper_bound_days is not None and self.upper_bound is not None:
+            raise ValueError("时间窗上界不能同时使用 upper_bound_days 和带单位数量")
         if (
             self.lower_bound_days is not None
             and self.upper_bound_days is not None
             and self.lower_bound_days > self.upper_bound_days
+        ):
+            raise ValueError("时间窗下界不能大于上界")
+        if (
+            self.lower_bound is not None
+            and self.upper_bound is not None
+            and self.lower_bound.unit == self.upper_bound.unit
+            and self.lower_bound.value > self.upper_bound.value
         ):
             raise ValueError("时间窗下界不能大于上界")
         if self.direction == TimeDirection.ON and any(
@@ -58,26 +100,79 @@ class TimeConstraint(ContractModel):
             for value in (
                 self.lower_bound_days,
                 self.upper_bound_days,
+                self.lower_bound,
+                self.upper_bound,
                 self.half_life_multiplier,
             )
         ):
             raise ValueError("on 仅表示与锚点同一日，不能携带时间窗或半衰期参数")
         return self
 
+    @property
+    def lower_bound_quantity(self) -> TimeQuantity | None:
+        """兼容调用方对新带单位下界的显式命名。"""
+
+        return self.lower_bound
+
+    @property
+    def upper_bound_quantity(self) -> TimeQuantity | None:
+        """兼容调用方对新带单位上界的显式命名。"""
+
+        return self.upper_bound
+
+
+class OccurrenceWindow(ContractModel):
+    """Rolling duration used by frequency definitions."""
+
+    duration: TimeQuantity
+    minimum_count: int | None = Field(default=None, gt=0)
+
+
+class ProspectiveWindow(ContractModel):
+    """Future horizon anchored to a named protocol milestone."""
+
+    anchor_type: AnchorType
+    upper_bound: TimeQuantity
+
+    @model_validator(mode="after")
+    def validate_future_anchor(self) -> "ProspectiveWindow":
+        if self.anchor_type not in {
+            AnchorType.LAST_DOSE_DATE,
+            AnchorType.STUDY_COMPLETION_DATE,
+        }:
+            raise ValueError("未来计划窗只允许末次给药日或研究完成日")
+        return self
+
+
+class ProspectivePeriod(ContractModel):
+    """Named protocol interval used by a future plan or intended action."""
+
+    period: ProtocolPeriod
+
 
 class AtomicPredicate(ContractModel):
     predicate_id: str = Field(min_length=1)
     subject: str = Field(min_length=1)
     attribute: str = Field(min_length=1)
+    source_term: str | None = Field(default=None, min_length=1)
+    source_clause: str | None = Field(default=None, min_length=1)
+    source_clauses: list[str] = Field(default_factory=list)
     comparator: Comparator
     value: ScalarValue | list[ScalarValue] | None = None
     unit: str | None = None
     applicable_population: str | None = None
     requires_professional_judgment: bool = False
+    occurrence_window: OccurrenceWindow | None = None
+    prospective_window: ProspectiveWindow | None = None
+    prospective_period: ProspectivePeriod | None = None
     unit_match_policy: Literal["exact_canonical_label"] = "exact_canonical_label"
 
     @model_validator(mode="after")
     def validate_comparator_value(self) -> "AtomicPredicate":
+        if self.source_clause and self.source_clauses:
+            raise ValueError("原子条件不能同时使用单段和多段原文定位")
+        if len(self.source_clauses) != len(set(self.source_clauses)):
+            raise ValueError("原子条件的多段原文定位不得重复")
         if self.comparator == "exists" and self.value is not None:
             raise ValueError("exists 比较器不接受 value")
         if self.comparator != "exists" and self.value is None:
@@ -94,7 +189,28 @@ class AtomicPredicate(ContractModel):
         )
         if has_numeric_value and not self.unit:
             raise ValueError("数值谓词必须声明单位；无量纲值显式使用 unitless")
+        if self.occurrence_window is not None:
+            direct_count = has_numeric_value and self.unit == "次"
+            occurrence_day_count = has_numeric_value and self.unit in {
+                "天",
+                "日",
+                "day",
+                "days",
+            }
+            nested_definition = self.occurrence_window.minimum_count is not None
+            if not direct_count and not occurrence_day_count and not nested_definition:
+                raise ValueError(
+                    "频率窗口必须与带‘次’或发生天数单位的数值谓词配套，或声明括号定义的最小次数"
+                )
         return self
+
+    @property
+    def exact_source_clauses(self) -> list[str]:
+        """Return exact fragments without pretending they are contiguous prose."""
+
+        if self.source_clauses:
+            return list(self.source_clauses)
+        return [self.source_clause] if self.source_clause else []
 
 
 class AtomicExpression(ContractModel):
@@ -132,13 +248,22 @@ def iter_atomic_predicates(expression: RuleExpression):
 
 class EvidenceRequirement(VersionedModel):
     requirement_id: str = Field(min_length=1)
-    rule_component_id: str = Field(min_length=1)
+    rule_component_id: str | None = Field(default=None, min_length=1)
+    procedure_catalog_item_id: str | None = Field(default=None, min_length=1)
     fact_type: str = Field(min_length=1)
     required_source_types: list[str] = Field(default_factory=list)
     allows_screening_record_transcription: bool = True
     requires_contemporaneous_objective_source: bool = False
     due_stage: ReviewStage
     description: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_requirement_origin(self) -> "EvidenceRequirement":
+        if (self.rule_component_id is None) == (
+            self.procedure_catalog_item_id is None
+        ):
+            raise ValueError("资料要求必须且只能绑定子规则或流程必做项目之一")
+        return self
 
 
 class RuleComponent(VersionedModel):

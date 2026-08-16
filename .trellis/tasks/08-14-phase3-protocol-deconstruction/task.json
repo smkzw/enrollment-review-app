@@ -28,10 +28,11 @@
     "app/domain/contracts/agent_io.py",
     "frontend/src/pages/ProtocolsPage.tsx"
   ],
-  "notes": "2026-08-14 用户已批准并启动实施。切片1完成不可变方案/来源基座；切片2完成元信息权威层、模板/正式字段分离、细粒度期别适用图、严格单期投影和解释材料边界。真实MG/D001与全仓530项测试通过，独立审查最终ACCEPT。下一步为切片3页定位恢复spike、官方目录、Protocol Deconstructor与确定性检查。",
+  "notes": "2026-08-16 Phase 3 切片 3 已完成并经独立终局审查 ACCEPT。MG III 为 IN7/EX16/必做41，保留唯一诚实的 EX-07w 回溯起点歧义；D001 II 为 IN6/EX30/必做50且全部门禁通过。已关闭频次窗口、流程/证据反向覆盖、括号例外、未来期间、多片段时间限定、空正文及持久会话恢复等共享根因。全仓687项通过、1项遗留OCR缓存条件跳过。父任务保持进行中，未进入切片4。",
   "meta": {
-    "completed_slice": "2",
-    "next_slice": "3",
-    "last_checkpoint": "2026-08-14T23:50:00+08:00"
+    "completed_slice": "3",
+    "next_slice": "4",
+    "slice3_checkpoint": "accepted-real-protocol-deconstruction",
+    "last_checkpoint": "2026-08-16T08:40:00+08:00"
   }
 }

@@ -62,6 +62,16 @@ from .phase_detection import (
     project_phase_applicability,
     project_single_phase,
 )
+from .deconstruction_service import (
+    DeconstructionInputAssemblyError,
+    ProtocolDeconstructionInputAssembler,
+    ProtocolDeconstructionInputAssemblyError,
+    ProtocolDeconstructionInputPackage,
+    ProtocolInputAssemblyError,
+    assemble_deconstruction_input_package,
+    assemble_protocol_deconstruction_input,
+    build_protocol_deconstruction_input_package,
+)
 
 __all__ = [
     "AlignmentResult",
@@ -102,4 +112,12 @@ __all__ = [
     "detect_phase_applicability",
     "project_phase_applicability",
     "project_single_phase",
+    "DeconstructionInputAssemblyError",
+    "ProtocolDeconstructionInputAssembler",
+    "ProtocolDeconstructionInputAssemblyError",
+    "ProtocolDeconstructionInputPackage",
+    "ProtocolInputAssemblyError",
+    "assemble_deconstruction_input_package",
+    "assemble_protocol_deconstruction_input",
+    "build_protocol_deconstruction_input_package",
 ]

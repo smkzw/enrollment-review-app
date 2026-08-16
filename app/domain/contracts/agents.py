@@ -98,6 +98,8 @@ class AgentCallContract(VersionedModel):
         if self.node == AgentNode.PROTOCOL_DECONSTRUCTOR:
             if not self.source_ids:
                 raise ValueError("方案解构 AgentCall 必须绑定方案来源")
+            if self.attempt > 1 and not self.same_session_group_id:
+                raise ValueError("方案解构的定向修复必须继续使用同一会话")
         elif not all(
             [
                 self.subject_id,

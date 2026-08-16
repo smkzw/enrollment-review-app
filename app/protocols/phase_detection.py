@@ -81,6 +81,10 @@ _VISIT_RE = re.compile(
     re.I,
 )
 _HEADING_RE = re.compile(r"阶段|研究目的|入选标准|排除标准|流程|给药|研究设计|主要终点|临床研究")
+_TABLE_APPLICABILITY_HEADING_RE = re.compile(
+    r"(?:研究)?(?:流程|日程|访视)(?:图|表)|临床研究阶段流程表",
+    re.I,
+)
 
 
 @dataclass(frozen=True)
@@ -240,6 +244,54 @@ def _table_groups(blocks: Sequence[StructureBlock]):
         key = (match.group("table"), int(match.group("row")))
         groups.setdefault(key, []).append(block)
     return groups
+
+
+def _table_heading_scopes(
+    blocks: Sequence[StructureBlock],
+) -> Mapping[str, tuple[PhaseScope, ...]]:
+    """Bind a top-level table to its nearest explicit applicability heading.
+
+    Visit matrices commonly carry the phase only in the paragraph immediately
+    before the table; their cells contain clinical operations and X marks, not
+    the words II/III. A heading naming one phase applies that phase to the
+    following table. A heading explicitly naming a shared flow/schedule table
+    for both phases applies to both as shared content, not as mixed prose.
+    """
+    ordered = sorted(blocks, key=lambda item: item.block_order)
+    top_level = [
+        block
+        for block in ordered
+        if block.document_part == DocumentPart.BODY and block.table_path is None
+    ]
+    result: dict[str, tuple[PhaseScope, ...]] = {}
+    for index, block in enumerate(top_level):
+        if not re.fullmatch(r"body\.t\d+", block.source_ref):
+            continue
+        inspected = 0
+        for candidate in reversed(top_level[:index]):
+            if re.fullmatch(r"body\.t\d+", candidate.source_ref):
+                break
+            text = _normalize(candidate.text)
+            if not text:
+                continue
+            inspected += 1
+            if inspected > 12 or candidate.section_index != block.section_index:
+                break
+            has_ii = bool(_PHASE_II_RE.search(text))
+            has_iii = bool(_PHASE_III_RE.search(text))
+            if not (has_ii or has_iii):
+                continue
+            if not _TABLE_APPLICABILITY_HEADING_RE.search(text):
+                # A nearby narrative phase mention is not table authority.
+                continue
+            if has_ii and has_iii:
+                result[block.source_ref] = (PhaseScope.SHARED,)
+            elif has_ii:
+                result[block.source_ref] = (PhaseScope.PHASE_II,)
+            else:
+                result[block.source_ref] = (PhaseScope.PHASE_III,)
+            break
+    return result
 
 
 def _table_is_visit_table(groups: Mapping[tuple[str, int], list[StructureBlock]], table: str) -> bool:
@@ -433,6 +485,7 @@ def _add_phase_candidate(
 
 def _effective_table_scopes(
     groups: Mapping[tuple[str, int], list[StructureBlock]],
+    table_heading_scopes: Mapping[str, tuple[PhaseScope, ...]],
 ) -> dict[str, tuple[tuple[PhaseScope, ...], bool]]:
     """Classify each table cell from local text plus narrow headers.
 
@@ -480,7 +533,12 @@ def _effective_table_scopes(
             if row_hint and col_hint:
                 inherited = row_hint if row_hint == col_hint else (PhaseScope.MIXED,)
             else:
-                inherited = row_hint or col_hint or (PhaseScope.UNKNOWN,)
+                inherited = (
+                    row_hint
+                    or col_hint
+                    or table_heading_scopes.get(table)
+                    or (PhaseScope.UNKNOWN,)
+                )
             result[cell.source_ref] = (inherited, False)
     return result
 
@@ -530,7 +588,7 @@ def build_phase_applicability_graph(
         )
 
     groups = _table_groups(table_blocks)
-    effective = _effective_table_scopes(groups)
+    effective = _effective_table_scopes(groups, _table_heading_scopes(blocks))
     atomic_by_ref: dict[str, PhaseApplicabilityBlock] = {}
     for cell in sorted(table_blocks, key=lambda item: (item.block_order, item.source_ref)):
         if not _normalize(cell.text):

@@ -1332,8 +1332,8 @@
       "input_revision_map": {
         "protocol-v1": 1
       },
-      "input_scope_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
-      "output_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
+      "input_scope_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
+      "output_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
       "parent_event_id": null,
       "recompute_scope": [
         "protocol-v1"
@@ -1367,8 +1367,8 @@
       "input_revision_map": {
         "ruleset-synthetic-phase-iii": 1
       },
-      "input_scope_hash": "a9ad5c4a209027491d695ea64f400df0afc378cd3f9afbece5e269c76fe4507d",
-      "output_hash": "a9ad5c4a209027491d695ea64f400df0afc378cd3f9afbece5e269c76fe4507d",
+      "input_scope_hash": "98b0e09b0631f871d74dbce4e9958d20b4c04d966631324662d61c05299c138c",
+      "output_hash": "98b0e09b0631f871d74dbce4e9958d20b4c04d966631324662d61c05299c138c",
       "parent_event_id": null,
       "recompute_scope": [
         "protocol-v1"
@@ -1470,7 +1470,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "6079d72676f89268a589fe72965029574a7a67be62a22e48fab22d4aa10eeb36",
+      "input_scope_hash": "21dd828f7ff92be61df7bb9c4fafdaa06cf945767373255dbafd413e2a3e57f8",
       "output_hash": "4ed9573f24a20808c32c383a18a86481219be0e94c099b1ec894808806cb9ac9",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1573,7 +1573,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "4ea1862837d5befdc58eac842ce70dce1943b4007e0a17fca14f41185eca1a7f",
+      "input_scope_hash": "b46b4269f4911e35660147ce0aa6d34983efb40e6126224bb74b66e24c1f06a4",
       "output_hash": "de9bb690c59b3e46ea9cc11fa7a45ae858d37c44404423af2299558278460d60",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1676,7 +1676,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "eafa0dbc00c26d3cc59909ceefcf8a42e97307a7205c36898a6aa5fad8a7b4a1",
+      "input_scope_hash": "afe9cb4fc5d01f05cd9d828b2ed701ef032ee285050777ecb8d95ad22c05e2d8",
       "output_hash": "818ce8734c87504e13a2781aec38ad97bd21365246af8122328080b9203f66b0",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1779,7 +1779,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "7d664541487495631a74ebe67b9037c638da7f22c69b752d826ff62f4c75f43b",
+      "input_scope_hash": "3367eb92ac7bc524a1281de9b79cecf6bab4e5d8d26ab551f93328a3a8872eb1",
       "output_hash": "9c2d82d0e16e8f963911fcf2ed1386af2cdaf251a792d4e0ea253c6197dd48b2",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1882,7 +1882,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "9d281222371856f0d90dcd19b4e60ca404e9329721e8d6af8beb48f099e052b7",
+      "input_scope_hash": "32255f7e0e87671b6d4b1fa990e330249b3dac1b36c301f9831ad69a21c6bd72",
       "output_hash": "e8f5bb2479759adaa83cff98628a22ae4b19b11b908f2bb338853ed2e17aadba",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1985,7 +1985,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "879d000ac2f7581de66558ac8c7b9ff38169025e770ae422be5096baf17266d4",
+      "input_scope_hash": "a0306ef92e997a829fb7a573ade8f7feab147d03e7ba17a6443a6ef4e8744a3e",
       "output_hash": "15a990b78062f019698aeef1ba7c6cf635ff4c289ba67eaedba01b76abf3e652",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2088,7 +2088,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "ff6d2706fd99df3fe226f0a4c1d9d6a28fe2d51d4592ce1780d0449241867f7a",
+      "input_scope_hash": "02c41af7290d3d5aa911c3ea37a573cb98dd3ec1276cd883baf72c8d64b0e6a2",
       "output_hash": "2bbeab9ad4ab3a7138465046b663da6341165ee2b8afabba8ac5cf6ff3738198",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2121,7 +2121,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "e3077ab875ba7cb84372215e52252d9300f8f4ec60ff12b8fe2be87a7bc920e6",
+      "input_scope_hash": "4d02aaa15fdb1618da6a8e1ba6810110f244a5f98590b5ec551d03dfd026b49e",
       "output_hash": "9d6748904367c1279c9ffd93d61a1cdf7d953d07fa71df8383d54136acd7f9ad",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2154,7 +2154,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "6797c62a65f5cb4c705f8d31cacdc53227a537771679471ab466d8e9345da4a9",
+      "input_scope_hash": "6f5d0be7ac9980e46d0e045f349f1f378e5afb43fdaf9400dcbb43b1ff82eb95",
       "output_hash": "27c294307407bb94e66f797ac551e58f68696854c327046ecaf0ef779ed53697",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2187,7 +2187,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "859026dda46f7cc5f7ae6212e1f6c413529c935364ea52adfd1f0536077b0924",
+      "input_scope_hash": "1d2b6cad9336275fdaefe6be954ee262a28e3b5bc1c294b506533e6315afc1cc",
       "output_hash": "1b834c555a2104273912feb9531993bc49eda21a5cbd1946ea2c37857bfa4388",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2220,7 +2220,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "7472271ccf6938b0db96981545fa788e439e5c2fd144bfe29ffb5f06154ed1fa",
+      "input_scope_hash": "08f59d9c23292493e8f922ae8e836d08178fa14d94a0608c428c61e487498fbf",
       "output_hash": "7298028a64c0a49d3d4b574f0da50a5e5d91812765cef2059086010fba490649",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2253,7 +2253,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "70e4b58317e3af01da1ff65a05ae60923e25ec4c6d33d21646bfec634e0d86aa",
+      "input_scope_hash": "796363d46022f2ecaf643adf849f4db12d33a0c3a2f446a9c2123dff3a3417b9",
       "output_hash": "f41dd124b4ed9d2757cfebefef7afb6662088b8b90e0aedc7cce2c1002a8d983",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2286,7 +2286,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "cd90f3dd75bce1e5c162467898d28d5b0e9cbc5a2138059c86078269a997e5ae",
+      "input_scope_hash": "abc9f9e9b09f276eb1757fa0f0a1f6fcaad8952d6a7ba66444451c3602ad6730",
       "output_hash": "f7dbae695b1b1aae18cf66be73a5bf9aee19b595a2a5e2dce4f01f34e8767d61",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2319,7 +2319,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "d96bc0798dd2a9a133098b75fd78744011a5a2aa6ab4254b8a8a2d3cb321d2cc",
+      "input_scope_hash": "2b78105d9786548e5a21908c689f184b577e76f327900ffe48c980d1cf41d9af",
       "output_hash": "29c583f66e2f3ed8957003c37e691d666dbb1e212e03eebbdc55cbead4ab7cec",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2352,7 +2352,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "55df0a7acdca13b513c2dbe74231ad2bffe764c4c00b4109533bf51412254f01",
+      "input_scope_hash": "c32e8ed408603bae7a1208abdd990772e1d8b92df76601ed3857d2bf36968719",
       "output_hash": "2c0dfa6931f3f1b599d60c25a2884d2a16f1c872a5c77db391fc983cffc28a37",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2385,7 +2385,7 @@
       "input_revision_map": {
         "episode-gap_conflict": 1
       },
-      "input_scope_hash": "94d6c3a35be48e359bf97b0b15d0a589dcb80177b3464b913704273b443c2720",
+      "input_scope_hash": "bf8af0fd3d408d6a9ea797cd618daee8faf64c9e0fed1b24549b41e1ba1987a7",
       "output_hash": "dd4750c2e42381e2dc9009053dc3dc6daa8283e37202b680123a9624f0f26a42",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2874,9 +2874,9 @@
     "protocol_version": {
       "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
       "authority_gate_result_id": "gate-authority-protocol-v1-phase-iii",
-      "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+      "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
       "integrity_gate_result_id": "gate-integrity-protocol-v1-phase-iii",
-      "integrity_manifest_sha256": "2de5fd424882bff4d484a0f849e2a0f6e249ed9d7252391f334ac19f6d498135",
+      "integrity_manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
       "official_date": {
         "precision": "day",
         "source_text": null,
@@ -2913,9 +2913,9 @@
     "action": "accept_protocol_authority",
     "actor_id": "synthetic-uat-human-acceptance",
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+    "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
     "command_id": "command-accept-protocol-v1-phase-iii",
-    "event_sha256": "ae94cdcbbb137aedd8f6176274ecc36043c2c0326f6f0cbfc001f2f0468bbda6",
+    "event_sha256": "e4432a817301af605804813f62e32b6d15da60455f1f66b9ce8b3e8b8e04d60d",
     "occurred_at": "2026-08-12T12:00:00Z",
     "protocol_version_id": "protocol-v1",
     "recorded_by_service": "enrollment-review-app",
@@ -2924,10 +2924,10 @@
   "protocol_authority_confirmation": {
     "action": "accept_protocol_authority",
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+    "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
     "command_id": "command-accept-protocol-v1-phase-iii",
     "confirmation_id": "confirmation-protocol-v1-phase-iii",
-    "confirmation_sha256": "1f213715bd1253931704f1aaee0fd985d1cb3192ac7e29e3773de220d914c9ac",
+    "confirmation_sha256": "dff1baad9a04328e7ca46b4b1c3ff3bdd97147b5964059f193e858a2bf7ce5f4",
     "confirmed_at": "2026-08-12T12:00:00Z",
     "confirmed_by": "synthetic-uat-human-acceptance",
     "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -2937,7 +2937,7 @@
   },
   "protocol_authority_record": {
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+    "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
     "official_rules": [
       {
         "components": [
@@ -2949,6 +2949,7 @@
                 "description": "筛选节点应有可定位的年龄记录。",
                 "due_stage": "screening",
                 "fact_type": "demographics.age_years",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record",
                   "identity_record"
@@ -2966,8 +2967,14 @@
                 "applicable_population": null,
                 "attribute": "age_years",
                 "comparator": "gte",
+                "occurrence_window": null,
                 "predicate_id": "predicate-demographics-age_years-gte",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": false,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "demographics",
                 "unit": "year",
                 "unit_match_policy": "exact_canonical_label",
@@ -2998,6 +3005,7 @@
                 "description": "异常指标与研究者不可接受风险判断必须同时有证据。",
                 "due_stage": "screening",
                 "fact_type": "laboratory_and_investigator_risk",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "laboratory_report",
                   "investigator_assessment"
@@ -3016,8 +3024,14 @@
                     "applicable_population": null,
                     "attribute": "protocol_exception_documented",
                     "comparator": "eq",
+                    "occurrence_window": null,
                     "predicate_id": "predicate-exception-protocol_exception_documented-eq",
+                    "prospective_period": null,
+                    "prospective_window": null,
                     "requires_professional_judgment": false,
+                    "source_clause": null,
+                    "source_clauses": [],
+                    "source_term": null,
                     "subject": "exception",
                     "unit": null,
                     "unit_match_policy": "exact_canonical_label",
@@ -3031,8 +3045,14 @@
                     "applicable_population": null,
                     "attribute": "exception_confirmed",
                     "comparator": "eq",
+                    "occurrence_window": null,
                     "predicate_id": "predicate-investigator-exception_confirmed-eq",
+                    "prospective_period": null,
+                    "prospective_window": null,
                     "requires_professional_judgment": true,
+                    "source_clause": null,
+                    "source_clauses": [],
+                    "source_term": null,
                     "subject": "investigator",
                     "unit": null,
                     "unit_match_policy": "exact_canonical_label",
@@ -3052,8 +3072,14 @@
                     "applicable_population": null,
                     "attribute": "unacceptable_participation_risk",
                     "comparator": "eq",
+                    "occurrence_window": null,
                     "predicate_id": "predicate-investigator-unacceptable_participation_risk-eq",
+                    "prospective_period": null,
+                    "prospective_window": null,
                     "requires_professional_judgment": true,
+                    "source_clause": null,
+                    "source_clauses": [],
+                    "source_term": null,
                     "subject": "investigator",
                     "unit": null,
                     "unit_match_policy": "exact_canonical_label",
@@ -3069,8 +3095,14 @@
                         "applicable_population": null,
                         "attribute": "target_ratio_uln",
                         "comparator": "gte",
+                        "occurrence_window": null,
                         "predicate_id": "predicate-laboratory-target_ratio_uln-gte",
+                        "prospective_period": null,
+                        "prospective_window": null,
                         "requires_professional_judgment": false,
+                        "source_clause": null,
+                        "source_clauses": [],
+                        "source_term": null,
                         "subject": "laboratory",
                         "unit": "xULN",
                         "unit_match_policy": "exact_canonical_label",
@@ -3084,8 +3116,14 @@
                         "applicable_population": null,
                         "attribute": "prohibited_exposure",
                         "comparator": "eq",
+                        "occurrence_window": null,
                         "predicate_id": "predicate-medication-prohibited-window",
+                        "prospective_period": null,
+                        "prospective_window": null,
                         "requires_professional_judgment": false,
+                        "source_clause": null,
+                        "source_clauses": [],
+                        "source_term": null,
                         "subject": "medication",
                         "unit": null,
                         "unit_match_policy": "exact_canonical_label",
@@ -3096,7 +3134,9 @@
                         "anchor_type": "randomization_date",
                         "direction": "before",
                         "half_life_multiplier": null,
+                        "lower_bound": null,
                         "lower_bound_days": null,
+                        "upper_bound": null,
                         "upper_bound_days": 28
                       }
                     }
@@ -3112,8 +3152,14 @@
                         "applicable_population": null,
                         "attribute": "critical_measurement_invalid",
                         "comparator": "eq",
+                        "occurrence_window": null,
                         "predicate_id": "predicate-laboratory-critical_measurement_invalid-eq",
+                        "prospective_period": null,
+                        "prospective_window": null,
                         "requires_professional_judgment": false,
+                        "source_clause": null,
+                        "source_clauses": [],
+                        "source_term": null,
                         "subject": "laboratory",
                         "unit": null,
                         "unit_match_policy": "exact_canonical_label",
@@ -3152,6 +3198,7 @@
                 "description": "待研究者判断的合成规则",
                 "due_stage": "screening",
                 "fact_type": "investigator.rule_specific_judgment",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record"
                 ],
@@ -3168,8 +3215,14 @@
                 "applicable_population": null,
                 "attribute": "rule_specific_judgment",
                 "comparator": "eq",
+                "occurrence_window": null,
                 "predicate_id": "predicate-investigator-rule_specific_judgment-eq",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": true,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "investigator",
                 "unit": null,
                 "unit_match_policy": "exact_canonical_label",
@@ -3200,6 +3253,7 @@
                 "description": "后续节点才到期的合成规则",
                 "due_stage": "baseline",
                 "fact_type": "baseline.future_assessment",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record"
                 ],
@@ -3216,8 +3270,14 @@
                 "applicable_population": null,
                 "attribute": "future_assessment",
                 "comparator": "eq",
+                "occurrence_window": null,
                 "predicate_id": "predicate-baseline-future_assessment-eq",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": false,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "baseline",
                 "unit": null,
                 "unit_match_policy": "exact_canonical_label",
@@ -3248,6 +3308,7 @@
                 "description": "病历引用资料必须提供的合成规则",
                 "due_stage": "screening",
                 "fact_type": "history.referenced_document",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record"
                 ],
@@ -3264,8 +3325,14 @@
                 "applicable_population": null,
                 "attribute": "referenced_document",
                 "comparator": "eq",
+                "occurrence_window": null,
                 "predicate_id": "predicate-history-referenced_document-eq",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": false,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "history",
                 "unit": null,
                 "unit_match_policy": "exact_canonical_label",
@@ -3296,6 +3363,7 @@
                 "description": "当前节点必做检查的合成规则",
                 "due_stage": "screening",
                 "fact_type": "procedure.required_completed",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record"
                 ],
@@ -3312,8 +3380,14 @@
                 "applicable_population": null,
                 "attribute": "required_completed",
                 "comparator": "eq",
+                "occurrence_window": null,
                 "predicate_id": "predicate-procedure-required_completed-eq",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": false,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "procedure",
                 "unit": null,
                 "unit_match_policy": "exact_canonical_label",
@@ -3344,6 +3418,7 @@
                 "description": "检验结果关键字段的合成规则",
                 "due_stage": "screening",
                 "fact_type": "laboratory.required_fields_complete",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record"
                 ],
@@ -3360,8 +3435,14 @@
                 "applicable_population": null,
                 "attribute": "required_fields_complete",
                 "comparator": "eq",
+                "occurrence_window": null,
                 "predicate_id": "predicate-laboratory-required_fields_complete-eq",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": false,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "laboratory",
                 "unit": null,
                 "unit_match_policy": "exact_canonical_label",
@@ -3462,12 +3543,12 @@
     "verified_by": "synthetic-uat-human-acceptance"
   },
   "protocol_integrity_manifest": {
-    "authoritative_rule_set_sha256": "bf83d54fd8f132f92066ddd8abdd6a43710d21d23696eddd1c1bd40d8abcc1ee",
+    "authoritative_rule_set_sha256": "96b887e73715b7d0043a2839fe3af1cfb6b578b2d4887258c30555b098c3d6c2",
     "authoritative_workflow_sha256": "a23d202d8be74ed1778906492e89e7c194371d702e13738c49362520154d9033",
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+    "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
     "manifest_id": "manifest-protocol-v1-phase-iii",
-    "manifest_sha256": "2de5fd424882bff4d484a0f849e2a0f6e249ed9d7252391f334ac19f6d498135",
+    "manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
     "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "protocol_version_id": "protocol-v1",
     "schema_version": "fixture/v1",
@@ -3554,6 +3635,7 @@
                 "description": "筛选节点应有可定位的年龄记录。",
                 "due_stage": "screening",
                 "fact_type": "demographics.age_years",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record",
                   "identity_record"
@@ -3571,8 +3653,14 @@
                 "applicable_population": null,
                 "attribute": "age_years",
                 "comparator": "gte",
+                "occurrence_window": null,
                 "predicate_id": "predicate-demographics-age_years-gte",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": false,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "demographics",
                 "unit": "year",
                 "unit_match_policy": "exact_canonical_label",
@@ -3603,6 +3691,7 @@
                 "description": "异常指标与研究者不可接受风险判断必须同时有证据。",
                 "due_stage": "screening",
                 "fact_type": "laboratory_and_investigator_risk",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "laboratory_report",
                   "investigator_assessment"
@@ -3621,8 +3710,14 @@
                     "applicable_population": null,
                     "attribute": "protocol_exception_documented",
                     "comparator": "eq",
+                    "occurrence_window": null,
                     "predicate_id": "predicate-exception-protocol_exception_documented-eq",
+                    "prospective_period": null,
+                    "prospective_window": null,
                     "requires_professional_judgment": false,
+                    "source_clause": null,
+                    "source_clauses": [],
+                    "source_term": null,
                     "subject": "exception",
                     "unit": null,
                     "unit_match_policy": "exact_canonical_label",
@@ -3636,8 +3731,14 @@
                     "applicable_population": null,
                     "attribute": "exception_confirmed",
                     "comparator": "eq",
+                    "occurrence_window": null,
                     "predicate_id": "predicate-investigator-exception_confirmed-eq",
+                    "prospective_period": null,
+                    "prospective_window": null,
                     "requires_professional_judgment": true,
+                    "source_clause": null,
+                    "source_clauses": [],
+                    "source_term": null,
                     "subject": "investigator",
                     "unit": null,
                     "unit_match_policy": "exact_canonical_label",
@@ -3657,8 +3758,14 @@
                     "applicable_population": null,
                     "attribute": "unacceptable_participation_risk",
                     "comparator": "eq",
+                    "occurrence_window": null,
                     "predicate_id": "predicate-investigator-unacceptable_participation_risk-eq",
+                    "prospective_period": null,
+                    "prospective_window": null,
                     "requires_professional_judgment": true,
+                    "source_clause": null,
+                    "source_clauses": [],
+                    "source_term": null,
                     "subject": "investigator",
                     "unit": null,
                     "unit_match_policy": "exact_canonical_label",
@@ -3674,8 +3781,14 @@
                         "applicable_population": null,
                         "attribute": "target_ratio_uln",
                         "comparator": "gte",
+                        "occurrence_window": null,
                         "predicate_id": "predicate-laboratory-target_ratio_uln-gte",
+                        "prospective_period": null,
+                        "prospective_window": null,
                         "requires_professional_judgment": false,
+                        "source_clause": null,
+                        "source_clauses": [],
+                        "source_term": null,
                         "subject": "laboratory",
                         "unit": "xULN",
                         "unit_match_policy": "exact_canonical_label",
@@ -3689,8 +3802,14 @@
                         "applicable_population": null,
                         "attribute": "prohibited_exposure",
                         "comparator": "eq",
+                        "occurrence_window": null,
                         "predicate_id": "predicate-medication-prohibited-window",
+                        "prospective_period": null,
+                        "prospective_window": null,
                         "requires_professional_judgment": false,
+                        "source_clause": null,
+                        "source_clauses": [],
+                        "source_term": null,
                         "subject": "medication",
                         "unit": null,
                         "unit_match_policy": "exact_canonical_label",
@@ -3701,7 +3820,9 @@
                         "anchor_type": "randomization_date",
                         "direction": "before",
                         "half_life_multiplier": null,
+                        "lower_bound": null,
                         "lower_bound_days": null,
+                        "upper_bound": null,
                         "upper_bound_days": 28
                       }
                     }
@@ -3717,8 +3838,14 @@
                         "applicable_population": null,
                         "attribute": "critical_measurement_invalid",
                         "comparator": "eq",
+                        "occurrence_window": null,
                         "predicate_id": "predicate-laboratory-critical_measurement_invalid-eq",
+                        "prospective_period": null,
+                        "prospective_window": null,
                         "requires_professional_judgment": false,
+                        "source_clause": null,
+                        "source_clauses": [],
+                        "source_term": null,
                         "subject": "laboratory",
                         "unit": null,
                         "unit_match_policy": "exact_canonical_label",
@@ -3757,6 +3884,7 @@
                 "description": "待研究者判断的合成规则",
                 "due_stage": "screening",
                 "fact_type": "investigator.rule_specific_judgment",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record"
                 ],
@@ -3773,8 +3901,14 @@
                 "applicable_population": null,
                 "attribute": "rule_specific_judgment",
                 "comparator": "eq",
+                "occurrence_window": null,
                 "predicate_id": "predicate-investigator-rule_specific_judgment-eq",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": true,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "investigator",
                 "unit": null,
                 "unit_match_policy": "exact_canonical_label",
@@ -3805,6 +3939,7 @@
                 "description": "后续节点才到期的合成规则",
                 "due_stage": "baseline",
                 "fact_type": "baseline.future_assessment",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record"
                 ],
@@ -3821,8 +3956,14 @@
                 "applicable_population": null,
                 "attribute": "future_assessment",
                 "comparator": "eq",
+                "occurrence_window": null,
                 "predicate_id": "predicate-baseline-future_assessment-eq",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": false,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "baseline",
                 "unit": null,
                 "unit_match_policy": "exact_canonical_label",
@@ -3853,6 +3994,7 @@
                 "description": "病历引用资料必须提供的合成规则",
                 "due_stage": "screening",
                 "fact_type": "history.referenced_document",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record"
                 ],
@@ -3869,8 +4011,14 @@
                 "applicable_population": null,
                 "attribute": "referenced_document",
                 "comparator": "eq",
+                "occurrence_window": null,
                 "predicate_id": "predicate-history-referenced_document-eq",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": false,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "history",
                 "unit": null,
                 "unit_match_policy": "exact_canonical_label",
@@ -3901,6 +4049,7 @@
                 "description": "当前节点必做检查的合成规则",
                 "due_stage": "screening",
                 "fact_type": "procedure.required_completed",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record"
                 ],
@@ -3917,8 +4066,14 @@
                 "applicable_population": null,
                 "attribute": "required_completed",
                 "comparator": "eq",
+                "occurrence_window": null,
                 "predicate_id": "predicate-procedure-required_completed-eq",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": false,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "procedure",
                 "unit": null,
                 "unit_match_policy": "exact_canonical_label",
@@ -3949,6 +4104,7 @@
                 "description": "检验结果关键字段的合成规则",
                 "due_stage": "screening",
                 "fact_type": "laboratory.required_fields_complete",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record"
                 ],
@@ -3965,8 +4121,14 @@
                 "applicable_population": null,
                 "attribute": "required_fields_complete",
                 "comparator": "eq",
+                "occurrence_window": null,
                 "predicate_id": "predicate-laboratory-required_fields_complete-eq",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": false,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "laboratory",
                 "unit": null,
                 "unit_match_policy": "exact_canonical_label",

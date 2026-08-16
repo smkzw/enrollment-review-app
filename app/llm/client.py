@@ -38,6 +38,8 @@ from app.config import (
     REVIEW_REASONING_EFFORT,
     DECONSTRUCT_BACKEND,
     DECONSTRUCT_MODEL,
+    DECONSTRUCT_REASONING_EFFORT,
+    DECONSTRUCT_MAX_TOKENS,
 )
 
 logger = logging.getLogger(__name__)
@@ -157,6 +159,36 @@ def _normalized_review_reasoning_effort() -> str | None:
 def _uses_deepseek_thinking_for_review(model: str) -> bool:
     """DeepSeek V4 review models expose provider-native thinking controls."""
     return REVIEW_BACKEND == "deepseek" and model.startswith("deepseek-v4")
+
+
+def _normalized_deconstruct_reasoning_effort() -> str | None:
+    if DECONSTRUCT_REASONING_EFFORT in {"", "default", "auto"}:
+        return None
+    if DECONSTRUCT_REASONING_EFFORT in {"high", "max"}:
+        return DECONSTRUCT_REASONING_EFFORT
+    logger.warning(
+        "Unsupported DECONSTRUCT_REASONING_EFFORT=%s; using provider default",
+        DECONSTRUCT_REASONING_EFFORT,
+    )
+    return None
+
+
+def _deconstruct_completion_kwargs(
+    *, model: str, messages: list[dict], temperature: float, max_tokens: int
+) -> dict:
+    kwargs: dict = {
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+    }
+    if DECONSTRUCT_BACKEND == "deepseek" and model.startswith("deepseek-v4"):
+        effort = _normalized_deconstruct_reasoning_effort()
+        if effort:
+            kwargs["reasoning_effort"] = effort
+            kwargs["extra_body"] = {"thinking": {"type": "enabled"}}
+    else:
+        kwargs["temperature"] = temperature
+    return kwargs
 
 
 def _review_completion_kwargs(
@@ -457,7 +489,7 @@ async def deconstruct_chat(
     *,
     model: str | None = None,
     temperature: float = 0.3,
-    max_tokens: int = 8192,
+    max_tokens: int = DECONSTRUCT_MAX_TOKENS,
 ) -> str:
     """Send a chat completion using the deconstruction backend."""
     client = _get_deconstruct_client()
@@ -465,10 +497,12 @@ async def deconstruct_chat(
 
     async def _call():
         resp = await client.chat.completions.create(
-            model=use_model,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=temperature,
+            **_deconstruct_completion_kwargs(
+                model=use_model,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
         )
         return resp.choices[0].message.content or ""
 

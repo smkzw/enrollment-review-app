@@ -53,3 +53,7 @@ MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", str(100 * 1024 * 1024)))  # 1
 # Deconstruction (uses same model family as review, but configurable separately)
 DECONSTRUCT_BACKEND = os.getenv("DECONSTRUCT_BACKEND", REVIEW_BACKEND)
 DECONSTRUCT_MODEL = os.getenv("DECONSTRUCT_MODEL", REVIEW_MODEL)
+DECONSTRUCT_REASONING_EFFORT = os.getenv(
+    "DECONSTRUCT_REASONING_EFFORT", REVIEW_REASONING_EFFORT
+).strip().lower()
+DECONSTRUCT_MAX_TOKENS = int(os.getenv("DECONSTRUCT_MAX_TOKENS", "60000"))

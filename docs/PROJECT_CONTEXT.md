@@ -1,5 +1,28 @@
 # Enrollment Review App Project Context
 
+## 2026-08-14 Checkpoint: Phase 3 Slice 3 In Progress
+
+Current deterministic results, not yet a completed Phase 3 release:
+
+- Real official parent catalogs now freeze exactly MG-K10-SAR III IN 7 / EX 16 and
+  CMS-D001 II IN 6 / EX 30. Every parent has at least one unique rendered text range;
+  all formal excerpts verify against the claimed physical page.
+- Required pre-baseline procedure catalogs now contain 41 MG items (25 screening/run-in,
+  16 baseline) and 50 D001 II items (23 screening, 27 across two baseline/randomization
+  checkpoints). Study-drug handling, diary logistics, randomization action and D1
+  post-dose safety collection are excluded.
+- Exact source recovery can disambiguate repeated text only inside proven structural/
+  physical bounds and can anchor a cross-page paragraph with a unique exact fragment.
+  Adjacent-page interpolation remains degraded and cannot satisfy publication coverage.
+- Required-procedure items now preserve a structured review stage rather than asking the
+  semantic model to infer stage ownership from display text.
+- The protocol Agent adapter and 12-check gate exist. DeepSeek V4 Flash max JSON-mode
+  connectivity and same-session continuation passed a two-turn live probe in 2.82 seconds.
+
+Pending before slice acceptance: complete calendar-unit time windows and deterministic
+input-package assembly, run real MG/D001 semantic drafts through the Agent and gate,
+independent Trellis review, full-repository regression, and cleanup/archive.
+
 ## 2026-08-14 Milestone: Phase 3 Slice 2 Implemented, Pending Independent Acceptance
 
 Implemented the reviewed slice 2 boundary only:
@@ -1877,3 +1900,50 @@ OCR concurrency note:
 - 来源 `text/source_ref` 始终不变，`projection_text` 只能是跨期原文的派生显示；项目代号、官方日期和确认时间均加入列/payload 镜像检查。未增加 SQLite UPDATE/DELETE 触发器：本地单用户且不做安全性测试，继续遵循 Phase 2 已冻结的仓储追加写+读取哈希/镜像拒绝边界，不为本切片另造全库触发器。
 - 新鲜独立 Luna 审查会话三轮拒绝，逐次揭示冲突状态、单期共同词泄漏、裸共同标题丢失、日期精度和混合语句过宽等边界；第四轮给出无 P1/P2 的 `ACCEPT`。最终协议切片 `63 passed`，全仓 `530 passed, 1 skipped, 18 subtests passed`；唯一跳过仍为既有 06003 OCR 缓存夹具不存在。
 - 下一安全动作：切片 3 先执行有停止条件的页定位恢复 spike，再冻结官方父规则目录和基线及以前必做项目录；未完成目录对账前不进入 Agent 发布。
+
+## 2026-08-14 Phase 3 切片 3A 页码定位恢复冻结点
+
+- 已用真实 MG-K10-SAR 与 CMS-D001 完成同结构容器邻块留一验证。同页夹逼分别为
+  `130/130`、`158/158` 全部正确；允许相邻页后准确率降为 `92.27%`、`95.35%`，
+  允许两页范围更低，因此不采用跨页猜测。
+- 正式来源层只在前后精确正文定位同容器、同派生物、同页且各距不超过 12 个结构块
+  时补充页面提示；跨 section/表格单元格、相邻页、顺序倒置及页眉页脚均拒绝推断。
+- 补充结果始终为“降级页面提示”，不含伪摘录或字符范围，不能单独通过来源覆盖门槛；
+  原始唯一文本范围和唯一表格页定位仍是正式来源定位。
+- 定向来源层与两份真实方案测试 `19 passed`。下一步进入官方父规则目录和基线及以前
+  必做项目录冻结；目录未与原文逐项对账前，不调用解构 Agent 发布规则。
+
+## 2026-08-14 Phase 3 切片 3 无损暂停点
+
+- 已建立冻结官方父规则/基线前必做项目录、结构化解构合同、同会话分批输出、局部定向修复和确定性发布门禁。
+- 修复 OOXML 上标/下标丢失与显示脚注污染：结构来源保留 `^`/`_`，语义标签只移除末尾脚注，不破坏 `10^9/L`。MG 目录不再出现“漏胸片、收随机动作”的同数错换，有效审核项为 41；D001 为 50。
+- 全新 MG-K10-SAR III 期真实运行在 6 次同会话尝试后通过门禁：IN 7、EX 16、41 个必做项，23 条父规则、73 个组件、187 条证据要求、2 个工作流节点，最终问题数 0，源方案未变。
+- 任务保持 `in_progress`。尚未运行 D001 II 期真实 Agent，尚未做切片 3 最终全量回归和独立终局审查。恢复时先跑完 `tests/v2/protocols`，再运行 D001，不跳到切片 4。
+
+## 2026-08-15 Phase 3 切片 3 D001 根因修复检查点
+
+- 修复前 D001 II 期新鲜运行已完成目录与初稿验证：IN 6、EX 30、50 个基线及以前必做项，源方案未改变；但有限修复耗尽后仍需核对。完整反例已归档，不能作为正式草稿。
+- 已从系统层分离“审核阶段”和“相对日期锚点”，新增首次给药日，建立公平修复轮转和逐父规则防回退，并强化非连续逐字溯源。未加入 D001/SAR 特异条款。
+- 当前确定性证据：方案模块 `180 passed`；契约/领域逻辑/日期评估 `165 passed`；传输、适配器和门禁聚焦 `48 passed`。
+- 修复后首次真实重跑在初稿分批期间遇到远程模型空正文。传输现只做一次同请求重试；连续失败时保留已完成会话并正常返回“需要核对”，同时仅记录结束原因和推理长度，不保存推理正文。
+- 切片 3 仍为 `in_progress`，未进入切片 4。下一步是重新运行 D001 II，并对时间锚点、阶段资料要求、例外、父子逻辑和逐字来源逐项验收，再做独立终局审查。
+
+## 2026-08-16 Phase 3 切片 3 完成裁决
+
+- 最终独立审查从真实原文发现旧门禁漏掉两种频次：D001 EX-04“2年内发生2次或以上”
+  和 MG EX-04“1周≥4天”。共享层已改为从完整组件提取频次、要求直接事件分支绑定，
+  并支持次数/周期及发生天数/周期；频次不能套到无关兄弟分支。
+- 多段逐字来源的换行现为明确边界，括号时间限定不再跨段误归属。DeepSeek 无状态会话
+  支持从完整持久历史恢复，已水合草稿可无损还原语义候选并仅替换指定父规则。
+- D001 II 最终会话 `protocol-chat-0cf91707a73a40a4ad46964068ae336d`：IN 6、EX 30、
+  必做 50，EX-04 复发性带状疱疹独立保留 2 次/2 年，12 类门禁全通过。
+- MG III 最终会话 `protocol-chat-d13b5ca3a69944b099912d92bc6f4671`：IN 7、EX 16、
+  必做 41，EX-04 保留 4 天/1 周；唯一问题为 EX-07w“6个月内存在或疑似蠕虫感染”
+  未命名回溯起点，系统保持 `TIME_ANCHOR_UNRESOLVED`，不猜筛选日或随机日。
+- 修复前后除 EX-04 外的父规则、组件、资料要求和顶层结构逐字段一致；原始方案哈希、
+  大小、mtime 未变。新鲜独立 Luna 审查为 `ACCEPT`。
+- 最终全仓回归 `687 passed, 1 skipped, 18 subtests passed`，唯一跳过为遗留 06003 OCR
+  缓存夹具不存在；`git diff --check` 通过。
+- Phase 3 父任务仍为 `in_progress`。切片 4 首次解构持久用例/API、前端工作台和受试者
+  审核尚未启动；后续必须直接消费冻结的 `occurrence_window`、`source_clauses` 和访视实例，
+  不重新猜测频次或时间锚点。
