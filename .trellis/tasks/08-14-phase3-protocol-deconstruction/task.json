@@ -28,11 +28,13 @@
     "app/domain/contracts/agent_io.py",
     "frontend/src/pages/ProtocolsPage.tsx"
   ],
-  "notes": "2026-08-16 Phase 3 切片 3 已完成并经独立终局审查 ACCEPT。MG III 为 IN7/EX16/必做41，保留唯一诚实的 EX-07w 回溯起点歧义；D001 II 为 IN6/EX30/必做50且全部门禁通过。已关闭频次窗口、流程/证据反向覆盖、括号例外、未来期间、多片段时间限定、空正文及持久会话恢复等共享根因。全仓687项通过、1项遗留OCR缓存条件跳过。父任务保持进行中，未进入切片4。",
+  "notes": "2026-08-16 无损暂停。Phase 3 切片 1-3 已完成并经独立终局审查 ACCEPT；MG III 为 IN7/EX16/必做41，D001 II 为 IN6/EX30/必做50。全仓687项通过、1项遗留OCR缓存条件跳过。本轮未开始切片4，恢复前读取 CHECKPOINT_20260816_PAUSED.md；两张并行修改的 UAT 截图及 output 下临床资料不得触碰。",
   "meta": {
     "completed_slice": "3",
     "next_slice": "4",
     "slice3_checkpoint": "accepted-real-protocol-deconstruction",
-    "last_checkpoint": "2026-08-16T08:40:00+08:00"
+    "last_checkpoint": "2026-08-16T08:20:54+08:00",
+    "pause_checkpoint": "CHECKPOINT_20260816_PAUSED.md",
+    "pause_reason": "user_requested_lossless_pause_after_record_and_cleanup"
   }
 }

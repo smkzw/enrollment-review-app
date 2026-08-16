@@ -209,3 +209,30 @@
 ### Status
 
 [OK] **Slice 2 accepted; Slice 3 next**
+
+## Session 9: Phase 3 切片 3 完成后无损暂停
+
+**Date**: 2026-08-16
+**Task**: Phase 3 方案解构V2（切片 3 已验收，切片 4 未开始）
+**Branch**: `codex/v2-phase0-foundation`
+
+### Summary
+
+用户要求完成详细任务记录后无损暂停，并清理前期 Phase 的子 Agent 冗余记录和测试缓存。
+新增 `CHECKPOINT_20260816_PAUSED.md`，冻结当前 commit、已验收能力、MG/D001 最终会话与
+数量、唯一保留歧义、全仓测试、切片 4 六步恢复顺序、两张并行截图保护边界和临床数据
+不删除边界。本轮没有开始切片 4 产品实现。
+
+### Cleanup
+
+清理范围限定为最终修复前的 63 个 Agent 中间归档、源码/测试 Python 字节码、pytest
+缓存和 Playwright test-results；最终验收、会商裁决、任务记录、源方案与 `output/`
+临床资料均保留。
+
+### Next
+
+恢复时先读取 Trellis 上下文和暂停检查点，从切片 4“流程节点、证据要求与发布事务”开始。
+
+### Status
+
+[PAUSED] **Slices 1-3 accepted; Slice 4 not started**
