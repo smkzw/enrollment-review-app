@@ -66,7 +66,6 @@ from app.protocols.deconstruction_gate import (
     ProtocolDeconstructionGateResult,
 )
 from app.storage.codecs import utc_now
-from app.storage.concurrency import StaleRevisionError
 from app.storage.idempotency import IdempotencyRepository, request_hash
 from app.storage.models import IdempotencyRecordRow, RuleSetRecord
 from app.storage.repositories import (
