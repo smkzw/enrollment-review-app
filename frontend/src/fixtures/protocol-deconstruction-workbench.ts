@@ -3,9 +3,12 @@
  */
 
 import type {
+  DraftComparisonView,
   DraftRevisionView,
   IdentityReviewView,
   IntegrityView,
+  OfficialProjectView,
+  ProjectOfficialVersionView,
   ProtocolSessionView,
   SourcesView,
 } from "../api/protocolWorkbenchTypes";
@@ -13,6 +16,7 @@ import type {
 export const PROTOCOL_DEMO_JOB_ID = "job-demo-review";
 export const PROTOCOL_IDENTITY_JOB_ID = "job-demo-identity";
 export const PROTOCOL_RECOVERY_JOB_ID = "job-demo-recovery";
+export const PROTOCOL_REDO_JOB_ID = "job-demo-redo";
 
 const baseSession = (
   overrides: Partial<ProtocolSessionView>,
@@ -42,6 +46,14 @@ const baseSession = (
   recoveryStepId: null,
   nextAction: "审阅草稿第 1 稿并核对来源定位",
   publishable: true,
+  targetProjectId: null,
+  targetProjectName: null,
+  targetProjectCode: null,
+  targetProtocolCode: null,
+  targetStudyPhase: null,
+  targetStudyPhaseLabel: null,
+  targetOfficialVersion: null,
+  targetRuleSetRevision: null,
   ...overrides,
 });
 
@@ -240,12 +252,24 @@ const draftContent = {
     {
       draft_component_id: "draft-component-in",
       parent_official_code: "IN-01",
+      proposed_component: {
+        rule_component_id: "component-in",
+        parent_rule_id: "rule-in",
+        display_code: "IN-01a",
+        title: "年龄要求",
+      },
       source_refs: ["span-in"],
       source_excerpts: ["年龄≥18岁"],
     },
     {
       draft_component_id: "draft-component-ex",
       parent_official_code: "EX-01",
+      proposed_component: {
+        rule_component_id: "component-ex",
+        parent_rule_id: "rule-ex",
+        display_code: "EX-01a",
+        title: "肝功能阈值",
+      },
       source_refs: ["span-ex"],
       source_excerpts: ["ALT或AST≥1.5×ULN"],
     },
@@ -325,4 +349,208 @@ export const sourcesFixture: SourcesView = {
     },
   },
   sourceMaterials: {},
+};
+
+export const officialProjectsFixture: OfficialProjectView[] = [
+  {
+    projectId: "project-demo-1",
+    projectCode: "TEST",
+    projectName: "测试研究",
+    studyPhase: "phase_ii",
+    studyPhaseLabel: "II 期",
+    protocolCode: "TEST-001",
+    officialVersion: "V1.0",
+    officialDateValue: "2026-08-14",
+    officialDatePrecision: "day",
+    ruleSetId: "ruleset-demo-1",
+    ruleSetRevision: 1,
+  },
+  {
+    projectId: "project-demo-2",
+    projectCode: "TEST2",
+    projectName: "测试研究二",
+    studyPhase: "phase_iii",
+    studyPhaseLabel: "III 期",
+    protocolCode: "TEST-002",
+    officialVersion: "V3.2",
+    officialDateValue: "2026-07-01",
+    officialDatePrecision: "day",
+    ruleSetId: "ruleset-demo-2",
+    ruleSetRevision: 3,
+  },
+];
+
+export const projectOfficialVersionFixture: ProjectOfficialVersionView = {
+  project: officialProjectsFixture[0]!,
+  versions: [
+    {
+      ruleSetRevision: 1,
+      protocolVersionId: "protocol-version-demo-1",
+      officialVersion: "V1.0",
+      officialDateValue: "2026-08-14",
+      officialDatePrecision: "day",
+      sha256: "a".repeat(64),
+      ruleCount: 2,
+      publishedAt: "2026-08-14T10:00:00Z",
+    },
+    {
+      ruleSetRevision: 2,
+      protocolVersionId: "protocol-version-demo-2",
+      officialVersion: "V2.0",
+      officialDateValue: "2026-08-17",
+      officialDatePrecision: "day",
+      sha256: "b".repeat(64),
+      ruleCount: 2,
+      publishedAt: "2026-08-17T10:00:00Z",
+    },
+  ],
+  publicationCount: 2,
+};
+
+/** 重新解构演示任务：进入等待审阅的重新解构会话（目标项目为测试研究）。 */
+export const protocolRedoSessionFixture: ProtocolSessionView = baseSession({
+  jobId: PROTOCOL_REDO_JOB_ID,
+  sessionKind: "re_deconstruction",
+  state: "await_review",
+  stateLabel: "等待审阅",
+  awaitingUser: "review",
+  awaitingUserLabel: "等待审阅新草稿",
+  protocolCode: "TEST-001",
+  officialVersion: "V2.1",
+  nextAction: "并列核对当前正式版本与新草稿的差异",
+  draftId: "draft-redo-1",
+  draftRevisionId: "revision-redo-1",
+  draftRevisionNumber: 1,
+  draftStatus: "saved",
+  draftStatusLabel: "已保存",
+  targetProjectId: "project-demo-1",
+  targetProjectName: "测试研究",
+  targetProjectCode: "TEST",
+  targetProtocolCode: "TEST-001",
+  targetStudyPhase: "phase_ii",
+  targetStudyPhaseLabel: "II 期",
+  targetOfficialVersion: "V1.0",
+  targetRuleSetRevision: 1,
+});
+
+/** 重新解构并列差异夹具：基线（当前正式 V1.0）与新草稿（V2.1）八类差异。 */
+export const draftComparisonFixture: DraftComparisonView = {
+  jobId: PROTOCOL_REDO_JOB_ID,
+  baseline: {
+    revisionId: "revision-baseline-demo",
+    draftId: "draft-demo-1",
+    protocolVersionId: "protocol-version-demo-1",
+    officialVersion: "V1.0",
+    revisionNumber: 1,
+    status: "published",
+    ruleCount: 2,
+    workflowStageCount: 1,
+    isFormalBaseline: true,
+    content: { ...draftContent, official_version: "V1.0" },
+    sourceRefs: ["span-in", "span-ex"],
+  },
+  candidate: {
+    revisionId: "revision-redo-1",
+    draftId: "draft-redo-1",
+    protocolVersionId: "protocol-version-demo-2",
+    officialVersion: "V2.1",
+    revisionNumber: 1,
+    status: "saved",
+    ruleCount: 2,
+    workflowStageCount: 1,
+    isFormalBaseline: false,
+    content: { ...draftContent, official_version: "V2.1" },
+    sourceRefs: ["span-in", "span-ex", "span-ex2"],
+  },
+  diff: {
+    added_rule_codes: [],
+    removed_rule_codes: [],
+    modified_rule_codes: ["IN-01", "EX-01"],
+    added_workflow_stage_ids: [],
+    removed_workflow_stage_ids: [],
+    modified_workflow_stage_ids: [],
+    changed_component_ids: ["component-in", "component-ex"],
+    changed_requirement_ids: [],
+    changed_procedure_mapping_ids: [],
+    source_scope_changed: false,
+    workflow_visit_rewritten: false,
+    clarification_semantics_changed: false,
+    rule_diffs: [
+      {
+        official_code: "IN-01",
+        added: false,
+        removed: false,
+        added_component_refs: [],
+        removed_component_refs: [],
+        original_text_changes: [
+          {
+            stable_ref: "IN-01",
+            kind: "rule",
+            previous: { source_text: "年龄≥18岁" },
+            current: { source_text: "年龄≥18周岁且≤65周岁" },
+          },
+        ],
+        logic_changes: [
+          {
+            stable_ref: "IN-01a",
+            kind: "component",
+            previous: {
+              kind: "predicate",
+              predicate: {
+                subject: "受试者",
+                attribute: "年龄",
+                comparator: "gte",
+                value: 18,
+                unit: "岁",
+              },
+            },
+            current: {
+              kind: "logical",
+              operator: "all",
+              children: [
+                {
+                  kind: "predicate",
+                  predicate: {
+                    subject: "受试者",
+                    attribute: "年龄",
+                    comparator: "gte",
+                    value: 18,
+                    unit: "岁",
+                  },
+                },
+                {
+                  kind: "predicate",
+                  predicate: {
+                    subject: "受试者",
+                    attribute: "年龄",
+                    comparator: "lte",
+                    value: 65,
+                    unit: "岁",
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        time_window_changes: [],
+        exception_changes: [],
+        evidence_changes: [],
+        due_stage_changes: [],
+      },
+      {
+        official_code: "EX-01",
+        added: false,
+        removed: false,
+        added_component_refs: [],
+        removed_component_refs: [],
+        original_text_changes: [],
+        logic_changes: [],
+        time_window_changes: [],
+        exception_changes: [],
+        evidence_changes: [],
+        due_stage_changes: [],
+      },
+    ],
+  },
+  sourceBound: true,
 };

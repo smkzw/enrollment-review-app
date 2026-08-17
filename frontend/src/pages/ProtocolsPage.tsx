@@ -1,5 +1,6 @@
 /**
- * 方案工作台（Phase 3 Slice 5）：首次解构 / 重新解构分流与草稿审阅主路径。
+ * 方案工作台（Phase 3 Slice 6）：首次解构 / 重新解构分流与草稿审阅主路径。
+ * 重新解构：选择目标正式项目 → 上传新版方案 → 并列比较规则变化 → 保存/取消/发布。
  */
 
 import { useCallback, useState } from "react";
@@ -7,10 +8,10 @@ import {
   getProtocolWorkbenchRepository,
   ProtocolWorkbenchApiError,
 } from "../api/protocolWorkbenchRepository";
-import { navigate, RouteLink, useHashRoute } from "../app/router";
-import { EmptyState } from "../components/shell/Feedback";
+import { navigate, useHashRoute } from "../app/router";
 import { ProtocolWorkbenchHome } from "../components/protocols/ProtocolWorkbenchHome";
 import { ProtocolUploadPanel } from "../components/protocols/ProtocolUploadPanel";
+import { ProtocolRedoSelectPanel } from "../components/protocols/ProtocolRedoSelectPanel";
 import { ProtocolJobFlow } from "../components/protocols/ProtocolJobFlow";
 
 export function ProtocolsPage() {
@@ -23,17 +24,50 @@ export function ProtocolsPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const handleUpload = useCallback(
-    async (file: File) => {
+    async (file: File, projectId: string | null = null) => {
       setUploadBusy(true);
       setUploadError(null);
       try {
-        const result = await repo.startDeconstruction(file, `upload-${Date.now()}`);
+        const result = await repo.startDeconstruction(file, `upload-${Date.now()}`, {
+          projectId: projectId ?? undefined,
+        });
         navigate("/protocols", { job: result.jobId });
       } catch (error) {
         setUploadError(
           error instanceof ProtocolWorkbenchApiError
-            ? error.message
+            ? `${error.message} ${error.recoveryAction}`
             : "文件登记失败，请稍后重试。",
+        );
+      } finally {
+        setUploadBusy(false);
+      }
+    },
+    [repo],
+  );
+
+  const handleFirstUpload = useCallback(
+    (file: File) => handleUpload(file, null),
+    [handleUpload],
+  );
+  const handleRedoUpload = useCallback(
+    (file: File, projectId: string) => handleUpload(file, projectId),
+    [handleUpload],
+  );
+  const handleFeedbackRevision = useCallback(
+    async (projectId: string) => {
+      setUploadBusy(true);
+      setUploadError(null);
+      try {
+        const result = await repo.startFeedbackRevision(
+          projectId,
+          `feedback-revision-${Date.now()}`,
+        );
+        navigate("/protocols", { job: result.jobId });
+      } catch (error) {
+        setUploadError(
+          error instanceof ProtocolWorkbenchApiError
+            ? `${error.message} ${error.recoveryAction}`
+            : "反馈修订稿准备失败，请稍后重试。",
         );
       } finally {
         setUploadBusy(false);
@@ -48,23 +82,12 @@ export function ProtocolsPage() {
 
   if (mode === "redo" && jobId === null) {
     return (
-      <div className="protocol-redo-placeholder">
-        <header className="page-head">
-          <h1 className="page-head__title">重新解构已有项目</h1>
-          <p className="page-head__note">
-            在已发布项目上上传新版方案，并列比较八类结构化差异。完整交互将在切片 6 接入。
-          </p>
-        </header>
-        <EmptyState
-          message="重新解构流程尚未在本切片开放"
-          hint="请先从项目看板进入已有项目，或返回首页选择「首次解构新方案」。"
-        />
-        <p className="protocol-redo-placeholder__back">
-          <RouteLink to="/protocols" className="button button--primary">
-            返回方案工作台首页
-          </RouteLink>
-        </p>
-      </div>
+      <ProtocolRedoSelectPanel
+        busy={uploadBusy}
+        error={uploadError}
+        onUpload={handleRedoUpload}
+        onStartFeedback={handleFeedbackRevision}
+      />
     );
   }
 
@@ -73,7 +96,7 @@ export function ProtocolsPage() {
       <ProtocolUploadPanel
         busy={uploadBusy}
         error={uploadError}
-        onUpload={handleUpload}
+        onUpload={handleFirstUpload}
         onInvalidFile={setUploadError}
       />
     );

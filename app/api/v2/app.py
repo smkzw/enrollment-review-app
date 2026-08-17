@@ -22,7 +22,10 @@ from fastapi import FastAPI
 
 from app.api.v2.errors import register_error_handlers
 from app.api.v2.jobs import router as jobs_router
-from app.api.v2.protocols import router as protocols_router
+from app.api.v2.protocols import (
+    projects_router as protocol_projects_router,
+    router as protocols_router,
+)
 from app.services.job_service import JobService, StepSpec
 from app.services.protocol_deconstruction_executor import (
     ProtocolDeconstructionExecutorConfig,
@@ -50,6 +53,10 @@ def create_app(
     sse_poll_interval: float = 0.1,
     sse_heartbeat_seconds: float = 15.0,
     lease_ttl: timedelta = DEFAULT_LEASE_TTL,
+    protocol_workbench_service_factory: Callable[
+        [Any, DataPaths], ProtocolWorkbenchService
+    ]
+    | None = None,
 ) -> FastAPI:
     """构造 V2 应用；测试可注入临时数据根、执行器与循环参数。"""
     executors = dict(executors or {})
@@ -62,9 +69,10 @@ def create_app(
         app.state.engine = engine
         app.state.session_factory = session_factory
         app.state.job_service = JobService(session_factory, lease_ttl=lease_ttl)
-        app.state.protocol_workbench_service = ProtocolWorkbenchService(
-            session_factory,
-            data_paths=paths,
+        app.state.protocol_workbench_service = (
+            protocol_workbench_service_factory(session_factory, paths)
+            if protocol_workbench_service_factory is not None
+            else ProtocolWorkbenchService(session_factory, data_paths=paths)
         )
         app.state.sse_poll_interval = sse_poll_interval
         app.state.sse_heartbeat_seconds = sse_heartbeat_seconds
@@ -104,5 +112,6 @@ def create_app(
     app = FastAPI(title="入排审核 V2 持久任务 API", lifespan=lifespan)
     app.include_router(jobs_router)
     app.include_router(protocols_router)
+    app.include_router(protocol_projects_router)
     register_error_handlers(app)
     return app

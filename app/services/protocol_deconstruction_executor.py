@@ -501,6 +501,34 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
         )
 
     actor = str(context.job_payload.get("actor") or "系统")
+    baseline_draft = None
+    if context.job_payload.get("session_kind") == "re_deconstruction":
+        from app.services.protocol_draft_service import (
+            FormalBaselineError,
+            resolve_formal_baseline_revision,
+        )
+
+        target_project_id = context.job_payload.get("target_project_id")
+        try:
+            with config.session_factory() as session:
+                baseline_draft = resolve_formal_baseline_revision(
+                    session=session,
+                    project_id=target_project_id,
+                ).content
+        except FormalBaselineError as exc:
+            raise StepFailure(
+                retryable=False,
+                error_code=exc.code,
+                detail=f"{str(exc)}（{exc.recovery}）",
+            ) from exc
+        except Exception as exc:  # noqa: BLE001 - 基线解析必须 fail-closed
+            raise StepFailure(
+                retryable=False,
+                error_code="FORMAL_BASELINE_READ_FAILED",
+                detail="读取当前正式草稿基线失败，无法生成本次重新解构差异。"
+                "请联系维护人员核对不可变发布链后重试。",
+            ) from exc
+
     with config.session_factory() as session:
         with session.begin():
             draft_service = ProtocolDraftService(session)
@@ -508,10 +536,23 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
                 result.final_draft,
                 actor=actor,
                 created_at=config.now(),
+                baseline=baseline_draft,
             )
 
     gate = result.final_gate_result
-    if gate is None:
+    if baseline_draft is not None:
+        from app.protocols.deconstruction_gate import ProtocolDraftDiffDeclaration
+
+        gate = (config.gate or ProtocolDeconstructionGate()).evaluate(
+            package.source_input,
+            result.final_draft,
+            source_spans=package.source_spans,
+            previous_draft=baseline_draft,
+            declared_diff=ProtocolDraftDiffDeclaration(
+                **revision.diff.model_dump(mode="python")
+            ),
+        )
+    elif gate is None:
         gate = (config.gate or ProtocolDeconstructionGate()).evaluate(
             package.source_input,
             result.final_draft,

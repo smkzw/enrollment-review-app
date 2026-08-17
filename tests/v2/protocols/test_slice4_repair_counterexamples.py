@@ -78,6 +78,56 @@ def test_successor_content_draft_revision_is_normalized(session) -> None:
         assert r2.content.previous_draft_id == draft.draft_id
 
 
+def test_manual_edit_cannot_reparent_existing_component(session) -> None:
+    """前端即使被绕过，手工修订也不得改写子项父系层级。"""
+
+    _source_input, draft, _spans = confirmed_fixture()
+    service = ProtocolDraftService(session)
+    with session.begin():
+        r1 = service.save_initial_draft(draft, actor="医学监查员", created_at=NOW)
+        tampered = draft.model_copy(deep=True)
+        tampered.proposed_rules[0].components[0] = (
+            tampered.proposed_rules[0].components[0].model_copy(
+                update={"parent_rule_id": "rule-ex"}
+            )
+        )
+        with pytest.raises(DraftEditBoundaryError) as exc_info:
+            service.apply_manual_edit(
+                tampered,
+                expected_revision_id=r1.revision_id,
+                actor="医学监查员",
+                created_at=NOW,
+            )
+    assert exc_info.value.code == "MANUAL_EDIT_REWRITES_RULE_TREE"
+
+
+@pytest.mark.parametrize("mutation", ["rule_text", "component_refs", "component_excerpt"])
+def test_manual_edit_cannot_rewrite_authoritative_source(session, mutation) -> None:
+    """方案原文、来源引用和原文摘录均只能只读展示。"""
+
+    _source_input, draft, _spans = confirmed_fixture()
+    service = ProtocolDraftService(session)
+    with session.begin():
+        r1 = service.save_initial_draft(draft, actor="医学监查员", created_at=NOW)
+        tampered = draft.model_copy(deep=True)
+        if mutation == "rule_text":
+            tampered.proposed_rules[0].source_text = "用户改写后的伪造方案原文"
+        elif mutation == "component_refs":
+            tampered.component_drafts[0].source_refs = ["span-ex"]
+        else:
+            tampered.component_drafts[0].source_excerpts = ["用户改写后的伪造摘录"]
+
+        with pytest.raises(DraftEditBoundaryError) as exc_info:
+            service.apply_manual_edit(
+                tampered,
+                expected_revision_id=r1.revision_id,
+                actor="医学监查员",
+                created_at=NOW,
+            )
+
+    assert exc_info.value.code == "MANUAL_EDIT_REWRITES_SOURCE"
+
+
 def test_repository_rejects_inner_outer_revision_mismatch(session) -> None:
     """内层 draft_revision 与外层链号不一致的 revision 必须被仓储拒绝。"""
     from app.domain.contracts.protocol_drafts import (
@@ -229,8 +279,8 @@ def test_clarification_cannot_change_source_bindings(session) -> None:
         assert exc_info.value.code == "CLARIFICATION_ALTERS_SOURCE_BINDING"
 
 
-def test_stale_component_source_change_reports_real_snapshots(session) -> None:
-    """只改组件来源时，陈旧提交也必须显示链头与提交方的真实来源快照。"""
+def test_stale_source_error_change_reports_real_snapshots(session) -> None:
+    """来源纠错形成新稿后，陈旧提交必须显示链头与提交方的真实来源快照。"""
     _source_input, draft, _spans = confirmed_fixture()
     service = ProtocolDraftService(session)
     with session.begin():
@@ -242,9 +292,11 @@ def test_stale_component_source_change_reports_real_snapshots(session) -> None:
         changed.component_drafts[0] = item.model_copy(
             update={"source_excerpts": [*item.source_excerpts, "来源纠错记录"]}
         )
-        r2 = service.apply_manual_edit(
+        r2 = service.apply_feedback(
             changed,
             expected_revision_id=r1.revision_id,
+            feedback_kind=DraftFeedbackKind.SOURCE_ERROR,
+            feedback_note="核对并纠正原文定位",
             actor="医学监查员",
             created_at=NOW,
         )
@@ -394,11 +446,14 @@ def test_published_head_cannot_be_saved_cancelled_edited_or_restored(
 # ---------------------------------------------------------------------------
 
 
-def _save_revision(factory, draft):
+def _save_revision(factory, draft, *, baseline=None):
     with factory() as session:
         with session.begin():
             return ProtocolDraftService(session).save_initial_draft(
-                draft, actor="医学监查员", created_at=NOW
+                draft,
+                actor="医学监查员",
+                created_at=NOW,
+                baseline=baseline,
             )
 
 
@@ -445,7 +500,9 @@ def test_republish_rejects_detached_version_id(slice4_env) -> None:
     revised.protocol_version_id = "protocol-version-2"
     revised_input = source_input.model_copy(deep=True)
     revised_input.protocol_version_id = "protocol-version-2"
-    rv2 = _save_revision(factory, revised)
+    # 有效的重新解构首稿必须声明相对当前正式版本的完整结构差异；
+    # 本测试随后只隔离验证发布请求中的版本身份绑定。
+    rv2 = _save_revision(factory, revised, baseline=draft)
     with pytest.raises(PublicationLineageError) as exc_info:
         _publish(
             factory,

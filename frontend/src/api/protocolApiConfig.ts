@@ -19,6 +19,13 @@ export function protocolDeconstructionsUrl(suffix = ""): string {
   return base.length > 0 ? `${base}${path}` : path;
 }
 
+/** 正式项目读取（重新解构选择与当前正式版本投影）：GET /api/v2/protocol/projects… */
+export function protocolProjectsUrl(suffix = ""): string {
+  const base = getProtocolApiBase();
+  const path = `/api/v2/protocol/projects${suffix}`;
+  return base.length > 0 ? `${base}${path}` : path;
+}
+
 /** 构建时显式启用 stub 仓储（组件测试、Playwright 视觉回归）。 */
 export function isProtocolWorkbenchStubMode(): boolean {
   return import.meta.env.VITE_PROTOCOL_WORKBENCH_STUB === "true";

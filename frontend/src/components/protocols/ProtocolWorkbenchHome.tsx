@@ -49,13 +49,15 @@ export function ProtocolWorkbenchHome() {
             重新解构已有项目
           </h2>
           <p className="protocol-home-card__desc">
-            在已发布项目上上传新版方案，并列比较当前正式版本与新草稿的结构化差异（切片 6 完整交互）。
+            在已发布项目上上传新版方案，并列比较当前正式版本与新草稿的规则变化；确认后可保存、取消或发布新的规则版本。
           </p>
-          <p className="protocol-home-card__note">
-            当前阶段提供入口说明；完整重新解构与八类差异视图将在后续切片接入。
-          </p>
+          <ul className="protocol-home-card__steps">
+            <li>选择目标正式项目并上传新版方案</li>
+            <li>按官方编号逐条核对规则变化与来源定位</li>
+            <li>保存草稿或基于反馈修订，发布前可取消</li>
+          </ul>
           <RouteLink to="/protocols" params={{ mode: "redo" }} className="button">
-            查看重新解构说明
+            开始重新解构
           </RouteLink>
         </section>
       </div>

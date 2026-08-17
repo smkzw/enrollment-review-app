@@ -48,6 +48,8 @@ describe("方案工作台", () => {
     expect(screen.getAllByText(/方案原文摘要/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/来源定位/).length).toBeGreaterThan(0);
     expect(screen.getByText(/请逐项核对原文、逻辑和资料要求/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "取消本次草稿" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "发布" })).toBeEnabled();
   });
 
   it("选择规则子项后编辑区与来源区同步显示", async () => {
@@ -102,10 +104,33 @@ describe("方案工作台", () => {
     expect(screen.getByRole("button", { name: "继续任务" })).toBeInTheDocument();
   });
 
-  it("重新解构占位展示空态说明", async () => {
+  it("重新解构入口展示正式项目选择列表", async () => {
     navigate("/protocols", { mode: "redo" });
     render(<ProtocolsPage />);
-    expect(await screen.findByText("重新解构流程尚未在本切片开放")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: /重新解构已有项目/ }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("测试研究", { exact: true }).length).toBeGreaterThan(0);
+    expect(screen.getByText(/TEST-001/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /测试研究二/ })).toBeInTheDocument();
+  });
+
+  it("重新解构：选择项目后上传新版方案可进入任务", async () => {
+    const user = userEvent.setup();
+    navigate("/protocols", { mode: "redo" });
+    render(<ProtocolsPage />);
+    await screen.findByRole("heading", { name: /重新解构已有项目/ });
+    await user.click(screen.getByRole("button", { name: /测试研究二/ }));
+    const file = new File([btoa("dummy-docx")], "新版方案.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+    expect(screen.getByRole("button", { name: "选择新版方案文件" })).toBeInTheDocument();
+    const uploadInput = document.querySelector("input[type=file]") as HTMLInputElement;
+    expect(uploadInput).not.toBeNull();
+    await user.upload(uploadInput, file);
+    expect(
+      await screen.findByRole("heading", { name: "核对方案信息与研究期别" }),
+    ).toBeInTheDocument();
   });
 
   it("示例草稿保存后显示界面试用状态", async () => {
@@ -116,5 +141,16 @@ describe("方案工作台", () => {
     await user.click(screen.getByRole("button", { name: "保存草稿" }));
     expect(await screen.findByRole("status")).toHaveTextContent("已保存草稿");
     expect(await screen.findByRole("button", { name: "已保存草稿" })).toBeDisabled();
+  });
+
+  it("首次解构发布前显示适用于新项目的确认说明", async () => {
+    const user = userEvent.setup();
+    navigate("/protocols", { job: PROTOCOL_DEMO_JOB_ID });
+    render(<ProtocolsPage />);
+    await user.click(await screen.findByRole("button", { name: "发布" }));
+    const dialog = screen.getByRole("dialog", { name: "确认发布新规则版本" });
+    expect(dialog).toHaveTextContent("建立正式项目");
+    expect(dialog).toHaveTextContent("同一方案、同一期别已有正式项目时");
+    expect(dialog).not.toHaveTextContent("目标项目下");
   });
 });

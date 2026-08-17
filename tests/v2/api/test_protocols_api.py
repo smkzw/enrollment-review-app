@@ -394,3 +394,275 @@ def test_identity_date_candidate_projection_is_form_ready() -> None:
     )
     assert candidate.value == "2026-08-17"
     assert candidate.source_excerpt == "版本日期：2026年8月17日"
+
+
+def test_official_projects_list_and_version_read_after_publish(client, build_app) -> None:
+    app = build_app()
+    with TestClient(app) as test_client:
+        first = _create_protocol_job(test_client, key="projects-read-publish")
+        _seed_review_job(app, first, wait_at="publish")
+        draft = test_client.get(f"/api/v2/protocol/deconstructions/{first}/draft").json()
+        published = test_client.post(
+            f"/api/v2/protocol/deconstructions/{first}/publish",
+            json={"idempotency_key": "projects-read-pub", "actor": "医学监查员"},
+        )
+        assert published.status_code == 200, published.text
+        project_id = published.json()["project_id"]
+
+        listed = test_client.get("/api/v2/protocol/projects")
+        assert listed.status_code == 200, listed.text
+        body = listed.json()
+        assert len(body["projects"]) == 1
+        project = body["projects"][0]
+        assert project["project_id"] == project_id
+        assert project["protocol_code"] == "TEST-001"
+        assert project["official_version"] == "V1.0"
+        assert project["rule_set_revision"] == 1
+        assert project["study_phase_label"] == "II 期"
+
+        detail = test_client.get(f"/api/v2/protocol/projects/{project_id}")
+        assert detail.status_code == 200, detail.text
+        detail_body = detail.json()
+        assert detail_body["publication_count"] == 1
+        assert len(detail_body["versions"]) == 1
+        assert detail_body["versions"][0]["rule_count"] == 2
+
+
+def test_redeconstruction_start_with_project_id_persists_target(client, build_app) -> None:
+    app = build_app()
+    with TestClient(app) as test_client:
+        first = _create_protocol_job(test_client, key="redo-persist-first")
+        _seed_review_job(app, first, wait_at="publish")
+        draft = test_client.get(f"/api/v2/protocol/deconstructions/{first}/draft").json()
+        published = test_client.post(
+            f"/api/v2/protocol/deconstructions/{first}/publish",
+            json={"idempotency_key": "redo-persist-pub", "actor": "医学监查员"},
+        )
+        project_id = published.json()["project_id"]
+
+        files = {
+            "file": (
+                "redo-protocol.docx",
+                io.BytesIO(_minimal_docx_bytes()),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        }
+        data = {
+            "idempotency_key": "redo-start",
+            "actor": "医学监查员",
+            "project_id": project_id,
+        }
+        started = test_client.post(
+            "/api/v2/protocol/deconstructions", files=files, data=data
+        )
+        assert started.status_code == 201, started.text
+        job_id = started.json()["job_id"]
+
+        session = test_client.get(f"/api/v2/protocol/deconstructions/{job_id}")
+        assert session.status_code == 200, session.text
+        body = session.json()
+        assert body["session_kind"] == "re_deconstruction"
+        assert body["target_project_id"] == project_id
+        assert body["target_protocol_code"] == "TEST-001"
+        assert body["target_study_phase_label"] == "II 期"
+
+
+def test_feedback_redeconstruction_api_starts_without_upload(build_app) -> None:
+    app = build_app()
+    with TestClient(app) as test_client:
+        first = _create_protocol_job(test_client, key="feedback-formal-first")
+        _seed_review_job(app, first, wait_at="publish")
+        published = test_client.post(
+            f"/api/v2/protocol/deconstructions/{first}/publish",
+            json={"idempotency_key": "feedback-formal-pub", "actor": "医学监查员"},
+        )
+        assert published.status_code == 200, published.text
+        project_id = published.json()["project_id"]
+
+        started = test_client.post(
+            "/api/v2/protocol/deconstructions/from-formal",
+            json={
+                "project_id": project_id,
+                "idempotency_key": "feedback-formal-start",
+                "actor": "医学监查员",
+            },
+        )
+        assert started.status_code == 201, started.text
+        job_id = started.json()["job_id"]
+        session = test_client.get(f"/api/v2/protocol/deconstructions/{job_id}")
+        assert session.status_code == 200, session.text
+        assert session.json()["awaiting_user"] == "review"
+        comparison = test_client.get(
+            f"/api/v2/protocol/deconstructions/{job_id}/draft/comparison"
+        )
+        assert comparison.status_code == 200, comparison.text
+        assert comparison.json()["diff"]["modified_rule_codes"] == []
+        republished = test_client.post(
+            f"/api/v2/protocol/deconstructions/{job_id}/publish",
+            json={
+                "idempotency_key": "feedback-formal-republish",
+                "actor": "医学监查员",
+            },
+        )
+        assert republished.status_code == 200, republished.text
+        assert republished.json()["rule_set_revision"] == 2
+
+
+def test_redeconstruction_start_unknown_project_returns_chinese_envelope(
+    client,
+) -> None:
+    files = {
+        "file": (
+            "redo-protocol.docx",
+            io.BytesIO(_minimal_docx_bytes()),
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+    }
+    data = {
+        "idempotency_key": "redo-unknown",
+        "actor": "医学监查员",
+        "project_id": "missing-project",
+    }
+    response = client.post("/api/v2/protocol/deconstructions", files=files, data=data)
+    assert response.status_code == 404
+    error = response.json()["error"]
+    assert error["code"] == "PROJECT_NOT_FOUND"
+    assert error["title"] == "找不到正式项目"
+    assert error["recovery_action"]
+
+
+def test_redeconstruction_confirm_identity_lineage_mismatch_rejected(
+    build_app,
+) -> None:
+    """重新解构身份确认阶段即拦截与目标项目不同谱系/期别的确认。"""
+    app = build_app()
+    with TestClient(app) as test_client:
+        first = _create_protocol_job(test_client, key="redo-lineage-first")
+        _seed_review_job(app, first, wait_at="publish")
+        draft = test_client.get(f"/api/v2/protocol/deconstructions/{first}/draft").json()
+        published = test_client.post(
+            f"/api/v2/protocol/deconstructions/{first}/publish",
+            json={"idempotency_key": "redo-lineage-pub", "actor": "医学监查员"},
+        )
+        project_id = published.json()["project_id"]
+
+        files = {
+            "file": (
+                "redo-protocol.docx",
+                io.BytesIO(_minimal_docx_bytes()),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        }
+        data = {
+            "idempotency_key": "redo-lineage-start",
+            "actor": "医学监查员",
+            "project_id": project_id,
+        }
+        started = test_client.post(
+            "/api/v2/protocol/deconstructions", files=files, data=data
+        )
+        assert started.status_code == 201, started.text
+        job_id = started.json()["job_id"]
+
+        # 任务未走到身份确认检查点：确认请求应被拒绝为状态冲突（非 200）。
+        confirm = test_client.post(
+            f"/api/v2/protocol/deconstructions/{job_id}/identity/confirm",
+            json={
+                "protocol_code": "OTHER-001",
+                "project_name": "测试研究",
+                "official_version": "V2.0",
+                "official_date_value": "2026-08-17",
+                "official_date_precision": "day",
+                "study_phase": StudyPhase.PHASE_II.value,
+                "actor": "医学监查员",
+            },
+        )
+        assert confirm.status_code in (409, 422), confirm.text
+
+def test_draft_comparison_endpoint_returns_baseline_candidate_and_diff(
+    build_app,
+) -> None:
+    """重新解构比较投影：一次返回当前正式草稿、新草稿与八类差异。"""
+    from app.services.protocol_draft_service import ProtocolDraftService
+
+    app = build_app()
+    with TestClient(app) as test_client:
+        first = _create_protocol_job(test_client, key="compare-api-first")
+        _seed_review_job(app, first, wait_at="publish")
+        draft = test_client.get(f"/api/v2/protocol/deconstructions/{first}/draft").json()
+        published = test_client.post(
+            f"/api/v2/protocol/deconstructions/{first}/publish",
+            json={"idempotency_key": "compare-api-pub", "actor": "医学监查员"},
+        )
+        assert published.status_code == 200, published.text
+        project_id = published.json()["project_id"]
+
+        files = {
+            "file": (
+                "redo-protocol.docx",
+                io.BytesIO(_minimal_docx_bytes()),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        }
+        data = {
+            "idempotency_key": "compare-api-start",
+            "actor": "医学监查员",
+            "project_id": project_id,
+        }
+        started = test_client.post(
+            "/api/v2/protocol/deconstructions", files=files, data=data
+        )
+        assert started.status_code == 201, started.text
+        job_id = started.json()["job_id"]
+
+        # 重新解构子工作台种子：新版本草案
+        source_input, draft, spans = confirmed_fixture()
+        revised = draft.model_copy(
+            update={
+                "draft_id": "draft-compare-api",
+                "protocol_version_id": "protocol-version-2",
+                "protocol_metadata": draft.protocol_metadata.model_copy(
+                    update={"version_candidate": "V2.0"}
+                ),
+            }
+        )
+        revised_input = source_input.model_copy(
+            update={
+                "protocol_version_id": "protocol-version-2",
+                "identity_decision": source_input.identity_decision.model_copy(
+                    update={"official_version": "V2.0"}
+                ),
+            }
+        )
+        service = app.state.protocol_workbench_service
+        service.seed_review_session(
+            job_id,
+            source_input=revised_input,
+            draft=revised,
+            source_spans={key: span for key, span in spans.items()},
+            wait_at="publish",
+        )
+
+        comparison = test_client.get(
+            f"/api/v2/protocol/deconstructions/{job_id}/draft/comparison"
+        )
+        assert comparison.status_code == 200, comparison.text
+        body = comparison.json()
+        assert body["baseline"]["is_formal_baseline"] is True
+        assert body["candidate"]["is_formal_baseline"] is False
+        assert body["baseline"]["protocol_version_id"] == "protocol-version-1"
+        assert body["candidate"]["protocol_version_id"] == "protocol-version-2"
+        assert body["baseline"]["rule_count"] == 2
+        assert body["candidate"]["rule_count"] == 2
+        assert body["source_bound"] is True
+        assert "rule_diffs" in body["diff"]
+
+
+def test_draft_comparison_rejected_for_first_deconstruction(client) -> None:
+    """首次解构不是重新解构，不提供正式基线比较。"""
+    job_id = _create_protocol_job(client, key="compare-first-only")
+    response = client.get(f"/api/v2/protocol/deconstructions/{job_id}/draft/comparison")
+    assert response.status_code == 409
+    error = response.json()["error"]
+    assert error["code"] == "NOT_RE_DECONSTRUCTION_JOB"
+    assert error["recovery_action"]

@@ -28,6 +28,7 @@ from app.domain.contracts.enums import (
 )
 from app.domain.contracts.protocol_ingestion import ProtocolSourceSpan
 from app.domain.contracts.protocol_metadata import InterpretationConflict
+from app.domain.contracts.protocol_drafts import ParentRuleDiff
 from app.domain.contracts.rules import Rule, TimeUnit, iter_atomic_predicates
 from app.domain.publication import canonical_hash
 from app.protocols.section_index import formal_source_span_ids
@@ -79,6 +80,7 @@ class ProtocolDraftDiffDeclaration(VersionedModel):
     source_scope_changed: bool = False
     workflow_visit_rewritten: bool = False
     clarification_semantics_changed: bool = False
+    rule_diffs: list[ParentRuleDiff] = Field(default_factory=list)
 
 
 class ProtocolDeconstructionGateResult(VersionedModel):
@@ -2185,17 +2187,26 @@ class ProtocolDeconstructionGate:
     @staticmethod
     def _diff_integrity(draft, previous, declared, issues):
         if draft.draft_revision == 1:
-            if previous is not None or declared is not None:
+            # “第 1 稿”只表示当前草稿链的起点。首次解构没有正式
+            # 基线；重新解构的第 1 稿则必须与当前正式版比较。后者不是
+            # 同一草稿链的后继，因此 content.previous_draft_id 仍应为空。
+            if previous is None and declared is None:
+                return
+            if previous is None or declared is None:
                 issues.append(
                     _issue(
                         "diff_integrity",
-                        "FIRST_DRAFT_HAS_DIFF_BASE",
-                        "首稿不应携带前序差异基线。",
+                        "INITIAL_REVISION_DIFF_BASE_INCOMPLETE",
+                        "重新解构首稿的正式基线与结构化差异不完整。",
                         [draft.draft_id],
                     )
                 )
-            return
-        if previous is None or declared is None or draft.previous_draft_id != previous.draft_id:
+                return
+        elif (
+            previous is None
+            or declared is None
+            or draft.previous_draft_id != previous.draft_id
+        ):
             issues.append(
                 _issue(
                     "diff_integrity",

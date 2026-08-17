@@ -763,6 +763,79 @@ def semantic_candidate_from_draft(
     )
 
 
+def revise_protocol_draft_from_feedback(
+    source_input: ProtocolDeconstructionInput,
+    current_draft: ProtocolDeconstructionDraft,
+    *,
+    target_rule_code: str,
+    feedback_note: str,
+    transport: ProtocolAgentTransport,
+) -> ProtocolDeconstructionDraft:
+    """依据一条明确的原文理解纠错，局部重新解构指定父规则。
+
+    反馈是输入资料，不是发布权威。返回内容必须使用当前
+    candidate_id，且只能替换指定官方父规则；其他规则由程序原样保留。
+    """
+
+    note = feedback_note.strip()
+    if not note:
+        raise ValueError("原文理解纠错必须写明具体问题和期望修正")
+    current = semantic_candidate_from_draft(current_draft)
+    current_codes = [rule.official_code for rule in current.proposed_rules]
+    if target_rule_code not in current_codes:
+        raise ValueError(f"当前草稿中找不到入排标准 {target_rule_code}")
+    target = next(
+        rule for rule in current.proposed_rules if rule.official_code == target_rule_code
+    )
+    prompt = (
+        "你正在根据医学监查员指出的原文理解错误，局部修正已有方案"
+        "解构草稿。用户反馈不能改变方案权威；仅当给定方案原文支持时"
+        "才能修正。你必须只返回 ProtocolSemanticRuleRepair JSON，"
+        f"candidate_id 必须为 {current.candidate_id!r}，replacement_rules 必须且只能"
+        f"包含 {target_rule_code}。不得修改官方编号、增删其他父规则或伪造来源。\n\n"
+        f"用户指出的问题：{note}\n\n"
+        f"当前目标规则：{target.model_dump_json()}\n\n"
+        f"冻结的方案输入：{source_input.model_dump_json()}\n\n"
+        f"输出结构：{_compact_repair_schema()}"
+    )
+    response = transport.start(prompt=prompt)
+    last_error: Exception | None = None
+    for attempt in range(2):
+        try:
+            repair = _parse_semantic_repair(response.text)
+            revised = _apply_semantic_repair(
+                current,
+                repair,
+                expected_codes=[target_rule_code],
+            )
+            hydrated = _hydrate_semantic_candidate(source_input, revised)
+            # 局部修订必须追加到当前不可变草稿链；语义候选 ID 只是模型会话
+            # 身份，不能反向生成一个新的 draft_id。
+            return hydrated.model_copy(
+                update={
+                    "draft_id": current_draft.draft_id,
+                    "draft_revision": current_draft.draft_revision,
+                    "previous_draft_id": current_draft.previous_draft_id,
+                }
+            )
+        except Exception as exc:
+            last_error = exc
+            if attempt == 1:
+                break
+            response = transport.continue_session(
+                session_id=response.session_id,
+                prompt=(
+                    "上一响应无法作为指定父规则的局部修订读取。"
+                    f"问题：{str(exc)[:12000]}。请只返回符合下列结构的 JSON："
+                    + _compact_repair_schema()
+                ),
+            )
+    raise ProtocolAgentCallError(
+        response.session_id,
+        f"反馈修订经过一次结构纠正后仍无法读取：{last_error}",
+    )
+
+
 def _parse_semantic_candidate(text: str) -> ProtocolSemanticDeconstructionCandidate:
     payload = _normalize_model_json(json.loads(text))
     try:

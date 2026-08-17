@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel
@@ -27,6 +28,7 @@ from app.domain.contracts import (
     AgentCallContract,
     AssessmentCandidate,
     ClinicalFact,
+    DraftRevisionStatus,
     EpisodeRollup,
     EvidenceExpectation,
     EvidenceExpectationTemplate,
@@ -2346,6 +2348,32 @@ class ProtocolDraftRevisionRepository:
         contracts = [self._decode_record(row) for row in rows]
         return [item for item in contracts if item.draft_id == draft_id]
 
+    def find_published_by_protocol_version(
+        self, protocol_version_id: str
+    ) -> list[ProtocolDraftRevision]:
+        """按正式方案版本返回全部已发布草稿 revision（只读，逐条哈希校验）。
+
+        重新解构必须把“当前正式草稿”作为新草稿的比较基线；正式版本 id 由
+        项目级 ``ProtocolDocumentVersion`` 提供，这里从已发布 revision 的
+        不可变链中定位承载该版本的草稿快照。若镜像/哈希被破坏，解码即抛
+        :class:`PersistedContractInvalid`，绝不返回坏基线。调用方负责处理
+        零条或内容不一致（fail-closed）的场景。
+        """
+        rows = self.session.execute(
+            select(ProtocolDraftRevisionRecord)
+            .where(
+                ProtocolDraftRevisionRecord.protocol_version_id
+                == protocol_version_id,
+                ProtocolDraftRevisionRecord.status
+                == DraftRevisionStatus.PUBLISHED.value,
+            )
+            .order_by(
+                ProtocolDraftRevisionRecord.created_at,
+                ProtocolDraftRevisionRecord.revision_number,
+            )
+        ).scalars().all()
+        return [self._decode_record(row) for row in rows]
+
     def get_head(self, draft_id: str) -> ProtocolDraftRevision | None:
         """返回 draft_id 的链头（revision_number 最大的已保存 revision）。"""
         revisions = self.list_by_draft(draft_id)
@@ -2602,6 +2630,91 @@ def find_project_by_protocol_and_phase(
         return None
     contract = decode_contract(Project, row.payload_json, row.payload_sha256)
     return contract
+
+
+# ---------------------------------------------------------------------------
+# 项目正式版本读取（切片 6：重新解构选择项目 / 展示当前正式版本投影）
+# ---------------------------------------------------------------------------
+
+
+def get_project_row(
+    session: Session, project_id: str
+) -> tuple[Project, int] | None:
+    """返回 (Project, 当前 rule_set_revision)；项目不存在时返回 None。"""
+    record = session.get(ProjectRecord, project_id)
+    if record is None:
+        return None
+    contract = decode_contract(Project, record.payload_json, record.payload_sha256)
+    payload = json.loads(record.payload_json)
+    check_column_mirrors(
+        "Project",
+        record,
+        payload,
+        {
+            "project_code": "project_code",
+            "project_name": "project_name",
+            "study_phase": "study_phase",
+            "protocol_version_id": "protocol_version.protocol_version_id",
+            "rule_set_id": "rule_set_id",
+        },
+    )
+    return contract, int(record.rule_set_revision)
+
+
+def list_projects_with_revision(session: Session) -> list[tuple[Project, int]]:
+    """列出全部正式项目及其当前 rule_set_revision（单条 SELECT，禁止 N+1）。"""
+    rows = session.execute(
+        select(ProjectRecord).order_by(ProjectRecord.project_id)
+    ).scalars().all()
+    contracts = [
+        decode_contract(Project, row.payload_json, row.payload_sha256) for row in rows
+    ]
+    for row, payload in (
+        (row, json.loads(row.payload_json)) for row in rows
+    ):
+        check_column_mirrors("Project", row, payload, {"rule_set_id": "rule_set_id"})
+    return list(zip(contracts, [int(row.rule_set_revision) for row in rows]))
+
+
+def list_rule_set_revisions(
+    session: Session, rule_set_id: str
+) -> list[tuple[int, ProtocolDocumentVersion, datetime]]:
+    """规则集的全部已发布 revision（升序）及其对应方案版本记录。
+
+    重新解构必须持久保留目标项目，并支持在同一项目中追加新的不可变规则
+    版本；历史 revision 全部保留供追溯。每条 revision 携带其绑定方案版本，
+    缺失或哈希校验失败的记录直接拒绝（不静默隐藏）。
+    """
+    rows = session.execute(
+        select(RuleSetRecord)
+        .where(RuleSetRecord.rule_set_id == rule_set_id)
+        .order_by(RuleSetRecord.revision)
+    ).scalars().all()
+    result: list[tuple[int, ProtocolDocumentVersion, datetime]] = []
+    for row in rows:
+        version = AppendRepository(session, PROTOCOL_DOC_CONFIG).get(
+            row.protocol_version_id
+        )
+        result.append(
+            (int(row.revision), version, to_utc_naive(row.created_at))
+        )
+    return result
+
+
+def count_rule_set_rules(
+    session: Session, rule_set_id: str, revision: int
+) -> int:
+    """返回 RuleSet 指定 revision 的正式规则条数（列表投影用）。"""
+    return int(
+        session.execute(
+            select(func.count())
+            .select_from(RuleRecord)
+            .where(
+                RuleRecord.rule_set_id == rule_set_id,
+                RuleRecord.rule_set_revision == revision,
+            )
+        ).scalar_one()
+    )
 
 
 # ---------------------------------------------------------------------------

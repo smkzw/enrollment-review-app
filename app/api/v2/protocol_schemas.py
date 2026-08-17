@@ -8,7 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.contracts.agent_io import ProtocolDeconstructionDraft
 from app.domain.contracts.enums import DatePrecision, StudyPhase
-from app.domain.contracts.protocol_drafts import DraftFeedbackKind
+from app.domain.contracts.protocol_drafts import (
+    DraftFeedbackKind,
+    ProtocolDraftRevisionDiff,
+)
 
 
 class _StrictModel(BaseModel):
@@ -22,6 +25,77 @@ class StartDeconstructionResponse(_StrictModel):
     created: bool
     source_artifact_id: str
     file_name: str
+
+
+class StartFeedbackRevisionRequest(_StrictModel):
+    project_id: str = Field(min_length=1, max_length=128)
+    idempotency_key: str = Field(min_length=1, max_length=256)
+    actor: str = Field(default="用户", min_length=1, max_length=128)
+
+
+class OfficialProjectDTO(_StrictModel):
+    """正式项目投影（重新解构选择使用）。"""
+
+    project_id: str
+    project_code: str
+    project_name: str
+    study_phase: StudyPhase
+    study_phase_label: str
+    protocol_code: str
+    official_version: str
+    official_date_value: str | None = None
+    official_date_precision: DatePrecision | None = None
+    rule_set_id: str
+    rule_set_revision: int
+
+
+class OfficialProjectListResponse(_StrictModel):
+    projects: list[OfficialProjectDTO]
+
+
+class ProjectVersionDTO(_StrictModel):
+    """某个已发布规则版本：revision、方案版本、哈希与规则条数。"""
+
+    rule_set_revision: int
+    protocol_version_id: str
+    official_version: str
+    official_date_value: str | None = None
+    official_date_precision: DatePrecision | None = None
+    sha256: str
+    rule_count: int
+    published_at: str
+
+
+class ProjectOfficialVersionResponse(_StrictModel):
+    project: OfficialProjectDTO
+    versions: list[ProjectVersionDTO]
+    publication_count: int
+
+
+class DraftComparisonSideResponse(_StrictModel):
+    """并列差异的一侧：正式基线或新草稿（含来源定位信息）。"""
+
+    revision_id: str
+    draft_id: str
+    protocol_version_id: str
+    official_version: str | None = None
+    revision_number: int | None = None
+    status: str | None = None
+    rule_count: int
+    workflow_stage_count: int
+    is_formal_baseline: bool
+    content: dict[str, Any]
+    source_refs: list[str]
+
+
+class DraftComparisonResponse(_StrictModel):
+    """当前正式草稿 + 新草稿 + 相对正式版本的八类结构化差异。"""
+
+    job_id: str
+    baseline: DraftComparisonSideResponse
+    candidate: DraftComparisonSideResponse
+    diff: ProtocolDraftRevisionDiff
+    source_bound: bool
 
 
 class ProtocolSessionResponse(_StrictModel):
@@ -50,6 +124,15 @@ class ProtocolSessionResponse(_StrictModel):
     recovery_step_id: str | None = None
     next_action: str
     publishable: bool | None = None
+    # 重新解构：目标正式项目投影（session_kind="re_deconstruction" 时有值）。
+    target_project_id: str | None = None
+    target_project_name: str | None = None
+    target_project_code: str | None = None
+    target_protocol_code: str | None = None
+    target_study_phase: StudyPhase | None = None
+    target_study_phase_label: str | None = None
+    target_official_version: str | None = None
+    target_rule_set_revision: int | None = None
 
 
 class IdentityDecisionDTO(_StrictModel):
@@ -142,7 +225,7 @@ class DraftRevisionResponse(_StrictModel):
     rule_count: int
     workflow_stage_count: int
     content: dict[str, Any]
-    diff: dict[str, Any] | None = None
+    diff: ProtocolDraftRevisionDiff | None = None
 
 
 class ManualEditRequest(_StrictModel):
@@ -153,9 +236,9 @@ class ManualEditRequest(_StrictModel):
 
 class FeedbackRequest(_StrictModel):
     expected_revision_id: str = Field(min_length=1, max_length=128)
-    draft: ProtocolDeconstructionDraft
     feedback_kind: DraftFeedbackKind
-    feedback_note: str | None = None
+    target_rule_code: str = Field(pattern=r"^(IN|EX)-\d{2}$")
+    feedback_note: str = Field(min_length=1, max_length=12000)
     actor: str = Field(default="用户", min_length=1, max_length=128)
 
 

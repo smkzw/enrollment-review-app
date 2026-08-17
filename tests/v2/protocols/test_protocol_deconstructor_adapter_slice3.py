@@ -12,6 +12,7 @@ from app.agents.protocol_deconstructor import (
     _regressing_rule_codes,
     _select_repair_rule_codes,
     protocol_prompt_template_sha256,
+    revise_protocol_draft_from_feedback,
     semantic_candidate_from_draft,
 )
 from app.domain.contracts.agents import PromptVersion
@@ -128,6 +129,94 @@ def test_hydrated_draft_can_recover_semantic_candidate_for_persisted_repair():
     assert recovered.candidate_id == candidate.candidate_id
     assert recovered.proposed_rules == candidate.proposed_rules
     assert recovered.created_by_agent_call_id == candidate.created_by_agent_call_id
+
+
+def test_feedback_revision_replaces_only_selected_parent_rule():
+    source_input, draft, _spans = _fixture()
+    candidate = semantic_candidate_from_draft(draft)
+    replacement = candidate.proposed_rules[1].model_copy(deep=True)
+    replacement.components[0].title = "按方案原文修正后的排除条件"
+    repair = ProtocolSemanticRuleRepair(
+        candidate_id=candidate.candidate_id,
+        replacement_rules=[replacement],
+    )
+    transport = FakeTransport(
+        [ProtocolAgentResponse(session_id="feedback-session", text=repair.model_dump_json())]
+    )
+
+    revised = revise_protocol_draft_from_feedback(
+        source_input,
+        draft,
+        target_rule_code="EX-01",
+        feedback_note="EX-01 的原文条件被理解错了，请按原文重新拆分。",
+        transport=transport,
+    )
+
+    original = semantic_candidate_from_draft(draft)
+    actual = semantic_candidate_from_draft(revised)
+    assert actual.proposed_rules[0] == original.proposed_rules[0]
+    assert actual.proposed_rules[1].components[0].title == "按方案原文修正后的排除条件"
+    assert revised.draft_id == draft.draft_id
+    assert "replacement_rules 必须且只能包含 EX-01" in transport.start_prompts[0]
+
+
+def test_feedback_namespaced_draft_id_round_trips_without_creating_new_chain():
+    """正式版本反馈草稿的命名空间不得在语义水合后重复套 draft 前缀。"""
+
+    source_input, draft, _spans = _fixture()
+    draft = draft.model_copy(update={"draft_id": "draft:feedback:stable-id"})
+    candidate = semantic_candidate_from_draft(draft)
+    repair = ProtocolSemanticRuleRepair(
+        candidate_id=candidate.candidate_id,
+        replacement_rules=[candidate.proposed_rules[1]],
+    )
+    transport = FakeTransport(
+        [ProtocolAgentResponse(session_id="feedback-session", text=repair.model_dump_json())]
+    )
+
+    revised = revise_protocol_draft_from_feedback(
+        source_input,
+        draft,
+        target_rule_code="EX-01",
+        feedback_note="核对反馈草稿身份。",
+        transport=transport,
+    )
+
+    assert candidate.candidate_id == "feedback:stable-id"
+    assert revised.draft_id == "draft:feedback:stable-id"
+
+
+def test_feedback_revision_rejects_wrong_rule_then_repairs_in_same_session():
+    source_input, draft, _spans = _fixture()
+    candidate = semantic_candidate_from_draft(draft)
+    wrong = ProtocolSemanticRuleRepair(
+        candidate_id=candidate.candidate_id,
+        replacement_rules=[candidate.proposed_rules[0]],
+    )
+    replacement = candidate.proposed_rules[1].model_copy(deep=True)
+    replacement.components[0].title = "修正后的目标规则"
+    correct = ProtocolSemanticRuleRepair(
+        candidate_id=candidate.candidate_id,
+        replacement_rules=[replacement],
+    )
+    transport = FakeTransport(
+        [
+            ProtocolAgentResponse(session_id="feedback-session", text=wrong.model_dump_json()),
+            ProtocolAgentResponse(session_id="feedback-session", text=correct.model_dump_json()),
+        ]
+    )
+
+    revised = revise_protocol_draft_from_feedback(
+        source_input,
+        draft,
+        target_rule_code="EX-01",
+        feedback_note="只核对 EX-01。",
+        transport=transport,
+    )
+
+    assert semantic_candidate_from_draft(revised).proposed_rules[1].components[0].title == "修正后的目标规则"
+    assert transport.repair_prompts[0][0] == "feedback-session"
+    assert "指定父规则的局部修订" in transport.repair_prompts[0][1]
 
 
 def test_valid_json_passes_without_repair():

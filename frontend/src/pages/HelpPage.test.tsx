@@ -33,7 +33,8 @@ describe("系统帮助", () => {
     expect(screen.getByRole("heading", { name: /入排工作台：规则、判断与证据/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /行动中心：谁负责、补什么、何时完成/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /任务与系统：资料整理进度/ })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /报告与方案/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /方案工作台：首次解构与重新解构/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /常见问题：重新解构与发布/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /键盘操作/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /遇到问题怎么办/ })).toBeInTheDocument();
   });
