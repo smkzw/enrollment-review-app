@@ -18,6 +18,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError
 
+from app.services.protocol_draft_service import DraftEditBoundaryError
+from app.services.protocol_workbench_service import ProtocolWorkbenchError
 from app.storage.codecs import PersistedContractInvalid
 from app.storage.concurrency import StaleRevisionError
 from app.storage.idempotency import IdempotencyConflict
@@ -164,6 +166,27 @@ def map_exception(exc: Exception) -> tuple[int, dict[str, Any]]:
             "请检查任务编号，或返回任务列表重新选择。",
         )
         context = None
+    elif isinstance(exc, ProtocolWorkbenchError):
+        status = 404 if exc.code.endswith("_NOT_FOUND") else 409
+        if exc.code in {"IDENTITY_CONFIRM_INVALID", "SOURCE_INGESTION_FAILED"}:
+            status = 422
+        spec = ErrorSpec(
+            status,
+            exc.code,
+            exc.title,
+            exc.detail,
+            exc.recovery,
+        )
+        context = exc.context
+    elif isinstance(exc, DraftEditBoundaryError):
+        spec = ErrorSpec(
+            422,
+            getattr(exc, "code", "DRAFT_EDIT_BOUNDARY"),
+            "草稿编辑超出允许范围",
+            str(exc),
+            "请只修正与当前方案来源一致的语义内容，不要增删冻结目录或改写流程结构。",
+        )
+        context = None
     elif isinstance(exc, PersistedContractInvalid):
         spec = ErrorSpec(
             500,
@@ -252,6 +275,8 @@ def register_error_handlers(app: FastAPI) -> None:
         JobStateConflictError,
         InvalidJobDefinitionError,
         JobNotFoundError,
+        ProtocolWorkbenchError,
+        DraftEditBoundaryError,
         PersistedContractInvalid,
         OperationalError,
         StepDeferredError,

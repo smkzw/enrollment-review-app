@@ -22,7 +22,9 @@ from fastapi import FastAPI
 
 from app.api.v2.errors import register_error_handlers
 from app.api.v2.jobs import router as jobs_router
+from app.api.v2.protocols import router as protocols_router
 from app.services.job_service import JobService
+from app.services.protocol_workbench_service import ProtocolWorkbenchService
 from app.storage.config import DataPaths
 from app.storage.db import build_session_factory
 from app.storage.migrate import upgrade_or_fail
@@ -53,6 +55,10 @@ def create_app(
         app.state.engine = engine
         app.state.session_factory = session_factory
         app.state.job_service = JobService(session_factory, lease_ttl=lease_ttl)
+        app.state.protocol_workbench_service = ProtocolWorkbenchService(
+            session_factory,
+            data_paths=paths,
+        )
         app.state.sse_poll_interval = sse_poll_interval
         app.state.sse_heartbeat_seconds = sse_heartbeat_seconds
         runner: JobRunner | None = None
@@ -81,5 +87,6 @@ def create_app(
 
     app = FastAPI(title="入排审核 V2 持久任务 API", lifespan=lifespan)
     app.include_router(jobs_router)
+    app.include_router(protocols_router)
     register_error_handlers(app)
     return app

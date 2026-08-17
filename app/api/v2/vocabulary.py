@@ -53,3 +53,36 @@ def job_recovery_action(state: str) -> str:
 
 def is_terminal_label(state: str) -> bool:
     return state in TERMINAL_JOB_STATES
+
+
+def study_phase_label(phase: str) -> str:
+    labels = {
+        "phase_ii": "II 期",
+        "phase_iii": "III 期",
+        "seamless_phase_ii_iii": "II/III 期无缝设计",
+        "other": "其他",
+    }
+    return labels.get(phase, phase)
+
+
+METADATA_STATUS_LABELS: dict[str, str] = {
+    "pending": "待确认",
+    "confirmed": "已确认",
+    "conflict": "存在冲突",
+}
+
+DRAFT_STATUS_LABELS: dict[str, str] = {
+    "draft": "草稿",
+    "saved": "已保存",
+    "cancelled": "已取消",
+    "published": "已发布",
+    "restored_from": "已恢复",
+}
+
+DRAFT_REASON_LABELS: dict[str, str] = {
+    "initial_save": "首次保存",
+    "manual_edit": "手工编辑",
+    "source_error_feedback": "原文理解纠错",
+    "clarification_feedback": "解释性澄清",
+    "restore": "恢复历史版本",
+}
