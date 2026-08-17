@@ -191,6 +191,16 @@ def build_protocol_authority_record(
     verified_by: str,
     verified_at: datetime,
 ) -> ProtocolAuthorityRecord:
+    # 每条资料要求（含子规则来源）逐条继承其所属父规则的来源锚点；
+    # 保证合同闭包校验通过，且每条要求可回溯到方案原文。
+    requirement_source_anchor_refs: dict[str, list[str]] = {}
+    for rule in official_rules:
+        rule_refs = rule_source_anchor_refs.get(rule.official_code, [])
+        for component in rule.components:
+            for requirement in component.evidence_requirements:
+                requirement_source_anchor_refs[
+                    requirement.requirement_id
+                ] = list(rule_refs)
     data = {
         "authority_record_id": authority_record_id,
         "protocol_version_id": protocol_version_id,
@@ -199,6 +209,7 @@ def build_protocol_authority_record(
         "official_rules": official_rules,
         "official_workflow_stages": official_workflow_stages,
         "rule_source_anchor_refs": rule_source_anchor_refs,
+        "requirement_source_anchor_refs": requirement_source_anchor_refs,
         "verified_by": verified_by,
         "verified_at": verified_at,
         "verification_method": "human_verified_official_protocol",

@@ -337,6 +337,10 @@ class WorkflowStage(VersionedModel):
     workflow_stage_id: str = Field(min_length=1)
     stage: ReviewStage
     display_name: str = Field(min_length=1)
+    # 访视实例身份（Phase 3 切片 4）：节点身份 = 选定期别 + visit_instance + stage。
+    # 同一操作在筛选与基线分别执行时保留两个实例；同一 ReviewStage 下多个访视
+    # 各自有独立 visit_instance，不能合并或由最后一个节点覆盖。
+    visit_instance: str | None = None
     visit_window: str | None = None
     review_required: bool = True
     due_requirement_ids: list[str] = Field(default_factory=list)
@@ -357,6 +361,12 @@ class ProtocolAuthorityRecord(VersionedModel):
         default_factory=list
     )
     procedure_requirement_source_anchor_refs: dict[str, list[str]] = Field(
+        default_factory=dict
+    )
+    # Phase 3 slice 4 repair: 每条资料要求（子规则来源与流程必做来源）都必须
+    # 逐条保存方案来源锚点，不能只覆盖父规则和流程要求。Gate 与发布侧校验
+    # 锚点属于对应组件来源/允许范围，保证每条要求可回溯到方案原文。
+    requirement_source_anchor_refs: dict[str, list[str]] = Field(
         default_factory=dict
     )
     verified_by: str = Field(min_length=1)
@@ -392,6 +402,16 @@ class ProtocolAuthorityRecord(VersionedModel):
         ]
         if len(workflow_stage_ids) != len(set(workflow_stage_ids)):
             raise ValueError("ProtocolAuthorityRecord 的流程节点 ID 不得重复")
+        # 节点身份 = 期别 + visit_instance + stage：同一审核阶段下多个访视
+        # 实例各自有独立 (stage, visit_instance)，不能合并。
+        stage_visit_keys = [
+            (workflow.stage.value, workflow.visit_instance)
+            for workflow in self.official_workflow_stages
+        ]
+        if len(stage_visit_keys) != len(set(stage_visit_keys)):
+            raise ValueError(
+                "ProtocolAuthorityRecord 不得包含重复的 (审核阶段, 访视实例) 节点身份"
+            )
         procedure_requirement_ids = [
             item.requirement_id for item in self.procedure_evidence_requirements
         ]
@@ -431,6 +451,22 @@ class ProtocolAuthorityRecord(VersionedModel):
                 for requirement in self.procedure_evidence_requirements
             }
         )
+        # 每条资料要求（含子规则来源）逐条保存来源锚点，闭包必须与要求全集一致。
+        if set(self.requirement_source_anchor_refs) != set(requirements):
+            raise ValueError(
+                "每条资料要求必须且只能提供自己的来源定位（含子规则资料要求）"
+            )
+        if any(
+            not self.requirement_source_anchor_refs[requirement_id]
+            for requirement_id in requirements
+        ):
+            raise ValueError("资料要求来源定位不能为空")
+        if any(
+            not source_ref.startswith(expected_prefix)
+            for refs in self.requirement_source_anchor_refs.values()
+            for source_ref in refs
+        ):
+            raise ValueError("资料要求来源定位必须绑定当前 protocol_version_id")
         listed_due_stages: dict[str, ReviewStage] = {}
         for workflow in self.official_workflow_stages:
             for requirement_id in workflow.due_requirement_ids:

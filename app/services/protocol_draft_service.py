@@ -149,18 +149,24 @@ def compute_draft_diff(
             for span in item.source_span_ids
         )
     )
-    # 流程访视结构 = (节点 ID, 阶段, 到期资料要求) + (必做项目映射绑定)；
-    # 展示名等外观字段变化不计为访视改写。
+    # 流程访视结构 = (节点 ID, 阶段, 访视实例, 时间窗, 到期资料要求)
+    # + (必做项目映射绑定)；展示名等外观字段变化不计为访视改写。
     previous_stage_structure = {
-        (stage.workflow_stage_id, stage.stage.value): tuple(
-            stage.due_requirement_ids
-        )
+        (
+            stage.workflow_stage_id,
+            stage.stage.value,
+            stage.visit_instance,
+            stage.visit_window,
+        ): tuple(stage.due_requirement_ids)
         for stage in previous.proposed_workflow_stages
     }
     current_stage_structure = {
-        (stage.workflow_stage_id, stage.stage.value): tuple(
-            stage.due_requirement_ids
-        )
+        (
+            stage.workflow_stage_id,
+            stage.stage.value,
+            stage.visit_instance,
+            stage.visit_window,
+        ): tuple(stage.due_requirement_ids)
         for stage in current.proposed_workflow_stages
     }
     previous_mapping_bindings = {
@@ -198,7 +204,12 @@ def _semantics_changed(
     previous: ProtocolDeconstructionDraft,
     current: ProtocolDeconstructionDraft,
 ) -> bool:
-    """比较组件表达式/例外/阈值/逻辑的规范哈希（不含描述性文本）。"""
+    """比较组件表达式/例外/阈值/逻辑及临床证据语义的规范哈希。
+
+    临床证据语义包括：fact_type、due_stage、required_source_types、
+    允许筛选记录转录、要求同期客观来源与描述文本——澄清反馈不得改变这些
+    权威语义，仅来源忠实纠错或手工编辑可调整（发布前仍过确定性门禁）。
+    """
 
     def semantic_map(draft: ProtocolDeconstructionDraft) -> dict[str, str]:
         result: dict[str, str] = {}
@@ -216,6 +227,16 @@ def _semantics_changed(
                             "requirement_id": requirement.requirement_id,
                             "fact_type": requirement.fact_type,
                             "due_stage": requirement.due_stage.value,
+                            "required_source_types": sorted(
+                                set(requirement.required_source_types)
+                            ),
+                            "allows_screening_record_transcription": (
+                                requirement.allows_screening_record_transcription
+                            ),
+                            "requires_contemporaneous_objective_source": (
+                                requirement.requires_contemporaneous_objective_source
+                            ),
+                            "description": requirement.description,
                         }
                         for requirement in component.evidence_requirements
                     ],
@@ -239,10 +260,11 @@ def enforce_draft_edit_boundary(
 ) -> None:
     """校验一次编辑是否越过权威边界。
 
-    - 任何编辑不得增删冻结目录成员或改写流程访视结构；
-    - 澄清反馈（解释材料）不得改变阈值或布尔逻辑；
-    - 原文理解纠错与手工编辑允许修正语义，但必须保留来源绑定
-      （由 ProtocolDeconstructionGate 的 source_coverage 把关）。
+    - 任何编辑不得增删冻结目录成员、改写流程访视结构或换绑目录来源；
+    - 澄清反馈（解释材料）不得改变阈值、布尔逻辑、临床证据语义或来源绑定；
+    - 原文理解纠错与手工编辑允许修正语义与来源映射，但必须保留冻结目录
+      成员与流程结构（由 ProtocolDeconstructionGate 的 source_coverage /
+      parent_catalog / workflow_coverage 把关）。
     """
     previous_parent_items = {
         item.catalog_item_id for item in previous.parent_catalog_mappings
@@ -266,23 +288,43 @@ def enforce_draft_edit_boundary(
             "FROZEN_PROCEDURE_MEMBERSHIP_CHANGED",
             "编辑不得增删冻结的基线及以前必做项目录成员",
         )
-    previous_stage_structure = {
-        (stage.workflow_stage_id, stage.stage.value): tuple(
-            stage.due_requirement_ids
+    # 父规则映射来源属于冻结目录身份的一部分：换绑即破坏「目录成员不可增删」。
+    previous_parent_sources = {
+        item.catalog_item_id: tuple(sorted(item.source_span_ids))
+        for item in previous.parent_catalog_mappings
+    }
+    current_parent_sources = {
+        item.catalog_item_id: tuple(sorted(item.source_span_ids))
+        for item in current.parent_catalog_mappings
+    }
+    if previous_parent_sources != current_parent_sources:
+        _fail_boundary(
+            "PARENT_SOURCE_REBOUND",
+            "编辑不得换绑官方父规则映射的方案来源定位",
         )
+    previous_stage_structure = {
+        (
+            stage.workflow_stage_id,
+            stage.stage.value,
+            stage.visit_instance,
+            stage.visit_window,
+        ): tuple(stage.due_requirement_ids)
         for stage in previous.proposed_workflow_stages
     }
     current_stage_structure = {
-        (stage.workflow_stage_id, stage.stage.value): tuple(
-            stage.due_requirement_ids
-        )
+        (
+            stage.workflow_stage_id,
+            stage.stage.value,
+            stage.visit_instance,
+            stage.visit_window,
+        ): tuple(stage.due_requirement_ids)
         for stage in current.proposed_workflow_stages
     }
     if previous_stage_structure != current_stage_structure:
         _fail_boundary(
             "WORKFLOW_VISIT_REWRITTEN",
-            "编辑不得增删或重命名流程访视节点、不得改写到期资料要求；"
-            "同一操作在筛选与基线必须保持两个实例",
+            "编辑不得增删或重命名流程访视节点、不得改写访视实例/时间窗/到期"
+            "资料要求；同一操作在筛选与基线必须保持两个实例",
         )
     previous_mapping_bindings = {
         (mapping.catalog_item_id, mapping.proposed_workflow_stage_id): tuple(
@@ -316,13 +358,54 @@ def enforce_draft_edit_boundary(
             "WORKFLOW_VISIT_REWRITTEN",
             "编辑不得改写必做项目与资料要求/到期访视的绑定",
         )
+    diff = compute_draft_diff(previous, current)
     if feedback_kind == DraftFeedbackKind.CLARIFICATION:
-        diff = compute_draft_diff(previous, current)
         if diff.clarification_semantics_changed or diff.workflow_visit_rewritten:
             _fail_boundary(
                 "CLARIFICATION_ALTERS_SEMANTICS",
-                "解释性澄清只能附着在说明层，不得改变方案阈值、布尔逻辑或流程结构",
+                "解释性澄清只能附着在说明层，不得改变方案阈值、布尔逻辑、"
+                "临床证据语义或流程结构",
             )
+        # 澄清反馈不得改变任何来源绑定（组件/资料要求摘录与来源范围）。
+        if _source_bindings_changed(previous, current):
+            _fail_boundary(
+                "CLARIFICATION_ALTERS_SOURCE_BINDING",
+                "解释性澄清不得改写子规则或资料要求的方案来源绑定",
+            )
+
+
+def _source_bindings_changed(
+    previous: ProtocolDeconstructionDraft,
+    current: ProtocolDeconstructionDraft,
+) -> bool:
+    """组件/资料要求来源绑定（source_refs 与摘录）是否被改写。"""
+    previous_component_sources = {
+        item.draft_component_id: (
+            tuple(sorted(item.source_refs)),
+            tuple(item.source_excerpts),
+        )
+        for item in previous.component_drafts
+    }
+    current_component_sources = {
+        item.draft_component_id: (
+            tuple(sorted(item.source_refs)),
+            tuple(item.source_excerpts),
+        )
+        for item in current.component_drafts
+    }
+    if previous_component_sources != current_component_sources:
+        return True
+    previous_requirement_sources = {
+        item.draft_requirement_id: tuple(sorted(item.source_refs))
+        for item in previous.evidence_requirement_drafts
+    }
+    current_requirement_sources = {
+        item.draft_requirement_id: tuple(sorted(item.source_refs))
+        for item in current.evidence_requirement_drafts
+    }
+    if previous_requirement_sources != current_requirement_sources:
+        return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -432,8 +515,17 @@ class ProtocolDraftService:
         actor: str,
         created_at: datetime,
     ) -> ProtocolDraftRevision:
-        """从任意已保存 revision 恢复：创建审计后继，不覆盖历史。"""
+        """从任意已保存 revision 恢复：创建审计后继，不覆盖历史。
+
+        恢复只能从明确状态创建后继：已取消/已保存/已恢复的链头可恢复，
+        已发布的链头不可恢复（发布后形成正式规则版本，旧版本供历史追溯）。
+        """
         head = self._require_head(draft_id, expected_revision_id)
+        if head.status == DraftRevisionStatus.PUBLISHED:
+            raise DraftEditBoundaryError(
+                "DRAFT_PUBLISHED",
+                "已发布的草稿 revision 不能恢复或覆盖；请基于新草稿重新解构。",
+            )
         source = self.revisions.get(restore_from_revision_id)
         if source.draft_id != draft_id:
             raise NotFoundError(
@@ -441,6 +533,14 @@ class ProtocolDraftService:
             )
         restored_content = source.content.model_copy(deep=True)
         next_number = head.revision_number + 1
+        # 规范化内层草稿链：恢复后继的 draft_revision 与 previous_draft_id
+        # 指向链头（而非被恢复的旧 revision），与外层链一致。
+        restored_content = restored_content.model_copy(
+            update={
+                "draft_revision": next_number,
+                "previous_draft_id": head.content.draft_id,
+            }
+        )
         revision = ProtocolDraftRevision(
             revision_id=_revision_id(draft_id, next_number),
             draft_id=draft_id,
@@ -469,6 +569,16 @@ class ProtocolDraftService:
     ) -> ProtocolDraftRevision:
         """把当前链头显式标记为已保存（幂等；历史不物理删除）。"""
         head = self._require_head(draft_id, expected_revision_id)
+        if head.status == DraftRevisionStatus.PUBLISHED:
+            raise DraftEditBoundaryError(
+                "DRAFT_PUBLISHED",
+                "已发布的草稿 revision 不能再保存或编辑。",
+            )
+        if head.status == DraftRevisionStatus.CANCELLED:
+            raise DraftEditBoundaryError(
+                "DRAFT_CANCELLED",
+                "已取消的草稿不能直接保存；请先恢复后再保存。",
+            )
         if head.status == DraftRevisionStatus.SAVED:
             return head
         return self._transition_status(head, DraftRevisionStatus.SAVED)
@@ -481,16 +591,39 @@ class ProtocolDraftService:
     ) -> ProtocolDraftRevision:
         """取消本次编辑会话：链头标记为已取消，可恢复，不物理删除。"""
         head = self._require_head(draft_id, expected_revision_id)
+        if head.status == DraftRevisionStatus.PUBLISHED:
+            raise DraftEditBoundaryError(
+                "DRAFT_PUBLISHED",
+                "已发布的草稿 revision 不能取消。",
+            )
+        if head.status == DraftRevisionStatus.CANCELLED:
+            raise DraftEditBoundaryError(
+                "DRAFT_CANCELLED",
+                "当前链头已处于取消状态；如需继续请恢复。",
+            )
         return self._transition_status(head, DraftRevisionStatus.CANCELLED)
 
-    def mark_published(
+    def _mark_published(
         self,
         *,
         draft_id: str,
         expected_revision_id: str,
     ) -> ProtocolDraftRevision:
-        """发布成功后把链头标记为已发布（同一事务内调用）。"""
+        """发布成功后才由发布服务在发布事务内调用的内部路径。
+
+        只能从 已保存/草稿 状态转移到 已发布；已取消、已恢复或已发布的
+        链头都不能被直接标记为已发布（取消必须走恢复，发布必须过发布事务）。
+        """
         head = self._require_head(draft_id, expected_revision_id)
+        if head.status not in {
+            DraftRevisionStatus.SAVED,
+            DraftRevisionStatus.DRAFT,
+        }:
+            raise DraftEditBoundaryError(
+                "DRAFT_NOT_PUBLISHABLE",
+                "只有已保存（或草稿）状态的链头能被发布事务标记为已发布；"
+                f"当前状态 {head.status.value} 不允许直接发布。",
+            )
         return self._transition_status(head, DraftRevisionStatus.PUBLISHED)
 
     # -- 内部 -------------------------------------------------------------
@@ -507,10 +640,29 @@ class ProtocolDraftService:
         created_at: datetime,
     ) -> ProtocolDraftRevision:
         head = self._require_head(draft.draft_id, expected_revision_id)
+        if head.status == DraftRevisionStatus.CANCELLED:
+            raise DraftEditBoundaryError(
+                "DRAFT_CANCELLED",
+                "已取消的草稿不能直接继续编辑；请先恢复后再修改。",
+            )
+        if head.status == DraftRevisionStatus.PUBLISHED:
+            raise DraftEditBoundaryError(
+                "DRAFT_PUBLISHED",
+                "已发布的草稿 revision 不能继续编辑；请基于新草稿重新解构。",
+            )
         enforce_draft_edit_boundary(
             head.content, draft, feedback_kind=feedback_kind
         )
         next_number = head.revision_number + 1
+        # 规范化内层草稿链：content.draft_revision 与 previous_draft_id 必须
+        # 与外层 ProtocolDraftRevision 链一致，杜绝「外层 revision=2、内层仍=1」
+        # 的不一致状态。
+        normalized_content = draft.model_copy(
+            update={
+                "draft_revision": next_number,
+                "previous_draft_id": head.content.draft_id,
+            }
+        )
         revision = ProtocolDraftRevision(
             revision_id=_revision_id(draft.draft_id, next_number),
             draft_id=draft.draft_id,
@@ -524,9 +676,9 @@ class ProtocolDraftService:
             feedback_kind=feedback_kind,
             feedback_note=feedback_note,
             actor=actor,
-            content=draft,
-            content_sha256=canonical_hash(draft.model_dump(mode="json")),
-            diff=compute_draft_diff(head.content, draft),
+            content=normalized_content,
+            content_sha256=canonical_hash(normalized_content.model_dump(mode="json")),
+            diff=compute_draft_diff(head.content, normalized_content),
             created_at=created_at,
         )
         return self.revisions.save(revision)
@@ -540,6 +692,7 @@ class ProtocolDraftService:
         if head is not None and head.revision_id == expected_revision_id:
             return head
         raise _head_error(
+            self.revisions,
             draft_id=draft_id,
             expected_revision_id=expected_revision_id,
             head=head,
@@ -554,20 +707,115 @@ class ProtocolDraftService:
         return self.revisions.update_status(updated)
 
 
+def mark_revision_published(
+    revisions: ProtocolDraftRevisionRepository,
+    *,
+    draft_id: str,
+    expected_revision_id: str,
+) -> ProtocolDraftRevision:
+    """发布服务专用内部入口：绕过公开服务面标记链头为已发布。
+
+    公开的 :class:`ProtocolDraftService` 不再暴露 ``mark_published``；
+    只有发布事务（经 :class:`ProtocolPublicationService`）调用本函数，
+    并在同一事务内完成全部正式写入与幂等记录，杜绝外部绕过发布事务
+    直接给草稿打上已发布状态。
+    """
+    service = ProtocolDraftService(
+        revisions.session, revision_repository=revisions
+    )
+    return service._mark_published(
+        draft_id=draft_id,
+        expected_revision_id=expected_revision_id,
+    )
+
+
+def _draft_diff_as_field_changes(
+    diff: ProtocolDraftRevisionDiff,
+) -> dict[str, "FieldChange"]:
+    """把结构化草稿差异转换为 StaleRevisionError 的字段差异信封。
+
+    每个差异维度给出 current（链头现值）与 submitted（提交方值）两列，
+    供 API 输出中文冲突信封，绝不静默覆盖。
+    """
+    from app.storage.concurrency import FieldChange
+
+    def _pair(submitted: list[str]) -> FieldChange:
+        return FieldChange(current=[], submitted=submitted)
+
+    return {
+        "added_rule_codes": _pair(diff.added_rule_codes),
+        "removed_rule_codes": _pair(diff.removed_rule_codes),
+        "modified_rule_codes": _pair(diff.modified_rule_codes),
+        "added_workflow_stage_ids": _pair(diff.added_workflow_stage_ids),
+        "removed_workflow_stage_ids": _pair(diff.removed_workflow_stage_ids),
+        "modified_workflow_stage_ids": _pair(diff.modified_workflow_stage_ids),
+        "changed_component_ids": _pair(diff.changed_component_ids),
+        "changed_requirement_ids": _pair(diff.changed_requirement_ids),
+        "changed_procedure_mapping_ids": _pair(diff.changed_procedure_mapping_ids),
+        "source_scope_changed": FieldChange(
+            current=not diff.source_scope_changed,
+            submitted=diff.source_scope_changed,
+        ),
+        "workflow_visit_rewritten": FieldChange(
+            current=not diff.workflow_visit_rewritten,
+            submitted=diff.workflow_visit_rewritten,
+        ),
+    }
+
+
 def _head_error(
+    revisions: ProtocolDraftRevisionRepository,
     *,
     draft_id: str,
     expected_revision_id: str,
     head: ProtocolDraftRevision | None,
 ) -> StaleRevisionError:
-    current_number = head.revision_number if head is not None else 0
+    """过期提交错误：报告提交方真实 expected revision、当前 revision 与
+    结构化差异，而不是把两值都写成当前值并清空差异。"""
+    submitter: ProtocolDraftRevision | None = None
+    try:
+        candidate = revisions.get(expected_revision_id)
+        if candidate.draft_id == draft_id:
+            submitter = candidate
+    except NotFoundError:
+        submitter = None
+    expected_revision = (
+        submitter.revision_number
+        if submitter is not None
+        else (head.revision_number + 1 if head is not None else 1)
+    )
+    current_revision = head.revision_number if head is not None else 0
+    field_diff: dict[str, "FieldChange"] = {}
+    if submitter is not None and head is not None:
+        field_diff = _draft_diff_as_field_changes(
+            compute_draft_diff(submitter.content, head.content)
+        )
     return StaleRevisionError(
         entity_type="ProtocolDraftRevision",
         entity_id=draft_id,
-        expected_revision=current_number,
-        current_revision=current_number,
-        field_diff={},
+        expected_revision=expected_revision,
+        current_revision=current_revision,
+        field_diff=field_diff,
         current_record=head,
+    )
+
+
+def head_stale_error(
+    revisions: ProtocolDraftRevisionRepository,
+    *,
+    draft_id: str,
+    expected_revision_id: str,
+    head: ProtocolDraftRevision | None,
+) -> StaleRevisionError:
+    """公共过期提交错误构造器（发布服务与草稿服务共用）。
+
+    报告提交方真实 expected revision、当前 revision 与结构化差异信封。
+    """
+    return _head_error(
+        revisions,
+        draft_id=draft_id,
+        expected_revision_id=expected_revision_id,
+        head=head,
     )
 
 
@@ -577,4 +825,6 @@ __all__ = [
     "ProtocolDraftService",
     "compute_draft_diff",
     "enforce_draft_edit_boundary",
+    "head_stale_error",
+    "mark_revision_published",
 ]

@@ -65,7 +65,6 @@ from app.protocols.deconstruction_gate import (
     ProtocolDeconstructionGate,
     ProtocolDeconstructionGateResult,
 )
-from app.services.protocol_draft_service import ProtocolDraftService
 from app.storage.codecs import utc_now
 from app.storage.concurrency import StaleRevisionError
 from app.storage.idempotency import IdempotencyRepository, request_hash
@@ -228,12 +227,22 @@ class ProtocolPublicationService:
         revision = revisions.get(request.draft_revision_id)
         head = revisions.get_head(revision.draft_id)
         if head is None or head.revision_id != revision.revision_id:
+            from app.services.protocol_draft_service import (
+                _draft_diff_as_field_changes,
+                compute_draft_diff,
+            )
+
+            field_diff: dict[str, object] = {}
+            if head is not None:
+                field_diff = _draft_diff_as_field_changes(
+                    compute_draft_diff(revision.content, head.content)
+                )
             raise StaleRevisionError(
                 entity_type="ProtocolDraftRevision",
                 entity_id=revision.draft_id,
-                expected_revision=head.revision_number if head else 0,
+                expected_revision=revision.revision_number,
                 current_revision=head.revision_number if head else 0,
-                field_diff={},
+                field_diff=field_diff,
                 current_record=head,
             )
         if revision.status not in {
@@ -247,12 +256,57 @@ class ProtocolPublicationService:
             )
         draft = revision.content
 
+        # 发布输入的身份绑定：request.protocol_version_id 不能脱离 source_input
+        # 与草稿。首次发布不得携带重新解构专用的覆盖 id；重新发布的内部版本 id
+        # 必须与草稿和输入完全一致。
+        if request.project_id is None and request.protocol_version_id is not None:
+            raise PublicationLineageError(
+                "first_publish_cannot_override_version",
+                "首次发布不接受外部方案版本 id；版本身份必须来自本次解构草稿与输入。",
+            )
+        if draft.protocol_version_id != request.source_input.protocol_version_id:
+            raise PublicationLineageError(
+                "draft_input_version_mismatch",
+                "草稿与方案解构输入的 protocol_version_id 不一致，拒绝发布。",
+            )
+        if (
+            request.project_id is not None
+            and request.protocol_version_id is not None
+            and request.protocol_version_id != draft.protocol_version_id
+        ):
+            raise PublicationLineageError(
+                "republish_version_mismatch",
+                f"重新发布的内部版本 id {request.protocol_version_id} 与草稿/"
+                f"输入版本 {draft.protocol_version_id} 不一致，拒绝发布。",
+            )
+
         # 1) 确定性门禁复跑：发布权威只在门禁通过后成立。
+        #    后继 revision（revision_number > 1）必须携带前序草稿与声明差异，
+        #    让 diff_integrity 校验「新增/删除/修改可由结构差异重建」。
+        previous_draft = None
+        declared_diff = None
+        if revision.revision_number > 1:
+            previous_revision = revisions.get(revision.previous_revision_id)
+            previous_draft = previous_revision.content
+            from app.protocols.deconstruction_gate import (
+                ProtocolDraftDiffDeclaration,
+            )
+
+            declared_diff = ProtocolDraftDiffDeclaration(
+                added_rule_codes=revision.diff.added_rule_codes,
+                removed_rule_codes=revision.diff.removed_rule_codes,
+                modified_rule_codes=revision.diff.modified_rule_codes,
+                added_workflow_stage_ids=revision.diff.added_workflow_stage_ids,
+                removed_workflow_stage_ids=revision.diff.removed_workflow_stage_ids,
+                modified_workflow_stage_ids=revision.diff.modified_workflow_stage_ids,
+            )
         gate_result = self.gate.evaluate(
             request.source_input,
             draft,
             source_spans=request.source_spans,
             interpretation_conflicts=request.interpretation_conflicts,
+            previous_draft=previous_draft,
+            declared_diff=declared_diff,
         )
         if not gate_result.publishable:
             raise PublicationGateError(gate_result)
@@ -289,7 +343,8 @@ class ProtocolPublicationService:
                 )
 
         # 3) 组装正式权威链对象（方案版本记录在最后一步按真实引用创建）。
-        version_id = request.protocol_version_id or draft.protocol_version_id
+        #    版本身份已被上方校验绑定到草稿/输入；此处直接取草稿版本 id。
+        version_id = draft.protocol_version_id
         document_sha256 = request.source_input.protocol_file_sha256
         rule_set = self._build_rule_set(
             session, draft, version_id=version_id, target_project=target_project
@@ -569,6 +624,53 @@ class ProtocolPublicationService:
             procedure_anchor_refs[requirement_id] = [
                 f"{version_id}:{ref}" for ref in refs
             ]
+        # 每条资料要求（含子规则来源）逐条保存方案来源锚点；来源必须是
+        # 其对应组件/必做项目来源范围内的片段（门禁已把关，此处再校验闭包）。
+        component_id_by_draft = {
+            item.draft_component_id: item.proposed_component.rule_component_id
+            for item in draft.component_drafts
+        }
+        component_refs_by_id = {
+            item.proposed_component.rule_component_id: set(item.source_refs)
+            for item in draft.component_drafts
+        }
+        catalog_refs_by_id = {
+            item.item_id: set(item.source_span_ids)
+            for item in request.source_input.required_procedure_catalog.items
+        }
+        requirement_anchor_refs: dict[str, list[str]] = {}
+        for item in draft.evidence_requirement_drafts:
+            requirement_id = item.proposed_requirement.requirement_id
+            if item.draft_component_id is not None:
+                component_id = component_id_by_draft.get(item.draft_component_id)
+                if component_id is None:
+                    raise ProtocolPublicationError(
+                        "requirement_draft_component_missing",
+                        f"资料要求草稿 {item.draft_requirement_id} 找不到所属子规则映射",
+                    )
+                if component_id in component_refs_by_id and not set(
+                    item.source_refs
+                ) <= component_refs_by_id[component_id]:
+                    raise ProtocolPublicationError(
+                        "requirement_source_outside_component",
+                        f"资料要求 {requirement_id} 的来源超出子规则 {component_id} 来源范围",
+                    )
+            else:
+                catalog_item_id = item.procedure_catalog_item_id
+                if (
+                    catalog_item_id in catalog_refs_by_id
+                    and not set(item.source_refs)
+                    <= catalog_refs_by_id[catalog_item_id]
+                ):
+                    raise ProtocolPublicationError(
+                        "procedure_requirement_source_outside_catalog",
+                        f"流程资料要求 {requirement_id} 的来源超出必做项目 "
+                        f"{catalog_item_id} 来源范围",
+                    )
+            refs = self._source_refs(item.source_refs, request.source_spans)
+            requirement_anchor_refs[requirement_id] = [
+                f"{version_id}:{ref}" for ref in refs
+            ]
         authority_data = {
             "authority_record_id": f"authority:{uuid.uuid4().hex}",
             "protocol_version_id": version_id,
@@ -579,6 +681,7 @@ class ProtocolPublicationService:
             "rule_source_anchor_refs": rule_anchor_refs,
             "procedure_evidence_requirements": self._procedure_requirements(draft),
             "procedure_requirement_source_anchor_refs": procedure_anchor_refs,
+            "requirement_source_anchor_refs": requirement_anchor_refs,
             "verified_by": request.actor,
             "verified_at": self._published_at(request),
             "verification_method": "human_verified_official_protocol",
@@ -601,6 +704,7 @@ class ProtocolPublicationService:
                 for refs in (
                     *rule_anchor_refs.values(),
                     *procedure_anchor_refs.values(),
+                    *requirement_anchor_refs.values(),
                 )
                 for ref in refs
             }
@@ -856,12 +960,11 @@ class ProtocolPublicationService:
         )
         save_expectation_templates(session, templates)
 
-        # 发布成功：草稿链头标记为已发布。
-        draft_service = ProtocolDraftService(
-            session,
-            revision_repository=ProtocolDraftRevisionRepository(session),
-        )
-        draft_service.mark_published(
+        # 发布成功：草稿链头标记为已发布（仅经内部路径，不能绕过发布事务）。
+        from app.services.protocol_draft_service import mark_revision_published
+
+        mark_revision_published(
+            ProtocolDraftRevisionRepository(session),
             draft_id=revision.draft_id,
             expected_revision_id=revision.revision_id,
         )

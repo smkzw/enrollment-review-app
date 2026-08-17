@@ -141,7 +141,9 @@ class EvidenceExpectationTemplate(VersionedModel):
     从已发布的 RuleSet/workflow 确定性投影，不含任何 subject/review-episode
     状态；``template_id`` 与 ``projection_sha256`` 均由稳定身份字段计算，
     同一 RuleSet revision 的同一 requirement 永远得到同一模板。
-    Phase 4/5 创建 ReviewEpisode 时再由此模板投影具体受试者期望。
+    模板覆盖 EvidenceRequirement 下游执行所需的全部字段：fact_type、
+    due_stage、required_source_types、允许筛选记录转录、要求同期客观来源
+    与描述文本。Phase 4/5 创建 ReviewEpisode 时再由此模板投影具体受试者期望。
     """
 
     template_id: str = Field(min_length=1)
@@ -152,6 +154,7 @@ class EvidenceExpectationTemplate(VersionedModel):
     study_phase: StudyPhase
     workflow_stage_id: str | None = Field(default=None, min_length=1)
     fact_type: str = Field(min_length=1)
+    required_source_types: list[str] = Field(default_factory=list)
     requires_contemporaneous_objective_source: bool = False
     allows_screening_record_transcription: bool = True
     description: str = Field(min_length=1)
@@ -171,6 +174,15 @@ class EvidenceExpectationTemplate(VersionedModel):
                 "due_stage": self.due_stage.value,
                 "study_phase": self.study_phase.value,
                 "workflow_stage_id": self.workflow_stage_id,
+                "fact_type": self.fact_type,
+                "required_source_types": sorted(set(self.required_source_types)),
+                "requires_contemporaneous_objective_source": (
+                    self.requires_contemporaneous_objective_source
+                ),
+                "allows_screening_record_transcription": (
+                    self.allows_screening_record_transcription
+                ),
+                "description": self.description,
             }
         )
         if self.projection_sha256 != expected_projection:

@@ -416,6 +416,13 @@ def _recover_exact_fragments(excerpt: str, sources: Sequence[str]) -> list[str]:
     return [excerpt]
 
 
+def _visit_slug(visit: str) -> str:
+    """访视实例的稳定短标识（前 8 位 SHA-256），用于多访视节点 id。"""
+    import hashlib
+
+    return hashlib.sha256(visit.encode("utf-8")).hexdigest()[:8]
+
+
 def _hydrate_semantic_candidate(
     source_input: ProtocolDeconstructionInput,
     candidate: ProtocolSemanticDeconstructionCandidate,
@@ -580,48 +587,91 @@ def _hydrate_semantic_candidate(
         )
 
     procedure_mappings: list[ProcedureCatalogMapping] = []
+    # 按（审核阶段, 访视实例）分组：同一阶段多个访视实例各自独立节点，
+    # 不能由最后一个节点覆盖；单实例阶段保留兼容节点 id（stage:<stage>）。
+    visit_groups: dict[tuple[str, str], list] = {}
     for item in sorted(
         source_input.required_procedure_catalog.items,
         key=lambda value: value.position,
     ):
-        if item.review_stage is None:
-            raise ValueError(f"必做项目缺少审核阶段：{item.item_id}")
-        requirement_id = f"requirement:{item.item_id}"
-        requirement = EvidenceRequirement(
-            requirement_id=requirement_id,
-            procedure_catalog_item_id=item.item_id,
-            fact_type="方案规定的访视操作或结果",
-            due_stage=item.review_stage,
-            description=f"{item.visit_instance}：{item.label}",
+        visit_groups.setdefault(
+            (item.review_stage.value, item.visit_instance or ""), []
+        ).append(item)
+    stage_visit_count = {
+        stage_value: sum(1 for group in visit_groups if group[0] == stage_value)
+        for stage_value in {group[0] for group in visit_groups}
+    }
+    stage_first_node: dict[str, str] = {}
+    workflow_stages: list[WorkflowStage] = []
+    for (stage_value, visit), items in visit_groups.items():
+        stage = ReviewStage(stage_value)
+        multi_visit = stage_visit_count[stage_value] > 1
+        node_id = (
+            f"stage:{stage_value}"
+            if not multi_visit
+            else f"stage:{stage_value}:{_visit_slug(visit)}"
         )
-        requirement_drafts.append(
-            EvidenceRequirementDraft(
-                draft_requirement_id=f"draft-{requirement_id}",
+        stage_first_node.setdefault(stage_value, node_id)
+        display_name = _STAGE_DISPLAY_NAMES[stage]
+        if multi_visit:
+            display_name = f"{display_name}（{visit}）"
+        node_requirement_ids: list[str] = []
+        for item in items:
+            if item.review_stage is None:
+                raise ValueError(f"必做项目缺少审核阶段：{item.item_id}")
+            requirement_id = f"requirement:{item.item_id}"
+            requirement = EvidenceRequirement(
+                requirement_id=requirement_id,
                 procedure_catalog_item_id=item.item_id,
-                proposed_requirement=requirement,
-                source_refs=list(item.source_span_ids),
+                fact_type="方案规定的访视操作或结果",
+                due_stage=item.review_stage,
+                description=f"{item.visit_instance}：{item.label}",
+            )
+            requirement_drafts.append(
+                EvidenceRequirementDraft(
+                    draft_requirement_id=f"draft-{requirement_id}",
+                    procedure_catalog_item_id=item.item_id,
+                    proposed_requirement=requirement,
+                    source_refs=list(item.source_span_ids),
+                )
+            )
+            procedure_mappings.append(
+                ProcedureCatalogMapping(
+                    catalog_item_id=item.item_id,
+                    proposed_requirement_ids=[requirement_id],
+                    proposed_workflow_stage_id=node_id,
+                    source_span_ids=list(item.source_span_ids),
+                )
+            )
+            node_requirement_ids.append(requirement_id)
+        workflow_stages.append(
+            WorkflowStage(
+                workflow_stage_id=node_id,
+                stage=stage,
+                display_name=display_name,
+                visit_instance=visit or None,
+                due_requirement_ids=node_requirement_ids,
             )
         )
-        stage_id = f"stage:{item.review_stage.value}"
-        procedure_mappings.append(
-            ProcedureCatalogMapping(
-                catalog_item_id=item.item_id,
-                proposed_requirement_ids=[requirement_id],
-                proposed_workflow_stage_id=stage_id,
-                source_span_ids=list(item.source_span_ids),
-            )
-        )
-        stage_requirements.setdefault(item.review_stage, []).append(requirement_id)
 
-    workflow_stages = [
-        WorkflowStage(
-            workflow_stage_id=f"stage:{stage.value}",
-            stage=stage,
-            display_name=_STAGE_DISPLAY_NAMES[stage],
-            due_requirement_ids=requirement_ids,
+    # 组件资料要求（无访视实例）确定性挂到其 due_stage 的第一个访视节点。
+    workflow_stages_by_id = {
+        stage.workflow_stage_id: stage for stage in workflow_stages
+    }
+    for stage, requirement_ids in stage_requirements.items():
+        node_id = stage_first_node.get(stage.value)
+        if node_id is None:
+            continue
+        listed = workflow_stages_by_id[node_id]
+        workflow_stages_by_id[node_id] = listed.model_copy(
+            update={
+                "due_requirement_ids": [
+                    *listed.due_requirement_ids,
+                    *requirement_ids,
+                ]
+            }
         )
-        for stage, requirement_ids in stage_requirements.items()
-    ]
+    workflow_stages = list(workflow_stages_by_id.values())
     identity = source_input.identity_decision
     source_refs = list(source_input.allowed_source_span_ids)
     return ProtocolDeconstructionDraft(

@@ -421,6 +421,7 @@ class EvidenceExpectationTemplateRecord(AppendedRecordMixin, Base):
         String(128), nullable=True
     )
     fact_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    required_source_types: Mapped[list | None] = mapped_column(JSON, nullable=True)
     projection_sha256: Mapped[str] = mapped_column(
         String(PAYLOAD_SHA_LEN), nullable=False
     )

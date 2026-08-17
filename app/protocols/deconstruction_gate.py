@@ -636,6 +636,19 @@ class ProtocolDeconstructionGate:
                         [item.item_id, mapping.proposed_rule_id],
                     )
                 )
+            # 父规则映射的来源必须等于冻结目录项自身来源，不能任意换绑其他
+            # 目录/跨期来源；换绑即破坏「目录成员不可增删、来源不可张冠李戴」。
+            if set(mapping.source_span_ids) != set(item.source_span_ids):
+                issues.append(
+                    _issue(
+                        "parent_catalog",
+                        "PARENT_MAPPING_SOURCE_MISMATCH",
+                        f"冻结条目 {item.item_id} 的目录映射来源与目录项来源不一致。",
+                        [item.item_id, *mapping.source_span_ids],
+                        action="请让父规则映射的 source_span_ids 与冻结目录项完全一致，"
+                        "不得借用其他父规则、跨期片段或降级提示来源。",
+                    )
+                )
 
     @staticmethod
     def _tree_integrity(draft, issues):
@@ -1551,6 +1564,26 @@ class ProtocolDeconstructionGate:
                     sorted(stages) or [draft.draft_id],
                 )
             )
+        # 节点身份 = (审核阶段, 访视实例)：同一 ReviewStage 下多个访视实例
+        # 各自有独立节点，不能由最后一个节点覆盖。访视实例缺失的节点不能
+        # 承载冻结必做项目（目录项必带 visit_instance）。
+        visit_keys: dict[tuple[str, str | None], str] = {}
+        for stage in stages.values():
+            key = (stage.stage.value, stage.visit_instance)
+            prior = visit_keys.get(key)
+            if prior is not None:
+                issues.append(
+                    _issue(
+                        "workflow_coverage",
+                        "DUPLICATE_VISIT_NODE_IDENTITY",
+                        f"审核节点 {prior} 与 {stage.workflow_stage_id} 具有相同"
+                        "（审核阶段, 访视实例）身份，无法区分两个访视。",
+                        [prior, stage.workflow_stage_id],
+                        action="请为同一阶段的每个访视实例保留独立 visit_instance；"
+                        "同一检查在筛选与基线分别执行时必须保留两个节点。",
+                    )
+                )
+            visit_keys[key] = stage.workflow_stage_id
         catalog_items = {
             item.item_id: item for item in source_input.required_procedure_catalog.items
         }
@@ -1567,10 +1600,9 @@ class ProtocolDeconstructionGate:
                 )
                 continue
             catalog_item = catalog_items.get(mapping.catalog_item_id)
-            if (
-                catalog_item is not None
-                and catalog_item.review_stage != stage.stage
-            ):
+            if catalog_item is None:
+                continue
+            if catalog_item.review_stage != stage.stage:
                 issues.append(
                     _issue(
                         "workflow_coverage",
@@ -1580,64 +1612,116 @@ class ProtocolDeconstructionGate:
                         action="请将必做项目映射到与冻结目录 review_stage 完全一致的审核节点，筛选项目不能映射到基线节点。",
                     )
                 )
-        expected_by_stage: dict[str, set[str]] = {}
-        stage_ids_by_review = {
-            stage.stage: stage_id for stage_id, stage in stages.items()
-        }
-        for rule in draft.proposed_rules:
-            for component in rule.components:
-                for requirement in component.evidence_requirements:
-                    stage_id = stage_ids_by_review.get(requirement.due_stage)
-                    if stage_id is not None:
-                        expected_by_stage.setdefault(stage_id, set()).add(
-                            requirement.requirement_id
-                        )
-        for mapping in draft.procedure_catalog_mappings:
-            expected_by_stage.setdefault(
-                mapping.proposed_workflow_stage_id, set()
-            ).update(mapping.proposed_requirement_ids)
-        if set(stages) != set(expected_by_stage):
-            issues.append(
-                _issue(
-                    "workflow_coverage",
-                    "WORKFLOW_STAGE_SET_MISMATCH",
-                    "审核节点与必做项目实际使用的节点不是一一对应。",
-                    sorted(set(stages) ^ set(expected_by_stage)),
-                )
-            )
-        listed_due_ids = [
-            requirement_id
-            for stage in draft.proposed_workflow_stages
-            for requirement_id in stage.due_requirement_ids
-        ]
-        duplicate_due_ids = sorted(
-            requirement_id
-            for requirement_id, count in Counter(listed_due_ids).items()
-            if count > 1
-        )
-        if duplicate_due_ids:
-            issues.append(
-                _issue(
-                    "workflow_coverage",
-                    "DUPLICATE_WORKFLOW_REQUIREMENT",
-                    "同一资料核对要求在审核节点中重复出现，无法确定唯一到期节点。",
-                    duplicate_due_ids,
-                    action="请保证每个资料核对要求只在其 due_stage 对应的一个审核节点中出现一次。",
-                )
-            )
-        for stage_id, stage in stages.items():
-            expected_ids = expected_by_stage.get(stage_id, set())
-            actual_ids = set(stage.due_requirement_ids)
-            if actual_ids != expected_ids:
+            if stage.visit_instance != catalog_item.visit_instance:
                 issues.append(
                     _issue(
                         "workflow_coverage",
-                        "WORKFLOW_STAGE_REQUIREMENTS_MISMATCH",
-                        f"审核节点 {stage.display_name} 的应核对项目与必做项目映射不一致。",
-                        sorted(actual_ids ^ expected_ids) or [stage_id],
-                        action="请从冻结必做项目映射重新生成该节点的 due_requirement_ids，不得留空、漏项或夹带其他节点项目。",
+                        "PROCEDURE_VISIT_INSTANCE_MISMATCH",
+                        f"必做项目 {mapping.catalog_item_id} 的冻结访视实例"
+                        f"（{catalog_item.visit_instance}）与草稿节点"
+                        f"（{stage.visit_instance or '未声明'}）不一致。",
+                        [mapping.catalog_item_id, mapping.proposed_workflow_stage_id],
+                        action="请把必做项目映射到访视实例与冻结目录完全一致的审核节点；"
+                        "同一操作在不同访视执行时必须保留各自实例，不能合并或错配。",
                     )
                 )
+
+        # 到期闭包：每个资料要求必须恰好列在一个节点，且节点阶段与要求 due_stage
+        # 一致；流程资料要求必须列在其目录映射指向的同一节点。
+        requirements = {
+            requirement.requirement_id: requirement
+            for rule in draft.proposed_rules
+            for component in rule.components
+            for requirement in component.evidence_requirements
+        }
+        procedure_requirement_objects = {
+            item.proposed_requirement.requirement_id: item.proposed_requirement
+            for item in draft.evidence_requirement_drafts
+            if item.procedure_catalog_item_id is not None
+        }
+        requirements.update(procedure_requirement_objects)
+        for mapping in draft.procedure_catalog_mappings:
+            for requirement_id in mapping.proposed_requirement_ids:
+                if requirement_id not in requirements:
+                    requirements[requirement_id] = None  # 占位：存在性由 evidence_coverage 把关
+        node_by_requirement: dict[str, str] = {}
+        for stage in draft.proposed_workflow_stages:
+            for requirement_id in stage.due_requirement_ids:
+                requirement = requirements.get(requirement_id)
+                if (
+                    requirement is not None
+                    and stage.stage != requirement.due_stage
+                ):
+                    issues.append(
+                        _issue(
+                            "workflow_coverage",
+                            "REQUIREMENT_DUE_STAGE_MISMATCH",
+                            f"资料要求 {requirement_id} 的 due_stage 是 "
+                            f"{requirement.due_stage.value}，却列在 "
+                            f"{stage.workflow_stage_id}（{stage.stage.value}）节点。",
+                            [requirement_id, stage.workflow_stage_id],
+                            action="请把资料要求放入与其 due_stage 一致的审核节点；"
+                            "筛选期要求不能放入基线节点。",
+                        )
+                    )
+                prior_node = node_by_requirement.get(requirement_id)
+                if prior_node is not None:
+                    issues.append(
+                        _issue(
+                            "workflow_coverage",
+                            "DUPLICATE_WORKFLOW_REQUIREMENT",
+                            "同一资料核对要求在审核节点中重复出现，无法确定唯一到期节点。",
+                            [prior_node, stage.workflow_stage_id, requirement_id],
+                            action="请保证每个资料核对要求只在其 due_stage 对应的一个审核节点中出现一次。",
+                        )
+                    )
+                node_by_requirement[requirement_id] = stage.workflow_stage_id
+        for requirement_id in sorted(requirements):
+            if requirement_id not in node_by_requirement:
+                issues.append(
+                    _issue(
+                        "workflow_coverage",
+                        "REQUIREMENT_WITHOUT_DUE_NODE",
+                        f"资料要求 {requirement_id} 没有出现在任何审核节点。",
+                        [requirement_id],
+                        action="请把每个资料核对要求放入其 due_stage 对应的唯一审核节点。",
+                    )
+                )
+                continue
+        # 流程资料要求必须与目录映射同节点（映射指向的节点即到期节点）。
+        for mapping in draft.procedure_catalog_mappings:
+            for requirement_id in mapping.proposed_requirement_ids:
+                listed_node = node_by_requirement.get(requirement_id)
+                if (
+                    listed_node is not None
+                    and listed_node != mapping.proposed_workflow_stage_id
+                ):
+                    issues.append(
+                        _issue(
+                            "workflow_coverage",
+                            "PROCEDURE_REQUIREMENT_WRONG_NODE",
+                            f"流程资料要求 {requirement_id} 列在 {listed_node}，"
+                            f"但其目录映射指向 {mapping.proposed_workflow_stage_id}。",
+                            [mapping.catalog_item_id, requirement_id, listed_node],
+                            action="流程资料要求必须列在其必做项目目录映射指向的同一审核节点。",
+                        )
+                    )
+        # 空节点（未承载任何资料核对要求）是孤立节点。
+        orphan_stages = sorted(
+            stage_id
+            for stage_id in stages
+            if stage_id not in node_by_requirement.values()
+        )
+        if orphan_stages:
+            issues.append(
+                _issue(
+                    "workflow_coverage",
+                    "ORPHAN_WORKFLOW_STAGE",
+                    "审核节点没有承载任何资料核对要求，无法归集应核对项目。",
+                    orphan_stages,
+                    action="请删除孤立节点或把对应访视的资料要求放入其中。",
+                )
+            )
 
     @staticmethod
     def _evidence_coverage(draft, issues):
@@ -1949,6 +2033,119 @@ class ProtocolDeconstructionGate:
                     action="请只保留当前官方父规则下直接支撑该子规则的来源，不得借用其他父规则。",
                 )
             )
+        # 资料要求来源绑定：组件要求只能引用其所属组件来源；流程要求只能
+        # 引用其必做项目映射来源。来源张冠李戴会破坏逐条可追溯性。
+        component_sources = {
+            item.draft_component_id: set(item.source_refs)
+            for item in draft.component_drafts
+        }
+        misplaced_requirement_sources = []
+        for item in draft.evidence_requirement_drafts:
+            if item.draft_component_id is not None:
+                allowed_refs = component_sources.get(item.draft_component_id, set())
+                if not set(item.source_refs) <= allowed_refs:
+                    misplaced_requirement_sources.append(
+                        item.proposed_requirement.requirement_id
+                    )
+            elif item.procedure_catalog_item_id is not None:
+                mapping = next(
+                    (
+                        candidate
+                        for candidate in draft.procedure_catalog_mappings
+                        if candidate.catalog_item_id == item.procedure_catalog_item_id
+                    ),
+                    None,
+                )
+                if mapping is None or not set(item.source_refs) <= set(
+                    mapping.source_span_ids
+                ):
+                    misplaced_requirement_sources.append(
+                        item.proposed_requirement.requirement_id
+                    )
+        if misplaced_requirement_sources:
+            issues.append(
+                _issue(
+                    "source_coverage",
+                    "REQUIREMENT_SOURCE_OUTSIDE_ORIGIN",
+                    "部分资料要求引用了其所属组件或必做项目之外的方案片段。",
+                    sorted(set(misplaced_requirement_sources)),
+                    action="请让每条资料要求只引用其所属子规则组件或必做项目目录映射的"
+                    "来源片段，不得借用其他组件或访视的来源。",
+                )
+            )
+        # 子规则资料要求与流程资料要求：来源必须属于其对应组件来源/允许范围。
+        component_refs = {
+            item.proposed_component.rule_component_id: set(item.source_refs)
+            for item in draft.component_drafts
+        }
+        requirement_to_component = {
+            requirement.requirement_id: component.rule_component_id
+            for rule in draft.proposed_rules
+            for component in rule.components
+            for requirement in component.evidence_requirements
+        }
+        requirement_refs_by_component: dict[str, list[str]] = {}
+        requirement_refs_by_procedure: dict[str, list[str]] = {}
+        for item in draft.evidence_requirement_drafts:
+            if item.draft_component_id is not None:
+                component_id = next(
+                    (
+                        draft_item.proposed_component.rule_component_id
+                        for draft_item in draft.component_drafts
+                        if draft_item.draft_component_id == item.draft_component_id
+                    ),
+                    None,
+                )
+                if component_id is not None:
+                    requirement_refs_by_component.setdefault(
+                        component_id, []
+                    ).extend(item.source_refs)
+            else:
+                requirement_refs_by_procedure.setdefault(
+                    item.procedure_catalog_item_id or "", []
+                ).extend(item.source_refs)
+        requirement_outside_component = sorted(
+            component_id
+            for component_id, refs in requirement_refs_by_component.items()
+            if refs and component_id in component_refs
+            and not set(refs) <= component_refs[component_id]
+        )
+        if requirement_outside_component:
+            issues.append(
+                _issue(
+                    "source_coverage",
+                    "REQUIREMENT_SOURCE_OUTSIDE_COMPONENT",
+                    "部分子规则资料要求的来源超出其所属子规则来源范围。",
+                    requirement_outside_component,
+                    action="资料要求只能引用直接支撑其所属子规则的方案片段，"
+                    "不得借用其他组件或父规则之外的来源。",
+                )
+            )
+        procedure_catalog_refs = {
+            item.item_id: set(item.source_span_ids)
+            for item in source_input.required_procedure_catalog.items
+        }
+        procedure_requirement_outside = sorted(
+            catalog_item_id
+            for catalog_item_id, refs in requirement_refs_by_procedure.items()
+            if refs
+            and catalog_item_id in procedure_catalog_refs
+            and not set(refs) <= procedure_catalog_refs[catalog_item_id]
+        )
+        if procedure_requirement_outside:
+            issues.append(
+                _issue(
+                    "source_coverage",
+                    "PROCEDURE_REQUIREMENT_SOURCE_OUTSIDE_CATALOG",
+                    "部分流程资料要求的来源超出其必做项目录项的来源范围。",
+                    procedure_requirement_outside,
+                    action="流程资料要求只能引用其所属必做项目录项的访视/操作原文，"
+                    "不得借用其他目录项或组件来源。",
+                )
+            )
+        # 资料要求自身若被换绑到其他组件（draft_component_id 与规则树组件不一致）
+        # 由 evidence_coverage 的 COMPONENT_REQUIREMENT_DRAFT_BINDING_MISMATCH 把关；
+        # 此处补充：requirement 来源还必须在 allowed 范围内（上方 DRAFT_SOURCE_NOT_FORMALLY_LOCATED 已覆盖）。
 
     @staticmethod
     def _interpretation_authority(conflicts, issues):

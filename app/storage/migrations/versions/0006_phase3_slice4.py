@@ -10,7 +10,9 @@ Create Date: 2026-08-17
    ``procedure_catalog_item_id``，用 CHECK 约束保证「且只能绑定一个来源」；
    既有组件来源行原样保留（rule_component_id 非空、流程来源列空）。
    重建采用「建新表 -> 拷贝 -> 删旧表 -> 改名」，避免 SQLite 的 RENAME
-   改写 ``evidence_expectations`` 等引用表的外键目标。
+   改写 ``evidence_expectations`` 等引用表的外键目标；``evidence_expectations``
+   等子表已有真实行时，重建在非事务连接上临时关闭外键，完成后用
+   ``PRAGMA foreign_key_check`` 验证子行与外键完整保留，再恢复外键约束。
 2. ``workflow_stages`` 追加 ``study_phase`` 列：同一操作在筛选与基线分别
    执行时按 (阶段, 期别) 保持身份，不跨项目合并审核节点。
 3. 新增 ``protocol_draft_revisions``（不可变草稿历史，取消/发布不物理删除）。
@@ -26,6 +28,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    JSON,
     MetaData,
     String,
     Table,
@@ -188,6 +191,7 @@ evidence_expectation_templates = Table(
     Column("study_phase", String(32), nullable=False),
     Column("workflow_stage_id", String(128), nullable=True),
     Column("fact_type", String(128), nullable=False),
+    Column("required_source_types", JSON, nullable=True),
     Column("projection_sha256", String(64), nullable=False),
     Column("payload_json", Text, nullable=False),
     Column("payload_sha256", String(64), nullable=False),
@@ -203,48 +207,119 @@ Index(
 )
 
 
+def _foreign_key_check_ok(bind) -> bool:
+    """PRAGMA foreign_key_check 必须无违规行；有违规即返回 False。"""
+    raw = _raw_dbapi(bind)
+    try:
+        rows = raw.execute("PRAGMA foreign_key_check").fetchall()
+    except Exception:
+        return False
+    return not rows
+
+
+def _raw_dbapi(bind):
+    """DBAPI 层连接：SQLAlchemy 的 autobegin 会让事务内 PRAGMA foreign_keys
+    变成 no-op，因此 FK 开关与完整性检查必须在 raw 连接上执行。"""
+    return bind.connection.driver_connection
+
+
+def _disable_foreign_keys(bind) -> None:
+    raw = _raw_dbapi(bind)
+    # 关闭 SQLAlchemy 隐式开启的事务，让 PRAGMA foreign_keys 真正生效；
+    # 无事务时 COMMIT 是空操作，幂等无害。
+    try:
+        raw.execute("COMMIT")
+    except Exception:
+        pass
+    raw.execute("PRAGMA foreign_keys = OFF")
+
+
+def _restore_foreign_keys(bind) -> None:
+    raw = _raw_dbapi(bind)
+    try:
+        raw.execute("COMMIT")
+    except Exception:
+        pass
+    raw.execute("PRAGMA foreign_keys = ON")
+
+
 def _rebuild_requirements_table(
     *,
     new_shape: bool,
 ) -> None:
-    """建新表 -> 拷贝 -> 删旧表 -> 改名，保住引用表外键目标。"""
+    """建新表 -> 拷贝 -> 删旧表 -> 改名，保住引用表外键目标。
+
+    ``evidence_expectations`` 等子表可能已有真实行引用 ``evidence_requirements``；
+    重建期间在 raw 连接上临时关闭外键（见 env.py
+    ``transaction_per_migration=False`` 与 :func:`_disable_foreign_keys`），
+    重建完成后用 ``PRAGMA foreign_key_check`` 验证子行与外键完整保留，
+    再恢复外键约束。
+    """
     bind = op.get_bind()
-    # SQLite 索引名是库级命名空间；旧索引先释放，新表才能创建同名索引。
-    op.execute("DROP INDEX IF EXISTS ix_evidence_requirements_fact_type")
-    temp_name = (
-        "evidence_requirements_new" if new_shape else "evidence_requirements_legacy"
-    )
-    if new_shape:
-        new_table = _new_shape_requirements_table(temp_name, metadata)
-        columns = (
-            "rule_set_id, rule_set_revision, requirement_id, rule_component_id, "
-            "procedure_catalog_item_id, fact_type, due_stage, "
-            "payload_json, payload_sha256, created_at"
+    _disable_foreign_keys(bind)
+    try:
+        # SQLite 索引名是库级命名空间；旧索引先释放，新表才能创建同名索引。
+        op.execute("DROP INDEX IF EXISTS ix_evidence_requirements_fact_type")
+        temp_name = (
+            "evidence_requirements_new" if new_shape else "evidence_requirements_legacy"
         )
-        source_columns = (
-            "rule_set_id, rule_set_revision, requirement_id, rule_component_id, "
-            "NULL, fact_type, due_stage, "
-            "payload_json, payload_sha256, created_at"
+        if new_shape:
+            new_table = _new_shape_requirements_table(temp_name, metadata)
+            columns = (
+                "rule_set_id, rule_set_revision, requirement_id, rule_component_id, "
+                "procedure_catalog_item_id, fact_type, due_stage, "
+                "payload_json, payload_sha256, created_at"
+            )
+            source_columns = (
+                "rule_set_id, rule_set_revision, requirement_id, rule_component_id, "
+                "NULL, fact_type, due_stage, "
+                "payload_json, payload_sha256, created_at"
+            )
+            where_clause = ""
+        else:
+            new_table = _legacy_shape_requirements_table(temp_name, downgrade_metadata)
+            columns = (
+                "rule_set_id, rule_set_revision, requirement_id, rule_component_id, "
+                "fact_type, due_stage, payload_json, payload_sha256, created_at"
+            )
+            source_columns = (
+                "rule_set_id, rule_set_revision, requirement_id, rule_component_id, "
+                "fact_type, due_stage, payload_json, payload_sha256, created_at"
+            )
+            where_clause = "WHERE rule_component_id IS NOT NULL"
+        new_table.create(bind=bind)
+        op.execute(
+            f"INSERT INTO {temp_name} ({columns}) "
+            f"SELECT {source_columns} FROM evidence_requirements {where_clause}"
         )
-        where_clause = ""
-    else:
-        new_table = _legacy_shape_requirements_table(temp_name, downgrade_metadata)
-        columns = (
-            "rule_set_id, rule_set_revision, requirement_id, rule_component_id, "
-            "fact_type, due_stage, payload_json, payload_sha256, created_at"
+        op.execute("DROP TABLE evidence_requirements")
+        op.execute(f"ALTER TABLE {temp_name} RENAME TO evidence_requirements")
+    finally:
+        _restore_foreign_keys(bind)
+    if not _foreign_key_check_ok(bind):
+        raise RuntimeError(
+            "迁移重建 evidence_requirements 后外键完整性检查失败；"
+            "子表行与外键引用未完整保留，禁止继续迁移"
         )
-        source_columns = (
-            "rule_set_id, rule_set_revision, requirement_id, rule_component_id, "
-            "fact_type, due_stage, payload_json, payload_sha256, created_at"
-        )
-        where_clause = "WHERE rule_component_id IS NOT NULL"
-    new_table.create(bind=bind)
-    op.execute(
-        f"INSERT INTO {temp_name} ({columns}) "
-        f"SELECT {source_columns} FROM evidence_requirements {where_clause}"
-    )
-    op.execute("DROP TABLE evidence_requirements")
-    op.execute(f"ALTER TABLE {temp_name} RENAME TO evidence_requirements")
+
+
+def _has_slice4_data(bind) -> bool:
+    """是否存在 Slice 4 正式数据；有则禁止有损降级。"""
+    for table, where in (
+        ("protocol_draft_revisions", "1=1"),
+        ("evidence_expectation_templates", "1=1"),
+        ("evidence_requirements", "procedure_catalog_item_id IS NOT NULL"),
+        ("workflow_stages", "study_phase IS NOT NULL"),
+    ):
+        try:
+            count = bind.exec_driver_sql(
+                f"SELECT COUNT(*) FROM {table} WHERE {where}"
+            ).scalar_one()
+        except Exception:
+            continue
+        if count:
+            return True
+    return False
 
 
 def upgrade() -> None:
@@ -258,6 +333,14 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
+    # 有损降级只允许用于灾难恢复：含 Slice 4 正式数据时必须显式拒绝，
+    # 不得静默丢弃流程来源行、草稿历史或模板投影。
+    if _has_slice4_data(bind):
+        raise RuntimeError(
+            "数据库包含 Phase 3 切片 4 正式数据（流程来源资料要求、草稿 revision "
+            "历史、期望模板或审核节点期别），拒绝有损降级到 0005；"
+            "仅允许空库或无切片 4 数据时降级"
+        )
     evidence_expectation_templates.drop(bind=bind)
     protocol_draft_revisions.drop(bind=bind)
     op.drop_column("workflow_stages", "study_phase")

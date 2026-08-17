@@ -96,7 +96,11 @@ def test_two_tab_concurrent_edit_second_gets_stale_revision(session) -> None:
             )
         error = exc_info.value
         assert error.entity_type == "ProtocolDraftRevision"
-        assert error.expected_revision == error.current_revision == 2
+        # 提交方真实 expected revision=1，当前链头=2；不得写成 2/2 或空差异。
+        assert error.expected_revision == 1
+        assert error.current_revision == 2
+        assert error.field_diff, "过期提交必须携带结构化差异信封"
+        assert "modified_workflow_stage_ids" in error.field_diff
         assert service.revisions.count(draft.draft_id) == 2
 
 
@@ -285,3 +289,213 @@ def test_compute_draft_diff_aligns_by_official_code(session) -> None:
     assert diff.changed_component_ids == ["component-in"]
     assert diff.added_rule_codes == []
     assert diff.removed_rule_codes == []
+
+
+def test_successor_content_is_normalized_to_outer_chain(session) -> None:
+    """外层 revision=2 时内层 content.draft_revision 必须同步为 2，
+    previous_draft_id 必须指向链头草稿；不允许外层 2 内层仍 1。"""
+    with session.begin():
+        r1, draft = _save_initial(session)
+        service = _service(session)
+        edited = draft.model_copy(deep=True)
+        edited.draft_revision = 1  # 提交方携带未更新的内层链号
+        r2 = service.apply_manual_edit(
+            edited,
+            expected_revision_id=r1.revision_id,
+            actor="医学监查员",
+            created_at=NOW,
+        )
+        assert r2.revision_number == 2
+        assert r2.content.draft_revision == 2
+        assert r2.content.previous_draft_id == draft.draft_id
+        # 存储层再次把关：内层链号与外层不一致的 revision 被拒
+        from app.storage.repositories import (
+            ProtocolDraftRevisionRepository,
+            ScopeViolationError,
+        )
+
+        repo = ProtocolDraftRevisionRepository(session)
+        forged = r2.model_copy(deep=True)
+        forged.revision_id = "draft-revision:draft-1:forged"
+        forged.content = forged.content.model_copy(update={"draft_revision": 1})
+        with pytest.raises(ScopeViolationError, match="draft_revision"):
+            repo.save(forged)
+
+
+def test_cancelled_revision_cannot_be_published_directly(session) -> None:
+    """取消状态不能直接转已发布：必须先恢复，恢复也只能按明确状态创建后继。"""
+    with session.begin():
+        r1, draft = _save_initial(session)
+        service = _service(session)
+        cancelled = service.cancel_draft(
+            draft_id=draft.draft_id, expected_revision_id=r1.revision_id
+        )
+        assert cancelled.status == DraftRevisionStatus.CANCELLED
+        with pytest.raises(DraftEditBoundaryError) as exc_info:
+            service.cancel_draft(
+                draft_id=draft.draft_id, expected_revision_id=r1.revision_id
+            )
+        assert exc_info.value.code == "DRAFT_CANCELLED"
+        with pytest.raises(DraftEditBoundaryError) as exc_info:
+            service.save_draft(
+                draft_id=draft.draft_id, expected_revision_id=r1.revision_id
+            )
+        assert exc_info.value.code == "DRAFT_CANCELLED"
+        # 取消后不能直接编辑；恢复创建审计后继后即可继续
+        edited = draft.model_copy(deep=True)
+        with pytest.raises(DraftEditBoundaryError) as exc_info:
+            service.apply_manual_edit(
+                edited,
+                expected_revision_id=r1.revision_id,
+                actor="医学监查员",
+                created_at=NOW,
+            )
+        assert exc_info.value.code == "DRAFT_CANCELLED"
+        restored = service.restore_draft(
+            draft_id=draft.draft_id,
+            expected_revision_id=r1.revision_id,
+            restore_from_revision_id=r1.revision_id,
+            actor="医学监查员",
+            created_at=NOW,
+        )
+        assert restored.status == DraftRevisionStatus.RESTORED_FROM
+        r3 = service.apply_manual_edit(
+            edited,
+            expected_revision_id=restored.revision_id,
+            actor="医学监查员",
+            created_at=NOW,
+        )
+        assert r3.revision_number == 3
+
+
+def test_published_revision_cannot_be_edited_saved_or_cancelled(session) -> None:
+    """已发布 revision 不能再 save/cancel/edit（发布后进入正式规则历史）。"""
+    with session.begin():
+        r1, draft = _save_initial(session)
+        service = _service(session)
+        from app.services.protocol_draft_service import mark_revision_published
+
+        published = mark_revision_published(
+            service.revisions,
+            draft_id=draft.draft_id,
+            expected_revision_id=r1.revision_id,
+        )
+        assert published.status == DraftRevisionStatus.PUBLISHED
+        for action, kwargs in (
+            ("save_draft", {"draft_id": draft.draft_id, "expected_revision_id": r1.revision_id}),
+            ("cancel_draft", {"draft_id": draft.draft_id, "expected_revision_id": r1.revision_id}),
+            ("restore_draft", {"draft_id": draft.draft_id, "expected_revision_id": r1.revision_id, "restore_from_revision_id": r1.revision_id, "actor": "医学监查员", "created_at": NOW}),
+        ):
+            with pytest.raises(DraftEditBoundaryError):
+                getattr(service, action)(**kwargs)
+        edited = draft.model_copy(deep=True)
+        with pytest.raises(DraftEditBoundaryError) as exc_info:
+            service.apply_manual_edit(
+                edited,
+                expected_revision_id=r1.revision_id,
+                actor="医学监查员",
+                created_at=NOW,
+            )
+        assert exc_info.value.code == "DRAFT_PUBLISHED"
+        # 公开服务面不再暴露 mark_published：外部无法绕过发布事务
+        assert not hasattr(ProtocolDraftService, "mark_published")
+
+
+def test_clarification_cannot_change_evidence_semantics(session) -> None:
+    """澄清反馈不得改变 required_source_types / 转录/同期来源/描述等权威语义。"""
+    with session.begin():
+        r1, draft = _save_initial(session)
+        service = _service(session)
+        clarified = draft.model_copy(deep=True)
+        requirement = clarified.proposed_rules[0].components[0].evidence_requirements[0]
+        clarified.proposed_rules[0].components[0] = (
+            clarified.proposed_rules[0].components[0].model_copy(
+                update={
+                    "evidence_requirements": [
+                        requirement.model_copy(
+                            update={
+                                "required_source_types": ["正式检验报告"],
+                                "description": "必须提供原始记录",
+                            }
+                        )
+                    ]
+                }
+            )
+        )
+        with pytest.raises(DraftEditBoundaryError) as exc_info:
+            service.apply_feedback(
+                clarified,
+                expected_revision_id=r1.revision_id,
+                feedback_kind=DraftFeedbackKind.CLARIFICATION,
+                feedback_note="解释材料不能改证据要求",
+                actor="医学监查员",
+                created_at=NOW,
+            )
+        assert exc_info.value.code == "CLARIFICATION_ALTERS_SEMANTICS"
+
+
+def test_clarification_cannot_change_source_binding(session) -> None:
+    """澄清反馈不得改写组件/资料要求的来源绑定（摘录或来源范围）。"""
+    with session.begin():
+        r1, draft = _save_initial(session)
+        service = _service(session)
+        clarified = draft.model_copy(deep=True)
+        clarified.component_drafts[0] = clarified.component_drafts[0].model_copy(
+            update={"source_refs": ["span-ex"]}
+        )
+        with pytest.raises(DraftEditBoundaryError) as exc_info:
+            service.apply_feedback(
+                clarified,
+                expected_revision_id=r1.revision_id,
+                feedback_kind=DraftFeedbackKind.CLARIFICATION,
+                feedback_note="解释材料不能改来源绑定",
+                actor="医学监查员",
+                created_at=NOW,
+            )
+        assert exc_info.value.code == "CLARIFICATION_ALTERS_SOURCE_BINDING"
+
+
+def test_any_edit_cannot_change_visit_instance_or_window(session) -> None:
+    """任何编辑（含手工编辑）不得改写访视实例/时间窗结构。"""
+    with session.begin():
+        r1, draft = _save_initial(session)
+        service = _service(session)
+        for field, value in (
+            ("visit_instance", "筛选期 D1"),
+            ("visit_window", "D-1"),
+        ):
+            tampered = draft.model_copy(deep=True)
+            tampered.proposed_workflow_stages[0] = (
+                tampered.proposed_workflow_stages[0].model_copy(
+                    update={field: value}
+                )
+            )
+            with pytest.raises(DraftEditBoundaryError) as exc_info:
+                service.apply_manual_edit(
+                    tampered,
+                    expected_revision_id=r1.revision_id,
+                    actor="医学监查员",
+                    created_at=NOW,
+                )
+            assert exc_info.value.code == "WORKFLOW_VISIT_REWRITTEN"
+
+
+def test_any_edit_cannot_rebind_parent_mapping_source(session) -> None:
+    """父规则映射来源换绑被拒（冻结目录身份的一部分）。"""
+    with session.begin():
+        r1, draft = _save_initial(session)
+        service = _service(session)
+        tampered = draft.model_copy(deep=True)
+        tampered.parent_catalog_mappings[0] = (
+            tampered.parent_catalog_mappings[0].model_copy(
+                update={"source_span_ids": ["span-ex"]}
+            )
+        )
+        with pytest.raises(DraftEditBoundaryError) as exc_info:
+            service.apply_manual_edit(
+                tampered,
+                expected_revision_id=r1.revision_id,
+                actor="医学监查员",
+                created_at=NOW,
+            )
+        assert exc_info.value.code == "PARENT_SOURCE_REBOUND"

@@ -109,6 +109,17 @@ def project_evidence_expectation_templates(
                 "due_stage": requirement.due_stage.value,
                 "study_phase": rule_set.study_phase.value,
                 "workflow_stage_id": stage.workflow_stage_id,
+                "fact_type": requirement.fact_type,
+                "required_source_types": sorted(
+                    set(requirement.required_source_types)
+                ),
+                "requires_contemporaneous_objective_source": (
+                    requirement.requires_contemporaneous_objective_source
+                ),
+                "allows_screening_record_transcription": (
+                    requirement.allows_screening_record_transcription
+                ),
+                "description": requirement.description,
             }
         )
         template_id = (
@@ -131,6 +142,7 @@ def project_evidence_expectation_templates(
                 study_phase=rule_set.study_phase,
                 workflow_stage_id=stage.workflow_stage_id,
                 fact_type=requirement.fact_type,
+                required_source_types=list(requirement.required_source_types),
                 requires_contemporaneous_objective_source=(
                     requirement.requires_contemporaneous_objective_source
                 ),
@@ -170,8 +182,17 @@ def template_projection_sha256(
     due_stage,
     study_phase,
     workflow_stage_id: str | None,
+    fact_type: str | None = None,
+    required_source_types: Sequence[str] = (),
+    requires_contemporaneous_objective_source: bool | None = None,
+    allows_screening_record_transcription: bool | None = None,
+    description: str | None = None,
 ) -> str:
-    """稳定投影哈希；与模板合同校验使用同一算法。"""
+    """稳定投影哈希；与模板合同校验使用同一算法。
+
+    哈希覆盖模板的全部下游执行字段（含 required_source_types），同一
+    RuleSet revision 的同一 requirement 必须投影出同一模板内容。
+    """
 
     return canonical_hash(
         {
@@ -182,6 +203,15 @@ def template_projection_sha256(
             "due_stage": due_stage.value,
             "study_phase": study_phase.value,
             "workflow_stage_id": workflow_stage_id,
+            "fact_type": fact_type,
+            "required_source_types": sorted(set(required_source_types)),
+            "requires_contemporaneous_objective_source": (
+                requires_contemporaneous_objective_source
+            ),
+            "allows_screening_record_transcription": (
+                allows_screening_record_transcription
+            ),
+            "description": description,
         }
     )
 
@@ -200,6 +230,15 @@ def verify_template_identity(template: EvidenceExpectationTemplate) -> None:
         due_stage=template.due_stage,
         study_phase=template.study_phase,
         workflow_stage_id=template.workflow_stage_id,
+        fact_type=template.fact_type,
+        required_source_types=template.required_source_types,
+        requires_contemporaneous_objective_source=(
+            template.requires_contemporaneous_objective_source
+        ),
+        allows_screening_record_transcription=(
+            template.allows_screening_record_transcription
+        ),
+        description=template.description,
     ):
         _fail("template_projection_mismatch", "模板投影哈希与身份字段不一致")
 

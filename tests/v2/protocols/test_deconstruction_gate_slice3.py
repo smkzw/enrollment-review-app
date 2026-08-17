@@ -328,12 +328,14 @@ def _fixture():
                 workflow_stage_id="stage-screening",
                 stage=ReviewStage.SCREENING,
                 display_name="筛选期审核",
+                visit_instance="筛选期 D-28~D-1",
                 due_requirement_ids=["req-in", "req-ex", "req-proc-screen"],
             ),
             WorkflowStage(
                 workflow_stage_id="stage-baseline",
                 stage=ReviewStage.BASELINE,
                 display_name="基线审核",
+                visit_instance="基线 D1",
                 due_requirement_ids=["req-proc-base"],
             ),
         ],
@@ -1213,6 +1215,230 @@ def test_screening_and_baseline_procedure_instances_cannot_be_merged():
     )
 
 
+def test_wrong_visit_instance_on_mapped_stage_is_blocked():
+    """目录项是「筛选期 D-28~D-1」，映射到「基线 D1」节点 -> 访视错配。"""
+    source_input, draft, spans = _fixture()
+    mapping = draft.procedure_catalog_mappings[0]
+    draft.procedure_catalog_mappings[0] = mapping.model_copy(
+        update={"proposed_workflow_stage_id": "stage-baseline"}
+    )
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+    issues = _issues(result, "workflow_coverage")
+    assert any(item.issue_code == "PROCEDURE_REVIEW_STAGE_MISMATCH" for item in issues)
+    assert any(item.issue_code == "PROCEDURE_VISIT_INSTANCE_MISMATCH" for item in issues)
+
+
+def test_node_without_visit_instance_cannot_host_frozen_procedure():
+    """冻结必做项目必带 visit_instance；无访视实例的节点不能承载。"""
+    source_input, draft, spans = _fixture()
+    draft.proposed_workflow_stages[0] = (
+        draft.proposed_workflow_stages[0].model_copy(update={"visit_instance": None})
+    )
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+    assert any(
+        item.issue_code == "PROCEDURE_VISIT_INSTANCE_MISMATCH"
+        for item in _issues(result, "workflow_coverage")
+    )
+
+
+def test_same_stage_two_visit_instances_cannot_collide_identity():
+    """同一 ReviewStage 的两个访视实例必须各自独立节点；重复身份被拒。"""
+    source_input, draft, spans = _fixture()
+    draft.proposed_workflow_stages.append(
+        draft.proposed_workflow_stages[0].model_copy(
+            update={
+                "workflow_stage_id": "stage-screening-visit-2",
+                "due_requirement_ids": [],
+            }
+        )
+    )
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+    issues = _issues(result, "workflow_coverage")
+    assert any(item.issue_code == "DUPLICATE_VISIT_NODE_IDENTITY" for item in issues)
+
+
+def test_same_stage_second_visit_cannot_overwrite_first_mapping():
+    """同阶段多访视：两个目录项（筛选 D-28~D-1 与筛选 D1）必须映射到各自
+    访视实例节点，不能被最后一个节点覆盖。"""
+    source_input, draft, spans = _fixture()
+    # 增加第二个筛选访视目录项与对应节点、映射、资料要求。
+    second_visit_item = source_input.required_procedure_catalog.items[0].model_copy(
+        update={
+            "item_id": "procedure:screening:lab:visit-2",
+            "visit_instance": "筛选期 D1",
+            "position": 2,
+            "source_span_ids": ["span-proc-screen-2"],
+        }
+    )
+    source_input.required_procedure_catalog = (
+        source_input.required_procedure_catalog.model_copy(
+            update={
+                "items": (
+                    *source_input.required_procedure_catalog.items,
+                    second_visit_item,
+                )
+            }
+        )
+    )
+    spans["span-proc-screen-2"] = _span("span-proc-screen-2", 5)
+    source_input.allowed_source_span_ids.append("span-proc-screen-2")
+    source_input.source_materials.append(
+        ProtocolSourceMaterial(
+            source_span_id="span-proc-screen-2",
+            source_ref="body.p5",
+            block_order=5,
+            text="筛选 D1 血生化检查",
+        )
+    )
+    second_requirement = EvidenceRequirement(
+        requirement_id="req-proc-screen-2",
+        procedure_catalog_item_id="procedure:screening:lab:visit-2",
+        fact_type="方案要求事实",
+        due_stage=ReviewStage.SCREENING,
+        description="核对筛选 D1 血生化正式原始资料",
+    )
+    draft.proposed_workflow_stages.append(
+        WorkflowStage(
+            workflow_stage_id="stage-screening-v2",
+            stage=ReviewStage.SCREENING,
+            display_name="筛选 D1 审核",
+            visit_instance="筛选期 D1",
+            due_requirement_ids=["req-proc-screen-2"],
+        )
+    )
+    draft.procedure_catalog_mappings.append(
+        ProcedureCatalogMapping(
+            catalog_item_id="procedure:screening:lab:visit-2",
+            proposed_requirement_ids=["req-proc-screen-2"],
+            proposed_workflow_stage_id="stage-screening-v2",
+            source_span_ids=["span-proc-screen-2"],
+        )
+    )
+    draft.evidence_requirement_drafts.append(
+        EvidenceRequirementDraft(
+            draft_requirement_id="draft-proc-screen-2",
+            procedure_catalog_item_id="procedure:screening:lab:visit-2",
+            proposed_requirement=second_requirement,
+            source_refs=["span-proc-screen-2"],
+        )
+    )
+    # 两个筛选访视实例分别映射到各自节点 -> 全部检查通过
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+    assert not _issues(result, "workflow_coverage"), "同阶段两个访视实例应各自保留"
+
+    # 把第二个目录项改绑到第一个筛选节点 -> 访视实例错配（不能覆盖/合并）
+    draft.procedure_catalog_mappings[2] = (
+        draft.procedure_catalog_mappings[2].model_copy(
+            update={"proposed_workflow_stage_id": "stage-screening"}
+        )
+    )
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+    assert any(
+        item.issue_code == "PROCEDURE_VISIT_INSTANCE_MISMATCH"
+        for item in _issues(result, "workflow_coverage")
+    )
+
+
+def test_procedure_requirement_listed_in_wrong_node_is_blocked():
+    """流程资料要求必须列在其目录映射指向的同一节点。"""
+    source_input, draft, spans = _fixture()
+    draft.proposed_workflow_stages[1] = (
+        draft.proposed_workflow_stages[1].model_copy(
+            update={"due_requirement_ids": ["req-proc-screen"]}
+        )
+    )
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+    assert any(
+        item.issue_code == "PROCEDURE_REQUIREMENT_WRONG_NODE"
+        for item in _issues(result, "workflow_coverage")
+    )
+
+
+def test_requirement_due_stage_mismatch_with_listing_node_is_blocked():
+    """资料要求 due_stage 必须与所列举节点阶段一致。"""
+    source_input, draft, spans = _fixture()
+    draft.proposed_workflow_stages[0] = (
+        draft.proposed_workflow_stages[0].model_copy(
+            update={"due_requirement_ids": ["req-proc-base"]}
+        )
+    )
+    draft.proposed_workflow_stages[1] = (
+        draft.proposed_workflow_stages[1].model_copy(
+            update={"due_requirement_ids": []}
+        )
+    )
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+    assert any(
+        item.issue_code == "REQUIREMENT_DUE_STAGE_MISMATCH"
+        for item in _issues(result, "workflow_coverage")
+    )
+
+
+def test_parent_mapping_cannot_rebind_to_foreign_catalog_source():
+    """父规则映射来源必须等于冻结目录项来源；换绑其他目录来源被拒。"""
+    source_input, draft, spans = _fixture()
+    draft.parent_catalog_mappings[0] = (
+        draft.parent_catalog_mappings[0].model_copy(
+            update={"source_span_ids": ["span-ex"]}
+        )
+    )
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+    assert any(
+        item.issue_code == "PARENT_MAPPING_SOURCE_MISMATCH"
+        for item in _issues(result, "parent_catalog")
+    )
+
+
+def test_requirement_source_outside_component_scope_is_blocked():
+    """子规则资料要求来源超出其所属子规则来源范围被拒。"""
+    source_input, draft, spans = _fixture()
+    draft.evidence_requirement_drafts[0] = (
+        draft.evidence_requirement_drafts[0].model_copy(
+            update={"source_refs": ["span-ex"]}
+        )
+    )
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+    assert any(
+        item.issue_code == "REQUIREMENT_SOURCE_OUTSIDE_COMPONENT"
+        for item in _issues(result, "source_coverage")
+    )
+
+
+def test_procedure_requirement_source_outside_catalog_scope_is_blocked():
+    """流程资料要求来源超出其必做项目录项来源范围被拒。"""
+    source_input, draft, spans = _fixture()
+    draft.evidence_requirement_drafts[2] = (
+        draft.evidence_requirement_drafts[2].model_copy(
+            update={"source_refs": ["span-proc-base"]}
+        )
+    )
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+    assert any(
+        item.issue_code == "PROCEDURE_REQUIREMENT_SOURCE_OUTSIDE_CATALOG"
+        for item in _issues(result, "source_coverage")
+    )
+
+
 def test_degraded_page_hint_cannot_satisfy_source_coverage():
     source_input, draft, spans = _fixture()
     spans["span-ex"] = _span("span-ex", 2, degraded=True)
@@ -1931,7 +2157,7 @@ def test_chinese_and_or_cannot_be_mutated_to_all():
         (
             lambda draft: draft.proposed_workflow_stages[0].due_requirement_ids.clear(),
             "workflow_coverage",
-            "WORKFLOW_STAGE_REQUIREMENTS_MISMATCH",
+            "REQUIREMENT_WITHOUT_DUE_NODE",
         ),
         (
             lambda draft: draft.component_drafts[0].source_excerpts.clear(),

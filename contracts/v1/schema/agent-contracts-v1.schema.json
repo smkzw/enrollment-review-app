@@ -3936,6 +3936,18 @@
         "stage": {
           "$ref": "#/$defs/ReviewStage"
         },
+        "visit_instance": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Visit Instance"
+        },
         "visit_window": {
           "anyOf": [
             {

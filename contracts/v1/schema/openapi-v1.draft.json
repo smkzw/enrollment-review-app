@@ -3530,6 +3530,16 @@
             "title": "Protocol Version Id",
             "type": "string"
           },
+          "requirement_source_anchor_refs": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Requirement Source Anchor Refs",
+            "type": "object"
+          },
           "rule_source_anchor_refs": {
             "additionalProperties": {
               "items": {
@@ -4771,6 +4781,18 @@
           },
           "stage": {
             "$ref": "#/components/schemas/ReviewStage"
+          },
+          "visit_instance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Visit Instance"
           },
           "visit_window": {
             "anyOf": [

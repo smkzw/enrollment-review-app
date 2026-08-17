@@ -160,12 +160,14 @@ def test_workflow_stage_persists_study_phase_and_visit_identity(session) -> None
             workflow_stage_id="ruleset:slice4:1:stage-screening",
             stage=ReviewStage.SCREENING,
             display_name="筛选期审核",
+            visit_instance="筛选期 D-28~D-1",
             due_requirement_ids=["req-in", "requirement:procedure:screen"],
         ),
         WorkflowStage(
             workflow_stage_id="ruleset:slice4:1:stage-baseline",
             stage=ReviewStage.BASELINE,
             display_name="基线审核",
+            visit_instance="基线 D1",
             due_requirement_ids=["requirement:procedure:baseline"],
         ),
     ]
@@ -243,6 +245,32 @@ def test_expectation_template_repository_dedup_and_identity(session) -> None:
     _seed_document_version(session)
     rule_set = _rule_set()
     save_rule_set(session, rule_set, procedure_requirements=_procedure_requirements())
+    # 模板引用完整性：先落库 RuleSet revision 与审核节点，模板才能引用。
+    from app.storage.repositories import WORKFLOW_STAGE_CONFIG
+
+    for stage in (
+        WorkflowStage(
+            workflow_stage_id="ruleset:slice4:1:stage-screening",
+            stage=ReviewStage.SCREENING,
+            display_name="筛选期审核",
+            visit_instance="筛选期 D-28~D-1",
+            due_requirement_ids=["req-in", "requirement:procedure:screen"],
+        ),
+        WorkflowStage(
+            workflow_stage_id="ruleset:slice4:1:stage-baseline",
+            stage=ReviewStage.BASELINE,
+            display_name="基线审核",
+            visit_instance="基线 D1",
+            due_requirement_ids=["requirement:procedure:baseline"],
+        ),
+    ):
+        AppendRepository(session, WORKFLOW_STAGE_CONFIG).save(
+            stage,
+            scope={
+                "protocol_version_id": "protocol-version-1",
+                "study_phase": rule_set.study_phase.value,
+            },
+        )
     from app.projections.evidence_expectation_templates import (
         template_identity,
         template_projection_sha256,
@@ -277,6 +305,15 @@ def test_expectation_template_repository_dedup_and_identity(session) -> None:
                 due_stage=ReviewStage.SCREENING,
                 study_phase=StudyPhase.PHASE_II,
                 workflow_stage_id="ruleset:slice4:1:stage-screening",
+                fact_type=forged.fact_type,
+                required_source_types=forged.required_source_types,
+                requires_contemporaneous_objective_source=(
+                    forged.requires_contemporaneous_objective_source
+                ),
+                allows_screening_record_transcription=(
+                    forged.allows_screening_record_transcription
+                ),
+                description=forged.description,
             ),
         }
     )
@@ -288,3 +325,189 @@ def test_expectation_template_repository_dedup_and_identity(session) -> None:
     save_expectation_templates(session, [valid])
     session.flush()
     assert len(list_expectation_templates(session, rule_set.rule_set_id, 1)) == 1
+
+
+def _valid_template(rule_set, requirement_id="req-in", stage_id="ruleset:slice4:1:stage-screening"):
+    from app.projections.evidence_expectation_templates import (
+        template_identity,
+        template_projection_sha256,
+    )
+
+    return EvidenceExpectationTemplate(
+        template_id=template_identity(rule_set.rule_set_id, 1, requirement_id),
+        rule_set_id=rule_set.rule_set_id,
+        rule_set_revision=1,
+        requirement_id=requirement_id,
+        due_stage=ReviewStage.SCREENING,
+        study_phase=rule_set.study_phase,
+        workflow_stage_id=stage_id,
+        fact_type="方案要求事实",
+        description="核对正式原始资料",
+        projection_sha256=template_projection_sha256(
+            rule_set_id=rule_set.rule_set_id,
+            revision=1,
+            requirement_id=requirement_id,
+            due_stage=ReviewStage.SCREENING,
+            study_phase=rule_set.study_phase,
+            workflow_stage_id=stage_id,
+            fact_type="方案要求事实",
+            required_source_types=[],
+            requires_contemporaneous_objective_source=False,
+            allows_screening_record_transcription=True,
+            description="核对正式原始资料",
+        ),
+        created_at=NOW,
+    )
+
+
+def test_ghost_rule_set_revision_template_is_rejected(session) -> None:
+    """模板引用不存在的 RuleSet revision -> 拒绝（杜绝孤儿模板）。"""
+    _seed_document_version(session)
+    rule_set = _rule_set()
+    ghost = _valid_template(rule_set)
+    ghost = ghost.model_copy(update={"rule_set_revision": 99})
+    # 重新计算 revision=99 的稳定投影哈希，让合同校验通过后由仓储拒绝幽灵引用。
+    from app.projections.evidence_expectation_templates import (
+        template_identity,
+        template_projection_sha256,
+    )
+
+    ghost = ghost.model_copy(
+        update={
+            "template_id": template_identity(rule_set.rule_set_id, 99, "req-in"),
+            "projection_sha256": template_projection_sha256(
+                rule_set_id=rule_set.rule_set_id,
+                revision=99,
+                requirement_id="req-in",
+                due_stage=ReviewStage.SCREENING,
+                study_phase=rule_set.study_phase,
+                workflow_stage_id="ruleset:slice4:1:stage-screening",
+                fact_type="方案要求事实",
+                required_source_types=[],
+                requires_contemporaneous_objective_source=False,
+                allows_screening_record_transcription=True,
+                description="核对正式原始资料",
+            ),
+        }
+    )
+    from app.storage.repositories import InvalidReferenceError
+
+    with pytest.raises(InvalidReferenceError, match="RuleSet"):
+        save_expectation_templates(session, [ghost])
+
+
+def test_ghost_requirement_template_is_rejected(session) -> None:
+    """模板引用该 RuleSet revision 中不存在的资料要求 -> 拒绝。"""
+    _seed_document_version(session)
+    rule_set = _rule_set()
+    save_rule_set(session, rule_set, procedure_requirements=_procedure_requirements())
+    from app.storage.repositories import WORKFLOW_STAGE_CONFIG
+
+    AppendRepository(session, WORKFLOW_STAGE_CONFIG).save(
+        WorkflowStage(
+            workflow_stage_id="ruleset:slice4:1:stage-screening",
+            stage=ReviewStage.SCREENING,
+            display_name="筛选期审核",
+            visit_instance="筛选期 D-28~D-1",
+            due_requirement_ids=["req-in", "requirement:procedure:screen"],
+        ),
+        scope={
+            "protocol_version_id": "protocol-version-1",
+            "study_phase": rule_set.study_phase.value,
+        },
+    )
+    ghost = _valid_template(rule_set, requirement_id="requirement:ghost")
+    from app.storage.repositories import InvalidReferenceError
+
+    with pytest.raises(InvalidReferenceError, match="资料要求"):
+        save_expectation_templates(session, [ghost])
+
+
+def test_cross_revision_draft_chain_is_rejected(session) -> None:
+    """草稿 revision 的前序必须属于同一草稿且紧邻；跨草稿/跨号拼接被拒。"""
+    _source_input, draft, _spans = confirmed_fixture()
+    other_draft = draft.model_copy(deep=True)
+    other_draft.draft_id = "draft-other"
+    repo = ProtocolDraftRevisionRepository(session)
+    r1 = ProtocolDraftRevision(
+        revision_id="draft-revision:draft-1:1",
+        draft_id="draft-1",
+        revision_number=1,
+        project_id=draft.project_id,
+        protocol_version_id=draft.protocol_version_id,
+        study_phase=draft.selected_phase,
+        status=DraftRevisionStatus.SAVED,
+        reason=DraftRevisionReason.INITIAL_SAVE,
+        actor="医学监查员",
+        content=draft,
+        content_sha256=canonical_hash(draft.model_dump(mode="json")),
+        created_at=NOW,
+    )
+    repo.save(r1)
+    session.flush()
+    # 另一草稿的首稿先落库，随后跨草稿引用它 -> 拒绝
+    other_r1 = ProtocolDraftRevision(
+        revision_id="draft-revision:other:1",
+        draft_id="draft-other",
+        revision_number=1,
+        project_id=other_draft.project_id,
+        protocol_version_id=other_draft.protocol_version_id,
+        study_phase=other_draft.selected_phase,
+        status=DraftRevisionStatus.SAVED,
+        reason=DraftRevisionReason.INITIAL_SAVE,
+        actor="医学监查员",
+        content=other_draft,
+        content_sha256=canonical_hash(other_draft.model_dump(mode="json")),
+        created_at=NOW,
+    )
+    repo.save(other_r1)
+    session.flush()
+    cross = ProtocolDraftRevision(
+        revision_id="draft-revision:draft-1:2",
+        draft_id="draft-1",
+        revision_number=2,
+        previous_revision_id="draft-revision:other:1",
+        project_id=draft.project_id,
+        protocol_version_id=draft.protocol_version_id,
+        study_phase=draft.selected_phase,
+        status=DraftRevisionStatus.SAVED,
+        reason=DraftRevisionReason.MANUAL_EDIT,
+        actor="医学监查员",
+        content=draft.model_copy(
+            update={"draft_revision": 2, "previous_draft_id": "draft-1"}
+        ),
+        content_sha256=canonical_hash(
+            draft.model_copy(
+                update={"draft_revision": 2, "previous_draft_id": "draft-1"}
+            ).model_dump(mode="json")
+        ),
+        created_at=NOW,
+    )
+    from app.storage.repositories import ScopeViolationError
+
+    with pytest.raises(ScopeViolationError, match="前序"):
+        repo.save(cross)
+    # 非紧邻前序：previous 是 r1 但声明 revision_number=3 -> 拒绝
+    non_adjacent = ProtocolDraftRevision(
+        revision_id="draft-revision:draft-1:3",
+        draft_id="draft-1",
+        revision_number=3,
+        previous_revision_id=r1.revision_id,
+        project_id=draft.project_id,
+        protocol_version_id=draft.protocol_version_id,
+        study_phase=draft.selected_phase,
+        status=DraftRevisionStatus.SAVED,
+        reason=DraftRevisionReason.MANUAL_EDIT,
+        actor="医学监查员",
+        content=draft.model_copy(
+            update={"draft_revision": 3, "previous_draft_id": "draft-1"}
+        ),
+        content_sha256=canonical_hash(
+            draft.model_copy(
+                update={"draft_revision": 3, "previous_draft_id": "draft-1"}
+            ).model_dump(mode="json")
+        ),
+        created_at=NOW,
+    )
+    with pytest.raises(ScopeViolationError, match="紧邻"):
+        repo.save(non_adjacent)

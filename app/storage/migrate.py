@@ -236,7 +236,7 @@ class MigrationManager:
             raise MigrationFailure(
                 "数据库迁移或迁移后校验失败，V2 写服务不会启动。"
                 + self._rollback_message(backup, restored, restore_error, "迁移")
-                + "。"
+                + f"（原因：{exc}）。"
             ) from exc
         to_revision = self.read_revision(self.paths.db_path)
         return UpgradeResult(backup=backup, from_revision=from_revision, to_revision=to_revision)
@@ -257,7 +257,7 @@ class MigrationManager:
                 raise MigrationFailure(
                     "数据库降级或降级后校验失败，V2 写服务不会启动。"
                     + self._rollback_message(backup, restored, restore_error, "降级")
-                    + "。"
+                    + f"（原因：{exc}）。"
                 ) from exc
             to_revision = self.read_revision(self.paths.db_path)
             return UpgradeResult(backup=backup, from_revision=from_revision, to_revision=to_revision)
@@ -408,6 +408,15 @@ class MigrationManager:
                 if problems:
                     raise MigrationFailure(
                         "迁移后 schema 与 ORM metadata 不一致：" + "；".join(problems)
+                    )
+            with engine.connect() as connection:
+                violations = connection.exec_driver_sql(
+                    "PRAGMA foreign_key_check"
+                ).fetchall()
+                if violations:
+                    raise MigrationFailure(
+                        "迁移后外键完整性检查失败，存在 "
+                        f"{len(violations)} 条违规引用，禁止启动写服务。"
                     )
             self._verify_basic_read_write(engine, require_revision=require_revision)
         finally:

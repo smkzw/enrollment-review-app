@@ -26,6 +26,7 @@ def _stages(rule_set_id: str = "ruleset:slice4") -> list[WorkflowStage]:
             workflow_stage_id=f"{rule_set_id}:1:stage-screening",
             stage=ReviewStage.SCREENING,
             display_name="筛选期审核",
+            visit_instance="筛选期 D-28~D-1",
             due_requirement_ids=[
                 "req-in",
                 "req-ex",
@@ -36,6 +37,7 @@ def _stages(rule_set_id: str = "ruleset:slice4") -> list[WorkflowStage]:
             workflow_stage_id=f"{rule_set_id}:1:stage-baseline",
             stage=ReviewStage.BASELINE,
             display_name="基线审核",
+            visit_instance="基线 D1",
             due_requirement_ids=["requirement:procedure:baseline"],
         ),
     ]
@@ -63,6 +65,7 @@ def test_projection_covers_all_requirements_with_stable_identity() -> None:
         assert template.template_id == template_identity(
             rule_set.rule_set_id, rule_set.revision, template.requirement_id
         )
+        # 投影哈希覆盖全部下游执行字段（含 required_source_types）
         assert template.projection_sha256 == template_projection_sha256(
             rule_set_id=rule_set.rule_set_id,
             revision=rule_set.revision,
@@ -70,8 +73,46 @@ def test_projection_covers_all_requirements_with_stable_identity() -> None:
             due_stage=template.due_stage,
             study_phase=template.study_phase,
             workflow_stage_id=template.workflow_stage_id,
+            fact_type=template.fact_type,
+            required_source_types=template.required_source_types,
+            requires_contemporaneous_objective_source=(
+                template.requires_contemporaneous_objective_source
+            ),
+            allows_screening_record_transcription=(
+                template.allows_screening_record_transcription
+            ),
+            description=template.description,
         )
         verify_template_identity(template)
+
+
+def test_projection_carries_evidence_semantics_fields() -> None:
+    """模板必须完整投影 EvidenceRequirement 下游执行所需字段。"""
+    rule_set = _rule_set()
+    procedure = _procedure_requirements()[0].model_copy(
+        update={
+            "required_source_types": ["正式检验报告", "原始记录"],
+            "requires_contemporaneous_objective_source": True,
+            "allows_screening_record_transcription": False,
+            "description": "必须提供同期客观来源的正式检验报告",
+        }
+    )
+    templates = project_evidence_expectation_templates(
+        rule_set=rule_set,
+        workflow_stages=_stages(),
+        procedure_requirements=[procedure, _procedure_requirements()[1]],
+        created_at=NOW,
+    )
+    screen = next(
+        item
+        for item in templates
+        if item.requirement_id == "requirement:procedure:screen"
+    )
+    assert screen.required_source_types == ["正式检验报告", "原始记录"]
+    assert screen.requires_contemporaneous_objective_source is True
+    assert screen.allows_screening_record_transcription is False
+    assert screen.description == "必须提供同期客观来源的正式检验报告"
+    verify_template_identity(screen)
 
 
 def test_projection_is_deterministic_across_rebuilds() -> None:
@@ -102,6 +143,15 @@ def test_projection_is_deterministic_across_rebuilds() -> None:
             due_stage=item.due_stage,
             study_phase=item.study_phase,
             workflow_stage_id=item.workflow_stage_id,
+            fact_type=item.fact_type,
+            required_source_types=item.required_source_types,
+            requires_contemporaneous_objective_source=(
+                item.requires_contemporaneous_objective_source
+            ),
+            allows_screening_record_transcription=(
+                item.allows_screening_record_transcription
+            ),
+            description=item.description,
         )
 
 

@@ -2115,6 +2115,38 @@ class ProtocolDraftRevisionRepository:
         self.session = session
 
     def save(self, revision: ProtocolDraftRevision) -> ProtocolDraftRevision:
+        # 链完整性：后继必须引用同一草稿、紧邻的前序 revision；内层草稿链
+        # 必须与外层 revision 链一致（杜绝 ghost/断裂链与跨 revision 拼接）。
+        if revision.revision_number > 1:
+            if not revision.previous_revision_id:
+                raise InvalidReferenceError(
+                    f"草稿 revision {revision.revision_id} 缺少前序引用"
+                )
+            previous = self.get(revision.previous_revision_id)
+            if previous.draft_id != revision.draft_id:
+                raise ScopeViolationError(
+                    f"草稿 revision {revision.revision_id} 的前序 "
+                    f"{revision.previous_revision_id} 不属于同一草稿"
+                )
+            if previous.revision_number != revision.revision_number - 1:
+                raise ScopeViolationError(
+                    f"草稿 revision {revision.revision_id} 的前序 revision 号"
+                    f"{previous.revision_number} 不是紧邻前序"
+                )
+        if revision.content.draft_revision != revision.revision_number:
+            raise ScopeViolationError(
+                f"草稿 revision {revision.revision_id} 的内层 content.draft_revision"
+                f"（{revision.content.draft_revision}）与外层链号"
+                f"（{revision.revision_number}）不一致"
+            )
+        if (
+            revision.revision_number > 1
+            and revision.content.previous_draft_id != revision.content.draft_id
+        ):
+            raise ScopeViolationError(
+                f"草稿 revision {revision.revision_id} 的内层 previous_draft_id"
+                "必须指向链头草稿，与外层链一致"
+            )
         payload_json, payload_sha256 = encode_contract(revision)
         payload = json.loads(payload_json)
         self.session.add(
@@ -2171,6 +2203,49 @@ class ProtocolDraftRevisionRepository:
         record.payload_json = payload_json
         record.payload_sha256 = payload_sha256
         record.status = revision.status.value
+        _flush_guarded(self.session)
+        return revision
+
+    def replace(self, revision: ProtocolDraftRevision) -> ProtocolDraftRevision:
+        """原地重写已存在 revision 行（payload 含 diff 变更）。
+
+        仅用于审计修正路径（如声明差异与实际结构差异不一致时的重建）；
+        链完整性校验与 save 一致，禁止跨草稿/跨号拼接。
+        """
+        record = _get_required(
+            self.session,
+            ProtocolDraftRevisionRecord,
+            revision.revision_id,
+            "ProtocolDraftRevision",
+        )
+        if record.draft_id != revision.draft_id:
+            raise ScopeViolationError(
+                f"revision {revision.revision_id} 的 draft_id 与已存在行不一致"
+            )
+        if record.revision_number != revision.revision_number:
+            raise ScopeViolationError(
+                f"revision {revision.revision_id} 的 revision_number 与已存在行不一致"
+            )
+        if revision.revision_number > 1:
+            if not revision.previous_revision_id:
+                raise InvalidReferenceError(
+                    f"草稿 revision {revision.revision_id} 缺少前序引用"
+                )
+            previous = self.get(revision.previous_revision_id)
+            if previous.revision_number != revision.revision_number - 1:
+                raise ScopeViolationError(
+                    f"草稿 revision {revision.revision_id} 的前序 revision 号"
+                    f"{previous.revision_number} 不是紧邻前序"
+                )
+        if revision.content.draft_revision != revision.revision_number:
+            raise ScopeViolationError(
+                f"草稿 revision {revision.revision_id} 的内层 draft_revision"
+                f"（{revision.content.draft_revision}）与外层链号不一致"
+            )
+        payload_json, payload_sha256 = encode_contract(revision)
+        record.payload_json = payload_json
+        record.payload_sha256 = payload_sha256
+        record.content_sha256 = revision.content_sha256
         _flush_guarded(self.session)
         return revision
 
@@ -2246,6 +2321,7 @@ EVIDENCE_EXPECTATION_TEMPLATE_CONFIG = _config(
         "study_phase": "study_phase",
         "workflow_stage_id": "workflow_stage_id",
         "fact_type": "fact_type",
+        "required_source_types": "required_source_types",
         "projection_sha256": "projection_sha256",
     },
     created_at_key="created_at",
@@ -2257,6 +2333,7 @@ EVIDENCE_EXPECTATION_TEMPLATE_CONFIG = _config(
         "study_phase": "study_phase",
         "workflow_stage_id": "workflow_stage_id",
         "fact_type": "fact_type",
+        "required_source_types": "required_source_types",
         "projection_sha256": "projection_sha256",
     },
 )
@@ -2266,13 +2343,57 @@ def save_expectation_templates(
     session: Session,
     templates: Sequence[EvidenceExpectationTemplate],
 ) -> None:
-    """追加写模板投影；同 (rule_set, revision, requirement) 幂等跳过。"""
+    """追加写模板投影；同 (rule_set, revision, requirement) 幂等跳过。
+
+    落库前校验引用完整性：RuleSet revision、EvidenceRequirement 与
+    WorkflowStage 必须真实存在，杜绝孤儿模板（ghost）投影。
+    """
     repo = AppendRepository(session, EVIDENCE_EXPECTATION_TEMPLATE_CONFIG)
     for template in templates:
         # 落库前重跑合同校验：模板 ID/投影哈希必须与稳定身份一致。
         EvidenceExpectationTemplate.model_validate(
             template.model_dump(mode="json")
         )
+        rule_set = session.get(
+            RuleSetRecord,
+            (template.rule_set_id, template.rule_set_revision),
+        )
+        if rule_set is None:
+            raise InvalidReferenceError(
+                f"模板 {template.template_id} 引用的 RuleSet "
+                f"{template.rule_set_id} revision {template.rule_set_revision} 不存在"
+            )
+        requirement = session.get(
+            EvidenceRequirementRecord,
+            (
+                template.rule_set_id,
+                template.rule_set_revision,
+                template.requirement_id,
+            ),
+        )
+        if requirement is None:
+            raise InvalidReferenceError(
+                f"模板 {template.template_id} 引用的资料要求 "
+                f"{template.requirement_id} 不在 RuleSet "
+                f"{template.rule_set_id} revision {template.rule_set_revision} 中"
+            )
+        if template.workflow_stage_id is not None:
+            stage = session.get(
+                WorkflowStageRecord, template.workflow_stage_id
+            )
+            if stage is None:
+                raise InvalidReferenceError(
+                    f"模板 {template.template_id} 引用的审核节点 "
+                    f"{template.workflow_stage_id} 不存在"
+                )
+            if (
+                stage.protocol_version_id != rule_set.protocol_version_id
+                or stage.study_phase != template.study_phase.value
+            ):
+                raise ScopeViolationError(
+                    f"模板 {template.template_id} 的审核节点 "
+                    f"{template.workflow_stage_id} 不属于该 RuleSet 的方案版本/期别"
+                )
         existing = session.execute(
             select(EvidenceExpectationTemplateRecord.template_id).where(
                 EvidenceExpectationTemplateRecord.rule_set_id

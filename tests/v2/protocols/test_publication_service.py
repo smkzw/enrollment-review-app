@@ -202,6 +202,9 @@ def test_authority_allows_distinct_visit_instances_in_same_review_stage(
             update={
                 "workflow_stage_id": first_stage.workflow_stage_id + ":visit-2",
                 "display_name": first_stage.display_name + "第二次访视",
+                "visit_instance": (
+                    first_stage.visit_instance or "筛选期 D1"
+                ) + " 第二次",
                 "due_requirement_ids": [moved_requirement],
             }
         ),
@@ -354,8 +357,8 @@ def test_stale_revision_publication_rolls_back_and_keeps_previous_published(
     factory, now = slice4_env
     source_input, draft, spans = confirmed_fixture()
     r1 = _save_revision(factory, draft)
-    first = _publish(factory, source_input, draft, spans, r1.revision_id, "pub-stale")
-    # 另一标签页追加了 r2，随后用过期 r1 发布 -> 过期
+    # 另一标签页在 r1 仍为已保存时追加 r2；随后用过期 r1 发布 -> 过期。
+    # （已发布的 revision 不能再编辑/覆盖，因此过期场景必须在发布前构造。）
     r2 = _edit_draft(
         factory,
         draft,
@@ -367,22 +370,26 @@ def test_stale_revision_publication_rolls_back_and_keeps_previous_published(
         ],
     )
     assert r2.revision_number == 2
-    with pytest.raises(StaleRevisionError):
+    with pytest.raises(StaleRevisionError) as exc_info:
         _publish(factory, source_input, draft, spans, r1.revision_id, "pub-stale-2")
+    error = exc_info.value
+    # 过期错误必须报告提交方真实 expected revision、当前 revision 与结构化差异，
+    # 不能写成 expected == current == 当前值且差异为空。
+    assert error.entity_type == "ProtocolDraftRevision"
+    assert error.expected_revision == 1
+    assert error.current_revision == 2
+    assert error.field_diff, "过期发布必须携带结构化差异信封"
+    assert "modified_workflow_stage_ids" in error.field_diff
     with factory() as session:
-        # 第一次发布保持原样
-        assert _count(session, ProjectRecord) == 1
-        assert _count(session, RuleSetRecord) == 1
-        project = session.get(ProjectRecord, "project-1")
-        assert project.rule_set_revision == first.rule_set_revision
-        old_authority = AppendRepository(session, AUTHORITY_RECORD_CONFIG).get(
-            first.authority_record_id
-        )
-        assert old_authority.authority_record_id == first.authority_record_id
-        # r1 仍是已发布，r2 未被发布
+        # 过期发布不产生任何正式行
+        assert _count(session, ProjectRecord) == 0
+        assert _count(session, RuleSetRecord) == 0
+        assert _count(session, ProtocolAuthorityRecordRow) == 0
         repo = ProtocolDraftRevisionRepository(session)
-        assert repo.get(r1.revision_id).status.value == "published"
+        # r1 从未被标记为已发布；r2 仍是链头且保持已保存
+        assert repo.get(r1.revision_id).status.value == "saved"
         assert repo.get(r2.revision_id).status.value == "saved"
+        assert repo.get_head(draft.draft_id).revision_id == r2.revision_id
 
 
 def test_duplicate_first_project_is_prevented(slice4_env) -> None:
@@ -506,6 +513,7 @@ def test_republish_cross_protocol_or_cross_phase_is_rejected(slice4_env) -> None
             )
 
     phase_input = source_input.model_copy(deep=True)
+    phase_input.protocol_version_id = "protocol-phase3-v1"
     phase_draft = draft.model_copy(deep=True)
     phase_draft.draft_id = "draft-phase3"
     phase_draft.selected_phase = StudyPhase.PHASE_III
@@ -567,3 +575,194 @@ def test_same_protocol_version_id_cannot_host_two_authority_chains(slice4_env) -
             protocol_version_id="protocol-version-1",
         )
     assert exc_info.value.code == "protocol_version_already_published"
+
+
+def test_first_publish_cannot_override_protocol_version_id(slice4_env) -> None:
+    """首次发布不接受重新解构专用的外部版本 id 覆盖。"""
+    factory, now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+    r1 = _save_revision(factory, draft)
+    with pytest.raises(PublicationLineageError) as exc_info:
+        _publish(
+            factory,
+            source_input,
+            draft,
+            spans,
+            r1.revision_id,
+            "pub-first-override",
+            protocol_version_id="protocol-version-external",
+        )
+    assert exc_info.value.code == "first_publish_cannot_override_version"
+
+
+def test_republish_version_id_must_match_draft_and_input(slice4_env) -> None:
+    """重新发布的内部版本 id 必须与新草稿/输入一致，不能脱离。"""
+    factory, now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+    r1 = _save_revision(factory, draft)
+    _publish(factory, source_input, draft, spans, r1.revision_id, "pub-mismatch-1")
+
+    revised = draft.model_copy(deep=True)
+    revised.draft_id = "draft-v2-mismatch"
+    revised.protocol_version_id = "protocol-version-2"
+    revised_input = source_input.model_copy(deep=True)
+    revised_input.protocol_version_id = "protocol-version-2"
+    rv2 = _save_revision(factory, revised)
+    # 请求携带与草稿不一致的版本 id -> 拒绝
+    with pytest.raises(PublicationLineageError) as exc_info:
+        _publish(
+            factory,
+            revised_input,
+            revised,
+            spans,
+            rv2.revision_id,
+            "pub-mismatch-2",
+            project_id="project-1",
+            protocol_version_id="protocol-version-3",
+        )
+    assert exc_info.value.code == "republish_version_mismatch"
+    # 草稿与输入版本不一致 -> 拒绝（输入被替换成另一版本）
+    with pytest.raises(PublicationLineageError) as exc_info:
+        _publish(
+            factory,
+            source_input,
+            revised,
+            spans,
+            rv2.revision_id,
+            "pub-mismatch-3",
+            project_id="project-1",
+            protocol_version_id="protocol-version-2",
+        )
+    assert exc_info.value.code == "draft_input_version_mismatch"
+
+
+def test_authority_record_keeps_per_requirement_source_anchors(slice4_env) -> None:
+    """权威记录必须逐条保存所有规则 EvidenceRequirement 的来源锚点，
+    不能只覆盖父规则与流程要求。"""
+    factory, now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+    r1 = _save_revision(factory, draft)
+    result = _publish(factory, source_input, draft, spans, r1.revision_id, "pub-req-anchors")
+    with factory() as session:
+        authority = AppendRepository(session, AUTHORITY_RECORD_CONFIG).get(
+            result.authority_record_id
+        )
+    all_requirement_ids = {
+        requirement.requirement_id
+        for rule in authority.official_rules
+        for component in rule.components
+        for requirement in component.evidence_requirements
+    } | {
+        requirement.requirement_id
+        for requirement in authority.procedure_evidence_requirements
+    }
+    # 闭包：每条资料要求都有非空、绑定当前版本前缀的来源锚点
+    assert set(authority.requirement_source_anchor_refs) == all_requirement_ids
+    assert len(authority.requirement_source_anchor_refs) == 4
+    prefix = f"{result.protocol_version_id}:"
+    for refs in authority.requirement_source_anchor_refs.values():
+        assert refs and all(ref.startswith(prefix) for ref in refs)
+
+
+def test_publication_rejects_requirement_source_outside_component(slice4_env) -> None:
+    """资料要求来源超出对应组件来源范围 -> 门禁拒绝，回滚。"""
+    factory, now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+    r1 = _save_revision(factory, draft)
+    r2 = _edit_draft(
+        factory,
+        draft,
+        r1.revision_id,
+        [
+            lambda d: d.evidence_requirement_drafts.__setitem__(
+                0, d.evidence_requirement_drafts[0].model_copy(
+                    update={"source_refs": ["span-ex"]}
+                )
+            )
+        ],
+    )
+    with pytest.raises(PublicationGateError) as exc_info:
+        _publish(factory, source_input, draft, spans, r2.revision_id, "pub-req-outside")
+    assert any(
+        issue.issue_code == "REQUIREMENT_SOURCE_OUTSIDE_COMPONENT"
+        for check in exc_info.value.result.checks
+        if check.check_name == "source_coverage"
+        for issue in check.issues
+    )
+    with factory() as session:
+        assert _count(session, ProjectRecord) == 0
+        assert _count(session, RuleSetRecord) == 0
+
+
+def test_successor_publication_reruns_diff_integrity_with_previous(slice4_env) -> None:
+    """发布后继 revision 时必须携带前序草稿与声明差异复跑 diff_integrity；
+    声明差异与实际结构差异不一致 -> 拒绝发布。"""
+    factory, now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+    r1 = _save_revision(factory, draft)
+    r2 = _edit_draft(
+        factory,
+        draft,
+        r1.revision_id,
+        [
+            lambda d: d.proposed_rules[0].components[0].__setattr__(
+                "title", "年龄要求（修改）"
+            )
+        ],
+    )
+    assert r2.revision_number == 2
+    assert r2.content.draft_revision == 2
+    assert r2.content.previous_draft_id == draft.draft_id
+
+    from app.storage.repositories import ProtocolDraftRevisionRepository
+
+    # 篡改声明差异（改动 revision.diff）-> diff_integrity 拒绝
+    with factory() as session:
+        repo = ProtocolDraftRevisionRepository(session)
+        record = repo.get(r2.revision_id)
+        tampered = record.model_copy(deep=True)
+        tampered.diff = tampered.diff.model_copy(
+            update={"modified_rule_codes": ["EX-01"]}
+        )
+        repo.replace(tampered)
+        session.commit()
+    with pytest.raises(PublicationGateError) as exc_info:
+        _publish(
+            factory,
+            source_input,
+            draft,
+            spans,
+            r2.revision_id,
+            "pub-successor-tampered",
+        )
+    assert any(
+        issue.issue_code == "DECLARED_DIFF_NOT_REPRODUCIBLE"
+        for check in exc_info.value.result.checks
+        if check.check_name == "diff_integrity"
+        for issue in check.issues
+    )
+    with factory() as session:
+        assert _count(session, ProjectRecord) == 0
+
+    # 恢复正确差异后，后继草稿携带正确 previous_draft + declared_diff -> 通过
+    with factory() as session:
+        repo = ProtocolDraftRevisionRepository(session)
+        record = repo.get(r2.revision_id)
+        correct = record.model_copy(deep=True)
+        correct.diff = correct.diff.model_copy(
+            update={"modified_rule_codes": ["IN-01"]}
+        )
+        repo.replace(correct)
+        session.commit()
+    result = _publish(
+        factory,
+        source_input,
+        draft,
+        spans,
+        r2.revision_id,
+        "pub-successor",
+    )
+    assert result.rule_set_revision == 1
+    with factory() as session:
+        head = ProtocolDraftRevisionRepository(session).get_head(draft.draft_id)
+        assert head.status.value == "published"

@@ -49,9 +49,14 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             render_as_batch=True,
+            # SQLite 的 ``PRAGMA foreign_keys`` 在事务内是 no-op；迁移 0006
+            # 需要关闭外键重建被子表引用的 evidence_requirements 并在重建后
+            # 用 foreign_key_check 验证。每个迁移脚本在无外层事务的连接上执行，
+            # 单条 DDL 仍由 SQLite 原子提交；失败时 MigrationManager 从迁移前
+            # 备份恢复整库。
+            transaction_per_migration=False,
         )
-        with context.begin_transaction():
-            context.run_migrations()
+        context.run_migrations()
 
 
 if context.is_offline_mode():

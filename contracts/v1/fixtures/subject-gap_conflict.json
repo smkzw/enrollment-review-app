@@ -1332,8 +1332,8 @@
       "input_revision_map": {
         "protocol-v1": 1
       },
-      "input_scope_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
-      "output_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
+      "input_scope_hash": "f59e68a94989d94c05de81a34b5095824b6bb56273b231e6e29471bbf4494e5d",
+      "output_hash": "f59e68a94989d94c05de81a34b5095824b6bb56273b231e6e29471bbf4494e5d",
       "parent_event_id": null,
       "recompute_scope": [
         "protocol-v1"
@@ -1367,8 +1367,8 @@
       "input_revision_map": {
         "ruleset-synthetic-phase-iii": 1
       },
-      "input_scope_hash": "a6be1e4737055fe2a8fc3ba418a2717255feddc3849beef95ecee3a3dfa3f9bc",
-      "output_hash": "a6be1e4737055fe2a8fc3ba418a2717255feddc3849beef95ecee3a3dfa3f9bc",
+      "input_scope_hash": "b2c744a657312f9f577d19b3f60af12a28d9ac6faaedeb5d8af7812a8e8ee3a4",
+      "output_hash": "b2c744a657312f9f577d19b3f60af12a28d9ac6faaedeb5d8af7812a8e8ee3a4",
       "parent_event_id": null,
       "recompute_scope": [
         "protocol-v1"
@@ -2874,9 +2874,9 @@
     "protocol_version": {
       "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
       "authority_gate_result_id": "gate-authority-protocol-v1-phase-iii",
-      "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
+      "authority_record_sha256": "db893037c6efa127fca2583c102e8afc47a7e0698a1c65f852eb46f9b3d735b2",
       "integrity_gate_result_id": "gate-integrity-protocol-v1-phase-iii",
-      "integrity_manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
+      "integrity_manifest_sha256": "3ac6a19b3bd4e8d1b2d0965a3f79a631ac3c7926808ec6d7f28bf21a5c7da548",
       "official_date": {
         "precision": "day",
         "source_text": null,
@@ -2913,9 +2913,9 @@
     "action": "accept_protocol_authority",
     "actor_id": "synthetic-uat-human-acceptance",
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
+    "authority_record_sha256": "db893037c6efa127fca2583c102e8afc47a7e0698a1c65f852eb46f9b3d735b2",
     "command_id": "command-accept-protocol-v1-phase-iii",
-    "event_sha256": "4e0c2e1f4effc313fd9dd04e96f64c62a395711006a3b177b09d50efa091ec5b",
+    "event_sha256": "ee2776cbfdcdb1e8c662b79edb35705edc18b4cdaf3c619d0aa39c9eda8ca37e",
     "occurred_at": "2026-08-12T12:00:00Z",
     "protocol_version_id": "protocol-v1",
     "recorded_by_service": "enrollment-review-app",
@@ -2924,10 +2924,10 @@
   "protocol_authority_confirmation": {
     "action": "accept_protocol_authority",
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
+    "authority_record_sha256": "db893037c6efa127fca2583c102e8afc47a7e0698a1c65f852eb46f9b3d735b2",
     "command_id": "command-accept-protocol-v1-phase-iii",
     "confirmation_id": "confirmation-protocol-v1-phase-iii",
-    "confirmation_sha256": "6cbc9218c983ed4402080ec12c165434260abd40329155c40923c0c5a53bd197",
+    "confirmation_sha256": "86ca0b6dd3830a30afc088c66b48844247c32ebcf3320accf19375ce44892fc1",
     "confirmed_at": "2026-08-12T12:00:00Z",
     "confirmed_by": "synthetic-uat-human-acceptance",
     "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -2937,7 +2937,7 @@
   },
   "protocol_authority_record": {
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
+    "authority_record_sha256": "db893037c6efa127fca2583c102e8afc47a7e0698a1c65f852eb46f9b3d735b2",
     "official_rules": [
       {
         "components": [
@@ -3471,6 +3471,7 @@
         "review_required": true,
         "schema_version": "fixture/v1",
         "stage": "pre_screening",
+        "visit_instance": null,
         "visit_window": "签署知情同意前",
         "workflow_stage_id": "stage-pre-screening"
       },
@@ -3487,6 +3488,7 @@
         "review_required": true,
         "schema_version": "fixture/v1",
         "stage": "screening",
+        "visit_instance": null,
         "visit_window": "D-28至D-1",
         "workflow_stage_id": "stage-screening"
       },
@@ -3496,6 +3498,7 @@
         "review_required": true,
         "schema_version": "fixture/v1",
         "stage": "run_in",
+        "visit_instance": null,
         "visit_window": "筛选后至基线前",
         "workflow_stage_id": "stage-run-in"
       },
@@ -3507,6 +3510,7 @@
         "review_required": true,
         "schema_version": "fixture/v1",
         "stage": "baseline",
+        "visit_instance": null,
         "visit_window": "D1随机前",
         "workflow_stage_id": "stage-baseline"
       }
@@ -3515,6 +3519,29 @@
     "procedure_requirement_source_anchor_refs": {},
     "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "protocol_version_id": "protocol-v1",
+    "requirement_source_anchor_refs": {
+      "req-age": [
+        "protocol-v1:IN-01"
+      ],
+      "req-composite-risk": [
+        "protocol-v1:EX-01"
+      ],
+      "req-future": [
+        "protocol-v1:EX-03"
+      ],
+      "req-procedure": [
+        "protocol-v1:REQ-01"
+      ],
+      "req-professional": [
+        "protocol-v1:EX-02"
+      ],
+      "req-referenced": [
+        "protocol-v1:EX-04"
+      ],
+      "req-result-fields": [
+        "protocol-v1:REQ-02"
+      ]
+    },
     "rule_source_anchor_refs": {
       "EX-01": [
         "protocol-v1:EX-01"
@@ -3546,11 +3573,11 @@
   },
   "protocol_integrity_manifest": {
     "authoritative_rule_set_sha256": "96b887e73715b7d0043a2839fe3af1cfb6b578b2d4887258c30555b098c3d6c2",
-    "authoritative_workflow_sha256": "a23d202d8be74ed1778906492e89e7c194371d702e13738c49362520154d9033",
+    "authoritative_workflow_sha256": "1d13d5f280706df5152685b4f1a4701a36a3e0a0cf3a13ed985ff8dac47a2ab8",
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
+    "authority_record_sha256": "db893037c6efa127fca2583c102e8afc47a7e0698a1c65f852eb46f9b3d735b2",
     "manifest_id": "manifest-protocol-v1-phase-iii",
-    "manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
+    "manifest_sha256": "3ac6a19b3bd4e8d1b2d0965a3f79a631ac3c7926808ec6d7f28bf21a5c7da548",
     "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "protocol_version_id": "protocol-v1",
     "schema_version": "fixture/v1",
@@ -4187,6 +4214,7 @@
       "review_required": true,
       "schema_version": "fixture/v1",
       "stage": "pre_screening",
+      "visit_instance": null,
       "visit_window": "签署知情同意前",
       "workflow_stage_id": "stage-pre-screening"
     },
@@ -4203,6 +4231,7 @@
       "review_required": true,
       "schema_version": "fixture/v1",
       "stage": "screening",
+      "visit_instance": null,
       "visit_window": "D-28至D-1",
       "workflow_stage_id": "stage-screening"
     },
@@ -4212,6 +4241,7 @@
       "review_required": true,
       "schema_version": "fixture/v1",
       "stage": "run_in",
+      "visit_instance": null,
       "visit_window": "筛选后至基线前",
       "workflow_stage_id": "stage-run-in"
     },
@@ -4223,6 +4253,7 @@
       "review_required": true,
       "schema_version": "fixture/v1",
       "stage": "baseline",
+      "visit_instance": null,
       "visit_window": "D1随机前",
       "workflow_stage_id": "stage-baseline"
     }
