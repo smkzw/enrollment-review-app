@@ -7,9 +7,10 @@ HTTP 层只做协议转换；本服务复用持久 Job、Slice 1–4 领域服�
 """
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Callable
 
@@ -19,7 +20,8 @@ from app.domain.contracts.agent_io import (
     ProtocolDeconstructionDraft,
     ProtocolDeconstructionInput,
 )
-from app.domain.contracts.enums import MetadataResolutionStatus, StudyPhase
+from app.domain.contracts.common import DateValue
+from app.domain.contracts.enums import DatePrecision, MetadataResolutionStatus, StudyPhase
 from app.domain.contracts.protocol_drafts import DraftFeedbackKind, ProtocolDraftRevision
 from app.domain.contracts.protocol_ingestion import ProtocolSourceSpan
 from app.domain.contracts.protocol_metadata import (
@@ -70,10 +72,10 @@ PROTOCOL_DECONSTRUCTION_STEPS: tuple[StepSpec, ...] = (
     StepSpec(STEP_REGISTER, "登记文件"),
     StepSpec(STEP_EXTRACT, "提取结构", depends_on=(STEP_REGISTER,)),
     StepSpec(STEP_RENDER, "渲染并对齐", depends_on=(STEP_EXTRACT,)),
-    StepSpec(STEP_IDENTIFY, "识别身份与期别", depends_on=(STEP_RENDER,)),
+    StepSpec(STEP_IDENTIFY, "识别方案信息与研究期别", depends_on=(STEP_RENDER,)),
     StepSpec(
         STEP_AWAIT_IDENTITY,
-        "等待身份确认",
+        "等待方案信息确认",
         depends_on=(STEP_IDENTIFY,),
         waiting_user_kind="identity",
     ),
@@ -206,10 +208,50 @@ def _study_phase_label(phase: str | None) -> str | None:
 
 def _awaiting_user_label(kind: str | None) -> str | None:
     if kind == "identity":
-        return "需要确认方案身份与研究期别"
+        return "需要确认方案信息与研究期别"
     if kind == "review":
         return "等待审阅草稿"
+    if kind == "publish":
+        return "等待发布确认"
     return None
+
+
+def _date_value_from_input(value: str, precision: str) -> DateValue:
+    """把工作台输入的年/月/日文本规范化为领域日期值。
+
+    ``DateValue`` 持久化的是可排序的具体日期，同时由 ``precision`` 保留
+    用户确认的粒度。API 输入不能直接把 ``YYYY`` 或 ``YYYY-MM`` 交给
+    Pydantic 的 ``date`` 字段，否则有效的低精度确认会变成 500。
+    """
+    normalized = value.strip()
+    try:
+        date_precision = DatePrecision(precision)
+    except ValueError as exc:
+        raise MetadataExtractionError("方案日期精度必须是年、月或日") from exc
+
+    if date_precision == DatePrecision.UNKNOWN:
+        raise MetadataExtractionError("方案日期确认必须提供年、月或日精度")
+
+    try:
+        if date_precision == DatePrecision.YEAR:
+            if re.fullmatch(r"\d{4}", normalized) is None:
+                raise ValueError
+            parsed = date(int(normalized), 1, 1)
+        elif date_precision == DatePrecision.MONTH:
+            match = re.fullmatch(r"(\d{4})-(\d{2})", normalized)
+            if match is None:
+                raise ValueError
+            parsed = date(int(match.group(1)), int(match.group(2)), 1)
+        else:
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", normalized) is None:
+                raise ValueError
+            parsed = date.fromisoformat(normalized)
+    except ValueError as exc:
+        raise MetadataExtractionError(
+            "方案日期格式与精度不一致，请填写 YYYY、YYYY-MM 或 YYYY-MM-DD"
+        ) from exc
+
+    return DateValue(value=parsed, precision=date_precision, source_text=None)
 
 
 class ProtocolWorkbenchService:
@@ -252,10 +294,34 @@ class ProtocolWorkbenchService:
                 recovery="请确认文件完整可读且为支持的方案格式（DOCX/DOC/PDF/TXT）后重新上传。",
             ) from exc
 
+        source_artifact_id = (
+            f"source-{sha256}-{upload_path.suffix.lower().lstrip('.') or 'bin'}"
+        )
+        try:
+            artifact = register_source_artifact(
+                upload_path,
+                source_artifact_id=source_artifact_id,
+                storage_root=self.data_paths.blobs_dir,
+                uploaded_at=self.now(),
+            )
+        except SourceIngestionError as exc:
+            raise ProtocolWorkbenchError(
+                "SOURCE_INGESTION_FAILED",
+                title="方案文件无法登记",
+                detail=str(exc),
+                recovery="请确认文件完整可读且为支持的方案格式（DOCX/DOC/PDF/TXT）后重新上传。",
+            ) from exc
+
+        # 将登记结果写入 Job payload，保证 runner 即使在 API 写入首个检查点前
+        # 抢到租约，也能从持久任务输入恢复 register_file 步骤。
         payload = {
             "session_kind": "first_deconstruction",
             "file_name": display_name,
-            "sha256": sha256,
+            "sha256": artifact.sha256,
+            "mime_type": artifact.mime_type,
+            "size_bytes": artifact.size_bytes,
+            "storage_ref": artifact.storage_ref,
+            "source_artifact_id": artifact.source_artifact_id,
             "actor": actor,
             "awaiting_user": None,
         }
@@ -275,53 +341,35 @@ class ProtocolWorkbenchService:
                 file_name=str(merged.get("file_name") or display_name),
             )
 
-        source_artifact_id = uuid.uuid4().hex
-        try:
-            artifact = register_source_artifact(
-                upload_path,
-                source_artifact_id=source_artifact_id,
-                storage_root=self.data_paths.blobs_dir,
-                uploaded_at=self.now(),
-            )
-        except SourceIngestionError as exc:
-            raise ProtocolWorkbenchError(
-                "SOURCE_INGESTION_FAILED",
-                title="方案文件无法登记",
-                detail=str(exc),
-                recovery="请确认文件完整可读且为支持的方案格式（DOCX/DOC/PDF/TXT）后重新上传。",
-            ) from exc
-
         with self.session_factory() as session:
             with session.begin():
                 store = JobStore(session, now=self.now)
                 lease = store.claim_job(result.job_id, self.WORKER_ID)
                 if lease is None:
-                    raise ProtocolWorkbenchError(
-                        "JOB_CLAIM_FAILED",
-                        title="任务暂时无法登记",
-                        detail="方案文件已登记，但解构任务未能立即领取执行权。",
-                        recovery="请稍后刷新页面；若持续失败，请记录时间并联系维护人员。",
+                    # runner 可能已在 Job 创建后取得租约；源登记信息已在
+                    # payload 中持久化，此时返回当前状态即可由前端继续恢复。
+                    state = store.get_job(result.job_id).state
+                else:
+                    store.start_step(lease, STEP_REGISTER)
+                    store.complete_step(
+                        lease,
+                        STEP_REGISTER,
+                        checkpoint_payload={
+                            "source_artifact_id": artifact.source_artifact_id,
+                            "file_name": display_name,
+                            "sha256": artifact.sha256,
+                            "mime_type": artifact.mime_type,
+                            "size_bytes": artifact.size_bytes,
+                            "storage_ref": artifact.storage_ref,
+                            "uploaded_at": artifact.uploaded_at.isoformat(),
+                        },
                     )
-                store.start_step(lease, STEP_REGISTER)
-                store.complete_step(
-                    lease,
-                    STEP_REGISTER,
-                    checkpoint_payload={
-                        "source_artifact_id": artifact.source_artifact_id,
-                        "file_name": display_name,
-                        "sha256": artifact.sha256,
-                        "mime_type": artifact.mime_type,
-                        "size_bytes": artifact.size_bytes,
-                        "storage_ref": artifact.storage_ref,
-                        "uploaded_at": artifact.uploaded_at.isoformat(),
-                    },
-                )
-                job = store.get_job(result.job_id)
-                job.state = "queued"
-                job.lease_owner = None
-                job.lease_expires_at = None
-                session.flush()
-                state = job.state
+                    job = store.get_job(result.job_id)
+                    job.state = "queued"
+                    job.lease_owner = None
+                    job.lease_expires_at = None
+                    session.flush()
+                    state = job.state
         return StartDeconstructionResult(
             job_id=result.job_id,
             state=state,
@@ -339,7 +387,15 @@ class ProtocolWorkbenchService:
         draft_summary = self._draft_summary(merged)
         gate_summary = self._gate_summary(merged)
         recovery_step, recovery_checkpoint = self._recovery_point(job_id)
-        awaiting = merged.get("awaiting_user")
+        persisted_wait = next(
+            (
+                step.waiting_user_kind
+                for step in snapshot.steps
+                if step.state == "waiting_user" and step.waiting_user_kind is not None
+            ),
+            None,
+        )
+        awaiting = persisted_wait or merged.get("awaiting_user")
         return ProtocolSessionView(
             job_id=job_id,
             job_type=snapshot.job_type,
@@ -363,7 +419,7 @@ class ProtocolWorkbenchService:
             official_version=merged.get("official_version"),
             recovery_checkpoint_id=recovery_checkpoint,
             recovery_step_id=recovery_step,
-            next_action=self._next_action(merged, gate_summary),
+            next_action=self._next_action(merged, gate_summary, awaiting_user=awaiting),
             publishable=gate_summary.get("publishable"),
         )
 
@@ -374,8 +430,8 @@ class ProtocolWorkbenchService:
         if not snapshot_id:
             raise ProtocolWorkbenchError(
                 "IDENTITY_NOT_READY",
-                title="身份与期别尚未识别",
-                detail="系统还在读取方案结构，或尚未完成元信息与期别识别。",
+                title="方案信息与研究期别尚未识别",
+                detail="系统还在读取方案结构，或尚未完成方案信息与研究期别识别。",
                 recovery="请稍后刷新；您也可以订阅任务事件了解最新进度。",
             )
         identity = self._load_identity_decision(merged)
@@ -459,11 +515,20 @@ class ProtocolWorkbenchService:
     ) -> ProtocolSessionView:
         merged = self._merged_payload(job_id)
         self._require_protocol_job(job_id)
-        if merged.get("awaiting_user") != "identity":
+        snapshot = self.jobs.get_status(job_id)
+        persisted_wait = next(
+            (
+                step.waiting_user_kind
+                for step in snapshot.steps
+                if step.state == "waiting_user" and step.waiting_user_kind is not None
+            ),
+            None,
+        )
+        if (persisted_wait or merged.get("awaiting_user")) != "identity":
             raise ProtocolWorkbenchError(
                 "IDENTITY_CONFIRM_NOT_ALLOWED",
-                title="当前不能确认方案身份",
-                detail="任务尚未进入身份与期别确认步骤，或该步骤已经完成。",
+                title="当前不能确认方案信息",
+                detail="任务尚未进入方案信息与研究期别确认步骤，或该步骤已经完成。",
                 recovery="请刷新任务状态，按页面提示继续下一步。",
             )
         metadata_result = merged.get("metadata_extraction")
@@ -471,8 +536,8 @@ class ProtocolWorkbenchService:
         if not metadata_result:
             raise ProtocolWorkbenchError(
                 "IDENTITY_NOT_READY",
-                title="缺少身份识别结果",
-                detail="系统没有可供确认的身份与期别候选。",
+                title="缺少方案信息识别结果",
+                detail="系统没有可供确认的方案信息与研究期别候选。",
                 recovery="请等待识别步骤完成，或重新上传方案。",
             )
         from app.domain.contracts.protocol_metadata import (
@@ -493,9 +558,6 @@ class ProtocolWorkbenchService:
                 for item in raw.get("conflicts") or []
             ),
         )
-        from app.domain.contracts.common import DateValue
-        from app.domain.contracts.enums import DatePrecision
-
         try:
             confirmed = confirm_protocol_identity(
                 extraction,
@@ -504,10 +566,9 @@ class ProtocolWorkbenchService:
                 project_name=project_name,
                 project_code=project_code,
                 official_version=official_version,
-                official_date=DateValue(
-                    value=official_date_value,
-                    precision=DatePrecision(official_date_precision),
-                    source_text=None,
+                official_date=_date_value_from_input(
+                    official_date_value,
+                    official_date_precision,
                 ),
                 study_phase=study_phase,
                 confirmed_by=actor,
@@ -517,20 +578,29 @@ class ProtocolWorkbenchService:
         except MetadataExtractionError as exc:
             raise ProtocolWorkbenchError(
                 "IDENTITY_CONFIRM_INVALID",
-                title="身份确认内容无效",
+                title="方案信息确认内容无效",
                 detail=str(exc),
                 recovery="请对照候选列表逐项确认；有冲突的字段必须明确选中一个候选值。",
             ) from exc
+
+        phase_candidate_ids = [
+            item.get("candidate_id", "")
+            for item in merged.get("phase_candidates") or []
+            if item.get("phase") == study_phase.value
+        ]
+        if not phase_candidate_ids:
+            raise ProtocolWorkbenchError(
+                "IDENTITY_CONFIRM_INVALID",
+                title="研究期别确认内容无效",
+                detail="所选研究期别没有对应的方案原文候选，不能建立可追溯的期别确认记录。",
+                recovery="请重新选择页面列出的期别候选；如果没有合适候选，请返回并重新上传当前方案版本。",
+            )
 
         phase_selection = StudyPhaseSelection(
             selection_id=merged.get("phase_selection_id") or uuid.uuid4().hex,
             snapshot_id=pending.snapshot_id,
             selected_phase=study_phase,
-            candidate_ids=[
-                item.get("candidate_id", "")
-                for item in merged.get("phase_candidates") or []
-                if item.get("phase") == study_phase.value
-            ],
+            candidate_ids=phase_candidate_ids,
             status=MetadataResolutionStatus.CONFIRMED,
             confirmed_by=actor,
             confirmed_at=self.now(),
@@ -1012,7 +1082,7 @@ class ProtocolWorkbenchService:
             raise ProtocolWorkbenchError(
                 "IDENTITY_NOT_READY",
                 title="身份决策尚未生成",
-                detail="系统还没有可供确认的方案身份信息。",
+                detail="系统还没有可供确认的方案信息。",
                 recovery="请等待识别步骤完成。",
             )
         return ProtocolIdentityDecision.model_validate(raw)
@@ -1023,8 +1093,8 @@ class ProtocolWorkbenchService:
             raise ProtocolWorkbenchError(
                 "SOURCE_INPUT_NOT_READY",
                 title="解构输入尚未就绪",
-                detail="身份与期别确认尚未完成，或输入包尚未写入。",
-                recovery="请先完成方案身份与研究期别确认。",
+                detail="方案信息与研究期别核对尚未完成，或输入资料尚未写入。",
+                recovery="请先完成方案信息与研究期别确认。",
             )
         return ProtocolDeconstructionInput.model_validate(raw)
 
@@ -1120,9 +1190,13 @@ class ProtocolWorkbenchService:
         return None, None
 
     def _next_action(
-        self, merged: dict[str, Any], gate_summary: dict[str, Any]
+        self,
+        merged: dict[str, Any],
+        gate_summary: dict[str, Any],
+        *,
+        awaiting_user: str | None = None,
     ) -> str:
-        awaiting = merged.get("awaiting_user")
+        awaiting = awaiting_user or merged.get("awaiting_user")
         if awaiting == "identity":
             return "请核对方案编号、版本、日期与研究期别后确认。"
         if awaiting == "review":
@@ -1132,8 +1206,10 @@ class ProtocolWorkbenchService:
             if blocking:
                 return f"草稿有 {blocking} 项阻止发布的问题，请先逐项核对修正。"
             return "请审阅草稿与来源定位，修正需要核对的项目。"
+        if awaiting == "publish":
+            return "草稿已确认，请确认后发布正式项目。"
         if not merged.get("snapshot_id"):
-            return "系统正在读取方案结构与元信息，请稍候。"
+            return "系统正在读取方案结构与基本信息，请稍候。"
         if not merged.get("draft_revision_id"):
             return "等待生成方案解构草稿。"
         return "请刷新查看最新进展。"

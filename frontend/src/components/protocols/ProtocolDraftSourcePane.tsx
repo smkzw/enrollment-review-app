@@ -48,7 +48,7 @@ export function ProtocolDraftSourcePane({
                 {locator.pageLabel !== null && (
                   <span className="protocol-source-card__page">{locator.pageLabel}</span>
                 )}
-                <PrecisionBadge precision={locator.precision as "bbox"} />
+                <PrecisionBadge precision={locator.precision} />
               </div>
               <blockquote className="protocol-source-card__excerpt">{locator.excerpt}</blockquote>
               {locator.degradationReason !== null && (

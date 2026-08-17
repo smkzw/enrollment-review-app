@@ -1,7 +1,7 @@
 /**
  * Playwright 配置：真实浏览器验收（合同 §3.3 视口矩阵 + §8 状态验收）。
  * - webServer 启动 vite preview（构建产物），避免 dev server 与测试竞争。
- * - 三个桌面宽度 + 一个窄屏项目；axe 检查与溢出检查在 spec 中执行。
+ * - 1080P、2K、4K 三个最大化桌面项目；axe 检查与溢出检查在 spec 中执行。
  * - 截图输出到 e2e/screenshots/（供 Codex 视觉复核，本角色不做最终视觉验收）。
  */
 
@@ -22,24 +22,16 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "desktop-1280",
-      use: { viewport: { width: 1280, height: 800 } },
-    },
-    {
-      name: "desktop-1440",
-      use: { viewport: { width: 1440, height: 900 } },
-    },
-    {
-      name: "desktop-1920",
+      name: "desktop-1080p",
       use: { viewport: { width: 1920, height: 1080 } },
     },
     {
-      name: "narrow-390",
-      use: {
-        viewport: { width: 390, height: 844 },
-        isMobile: true,
-        hasTouch: true,
-      },
+      name: "desktop-2k",
+      use: { viewport: { width: 2560, height: 1440 } },
+    },
+    {
+      name: "desktop-4k",
+      use: { viewport: { width: 3840, height: 2160 } },
     },
   ],
   webServer: {

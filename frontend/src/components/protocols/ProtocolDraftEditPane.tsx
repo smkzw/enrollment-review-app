@@ -22,7 +22,7 @@ export function ProtocolDraftEditPane({
     return (
       <EmptyState
         message="请选择左侧规则树中的子项"
-        hint="宽屏下三列联动；窄屏请切换到「编辑」标签。"
+        hint="选择后将同步显示逻辑结构、完整性问题和方案原文定位。"
       />
     );
   }
@@ -38,7 +38,7 @@ export function ProtocolDraftEditPane({
           <span className="protocol-edit-pane__code">{component.displayCode}</span>
           {component.title}
         </h3>
-        <p className="protocol-edit-pane__meta">{revisionLabel} · 手工修订入口将在后续步骤开放</p>
+        <p className="protocol-edit-pane__meta">{revisionLabel} · 请逐项核对原文、逻辑和资料要求</p>
       </header>
 
       <section className="protocol-edit-pane__section" aria-labelledby="protocol-edit-source">
@@ -84,7 +84,7 @@ export function ProtocolDraftEditPane({
       )}
 
       <p className="protocol-edit-pane__note" role="note">
-        草稿内容供医学经理逐条终审；手工修订入口将在后续步骤开放。
+        发现原文理解、逻辑关系或资料要求不准确时，请先记录具体条目；草稿修订时可据此逐项修改并再次检查。
       </p>
     </div>
   );

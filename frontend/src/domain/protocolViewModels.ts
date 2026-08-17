@@ -2,7 +2,7 @@
  * 方案解构工作台 ViewModel。
  */
 
-import type { RuleKind } from "./enums";
+import type { ProtocolSourcePrecision, RuleKind } from "./enums";
 import type { RuleComponentId, RuleId } from "./ids";
 import type { ExpressionNodeView } from "./viewModels";
 
@@ -32,7 +32,7 @@ export interface ProtocolSourceLocatorView {
   sourceRef: string;
   pageLabel: string | null;
   excerpt: string;
-  precision: string;
+  precision: ProtocolSourcePrecision;
   precisionLabel: string;
   degradationReason: string | null;
 }

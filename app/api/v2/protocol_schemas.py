@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.contracts.agent_io import ProtocolDeconstructionDraft
-from app.domain.contracts.enums import StudyPhase
+from app.domain.contracts.enums import DatePrecision, StudyPhase
 from app.domain.contracts.protocol_drafts import DraftFeedbackKind
 
 
@@ -42,7 +42,7 @@ class ProtocolSessionResponse(_StrictModel):
     draft_revision_number: int | None = None
     draft_status: str | None = None
     draft_status_label: str | None = None
-    selected_phase: str | None = None
+    selected_phase: StudyPhase | None = None
     selected_phase_label: str | None = None
     protocol_code: str | None = None
     official_version: str | None = None
@@ -62,12 +62,44 @@ class IdentityDecisionDTO(_StrictModel):
     protocol_code: str | None = None
     official_version: str | None = None
     official_date_value: str | None = None
-    official_date_precision: str | None = None
-    study_phase: str | None = None
+    official_date_precision: DatePrecision | None = None
+    study_phase: StudyPhase | None = None
     study_phase_label: str | None = None
     confirmation_required: bool
     conflict_ids: list[str] = Field(default_factory=list)
     selected_candidate_ids: list[str] = Field(default_factory=list)
+
+
+class PhaseCandidateDTO(_StrictModel):
+    candidate_id: str
+    phase: StudyPhase
+    phase_label: str
+    rationale: str
+    source_excerpt: str
+
+
+class MetadataCandidateDTO(_StrictModel):
+    candidate_id: str
+    field: str
+    field_label: str
+    value: str
+    source_label: str
+    source_excerpt: str
+    is_fallback: bool
+
+
+class MetadataConflictCandidateDTO(_StrictModel):
+    candidate_id: str
+    value: str
+    source_label: str
+
+
+class MetadataConflictDTO(_StrictModel):
+    conflict_id: str
+    field: str
+    field_label: str
+    reason: str
+    candidates: list[MetadataConflictCandidateDTO] = Field(default_factory=list)
 
 
 class IdentityReviewResponse(_StrictModel):
@@ -75,9 +107,9 @@ class IdentityReviewResponse(_StrictModel):
     snapshot_id: str
     confirmation_required: bool
     identity: IdentityDecisionDTO
-    phase_candidates: list[dict[str, Any]] = Field(default_factory=list)
-    metadata_candidates: list[dict[str, Any]] = Field(default_factory=list)
-    metadata_conflicts: list[dict[str, Any]] = Field(default_factory=list)
+    phase_candidates: list[PhaseCandidateDTO] = Field(default_factory=list)
+    metadata_candidates: list[MetadataCandidateDTO] = Field(default_factory=list)
+    metadata_conflicts: list[MetadataConflictDTO] = Field(default_factory=list)
 
 
 class ConfirmIdentityRequest(_StrictModel):
@@ -86,7 +118,7 @@ class ConfirmIdentityRequest(_StrictModel):
     project_code: str | None = Field(default=None, max_length=128)
     official_version: str = Field(min_length=1, max_length=64)
     official_date_value: str = Field(min_length=1, max_length=64)
-    official_date_precision: str = Field(min_length=1, max_length=32)
+    official_date_precision: Literal["year", "month", "day"]
     study_phase: StudyPhase
     selected_candidate_ids: list[str] = Field(default_factory=list)
     actor: str = Field(default="用户", min_length=1, max_length=128)
@@ -103,7 +135,7 @@ class DraftRevisionResponse(_StrictModel):
     reason_label: str
     actor: str
     created_at: datetime
-    study_phase: str
+    study_phase: StudyPhase
     study_phase_label: str
     protocol_code: str | None = None
     official_version: str | None = None
@@ -162,7 +194,7 @@ class IntegrityResponse(_StrictModel):
 class SourcesResponse(_StrictModel):
     job_id: str
     snapshot_id: str
-    selected_phase: str
+    selected_phase: StudyPhase
     selected_phase_label: str
     source_spans: dict[str, Any]
     source_materials: dict[str, Any]

@@ -28,8 +28,8 @@
 
 - Prefer structured domain models and deterministic validators for logic, dates, units, state, and audit behavior. Use bounded Agents only for semantic tasks.
 - Use `apply_patch` for manual text/code edits. Preserve unrelated user changes.
-- Verify user-facing UI in a real browser at representative desktop and narrow viewports.
-- Keep visual layouts responsive; avoid fixed pixel dimensions as the primary layout strategy.
+- Verify user-facing UI in a real browser at representative 1080P, 2K, and 4K desktop viewports.
+- The product targets maximized wide-screen desktop use only. Do not add mobile or narrow-screen interaction variants; keep layouts fluid across desktop DPI and browser zoom, and avoid fixed pixel dimensions as the primary layout strategy.
 - Update task context and `docs/PROJECT_CONTEXT.md` at material milestones.
 
 ## Conference Boundary

@@ -12,8 +12,8 @@ import type {
   ProtocolDraftRuleView,
   ProtocolSourceLocatorView,
 } from "./protocolViewModels";
-import { precisionLabel } from "./labels";
-import type { LocatorPrecision } from "./enums";
+import { protocolSourcePrecisionLabel } from "./labels";
+import type { ProtocolSourcePrecision } from "./enums";
 
 function displayRuleCode(code: string): string {
   return code.replace(/^REQ-/, "必做-");
@@ -27,17 +27,41 @@ function asComponentWire(component: Record<string, unknown>): RuleComponentWire 
   return component as unknown as RuleComponentWire;
 }
 
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
 export function mapProtocolDraftRules(
   content: Record<string, unknown>,
 ): ProtocolDraftRuleView[] {
   const rules = (content.proposed_rules as ReadonlyArray<Record<string, unknown>>) ?? [];
   const componentDrafts =
     (content.component_drafts as ReadonlyArray<Record<string, unknown>>) ?? [];
-  const draftRefByComponent = new Map<string, string[]>();
+  const draftRefByRule = new Map<string, string[]>();
+  const draftsByRule = new Map<string, Record<string, unknown>[]>();
+  const draftByComponentId = new Map<string, Record<string, unknown>>();
   for (const draft of componentDrafts) {
     const parentCode = String(draft.parent_official_code ?? "");
-    const refs = (draft.source_refs as string[]) ?? [];
-    draftRefByComponent.set(parentCode, refs);
+    const refs = stringList(draft.source_refs);
+    draftsByRule.set(parentCode, [...(draftsByRule.get(parentCode) ?? []), draft]);
+    draftRefByRule.set(parentCode, [
+      ...new Set([...(draftRefByRule.get(parentCode) ?? []), ...refs]),
+    ]);
+    const proposedComponent = draft.proposed_component;
+    if (
+      proposedComponent !== null &&
+      typeof proposedComponent === "object" &&
+      !Array.isArray(proposedComponent)
+    ) {
+      const componentId = String(
+        (proposedComponent as Record<string, unknown>).rule_component_id ?? "",
+      );
+      if (componentId.length > 0) {
+        draftByComponentId.set(componentId, draft);
+      }
+    }
   }
 
   return rules.map((rawRule) => {
@@ -48,14 +72,15 @@ export function mapProtocolDraftRules(
       kind: rule.kind as RuleKind,
       kindLabel: ruleKindLabel[rule.kind as RuleKind],
       sourceText: rule.source_text,
-      sourceRefs: draftRefByComponent.get(rule.official_code) ?? [],
-      components: rule.components.map((component) => {
+      sourceRefs: draftRefByRule.get(rule.official_code) ?? [],
+      components: rule.components.map((component, componentIndex) => {
         const wire = asComponentWire(component as unknown as Record<string, unknown>);
-        const draftEntry = componentDrafts.find(
-          (entry) => entry.parent_official_code === rule.official_code,
-        );
-        const sourceRefs = (draftEntry?.source_refs as string[]) ?? [];
-        const sourceExcerpts = (draftEntry?.source_excerpts as string[]) ?? [];
+        const ruleDrafts = draftsByRule.get(rule.official_code) ?? [];
+        const draftEntry =
+          draftByComponentId.get(wire.rule_component_id) ??
+          ruleDrafts[componentIndex];
+        const sourceRefs = stringList(draftEntry?.source_refs);
+        const sourceExcerpts = stringList(draftEntry?.source_excerpts);
         return {
           componentId: toId<RuleComponentId>(wire.rule_component_id),
           parentRuleId: toId<RuleId>(wire.parent_rule_id),
@@ -81,8 +106,25 @@ export function mapProtocolSourceLocators(
   return selectedRefs.flatMap((ref) => {
     const raw = sourceSpans[ref] as Record<string, unknown> | undefined;
     if (raw === undefined) return [];
-    const precision = String(raw.precision ?? "page_only");
-    const pageNumber = raw.page_number as number | undefined;
+    const rawPrecision = String(raw.precision ?? "page_only");
+    const precision: ProtocolSourcePrecision =
+      rawPrecision === "bbox" ||
+      rawPrecision === "text_range" ||
+      rawPrecision === "page_excerpt" ||
+      rawPrecision === "page_only" ||
+      rawPrecision === "block"
+        ? rawPrecision
+        : "page_only";
+    const pageNumber =
+      typeof raw.render_page === "number" &&
+      Number.isInteger(raw.render_page) &&
+      raw.render_page > 0
+        ? raw.render_page
+        : typeof raw.page_number === "number" &&
+            Number.isInteger(raw.page_number) &&
+            raw.page_number > 0
+          ? raw.page_number
+          : undefined;
     return [
       {
         sourceSpanId: ref,
@@ -90,8 +132,7 @@ export function mapProtocolSourceLocators(
         pageLabel: pageNumber !== undefined ? `第 ${pageNumber} 页` : null,
         excerpt: String(raw.excerpt ?? ""),
         precision,
-        precisionLabel:
-          precisionLabel[precision as LocatorPrecision] ?? precision,
+        precisionLabel: protocolSourcePrecisionLabel[precision],
         degradationReason:
           raw.degradation_reason === null || raw.degradation_reason === undefined
             ? null

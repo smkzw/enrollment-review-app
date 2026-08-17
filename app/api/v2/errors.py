@@ -75,6 +75,16 @@ _FIELD_LABELS = {
     "max_attempts": "最多尝试次数",
     "retryable": "是否允许重试",
     "depends_on": "前置步骤",
+    "file": "方案文件",
+    "actor": "操作人",
+    "protocol_code": "方案编号",
+    "project_name": "项目名称",
+    "project_code": "项目代号",
+    "official_version": "正式版本",
+    "official_date_value": "版本日期",
+    "official_date_precision": "版本日期精度",
+    "study_phase": "研究期别",
+    "selected_candidate_ids": "来源候选",
 }
 
 

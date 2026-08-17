@@ -177,7 +177,7 @@ test.describe("Phase 1.5 交互预试", () => {
   });
 
   test("UAT-P1-14 自动化补充：三档布局压力均可完成 Profile、规则和证据路径", async ({ page }) => {
-    test.skip(page.viewportSize()?.width !== 1440, "仅 1440 项目执行三档布局压力检查");
+    test.skip(page.viewportSize()?.width !== 1920, "仅 1080P 桌面项目执行三档布局压力检查");
     for (const factor of [1, 1.5, 2] as const) {
       await setLayoutStressFactor(page, factor);
       await openRoute(page, "/subjects?subject=subject-uat-02-barrier&stage=screening");

@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 
 const [zoomLabel, cdpUrl = "http://127.0.0.1:9334"] = process.argv.slice(2);
 const holdOpen = process.argv.includes("--hold");
-const baselineWidth = readPositiveNumber("--baseline-width", 1440);
+const baselineWidth = readPositiveNumber("--baseline-width", 1920);
 const baselineDpr = readPositiveNumber("--baseline-dpr", 2);
 
 if (!zoomLabel) {

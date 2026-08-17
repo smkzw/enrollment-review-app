@@ -25,6 +25,10 @@ export interface UseLoadResult<T> {
   retry: () => void;
 }
 
+export interface UseLoadOptions {
+  enabled?: boolean;
+}
+
 /**
  * @param loader 数据加载函数（stub/真实 API 同一接口）
  * @param deps 重新加载的依赖；切换对象时旧请求会被丢弃，不会覆盖新页面
@@ -32,11 +36,16 @@ export interface UseLoadResult<T> {
 export function useLoad<T>(
   loader: (signal?: AbortSignal) => Promise<T>,
   deps: ReadonlyArray<unknown>,
+  options: UseLoadOptions = {},
 ): UseLoadResult<T> {
   const [state, setState] = useState<LoadState<T>>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    if (options.enabled === false) {
+      setState({ status: "loading" });
+      return;
+    }
     const controller = new AbortController();
     let cancelled = false;
     setState({ status: "loading" });
@@ -60,7 +69,7 @@ export function useLoad<T>(
       controller.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, attempt]);
+  }, [...deps, attempt, options.enabled]);
 
   const retry = useCallback(() => {
     setAttempt((value) => value + 1);

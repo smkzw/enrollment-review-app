@@ -31,7 +31,7 @@ export function ProtocolWorkbenchHome() {
             首次解构新方案
           </h2>
           <p className="protocol-home-card__desc">
-            上传 DOCX 方案，确认身份与期别后生成<strong>草稿第 1 稿</strong>，核对规则树、来源定位与完整性检查后再发布。
+            上传 DOCX 方案，核对方案信息与研究期别后生成<strong>草稿第 1 稿</strong>，核对规则树、来源定位与完整性检查后再发布。
           </p>
           <ul className="protocol-home-card__steps">
             <li>登记文件并提取结构</li>

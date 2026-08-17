@@ -545,6 +545,14 @@
   border-color: var(--color-line);
 }
 
+/* 结构块：仅保留文档结构定位，不显示页码或高亮暗示。 */
+.precision-badge--block {
+  color: var(--color-muted);
+  background: var(--color-canvas);
+  border-style: dashed;
+  border-color: var(--color-line);
+}
+
 .precision-legend {
   display: flex;
   flex-direction: column;

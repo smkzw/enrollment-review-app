@@ -71,8 +71,29 @@ def study_phase_label(phase: str) -> str:
 
 METADATA_STATUS_LABELS: dict[str, str] = {
     "pending": "待确认",
+    "needs_confirmation": "需要确认",
     "confirmed": "已确认",
     "conflict": "存在冲突",
+    "rejected": "已排除",
+}
+
+METADATA_FIELD_LABELS: dict[str, str] = {
+    "document_title": "文档标题",
+    "project_name": "项目名称",
+    "project_code": "项目代号",
+    "protocol_code": "方案编号",
+    "protocol_version": "方案版本",
+    "protocol_date": "方案日期",
+    "template_code": "模板编号",
+    "template_version": "模板版本",
+}
+
+METADATA_SOURCE_LABELS: dict[str, str] = {
+    "header_footer": "页眉或页脚",
+    "first_page": "方案首页",
+    "signature_page": "方案签署页",
+    "body": "方案正文",
+    "filename": "文件名（仅供辅助核对）",
 }
 
 DRAFT_STATUS_LABELS: dict[str, str] = {

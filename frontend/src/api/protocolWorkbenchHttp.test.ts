@@ -4,18 +4,23 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { createProtocolWorkbenchHttp } from "./protocolWorkbenchHttp";
+import {
+  normalizeIdentityReview,
+  normalizeSession,
+  normalizeSources,
+} from "./protocolWorkbenchNormalize";
 import { ProtocolWorkbenchApiError } from "./protocolWorkbenchTypes";
 
 const SESSION_WIRE = {
   job_id: "job-http-1",
   job_type: "protocol_deconstruction",
   state: "await_identity",
-  state_label: "等待身份确认",
+  state_label: "等待方案信息确认",
   progress_completed: 4,
   progress_total: 9,
   session_kind: "first_deconstruction",
   awaiting_user: "identity",
-  awaiting_user_label: "等待确认方案身份与期别",
+  awaiting_user_label: "等待确认方案信息与研究期别",
   source_artifact_id: "artifact-1",
   file_name: "测试方案.docx",
   snapshot_id: "snapshot-1",
@@ -54,7 +59,7 @@ describe("protocolWorkbenchHttp", () => {
       expect.objectContaining({ method: "GET" }),
     );
     expect(session.jobId).toBe("job-http-1");
-    expect(session.stateLabel).toBe("等待身份确认");
+    expect(session.stateLabel).toBe("等待方案信息确认");
     expect(session.fileName).toBe("测试方案.docx");
     expect(session.progressCompleted).toBe(4);
   });
@@ -96,7 +101,7 @@ describe("protocolWorkbenchHttp", () => {
       return jsonResponse(201, {
         job_id: "job-new-1",
         state: "await_identity",
-        state_label: "等待身份确认",
+        state_label: "等待方案信息确认",
         created: true,
         source_artifact_id: "artifact-new",
         file_name: "方案.docx",
@@ -147,5 +152,64 @@ describe("protocolWorkbenchHttp", () => {
     const repo = createProtocolWorkbenchHttp({ fetchImpl });
 
     await repo.getSession("job-http-1", { signal: controller.signal });
+  });
+
+  it("拒绝无法识别的研究期别投影", () => {
+    expect(() =>
+      normalizeSession({ ...SESSION_WIRE, selected_phase: "phase_unknown" }),
+    ).toThrow("不是有效研究期别");
+  });
+
+  it("将来源响应的研究期别保持为受限枚举", () => {
+    const sources = normalizeSources({
+      job_id: "job-http-1",
+      snapshot_id: "snapshot-1",
+      selected_phase: "phase_iii",
+      selected_phase_label: "III 期",
+      source_spans: {},
+      source_materials: {},
+    });
+
+    expect(sources.selectedPhase).toBe("phase_iii");
+    expect(() =>
+      normalizeSources({
+        job_id: "job-http-1",
+        snapshot_id: "snapshot-1",
+        selected_phase: "phase_unknown",
+        selected_phase_label: "未知期别",
+        source_spans: {},
+        source_materials: {},
+      }),
+    ).toThrow("不是有效研究期别");
+  });
+
+  it("将身份响应中的畸形候选归一化为可恢复错误", () => {
+    const malformed = {
+      job_id: "job-http-1",
+      snapshot_id: "snapshot-1",
+      confirmation_required: true,
+      identity: {
+        identity_decision_id: "identity-1",
+        snapshot_id: "snapshot-1",
+        status: "needs_confirmation",
+        status_label: "需要确认",
+        project_name: null,
+        project_code: null,
+        protocol_code: null,
+        official_version: null,
+        official_date_value: null,
+        official_date_precision: null,
+        study_phase: null,
+        study_phase_label: null,
+        confirmation_required: true,
+        conflict_ids: [],
+        selected_candidate_ids: [],
+      },
+      phase_candidates: [null],
+      metadata_candidates: [],
+      metadata_conflicts: [],
+    } as unknown as Parameters<typeof normalizeIdentityReview>[0];
+
+    expect(() => normalizeIdentityReview(malformed)).toThrow("应为对象");
   });
 });

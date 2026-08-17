@@ -27,6 +27,7 @@ import type {
   StartDeconstructionResult,
 } from "./protocolWorkbenchTypes";
 import { ProtocolWorkbenchApiError } from "./protocolWorkbenchTypes";
+import { studyPhaseLabel } from "../domain/labels";
 
 const LATENCY_MS = 40;
 
@@ -82,7 +83,7 @@ export function createProtocolWorkbenchStub(): ProtocolWorkbenchRepository {
       return {
         jobId,
         state: "await_identity",
-        stateLabel: "等待身份确认",
+        stateLabel: "等待方案信息确认",
         created: true,
         sourceArtifactId: `artifact-${jobId}`,
         fileName: file.name,
@@ -120,8 +121,8 @@ export function createProtocolWorkbenchStub(): ProtocolWorkbenchRepository {
       }
       throw new ProtocolWorkbenchApiError(
         "IDENTITY_NOT_READY",
-        "身份信息尚未就绪",
-        "方案结构仍在提取中，暂时无法核对身份与期别。",
+        "方案信息尚未就绪",
+        "方案结构仍在提取中，暂时无法核对方案信息与研究期别。",
         "请稍候刷新，或从恢复入口继续任务。",
       );
     },
@@ -142,7 +143,7 @@ export function createProtocolWorkbenchStub(): ProtocolWorkbenchRepository {
         awaitingUser: "review",
         awaitingUserLabel: "等待审阅草稿",
         selectedPhase: input.studyPhase,
-        selectedPhaseLabel: input.studyPhase === "phase_ii" ? "II 期" : input.studyPhase,
+        selectedPhaseLabel: studyPhaseLabel[input.studyPhase],
         protocolCode: input.protocolCode,
         officialVersion: input.officialVersion,
         draftId: draftRevisionFixture.draftId,
@@ -172,7 +173,7 @@ export function createProtocolWorkbenchStub(): ProtocolWorkbenchRepository {
         "DRAFT_NOT_READY",
         "草稿尚未生成",
         "当前任务尚未进入草稿审阅阶段。",
-        "先完成身份与期别确认，或等待后台任务完成。",
+        "先完成方案信息与研究期别核对，或等待后台任务完成。",
       );
     },
 

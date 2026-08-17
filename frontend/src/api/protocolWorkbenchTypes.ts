@@ -3,6 +3,14 @@
  * 组件经 mappers 消费 ViewModel，不直接使用 wire 结构。
  */
 
+import type {
+  DatePrecision,
+  ProtocolSourcePrecision,
+  StudyPhase,
+} from "../domain/enums";
+
+export type ConfirmableDatePrecision = Exclude<DatePrecision, "unknown">;
+
 export interface ProtocolWorkbenchErrorBody {
   code: string;
   title: string;
@@ -52,7 +60,7 @@ export interface ProtocolSessionView {
   draftRevisionNumber: number | null;
   draftStatus: string | null;
   draftStatusLabel: string | null;
-  selectedPhase: string | null;
+  selectedPhase: StudyPhase | null;
   selectedPhaseLabel: string | null;
   protocolCode: string | null;
   officialVersion: string | null;
@@ -72,8 +80,8 @@ export interface IdentityDecisionView {
   protocolCode: string | null;
   officialVersion: string | null;
   officialDateValue: string | null;
-  officialDatePrecision: string | null;
-  studyPhase: string | null;
+  officialDatePrecision: DatePrecision | null;
+  studyPhase: StudyPhase | null;
   studyPhaseLabel: string | null;
   confirmationRequired: boolean;
   conflictIds: string[];
@@ -82,15 +90,27 @@ export interface IdentityDecisionView {
 
 export interface PhaseCandidateView {
   candidateId: string;
-  phase: string;
+  phase: StudyPhase;
   phaseLabel: string;
   rationale: string;
+  sourceExcerpt: string;
+}
+
+export interface MetadataCandidateView {
+  candidateId: string;
+  field: string;
+  fieldLabel: string;
+  value: string;
+  sourceLabel: string;
+  sourceExcerpt: string;
+  isFallback: boolean;
 }
 
 export interface MetadataConflictView {
   conflictId: string;
   field: string;
   fieldLabel: string;
+  reason: string;
   candidates: ReadonlyArray<{ candidateId: string; value: string; sourceLabel: string }>;
 }
 
@@ -100,7 +120,7 @@ export interface IdentityReviewView {
   confirmationRequired: boolean;
   identity: IdentityDecisionView;
   phaseCandidates: PhaseCandidateView[];
-  metadataCandidates: ReadonlyArray<Record<string, unknown>>;
+  metadataCandidates: MetadataCandidateView[];
   metadataConflicts: MetadataConflictView[];
 }
 
@@ -110,8 +130,8 @@ export interface ConfirmIdentityInput {
   projectCode?: string | null;
   officialVersion: string;
   officialDateValue: string;
-  officialDatePrecision: string;
-  studyPhase: string;
+  officialDatePrecision: ConfirmableDatePrecision;
+  studyPhase: StudyPhase;
   selectedCandidateIds?: string[];
   actor?: string;
 }
@@ -127,7 +147,7 @@ export interface DraftRevisionView {
   reasonLabel: string;
   actor: string;
   createdAt: string;
-  studyPhase: string;
+  studyPhase: StudyPhase;
   studyPhaseLabel: string;
   protocolCode: string | null;
   officialVersion: string | null;
@@ -170,7 +190,7 @@ export interface SourceSpanView {
   sourceRef: string;
   pageLabel: string | null;
   excerpt: string;
-  precision: string;
+  precision: ProtocolSourcePrecision;
   precisionLabel: string;
   degradationReason: string | null;
 }
@@ -178,7 +198,7 @@ export interface SourceSpanView {
 export interface SourcesView {
   jobId: string;
   snapshotId: string;
-  selectedPhase: string;
+  selectedPhase: StudyPhase;
   selectedPhaseLabel: string;
   sourceSpans: Record<string, unknown>;
   sourceMaterials: Record<string, unknown>;

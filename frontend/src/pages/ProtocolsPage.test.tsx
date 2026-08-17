@@ -33,7 +33,7 @@ describe("方案工作台", () => {
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "首次解构新方案" })).toBeInTheDocument();
     });
-    expect(screen.getByText(/核对方案身份与研究期别/)).toBeInTheDocument();
+    expect(screen.getByText(/核对方案信息与研究期别/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "选择方案文件" })).toBeInTheDocument();
   });
 
@@ -47,7 +47,7 @@ describe("方案工作台", () => {
     expect(screen.getByRole("tree", { name: "方案规则树" })).toHaveTextContent("EX-01");
     expect(screen.getAllByText(/方案原文摘要/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/来源定位/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/医学经理逐条终审/)).toBeInTheDocument();
+    expect(screen.getByText(/请逐项核对原文、逻辑和资料要求/)).toBeInTheDocument();
   });
 
   it("选择规则子项后编辑区与来源区同步显示", async () => {
@@ -65,14 +65,14 @@ describe("方案工作台", () => {
     navigate("/protocols", { job: PROTOCOL_IDENTITY_JOB_ID });
     render(<ProtocolsPage />);
     expect(
-      await screen.findByRole("heading", { name: "确认方案身份与期别" }),
+      await screen.findByRole("heading", { name: "核对方案信息与研究期别" }),
     ).toBeInTheDocument();
     expect(screen.getByText("II 期")).toBeInTheDocument();
     expect(screen.getByText("III 期")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "确认并继续解构" })).toBeInTheDocument();
   });
 
-  it("窄屏标签切换共享选择状态", async () => {
+  it("工作区标签切换时保留规则选择", async () => {
     const user = userEvent.setup();
     navigate("/protocols", { job: PROTOCOL_DEMO_JOB_ID });
     render(<ProtocolsPage />);

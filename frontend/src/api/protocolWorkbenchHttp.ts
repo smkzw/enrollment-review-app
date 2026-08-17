@@ -28,16 +28,6 @@ import type {
   SourcesView,
   StartDeconstructionResult,
 } from "./protocolWorkbenchTypes";
-import type {
-  WireDraftRevisionResponse,
-  WireIdentityReviewResponse,
-  WireIntegrityResponse,
-  WireProtocolSessionResponse,
-  WirePublishResponse,
-  WireSourcesResponse,
-  WireStartDeconstructionResponse,
-} from "./protocolWorkbenchWire";
-
 export interface ProtocolWorkbenchHttpOptions {
   fetchImpl?: typeof fetch;
 }
@@ -88,7 +78,7 @@ export function createProtocolWorkbenchHttp(
       const result = await request(
         "",
         { method: "POST", body, signal: options?.signal },
-        (payload) => normalizeStartDeconstruction(payload as WireStartDeconstructionResponse),
+        normalizeStartDeconstruction,
       );
       return result;
     },
@@ -100,7 +90,7 @@ export function createProtocolWorkbenchHttp(
       return request(
         `/${encodeURIComponent(jobId)}`,
         { method: "GET", signal: options?.signal },
-        (payload) => normalizeSession(payload as WireProtocolSessionResponse),
+        normalizeSession,
       );
     },
 
@@ -111,7 +101,7 @@ export function createProtocolWorkbenchHttp(
       return request(
         `/${encodeURIComponent(jobId)}/identity`,
         { method: "GET", signal: options?.signal },
-        (payload) => normalizeIdentityReview(payload as WireIdentityReviewResponse),
+        normalizeIdentityReview,
       );
     },
 
@@ -128,7 +118,7 @@ export function createProtocolWorkbenchHttp(
           body: JSON.stringify(encodeConfirmIdentity(input)),
           signal: options?.signal,
         },
-        (payload) => normalizeSession(payload as WireProtocolSessionResponse),
+        normalizeSession,
       );
     },
 
@@ -139,7 +129,7 @@ export function createProtocolWorkbenchHttp(
       return request(
         `/${encodeURIComponent(jobId)}/draft`,
         { method: "GET", signal: options?.signal },
-        (payload) => normalizeDraftRevision(payload as WireDraftRevisionResponse),
+        normalizeDraftRevision,
       );
     },
 
@@ -150,7 +140,7 @@ export function createProtocolWorkbenchHttp(
       return request(
         `/${encodeURIComponent(jobId)}/integrity`,
         { method: "GET", signal: options?.signal },
-        (payload) => normalizeIntegrity(payload as WireIntegrityResponse),
+        normalizeIntegrity,
       );
     },
 
@@ -161,7 +151,7 @@ export function createProtocolWorkbenchHttp(
       return request(
         `/${encodeURIComponent(jobId)}/sources`,
         { method: "GET", signal: options?.signal },
-        (payload) => normalizeSources(payload as WireSourcesResponse),
+        normalizeSources,
       );
     },
 
@@ -178,7 +168,7 @@ export function createProtocolWorkbenchHttp(
           body: JSON.stringify({ expected_revision_id: expectedRevisionId }),
           signal: options?.signal,
         },
-        (payload) => normalizeDraftRevision(payload as WireDraftRevisionResponse),
+        normalizeDraftRevision,
       );
     },
 
@@ -195,7 +185,7 @@ export function createProtocolWorkbenchHttp(
           body: JSON.stringify({ idempotency_key: idempotencyKey, actor: "用户" }),
           signal: options?.signal,
         },
-        (payload) => normalizePublishResult(payload as WirePublishResponse),
+        normalizePublishResult,
       );
     },
   };

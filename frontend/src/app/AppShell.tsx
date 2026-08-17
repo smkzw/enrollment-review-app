@@ -73,7 +73,7 @@ export function AppShell() {
         <TopBar
           positionLabel={positionLabel}
           showProjectCreation={path === "/board"}
-          showProjectContext={path !== "/projects/new"}
+          showProjectContext={!new Set(["/projects/new", "/protocols"]).has(path)}
         />
         <main id="main-content" tabIndex={-1} className="app-shell__content">
           <CurrentPage />

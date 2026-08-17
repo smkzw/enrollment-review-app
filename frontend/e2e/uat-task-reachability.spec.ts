@@ -200,7 +200,7 @@ test.describe("14 项任务目标可达性", () => {
     await expectNoPageOverflow(page);
   });
 
-  test("UAT-P1-13：窄窗口三区切换（桌面项目验证标签模式入口存在）", async ({
+  test("UAT-P1-13：工作区三区切换（桌面项目验证标签模式入口存在）", async ({
     page,
   }) => {
     await openRoute(
@@ -209,7 +209,7 @@ test.describe("14 项任务目标可达性", () => {
     );
     await expect(page.getByText("UAT-03").first()).toBeVisible();
     await expect(page.getByText("筛选期").first()).toBeVisible();
-    // 窄屏降级能力由 narrow.spec.ts 全覆盖；此处只验证三个工作区标识可达
+    // 此处只验证三个工作区标识可达，具体展示模式由当前桌面视口决定
     const tabsVisible = await page.locator(".workbench-tabs").isVisible();
     if (tabsVisible) {
       await expect(page.getByRole("tab", { name: "规则" })).toBeVisible();

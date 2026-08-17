@@ -1,6 +1,6 @@
 /**
  * 草稿审阅三区：规则树 / 编辑区 / 来源定位。
- * 宽屏三列联动；窄屏标签共享 component URL 选择状态。
+ * 1080P至4K桌面三列联动，共享 component URL 选择状态。
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -23,6 +23,7 @@ interface ProtocolDraftWorkbenchProps {
   componentParam: string | null;
   onSaveDraft: () => void;
   saving: boolean;
+  saveError?: string;
   /** 界面试用：示例草稿保存状态（仅 stub 演示任务注入） */
   uatDraftSaved?: boolean;
   onUatReset?: () => void;
@@ -36,6 +37,7 @@ export function ProtocolDraftWorkbench({
   componentParam,
   onSaveDraft,
   saving,
+  saveError,
   uatDraftSaved,
   onUatReset,
 }: ProtocolDraftWorkbenchProps) {
@@ -122,6 +124,11 @@ export function ProtocolDraftWorkbench({
         {draftSaved && (
           <p className="protocol-draft-actions__status" role="status">
             已保存草稿；尚未发布，当前正式规则版本没有被覆盖。
+          </p>
+        )}
+        {saveError !== undefined && saveError.length > 0 && (
+          <p className="protocol-draft-actions__error" role="alert">
+            {saveError}
           </p>
         )}
       </section>

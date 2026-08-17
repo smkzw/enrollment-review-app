@@ -10,15 +10,22 @@ interface ProtocolUploadPanelProps {
   busy: boolean;
   error: string | null;
   onUpload: (file: File) => void;
+  onInvalidFile?: (message: string) => void;
 }
 
-export function ProtocolUploadPanel({ busy, error, onUpload }: ProtocolUploadPanelProps) {
+export function ProtocolUploadPanel({
+  busy,
+  error,
+  onUpload,
+  onInvalidFile,
+}: ProtocolUploadPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
 
   const handleFile = (file: File | undefined) => {
     if (file === undefined) return;
     if (!file.name.toLowerCase().endsWith(".docx")) {
+      onInvalidFile?.("当前仅支持 DOCX 方案文件，请选择正式方案文件后重试。");
       return;
     }
     onUpload(file);
@@ -29,7 +36,7 @@ export function ProtocolUploadPanel({ busy, error, onUpload }: ProtocolUploadPan
       <header className="page-head">
         <h1 className="page-head__title">首次解构新方案</h1>
         <p className="page-head__note">
-          上传 DOCX 方案原文。系统将登记文件并提取结构，随后请您核对方案身份与研究期别。
+          上传 DOCX 方案原文。系统将登记文件并提取结构，随后请您核对方案信息与研究期别。
         </p>
       </header>
 
@@ -61,7 +68,10 @@ export function ProtocolUploadPanel({ busy, error, onUpload }: ProtocolUploadPan
           type="file"
           accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           className="protocol-upload__input"
-          onChange={(event) => handleFile(event.target.files?.[0])}
+          onChange={(event) => {
+            handleFile(event.target.files?.[0]);
+            event.currentTarget.value = "";
+          }}
         />
       </div>
 

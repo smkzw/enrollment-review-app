@@ -18,6 +18,10 @@ from app.api.v2.protocol_schemas import (
     FeedbackRequest,
     IdentityDecisionDTO,
     IdentityReviewResponse,
+    MetadataCandidateDTO,
+    MetadataConflictCandidateDTO,
+    MetadataConflictDTO,
+    PhaseCandidateDTO,
     IntegrityCheckDTO,
     IntegrityIssueDTO,
     IntegrityResponse,
@@ -31,9 +35,12 @@ from app.api.v2.protocol_schemas import (
 from app.api.v2.vocabulary import (
     DRAFT_REASON_LABELS,
     DRAFT_STATUS_LABELS,
+    METADATA_FIELD_LABELS,
+    METADATA_SOURCE_LABELS,
     METADATA_STATUS_LABELS,
     study_phase_label,
 )
+from app.domain.contracts.common import DateValue
 from app.domain.contracts.protocol_metadata import ProtocolIdentityDecision
 from app.services.protocol_workbench_service import ProtocolWorkbenchService
 
@@ -87,6 +94,7 @@ def _session_dto(view) -> ProtocolSessionResponse:
 
 
 def _identity_dto(decision: ProtocolIdentityDecision) -> IdentityDecisionDTO:
+    official_date = decision.official_date
     return IdentityDecisionDTO(
         identity_decision_id=decision.identity_decision_id,
         snapshot_id=decision.snapshot_id,
@@ -98,12 +106,8 @@ def _identity_dto(decision: ProtocolIdentityDecision) -> IdentityDecisionDTO:
         project_code=decision.project_code,
         protocol_code=decision.protocol_code,
         official_version=decision.official_version,
-        official_date_value=(
-            decision.official_date.value if decision.official_date else None
-        ),
-        official_date_precision=(
-            decision.official_date.precision.value if decision.official_date else None
-        ),
+        official_date_value=_official_date_text(official_date),
+        official_date_precision=official_date.precision if official_date else None,
         study_phase=decision.study_phase.value if decision.study_phase else None,
         study_phase_label=(
             study_phase_label(decision.study_phase.value)
@@ -113,6 +117,101 @@ def _identity_dto(decision: ProtocolIdentityDecision) -> IdentityDecisionDTO:
         confirmation_required=decision.confirmation_required,
         conflict_ids=list(decision.conflict_ids),
         selected_candidate_ids=list(decision.selected_candidate_ids),
+    )
+
+
+def _official_date_text(value: DateValue | None) -> str | None:
+    """Project normalized dates without losing the confirmed precision."""
+    if value is None or value.value is None:
+        return None
+    if value.precision.value == "year":
+        return f"{value.value.year:04d}"
+    if value.precision.value == "month":
+        return f"{value.value.year:04d}-{value.value.month:02d}"
+    return value.value.isoformat()
+
+
+def _metadata_source_label(candidate: dict) -> str:
+    source_kind = str(candidate.get("source_kind") or "")
+    return METADATA_SOURCE_LABELS.get(source_kind, "方案原文")
+
+
+def _phase_candidate_dtos(candidates: list[dict]) -> list[PhaseCandidateDTO]:
+    grouped: dict[str, list[dict]] = {}
+    for candidate in candidates:
+        phase = str(candidate.get("phase") or "")
+        if phase:
+            grouped.setdefault(phase, []).append(candidate)
+    output = []
+    for phase, items in grouped.items():
+        excerpts = list(
+            dict.fromkeys(
+                str(item.get("excerpt") or "").strip()
+                for item in items
+                if str(item.get("excerpt") or "").strip()
+            )
+        )
+        source_excerpt = "；".join(excerpts)
+        output.append(
+            PhaseCandidateDTO(
+                candidate_id=str(items[0].get("candidate_id") or ""),
+                phase=phase,
+                phase_label=study_phase_label(phase),
+                rationale=(
+                    f"方案原文在 {len(excerpts)} 处明确提及该期别：{source_excerpt}"
+                    if len(excerpts) > 1
+                    else f"方案原文出现“{source_excerpt}”"
+                ),
+                source_excerpt=source_excerpt,
+            )
+        )
+    return output
+
+
+def _metadata_candidate_dto(candidate: dict) -> MetadataCandidateDTO:
+    field = str(candidate.get("field_category") or "")
+    return MetadataCandidateDTO(
+        candidate_id=str(candidate.get("candidate_id") or ""),
+        field=field,
+        field_label=METADATA_FIELD_LABELS.get(field, "方案信息"),
+        value=_metadata_candidate_value(candidate, field),
+        source_label=_metadata_source_label(candidate),
+        source_excerpt=str(candidate.get("excerpt") or ""),
+        is_fallback=bool(candidate.get("is_fallback", False)),
+    )
+
+
+def _metadata_candidate_value(candidate: dict, field: str | None = None) -> str:
+    """Use a form-ready value while keeping the exact source excerpt separate."""
+    field_name = field or str(candidate.get("field_category") or "")
+    if field_name == "protocol_date":
+        normalized = candidate.get("normalized_value")
+        if normalized:
+            return str(normalized)
+    return str(candidate.get("candidate_value") or "")
+
+
+def _metadata_conflict_dto(
+    conflict: dict,
+    candidates_by_id: dict[str, dict],
+) -> MetadataConflictDTO:
+    field = str(conflict.get("field_category") or "")
+    candidates = []
+    for candidate_id in conflict.get("candidate_ids") or []:
+        candidate = candidates_by_id.get(str(candidate_id), {})
+        candidates.append(
+            MetadataConflictCandidateDTO(
+                candidate_id=str(candidate_id),
+                value=_metadata_candidate_value(candidate, field),
+                source_label=_metadata_source_label(candidate),
+            )
+        )
+    return MetadataConflictDTO(
+        conflict_id=str(conflict.get("conflict_id") or ""),
+        field=field,
+        field_label=METADATA_FIELD_LABELS.get(field, "方案信息"),
+        reason=str(conflict.get("reason") or "检测到多个不一致的候选值"),
+        candidates=candidates,
     )
 
 
@@ -214,14 +313,22 @@ def get_deconstruction_session(job_id: str, request: Request) -> ProtocolSession
 @router.get("/{job_id}/identity", response_model=IdentityReviewResponse)
 def get_identity_review(job_id: str, request: Request) -> IdentityReviewResponse:
     view = _service(request).get_identity_review(job_id)
+    candidates_by_id = {
+        str(item.get("candidate_id")): item for item in view.metadata_candidates
+    }
     return IdentityReviewResponse(
         job_id=view.job_id,
         snapshot_id=view.snapshot_id,
         confirmation_required=view.confirmation_required,
         identity=_identity_dto(view.identity_decision),
-        phase_candidates=view.phase_candidates,
-        metadata_candidates=view.metadata_candidates,
-        metadata_conflicts=view.metadata_conflicts,
+        phase_candidates=_phase_candidate_dtos(view.phase_candidates),
+        metadata_candidates=[
+            _metadata_candidate_dto(item) for item in view.metadata_candidates
+        ],
+        metadata_conflicts=[
+            _metadata_conflict_dto(item, candidates_by_id)
+            for item in view.metadata_conflicts
+        ],
     )
 
 

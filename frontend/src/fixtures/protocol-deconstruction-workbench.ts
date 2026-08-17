@@ -50,10 +50,10 @@ export const protocolSessionFixtures: Record<string, ProtocolSessionView> = {
   [PROTOCOL_IDENTITY_JOB_ID]: baseSession({
     jobId: PROTOCOL_IDENTITY_JOB_ID,
     state: "await_identity",
-    stateLabel: "等待身份确认",
+    stateLabel: "等待方案信息确认",
     progressCompleted: 4,
     awaitingUser: "identity",
-    awaitingUserLabel: "等待确认方案身份与期别",
+    awaitingUserLabel: "等待核对方案信息与研究期别",
     draftId: null,
     draftRevisionId: null,
     draftRevisionNumber: null,
@@ -109,12 +109,14 @@ export const identityReviewFixture: IdentityReviewView = {
       phase: "phase_ii",
       phaseLabel: "II 期",
       rationale: "正文标题与入排章节均指向 II 期受试者",
+      sourceExcerpt: "II期临床试验",
     },
     {
       candidateId: "phase-candidate-iii",
       phase: "phase_iii",
       phaseLabel: "III 期",
       rationale: "页眉模板残留 III 期字样，需人工确认",
+      sourceExcerpt: "III 期（页眉模板）",
     },
   ],
   metadataCandidates: [],
@@ -282,7 +284,7 @@ export const integrityFixture: IntegrityView = {
   reminderCount: 1,
   summary: "完整性检查已通过，可以进入发布确认。",
   checks: [
-    { checkName: "身份与期别", passed: true, issueCount: 0 },
+    { checkName: "方案信息与研究期别", passed: true, issueCount: 0 },
     { checkName: "来源覆盖", passed: true, issueCount: 0 },
   ],
   issues: [

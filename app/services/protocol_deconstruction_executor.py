@@ -254,7 +254,12 @@ def _default_page_texts(blocks: tuple[StructureBlock, ...]) -> list[str]:
 
 
 def _handle_register(context: StepContext, config: ProtocolDeconstructionExecutorConfig) -> dict[str, Any]:
-    merged = _merged_prior_checkpoints(config, context.job_id, before_step=STEP_REGISTER)
+    # API 写入首个检查点前若 runner 已取得租约，源登记信息仍可从 Job
+    # payload 恢复；后续检查点优先覆盖 payload 中的同名字段。
+    merged = dict(context.job_payload)
+    merged.update(
+        _merged_prior_checkpoints(config, context.job_id, before_step=STEP_REGISTER)
+    )
     required = ("source_artifact_id", "sha256", "storage_ref")
     if all(merged.get(key) for key in required):
         return {key: merged[key] for key in (*required, "file_name", "mime_type", "size_bytes", "uploaded_at") if key in merged}

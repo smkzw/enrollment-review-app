@@ -70,7 +70,12 @@ export function ProtocolsPage() {
 
   if (mode === "first" && jobId === null) {
     return (
-      <ProtocolUploadPanel busy={uploadBusy} error={uploadError} onUpload={handleUpload} />
+      <ProtocolUploadPanel
+        busy={uploadBusy}
+        error={uploadError}
+        onUpload={handleUpload}
+        onInvalidFile={setUploadError}
+      />
     );
   }
 

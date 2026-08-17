@@ -3,6 +3,7 @@
  */
 
 import { ProtocolWorkbenchApiError } from "./protocolWorkbenchTypes";
+import type { DatePrecision, StudyPhase } from "../domain/enums";
 import type {
   ConfirmIdentityInput,
   DraftRevisionView,
@@ -11,6 +12,7 @@ import type {
   IntegrityCheckView,
   IntegrityIssueView,
   IntegrityView,
+  MetadataCandidateView,
   MetadataConflictView,
   PhaseCandidateView,
   ProtocolSessionView,
@@ -18,17 +20,6 @@ import type {
   SourcesView,
   StartDeconstructionResult,
 } from "./protocolWorkbenchTypes";
-import type {
-  WireDraftRevisionResponse,
-  WireErrorEnvelope,
-  WireIdentityReviewResponse,
-  WireIntegrityResponse,
-  WireProtocolSessionResponse,
-  WirePublishResponse,
-  WireSourcesResponse,
-  WireStartDeconstructionResponse,
-} from "./protocolWorkbenchWire";
-
 function requireString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.length === 0) {
     throw new ProtocolWorkbenchApiError(
@@ -53,6 +44,66 @@ function requireNumber(value: unknown, field: string): number {
   return value;
 }
 
+function requireArray<T>(value: unknown, field: string): T[] {
+  if (!Array.isArray(value)) {
+    throw new ProtocolWorkbenchApiError(
+      "INVALID_RESPONSE",
+      "服务响应异常",
+      `方案解构服务返回的数据不完整（${field} 应为列表）。`,
+      "请稍后重试；若问题持续出现，请联系维护人员。",
+    );
+  }
+  return value as T[];
+}
+
+function requireRecord(value: unknown, field: string): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new ProtocolWorkbenchApiError(
+      "INVALID_RESPONSE",
+      "服务响应异常",
+      `方案解构服务返回的数据不完整（${field} 应为对象）。`,
+      "请稍后重试；若问题持续出现，请联系维护人员。",
+    );
+  }
+  return value as Record<string, unknown>;
+}
+
+function requireStudyPhase(value: unknown, field: string): StudyPhase {
+  const candidate = requireString(value, field);
+  if (
+    candidate !== "phase_ii" &&
+    candidate !== "phase_iii" &&
+    candidate !== "seamless_phase_ii_iii" &&
+    candidate !== "other"
+  ) {
+    throw new ProtocolWorkbenchApiError(
+      "INVALID_RESPONSE",
+      "服务响应异常",
+      `方案解构服务返回的数据不完整（${field} 不是有效研究期别）。`,
+      "请稍后重试；若问题持续出现，请联系维护人员。",
+    );
+  }
+  return candidate;
+}
+
+function optionalStudyPhase(value: unknown, field: string): StudyPhase | null {
+  return value === null || value === undefined ? null : requireStudyPhase(value, field);
+}
+
+function optionalDatePrecision(value: unknown, field: string): DatePrecision | null {
+  if (value === null || value === undefined) return null;
+  const candidate = requireString(value, field);
+  if (candidate !== "day" && candidate !== "month" && candidate !== "year" && candidate !== "unknown") {
+    throw new ProtocolWorkbenchApiError(
+      "INVALID_RESPONSE",
+      "服务响应异常",
+      `方案解构服务返回的数据不完整（${field} 不是有效日期精度）。`,
+      "请稍后重试；若问题持续出现，请联系维护人员。",
+    );
+  }
+  return candidate;
+}
+
 function optionalString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
@@ -73,8 +124,7 @@ export function decodeProtocolWorkbenchError(payload: unknown): ProtocolWorkbenc
     payload.error !== null &&
     typeof payload.error === "object"
   ) {
-    const envelope = payload as WireErrorEnvelope;
-    const error = envelope.error;
+    const error = requireRecord(payload.error, "error");
     const detail =
       typeof error.detail === "string" && error.detail.length > 0
         ? error.detail
@@ -96,193 +146,242 @@ export function decodeProtocolWorkbenchError(payload: unknown): ProtocolWorkbenc
 }
 
 export function normalizeStartDeconstruction(
-  wire: WireStartDeconstructionResponse,
+  wire: unknown,
 ): StartDeconstructionResult {
+  const row = requireRecord(wire, "start_deconstruction");
   return {
-    jobId: requireString(wire.job_id, "job_id"),
-    state: requireString(wire.state, "state"),
-    stateLabel: requireString(wire.state_label, "state_label"),
-    created: wire.created === true,
-    sourceArtifactId: requireString(wire.source_artifact_id, "source_artifact_id"),
-    fileName: requireString(wire.file_name, "file_name"),
+    jobId: requireString(row.job_id, "job_id"),
+    state: requireString(row.state, "state"),
+    stateLabel: requireString(row.state_label, "state_label"),
+    created: row.created === true,
+    sourceArtifactId: requireString(row.source_artifact_id, "source_artifact_id"),
+    fileName: requireString(row.file_name, "file_name"),
   };
 }
 
-export function normalizeSession(wire: WireProtocolSessionResponse): ProtocolSessionView {
+export function normalizeSession(wire: unknown): ProtocolSessionView {
+  const row = requireRecord(wire, "session");
   return {
-    jobId: requireString(wire.job_id, "job_id"),
-    jobType: requireString(wire.job_type, "job_type"),
-    state: requireString(wire.state, "state"),
-    stateLabel: requireString(wire.state_label, "state_label"),
-    progressCompleted: requireNumber(wire.progress_completed, "progress_completed"),
-    progressTotal: requireNumber(wire.progress_total, "progress_total"),
-    sessionKind: requireString(wire.session_kind, "session_kind"),
-    awaitingUser: optionalString(wire.awaiting_user),
-    awaitingUserLabel: optionalString(wire.awaiting_user_label),
-    sourceArtifactId: optionalString(wire.source_artifact_id),
-    fileName: optionalString(wire.file_name),
-    snapshotId: optionalString(wire.snapshot_id),
-    draftId: optionalString(wire.draft_id),
-    draftRevisionId: optionalString(wire.draft_revision_id),
-    draftRevisionNumber: optionalNumber(wire.draft_revision_number),
-    draftStatus: optionalString(wire.draft_status),
-    draftStatusLabel: optionalString(wire.draft_status_label),
-    selectedPhase: optionalString(wire.selected_phase),
-    selectedPhaseLabel: optionalString(wire.selected_phase_label),
-    protocolCode: optionalString(wire.protocol_code),
-    officialVersion: optionalString(wire.official_version),
-    recoveryCheckpointId: optionalString(wire.recovery_checkpoint_id),
-    recoveryStepId: optionalString(wire.recovery_step_id),
-    nextAction: requireString(wire.next_action, "next_action"),
-    publishable: optionalBoolean(wire.publishable),
+    jobId: requireString(row.job_id, "job_id"),
+    jobType: requireString(row.job_type, "job_type"),
+    state: requireString(row.state, "state"),
+    stateLabel: requireString(row.state_label, "state_label"),
+    progressCompleted: requireNumber(row.progress_completed, "progress_completed"),
+    progressTotal: requireNumber(row.progress_total, "progress_total"),
+    sessionKind: requireString(row.session_kind, "session_kind"),
+    awaitingUser: optionalString(row.awaiting_user),
+    awaitingUserLabel: optionalString(row.awaiting_user_label),
+    sourceArtifactId: optionalString(row.source_artifact_id),
+    fileName: optionalString(row.file_name),
+    snapshotId: optionalString(row.snapshot_id),
+    draftId: optionalString(row.draft_id),
+    draftRevisionId: optionalString(row.draft_revision_id),
+    draftRevisionNumber: optionalNumber(row.draft_revision_number),
+    draftStatus: optionalString(row.draft_status),
+    draftStatusLabel: optionalString(row.draft_status_label),
+    selectedPhase: optionalStudyPhase(row.selected_phase, "selected_phase"),
+    selectedPhaseLabel: optionalString(row.selected_phase_label),
+    protocolCode: optionalString(row.protocol_code),
+    officialVersion: optionalString(row.official_version),
+    recoveryCheckpointId: optionalString(row.recovery_checkpoint_id),
+    recoveryStepId: optionalString(row.recovery_step_id),
+    nextAction: requireString(row.next_action, "next_action"),
+    publishable: optionalBoolean(row.publishable),
   };
 }
 
-function normalizePhaseCandidate(raw: Record<string, unknown>): PhaseCandidateView {
+function normalizePhaseCandidate(
+  raw: unknown,
+): PhaseCandidateView {
+  const row = requireRecord(raw, "phase_candidates[]");
   return {
-    candidateId: requireString(raw.candidate_id ?? raw.candidateId, "candidate_id"),
-    phase: requireString(raw.phase, "phase"),
-    phaseLabel: requireString(raw.phase_label ?? raw.phaseLabel, "phase_label"),
-    rationale: requireString(raw.rationale, "rationale"),
+    candidateId: requireString(row.candidate_id, "candidate_id"),
+    phase: requireStudyPhase(row.phase, "phase"),
+    phaseLabel: requireString(row.phase_label, "phase_label"),
+    rationale: requireString(row.rationale, "rationale"),
+    sourceExcerpt: requireString(row.source_excerpt, "source_excerpt"),
   };
 }
 
-function normalizeMetadataConflict(raw: Record<string, unknown>): MetadataConflictView {
-  const candidatesRaw = raw.candidates;
-  const candidates = Array.isArray(candidatesRaw)
-    ? candidatesRaw.map((item) => {
-        const row = item as Record<string, unknown>;
-        return {
-          candidateId: requireString(row.candidate_id ?? row.candidateId, "candidate_id"),
-          value: requireString(row.value, "value"),
-          sourceLabel: requireString(row.source_label ?? row.sourceLabel, "source_label"),
-        };
-      })
-    : [];
+function normalizeMetadataCandidate(
+  raw: unknown,
+): MetadataCandidateView {
+  const row = requireRecord(raw, "metadata_candidates[]");
   return {
-    conflictId: requireString(raw.conflict_id ?? raw.conflictId, "conflict_id"),
-    field: requireString(raw.field, "field"),
-    fieldLabel: requireString(raw.field_label ?? raw.fieldLabel, "field_label"),
+    candidateId: requireString(row.candidate_id, "candidate_id"),
+    field: requireString(row.field, "field"),
+    fieldLabel: requireString(row.field_label, "field_label"),
+    value: requireString(row.value, "value"),
+    sourceLabel: requireString(row.source_label, "source_label"),
+    sourceExcerpt: requireString(row.source_excerpt, "source_excerpt"),
+    isFallback: row.is_fallback === true,
+  };
+}
+
+function normalizeMetadataConflict(
+  raw: unknown,
+): MetadataConflictView {
+  const row = requireRecord(raw, "metadata_conflicts[]");
+  const candidates = requireArray<unknown>(
+    row.candidates,
+    "metadata_conflicts[].candidates",
+  ).map((item) => {
+    const candidate = requireRecord(item, "metadata_conflicts[].candidates[]");
+    return {
+      candidateId: requireString(candidate.candidate_id, "candidate_id"),
+      value: requireString(candidate.value, "value"),
+      sourceLabel: requireString(candidate.source_label, "source_label"),
+    };
+  });
+  return {
+    conflictId: requireString(row.conflict_id, "conflict_id"),
+    field: requireString(row.field, "field"),
+    fieldLabel: requireString(row.field_label, "field_label"),
+    reason: requireString(row.reason, "reason"),
     candidates,
   };
 }
 
-function normalizeIdentityDecision(wire: WireIdentityReviewResponse["identity"]): IdentityDecisionView {
+function normalizeIdentityDecision(wire: unknown): IdentityDecisionView {
+  const row = requireRecord(wire, "identity");
   return {
-    identityDecisionId: requireString(wire.identity_decision_id, "identity_decision_id"),
-    snapshotId: requireString(wire.snapshot_id, "snapshot_id"),
-    status: requireString(wire.status, "status"),
-    statusLabel: requireString(wire.status_label, "status_label"),
-    projectName: optionalString(wire.project_name),
-    projectCode: optionalString(wire.project_code),
-    protocolCode: optionalString(wire.protocol_code),
-    officialVersion: optionalString(wire.official_version),
-    officialDateValue: optionalString(wire.official_date_value),
-    officialDatePrecision: optionalString(wire.official_date_precision),
-    studyPhase: optionalString(wire.study_phase),
-    studyPhaseLabel: optionalString(wire.study_phase_label),
-    confirmationRequired: wire.confirmation_required === true,
-    conflictIds: Array.isArray(wire.conflict_ids) ? [...wire.conflict_ids.map(String)] : [],
-    selectedCandidateIds: Array.isArray(wire.selected_candidate_ids)
-      ? [...wire.selected_candidate_ids.map(String)]
-      : [],
-  };
-}
-
-export function normalizeIdentityReview(wire: WireIdentityReviewResponse): IdentityReviewView {
-  return {
-    jobId: requireString(wire.job_id, "job_id"),
-    snapshotId: requireString(wire.snapshot_id, "snapshot_id"),
-    confirmationRequired: wire.confirmation_required === true,
-    identity: normalizeIdentityDecision(wire.identity),
-    phaseCandidates: wire.phase_candidates.map((item) =>
-      normalizePhaseCandidate(item as Record<string, unknown>),
+    identityDecisionId: requireString(row.identity_decision_id, "identity_decision_id"),
+    snapshotId: requireString(row.snapshot_id, "snapshot_id"),
+    status: requireString(row.status, "status"),
+    statusLabel: requireString(row.status_label, "status_label"),
+    projectName: optionalString(row.project_name),
+    projectCode: optionalString(row.project_code),
+    protocolCode: optionalString(row.protocol_code),
+    officialVersion: optionalString(row.official_version),
+    officialDateValue: optionalString(row.official_date_value),
+    officialDatePrecision: optionalDatePrecision(
+      row.official_date_precision,
+      "official_date_precision",
     ),
-    metadataCandidates: wire.metadata_candidates,
-    metadataConflicts: wire.metadata_conflicts.map((item) =>
-      normalizeMetadataConflict(item as Record<string, unknown>),
+    studyPhase: optionalStudyPhase(row.study_phase, "study_phase"),
+    studyPhaseLabel: optionalString(row.study_phase_label),
+    confirmationRequired: row.confirmation_required === true,
+    conflictIds: requireArray<unknown>(row.conflict_ids, "conflict_ids").map((value) =>
+      requireString(value, "conflict_ids[]"),
+    ),
+    selectedCandidateIds: requireArray<unknown>(
+      row.selected_candidate_ids,
+      "selected_candidate_ids",
+    ).map((value) => requireString(value, "selected_candidate_ids[]")),
+  };
+}
+
+export function normalizeIdentityReview(wire: unknown): IdentityReviewView {
+  const row = requireRecord(wire, "identity_review");
+  return {
+    jobId: requireString(row.job_id, "job_id"),
+    snapshotId: requireString(row.snapshot_id, "snapshot_id"),
+    confirmationRequired: row.confirmation_required === true,
+    identity: normalizeIdentityDecision(row.identity),
+    phaseCandidates: requireArray<unknown>(
+      row.phase_candidates,
+      "phase_candidates",
+    ).map(normalizePhaseCandidate),
+    metadataCandidates: requireArray<unknown>(
+      row.metadata_candidates,
+      "metadata_candidates",
+    ).map(normalizeMetadataCandidate),
+    metadataConflicts: requireArray<unknown>(
+      row.metadata_conflicts,
+      "metadata_conflicts",
+    ).map(normalizeMetadataConflict),
+  };
+}
+
+export function normalizeDraftRevision(wire: unknown): DraftRevisionView {
+  const row = requireRecord(wire, "draft");
+  return {
+    jobId: requireString(row.job_id, "job_id"),
+    revisionId: requireString(row.revision_id, "revision_id"),
+    draftId: requireString(row.draft_id, "draft_id"),
+    revisionNumber: requireNumber(row.revision_number, "revision_number"),
+    status: requireString(row.status, "status"),
+    statusLabel: requireString(row.status_label, "status_label"),
+    reason: requireString(row.reason, "reason"),
+    reasonLabel: requireString(row.reason_label, "reason_label"),
+    actor: requireString(row.actor, "actor"),
+    createdAt: requireString(row.created_at, "created_at"),
+    studyPhase: requireStudyPhase(row.study_phase, "study_phase"),
+    studyPhaseLabel: requireString(row.study_phase_label, "study_phase_label"),
+    protocolCode: optionalString(row.protocol_code),
+    officialVersion: optionalString(row.official_version),
+    ruleCount: requireNumber(row.rule_count, "rule_count"),
+    workflowStageCount: requireNumber(row.workflow_stage_count, "workflow_stage_count"),
+    content: requireRecord(row.content, "content"),
+    diff:
+      row.diff === null || row.diff === undefined
+        ? null
+        : requireRecord(row.diff, "diff"),
+  };
+}
+
+function normalizeIntegrityIssue(wire: unknown): IntegrityIssueView {
+  const row = requireRecord(wire, "issues[]");
+  return {
+    issueCode: requireString(row.issue_code, "issue_code"),
+    checkName: requireString(row.check_name, "check_name"),
+    level: requireString(row.level, "level"),
+    problem: requireString(row.problem, "problem"),
+    impact: requireString(row.impact, "impact"),
+    nextAction: requireString(row.next_action, "next_action"),
+    affectedRefs: requireArray<unknown>(row.affected_refs, "affected_refs").map((value) =>
+      requireString(value, "affected_refs[]"),
+    ),
+    repairScope: requireArray<unknown>(row.repair_scope, "repair_scope").map((value) =>
+      requireString(value, "repair_scope[]"),
     ),
   };
 }
 
-export function normalizeDraftRevision(wire: WireDraftRevisionResponse): DraftRevisionView {
+function normalizeIntegrityCheck(wire: unknown): IntegrityCheckView {
+  const row = requireRecord(wire, "checks[]");
   return {
-    jobId: requireString(wire.job_id, "job_id"),
-    revisionId: requireString(wire.revision_id, "revision_id"),
-    draftId: requireString(wire.draft_id, "draft_id"),
-    revisionNumber: requireNumber(wire.revision_number, "revision_number"),
-    status: requireString(wire.status, "status"),
-    statusLabel: requireString(wire.status_label, "status_label"),
-    reason: requireString(wire.reason, "reason"),
-    reasonLabel: requireString(wire.reason_label, "reason_label"),
-    actor: requireString(wire.actor, "actor"),
-    createdAt: requireString(wire.created_at, "created_at"),
-    studyPhase: requireString(wire.study_phase, "study_phase"),
-    studyPhaseLabel: requireString(wire.study_phase_label, "study_phase_label"),
-    protocolCode: optionalString(wire.protocol_code),
-    officialVersion: optionalString(wire.official_version),
-    ruleCount: requireNumber(wire.rule_count, "rule_count"),
-    workflowStageCount: requireNumber(wire.workflow_stage_count, "workflow_stage_count"),
-    content: wire.content,
-    diff: wire.diff,
+    checkName: requireString(row.check_name, "check_name"),
+    passed: row.passed === true,
+    issueCount: requireNumber(row.issue_count, "issue_count"),
   };
 }
 
-function normalizeIntegrityIssue(wire: WireIntegrityResponse["issues"][number]): IntegrityIssueView {
+export function normalizeIntegrity(wire: unknown): IntegrityView {
+  const row = requireRecord(wire, "integrity");
   return {
-    issueCode: requireString(wire.issue_code, "issue_code"),
-    checkName: requireString(wire.check_name, "check_name"),
-    level: requireString(wire.level, "level"),
-    problem: requireString(wire.problem, "problem"),
-    impact: requireString(wire.impact, "impact"),
-    nextAction: requireString(wire.next_action, "next_action"),
-    affectedRefs: Array.isArray(wire.affected_refs) ? [...wire.affected_refs.map(String)] : [],
-    repairScope: Array.isArray(wire.repair_scope) ? [...wire.repair_scope.map(String)] : [],
+    jobId: requireString(row.job_id, "job_id"),
+    publishable: row.publishable === true,
+    blockingCount: requireNumber(row.blocking_count, "blocking_count"),
+    reviewCount: requireNumber(row.review_count, "review_count"),
+    reminderCount: requireNumber(row.reminder_count, "reminder_count"),
+    summary: requireString(row.summary, "summary"),
+    checks: requireArray<unknown>(row.checks, "checks").map(normalizeIntegrityCheck),
+    issues: requireArray<unknown>(row.issues, "issues").map(normalizeIntegrityIssue),
   };
 }
 
-function normalizeIntegrityCheck(
-  wire: WireIntegrityResponse["checks"][number],
-): IntegrityCheckView {
+export function normalizeSources(wire: unknown): SourcesView {
+  const row = requireRecord(wire, "sources");
   return {
-    checkName: requireString(wire.check_name, "check_name"),
-    passed: wire.passed === true,
-    issueCount: requireNumber(wire.issue_count, "issue_count"),
+    jobId: requireString(row.job_id, "job_id"),
+    snapshotId: requireString(row.snapshot_id, "snapshot_id"),
+    selectedPhase: requireStudyPhase(row.selected_phase, "selected_phase"),
+    selectedPhaseLabel: requireString(row.selected_phase_label, "selected_phase_label"),
+    sourceSpans: requireRecord(row.source_spans, "source_spans"),
+    sourceMaterials: requireRecord(row.source_materials, "source_materials"),
   };
 }
 
-export function normalizeIntegrity(wire: WireIntegrityResponse): IntegrityView {
+export function normalizePublishResult(wire: unknown): PublishResultView {
+  const row = requireRecord(wire, "publish");
   return {
-    jobId: requireString(wire.job_id, "job_id"),
-    publishable: wire.publishable === true,
-    blockingCount: requireNumber(wire.blocking_count, "blocking_count"),
-    reviewCount: requireNumber(wire.review_count, "review_count"),
-    reminderCount: requireNumber(wire.reminder_count, "reminder_count"),
-    summary: requireString(wire.summary, "summary"),
-    checks: wire.checks.map(normalizeIntegrityCheck),
-    issues: wire.issues.map(normalizeIntegrityIssue),
-  };
-}
-
-export function normalizeSources(wire: WireSourcesResponse): SourcesView {
-  return {
-    jobId: requireString(wire.job_id, "job_id"),
-    snapshotId: requireString(wire.snapshot_id, "snapshot_id"),
-    selectedPhase: requireString(wire.selected_phase, "selected_phase"),
-    selectedPhaseLabel: requireString(wire.selected_phase_label, "selected_phase_label"),
-    sourceSpans: wire.source_spans,
-    sourceMaterials: wire.source_materials,
-  };
-}
-
-export function normalizePublishResult(wire: WirePublishResponse): PublishResultView {
-  return {
-    jobId: requireString(wire.job_id, "job_id"),
-    projectId: requireString(wire.project_id, "project_id"),
-    protocolVersionId: requireString(wire.protocol_version_id, "protocol_version_id"),
-    ruleSetId: requireString(wire.rule_set_id, "rule_set_id"),
-    ruleSetRevision: requireNumber(wire.rule_set_revision, "rule_set_revision"),
-    replay: wire.replay === true,
+    jobId: requireString(row.job_id, "job_id"),
+    projectId: requireString(row.project_id, "project_id"),
+    protocolVersionId: requireString(row.protocol_version_id, "protocol_version_id"),
+    ruleSetId: requireString(row.rule_set_id, "rule_set_id"),
+    ruleSetRevision: requireNumber(row.rule_set_revision, "rule_set_revision"),
+    replay: row.replay === true,
   };
 }
 

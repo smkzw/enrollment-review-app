@@ -17,10 +17,12 @@ import type {
   GapType,
   JobEventType,
   LocatorPrecision,
+  ProtocolSourcePrecision,
   LogicalOperator,
   ProfileLane,
   ReviewStage,
   RuleKind,
+  StudyPhase,
   TaskState,
 } from "./enums";
 
@@ -42,6 +44,13 @@ export const stageOrder: readonly ReviewStage[] = [
   "run_in",
   "baseline",
 ];
+
+export const studyPhaseLabel: Record<StudyPhase, string> = {
+  phase_ii: "II 期",
+  phase_iii: "III 期",
+  seamless_phase_ii_iii: "II/III 期无缝设计",
+  other: "其他",
+};
 
 export const mainStatusLabel: Record<EpisodeMainStatus, string> = {
   clear_barrier: "明确障碍",
@@ -115,6 +124,11 @@ export const precisionLabel: Record<LocatorPrecision, string> = {
   text_range: "文本范围",
   page_excerpt: "页内摘录",
   page_only: "仅页码",
+};
+
+export const protocolSourcePrecisionLabel: Record<ProtocolSourcePrecision, string> = {
+  ...precisionLabel,
+  block: "结构块",
 };
 
 export const expectationStatusLabel: Record<ExpectationStatus, string> = {

@@ -1,6 +1,6 @@
 /**
  * Phase 3 Slice 5 方案解构工作台验收：错误/空态/恢复、键盘焦点、
- * 窄屏标签共享选择、页面级溢出与布局压力。
+ * 工作区选择、页面级溢出与布局压力。
  */
 
 import { test, expect, type Page } from "@playwright/test";
@@ -21,7 +21,7 @@ async function openProtocolHash(page: Page, hash: string) {
   await expect(page.getByText("正在整理资料，请稍候", { exact: true })).toHaveCount(0);
 }
 
-/** 标签模式下先切到编辑区（1280 等内容区较窄时与窄屏相同行为）。 */
+/** 标签可见时先切到编辑区。 */
 async function showDraftEditPane(page: Page) {
   const tabs = page.locator(".protocol-draft-tabs");
   if (await tabs.isVisible()) {
@@ -59,7 +59,7 @@ test.describe("方案解构工作台（Slice 5）", () => {
   test("身份确认阶段展示期别候选", async ({ page }) => {
     await openProtocolHash(page, `/protocols?job=${IDENTITY_JOB}`);
     await expect(
-      page.getByRole("heading", { name: "确认方案身份与期别" }),
+      page.getByRole("heading", { name: "核对方案信息与研究期别" }),
     ).toBeVisible();
     await expect(page.getByText("II 期", { exact: true })).toBeVisible();
     await expect(page.getByText("III 期", { exact: true })).toBeVisible();
@@ -78,24 +78,8 @@ test.describe("方案解构工作台（Slice 5）", () => {
     );
   });
 
-  test("窄屏标签切换共享 component 选择", async ({ page }) => {
-    test.skip(page.viewportSize()?.width !== 390, "仅窄屏项目执行");
-    await openRoute(page, `/protocols?job=${DEMO_JOB}`);
-    await page.getByRole("button", { name: /IN-01a/ }).click();
-    await page.getByRole("tab", { name: "编辑" }).click();
-    await expect(page.getByRole("tabpanel", { name: /编辑/ })).toContainText("年龄要求");
-    await page.getByRole("tab", { name: "来源定位" }).click();
-    await expect(page.getByRole("tabpanel", { name: /来源定位/ })).toContainText(/第 12 页/);
-    await page.getByRole("tab", { name: "规则树" }).click();
-    await expect(page.getByRole("button", { name: /IN-01a/ })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    await expectNoPageOverflow(page);
-  });
-
-  test("1440 草稿审阅在 1.5×/2× 布局压力下无页面级横向滚动", async ({ page }) => {
-    test.skip(page.viewportSize()?.width !== 1440, "仅 1440 项目执行");
+  test("1080P 草稿审阅在 1.5×/2× 布局压力下无页面级横向滚动", async ({ page }) => {
+    test.skip(page.viewportSize()?.width !== 1920, "仅 1080P 桌面项目执行");
     await openRoute(page, `/protocols?job=${DEMO_JOB}`);
     await expect(page.getByRole("heading", { name: "审阅解构草稿" })).toBeVisible();
     await setLayoutStressFactor(page, 1.5);

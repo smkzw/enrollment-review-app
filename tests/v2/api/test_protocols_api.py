@@ -9,6 +9,8 @@ import pytest
 from docx import Document
 from fastapi.testclient import TestClient
 
+from app.api.v2.protocols import _metadata_candidate_dto
+from app.domain.contracts.enums import StudyPhase
 from app.services.protocol_deconstruction_executor import (
     ProtocolDeconstructionExecutorConfig,
     create_protocol_deconstruction_executor,
@@ -18,8 +20,8 @@ from app.services.protocol_workbench_service import (
     PROTOCOL_DECONSTRUCTION_STEPS,
     ProtocolWorkbenchService,
 )
-from app.domain.contracts.enums import StudyPhase
 from app.workflow.runner import JobRunner
+from app.workflow.jobstore import JobStore
 from tests.v2.api.protocol_e2e_helpers import (
     build_passing_draft_json,
     build_pipeline_e2e_docx,
@@ -126,6 +128,32 @@ def test_upload_registers_source_and_creates_protocol_job(client) -> None:
     assert body["progress_completed"] >= 1
 
 
+def test_upload_registration_survives_api_claim_race(client, monkeypatch) -> None:
+    original_claim_job = JobStore.claim_job
+    api_claims = 0
+
+    def claim_job_once_for_runner_race(self, job_id: str, worker_id: str):
+        nonlocal api_claims
+        if worker_id == ProtocolWorkbenchService.WORKER_ID and api_claims == 0:
+            api_claims += 1
+            return None
+        return original_claim_job(self, job_id, worker_id)
+
+    monkeypatch.setattr(JobStore, "claim_job", claim_job_once_for_runner_race)
+
+    job_id = _create_protocol_job(client, key="upload-claim-race")
+    session = client.get(f"/api/v2/protocol/deconstructions/{job_id}")
+    assert session.status_code == 200
+    assert session.json()["source_artifact_id"]
+    assert session.json()["progress_completed"] == 0
+
+    runner = _test_executor(client.app)
+    runner.run_job(job_id)
+    status = client.get(f"/api/v2/jobs/{job_id}")
+    assert status.status_code == 200
+    assert status.json()["error_code"] != "REGISTER_INCOMPLETE"
+
+
 def test_upload_idempotent_same_key(client) -> None:
     files = {
         "file": (
@@ -176,6 +204,7 @@ def test_draft_integrity_and_sources_after_seed(client, build_app) -> None:
         sources = test_client.get(f"/api/v2/protocol/deconstructions/{job_id}/sources")
         assert sources.status_code == 200
         sources_body = sources.json()
+        assert sources_body["selected_phase"] == "phase_ii"
         assert sources_body["selected_phase_label"] == "II 期"
         assert sources_body["source_materials"]
 
@@ -242,10 +271,22 @@ def test_draft_not_ready_before_review(client) -> None:
     assert error["recovery_action"]
 
 
-def test_upload_pipeline_reaches_identity_and_review_without_seed(build_app) -> None:
+@pytest.mark.parametrize(
+    ("official_date_value", "official_date_precision"),
+    [("2026", "year"), ("2026-08", "month"), ("2026-08-17", "day")],
+)
+def test_upload_pipeline_reaches_identity_and_review_without_seed(
+    build_app,
+    official_date_value: str,
+    official_date_precision: str,
+) -> None:
     app = build_app(run_runner=False)
     with TestClient(app) as client:
-        job_id = _create_protocol_job(client, key="pipeline-e2e-1", docx_bytes=_pipeline_docx_bytes())
+        job_id = _create_protocol_job(
+            client,
+            key=f"pipeline-e2e-{official_date_precision}",
+            docx_bytes=_pipeline_docx_bytes(),
+        )
         _run_until(client, app, job_id, awaiting_user="identity")
 
         identity_session = client.get(f"/api/v2/jobs/{job_id}").json()
@@ -266,6 +307,16 @@ def test_upload_pipeline_reaches_identity_and_review_without_seed(build_app) -> 
         identity_body = identity.json()
         assert identity_body["snapshot_id"]
         assert identity_body["phase_candidates"]
+        assert len(identity_body["phase_candidates"]) == 1
+        phase_candidate = identity_body["phase_candidates"][0]
+        assert phase_candidate["phase_label"] == "II 期"
+        assert "方案原文" in phase_candidate["rationale"]
+        assert phase_candidate["source_excerpt"]
+        assert identity_body["identity"]["status_label"] == "需要确认"
+        assert all(
+            item["field_label"] and item["source_label"]
+            for item in identity_body["metadata_candidates"]
+        )
 
         confirm = client.post(
             f"/api/v2/protocol/deconstructions/{job_id}/identity/confirm",
@@ -273,13 +324,23 @@ def test_upload_pipeline_reaches_identity_and_review_without_seed(build_app) -> 
                 "protocol_code": "E2E-001",
                 "project_name": "E2E 测试研究",
                 "official_version": "V1.0",
-                "official_date_value": "2026-08-17",
-                "official_date_precision": "day",
+                "official_date_value": official_date_value,
+                "official_date_precision": official_date_precision,
                 "study_phase": StudyPhase.PHASE_II.value,
                 "actor": "测试用户",
             },
         )
         assert confirm.status_code == 200, confirm.text
+
+        confirmed_identity = client.get(
+            f"/api/v2/protocol/deconstructions/{job_id}/identity"
+        )
+        assert confirmed_identity.status_code == 200, confirmed_identity.text
+        assert confirmed_identity.json()["identity"]["official_date_value"] == official_date_value
+        assert (
+            confirmed_identity.json()["identity"]["official_date_precision"]
+            == official_date_precision
+        )
 
         _run_until(client, app, job_id, awaiting_user="review", limit=60)
 
@@ -303,3 +364,33 @@ def test_upload_pipeline_reaches_identity_and_review_without_seed(build_app) -> 
         sources = client.get(f"/api/v2/protocol/deconstructions/{job_id}/sources")
         assert sources.status_code == 200, sources.text
         assert sources.json()["selected_phase_label"] == "II 期"
+
+
+def test_session_projects_persisted_publish_wait(build_app) -> None:
+    app = build_app()
+    with TestClient(app) as client:
+        job_id = _create_protocol_job(client, key="publish-wait-projection")
+        _seed_review_job(app, job_id, wait_at="publish")
+
+        session = client.get(f"/api/v2/protocol/deconstructions/{job_id}")
+        assert session.status_code == 200, session.text
+        body = session.json()
+        assert body["state"] == "waiting_user"
+        assert body["awaiting_user"] == "publish"
+        assert body["awaiting_user_label"] == "等待发布确认"
+        assert "发布正式项目" in body["next_action"]
+
+
+def test_identity_date_candidate_projection_is_form_ready() -> None:
+    candidate = _metadata_candidate_dto(
+        {
+            "candidate_id": "date-candidate",
+            "field_category": "protocol_date",
+            "candidate_value": "2026年8月17日",
+            "normalized_value": "2026-08-17",
+            "source_kind": "first_page",
+            "excerpt": "版本日期：2026年8月17日",
+        }
+    )
+    assert candidate.value == "2026-08-17"
+    assert candidate.source_excerpt == "版本日期：2026年8月17日"
