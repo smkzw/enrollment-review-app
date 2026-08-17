@@ -8,7 +8,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, beforeEach } from "vitest";
 import { navigate } from "../app/router";
 import { ProtocolsPage } from "./ProtocolsPage";
-import { PROTOCOL_DEMO_JOB_ID, PROTOCOL_IDENTITY_JOB_ID } from "../api/protocolWorkbenchRepository";
+import { PROTOCOL_DEMO_JOB_ID, PROTOCOL_IDENTITY_JOB_ID, PROTOCOL_RECOVERY_JOB_ID } from "../api/protocolWorkbenchRepository";
 
 describe("方案工作台", () => {
   beforeEach(() => {
@@ -87,5 +87,34 @@ describe("方案工作台", () => {
     await user.click(screen.getByRole("tab", { name: "来源定位" }));
     const sourcePanel = screen.getByRole("tabpanel", { name: /来源定位/ });
     expect(within(sourcePanel).getByText(/第 12 页/)).toBeInTheDocument();
+  });
+
+  it("未知任务显示错误态", async () => {
+    navigate("/protocols", { job: "missing-job" });
+    render(<ProtocolsPage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("未找到该解构任务");
+  });
+
+  it("恢复示例展示中断横幅", async () => {
+    navigate("/protocols", { job: PROTOCOL_RECOVERY_JOB_ID });
+    render(<ProtocolsPage />);
+    expect(await screen.findByRole("heading", { name: "可从中断处继续" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "继续任务" })).toBeInTheDocument();
+  });
+
+  it("重新解构占位展示空态说明", async () => {
+    navigate("/protocols", { mode: "redo" });
+    render(<ProtocolsPage />);
+    expect(await screen.findByText("重新解构流程尚未在本切片开放")).toBeInTheDocument();
+  });
+
+  it("示例草稿保存后显示界面试用状态", async () => {
+    const user = userEvent.setup();
+    navigate("/protocols", { job: PROTOCOL_DEMO_JOB_ID });
+    render(<ProtocolsPage />);
+    await screen.findByRole("button", { name: "保存草稿" });
+    await user.click(screen.getByRole("button", { name: "保存草稿" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("已保存草稿");
+    expect(await screen.findByRole("button", { name: "已保存草稿" })).toBeDisabled();
   });
 });

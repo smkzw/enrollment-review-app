@@ -9,8 +9,10 @@ import {
   PROTOCOL_RECOVERY_JOB_ID,
 } from "../../api/protocolWorkbenchRepository";
 import type { ConfirmIdentityInput } from "../../api/protocolWorkbenchTypes";
-import { navigate, RouteLink } from "../../app/router";
+import { navigate, RouteLink, updateParams } from "../../app/router";
 import { useLoad } from "../../app/useLoad";
+import { useSessionState } from "../../app/useSessionState";
+import { UAT_KEY_PROTOCOL_DRAFT_SAVED } from "../../app/uatTrialState";
 import { EmptyState, ErrorState, LoadingState } from "../shell/Feedback";
 import { ProtocolIdentityPanel } from "./ProtocolIdentityPanel";
 import { ProtocolDraftWorkbench } from "./ProtocolDraftWorkbench";
@@ -23,8 +25,14 @@ interface ProtocolJobFlowProps {
 
 export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps) {
   const repo = getProtocolWorkbenchRepository();
+  const isDemoJob = jobId === PROTOCOL_DEMO_JOB_ID;
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
+  const [draftSaved, setDraftSaved, resetDraftSaved] = useSessionState(
+    UAT_KEY_PROTOCOL_DRAFT_SAVED,
+    false,
+    (value) => (typeof value === "boolean" ? value : null),
+  );
 
   const session = useLoad(() => repo.getSession(jobId), [jobId]);
 
@@ -61,11 +69,17 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
     setSaveBusy(true);
     try {
       await repo.saveDraft(jobId, draftBundle.state.data.draft.revisionId);
+      if (isDemoJob) setDraftSaved(true);
       draftBundle.retry();
     } finally {
       setSaveBusy(false);
     }
-  }, [jobId, repo, draftBundle]);
+  }, [draftBundle, isDemoJob, jobId, repo, setDraftSaved]);
+
+  const handleResetTrial = useCallback(() => {
+    resetDraftSaved();
+    updateParams({ component: null });
+  }, [resetDraftSaved]);
 
   if (session.state.status === "loading") {
     return <LoadingState />;
@@ -145,6 +159,8 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
         componentParam={componentParam}
         onSaveDraft={handleSaveDraft}
         saving={saveBusy}
+        uatDraftSaved={isDemoJob ? draftSaved : undefined}
+        onUatReset={isDemoJob ? handleResetTrial : undefined}
       />
     );
   }

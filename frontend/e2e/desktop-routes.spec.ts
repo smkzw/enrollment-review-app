@@ -14,7 +14,7 @@ import {
 const ROUTES = [
   { hash: "today", title: "今日工作", key: "待处理事项" },
   { hash: "board", title: "项目看板", key: "受试者" },
-  { hash: "protocols", title: "方案工作台", key: "当前使用版本" },
+  { hash: "protocols", title: "方案工作台", key: "首次解构新方案" },
   { hash: "subjects", title: "受试者与资料", key: "应备证据覆盖" },
   { hash: "workbench", title: "入排工作台", key: "规则与判断状态" },
   { hash: "actions", title: "行动中心", key: "行动列表" },

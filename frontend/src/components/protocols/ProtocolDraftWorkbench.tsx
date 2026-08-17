@@ -23,6 +23,9 @@ interface ProtocolDraftWorkbenchProps {
   componentParam: string | null;
   onSaveDraft: () => void;
   saving: boolean;
+  /** 界面试用：示例草稿保存状态（仅 demo 任务注入） */
+  uatDraftSaved?: boolean;
+  onUatReset?: () => void;
 }
 
 export function ProtocolDraftWorkbench({
@@ -33,7 +36,10 @@ export function ProtocolDraftWorkbench({
   componentParam,
   onSaveDraft,
   saving,
+  uatDraftSaved,
+  onUatReset,
 }: ProtocolDraftWorkbenchProps) {
+  const draftSaved = uatDraftSaved === true;
   const rules = useMemo(() => mapProtocolDraftRules(draft.content), [draft.content]);
   const allComponents = useMemo(
     () => rules.flatMap((rule) => rule.components),
@@ -99,15 +105,25 @@ export function ProtocolDraftWorkbench({
           <button
             type="button"
             className="button button--primary"
-            disabled={saving}
+            disabled={saving || draftSaved}
             onClick={onSaveDraft}
           >
-            {saving ? "正在保存…" : "保存草稿"}
+            {saving ? "正在保存…" : draftSaved ? "已保存草稿" : "保存草稿"}
           </button>
+          {onUatReset !== undefined && (
+            <button type="button" className="button button--quiet" onClick={onUatReset}>
+              恢复试用初始状态
+            </button>
+          )}
           <RouteLink to="/protocols" className="button button--quiet">
             返回首页
           </RouteLink>
         </div>
+        {draftSaved && (
+          <p className="protocol-draft-actions__status" role="status">
+            已保存草稿；尚未发布，当前正式规则版本没有被覆盖。
+          </p>
+        )}
       </section>
 
       <div className="protocol-draft-tabs" role="tablist" aria-label="草稿工作区切换">

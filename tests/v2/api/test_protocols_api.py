@@ -163,3 +163,13 @@ def test_identity_not_ready_before_pipeline(client) -> None:
     error = response.json()["error"]
     assert error["code"] == "IDENTITY_NOT_READY"
     assert error["recovery_action"]
+
+
+def test_draft_not_ready_before_review(client) -> None:
+    job_id = _create_protocol_job(client, key="draft-wait-1")
+    response = client.get(f"/api/v2/protocol/deconstructions/{job_id}/draft")
+    assert response.status_code == 409
+    error = response.json()["error"]
+    assert error["code"] in {"DRAFT_NOT_READY", "STATE_CONFLICT", "STEP_STATE_CONFLICT"}
+    assert error["title"]
+    assert error["recovery_action"]
