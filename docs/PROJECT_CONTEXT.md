@@ -2000,3 +2000,6 @@ OCR concurrency note:
   `dist` 并制造 404，顺序复跑已证明非产品缺陷，后续验收命令必须串行写构建目录。
 - 新鲜独立 `gpt-5.6-luna:max` 审查已完成并关闭 API/任务竞态、期别/日期类型、父子来源映射
   和定位精度问题。下一安全动作是切片 6；不得让前端重新计算八类差异或发布合法性。
+- 2026-08-18 合并主分支后全仓后端 `820 passed, 1 skipped, 18 subtests passed`，前端
+  Vitest `225 passed`、生产构建和 Playwright `247 passed, 38 skipped` 均通过。阶段清理已
+  删除隔离工作树、一次性执行记录、trace 和失效截图矩阵；两张用户 UAT 图片保持未暂存。
