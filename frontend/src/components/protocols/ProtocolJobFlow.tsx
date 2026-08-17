@@ -26,11 +26,14 @@ import {
   ProtocolConfirmCancelDialog,
   ProtocolConfirmPublishDialog,
   ProtocolFeedbackDialog,
+  ProtocolManualEditDialog,
   type FeedbackDraftValues,
+  type ManualEditValues,
 } from "./ProtocolRedoDialogs";
 import { ProtocolJobProgress } from "./ProtocolJobProgress";
 import { ProtocolPublishResult } from "./ProtocolPublishResult";
 import { ProtocolRecoveryBanner } from "./ProtocolRecoveryBanner";
+import { patchComponentText } from "../../domain/protocolManualEdit";
 
 interface ProtocolJobFlowProps {
   jobId: string;
@@ -47,6 +50,9 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
   const [feedbackBusy, setFeedbackBusy] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [manualEditBusy, setManualEditBusy] = useState(false);
+  const [manualEditError, setManualEditError] = useState<string | null>(null);
+  const [manualEditOpen, setManualEditOpen] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -182,6 +188,42 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
         }
       } finally {
         setFeedbackBusy(false);
+      }
+    },
+    [comparison, isStubDemo, jobId, repo, setDraftSaved],
+  );
+
+  const handleSubmitManualEdit = useCallback(
+    async (values: ManualEditValues) => {
+      if (comparison.state.status !== "success") return;
+      setManualEditBusy(true);
+      setManualEditError(null);
+      const candidate = comparison.state.data.candidate;
+      const patched = patchComponentText(candidate.content, values.componentId, {
+        title: values.title,
+        sourceExcerpts: values.sourceExcerpts
+          .split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0),
+      });
+      try {
+        const next = await repo.editDraft(jobId, {
+          expectedRevisionId: candidate.revisionId,
+          draft: patched,
+        });
+        setManualEditOpen(false);
+        comparison.retry();
+        if (isStubDemo && next.revisionNumber > 1) setDraftSaved(true);
+      } catch (error) {
+        if (error instanceof ProtocolWorkbenchApiError) {
+          setManualEditError(`${error.message} ${error.recoveryAction}`);
+        } else if (error instanceof Error) {
+          setManualEditError(error.message);
+        } else {
+          setManualEditError("手工修订未能提交，请稍后重试。");
+        }
+      } finally {
+        setManualEditBusy(false);
       }
     },
     [comparison, isStubDemo, jobId, repo, setDraftSaved],
@@ -324,6 +366,10 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
             setFeedbackError(null);
             setFeedbackOpen(true);
           }}
+          onOpenManualEdit={() => {
+            setManualEditError(null);
+            setManualEditOpen(true);
+          }}
           onCancel={() => setCancelOpen(true)}
           onPublish={() => {
             setPublishError(null);
@@ -340,6 +386,17 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
             setFeedbackOpen(false);
           }}
           onSubmit={handleSubmitFeedback}
+        />
+        <ProtocolManualEditDialog
+          open={manualEditOpen}
+          busy={manualEditBusy}
+          errorMessage={manualEditError ?? undefined}
+          candidateContent={comparison.state.data.candidate.content}
+          onClose={() => {
+            if (manualEditBusy) return;
+            setManualEditOpen(false);
+          }}
+          onSubmit={handleSubmitManualEdit}
         />
         <ProtocolConfirmCancelDialog
           open={cancelOpen}

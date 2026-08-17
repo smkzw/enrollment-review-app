@@ -252,12 +252,24 @@ const draftContent = {
     {
       draft_component_id: "draft-component-in",
       parent_official_code: "IN-01",
+      proposed_component: {
+        rule_component_id: "component-in",
+        parent_rule_id: "rule-in",
+        display_code: "IN-01a",
+        title: "年龄要求",
+      },
       source_refs: ["span-in"],
       source_excerpts: ["年龄≥18岁"],
     },
     {
       draft_component_id: "draft-component-ex",
       parent_official_code: "EX-01",
+      proposed_component: {
+        rule_component_id: "component-ex",
+        parent_rule_id: "rule-ex",
+        display_code: "EX-01a",
+        title: "肝功能阈值",
+      },
       source_refs: ["span-ex"],
       source_excerpts: ["ALT或AST≥1.5×ULN"],
     },

@@ -7,6 +7,7 @@ import {
   decodeProtocolWorkbenchError,
   encodeConfirmIdentity,
   encodeFeedback,
+  encodeManualEdit,
   normalizeDraftComparison,
   normalizeDraftRevision,
   normalizeIdentityReview,
@@ -29,6 +30,7 @@ import type {
   FeedbackInput,
   IdentityReviewView,
   IntegrityView,
+  ManualEditInput,
   OfficialProjectView,
   ProjectOfficialVersionView,
   ProtocolSessionView,
@@ -153,6 +155,23 @@ export function createProtocolWorkbenchHttp(
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(encodeFeedback(input)),
+          signal: options?.signal,
+        },
+        normalizeDraftRevision,
+      );
+    },
+
+    editDraft(
+      jobId: string,
+      input: ManualEditInput,
+      options?: ProtocolWorkbenchRequestOptions,
+    ): Promise<DraftRevisionView> {
+      return request(
+        `/${encodeURIComponent(jobId)}/draft`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(encodeManualEdit(input)),
           signal: options?.signal,
         },
         normalizeDraftRevision,

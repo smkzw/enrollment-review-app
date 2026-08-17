@@ -28,6 +28,7 @@ import type {
   FeedbackInput,
   IdentityReviewView,
   IntegrityView,
+  ManualEditInput,
   OfficialProjectView,
   ProjectOfficialVersionView,
   ProtocolSessionView,
@@ -187,6 +188,33 @@ export function createProtocolWorkbenchStub(): ProtocolWorkbenchRepository {
         revisionNumber: 2,
         statusLabel: input.feedbackKind === "clarification" ? "已记录补充解释" : "已记录原文纠错",
         reasonLabel: input.feedbackKind === "clarification" ? "补充解释" : "原文理解纠错",
+      };
+    },
+
+    async editDraft(
+      jobId: string,
+      input: ManualEditInput,
+      options?: ProtocolWorkbenchRequestOptions,
+    ): Promise<DraftRevisionView> {
+      rejectIfAborted(options?.signal);
+      await delay();
+      if (
+        input.expectedRevisionId !== draftRevisionFixture.revisionId &&
+        input.expectedRevisionId !== draftComparisonFixture.candidate.revisionId
+      ) {
+        throw new ProtocolWorkbenchApiError(
+          "REVISION_CONFLICT",
+          "草稿版本已更新",
+          "其他窗口已保存较新的草稿，当前编辑基于过期版本。",
+          "刷新页面加载最新草稿后再继续编辑。",
+        );
+      }
+      return {
+        ...draftRevisionFixture,
+        jobId,
+        revisionNumber: 2,
+        statusLabel: "已保存草稿（手工修订）",
+        reasonLabel: "手工修订",
       };
     },
 

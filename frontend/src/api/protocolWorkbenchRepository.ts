@@ -12,6 +12,7 @@ import type {
   FeedbackInput,
   IdentityReviewView,
   IntegrityView,
+  ManualEditInput,
   OfficialProjectView,
   ProjectOfficialVersionView,
   ProtocolSessionView,
@@ -85,6 +86,12 @@ export interface ProtocolWorkbenchRepository {
   submitFeedback(
     jobId: string,
     input: FeedbackInput,
+    options?: ProtocolWorkbenchRequestOptions,
+  ): Promise<DraftRevisionView>;
+  /** 手工修订草稿（继续编辑）：PUT /draft，乐观并发校验链头。 */
+  editDraft(
+    jobId: string,
+    input: ManualEditInput,
     options?: ProtocolWorkbenchRequestOptions,
   ): Promise<DraftRevisionView>;
   cancelDraft(

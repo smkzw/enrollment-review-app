@@ -345,6 +345,47 @@ describe("protocolWorkbenchHttp", () => {
     expect(revision.reasonLabel).toBe("补充解释");
   });
 
+  it("editDraft 发送 PUT snake_case 手工修订正文", async () => {
+    const fetchImpl = vi.fn(async (_url, init) => {
+      expect(init?.method).toBe("PUT");
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(body.expected_revision_id).toBe("rev-cand");
+      expect(body.draft).toEqual({ proposed_rules: [] });
+      expect(body.actor).toBe("用户");
+      return jsonResponse(200, {
+        job_id: "job-redo-1",
+        revision_id: "rev-cand-2",
+        draft_id: "draft-cand",
+        revision_number: 2,
+        status: "saved",
+        status_label: "已保存",
+        reason: "manual_edit",
+        reason_label: "手工修订",
+        actor: "用户",
+        created_at: "2026-08-17T10:00:00Z",
+        study_phase: "phase_ii",
+        study_phase_label: "II 期",
+        protocol_code: "TEST-001",
+        official_version: "V2.1",
+        rule_count: 2,
+        workflow_stage_count: 1,
+        content: { proposed_rules: [] },
+        diff: null,
+      });
+    });
+    const repo = createProtocolWorkbenchHttp({ fetchImpl });
+    const revision = await repo.editDraft("job-redo-1", {
+      expectedRevisionId: "rev-cand",
+      draft: { proposed_rules: [] },
+    });
+    expect(revision.revisionNumber).toBe(2);
+    expect(revision.reasonLabel).toBe("手工修订");
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/api/v2/protocol/deconstructions/job-redo-1/draft",
+      expect.objectContaining({ method: "PUT" }),
+    );
+  });
+
   it("startDeconstruction 携带 project_id 进入重新解构", async () => {
     const fetchImpl = vi.fn(async (_url, init) => {
       const form = init?.body as FormData;

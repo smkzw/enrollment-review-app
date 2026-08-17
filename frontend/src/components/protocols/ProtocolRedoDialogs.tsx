@@ -3,8 +3,9 @@
  * 所有说明使用中文临床工作语言；发布确认明确新的不可变规则版本将追加到目标项目。
  */
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { FeedbackKind } from "../../api/protocolWorkbenchTypes";
+import { mapProtocolDraftRules } from "../../domain/protocolMappers";
 
 export interface FeedbackDraftValues {
   kind: FeedbackKind;
@@ -273,6 +274,149 @@ export function ProtocolConfirmCancelDialog({
             onClick={onConfirm}
           >
             {busy ? "正在取消…" : "确认取消"}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export interface ManualEditValues {
+  componentId: string;
+  title: string;
+  sourceExcerpts: string;
+}
+
+interface ProtocolManualEditDialogProps {
+  open: boolean;
+  busy: boolean;
+  errorMessage?: string;
+  candidateContent: Record<string, unknown>;
+  onClose: () => void;
+  onSubmit: (values: ManualEditValues) => void;
+}
+
+/** 手工修订草稿：改写所选子项标题与方案原文摘录；提交后生成修订稿，正式版本不受影响。 */
+export function ProtocolManualEditDialog({
+  open,
+  busy,
+  errorMessage,
+  candidateContent,
+  onClose,
+  onSubmit,
+}: ProtocolManualEditDialogProps) {
+  const rules = useMemo(
+    () => mapProtocolDraftRules(candidateContent),
+    [candidateContent],
+  );
+  const allComponents = useMemo(
+    () => rules.flatMap((rule) => rule.components),
+    [rules],
+  );
+  const [componentId, setComponentId] = useState<string>(
+    allComponents[0]?.componentId ?? "",
+  );
+  const [title, setTitle] = useState("");
+  const [excerpts, setExcerpts] = useState("");
+  const titleId = useId();
+  const titleRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const component = allComponents.find((item) => item.componentId === componentId);
+    setTitle(component?.title ?? "");
+    setExcerpts(component?.sourceExcerpts.join("\n") ?? "");
+    requestAnimationFrame(() => titleRef.current?.focus());
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (!busy) onClose();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [open, busy, componentId, onClose, allComponents]);
+
+  if (!open) return null;
+
+  const selected = allComponents.find((item) => item.componentId === componentId);
+  const canSubmit = selected !== undefined && title.trim().length > 0;
+
+  const chooseComponent = (id: string) => {
+    setComponentId(id);
+    const component = allComponents.find((item) => item.componentId === id);
+    setTitle(component?.title ?? "");
+    setExcerpts(component?.sourceExcerpts.join("\n") ?? "");
+  };
+
+  return (
+    <div className="confirmation-scrim" onClick={busy ? undefined : onClose}>
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="confirmation-dialog protocol-edit-dialog"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <h2 id={titleId}>手工修订草稿</h2>
+        <p className="confirmation-dialog__note">
+          选择要修订的子项，改写其标题与方案原文摘录。提交后生成修订稿；正式版本不受影响。
+        </p>
+        <label className="protocol-edit-dialog__field">
+          <span>修订子项</span>
+          <select
+            value={componentId}
+            onChange={(event) => chooseComponent(event.target.value)}
+          >
+            {allComponents.map((component) => (
+              <option key={component.componentId} value={component.componentId}>
+                {component.displayCode} · {component.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        {selected !== undefined && (
+          <>
+            <label className="protocol-edit-dialog__field">
+              <span>子项标题</span>
+              <input
+                ref={titleRef}
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+              />
+            </label>
+            <label className="protocol-edit-dialog__field">
+              <span>方案原文摘录（每行一条）</span>
+              <textarea
+                value={excerpts}
+                rows={4}
+                onChange={(event) => setExcerpts(event.target.value)}
+              />
+            </label>
+          </>
+        )}
+        {errorMessage !== undefined && errorMessage.length > 0 && (
+          <p className="protocol-draft-actions__error" role="alert">
+            {errorMessage}
+          </p>
+        )}
+        <div className="confirmation-dialog__actions">
+          <button type="button" className="button" disabled={busy} onClick={onClose}>
+            先不要
+          </button>
+          <button
+            type="button"
+            className="button button--primary"
+            disabled={busy || !canSubmit}
+            onClick={() =>
+              onSubmit({
+                componentId,
+                title: title.trim(),
+                sourceExcerpts: excerpts,
+              })
+            }
+          >
+            {busy ? "正在提交…" : "提交手工修订"}
           </button>
         </div>
       </section>

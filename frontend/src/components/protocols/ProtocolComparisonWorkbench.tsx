@@ -28,6 +28,7 @@ interface ProtocolComparisonWorkbenchProps {
   feedbackBusy: boolean;
   onSaveDraft: () => void;
   onOpenFeedback: () => void;
+  onOpenManualEdit: () => void;
   onCancel: () => void;
   onPublish: () => void;
   actionError?: string;
@@ -40,6 +41,7 @@ export function ProtocolComparisonWorkbench({
   feedbackBusy,
   onSaveDraft,
   onOpenFeedback,
+  onOpenManualEdit,
   onCancel,
   onPublish,
   actionError,
@@ -123,6 +125,14 @@ export function ProtocolComparisonWorkbench({
             onClick={onOpenFeedback}
           >
             基于反馈修订
+          </button>
+          <button
+            type="button"
+            className="button"
+            disabled={feedbackBusy || saving}
+            onClick={onOpenManualEdit}
+          >
+            手工修订
           </button>
           <button
             type="button"

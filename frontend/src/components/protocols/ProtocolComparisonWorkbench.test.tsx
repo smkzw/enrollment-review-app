@@ -17,6 +17,7 @@ function renderWorkbench() {
       feedbackBusy={false}
       onSaveDraft={() => undefined}
       onOpenFeedback={() => undefined}
+      onOpenManualEdit={() => undefined}
       onCancel={() => undefined}
       onPublish={() => undefined}
     />,
@@ -41,10 +42,11 @@ describe("重新解构并列差异工作台", () => {
     expect(screen.getAllByText(/年龄≥18周岁且≤65周岁/).length).toBeGreaterThan(0);
   });
 
-  it("提供保存、反馈修订、取消与发布操作", () => {
+  it("提供保存、反馈修订、手工修订、取消与发布操作", () => {
     renderWorkbench();
     expect(screen.getByRole("button", { name: "保存草稿" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "基于反馈修订" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "手工修订" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "取消" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "发布" })).toBeInTheDocument();
   });

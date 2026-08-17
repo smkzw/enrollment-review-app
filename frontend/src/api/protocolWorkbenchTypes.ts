@@ -284,3 +284,10 @@ export interface FeedbackInput {
   feedbackNote: string | null;
   actor?: string;
 }
+
+/** 手工修订草稿输入（继续编辑）：提交完整草稿快照，乐观并发校验链头。 */
+export interface ManualEditInput {
+  expectedRevisionId: string;
+  draft: Record<string, unknown>;
+  actor?: string;
+}

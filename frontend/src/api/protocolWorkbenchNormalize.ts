@@ -15,6 +15,7 @@ import type {
   IntegrityCheckView,
   IntegrityIssueView,
   IntegrityView,
+  ManualEditInput,
   MetadataCandidateView,
   MetadataConflictView,
   OfficialProjectView,
@@ -509,6 +510,15 @@ export function encodeFeedback(input: FeedbackInput): Record<string, unknown> {
     draft: input.draft,
     feedback_kind: input.feedbackKind,
     feedback_note: input.feedbackNote,
+    actor: input.actor ?? "用户",
+  };
+}
+
+/** 手工修订草稿请求：视图 → wire snake_case。 */
+export function encodeManualEdit(input: ManualEditInput): Record<string, unknown> {
+  return {
+    expected_revision_id: input.expectedRevisionId,
+    draft: input.draft,
     actor: input.actor ?? "用户",
   };
 }
