@@ -28,6 +28,7 @@ from app.domain.contracts import (
     AgentCallContract,
     AssessmentCandidate,
     ClinicalFact,
+    DraftRevisionStatus,
     EpisodeRollup,
     EvidenceExpectation,
     EvidenceExpectationTemplate,
@@ -2346,6 +2347,32 @@ class ProtocolDraftRevisionRepository:
         ).scalars().all()
         contracts = [self._decode_record(row) for row in rows]
         return [item for item in contracts if item.draft_id == draft_id]
+
+    def find_published_by_protocol_version(
+        self, protocol_version_id: str
+    ) -> list[ProtocolDraftRevision]:
+        """按正式方案版本返回全部已发布草稿 revision（只读，逐条哈希校验）。
+
+        重新解构必须把“当前正式草稿”作为新草稿的比较基线；正式版本 id 由
+        项目级 ``ProtocolDocumentVersion`` 提供，这里从已发布 revision 的
+        不可变链中定位承载该版本的草稿快照。若镜像/哈希被破坏，解码即抛
+        :class:`PersistedContractInvalid`，绝不返回坏基线。调用方负责处理
+        零条或内容不一致（fail-closed）的场景。
+        """
+        rows = self.session.execute(
+            select(ProtocolDraftRevisionRecord)
+            .where(
+                ProtocolDraftRevisionRecord.protocol_version_id
+                == protocol_version_id,
+                ProtocolDraftRevisionRecord.status
+                == DraftRevisionStatus.PUBLISHED.value,
+            )
+            .order_by(
+                ProtocolDraftRevisionRecord.created_at,
+                ProtocolDraftRevisionRecord.revision_number,
+            )
+        ).scalars().all()
+        return [self._decode_record(row) for row in rows]
 
     def get_head(self, draft_id: str) -> ProtocolDraftRevision | None:
         """返回 draft_id 的链头（revision_number 最大的已保存 revision）。"""

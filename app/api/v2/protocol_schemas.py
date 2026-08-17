@@ -63,6 +63,32 @@ class ProjectOfficialVersionResponse(_StrictModel):
     publication_count: int
 
 
+class DraftComparisonSideResponse(_StrictModel):
+    """并列差异的一侧：正式基线或新草稿（含来源定位信息）。"""
+
+    revision_id: str
+    draft_id: str
+    protocol_version_id: str
+    official_version: str | None = None
+    revision_number: int | None = None
+    status: str | None = None
+    rule_count: int
+    workflow_stage_count: int
+    is_formal_baseline: bool
+    content: dict[str, Any]
+    source_refs: list[str]
+
+
+class DraftComparisonResponse(_StrictModel):
+    """当前正式草稿 + 新草稿 + 相对正式版本的八类结构化差异。"""
+
+    job_id: str
+    baseline: DraftComparisonSideResponse
+    candidate: DraftComparisonSideResponse
+    diff: dict[str, Any]
+    source_bound: bool
+
+
 class ProtocolSessionResponse(_StrictModel):
     job_id: str
     job_type: str

@@ -40,7 +40,12 @@ from app.protocols.ingestion import (
 )
 from app.protocols.metadata import MetadataExtractionError, confirm_protocol_identity
 from app.services.job_service import JobService, StepSpec
-from app.services.protocol_draft_service import ProtocolDraftService
+from app.services.protocol_draft_service import (
+    FormalBaselineError,
+    ProtocolDraftService,
+    compute_draft_diff,
+    resolve_formal_baseline_revision,
+)
 from app.services.protocol_publication_service import (
     DuplicateFirstProjectError,
     ProtocolPublicationError,
@@ -176,6 +181,34 @@ class ProjectOfficialVersionView:
     project: OfficialProjectView
     versions: list[ProjectVersionView]
     publication_count: int
+
+
+@dataclass(frozen=True)
+class DraftComparisonSideView:
+    """并列差异中的一侧：正式基线或新草稿。"""
+
+    revision_id: str
+    draft_id: str
+    protocol_version_id: str
+    official_version: str | None
+    revision_number: int | None
+    status: str | None
+    rule_count: int
+    workflow_stage_count: int
+    is_formal_baseline: bool
+    content: dict[str, Any]
+    source_refs: list[str]
+
+
+@dataclass(frozen=True)
+class DraftComparisonView:
+    """当前正式草稿与新草稿的并列比较投影（八类差异 + 来源定位信息）。"""
+
+    job_id: str
+    baseline: DraftComparisonSideView
+    candidate: DraftComparisonSideView
+    diff: dict[str, Any]
+    source_bound: bool
 
 
 @dataclass(frozen=True)
@@ -677,6 +710,79 @@ class ProtocolWorkbenchService:
             job_id=job_id,
             revision=revision,
             diff=diff_payload,
+        )
+
+    def get_draft_comparison(self, job_id: str) -> DraftComparisonView:
+        """当前正式草稿与新草稿的并列比较（重新解构）。
+
+        基线来自目标项目当前正式版本的已发布草稿 revision（不可变链），
+        八类差异由确定性算法重算；来源定位信息随两侧内容一并返回。找不到
+        基线或基线不一致时 fail-closed 并给出中文恢复动作。
+        """
+        merged = self._merged_payload(job_id)
+        self._require_protocol_job(job_id)
+        if merged.get("session_kind") != "re_deconstruction":
+            raise ProtocolWorkbenchError(
+                "NOT_RE_DECONSTRUCTION_JOB",
+                title="不是重新解构任务",
+                detail="只有重新解构任务提供“当前正式版本与新草稿”并列比较。",
+                recovery="请返回重新解构工作台选择项目后再比较。",
+            )
+        target_project_id = merged.get("target_project_id")
+        if not target_project_id:
+            raise ProtocolWorkbenchError(
+                "TARGET_PROJECT_MISSING",
+                title="缺少目标正式项目",
+                detail="重新解构任务没有保存目标正式项目，无法确定比较基线。",
+                recovery="请返回工作台首页重新选择项目并上传新版方案。",
+            )
+        candidate = self._load_draft_revision(merged)
+        try:
+            with self.session_factory() as session:
+                baseline = resolve_formal_baseline_revision(
+                    session=session,
+                    project_id=target_project_id,
+                )
+        except FormalBaselineError as exc:
+            raise ProtocolWorkbenchError(
+                exc.code,
+                title="无法确定当前正式草稿基线",
+                detail=str(exc),
+                recovery=exc.recovery,
+            ) from exc
+        diff = compute_draft_diff(baseline.content, candidate.content)
+        return DraftComparisonView(
+            job_id=job_id,
+            baseline=self._comparison_side(
+                baseline, formal=True, official_version=merged.get("target_official_version")
+            ),
+            candidate=self._comparison_side(candidate, formal=False),
+            diff=diff.model_dump(mode="json"),
+            source_bound=bool(candidate.content.source_refs),
+        )
+
+    @staticmethod
+    def _comparison_side(
+        revision: ProtocolDraftRevision,
+        *,
+        formal: bool,
+        official_version: str | None = None,
+    ) -> DraftComparisonSideView:
+        content = revision.content
+        return DraftComparisonSideView(
+            revision_id=revision.revision_id,
+            draft_id=revision.draft_id,
+            protocol_version_id=revision.protocol_version_id,
+            official_version=official_version
+            if formal
+            else content.protocol_metadata.version_candidate,
+            revision_number=revision.revision_number,
+            status=revision.status.value,
+            rule_count=len(content.proposed_rules),
+            workflow_stage_count=len(content.proposed_workflow_stages),
+            is_formal_baseline=formal,
+            content=content.model_dump(mode="json"),
+            source_refs=sorted(set(content.source_refs)),
         )
 
     def get_sources(self, job_id: str) -> dict[str, Any]:
@@ -1701,6 +1807,8 @@ class ProtocolWorkbenchService:
 __all__ = [
     "PROTOCOL_DECONSTRUCTION_JOB_TYPE",
     "PROTOCOL_DECONSTRUCTION_STEPS",
+    "DraftComparisonSideView",
+    "DraftComparisonView",
     "OfficialProjectView",
     "ProjectOfficialVersionView",
     "ProjectVersionView",

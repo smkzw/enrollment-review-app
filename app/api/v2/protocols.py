@@ -15,6 +15,8 @@ from app.api.v2.protocol_schemas import (
     ConfirmIdentityRequest,
     DraftActionRequest,
     DraftRevisionResponse,
+    DraftComparisonResponse,
+    DraftComparisonSideResponse,
     FeedbackRequest,
     IdentityDecisionDTO,
     IdentityReviewResponse,
@@ -273,6 +275,22 @@ def _draft_dto(view) -> DraftRevisionResponse:
     )
 
 
+def _comparison_side_dto(side) -> DraftComparisonSideResponse:
+    return DraftComparisonSideResponse(
+        revision_id=side.revision_id,
+        draft_id=side.draft_id,
+        protocol_version_id=side.protocol_version_id,
+        official_version=side.official_version,
+        revision_number=side.revision_number,
+        status=side.status,
+        rule_count=side.rule_count,
+        workflow_stage_count=side.workflow_stage_count,
+        is_formal_baseline=side.is_formal_baseline,
+        content=side.content,
+        source_refs=list(side.source_refs),
+    )
+
+
 def _integrity_dto(view) -> IntegrityResponse:
     if view.publishable:
         summary = "完整性检查已通过，可以进入发布确认。"
@@ -397,6 +415,18 @@ def confirm_identity(
 @router.get("/{job_id}/draft", response_model=DraftRevisionResponse)
 def get_draft(job_id: str, request: Request) -> DraftRevisionResponse:
     return _draft_dto(_service(request).get_draft_detail(job_id))
+
+
+@router.get("/{job_id}/draft/comparison", response_model=DraftComparisonResponse)
+def get_draft_comparison(job_id: str, request: Request) -> DraftComparisonResponse:
+    view = _service(request).get_draft_comparison(job_id)
+    return DraftComparisonResponse(
+        job_id=view.job_id,
+        baseline=_comparison_side_dto(view.baseline),
+        candidate=_comparison_side_dto(view.candidate),
+        diff=view.diff,
+        source_bound=view.source_bound,
+    )
 
 
 @router.put("/{job_id}/draft", response_model=DraftRevisionResponse)

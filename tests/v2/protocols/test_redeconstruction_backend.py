@@ -45,6 +45,7 @@ class AlwaysPublishableGate:
             ],
         )
 from app.storage.repositories import (
+    ProtocolDraftRevisionRepository,
     get_project_row,
     list_rule_set_revisions,
 )
@@ -431,3 +432,309 @@ def test_redeconstruction_identity_confirm_guard_blocks_mismatched_lineage() -> 
         protocol_code="ANY-001",
         study_phase=StudyPhase.PHASE_III,
     )
+
+
+# ---------------------------------------------------------------------------
+# 正式基线差异（Slice 6 阻断项回归）
+# ---------------------------------------------------------------------------
+
+
+def _threshold_bump_draft(baseline_draft, *, new_version="protocol-version-2"):
+    """复制正式基线草稿并只改一条阈值（IN-01 年龄 18 -> 20），首稿相对基线的
+    八类差异应只出现逻辑变化，而不是“全部新增”。"""
+    changed = baseline_draft.model_copy(deep=True)
+    changed = changed.model_copy(
+        update={
+            "draft_id": f"draft-redo-{new_version}",
+            "protocol_version_id": new_version,
+            "protocol_metadata": changed.protocol_metadata.model_copy(
+                update={"version_candidate": "V2.0"}
+            ),
+        }
+    )
+    predicate = changed.proposed_rules[0].components[0].expression.predicate
+    return changed.model_copy(
+        update={
+            "proposed_rules": [
+                changed.proposed_rules[0].model_copy(
+                    update={
+                        "components": [
+                            changed.proposed_rules[0].components[0].model_copy(
+                                update={
+                                    "expression": changed.proposed_rules[0]
+                                    .components[0]
+                                    .expression.model_copy(
+                                        update={
+                                            "predicate": predicate.model_copy(
+                                                update={"value": 20}
+                                            )
+                                        }
+                                    )
+                                }
+                            )
+                        ]
+                    }
+                ),
+                *changed.proposed_rules[1:],
+            ]
+        }
+    )
+
+
+def test_redeconstruction_first_revision_uses_formal_baseline_not_all_added(
+    slice4_env, data_paths
+) -> None:
+    """首稿 diff 以当前正式（已发布）草稿为基线，而不是 None -> 全部新增。
+
+    只改一条阈值时，八类差异只含该规则的逻辑变化，IN/EX 父规则均非新增。
+    """
+    factory, _now = slice4_env
+    source_input, baseline_draft, spans = confirmed_fixture()
+    _publish_first(factory, source_input, baseline_draft, spans)
+
+    with factory() as session:
+        baseline_revision = ProtocolDraftRevisionRepository(
+            session
+        ).find_published_by_protocol_version("protocol-version-1")[0]
+
+    changed_draft = _threshold_bump_draft(baseline_draft)
+    with factory() as session:
+        with session.begin():
+            service = ProtocolDraftService(session)
+            revision = service.save_initial_draft(
+                changed_draft,
+                actor="医学监查员",
+                created_at=NAIVE_NOW,
+                baseline=baseline_revision.content,
+            )
+    assert revision.revision_number == 1
+    diff = revision.diff
+    # 不是全部新增：父规则新增列表为空
+    assert diff.added_rule_codes == []
+    assert diff.removed_rule_codes == []
+    assert diff.modified_rule_codes == ["IN-01"]
+    # rule_diffs：IN-01 存在、非 added，逻辑类变化引出 IN-01a
+    by_code = {item.official_code: item for item in diff.rule_diffs}
+    assert set(by_code) == {"IN-01", "EX-01"}
+    assert by_code["IN-01"].added is False
+    assert by_code["IN-01"].removed is False
+    assert by_code["EX-01"].added is False
+    assert any(
+        change.stable_ref == "IN-01a" for change in by_code["IN-01"].logic_changes
+    )
+    assert by_code["EX-01"].logic_changes == []
+    # 采用基线而非 None：流程节点不是新增
+    assert diff.added_workflow_stage_ids == []
+
+
+def test_redeconstruction_first_revision_empty_when_formal_unchanged(
+    slice4_env, data_paths
+) -> None:
+    """正式版本未变时，八类差异应全空（基线 = 当前正式草稿）。"""
+    factory, _now = slice4_env
+    source_input, baseline_draft, spans = confirmed_fixture()
+    _publish_first(factory, source_input, baseline_draft, spans)
+
+    with factory() as session:
+        baseline_revision = ProtocolDraftRevisionRepository(
+            session
+        ).find_published_by_protocol_version("protocol-version-1")[0]
+
+    identical = baseline_draft.model_copy(
+        update={
+            "draft_id": "draft-identical",
+            "protocol_version_id": "protocol-version-2",
+        }
+    )
+    with factory() as session:
+        with session.begin():
+            service = ProtocolDraftService(session)
+            revision = service.save_initial_draft(
+                identical,
+                actor="医学监查员",
+                created_at=NAIVE_NOW,
+                baseline=baseline_revision.content,
+            )
+    diff = revision.diff
+    assert diff.added_rule_codes == []
+    assert diff.modified_rule_codes == []
+    assert diff.added_workflow_stage_ids == []
+    for entry in diff.rule_diffs:
+        item = entry.model_dump()
+        for key in (
+            "original_text_changes",
+            "logic_changes",
+            "time_window_changes",
+            "exception_changes",
+            "evidence_changes",
+            "due_stage_changes",
+        ):
+            assert item[key] == []
+        assert item["added_component_refs"] == []
+        assert item["removed_component_refs"] == []
+
+
+def test_redeconstruction_comparison_endpoint_uses_formal_baseline(
+    slice4_env, data_paths
+) -> None:
+    """工作台比较投影：基线来自已发布草稿 revision，候选为链头，八类差异正确。"""
+    factory, _now = slice4_env
+    service = _make_service(factory, data_paths)
+    source_input, baseline_draft, spans = confirmed_fixture()
+    _publish_first(factory, source_input, baseline_draft, spans)
+
+    result = _start_redeconstruction(service, "project-1", data_paths)
+    changed_input, changed_draft, changed_spans = _revised_fixture()
+    changed_draft = _threshold_bump_draft(changed_draft)
+    _seed_review(
+        service, result.job_id, changed_input, changed_draft, changed_spans
+    )
+    comparison = service.get_draft_comparison(result.job_id)
+    assert comparison.baseline.is_formal_baseline is True
+    assert comparison.candidate.is_formal_baseline is False
+    assert comparison.baseline.protocol_version_id == "protocol-version-1"
+    assert comparison.baseline.rule_count == 2
+    assert comparison.candidate.rule_count == 2
+    by_code = {item["official_code"]: item for item in comparison.diff["rule_diffs"]}
+    assert by_code["IN-01"]["added"] is False
+    assert by_code["IN-01"]["added_component_refs"] == []
+    assert any(
+        change["stable_ref"] == "IN-01a"
+        for change in by_code["IN-01"]["logic_changes"]
+    )
+    assert comparison.source_bound is True
+
+
+def test_redeconstruction_comparison_fails_closed_when_baseline_missing(
+    slice4_env, data_paths
+) -> None:
+    """目标项目没有已发布草稿 revision 时，比较必须 fail-closed 并给中文恢复。"""
+    factory, _now = slice4_env
+    service = _make_service(factory, data_paths)
+
+    # 已发布项目存在但正式版本没有对应草稿 revision：基线缺失 fail-closed
+    source_input, baseline_draft, spans = confirmed_fixture()
+    _publish_first(factory, source_input, baseline_draft, spans)
+    with factory() as session:
+        from sqlalchemy import delete
+
+        from app.storage.models import ProtocolDraftRevisionRecord
+
+        session.execute(
+            delete(ProtocolDraftRevisionRecord).where(
+                ProtocolDraftRevisionRecord.status == "published"
+            )
+        )
+        session.commit()
+    result = _start_redeconstruction(
+        service, "project-1", data_paths, key="baseline-missing"
+    )
+    revised_input, revised_draft, revised_spans = _revised_fixture()
+    _seed_review(
+        service, result.job_id, revised_input, revised_draft, revised_spans
+    )
+    with pytest.raises(ProtocolWorkbenchError) as exc_info:
+        service.get_draft_comparison(result.job_id)
+    assert exc_info.value.code.startswith("FORMAL_BASELINE")
+    assert "基线" in exc_info.value.detail
+    assert exc_info.value.recovery
+
+
+def test_redeconstruction_comparison_fails_closed_on_inconsistent_baseline(
+    slice4_env, data_paths
+) -> None:
+    """正式版本对应多条内容不一致的已发布 revision 时 fail-closed。
+
+    通过真实仓储保存第二条内容不同的已发布 revision（哈希有效），
+    使同一 protocol_version_id 出现两份内容不一致的发布记录。
+    """
+    from app.domain.contracts.protocol_drafts import DraftRevisionStatus
+
+    factory, _now = slice4_env
+    source_input, baseline_draft, spans = confirmed_fixture()
+    _publish_first(factory, source_input, baseline_draft, spans)
+    with factory() as session:
+        with session.begin():
+            forged = baseline_draft.model_copy(deep=True)
+            forged = forged.model_copy(
+                update={
+                    "draft_id": "draft-forged",
+                    "protocol_version_id": "protocol-version-1",
+                    "protocol_metadata": forged.protocol_metadata.model_copy(
+                        update={"version_candidate": "V9.9"}
+                    ),
+                }
+            )
+            service = ProtocolDraftService(session)
+            revision = service.save_initial_draft(
+                forged, actor="医学监查员", created_at=NAIVE_NOW
+            )
+            published = revision.model_copy(
+                update={"status": DraftRevisionStatus.PUBLISHED}
+            )
+            ProtocolDraftRevisionRepository(session).update_status(published)
+            session.commit()
+
+    service = _make_service(factory, data_paths)
+    result = _start_redeconstruction(service, "project-1", data_paths)
+    revised_input, revised_draft, revised_spans = _revised_fixture()
+    _seed_review(
+        service, result.job_id, revised_input, revised_draft, revised_spans
+    )
+    with pytest.raises(ProtocolWorkbenchError) as exc_info:
+        service.get_draft_comparison(result.job_id)
+    assert exc_info.value.code == "FORMAL_BASELINE_INCONSISTENT"
+    assert "不一致" in exc_info.value.detail
+    assert exc_info.value.recovery
+
+
+def test_redeconstruction_uses_latest_formal_revision_after_republish(
+    slice4_env, data_paths
+) -> None:
+    """重新发布 v2 后，下一次重新解构以 v2（最新正式 revision）为基线。"""
+    from app.services.protocol_draft_service import resolve_formal_baseline_revision
+
+    factory, _now = slice4_env
+    service = _make_service(factory, data_paths)
+    source_input, baseline_draft, spans = confirmed_fixture()
+    _publish_first(factory, source_input, baseline_draft, spans)
+
+    # 发布 v2（版本/日期变化，规则同正式基线，可通过门禁）
+    result = _start_redeconstruction(service, "project-1", data_paths)
+    v2_input, v2_draft, v2_spans = _revised_fixture(
+        new_version="protocol-version-2"
+    )
+    _seed_review(service, result.job_id, v2_input, v2_draft, v2_spans)
+    v2_view = service.publish_re_deconstruction(
+        result.job_id,
+        idempotency_key="redo-pub-v2",
+        actor="医学监查员",
+    )
+    assert v2_view.rule_set_revision == 2
+
+    # 下一次重新解构：正式基线必须是最新 v2 revision，而不是 v1
+    with factory() as session:
+        baseline = resolve_formal_baseline_revision(
+            session=session, project_id="project-1"
+        )
+    assert baseline.protocol_version_id == "protocol-version-2"
+
+    # 新草稿与 v2 基线比较：基线为 v2，版本未变时八类逻辑差异为空
+    result2 = _start_redeconstruction(
+        service, "project-1", data_paths, key="redo-after-v2"
+    )
+    unchanged_input, unchanged_draft, unchanged_spans = _revised_fixture(
+        new_version="protocol-version-3"
+    )
+    _seed_review(
+        service,
+        result2.job_id,
+        unchanged_input,
+        unchanged_draft,
+        unchanged_spans,
+    )
+    comparison = service.get_draft_comparison(result2.job_id)
+    assert comparison.baseline.protocol_version_id == "protocol-version-2"
+    by_code = {item["official_code"]: item for item in comparison.diff["rule_diffs"]}
+    assert by_code["IN-01"]["added"] is False
+    assert by_code["IN-01"]["logic_changes"] == []

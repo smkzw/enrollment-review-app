@@ -537,3 +537,91 @@ def test_redeconstruction_confirm_identity_lineage_mismatch_rejected(
             },
         )
         assert confirm.status_code in (409, 422), confirm.text
+
+def test_draft_comparison_endpoint_returns_baseline_candidate_and_diff(
+    build_app,
+) -> None:
+    """重新解构比较投影：一次返回当前正式草稿、新草稿与八类差异。"""
+    from app.services.protocol_draft_service import ProtocolDraftService
+
+    app = build_app()
+    with TestClient(app) as test_client:
+        first = _create_protocol_job(test_client, key="compare-api-first")
+        _seed_review_job(app, first, wait_at="publish")
+        draft = test_client.get(f"/api/v2/protocol/deconstructions/{first}/draft").json()
+        published = test_client.post(
+            f"/api/v2/protocol/deconstructions/{first}/publish",
+            json={"idempotency_key": "compare-api-pub", "actor": "医学监查员"},
+        )
+        assert published.status_code == 200, published.text
+        project_id = published.json()["project_id"]
+
+        files = {
+            "file": (
+                "redo-protocol.docx",
+                io.BytesIO(_minimal_docx_bytes()),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        }
+        data = {
+            "idempotency_key": "compare-api-start",
+            "actor": "医学监查员",
+            "project_id": project_id,
+        }
+        started = test_client.post(
+            "/api/v2/protocol/deconstructions", files=files, data=data
+        )
+        assert started.status_code == 201, started.text
+        job_id = started.json()["job_id"]
+
+        # 重新解构子工作台种子：新版本草案
+        source_input, draft, spans = confirmed_fixture()
+        revised = draft.model_copy(
+            update={
+                "draft_id": "draft-compare-api",
+                "protocol_version_id": "protocol-version-2",
+                "protocol_metadata": draft.protocol_metadata.model_copy(
+                    update={"version_candidate": "V2.0"}
+                ),
+            }
+        )
+        revised_input = source_input.model_copy(
+            update={
+                "protocol_version_id": "protocol-version-2",
+                "identity_decision": source_input.identity_decision.model_copy(
+                    update={"official_version": "V2.0"}
+                ),
+            }
+        )
+        service = app.state.protocol_workbench_service
+        service.seed_review_session(
+            job_id,
+            source_input=revised_input,
+            draft=revised,
+            source_spans={key: span for key, span in spans.items()},
+            wait_at="publish",
+        )
+
+        comparison = test_client.get(
+            f"/api/v2/protocol/deconstructions/{job_id}/draft/comparison"
+        )
+        assert comparison.status_code == 200, comparison.text
+        body = comparison.json()
+        assert body["baseline"]["is_formal_baseline"] is True
+        assert body["candidate"]["is_formal_baseline"] is False
+        assert body["baseline"]["protocol_version_id"] == "protocol-version-1"
+        assert body["candidate"]["protocol_version_id"] == "protocol-version-2"
+        assert body["baseline"]["rule_count"] == 2
+        assert body["candidate"]["rule_count"] == 2
+        assert body["source_bound"] is True
+        assert "rule_diffs" in body["diff"]
+
+
+def test_draft_comparison_rejected_for_first_deconstruction(client) -> None:
+    """首次解构不是重新解构，不提供正式基线比较。"""
+    job_id = _create_protocol_job(client, key="compare-first-only")
+    response = client.get(f"/api/v2/protocol/deconstructions/{job_id}/draft/comparison")
+    assert response.status_code == 409
+    error = response.json()["error"]
+    assert error["code"] == "NOT_RE_DECONSTRUCTION_JOB"
+    assert error["recovery_action"]

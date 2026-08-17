@@ -824,6 +824,7 @@ class ProtocolDraftService:
         *,
         actor: str,
         created_at: datetime,
+        baseline: ProtocolDeconstructionDraft | None = None,
     ) -> ProtocolDraftRevision:
         if draft.draft_revision != 1:
             raise ValueError("初始保存的草稿必须是首稿（draft_revision=1）")
@@ -843,7 +844,7 @@ class ProtocolDraftService:
             actor=actor,
             content=draft,
             content_sha256=canonical_hash(draft.model_dump(mode="json")),
-            diff=compute_draft_diff(None, draft),
+            diff=compute_draft_diff(baseline, draft),
             created_at=created_at,
         )
         return self.revisions.save(revision)
@@ -1301,12 +1302,78 @@ def head_stale_error(
     )
 
 
+class FormalBaselineError(RuntimeError):
+    """重新解构缺少或发现不一致的正式基线；携带稳定错误码与中文恢复动作。"""
+
+    def __init__(self, code: str, message: str, recovery: str) -> None:
+        self.code = code
+        self.recovery = recovery
+        super().__init__(message)
+
+
+def resolve_formal_baseline_revision(
+    *,
+    session,
+    project_id: str,
+) -> ProtocolDraftRevision:
+    """定位目标项目当前正式版本的已发布草稿 revision（重新解构比较基线）。
+
+    基线来自不可变链：项目 -> 当前正式方案版本 id -> 已发布 revision，绝不从
+    RuleSet 或前端反向猜测。找不到、版本对应多条内容不一致的发布记录时
+    fail-closed，并给出中文恢复动作。
+    """
+    from app.storage.repositories import (
+        get_project_row,
+    )
+
+    row = get_project_row(session, project_id)
+    if row is None:
+        raise FormalBaselineError(
+            "FORMAL_BASELINE_PROJECT_MISSING",
+            f"找不到项目 {project_id} 的正式发布记录，无法确定重新解构的比较基线。",
+            "请返回项目列表确认目标项目；若该项目从未发布正式规则，请先完成首次解构与发布。",
+        )
+    project, _rule_set_revision = row
+    protocol_version_id = project.protocol_version.protocol_version_id
+
+    from app.storage.repositories import ProtocolDraftRevisionRepository
+
+    published = ProtocolDraftRevisionRepository(
+        session
+    ).find_published_by_protocol_version(protocol_version_id)
+    if not published:
+        raise FormalBaselineError(
+            "FORMAL_BASELINE_MISSING",
+            f"项目 {project_id} 的正式版本 {protocol_version_id} 缺少已发布草稿"
+            " revision，无法作为重新解构的比较基线。",
+            "请确认该项目已完成正式发布；若数据被外部改动，请联系维护人员核对"
+            "不可变发布链后重试。",
+        )
+    if len(published) > 1:
+        contents = {
+            item.content_sha256 for item in published
+        }
+        if len(contents) > 1:
+            raise FormalBaselineError(
+                "FORMAL_BASELINE_INCONSISTENT",
+                f"项目 {project_id} 的正式版本 {protocol_version_id} 存在 "
+                f"{len(published)} 条内容不一致的已发布草稿 revision，无法确定"
+                "唯一的比较基线。",
+                "请停止发布并联系维护人员核对不可变发布链；在基线一致前，"
+                "系统不会用猜测基线生成差异。",
+            )
+        # 多条记录内容一致（同一版本重复发布但内容相同）：取最新一条，内容等价。
+    return published[-1]
+
+
 __all__ = [
     "DraftEditBoundaryError",
     "DuplicateDraftError",
+    "FormalBaselineError",
     "ProtocolDraftService",
     "compute_draft_diff",
     "enforce_draft_edit_boundary",
     "head_stale_error",
     "mark_revision_published",
+    "resolve_formal_baseline_revision",
 ]
