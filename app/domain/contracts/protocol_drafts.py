@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any, Literal
 from pydantic import Field, model_validator
 
 from .agent_io import ProtocolDeconstructionDraft
@@ -49,6 +50,63 @@ class DraftFeedbackKind(StableEnum):
     CLARIFICATION = "clarification"
 
 
+class DiffCategory(StableEnum):
+    """八类结构化差异的机器类别（中文标签由投影词汇表提供，展示层不解析自由文本）。
+
+    ``ADDED``/``REMOVED`` 在规则与子组件两个粒度分别表达；其余六类是同一稳定子组件
+    在前后稿中该维度的变化。
+    """
+
+    ADDED = "added"                     # 新增
+    REMOVED = "removed"                 # 删除
+    ORIGINAL_TEXT = "original_text"     # 原文
+    LOGIC = "logic"                     # 逻辑
+    TIME_WINDOW = "time_window"         # 时间窗
+    EXCEPTION = "exception"             # 例外
+    EVIDENCE = "evidence"               # 证据要求
+    DUE_STAGE = "due_stage"             # 应完成阶段
+
+
+class CategoryChange(VersionedModel):
+    """某个稳定项在单个类别的前后结构化快照（确定性比较输出）。
+
+    ``stable_ref`` 为稳定引用：父规则使用官方编号，子组件使用其展示编号（如
+    ``IN-04a``），资料要求使用 ``<组件引用>#req[序号]``。``previous``/``current``
+    为该类别在前后稿上的结构化快照；一边缺失（首稿或该项前稿不存在）时为 None。
+    """
+
+    stable_ref: str = Field(min_length=1)
+    kind: Literal["rule", "component", "requirement"] = "component"
+    previous: Any | None = None
+    current: Any | None = None
+
+
+class ParentRuleDiff(VersionedModel):
+    """一条官方父规则相对前序稿的八类结构化差异（按 ``official_code`` 对齐）。
+
+    新增/删除在父规则与稳定子组件两个粒度列出；其余六类（原文、逻辑、时间窗、例外、
+    证据要求、应完成阶段）以稳定子组件引用的前后快照分列，供展示层逐条并列显示。
+    """
+
+    official_code: str = Field(min_length=1)
+    added: bool = False
+    removed: bool = False
+    added_component_refs: list[str] = Field(default_factory=list)
+    removed_component_refs: list[str] = Field(default_factory=list)
+    original_text_changes: list[CategoryChange] = Field(default_factory=list)
+    logic_changes: list[CategoryChange] = Field(default_factory=list)
+    time_window_changes: list[CategoryChange] = Field(default_factory=list)
+    exception_changes: list[CategoryChange] = Field(default_factory=list)
+    evidence_changes: list[CategoryChange] = Field(default_factory=list)
+    due_stage_changes: list[CategoryChange] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_exclusivity(self) -> "ParentRuleDiff":
+        if self.added and self.removed:
+            raise ValueError("同一父规则不能同时为新增和删除")
+        return self
+
+
 class ProtocolDraftRevisionDiff(VersionedModel):
     """一次 revision 相对其前序的结构化差异（设计书 §10 差异算法输出）。"""
 
@@ -64,6 +122,9 @@ class ProtocolDraftRevisionDiff(VersionedModel):
     source_scope_changed: bool = False
     workflow_visit_rewritten: bool = False
     clarification_semantics_changed: bool = False
+    # 切片 6：按官方父规则编号对齐的八类结构化详情（新增/删除/原文/逻辑/时间窗/例外/
+    # 证据要求/应完成阶段）。粗粒度字段保留以兼容前序调用方；展示层应优先消费本字段。
+    rule_diffs: list[ParentRuleDiff] = Field(default_factory=list)
 
 
 class ProtocolDraftRevision(VersionedModel):
@@ -137,9 +198,12 @@ class ProtocolDraftRevision(VersionedModel):
 
 
 __all__ = [
+    "CategoryChange",
+    "DiffCategory",
     "DraftFeedbackKind",
     "DraftRevisionReason",
     "DraftRevisionStatus",
+    "ParentRuleDiff",
     "ProtocolDraftRevision",
     "ProtocolDraftRevisionDiff",
 ]

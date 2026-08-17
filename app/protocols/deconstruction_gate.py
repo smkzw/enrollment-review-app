@@ -28,6 +28,7 @@ from app.domain.contracts.enums import (
 )
 from app.domain.contracts.protocol_ingestion import ProtocolSourceSpan
 from app.domain.contracts.protocol_metadata import InterpretationConflict
+from app.domain.contracts.protocol_drafts import ParentRuleDiff
 from app.domain.contracts.rules import Rule, TimeUnit, iter_atomic_predicates
 from app.domain.publication import canonical_hash
 from app.protocols.section_index import formal_source_span_ids
@@ -79,6 +80,7 @@ class ProtocolDraftDiffDeclaration(VersionedModel):
     source_scope_changed: bool = False
     workflow_visit_rewritten: bool = False
     clarification_semantics_changed: bool = False
+    rule_diffs: list[ParentRuleDiff] = Field(default_factory=list)
 
 
 class ProtocolDeconstructionGateResult(VersionedModel):

@@ -26,9 +26,12 @@ from .evidence import (
     PatientProfileEvent,
 )
 from .protocol_drafts import (
+    CategoryChange,
+    DiffCategory,
     DraftFeedbackKind,
     DraftRevisionReason,
     DraftRevisionStatus,
+    ParentRuleDiff,
     ProtocolDraftRevision,
     ProtocolDraftRevisionDiff,
 )
@@ -94,8 +97,10 @@ __all__ = [
     "AgentOutputKind",
     "AgentWriteScope",
     "AssessmentCandidate",
+    "CategoryChange",
     "ClinicalFact",
     "DateValue",
+    "DiffCategory",
     "DraftFeedbackKind",
     "DraftRevisionReason",
     "DraftRevisionStatus",
@@ -119,6 +124,7 @@ __all__ = [
     "ModelConfigContract",
     "PatientProfile",
     "PatientProfileEvent",
+    "ParentRuleDiff",
     "Project",
     "ProjectListResponse",
     "ProtocolDraftRevision",

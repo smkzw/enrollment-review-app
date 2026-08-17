@@ -10,18 +10,23 @@ revision。乐观并发通过「后继 revision 必须指向当前链头」实�
 """
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
 from app.domain.contracts.agent_io import ProtocolDeconstructionDraft
 from app.domain.contracts.protocol_drafts import (
+    CategoryChange,
+    DiffCategory,
     DraftFeedbackKind,
     DraftRevisionReason,
     DraftRevisionStatus,
+    ParentRuleDiff,
     ProtocolDraftRevision,
     ProtocolDraftRevisionDiff,
 )
+from app.domain.contracts.rules import RuleComponent, iter_atomic_predicates
 from app.domain.publication import canonical_hash
 from app.storage.concurrency import StaleRevisionError
 from app.storage.repositories import (
@@ -83,6 +88,7 @@ def compute_draft_diff(
                 mapping.catalog_item_id
                 for mapping in current.procedure_catalog_mappings
             ],
+            rule_diffs=_first_draft_rule_diffs(current),
         )
 
     old_rules = _hash_map(previous.proposed_rules, lambda rule: rule.official_code)
@@ -205,6 +211,337 @@ def compute_draft_diff(
             or previous_mapping_bindings != current_mapping_bindings
         ),
         clarification_semantics_changed=_semantics_changed(previous, current),
+        rule_diffs=_rule_diff_details(previous, current),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 八类结构化差异详情（切片 6，设计书 §10：按官方父规则编号对齐）
+# ---------------------------------------------------------------------------
+
+
+def _first_draft_rule_diffs(
+    current: ProtocolDeconstructionDraft,
+) -> list[ParentRuleDiff]:
+    """首稿：每条官方父规则标记为新增，子组件按展示编号列入新增。"""
+
+    return [
+        ParentRuleDiff(
+            official_code=rule.official_code,
+            added=True,
+            added_component_refs=_component_refs(rule),
+        )
+        for rule in current.proposed_rules
+    ]
+
+
+def _component_refs(rule) -> list[str]:
+    """子组件稳定引用：展示编号；同编号重复时按出现顺序追加 ``#N``。"""
+
+    counts: dict[str, int] = {}
+    refs: list[str] = []
+    for component in rule.components:
+        code = component.display_code
+        counts[code] = counts.get(code, 0) + 1
+        refs.append(code if counts[code] == 1 else f"{code}#{counts[code]}")
+    return refs
+
+
+def _align_components(
+    previous_rule, current_rule
+) -> tuple[list[tuple[str, RuleComponent, RuleComponent]], list[str], list[str]]:
+    """按展示编号 + 出现顺序把两稿同一父规则的子组件对齐。
+
+    返回 (对齐对, 新增引用, 删除引用)；引用与 :func:`_component_refs` 一致，
+    不依赖随机组件 ID（设计书 §10.2）。
+    """
+
+    def grouped(rule) -> dict[str, list[RuleComponent]]:
+        result: dict[str, list[RuleComponent]] = {}
+        for component in rule.components:
+            result.setdefault(component.display_code, []).append(component)
+        return result
+
+    old_groups = grouped(previous_rule)
+    new_groups = grouped(current_rule)
+    aligned: list[tuple[str, RuleComponent, RuleComponent]] = []
+    added: list[str] = []
+    removed: list[str] = []
+    for code in sorted(set(old_groups) | set(new_groups)):
+        old_items = old_groups.get(code, [])
+        new_items = new_groups.get(code, [])
+        size = max(len(old_items), len(new_items))
+        for index in range(size):
+            ref = code if size == 1 else f"{code}#{index + 1}"
+            old_item = old_items[index] if index < len(old_items) else None
+            new_item = new_items[index] if index < len(new_items) else None
+            if old_item is None:
+                added.append(ref)
+            elif new_item is None:
+                removed.append(ref)
+            else:
+                aligned.append((ref, old_item, new_item))
+    return aligned, sorted(added), sorted(removed)
+
+
+def _rule_diff_details(
+    previous: ProtocolDeconstructionDraft,
+    current: ProtocolDeconstructionDraft,
+) -> list[ParentRuleDiff]:
+    """按官方父规则编号对齐输出八类详情（新增/删除/原文/逻辑/时间窗/例外/
+    证据要求/应完成阶段）。输出顺序与引用列表均确定。"""
+
+    old_rules = {rule.official_code: rule for rule in previous.proposed_rules}
+    new_rules = {rule.official_code: rule for rule in current.proposed_rules}
+    results: list[ParentRuleDiff] = []
+    for code in sorted(set(old_rules) | set(new_rules)):
+        old_rule = old_rules.get(code)
+        new_rule = new_rules.get(code)
+        if old_rule is None:
+            results.append(
+                ParentRuleDiff(
+                    official_code=code,
+                    added=True,
+                    added_component_refs=_component_refs(new_rule),
+                )
+            )
+        elif new_rule is None:
+            results.append(
+                ParentRuleDiff(
+                    official_code=code,
+                    removed=True,
+                    removed_component_refs=_component_refs(old_rule),
+                )
+            )
+        else:
+            results.append(
+                _aligned_rule_diff(code, old_rule, new_rule, previous, current)
+            )
+    return results
+
+
+def _component_binding(
+    draft: ProtocolDeconstructionDraft, component_id: str
+) -> dict[str, Any] | None:
+    """从组件草稿取来源绑定（引用 + 摘录）；无对应草稿项时返回 None。"""
+
+    for item in draft.component_drafts:
+        if item.proposed_component.rule_component_id == component_id:
+            return {
+                "source_refs": sorted(item.source_refs),
+                "source_excerpts": list(item.source_excerpts),
+            }
+    return None
+
+
+def _verbatim_fragments(expression) -> list[dict[str, Any]]:
+    """按遍历顺序收集表达式中各原子条件的逐字原文片段。"""
+
+    return [
+        {
+            "source_term": predicate.source_term,
+            "source_clause": predicate.source_clause,
+            "source_clauses": list(predicate.source_clauses),
+        }
+        for predicate in iter_atomic_predicates(expression)
+    ]
+
+
+def _original_text_payload(
+    rule, component: RuleComponent, draft: ProtocolDeconstructionDraft
+) -> dict[str, Any]:
+    # 父规则原文由 kind=rule 的条目单独承载；组件条目只携带组件级来源与逐字片段。
+    return {
+        "source_binding": _component_binding(draft, component.rule_component_id),
+        "verbatim_fragments": _verbatim_fragments(component.expression),
+    }
+
+
+def _strip_expression(node: dict[str, Any]) -> dict[str, Any]:
+    """逻辑快照：剥离不稳定 ID、逐字原文片段与全部时间窗字段。"""
+
+    if node.get("kind") == "predicate":
+        predicate = {
+            key: value
+            for key, value in node["predicate"].items()
+            if key
+            not in {
+                "predicate_id",
+                "source_term",
+                "source_clause",
+                "source_clauses",
+                "occurrence_window",
+                "prospective_window",
+                "prospective_period",
+            }
+        }
+        return {"kind": "predicate", "predicate": predicate}
+    return {
+        "kind": "logical",
+        "operator": node["operator"],
+        "children": [_strip_expression(child) for child in node["children"]],
+    }
+
+
+def _logic_payload(
+    rule, component: RuleComponent, draft: ProtocolDeconstructionDraft
+) -> dict[str, Any]:
+    return _strip_expression(component.expression.model_dump(mode="json"))
+
+
+def _time_window_payload(
+    rule, component: RuleComponent, draft: ProtocolDeconstructionDraft
+) -> list[dict[str, Any]]:
+    """按遍历顺序收集每个原子条件的时间窗快照。"""
+
+    payloads: list[dict[str, Any]] = []
+    for expression in _iter_expression_nodes(component.expression):
+        predicate = expression["predicate"]
+        payloads.append(
+            {
+                "time_constraint": expression.get("time_constraint"),
+                "occurrence_window": predicate.get("occurrence_window"),
+                "prospective_window": predicate.get("prospective_window"),
+                "prospective_period": predicate.get("prospective_period"),
+            }
+        )
+    return payloads
+
+
+def _iter_expression_nodes(expression) -> list[dict[str, Any]]:
+    """按遍历顺序返回表达式树的全部节点 dict（先序）。"""
+
+    node = expression.model_dump(mode="json")
+    if node.get("kind") == "predicate":
+        return [node]
+    children: list[dict[str, Any]] = []
+    for child in expression.children:
+        children.extend(_iter_expression_nodes(child))
+    return children
+
+
+def _exception_payload(
+    rule, component: RuleComponent, draft: ProtocolDeconstructionDraft
+) -> dict[str, Any] | None:
+    if component.exception_expression is None:
+        return None
+    return _strip_expression(component.exception_expression.model_dump(mode="json"))
+
+
+def _json_key(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, ensure_ascii=False)
+
+
+def _requirement_rows(
+    component: RuleComponent,
+) -> list[tuple[dict[str, Any], str]]:
+    """证据要求行：证据语义（不含应完成阶段）与应完成阶段，按证据键排序。"""
+
+    rows: list[tuple[dict[str, Any], str]] = []
+    for requirement in component.evidence_requirements:
+        evidence = {
+            "fact_type": requirement.fact_type,
+            "required_source_types": sorted(requirement.required_source_types),
+            "allows_screening_record_transcription": (
+                requirement.allows_screening_record_transcription
+            ),
+            "requires_contemporaneous_objective_source": (
+                requirement.requires_contemporaneous_objective_source
+            ),
+            "description": requirement.description,
+        }
+        rows.append((evidence, requirement.due_stage.value))
+    rows.sort(key=lambda row: _json_key(row[0]))
+    return rows
+
+
+def _evidence_payload(
+    rule, component: RuleComponent, draft: ProtocolDeconstructionDraft
+) -> list[dict[str, Any]]:
+    return [evidence for evidence, _due_stage in _requirement_rows(component)]
+
+
+def _due_stage_payload(
+    rule, component: RuleComponent, draft: ProtocolDeconstructionDraft
+) -> list[str]:
+    return [due_stage for _evidence, due_stage in _requirement_rows(component)]
+
+
+_CATEGORY_PAYLOAD_KEYS = (
+    (DiffCategory.ORIGINAL_TEXT, "original_text_changes", _original_text_payload),
+    (DiffCategory.LOGIC, "logic_changes", _logic_payload),
+    (DiffCategory.TIME_WINDOW, "time_window_changes", _time_window_payload),
+    (DiffCategory.EXCEPTION, "exception_changes", _exception_payload),
+    (DiffCategory.EVIDENCE, "evidence_changes", _evidence_payload),
+    (DiffCategory.DUE_STAGE, "due_stage_changes", _due_stage_payload),
+)
+
+
+def _aligned_rule_diff(
+    code: str,
+    old_rule,
+    new_rule,
+    previous: ProtocolDeconstructionDraft,
+    current: ProtocolDeconstructionDraft,
+) -> ParentRuleDiff:
+    aligned, added, removed = _align_components(old_rule, new_rule)
+    changes: dict[str, list[CategoryChange]] = {
+        field: [] for _category, field, _payload in _CATEGORY_PAYLOAD_KEYS
+    }
+    if old_rule.source_text != new_rule.source_text:
+        changes["original_text_changes"].append(
+            CategoryChange(
+                stable_ref=code,
+                kind="rule",
+                previous={"source_text": old_rule.source_text},
+                current={"source_text": new_rule.source_text},
+            )
+        )
+    for ref, old_component, new_component in aligned:
+        for _category, field, extract in _CATEGORY_PAYLOAD_KEYS:
+            previous_payload = extract(old_rule, old_component, previous)
+            current_payload = extract(new_rule, new_component, current)
+            if previous_payload != current_payload:
+                changes[field].append(
+                    CategoryChange(
+                        stable_ref=ref,
+                        kind="component",
+                        previous=previous_payload,
+                        current=current_payload,
+                    )
+                )
+        old_ids = {item.requirement_id for item in old_component.evidence_requirements}
+        new_ids = {item.requirement_id for item in new_component.evidence_requirements}
+        for position, requirement_id in enumerate(
+            sorted(new_ids - old_ids), start=1
+        ):
+            changes["evidence_changes"].append(
+                CategoryChange(
+                    stable_ref=f"{ref}#req[{position}]",
+                    kind="requirement",
+                    previous=None,
+                    current={"requirement_id": requirement_id},
+                )
+            )
+        for position, requirement_id in enumerate(
+            sorted(old_ids - new_ids), start=1
+        ):
+            changes["evidence_changes"].append(
+                CategoryChange(
+                    stable_ref=f"{ref}#req[{position}]",
+                    kind="requirement",
+                    previous={"requirement_id": requirement_id},
+                    current=None,
+                )
+            )
+    return ParentRuleDiff(
+        official_code=code,
+        added_component_refs=added,
+        removed_component_refs=removed,
+        **{
+            field: changes[field]
+            for _category, field, _payload in _CATEGORY_PAYLOAD_KEYS
+        },
     )
 
 
