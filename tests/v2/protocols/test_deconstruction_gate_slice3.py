@@ -2176,3 +2176,82 @@ def test_structural_contract_mutations_are_blocked(mutate, check_name, issue_cod
         issue.issue_code == issue_code
         for issue in _issues(result, check_name)
     )
+
+
+@pytest.mark.parametrize(
+    "change_kind",
+    ["component_source", "requirement", "procedure_mapping", "source_scope"],
+)
+def test_diff_integrity_covers_all_structured_child_changes(change_kind):
+    """发布差异不能只核对父规则和节点；子结构/来源变化也必须可重建。"""
+    from app.protocols.deconstruction_gate import ProtocolDraftDiffDeclaration
+
+    source_input, previous, source_spans = _fixture()
+    current = previous.model_copy(
+        deep=True,
+        update={
+            "draft_revision": 2,
+            "previous_draft_id": previous.draft_id,
+        },
+    )
+    if change_kind == "component_source":
+        item = current.component_drafts[0]
+        current.component_drafts[0] = item.model_copy(
+            update={"source_excerpts": [*item.source_excerpts, "来源修订"]}
+        )
+    elif change_kind == "requirement":
+        item = current.evidence_requirement_drafts[0]
+        current.evidence_requirement_drafts[0] = item.model_copy(
+            update={
+                "proposed_requirement": item.proposed_requirement.model_copy(
+                    update={"description": "资料要求修订"}
+                )
+            }
+        )
+    elif change_kind == "procedure_mapping":
+        item = current.procedure_catalog_mappings[0]
+        current.procedure_catalog_mappings[0] = item.model_copy(
+            update={"source_span_ids": [*item.source_span_ids, "span-other"]}
+        )
+    else:
+        current.source_refs = [*current.source_refs, "source:other"]
+
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input,
+        current,
+        source_spans=source_spans,
+        previous_draft=previous,
+        declared_diff=ProtocolDraftDiffDeclaration(),
+    )
+    assert any(
+        issue.issue_code == "DECLARED_DIFF_NOT_REPRODUCIBLE"
+        for issue in _issues(result, "diff_integrity")
+    )
+
+
+def test_procedure_mapping_cannot_include_another_visit_source():
+    """正式来源并不等于当前访视来源；流程映射必须与冻结目录项精确一致。"""
+    source_input, draft, source_spans = _fixture()
+    changed = draft.model_copy(deep=True)
+    mapping = changed.procedure_catalog_mappings[0]
+    own = next(
+        item
+        for item in source_input.required_procedure_catalog.items
+        if item.item_id == mapping.catalog_item_id
+    )
+    other = next(
+        item
+        for item in source_input.required_procedure_catalog.items
+        if item.item_id != mapping.catalog_item_id
+    )
+    foreign_ref = next(ref for ref in other.source_span_ids if ref not in own.source_span_ids)
+    changed.procedure_catalog_mappings[0] = mapping.model_copy(
+        update={"source_span_ids": [*mapping.source_span_ids, foreign_ref]}
+    )
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, changed, source_spans=source_spans
+    )
+    assert any(
+        issue.issue_code == "PROCEDURE_MAPPING_SOURCE_MISMATCH"
+        for issue in _issues(result, "source_coverage")
+    )

@@ -101,20 +101,28 @@ def compute_draft_diff(
     removed_workflow_stage_ids = sorted(set(old_stages) - set(new_stages))
     modified_workflow_stage_ids = _changed_keys(old_stages, new_stages)
 
-    old_components = {
-        component.rule_component_id: canonical_hash(
-            component.model_dump(mode="json")
-        )
-        for rule in previous.proposed_rules
-        for component in rule.components
-    }
-    new_components = {
-        component.rule_component_id: canonical_hash(
-            component.model_dump(mode="json")
-        )
-        for rule in current.proposed_rules
-        for component in rule.components
-    }
+    def component_state(draft: ProtocolDeconstructionDraft) -> dict[str, str]:
+        proposed = {
+            component.rule_component_id: component.model_dump(mode="json")
+            for rule in draft.proposed_rules
+            for component in rule.components
+        }
+        sources = {
+            item.proposed_component.rule_component_id: {
+                "source_refs": sorted(item.source_refs),
+                "source_excerpts": item.source_excerpts,
+            }
+            for item in draft.component_drafts
+        }
+        return {
+            component_id: canonical_hash(
+                {"component": payload, "source_binding": sources.get(component_id)}
+            )
+            for component_id, payload in proposed.items()
+        }
+
+    old_components = component_state(previous)
+    new_components = component_state(current)
     changed_component_ids = _changed_keys(old_components, new_components)
 
     old_requirements = _hash_map(
@@ -266,6 +274,24 @@ def enforce_draft_edit_boundary(
       成员与流程结构（由 ProtocolDeconstructionGate 的 source_coverage /
       parent_catalog / workflow_coverage 把关）。
     """
+    if (
+        previous.draft_id != current.draft_id
+        or previous.project_id != current.project_id
+        or previous.protocol_version_id != current.protocol_version_id
+        or previous.selected_phase != current.selected_phase
+    ):
+        _fail_boundary(
+            "DRAFT_IDENTITY_CHANGED",
+            "编辑不得改写草稿所属项目、方案版本、研究期别或草稿身份",
+        )
+    if (
+        feedback_kind == DraftFeedbackKind.CLARIFICATION
+        and _source_bindings_changed(previous, current)
+    ):
+        _fail_boundary(
+            "CLARIFICATION_ALTERS_SOURCE_BINDING",
+            "解释性澄清不得改写草稿、流程、子规则或资料要求的方案来源绑定",
+        )
     previous_parent_items = {
         item.catalog_item_id for item in previous.parent_catalog_mappings
     }
@@ -301,6 +327,24 @@ def enforce_draft_edit_boundary(
         _fail_boundary(
             "PARENT_SOURCE_REBOUND",
             "编辑不得换绑官方父规则映射的方案来源定位",
+        )
+    previous_procedure_sources = {
+        item.catalog_item_id: tuple(sorted(item.source_span_ids))
+        for item in previous.procedure_catalog_mappings
+    }
+    current_procedure_sources = {
+        item.catalog_item_id: tuple(sorted(item.source_span_ids))
+        for item in current.procedure_catalog_mappings
+    }
+    if previous_procedure_sources != current_procedure_sources:
+        _fail_boundary(
+            "PROCEDURE_SOURCE_REBOUND",
+            "编辑不得换绑基线及以前必做项目录的方案来源定位",
+        )
+    if tuple(sorted(previous.source_refs)) != tuple(sorted(current.source_refs)):
+        _fail_boundary(
+            "DRAFT_SOURCE_SCOPE_CHANGED",
+            "编辑不得改写本次方案解构草稿的来源范围",
         )
     previous_stage_structure = {
         (
@@ -366,19 +410,25 @@ def enforce_draft_edit_boundary(
                 "解释性澄清只能附着在说明层，不得改变方案阈值、布尔逻辑、"
                 "临床证据语义或流程结构",
             )
-        # 澄清反馈不得改变任何来源绑定（组件/资料要求摘录与来源范围）。
-        if _source_bindings_changed(previous, current):
-            _fail_boundary(
-                "CLARIFICATION_ALTERS_SOURCE_BINDING",
-                "解释性澄清不得改写子规则或资料要求的方案来源绑定",
-            )
 
 
 def _source_bindings_changed(
     previous: ProtocolDeconstructionDraft,
     current: ProtocolDeconstructionDraft,
 ) -> bool:
-    """组件/资料要求来源绑定（source_refs 与摘录）是否被改写。"""
+    """草稿、流程、组件及资料要求来源绑定是否被改写。"""
+    if tuple(sorted(previous.source_refs)) != tuple(sorted(current.source_refs)):
+        return True
+    previous_procedure_sources = {
+        item.catalog_item_id: tuple(sorted(item.source_span_ids))
+        for item in previous.procedure_catalog_mappings
+    }
+    current_procedure_sources = {
+        item.catalog_item_id: tuple(sorted(item.source_span_ids))
+        for item in current.procedure_catalog_mappings
+    }
+    if previous_procedure_sources != current_procedure_sources:
+        return True
     previous_component_sources = {
         item.draft_component_id: (
             tuple(sorted(item.source_refs)),
@@ -661,6 +711,9 @@ class ProtocolDraftService:
             update={
                 "draft_revision": next_number,
                 "previous_draft_id": head.content.draft_id,
+                "project_id": head.project_id,
+                "protocol_version_id": head.protocol_version_id,
+                "selected_phase": head.study_phase,
             }
         )
         revision = ProtocolDraftRevision(
@@ -781,18 +834,32 @@ def _draft_diff_as_field_changes(
         )
 
     def _components(draft: ProtocolDeconstructionDraft) -> dict[str, Any]:
-        return {
-            component.rule_component_id: component
+        proposed = {
+            component.rule_component_id: component.model_dump(mode="json")
             for rule in draft.proposed_rules
             for component in rule.components
+        }
+        sources = {
+            item.proposed_component.rule_component_id: {
+                "source_refs": item.source_refs,
+                "source_excerpts": item.source_excerpts,
+            }
+            for item in draft.component_drafts
+        }
+        return {
+            component_id: {
+                "component": payload,
+                "source_binding": sources.get(component_id),
+            }
+            for component_id, payload in proposed.items()
         }
 
     submitted_components = _components(submitted)
     current_components = _components(current)
     for component_id in diff.changed_component_ids:
         changes[f"rule_component:{component_id}"] = FieldChange(
-            current=_dump(current_components.get(component_id)),
-            submitted=_dump(submitted_components.get(component_id)),
+            current=current_components.get(component_id),
+            submitted=submitted_components.get(component_id),
         )
 
     submitted_requirements = _index(

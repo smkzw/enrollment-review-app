@@ -95,6 +95,16 @@ class ProtocolDraftRevision(VersionedModel):
     def validate_chain(self) -> "ProtocolDraftRevision":
         from app.domain.publication import canonical_hash
 
+        if self.content.draft_id != self.draft_id:
+            raise ValueError("ProtocolDraftRevision 内外层 draft_id 不一致")
+        if self.content.project_id != self.project_id:
+            raise ValueError("ProtocolDraftRevision 内外层 project_id 不一致")
+        if self.content.protocol_version_id != self.protocol_version_id:
+            raise ValueError("ProtocolDraftRevision 内外层 protocol_version_id 不一致")
+        if self.content.selected_phase != self.study_phase:
+            raise ValueError("ProtocolDraftRevision 内外层研究期别不一致")
+        if self.content.draft_revision != self.revision_number:
+            raise ValueError("ProtocolDraftRevision 内外层 revision 号不一致")
         expected_hash = canonical_hash(self.content.model_dump(mode="json"))
         if self.content_sha256 != expected_hash:
             raise ValueError("ProtocolDraftRevision 内容哈希与草稿快照不一致")

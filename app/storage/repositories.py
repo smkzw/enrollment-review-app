@@ -2140,6 +2140,15 @@ class ProtocolDraftRevisionRepository:
                 f"（{revision.revision_number}）不一致"
             )
         if (
+            revision.content.draft_id != revision.draft_id
+            or revision.content.project_id != revision.project_id
+            or revision.content.protocol_version_id != revision.protocol_version_id
+            or revision.content.selected_phase != revision.study_phase
+        ):
+            raise ScopeViolationError(
+                f"草稿 revision {revision.revision_id} 的内外层方案身份不一致"
+            )
+        if (
             revision.revision_number > 1
             and revision.content.previous_draft_id != revision.content.draft_id
         ):
@@ -2232,6 +2241,10 @@ class ProtocolDraftRevisionRepository:
                     f"草稿 revision {revision.revision_id} 缺少前序引用"
                 )
             previous = self.get(revision.previous_revision_id)
+            if previous.draft_id != revision.draft_id:
+                raise ScopeViolationError(
+                    f"草稿 revision {revision.revision_id} 的前序不属于同一草稿"
+                )
             if previous.revision_number != revision.revision_number - 1:
                 raise ScopeViolationError(
                     f"草稿 revision {revision.revision_id} 的前序 revision 号"
@@ -2241,6 +2254,15 @@ class ProtocolDraftRevisionRepository:
             raise ScopeViolationError(
                 f"草稿 revision {revision.revision_id} 的内层 draft_revision"
                 f"（{revision.content.draft_revision}）与外层链号不一致"
+            )
+        if (
+            revision.content.draft_id != revision.draft_id
+            or revision.content.project_id != revision.project_id
+            or revision.content.protocol_version_id != revision.protocol_version_id
+            or revision.content.selected_phase != revision.study_phase
+        ):
+            raise ScopeViolationError(
+                f"草稿 revision {revision.revision_id} 的内外层方案身份不一致"
             )
         payload_json, payload_sha256 = encode_contract(revision)
         record.payload_json = payload_json
@@ -2377,6 +2399,42 @@ def save_expectation_templates(
                 f"{template.requirement_id} 不在 RuleSet "
                 f"{template.rule_set_id} revision {template.rule_set_revision} 中"
             )
+        requirement_contract = decode_contract(
+            EvidenceRequirement,
+            requirement.payload_json,
+            requirement.payload_sha256,
+        )
+        expected_semantics = {
+            "due_stage": requirement_contract.due_stage,
+            "fact_type": requirement_contract.fact_type,
+            "required_source_types": sorted(
+                set(requirement_contract.required_source_types)
+            ),
+            "requires_contemporaneous_objective_source": (
+                requirement_contract.requires_contemporaneous_objective_source
+            ),
+            "allows_screening_record_transcription": (
+                requirement_contract.allows_screening_record_transcription
+            ),
+            "description": requirement_contract.description,
+        }
+        actual_semantics = {
+            "due_stage": template.due_stage,
+            "fact_type": template.fact_type,
+            "required_source_types": sorted(set(template.required_source_types)),
+            "requires_contemporaneous_objective_source": (
+                template.requires_contemporaneous_objective_source
+            ),
+            "allows_screening_record_transcription": (
+                template.allows_screening_record_transcription
+            ),
+            "description": template.description,
+        }
+        if actual_semantics != expected_semantics:
+            raise ScopeViolationError(
+                f"模板 {template.template_id} 的资料语义与 RuleSet 中的资料要求 "
+                f"{template.requirement_id} 不一致"
+            )
         if template.workflow_stage_id is not None:
             stage = session.get(
                 WorkflowStageRecord, template.workflow_stage_id
@@ -2394,8 +2452,25 @@ def save_expectation_templates(
                     f"模板 {template.template_id} 的审核节点 "
                     f"{template.workflow_stage_id} 不属于该 RuleSet 的方案版本/期别"
                 )
-        existing = session.execute(
-            select(EvidenceExpectationTemplateRecord.template_id).where(
+            stage_contract = decode_contract(
+                WorkflowStage, stage.payload_json, stage.payload_sha256
+            )
+            expected_prefix = (
+                f"{template.rule_set_id}:{template.rule_set_revision}:"
+            )
+            if not template.workflow_stage_id.startswith(expected_prefix):
+                raise ScopeViolationError(
+                    f"模板 {template.template_id} 的审核节点不属于该 RuleSet revision"
+                )
+            if (
+                template.requirement_id not in stage_contract.due_requirement_ids
+                or stage_contract.stage != template.due_stage
+            ):
+                raise ScopeViolationError(
+                    f"模板 {template.template_id} 的资料要求未在所引审核节点按期到期"
+                )
+        existing_record = session.execute(
+            select(EvidenceExpectationTemplateRecord).where(
                 EvidenceExpectationTemplateRecord.rule_set_id
                 == template.rule_set_id,
                 EvidenceExpectationTemplateRecord.rule_set_revision
@@ -2404,7 +2479,20 @@ def save_expectation_templates(
                 == template.requirement_id,
             )
         ).scalars().first()
-        if existing is not None:
+        if existing_record is not None:
+            existing = decode_contract(
+                EvidenceExpectationTemplate,
+                existing_record.payload_json,
+                existing_record.payload_sha256,
+            )
+            if (
+                existing.template_id != template.template_id
+                or existing.projection_sha256 != template.projection_sha256
+            ):
+                raise ScopeViolationError(
+                    f"资料要求 {template.requirement_id} 已存在与当前 RuleSet 语义"
+                    "不一致的模板，拒绝静默跳过"
+                )
             continue
         repo.save(template)
 

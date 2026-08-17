@@ -84,6 +84,49 @@ def _procedure_requirements() -> list[EvidenceRequirement]:
     ]
 
 
+def _seed_template_context(session):
+    """建立一份可发布 RuleSet、其审核节点和确定性模板。"""
+    from app.projections.evidence_expectation_templates import (
+        project_evidence_expectation_templates,
+    )
+    from app.storage.repositories import WORKFLOW_STAGE_CONFIG
+
+    _seed_document_version(session)
+    rule_set = _rule_set()
+    procedure = _procedure_requirements()
+    save_rule_set(session, rule_set, procedure_requirements=procedure)
+    stages = [
+        WorkflowStage(
+            workflow_stage_id="ruleset:slice4:1:stage-screening",
+            stage=ReviewStage.SCREENING,
+            display_name="筛选期审核",
+            visit_instance="筛选期 D-28~D-1",
+            due_requirement_ids=["req-in", "req-ex", "requirement:procedure:screen"],
+        ),
+        WorkflowStage(
+            workflow_stage_id="ruleset:slice4:1:stage-baseline",
+            stage=ReviewStage.BASELINE,
+            display_name="基线审核",
+            visit_instance="基线 D1",
+            due_requirement_ids=["requirement:procedure:baseline"],
+        ),
+    ]
+    for stage in stages:
+        AppendRepository(session, WORKFLOW_STAGE_CONFIG).save(
+            stage,
+            scope={
+                "protocol_version_id": "protocol-version-1",
+                "study_phase": rule_set.study_phase.value,
+            },
+        )
+    return rule_set, stages, project_evidence_expectation_templates(
+        rule_set=rule_set,
+        workflow_stages=stages,
+        procedure_requirements=procedure,
+        created_at=NOW,
+    )
+
+
 def test_rule_set_persists_procedure_origin_without_fabricated_component(session) -> None:
     """根缺陷回归：流程资料要求不再伪造规则组件来源。"""
     _seed_document_version(session)
@@ -293,29 +336,35 @@ def test_expectation_template_repository_dedup_and_identity(session) -> None:
     with pytest.raises(Exception):
         save_expectation_templates(session, [forged])
 
-    valid = forged.model_copy(
-        update={
-            "template_id": template_identity(
-                rule_set.rule_set_id, 1, "req-in"
-            ),
-            "projection_sha256": template_projection_sha256(
-                rule_set_id=rule_set.rule_set_id,
-                revision=1,
-                requirement_id="req-in",
-                due_stage=ReviewStage.SCREENING,
-                study_phase=StudyPhase.PHASE_II,
-                workflow_stage_id="ruleset:slice4:1:stage-screening",
-                fact_type=forged.fact_type,
-                required_source_types=forged.required_source_types,
-                requires_contemporaneous_objective_source=(
-                    forged.requires_contemporaneous_objective_source
-                ),
-                allows_screening_record_transcription=(
-                    forged.allows_screening_record_transcription
-                ),
-                description=forged.description,
-            ),
-        }
+    from app.projections.evidence_expectation_templates import (
+        project_evidence_expectation_templates,
+    )
+
+    stages = [
+        WorkflowStage(
+            workflow_stage_id="ruleset:slice4:1:stage-screening",
+            stage=ReviewStage.SCREENING,
+            display_name="筛选期审核",
+            visit_instance="筛选期 D-28~D-1",
+            due_requirement_ids=["req-in", "req-ex", "requirement:procedure:screen"],
+        ),
+        WorkflowStage(
+            workflow_stage_id="ruleset:slice4:1:stage-baseline",
+            stage=ReviewStage.BASELINE,
+            display_name="基线审核",
+            visit_instance="基线 D1",
+            due_requirement_ids=["requirement:procedure:baseline"],
+        ),
+    ]
+    valid = next(
+        item
+        for item in project_evidence_expectation_templates(
+            rule_set=rule_set,
+            workflow_stages=stages,
+            procedure_requirements=_procedure_requirements(),
+            created_at=NOW,
+        )
+        if item.requirement_id == "req-in"
     )
     save_expectation_templates(session, [valid])
     session.flush()
@@ -511,3 +560,84 @@ def test_cross_revision_draft_chain_is_rejected(session) -> None:
     )
     with pytest.raises(ScopeViolationError, match="紧邻"):
         repo.save(non_adjacent)
+
+
+def _rehash_template(template, **changes):
+    """模拟一个自洽哈希但语义被改写的模板。"""
+    from app.projections.evidence_expectation_templates import (
+        template_projection_sha256,
+    )
+
+    changed = template.model_copy(update=changes)
+    return changed.model_copy(
+        update={
+            "projection_sha256": template_projection_sha256(
+                rule_set_id=changed.rule_set_id,
+                revision=changed.rule_set_revision,
+                requirement_id=changed.requirement_id,
+                due_stage=changed.due_stage,
+                study_phase=changed.study_phase,
+                workflow_stage_id=changed.workflow_stage_id,
+                fact_type=changed.fact_type,
+                required_source_types=changed.required_source_types,
+                requires_contemporaneous_objective_source=(
+                    changed.requires_contemporaneous_objective_source
+                ),
+                allows_screening_record_transcription=(
+                    changed.allows_screening_record_transcription
+                ),
+                description=changed.description,
+            )
+        }
+    )
+
+
+def test_template_self_hash_cannot_override_requirement_semantics(session) -> None:
+    from app.storage.repositories import ScopeViolationError
+
+    _rule_set_value, _stages, templates = _seed_template_context(session)
+    valid = next(item for item in templates if item.requirement_id == "req-in")
+    forged = _rehash_template(valid, required_source_types=["伪造的资料类型"])
+    with pytest.raises(ScopeViolationError, match="资料语义"):
+        save_expectation_templates(session, [forged])
+
+
+def test_template_cannot_borrow_stage_from_another_ruleset(session) -> None:
+    from app.storage.repositories import ScopeViolationError, WORKFLOW_STAGE_CONFIG
+
+    _rule_set_value, _stages, templates = _seed_template_context(session)
+    valid = next(item for item in templates if item.requirement_id == "req-in")
+    foreign_stage = WorkflowStage(
+        workflow_stage_id="ruleset:other:1:stage-screening",
+        stage=ReviewStage.SCREENING,
+        display_name="其他规则集筛选节点",
+        visit_instance="筛选期 D-28~D-1",
+        due_requirement_ids=[valid.requirement_id],
+    )
+    AppendRepository(session, WORKFLOW_STAGE_CONFIG).save(
+        foreign_stage,
+        scope={
+            "protocol_version_id": "protocol-version-1",
+            "study_phase": StudyPhase.PHASE_II.value,
+        },
+    )
+    forged = _rehash_template(
+        valid, workflow_stage_id=foreign_stage.workflow_stage_id
+    )
+    with pytest.raises(ScopeViolationError, match="RuleSet revision"):
+        save_expectation_templates(session, [forged])
+
+
+def test_existing_wrong_template_is_not_silently_skipped(session) -> None:
+    from app.storage.repositories import (
+        EVIDENCE_EXPECTATION_TEMPLATE_CONFIG,
+        ScopeViolationError,
+    )
+
+    _rule_set_value, _stages, templates = _seed_template_context(session)
+    valid = next(item for item in templates if item.requirement_id == "req-in")
+    forged = _rehash_template(valid, description="被改写的模板描述")
+    # 模拟历史错误投影已写入；重复构建必须识别冲突，不能见到唯一键就跳过。
+    AppendRepository(session, EVIDENCE_EXPECTATION_TEMPLATE_CONFIG).save(forged)
+    with pytest.raises(ScopeViolationError, match="拒绝静默跳过"):
+        save_expectation_templates(session, [valid])

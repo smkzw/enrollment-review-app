@@ -282,12 +282,7 @@ class ProtocolPublicationService:
             )
 
             declared_diff = ProtocolDraftDiffDeclaration(
-                added_rule_codes=revision.diff.added_rule_codes,
-                removed_rule_codes=revision.diff.removed_rule_codes,
-                modified_rule_codes=revision.diff.modified_rule_codes,
-                added_workflow_stage_ids=revision.diff.added_workflow_stage_ids,
-                removed_workflow_stage_ids=revision.diff.removed_workflow_stage_ids,
-                modified_workflow_stage_ids=revision.diff.modified_workflow_stage_ids,
+                **revision.diff.model_dump(mode="python")
             )
         gate_result = self.gate.evaluate(
             request.source_input,

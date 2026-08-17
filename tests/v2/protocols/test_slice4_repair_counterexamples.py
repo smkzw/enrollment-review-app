@@ -16,7 +16,7 @@ import alembic
 import pytest
 from sqlalchemy import inspect, text
 
-from app.domain.contracts.enums import ReviewStage
+from app.domain.contracts.enums import ReviewStage, StudyPhase
 from app.domain.contracts.protocol_drafts import (
     DraftFeedbackKind,
     DraftRevisionStatus,
@@ -87,6 +87,7 @@ def test_repository_rejects_inner_outer_revision_mismatch(session) -> None:
     from app.domain.publication import canonical_hash
 
     _source_input, draft, _spans = confirmed_fixture()
+    draft = draft.model_copy(update={"draft_id": "draft-x"})
     repo = ProtocolDraftRevisionRepository(session)
     with session.begin():
         r1 = ProtocolDraftRevision(
@@ -104,6 +105,9 @@ def test_repository_rejects_inner_outer_revision_mismatch(session) -> None:
             created_at=NOW,
         )
         repo.save(r1)
+        valid_content = draft.model_copy(
+            update={"draft_revision": 2, "previous_draft_id": "draft-x"}
+        )
         broken = ProtocolDraftRevision(
             revision_id="draft-revision:draft-x:2",
             draft_id="draft-x",
@@ -115,9 +119,13 @@ def test_repository_rejects_inner_outer_revision_mismatch(session) -> None:
             status=DraftRevisionStatus.SAVED,
             reason=DraftRevisionReason.MANUAL_EDIT,
             actor="医学监查员",
-            content=draft.model_copy(deep=True),  # 内层仍为 1
-            content_sha256=canonical_hash(draft.model_dump(mode="json")),
+            content=valid_content,
+            content_sha256=canonical_hash(valid_content.model_dump(mode="json")),
             created_at=NOW,
+        ).model_copy(
+            update={
+                "content": valid_content.model_copy(update={"draft_revision": 1})
+            }
         )
         with pytest.raises(ScopeViolationError, match="内层 content.draft_revision"):
             ProtocolDraftRevisionRepository(session).save(broken)
@@ -215,6 +223,99 @@ def test_clarification_cannot_change_source_bindings(session) -> None:
                 expected_revision_id=r1.revision_id,
                 feedback_kind=DraftFeedbackKind.CLARIFICATION,
                 feedback_note="解释材料不得改写来源绑定",
+                actor="医学监查员",
+                created_at=NOW,
+            )
+        assert exc_info.value.code == "CLARIFICATION_ALTERS_SOURCE_BINDING"
+
+
+def test_stale_component_source_change_reports_real_snapshots(session) -> None:
+    """只改组件来源时，陈旧提交也必须显示链头与提交方的真实来源快照。"""
+    _source_input, draft, _spans = confirmed_fixture()
+    service = ProtocolDraftService(session)
+    with session.begin():
+        r1 = service.save_initial_draft(
+            draft, actor="医学监查员", created_at=NOW
+        )
+        changed = draft.model_copy(deep=True)
+        item = changed.component_drafts[0]
+        changed.component_drafts[0] = item.model_copy(
+            update={"source_excerpts": [*item.source_excerpts, "来源纠错记录"]}
+        )
+        r2 = service.apply_manual_edit(
+            changed,
+            expected_revision_id=r1.revision_id,
+            actor="医学监查员",
+            created_at=NOW,
+        )
+        with pytest.raises(Exception) as exc_info:
+            service.apply_manual_edit(
+                draft,
+                expected_revision_id=r1.revision_id,
+                actor="另一标签页",
+                created_at=NOW,
+            )
+        error = exc_info.value
+        component_id = item.proposed_component.rule_component_id
+        change = error.field_diff[f"rule_component:{component_id}"]
+        assert change.current["source_binding"]["source_excerpts"][-1] == "来源纠错记录"
+        assert "来源纠错记录" not in change.submitted["source_binding"]["source_excerpts"]
+        assert error.expected_revision == 1
+        assert error.current_revision == r2.revision_number
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("project_id", "project-other"),
+        ("protocol_version_id", "protocol-version-other"),
+        ("selected_phase", StudyPhase.PHASE_III),
+    ],
+)
+def test_edit_cannot_detach_inner_protocol_identity(
+    session, field, value
+) -> None:
+    _source_input, draft, _spans = confirmed_fixture()
+    service = ProtocolDraftService(session)
+    with session.begin():
+        r1 = service.save_initial_draft(
+            draft, actor="医学监查员", created_at=NOW
+        )
+        detached = draft.model_copy(update={field: value})
+        with pytest.raises(DraftEditBoundaryError) as exc_info:
+            service.apply_manual_edit(
+                detached,
+                expected_revision_id=r1.revision_id,
+                actor="医学监查员",
+                created_at=NOW,
+            )
+        assert exc_info.value.code == "DRAFT_IDENTITY_CHANGED"
+
+
+@pytest.mark.parametrize("binding", ["top_scope", "procedure_mapping"])
+def test_clarification_cannot_rebind_top_or_procedure_sources(
+    session, binding
+) -> None:
+    _source_input, draft, _spans = confirmed_fixture()
+    service = ProtocolDraftService(session)
+    with session.begin():
+        r1 = service.save_initial_draft(
+            draft, actor="医学监查员", created_at=NOW
+        )
+        changed = draft.model_copy(deep=True)
+        if binding == "top_scope":
+            changed.source_refs = [*changed.source_refs, "source:other"]
+        else:
+            mapping = changed.procedure_catalog_mappings[0]
+            changed.procedure_catalog_mappings[0] = mapping.model_copy(
+                update={"source_span_ids": [*mapping.source_span_ids, "span-other"]}
+            )
+        with pytest.raises(DraftEditBoundaryError) as exc_info:
+            service.apply_feedback(
+                changed,
+                expected_revision_id=r1.revision_id,
+                feedback_kind=DraftFeedbackKind.CLARIFICATION,
+                feedback_note="仅作解释",
                 actor="医学监查员",
                 created_at=NOW,
             )
@@ -491,6 +592,7 @@ def test_broken_draft_chain_is_rejected(session) -> None:
     from app.domain.publication import canonical_hash
 
     _source_input, draft, _spans = confirmed_fixture()
+    draft = draft.model_copy(update={"draft_id": "chain-a"})
     repo = ProtocolDraftRevisionRepository(session)
     with session.begin():
         r1 = ProtocolDraftRevision(
@@ -510,7 +612,11 @@ def test_broken_draft_chain_is_rejected(session) -> None:
         repo.save(r1)
         # 跨草稿前序：b 的 revision 2 引用 a 的 revision 1。
         cross_draft_content = draft.model_copy(
-            update={"draft_revision": 2, "previous_draft_id": "chain-b"}
+            update={
+                "draft_id": "chain-b",
+                "draft_revision": 2,
+                "previous_draft_id": "chain-b",
+            }
         )
         cross_draft = ProtocolDraftRevision(
             revision_id="draft-revision:chain-b:2",

@@ -73,6 +73,12 @@ class ProtocolDraftDiffDeclaration(VersionedModel):
     added_workflow_stage_ids: list[str] = Field(default_factory=list)
     removed_workflow_stage_ids: list[str] = Field(default_factory=list)
     modified_workflow_stage_ids: list[str] = Field(default_factory=list)
+    changed_component_ids: list[str] = Field(default_factory=list)
+    changed_requirement_ids: list[str] = Field(default_factory=list)
+    changed_procedure_mapping_ids: list[str] = Field(default_factory=list)
+    source_scope_changed: bool = False
+    workflow_visit_rewritten: bool = False
+    clarification_semantics_changed: bool = False
 
 
 class ProtocolDeconstructionGateResult(VersionedModel):
@@ -483,16 +489,6 @@ def _source_comparators(text: str) -> set[Comparator]:
 
 def _rule_map(draft: ProtocolDeconstructionDraft) -> dict[str, Rule]:
     return {rule.rule_id: rule for rule in draft.proposed_rules}
-
-
-def _diff_sets(previous, current, key):
-    old = {key(item): canonical_hash(item) for item in previous}
-    new = {key(item): canonical_hash(item) for item in current}
-    return (
-        sorted(new.keys() - old.keys()),
-        sorted(old.keys() - new.keys()),
-        sorted(item for item in old.keys() & new.keys() if old[item] != new[item]),
-    )
 
 
 class ProtocolDeconstructionGate:
@@ -1942,6 +1938,26 @@ class ProtocolDeconstructionGate:
                     invalid,
                 )
             )
+        procedure_catalog_sources = {
+            item.item_id: set(item.source_span_ids)
+            for item in source_input.required_procedure_catalog.items
+        }
+        procedure_source_mismatches = []
+        for mapping in draft.procedure_catalog_mappings:
+            expected_refs = procedure_catalog_sources.get(mapping.catalog_item_id)
+            if expected_refs is None or set(mapping.source_span_ids) != expected_refs:
+                procedure_source_mismatches.append(mapping.catalog_item_id)
+        if procedure_source_mismatches:
+            issues.append(
+                _issue(
+                    "source_coverage",
+                    "PROCEDURE_MAPPING_SOURCE_MISMATCH",
+                    "部分必做项目映射没有精确保留其冻结访视目录来源。",
+                    sorted(set(procedure_source_mismatches)),
+                    action="请让每个必做项目只绑定其自身冻结目录项的完整来源片段；"
+                    "不得遗漏本访视来源，也不得夹带其他访视的方案片段。",
+                )
+            )
         materials = {
             material.source_span_id: material.text
             for material in source_input.source_materials
@@ -2184,19 +2200,13 @@ class ProtocolDeconstructionGate:
                 )
             )
             return
-        rule_diff = _diff_sets(previous.proposed_rules, draft.proposed_rules, lambda item: item.official_code)
-        workflow_diff = _diff_sets(
-            previous.proposed_workflow_stages,
-            draft.proposed_workflow_stages,
-            lambda item: item.workflow_stage_id,
-        )
+        # 发布重建与草稿服务共用唯一差异算法；声明必须覆盖组件、资料要求、
+        # 流程映射和来源范围，不能只校验父规则/节点后让被篡改的子差异混入。
+        from app.services.protocol_draft_service import compute_draft_diff
+
+        actual = compute_draft_diff(previous, draft)
         expected = ProtocolDraftDiffDeclaration(
-            added_rule_codes=rule_diff[0],
-            removed_rule_codes=rule_diff[1],
-            modified_rule_codes=rule_diff[2],
-            added_workflow_stage_ids=workflow_diff[0],
-            removed_workflow_stage_ids=workflow_diff[1],
-            modified_workflow_stage_ids=workflow_diff[2],
+            **actual.model_dump(mode="python")
         )
         if declared != expected:
             issues.append(
