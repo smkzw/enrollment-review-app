@@ -23,12 +23,13 @@ def test_terminal_predicates() -> None:
     for state in (JobState.COMPLETED, JobState.FAILED_FINAL, JobState.CANCELLED):
         assert is_job_terminal(state.value) is True
     for state in (JobState.QUEUED, JobState.RUNNING, JobState.FAILED_RETRYABLE,
-                  JobState.CANCEL_REQUESTED, JobState.RECOVERING):
+                  JobState.CANCEL_REQUESTED, JobState.RECOVERING, JobState.WAITING_USER):
         assert is_job_terminal(state.value) is False
 
     for state in (JobStepState.COMPLETED, JobStepState.FAILED_FINAL, JobStepState.CANCELLED):
         assert is_step_terminal(state.value) is True
-    for state in (JobStepState.QUEUED, JobStepState.RUNNING, JobStepState.FAILED_RETRYABLE):
+    for state in (JobStepState.QUEUED, JobStepState.RUNNING, JobStepState.FAILED_RETRYABLE,
+                  JobStepState.WAITING_USER):
         assert is_step_terminal(state.value) is False
 
 

@@ -1,104 +1,120 @@
 // @vitest-environment jsdom
 /**
- * 方案工作台组件测试：当前/草稿版本对比与新增/删除/变化规则（UAT-P1-03）。
+ * 方案工作台组件测试（Phase 3 Slice 5）：分流首页、身份确认、草稿审阅三区。
  */
 
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, beforeEach } from "vitest";
+import { navigate } from "../app/router";
 import { ProtocolsPage } from "./ProtocolsPage";
+import { PROTOCOL_DEMO_JOB_ID, PROTOCOL_IDENTITY_JOB_ID, PROTOCOL_RECOVERY_JOB_ID } from "../api/protocolWorkbenchRepository";
 
 describe("方案工作台", () => {
   beforeEach(() => {
-    window.location.hash = "";
+    navigate("/protocols");
     window.sessionStorage.clear();
   });
 
-  it("保存草稿后离开页面再进入，仍保持未发布草稿状态", async () => {
-    const user = userEvent.setup();
-    const first = render(<ProtocolsPage />);
-    await screen.findByRole("heading", { name: "方案工作台" });
-    await user.click(screen.getByRole("button", { name: "保存为草稿" }));
-    first.unmount();
-
-    render(<ProtocolsPage />);
-    expect(await screen.findByRole("button", { name: "已保存为草稿" })).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("当前规则版本没有被覆盖");
-  });
-
-  it("显示当前使用版本与新版草稿，并说明草稿不覆盖当前结果", async () => {
+  it("首页展示首次解构与重新解构分流", async () => {
     render(<ProtocolsPage />);
     expect(await screen.findByRole("heading", { name: "方案工作台" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /当前使用版本/ })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /新版本草稿/ })).toBeInTheDocument();
-    expect(screen.getByText("V1.0")).toBeInTheDocument();
-    expect(screen.getByText("V2.0（草稿）")).toBeInTheDocument();
-    expect(screen.getByText(/草稿中的变化仅作比较参考/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /首次解构新方案/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /重新解构已有项目/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "开始首次解构" })).toHaveAttribute(
+      "href",
+      "#/protocols?mode=first",
+    );
   });
 
-  it("差异列表区分新增 EX-05、删除必做-02 与变化 EX-01", async () => {
+  it("首次解构上传页使用中文说明", async () => {
+    navigate("/protocols", { mode: "first" });
     render(<ProtocolsPage />);
-    await screen.findByRole("heading", { name: "方案工作台" });
-    expect(screen.getByRole("heading", { name: "规则差异" })).toBeInTheDocument();
-    const list = screen.getByRole("heading", { name: "规则差异" }).closest("section");
-    expect(list).toHaveTextContent("EX-05");
-    expect(list).toHaveTextContent("必做-02");
-    expect(list).not.toHaveTextContent("REQ-");
-    expect(list).toHaveTextContent("EX-01");
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "首次解构新方案" })).toBeInTheDocument();
+    });
+    expect(screen.getByText(/核对方案信息与研究期别/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "选择方案文件" })).toBeInTheDocument();
   });
 
-  it("提供方案原文位置与“新内容仍为草稿”说明", async () => {
+  it("示例草稿任务展示规则树、编辑区与来源定位", async () => {
+    navigate("/protocols", { job: PROTOCOL_DEMO_JOB_ID });
     render(<ProtocolsPage />);
-    await screen.findByRole("heading", { name: "方案工作台" });
-    expect(screen.getByRole("heading", { name: "方案原文位置" })).toBeInTheDocument();
-    expect(screen.getByText("当前方案")).toBeInTheDocument();
-    expect(screen.getAllByText("新版本草稿").length).toBeGreaterThan(0);
-    expect(screen.getByText(/当前规则版本未被覆盖/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "审阅解构草稿" })).toBeInTheDocument();
+    expect(screen.getAllByText(/草稿第 1 稿/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/完整性检查/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("tree", { name: "方案规则树" })).toHaveTextContent("IN-01");
+    expect(screen.getByRole("tree", { name: "方案规则树" })).toHaveTextContent("EX-01");
+    expect(screen.getAllByText(/方案原文摘要/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/来源定位/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/请逐项核对原文、逻辑和资料要求/)).toBeInTheDocument();
   });
 
-  it("可以打开每类变化的原文定位，保存草稿不覆盖当前版本并可复位", async () => {
+  it("选择规则子项后编辑区与来源区同步显示", async () => {
     const user = userEvent.setup();
+    navigate("/protocols", { job: PROTOCOL_DEMO_JOB_ID });
     render(<ProtocolsPage />);
-    await screen.findByRole("heading", { name: "方案工作台" });
+    await screen.findByRole("tree", { name: "方案规则树" });
+    await user.click(screen.getByRole("button", { name: /EX-01a/ }));
+    const editPane = screen.getByRole("tabpanel", { name: /编辑/ });
+    expect(within(editPane).getByText("ALT或AST≥1.5×ULN")).toBeInTheDocument();
+    expect(screen.getAllByText(/第 18 页/).length).toBeGreaterThan(0);
+  });
 
-    expect(screen.getByRole("heading", { name: /新增/ })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /删除/ })).toBeInTheDocument();
+  it("身份确认阶段展示期别候选", async () => {
+    navigate("/protocols", { job: PROTOCOL_IDENTITY_JOB_ID });
+    render(<ProtocolsPage />);
     expect(
-      screen.getByRole("heading", { name: /逻辑或时间范围变化/ }),
+      await screen.findByRole("heading", { name: "核对方案信息与研究期别" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("II 期")).toBeInTheDocument();
+    expect(screen.getByText("III 期")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "确认并继续解构" })).toBeInTheDocument();
+  });
 
-    expect(
-      screen.queryByRole("button", { name: /查看当前方案.*EX-05/ }),
-    ).not.toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", { name: "查看新版本草稿第 12 页：EX-05" }),
-    );
-    const sourceDialog = screen.getByRole("dialog", { name: /EX-05/ });
-    expect(sourceDialog).toHaveTextContent("新版本草稿");
-    expect(sourceDialog).toHaveTextContent("第 12 页");
-    await user.click(
-      within(sourceDialog).getByRole("button", { name: "关闭方案原文定位" }),
-    );
+  it("工作区标签切换时保留规则选择", async () => {
+    const user = userEvent.setup();
+    navigate("/protocols", { job: PROTOCOL_DEMO_JOB_ID });
+    render(<ProtocolsPage />);
+    await screen.findByRole("tree", { name: "方案规则树" });
+    await user.click(screen.getByRole("button", { name: /IN-01a/ }));
 
-    expect(
-      screen.getByRole("button", { name: "查看当前方案第 10 页：必做-02" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /查看新版本草稿.*必做-02/ }),
-    ).not.toBeInTheDocument();
-    const changedGroup = screen
-      .getByRole("heading", { name: /逻辑或时间范围变化/ })
-      .closest("section");
-    expect(changedGroup).toHaveTextContent("查看当前方案第 10 页：EX-01");
-    expect(changedGroup).toHaveTextContent("查看新版本草稿第 12 页：EX-01");
+    const editTab = screen.getByRole("tab", { name: "编辑" });
+    await user.click(editTab);
+    const editPanel = screen.getByRole("tabpanel", { name: /编辑/ });
+    expect(within(editPanel).getByText("年龄要求")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "保存为草稿" }));
-    expect(screen.getByRole("status")).toHaveTextContent(/已保存为草稿/);
-    expect(screen.getByText("V1.0")).toBeInTheDocument();
-    expect(screen.getByText(/当前规则版本没有被覆盖/)).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "来源定位" }));
+    const sourcePanel = screen.getByRole("tabpanel", { name: /来源定位/ });
+    expect(within(sourcePanel).getByText(/第 12 页/)).toBeInTheDocument();
+  });
 
-    await user.click(screen.getByRole("button", { name: "恢复试用初始状态" }));
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "保存为草稿" })).toBeInTheDocument();
+  it("未知任务显示错误态", async () => {
+    navigate("/protocols", { job: "missing-job" });
+    render(<ProtocolsPage />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("未找到该解构任务");
+  });
+
+  it("恢复示例展示中断横幅", async () => {
+    navigate("/protocols", { job: PROTOCOL_RECOVERY_JOB_ID });
+    render(<ProtocolsPage />);
+    expect(await screen.findByRole("heading", { name: "可从中断处继续" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "继续任务" })).toBeInTheDocument();
+  });
+
+  it("重新解构占位展示空态说明", async () => {
+    navigate("/protocols", { mode: "redo" });
+    render(<ProtocolsPage />);
+    expect(await screen.findByText("重新解构流程尚未在本切片开放")).toBeInTheDocument();
+  });
+
+  it("示例草稿保存后显示界面试用状态", async () => {
+    const user = userEvent.setup();
+    navigate("/protocols", { job: PROTOCOL_DEMO_JOB_ID });
+    render(<ProtocolsPage />);
+    await screen.findByRole("button", { name: "保存草稿" });
+    await user.click(screen.getByRole("button", { name: "保存草稿" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("已保存草稿");
+    expect(await screen.findByRole("button", { name: "已保存草稿" })).toBeDisabled();
   });
 });

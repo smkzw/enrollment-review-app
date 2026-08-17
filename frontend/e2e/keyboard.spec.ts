@@ -47,7 +47,7 @@ test.describe("键盘路径", () => {
     await expect(page
       .getByRole("button", { name: /EX-01a 实验室异常与研究者风险的复合条件/ })
     ).toHaveAttribute("aria-current", "true");
-    // 标签模式（1280 桌面）先切到证据标签
+    // 工作区进入标签视图时，先切到证据标签
     if (await page.locator(".workbench-tabs").isVisible()) {
       await page.getByRole("tab", { name: "证据" }).click();
     }

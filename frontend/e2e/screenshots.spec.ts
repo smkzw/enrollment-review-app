@@ -1,6 +1,6 @@
 /**
  * 截图收集（供 Codex 视觉复核；本角色不做最终视觉验收）。
- * 每个视口项目输出关键页面截图；1440 项目额外输出两档布局压力截图。
+ * 每个视口项目输出关键页面截图；1080P 项目额外输出两档布局压力截图。
  */
 
 import { test, expect } from "@playwright/test";
@@ -33,10 +33,10 @@ test.describe("截图收集", () => {
     });
   }
 
-  test("1440 物理宽度工作台两档布局压力截图", async ({ page }) => {
+  test("1080P 物理宽度工作台两档布局压力截图", async ({ page }) => {
     test.skip(
-      test.info().project.name !== "desktop-1440",
-      "仅 1440 项目执行布局压力截图",
+      test.info().project.name !== "desktop-1080p",
+      "仅 1080P 项目执行布局压力截图",
     );
     await openRoute(
       page,
@@ -45,20 +45,20 @@ test.describe("截图收集", () => {
     await setLayoutStressFactor(page, 1.5);
     await page.waitForTimeout(200);
     await page.screenshot({
-      path: "e2e/screenshots/desktop-1440-workbench-layout-stress-960.png",
+      path: "e2e/screenshots/desktop-1080p-workbench-layout-stress-1280.png",
     });
     await setLayoutStressFactor(page, 2);
     await page.waitForTimeout(200);
     await page.screenshot({
-      path: "e2e/screenshots/desktop-1440-workbench-layout-stress-720.png",
+      path: "e2e/screenshots/desktop-1080p-workbench-layout-stress-960.png",
     });
   });
 
-  test("1440 与窄屏关键确认弹窗截图", async ({ page }) => {
+  test("1080P 关键确认弹窗截图", async ({ page }) => {
     const project = test.info().project.name;
     test.skip(
-      project !== "desktop-1440" && project !== "narrow-390",
-      "仅保留代表性桌面与窄屏确认弹窗",
+      project !== "desktop-1080p",
+      "仅 1080P 项目执行确认弹窗截图",
     );
 
     await openRoute(page, "/board");
@@ -73,10 +73,10 @@ test.describe("截图收集", () => {
     await page.screenshot({ path: `e2e/screenshots/${project}-manual-confirm.png` });
   });
 
-  test("窄屏帮助页复位确认界面与复位后今日工作截图", async ({ page }) => {
+  test("4K 帮助页复位确认界面与复位后今日工作截图", async ({ page }) => {
     test.skip(
-      test.info().project.name !== "narrow-390",
-      "仅窄屏项目执行复位截图",
+      test.info().project.name !== "desktop-4k",
+      "仅 4K 项目执行复位截图",
     );
     // 先注入登记键：截图必须来自真实复位路径，不得用首屏帮助页冒充复位证据。
     await page.goto("/");
@@ -94,7 +94,7 @@ test.describe("截图收集", () => {
     ).toBeVisible();
     await page.waitForTimeout(300);
     await page.screenshot({
-      path: "e2e/screenshots/narrow-390-help-reset-confirm.png",
+      path: "e2e/screenshots/desktop-4k-help-reset-confirm.png",
       fullPage: false,
     });
 
@@ -102,7 +102,7 @@ test.describe("截图收集", () => {
     await expect(page).toHaveURL(/\/today$/);
     await page.waitForTimeout(500);
     await page.screenshot({
-      path: "e2e/screenshots/narrow-390-today-after-reset.png",
+      path: "e2e/screenshots/desktop-4k-today-after-reset.png",
       fullPage: false,
     });
 

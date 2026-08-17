@@ -14,7 +14,7 @@ import {
 const ROUTES = [
   { hash: "today", title: "今日工作", key: "待处理事项" },
   { hash: "board", title: "项目看板", key: "受试者" },
-  { hash: "protocols", title: "方案工作台", key: "当前使用版本" },
+  { hash: "protocols", title: "方案工作台", key: "首次解构新方案" },
   { hash: "subjects", title: "受试者与资料", key: "应备证据覆盖" },
   { hash: "workbench", title: "入排工作台", key: "规则与判断状态" },
   { hash: "actions", title: "行动中心", key: "行动列表" },
@@ -43,7 +43,7 @@ test.describe("一级路由", () => {
       "/workbench?episode=episode-uat-03-screening-gap_conflict",
     );
     await expect(page.locator(".workbench-episode__subject")).toHaveText("UAT-03");
-    // 内容区 ≥1080px 时三区并列；更窄时（1280 桌面）为“规则/判断/证据”标签模式
+    // 内容区较窄时使用“规则/判断/证据”标签模式
     const tabsMode = await page.locator(".workbench-tabs").isVisible();
     if (tabsMode) {
       await expect(page.getByRole("tab", { name: "规则" })).toBeVisible();
@@ -80,8 +80,8 @@ test.describe("一级路由", () => {
     await expect(detail).toContainText("UAT-03");
   });
 
-  test("1440 物理宽度在缩小布局视口压力下无页面级横向滚动", async ({ page }) => {
-    test.skip(page.viewportSize()?.width !== 1440, "仅 1440 项目执行");
+  test("1080P 物理宽度在缩小布局视口压力下无页面级横向滚动", async ({ page }) => {
+    test.skip(page.viewportSize()?.width !== 1920, "仅 1080P 桌面项目执行");
     for (const route of ROUTES) {
       await openRoute(page, `/${route.hash}`);
       await expect(

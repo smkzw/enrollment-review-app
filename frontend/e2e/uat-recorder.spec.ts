@@ -10,10 +10,10 @@
  * - 总体/逐任务统计（全部由逐项原始记录派生）
  * - Markdown/CSV/逐任务 CSV/本机备份四类下载
  * - 损坏备份拒绝、有效备份预览确认恢复
- * - 桌面与 390px 无横向溢出
- * - 最终证据截图（仅 4 张：桌面总览、桌面记录、390px 记录、错误结论停止提示）
+ * - 1080P 与 4K 桌面无横向溢出
+ * - 最终证据截图（仅 4 张：桌面总览、桌面记录、4K 记录、错误结论停止提示）
  *
- * 项目门槛：桌面用例仅在 desktop-1440 项目执行，窄屏用例仅在 narrow-390 项目执行，
+ * 项目门槛：桌面用例仅在 desktop-1080p 项目执行，4K 用例仅在 desktop-4k 项目执行，
  * 其余项目跳过，避免重复执行与截图互相覆盖。每个用例都在独立浏览器上下文中运行，
  * 记录数据写入独立本机存储键，互不污染。
  */
@@ -28,8 +28,8 @@ import {
   UAT_KEY_TASK_PROGRESS,
 } from "../src/app/uatTrialState";
 
-const DESKTOP_PROJECT = "desktop-1440";
-const NARROW_PROJECT = "narrow-390";
+const DESKTOP_PROJECT = "desktop-1080p";
+const WIDE_PROJECT = "desktop-4k";
 
 const TASK_IDS = Array.from(
   { length: 14 },
@@ -39,7 +39,7 @@ const TASK_IDS = Array.from(
 const SCREENSHOTS = {
   desktopOverview: "e2e/screenshots/uat-recorder-desktop-overview.png",
   desktopRecord: "e2e/screenshots/uat-recorder-desktop-record.png",
-  narrowRecord: "e2e/screenshots/uat-recorder-390-record.png",
+  wideRecord: "e2e/screenshots/uat-recorder-4k-record.png",
   stopBanner: "e2e/screenshots/uat-recorder-e4-stop-banner.png",
 };
 
@@ -535,9 +535,9 @@ test.describe("记录工作台端到端（桌面）", () => {
   });
 });
 
-test.describe("记录工作台端到端（窄屏 390px）", () => {
-  test("390px 无横向溢出且记录可用", async ({ page }) => {
-    onlyIn(NARROW_PROJECT);
+test.describe("记录工作台端到端（4K）", () => {
+  test("4K 无页面级横向溢出且记录可用", async ({ page }) => {
+    onlyIn(WIDE_PROJECT);
     const errors = watchErrors(page);
     await openRecorder(page);
     await expectNoPageOverflow(page);
@@ -547,7 +547,7 @@ test.describe("记录工作台端到端（窄屏 390px）", () => {
     await expectNoPageOverflow(page);
     await expect(page.locator("#rec-stop-banner")).toBeHidden();
     await page.locator("#rec-record-form").scrollIntoViewIfNeeded();
-    await page.screenshot({ path: SCREENSHOTS.narrowRecord });
+    await page.screenshot({ path: SCREENSHOTS.wideRecord });
     expect(errors).toEqual([]);
   });
 });

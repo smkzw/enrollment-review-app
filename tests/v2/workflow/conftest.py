@@ -55,7 +55,7 @@ def create_job_with_steps(
 ) -> None:
     """在一个事务内创建任务与步骤。
 
-    步骤字典键：step_id/name/max_attempts/retryable/depends_on。
+    步骤字典键：step_id/name/max_attempts/retryable/waiting_user_kind/depends_on。
     """
     with session_factory() as session:
         with session.begin():
@@ -73,6 +73,7 @@ def create_job_with_steps(
                     name=spec.get("name", spec["step_id"]),
                     max_attempts=spec.get("max_attempts", 1),
                     retryable=spec.get("retryable", False),
+                    waiting_user_kind=spec.get("waiting_user_kind"),
                     depends_on=tuple(spec.get("depends_on", ())),
                 )
             store.append_event(

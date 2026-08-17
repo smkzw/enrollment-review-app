@@ -40,6 +40,7 @@ class StepSpec:
     name: str
     max_attempts: int = 1
     retryable: bool = False
+    waiting_user_kind: str | None = None
     depends_on: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
@@ -48,6 +49,7 @@ class StepSpec:
             "name": self.name,
             "max_attempts": self.max_attempts,
             "retryable": self.retryable,
+            "waiting_user_kind": self.waiting_user_kind,
             "depends_on": list(self.depends_on),
         }
 
@@ -132,6 +134,7 @@ class JobService:
                         name=step.name,
                         max_attempts=step.max_attempts,
                         retryable=step.retryable,
+                        waiting_user_kind=step.waiting_user_kind,
                     )
                 # 依赖可以任意顺序声明；先落全部步骤，再建立同任务复合外键。
                 for step in steps:
@@ -158,6 +161,16 @@ class JobService:
             raise InvalidJobDefinitionError("任务中存在重复的步骤编号")
         known = set(ids)
         graph = {step.step_id: tuple(step.depends_on) for step in steps}
+        for step in steps:
+            if step.waiting_user_kind is not None:
+                if not step.waiting_user_kind.strip():
+                    raise InvalidJobDefinitionError(
+                        f"步骤 {step.step_id} 的等待确认类型不能为空"
+                    )
+                if step.retryable or step.max_attempts != 1:
+                    raise InvalidJobDefinitionError(
+                        f"等待确认步骤 {step.step_id} 不能配置自动重试或多次尝试"
+                    )
         for step_id, dependencies in graph.items():
             if len(dependencies) != len(set(dependencies)):
                 raise InvalidJobDefinitionError(f"步骤 {step_id} 存在重复依赖")

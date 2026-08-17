@@ -180,6 +180,7 @@ class JobEventType(StableEnum):
     STEP_COMPLETED = "step_completed"
     STEP_FAILED = "step_failed"
     RETRY_SCHEDULED = "retry_scheduled"
+    WAITING_USER = "waiting_user"
     CANCEL_REQUESTED = "cancel_requested"
     CANCELLED = "cancelled"
     COMPLETED = "completed"

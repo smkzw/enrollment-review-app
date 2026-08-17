@@ -150,9 +150,9 @@ test.describe("界面试用复位往返", () => {
     await expect(page.getByRole("heading", { name: "项目已建立" })).toBeVisible();
 
     // 3) 方案工作台：保存草稿
-    await openRoute(page, "/protocols");
-    await page.getByRole("button", { name: "保存为草稿" }).click();
-    await expect(page.getByRole("status")).toContainText("已保存为草稿");
+    await openRoute(page, "/protocols?job=job-demo-review");
+    await page.getByRole("button", { name: "保存草稿" }).click();
+    await expect(page.getByRole("status")).toContainText("已保存草稿");
 
     // 4) 任务页：完成一项资料
     await openRoute(page, "/tasks");
@@ -179,8 +179,8 @@ test.describe("界面试用复位往返", () => {
     await expect(page.getByText("上次处理失败，可稍后再试").first()).toBeVisible();
 
     // 方案工作台回到未保存草稿
-    await openRoute(page, "/protocols");
-    await expect(page.getByRole("button", { name: "保存为草稿" })).toBeVisible();
+    await openRoute(page, "/protocols?job=job-demo-review");
+    await expect(page.getByRole("button", { name: "保存草稿" })).toBeVisible();
     await expect(page.getByRole("status")).toHaveCount(0);
 
     // 新建项目回到“从方案确认”对话框

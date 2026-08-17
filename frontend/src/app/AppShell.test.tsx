@@ -77,4 +77,12 @@ describe("全局壳与导航", () => {
     const help = screen.getByRole("link", { name: "打开系统帮助" });
     expect(help).toHaveAttribute("href", "#/help");
   });
+
+  it("首次方案解构不显示无关的示例项目上下文", async () => {
+    window.location.hash = "#/protocols";
+    render(<App />);
+    await screen.findByRole("heading", { name: "方案工作台" });
+    expect(screen.queryByText(/界面试用项目/)).not.toBeInTheDocument();
+    expect(screen.queryByText("方案 V1.0")).not.toBeInTheDocument();
+  });
 });

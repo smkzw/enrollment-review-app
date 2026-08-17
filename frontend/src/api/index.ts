@@ -9,6 +9,24 @@ export {
   StubApiError,
   type EnrollmentRepository,
 } from "./stubRepository";
+export {
+  getProtocolWorkbenchRepository,
+  setProtocolWorkbenchRepository,
+  createProtocolWorkbenchStub,
+  createProtocolWorkbenchHttp,
+  ProtocolWorkbenchApiError,
+  PROTOCOL_DEMO_JOB_ID,
+  PROTOCOL_IDENTITY_JOB_ID,
+  PROTOCOL_RECOVERY_JOB_ID,
+  type ProtocolWorkbenchRepository,
+} from "./protocolWorkbenchRepository";
+export type {
+  ProtocolSessionView,
+  DraftRevisionView,
+  IdentityReviewView,
+  IntegrityView,
+  SourcesView,
+} from "./protocolWorkbenchTypes";
 export { FIXTURE_SCHEMA_VERSION } from "./fixtureAssets";
 export {
   subscribeJobEvents,

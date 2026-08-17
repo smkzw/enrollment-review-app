@@ -62,6 +62,15 @@ export type ActionTarget =
 
 export type LocatorPrecision = "bbox" | "text_range" | "page_excerpt" | "page_only";
 
+/** 方案结构来源还可能只能回溯到文档结构块，不能冒充页码定位。 */
+export type ProtocolSourcePrecision = LocatorPrecision | "block";
+
+export type StudyPhase =
+  | "phase_ii"
+  | "phase_iii"
+  | "seamless_phase_ii_iii"
+  | "other";
+
 export type ExpectationStatus =
   | "observed"
   | "observed_weak"

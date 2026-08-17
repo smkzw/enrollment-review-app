@@ -5,16 +5,24 @@
  */
 
 import type { LocatorPrecision } from "../../domain/enums";
-import { precisionLabel, UI_PHRASES } from "../../domain/labels";
+import {
+  precisionLabel,
+  protocolSourcePrecisionLabel,
+  UI_PHRASES,
+} from "../../domain/labels";
 import { BboxIcon, ExcerptIcon, PageOnlyIcon, TextRangeIcon } from "../shell/icons";
 
+type PrecisionBadgeValue = LocatorPrecision | "block";
+
 /** 每个精度等级固定可见的诚实说明（§6.1 允许/禁止的视觉效果）。 */
-export const PRECISION_DESCRIPTIONS: Record<LocatorPrecision, string> = {
+export const PRECISION_DESCRIPTIONS: Record<PrecisionBadgeValue, string> = {
   bbox: "可定位到原始页图上的具体文字位置（坐标区域）。当前界面未附带页图，不绘制坐标框。",
   text_range: "可定位到识别文字中的一段文字范围，并显示页码与摘录。",
   page_excerpt: "可定位到页内摘录区域，但不能精确到具体字符位置。",
   page_only:
     "只能确定到整页，没有文字坐标或文本高亮；界面试用阶段未附带原始页图，不提供整页预览。",
+  block:
+    "只能回溯到文档结构块，尚未可靠对齐到渲染页或页码；界面不显示高亮或虚假页码。",
 };
 
 export const PRECISION_ORDER: readonly LocatorPrecision[] = [
@@ -24,7 +32,7 @@ export const PRECISION_ORDER: readonly LocatorPrecision[] = [
   "page_only",
 ];
 
-function precisionIcon(precision: LocatorPrecision, size = 13) {
+function precisionIcon(precision: PrecisionBadgeValue, size = 13) {
   switch (precision) {
     case "bbox":
       return <BboxIcon size={size} />;
@@ -34,29 +42,35 @@ function precisionIcon(precision: LocatorPrecision, size = 13) {
       return <ExcerptIcon size={size} />;
     case "page_only":
       return <PageOnlyIcon size={size} />;
+    case "block":
+      return <PageOnlyIcon size={size} />;
   }
 }
 
 interface PrecisionBadgeProps {
-  precision: LocatorPrecision;
+  precision: PrecisionBadgeValue;
   /** 是否附带完整说明作为悬停提示 */
   hint?: boolean;
 }
 
 /** 精度徽标：中文词 + 图标 + 形状差异，色调只作辅助。 */
 export function PrecisionBadge({ precision, hint = true }: PrecisionBadgeProps) {
+  const label =
+    precision === "block"
+      ? protocolSourcePrecisionLabel.block
+      : precisionLabel[precision];
   return (
     <span
       className={`precision-badge precision-badge--${precision}`}
-      title={hint ? PRECISION_DESCRIPTIONS[precision] : precisionLabel[precision]}
+      title={hint ? PRECISION_DESCRIPTIONS[precision] : label}
     >
       {precisionIcon(precision)}
-      <span>{precisionLabel[precision]}</span>
+      <span>{label}</span>
     </span>
   );
 }
 
-/** 四级定位图例：证据区顶部固定显示，保证用户能区分并理解各精度含义。 */
+/** 核心四级定位图例：证据区顶部固定显示，结构块只在方案来源卡中单独标示。 */
 export function PrecisionLegend() {
   return (
     <div className="precision-legend" aria-label="定位精度说明">

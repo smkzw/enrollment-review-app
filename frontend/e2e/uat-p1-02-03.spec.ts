@@ -8,6 +8,12 @@ import { collectRuntimeErrors, expectNoPageOverflow, openRoute } from "./helpers
 
 const runtimeErrorsByPage = new WeakMap<Page, string[]>();
 
+async function showDraftEditPane(page: Page) {
+  if (await page.locator(".protocol-draft-tabs").isVisible()) {
+    await page.getByRole("tab", { name: "编辑" }).click();
+  }
+}
+
 test.describe("UAT-P1-02/P1-03", () => {
   test.beforeEach(async ({ page }) => {
     runtimeErrorsByPage.set(page, collectRuntimeErrors(page));
@@ -48,42 +54,31 @@ test.describe("UAT-P1-02/P1-03", () => {
     await expect(page.getByRole("dialog", { name: "确认方案信息" })).toBeVisible();
   });
 
-  test("P1-03 并列查看三类变化，定位原文后保存草稿并复位", async ({ page }) => {
-    await openRoute(page, "/protocols");
+  test("P1-03 审阅示例草稿：规则树联动、来源定位与保存草稿", async ({ page }) => {
+    await openRoute(page, "/protocols?job=job-demo-review");
 
-    await expect(page.getByRole("heading", { name: "当前使用版本" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "新版本草稿" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /新增/ })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /删除/ })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /逻辑或时间范围变化/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "审阅解构草稿" })).toBeVisible();
+    await expect(page.getByRole("tree", { name: "方案规则树" })).toContainText("IN-01");
+    await expect(page.getByRole("tree", { name: "方案规则树" })).toContainText("EX-01");
+    await page.getByRole("button", { name: /EX-01a/ }).click();
+    await showDraftEditPane(page);
+    await expect(page.getByRole("tabpanel", { name: /编辑/ })).toContainText("ALT或AST≥1.5×ULN");
+    if (await page.locator(".protocol-draft-tabs").isVisible()) {
+      await page.getByRole("tab", { name: "来源定位" }).click();
+    }
+    await expect(page.getByText(/第 18 页/).first()).toBeVisible();
 
-    await expect(page.getByRole("button", { name: /查看当前方案.*EX-05/ })).toHaveCount(0);
-    await page.getByRole("button", { name: "查看新版本草稿第 12 页：EX-05" }).click();
-    const sourceDialog = page.getByRole("dialog", { name: /EX-05/ });
-    await expect(sourceDialog).toContainText("新版本草稿");
-    await expect(sourceDialog).toContainText("第 12 页");
-    await sourceDialog.getByRole("button", { name: "关闭方案原文定位" }).click();
-    await expect(
-      page.getByRole("button", { name: "查看当前方案第 10 页：必做-02" }),
-    ).toBeVisible();
-    const changed = page
-      .getByRole("heading", { name: /逻辑或时间范围变化/ })
-      .locator("..");
-    await expect(changed).toContainText("查看当前方案第 10 页：EX-01");
-    await expect(changed).toContainText("查看新版本草稿第 12 页：EX-01");
-
-    await page.getByRole("button", { name: "保存为草稿" }).click();
-    await expect(page.getByRole("status")).toContainText("已保存为草稿");
-    await expect(page.locator(".protocol-version--current .protocol-version__name")).toHaveText("V1.0");
-    await expect(page.getByText(/当前规则版本没有被覆盖/)).toBeVisible();
+    await page.getByRole("button", { name: "保存草稿" }).click();
+    await expect(page.getByRole("status")).toContainText("已保存草稿");
+    await expect(page.getByRole("button", { name: "已保存草稿" })).toBeVisible();
+    await expect(page.getByText(/当前正式规则版本没有被覆盖/)).toBeVisible();
 
     await openRoute(page, "/today");
-    await openRoute(page, "/protocols");
-    await expect(page.getByRole("button", { name: "已保存为草稿" })).toBeVisible();
-    await expect(page.getByText(/当前规则版本没有被覆盖/)).toBeVisible();
+    await openRoute(page, "/protocols?job=job-demo-review");
+    await expect(page.getByRole("button", { name: "已保存草稿" })).toBeVisible();
 
     await page.getByRole("button", { name: "恢复试用初始状态" }).click();
-    await expect(page.getByRole("button", { name: "保存为草稿" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "保存草稿" })).toBeVisible();
     await expect(page.getByRole("status")).toHaveCount(0);
     await expectNoPageOverflow(page);
   });

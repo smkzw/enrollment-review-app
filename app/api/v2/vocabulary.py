@@ -12,6 +12,7 @@ JOB_STATE_LABELS: dict[str, str] = {
     "cancel_requested": "正在取消",
     "cancelled": "已取消",
     "recovering": "恢复中",
+    "waiting_user": "等待确认",
 }
 
 STEP_STATE_LABELS: dict[str, str] = {
@@ -21,6 +22,7 @@ STEP_STATE_LABELS: dict[str, str] = {
     "failed_retryable": "失败（等待重试）",
     "failed_final": "失败",
     "cancelled": "已取消",
+    "waiting_user": "等待确认",
 }
 
 EVENT_TYPE_LABELS: dict[str, str] = {
@@ -29,6 +31,7 @@ EVENT_TYPE_LABELS: dict[str, str] = {
     "step_completed": "步骤完成",
     "step_failed": "步骤失败",
     "retry_scheduled": "已安排重试",
+    "waiting_user": "等待确认",
     "cancel_requested": "取消已受理",
     "cancelled": "任务已取消",
     "completed": "任务已完成",
@@ -44,6 +47,7 @@ _JOB_RECOVERY_ACTIONS: dict[str, str] = {
     "cancelled": "任务已取消；已完成的步骤和检查点保留在历史记录中。",
     "completed": "任务已完成，全部步骤均已提交检查点。",
     "recovering": "服务重启后正在恢复任务，无需操作。",
+    "waiting_user": "任务正在等待您的确认；提交后将继续执行后续步骤。",
 }
 
 
@@ -53,3 +57,57 @@ def job_recovery_action(state: str) -> str:
 
 def is_terminal_label(state: str) -> bool:
     return state in TERMINAL_JOB_STATES
+
+
+def study_phase_label(phase: str) -> str:
+    labels = {
+        "phase_ii": "II 期",
+        "phase_iii": "III 期",
+        "seamless_phase_ii_iii": "II/III 期无缝设计",
+        "other": "其他",
+    }
+    return labels.get(phase, phase)
+
+
+METADATA_STATUS_LABELS: dict[str, str] = {
+    "pending": "待确认",
+    "needs_confirmation": "需要确认",
+    "confirmed": "已确认",
+    "conflict": "存在冲突",
+    "rejected": "已排除",
+}
+
+METADATA_FIELD_LABELS: dict[str, str] = {
+    "document_title": "文档标题",
+    "project_name": "项目名称",
+    "project_code": "项目代号",
+    "protocol_code": "方案编号",
+    "protocol_version": "方案版本",
+    "protocol_date": "方案日期",
+    "template_code": "模板编号",
+    "template_version": "模板版本",
+}
+
+METADATA_SOURCE_LABELS: dict[str, str] = {
+    "header_footer": "页眉或页脚",
+    "first_page": "方案首页",
+    "signature_page": "方案签署页",
+    "body": "方案正文",
+    "filename": "文件名（仅供辅助核对）",
+}
+
+DRAFT_STATUS_LABELS: dict[str, str] = {
+    "draft": "草稿",
+    "saved": "已保存",
+    "cancelled": "已取消",
+    "published": "已发布",
+    "restored_from": "已恢复",
+}
+
+DRAFT_REASON_LABELS: dict[str, str] = {
+    "initial_save": "首次保存",
+    "manual_edit": "手工编辑",
+    "source_error_feedback": "原文理解纠错",
+    "clarification_feedback": "解释性澄清",
+    "restore": "恢复历史版本",
+}

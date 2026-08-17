@@ -82,6 +82,7 @@ class StepView:
     attempt: int
     max_attempts: int
     retryable: bool
+    waiting_user_kind: str | None
     error_code: str | None
     error_classification: str | None
     retry_not_before: datetime | None
@@ -170,6 +171,7 @@ class JobStore:
         name: str,
         max_attempts: int = 1,
         retryable: bool = False,
+        waiting_user_kind: str | None = None,
         depends_on: tuple[str, ...] = (),
     ) -> JobStepRecord:
         return self.repo.create_step(
@@ -180,6 +182,7 @@ class JobStore:
             attempt=0,
             max_attempts=max_attempts,
             retryable=retryable,
+            waiting_user_kind=waiting_user_kind,
             depends_on=depends_on,
         )
 
@@ -326,6 +329,7 @@ class JobStore:
                 attempt=step.attempt,
                 max_attempts=step.max_attempts,
                 retryable=step.retryable,
+                waiting_user_kind=step.waiting_user_kind,
                 error_code=step.error_code,
                 error_classification=step.error_classification,
                 retry_not_before=step.retry_not_before,
@@ -680,6 +684,116 @@ class JobStore:
             exhausted=exhausted,
             retry_not_before=step.retry_not_before,
         )
+
+    def enter_user_wait(
+        self,
+        lease: JobLease,
+        step_id: str,
+        *,
+        awaiting_user: str,
+    ) -> None:
+        """声明式用户边界：queued -> waiting_user，不启动执行器、不计尝试。"""
+        job = self._lease_guard(lease)
+        now = self.now()
+        step = self.session.get(
+            JobStepRecord, {"job_id": job.job_id, "step_id": step_id}
+        )
+        if step is None or step.job_id != job.job_id:
+            raise StepMismatchError(f"步骤 {step_id!r} 不属于任务 {job.job_id}")
+        if step.state != "queued":
+            raise StepMismatchError(
+                f"步骤 {step_id} 当前状态 {step.state}，不能进入等待确认"
+            )
+        if step.waiting_user_kind != awaiting_user:
+            raise StepMismatchError(
+                f"步骤 {step_id} 的等待确认类型不一致"
+            )
+        step.state = "waiting_user"
+        step.error_code = None
+        step.error_classification = None
+        step.retry_not_before = None
+        step.updated_at = now
+        job.state = "waiting_user"
+        job.lease_owner = None
+        job.lease_expires_at = None
+        job.updated_at = now
+        self.append_event(
+            self.make_event(
+                job_id=job.job_id,
+                event_type=JobEventType.WAITING_USER,
+                step_id=step_id,
+                attempt=max(step.attempt, 1),
+                progress_completed=job.progress_completed,
+                progress_total=job.progress_total,
+                payload={"awaiting_user": awaiting_user},
+            )
+        )
+        self.session.flush()
+
+    def complete_user_step(
+        self,
+        job_id: str,
+        step_id: str,
+        *,
+        checkpoint_payload: dict[str, Any],
+    ) -> int:
+        """用户提交确认：仅 waiting_user 步骤可完成，任务重新入队，不增加 attempt。"""
+        job = self.get_job(job_id)
+        if job.state != "waiting_user":
+            raise JobStateConflictError(
+                "任务当前不在等待确认状态",
+                current_state=job.state,
+            )
+        if job.lease_owner is not None:
+            raise JobStateConflictError(
+                "任务仍被占用，不能提交确认",
+                current_state=job.state,
+            )
+        step = self.session.get(
+            JobStepRecord, {"job_id": job_id, "step_id": step_id}
+        )
+        if step is None or step.job_id != job_id:
+            raise StepMismatchError(f"步骤 {step_id!r} 不属于任务 {job_id}")
+        if step.state != "waiting_user":
+            raise JobStateConflictError(
+                f"步骤 {step_id} 不在等待确认状态",
+                current_state=step.state,
+            )
+        now = self.now()
+        checkpoint_id = uuid4().hex
+        self.repo.create_checkpoint(
+            checkpoint_id=checkpoint_id,
+            job_id=job_id,
+            step_id=step_id,
+            payload={"attempt": step.attempt, **checkpoint_payload},
+        )
+        step.state = "completed"
+        step.error_code = None
+        step.error_classification = None
+        step.retry_not_before = None
+        step.updated_at = now
+        completed = self.session.execute(
+            select(func.count())
+            .select_from(JobStepRecord)
+            .where(JobStepRecord.job_id == job_id, JobStepRecord.state == "completed")
+        ).scalar_one()
+        job.progress_completed = completed
+        job.state = "queued"
+        job.updated_at = now
+        seq = self.append_event(
+            self.make_event(
+                job_id=job_id,
+                event_type=JobEventType.STEP_COMPLETED,
+                step_id=step_id,
+                attempt=max(step.attempt, 1),
+                checkpoint_id=checkpoint_id,
+                progress_completed=completed,
+                progress_total=job.progress_total,
+                payload={"checkpoint_id": checkpoint_id},
+            )
+        )
+        self.session.flush()
+        return seq
 
     def finish_success(self, lease: JobLease) -> int:
         job = self._lease_guard(lease)

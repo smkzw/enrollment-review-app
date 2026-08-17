@@ -2662,6 +2662,7 @@ class JobRepository:
         attempt: int = 0,
         max_attempts: int = 1,
         retryable: bool = False,
+        waiting_user_kind: str | None = None,
         depends_on: list[str] | tuple[str, ...] = (),
     ) -> JobStepRecord:
         _get_required(self.session, JobRecord, job_id, "Job")
@@ -2674,6 +2675,7 @@ class JobRepository:
             attempt=attempt,
             max_attempts=max_attempts,
             retryable=retryable,
+            waiting_user_kind=waiting_user_kind,
             progress_completed=0,
             progress_total=0,
             payload_json=payload_json,

@@ -175,6 +175,13 @@ class JobRunner:
                             return
                         store.release_deferred(lease)
                         return
+                    if step.waiting_user_kind is not None:
+                        store.enter_user_wait(
+                            lease,
+                            step.step_id,
+                            awaiting_user=step.waiting_user_kind,
+                        )
+                        return
                     started = store.start_step(lease, step.step_id)
                     last_checkpoint = store.get_last_checkpoint(
                         lease.job_id, started.step_id

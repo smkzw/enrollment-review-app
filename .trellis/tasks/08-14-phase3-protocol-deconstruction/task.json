@@ -28,18 +28,18 @@
     "app/domain/contracts/agent_io.py",
     "frontend/src/pages/ProtocolsPage.tsx"
   ],
-  "notes": "2026-08-17 无损暂停。Phase 3 切片 1-4 已验收；切片 5 初版及后端修复位于隔离分支 codex/phase3-slice5-exec，最新 bcadc56。后端执行者报告 V2 676 项通过，但 Codex 尚未独立复测/审查；前端真实 HTTP 仓储补全尚未启动，真实联调、浏览器验收、独立审查和主分支合并均未完成。恢复必须先读 CHECKPOINT_20260817_SLICE5_PAUSED.md。两张用户 UAT 截图、旧项目及临床资料不得触碰。",
+  "notes": "2026-08-17 检查点。Phase 3 切片 1-5 已完成；切片5建立类型化 V2 API、首次方案解构工作台、方案信息与研究期别核对、父子规则/来源联动及1080P至4K宽屏布局。独立审查关闭上传任务竞态、来源错配和伪页码风险。最终 V2 后端690项、前端Vitest225项、Playwright247项通过。下一步为切片6重新解构、八类差异与发布交互；主工作树用户修改的 UAT 截图、旧项目及 output 下临床资料不得触碰。",
   "meta": {
-    "completed_slice": "4",
-    "next_slice": "5",
+    "completed_slice": "5",
+    "next_slice": "6",
     "slice3_checkpoint": "accepted-real-protocol-deconstruction",
     "slice4_checkpoint": "accepted-workflow-evidence-draft-publication",
-    "last_checkpoint": "2026-08-17T18:23:07+08:00",
-    "pause_checkpoint": "CHECKPOINT_20260816_PAUSED.md",
-    "pause_reason": "user_requested_lossless_pause_during_slice5_after_backend_followup",
+    "slice5_checkpoint": "accepted-v2-api-first-deconstruction-workbench",
+    "last_checkpoint": "2026-08-17T23:55:00+08:00",
     "pause_checkpoint": "CHECKPOINT_20260817_SLICE5_PAUSED.md",
-    "slice5_isolated_head": "bcadc56",
-    "slice5_frontend_followup_started": false,
-    "slice5_acceptance": "pending"
+    "pause_reason": null,
+    "slice5_isolated_head": "78251c9",
+    "slice5_frontend_followup_started": true,
+    "slice5_acceptance": "accepted"
   }
 }

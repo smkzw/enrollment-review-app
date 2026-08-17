@@ -54,18 +54,18 @@ test.describe("14 项任务目标可达性", () => {
     await expectNoPageOverflow(page);
   });
 
-  test("UAT-P1-03：方案工作台展示指定规则编号与保存草稿入口", async ({
+  test("UAT-P1-03：方案工作台展示示例草稿规则树与保存草稿入口", async ({
     page,
   }) => {
     await openRoute(page, "/protocols");
-    await expect(page.getByRole("heading", { name: "当前使用版本" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "新版本草稿" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /新增/ })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /删除/ })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /逻辑或时间范围变化/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /EX-05/ }).first()).toBeVisible();
-    await expect(page.getByRole("button", { name: /必做-02/ }).first()).toBeVisible();
-    await expect(page.getByRole("button", { name: "保存为草稿" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "方案工作台" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /首次解构新方案/ })).toBeVisible();
+    await page.getByRole("link", { name: /继续审阅示例草稿/ }).click();
+    await expect(page.getByRole("heading", { name: "审阅解构草稿" })).toBeVisible();
+    await expect(page.getByRole("tree", { name: "方案规则树" })).toContainText("IN-01");
+    await expect(page.getByRole("tree", { name: "方案规则树" })).toContainText("EX-01");
+    await expect(page.getByRole("button", { name: /IN-01a/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "保存草稿" })).toBeVisible();
     await expectNoPageOverflow(page);
   });
 
@@ -200,7 +200,7 @@ test.describe("14 项任务目标可达性", () => {
     await expectNoPageOverflow(page);
   });
 
-  test("UAT-P1-13：窄窗口三区切换（桌面项目验证标签模式入口存在）", async ({
+  test("UAT-P1-13：工作区三区切换（桌面项目验证标签模式入口存在）", async ({
     page,
   }) => {
     await openRoute(
@@ -209,7 +209,7 @@ test.describe("14 项任务目标可达性", () => {
     );
     await expect(page.getByText("UAT-03").first()).toBeVisible();
     await expect(page.getByText("筛选期").first()).toBeVisible();
-    // 窄屏降级能力由 narrow.spec.ts 全覆盖；此处只验证三个工作区标识可达
+    // 此处只验证三个工作区标识可达，具体展示模式由当前桌面视口决定
     const tabsVisible = await page.locator(".workbench-tabs").isVisible();
     if (tabsVisible) {
       await expect(page.getByRole("tab", { name: "规则" })).toBeVisible();
