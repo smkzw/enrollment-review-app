@@ -2,35 +2,64 @@
 from __future__ import annotations
 
 import io
+import tempfile
 from pathlib import Path
 
 import pytest
 from docx import Document
 from fastapi.testclient import TestClient
 
+from app.services.protocol_deconstruction_executor import (
+    ProtocolDeconstructionExecutorConfig,
+    create_protocol_deconstruction_executor,
+)
 from app.services.protocol_workbench_service import (
     PROTOCOL_DECONSTRUCTION_JOB_TYPE,
     PROTOCOL_DECONSTRUCTION_STEPS,
     ProtocolWorkbenchService,
 )
-from app.services.job_service import JobService
+from app.domain.contracts.enums import StudyPhase
+from app.workflow.runner import JobRunner
+from tests.v2.api.protocol_e2e_helpers import (
+    build_passing_draft_json,
+    build_pipeline_e2e_docx,
+    page_texts_from_blocks,
+)
 from tests.v2.protocols.slice4_helpers import confirmed_fixture
 
 
 def _minimal_docx_bytes() -> bytes:
-    path = Path("/tmp/protocol-api-test.docx")
+    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as handle:
+        path = Path(handle.name)
     doc = Document()
     doc.add_paragraph("临床研究方案")
     doc.add_paragraph("方案编号：TEST-001")
     doc.save(str(path))
-    return path.read_bytes()
+    payload = path.read_bytes()
+    path.unlink(missing_ok=True)
+    return payload
 
 
-def _create_protocol_job(client: TestClient, *, key: str = "proto-key-1") -> str:
+def _pipeline_docx_bytes() -> bytes:
+    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as handle:
+        path = Path(handle.name)
+    build_pipeline_e2e_docx(path)
+    payload = path.read_bytes()
+    path.unlink(missing_ok=True)
+    return payload
+
+
+def _create_protocol_job(
+    client: TestClient,
+    *,
+    key: str = "proto-key-1",
+    docx_bytes: bytes | None = None,
+) -> str:
+    payload = docx_bytes if docx_bytes is not None else _minimal_docx_bytes()
     files = {
         "file": (
             "test-protocol.docx",
-            io.BytesIO(_minimal_docx_bytes()),
+            io.BytesIO(payload),
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         )
     }
@@ -38,6 +67,37 @@ def _create_protocol_job(client: TestClient, *, key: str = "proto-key-1") -> str
     response = client.post("/api/v2/protocol/deconstructions", files=files, data=data)
     assert response.status_code == 201, response.text
     return response.json()["job_id"]
+
+
+def _test_executor(app) -> JobRunner:
+    executor = create_protocol_deconstruction_executor(
+        ProtocolDeconstructionExecutorConfig(
+            data_paths=app.state.data_paths,
+            session_factory=app.state.session_factory,
+            page_texts_builder=page_texts_from_blocks,
+            draft_response_builder=build_passing_draft_json,
+        )
+    )
+    return JobRunner(
+        app.state.session_factory,
+        {PROTOCOL_DECONSTRUCTION_JOB_TYPE: executor},
+        worker_id="test-runner",
+        poll_interval=0.01,
+    )
+
+
+def _run_until(client: TestClient, app, job_id: str, *, awaiting_user: str, limit: int = 40) -> None:
+    runner = _test_executor(app)
+    for _ in range(limit):
+        session = client.get(f"/api/v2/protocol/deconstructions/{job_id}").json()
+        if session.get("awaiting_user") == awaiting_user:
+            return
+        runner.run_job(job_id)
+    session = client.get(f"/api/v2/protocol/deconstructions/{job_id}").json()
+    pytest.fail(
+        f"任务未在 {limit} 次推进后到达 awaiting_user={awaiting_user!r}；"
+        f"当前状态={session.get('state')!r} awaiting_user={session.get('awaiting_user')!r}"
+    )
 
 
 def _seed_review_job(app, job_id: str) -> tuple:
@@ -173,3 +233,47 @@ def test_draft_not_ready_before_review(client) -> None:
     assert error["code"] in {"DRAFT_NOT_READY", "STATE_CONFLICT", "STEP_STATE_CONFLICT"}
     assert error["title"]
     assert error["recovery_action"]
+
+
+def test_upload_pipeline_reaches_identity_and_review_without_seed(build_app) -> None:
+    app = build_app(run_runner=False)
+    with TestClient(app) as client:
+        job_id = _create_protocol_job(client, key="pipeline-e2e-1", docx_bytes=_pipeline_docx_bytes())
+        _run_until(client, app, job_id, awaiting_user="identity")
+
+        identity = client.get(f"/api/v2/protocol/deconstructions/{job_id}/identity")
+        assert identity.status_code == 200, identity.text
+        identity_body = identity.json()
+        assert identity_body["snapshot_id"]
+        assert identity_body["phase_candidates"]
+
+        confirm = client.post(
+            f"/api/v2/protocol/deconstructions/{job_id}/identity/confirm",
+            json={
+                "protocol_code": "E2E-001",
+                "project_name": "E2E 测试研究",
+                "official_version": "V1.0",
+                "official_date_value": "2026-08-17",
+                "official_date_precision": "day",
+                "study_phase": StudyPhase.PHASE_II.value,
+                "actor": "测试用户",
+            },
+        )
+        assert confirm.status_code == 200, confirm.text
+
+        _run_until(client, app, job_id, awaiting_user="review", limit=60)
+
+        session = client.get(f"/api/v2/protocol/deconstructions/{job_id}").json()
+        assert session["awaiting_user"] == "review"
+        assert session["draft_revision_number"] == 1
+
+        draft = client.get(f"/api/v2/protocol/deconstructions/{job_id}/draft")
+        assert draft.status_code == 200, draft.text
+        draft_body = draft.json()
+        assert draft_body["revision_number"] == 1
+        assert draft_body["rule_count"] >= 1
+        assert "content" in draft_body
+
+        sources = client.get(f"/api/v2/protocol/deconstructions/{job_id}/sources")
+        assert sources.status_code == 200, sources.text
+        assert sources.json()["selected_phase_label"] == "II 期"

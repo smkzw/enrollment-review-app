@@ -23,8 +23,15 @@ from fastapi import FastAPI
 from app.api.v2.errors import register_error_handlers
 from app.api.v2.jobs import router as jobs_router
 from app.api.v2.protocols import router as protocols_router
-from app.services.job_service import JobService
-from app.services.protocol_workbench_service import ProtocolWorkbenchService
+from app.services.job_service import JobService, StepSpec
+from app.services.protocol_deconstruction_executor import (
+    ProtocolDeconstructionExecutorConfig,
+    create_protocol_deconstruction_executor,
+)
+from app.services.protocol_workbench_service import (
+    PROTOCOL_DECONSTRUCTION_JOB_TYPE,
+    ProtocolWorkbenchService,
+)
 from app.storage.config import DataPaths
 from app.storage.db import build_session_factory
 from app.storage.migrate import upgrade_or_fail
@@ -61,12 +68,21 @@ def create_app(
         )
         app.state.sse_poll_interval = sse_poll_interval
         app.state.sse_heartbeat_seconds = sse_heartbeat_seconds
+        default_executors = {
+            PROTOCOL_DECONSTRUCTION_JOB_TYPE: create_protocol_deconstruction_executor(
+                ProtocolDeconstructionExecutorConfig(
+                    data_paths=paths,
+                    session_factory=session_factory,
+                )
+            ),
+        }
+        merged_executors = {**default_executors, **executors}
         runner: JobRunner | None = None
         thread: threading.Thread | None = None
         if run_runner:
             runner = JobRunner(
                 session_factory,
-                executors,
+                merged_executors,
                 worker_id=worker_id,
                 poll_interval=poll_interval,
                 lease_ttl=lease_ttl,

@@ -75,11 +75,25 @@ PROTOCOL_DECONSTRUCTION_STEPS: tuple[StepSpec, ...] = (
         STEP_AWAIT_IDENTITY,
         "等待身份确认",
         depends_on=(STEP_IDENTIFY,),
+        retryable=True,
+        max_attempts=999,
     ),
     StepSpec(STEP_GENERATE, "生成草稿", depends_on=(STEP_AWAIT_IDENTITY,)),
     StepSpec(STEP_INTEGRITY, "完整性检查", depends_on=(STEP_GENERATE,)),
-    StepSpec(STEP_AWAIT_REVIEW, "等待审阅", depends_on=(STEP_INTEGRITY,)),
-    StepSpec(STEP_PUBLISH, "发布", depends_on=(STEP_AWAIT_REVIEW,)),
+    StepSpec(
+        STEP_AWAIT_REVIEW,
+        "等待审阅",
+        depends_on=(STEP_INTEGRITY,),
+        retryable=True,
+        max_attempts=999,
+    ),
+    StepSpec(
+        STEP_PUBLISH,
+        "发布",
+        depends_on=(STEP_AWAIT_REVIEW,),
+        retryable=True,
+        max_attempts=999,
+    ),
 )
 
 _CHECKPOINT_STEP_ORDER: tuple[str, ...] = tuple(step.step_id for step in PROTOCOL_DECONSTRUCTION_STEPS)
@@ -300,6 +314,9 @@ class ProtocolWorkbenchService:
                         "file_name": display_name,
                         "sha256": artifact.sha256,
                         "mime_type": artifact.mime_type,
+                        "size_bytes": artifact.size_bytes,
+                        "storage_ref": artifact.storage_ref,
+                        "uploaded_at": artifact.uploaded_at.isoformat(),
                     },
                 )
                 job = store.get_job(result.job_id)
@@ -869,6 +886,32 @@ class ProtocolWorkbenchService:
         with self.session_factory() as session:
             with session.begin():
                 store = JobStore(session, now=self.now)
+                job = store.get_job(job_id)
+                step = session.get(JobStepRecord, {"job_id": job_id, "step_id": step_id})
+                if step is None:
+                    raise ProtocolWorkbenchError(
+                        "STEP_NOT_FOUND",
+                        title="任务步骤不存在",
+                        detail="方案解构任务结构不完整。",
+                        recovery="请联系维护人员检查任务记录。",
+                    )
+                if job.state == "failed_retryable" and step.state == "failed_retryable":
+                    if step.error_code != "AWAITING_USER":
+                        raise ProtocolWorkbenchError(
+                            "JOB_CLAIM_FAILED",
+                            title="任务暂时无法更新",
+                            detail="任务正在等待自动重试，请稍后再确认。",
+                            recovery="请稍后重试；无需重复填写确认内容。",
+                        )
+                    step.state = "queued"
+                    step.retry_not_before = None
+                    step.error_code = None
+                    step.error_classification = None
+                    job.state = "queued"
+                    job.lease_owner = None
+                    job.lease_expires_at = None
+                    job.updated_at = self.now()
+                    session.flush()
                 lease = store.claim_job(job_id, self.WORKER_ID)
                 if lease is None:
                     raise ProtocolWorkbenchError(
@@ -885,7 +928,7 @@ class ProtocolWorkbenchService:
                         detail="方案解构任务结构不完整。",
                         recovery="请联系维护人员检查任务记录。",
                     )
-                if step.state == "queued":
+                if step.state in ("queued", "failed_retryable"):
                     store.start_step(lease, step_id)
                 elif step.state != "running":
                     raise ProtocolWorkbenchError(
