@@ -2208,6 +2208,7 @@ class ProtocolDraftRevisionRepository:
             revision.revision_id,
             "ProtocolDraftRevision",
         )
+        self._assert_existing_identity(record, revision, allow_status_change=True)
         payload_json, payload_sha256 = encode_contract(revision)
         record.payload_json = payload_json
         record.payload_sha256 = payload_sha256
@@ -2231,6 +2232,7 @@ class ProtocolDraftRevisionRepository:
             raise ScopeViolationError(
                 f"revision {revision.revision_id} 的 draft_id 与已存在行不一致"
             )
+        self._assert_existing_identity(record, revision, allow_status_change=False)
         if record.revision_number != revision.revision_number:
             raise ScopeViolationError(
                 f"revision {revision.revision_id} 的 revision_number 与已存在行不一致"
@@ -2270,6 +2272,44 @@ class ProtocolDraftRevisionRepository:
         record.content_sha256 = revision.content_sha256
         _flush_guarded(self.session)
         return revision
+
+    @staticmethod
+    def _assert_existing_identity(
+        record: ProtocolDraftRevisionRecord,
+        revision: ProtocolDraftRevision,
+        *,
+        allow_status_change: bool,
+    ) -> None:
+        """写前核对现有列镜像，禁止先提交不可读取的 payload/列分叉。"""
+        expected = {
+            "draft_id": revision.draft_id,
+            "revision_number": revision.revision_number,
+            "previous_revision_id": revision.previous_revision_id,
+            "project_id": revision.project_id,
+            "protocol_version_id": revision.protocol_version_id,
+            "study_phase": revision.study_phase.value,
+            "reason": revision.reason.value,
+            "feedback_kind": (
+                revision.feedback_kind.value if revision.feedback_kind else None
+            ),
+            "actor": revision.actor,
+        }
+        if not allow_status_change:
+            expected["status"] = revision.status.value
+        mismatches = [
+            name
+            for name, value in expected.items()
+            if getattr(record, name) != value
+        ]
+        if mismatches:
+            raise ScopeViolationError(
+                f"revision {revision.revision_id} 与已存在行的身份/审计列不一致："
+                + "、".join(mismatches)
+            )
+        if allow_status_change and record.content_sha256 != revision.content_sha256:
+            raise ScopeViolationError(
+                f"revision {revision.revision_id} 的状态转移不得改写草稿内容"
+            )
 
     def list_by_draft(self, draft_id: str) -> list[ProtocolDraftRevision]:
         rows = self.session.execute(
@@ -2385,6 +2425,10 @@ def save_expectation_templates(
                 f"模板 {template.template_id} 引用的 RuleSet "
                 f"{template.rule_set_id} revision {template.rule_set_revision} 不存在"
             )
+        if template.study_phase.value != rule_set.study_phase:
+            raise ScopeViolationError(
+                f"模板 {template.template_id} 的研究期别与 RuleSet 不一致"
+            )
         requirement = session.get(
             EvidenceRequirementRecord,
             (
@@ -2435,40 +2479,35 @@ def save_expectation_templates(
                 f"模板 {template.template_id} 的资料语义与 RuleSet 中的资料要求 "
                 f"{template.requirement_id} 不一致"
             )
-        if template.workflow_stage_id is not None:
-            stage = session.get(
-                WorkflowStageRecord, template.workflow_stage_id
+        stage = session.get(WorkflowStageRecord, template.workflow_stage_id)
+        if stage is None:
+            raise InvalidReferenceError(
+                f"模板 {template.template_id} 引用的审核节点 "
+                f"{template.workflow_stage_id} 不存在"
             )
-            if stage is None:
-                raise InvalidReferenceError(
-                    f"模板 {template.template_id} 引用的审核节点 "
-                    f"{template.workflow_stage_id} 不存在"
-                )
-            if (
-                stage.protocol_version_id != rule_set.protocol_version_id
-                or stage.study_phase != template.study_phase.value
-            ):
-                raise ScopeViolationError(
-                    f"模板 {template.template_id} 的审核节点 "
-                    f"{template.workflow_stage_id} 不属于该 RuleSet 的方案版本/期别"
-                )
-            stage_contract = decode_contract(
-                WorkflowStage, stage.payload_json, stage.payload_sha256
+        if (
+            stage.protocol_version_id != rule_set.protocol_version_id
+            or stage.study_phase != rule_set.study_phase
+        ):
+            raise ScopeViolationError(
+                f"模板 {template.template_id} 的审核节点 "
+                f"{template.workflow_stage_id} 不属于该 RuleSet 的方案版本/期别"
             )
-            expected_prefix = (
-                f"{template.rule_set_id}:{template.rule_set_revision}:"
+        stage_contract = decode_contract(
+            WorkflowStage, stage.payload_json, stage.payload_sha256
+        )
+        expected_prefix = f"{template.rule_set_id}:{template.rule_set_revision}:"
+        if not template.workflow_stage_id.startswith(expected_prefix):
+            raise ScopeViolationError(
+                f"模板 {template.template_id} 的审核节点不属于该 RuleSet revision"
             )
-            if not template.workflow_stage_id.startswith(expected_prefix):
-                raise ScopeViolationError(
-                    f"模板 {template.template_id} 的审核节点不属于该 RuleSet revision"
-                )
-            if (
-                template.requirement_id not in stage_contract.due_requirement_ids
-                or stage_contract.stage != template.due_stage
-            ):
-                raise ScopeViolationError(
-                    f"模板 {template.template_id} 的资料要求未在所引审核节点按期到期"
-                )
+        if (
+            template.requirement_id not in stage_contract.due_requirement_ids
+            or stage_contract.stage != template.due_stage
+        ):
+            raise ScopeViolationError(
+                f"模板 {template.template_id} 的资料要求未在所引审核节点按期到期"
+            )
         existing_record = session.execute(
             select(EvidenceExpectationTemplateRecord).where(
                 EvidenceExpectationTemplateRecord.rule_set_id

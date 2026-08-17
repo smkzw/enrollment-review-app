@@ -1939,13 +1939,16 @@ class ProtocolDeconstructionGate:
                 )
             )
         procedure_catalog_sources = {
-            item.item_id: set(item.source_span_ids)
+            item.item_id: tuple(sorted(item.source_span_ids))
             for item in source_input.required_procedure_catalog.items
         }
         procedure_source_mismatches = []
         for mapping in draft.procedure_catalog_mappings:
             expected_refs = procedure_catalog_sources.get(mapping.catalog_item_id)
-            if expected_refs is None or set(mapping.source_span_ids) != expected_refs:
+            if (
+                expected_refs is None
+                or tuple(sorted(mapping.source_span_ids)) != expected_refs
+            ):
                 procedure_source_mismatches.append(mapping.catalog_item_id)
         if procedure_source_mismatches:
             issues.append(

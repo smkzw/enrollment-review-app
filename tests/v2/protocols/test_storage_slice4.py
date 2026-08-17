@@ -641,3 +641,62 @@ def test_existing_wrong_template_is_not_silently_skipped(session) -> None:
     AppendRepository(session, EVIDENCE_EXPECTATION_TEMPLATE_CONFIG).save(forged)
     with pytest.raises(ScopeViolationError, match="拒绝静默跳过"):
         save_expectation_templates(session, [valid])
+
+
+def test_template_requires_workflow_stage_and_ruleset_phase(session) -> None:
+    from app.storage.repositories import ScopeViolationError
+
+    _rule_set_value, _stages, templates = _seed_template_context(session)
+    valid = next(item for item in templates if item.requirement_id == "req-in")
+    without_stage = _rehash_template(valid, workflow_stage_id=None)
+    with pytest.raises(Exception, match="workflow_stage_id"):
+        save_expectation_templates(session, [without_stage])
+
+    wrong_phase = _rehash_template(valid, study_phase=StudyPhase.PHASE_III)
+    with pytest.raises(ScopeViolationError, match="研究期别"):
+        save_expectation_templates(session, [wrong_phase])
+
+
+def test_revision_replace_and_status_update_reject_existing_mirror_drift(
+    session,
+) -> None:
+    from app.storage.repositories import ScopeViolationError
+
+    _source_input, draft, _spans = confirmed_fixture()
+    repo = ProtocolDraftRevisionRepository(session)
+    revision = ProtocolDraftRevision(
+        revision_id="draft-revision:draft-1:1",
+        draft_id=draft.draft_id,
+        revision_number=1,
+        project_id=draft.project_id,
+        protocol_version_id=draft.protocol_version_id,
+        study_phase=draft.selected_phase,
+        status=DraftRevisionStatus.SAVED,
+        reason=DraftRevisionReason.INITIAL_SAVE,
+        actor="医学监查员",
+        content=draft,
+        content_sha256=canonical_hash(draft.model_dump(mode="json")),
+        created_at=NOW,
+    )
+    repo.save(revision)
+
+    detached_content = draft.model_copy(update={"project_id": "project-other"})
+    detached = revision.model_copy(
+        update={
+            "project_id": "project-other",
+            "content": detached_content,
+            "content_sha256": canonical_hash(
+                detached_content.model_dump(mode="json")
+            ),
+        }
+    )
+    with pytest.raises(ScopeViolationError, match="project_id"):
+        repo.replace(detached)
+    with pytest.raises(ScopeViolationError, match="project_id"):
+        repo.update_status(
+            detached.model_copy(update={"status": DraftRevisionStatus.CANCELLED})
+        )
+    # 两次拒绝均发生在写前，原 revision 仍可读取且身份未变。
+    loaded = repo.get(revision.revision_id)
+    assert loaded.project_id == draft.project_id
+    assert loaded.status == DraftRevisionStatus.SAVED

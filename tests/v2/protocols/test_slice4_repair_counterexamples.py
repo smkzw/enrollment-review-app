@@ -562,7 +562,7 @@ def test_ghost_expectation_template_is_rejected(session) -> None:
         requirement_id="req-ghost",
         due_stage=ReviewStage.SCREENING,
         study_phase=draft.selected_phase,
-        workflow_stage_id=None,
+        workflow_stage_id="ruleset:ghost:1:stage-screening",
         fact_type="方案要求事实",
         description="孤儿模板",
         projection_sha256=template_projection_sha256(
@@ -571,7 +571,7 @@ def test_ghost_expectation_template_is_rejected(session) -> None:
             requirement_id="req-ghost",
             due_stage=ReviewStage.SCREENING,
             study_phase=draft.selected_phase,
-            workflow_stage_id=None,
+            workflow_stage_id="ruleset:ghost:1:stage-screening",
             fact_type="方案要求事实",
             required_source_types=[],
             requires_contemporaneous_objective_source=False,

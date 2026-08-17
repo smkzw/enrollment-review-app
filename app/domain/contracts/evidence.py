@@ -152,7 +152,7 @@ class EvidenceExpectationTemplate(VersionedModel):
     requirement_id: str = Field(min_length=1)
     due_stage: ReviewStage
     study_phase: StudyPhase
-    workflow_stage_id: str | None = Field(default=None, min_length=1)
+    workflow_stage_id: str = Field(min_length=1)
     fact_type: str = Field(min_length=1)
     required_source_types: list[str] = Field(default_factory=list)
     requires_contemporaneous_objective_source: bool = False

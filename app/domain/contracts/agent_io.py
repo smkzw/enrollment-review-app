@@ -72,6 +72,12 @@ class ParentRuleCatalogMapping(VersionedModel):
     proposed_rule_id: str = Field(min_length=1)
     source_span_ids: list[str] = Field(min_length=1)
 
+    @model_validator(mode="after")
+    def validate_unique_sources(self) -> "ParentRuleCatalogMapping":
+        if len(self.source_span_ids) != len(set(self.source_span_ids)):
+            raise ValueError("官方父规则映射的来源片段不得重复")
+        return self
+
 
 class ProcedureCatalogMapping(VersionedModel):
     """One frozen visit-operation instance mapped into the draft workflow."""
@@ -80,6 +86,12 @@ class ProcedureCatalogMapping(VersionedModel):
     proposed_requirement_ids: list[str] = Field(min_length=1)
     proposed_workflow_stage_id: str = Field(min_length=1)
     source_span_ids: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_unique_sources(self) -> "ProcedureCatalogMapping":
+        if len(self.source_span_ids) != len(set(self.source_span_ids)):
+            raise ValueError("必做项目映射的来源片段不得重复")
+        return self
 
 
 class ProtocolSourceMaterial(VersionedModel):

@@ -2255,3 +2255,29 @@ def test_procedure_mapping_cannot_include_another_visit_source():
         issue.issue_code == "PROCEDURE_MAPPING_SOURCE_MISMATCH"
         for issue in _issues(result, "source_coverage")
     )
+
+
+def test_procedure_mapping_duplicate_source_is_rejected():
+    source_input, draft, source_spans = _fixture()
+    mapping = draft.procedure_catalog_mappings[0]
+    duplicated = [*mapping.source_span_ids, mapping.source_span_ids[0]]
+    with pytest.raises(ValueError, match="来源片段不得重复"):
+        ProcedureCatalogMapping(
+            catalog_item_id=mapping.catalog_item_id,
+            proposed_requirement_ids=mapping.proposed_requirement_ids,
+            proposed_workflow_stage_id=mapping.proposed_workflow_stage_id,
+            source_span_ids=duplicated,
+        )
+
+    # 即使低层 model_copy 绕过 Pydantic 重验证，发布门禁仍独立拒绝。
+    changed = draft.model_copy(deep=True)
+    changed.procedure_catalog_mappings[0] = mapping.model_copy(
+        update={"source_span_ids": duplicated}
+    )
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, changed, source_spans=source_spans
+    )
+    assert any(
+        issue.issue_code == "PROCEDURE_MAPPING_SOURCE_MISMATCH"
+        for issue in _issues(result, "source_coverage")
+    )
