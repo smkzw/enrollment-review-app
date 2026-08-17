@@ -3,7 +3,7 @@
  * 若暂停前已有任务，仍可返回首页从恢复入口继续；保存/取消不改变正式版本。
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { getProtocolWorkbenchRepository } from "../../api/protocolWorkbenchRepository";
 import type {
   OfficialProjectView,
@@ -18,12 +18,14 @@ interface ProtocolRedoSelectPanelProps {
   busy: boolean;
   error: string | null;
   onUpload: (file: File, projectId: string) => void;
+  onStartFeedback: (projectId: string) => void;
 }
 
 export function ProtocolRedoSelectPanel({
   busy,
   error,
   onUpload,
+  onStartFeedback,
 }: ProtocolRedoSelectPanelProps) {
   const repo = getProtocolWorkbenchRepository();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -49,13 +51,6 @@ export function ProtocolRedoSelectPanel({
   );
   const versionView: ProjectOfficialVersionView | null =
     history.state.status === "success" ? history.state.data : null;
-
-  useEffect(() => {
-    if (projects.state.status === "success" && selectedProjectId === null) {
-      const first = projects.state.data[0];
-      if (first !== undefined) setSelectedProjectId(first.projectId);
-    }
-  }, [projects.state, selectedProjectId]);
 
   const handleFile = (file: File | undefined) => {
     if (file === undefined || busy) return;
@@ -132,7 +127,7 @@ export function ProtocolRedoSelectPanel({
           重新解构已有项目
         </h1>
         <p className="page-head__note">
-          选择一个已发布的正式项目，上传新版方案。系统将并列比较当前正式版本与新草稿的八类结构化差异；保存或取消都不会改变正式版本。
+          请先明确选择一个已发布项目，再上传新版方案或按反馈修订。系统会逐项比较当前正式版本与新草稿；保存或取消都不会改变正式版本。
         </p>
       </header>
 
@@ -216,6 +211,22 @@ export function ProtocolRedoSelectPanel({
               <p className="protocol-redo__target-note">
                 上传的新版方案只允许更新版本、日期与文件内容；方案编号与研究期别必须与目标项目一致，否则将阻止发布并提示原因。
               </p>
+              <div className="protocol-redo__feedback-route">
+                <div>
+                  <strong>方案文件没有变化，只修正当前解构结果</strong>
+                  <p>
+                    系统会复制当前正式草稿并保留原有方案定位，随后可逐条填写反馈或手工修订；正式版本不会被直接改写。
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="button"
+                  disabled={busy}
+                  onClick={() => onStartFeedback(selectedProject.projectId)}
+                >
+                  {busy ? "正在准备…" : "不上传文件，按反馈修订"}
+                </button>
+              </div>
             </>
           )}
         </section>
@@ -226,7 +237,7 @@ export function ProtocolRedoSelectPanel({
         aria-labelledby="protocol-redo-upload-title"
       >
         <h2 id="protocol-redo-upload-title" className="protocol-section__title">
-          上传新版方案
+          方案文件有变化时，上传新版方案
         </h2>
         <div
           className={`protocol-upload__dropzone${

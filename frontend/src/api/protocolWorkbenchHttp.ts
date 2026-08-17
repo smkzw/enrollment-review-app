@@ -112,6 +112,27 @@ export function createProtocolWorkbenchHttp(
       return result;
     },
 
+    async startFeedbackRevision(
+      projectId: string,
+      idempotencyKey: string,
+      options?: ProtocolWorkbenchRequestOptions,
+    ): Promise<StartDeconstructionResult> {
+      return request(
+        "/from-formal",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            project_id: projectId,
+            idempotency_key: idempotencyKey,
+            actor: "用户",
+          }),
+          signal: options?.signal,
+        },
+        normalizeStartDeconstruction,
+      );
+    },
+
     async listOfficialProjects(
       options?: ProtocolWorkbenchRequestOptions,
     ): Promise<OfficialProjectView[]> {

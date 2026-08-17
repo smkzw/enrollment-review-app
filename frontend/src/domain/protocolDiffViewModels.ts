@@ -3,6 +3,8 @@
  * 展示层只消费这里定义的结构，不解析自由文本推导临床语义。
  */
 
+import type { ProtocolDiffPayload } from "../api/protocolWorkbenchTypes";
+
 export type DiffCategoryKey =
   | "added"
   | "removed"
@@ -20,8 +22,8 @@ export interface ProtocolCategoryChangeView {
   /** 稳定引用：父规则用官方编号，子组件用展示编号（如 IN-01a） */
   stableRef: string;
   kind: "rule" | "component" | "requirement";
-  previous: unknown;
-  current: unknown;
+  previous: ProtocolDiffPayload | null;
+  current: ProtocolDiffPayload | null;
 }
 
 export interface ProtocolRuleDiffView {

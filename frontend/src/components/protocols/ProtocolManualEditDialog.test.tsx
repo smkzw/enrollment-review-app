@@ -31,9 +31,16 @@ describe("ProtocolManualEditDialog", () => {
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
         componentId: "component-in",
-        title: "年龄要求（修订）",
+        patch: expect.objectContaining({
+          title: "年龄要求（修订）",
+          predicate: expect.objectContaining({ attribute: "年龄" }),
+          requirements: expect.arrayContaining([
+            expect.objectContaining({ dueStage: "screening" }),
+          ]),
+        }),
       }),
     );
+    expect(screen.getByText("方案原文（只读）")).toBeInTheDocument();
   });
 
   it("关闭按钮触发 onClose 且不提交", async () => {

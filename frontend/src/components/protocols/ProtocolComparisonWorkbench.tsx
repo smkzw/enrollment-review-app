@@ -8,14 +8,23 @@ import { useMemo, useState } from "react";
 import { RouteLink } from "../../app/router";
 import type {
   DraftComparisonView,
+  IntegrityView,
   ProtocolSessionView,
+  SourcesView,
 } from "../../api/protocolWorkbenchTypes";
-import { mapProtocolDraftDiff } from "../../domain/protocolDiffMapper";
+import {
+  DIFF_CATEGORY_LABELS,
+  mapProtocolDraftDiff,
+} from "../../domain/protocolDiffMapper";
 import type {
+  DiffCategoryKey,
   ProtocolDraftDiffView,
   ProtocolRuleDiffView,
 } from "../../domain/protocolDiffViewModels";
-import { mapProtocolDraftRules } from "../../domain/protocolMappers";
+import {
+  mapProtocolDraftRules,
+  mapProtocolSourceLocators,
+} from "../../domain/protocolMappers";
 import { EmptyState } from "../shell/Feedback";
 import { ProtocolFileIcon } from "../shell/icons";
 import { ProtocolRedoDiffPane } from "./ProtocolRedoDiffPane";
@@ -24,6 +33,8 @@ import { ProtocolRedoRuleColumn } from "./ProtocolRedoRuleColumn";
 interface ProtocolComparisonWorkbenchProps {
   session: ProtocolSessionView;
   comparison: DraftComparisonView;
+  integrity: IntegrityView;
+  sources: SourcesView;
   saving: boolean;
   feedbackBusy: boolean;
   onSaveDraft: () => void;
@@ -37,6 +48,8 @@ interface ProtocolComparisonWorkbenchProps {
 export function ProtocolComparisonWorkbench({
   session,
   comparison,
+  integrity,
+  sources,
   saving,
   feedbackBusy,
   onSaveDraft,
@@ -60,17 +73,51 @@ export function ProtocolComparisonWorkbench({
   );
 
   const [filter, setFilter] = useState<"all" | "changed">("changed");
+  const [categoryFilter, setCategoryFilter] = useState<DiffCategoryKey | "all">("all");
+  const [selectedRuleCode, setSelectedRuleCode] = useState(
+    () => diff.modifiedRuleCodes[0] ?? diff.addedRuleCodes[0] ?? diff.removedRuleCodes[0] ?? candidateRules[0]?.officialCode ?? "",
+  );
 
   const visibleRules: ProtocolRuleDiffView[] = useMemo(() => {
-    if (filter === "all") return diff.ruleDiffs;
-    return diff.ruleDiffs.filter((rule) => rule.hasChanges);
-  }, [diff.ruleDiffs, filter]);
+    return diff.ruleDiffs.filter((rule) => {
+      if (filter === "changed" && !rule.hasChanges) return false;
+      if (categoryFilter === "all") return true;
+      if (categoryFilter === "added") {
+        return rule.added || rule.addedComponentRefs.length > 0;
+      }
+      if (categoryFilter === "removed") {
+        return rule.removed || rule.removedComponentRefs.length > 0;
+      }
+      return rule.changes.some((change) => change.category === categoryFilter);
+    });
+  }, [categoryFilter, diff.ruleDiffs, filter]);
 
   const totalChanges = diff.ruleDiffs.reduce(
     (sum, rule) => sum + rule.changes.length,
     0,
   );
   const changedRules = diff.ruleDiffs.filter((rule) => rule.hasChanges).length;
+  const selectedCandidateRule = candidateRules.find(
+    (rule) => rule.officialCode === selectedRuleCode,
+  );
+  const selectedSources = useMemo(
+    () => mapProtocolSourceLocators(
+      sources.sourceSpans,
+      selectedCandidateRule?.sourceRefs ?? [],
+    ),
+    [selectedCandidateRule, sources.sourceSpans],
+  );
+  const categoryOptions: ReadonlyArray<DiffCategoryKey | "all"> = [
+    "all",
+    "added",
+    "removed",
+    "original_text",
+    "logic",
+    "time_window",
+    "exception",
+    "evidence",
+    "due_stage",
+  ];
 
   return (
     <div className="protocol-comparison">
@@ -103,9 +150,9 @@ export function ProtocolComparisonWorkbench({
           <small>{comparison.candidate.ruleCount} 条规则</small>
         </div>
         <div className="protocol-comparison__meta-item">
-          <span className="protocol-comparison__meta-label">八类差异</span>
+          <span className="protocol-comparison__meta-label">规则变化</span>
           <strong>
-            {changedRules} 条父规则 · {totalChanges} 处变化
+            {changedRules} 条入排标准 · {totalChanges} 处变化
           </strong>
           <small>{comparison.sourceBound ? "差异已绑定方案原文定位" : "部分差异缺少来源定位"}</small>
         </div>
@@ -145,8 +192,9 @@ export function ProtocolComparisonWorkbench({
           <button
             type="button"
             className="button button--primary"
-            disabled={feedbackBusy || saving}
+            disabled={feedbackBusy || saving || !integrity.publishable}
             onClick={onPublish}
+            title={integrity.publishable ? "发布为新的正式规则版本" : "请先处理完整性检查中的问题"}
           >
             发布
           </button>
@@ -180,9 +228,50 @@ export function ProtocolComparisonWorkbench({
             全部规则（{diff.ruleDiffs.length}）
           </button>
         </div>
-        <p className="protocol-comparison__legend">
-          左侧：当前正式版本；中间：八类结构化差异；右侧：新草稿。颜色标记为新增/删除/修改。
-        </p>
+        <div className="protocol-comparison__category-filters" aria-label="按变化内容筛选">
+          {categoryOptions.map((category) => (
+            <button
+              key={category}
+              type="button"
+              className={`protocol-comparison__filter${categoryFilter === category ? " protocol-comparison__filter--active" : ""}`}
+              aria-pressed={categoryFilter === category}
+              onClick={() => setCategoryFilter(category)}
+            >
+              {category === "all" ? "全部变化" : DIFF_CATEGORY_LABELS[category]}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="protocol-comparison__review-strip" aria-label="发布检查与方案依据">
+        <div className={`protocol-comparison__integrity${integrity.publishable ? " protocol-comparison__integrity--ready" : " protocol-comparison__integrity--blocked"}`}>
+          <strong>{integrity.publishable ? "可以发布" : "暂不能发布"}</strong>
+          <span>{integrity.summary}</span>
+          {!integrity.publishable && integrity.issues.length > 0 && (
+            <ul>
+              {integrity.issues.slice(0, 3).map((issue) => (
+                <li key={`${issue.issueCode}-${issue.problem}`}>
+                  {issue.problem}；{issue.nextAction}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="protocol-comparison__source-summary">
+          <strong>{selectedRuleCode || "尚未选择规则"} 的方案依据</strong>
+          {selectedSources.length === 0 ? (
+            <span>当前所选规则没有可展示的原文定位，请在发布前核对来源完整性。</span>
+          ) : (
+            <ul>
+              {selectedSources.slice(0, 3).map((source) => (
+                <li key={source.sourceSpanId}>
+                  <span>{source.pageLabel ?? "方案结构位置"} · {source.precisionLabel}</span>
+                  <q>{source.excerpt}</q>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </section>
 
       {diff.ruleDiffs.length === 0 ? (
@@ -197,18 +286,25 @@ export function ProtocolComparisonWorkbench({
               title="当前正式版本"
               subtitle={comparison.baseline.officialVersion ?? "—"}
               rules={baselineRules}
+              selectedRuleCode={selectedRuleCode}
+              onSelectRule={setSelectedRuleCode}
             />
           </div>
           <div className="protocol-comparison__col protocol-comparison__col--diff">
             {visibleRules.length === 0 ? (
               <EmptyState
                 message="所选范围内没有差异"
-                hint="切换到「全部规则」可查看其他父规则。"
+                hint="切换到「全部规则」可查看其他入排标准。"
               />
             ) : (
               <ol className="protocol-redo-diff-list">
                 {visibleRules.map((rule) => (
-                  <ProtocolRedoDiffPane key={rule.officialCode} rule={rule} />
+                  <ProtocolRedoDiffPane
+                    key={rule.officialCode}
+                    rule={rule}
+                    selected={selectedRuleCode === rule.officialCode}
+                    onSelect={() => setSelectedRuleCode(rule.officialCode)}
+                  />
                 ))}
               </ol>
             )}
@@ -218,6 +314,8 @@ export function ProtocolComparisonWorkbench({
               title="新草稿"
               subtitle={comparison.candidate.officialVersion ?? "—"}
               rules={candidateRules}
+              selectedRuleCode={selectedRuleCode}
+              onSelectRule={setSelectedRuleCode}
             />
           </div>
         </div>
@@ -225,5 +323,3 @@ export function ProtocolComparisonWorkbench({
     </div>
   );
 }
-
-

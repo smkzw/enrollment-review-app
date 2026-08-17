@@ -163,7 +163,147 @@ export interface DraftRevisionView {
   ruleCount: number;
   workflowStageCount: number;
   content: Record<string, unknown>;
-  diff: Record<string, unknown> | null;
+  diff: ProtocolDraftDiffWire | null;
+}
+
+export type ProtocolDiffEntityKind = "rule" | "component" | "requirement";
+
+export type ProtocolJsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | ProtocolJsonValue[]
+  | { [key: string]: ProtocolJsonValue };
+
+export type ProtocolPredicateValue = string | number | boolean | Array<string | number | boolean>;
+
+export type ProtocolLogicPayload =
+  | {
+      kind: "predicate";
+      predicate: {
+        subject: string;
+        attribute: string;
+        comparator: "eq" | "ne" | "gt" | "gte" | "lt" | "lte" | "in" | "not_in" | "exists";
+        value?: ProtocolPredicateValue;
+        unit?: string | null;
+        applicable_population?: string | null;
+        requires_professional_judgment?: boolean;
+        unit_match_policy?: string;
+      };
+    }
+  | {
+      kind: "logical";
+      operator: "all" | "any" | "not";
+      children: ProtocolLogicPayload[];
+    };
+
+export interface ProtocolTimeQuantityPayload {
+  value: number;
+  unit: "day" | "week" | "month" | "year";
+}
+
+export interface ProtocolTimeEntryPayload {
+  scope: "main" | "exception";
+  time_constraint: null | {
+    anchor_type: "icf_date" | "screening_date" | "baseline_date" | "randomization_date" | "first_dose_date" | "last_dose_date" | "study_completion_date" | "event_date";
+    direction: "before" | "after" | "on";
+    lower_bound_days?: number | null;
+    upper_bound_days?: number | null;
+    lower_bound?: ProtocolTimeQuantityPayload | null;
+    upper_bound?: ProtocolTimeQuantityPayload | null;
+    half_life_multiplier?: number | null;
+    allow_partial_date?: boolean;
+  };
+  occurrence_window: null | {
+    duration: ProtocolTimeQuantityPayload;
+    minimum_count?: number | null;
+  };
+  prospective_window: null | {
+    anchor_type: "last_dose_date" | "study_completion_date";
+    upper_bound: ProtocolTimeQuantityPayload;
+  };
+  prospective_period: null | {
+    period: "treatment_period" | "study_period";
+  };
+}
+
+export interface ProtocolOriginalTextPayload {
+  source_text?: string;
+  title?: string;
+  source_binding?: null | {
+    source_refs: string[];
+    source_excerpts: string[];
+  };
+  verbatim_fragments?: Array<{
+    source_term: string | null;
+    source_clause: string | null;
+    source_clauses: string[];
+  }>;
+}
+
+export interface ProtocolEvidencePayload {
+  fact_type: string;
+  required_source_types: string[];
+  allows_screening_record_transcription: boolean;
+  requires_contemporaneous_objective_source: boolean;
+  description: string;
+}
+
+export interface ProtocolEvidenceWrapperPayload {
+  evidence: ProtocolEvidencePayload;
+}
+
+export interface ProtocolDueStagePayload {
+  fact_type: string;
+  due_stages: Array<"pre_screening" | "screening" | "run_in" | "baseline">;
+}
+
+export type ProtocolDiffPayload =
+  | ProtocolLogicPayload
+  | ProtocolTimeEntryPayload[]
+  | ProtocolOriginalTextPayload
+  | ProtocolEvidencePayload
+  | ProtocolEvidenceWrapperPayload
+  | ProtocolEvidencePayload[]
+  | Array<ProtocolEvidencePayload | ProtocolEvidenceWrapperPayload>
+  | ProtocolDueStagePayload[];
+
+export interface ProtocolCategoryChangeWire {
+  stable_ref: string;
+  kind: ProtocolDiffEntityKind;
+  previous: ProtocolDiffPayload | null;
+  current: ProtocolDiffPayload | null;
+}
+
+export interface ProtocolRuleDiffWire {
+  official_code: string;
+  added: boolean;
+  removed: boolean;
+  added_component_refs: string[];
+  removed_component_refs: string[];
+  original_text_changes: ProtocolCategoryChangeWire[];
+  logic_changes: ProtocolCategoryChangeWire[];
+  time_window_changes: ProtocolCategoryChangeWire[];
+  exception_changes: ProtocolCategoryChangeWire[];
+  evidence_changes: ProtocolCategoryChangeWire[];
+  due_stage_changes: ProtocolCategoryChangeWire[];
+}
+
+export interface ProtocolDraftDiffWire {
+  added_rule_codes: string[];
+  removed_rule_codes: string[];
+  modified_rule_codes: string[];
+  added_workflow_stage_ids: string[];
+  removed_workflow_stage_ids: string[];
+  modified_workflow_stage_ids: string[];
+  changed_component_ids: string[];
+  changed_requirement_ids: string[];
+  changed_procedure_mapping_ids: string[];
+  source_scope_changed: boolean;
+  workflow_visit_rewritten: boolean;
+  clarification_semantics_changed: boolean;
+  rule_diffs: ProtocolRuleDiffWire[];
 }
 
 export interface IntegrityIssueView {
@@ -271,7 +411,7 @@ export interface DraftComparisonView {
   jobId: string;
   baseline: DraftComparisonSideView;
   candidate: DraftComparisonSideView;
-  diff: Record<string, unknown>;
+  diff: ProtocolDraftDiffWire;
   sourceBound: boolean;
 }
 
@@ -279,9 +419,9 @@ export type FeedbackKind = "source_error" | "clarification";
 
 export interface FeedbackInput {
   expectedRevisionId: string;
-  draft: Record<string, unknown>;
   feedbackKind: FeedbackKind;
-  feedbackNote: string | null;
+  targetRuleCode: string;
+  feedbackNote: string;
   actor?: string;
 }
 

@@ -277,11 +277,24 @@ describe("protocolWorkbenchHttp", () => {
         },
         diff: {
           added_rule_codes: [],
+          removed_rule_codes: [],
+          modified_rule_codes: [],
+          added_workflow_stage_ids: [],
+          removed_workflow_stage_ids: [],
+          modified_workflow_stage_ids: [],
+          changed_component_ids: [],
+          changed_requirement_ids: [],
+          changed_procedure_mapping_ids: [],
+          source_scope_changed: false,
+          workflow_visit_rewritten: false,
+          clarification_semantics_changed: false,
           rule_diffs: [
             {
               official_code: "IN-01",
               added: false,
               removed: false,
+              added_component_refs: [],
+              removed_component_refs: [],
               original_text_changes: [],
               logic_changes: [],
               time_window_changes: [],
@@ -312,7 +325,8 @@ describe("protocolWorkbenchHttp", () => {
       expect(body.expected_revision_id).toBe("rev-cand");
       expect(body.feedback_kind).toBe("clarification");
       expect(body.feedback_note).toContain("补充解释");
-      expect(body.draft).toEqual({ proposed_rules: [] });
+      expect(body.target_rule_code).toBe("IN-01");
+      expect(body).not.toHaveProperty("draft");
       return jsonResponse(200, {
         job_id: "job-redo-1",
         revision_id: "rev-cand-2",
@@ -337,8 +351,8 @@ describe("protocolWorkbenchHttp", () => {
     const repo = createProtocolWorkbenchHttp({ fetchImpl });
     const revision = await repo.submitFeedback("job-redo-1", {
       expectedRevisionId: "rev-cand",
-      draft: { proposed_rules: [] },
       feedbackKind: "clarification",
+      targetRuleCode: "IN-01",
       feedbackNote: "这是一条补充解释",
     });
     expect(revision.revisionNumber).toBe(2);
@@ -404,5 +418,27 @@ describe("protocolWorkbenchHttp", () => {
     const result = await repo.startDeconstruction(file, "redo-key", { projectId: "project-1" });
     expect(result.jobId).toBe("job-redo-new");
     expect(result.stateLabel).toBe("等待方案信息确认");
+  });
+
+  it("startFeedbackRevision 不上传文件并绑定当前正式项目", async () => {
+    const fetchImpl = vi.fn(async (url, init) => {
+      expect(url).toBe("/api/v2/protocol/deconstructions/from-formal");
+      expect(init?.method).toBe("POST");
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(body.project_id).toBe("project-1");
+      expect(body.idempotency_key).toBe("feedback-key");
+      return jsonResponse(201, {
+        job_id: "job-feedback-new",
+        state: "waiting_user",
+        state_label: "等待审阅",
+        created: true,
+        source_artifact_id: "artifact-formal-source",
+        file_name: "当前正式方案.docx",
+      });
+    });
+    const repo = createProtocolWorkbenchHttp({ fetchImpl });
+    const result = await repo.startFeedbackRevision("project-1", "feedback-key");
+    expect(result.jobId).toBe("job-feedback-new");
+    expect(result.stateLabel).toBe("等待审阅");
   });
 });

@@ -11,12 +11,16 @@ interface ProtocolRedoRuleColumnProps {
   title: string;
   subtitle: string;
   rules: ReadonlyArray<ProtocolDraftRuleView>;
+  selectedRuleCode: string;
+  onSelectRule: (officialCode: string) => void;
 }
 
 export function ProtocolRedoRuleColumn({
   title,
   subtitle,
   rules,
+  selectedRuleCode,
+  onSelectRule,
 }: ProtocolRedoRuleColumnProps) {
   const [expandedRules, setExpandedRules] = useState<ReadonlySet<string>>(
     () => new Set(rules.map((rule) => rule.ruleId)),
@@ -46,12 +50,18 @@ export function ProtocolRedoRuleColumn({
           {rules.map((rule) => {
             const expanded = expandedRules.has(rule.ruleId);
             return (
-              <li key={rule.ruleId} className="protocol-redo-column__rule">
+              <li
+                key={rule.ruleId}
+                className={`protocol-redo-column__rule${selectedRuleCode === rule.officialCode ? " protocol-redo-column__rule--selected" : ""}`}
+              >
                 <button
                   type="button"
                   className="protocol-redo-column__parent"
                   aria-expanded={expanded}
-                  onClick={() => toggleRule(rule.ruleId)}
+                  onClick={() => {
+                    onSelectRule(rule.officialCode);
+                    toggleRule(rule.ruleId);
+                  }}
                 >
                   {expanded ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
                   <span className="protocol-redo-column__code">{rule.officialCode}</span>

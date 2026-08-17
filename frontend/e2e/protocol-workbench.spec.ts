@@ -40,18 +40,35 @@ test.describe("方案解构工作台（Slice 5）", () => {
     expect(errors).toEqual([]);
   });
 
-  test("重新解构入口展示正式项目列表与目标摘要", async ({ page }) => {
+  test("重新解构入口要求明确选择正式项目后才展示目标摘要", async ({ page }) => {
     await openRoute(page, "/protocols?mode=redo");
     await expect(page.getByRole("heading", { name: "重新解构已有项目" })).toBeVisible();
-    const firstProject = page.locator(".protocol-redo__project--selected");
-    await expect(firstProject).toBeVisible();
+    await expect(page.locator(".protocol-redo__project--selected")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "选择新版方案文件" })).toBeDisabled();
+
+    const firstProject = page.locator(".protocol-redo__project").first();
     await expect(firstProject).toContainText("TEST-001");
     await expect(firstProject).toContainText("正式版本");
-    await expect(page.getByRole("button", { name: "选择新版方案文件" })).toBeVisible();
+    await firstProject.click();
+    await expect(firstProject).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("heading", { name: "目标项目与正式版本" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "选择新版方案文件" })).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: "不上传文件，按反馈修订" }),
+    ).toBeVisible();
     await expectNoPageOverflow(page);
   });
 
-  test("重新解构任务并列展示八类差异工作台", async ({ page }) => {
+  test("重新解构可不上传新文件并进入正式草稿反馈修订", async ({ page }) => {
+    await openRoute(page, "/protocols?mode=redo");
+    await page.locator(".protocol-redo__project").first().click();
+    await page.getByRole("button", { name: "不上传文件，按反馈修订" }).click();
+    await expect(page.getByRole("heading", { name: /并列比较差异/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "基于反馈修订" })).toBeVisible();
+    await expectNoPageOverflow(page);
+  });
+
+  test("重新解构任务并列展示规则变化工作台", async ({ page }) => {
     await openRoute(page, "/protocols?job=job-demo-redo");
     await expect(page.getByRole("heading", { name: /并列比较差异/ })).toBeVisible();
     await expect(

@@ -8,12 +8,14 @@ import { ProtocolCategoryChangeRow } from "./ProtocolDiffChangeRow";
 
 interface ProtocolRedoDiffPaneProps {
   rule: ProtocolRuleDiffView;
+  selected: boolean;
+  onSelect: () => void;
 }
 
-export function ProtocolRedoDiffPane({ rule }: ProtocolRedoDiffPaneProps) {
+export function ProtocolRedoDiffPane({ rule, selected, onSelect }: ProtocolRedoDiffPaneProps) {
   return (
-    <li className="protocol-redo-diff">
-      <header className="protocol-redo-diff__head">
+    <li className={`protocol-redo-diff${selected ? " protocol-redo-diff--selected" : ""}`}>
+      <button type="button" className="protocol-redo-diff__head" onClick={onSelect}>
         <span className="protocol-redo-diff__code">{rule.officialCode}</span>
         {rule.added && <span className="protocol-redo-diff__badge protocol-redo-diff__badge--added">新增</span>}
         {rule.removed && <span className="protocol-redo-diff__badge protocol-redo-diff__badge--removed">删除</span>}
@@ -21,7 +23,7 @@ export function ProtocolRedoDiffPane({ rule }: ProtocolRedoDiffPaneProps) {
           <span className="protocol-redo-diff__badge protocol-redo-diff__badge--changed">修改</span>
         )}
         {!rule.hasChanges && <span className="protocol-redo-diff__badge protocol-redo-diff__badge--unchanged">无变化</span>}
-      </header>
+      </button>
 
       {(rule.added || rule.addedComponentRefs.length > 0) && (
         <p className="protocol-redo-diff__summary protocol-redo-diff__summary--added">
@@ -53,7 +55,7 @@ export function ProtocolRedoDiffPane({ rule }: ProtocolRedoDiffPaneProps) {
           ))}
         </dl>
       ) : !rule.added && !rule.removed ? (
-        <p className="protocol-redo-diff__unchanged">结构与正式版本一致，无八类差异。</p>
+        <p className="protocol-redo-diff__unchanged">结构与正式版本一致，没有变化。</p>
       ) : null}
     </li>
   );

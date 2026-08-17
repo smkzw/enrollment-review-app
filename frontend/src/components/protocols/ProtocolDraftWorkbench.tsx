@@ -22,7 +22,10 @@ interface ProtocolDraftWorkbenchProps {
   sources: SourcesView;
   componentParam: string | null;
   onSaveDraft: () => void;
+  onCancel: () => void;
+  onPublish: () => void;
   saving: boolean;
+  publishing: boolean;
   saveError?: string;
   /** 界面试用：示例草稿保存状态（仅 stub 演示任务注入） */
   uatDraftSaved?: boolean;
@@ -36,7 +39,10 @@ export function ProtocolDraftWorkbench({
   sources,
   componentParam,
   onSaveDraft,
+  onCancel,
+  onPublish,
   saving,
+  publishing,
   saveError,
   uatDraftSaved,
   onUatReset,
@@ -112,6 +118,23 @@ export function ProtocolDraftWorkbench({
           >
             {saving ? "正在保存…" : draftSaved ? "已保存草稿" : "保存草稿"}
           </button>
+          <button
+            type="button"
+            className="button"
+            disabled={saving || publishing}
+            onClick={onCancel}
+          >
+            取消本次草稿
+          </button>
+          <button
+            type="button"
+            className="button button--primary"
+            disabled={saving || publishing || !integrity.publishable}
+            title={integrity.publishable ? "发布正式项目与规则版本" : "请先处理完整性检查中的问题"}
+            onClick={onPublish}
+          >
+            {publishing ? "正在发布…" : "发布"}
+          </button>
           {onUatReset !== undefined && (
             <button type="button" className="button button--quiet" onClick={onUatReset}>
               恢复试用初始状态
@@ -129,6 +152,11 @@ export function ProtocolDraftWorkbench({
         {saveError !== undefined && saveError.length > 0 && (
           <p className="protocol-draft-actions__error" role="alert">
             {saveError}
+          </p>
+        )}
+        {!integrity.publishable && (
+          <p className="protocol-draft-actions__error" role="status">
+            完整性检查尚未通过，处理完上方提示事项后才能发布。
           </p>
         )}
       </section>

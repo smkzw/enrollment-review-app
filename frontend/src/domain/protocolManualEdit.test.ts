@@ -1,56 +1,43 @@
-/**
- * 手工修订草稿补丁测试：改写子项标题与原文摘录，不改变结构/编号/来源绑定。
- */
-
 import { describe, expect, it } from "vitest";
-import { patchComponentText } from "./protocolManualEdit";
+import { getEditableProtocolComponents, patchComponentSemantics } from "./protocolManualEdit";
 import { draftComparisonFixture } from "../fixtures/protocol-deconstruction-workbench";
 
 const candidateContent = draftComparisonFixture.candidate.content;
 
-describe("patchComponentText", () => {
-  it("改写所选子项标题与方案原文摘录", () => {
-    const patched = patchComponentText(candidateContent, "component-in", {
-      title: "年龄要求（修订）",
-      sourceExcerpts: ["年龄≥18岁", "且≤65岁"],
-    });
-    expect(patched).not.toBe(candidateContent);
-    const rules = patched.proposed_rules as ReadonlyArray<Record<string, unknown>>;
-    const rule = rules.find((item) => item.official_code === "IN-01");
-    const components = rule?.components as ReadonlyArray<Record<string, unknown>>;
-    const target = components.find(
-      (item) => item.rule_component_id === "component-in",
-    );
-    expect(target?.title).toBe("年龄要求（修订）");
-    const drafts = patched.component_drafts as ReadonlyArray<Record<string, unknown>>;
-    const draft = drafts.find((item) => {
-      const proposed = item.proposed_component as Record<string, unknown>;
-      return proposed?.rule_component_id === "component-in";
-    });
-    expect(draft?.source_excerpts).toEqual(["年龄≥18岁", "且≤65岁"]);
+describe("方案草稿手工修订", () => {
+  it("读取子项的条件、资料要求和只读来源", () => {
+    const components = getEditableProtocolComponents(candidateContent);
+    const age = components.find((item) => item.componentId === "component-in")!;
+    expect(age.predicates[0]).toMatchObject({ predicateId: "predicate-age", attribute: "年龄", comparator: "gte", valueText: "18" });
+    expect(age.requirements[0]).toMatchObject({ dueStage: "screening" });
+    expect(age.sourceExcerpts).toEqual(["年龄≥18岁"]);
   });
 
-  it("不改变未选子项与结构字段", () => {
-    const patched = patchComponentText(candidateContent, "component-in", {
-      title: "年龄要求（修订）",
-      sourceExcerpts: ["年龄≥18岁"],
+  it("修订逻辑、原子条件和资料要求，但不改来源摘录", () => {
+    const components = getEditableProtocolComponents(candidateContent);
+    const liver = components.find((item) => item.componentId === "component-ex")!;
+    const predicate = { ...liver.predicates[0]!, valueText: "2", requiresProfessionalJudgment: true };
+    const patched = patchComponentSemantics(candidateContent, liver.componentId, {
+      title: "肝功能联合条件",
+      mainOperator: "all",
+      exceptionOperator: null,
+      predicate,
+      requirements: liver.requirements,
     });
-    const originalRules = candidateContent.proposed_rules as ReadonlyArray<
-      Record<string, unknown>
-    >;
-    const patchedRules = patched.proposed_rules as ReadonlyArray<
-      Record<string, unknown>
-    >;
-    expect(patchedRules).toHaveLength(originalRules.length);
-    const exRule = patchedRules.find((item) => item.official_code === "EX-01");
-    const exComponents = exRule?.components as ReadonlyArray<Record<string, unknown>>;
-    expect(exComponents[0]?.title).toBe("肝功能阈值");
+    const patchedComponent = getEditableProtocolComponents(patched).find((item) => item.componentId === "component-ex")!;
+    expect(patchedComponent.title).toBe("肝功能联合条件");
+    expect(patchedComponent.mainOperator).toBe("all");
+    expect(patchedComponent.predicates[0]).toMatchObject({ valueText: "2", requiresProfessionalJudgment: true });
+    expect(patchedComponent.sourceExcerpts).toEqual(liver.sourceExcerpts);
   });
 
-  it("找不到匹配子项时原样返回（不做静默改写）", () => {
-    const missing = patchComponentText(candidateContent, "component-missing", {
+  it("找不到匹配子项时原样返回", () => {
+    const missing = patchComponentSemantics(candidateContent, "component-missing", {
       title: "不存在",
-      sourceExcerpts: ["不存在的摘录"],
+      mainOperator: null,
+      exceptionOperator: null,
+      predicate: null,
+      requirements: [],
     });
     expect(missing).toBe(candidateContent);
   });

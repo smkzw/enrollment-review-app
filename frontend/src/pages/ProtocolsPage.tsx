@@ -1,6 +1,6 @@
 /**
  * 方案工作台（Phase 3 Slice 6）：首次解构 / 重新解构分流与草稿审阅主路径。
- * 重新解构：选择目标正式项目 → 上传新版方案 → 并列比较八类差异 → 保存/取消/发布。
+ * 重新解构：选择目标正式项目 → 上传新版方案 → 并列比较规则变化 → 保存/取消/发布。
  */
 
 import { useCallback, useState } from "react";
@@ -53,6 +53,28 @@ export function ProtocolsPage() {
     (file: File, projectId: string) => handleUpload(file, projectId),
     [handleUpload],
   );
+  const handleFeedbackRevision = useCallback(
+    async (projectId: string) => {
+      setUploadBusy(true);
+      setUploadError(null);
+      try {
+        const result = await repo.startFeedbackRevision(
+          projectId,
+          `feedback-revision-${Date.now()}`,
+        );
+        navigate("/protocols", { job: result.jobId });
+      } catch (error) {
+        setUploadError(
+          error instanceof ProtocolWorkbenchApiError
+            ? `${error.message} ${error.recoveryAction}`
+            : "反馈修订稿准备失败，请稍后重试。",
+        );
+      } finally {
+        setUploadBusy(false);
+      }
+    },
+    [repo],
+  );
 
   if (mode === null && jobId === null) {
     return <ProtocolWorkbenchHome />;
@@ -64,6 +86,7 @@ export function ProtocolsPage() {
         busy={uploadBusy}
         error={uploadError}
         onUpload={handleRedoUpload}
+        onStartFeedback={handleFeedbackRevision}
       />
     );
   }

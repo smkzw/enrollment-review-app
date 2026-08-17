@@ -33,7 +33,7 @@ import {
 import { ProtocolJobProgress } from "./ProtocolJobProgress";
 import { ProtocolPublishResult } from "./ProtocolPublishResult";
 import { ProtocolRecoveryBanner } from "./ProtocolRecoveryBanner";
-import { patchComponentText } from "../../domain/protocolManualEdit";
+import { patchComponentSemantics } from "../../domain/protocolManualEdit";
 
 interface ProtocolJobFlowProps {
   jobId: string;
@@ -95,7 +95,29 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
   const comparison = useLoad(
     (signal) => repo.getDraftComparison(jobId, { signal }),
     [jobId, repo],
-    { enabled: sessionData?.awaitingUser === "review" && isRedo },
+    {
+      enabled:
+        (sessionData?.awaitingUser === "review" ||
+          sessionData?.awaitingUser === "publish") &&
+        isRedo,
+    },
+  );
+
+  const redoReview = useLoad(
+    async (signal) => {
+      const [integrity, sources] = await Promise.all([
+        repo.getIntegrity(jobId, { signal }),
+        repo.getSources(jobId, { signal }),
+      ]);
+      return { integrity, sources };
+    },
+    [jobId, repo],
+    {
+      enabled:
+        (sessionData?.awaitingUser === "review" ||
+          sessionData?.awaitingUser === "publish") &&
+        isRedo,
+    },
   );
 
   useEffect(() => {
@@ -118,6 +140,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
         session.retry();
         draftBundle.retry();
         comparison.retry();
+        redoReview.retry();
       } catch (error) {
         if (error instanceof ProtocolWorkbenchApiError) {
           setConfirmError(`${error.message} ${error.recoveryAction}`);
@@ -130,7 +153,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
         setConfirmBusy(false);
       }
     },
-    [jobId, repo, session, draftBundle, comparison],
+    [jobId, repo, session, draftBundle, comparison, redoReview],
   );
 
   const handleSaveDraft = useCallback(async () => {
@@ -147,7 +170,10 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
     try {
       await repo.saveDraft(jobId, expectedRevisionId);
       if (isStubDemo) setDraftSaved(true);
-      if (isRedo) comparison.retry();
+      if (isRedo) {
+        comparison.retry();
+        redoReview.retry();
+      }
       else draftBundle.retry();
     } catch (error) {
       if (error instanceof ProtocolWorkbenchApiError) {
@@ -160,7 +186,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
     } finally {
       setSaveBusy(false);
     }
-  }, [comparison, draftBundle, isRedo, isStubDemo, jobId, repo, setDraftSaved]);
+  }, [comparison, draftBundle, isRedo, isStubDemo, jobId, redoReview, repo, setDraftSaved]);
 
   const handleSubmitFeedback = useCallback(
     async (values: FeedbackDraftValues) => {
@@ -171,12 +197,13 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
       try {
         const next = await repo.submitFeedback(jobId, {
           expectedRevisionId: candidate.revisionId,
-          draft: candidate.content,
           feedbackKind: values.kind,
-          feedbackNote: values.note.length > 0 ? values.note : null,
+          targetRuleCode: values.targetRuleCode,
+          feedbackNote: values.note,
         });
         setFeedbackOpen(false);
         comparison.retry();
+        redoReview.retry();
         if (isStubDemo && next.revisionNumber > 1) setDraftSaved(true);
       } catch (error) {
         if (error instanceof ProtocolWorkbenchApiError) {
@@ -190,7 +217,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
         setFeedbackBusy(false);
       }
     },
-    [comparison, isStubDemo, jobId, repo, setDraftSaved],
+    [comparison, isStubDemo, jobId, redoReview, repo, setDraftSaved],
   );
 
   const handleSubmitManualEdit = useCallback(
@@ -199,13 +226,11 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
       setManualEditBusy(true);
       setManualEditError(null);
       const candidate = comparison.state.data.candidate;
-      const patched = patchComponentText(candidate.content, values.componentId, {
-        title: values.title,
-        sourceExcerpts: values.sourceExcerpts
-          .split("\n")
-          .map((line) => line.trim())
-          .filter((line) => line.length > 0),
-      });
+      const patched = patchComponentSemantics(
+        candidate.content,
+        values.componentId,
+        values.patch,
+      );
       try {
         const next = await repo.editDraft(jobId, {
           expectedRevisionId: candidate.revisionId,
@@ -213,6 +238,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
         });
         setManualEditOpen(false);
         comparison.retry();
+        redoReview.retry();
         if (isStubDemo && next.revisionNumber > 1) setDraftSaved(true);
       } catch (error) {
         if (error instanceof ProtocolWorkbenchApiError) {
@@ -226,7 +252,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
         setManualEditBusy(false);
       }
     },
-    [comparison, isStubDemo, jobId, repo, setDraftSaved],
+    [comparison, isStubDemo, jobId, redoReview, repo, setDraftSaved],
   );
 
   const handleCancelDraft = useCallback(async () => {
@@ -349,16 +375,25 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
     );
   }
 
-  if (currentSession.awaitingUser === "review" && isRedo) {
+  if (
+    (currentSession.awaitingUser === "review" || currentSession.awaitingUser === "publish") &&
+    isRedo
+  ) {
     if (comparison.state.status === "loading") return <LoadingState />;
     if (comparison.state.status === "error") {
       return <ErrorState message={comparison.state.message} onRetry={comparison.retry} />;
+    }
+    if (redoReview.state.status === "loading") return <LoadingState />;
+    if (redoReview.state.status === "error") {
+      return <ErrorState message={redoReview.state.message} onRetry={redoReview.retry} />;
     }
     return (
       <div className="protocols">
         <ProtocolComparisonWorkbench
           session={currentSession}
           comparison={comparison.state.data}
+          integrity={redoReview.state.data.integrity}
+          sources={redoReview.state.data.sources}
           saving={saveBusy}
           feedbackBusy={feedbackBusy}
           onSaveDraft={handleSaveDraft}
@@ -381,6 +416,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
           open={feedbackOpen}
           busy={feedbackBusy}
           errorMessage={feedbackError ?? undefined}
+          candidateContent={comparison.state.data.candidate.content}
           onClose={() => {
             if (feedbackBusy) return;
             setFeedbackOpen(false);
@@ -423,25 +459,56 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
     );
   }
 
-  if (currentSession.awaitingUser === "review") {
+  if (currentSession.awaitingUser === "review" || currentSession.awaitingUser === "publish") {
     if (draftBundle.state.status === "loading") return <LoadingState />;
     if (draftBundle.state.status === "error") {
       return <ErrorState message={draftBundle.state.message} onRetry={draftBundle.retry} />;
     }
     const { draft, integrity, sources } = draftBundle.state.data;
     return (
-      <ProtocolDraftWorkbench
-        session={currentSession}
-        draft={draft}
-        integrity={integrity}
-        sources={sources}
-        componentParam={componentParam}
-        onSaveDraft={handleSaveDraft}
-        saving={saveBusy}
-        saveError={saveError ?? undefined}
-        uatDraftSaved={isStubDemo ? draftSaved : undefined}
-        onUatReset={isStubDemo ? handleResetTrial : undefined}
-      />
+      <>
+        <ProtocolDraftWorkbench
+          session={currentSession}
+          draft={draft}
+          integrity={integrity}
+          sources={sources}
+          componentParam={componentParam}
+          onSaveDraft={handleSaveDraft}
+          onCancel={() => setCancelOpen(true)}
+          onPublish={() => {
+            setPublishError(null);
+            setPublishOpen(true);
+          }}
+          saving={saveBusy}
+          publishing={publishBusy}
+          saveError={saveError ?? publishError ?? undefined}
+          uatDraftSaved={isStubDemo ? draftSaved : undefined}
+          onUatReset={isStubDemo ? handleResetTrial : undefined}
+        />
+        <ProtocolConfirmCancelDialog
+          open={cancelOpen}
+          busy={cancelBusy}
+          errorMessage={cancelError ?? undefined}
+          isRedo={false}
+          onClose={() => {
+            if (cancelBusy) return;
+            setCancelError(null);
+            setCancelOpen(false);
+          }}
+          onConfirm={handleCancelDraft}
+        />
+        <ProtocolConfirmPublishDialog
+          open={publishOpen}
+          busy={publishBusy}
+          isRedo={false}
+          sessionLabel={`${currentSession.protocolCode ?? draft.protocolCode} · ${currentSession.selectedPhaseLabel ?? draft.studyPhaseLabel} · ${currentSession.officialVersion ?? "待核对版本"}`}
+          onClose={() => {
+            if (publishBusy) return;
+            setPublishOpen(false);
+          }}
+          onConfirm={handlePublish}
+        />
+      </>
     );
   }
 

@@ -42,6 +42,11 @@ export interface ProtocolWorkbenchRepository {
     idempotencyKey: string,
     options?: ProtocolWorkbenchRequestOptions,
   ): Promise<StartDeconstructionResult>;
+  startFeedbackRevision(
+    projectId: string,
+    idempotencyKey: string,
+    options?: ProtocolWorkbenchRequestOptions,
+  ): Promise<StartDeconstructionResult>;
   listOfficialProjects(
     options?: ProtocolWorkbenchRequestOptions,
   ): Promise<OfficialProjectView[]>;

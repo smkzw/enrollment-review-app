@@ -116,6 +116,44 @@ export function createProtocolWorkbenchStub(): ProtocolWorkbenchRepository {
       };
     },
 
+    async startFeedbackRevision(
+      projectId: string,
+      _idempotencyKey: string,
+      options?: ProtocolWorkbenchRequestOptions,
+    ): Promise<StartDeconstructionResult> {
+      rejectIfAborted(options?.signal);
+      await delay();
+      const project = officialProjectsFixture.find((item) => item.projectId === projectId);
+      if (project === undefined) {
+        throw new ProtocolWorkbenchApiError(
+          "PROJECT_NOT_FOUND",
+          "找不到正式项目",
+          "该项目编号不存在正式发布记录，无法建立反馈修订稿。",
+          "请返回项目列表重新选择。",
+        );
+      }
+      const jobId = nextJobId();
+      sessions.set(jobId, {
+        ...protocolRedoSessionFixture,
+        jobId,
+        targetProjectId: project.projectId,
+        targetProjectName: project.projectName,
+        targetProjectCode: project.projectCode,
+        targetProtocolCode: project.protocolCode,
+        targetStudyPhase: project.studyPhase,
+        targetStudyPhaseLabel: project.studyPhaseLabel,
+        targetOfficialVersion: project.officialVersion,
+      });
+      return {
+        jobId,
+        state: "waiting_user",
+        stateLabel: "等待审阅",
+        created: true,
+        sourceArtifactId: "artifact-formal-source",
+        fileName: "当前正式方案",
+      };
+    },
+
     async listOfficialProjects(
       options?: ProtocolWorkbenchRequestOptions,
     ): Promise<OfficialProjectView[]> {
