@@ -2,7 +2,7 @@
  * 单个解构任务的状态机视图。
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   getProtocolWorkbenchRepository,
   PROTOCOL_DEMO_JOB_ID,
@@ -50,6 +50,20 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
     },
     [jobId, repo],
   );
+
+  const sessionStatus = session.state.status;
+  const jobState = sessionStatus === "success" ? session.state.data.state : null;
+
+  useEffect(() => {
+    if (
+      sessionStatus !== "success" ||
+      !["queued", "running", "recovering"].includes(jobState ?? "")
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(session.retry, 1200);
+    return () => window.clearTimeout(timer);
+  }, [jobState, session.retry, sessionStatus]);
 
   const handleConfirmIdentity = useCallback(
     async (input: ConfirmIdentityInput) => {
