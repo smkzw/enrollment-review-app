@@ -467,6 +467,47 @@ def test_redeconstruction_start_with_project_id_persists_target(client, build_ap
         assert body["target_study_phase_label"] == "II 期"
 
 
+def test_feedback_redeconstruction_api_starts_without_upload(build_app) -> None:
+    app = build_app()
+    with TestClient(app) as test_client:
+        first = _create_protocol_job(test_client, key="feedback-formal-first")
+        _seed_review_job(app, first, wait_at="publish")
+        published = test_client.post(
+            f"/api/v2/protocol/deconstructions/{first}/publish",
+            json={"idempotency_key": "feedback-formal-pub", "actor": "医学监查员"},
+        )
+        assert published.status_code == 200, published.text
+        project_id = published.json()["project_id"]
+
+        started = test_client.post(
+            "/api/v2/protocol/deconstructions/from-formal",
+            json={
+                "project_id": project_id,
+                "idempotency_key": "feedback-formal-start",
+                "actor": "医学监查员",
+            },
+        )
+        assert started.status_code == 201, started.text
+        job_id = started.json()["job_id"]
+        session = test_client.get(f"/api/v2/protocol/deconstructions/{job_id}")
+        assert session.status_code == 200, session.text
+        assert session.json()["awaiting_user"] == "review"
+        comparison = test_client.get(
+            f"/api/v2/protocol/deconstructions/{job_id}/draft/comparison"
+        )
+        assert comparison.status_code == 200, comparison.text
+        assert comparison.json()["diff"]["modified_rule_codes"] == []
+        republished = test_client.post(
+            f"/api/v2/protocol/deconstructions/{job_id}/publish",
+            json={
+                "idempotency_key": "feedback-formal-republish",
+                "actor": "医学监查员",
+            },
+        )
+        assert republished.status_code == 200, republished.text
+        assert republished.json()["rule_set_revision"] == 2
+
+
 def test_redeconstruction_start_unknown_project_returns_chinese_envelope(
     client,
 ) -> None:

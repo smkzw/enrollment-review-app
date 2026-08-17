@@ -67,7 +67,7 @@ from app.protocols.deconstruction_gate import (
 )
 from app.storage.codecs import utc_now
 from app.storage.idempotency import IdempotencyRepository, request_hash
-from app.storage.models import IdempotencyRecordRow, RuleSetRecord
+from app.storage.models import IdempotencyRecordRow, ProjectRecord, RuleSetRecord
 from app.storage.repositories import (
     AppendRepository,
     AUTHORITY_CONFIRMATION_CONFIG,
@@ -137,6 +137,7 @@ class ProtocolPublicationRequest:
     # 重新解构：目标正式项目与新的内部方案版本 id；None 表示首次发布。
     project_id: str | None = None
     protocol_version_id: str | None = None
+    expected_rule_set_revision: int | None = None
 
 
 @dataclass(frozen=True)
@@ -269,39 +270,31 @@ class ProtocolPublicationService:
                 f"输入版本 {draft.protocol_version_id} 不一致，拒绝发布。",
             )
 
-        # 1) 确定性门禁复跑：发布权威只在门禁通过后成立。
-        #    后继 revision（revision_number > 1）必须携带前序草稿与声明差异，
-        #    让 diff_integrity 校验「新增/删除/修改可由结构差异重建」。
-        previous_draft = None
-        declared_diff = None
-        if revision.revision_number > 1:
-            previous_revision = revisions.get(revision.previous_revision_id)
-            previous_draft = previous_revision.content
-            from app.protocols.deconstruction_gate import (
-                ProtocolDraftDiffDeclaration,
-            )
-
-            declared_diff = ProtocolDraftDiffDeclaration(
-                **revision.diff.model_dump(mode="python")
-            )
-        gate_result = self.gate.evaluate(
-            request.source_input,
-            draft,
-            source_spans=request.source_spans,
-            interpretation_conflicts=request.interpretation_conflicts,
-            previous_draft=previous_draft,
-            declared_diff=declared_diff,
-        )
-        if not gate_result.publishable:
-            raise PublicationGateError(gate_result)
-
-        # 2) 谱系与期别校验。
+        # 重新解构必须仍基于任务启动时的正式规则版。该检查与后续项目更新处于
+        # 同一事务，防止两个并行任务依次把各自旧基线发布成新正式版本。
         identity = request.source_input.identity_decision
         protocol_code = identity.protocol_code
         selected_phase = draft.selected_phase
         target_project: Project | None = None
         if request.project_id is not None:
             target_project = ProjectRepository(session).get(request.project_id)
+            target_record = session.get(ProjectRecord, request.project_id)
+            if target_record is None:
+                raise PublicationLineageError(
+                    "target_project_missing",
+                    f"目标项目 {request.project_id} 不存在，拒绝发布",
+                )
+            if (
+                request.expected_rule_set_revision is not None
+                and target_record.rule_set_revision
+                != request.expected_rule_set_revision
+            ):
+                raise PublicationLineageError(
+                    "formal_baseline_changed",
+                    "当前正式规则版本已被另一项重新解构任务更新；"
+                    f"本任务基于第 {request.expected_rule_set_revision} 版，"
+                    f"当前已是第 {target_record.rule_set_revision} 版。",
+                )
             if target_project.protocol_version.protocol_code != protocol_code:
                 raise PublicationLineageError(
                     "cross_protocol",
@@ -326,7 +319,51 @@ class ProtocolPublicationService:
                     "请进入重新解构流程",
                 )
 
-        # 3) 组装正式权威链对象（方案版本记录在最后一步按真实引用创建）。
+        # 内部方案版本是不可变发布链的身份。复用已发布版本是
+        # 谱系错误，应在差异完整性检查前明确拒绝，避免次生问题遮蔽
+        # 真正的恢复动作。
+        self._ensure_protocol_version_available(session, draft.protocol_version_id)
+
+        # 1) 确定性门禁复跑：发布权威只在门禁通过后成立。
+        #    重新解构首稿以当前正式草稿为基线；后继 revision 以前一稿为基线。
+        #    两者都必须用持久化声明差异复算，不能让首稿绕过 diff_integrity。
+        previous_draft = None
+        declared_diff = None
+        if revision.revision_number > 1:
+            previous_revision = revisions.get(revision.previous_revision_id)
+            previous_draft = previous_revision.content
+        elif target_project is not None:
+            from app.services.protocol_draft_service import (
+                resolve_formal_baseline_revision,
+            )
+
+            previous_draft = resolve_formal_baseline_revision(
+                session=session,
+                project_id=target_project.project_id,
+            ).content
+        if previous_draft is not None:
+            if revision.diff is None:
+                raise ProtocolPublicationError(
+                    "draft_diff_missing",
+                    "重新解构草稿缺少相对正式基线的声明差异，拒绝发布。",
+                )
+            from app.protocols.deconstruction_gate import ProtocolDraftDiffDeclaration
+
+            declared_diff = ProtocolDraftDiffDeclaration(
+                **revision.diff.model_dump(mode="python")
+            )
+        gate_result = self.gate.evaluate(
+            request.source_input,
+            draft,
+            source_spans=request.source_spans,
+            interpretation_conflicts=request.interpretation_conflicts,
+            previous_draft=previous_draft,
+            declared_diff=declared_diff,
+        )
+        if not gate_result.publishable:
+            raise PublicationGateError(gate_result)
+
+        # 2) 组装正式权威链对象（方案版本记录在最后一步按真实引用创建）。
         #    版本身份已被上方校验绑定到草稿/输入；此处直接取草稿版本 id。
         version_id = draft.protocol_version_id
         document_sha256 = request.source_input.protocol_file_sha256
@@ -444,6 +481,7 @@ class ProtocolPublicationService:
                 "draft_revision_id": request.draft_revision_id,
                 "project_id": request.project_id,
                 "protocol_version_id": request.protocol_version_id,
+                "expected_rule_set_revision": request.expected_rule_set_revision,
                 "actor": request.actor,
                 # 幂等键绑定完整发布输入，而不是只绑定身份摘要。否则同一草稿
                 # revision 下替换方案文件、来源定位或解释冲突时，会错误重放旧结果。
@@ -462,6 +500,20 @@ class ProtocolPublicationService:
     def _published_at(self, request: ProtocolPublicationRequest) -> datetime:
         return request.published_at or self.now()
 
+    @staticmethod
+    def _ensure_protocol_version_available(
+        session: Session, version_id: str
+    ) -> None:
+        try:
+            AppendRepository(session, PROTOCOL_DOC_CONFIG).get(version_id)
+        except NotFoundError:
+            return
+        raise PublicationLineageError(
+            "protocol_version_already_published",
+            f"内部方案版本 {version_id} 已存在发布记录；重新发布必须携带"
+            "新的内部版本 id（封面版本号可不变），保证两条证据链可追溯",
+        )
+
     def _build_protocol_version(
         self,
         session: Session,
@@ -477,16 +529,7 @@ class ProtocolPublicationService:
         integrity_gate: GateResult,
     ) -> ProtocolDocumentVersion:
         """创建内部方案版本记录；已存在的版本 id 不可复用（防双权威链）。"""
-        try:
-            AppendRepository(session, PROTOCOL_DOC_CONFIG).get(version_id)
-        except NotFoundError:
-            pass
-        else:
-            raise PublicationLineageError(
-                "protocol_version_already_published",
-                f"内部方案版本 {version_id} 已存在发布记录；重新发布必须携带"
-                "新的内部版本 id（封面版本号可不变），保证两条证据链可追溯",
-            )
+        self._ensure_protocol_version_available(session, version_id)
         return ProtocolDocumentVersion(
             protocol_version_id=version_id,
             protocol_code=identity.protocol_code,

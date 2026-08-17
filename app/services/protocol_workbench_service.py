@@ -7,6 +7,7 @@ HTTP 层只做协议转换；本服务复用持久 Job、Slice 1–4 领域服�
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import uuid
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Callable
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.domain.contracts.agent_io import (
@@ -31,6 +33,7 @@ from app.domain.contracts.protocol_metadata import (
 from app.protocols.deconstruction_gate import (
     ProtocolDeconstructionGate,
     ProtocolDeconstructionGateResult,
+    ProtocolDraftDiffDeclaration,
     ProtocolGateIssue,
 )
 from app.protocols.ingestion import (
@@ -112,6 +115,15 @@ PROTOCOL_DECONSTRUCTION_STEPS: tuple[StepSpec, ...] = (
 _CHECKPOINT_STEP_ORDER: tuple[str, ...] = tuple(step.step_id for step in PROTOCOL_DECONSTRUCTION_STEPS)
 
 Now = Callable[[], datetime]
+FeedbackReviser = Callable[
+    [
+        ProtocolDeconstructionInput,
+        ProtocolDeconstructionDraft,
+        str,
+        str,
+    ],
+    ProtocolDeconstructionDraft,
+]
 
 
 class ProtocolWorkbenchError(RuntimeError):
@@ -387,14 +399,48 @@ class ProtocolWorkbenchService:
         data_paths: DataPaths,
         now: Now = utc_now,
         gate: ProtocolDeconstructionGate | None = None,
+        feedback_reviser: FeedbackReviser | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.data_paths = data_paths
         self.now = now
         self.gate = gate or ProtocolDeconstructionGate()
+        self.feedback_reviser = feedback_reviser or self._revise_feedback_with_model
         self.jobs = JobService(session_factory, now=now)
 
+    @staticmethod
+    def _revise_feedback_with_model(
+        source_input: ProtocolDeconstructionInput,
+        current_draft: ProtocolDeconstructionDraft,
+        target_rule_code: str,
+        feedback_note: str,
+    ) -> ProtocolDeconstructionDraft:
+        from app.agents.deepseek_protocol_transport import DeepSeekProtocolAgentTransport
+        from app.agents.protocol_deconstructor import (
+            revise_protocol_draft_from_feedback,
+        )
+
+        return revise_protocol_draft_from_feedback(
+            source_input,
+            current_draft,
+            target_rule_code=target_rule_code,
+            feedback_note=feedback_note,
+            transport=DeepSeekProtocolAgentTransport(),
+        )
+
     # ------------------------------------------------------------------ 上传
+
+    @staticmethod
+    def _require_supported_protocol_file(upload_path: Path, original_name: str) -> None:
+        suffix = Path(original_name or upload_path.name).suffix.lower()
+        if suffix == ".docx":
+            return
+        raise ProtocolWorkbenchError(
+            "UNSUPPORTED_PROTOCOL_FILE",
+            title="当前文件格式不能用于方案解构",
+            detail="现阶段的结构提取和原文定位仅支持 DOCX 格式的正式研究方案。",
+            recovery="请使用 Word 将正式方案另存为 DOCX 后重新上传。",
+        )
 
     def start_first_deconstruction(
         self,
@@ -405,6 +451,7 @@ class ProtocolWorkbenchService:
         actor: str = "用户",
     ) -> StartDeconstructionResult:
         display_name = original_name or upload_path.name
+        self._require_supported_protocol_file(upload_path, display_name)
         try:
             sha256 = compute_sha256(upload_path)
         except SourceIngestionError as exc:
@@ -412,7 +459,7 @@ class ProtocolWorkbenchService:
                 "SOURCE_INGESTION_FAILED",
                 title="方案文件无法登记",
                 detail=str(exc),
-                recovery="请确认文件完整可读且为支持的方案格式（DOCX/DOC/PDF/TXT）后重新上传。",
+                recovery="请确认 DOCX 文件完整可读后重新上传。",
             ) from exc
 
         source_artifact_id = (
@@ -430,7 +477,7 @@ class ProtocolWorkbenchService:
                 "SOURCE_INGESTION_FAILED",
                 title="方案文件无法登记",
                 detail=str(exc),
-                recovery="请确认文件完整可读且为支持的方案格式（DOCX/DOC/PDF/TXT）后重新上传。",
+                recovery="请确认 DOCX 文件完整可读后重新上传。",
             ) from exc
 
         # 将登记结果写入 Job payload，保证 runner 即使在 API 写入首个检查点前
@@ -511,6 +558,7 @@ class ProtocolWorkbenchService:
         """重新解构：目标项目必须在持久任务中保存，上传的新版方案在同一项目中
         生成新的不可变规则版本。目标项目不存在时直接拒绝，不创建任务。"""
         display_name = original_name or upload_path.name
+        self._require_supported_protocol_file(upload_path, display_name)
         try:
             sha256 = compute_sha256(upload_path)
         except SourceIngestionError as exc:
@@ -518,7 +566,7 @@ class ProtocolWorkbenchService:
                 "SOURCE_INGESTION_FAILED",
                 title="方案文件无法登记",
                 detail=str(exc),
-                recovery="请确认文件完整可读且为支持的方案格式（DOCX/DOC/PDF/TXT）后重新上传。",
+                recovery="请确认 DOCX 文件完整可读后重新上传。",
             ) from exc
 
         with self.session_factory() as session:
@@ -548,7 +596,7 @@ class ProtocolWorkbenchService:
                 "SOURCE_INGESTION_FAILED",
                 title="方案文件无法登记",
                 detail=str(exc),
-                recovery="请确认文件完整可读且为支持的方案格式（DOCX/DOC/PDF/TXT）后重新上传。",
+                recovery="请确认 DOCX 文件完整可读后重新上传。",
             ) from exc
 
         target_version = target_project.protocol_version
@@ -620,6 +668,221 @@ class ProtocolWorkbenchService:
             created=True,
             source_artifact_id=artifact.source_artifact_id,
             file_name=display_name,
+        )
+
+    def start_feedback_re_deconstruction(
+        self,
+        *,
+        project_id: str,
+        idempotency_key: str,
+        actor: str = "用户",
+    ) -> StartDeconstructionResult:
+        """无需上传新版文件，复制当前正式草稿为候选稿并进入反馈修订。
+
+        该路径仍必须恢复正式版本发布时使用的方案输入与来源定位；若历史任务已
+        缺失这些权威上下文则失败关闭，不能用只有规则正文的无来源副本继续发布。
+        """
+        with self.session_factory() as session:
+            row = get_project_row(session, project_id)
+            if row is None:
+                raise ProtocolWorkbenchError(
+                    "PROJECT_NOT_FOUND",
+                    title="找不到正式项目",
+                    detail=f"项目 {project_id} 不存在正式发布记录，无法发起反馈修订。",
+                    recovery="请返回项目列表重新选择，或先完成首次解构与发布。",
+                    context={"project_id": project_id},
+                )
+            target_project, target_rule_set_revision = row
+            try:
+                baseline = resolve_formal_baseline_revision(
+                    session=session,
+                    project_id=project_id,
+                )
+            except FormalBaselineError as exc:
+                raise ProtocolWorkbenchError(
+                    exc.code,
+                    title="无法读取当前正式草稿",
+                    detail=str(exc),
+                    recovery=exc.recovery,
+                ) from exc
+
+        source_context = self._source_context_for_revision(baseline.revision_id)
+        if source_context is None:
+            raise ProtocolWorkbenchError(
+                "FORMAL_SOURCE_CONTEXT_MISSING",
+                title="当前正式版本缺少可复用的来源定位",
+                detail="系统找到了正式规则，但没有找到该版本发布时的方案输入和原文定位，不能直接生成反馈修订稿。",
+                recovery="请改用“上传新版方案”并重新选择当前正式方案文件；系统会重新建立来源定位后再比较。",
+                context={"project_id": project_id},
+            )
+
+        feedback_identity = hashlib.sha256(
+            f"{project_id}:{idempotency_key}".encode("utf-8")
+        ).hexdigest()
+        # 草稿与语义候选的往返合同固定为 ``draft:<candidate_id>``。
+        # 保留 feedback 命名空间，但必须放在 draft: 之后，否则局部修订水合时
+        # 会生成第二个草稿身份并触发错误的并发冲突。
+        new_draft_id = f"draft:feedback:{feedback_identity}"
+        new_protocol_version_id = f"protocol-version-feedback:{feedback_identity}"
+        source_input = ProtocolDeconstructionInput.model_validate(
+            source_context["source_input"]
+        ).model_copy(update={"protocol_version_id": new_protocol_version_id})
+        source_input_payload = source_input.model_dump(mode="json")
+        candidate = ProtocolDeconstructionDraft.model_validate(
+            baseline.content.model_dump(mode="json")
+            | {
+                "draft_id": new_draft_id,
+                "draft_revision": 1,
+                "previous_draft_id": None,
+                "project_id": target_project.project_id,
+                "protocol_version_id": new_protocol_version_id,
+            }
+        )
+        target_version = target_project.protocol_version
+        file_name = str(source_context.get("file_name") or "当前正式方案")
+        payload = {
+            "session_kind": "re_deconstruction",
+            "re_deconstruction_origin": "formal_feedback",
+            "file_name": file_name,
+            "source_artifact_id": source_context.get("source_artifact_id"),
+            "actor": actor,
+            "awaiting_user": "review",
+            "source_input": source_input_payload,
+            "source_spans": source_context["source_spans"],
+            "snapshot_id": source_context.get("snapshot_id"),
+            "selected_phase": target_project.study_phase.value,
+            "protocol_code": target_version.protocol_code,
+            "official_version": target_version.official_version,
+            "target_project_id": target_project.project_id,
+            "target_project_code": target_project.project_code,
+            "target_project_name": target_project.project_name,
+            "target_protocol_code": target_version.protocol_code,
+            "target_study_phase": target_project.study_phase.value,
+            "target_official_version": target_version.official_version,
+            "target_rule_set_revision": target_rule_set_revision,
+        }
+        source_spans = {
+            key: ProtocolSourceSpan.model_validate(value)
+            for key, value in source_context["source_spans"].items()
+        }
+        with self.session_factory() as session:
+            with session.begin():
+                # 任务、初稿和全部已完成检查点一次提交。后台 runner 在提交前
+                # 看不到 queued 任务，因此不能抢先取得租约并破坏同步初始化。
+                result = self.jobs.create_job_in_session(
+                    session,
+                    idempotency_key=idempotency_key,
+                    job_type=PROTOCOL_DECONSTRUCTION_JOB_TYPE,
+                    payload=payload,
+                    steps=list(PROTOCOL_DECONSTRUCTION_STEPS),
+                )
+                if not result.created:
+                    return StartDeconstructionResult(
+                        job_id=result.job_id,
+                        state=result.state,
+                        created=False,
+                        source_artifact_id=str(
+                            source_context.get("source_artifact_id") or ""
+                        ),
+                        file_name=file_name,
+                    )
+                revision = ProtocolDraftService(session).save_initial_draft(
+                    candidate,
+                    actor=actor,
+                    created_at=self.now(),
+                    baseline=baseline.content,
+                )
+                gate = self.gate.evaluate(
+                    source_input,
+                    candidate,
+                    source_spans=source_spans,
+                    previous_draft=baseline.content,
+                    declared_diff=ProtocolDraftDiffDeclaration(
+                        **revision.diff.model_dump(mode="python")
+                    ),
+                )
+                store = JobStore(session, now=self.now)
+                lease = store.claim_job(result.job_id, self.WORKER_ID)
+                if lease is None:
+                    raise ProtocolWorkbenchError(
+                        "JOB_CLAIM_FAILED",
+                        title="反馈修订任务未能建立",
+                        detail="系统未能取得新任务的处理权。",
+                        recovery="请返回工作台后重试；若仍失败，请联系维护人员。",
+                    )
+                completed_payloads = {
+                    STEP_REGISTER: {
+                        "source_artifact_id": source_context.get("source_artifact_id"),
+                        "file_name": file_name,
+                    },
+                    STEP_EXTRACT: {"source_input": source_input_payload},
+                    STEP_RENDER: {
+                        "source_spans": source_context["source_spans"],
+                        "snapshot_id": source_context.get("snapshot_id"),
+                    },
+                    STEP_IDENTIFY: {
+                        "selected_phase": target_project.study_phase.value,
+                        "protocol_code": target_version.protocol_code,
+                        "official_version": target_version.official_version,
+                    },
+                }
+                for step_id, checkpoint in completed_payloads.items():
+                    store.start_step(lease, step_id)
+                    store.complete_step(lease, step_id, checkpoint_payload=checkpoint)
+                store.enter_user_wait(
+                    lease,
+                    STEP_AWAIT_IDENTITY,
+                    awaiting_user="identity",
+                )
+                store.complete_user_step(
+                    result.job_id,
+                    STEP_AWAIT_IDENTITY,
+                    checkpoint_payload={
+                        "selected_phase": target_project.study_phase.value,
+                        "protocol_code": target_version.protocol_code,
+                        "official_version": target_version.official_version,
+                        "awaiting_user": None,
+                    },
+                )
+                lease = store.claim_job(result.job_id, self.WORKER_ID)
+                if lease is None:
+                    raise ProtocolWorkbenchError(
+                        "JOB_CLAIM_FAILED",
+                        title="反馈修订任务未能进入审阅",
+                        detail="系统未能继续准备正式草稿副本。",
+                        recovery="请返回工作台后重试；若仍失败，请联系维护人员。",
+                    )
+                store.start_step(lease, STEP_GENERATE)
+                store.complete_step(
+                    lease,
+                    STEP_GENERATE,
+                    checkpoint_payload={
+                        "draft_id": revision.draft_id,
+                        "draft_revision_id": revision.revision_id,
+                        "draft_status": revision.status.value,
+                    },
+                )
+                store.start_step(lease, STEP_INTEGRITY)
+                store.complete_step(
+                    lease,
+                    STEP_INTEGRITY,
+                    checkpoint_payload={
+                        "gate_result": gate.model_dump(mode="json"),
+                        "publishable": gate.publishable,
+                    },
+                )
+                store.enter_user_wait(
+                    lease,
+                    STEP_AWAIT_REVIEW,
+                    awaiting_user="review",
+                )
+
+        return StartDeconstructionResult(
+            job_id=result.job_id,
+            state="waiting_user",
+            created=True,
+            source_artifact_id=str(source_context.get("source_artifact_id") or ""),
+            file_name=file_name,
         )
 
     # ------------------------------------------------------------------ 查询
@@ -1029,15 +1292,64 @@ class ProtocolWorkbenchService:
         self,
         job_id: str,
         *,
-        draft: ProtocolDeconstructionDraft,
         expected_revision_id: str,
         feedback_kind: DraftFeedbackKind,
-        feedback_note: str | None,
+        feedback_note: str,
+        target_rule_code: str,
         actor: str,
     ) -> DraftDetailView:
         merged = self._merged_payload(job_id)
         self._require_protocol_job(job_id)
         self._require_draft_session(merged)
+        note = feedback_note.strip()
+        if not note:
+            raise ProtocolWorkbenchError(
+                "FEEDBACK_NOTE_REQUIRED",
+                title="请写明需要修订的内容",
+                detail="反馈内容为空，系统无法判断需要核对或补充什么。",
+                recovery="请选择一条入排标准，并写明原文理解问题或补充解释。",
+            )
+        with self.session_factory() as session:
+            current_revision = ProtocolDraftRevisionRepository(session).get(
+                expected_revision_id
+            )
+        current_draft = current_revision.content
+        rule_codes = {rule.official_code for rule in current_draft.proposed_rules}
+        if target_rule_code not in rule_codes:
+            raise ProtocolWorkbenchError(
+                "FEEDBACK_RULE_NOT_FOUND",
+                title="找不到选中的入排标准",
+                detail=f"当前草稿中没有 {target_rule_code}，未生成新稿。",
+                recovery="请刷新页面，从当前入排标准列表中重新选择。",
+            )
+        draft = current_draft
+        if feedback_kind == DraftFeedbackKind.SOURCE_ERROR:
+            try:
+                draft = self.feedback_reviser(
+                    self._load_source_input(merged),
+                    current_draft,
+                    target_rule_code,
+                    note,
+                )
+                self._validate_source_error_scope(
+                    current_draft,
+                    draft,
+                    target_rule_code=target_rule_code,
+                )
+                changed_codes = set(
+                    compute_draft_diff(current_draft, draft).modified_rule_codes
+                )
+                if changed_codes != {target_rule_code}:
+                    raise ValueError(
+                        "原文理解纠错必须且只能改变选中的一条官方入排标准"
+                    )
+            except Exception as exc:
+                raise ProtocolWorkbenchError(
+                    "FEEDBACK_REVISION_FAILED",
+                    title="未能完成本次反馈修订",
+                    detail="系统未产出可安全读取的局部修订，原草稿保持不变。",
+                    recovery="请把问题具体到原文词句、逻辑关系或时间窗后重试。",
+                ) from exc
         with self.session_factory() as session:
             with session.begin():
                 service = ProtocolDraftService(session)
@@ -1045,12 +1357,183 @@ class ProtocolWorkbenchService:
                     draft,
                     expected_revision_id=expected_revision_id,
                     feedback_kind=feedback_kind,
-                    feedback_note=feedback_note,
+                    feedback_note=f"{target_rule_code}：{note}",
                     actor=actor,
                     created_at=self.now(),
                 )
                 self._update_draft_checkpoint(session, job_id, revision)
         return self.get_draft_detail(job_id)
+
+    @staticmethod
+    def _validate_source_error_scope(
+        previous: ProtocolDeconstructionDraft,
+        current: ProtocolDeconstructionDraft,
+        *,
+        target_rule_code: str,
+    ) -> None:
+        """原文理解纠错只能重建选中的官方父规则及其附属结构。"""
+
+        previous_rules = {
+            rule.official_code: rule for rule in previous.proposed_rules
+        }
+        current_rules = {rule.official_code: rule for rule in current.proposed_rules}
+        if (
+            len(previous_rules) != len(previous.proposed_rules)
+            or len(current_rules) != len(current.proposed_rules)
+            or previous_rules.keys() != current_rules.keys()
+        ):
+            raise ValueError("原文理解纠错不得增删官方父规则")
+        current_rule_ids = [rule.rule_id for rule in current.proposed_rules]
+        if len(current_rule_ids) != len(set(current_rule_ids)):
+            raise ValueError("原文理解纠错不得在不同父规则间复用规则身份")
+        for code, rule in current_rules.items():
+            if any(component.parent_rule_id != rule.rule_id for component in rule.components):
+                raise ValueError("原文理解纠错不得改写任何子项的父子层级")
+            if code != target_rule_code and rule != previous_rules[code]:
+                raise ValueError("原文理解纠错不得修改未选中的官方父规则")
+
+        tree_components = [
+            (code, component)
+            for code, rule in current_rules.items()
+            for component in rule.components
+        ]
+        tree_component_ids = [
+            component.rule_component_id for _code, component in tree_components
+        ]
+        if len(tree_component_ids) != len(set(tree_component_ids)):
+            raise ValueError("原文理解纠错不得在不同父规则间复用子项身份")
+        tree_component_by_id = {
+            component.rule_component_id: (code, component)
+            for code, component in tree_components
+        }
+
+        draft_component_ids = [item.draft_component_id for item in current.component_drafts]
+        bound_component_ids = [
+            item.proposed_component.rule_component_id for item in current.component_drafts
+        ]
+        if (
+            len(draft_component_ids) != len(set(draft_component_ids))
+            or len(bound_component_ids) != len(set(bound_component_ids))
+            or set(bound_component_ids) != set(tree_component_ids)
+        ):
+            raise ValueError("原文理解纠错后的规则树与子项来源映射必须保持全局一一对应")
+        draft_component_by_id = {
+            item.draft_component_id: item for item in current.component_drafts
+        }
+        for binding in current.component_drafts:
+            tree_entry = tree_component_by_id.get(
+                binding.proposed_component.rule_component_id
+            )
+            if (
+                tree_entry is None
+                or binding.parent_official_code != tree_entry[0]
+                or binding.proposed_component != tree_entry[1]
+            ):
+                raise ValueError("子项来源映射必须指向规则树中的同一父规则和同一子项")
+
+        tree_requirements = {
+            requirement.requirement_id: (component.rule_component_id, requirement)
+            for _code, component in tree_components
+            for requirement in component.evidence_requirements
+        }
+        tree_requirement_count = sum(
+            len(component.evidence_requirements)
+            for _code, component in tree_components
+        )
+        if len(tree_requirements) != tree_requirement_count:
+            raise ValueError("原文理解纠错不得跨子项复用资料要求身份")
+        component_requirement_drafts = [
+            item
+            for item in current.evidence_requirement_drafts
+            if item.draft_component_id is not None
+        ]
+        proposed_requirement_ids = [
+            item.proposed_requirement.requirement_id
+            for item in component_requirement_drafts
+        ]
+        if (
+            len(proposed_requirement_ids) != len(set(proposed_requirement_ids))
+            or set(proposed_requirement_ids) != set(tree_requirements)
+        ):
+            raise ValueError("规则树与资料要求来源映射必须保持全局一一对应")
+        for requirement_draft in component_requirement_drafts:
+            component_binding = draft_component_by_id.get(
+                requirement_draft.draft_component_id
+            )
+            tree_entry = tree_requirements.get(
+                requirement_draft.proposed_requirement.requirement_id
+            )
+            if (
+                component_binding is None
+                or tree_entry is None
+                or tree_entry[0]
+                != component_binding.proposed_component.rule_component_id
+                or requirement_draft.proposed_requirement != tree_entry[1]
+            ):
+                raise ValueError("资料要求来源映射必须指向同一规则子项中的同一资料要求")
+
+        target_component_ids = {
+            component.rule_component_id
+            for component in current_rules[target_rule_code].components
+        }
+        target_components = {
+            component.rule_component_id: component
+            for component in current_rules[target_rule_code].components
+        }
+        for binding in current.component_drafts:
+            component = binding.proposed_component
+            if binding.parent_official_code == target_rule_code:
+                if (
+                    component.rule_component_id not in target_component_ids
+                    or component != target_components[component.rule_component_id]
+                ):
+                    raise ValueError("选中规则的子项来源映射与规则树不一致")
+        previous_non_target_bindings = {
+            item.draft_component_id: item
+            for item in previous.component_drafts
+            if item.parent_official_code != target_rule_code
+        }
+        current_non_target_bindings = {
+            item.draft_component_id: item
+            for item in current.component_drafts
+            if item.parent_official_code != target_rule_code
+        }
+        if previous_non_target_bindings != current_non_target_bindings:
+            raise ValueError("原文理解纠错不得改写未选中规则的子项或来源")
+
+        target_draft_component_ids = {
+            item.draft_component_id
+            for item in [*previous.component_drafts, *current.component_drafts]
+            if item.parent_official_code == target_rule_code
+        }
+        previous_other_requirements = {
+            item.draft_requirement_id: item
+            for item in previous.evidence_requirement_drafts
+            if item.draft_component_id not in target_draft_component_ids
+        }
+        current_other_requirements = {
+            item.draft_requirement_id: item
+            for item in current.evidence_requirement_drafts
+            if item.draft_component_id not in target_draft_component_ids
+        }
+        if previous_other_requirements != current_other_requirements:
+            raise ValueError("原文理解纠错不得改写其他规则或流程项目的资料要求")
+
+        immutable_fields = (
+            "draft_id",
+            "project_id",
+            "protocol_version_id",
+            "selected_phase",
+            "protocol_metadata",
+            "proposed_workflow_stages",
+            "parent_catalog_mappings",
+            "procedure_catalog_mappings",
+            "structural_warnings",
+            "unresolved_items",
+            "source_refs",
+        )
+        if any(getattr(previous, field) != getattr(current, field) for field in immutable_fields):
+            raise ValueError("原文理解纠错不得改写项目身份、流程结构或全局来源范围")
 
     def save_draft(
         self,
@@ -1136,6 +1619,7 @@ class ProtocolWorkbenchService:
         source_input = self._load_source_input(merged)
         revision = self._load_draft_revision(merged)
         spans = self._load_source_spans(merged)
+        self._ensure_publish_wait(job_id, revision.revision_id)
         publication = ProtocolPublicationService(self.session_factory, gate=self.gate)
         try:
             result = publication.publish(
@@ -1237,6 +1721,7 @@ class ProtocolWorkbenchService:
         revision = self._load_draft_revision(merged)
         spans = self._load_source_spans(merged)
         new_version_id = revision.content.protocol_version_id
+        self._ensure_publish_wait(job_id, revision.revision_id)
         publication = ProtocolPublicationService(self.session_factory, gate=self.gate)
         try:
             result = publication.publish(
@@ -1249,6 +1734,9 @@ class ProtocolWorkbenchService:
                     published_at=self.now(),
                     project_id=target_project_id,
                     protocol_version_id=new_version_id,
+                    expected_rule_set_revision=merged.get(
+                        "target_rule_set_revision"
+                    ),
                 )
             )
         except PublicationGateError as exc:
@@ -1309,16 +1797,44 @@ class ProtocolWorkbenchService:
         """测试夹具：写入完整审阅态（不跑 OCR/Agent）。"""
         if wait_at not in (STEP_AWAIT_REVIEW, STEP_PUBLISH):
             raise ValueError(f"wait_at 必须是审阅或发布步骤，收到 {wait_at!r}")
-        gate = gate_result or self.gate.evaluate(
-            source_input,
-            draft,
-            source_spans=source_spans,
-        )
+        merged = self._merged_payload(job_id)
         with self.session_factory() as session:
             with session.begin():
                 draft_service = ProtocolDraftService(session)
+                baseline = None
+                if merged.get("session_kind") == "re_deconstruction":
+                    target_project_id = merged.get("target_project_id")
+                    if not target_project_id:
+                        raise ValueError("重新解构测试夹具缺少目标项目")
+                    try:
+                        baseline = resolve_formal_baseline_revision(
+                            session=session,
+                            project_id=str(target_project_id),
+                        )
+                    except FormalBaselineError:
+                        # 仅供 fail-closed 对抗测试构造“正式基线损坏”
+                        # 状态；真实执行器不走此测试夹具，会在生成前停止。
+                        baseline = None
                 revision = draft_service.save_initial_draft(
-                    draft, actor=actor, created_at=self.now()
+                    draft,
+                    actor=actor,
+                    created_at=self.now(),
+                    baseline=baseline.content if baseline is not None else None,
+                )
+                gate = gate_result or self.gate.evaluate(
+                    source_input,
+                    draft,
+                    source_spans=source_spans,
+                    previous_draft=(
+                        baseline.content if baseline is not None else None
+                    ),
+                    declared_diff=(
+                        ProtocolDraftDiffDeclaration(
+                            **revision.diff.model_dump(mode="python")
+                        )
+                        if baseline is not None
+                        else None
+                    ),
                 )
                 repo = JobRepository(session)
                 for step_id, payload in (
@@ -1463,6 +1979,41 @@ class ProtocolWorkbenchService:
                 )
             return merged
 
+    def _source_context_for_revision(
+        self,
+        revision_id: str,
+    ) -> dict[str, Any] | None:
+        """从生成该正式草稿的持久任务恢复方案输入与原文定位。
+
+        草稿 revision 本身只保存规则内容；来源图保存在任务检查点。按任务更新时间
+        倒序查找精确引用该 revision 的任务，避免把另一版本的来源上下文拼接进来。
+        """
+        with self.session_factory() as session:
+            job_ids = session.execute(
+                select(JobRecord.job_id)
+                .where(JobRecord.job_type == PROTOCOL_DECONSTRUCTION_JOB_TYPE)
+                .order_by(JobRecord.updated_at.desc(), JobRecord.job_id.desc())
+            ).scalars().all()
+        for job_id in job_ids:
+            try:
+                merged = self._merged_payload(job_id)
+            except (JobNotFoundError, ValueError):
+                continue
+            if merged.get("draft_revision_id") != revision_id:
+                continue
+            source_input = merged.get("source_input")
+            source_spans = merged.get("source_spans")
+            if not isinstance(source_input, dict) or not isinstance(source_spans, dict):
+                continue
+            return {
+                "source_input": source_input,
+                "source_spans": source_spans,
+                "source_artifact_id": merged.get("source_artifact_id"),
+                "snapshot_id": merged.get("snapshot_id"),
+                "file_name": merged.get("file_name"),
+            }
+        return None
+
     def _complete_user_step(
         self,
         job_id: str,
@@ -1486,6 +2037,61 @@ class ProtocolWorkbenchService:
                 recovery="请刷新任务状态后重试。",
                 context={"current_state": exc.current_state},
             ) from exc
+
+    def _ensure_publish_wait(self, job_id: str, revision_id: str) -> None:
+        """把审阅边界推进到发布确认边界；重复调用保持幂等。
+
+        发布事务只能在 ``publish`` 步骤已进入等待确认后执行，避免正式记录已经
+        写入而工作流仍停在审阅步骤。发布失败时页面仍可读取同一草稿并重试。
+        """
+        with self.session_factory() as session:
+            store = JobStore(session, now=self.now)
+            job = store.get_job(job_id)
+            review_step = session.get(
+                JobStepRecord,
+                {"job_id": job_id, "step_id": STEP_AWAIT_REVIEW},
+            )
+            publish_step = session.get(
+                JobStepRecord,
+                {"job_id": job_id, "step_id": STEP_PUBLISH},
+            )
+            if publish_step is not None and publish_step.state in {
+                "waiting_user",
+                "completed",
+            }:
+                return
+            if review_step is None or review_step.state != "waiting_user":
+                raise ProtocolWorkbenchError(
+                    "REVIEW_NOT_READY_FOR_PUBLICATION",
+                    title="草稿尚未完成发布前审阅",
+                    detail="当前任务不在等待审阅状态，不能进入发布确认。",
+                    recovery="请刷新页面并继续完成草稿审阅；若状态仍异常，请联系维护人员。",
+                )
+
+        self._complete_user_step(
+            job_id,
+            STEP_AWAIT_REVIEW,
+            {
+                "draft_revision_id": revision_id,
+                "awaiting_user": None,
+            },
+        )
+        with self.session_factory() as session:
+            with session.begin():
+                store = JobStore(session, now=self.now)
+                lease = store.claim_job(job_id, self.WORKER_ID)
+                if lease is None:
+                    raise ProtocolWorkbenchError(
+                        "JOB_CLAIM_FAILED",
+                        title="未能进入发布确认",
+                        detail="系统未能取得任务的处理权。",
+                        recovery="请刷新页面后重试；若仍失败，请联系维护人员。",
+                    )
+                store.enter_user_wait(
+                    lease,
+                    STEP_PUBLISH,
+                    awaiting_user="publish",
+                )
 
     def _force_complete_step(
         self,
@@ -1529,7 +2135,13 @@ class ProtocolWorkbenchService:
             revision.content,
             source_spans=spans,
             previous_draft=previous,
-            declared_diff=revision.diff if revision.revision_number > 1 else None,
+            declared_diff=(
+                ProtocolDraftDiffDeclaration(
+                    **revision.diff.model_dump(mode="python")
+                )
+                if revision.revision_number > 1
+                else None
+            ),
         )
         repo = JobRepository(session)
         for step_id, payload in (
@@ -1631,7 +2243,11 @@ class ProtocolWorkbenchService:
 
     def _load_declared_diff(self, merged: dict[str, Any]):
         revision = self._load_draft_revision(merged)
-        return revision.diff if revision.revision_number > 1 else None
+        if revision.revision_number <= 1:
+            return None
+        return ProtocolDraftDiffDeclaration(
+            **revision.diff.model_dump(mode="python")
+        )
 
     def _require_draft_session(self, merged: dict[str, Any]) -> None:
         if not merged.get("draft_revision_id"):

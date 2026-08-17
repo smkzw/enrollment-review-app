@@ -8,7 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.contracts.agent_io import ProtocolDeconstructionDraft
 from app.domain.contracts.enums import DatePrecision, StudyPhase
-from app.domain.contracts.protocol_drafts import DraftFeedbackKind
+from app.domain.contracts.protocol_drafts import (
+    DraftFeedbackKind,
+    ProtocolDraftRevisionDiff,
+)
 
 
 class _StrictModel(BaseModel):
@@ -22,6 +25,12 @@ class StartDeconstructionResponse(_StrictModel):
     created: bool
     source_artifact_id: str
     file_name: str
+
+
+class StartFeedbackRevisionRequest(_StrictModel):
+    project_id: str = Field(min_length=1, max_length=128)
+    idempotency_key: str = Field(min_length=1, max_length=256)
+    actor: str = Field(default="用户", min_length=1, max_length=128)
 
 
 class OfficialProjectDTO(_StrictModel):
@@ -85,7 +94,7 @@ class DraftComparisonResponse(_StrictModel):
     job_id: str
     baseline: DraftComparisonSideResponse
     candidate: DraftComparisonSideResponse
-    diff: dict[str, Any]
+    diff: ProtocolDraftRevisionDiff
     source_bound: bool
 
 
@@ -216,7 +225,7 @@ class DraftRevisionResponse(_StrictModel):
     rule_count: int
     workflow_stage_count: int
     content: dict[str, Any]
-    diff: dict[str, Any] | None = None
+    diff: ProtocolDraftRevisionDiff | None = None
 
 
 class ManualEditRequest(_StrictModel):
@@ -227,9 +236,9 @@ class ManualEditRequest(_StrictModel):
 
 class FeedbackRequest(_StrictModel):
     expected_revision_id: str = Field(min_length=1, max_length=128)
-    draft: ProtocolDeconstructionDraft
     feedback_kind: DraftFeedbackKind
-    feedback_note: str | None = None
+    target_rule_code: str = Field(pattern=r"^(IN|EX)-\d{2}$")
+    feedback_note: str = Field(min_length=1, max_length=12000)
     actor: str = Field(default="用户", min_length=1, max_length=128)
 
 

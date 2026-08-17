@@ -27,6 +27,7 @@ from app.protocols.deconstruction_gate import (
     ProtocolDeconstructionGateResult,
     ProtocolGateCheckResult,
 )
+from app.domain.contracts.protocol_drafts import DraftFeedbackKind
 from app.services.protocol_workbench_service import (
     ProtocolWorkbenchError,
     ProtocolWorkbenchService,
@@ -57,13 +58,14 @@ NAIVE_NOW = datetime(2026, 8, 17, tzinfo=timezone.utc).replace(tzinfo=None)
 
 
 def _make_service(
-    session_factory, data_paths, gate=None
+    session_factory, data_paths, gate=None, feedback_reviser=None
 ) -> ProtocolWorkbenchService:
     return ProtocolWorkbenchService(
         session_factory,
         data_paths=data_paths,
         now=lambda: NAIVE_NOW,
         gate=gate,
+        feedback_reviser=feedback_reviser,
     )
 
 
@@ -181,6 +183,30 @@ def _seed_review(service, job_id, source_input, draft, spans, *, wait_at="publis
     )
 
 
+def _publish_first_with_source_context(
+    service, data_paths, source_input, draft, spans
+):
+    docx = _write_minimal_docx(data_paths, "first-with-source-context-helper.docx")
+    started = service.start_first_deconstruction(
+        upload_path=docx,
+        original_name=docx.name,
+        idempotency_key="first-with-source-context-helper",
+        actor="医学监查员",
+    )
+    service.seed_review_session(
+        started.job_id,
+        source_input=source_input,
+        draft=draft,
+        source_spans=spans,
+        wait_at="publish",
+    )
+    return service.publish_first_project(
+        started.job_id,
+        idempotency_key="publish-with-source-context-helper",
+        actor="医学监查员",
+    )
+
+
 def test_redeconstruction_start_persists_target_project(
     slice4_env, data_paths
 ) -> None:
@@ -220,6 +246,387 @@ def test_redeconstruction_unknown_project_rejected(
         _start_redeconstruction(service, "missing-project", data_paths)
     assert exc_info.value.code == "PROJECT_NOT_FOUND"
     assert "找不到正式项目" in exc_info.value.title
+
+
+def test_protocol_upload_rejects_formats_without_source_preserving_extraction(
+    slice4_env, data_paths
+) -> None:
+    factory, _now = slice4_env
+    service = _make_service(factory, data_paths)
+    pdf = data_paths.root / "protocol.pdf"
+    pdf.write_bytes(b"%PDF-1.4")
+
+    with pytest.raises(ProtocolWorkbenchError) as exc_info:
+        service.start_first_deconstruction(
+            upload_path=pdf,
+            original_name="protocol.pdf",
+            idempotency_key="unsupported-pdf",
+        )
+
+    assert exc_info.value.code == "UNSUPPORTED_PROTOCOL_FILE"
+    assert "另存为 DOCX" in exc_info.value.recovery
+
+
+def test_redeconstruction_rejects_publish_when_formal_baseline_has_advanced(
+    slice4_env, data_paths
+) -> None:
+    """并行任务只能发布到启动时读取的正式规则版，旧基线不得覆盖新正式版。"""
+    factory, _now = slice4_env
+    service = _make_service(factory, data_paths, gate=AlwaysPublishableGate())
+    source_input, draft, spans = confirmed_fixture()
+    published = _publish_first(factory, source_input, draft, spans)
+    task_a = _start_redeconstruction(
+        service, published.project_id, data_paths, key="parallel-redo-a"
+    )
+    task_b = _start_redeconstruction(
+        service, published.project_id, data_paths, key="parallel-redo-b"
+    )
+    source_a, draft_a, spans_a = _revised_fixture("parallel-version-a")
+    source_b, draft_b, spans_b = _revised_fixture("parallel-version-b")
+    _seed_review(service, task_a.job_id, source_a, draft_a, spans_a, wait_at="publish")
+    _seed_review(service, task_b.job_id, source_b, draft_b, spans_b, wait_at="publish")
+    service.publish_re_deconstruction(
+        task_b.job_id,
+        idempotency_key="parallel-publish-b",
+        actor="医学监查员",
+    )
+
+    with pytest.raises(ProtocolWorkbenchError) as exc_info:
+        service.publish_re_deconstruction(
+            task_a.job_id,
+            idempotency_key="parallel-publish-a",
+            actor="医学监查员",
+        )
+    assert exc_info.value.code == "PUBLICATION_LINEAGE_REJECTED"
+    assert "当前正式规则版本已被" in exc_info.value.detail
+    assert service.get_project_official_version(published.project_id).publication_count == 2
+
+
+def test_feedback_redeconstruction_starts_from_formal_draft_without_upload(
+    slice4_env, data_paths
+) -> None:
+    """无新版文件时复用正式发布任务的来源上下文，候选稿与正式稿初始无差异。"""
+    factory, _now = slice4_env
+    service = _make_service(factory, data_paths, gate=AlwaysPublishableGate())
+    source_input, draft, spans = confirmed_fixture()
+    docx = _write_minimal_docx(data_paths, "first-with-source-context.docx")
+    started = service.start_first_deconstruction(
+        upload_path=docx,
+        original_name=docx.name,
+        idempotency_key="first-with-source-context",
+        actor="医学监查员",
+    )
+    service.seed_review_session(
+        started.job_id,
+        source_input=source_input,
+        draft=draft,
+        source_spans=spans,
+        wait_at="publish",
+    )
+    published = service.publish_first_project(
+        started.job_id,
+        idempotency_key="publish-with-source-context",
+        actor="医学监查员",
+    )
+
+    result = service.start_feedback_re_deconstruction(
+        project_id=published.project_id,
+        idempotency_key="feedback-from-formal",
+        actor="医学监查员",
+    )
+    assert result.created is True
+    session_view = service.get_session(result.job_id)
+    assert session_view.state == "waiting_user"
+    assert session_view.awaiting_user == "review"
+    assert session_view.target_project_id == published.project_id
+    comparison = service.get_draft_comparison(result.job_id)
+    assert comparison.baseline.revision_id != comparison.candidate.revision_id
+    assert comparison.diff["added_rule_codes"] == []
+    assert comparison.diff["removed_rule_codes"] == []
+    assert comparison.diff["modified_rule_codes"] == []
+    assert all(not item["added"] and not item["removed"] for item in comparison.diff["rule_diffs"])
+
+    replay = service.start_feedback_re_deconstruction(
+        project_id=published.project_id,
+        idempotency_key="feedback-from-formal",
+        actor="医学监查员",
+    )
+    assert replay.created is False
+    assert replay.job_id == result.job_id
+
+    republished = service.publish_re_deconstruction(
+        result.job_id,
+        idempotency_key="feedback-from-formal-publish",
+        actor="医学监查员",
+    )
+    assert republished.project_id == published.project_id
+    assert republished.rule_set_revision == 2
+    current = service.get_project_official_version(published.project_id)
+    assert current.project.official_version == "V1.0"
+    assert current.publication_count == 2
+
+
+def test_feedback_redeconstruction_fails_closed_without_formal_source_context(
+    slice4_env, data_paths
+) -> None:
+    """旧正式项目只有规则而没有原始方案定位时，不得生成无来源反馈草稿。"""
+    factory, _now = slice4_env
+    service = _make_service(factory, data_paths)
+    source_input, draft, spans = confirmed_fixture()
+    published = _publish_first(
+        factory,
+        source_input,
+        draft,
+        spans,
+        key="formal-without-job-context",
+    )
+    with pytest.raises(ProtocolWorkbenchError) as exc_info:
+        service.start_feedback_re_deconstruction(
+            project_id=published.project_id,
+            idempotency_key="feedback-without-context",
+            actor="医学监查员",
+        )
+    assert exc_info.value.code == "FORMAL_SOURCE_CONTEXT_MISSING"
+    assert "上传新版方案" in exc_info.value.recovery
+
+
+def test_source_error_feedback_creates_real_local_revision(
+    slice4_env, data_paths
+) -> None:
+    factory, _now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+
+    def revise(_source_input, current_draft, target_rule_code, feedback_note):
+        assert target_rule_code == "EX-01"
+        assert feedback_note == "原文要求同时满足两个条件，请重新核对。"
+        revised = current_draft.model_copy(deep=True)
+        revised.proposed_rules[1].components[0].title = "按原文重新核对后的条件"
+        revised.component_drafts[1].proposed_component.title = "按原文重新核对后的条件"
+        return revised
+
+    service = _make_service(
+        factory,
+        data_paths,
+        gate=AlwaysPublishableGate(),
+        feedback_reviser=revise,
+    )
+    started = service.start_first_deconstruction(
+        upload_path=_write_minimal_docx(data_paths, "feedback-revision.docx"),
+        original_name="feedback-revision.docx",
+        idempotency_key="feedback-revision-first",
+        actor="医学监查员",
+    )
+    service.seed_review_session(
+        started.job_id,
+        source_input=source_input,
+        draft=draft,
+        source_spans=spans,
+        wait_at="await_review",
+    )
+    before = service.get_draft_detail(started.job_id)
+
+    after = service.apply_feedback(
+        started.job_id,
+        expected_revision_id=before.revision.revision_id,
+        feedback_kind=DraftFeedbackKind.SOURCE_ERROR,
+        target_rule_code="EX-01",
+        feedback_note="原文要求同时满足两个条件，请重新核对。",
+        actor="医学监查员",
+    )
+
+    assert after.revision.revision_number == before.revision.revision_number + 1
+    assert after.revision.content.proposed_rules[1].components[0].title == "按原文重新核对后的条件"
+    assert after.revision.diff.modified_rule_codes == ["EX-01"]
+
+
+def test_failed_source_error_feedback_keeps_current_revision(
+    slice4_env, data_paths
+) -> None:
+    factory, _now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+
+    def fail_revision(*_args):
+        raise RuntimeError("模型未返回可读取结果")
+
+    service = _make_service(
+        factory,
+        data_paths,
+        feedback_reviser=fail_revision,
+    )
+    started = service.start_first_deconstruction(
+        upload_path=_write_minimal_docx(data_paths, "feedback-failure.docx"),
+        original_name="feedback-failure.docx",
+        idempotency_key="feedback-failure-first",
+        actor="医学监查员",
+    )
+    service.seed_review_session(
+        started.job_id,
+        source_input=source_input,
+        draft=draft,
+        source_spans=spans,
+        wait_at="await_review",
+    )
+    before = service.get_draft_detail(started.job_id)
+
+    with pytest.raises(ProtocolWorkbenchError) as exc_info:
+        service.apply_feedback(
+            started.job_id,
+            expected_revision_id=before.revision.revision_id,
+            feedback_kind=DraftFeedbackKind.SOURCE_ERROR,
+            target_rule_code="EX-01",
+            feedback_note="请核对原文。",
+            actor="医学监查员",
+        )
+
+    assert exc_info.value.code == "FEEDBACK_REVISION_FAILED"
+    current = service.get_draft_detail(started.job_id)
+    assert current.revision.revision_id == before.revision.revision_id
+
+
+def test_source_error_feedback_rejects_noop_or_changes_outside_selected_rule(
+    slice4_env, data_paths
+) -> None:
+    """原文纠错不得用无变化结果冒充修订，也不得顺带修改其他父规则。"""
+
+    factory, _now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+
+    for mode in ("noop", "other-rule", "hidden-reparent", "cross-parent-id-reuse"):
+        def invalid_revise(_source_input, current_draft, _target, _note, mode=mode):
+            revised = current_draft.model_copy(deep=True)
+            if mode == "other-rule":
+                revised.proposed_rules[0].components[0].title = "错误地修改了其他规则"
+            elif mode == "hidden-reparent":
+                revised.proposed_rules[1].components[0].title = "目标规则确有变化"
+                revised.proposed_rules[0].components[0].parent_rule_id = "rule-ex"
+            elif mode == "cross-parent-id-reuse":
+                target = revised.proposed_rules[1].components[0]
+                target.rule_component_id = (
+                    revised.proposed_rules[0].components[0].rule_component_id
+                )
+                target.title = "目标规则确有变化"
+                target_binding = next(
+                    item
+                    for item in revised.component_drafts
+                    if item.parent_official_code == "EX-01"
+                )
+                target_binding.proposed_component = target.model_copy(deep=True)
+            return revised
+
+        service = _make_service(
+            factory,
+            data_paths,
+            feedback_reviser=invalid_revise,
+        )
+        started = service.start_first_deconstruction(
+            upload_path=_write_minimal_docx(data_paths, f"feedback-invalid-{mode}.docx"),
+            original_name=f"feedback-invalid-{mode}.docx",
+            idempotency_key=f"feedback-invalid-{mode}",
+            actor="医学监查员",
+        )
+        case_draft = draft.model_copy(update={"draft_id": f"draft-feedback-invalid-{mode}"})
+        service.seed_review_session(
+            started.job_id,
+            source_input=source_input,
+            draft=case_draft,
+            source_spans=spans,
+            wait_at="await_review",
+        )
+        before = service.get_draft_detail(started.job_id)
+
+        with pytest.raises(ProtocolWorkbenchError) as exc_info:
+            service.apply_feedback(
+                started.job_id,
+                expected_revision_id=before.revision.revision_id,
+                feedback_kind=DraftFeedbackKind.SOURCE_ERROR,
+                target_rule_code="EX-01",
+                feedback_note="只修订选中的规则。",
+                actor="医学监查员",
+            )
+
+        assert exc_info.value.code == "FEEDBACK_REVISION_FAILED"
+        assert service.get_draft_detail(started.job_id).revision.revision_id == before.revision.revision_id
+
+
+def test_clarification_feedback_records_note_without_changing_rules(
+    slice4_env, data_paths
+) -> None:
+    factory, _now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+
+    def must_not_run(*_args):
+        raise AssertionError("补充解释不应调用规则修订")
+
+    service = _make_service(
+        factory,
+        data_paths,
+        feedback_reviser=must_not_run,
+    )
+    started = service.start_first_deconstruction(
+        upload_path=_write_minimal_docx(data_paths, "clarification.docx"),
+        original_name="clarification.docx",
+        idempotency_key="clarification-first",
+        actor="医学监查员",
+    )
+    service.seed_review_session(
+        started.job_id,
+        source_input=source_input,
+        draft=draft,
+        source_spans=spans,
+        wait_at="await_review",
+    )
+    before = service.get_draft_detail(started.job_id)
+
+    after = service.apply_feedback(
+        started.job_id,
+        expected_revision_id=before.revision.revision_id,
+        feedback_kind=DraftFeedbackKind.CLARIFICATION,
+        target_rule_code="IN-01",
+        feedback_note="该条按医学组解释记录，不改变方案阈值。",
+        actor="医学监查员",
+    )
+
+    assert after.revision.content == before.revision.content.model_copy(
+        update={
+            "draft_revision": after.revision.revision_number,
+            "previous_draft_id": before.revision.content.draft_id,
+        }
+    )
+    assert after.revision.diff.modified_rule_codes == []
+    assert after.revision.feedback_note == "IN-01：该条按医学组解释记录，不改变方案阈值。"
+    integrity = service.get_integrity(started.job_id)
+    assert integrity.publishable is True
+    assert integrity.blocking_count == 0
+
+
+def test_redeconstruction_clarification_keeps_integrity_publishable(
+    slice4_env, data_paths
+) -> None:
+    """正式版本反馈修订后，等价结构差异不能因模型类型不同被误判。"""
+    factory, _now = slice4_env
+    service = _make_service(factory, data_paths)
+    source_input, draft, spans = confirmed_fixture()
+    published = _publish_first_with_source_context(
+        service, data_paths, source_input, draft, spans
+    )
+    started = service.start_feedback_re_deconstruction(
+        project_id=published.project_id,
+        idempotency_key="redo-clarification-integrity",
+        actor="医学监查员",
+    )
+    before = service.get_draft_detail(started.job_id)
+    service.apply_feedback(
+        started.job_id,
+        expected_revision_id=before.revision.revision_id,
+        feedback_kind=DraftFeedbackKind.CLARIFICATION,
+        target_rule_code="IN-01",
+        feedback_note="仅记录审阅说明，不改变方案语义。",
+        actor="医学监查员",
+    )
+
+    integrity = service.get_integrity(started.job_id)
+    assert integrity.publishable is True
+    assert integrity.blocking_count == 0
 
 
 def test_project_official_version_projection_reads_published_chain(

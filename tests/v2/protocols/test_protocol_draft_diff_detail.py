@@ -219,6 +219,135 @@ def test_time_window_change_only() -> None:
     _assert_only_category(rule_diff, "time_window_changes")
 
 
+def test_exception_time_window_change_is_not_silently_lost() -> None:
+    """例外条件时间窗属于临床语义，变化必须进入时间窗差异。"""
+
+    _source_input, previous, _spans = confirmed_fixture()
+    previous = copy.deepcopy(previous)
+    component = _component(previous, "IN-01", "IN-01a")
+    exception = _predicate(
+        "predicate-exception-time",
+        "研究者判断",
+        "可接受",
+        "unitless",
+    )
+    previous_component = component.model_copy(update={"exception_expression": exception})
+    previous.proposed_rules = [
+        rule.model_copy(
+            update={
+                "components": [
+                    previous_component if item.rule_component_id == component.rule_component_id else item
+                    for item in rule.components
+                ]
+            }
+        )
+        if rule.official_code == "IN-01"
+        else rule
+        for rule in previous.proposed_rules
+    ]
+    current = copy.deepcopy(previous)
+    current_component = _component(current, "IN-01", "IN-01a")
+    timed_exception = current_component.exception_expression.model_copy(
+        update={
+            "time_constraint": TimeConstraint(
+                anchor_type=AnchorType.BASELINE_DATE,
+                direction=TimeDirection.ON,
+            )
+        }
+    )
+    current.proposed_rules = [
+        rule.model_copy(
+            update={
+                "components": [
+                    item.model_copy(update={"exception_expression": timed_exception})
+                    if item.rule_component_id == current_component.rule_component_id
+                    else item
+                    for item in rule.components
+                ]
+            }
+        )
+        if rule.official_code == "IN-01"
+        else rule
+        for rule in current.proposed_rules
+    ]
+
+    diff = compute_draft_diff(previous, current)
+    rule_diff = _rule_diff(diff, "IN-01")
+
+    assert len(rule_diff.time_window_changes) == 1
+    assert rule_diff.time_window_changes[0].current[-1]["scope"] == "exception"
+    assert rule_diff.time_window_changes[0].current[-1]["time_constraint"]["direction"] == "on"
+    assert not rule_diff.exception_changes
+    assert diff.clarification_semantics_changed is True
+
+
+def test_components_align_by_source_when_generated_display_codes_swap() -> None:
+    """同一来源子项仅交换生成编号/顺序时不得产生临床假差异。"""
+
+    _source_input, previous, _spans = confirmed_fixture()
+    previous = copy.deepcopy(previous)
+    rule = _rule_of(previous, "IN-01")
+    first = rule.components[0]
+    second_requirement = first.evidence_requirements[0].model_copy(
+        update={"requirement_id": "req-in-second", "rule_component_id": "component-in-second"}
+    )
+    second = first.model_copy(
+        update={
+            "rule_component_id": "component-in-second",
+            "display_code": "IN-01b",
+            "title": "第二个来源稳定子项",
+            "expression": first.expression.model_copy(
+                update={
+                    "predicate": first.expression.predicate.model_copy(
+                        update={"value": 21}
+                    )
+                }
+            ),
+            "evidence_requirements": [second_requirement],
+        }
+    )
+    previous.proposed_rules = [
+        item.model_copy(update={"components": [first, second]})
+        if item.official_code == "IN-01"
+        else item
+        for item in previous.proposed_rules
+    ]
+    first_mapping = next(
+        item for item in previous.component_drafts if item.parent_official_code == "IN-01"
+    )
+    second_mapping = first_mapping.model_copy(
+        update={
+            "draft_component_id": "draft-component-in-second",
+            "proposed_component": second,
+            "source_refs": ["span-ex"],
+            "source_excerpts": ["第二个稳定来源"],
+        }
+    )
+    previous.component_drafts = [*previous.component_drafts, second_mapping]
+
+    current = copy.deepcopy(previous)
+    current_rule = _rule_of(current, "IN-01")
+    swapped = [
+        current_rule.components[1].model_copy(update={"display_code": "IN-01a"}),
+        current_rule.components[0].model_copy(update={"display_code": "IN-01b"}),
+    ]
+    current.proposed_rules = [
+        item.model_copy(update={"components": swapped})
+        if item.official_code == "IN-01"
+        else item
+        for item in current.proposed_rules
+    ]
+
+    diff = compute_draft_diff(previous, current)
+    rule_diff = _rule_diff(diff, "IN-01")
+
+    assert rule_diff.added_component_refs == []
+    assert rule_diff.removed_component_refs == []
+    assert not any(getattr(rule_diff, field) for field in CATEGORY_FIELDS)
+    assert "IN-01" not in diff.modified_rule_codes
+    assert diff.clarification_semantics_changed is False
+
+
 def test_exception_change_only() -> None:
     """例外变化：新增例外表达式只落入例外类别。"""
 
@@ -346,8 +475,8 @@ def test_due_stage_change_only() -> None:
         if change.stable_ref == "IN-01a"
     )
     assert change.kind == "component"
-    assert change.previous == ["screening"]
-    assert change.current == ["baseline"]
+    assert change.previous[0]["due_stages"] == ["screening"]
+    assert change.current[0]["due_stages"] == ["baseline"]
     _assert_only_category(rule_diff, "due_stage_changes")
 
 
@@ -396,7 +525,7 @@ def test_requirement_added_and_removed_within_component() -> None:
     )
     assert requirement_change.stable_ref == "IN-01a#req[1]"
     assert requirement_change.previous is None
-    assert requirement_change.current == {"requirement_id": "req-extra"}
+    assert requirement_change.current["evidence"]["fact_type"] == "方案要求事实"
 
     # 删除方向：回到前一稿，新增条目从当前稿消失
     diff_removed = compute_draft_diff(current, previous)
@@ -406,7 +535,7 @@ def test_requirement_added_and_removed_within_component() -> None:
         for change in rule_diff_removed.evidence_changes
         if change.kind == "requirement"
     )
-    assert removed_change.previous == {"requirement_id": "req-extra"}
+    assert removed_change.previous["evidence"]["fact_type"] == "方案要求事实"
     assert removed_change.current is None
 
 
@@ -523,6 +652,90 @@ def test_component_alignment_ignores_random_ids() -> None:
     assert rule_diff.removed_component_refs == []
     for field in CATEGORY_FIELDS:
         assert not getattr(rule_diff, field), f"{field} 不应因随机 ID 变化触发"
+    assert "IN-01" not in diff.modified_rule_codes
+    assert diff.clarification_semantics_changed is False
+
+
+def test_requirement_alignment_ignores_random_id_churn() -> None:
+    """资料要求内容不变时，重新生成 requirement_id 不得误报变更。"""
+
+    _source_input, previous, _source_spans = _fixture()
+    current = copy.deepcopy(previous)
+    component = _component(current, "IN-01", "IN-01a")
+    renamed_requirements = [
+        requirement.model_copy(
+            update={"requirement_id": f"renewed-{index}"}
+        )
+        for index, requirement in enumerate(
+            component.evidence_requirements, start=1
+        )
+    ]
+    current.proposed_rules = [
+        rule.model_copy(
+            update={
+                "components": [
+                    item.model_copy(
+                        update={"evidence_requirements": renamed_requirements}
+                    )
+                    if item.display_code == "IN-01a"
+                    else item
+                    for item in rule.components
+                ]
+            }
+        )
+        if rule.official_code == "IN-01"
+        else rule
+        for rule in current.proposed_rules
+    ]
+    diff = compute_draft_diff(previous, current)
+    rule_diff = _rule_diff(diff, "IN-01")
+    assert not rule_diff.evidence_changes
+    assert not rule_diff.due_stage_changes
+    assert "IN-01" not in diff.modified_rule_codes
+    assert diff.clarification_semantics_changed is False
+
+
+def test_due_stage_alignment_ignores_requirement_order() -> None:
+    """同一证据要求的筛选/基线实例只换输出顺序时不是方案变更。"""
+
+    _source_input, previous, _source_spans = _fixture()
+    component = _component(previous, "IN-01", "IN-01a")
+    screening = component.evidence_requirements[0]
+    baseline = screening.model_copy(
+        update={
+            "requirement_id": "same-evidence-baseline",
+            "due_stage": ReviewStage.BASELINE,
+        }
+    )
+
+    def with_requirements(draft, requirements):
+        changed = copy.deepcopy(draft)
+        changed.proposed_rules = [
+            rule.model_copy(
+                update={
+                    "components": [
+                        item.model_copy(
+                            update={"evidence_requirements": requirements}
+                        )
+                        if item.display_code == "IN-01a"
+                        else item
+                        for item in rule.components
+                    ]
+                }
+            )
+            if rule.official_code == "IN-01"
+            else rule
+            for rule in changed.proposed_rules
+        ]
+        return changed
+
+    old = with_requirements(previous, [screening, baseline])
+    new = with_requirements(previous, [baseline, screening])
+    diff = compute_draft_diff(old, new)
+    rule_diff = _rule_diff(diff, "IN-01")
+    assert not rule_diff.evidence_changes
+    assert not rule_diff.due_stage_changes
+    assert "IN-01" not in diff.modified_rule_codes
 
 
 def test_rule_diffs_are_deterministic_and_sorted() -> None:
@@ -638,6 +851,60 @@ def test_gate_declared_diff_must_reproduce_rule_diffs() -> None:
     )
     assert any(
         issue.issue_code == "DECLARED_DIFF_NOT_REPRODUCIBLE"
+        for check in result.checks
+        if check.check_name == "diff_integrity"
+        for issue in check.issues
+    )
+
+
+def test_gate_accepts_redeconstruction_first_revision_with_formal_baseline() -> None:
+    """重新解构的第 1 稿是新草稿链起点，但仍必须与当前正式版比较。"""
+
+    source_input, formal, source_spans = _fixture()
+    candidate = formal.model_copy(
+        deep=True,
+        update={
+            "draft_id": "redeconstruction-draft",
+            "draft_revision": 1,
+            "previous_draft_id": None,
+        },
+    )
+    actual = compute_draft_diff(formal, candidate)
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input,
+        candidate,
+        source_spans=source_spans,
+        previous_draft=formal,
+        declared_diff=ProtocolDraftDiffDeclaration(**actual.model_dump(mode="python")),
+    )
+    assert not [
+        issue
+        for check in result.checks
+        if check.check_name == "diff_integrity"
+        for issue in check.issues
+    ]
+
+
+def test_gate_rejects_redeconstruction_first_revision_with_half_diff_base() -> None:
+    """正式基线和声明差异必须成对提供，不允许只携带其一。"""
+
+    source_input, formal, source_spans = _fixture()
+    candidate = formal.model_copy(
+        deep=True,
+        update={
+            "draft_id": "redeconstruction-draft",
+            "draft_revision": 1,
+            "previous_draft_id": None,
+        },
+    )
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input,
+        candidate,
+        source_spans=source_spans,
+        previous_draft=formal,
+    )
+    assert any(
+        issue.issue_code == "INITIAL_REVISION_DIFF_BASE_INCOMPLETE"
         for check in result.checks
         if check.check_name == "diff_integrity"
         for issue in check.issues

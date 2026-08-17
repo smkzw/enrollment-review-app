@@ -11,6 +11,7 @@ revision。乐观并发通过「后继 revision 必须指向当前链头」实�
 from __future__ import annotations
 
 import json
+from collections import Counter
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
@@ -91,11 +92,32 @@ def compute_draft_diff(
             rule_diffs=_first_draft_rule_diffs(current),
         )
 
-    old_rules = _hash_map(previous.proposed_rules, lambda rule: rule.official_code)
-    new_rules = _hash_map(current.proposed_rules, lambda rule: rule.official_code)
-    added_rule_codes = sorted(set(new_rules) - set(old_rules))
-    removed_rule_codes = sorted(set(old_rules) - set(new_rules))
-    modified_rule_codes = _changed_keys(old_rules, new_rules)
+    old_rule_codes = {rule.official_code for rule in previous.proposed_rules}
+    new_rule_codes = {rule.official_code for rule in current.proposed_rules}
+    added_rule_codes = sorted(new_rule_codes - old_rule_codes)
+    removed_rule_codes = sorted(old_rule_codes - new_rule_codes)
+    rule_diffs = _rule_diff_details(previous, current)
+    modified_rule_codes = sorted(
+        item.official_code
+        for item in rule_diffs
+        if not item.added
+        and not item.removed
+        and (
+            item.added_component_refs
+            or item.removed_component_refs
+            or any(
+                getattr(item, field)
+                for field in (
+                    "original_text_changes",
+                    "logic_changes",
+                    "time_window_changes",
+                    "exception_changes",
+                    "evidence_changes",
+                    "due_stage_changes",
+                )
+            )
+        )
+    )
 
     old_stages = _hash_map(
         previous.proposed_workflow_stages, lambda stage: stage.workflow_stage_id
@@ -211,7 +233,7 @@ def compute_draft_diff(
             or previous_mapping_bindings != current_mapping_bindings
         ),
         clarification_semantics_changed=_semantics_changed(previous, current),
-        rule_diffs=_rule_diff_details(previous, current),
+        rule_diffs=rule_diffs,
     )
 
 
@@ -247,29 +269,98 @@ def _component_refs(rule) -> list[str]:
     return refs
 
 
+def _component_source_key(
+    draft: ProtocolDeconstructionDraft, component: RuleComponent
+) -> str | None:
+    """子条件的稳定来源身份；没有真实来源时返回 ``None``。
+
+    展示编号可能因模型输出顺序改变，因此不能参与来源身份。随机生成的
+    ``rule_component_id`` 同样不能参与。只有真实来源引用/摘录可跨稿稳定匹配。
+    """
+
+    binding = _component_binding(draft, component.rule_component_id) or {}
+    source_refs = binding.get("source_refs", [])
+    source_excerpts = binding.get("source_excerpts", [])
+    if not source_refs and not source_excerpts:
+        return None
+    return _json_key(
+        {
+            "source_refs": source_refs,
+            "source_excerpts": source_excerpts,
+        }
+    )
+
+
 def _align_components(
-    previous_rule, current_rule
+    previous_rule,
+    current_rule,
+    previous: ProtocolDeconstructionDraft,
+    current: ProtocolDeconstructionDraft,
 ) -> tuple[list[tuple[str, RuleComponent, RuleComponent]], list[str], list[str]]:
-    """按展示编号 + 出现顺序把两稿同一父规则的子组件对齐。
+    """按展示编号 + 稳定来源范围对齐两稿子条件。
 
     返回 (对齐对, 新增引用, 删除引用)；引用与 :func:`_component_refs` 一致，
     不依赖随机组件 ID（设计书 §10.2）。
     """
 
-    def grouped(rule) -> dict[str, list[RuleComponent]]:
+    def grouped(components: list[RuleComponent]) -> dict[str, list[RuleComponent]]:
         result: dict[str, list[RuleComponent]] = {}
-        for component in rule.components:
+        for component in components:
             result.setdefault(component.display_code, []).append(component)
         return result
 
-    old_groups = grouped(previous_rule)
-    new_groups = grouped(current_rule)
     aligned: list[tuple[str, RuleComponent, RuleComponent]] = []
     added: list[str] = []
     removed: list[str] = []
+
+    old_remaining = list(previous_rule.components)
+    new_remaining = list(current_rule.components)
+
+    # 第一轮按冻结来源全局对齐。即使模型把 a/b 子项交换输出顺序，只要来源
+    # 未变就仍是同一临床子条件，不制造原文或逻辑假差异。
+    source_keys = sorted(
+        {
+            *(
+                key
+                for item in old_remaining
+                if (key := _component_source_key(previous, item)) is not None
+            ),
+            *(
+                key
+                for item in new_remaining
+                if (key := _component_source_key(current, item)) is not None
+            ),
+        }
+    )
+    for source_key in source_keys:
+        old_items = sorted(
+            [item for item in old_remaining if _component_source_key(previous, item) == source_key],
+            key=lambda item: item.display_code,
+        )
+        new_items = sorted(
+            [item for item in new_remaining if _component_source_key(current, item) == source_key],
+            key=lambda item: item.display_code,
+        )
+        pair_count = min(len(old_items), len(new_items))
+        for index in range(pair_count):
+            old_item = old_items[index]
+            new_item = new_items[index]
+            aligned.append((old_item.display_code, old_item, new_item))
+            old_remaining.remove(old_item)
+            new_remaining.remove(new_item)
+
+    # 第二轮只处理无稳定来源或来源已真实变化的条目，展示编号作为保守兜底。
+    old_groups = grouped(old_remaining)
+    new_groups = grouped(new_remaining)
     for code in sorted(set(old_groups) | set(new_groups)):
-        old_items = old_groups.get(code, [])
-        new_items = new_groups.get(code, [])
+        old_items = sorted(
+            old_groups.get(code, []),
+            key=lambda item: _component_source_key(previous, item) or "",
+        )
+        new_items = sorted(
+            new_groups.get(code, []),
+            key=lambda item: _component_source_key(current, item) or "",
+        )
         size = max(len(old_items), len(new_items))
         for index in range(size):
             ref = code if size == 1 else f"{code}#{index + 1}"
@@ -352,6 +443,7 @@ def _original_text_payload(
 ) -> dict[str, Any]:
     # 父规则原文由 kind=rule 的条目单独承载；组件条目只携带组件级来源与逐字片段。
     return {
+        "title": component.title,
         "source_binding": _component_binding(draft, component.rule_component_id),
         "verbatim_fragments": _verbatim_fragments(component.expression),
     }
@@ -392,19 +484,34 @@ def _logic_payload(
 def _time_window_payload(
     rule, component: RuleComponent, draft: ProtocolDeconstructionDraft
 ) -> list[dict[str, Any]]:
-    """按遍历顺序收集每个原子条件的时间窗快照。"""
+    """收集主条件和例外条件的全部时间语义快照。"""
 
     payloads: list[dict[str, Any]] = []
-    for expression in _iter_expression_nodes(component.expression):
-        predicate = expression["predicate"]
-        payloads.append(
-            {
+    expressions = [("main", component.expression)]
+    if component.exception_expression is not None:
+        expressions.append(("exception", component.exception_expression))
+    for scope, root in expressions:
+        for expression in _iter_expression_nodes(root):
+            predicate = expression["predicate"]
+            payload = {
+                "scope": scope,
                 "time_constraint": expression.get("time_constraint"),
                 "occurrence_window": predicate.get("occurrence_window"),
                 "prospective_window": predicate.get("prospective_window"),
                 "prospective_period": predicate.get("prospective_period"),
             }
-        )
+            # 主条件保留显式“未设置”，维持既有展示；无任何时间语义的例外
+            # 由例外类别表达，不能额外制造时间窗变化。
+            if scope == "main" or any(
+                payload[key] is not None
+                for key in (
+                    "time_constraint",
+                    "occurrence_window",
+                    "prospective_window",
+                    "prospective_period",
+                )
+            ):
+                payloads.append(payload)
     return payloads
 
 
@@ -463,8 +570,30 @@ def _evidence_payload(
 
 def _due_stage_payload(
     rule, component: RuleComponent, draft: ProtocolDeconstructionDraft
-) -> list[str]:
-    return [due_stage for _evidence, due_stage in _requirement_rows(component)]
+) -> list[dict[str, Any]]:
+    """按证据语义分组的应完成阶段，不受资料要求输出顺序影响。"""
+
+    grouped: dict[str, list[str]] = {}
+    for evidence, due_stage in _requirement_rows(component):
+        # fact_type 是资料要求的临床稳定身份；描述、来源类型等
+        # 证据内容变化不应同时误报“应完成阶段”变化。
+        key = str(evidence["fact_type"])
+        grouped.setdefault(key, []).append(due_stage)
+    return [
+        {"fact_type": fact_type, "due_stages": sorted(due_stages)}
+        for fact_type, due_stages in sorted(grouped.items())
+    ]
+
+
+def _requirement_evidence_snapshots(
+    component: RuleComponent,
+) -> list[dict[str, Any]]:
+    """资料要求的证据快照；排除随机 ID 和应完成阶段。"""
+
+    return sorted(
+        [evidence for evidence, _due_stage in _requirement_rows(component)],
+        key=_json_key,
+    )
 
 
 _CATEGORY_PAYLOAD_KEYS = (
@@ -484,7 +613,9 @@ def _aligned_rule_diff(
     previous: ProtocolDeconstructionDraft,
     current: ProtocolDeconstructionDraft,
 ) -> ParentRuleDiff:
-    aligned, added, removed = _align_components(old_rule, new_rule)
+    aligned, added, removed = _align_components(
+        old_rule, new_rule, previous, current
+    )
     changes: dict[str, list[CategoryChange]] = {
         field: [] for _category, field, _payload in _CATEGORY_PAYLOAD_KEYS
     }
@@ -510,27 +641,29 @@ def _aligned_rule_diff(
                         current=current_payload,
                     )
                 )
-        old_ids = {item.requirement_id for item in old_component.evidence_requirements}
-        new_ids = {item.requirement_id for item in new_component.evidence_requirements}
-        for position, requirement_id in enumerate(
-            sorted(new_ids - old_ids), start=1
-        ):
+        old_rows = _requirement_evidence_snapshots(old_component)
+        new_rows = _requirement_evidence_snapshots(new_component)
+        old_counts = Counter(_json_key(item) for item in old_rows)
+        new_counts = Counter(_json_key(item) for item in new_rows)
+        old_payloads = {_json_key(item): item for item in old_rows}
+        new_payloads = {_json_key(item): item for item in new_rows}
+        added_rows = list((new_counts - old_counts).elements())
+        removed_rows = list((old_counts - new_counts).elements())
+        for position, row_key in enumerate(sorted(added_rows), start=1):
             changes["evidence_changes"].append(
                 CategoryChange(
                     stable_ref=f"{ref}#req[{position}]",
                     kind="requirement",
                     previous=None,
-                    current={"requirement_id": requirement_id},
+                    current={"evidence": new_payloads[row_key]},
                 )
             )
-        for position, requirement_id in enumerate(
-            sorted(old_ids - new_ids), start=1
-        ):
+        for position, row_key in enumerate(sorted(removed_rows), start=1):
             changes["evidence_changes"].append(
                 CategoryChange(
                     stable_ref=f"{ref}#req[{position}]",
                     kind="requirement",
-                    previous={"requirement_id": requirement_id},
+                    previous={"evidence": old_payloads[row_key]},
                     current=None,
                 )
             )
@@ -556,40 +689,22 @@ def _semantics_changed(
     权威语义，仅来源忠实纠错或手工编辑可调整（发布前仍过确定性门禁）。
     """
 
-    def semantic_map(draft: ProtocolDeconstructionDraft) -> dict[str, str]:
-        result: dict[str, str] = {}
-        for rule in draft.proposed_rules:
-            for component in rule.components:
-                payload = {
-                    "expression": component.expression.model_dump(mode="json"),
-                    "exception": (
-                        component.exception_expression.model_dump(mode="json")
-                        if component.exception_expression is not None
-                        else None
-                    ),
-                    "evidence": [
-                        {
-                            "requirement_id": requirement.requirement_id,
-                            "fact_type": requirement.fact_type,
-                            "due_stage": requirement.due_stage.value,
-                            "required_source_types": sorted(
-                                set(requirement.required_source_types)
-                            ),
-                            "allows_screening_record_transcription": (
-                                requirement.allows_screening_record_transcription
-                            ),
-                            "requires_contemporaneous_objective_source": (
-                                requirement.requires_contemporaneous_objective_source
-                            ),
-                            "description": requirement.description,
-                        }
-                        for requirement in component.evidence_requirements
-                    ],
-                }
-                result[component.rule_component_id] = canonical_hash(payload)
-        return result
-
-    return semantic_map(previous) != semantic_map(current)
+    # 与用户看到的结构化差异共用同一套“官方父规则 + 稳定来源”对齐，
+    # 不再以模型生成的 a/b 展示编号另建第二套语义身份。
+    for rule_diff in _rule_diff_details(previous, current):
+        if (
+            rule_diff.added
+            or rule_diff.removed
+            or rule_diff.added_component_refs
+            or rule_diff.removed_component_refs
+            or rule_diff.logic_changes
+            or rule_diff.time_window_changes
+            or rule_diff.exception_changes
+            or rule_diff.evidence_changes
+            or rule_diff.due_stage_changes
+        ):
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -621,6 +736,76 @@ def enforce_draft_edit_boundary(
             "DRAFT_IDENTITY_CHANGED",
             "编辑不得改写草稿所属项目、方案版本、研究期别或草稿身份",
         )
+    if feedback_kind is None:
+        previous_tree = {
+            rule.official_code: {
+                "rule_id": rule.rule_id,
+                "kind": rule.kind.value,
+                "components": sorted(
+                    (
+                        component.rule_component_id,
+                        component.parent_rule_id,
+                        component.display_code,
+                    )
+                    for component in rule.components
+                ),
+                "requirements": sorted(
+                    (
+                        requirement.requirement_id,
+                        requirement.rule_component_id,
+                        requirement.procedure_catalog_item_id,
+                    )
+                    for component in rule.components
+                    for requirement in component.evidence_requirements
+                ),
+            }
+            for rule in previous.proposed_rules
+        }
+        current_tree = {
+            rule.official_code: {
+                "rule_id": rule.rule_id,
+                "kind": rule.kind.value,
+                "components": sorted(
+                    (
+                        component.rule_component_id,
+                        component.parent_rule_id,
+                        component.display_code,
+                    )
+                    for component in rule.components
+                ),
+                "requirements": sorted(
+                    (
+                        requirement.requirement_id,
+                        requirement.rule_component_id,
+                        requirement.procedure_catalog_item_id,
+                    )
+                    for component in rule.components
+                    for requirement in component.evidence_requirements
+                ),
+            }
+            for rule in current.proposed_rules
+        }
+        if previous_tree != current_tree:
+            _fail_boundary(
+                "MANUAL_EDIT_REWRITES_RULE_TREE",
+                "手工修订只能调整现有子项的结构化判定内容，不得增删规则或资料要求、改写官方编号、子项编号及父子层级",
+            )
+        previous_source_text = {
+            rule.official_code: rule.source_text for rule in previous.proposed_rules
+        }
+        current_source_text = {
+            rule.official_code: rule.source_text for rule in current.proposed_rules
+        }
+        if (
+            previous_source_text != current_source_text
+            or previous.protocol_metadata.source_refs
+            != current.protocol_metadata.source_refs
+            or _source_bindings_changed(previous, current)
+        ):
+            _fail_boundary(
+                "MANUAL_EDIT_REWRITES_SOURCE",
+                "手工修订不得改写方案原文、原文摘录或来源定位；如原文理解有误，请使用“原文理解纠错”并由系统重新核对冻结方案",
+            )
     if (
         feedback_kind == DraftFeedbackKind.CLARIFICATION
         and _source_bindings_changed(previous, current)

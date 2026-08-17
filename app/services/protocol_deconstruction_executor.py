@@ -540,7 +540,19 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
             )
 
     gate = result.final_gate_result
-    if gate is None:
+    if baseline_draft is not None:
+        from app.protocols.deconstruction_gate import ProtocolDraftDiffDeclaration
+
+        gate = (config.gate or ProtocolDeconstructionGate()).evaluate(
+            package.source_input,
+            result.final_draft,
+            source_spans=package.source_spans,
+            previous_draft=baseline_draft,
+            declared_diff=ProtocolDraftDiffDeclaration(
+                **revision.diff.model_dump(mode="python")
+            ),
+        )
+    elif gate is None:
         gate = (config.gate or ProtocolDeconstructionGate()).evaluate(
             package.source_input,
             result.final_draft,

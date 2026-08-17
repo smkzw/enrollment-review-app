@@ -75,11 +75,13 @@ def _publish(
     )
 
 
-def _save_revision(factory, draft, actor="医学监查员", now=NOW):
+def _save_revision(
+    factory, draft, actor="医学监查员", now=NOW, *, baseline=None
+):
     with factory() as session:
         with session.begin():
             return ProtocolDraftService(session).save_initial_draft(
-                draft, actor=actor, created_at=now
+                draft, actor=actor, created_at=now, baseline=baseline
             )
 
 
@@ -431,7 +433,7 @@ def test_republish_same_protocol_lineage_appends_rule_set_revision(slice4_env) -
             ),
         }
     )
-    rv2 = _save_revision(factory, revised)
+    rv2 = _save_revision(factory, revised, baseline=draft)
     result2 = _publish(
         factory,
         revised_input,
@@ -667,24 +669,18 @@ def test_authority_record_keeps_per_requirement_source_anchors(slice4_env) -> No
 
 
 def test_publication_rejects_requirement_source_outside_component(slice4_env) -> None:
-    """资料要求来源超出对应组件来源范围 -> 门禁拒绝，回滚。"""
+    """即使畸形首稿绕过编辑边界，发布门禁仍拒绝越界来源并回滚。"""
     factory, now = slice4_env
     source_input, draft, spans = confirmed_fixture()
-    r1 = _save_revision(factory, draft)
-    r2 = _edit_draft(
-        factory,
-        draft,
-        r1.revision_id,
-        [
-            lambda d: d.evidence_requirement_drafts.__setitem__(
-                0, d.evidence_requirement_drafts[0].model_copy(
-                    update={"source_refs": ["span-ex"]}
-                )
-            )
-        ],
+    malformed = draft.model_copy(deep=True)
+    malformed.evidence_requirement_drafts[0] = (
+        malformed.evidence_requirement_drafts[0].model_copy(
+            update={"source_refs": ["span-ex"]}
+        )
     )
+    r1 = _save_revision(factory, malformed)
     with pytest.raises(PublicationGateError) as exc_info:
-        _publish(factory, source_input, draft, spans, r2.revision_id, "pub-req-outside")
+        _publish(factory, source_input, malformed, spans, r1.revision_id, "pub-req-outside")
     assert any(
         issue.issue_code == "REQUIREMENT_SOURCE_OUTSIDE_COMPONENT"
         for check in exc_info.value.result.checks

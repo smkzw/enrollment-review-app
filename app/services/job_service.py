@@ -94,6 +94,27 @@ class JobService:
         steps: list[StepSpec] | None = None,
     ) -> CreateJobResult:
         """幂等创建持久 Job：同键同内容复用原任务，同键不同内容冲突。"""
+        with self.session_factory() as session:
+            with session.begin():
+                return self.create_job_in_session(
+                    session,
+                    idempotency_key=idempotency_key,
+                    job_type=job_type,
+                    payload=payload,
+                    steps=steps,
+                )
+
+    def create_job_in_session(
+        self,
+        session: Session,
+        *,
+        idempotency_key: str,
+        job_type: str,
+        payload: dict[str, Any] | None = None,
+        steps: list[StepSpec] | None = None,
+    ) -> CreateJobResult:
+        """在调用方事务中创建任务，供需要原子初始化检查点的用例使用。"""
+
         steps = steps or []
         self._validate_steps(steps)
         job_id = uuid4().hex
@@ -104,53 +125,51 @@ class JobService:
                 "steps": [step.as_dict() for step in steps],
             }
         )
-        with self.session_factory() as session:
-            with session.begin():
-                idempotency = IdempotencyRepository(session)
-                record, created = idempotency.resolve(
-                    scope=JOB_IDEMPOTENCY_SCOPE,
-                    idempotency_key=idempotency_key,
-                    submitted_hash=submitted,
-                    result_type="job",
-                    result_id=job_id,
-                )
-                if not created:
-                    return CreateJobResult(
-                        job_id=record.result_id,
-                        state=self.get_job_state(record.result_id),
-                        created=False,
-                    )
-                store = self._store(session)
-                store.create_job(
-                    job_id=job_id,
-                    job_type=job_type,
-                    payload=payload,
-                    progress_total=len(steps),
-                )
-                for step in steps:
-                    store.create_step(
-                        step_id=step.step_id,
-                        job_id=job_id,
-                        name=step.name,
-                        max_attempts=step.max_attempts,
-                        retryable=step.retryable,
-                        waiting_user_kind=step.waiting_user_kind,
-                    )
-                # 依赖可以任意顺序声明；先落全部步骤，再建立同任务复合外键。
-                for step in steps:
-                    store.add_step_dependencies(
-                        job_id=job_id,
-                        step_id=step.step_id,
-                        depends_on=step.depends_on,
-                    )
-                store.append_event(
-                    store.make_event(
-                        job_id=job_id,
-                        event_type=JobEventType.CREATED,
-                        progress_total=len(steps),
-                        payload={"job_type": job_type},
-                    )
-                )
+        idempotency = IdempotencyRepository(session)
+        record, created = idempotency.resolve(
+            scope=JOB_IDEMPOTENCY_SCOPE,
+            idempotency_key=idempotency_key,
+            submitted_hash=submitted,
+            result_type="job",
+            result_id=job_id,
+        )
+        store = self._store(session)
+        if not created:
+            return CreateJobResult(
+                job_id=record.result_id,
+                state=store.job_status(record.result_id).state,
+                created=False,
+            )
+        store.create_job(
+            job_id=job_id,
+            job_type=job_type,
+            payload=payload,
+            progress_total=len(steps),
+        )
+        for step in steps:
+            store.create_step(
+                step_id=step.step_id,
+                job_id=job_id,
+                name=step.name,
+                max_attempts=step.max_attempts,
+                retryable=step.retryable,
+                waiting_user_kind=step.waiting_user_kind,
+            )
+        # 依赖可以任意顺序声明；先落全部步骤，再建立同任务复合外键。
+        for step in steps:
+            store.add_step_dependencies(
+                job_id=job_id,
+                step_id=step.step_id,
+                depends_on=step.depends_on,
+            )
+        store.append_event(
+            store.make_event(
+                job_id=job_id,
+                event_type=JobEventType.CREATED,
+                progress_total=len(steps),
+                payload={"job_type": job_type},
+            )
+        )
         return CreateJobResult(job_id=job_id, state="queued", created=True)
 
     @staticmethod

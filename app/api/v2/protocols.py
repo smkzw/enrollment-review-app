@@ -37,6 +37,7 @@ from app.api.v2.protocol_schemas import (
     PublishResponse,
     SourcesResponse,
     StartDeconstructionResponse,
+    StartFeedbackRevisionRequest,
 )
 from app.api.v2.vocabulary import (
     DRAFT_REASON_LABELS,
@@ -364,6 +365,36 @@ async def start_deconstruction(
     )
 
 
+@router.post(
+    "/from-formal",
+    response_model=StartDeconstructionResponse,
+    status_code=http_status.HTTP_201_CREATED,
+)
+def start_feedback_re_deconstruction(
+    payload: StartFeedbackRevisionRequest,
+    request: Request,
+    response: Response,
+) -> StartDeconstructionResponse:
+    """不上传新文件，基于当前正式草稿建立反馈修订任务。"""
+    result = _service(request).start_feedback_re_deconstruction(
+        project_id=payload.project_id,
+        idempotency_key=payload.idempotency_key,
+        actor=payload.actor,
+    )
+    if not result.created:
+        response.status_code = http_status.HTTP_200_OK
+    from app.api.v2.vocabulary import JOB_STATE_LABELS
+
+    return StartDeconstructionResponse(
+        job_id=result.job_id,
+        state=result.state,
+        state_label=JOB_STATE_LABELS.get(result.state, result.state),
+        created=result.created,
+        source_artifact_id=result.source_artifact_id,
+        file_name=result.file_name,
+    )
+
+
 @router.get("/{job_id}", response_model=ProtocolSessionResponse)
 def get_deconstruction_session(job_id: str, request: Request) -> ProtocolSessionResponse:
     return _session_dto(_service(request).get_session(job_id))
@@ -452,10 +483,10 @@ def submit_feedback(
 ) -> DraftRevisionResponse:
     view = _service(request).apply_feedback(
         job_id,
-        draft=body.draft,
         expected_revision_id=body.expected_revision_id,
         feedback_kind=body.feedback_kind,
         feedback_note=body.feedback_note,
+        target_rule_code=body.target_rule_code,
         actor=body.actor,
     )
     return _draft_dto(view)
