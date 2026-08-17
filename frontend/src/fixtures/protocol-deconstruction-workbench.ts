@@ -1,0 +1,326 @@
+/**
+ * 方案解构工作台 stub 夹具：模拟首次解构各阶段，不声称真实 OCR/LLM 完成。
+ */
+
+import type {
+  DraftRevisionView,
+  IdentityReviewView,
+  IntegrityView,
+  ProtocolSessionView,
+  SourcesView,
+} from "../api/protocolWorkbenchTypes";
+
+export const PROTOCOL_DEMO_JOB_ID = "job-demo-review";
+export const PROTOCOL_IDENTITY_JOB_ID = "job-demo-identity";
+export const PROTOCOL_RECOVERY_JOB_ID = "job-demo-recovery";
+
+const baseSession = (
+  overrides: Partial<ProtocolSessionView>,
+): ProtocolSessionView => ({
+  jobId: PROTOCOL_DEMO_JOB_ID,
+  jobType: "protocol_deconstruction",
+  state: "await_review",
+  stateLabel: "等待审阅",
+  progressCompleted: 7,
+  progressTotal: 9,
+  sessionKind: "first_deconstruction",
+  awaitingUser: "review",
+  awaitingUserLabel: "等待审阅草稿",
+  sourceArtifactId: "artifact-demo-1",
+  fileName: "MG-K10-SAR-方案.docx",
+  snapshotId: "snapshot-demo-1",
+  draftId: "draft-demo-1",
+  draftRevisionId: "revision-demo-1",
+  draftRevisionNumber: 1,
+  draftStatus: "saved",
+  draftStatusLabel: "已保存",
+  selectedPhase: "phase_ii",
+  selectedPhaseLabel: "II 期",
+  protocolCode: "TEST-001",
+  officialVersion: "V1.0",
+  recoveryCheckpointId: null,
+  recoveryStepId: null,
+  nextAction: "审阅草稿第 1 稿并核对来源定位",
+  publishable: true,
+  ...overrides,
+});
+
+export const protocolSessionFixtures: Record<string, ProtocolSessionView> = {
+  [PROTOCOL_DEMO_JOB_ID]: baseSession({}),
+  [PROTOCOL_IDENTITY_JOB_ID]: baseSession({
+    jobId: PROTOCOL_IDENTITY_JOB_ID,
+    state: "await_identity",
+    stateLabel: "等待身份确认",
+    progressCompleted: 4,
+    awaitingUser: "identity",
+    awaitingUserLabel: "等待确认方案身份与期别",
+    draftId: null,
+    draftRevisionId: null,
+    draftRevisionNumber: null,
+    draftStatus: null,
+    draftStatusLabel: null,
+    selectedPhase: null,
+    selectedPhaseLabel: null,
+    protocolCode: null,
+    officialVersion: null,
+    nextAction: "核对方案编号、版本与研究期别",
+    publishable: null,
+  }),
+  [PROTOCOL_RECOVERY_JOB_ID]: baseSession({
+    jobId: PROTOCOL_RECOVERY_JOB_ID,
+    state: "resumable",
+    stateLabel: "可恢复",
+    recoveryCheckpointId: "checkpoint-demo-1",
+    recoveryStepId: "generate_draft",
+    nextAction: "从上次中断处继续生成草稿",
+    awaitingUser: null,
+    awaitingUserLabel: null,
+    draftId: null,
+    draftRevisionId: null,
+    draftRevisionNumber: null,
+    publishable: null,
+  }),
+};
+
+export const identityReviewFixture: IdentityReviewView = {
+  jobId: PROTOCOL_IDENTITY_JOB_ID,
+  snapshotId: "snapshot-demo-1",
+  confirmationRequired: true,
+  identity: {
+    identityDecisionId: "identity-demo-1",
+    snapshotId: "snapshot-demo-1",
+    status: "pending_confirmation",
+    statusLabel: "待确认",
+    projectName: "测试研究",
+    projectCode: "TEST",
+    protocolCode: "TEST-001",
+    officialVersion: "V1.0",
+    officialDateValue: "2026-08-14",
+    officialDatePrecision: "day",
+    studyPhase: "phase_ii",
+    studyPhaseLabel: "II 期",
+    confirmationRequired: true,
+    conflictIds: [],
+    selectedCandidateIds: ["candidate-1"],
+  },
+  phaseCandidates: [
+    {
+      candidateId: "phase-candidate-ii",
+      phase: "phase_ii",
+      phaseLabel: "II 期",
+      rationale: "正文标题与入排章节均指向 II 期受试者",
+    },
+    {
+      candidateId: "phase-candidate-iii",
+      phase: "phase_iii",
+      phaseLabel: "III 期",
+      rationale: "页眉模板残留 III 期字样，需人工确认",
+    },
+  ],
+  metadataCandidates: [],
+  metadataConflicts: [],
+};
+
+const draftContent = {
+  draft_id: "draft-demo-1",
+  project_id: "project-demo-1",
+  protocol_version_id: "protocol-version-demo-1",
+  selected_phase: "phase_ii",
+  draft_revision: 1,
+  proposed_rules: [
+    {
+      rule_id: "rule-in",
+      official_code: "IN-01",
+      kind: "inclusion",
+      source_text: "年龄≥18岁",
+      study_phase: "phase_ii",
+      components: [
+        {
+          rule_component_id: "component-in",
+          parent_rule_id: "rule-in",
+          display_code: "IN-01a",
+          title: "年龄要求",
+          expression: {
+            kind: "predicate",
+            predicate: {
+              predicate_id: "predicate-age",
+              subject: "受试者",
+              attribute: "年龄",
+              comparator: "gte",
+              value: 18,
+              unit: "岁",
+              requires_professional_judgment: false,
+              applicable_population: null,
+            },
+            time_constraint: null,
+          },
+          exception_expression: null,
+          evidence_requirements: [
+            {
+              requirement_id: "req-in",
+              rule_component_id: "component-in",
+              fact_type: "方案要求事实",
+              due_stage: "screening",
+              description: "核对正式原始资料和研究者记录",
+              required_source_types: ["medical_record"],
+              requires_contemporaneous_objective_source: false,
+              allows_screening_record_transcription: true,
+              schema_version: "1",
+            },
+          ],
+          schema_version: "1",
+        },
+      ],
+      schema_version: "1",
+    },
+    {
+      rule_id: "rule-ex",
+      official_code: "EX-01",
+      kind: "exclusion",
+      source_text: "ALT或AST≥1.5×ULN",
+      study_phase: "phase_ii",
+      components: [
+        {
+          rule_component_id: "component-ex",
+          parent_rule_id: "rule-ex",
+          display_code: "EX-01a",
+          title: "肝功能阈值",
+          expression: {
+            kind: "logical",
+            operator: "any",
+            children: [
+              {
+                kind: "predicate",
+                predicate: {
+                  predicate_id: "predicate-alt",
+                  subject: "受试者",
+                  attribute: "ALT",
+                  comparator: "gte",
+                  value: 1.5,
+                  unit: "ULN",
+                  requires_professional_judgment: false,
+                  applicable_population: null,
+                },
+              },
+              {
+                kind: "predicate",
+                predicate: {
+                  predicate_id: "predicate-ast",
+                  subject: "受试者",
+                  attribute: "AST",
+                  comparator: "gte",
+                  value: 1.5,
+                  unit: "ULN",
+                  requires_professional_judgment: false,
+                  applicable_population: null,
+                },
+              },
+            ],
+          },
+          exception_expression: null,
+          evidence_requirements: [],
+          schema_version: "1",
+        },
+      ],
+      schema_version: "1",
+    },
+  ],
+  proposed_workflow_stages: [
+    {
+      workflow_stage_id: "stage-screening",
+      stage: "screening",
+      display_name: "筛选期审核",
+      visit_instance: "筛选期 D-28~D-1",
+      due_requirement_ids: ["req-in"],
+    },
+  ],
+  component_drafts: [
+    {
+      draft_component_id: "draft-component-in",
+      parent_official_code: "IN-01",
+      source_refs: ["span-in"],
+      source_excerpts: ["年龄≥18岁"],
+    },
+    {
+      draft_component_id: "draft-component-ex",
+      parent_official_code: "EX-01",
+      source_refs: ["span-ex"],
+      source_excerpts: ["ALT或AST≥1.5×ULN"],
+    },
+  ],
+  unresolved_items: [],
+  structural_warnings: [],
+  schema_version: "1",
+};
+
+export const draftRevisionFixture: DraftRevisionView = {
+  jobId: PROTOCOL_DEMO_JOB_ID,
+  revisionId: "revision-demo-1",
+  draftId: "draft-demo-1",
+  revisionNumber: 1,
+  status: "saved",
+  statusLabel: "已保存",
+  reason: "agent_output",
+  reasonLabel: "智能体输出",
+  actor: "系统",
+  createdAt: "2026-08-17T10:00:00Z",
+  studyPhase: "phase_ii",
+  studyPhaseLabel: "II 期",
+  protocolCode: "TEST-001",
+  officialVersion: "V1.0",
+  ruleCount: 2,
+  workflowStageCount: 1,
+  content: draftContent,
+  diff: null,
+};
+
+export const integrityFixture: IntegrityView = {
+  jobId: PROTOCOL_DEMO_JOB_ID,
+  publishable: true,
+  blockingCount: 0,
+  reviewCount: 0,
+  reminderCount: 1,
+  summary: "完整性检查已通过，可以进入发布确认。",
+  checks: [
+    { checkName: "身份与期别", passed: true, issueCount: 0 },
+    { checkName: "来源覆盖", passed: true, issueCount: 0 },
+  ],
+  issues: [
+    {
+      issueCode: "reminder-manual-review",
+      checkName: "医学复核提醒",
+      level: "reminder",
+      problem: "草稿由智能体生成，关键排除条件仍需医学经理终审。",
+      impact: "不影响保存草稿，但发布前需人工确认。",
+      nextAction: "逐条核对 EX 类规则阈值与原文一致。",
+      affectedRefs: ["EX-01"],
+      repairScope: ["draft_review"],
+    },
+  ],
+};
+
+export const sourcesFixture: SourcesView = {
+  jobId: PROTOCOL_DEMO_JOB_ID,
+  snapshotId: "snapshot-demo-1",
+  selectedPhase: "phase_ii",
+  selectedPhaseLabel: "II 期",
+  sourceSpans: {
+    "span-in": {
+      source_span_id: "span-in",
+      source_ref: "protocol:p12",
+      page_number: 12,
+      precision: "text_range",
+      excerpt: "年龄≥18岁",
+      degradation_reason: null,
+    },
+    "span-ex": {
+      source_span_id: "span-ex",
+      source_ref: "protocol:p18",
+      page_number: 18,
+      precision: "page_excerpt",
+      excerpt: "ALT或AST≥1.5×ULN",
+      degradation_reason: null,
+    },
+  },
+  sourceMaterials: {},
+};

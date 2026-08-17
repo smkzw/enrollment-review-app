@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { StubApiError } from "../api";
+import { ProtocolWorkbenchApiError } from "../api/protocolWorkbenchRepository";
 import { UI_PHRASES } from "../domain/labels";
 
 export type LoadState<T> =
@@ -15,6 +16,7 @@ export type LoadState<T> =
 /** 面向用户的错误说明：已知业务错误用其中文消息，其余用统一恢复文案（合同 §8）。 */
 function toUserMessage(error: unknown): string {
   if (error instanceof StubApiError) return error.message;
+  if (error instanceof ProtocolWorkbenchApiError) return error.message;
   return UI_PHRASES.temporarilyUnavailable;
 }
 
