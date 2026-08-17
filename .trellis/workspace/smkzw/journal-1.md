@@ -263,3 +263,29 @@
 ### Status
 
 [OK] **Slice 4 accepted; Slice 5 next**
+
+## Session 11: Phase 3 切片 5 实施中无损暂停
+
+**Date**: 2026-08-17
+**Task**: Phase 3 方案解构V2（切片 5 未验收）
+**Branch**: `codex/v2-phase0-foundation` + 隔离 `codex/phase3-slice5-exec`
+
+### Summary
+
+完成 Slice 5 API/工作台初版后，Codex 从真实用户路径发现测试仍停留在样例数据：
+后端有任务图却无执行器，前端默认仓储始终是样例。后端原会话已定向修复并提交
+`bcadc56`，执行者报告 V2 `676 passed`；该证据未经 Codex 独立复测和审查。
+
+### Pause Boundary
+
+用户要求无损暂停后，未再启动前端定向会话、联调、浏览器验收、独立审查或合并。
+隔离工作树和过程记录暂不清理，因其仍是未验收 Slice 5 的唯一完整恢复依据。
+
+### Next
+
+先独立复核 `bcadc56`，再复用前端会话完成真实 HTTP 仓储与中文界面清理，然后做真实
+V2 服务联调、浏览器矩阵和新鲜独立验证。详见 `CHECKPOINT_20260817_SLICE5_PAUSED.md`。
+
+### Status
+
+[PAUSED] **Slices 1-4 accepted; Slice 5 backend follow-up unverified, frontend follow-up not started**
