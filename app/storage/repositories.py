@@ -79,6 +79,7 @@ from app.storage.codecs import (
     encode_value,
     parse_datetime_column,
     payload_get,
+    to_utc_naive,
     utc_now,
 )
 from app.storage.concurrency import apply_revisioned_update
@@ -328,7 +329,10 @@ class AppendRepository:
             self.config.contract_type, record.payload_json, record.payload_sha256
         )
         payload = json.loads(record.payload_json)
-        check_column_mirrors(self.config.entity_name, record, payload, self.config.mirrors)
+        mirrors = dict(self.config.mirrors)
+        if self.config.created_at_key is not None:
+            mirrors["created_at"] = self.config.created_at_key
+        check_column_mirrors(self.config.entity_name, record, payload, mirrors)
         return contract
 
 
@@ -2199,6 +2203,7 @@ class ProtocolDraftRevisionRepository:
                 "feedback_kind": "feedback_kind",
                 "actor": "actor",
                 "content_sha256": "content_sha256",
+                "created_at": "created_at",
             },
         )
         return contract
@@ -2316,6 +2321,8 @@ class ProtocolDraftRevisionRepository:
             for name, value in expected.items()
             if getattr(record, name) != value
         ]
+        if to_utc_naive(record.created_at) != to_utc_naive(revision.created_at):
+            mismatches.append("created_at")
         if mismatches:
             raise ScopeViolationError(
                 f"revision {revision.revision_id} 与已存在行的身份/审计列不一致："
@@ -2407,6 +2414,7 @@ def _decode_expectation_template_record(
             "fact_type": "fact_type",
             "required_source_types": "required_source_types",
             "projection_sha256": "projection_sha256",
+            "created_at": "created_at",
         },
     )
     return contract

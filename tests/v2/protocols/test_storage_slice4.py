@@ -745,7 +745,8 @@ def test_status_update_cannot_rewrite_audit_payload(
             field_name: new_value,
         }
     )
-    with pytest.raises(ScopeViolationError, match="只能改变 status"):
+    expected_message = "created_at" if field_name == "created_at" else "只能改变 status"
+    with pytest.raises(ScopeViolationError, match=expected_message):
         repo.update_status(changed)
 
     assert repo.get(revision.revision_id) == revision
@@ -781,6 +782,42 @@ def test_revision_list_cannot_hide_normalized_column_drift(session) -> None:
         repo.get_head(revision.draft_id)
 
 
+def test_revision_created_at_is_immutable_and_mirrored_on_every_read(session) -> None:
+    from app.storage.codecs import PersistedContractInvalid
+    from app.storage.repositories import ScopeViolationError
+
+    _source_input, draft, _spans = confirmed_fixture()
+    repo = ProtocolDraftRevisionRepository(session)
+    revision = ProtocolDraftRevision(
+        revision_id="draft-revision:created-at:1",
+        draft_id=draft.draft_id,
+        revision_number=1,
+        project_id=draft.project_id,
+        protocol_version_id=draft.protocol_version_id,
+        study_phase=draft.selected_phase,
+        status=DraftRevisionStatus.SAVED,
+        reason=DraftRevisionReason.INITIAL_SAVE,
+        actor="医学监查员",
+        content=draft,
+        content_sha256=canonical_hash(draft.model_dump(mode="json")),
+        created_at=NOW,
+    )
+    repo.save(revision)
+
+    with pytest.raises(ScopeViolationError, match="created_at"):
+        repo.replace(revision.model_copy(update={"created_at": NOW.replace(day=18)}))
+
+    row = session.get(ProtocolDraftRevisionRecord, revision.revision_id)
+    row.created_at = NOW.replace(tzinfo=None, day=19)
+    session.flush()
+    with pytest.raises(PersistedContractInvalid, match="created_at"):
+        repo.get(revision.revision_id)
+    with pytest.raises(PersistedContractInvalid, match="created_at"):
+        repo.list_by_draft(revision.draft_id)
+    with pytest.raises(PersistedContractInvalid, match="created_at"):
+        repo.get_head(revision.draft_id)
+
+
 def test_template_list_cannot_hide_normalized_column_drift(session) -> None:
     from app.storage.codecs import PersistedContractInvalid
 
@@ -792,4 +829,23 @@ def test_template_list_cannot_hide_normalized_column_drift(session) -> None:
     session.flush()
 
     with pytest.raises(PersistedContractInvalid, match="fact_type"):
+        list_expectation_templates(session, rule_set.rule_set_id, 1)
+
+
+def test_template_created_at_is_mirrored_on_direct_and_list_reads(session) -> None:
+    from app.storage.codecs import PersistedContractInvalid
+    from app.storage.repositories import EVIDENCE_EXPECTATION_TEMPLATE_CONFIG
+
+    rule_set, _stages, templates = _seed_template_context(session)
+    valid = next(item for item in templates if item.requirement_id == "req-in")
+    save_expectation_templates(session, [valid])
+    row = session.get(EvidenceExpectationTemplateRecord, valid.template_id)
+    row.created_at = NOW.replace(tzinfo=None, day=19)
+    session.flush()
+
+    with pytest.raises(PersistedContractInvalid, match="created_at"):
+        AppendRepository(session, EVIDENCE_EXPECTATION_TEMPLATE_CONFIG).get(
+            valid.template_id
+        )
+    with pytest.raises(PersistedContractInvalid, match="created_at"):
         list_expectation_templates(session, rule_set.rule_set_id, 1)
