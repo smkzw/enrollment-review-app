@@ -236,3 +236,30 @@
 ### Status
 
 [PAUSED] **Slices 1-3 accepted; Slice 4 not started**
+
+## Session 10: Phase 3 切片 4 流程节点、证据要求与发布事务
+
+**Date**: 2026-08-17
+**Task**: Phase 3 方案解构V2（切片 4）
+**Branch**: `codex/v2-phase0-foundation`
+
+### Summary
+
+完成流程节点、规则/流程资料要求、无受试者资料核对模板、不可变草稿修订、反馈边界、
+完整结构化差异和原子发布。独立审查多轮以可复现反例推动修复重复访视、来源闭包、
+孤儿模板、列/正文漂移、状态转换审计改写和创建时间镜像；最终 `ACCEPT`。
+
+### Verification
+
+- 隔离 V2：`667 passed, 2 subtests passed`
+- 主分支全仓：`797 passed, 1 skipped, 18 subtests passed`
+- 唯一跳过：遗留 06003 OCR 缓存夹具不存在
+- 用户已有两张 UAT 截图未暂存、未覆盖
+
+### Next
+
+进入切片 5 V2 API 与首次解构工作台；不提前进入受试者审核或视觉多模型验收。
+
+### Status
+
+[OK] **Slice 4 accepted; Slice 5 next**
