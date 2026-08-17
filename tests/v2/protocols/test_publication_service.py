@@ -177,6 +177,55 @@ def test_authority_record_closure_hashes_are_self_consistent(slice4_env) -> None
         assert result.authority_record_id == authority.authority_record_id
 
 
+def test_authority_allows_distinct_visit_instances_in_same_review_stage(
+    slice4_env,
+) -> None:
+    factory, now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+    r1 = _save_revision(factory, draft)
+    result = _publish(factory, source_input, draft, spans, r1.revision_id, "pub-visits")
+
+    with factory() as session:
+        authority = AppendRepository(session, AUTHORITY_RECORD_CONFIG).get(
+            result.authority_record_id
+        )
+    first_stage = authority.official_workflow_stages[0]
+    moved_requirement = first_stage.due_requirement_ids[0]
+    stages = [
+        first_stage.model_copy(
+            update={
+                "due_requirement_ids": first_stage.due_requirement_ids[1:]
+            }
+        ),
+        first_stage.model_copy(
+            update={
+                "workflow_stage_id": first_stage.workflow_stage_id + ":visit-2",
+                "display_name": first_stage.display_name + "第二次访视",
+                "due_requirement_ids": [moved_requirement],
+            }
+        ),
+        *authority.official_workflow_stages[1:],
+    ]
+    payload = authority.model_dump(
+        mode="json", exclude={"authority_record_sha256"}
+    )
+    payload["official_workflow_stages"] = [
+        stage.model_dump(mode="json") for stage in stages
+    ]
+
+    rebuilt = authority.__class__(
+        **payload,
+        authority_record_sha256=canonical_hash(payload),
+    )
+    assert [stage.stage for stage in rebuilt.official_workflow_stages[:2]] == [
+        first_stage.stage,
+        first_stage.stage,
+    ]
+    assert rebuilt.official_workflow_stages[0].workflow_stage_id != (
+        rebuilt.official_workflow_stages[1].workflow_stage_id
+    )
+
+
 def test_same_key_same_request_returns_original_publication(slice4_env) -> None:
     factory, now = slice4_env
     source_input, draft, spans = confirmed_fixture()

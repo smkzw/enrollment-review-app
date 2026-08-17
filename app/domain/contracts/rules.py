@@ -387,11 +387,11 @@ class ProtocolAuthorityRecord(VersionedModel):
             raise ValueError("官方规则来源定位必须绑定当前 protocol_version_id")
         if any(item.study_phase != self.study_phase for item in self.official_rules):
             raise ValueError("权威规则期别必须与 AuthorityRecord 一致")
-        stage_by_value = {
-            workflow.stage: workflow for workflow in self.official_workflow_stages
-        }
-        if len(stage_by_value) != len(self.official_workflow_stages):
-            raise ValueError("ProtocolAuthorityRecord 不得包含重复审核阶段")
+        workflow_stage_ids = [
+            workflow.workflow_stage_id for workflow in self.official_workflow_stages
+        ]
+        if len(workflow_stage_ids) != len(set(workflow_stage_ids)):
+            raise ValueError("ProtocolAuthorityRecord 的流程节点 ID 不得重复")
         procedure_requirement_ids = [
             item.requirement_id for item in self.procedure_evidence_requirements
         ]
