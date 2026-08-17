@@ -80,20 +80,6 @@ class StepFailure(WorkflowError):
         self.detail = detail
 
 
-class StepWaitForUser(Exception):
-    """执行器声明的用户等待边界：持久 ``waiting_user``，不占用租约，不进入重试。"""
-
-    def __init__(
-        self,
-        *,
-        awaiting_user: str,
-        checkpoint_payload: dict[str, Any] | None = None,
-    ) -> None:
-        super().__init__(awaiting_user)
-        self.awaiting_user = awaiting_user
-        self.checkpoint_payload = checkpoint_payload
-
-
 class ProcessDeath(BaseException):
     """模拟进程被强制终止（提交前/提交后故障注入）。
 

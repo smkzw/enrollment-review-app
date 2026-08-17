@@ -82,6 +82,7 @@ class StepView:
     attempt: int
     max_attempts: int
     retryable: bool
+    waiting_user_kind: str | None
     error_code: str | None
     error_classification: str | None
     retry_not_before: datetime | None
@@ -170,6 +171,7 @@ class JobStore:
         name: str,
         max_attempts: int = 1,
         retryable: bool = False,
+        waiting_user_kind: str | None = None,
         depends_on: tuple[str, ...] = (),
     ) -> JobStepRecord:
         return self.repo.create_step(
@@ -180,6 +182,7 @@ class JobStore:
             attempt=0,
             max_attempts=max_attempts,
             retryable=retryable,
+            waiting_user_kind=waiting_user_kind,
             depends_on=depends_on,
         )
 
@@ -326,6 +329,7 @@ class JobStore:
                 attempt=step.attempt,
                 max_attempts=step.max_attempts,
                 retryable=step.retryable,
+                waiting_user_kind=step.waiting_user_kind,
                 error_code=step.error_code,
                 error_classification=step.error_classification,
                 retry_not_before=step.retry_not_before,
@@ -681,15 +685,14 @@ class JobStore:
             retry_not_before=step.retry_not_before,
         )
 
-    def wait_for_user(
+    def enter_user_wait(
         self,
         lease: JobLease,
         step_id: str,
         *,
         awaiting_user: str,
-        checkpoint_payload: dict[str, Any] | None = None,
     ) -> None:
-        """用户等待边界：running -> waiting_user，清空租约，不写入失败/重试事件。"""
+        """声明式用户边界：queued -> waiting_user，不启动执行器、不计尝试。"""
         job = self._lease_guard(lease)
         now = self.now()
         step = self.session.get(
@@ -697,18 +700,13 @@ class JobStore:
         )
         if step is None or step.job_id != job.job_id:
             raise StepMismatchError(f"步骤 {step_id!r} 不属于任务 {job.job_id}")
-        if step.state != "running":
+        if step.state != "queued":
             raise StepMismatchError(
                 f"步骤 {step_id} 当前状态 {step.state}，不能进入等待确认"
             )
-        checkpoint_id: str | None = None
-        if checkpoint_payload is not None:
-            checkpoint_id = uuid4().hex
-            self.repo.create_checkpoint(
-                checkpoint_id=checkpoint_id,
-                job_id=job.job_id,
-                step_id=step_id,
-                payload={"attempt": step.attempt, **checkpoint_payload},
+        if step.waiting_user_kind != awaiting_user:
+            raise StepMismatchError(
+                f"步骤 {step_id} 的等待确认类型不一致"
             )
         step.state = "waiting_user"
         step.error_code = None
@@ -724,8 +722,7 @@ class JobStore:
                 job_id=job.job_id,
                 event_type=JobEventType.WAITING_USER,
                 step_id=step_id,
-                attempt=step.attempt,
-                checkpoint_id=checkpoint_id,
+                attempt=max(step.attempt, 1),
                 progress_completed=job.progress_completed,
                 progress_total=job.progress_total,
                 payload={"awaiting_user": awaiting_user},
@@ -788,7 +785,7 @@ class JobStore:
                 job_id=job_id,
                 event_type=JobEventType.STEP_COMPLETED,
                 step_id=step_id,
-                attempt=step.attempt,
+                attempt=max(step.attempt, 1),
                 checkpoint_id=checkpoint_id,
                 progress_completed=completed,
                 progress_total=job.progress_total,

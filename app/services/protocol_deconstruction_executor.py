@@ -69,7 +69,7 @@ from app.services.protocol_workbench_service import (
 from app.storage.codecs import utc_now
 from app.storage.config import DataPaths
 from app.storage.repositories import ProtocolDraftRevisionRepository
-from app.workflow.errors import StepFailure, StepWaitForUser
+from app.workflow.errors import StepFailure
 from app.workflow.jobstore import JobStore
 from app.workflow.runner import StepContext, StepExecutor
 
@@ -78,14 +78,6 @@ _DEFAULT_PROMPT = (
     "逐条保留官方父规则，准确表达每个必要条件、替代条件、例外、时间锚点、专业判断，"
     "并把基线及以前每个必做项目映射到其独立审核节点。"
 )
-
-_USER_WAIT_STEPS = frozenset({STEP_AWAIT_IDENTITY, STEP_AWAIT_REVIEW, STEP_PUBLISH})
-
-_AWAITING_USER_BY_STEP: dict[str, str] = {
-    STEP_AWAIT_IDENTITY: "identity",
-    STEP_AWAIT_REVIEW: "review",
-    STEP_PUBLISH: "publish",
-}
 
 _CHECKPOINT_ORDER: tuple[str, ...] = tuple(
     step.step_id for step in PROTOCOL_DECONSTRUCTION_STEPS
@@ -115,8 +107,6 @@ def create_protocol_deconstruction_executor(
     """Build the ``protocol_deconstruction`` step executor."""
 
     def execute(context: StepContext) -> dict[str, Any]:
-        if context.step_id in _USER_WAIT_STEPS:
-            return _handle_user_wait(context)
         if context.last_checkpoint is not None:
             return dict(context.last_checkpoint)
         handlers = {
@@ -164,12 +154,6 @@ def create_protocol_deconstruction_executor(
             ) from exc
 
     return execute
-
-
-def _handle_user_wait(context: StepContext) -> dict[str, Any]:
-    """User-boundary steps suspend until the workbench API completes them."""
-    awaiting = _AWAITING_USER_BY_STEP.get(context.step_id, context.step_id)
-    raise StepWaitForUser(awaiting_user=awaiting)
 
 
 def _merged_prior_checkpoints(

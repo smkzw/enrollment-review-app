@@ -75,6 +75,7 @@ PROTOCOL_DECONSTRUCTION_STEPS: tuple[StepSpec, ...] = (
         STEP_AWAIT_IDENTITY,
         "等待身份确认",
         depends_on=(STEP_IDENTIFY,),
+        waiting_user_kind="identity",
     ),
     StepSpec(STEP_GENERATE, "生成草稿", depends_on=(STEP_AWAIT_IDENTITY,)),
     StepSpec(STEP_INTEGRITY, "完整性检查", depends_on=(STEP_GENERATE,)),
@@ -82,11 +83,13 @@ PROTOCOL_DECONSTRUCTION_STEPS: tuple[StepSpec, ...] = (
         STEP_AWAIT_REVIEW,
         "等待审阅",
         depends_on=(STEP_INTEGRITY,),
+        waiting_user_kind="review",
     ),
     StepSpec(
         STEP_PUBLISH,
         "发布",
         depends_on=(STEP_AWAIT_REVIEW,),
+        waiting_user_kind="publish",
     ),
 )
 

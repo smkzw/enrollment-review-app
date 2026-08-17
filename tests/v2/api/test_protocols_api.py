@@ -248,6 +248,19 @@ def test_upload_pipeline_reaches_identity_and_review_without_seed(build_app) -> 
         job_id = _create_protocol_job(client, key="pipeline-e2e-1", docx_bytes=_pipeline_docx_bytes())
         _run_until(client, app, job_id, awaiting_user="identity")
 
+        identity_session = client.get(f"/api/v2/jobs/{job_id}").json()
+        identity_wait = next(
+            step
+            for step in identity_session["steps"]
+            if step["step_id"] == "await_identity_confirm"
+        )
+        assert identity_wait["state"] == "waiting_user"
+        assert identity_wait["attempt"] == 0
+        identity_events = [item["event_type"] for item in identity_session["events"]]
+        assert "waiting_user" in identity_events
+        assert "step_failed" not in identity_events
+        assert "retry_scheduled" not in identity_events
+
         identity = client.get(f"/api/v2/protocol/deconstructions/{job_id}/identity")
         assert identity.status_code == 200, identity.text
         identity_body = identity.json()
@@ -273,6 +286,12 @@ def test_upload_pipeline_reaches_identity_and_review_without_seed(build_app) -> 
         session = client.get(f"/api/v2/protocol/deconstructions/{job_id}").json()
         assert session["awaiting_user"] == "review"
         assert session["draft_revision_number"] == 1
+        review_job = client.get(f"/api/v2/jobs/{job_id}").json()
+        review_wait = next(
+            step for step in review_job["steps"] if step["step_id"] == "await_review"
+        )
+        assert review_wait["state"] == "waiting_user"
+        assert review_wait["attempt"] == 0
 
         draft = client.get(f"/api/v2/protocol/deconstructions/{job_id}/draft")
         assert draft.status_code == 200, draft.text

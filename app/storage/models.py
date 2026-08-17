@@ -1230,6 +1230,7 @@ class JobStepRecord(RevisionedRecordMixin, Base):
     attempt: Mapped[int] = mapped_column(Integer, nullable=False)
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False)
     retryable: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    waiting_user_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
     progress_completed: Mapped[int] = mapped_column(Integer, nullable=False)
     progress_total: Mapped[int] = mapped_column(Integer, nullable=False)
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
