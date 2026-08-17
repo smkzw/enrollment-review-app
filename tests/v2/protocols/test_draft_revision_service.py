@@ -100,7 +100,9 @@ def test_two_tab_concurrent_edit_second_gets_stale_revision(session) -> None:
         assert error.expected_revision == 1
         assert error.current_revision == 2
         assert error.field_diff, "过期提交必须携带结构化差异信封"
-        assert "modified_workflow_stage_ids" in error.field_diff
+        stage_change = error.field_diff["workflow_stage:stage-screening"]
+        assert stage_change.submitted["display_name"] == "筛选期审核"
+        assert stage_change.current["display_name"] == "标签页 A 的修改"
         assert service.revisions.count(draft.draft_id) == 2
 
 

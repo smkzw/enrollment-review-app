@@ -730,37 +730,115 @@ def mark_revision_published(
 
 
 def _draft_diff_as_field_changes(
-    diff: ProtocolDraftRevisionDiff,
+    submitted: ProtocolDeconstructionDraft,
+    current: ProtocolDeconstructionDraft,
 ) -> dict[str, "FieldChange"]:
     """把结构化草稿差异转换为 StaleRevisionError 的字段差异信封。
 
-    每个差异维度给出 current（链头现值）与 submitted（提交方值）两列，
-    供 API 输出中文冲突信封，绝不静默覆盖。
+    每个差异项直接取两份草稿中的真实结构化快照，给出 current（链头现值）
+    与 submitted（提交方值）。不能用空数组或布尔量代替内容，否则前端会把
+    “链头新增”误呈现为“提交方新增”，也无法让用户判断应保留哪一版。
     """
     from app.storage.concurrency import FieldChange
 
-    def _pair(submitted: list[str]) -> FieldChange:
-        return FieldChange(current=[], submitted=submitted)
+    diff = compute_draft_diff(submitted, current)
+    changes: dict[str, FieldChange] = {}
 
-    return {
-        "added_rule_codes": _pair(diff.added_rule_codes),
-        "removed_rule_codes": _pair(diff.removed_rule_codes),
-        "modified_rule_codes": _pair(diff.modified_rule_codes),
-        "added_workflow_stage_ids": _pair(diff.added_workflow_stage_ids),
-        "removed_workflow_stage_ids": _pair(diff.removed_workflow_stage_ids),
-        "modified_workflow_stage_ids": _pair(diff.modified_workflow_stage_ids),
-        "changed_component_ids": _pair(diff.changed_component_ids),
-        "changed_requirement_ids": _pair(diff.changed_requirement_ids),
-        "changed_procedure_mapping_ids": _pair(diff.changed_procedure_mapping_ids),
-        "source_scope_changed": FieldChange(
-            current=not diff.source_scope_changed,
-            submitted=diff.source_scope_changed,
-        ),
-        "workflow_visit_rewritten": FieldChange(
-            current=not diff.workflow_visit_rewritten,
-            submitted=diff.workflow_visit_rewritten,
-        ),
-    }
+    def _dump(item: Any | None) -> Any | None:
+        return item.model_dump(mode="json") if item is not None else None
+
+    def _index(values: Sequence[Any], key) -> dict[str, Any]:
+        return {key(item): item for item in values}
+
+    submitted_rules = _index(submitted.proposed_rules, lambda item: item.official_code)
+    current_rules = _index(current.proposed_rules, lambda item: item.official_code)
+    changed_rule_codes = sorted(
+        set(diff.added_rule_codes)
+        | set(diff.removed_rule_codes)
+        | set(diff.modified_rule_codes)
+    )
+    for code in changed_rule_codes:
+        changes[f"rule:{code}"] = FieldChange(
+            current=_dump(current_rules.get(code)),
+            submitted=_dump(submitted_rules.get(code)),
+        )
+
+    submitted_stages = _index(
+        submitted.proposed_workflow_stages, lambda item: item.workflow_stage_id
+    )
+    current_stages = _index(
+        current.proposed_workflow_stages, lambda item: item.workflow_stage_id
+    )
+    changed_stage_ids = sorted(
+        set(diff.added_workflow_stage_ids)
+        | set(diff.removed_workflow_stage_ids)
+        | set(diff.modified_workflow_stage_ids)
+    )
+    for stage_id in changed_stage_ids:
+        changes[f"workflow_stage:{stage_id}"] = FieldChange(
+            current=_dump(current_stages.get(stage_id)),
+            submitted=_dump(submitted_stages.get(stage_id)),
+        )
+
+    def _components(draft: ProtocolDeconstructionDraft) -> dict[str, Any]:
+        return {
+            component.rule_component_id: component
+            for rule in draft.proposed_rules
+            for component in rule.components
+        }
+
+    submitted_components = _components(submitted)
+    current_components = _components(current)
+    for component_id in diff.changed_component_ids:
+        changes[f"rule_component:{component_id}"] = FieldChange(
+            current=_dump(current_components.get(component_id)),
+            submitted=_dump(submitted_components.get(component_id)),
+        )
+
+    submitted_requirements = _index(
+        submitted.evidence_requirement_drafts,
+        lambda item: item.draft_requirement_id,
+    )
+    current_requirements = _index(
+        current.evidence_requirement_drafts,
+        lambda item: item.draft_requirement_id,
+    )
+    for requirement_id in diff.changed_requirement_ids:
+        changes[f"evidence_requirement:{requirement_id}"] = FieldChange(
+            current=_dump(current_requirements.get(requirement_id)),
+            submitted=_dump(submitted_requirements.get(requirement_id)),
+        )
+
+    submitted_mappings = _index(
+        submitted.procedure_catalog_mappings, lambda item: item.catalog_item_id
+    )
+    current_mappings = _index(
+        current.procedure_catalog_mappings, lambda item: item.catalog_item_id
+    )
+    for catalog_item_id in diff.changed_procedure_mapping_ids:
+        changes[f"procedure_mapping:{catalog_item_id}"] = FieldChange(
+            current=_dump(current_mappings.get(catalog_item_id)),
+            submitted=_dump(submitted_mappings.get(catalog_item_id)),
+        )
+
+    if diff.source_scope_changed:
+        changes["source_scope"] = FieldChange(
+            current={
+                "source_refs": current.source_refs,
+                "procedure_source_span_ids": {
+                    item.catalog_item_id: item.source_span_ids
+                    for item in current.procedure_catalog_mappings
+                },
+            },
+            submitted={
+                "source_refs": submitted.source_refs,
+                "procedure_source_span_ids": {
+                    item.catalog_item_id: item.source_span_ids
+                    for item in submitted.procedure_catalog_mappings
+                },
+            },
+        )
+    return changes
 
 
 def _head_error(
@@ -788,7 +866,7 @@ def _head_error(
     field_diff: dict[str, "FieldChange"] = {}
     if submitter is not None and head is not None:
         field_diff = _draft_diff_as_field_changes(
-            compute_draft_diff(submitter.content, head.content)
+            submitter.content, head.content
         )
     return StaleRevisionError(
         entity_type="ProtocolDraftRevision",

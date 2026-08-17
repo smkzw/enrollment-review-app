@@ -379,7 +379,9 @@ def test_stale_revision_publication_rolls_back_and_keeps_previous_published(
     assert error.expected_revision == 1
     assert error.current_revision == 2
     assert error.field_diff, "过期发布必须携带结构化差异信封"
-    assert "modified_workflow_stage_ids" in error.field_diff
+    stage_change = error.field_diff["workflow_stage:stage-screening"]
+    assert stage_change.submitted["display_name"] == "筛选期审核"
+    assert stage_change.current["display_name"] == "另一标签页的修改"
     with factory() as session:
         # 过期发布不产生任何正式行
         assert _count(session, ProjectRecord) == 0

@@ -227,23 +227,13 @@ class ProtocolPublicationService:
         revision = revisions.get(request.draft_revision_id)
         head = revisions.get_head(revision.draft_id)
         if head is None or head.revision_id != revision.revision_id:
-            from app.services.protocol_draft_service import (
-                _draft_diff_as_field_changes,
-                compute_draft_diff,
-            )
+            from app.services.protocol_draft_service import head_stale_error
 
-            field_diff: dict[str, object] = {}
-            if head is not None:
-                field_diff = _draft_diff_as_field_changes(
-                    compute_draft_diff(revision.content, head.content)
-                )
-            raise StaleRevisionError(
-                entity_type="ProtocolDraftRevision",
-                entity_id=revision.draft_id,
-                expected_revision=revision.revision_number,
-                current_revision=head.revision_number if head else 0,
-                field_diff=field_diff,
-                current_record=head,
+            raise head_stale_error(
+                revisions,
+                draft_id=revision.draft_id,
+                expected_revision_id=revision.revision_id,
+                head=head,
             )
         if revision.status not in {
             DraftRevisionStatus.SAVED,
