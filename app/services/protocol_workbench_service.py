@@ -49,10 +49,10 @@ from app.services.protocol_publication_service import (
 )
 from app.storage.codecs import utc_now
 from app.storage.config import DataPaths
+from app.storage.models import JobRecord, JobStepRecord
 from app.storage.repositories import JobRepository, NotFoundError, ProtocolDraftRevisionRepository
-from app.workflow.errors import JobNotFoundError
+from app.workflow.errors import JobNotFoundError, JobStateConflictError
 from app.workflow.jobstore import JobStore
-from app.storage.models import JobStepRecord
 
 PROTOCOL_DECONSTRUCTION_JOB_TYPE = "protocol_deconstruction"
 
@@ -75,8 +75,6 @@ PROTOCOL_DECONSTRUCTION_STEPS: tuple[StepSpec, ...] = (
         STEP_AWAIT_IDENTITY,
         "等待身份确认",
         depends_on=(STEP_IDENTIFY,),
-        retryable=True,
-        max_attempts=999,
     ),
     StepSpec(STEP_GENERATE, "生成草稿", depends_on=(STEP_AWAIT_IDENTITY,)),
     StepSpec(STEP_INTEGRITY, "完整性检查", depends_on=(STEP_GENERATE,)),
@@ -84,15 +82,11 @@ PROTOCOL_DECONSTRUCTION_STEPS: tuple[StepSpec, ...] = (
         STEP_AWAIT_REVIEW,
         "等待审阅",
         depends_on=(STEP_INTEGRITY,),
-        retryable=True,
-        max_attempts=999,
     ),
     StepSpec(
         STEP_PUBLISH,
         "发布",
         depends_on=(STEP_AWAIT_REVIEW,),
-        retryable=True,
-        max_attempts=999,
     ),
 )
 
@@ -755,8 +749,11 @@ class ProtocolWorkbenchService:
         source_spans: dict[str, ProtocolSourceSpan],
         gate_result: ProtocolDeconstructionGateResult | None = None,
         actor: str = "测试用户",
+        wait_at: str = STEP_AWAIT_REVIEW,
     ) -> None:
         """测试夹具：写入完整审阅态（不跑 OCR/Agent）。"""
+        if wait_at not in (STEP_AWAIT_REVIEW, STEP_PUBLISH):
+            raise ValueError(f"wait_at 必须是审阅或发布步骤，收到 {wait_at!r}")
         gate = gate_result or self.gate.evaluate(
             source_input,
             draft,
@@ -844,6 +841,34 @@ class ProtocolWorkbenchService:
                         step_id=step_id,
                         payload=payload,
                     )
+                now = self.now()
+                wait_index = _CHECKPOINT_STEP_ORDER.index(wait_at)
+                completed_count = 0
+                for step_id in _CHECKPOINT_STEP_ORDER:
+                    step = session.get(JobStepRecord, {"job_id": job_id, "step_id": step_id})
+                    if step is None:
+                        continue
+                    step_index = _CHECKPOINT_STEP_ORDER.index(step_id)
+                    if step_index < wait_index:
+                        step.state = "completed"
+                        step.attempt = max(step.attempt, 1)
+                        completed_count += 1
+                    elif step_id == wait_at:
+                        step.state = "waiting_user"
+                        step.attempt = max(step.attempt, 1)
+                    else:
+                        step.state = "queued"
+                    step.error_code = None
+                    step.error_classification = None
+                    step.retry_not_before = None
+                    step.updated_at = now
+                job = session.get(JobRecord, job_id)
+                if job is not None:
+                    job.state = "waiting_user"
+                    job.progress_completed = completed_count
+                    job.lease_owner = None
+                    job.lease_expires_at = None
+                    job.updated_at = now
 
     # ------------------------------------------------------------------ 内部
 
@@ -883,68 +908,23 @@ class ProtocolWorkbenchService:
         step_id: str,
         checkpoint_payload: dict[str, Any],
     ) -> None:
-        with self.session_factory() as session:
-            with session.begin():
-                store = JobStore(session, now=self.now)
-                job = store.get_job(job_id)
-                step = session.get(JobStepRecord, {"job_id": job_id, "step_id": step_id})
-                if step is None:
-                    raise ProtocolWorkbenchError(
-                        "STEP_NOT_FOUND",
-                        title="任务步骤不存在",
-                        detail="方案解构任务结构不完整。",
-                        recovery="请联系维护人员检查任务记录。",
+        try:
+            with self.session_factory() as session:
+                with session.begin():
+                    store = JobStore(session, now=self.now)
+                    store.complete_user_step(
+                        job_id,
+                        step_id,
+                        checkpoint_payload=checkpoint_payload,
                     )
-                if job.state == "failed_retryable" and step.state == "failed_retryable":
-                    if step.error_code != "AWAITING_USER":
-                        raise ProtocolWorkbenchError(
-                            "JOB_CLAIM_FAILED",
-                            title="任务暂时无法更新",
-                            detail="任务正在等待自动重试，请稍后再确认。",
-                            recovery="请稍后重试；无需重复填写确认内容。",
-                        )
-                    step.state = "queued"
-                    step.retry_not_before = None
-                    step.error_code = None
-                    step.error_classification = None
-                    job.state = "queued"
-                    job.lease_owner = None
-                    job.lease_expires_at = None
-                    job.updated_at = self.now()
-                    session.flush()
-                lease = store.claim_job(job_id, self.WORKER_ID)
-                if lease is None:
-                    raise ProtocolWorkbenchError(
-                        "JOB_CLAIM_FAILED",
-                        title="任务暂时无法更新",
-                        detail="当前有其他执行过程占用任务，本次确认尚未写入。",
-                        recovery="请稍后重试；无需重复填写确认内容。",
-                    )
-                step = session.get(JobStepRecord, {"job_id": job_id, "step_id": step_id})
-                if step is None:
-                    raise ProtocolWorkbenchError(
-                        "STEP_NOT_FOUND",
-                        title="任务步骤不存在",
-                        detail="方案解构任务结构不完整。",
-                        recovery="请联系维护人员检查任务记录。",
-                    )
-                if step.state in ("queued", "failed_retryable"):
-                    store.start_step(lease, step_id)
-                elif step.state != "running":
-                    raise ProtocolWorkbenchError(
-                        "STEP_STATE_CONFLICT",
-                        title="任务步骤状态不允许该操作",
-                        detail="当前步骤已完成或失败，不能重复提交。",
-                        recovery="请刷新任务状态后重试。",
-                    )
-                store.complete_step(
-                    lease, step_id, checkpoint_payload=checkpoint_payload
-                )
-                job = store.get_job(job_id)
-                job.state = "queued"
-                job.lease_owner = None
-                job.lease_expires_at = None
-                session.flush()
+        except JobStateConflictError as exc:
+            raise ProtocolWorkbenchError(
+                "STEP_STATE_CONFLICT",
+                title="任务步骤状态不允许该操作",
+                detail="当前步骤不在等待确认状态，不能重复提交。",
+                recovery="请刷新任务状态后重试。",
+                context={"current_state": exc.current_state},
+            ) from exc
 
     def _force_complete_step(
         self,

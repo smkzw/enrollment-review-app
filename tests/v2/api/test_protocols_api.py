@@ -100,10 +100,17 @@ def _run_until(client: TestClient, app, job_id: str, *, awaiting_user: str, limi
     )
 
 
-def _seed_review_job(app, job_id: str) -> tuple:
+def _seed_review_job(app, job_id: str, *, wait_at: str | None = None) -> tuple:
     source_input, draft, spans = confirmed_fixture()
     service: ProtocolWorkbenchService = app.state.protocol_workbench_service
-    service.seed_review_session(job_id, source_input=source_input, draft=draft, source_spans=spans)
+    kwargs: dict = {
+        "source_input": source_input,
+        "draft": draft,
+        "source_spans": spans,
+    }
+    if wait_at is not None:
+        kwargs["wait_at"] = wait_at
+    service.seed_review_session(job_id, **kwargs)
     return source_input, draft
 
 
@@ -196,7 +203,7 @@ def test_publish_first_project(client, build_app) -> None:
     app = build_app()
     with TestClient(app) as test_client:
         job_id = _create_protocol_job(test_client, key="publish-1")
-        _seed_review_job(app, job_id)
+        _seed_review_job(app, job_id, wait_at="publish")
         draft = test_client.get(f"/api/v2/protocol/deconstructions/{job_id}/draft").json()
         response = test_client.post(
             f"/api/v2/protocol/deconstructions/{job_id}/publish",

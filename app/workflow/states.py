@@ -7,9 +7,12 @@
     queued -> running -> completed
                       -> failed_retryable -> queued
                       -> failed_final
+                      -> waiting_user (user boundary, lease cleared)
                       -> cancel_requested -> cancelled
     running --lease expired/startup recovery--> recovering -> queued
+    waiting_user --user confirm--> step completed, job queued
 
+- ``waiting_user`` 表示正常业务等待（非失败、非终态、无租约、不可自动重试）；
 - Job/Step 状态使用稳定英文机器值，中文标签由 API 投影词汇表提供；
 - 本模块不导入 SQLAlchemy/FastAPI，全部为纯函数，可直接单测；
 - 取消是持久请求：worker 只在安全步骤边界检查并提交 cancelled；
@@ -31,6 +34,7 @@ class JobState(StableEnum):
     CANCEL_REQUESTED = "cancel_requested"
     CANCELLED = "cancelled"
     RECOVERING = "recovering"
+    WAITING_USER = "waiting_user"
 
 
 class JobStepState(StableEnum):
@@ -40,6 +44,7 @@ class JobStepState(StableEnum):
     FAILED_RETRYABLE = "failed_retryable"
     FAILED_FINAL = "failed_final"
     CANCELLED = "cancelled"
+    WAITING_USER = "waiting_user"
 
 
 class ErrorClassification(StableEnum):
@@ -77,6 +82,7 @@ DIRECT_CANCELABLE_JOB_STATES: tuple[str, ...] = (
     JobState.QUEUED.value,
     JobState.FAILED_RETRYABLE.value,
     JobState.RECOVERING.value,
+    JobState.WAITING_USER.value,
 )
 
 DEPENDENCY_FAILED_CODE = "DEPENDENCY_FAILED"

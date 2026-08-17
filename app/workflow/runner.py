@@ -22,7 +22,7 @@ from typing import Any, Callable, Iterator, Mapping
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.storage.codecs import utc_now, verify_payload_sha256
-from app.workflow.errors import LeaseLostError, ProcessDeath, StepFailure
+from app.workflow.errors import LeaseLostError, ProcessDeath, StepFailure, StepWaitForUser
 from app.workflow.jobstore import DEFAULT_LEASE_TTL, JobLease, JobStore
 from app.workflow.recovery import recover_expired_jobs
 from app.workflow.states import (
@@ -50,7 +50,8 @@ class StepContext:
 
 
 StepExecutor = Callable[[StepContext], dict[str, Any]]
-"""执行器协议：返回 checkpoint payload dict；失败抛 :class:`StepFailure`。"""
+"""执行器协议：返回 checkpoint payload dict；失败抛 :class:`StepFailure`；
+用户边界抛 :class:`StepWaitForUser`。"""
 
 
 class JobRunner:
@@ -207,6 +208,9 @@ class JobRunner:
                         lease = lease_ref[0]
             except ProcessDeath:
                 raise
+            except StepWaitForUser as wait:
+                self._commit_step_wait(lease, step_id, wait)
+                return
             except StepFailure as failure:
                 self._commit_step_failure(lease, step_id, failure)
                 return
@@ -288,6 +292,19 @@ class JobRunner:
                     error_code=failure.error_code,
                     retryable=failure.retryable,
                     detail=failure.detail,
+                )
+
+    def _commit_step_wait(
+        self, lease: JobLease, step_id: str, wait: StepWaitForUser
+    ) -> None:
+        lease = self._renew_if_due(lease)
+        with self.session_factory() as session:
+            with session.begin():
+                self._store(session).wait_for_user(
+                    lease,
+                    step_id,
+                    awaiting_user=wait.awaiting_user,
+                    checkpoint_payload=wait.checkpoint_payload,
                 )
 
     def _job_payload(self, store: JobStore, job_id: str) -> dict[str, Any]:

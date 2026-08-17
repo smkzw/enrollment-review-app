@@ -2351,6 +2351,7 @@
         "step_completed",
         "step_failed",
         "retry_scheduled",
+        "waiting_user",
         "cancel_requested",
         "cancelled",
         "completed",
