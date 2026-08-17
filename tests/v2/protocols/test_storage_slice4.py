@@ -18,6 +18,7 @@ from app.domain.contracts.protocol_drafts import (
 from app.domain.contracts.rules import EvidenceRequirement, RuleSet, WorkflowStage
 from app.domain.publication import canonical_hash
 from app.storage.models import (
+    EvidenceExpectationTemplateRecord,
     EvidenceRequirementRecord,
     ProtocolDraftRevisionRecord,
     WorkflowStageRecord,
@@ -700,3 +701,95 @@ def test_revision_replace_and_status_update_reject_existing_mirror_drift(
     loaded = repo.get(revision.revision_id)
     assert loaded.project_id == draft.project_id
     assert loaded.status == DraftRevisionStatus.SAVED
+
+
+@pytest.mark.parametrize(
+    ("field_name", "new_value"),
+    [
+        (
+            "diff",
+            ProtocolDraftRevision.model_fields["diff"].default_factory().model_copy(
+                update={"source_scope_changed": True}
+            ),
+        ),
+        ("feedback_note", "状态转换时偷改的反馈说明"),
+        ("created_at", NOW.replace(day=18)),
+    ],
+)
+def test_status_update_cannot_rewrite_audit_payload(
+    session, field_name, new_value
+) -> None:
+    from app.storage.repositories import ScopeViolationError
+
+    _source_input, draft, _spans = confirmed_fixture()
+    repo = ProtocolDraftRevisionRepository(session)
+    revision = ProtocolDraftRevision(
+        revision_id="draft-revision:audit-only:1",
+        draft_id=draft.draft_id,
+        revision_number=1,
+        project_id=draft.project_id,
+        protocol_version_id=draft.protocol_version_id,
+        study_phase=draft.selected_phase,
+        status=DraftRevisionStatus.SAVED,
+        reason=DraftRevisionReason.INITIAL_SAVE,
+        actor="医学监查员",
+        content=draft,
+        content_sha256=canonical_hash(draft.model_dump(mode="json")),
+        created_at=NOW,
+    )
+    repo.save(revision)
+
+    changed = revision.model_copy(
+        update={
+            "status": DraftRevisionStatus.CANCELLED,
+            field_name: new_value,
+        }
+    )
+    with pytest.raises(ScopeViolationError, match="只能改变 status"):
+        repo.update_status(changed)
+
+    assert repo.get(revision.revision_id) == revision
+
+
+def test_revision_list_cannot_hide_normalized_column_drift(session) -> None:
+    from app.storage.codecs import PersistedContractInvalid
+
+    _source_input, draft, _spans = confirmed_fixture()
+    repo = ProtocolDraftRevisionRepository(session)
+    revision = ProtocolDraftRevision(
+        revision_id="draft-revision:list-drift:1",
+        draft_id=draft.draft_id,
+        revision_number=1,
+        project_id=draft.project_id,
+        protocol_version_id=draft.protocol_version_id,
+        study_phase=draft.selected_phase,
+        status=DraftRevisionStatus.SAVED,
+        reason=DraftRevisionReason.INITIAL_SAVE,
+        actor="医学监查员",
+        content=draft,
+        content_sha256=canonical_hash(draft.model_dump(mode="json")),
+        created_at=NOW,
+    )
+    repo.save(revision)
+    row = session.get(ProtocolDraftRevisionRecord, revision.revision_id)
+    row.draft_id = "被篡改后不再命中查询的草稿"
+    session.flush()
+
+    with pytest.raises(PersistedContractInvalid, match="draft_id"):
+        repo.list_by_draft(revision.draft_id)
+    with pytest.raises(PersistedContractInvalid, match="draft_id"):
+        repo.get_head(revision.draft_id)
+
+
+def test_template_list_cannot_hide_normalized_column_drift(session) -> None:
+    from app.storage.codecs import PersistedContractInvalid
+
+    rule_set, _stages, templates = _seed_template_context(session)
+    valid = next(item for item in templates if item.requirement_id == "req-in")
+    save_expectation_templates(session, [valid])
+    row = session.get(EvidenceExpectationTemplateRecord, valid.template_id)
+    row.fact_type = "被篡改后不再反映正文的资料类型"
+    session.flush()
+
+    with pytest.raises(PersistedContractInvalid, match="fact_type"):
+        list_expectation_templates(session, rule_set.rule_set_id, 1)

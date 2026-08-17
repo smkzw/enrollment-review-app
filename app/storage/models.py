@@ -417,8 +417,8 @@ class EvidenceExpectationTemplateRecord(AppendedRecordMixin, Base):
     requirement_id: Mapped[str] = mapped_column(String(128), nullable=False)
     due_stage: Mapped[str] = mapped_column(String(32), nullable=False)
     study_phase: Mapped[str] = mapped_column(String(32), nullable=False)
-    workflow_stage_id: Mapped[str | None] = mapped_column(
-        String(128), nullable=True
+    workflow_stage_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("workflow_stages.workflow_stage_id"), nullable=False
     )
     fact_type: Mapped[str] = mapped_column(String(128), nullable=False)
     required_source_types: Mapped[list | None] = mapped_column(JSON, nullable=True)
@@ -428,6 +428,18 @@ class EvidenceExpectationTemplateRecord(AppendedRecordMixin, Base):
 
     __table_args__ = (
         UniqueConstraint("rule_set_id", "rule_set_revision", "requirement_id"),
+        ForeignKeyConstraint(
+            ["rule_set_id", "rule_set_revision"],
+            ["rule_sets.rule_set_id", "rule_sets.revision"],
+        ),
+        ForeignKeyConstraint(
+            ["rule_set_id", "rule_set_revision", "requirement_id"],
+            [
+                "evidence_requirements.rule_set_id",
+                "evidence_requirements.rule_set_revision",
+                "evidence_requirements.requirement_id",
+            ],
+        ),
         Index(
             "ix_evidence_expectation_templates_rule_set",
             "rule_set_id",

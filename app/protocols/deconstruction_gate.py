@@ -634,7 +634,9 @@ class ProtocolDeconstructionGate:
                 )
             # 父规则映射的来源必须等于冻结目录项自身来源，不能任意换绑其他
             # 目录/跨期来源；换绑即破坏「目录成员不可增删、来源不可张冠李戴」。
-            if set(mapping.source_span_ids) != set(item.source_span_ids):
+            if tuple(sorted(mapping.source_span_ids)) != tuple(
+                sorted(item.source_span_ids)
+            ):
                 issues.append(
                     _issue(
                         "parent_catalog",

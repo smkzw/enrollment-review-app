@@ -2173,6 +2173,12 @@ class ProtocolDraftRevisionRepository:
         record = _get_required(
             self.session, ProtocolDraftRevisionRecord, revision_id, "ProtocolDraftRevision"
         )
+        return self._decode_record(record)
+
+    @staticmethod
+    def _decode_record(
+        record: ProtocolDraftRevisionRecord,
+    ) -> ProtocolDraftRevision:
         contract = decode_contract(
             ProtocolDraftRevision, record.payload_json, record.payload_sha256
         )
@@ -2208,7 +2214,15 @@ class ProtocolDraftRevisionRepository:
             revision.revision_id,
             "ProtocolDraftRevision",
         )
+        existing = self._decode_record(record)
         self._assert_existing_identity(record, revision, allow_status_change=True)
+        if existing.model_dump(mode="json", exclude={"status"}) != revision.model_dump(
+            mode="json", exclude={"status"}
+        ):
+            raise ScopeViolationError(
+                f"revision {revision.revision_id} 的状态转移只能改变 status，"
+                "不得改写差异、反馈说明、时间或其他审计内容"
+            )
         payload_json, payload_sha256 = encode_contract(revision)
         record.payload_json = payload_json
         record.payload_sha256 = payload_sha256
@@ -2228,6 +2242,7 @@ class ProtocolDraftRevisionRepository:
             revision.revision_id,
             "ProtocolDraftRevision",
         )
+        self._decode_record(record)
         if record.draft_id != revision.draft_id:
             raise ScopeViolationError(
                 f"revision {revision.revision_id} 的 draft_id 与已存在行不一致"
@@ -2312,58 +2327,27 @@ class ProtocolDraftRevisionRepository:
             )
 
     def list_by_draft(self, draft_id: str) -> list[ProtocolDraftRevision]:
+        # 先扫描并验证全部不可变 revision，再按 payload 真值筛选。若规范化列被
+        # 外部破坏，不能因 WHERE 命中不到而把坏行静默隐藏。
         rows = self.session.execute(
             select(ProtocolDraftRevisionRecord)
-            .where(ProtocolDraftRevisionRecord.draft_id == draft_id)
-            .order_by(ProtocolDraftRevisionRecord.revision_number)
+            .order_by(
+                ProtocolDraftRevisionRecord.draft_id,
+                ProtocolDraftRevisionRecord.revision_number,
+            )
         ).scalars().all()
-        return [
-            decode_contract(ProtocolDraftRevision, row.payload_json, row.payload_sha256)
-            for row in rows
-        ]
+        contracts = [self._decode_record(row) for row in rows]
+        return [item for item in contracts if item.draft_id == draft_id]
 
     def get_head(self, draft_id: str) -> ProtocolDraftRevision | None:
         """返回 draft_id 的链头（revision_number 最大的已保存 revision）。"""
-        row = self.session.execute(
-            select(ProtocolDraftRevisionRecord)
-            .where(ProtocolDraftRevisionRecord.draft_id == draft_id)
-            .order_by(ProtocolDraftRevisionRecord.revision_number.desc())
-            .limit(1)
-        ).scalars().first()
-        if row is None:
+        revisions = self.list_by_draft(draft_id)
+        if not revisions:
             return None
-        contract = decode_contract(
-            ProtocolDraftRevision, row.payload_json, row.payload_sha256
-        )
-        payload = json.loads(row.payload_json)
-        check_column_mirrors(
-            "ProtocolDraftRevision",
-            row,
-            payload,
-            {
-                "draft_id": "draft_id",
-                "revision_number": "revision_number",
-                "previous_revision_id": "previous_revision_id",
-                "project_id": "project_id",
-                "protocol_version_id": "protocol_version_id",
-                "study_phase": "study_phase",
-                "status": "status",
-                "reason": "reason",
-                "feedback_kind": "feedback_kind",
-                "actor": "actor",
-                "content_sha256": "content_sha256",
-            },
-        )
-        return contract
+        return max(revisions, key=lambda item: item.revision_number)
 
     def count(self, draft_id: str) -> int:
-        return int(
-            self.session.execute(
-                select(func.count())
-                .select_from(ProtocolDraftRevisionRecord)
-                .where(ProtocolDraftRevisionRecord.draft_id == draft_id)
-            ).scalar_one()
-        )
+        return len(self.list_by_draft(draft_id))
 
 
 # ---------------------------------------------------------------------------
@@ -2399,6 +2383,33 @@ EVIDENCE_EXPECTATION_TEMPLATE_CONFIG = _config(
         "projection_sha256": "projection_sha256",
     },
 )
+
+
+def _decode_expectation_template_record(
+    record: EvidenceExpectationTemplateRecord,
+) -> EvidenceExpectationTemplate:
+    contract = decode_contract(
+        EvidenceExpectationTemplate, record.payload_json, record.payload_sha256
+    )
+    payload = json.loads(record.payload_json)
+    check_column_mirrors(
+        "EvidenceExpectationTemplate",
+        record,
+        payload,
+        {
+            "template_id": "template_id",
+            "rule_set_id": "rule_set_id",
+            "rule_set_revision": "rule_set_revision",
+            "requirement_id": "requirement_id",
+            "due_stage": "due_stage",
+            "study_phase": "study_phase",
+            "workflow_stage_id": "workflow_stage_id",
+            "fact_type": "fact_type",
+            "required_source_types": "required_source_types",
+            "projection_sha256": "projection_sha256",
+        },
+    )
+    return contract
 
 
 def save_expectation_templates(
@@ -2519,11 +2530,7 @@ def save_expectation_templates(
             )
         ).scalars().first()
         if existing_record is not None:
-            existing = decode_contract(
-                EvidenceExpectationTemplate,
-                existing_record.payload_json,
-                existing_record.payload_sha256,
-            )
+            existing = _decode_expectation_template_record(existing_record)
             if (
                 existing.template_id != template.template_id
                 or existing.projection_sha256 != template.projection_sha256
@@ -2539,19 +2546,20 @@ def save_expectation_templates(
 def list_expectation_templates(
     session: Session, rule_set_id: str, revision: int
 ) -> list[EvidenceExpectationTemplate]:
+    # 与 revision 列表相同：先验证全部镜像，再按 payload 真值筛选，避免被
+    # 篡改的规范化列让坏模板从列表中静默消失。
     rows = session.execute(
-        select(EvidenceExpectationTemplateRecord)
-        .where(
-            EvidenceExpectationTemplateRecord.rule_set_id == rule_set_id,
-            EvidenceExpectationTemplateRecord.rule_set_revision == revision,
+        select(EvidenceExpectationTemplateRecord).order_by(
+            EvidenceExpectationTemplateRecord.rule_set_id,
+            EvidenceExpectationTemplateRecord.rule_set_revision,
+            EvidenceExpectationTemplateRecord.requirement_id,
         )
-        .order_by(EvidenceExpectationTemplateRecord.requirement_id)
     ).scalars().all()
+    contracts = [_decode_expectation_template_record(row) for row in rows]
     return [
-        decode_contract(
-            EvidenceExpectationTemplate, row.payload_json, row.payload_sha256
-        )
-        for row in rows
+        item
+        for item in contracts
+        if item.rule_set_id == rule_set_id and item.rule_set_revision == revision
     ]
 
 

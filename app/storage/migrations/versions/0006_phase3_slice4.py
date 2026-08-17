@@ -58,6 +58,18 @@ rule_sets = Table(
     Column("rule_set_id", String(128), primary_key=True),
     Column("revision", Integer, primary_key=True),
 )
+workflow_stages_stub = Table(
+    "workflow_stages",
+    metadata,
+    Column("workflow_stage_id", String(128), primary_key=True),
+)
+evidence_requirements_stub = Table(
+    "evidence_requirements",
+    metadata,
+    Column("rule_set_id", String(128), primary_key=True),
+    Column("rule_set_revision", Integer, primary_key=True),
+    Column("requirement_id", String(128), primary_key=True),
+)
 rule_components = Table(
     "rule_components",
     metadata,
@@ -189,7 +201,7 @@ evidence_expectation_templates = Table(
     Column("requirement_id", String(128), nullable=False),
     Column("due_stage", String(32), nullable=False),
     Column("study_phase", String(32), nullable=False),
-    Column("workflow_stage_id", String(128), nullable=True),
+    Column("workflow_stage_id", String(128), nullable=False),
     Column("fact_type", String(128), nullable=False),
     Column("required_source_types", JSON, nullable=True),
     Column("projection_sha256", String(64), nullable=False),
@@ -197,6 +209,21 @@ evidence_expectation_templates = Table(
     Column("payload_sha256", String(64), nullable=False),
     Column("created_at", DateTime, nullable=False),
     UniqueConstraint("rule_set_id", "rule_set_revision", "requirement_id"),
+    ForeignKeyConstraint(
+        ["rule_set_id", "rule_set_revision"],
+        ["rule_sets.rule_set_id", "rule_sets.revision"],
+    ),
+    ForeignKeyConstraint(
+        ["rule_set_id", "rule_set_revision", "requirement_id"],
+        [
+            "evidence_requirements.rule_set_id",
+            "evidence_requirements.rule_set_revision",
+            "evidence_requirements.requirement_id",
+        ],
+    ),
+    ForeignKeyConstraint(
+        ["workflow_stage_id"], ["workflow_stages.workflow_stage_id"]
+    ),
 )
 
 Index("ix_protocol_draft_revisions_draft_id", protocol_draft_revisions.c.draft_id)

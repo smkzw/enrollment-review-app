@@ -126,6 +126,36 @@ def test_0006_upgrade_preserves_component_rows_and_adds_origin_columns(data_path
         assert cols["procedure_catalog_item_id"] is True
         assert "study_phase" in [c["name"] for c in inspector.get_columns("workflow_stages")]
         assert SLICE4_TABLES <= set(inspector.get_table_names())
+        template_columns = {
+            column["name"]: column for column in inspector.get_columns(
+                "evidence_expectation_templates"
+            )
+        }
+        assert template_columns["workflow_stage_id"]["nullable"] is False
+        template_fks = inspector.get_foreign_keys("evidence_expectation_templates")
+        fk_shapes = {
+            (
+                tuple(item["constrained_columns"]),
+                item["referred_table"],
+                tuple(item["referred_columns"]),
+            )
+            for item in template_fks
+        }
+        assert (
+            ("rule_set_id", "rule_set_revision"),
+            "rule_sets",
+            ("rule_set_id", "revision"),
+        ) in fk_shapes
+        assert (
+            ("rule_set_id", "rule_set_revision", "requirement_id"),
+            "evidence_requirements",
+            ("rule_set_id", "rule_set_revision", "requirement_id"),
+        ) in fk_shapes
+        assert (
+            ("workflow_stage_id",),
+            "workflow_stages",
+            ("workflow_stage_id",),
+        ) in fk_shapes
         from app.storage.db import build_session_factory
 
         with build_session_factory(engine)() as session:
@@ -141,6 +171,52 @@ def test_0006_upgrade_preserves_component_rows_and_adds_origin_columns(data_path
             fks = inspector.get_foreign_keys("evidence_expectations")
             referred = {item["referred_table"] for item in fks}
             assert referred == {"evidence_requirements", "review_episodes"}
+    finally:
+        engine.dispose()
+
+
+def test_0006_database_rejects_orphan_or_stage_less_template(data_paths) -> None:
+    """绕过仓储直接写 SQL 时，数据库仍必须拒绝孤儿模板和空审核节点。"""
+    from sqlalchemy.exc import IntegrityError
+
+    MigrationManager(data_paths).upgrade("head")
+    engine = build_engine(data_paths.db_path)
+    try:
+        with build_session_factory(engine)() as session:
+            statement = text(
+                "INSERT INTO evidence_expectation_templates "
+                "(template_id, rule_set_id, rule_set_revision, requirement_id, "
+                " due_stage, study_phase, workflow_stage_id, fact_type, "
+                " required_source_types, projection_sha256, payload_json, "
+                " payload_sha256, created_at) "
+                "VALUES (:template_id, 'missing-ruleset', 1, 'missing-requirement', "
+                " 'screening', 'phase_ii', :workflow_stage_id, '方案要求事实', "
+                " '[]', :ps, '{}', :ps, :ts)"
+            )
+            with pytest.raises(IntegrityError):
+                session.execute(
+                    statement,
+                    {
+                        "template_id": "template:orphan",
+                        "workflow_stage_id": "missing-stage",
+                        "ps": "0" * 64,
+                        "ts": _NOW,
+                    },
+                )
+                session.commit()
+            session.rollback()
+
+            with pytest.raises(IntegrityError):
+                session.execute(
+                    statement,
+                    {
+                        "template_id": "template:no-stage",
+                        "workflow_stage_id": None,
+                        "ps": "0" * 64,
+                        "ts": _NOW,
+                    },
+                )
+                session.commit()
     finally:
         engine.dispose()
 

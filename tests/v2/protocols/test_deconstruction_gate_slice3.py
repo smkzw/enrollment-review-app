@@ -2281,3 +2281,28 @@ def test_procedure_mapping_duplicate_source_is_rejected():
         issue.issue_code == "PROCEDURE_MAPPING_SOURCE_MISMATCH"
         for issue in _issues(result, "source_coverage")
     )
+
+
+def test_parent_mapping_duplicate_source_is_rejected():
+    source_input, draft, source_spans = _fixture()
+    mapping = draft.parent_catalog_mappings[0]
+    duplicated = [*mapping.source_span_ids, mapping.source_span_ids[0]]
+    with pytest.raises(ValueError, match="来源片段不得重复"):
+        ParentRuleCatalogMapping(
+            catalog_item_id=mapping.catalog_item_id,
+            proposed_rule_id=mapping.proposed_rule_id,
+            source_span_ids=duplicated,
+        )
+
+    # 门禁不能依赖 Pydantic 构造器：低层复制绕过重验证时仍须拒绝重复来源。
+    changed = draft.model_copy(deep=True)
+    changed.parent_catalog_mappings[0] = mapping.model_copy(
+        update={"source_span_ids": duplicated}
+    )
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, changed, source_spans=source_spans
+    )
+    assert any(
+        issue.issue_code == "PARENT_MAPPING_SOURCE_MISMATCH"
+        for issue in _issues(result, "parent_catalog")
+    )
