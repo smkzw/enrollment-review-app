@@ -15,6 +15,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     Float,
@@ -321,11 +322,24 @@ class EvidenceRequirementRecord(AppendedRecordMixin, Base):
     rule_set_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     rule_set_revision: Mapped[int] = mapped_column(Integer, primary_key=True)
     requirement_id: Mapped[str] = mapped_column(String(128), primary_key=True)
-    rule_component_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    # One-and-only-one origin: a requirement is produced either by a rule
+    # component or by a frozen procedure-catalog item (visit instance).  The
+    # CHECK constraint mirrors the domain contract; procedure-origin rows keep
+    # rule_component_id NULL instead of fabricating a component binding.
+    rule_component_id: Mapped[str | None] = mapped_column(
+        String(128), nullable=True
+    )
+    procedure_catalog_item_id: Mapped[str | None] = mapped_column(
+        String(128), nullable=True
+    )
     fact_type: Mapped[str] = mapped_column(String(128), nullable=False)
     due_stage: Mapped[str] = mapped_column(String(32), nullable=False)
 
     __table_args__ = (
+        CheckConstraint(
+            "(rule_component_id IS NULL) != (procedure_catalog_item_id IS NULL)",
+            name="one_origin",
+        ),
         ForeignKeyConstraint(
             ["rule_set_id", "rule_set_revision"],
             ["rule_sets.rule_set_id", "rule_sets.revision"],
@@ -352,6 +366,73 @@ class WorkflowStageRecord(AppendedRecordMixin, Base):
         nullable=False,
     )
     stage: Mapped[str] = mapped_column(String(32), nullable=False)
+    # 审核节点按研究期别隔离：同一筛选/基线名称在不同期别项目中的节点
+    # 不能互相合并；期别由发布服务写入，查询与投影按 (阶段, 期别) 去重。
+    study_phase: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+
+class ProtocolDraftRevisionRecord(AppendedRecordMixin, Base):
+    """已保存草稿 revision（追加写，永不物理删除）。
+
+    首稿 revision_number=1；后继 revision 通过 previous_revision_id 形成
+    链，链头即当前草稿版本。乐观并发由服务层校验「后继必须指向链头」，
+    过期编辑抛 StaleRevisionError，绝不覆盖新 revision。
+    """
+
+    __tablename__ = "protocol_draft_revisions"
+
+    revision_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    draft_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    previous_revision_id: Mapped[str | None] = mapped_column(
+        String(128), nullable=True
+    )
+    project_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    protocol_version_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    study_phase: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str] = mapped_column(String(32), nullable=False)
+    feedback_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    actor: Mapped[str] = mapped_column(String(128), nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(PAYLOAD_SHA_LEN), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("draft_id", "revision_number"),
+        Index("ix_protocol_draft_revisions_draft_id", "draft_id"),
+    )
+
+
+class EvidenceExpectationTemplateRecord(AppendedRecordMixin, Base):
+    """无受试者资料核对期望模板投影（追加写，可重建）。
+
+    ``(rule_set_id, rule_set_revision, requirement_id)`` 唯一；模板 ID 与
+    投影哈希由稳定身份字段确定性计算，同一 revision 重建结果一致。
+    """
+
+    __tablename__ = "evidence_expectation_templates"
+
+    template_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    rule_set_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    rule_set_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    requirement_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    due_stage: Mapped[str] = mapped_column(String(32), nullable=False)
+    study_phase: Mapped[str] = mapped_column(String(32), nullable=False)
+    workflow_stage_id: Mapped[str | None] = mapped_column(
+        String(128), nullable=True
+    )
+    fact_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    projection_sha256: Mapped[str] = mapped_column(
+        String(PAYLOAD_SHA_LEN), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("rule_set_id", "rule_set_revision", "requirement_id"),
+        Index(
+            "ix_evidence_expectation_templates_rule_set",
+            "rule_set_id",
+            "rule_set_revision",
+        ),
+    )
 
 
 class ProtocolAuthorityRecordRow(AppendedRecordMixin, Base):

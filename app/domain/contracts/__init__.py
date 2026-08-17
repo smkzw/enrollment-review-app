@@ -19,10 +19,18 @@ from .common import DateValue, ErrorDetail, ErrorEnvelope, VersionedModel
 from .evidence import (
     ClinicalFact,
     EvidenceExpectation,
+    EvidenceExpectationTemplate,
     EvidenceSnapshot,
     EvidenceSpan,
     PatientProfile,
     PatientProfileEvent,
+)
+from .protocol_drafts import (
+    DraftFeedbackKind,
+    DraftRevisionReason,
+    DraftRevisionStatus,
+    ProtocolDraftRevision,
+    ProtocolDraftRevisionDiff,
 )
 from .jobs import JobEvent, ReviewRunDiff
 from .normalization import EvidenceNormalizationCandidate
@@ -88,7 +96,11 @@ __all__ = [
     "AssessmentCandidate",
     "ClinicalFact",
     "DateValue",
+    "DraftFeedbackKind",
+    "DraftRevisionReason",
+    "DraftRevisionStatus",
     "EvidenceExpectation",
+    "EvidenceExpectationTemplate",
     "EvidenceSnapshot",
     "EvidenceRequirement",
     "EvidenceNormalizationCandidate",
@@ -109,6 +121,8 @@ __all__ = [
     "PatientProfileEvent",
     "Project",
     "ProjectListResponse",
+    "ProtocolDraftRevision",
+    "ProtocolDraftRevisionDiff",
     "ProtocolExtractionSnapshot",
     "ProtocolIntegrityManifest",
     "ProtocolAuthorityRecord",

@@ -29,6 +29,7 @@ from app.domain.contracts import (
     ClinicalFact,
     EpisodeRollup,
     EvidenceExpectation,
+    EvidenceExpectationTemplate,
     EvidenceNormalizationCandidate,
     EvidenceSnapshot,
     EvidenceSpan,
@@ -41,8 +42,10 @@ from app.domain.contracts import (
     Project,
     PromptVersion,
     ProtocolAuthorityRecord,
-    ProtocolIntegrityManifest,
+    ProtocolDraftRevision,
+    ProtocolDraftRevisionDiff,
     ProtocolIdentityDecision,
+    ProtocolIntegrityManifest,
     ProtocolMetadataCandidate,
     ProtocolMetadataConflict,
     PhaseApplicabilityGraph,
@@ -89,6 +92,7 @@ from app.storage.models import (
     CriticRunRecord,
     EpisodeRollupRecord,
     EvidenceExpectationRecord,
+    EvidenceExpectationTemplateRecord,
     EvidenceNormalizationCandidateRecord,
     EvidenceRequirementRecord,
     EvidenceSnapshotRecord,
@@ -106,6 +110,7 @@ from app.storage.models import (
     ProtocolAuthorityConfirmationRecord,
     ProtocolAuthorityRecordRow,
     ProtocolDocumentVersionRecord,
+    ProtocolDraftRevisionRecord,
     ProtocolIntegrityManifestRecord,
     ProtocolIdentityDecisionRecord,
     ProtocolMetadataCandidateRecord,
@@ -1260,8 +1265,18 @@ CONTEXT_SNAPSHOT_CONFIG = _config(
 # ---------------------------------------------------------------------------
 
 
-def save_rule_set(session: Session, rule_set: RuleSet) -> RuleSet:
-    """追加写入 RuleSet 及其规则树；新 revision 追加新行，不覆盖历史。"""
+def save_rule_set(
+    session: Session,
+    rule_set: RuleSet,
+    *,
+    procedure_requirements: Sequence[EvidenceRequirement] = (),
+) -> RuleSet:
+    """追加写入 RuleSet 及其规则树；新 revision 追加新行，不覆盖历史。
+
+    ``procedure_requirements`` 为流程必做项目录来源的资料要求（不绑定规则
+    组件）；它们与组件资料要求一起按 ``(rule_set_id, revision, requirement_id)``
+    落库，供 WorkflowStage 引用与后续 EvidenceExpectation 投影使用。
+    """
     payload_json, payload_sha256 = encode_contract(rule_set)
     created_at = utc_now()
     session.add(
@@ -1325,22 +1340,55 @@ def save_rule_set(session: Session, rule_set: RuleSet) -> RuleSet:
             )
             _flush_guarded(session)
             for requirement in component.evidence_requirements:
-                requirement_payload_json, requirement_payload_sha256 = encode_contract(requirement)
-                session.add(
-                    EvidenceRequirementRecord(
-                        requirement_id=requirement.requirement_id,
-                        rule_set_id=rule_set.rule_set_id,
-                        rule_set_revision=rule_set.revision,
-                        rule_component_id=component.rule_component_id,
-                        fact_type=requirement.fact_type,
-                        due_stage=requirement.due_stage.value,
-                        payload_json=requirement_payload_json,
-                        payload_sha256=requirement_payload_sha256,
-                        created_at=created_at,
-                    )
+                _save_requirement_row(
+                    session,
+                    requirement,
+                    rule_set=rule_set,
+                    created_at=created_at,
                 )
-                _flush_guarded(session)
+    for requirement in procedure_requirements:
+        if requirement.rule_component_id is not None:
+            raise ScopeViolationError(
+                f"流程资料要求 {requirement.requirement_id} 不能绑定规则组件"
+            )
+        if not requirement.procedure_catalog_item_id:
+            raise ScopeViolationError(
+                f"流程资料要求 {requirement.requirement_id} 必须绑定必做项目录项"
+            )
+        _save_requirement_row(session, requirement, rule_set=rule_set, created_at=created_at)
     return rule_set
+
+
+def _save_requirement_row(
+    session: Session,
+    requirement: EvidenceRequirement,
+    *,
+    rule_set: RuleSet,
+    created_at,
+) -> None:
+    """写一行资料要求；组件来源与必做项目录来源分别落对应列。"""
+    if (requirement.rule_component_id is None) == (
+        requirement.procedure_catalog_item_id is None
+    ):
+        raise ScopeViolationError(
+            f"资料要求 {requirement.requirement_id} 必须且只能绑定子规则或流程必做项目之一"
+        )
+    requirement_payload_json, requirement_payload_sha256 = encode_contract(requirement)
+    session.add(
+        EvidenceRequirementRecord(
+            requirement_id=requirement.requirement_id,
+            rule_set_id=rule_set.rule_set_id,
+            rule_set_revision=rule_set.revision,
+            rule_component_id=requirement.rule_component_id,
+            procedure_catalog_item_id=requirement.procedure_catalog_item_id,
+            fact_type=requirement.fact_type,
+            due_stage=requirement.due_stage.value,
+            payload_json=requirement_payload_json,
+            payload_sha256=requirement_payload_sha256,
+            created_at=created_at,
+        )
+    )
+    _flush_guarded(session)
 
 
 def get_rule_set(session: Session, rule_set_id: str, revision: int) -> RuleSet:
@@ -1403,7 +1451,12 @@ def get_evidence_requirement(
         "EvidenceRequirement",
         record,
         payload,
-        {"rule_component_id": "rule_component_id", "fact_type": "fact_type", "due_stage": "due_stage"},
+        {
+            "rule_component_id": "rule_component_id",
+            "procedure_catalog_item_id": "procedure_catalog_item_id",
+            "fact_type": "fact_type",
+            "due_stage": "due_stage",
+        },
     )
     return contract
 
@@ -2034,6 +2087,260 @@ def get_latest_rollup(session: Session, review_episode_id: str) -> EpisodeRollup
 
 
 # ---------------------------------------------------------------------------
+# 草稿 revision 历史（追加写，乐观并发由链头校验实现）
+# ---------------------------------------------------------------------------
+
+
+def _draft_revision_columns(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "revision_id": payload["revision_id"],
+        "draft_id": payload["draft_id"],
+        "revision_number": payload["revision_number"],
+        "previous_revision_id": payload.get("previous_revision_id"),
+        "project_id": payload["project_id"],
+        "protocol_version_id": payload["protocol_version_id"],
+        "study_phase": payload["study_phase"],
+        "status": payload["status"],
+        "reason": payload["reason"],
+        "feedback_kind": payload.get("feedback_kind"),
+        "actor": payload["actor"],
+        "content_sha256": payload["content_sha256"],
+    }
+
+
+class ProtocolDraftRevisionRepository:
+    """已保存草稿 revision 的追加写仓储；``draft_id`` 链头即当前版本。"""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def save(self, revision: ProtocolDraftRevision) -> ProtocolDraftRevision:
+        payload_json, payload_sha256 = encode_contract(revision)
+        payload = json.loads(payload_json)
+        self.session.add(
+            ProtocolDraftRevisionRecord(
+                payload_json=payload_json,
+                payload_sha256=payload_sha256,
+                created_at=revision.created_at,
+                **_draft_revision_columns(payload),
+            )
+        )
+        _flush_guarded(self.session)
+        return revision
+
+    def get(self, revision_id: str) -> ProtocolDraftRevision:
+        record = _get_required(
+            self.session, ProtocolDraftRevisionRecord, revision_id, "ProtocolDraftRevision"
+        )
+        contract = decode_contract(
+            ProtocolDraftRevision, record.payload_json, record.payload_sha256
+        )
+        payload = json.loads(record.payload_json)
+        check_column_mirrors(
+            "ProtocolDraftRevision",
+            record,
+            payload,
+            {
+                "draft_id": "draft_id",
+                "revision_number": "revision_number",
+                "previous_revision_id": "previous_revision_id",
+                "project_id": "project_id",
+                "protocol_version_id": "protocol_version_id",
+                "study_phase": "study_phase",
+                "status": "status",
+                "reason": "reason",
+                "feedback_kind": "feedback_kind",
+                "actor": "actor",
+                "content_sha256": "content_sha256",
+            },
+        )
+        return contract
+
+    def update_status(self, revision: ProtocolDraftRevision) -> ProtocolDraftRevision:
+        """生命周期状态转移（内容不变）：payload 与 status 列同步重写。
+
+        只允许已存在 revision 行做状态转移；链头指向不受影响。
+        """
+        record = _get_required(
+            self.session,
+            ProtocolDraftRevisionRecord,
+            revision.revision_id,
+            "ProtocolDraftRevision",
+        )
+        payload_json, payload_sha256 = encode_contract(revision)
+        record.payload_json = payload_json
+        record.payload_sha256 = payload_sha256
+        record.status = revision.status.value
+        _flush_guarded(self.session)
+        return revision
+
+    def list_by_draft(self, draft_id: str) -> list[ProtocolDraftRevision]:
+        rows = self.session.execute(
+            select(ProtocolDraftRevisionRecord)
+            .where(ProtocolDraftRevisionRecord.draft_id == draft_id)
+            .order_by(ProtocolDraftRevisionRecord.revision_number)
+        ).scalars().all()
+        return [
+            decode_contract(ProtocolDraftRevision, row.payload_json, row.payload_sha256)
+            for row in rows
+        ]
+
+    def get_head(self, draft_id: str) -> ProtocolDraftRevision | None:
+        """返回 draft_id 的链头（revision_number 最大的已保存 revision）。"""
+        row = self.session.execute(
+            select(ProtocolDraftRevisionRecord)
+            .where(ProtocolDraftRevisionRecord.draft_id == draft_id)
+            .order_by(ProtocolDraftRevisionRecord.revision_number.desc())
+            .limit(1)
+        ).scalars().first()
+        if row is None:
+            return None
+        contract = decode_contract(
+            ProtocolDraftRevision, row.payload_json, row.payload_sha256
+        )
+        payload = json.loads(row.payload_json)
+        check_column_mirrors(
+            "ProtocolDraftRevision",
+            row,
+            payload,
+            {
+                "draft_id": "draft_id",
+                "revision_number": "revision_number",
+                "previous_revision_id": "previous_revision_id",
+                "project_id": "project_id",
+                "protocol_version_id": "protocol_version_id",
+                "study_phase": "study_phase",
+                "status": "status",
+                "reason": "reason",
+                "feedback_kind": "feedback_kind",
+                "actor": "actor",
+                "content_sha256": "content_sha256",
+            },
+        )
+        return contract
+
+    def count(self, draft_id: str) -> int:
+        return int(
+            self.session.execute(
+                select(func.count())
+                .select_from(ProtocolDraftRevisionRecord)
+                .where(ProtocolDraftRevisionRecord.draft_id == draft_id)
+            ).scalar_one()
+        )
+
+
+# ---------------------------------------------------------------------------
+# 无受试者 EvidenceExpectation 模板投影（追加写，可重建）
+# ---------------------------------------------------------------------------
+
+
+EVIDENCE_EXPECTATION_TEMPLATE_CONFIG = _config(
+    EvidenceExpectationTemplateRecord,
+    EvidenceExpectationTemplate,
+    {
+        "template_id": "template_id",
+        "rule_set_id": "rule_set_id",
+        "rule_set_revision": "rule_set_revision",
+        "requirement_id": "requirement_id",
+        "due_stage": "due_stage",
+        "study_phase": "study_phase",
+        "workflow_stage_id": "workflow_stage_id",
+        "fact_type": "fact_type",
+        "projection_sha256": "projection_sha256",
+    },
+    created_at_key="created_at",
+    mirrors={
+        "rule_set_id": "rule_set_id",
+        "rule_set_revision": "rule_set_revision",
+        "requirement_id": "requirement_id",
+        "due_stage": "due_stage",
+        "study_phase": "study_phase",
+        "workflow_stage_id": "workflow_stage_id",
+        "fact_type": "fact_type",
+        "projection_sha256": "projection_sha256",
+    },
+)
+
+
+def save_expectation_templates(
+    session: Session,
+    templates: Sequence[EvidenceExpectationTemplate],
+) -> None:
+    """追加写模板投影；同 (rule_set, revision, requirement) 幂等跳过。"""
+    repo = AppendRepository(session, EVIDENCE_EXPECTATION_TEMPLATE_CONFIG)
+    for template in templates:
+        # 落库前重跑合同校验：模板 ID/投影哈希必须与稳定身份一致。
+        EvidenceExpectationTemplate.model_validate(
+            template.model_dump(mode="json")
+        )
+        existing = session.execute(
+            select(EvidenceExpectationTemplateRecord.template_id).where(
+                EvidenceExpectationTemplateRecord.rule_set_id
+                == template.rule_set_id,
+                EvidenceExpectationTemplateRecord.rule_set_revision
+                == template.rule_set_revision,
+                EvidenceExpectationTemplateRecord.requirement_id
+                == template.requirement_id,
+            )
+        ).scalars().first()
+        if existing is not None:
+            continue
+        repo.save(template)
+
+
+def list_expectation_templates(
+    session: Session, rule_set_id: str, revision: int
+) -> list[EvidenceExpectationTemplate]:
+    rows = session.execute(
+        select(EvidenceExpectationTemplateRecord)
+        .where(
+            EvidenceExpectationTemplateRecord.rule_set_id == rule_set_id,
+            EvidenceExpectationTemplateRecord.rule_set_revision == revision,
+        )
+        .order_by(EvidenceExpectationTemplateRecord.requirement_id)
+    ).scalars().all()
+    return [
+        decode_contract(
+            EvidenceExpectationTemplate, row.payload_json, row.payload_sha256
+        )
+        for row in rows
+    ]
+
+
+# ---------------------------------------------------------------------------
+# 发布前项目查询（同方案谱系 + 研究期别）
+# ---------------------------------------------------------------------------
+
+
+def find_project_by_protocol_and_phase(
+    session: Session, protocol_code: str, study_phase: str
+) -> Project | None:
+    """返回同一方案编号与期别已有的正式项目（跨方案版本查谱系）。
+
+    同一方案编号的多个正式版本共享谱系；研究期别必须一致。用于首次解构
+    不得创建平行项目、重新解构必须保持同谱系同期别的校验。
+    """
+    row = session.execute(
+        select(ProjectRecord)
+        .join(
+            ProtocolDocumentVersionRecord,
+            ProjectRecord.protocol_version_id
+            == ProtocolDocumentVersionRecord.protocol_version_id,
+        )
+        .where(
+            ProtocolDocumentVersionRecord.protocol_code == protocol_code,
+            ProjectRecord.study_phase == study_phase,
+        )
+        .order_by(ProjectRecord.project_id)
+        .limit(1)
+    ).scalars().first()
+    if row is None:
+        return None
+    contract = decode_contract(Project, row.payload_json, row.payload_sha256)
+    return contract
+
+
+# ---------------------------------------------------------------------------
 # Job 存储原语（状态机/租约/恢复由 workflow 层实现）
 # ---------------------------------------------------------------------------
 
@@ -2295,7 +2602,11 @@ def save_protocol_authority_chain(session: Session, fixture: FixtureV1) -> None:
         AppendRepository(session, SOURCE_RECORD_CONFIG).save(record)
     for stage in fixture.workflow_stages:
         AppendRepository(session, WORKFLOW_STAGE_CONFIG).save(
-            stage, scope={"protocol_version_id": authority.protocol_version_id}
+            stage,
+            scope={
+                "protocol_version_id": authority.protocol_version_id,
+                "study_phase": authority.study_phase.value,
+            },
         )
 
 

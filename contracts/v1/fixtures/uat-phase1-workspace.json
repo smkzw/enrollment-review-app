@@ -1228,8 +1228,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
-          "output_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
+          "input_scope_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
+          "output_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -1263,8 +1263,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "45ed5e17fc02dffc50788bcae107e56484eec1a62284125e759a265b49bfa9b7",
-          "output_hash": "45ed5e17fc02dffc50788bcae107e56484eec1a62284125e759a265b49bfa9b7",
+          "input_scope_hash": "6f0ce6d67579decfd89588ee491b71db2d9d82aa2c23746f39f458e22beb5da9",
+          "output_hash": "6f0ce6d67579decfd89588ee491b71db2d9d82aa2c23746f39f458e22beb5da9",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -2209,9 +2209,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-01-screening-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+          "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
           "integrity_gate_result_id": "gate-uat-01-screening-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+          "integrity_manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -2248,9 +2248,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "e4432a817301af605804813f62e32b6d15da60455f1f66b9ce8b3e8b8e04d60d",
+        "event_sha256": "4e0c2e1f4effc313fd9dd04e96f64c62a395711006a3b177b09d50efa091ec5b",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -2259,10 +2259,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "dff1baad9a04328e7ca46b4b1c3ff3bdd97147b5964059f193e858a2bf7ce5f4",
+        "confirmation_sha256": "6cbc9218c983ed4402080ec12c165434260abd40329155c40923c0c5a53bd197",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -2272,7 +2272,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "official_rules": [
           {
             "components": [
@@ -2846,6 +2846,8 @@
             "workflow_stage_id": "stage-baseline"
           }
         ],
+        "procedure_evidence_requirements": [],
+        "procedure_requirement_source_anchor_refs": {},
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "rule_source_anchor_refs": {
@@ -2881,9 +2883,9 @@
         "authoritative_rule_set_sha256": "96b887e73715b7d0043a2839fe3af1cfb6b578b2d4887258c30555b098c3d6c2",
         "authoritative_workflow_sha256": "a23d202d8be74ed1778906492e89e7c194371d702e13738c49362520154d9033",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+        "manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -4796,8 +4798,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
-          "output_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
+          "input_scope_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
+          "output_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -4831,8 +4833,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "24211c8173640bb0dcc256ba2e6fd420a841d62e62dada1200fdbfa32157b4ad",
-          "output_hash": "24211c8173640bb0dcc256ba2e6fd420a841d62e62dada1200fdbfa32157b4ad",
+          "input_scope_hash": "5edcb30749063a94778291dce081964d8caaf4a68b75a0ee97a0634b5bc2499a",
+          "output_hash": "5edcb30749063a94778291dce081964d8caaf4a68b75a0ee97a0634b5bc2499a",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -5744,9 +5746,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-01-baseline-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+          "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
           "integrity_gate_result_id": "gate-uat-01-baseline-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+          "integrity_manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -5783,9 +5785,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "e4432a817301af605804813f62e32b6d15da60455f1f66b9ce8b3e8b8e04d60d",
+        "event_sha256": "4e0c2e1f4effc313fd9dd04e96f64c62a395711006a3b177b09d50efa091ec5b",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -5794,10 +5796,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "dff1baad9a04328e7ca46b4b1c3ff3bdd97147b5964059f193e858a2bf7ce5f4",
+        "confirmation_sha256": "6cbc9218c983ed4402080ec12c165434260abd40329155c40923c0c5a53bd197",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -5807,7 +5809,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "official_rules": [
           {
             "components": [
@@ -6381,6 +6383,8 @@
             "workflow_stage_id": "stage-baseline"
           }
         ],
+        "procedure_evidence_requirements": [],
+        "procedure_requirement_source_anchor_refs": {},
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "rule_source_anchor_refs": {
@@ -6416,9 +6420,9 @@
         "authoritative_rule_set_sha256": "96b887e73715b7d0043a2839fe3af1cfb6b578b2d4887258c30555b098c3d6c2",
         "authoritative_workflow_sha256": "a23d202d8be74ed1778906492e89e7c194371d702e13738c49362520154d9033",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+        "manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -8376,8 +8380,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
-          "output_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
+          "input_scope_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
+          "output_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -8411,8 +8415,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "f927f2392d9f9cb690aa941784c1e6fc2a100c28445c5931e880666cf8bdd9a6",
-          "output_hash": "f927f2392d9f9cb690aa941784c1e6fc2a100c28445c5931e880666cf8bdd9a6",
+          "input_scope_hash": "d7b1365ea33b9200cc0bcad89d10cfb38f4990774e14fa3e6e4f6944d27d47a5",
+          "output_hash": "d7b1365ea33b9200cc0bcad89d10cfb38f4990774e14fa3e6e4f6944d27d47a5",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -9334,9 +9338,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-02-screening-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+          "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
           "integrity_gate_result_id": "gate-uat-02-screening-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+          "integrity_manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -9373,9 +9377,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "e4432a817301af605804813f62e32b6d15da60455f1f66b9ce8b3e8b8e04d60d",
+        "event_sha256": "4e0c2e1f4effc313fd9dd04e96f64c62a395711006a3b177b09d50efa091ec5b",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -9384,10 +9388,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "dff1baad9a04328e7ca46b4b1c3ff3bdd97147b5964059f193e858a2bf7ce5f4",
+        "confirmation_sha256": "6cbc9218c983ed4402080ec12c165434260abd40329155c40923c0c5a53bd197",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -9397,7 +9401,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "official_rules": [
           {
             "components": [
@@ -9971,6 +9975,8 @@
             "workflow_stage_id": "stage-baseline"
           }
         ],
+        "procedure_evidence_requirements": [],
+        "procedure_requirement_source_anchor_refs": {},
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "rule_source_anchor_refs": {
@@ -10006,9 +10012,9 @@
         "authoritative_rule_set_sha256": "96b887e73715b7d0043a2839fe3af1cfb6b578b2d4887258c30555b098c3d6c2",
         "authoritative_workflow_sha256": "a23d202d8be74ed1778906492e89e7c194371d702e13738c49362520154d9033",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+        "manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -11960,8 +11966,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
-          "output_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
+          "input_scope_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
+          "output_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -11995,8 +12001,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "2763ef085ee42ff20dfbaa407bf2217646b15dcac0d5604785758f319a1e1ded",
-          "output_hash": "2763ef085ee42ff20dfbaa407bf2217646b15dcac0d5604785758f319a1e1ded",
+          "input_scope_hash": "c86afb39e53858b7cf59c7c4b0e3e06218df695ccdb36b17ca0233a5b84a1d34",
+          "output_hash": "c86afb39e53858b7cf59c7c4b0e3e06218df695ccdb36b17ca0233a5b84a1d34",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -12885,9 +12891,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-02-baseline-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+          "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
           "integrity_gate_result_id": "gate-uat-02-baseline-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+          "integrity_manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -12924,9 +12930,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "e4432a817301af605804813f62e32b6d15da60455f1f66b9ce8b3e8b8e04d60d",
+        "event_sha256": "4e0c2e1f4effc313fd9dd04e96f64c62a395711006a3b177b09d50efa091ec5b",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -12935,10 +12941,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "dff1baad9a04328e7ca46b4b1c3ff3bdd97147b5964059f193e858a2bf7ce5f4",
+        "confirmation_sha256": "6cbc9218c983ed4402080ec12c165434260abd40329155c40923c0c5a53bd197",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -12948,7 +12954,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "official_rules": [
           {
             "components": [
@@ -13522,6 +13528,8 @@
             "workflow_stage_id": "stage-baseline"
           }
         ],
+        "procedure_evidence_requirements": [],
+        "procedure_requirement_source_anchor_refs": {},
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "rule_source_anchor_refs": {
@@ -13557,9 +13565,9 @@
         "authoritative_rule_set_sha256": "96b887e73715b7d0043a2839fe3af1cfb6b578b2d4887258c30555b098c3d6c2",
         "authoritative_workflow_sha256": "a23d202d8be74ed1778906492e89e7c194371d702e13738c49362520154d9033",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+        "manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -15524,8 +15532,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
-          "output_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
+          "input_scope_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
+          "output_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -15559,8 +15567,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "ece37a856dccfc40f92bcf225d681177a3dae8606a037be34d69e6749efcb199",
-          "output_hash": "ece37a856dccfc40f92bcf225d681177a3dae8606a037be34d69e6749efcb199",
+          "input_scope_hash": "4a361d733523acf74a6dd8def77e4d1eed47de0a9089353975f3983369ef6935",
+          "output_hash": "4a361d733523acf74a6dd8def77e4d1eed47de0a9089353975f3983369ef6935",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -16897,9 +16905,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-03-screening-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+          "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
           "integrity_gate_result_id": "gate-uat-03-screening-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+          "integrity_manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -16936,9 +16944,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "e4432a817301af605804813f62e32b6d15da60455f1f66b9ce8b3e8b8e04d60d",
+        "event_sha256": "4e0c2e1f4effc313fd9dd04e96f64c62a395711006a3b177b09d50efa091ec5b",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -16947,10 +16955,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "dff1baad9a04328e7ca46b4b1c3ff3bdd97147b5964059f193e858a2bf7ce5f4",
+        "confirmation_sha256": "6cbc9218c983ed4402080ec12c165434260abd40329155c40923c0c5a53bd197",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -16960,7 +16968,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "official_rules": [
           {
             "components": [
@@ -17534,6 +17542,8 @@
             "workflow_stage_id": "stage-baseline"
           }
         ],
+        "procedure_evidence_requirements": [],
+        "procedure_requirement_source_anchor_refs": {},
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "rule_source_anchor_refs": {
@@ -17569,9 +17579,9 @@
         "authoritative_rule_set_sha256": "96b887e73715b7d0043a2839fe3af1cfb6b578b2d4887258c30555b098c3d6c2",
         "authoritative_workflow_sha256": "a23d202d8be74ed1778906492e89e7c194371d702e13738c49362520154d9033",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+        "manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -19533,8 +19543,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
-          "output_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
+          "input_scope_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
+          "output_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -19568,8 +19578,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "bd0797253555233dd6ac322f666563814adb2e90eea55aae9828bcde11f3d50d",
-          "output_hash": "bd0797253555233dd6ac322f666563814adb2e90eea55aae9828bcde11f3d50d",
+          "input_scope_hash": "41c36569c3d78f87b9e53561356f4a5cf33f57d5434cda2d681fb5c2aa4375b8",
+          "output_hash": "41c36569c3d78f87b9e53561356f4a5cf33f57d5434cda2d681fb5c2aa4375b8",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -20873,9 +20883,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-03-baseline-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+          "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
           "integrity_gate_result_id": "gate-uat-03-baseline-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+          "integrity_manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -20912,9 +20922,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "e4432a817301af605804813f62e32b6d15da60455f1f66b9ce8b3e8b8e04d60d",
+        "event_sha256": "4e0c2e1f4effc313fd9dd04e96f64c62a395711006a3b177b09d50efa091ec5b",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -20923,10 +20933,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "dff1baad9a04328e7ca46b4b1c3ff3bdd97147b5964059f193e858a2bf7ce5f4",
+        "confirmation_sha256": "6cbc9218c983ed4402080ec12c165434260abd40329155c40923c0c5a53bd197",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -20936,7 +20946,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "official_rules": [
           {
             "components": [
@@ -21510,6 +21520,8 @@
             "workflow_stage_id": "stage-baseline"
           }
         ],
+        "procedure_evidence_requirements": [],
+        "procedure_requirement_source_anchor_refs": {},
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "rule_source_anchor_refs": {
@@ -21545,9 +21557,9 @@
         "authoritative_rule_set_sha256": "96b887e73715b7d0043a2839fe3af1cfb6b578b2d4887258c30555b098c3d6c2",
         "authoritative_workflow_sha256": "a23d202d8be74ed1778906492e89e7c194371d702e13738c49362520154d9033",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+        "manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -23514,8 +23526,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
-          "output_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
+          "input_scope_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
+          "output_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -23549,8 +23561,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "9fa7f735a6402945afee58fdd671ce5c1685352a02f1805d71ada864cc2efb9d",
-          "output_hash": "9fa7f735a6402945afee58fdd671ce5c1685352a02f1805d71ada864cc2efb9d",
+          "input_scope_hash": "229de4cad85e2943cff283c69f3883e771874210bc7058f203b452583c8f0438",
+          "output_hash": "229de4cad85e2943cff283c69f3883e771874210bc7058f203b452583c8f0438",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -24886,9 +24898,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-04-screening-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+          "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
           "integrity_gate_result_id": "gate-uat-04-screening-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+          "integrity_manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -24925,9 +24937,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "e4432a817301af605804813f62e32b6d15da60455f1f66b9ce8b3e8b8e04d60d",
+        "event_sha256": "4e0c2e1f4effc313fd9dd04e96f64c62a395711006a3b177b09d50efa091ec5b",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -24936,10 +24948,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "dff1baad9a04328e7ca46b4b1c3ff3bdd97147b5964059f193e858a2bf7ce5f4",
+        "confirmation_sha256": "6cbc9218c983ed4402080ec12c165434260abd40329155c40923c0c5a53bd197",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -24949,7 +24961,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "official_rules": [
           {
             "components": [
@@ -25523,6 +25535,8 @@
             "workflow_stage_id": "stage-baseline"
           }
         ],
+        "procedure_evidence_requirements": [],
+        "procedure_requirement_source_anchor_refs": {},
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "rule_source_anchor_refs": {
@@ -25558,9 +25572,9 @@
         "authoritative_rule_set_sha256": "96b887e73715b7d0043a2839fe3af1cfb6b578b2d4887258c30555b098c3d6c2",
         "authoritative_workflow_sha256": "a23d202d8be74ed1778906492e89e7c194371d702e13738c49362520154d9033",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+        "manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -27522,8 +27536,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
-          "output_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
+          "input_scope_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
+          "output_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -27557,8 +27571,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "2ec25425ad0f7d4ea70a1352c643a3d26df1571b9dfa5e5c4e922c5fca826410",
-          "output_hash": "2ec25425ad0f7d4ea70a1352c643a3d26df1571b9dfa5e5c4e922c5fca826410",
+          "input_scope_hash": "e05fcdcce42f2c554e203c900b662eab2bb0b326bae4201fad2f5aad8b5bcb68",
+          "output_hash": "e05fcdcce42f2c554e203c900b662eab2bb0b326bae4201fad2f5aad8b5bcb68",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -28862,9 +28876,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-04-baseline-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+          "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
           "integrity_gate_result_id": "gate-uat-04-baseline-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+          "integrity_manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -28901,9 +28915,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "e4432a817301af605804813f62e32b6d15da60455f1f66b9ce8b3e8b8e04d60d",
+        "event_sha256": "4e0c2e1f4effc313fd9dd04e96f64c62a395711006a3b177b09d50efa091ec5b",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -28912,10 +28926,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "dff1baad9a04328e7ca46b4b1c3ff3bdd97147b5964059f193e858a2bf7ce5f4",
+        "confirmation_sha256": "6cbc9218c983ed4402080ec12c165434260abd40329155c40923c0c5a53bd197",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -28925,7 +28939,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "official_rules": [
           {
             "components": [
@@ -29499,6 +29513,8 @@
             "workflow_stage_id": "stage-baseline"
           }
         ],
+        "procedure_evidence_requirements": [],
+        "procedure_requirement_source_anchor_refs": {},
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "rule_source_anchor_refs": {
@@ -29534,9 +29550,9 @@
         "authoritative_rule_set_sha256": "96b887e73715b7d0043a2839fe3af1cfb6b578b2d4887258c30555b098c3d6c2",
         "authoritative_workflow_sha256": "a23d202d8be74ed1778906492e89e7c194371d702e13738c49362520154d9033",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+        "manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -31452,8 +31468,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
-          "output_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
+          "input_scope_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
+          "output_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -31487,8 +31503,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "e84bb554d5454c73b585b8631117049581084f36728229a24641defc1f674f8a",
-          "output_hash": "e84bb554d5454c73b585b8631117049581084f36728229a24641defc1f674f8a",
+          "input_scope_hash": "87254e686ef7322047f026e25555b9f5602dab9d126dfba042eef9b106c74632",
+          "output_hash": "87254e686ef7322047f026e25555b9f5602dab9d126dfba042eef9b106c74632",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -32433,9 +32449,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-05-screening-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+          "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
           "integrity_gate_result_id": "gate-uat-05-screening-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+          "integrity_manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -32472,9 +32488,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "e4432a817301af605804813f62e32b6d15da60455f1f66b9ce8b3e8b8e04d60d",
+        "event_sha256": "4e0c2e1f4effc313fd9dd04e96f64c62a395711006a3b177b09d50efa091ec5b",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -32483,10 +32499,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "dff1baad9a04328e7ca46b4b1c3ff3bdd97147b5964059f193e858a2bf7ce5f4",
+        "confirmation_sha256": "6cbc9218c983ed4402080ec12c165434260abd40329155c40923c0c5a53bd197",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -32496,7 +32512,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "official_rules": [
           {
             "components": [
@@ -33070,6 +33086,8 @@
             "workflow_stage_id": "stage-baseline"
           }
         ],
+        "procedure_evidence_requirements": [],
+        "procedure_requirement_source_anchor_refs": {},
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "rule_source_anchor_refs": {
@@ -33105,9 +33123,9 @@
         "authoritative_rule_set_sha256": "96b887e73715b7d0043a2839fe3af1cfb6b578b2d4887258c30555b098c3d6c2",
         "authoritative_workflow_sha256": "a23d202d8be74ed1778906492e89e7c194371d702e13738c49362520154d9033",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+        "manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -35020,8 +35038,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
-          "output_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
+          "input_scope_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
+          "output_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -35055,8 +35073,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "846e7ac84f4696cc80644879b161d182418d4604cf16906426dea804cfbee3d4",
-          "output_hash": "846e7ac84f4696cc80644879b161d182418d4604cf16906426dea804cfbee3d4",
+          "input_scope_hash": "be68d535a6048aa709877b0e0ac4d322b7dad40fc1d4ccd545d6ba8388ac892e",
+          "output_hash": "be68d535a6048aa709877b0e0ac4d322b7dad40fc1d4ccd545d6ba8388ac892e",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -35968,9 +35986,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-05-baseline-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+          "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
           "integrity_gate_result_id": "gate-uat-05-baseline-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+          "integrity_manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -36007,9 +36025,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "e4432a817301af605804813f62e32b6d15da60455f1f66b9ce8b3e8b8e04d60d",
+        "event_sha256": "4e0c2e1f4effc313fd9dd04e96f64c62a395711006a3b177b09d50efa091ec5b",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -36018,10 +36036,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "dff1baad9a04328e7ca46b4b1c3ff3bdd97147b5964059f193e858a2bf7ce5f4",
+        "confirmation_sha256": "6cbc9218c983ed4402080ec12c165434260abd40329155c40923c0c5a53bd197",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -36031,7 +36049,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "official_rules": [
           {
             "components": [
@@ -36605,6 +36623,8 @@
             "workflow_stage_id": "stage-baseline"
           }
         ],
+        "procedure_evidence_requirements": [],
+        "procedure_requirement_source_anchor_refs": {},
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "rule_source_anchor_refs": {
@@ -36640,9 +36660,9 @@
         "authoritative_rule_set_sha256": "96b887e73715b7d0043a2839fe3af1cfb6b578b2d4887258c30555b098c3d6c2",
         "authoritative_workflow_sha256": "a23d202d8be74ed1778906492e89e7c194371d702e13738c49362520154d9033",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+        "manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -38600,8 +38620,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
-          "output_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
+          "input_scope_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
+          "output_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -38635,8 +38655,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "a6f892034cf3f3c32aa5161b7f1d55bf2739cee6c945f53edccbc56ee77b8903",
-          "output_hash": "a6f892034cf3f3c32aa5161b7f1d55bf2739cee6c945f53edccbc56ee77b8903",
+          "input_scope_hash": "ffd2b4e644f5f5aaf92a649cb2b8b7730aa7d8036022550724b9ac4bfe27a960",
+          "output_hash": "ffd2b4e644f5f5aaf92a649cb2b8b7730aa7d8036022550724b9ac4bfe27a960",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -39558,9 +39578,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-06-screening-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+          "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
           "integrity_gate_result_id": "gate-uat-06-screening-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+          "integrity_manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -39597,9 +39617,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "e4432a817301af605804813f62e32b6d15da60455f1f66b9ce8b3e8b8e04d60d",
+        "event_sha256": "4e0c2e1f4effc313fd9dd04e96f64c62a395711006a3b177b09d50efa091ec5b",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -39608,10 +39628,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "dff1baad9a04328e7ca46b4b1c3ff3bdd97147b5964059f193e858a2bf7ce5f4",
+        "confirmation_sha256": "6cbc9218c983ed4402080ec12c165434260abd40329155c40923c0c5a53bd197",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -39621,7 +39641,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "official_rules": [
           {
             "components": [
@@ -40195,6 +40215,8 @@
             "workflow_stage_id": "stage-baseline"
           }
         ],
+        "procedure_evidence_requirements": [],
+        "procedure_requirement_source_anchor_refs": {},
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "rule_source_anchor_refs": {
@@ -40230,9 +40252,9 @@
         "authoritative_rule_set_sha256": "96b887e73715b7d0043a2839fe3af1cfb6b578b2d4887258c30555b098c3d6c2",
         "authoritative_workflow_sha256": "a23d202d8be74ed1778906492e89e7c194371d702e13738c49362520154d9033",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+        "manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -42184,8 +42206,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
-          "output_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
+          "input_scope_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
+          "output_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -42219,8 +42241,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "1b715a767b0d5345511f222c84a5f215697573fce0282d14bc4379913cb6a5c7",
-          "output_hash": "1b715a767b0d5345511f222c84a5f215697573fce0282d14bc4379913cb6a5c7",
+          "input_scope_hash": "b0138144cf2e744a08e15a7b398900554cf479bb8d70b1de280d4e37f6ca5dad",
+          "output_hash": "b0138144cf2e744a08e15a7b398900554cf479bb8d70b1de280d4e37f6ca5dad",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -43109,9 +43131,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-06-baseline-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+          "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
           "integrity_gate_result_id": "gate-uat-06-baseline-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+          "integrity_manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -43148,9 +43170,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "e4432a817301af605804813f62e32b6d15da60455f1f66b9ce8b3e8b8e04d60d",
+        "event_sha256": "4e0c2e1f4effc313fd9dd04e96f64c62a395711006a3b177b09d50efa091ec5b",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -43159,10 +43181,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "dff1baad9a04328e7ca46b4b1c3ff3bdd97147b5964059f193e858a2bf7ce5f4",
+        "confirmation_sha256": "6cbc9218c983ed4402080ec12c165434260abd40329155c40923c0c5a53bd197",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -43172,7 +43194,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "official_rules": [
           {
             "components": [
@@ -43746,6 +43768,8 @@
             "workflow_stage_id": "stage-baseline"
           }
         ],
+        "procedure_evidence_requirements": [],
+        "procedure_requirement_source_anchor_refs": {},
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "rule_source_anchor_refs": {
@@ -43781,9 +43805,9 @@
         "authoritative_rule_set_sha256": "96b887e73715b7d0043a2839fe3af1cfb6b578b2d4887258c30555b098c3d6c2",
         "authoritative_workflow_sha256": "a23d202d8be74ed1778906492e89e7c194371d702e13738c49362520154d9033",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+        "manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -45856,8 +45880,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
-          "output_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
+          "input_scope_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
+          "output_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -45891,8 +45915,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "6530fd54cea7d1dd4ba12d030ed6ef64609b3cb19eada58b260317cfeaa2ce19",
-          "output_hash": "6530fd54cea7d1dd4ba12d030ed6ef64609b3cb19eada58b260317cfeaa2ce19",
+          "input_scope_hash": "0bdcf8ecbb913dfb652f139a29de183bfc59fbe3bc48f756b6c87baf13affada",
+          "output_hash": "0bdcf8ecbb913dfb652f139a29de183bfc59fbe3bc48f756b6c87baf13affada",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -47012,9 +47036,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-07-pre_screening-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+          "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
           "integrity_gate_result_id": "gate-uat-07-pre_screening-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+          "integrity_manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -47051,9 +47075,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "e4432a817301af605804813f62e32b6d15da60455f1f66b9ce8b3e8b8e04d60d",
+        "event_sha256": "4e0c2e1f4effc313fd9dd04e96f64c62a395711006a3b177b09d50efa091ec5b",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -47062,10 +47086,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "dff1baad9a04328e7ca46b4b1c3ff3bdd97147b5964059f193e858a2bf7ce5f4",
+        "confirmation_sha256": "6cbc9218c983ed4402080ec12c165434260abd40329155c40923c0c5a53bd197",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -47075,7 +47099,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "official_rules": [
           {
             "components": [
@@ -47649,6 +47673,8 @@
             "workflow_stage_id": "stage-baseline"
           }
         ],
+        "procedure_evidence_requirements": [],
+        "procedure_requirement_source_anchor_refs": {},
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "rule_source_anchor_refs": {
@@ -47684,9 +47710,9 @@
         "authoritative_rule_set_sha256": "96b887e73715b7d0043a2839fe3af1cfb6b578b2d4887258c30555b098c3d6c2",
         "authoritative_workflow_sha256": "a23d202d8be74ed1778906492e89e7c194371d702e13738c49362520154d9033",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+        "manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -49641,8 +49667,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
-          "output_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
+          "input_scope_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
+          "output_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -49676,8 +49702,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "fe0c37fd09e7a909c06baa9f5c22a6b7588782404256dc934ba7db4c1b5626d8",
-          "output_hash": "fe0c37fd09e7a909c06baa9f5c22a6b7588782404256dc934ba7db4c1b5626d8",
+          "input_scope_hash": "3d69ed72b0b0b72673399857ca4761d921ac3731237e70afe81af4d7f8cca192",
+          "output_hash": "3d69ed72b0b0b72673399857ca4761d921ac3731237e70afe81af4d7f8cca192",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -51014,9 +51040,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-08-run_in-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+          "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
           "integrity_gate_result_id": "gate-uat-08-run_in-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+          "integrity_manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -51053,9 +51079,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "e4432a817301af605804813f62e32b6d15da60455f1f66b9ce8b3e8b8e04d60d",
+        "event_sha256": "4e0c2e1f4effc313fd9dd04e96f64c62a395711006a3b177b09d50efa091ec5b",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -51064,10 +51090,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "dff1baad9a04328e7ca46b4b1c3ff3bdd97147b5964059f193e858a2bf7ce5f4",
+        "confirmation_sha256": "6cbc9218c983ed4402080ec12c165434260abd40329155c40923c0c5a53bd197",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -51077,7 +51103,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "official_rules": [
           {
             "components": [
@@ -51651,6 +51677,8 @@
             "workflow_stage_id": "stage-baseline"
           }
         ],
+        "procedure_evidence_requirements": [],
+        "procedure_requirement_source_anchor_refs": {},
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "rule_source_anchor_refs": {
@@ -51686,9 +51714,9 @@
         "authoritative_rule_set_sha256": "96b887e73715b7d0043a2839fe3af1cfb6b578b2d4887258c30555b098c3d6c2",
         "authoritative_workflow_sha256": "a23d202d8be74ed1778906492e89e7c194371d702e13738c49362520154d9033",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+        "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+        "manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",

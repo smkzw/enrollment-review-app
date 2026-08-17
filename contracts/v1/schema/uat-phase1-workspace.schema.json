@@ -3322,6 +3322,23 @@
           "title": "Official Workflow Stages",
           "type": "array"
         },
+        "procedure_evidence_requirements": {
+          "items": {
+            "$ref": "#/$defs/EvidenceRequirement"
+          },
+          "title": "Procedure Evidence Requirements",
+          "type": "array"
+        },
+        "procedure_requirement_source_anchor_refs": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": "Procedure Requirement Source Anchor Refs",
+          "type": "object"
+        },
         "protocol_document_sha256": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Protocol Document Sha256",

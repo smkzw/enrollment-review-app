@@ -1332,8 +1332,8 @@
       "input_revision_map": {
         "protocol-v1": 1
       },
-      "input_scope_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
-      "output_hash": "b3284d47f4973e85c59f723a7c7dafd2aed8b9e99e69cc1d986fa6dd69accbed",
+      "input_scope_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
+      "output_hash": "8481f0adf7251ee1ac4d2e05c8d6624df8456590ef5bb24243723766ad480b0e",
       "parent_event_id": null,
       "recompute_scope": [
         "protocol-v1"
@@ -1367,8 +1367,8 @@
       "input_revision_map": {
         "ruleset-synthetic-phase-iii": 1
       },
-      "input_scope_hash": "98b0e09b0631f871d74dbce4e9958d20b4c04d966631324662d61c05299c138c",
-      "output_hash": "98b0e09b0631f871d74dbce4e9958d20b4c04d966631324662d61c05299c138c",
+      "input_scope_hash": "a6be1e4737055fe2a8fc3ba418a2717255feddc3849beef95ecee3a3dfa3f9bc",
+      "output_hash": "a6be1e4737055fe2a8fc3ba418a2717255feddc3849beef95ecee3a3dfa3f9bc",
       "parent_event_id": null,
       "recompute_scope": [
         "protocol-v1"
@@ -2874,9 +2874,9 @@
     "protocol_version": {
       "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
       "authority_gate_result_id": "gate-authority-protocol-v1-phase-iii",
-      "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+      "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
       "integrity_gate_result_id": "gate-integrity-protocol-v1-phase-iii",
-      "integrity_manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+      "integrity_manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
       "official_date": {
         "precision": "day",
         "source_text": null,
@@ -2913,9 +2913,9 @@
     "action": "accept_protocol_authority",
     "actor_id": "synthetic-uat-human-acceptance",
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+    "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
     "command_id": "command-accept-protocol-v1-phase-iii",
-    "event_sha256": "e4432a817301af605804813f62e32b6d15da60455f1f66b9ce8b3e8b8e04d60d",
+    "event_sha256": "4e0c2e1f4effc313fd9dd04e96f64c62a395711006a3b177b09d50efa091ec5b",
     "occurred_at": "2026-08-12T12:00:00Z",
     "protocol_version_id": "protocol-v1",
     "recorded_by_service": "enrollment-review-app",
@@ -2924,10 +2924,10 @@
   "protocol_authority_confirmation": {
     "action": "accept_protocol_authority",
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+    "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
     "command_id": "command-accept-protocol-v1-phase-iii",
     "confirmation_id": "confirmation-protocol-v1-phase-iii",
-    "confirmation_sha256": "dff1baad9a04328e7ca46b4b1c3ff3bdd97147b5964059f193e858a2bf7ce5f4",
+    "confirmation_sha256": "6cbc9218c983ed4402080ec12c165434260abd40329155c40923c0c5a53bd197",
     "confirmed_at": "2026-08-12T12:00:00Z",
     "confirmed_by": "synthetic-uat-human-acceptance",
     "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -2937,7 +2937,7 @@
   },
   "protocol_authority_record": {
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+    "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
     "official_rules": [
       {
         "components": [
@@ -3511,6 +3511,8 @@
         "workflow_stage_id": "stage-baseline"
       }
     ],
+    "procedure_evidence_requirements": [],
+    "procedure_requirement_source_anchor_refs": {},
     "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "protocol_version_id": "protocol-v1",
     "rule_source_anchor_refs": {
@@ -3546,9 +3548,9 @@
     "authoritative_rule_set_sha256": "96b887e73715b7d0043a2839fe3af1cfb6b578b2d4887258c30555b098c3d6c2",
     "authoritative_workflow_sha256": "a23d202d8be74ed1778906492e89e7c194371d702e13738c49362520154d9033",
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "e0771be2c5d00a9badba8e0f0adb06d6d3b984da51616c04e864f6b4e1c3e4ef",
+    "authority_record_sha256": "90e23757b0eb7060094951ffad16bb27fe0104460f529df7642b00368cd100f5",
     "manifest_id": "manifest-protocol-v1-phase-iii",
-    "manifest_sha256": "2ceeff7ec5fe9b940a270e594e95f3274d7543bf8fa4470b2235e13b0a6945dd",
+    "manifest_sha256": "06980f74496ef3c977472d98a5634445733c8904ea5ede2353a3f7270bb540c4",
     "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "protocol_version_id": "protocol-v1",
     "schema_version": "fixture/v1",

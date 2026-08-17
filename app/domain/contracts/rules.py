@@ -350,6 +350,15 @@ class ProtocolAuthorityRecord(VersionedModel):
     official_rules: list[Rule] = Field(min_length=1)
     official_workflow_stages: list[WorkflowStage] = Field(min_length=1)
     rule_source_anchor_refs: dict[str, list[str]]
+    # Phase 3 slice 4: procedure-catalog-origin requirements are first-class
+    # members of the published authority chain. They are not rule components,
+    # so they are listed separately and still must be due exactly once.
+    procedure_evidence_requirements: list[EvidenceRequirement] = Field(
+        default_factory=list
+    )
+    procedure_requirement_source_anchor_refs: dict[str, list[str]] = Field(
+        default_factory=dict
+    )
     verified_by: str = Field(min_length=1)
     verified_at: datetime
     verification_method: Literal["human_verified_official_protocol"]
@@ -383,12 +392,45 @@ class ProtocolAuthorityRecord(VersionedModel):
         }
         if len(stage_by_value) != len(self.official_workflow_stages):
             raise ValueError("ProtocolAuthorityRecord 不得包含重复审核阶段")
+        procedure_requirement_ids = [
+            item.requirement_id for item in self.procedure_evidence_requirements
+        ]
+        if len(procedure_requirement_ids) != len(set(procedure_requirement_ids)):
+            raise ValueError("流程资料要求 ID 不得重复")
+        for item in self.procedure_evidence_requirements:
+            if item.rule_component_id is not None:
+                raise ValueError("流程资料要求不能绑定规则组件")
+            if not item.procedure_catalog_item_id:
+                raise ValueError("流程资料要求必须绑定必做项目录项")
+        if set(self.procedure_requirement_source_anchor_refs) != set(
+            procedure_requirement_ids
+        ):
+            raise ValueError(
+                "每条流程资料要求必须提供且只能提供自己的来源定位"
+            )
+        if any(
+            not self.procedure_requirement_source_anchor_refs[requirement_id]
+            for requirement_id in procedure_requirement_ids
+        ):
+            raise ValueError("流程资料要求来源定位不能为空")
+        if any(
+            not source_ref.startswith(expected_prefix)
+            for refs in self.procedure_requirement_source_anchor_refs.values()
+            for source_ref in refs
+        ):
+            raise ValueError("流程资料要求来源定位必须绑定当前 protocol_version_id")
         requirements = {
             requirement.requirement_id: requirement
             for rule in self.official_rules
             for component in rule.components
             for requirement in component.evidence_requirements
         }
+        requirements.update(
+            {
+                requirement.requirement_id: requirement
+                for requirement in self.procedure_evidence_requirements
+            }
+        )
         listed_due_stages: dict[str, ReviewStage] = {}
         for workflow in self.official_workflow_stages:
             for requirement_id in workflow.due_requirement_ids:

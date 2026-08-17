@@ -13,6 +13,7 @@ from .enums import (
     LocatorPrecision,
     ProfileLane,
     ReviewStage,
+    StudyPhase,
     UploadMode,
 )
 
@@ -131,6 +132,61 @@ class EvidenceExpectation(VersionedModel):
             and self.gap_type != GapType.REFERENCED_FILE_MISSING
         ):
             raise ValueError("已引用未提供必须使用 referenced_file_missing")
+        return self
+
+
+class EvidenceExpectationTemplate(VersionedModel):
+    """无受试者的资料核对期望模板投影（Phase 3 切片 4）。
+
+    从已发布的 RuleSet/workflow 确定性投影，不含任何 subject/review-episode
+    状态；``template_id`` 与 ``projection_sha256`` 均由稳定身份字段计算，
+    同一 RuleSet revision 的同一 requirement 永远得到同一模板。
+    Phase 4/5 创建 ReviewEpisode 时再由此模板投影具体受试者期望。
+    """
+
+    template_id: str = Field(min_length=1)
+    rule_set_id: str = Field(min_length=1)
+    rule_set_revision: int = Field(ge=1)
+    requirement_id: str = Field(min_length=1)
+    due_stage: ReviewStage
+    study_phase: StudyPhase
+    workflow_stage_id: str | None = Field(default=None, min_length=1)
+    fact_type: str = Field(min_length=1)
+    requires_contemporaneous_objective_source: bool = False
+    allows_screening_record_transcription: bool = True
+    description: str = Field(min_length=1)
+    projection_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    created_at: datetime
+
+    @model_validator(mode="after")
+    def validate_template_identity(self) -> "EvidenceExpectationTemplate":
+        from app.domain.publication import canonical_hash
+
+        expected_projection = canonical_hash(
+            {
+                "projection": "evidence_expectation_template/v1",
+                "rule_set_id": self.rule_set_id,
+                "rule_set_revision": self.rule_set_revision,
+                "requirement_id": self.requirement_id,
+                "due_stage": self.due_stage.value,
+                "study_phase": self.study_phase.value,
+                "workflow_stage_id": self.workflow_stage_id,
+            }
+        )
+        if self.projection_sha256 != expected_projection:
+            raise ValueError("EvidenceExpectationTemplate 投影哈希与身份字段不一致")
+        expected_id = (
+            "expectation-template:"
+            + canonical_hash(
+                {
+                    "rule_set_id": self.rule_set_id,
+                    "rule_set_revision": self.rule_set_revision,
+                    "requirement_id": self.requirement_id,
+                }
+            )[:32]
+        )
+        if self.template_id != expected_id:
+            raise ValueError("EvidenceExpectationTemplate 模板 ID 与稳定身份不一致")
         return self
 
 
