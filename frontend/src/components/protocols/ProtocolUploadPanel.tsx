@@ -29,7 +29,7 @@ export function ProtocolUploadPanel({ busy, error, onUpload }: ProtocolUploadPan
       <header className="page-head">
         <h1 className="page-head__title">首次解构新方案</h1>
         <p className="page-head__note">
-          上传 DOCX 方案原文。系统将登记文件并提取结构；<strong>不声称</strong> OCR/LLM 在本阶段已全部完成。
+          上传 DOCX 方案原文。系统将登记文件并提取结构，随后请您核对方案身份与研究期别。
         </p>
       </header>
 

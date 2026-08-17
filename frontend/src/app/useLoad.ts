@@ -30,22 +30,24 @@ export interface UseLoadResult<T> {
  * @param deps 重新加载的依赖；切换对象时旧请求会被丢弃，不会覆盖新页面
  */
 export function useLoad<T>(
-  loader: () => Promise<T>,
+  loader: (signal?: AbortSignal) => Promise<T>,
   deps: ReadonlyArray<unknown>,
 ): UseLoadResult<T> {
   const [state, setState] = useState<LoadState<T>>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    const controller = new AbortController();
     let cancelled = false;
     setState({ status: "loading" });
-    loader().then(
+    loader(controller.signal).then(
       (data) => {
         if (cancelled) return;
         setState({ status: "success", data, revision: 1 });
       },
       (error: unknown) => {
         if (cancelled) return;
+        if (error instanceof DOMException && error.name === "AbortError") return;
         setState({
           status: "error",
           message: toUserMessage(error),
@@ -55,6 +57,7 @@ export function useLoad<T>(
     );
     return () => {
       cancelled = true;
+      controller.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, attempt]);

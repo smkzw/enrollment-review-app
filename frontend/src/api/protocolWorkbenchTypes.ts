@@ -11,6 +11,20 @@ export interface ProtocolWorkbenchErrorBody {
   correlation_id?: string;
 }
 
+export class ProtocolWorkbenchApiError extends Error {
+  readonly code: string;
+  readonly title: string;
+  readonly recoveryAction: string;
+
+  constructor(code: string, title: string, message: string, recoveryAction: string) {
+    super(message);
+    this.name = "ProtocolWorkbenchApiError";
+    this.code = code;
+    this.title = title;
+    this.recoveryAction = recoveryAction;
+  }
+}
+
 export interface StartDeconstructionResult {
   jobId: string;
   state: string;

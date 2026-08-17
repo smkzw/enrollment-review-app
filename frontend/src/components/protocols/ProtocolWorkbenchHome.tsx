@@ -4,10 +4,16 @@
 
 import logoUrl from "../../assets/logo_bot.svg";
 import { RouteLink } from "../../app/router";
-import { PROTOCOL_DEMO_JOB_ID, PROTOCOL_RECOVERY_JOB_ID } from "../../api/protocolWorkbenchRepository";
+import {
+  getProtocolWorkbenchRepository,
+  PROTOCOL_DEMO_JOB_ID,
+  PROTOCOL_RECOVERY_JOB_ID,
+} from "../../api/protocolWorkbenchRepository";
 import { ResumeIcon, HistoryIcon, ProtocolFileIcon } from "../shell/icons";
 
 export function ProtocolWorkbenchHome() {
+  const showDemoRecovery = getProtocolWorkbenchRepository().kind === "stub";
+
   return (
     <div className="protocol-home">
       <header className="protocol-home__hero">
@@ -54,35 +60,39 @@ export function ProtocolWorkbenchHome() {
         </section>
       </div>
 
-      <section className="protocol-home-recovery" aria-labelledby="protocol-recovery-title">
-        <h2 id="protocol-recovery-title" className="protocol-home-recovery__title">
-          <ProtocolFileIcon size={16} />
-          恢复未完成任务
-        </h2>
-        <p className="protocol-home-recovery__desc">
-          若浏览器关闭或服务中断，可从上次检查点继续，不会丢失已登记的文件与确认进度。
-        </p>
-        <div className="protocol-home-recovery__links">
-          <RouteLink
-            to="/protocols"
-            params={{ job: PROTOCOL_DEMO_JOB_ID }}
-            className="button button--quiet"
-          >
-            继续审阅示例草稿（{PROTOCOL_DEMO_JOB_ID}）
-          </RouteLink>
-          <RouteLink
-            to="/protocols"
-            params={{ job: PROTOCOL_RECOVERY_JOB_ID }}
-            className="button button--quiet"
-          >
-            恢复中断示例（{PROTOCOL_RECOVERY_JOB_ID}）
-          </RouteLink>
-        </div>
-      </section>
+      {showDemoRecovery && (
+        <section className="protocol-home-recovery" aria-labelledby="protocol-recovery-title">
+          <h2 id="protocol-recovery-title" className="protocol-home-recovery__title">
+            <ProtocolFileIcon size={16} />
+            恢复未完成任务（界面试用）
+          </h2>
+          <p className="protocol-home-recovery__desc">
+            若浏览器关闭或服务中断，可从上次检查点继续，不会丢失已登记的文件与确认进度。
+          </p>
+          <div className="protocol-home-recovery__links">
+            <RouteLink
+              to="/protocols"
+              params={{ job: PROTOCOL_DEMO_JOB_ID }}
+              className="button button--quiet"
+            >
+              继续审阅示例草稿
+            </RouteLink>
+            <RouteLink
+              to="/protocols"
+              params={{ job: PROTOCOL_RECOVERY_JOB_ID }}
+              className="button button--quiet"
+            >
+              恢复中断示例任务
+            </RouteLink>
+          </div>
+        </section>
+      )}
 
-      <p className="protocol-home__disclaimer" role="note">
-        界面试用数据用于体验操作流程；不声称真实 OCR/LLM 已全部完成。发布前需医学经理终审。
-      </p>
+      {showDemoRecovery && (
+        <p className="protocol-home__disclaimer" role="note">
+          界面试用数据用于熟悉操作流程；发布前需医学经理终审。
+        </p>
+      )}
     </div>
   );
 }

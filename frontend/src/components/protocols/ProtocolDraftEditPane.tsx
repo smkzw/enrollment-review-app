@@ -84,7 +84,7 @@ export function ProtocolDraftEditPane({
       )}
 
       <p className="protocol-edit-pane__note" role="note">
-        草稿由智能体辅助生成，关键排除条件需医学经理终审；本页不声称 OCR/LLM 已全部完成。
+        草稿内容供医学经理逐条终审；手工修订入口将在后续步骤开放。
       </p>
     </div>
   );

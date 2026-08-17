@@ -50,7 +50,7 @@ test.describe("方案解构工作台（Slice 5）", () => {
   test("恢复示例展示横幅并可继续到草稿审阅", async ({ page }) => {
     await openProtocolHash(page, `/protocols?job=${RECOVERY_JOB}`);
     await expect(page.getByRole("heading", { name: "可从中断处继续" })).toBeVisible();
-    await expect(page.locator(".protocol-recovery__detail")).toContainText("生成草稿");
+    await expect(page.locator(".protocol-recovery__action-text")).toContainText("生成草稿");
     await page.getByRole("button", { name: "继续任务" }).click();
     await expect(page.getByRole("heading", { name: "审阅解构草稿" })).toBeVisible();
     await expectNoPageOverflow(page);

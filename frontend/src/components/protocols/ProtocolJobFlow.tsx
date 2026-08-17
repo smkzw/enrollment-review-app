@@ -13,9 +13,10 @@ import { navigate, RouteLink, updateParams } from "../../app/router";
 import { useLoad } from "../../app/useLoad";
 import { useSessionState } from "../../app/useSessionState";
 import { UAT_KEY_PROTOCOL_DRAFT_SAVED } from "../../app/uatTrialState";
-import { EmptyState, ErrorState, LoadingState } from "../shell/Feedback";
+import { ErrorState, LoadingState } from "../shell/Feedback";
 import { ProtocolIdentityPanel } from "./ProtocolIdentityPanel";
 import { ProtocolDraftWorkbench } from "./ProtocolDraftWorkbench";
+import { ProtocolJobProgress } from "./ProtocolJobProgress";
 import { ProtocolRecoveryBanner } from "./ProtocolRecoveryBanner";
 
 interface ProtocolJobFlowProps {
@@ -25,7 +26,7 @@ interface ProtocolJobFlowProps {
 
 export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps) {
   const repo = getProtocolWorkbenchRepository();
-  const isDemoJob = jobId === PROTOCOL_DEMO_JOB_ID;
+  const isStubDemo = repo.kind === "stub" && jobId === PROTOCOL_DEMO_JOB_ID;
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
   const [draftSaved, setDraftSaved, resetDraftSaved] = useSessionState(
@@ -34,20 +35,20 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
     (value) => (typeof value === "boolean" ? value : null),
   );
 
-  const session = useLoad(() => repo.getSession(jobId), [jobId]);
+  const session = useLoad((signal) => repo.getSession(jobId, { signal }), [jobId, repo]);
 
-  const identity = useLoad(() => repo.getIdentityReview(jobId), [jobId]);
+  const identity = useLoad((signal) => repo.getIdentityReview(jobId, { signal }), [jobId, repo]);
 
   const draftBundle = useLoad(
-    async () => {
+    async (signal) => {
       const [draft, integrity, sources] = await Promise.all([
-        repo.getDraft(jobId),
-        repo.getIntegrity(jobId),
-        repo.getSources(jobId),
+        repo.getDraft(jobId, { signal }),
+        repo.getIntegrity(jobId, { signal }),
+        repo.getSources(jobId, { signal }),
       ]);
       return { draft, integrity, sources };
     },
-    [jobId],
+    [jobId, repo],
   );
 
   const handleConfirmIdentity = useCallback(
@@ -69,12 +70,12 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
     setSaveBusy(true);
     try {
       await repo.saveDraft(jobId, draftBundle.state.data.draft.revisionId);
-      if (isDemoJob) setDraftSaved(true);
+      if (isStubDemo) setDraftSaved(true);
       draftBundle.retry();
     } finally {
       setSaveBusy(false);
     }
-  }, [draftBundle, isDemoJob, jobId, repo, setDraftSaved]);
+  }, [draftBundle, isStubDemo, jobId, repo, setDraftSaved]);
 
   const handleResetTrial = useCallback(() => {
     resetDraftSaved();
@@ -109,11 +110,11 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
         <ProtocolRecoveryBanner
           session={sessionData}
           onContinue={() => {
-            if (jobId === PROTOCOL_RECOVERY_JOB_ID) {
+            if (repo.kind === "stub" && jobId === PROTOCOL_RECOVERY_JOB_ID) {
               navigate("/protocols", { job: PROTOCOL_DEMO_JOB_ID });
-            } else {
-              session.retry();
+              return;
             }
+            session.retry();
           }}
         />
         <p className="protocol-recovery__home-link">
@@ -142,7 +143,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
     );
   }
 
-  if (sessionData.awaitingUser === "review" || jobId === PROTOCOL_DEMO_JOB_ID) {
+  if (sessionData.awaitingUser === "review") {
     if (draftBundle.state.status === "loading") return <LoadingState />;
     if (draftBundle.state.status === "error") {
       return (
@@ -159,13 +160,11 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
         componentParam={componentParam}
         onSaveDraft={handleSaveDraft}
         saving={saveBusy}
-        uatDraftSaved={isDemoJob ? draftSaved : undefined}
-        onUatReset={isDemoJob ? handleResetTrial : undefined}
+        uatDraftSaved={isStubDemo ? draftSaved : undefined}
+        onUatReset={isStubDemo ? handleResetTrial : undefined}
       />
     );
   }
 
-  return (
-    <EmptyState message={`任务状态：${sessionData.stateLabel}`} hint={sessionData.nextAction} />
-  );
+  return <ProtocolJobProgress session={sessionData} onRefresh={session.retry} />;
 }

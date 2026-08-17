@@ -23,7 +23,7 @@ interface ProtocolDraftWorkbenchProps {
   componentParam: string | null;
   onSaveDraft: () => void;
   saving: boolean;
-  /** 界面试用：示例草稿保存状态（仅 demo 任务注入） */
+  /** 界面试用：示例草稿保存状态（仅 stub 演示任务注入） */
   uatDraftSaved?: boolean;
   onUatReset?: () => void;
 }

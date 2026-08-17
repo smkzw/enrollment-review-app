@@ -27,13 +27,13 @@ describe("方案工作台", () => {
     );
   });
 
-  it("首次解构上传页使用中文说明且不声称 OCR 完成", async () => {
+  it("首次解构上传页使用中文说明", async () => {
     navigate("/protocols", { mode: "first" });
     render(<ProtocolsPage />);
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "首次解构新方案" })).toBeInTheDocument();
     });
-    expect(screen.getByText(/不声称/)).toBeInTheDocument();
+    expect(screen.getByText(/核对方案身份与研究期别/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "选择方案文件" })).toBeInTheDocument();
   });
 
@@ -47,7 +47,7 @@ describe("方案工作台", () => {
     expect(screen.getByRole("tree", { name: "方案规则树" })).toHaveTextContent("EX-01");
     expect(screen.getAllByText(/方案原文摘要/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/来源定位/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/医学经理终审/)).toBeInTheDocument();
+    expect(screen.getByText(/医学经理逐条终审/)).toBeInTheDocument();
   });
 
   it("选择规则子项后编辑区与来源区同步显示", async () => {

@@ -13,6 +13,7 @@ export {
   getProtocolWorkbenchRepository,
   setProtocolWorkbenchRepository,
   createProtocolWorkbenchStub,
+  createProtocolWorkbenchHttp,
   ProtocolWorkbenchApiError,
   PROTOCOL_DEMO_JOB_ID,
   PROTOCOL_IDENTITY_JOB_ID,
