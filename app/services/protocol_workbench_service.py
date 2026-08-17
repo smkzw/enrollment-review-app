@@ -52,7 +52,16 @@ from app.services.protocol_publication_service import (
 from app.storage.codecs import utc_now
 from app.storage.config import DataPaths
 from app.storage.models import JobRecord, JobStepRecord
-from app.storage.repositories import JobRepository, NotFoundError, ProtocolDraftRevisionRepository
+from app.storage.repositories import (
+    JobRepository,
+    NotFoundError,
+    ProjectRepository,
+    ProtocolDraftRevisionRepository,
+    count_rule_set_rules,
+    get_project_row,
+    list_projects_with_revision,
+    list_rule_set_revisions,
+)
 from app.workflow.errors import JobNotFoundError, JobStateConflictError
 from app.workflow.jobstore import JobStore
 
@@ -130,6 +139,46 @@ class StartDeconstructionResult:
 
 
 @dataclass(frozen=True)
+class OfficialProjectView:
+    """正式项目投影（重新解构选择与当前正式版本读取）。"""
+
+    project_id: str
+    project_code: str
+    project_name: str
+    study_phase: str
+    study_phase_label: str
+    protocol_code: str
+    official_version: str
+    official_date_value: str | None
+    official_date_precision: str | None
+    rule_set_id: str
+    rule_set_revision: int
+
+
+@dataclass(frozen=True)
+class ProjectVersionView:
+    """单个正式（已发布）规则版本：revision、方案版本与规则条数。"""
+
+    rule_set_revision: int
+    protocol_version_id: str
+    official_version: str
+    official_date_value: str | None
+    official_date_precision: str | None
+    sha256: str
+    rule_count: int
+    published_at: str
+
+
+@dataclass(frozen=True)
+class ProjectOfficialVersionView:
+    """项目的正式版本投影：当前正式版本 + 全部已发布规则 revision。"""
+
+    project: OfficialProjectView
+    versions: list[ProjectVersionView]
+    publication_count: int
+
+
+@dataclass(frozen=True)
 class ProtocolSessionView:
     job_id: str
     job_type: str
@@ -155,6 +204,15 @@ class ProtocolSessionView:
     recovery_step_id: str | None
     next_action: str
     publishable: bool | None
+    # 重新解构：目标正式项目投影（session_kind="re_deconstruction" 时有值）。
+    target_project_id: str | None
+    target_project_name: str | None
+    target_project_code: str | None
+    target_protocol_code: str | None
+    target_study_phase: str | None
+    target_study_phase_label: str | None
+    target_official_version: str | None
+    target_rule_set_revision: int | None
 
 
 @dataclass(frozen=True)
@@ -252,6 +310,36 @@ def _date_value_from_input(value: str, precision: str) -> DateValue:
         ) from exc
 
     return DateValue(value=parsed, precision=date_precision, source_text=None)
+
+
+def _official_date_text(value: DateValue | None) -> str | None:
+    """按确认精度投影正式日期文本（YYYY / YYYY-MM / YYYY-MM-DD）。"""
+    if value is None or value.value is None:
+        return None
+    if value.precision == DatePrecision.YEAR:
+        return f"{value.value.year:04d}"
+    if value.precision == DatePrecision.MONTH:
+        return f"{value.value.year:04d}-{value.value.month:02d}"
+    return value.value.isoformat()
+
+
+def _official_project_view(project, rule_set_revision: int) -> OfficialProjectView:
+    version = project.protocol_version
+    return OfficialProjectView(
+        project_id=project.project_id,
+        project_code=project.project_code,
+        project_name=project.project_name,
+        study_phase=project.study_phase.value,
+        study_phase_label=_study_phase_label(project.study_phase.value),
+        protocol_code=version.protocol_code,
+        official_version=version.official_version,
+        official_date_value=_official_date_text(version.official_date),
+        official_date_precision=(
+            version.official_date.precision.value if version.official_date else None
+        ),
+        rule_set_id=project.rule_set_id,
+        rule_set_revision=rule_set_revision,
+    )
 
 
 class ProtocolWorkbenchService:
@@ -378,6 +466,129 @@ class ProtocolWorkbenchService:
             file_name=display_name,
         )
 
+    def start_re_deconstruction(
+        self,
+        *,
+        upload_path: Path,
+        original_name: str,
+        project_id: str,
+        idempotency_key: str,
+        actor: str = "用户",
+    ) -> StartDeconstructionResult:
+        """重新解构：目标项目必须在持久任务中保存，上传的新版方案在同一项目中
+        生成新的不可变规则版本。目标项目不存在时直接拒绝，不创建任务。"""
+        display_name = original_name or upload_path.name
+        try:
+            sha256 = compute_sha256(upload_path)
+        except SourceIngestionError as exc:
+            raise ProtocolWorkbenchError(
+                "SOURCE_INGESTION_FAILED",
+                title="方案文件无法登记",
+                detail=str(exc),
+                recovery="请确认文件完整可读且为支持的方案格式（DOCX/DOC/PDF/TXT）后重新上传。",
+            ) from exc
+
+        with self.session_factory() as session:
+            row = get_project_row(session, project_id)
+            if row is None:
+                raise ProtocolWorkbenchError(
+                    "PROJECT_NOT_FOUND",
+                    title="找不到正式项目",
+                    detail=f"项目 {project_id} 不存在正式发布记录，无法发起重新解构。",
+                    recovery="请返回项目列表重新选择，或先完成首次解构与发布。",
+                    context={"project_id": project_id},
+                )
+            target_project, target_rule_set_revision = row
+
+        source_artifact_id = (
+            f"source-{sha256}-{upload_path.suffix.lower().lstrip('.') or 'bin'}"
+        )
+        try:
+            artifact = register_source_artifact(
+                upload_path,
+                source_artifact_id=source_artifact_id,
+                storage_root=self.data_paths.blobs_dir,
+                uploaded_at=self.now(),
+            )
+        except SourceIngestionError as exc:
+            raise ProtocolWorkbenchError(
+                "SOURCE_INGESTION_FAILED",
+                title="方案文件无法登记",
+                detail=str(exc),
+                recovery="请确认文件完整可读且为支持的方案格式（DOCX/DOC/PDF/TXT）后重新上传。",
+            ) from exc
+
+        target_version = target_project.protocol_version
+        payload = {
+            "session_kind": "re_deconstruction",
+            "file_name": display_name,
+            "sha256": artifact.sha256,
+            "mime_type": artifact.mime_type,
+            "size_bytes": artifact.size_bytes,
+            "storage_ref": artifact.storage_ref,
+            "source_artifact_id": artifact.source_artifact_id,
+            "actor": actor,
+            "awaiting_user": None,
+            # 目标项目持久保存：发布编排与待命视图据此加载谱系/期别并进行校验。
+            "target_project_id": target_project.project_id,
+            "target_project_code": target_project.project_code,
+            "target_project_name": target_project.project_name,
+            "target_protocol_code": target_version.protocol_code,
+            "target_study_phase": target_project.study_phase.value,
+            "target_official_version": target_version.official_version,
+            "target_rule_set_revision": target_rule_set_revision,
+        }
+        result = self.jobs.create_job(
+            idempotency_key=idempotency_key,
+            job_type=PROTOCOL_DECONSTRUCTION_JOB_TYPE,
+            payload=payload,
+            steps=list(PROTOCOL_DECONSTRUCTION_STEPS),
+        )
+        if not result.created:
+            merged = self._merged_payload(result.job_id)
+            return StartDeconstructionResult(
+                job_id=result.job_id,
+                state=result.state,
+                created=False,
+                source_artifact_id=str(merged.get("source_artifact_id") or ""),
+                file_name=str(merged.get("file_name") or display_name),
+            )
+
+        with self.session_factory() as session:
+            with session.begin():
+                store = JobStore(session, now=self.now)
+                lease = store.claim_job(result.job_id, self.WORKER_ID)
+                if lease is None:
+                    state = store.get_job(result.job_id).state
+                else:
+                    store.start_step(lease, STEP_REGISTER)
+                    store.complete_step(
+                        lease,
+                        STEP_REGISTER,
+                        checkpoint_payload={
+                            "source_artifact_id": artifact.source_artifact_id,
+                            "file_name": display_name,
+                            "sha256": artifact.sha256,
+                            "mime_type": artifact.mime_type,
+                            "size_bytes": artifact.size_bytes,
+                            "storage_ref": artifact.storage_ref,
+                            "uploaded_at": artifact.uploaded_at.isoformat(),
+                        },
+                    )
+                    job = store.get_job(result.job_id)
+                    job.state = "queued"
+                    job.lease_owner = None
+                    job.lease_expires_at = None
+                    session.flush()
+                    state = job.state
+        return StartDeconstructionResult(
+            job_id=result.job_id,
+            state=state,
+            created=True,
+            source_artifact_id=artifact.source_artifact_id,
+            file_name=display_name,
+        )
+
     # ------------------------------------------------------------------ 查询
 
     def get_session(self, job_id: str) -> ProtocolSessionView:
@@ -421,6 +632,16 @@ class ProtocolWorkbenchService:
             recovery_step_id=recovery_step,
             next_action=self._next_action(merged, gate_summary, awaiting_user=awaiting),
             publishable=gate_summary.get("publishable"),
+            target_project_id=merged.get("target_project_id"),
+            target_project_name=merged.get("target_project_name"),
+            target_project_code=merged.get("target_project_code"),
+            target_protocol_code=merged.get("target_protocol_code"),
+            target_study_phase=merged.get("target_study_phase"),
+            target_study_phase_label=_study_phase_label(
+                merged.get("target_study_phase")
+            ),
+            target_official_version=merged.get("target_official_version"),
+            target_rule_set_revision=merged.get("target_rule_set_revision"),
         )
 
     def get_identity_review(self, job_id: str) -> IdentityReviewView:
@@ -496,6 +717,60 @@ class ProtocolWorkbenchService:
                 declared_diff=declared,
             )
         return self._integrity_view(job_id, result)
+
+    # ------------------------------------------------------------- 项目正式版本读取
+
+    def list_official_projects(self) -> list[OfficialProjectView]:
+        """返回全部正式项目的当前投影（重新解构选择使用）。"""
+        with self.session_factory() as session:
+            rows = list_projects_with_revision(session)
+        return [
+            _official_project_view(project, rule_set_revision=revision)
+            for project, revision in rows
+        ]
+
+    def get_project_official_version(
+        self, project_id: str
+    ) -> ProjectOfficialVersionView:
+        """读取单个项目的正式版本投影：当前正式版本 + 全部已发布规则 revision。"""
+        with self.session_factory() as session:
+            row = get_project_row(session, project_id)
+            if row is None:
+                raise ProtocolWorkbenchError(
+                    "PROJECT_NOT_FOUND",
+                    title="找不到正式项目",
+                    detail="该项目编号不存在正式发布记录，无法读取其正式版本。",
+                    recovery="请返回项目列表重新选择，或先完成首次解构与发布。",
+                    context={"project_id": project_id},
+                )
+            project, revision = row
+            versions = []
+            for rule_revision, version, published_at in list_rule_set_revisions(
+                session, project.rule_set_id
+            ):
+                versions.append(
+                    ProjectVersionView(
+                        rule_set_revision=rule_revision,
+                        protocol_version_id=version.protocol_version_id,
+                        official_version=version.official_version,
+                        official_date_value=_official_date_text(version.official_date),
+                        official_date_precision=(
+                            version.official_date.precision.value
+                            if version.official_date
+                            else None
+                        ),
+                        sha256=version.sha256,
+                        rule_count=count_rule_set_rules(
+                            session, project.rule_set_id, rule_revision
+                        ),
+                        published_at=published_at.isoformat(),
+                    )
+                )
+        return ProjectOfficialVersionView(
+            project=_official_project_view(project, rule_set_revision=revision),
+            versions=versions,
+            publication_count=len(versions),
+        )
 
     # ------------------------------------------------------------------ 写入
 
@@ -595,6 +870,11 @@ class ProtocolWorkbenchService:
                 detail="所选研究期别没有对应的方案原文候选，不能建立可追溯的期别确认记录。",
                 recovery="请重新选择页面列出的期别候选；如果没有合适候选，请返回并重新上传当前方案版本。",
             )
+        self._validate_redeconstruction_lineage(
+            merged,
+            protocol_code=confirmed.protocol_code,
+            study_phase=study_phase,
+        )
 
         phase_selection = StudyPhaseSelection(
             selection_id=merged.get("phase_selection_id") or uuid.uuid4().hex,
@@ -811,6 +1091,102 @@ class ProtocolWorkbenchService:
             replay=result.replay,
         )
 
+    def publish_re_deconstruction(
+        self,
+        job_id: str,
+        *,
+        idempotency_key: str,
+        actor: str,
+    ) -> PublicationView:
+        """同谱系同期别发布编排：复用既有原子发布事务，把新草稿作为目标项目的
+        新的不可变规则版本写入。目标项目在创建任务时已持久保存；谱系与期别一致
+        由发布事务内的确定性门禁裁定（跨方案/跨期即拒绝并给出中文下一步）。"""
+        merged = self._merged_payload(job_id)
+        self._require_protocol_job(job_id)
+        if merged.get("session_kind") != "re_deconstruction":
+            raise ProtocolWorkbenchError(
+                "NOT_RE_DECONSTRUCTION_JOB",
+                title="不是重新解构任务",
+                detail="该任务不是面向已有正式项目的重新解构，不能按重新发布处理。",
+                recovery="请返回首次解构入口完成发布，或重新选择项目发起重新解构。",
+            )
+        target_project_id = merged.get("target_project_id")
+        if not target_project_id:
+            raise ProtocolWorkbenchError(
+                "TARGET_PROJECT_MISSING",
+                title="缺少目标正式项目",
+                detail="重新解构任务没有保存目标正式项目，无法完成发布。",
+                recovery="请返回工作台首页重新选择项目并上传新版方案。",
+            )
+        integrity = self.get_integrity(job_id)
+        if not integrity.publishable:
+            raise ProtocolWorkbenchError(
+                "PUBLICATION_BLOCKED",
+                title="草稿尚不能发布",
+                detail=f"完整性检查仍有 {integrity.blocking_count} 项阻止发布的问题。",
+                recovery="请先回到草稿逐项修正阻止发布的问题，再尝试发布。",
+                context={"blocking_count": integrity.blocking_count},
+            )
+        source_input = self._load_source_input(merged)
+        revision = self._load_draft_revision(merged)
+        spans = self._load_source_spans(merged)
+        new_version_id = revision.content.protocol_version_id
+        publication = ProtocolPublicationService(self.session_factory, gate=self.gate)
+        try:
+            result = publication.publish(
+                ProtocolPublicationRequest(
+                    idempotency_key=idempotency_key,
+                    draft_revision_id=revision.revision_id,
+                    source_input=source_input,
+                    source_spans=spans,
+                    actor=actor,
+                    published_at=self.now(),
+                    project_id=target_project_id,
+                    protocol_version_id=new_version_id,
+                )
+            )
+        except PublicationGateError as exc:
+            raise ProtocolWorkbenchError(
+                "PUBLICATION_GATE_REJECTED",
+                title="发布前完整性检查未通过",
+                detail="草稿仍未达到可发布标准，系统没有写入任何正式规则。",
+                recovery="请根据完整性问题列表修正草稿后重新保存，再尝试发布。",
+            ) from exc
+        except PublicationLineageError as exc:
+            raise ProtocolWorkbenchError(
+                "PUBLICATION_LINEAGE_REJECTED",
+                title="方案谱系或期别与目标项目不一致",
+                detail=str(exc),
+                recovery="请确认上传的新版方案属于目标项目的同一方案与研究期别。",
+            ) from exc
+        except ProtocolPublicationError as exc:
+            raise ProtocolWorkbenchError(
+                "PUBLICATION_FAILED",
+                title="发布未能完成",
+                detail=str(exc),
+                recovery="请刷新草稿状态后重试；若仍失败，请联系维护人员并保留操作时间。",
+            ) from exc
+
+        if not result.replay:
+            self._complete_user_step(
+                job_id,
+                STEP_PUBLISH,
+                {
+                    "project_id": result.project_id,
+                    "protocol_version_id": result.protocol_version_id,
+                    "rule_set_id": result.rule_set_id,
+                    "awaiting_user": None,
+                },
+            )
+        return PublicationView(
+            job_id=job_id,
+            project_id=result.project_id,
+            protocol_version_id=result.protocol_version_id,
+            rule_set_id=result.rule_set_id,
+            rule_set_revision=result.rule_set_revision,
+            replay=result.replay,
+        )
+
     # ------------------------------------------------------------------ 测试/恢复辅助
 
     def seed_review_session(
@@ -954,6 +1330,12 @@ class ProtocolWorkbenchService:
                 detail="该任务编号不属于方案解构工作台。",
                 recovery="请返回方案工作台重新选择任务。",
             )
+
+    def is_re_deconstruction(self, job_id: str) -> bool:
+        """返回该解构任务是否为重新解构（重新发布到既有正式项目）。"""
+        merged = self._merged_payload(job_id)
+        self._require_protocol_job(job_id)
+        return merged.get("session_kind") == "re_deconstruction"
 
     def _merged_payload(self, job_id: str) -> dict[str, Any]:
         with self.session_factory() as session:
@@ -1154,6 +1536,42 @@ class ProtocolWorkbenchService:
                 recovery="请等待草稿生成完成。",
             )
 
+    @staticmethod
+    def _validate_redeconstruction_lineage(
+        merged: dict[str, Any],
+        *,
+        protocol_code: str,
+        study_phase: StudyPhase,
+    ) -> None:
+        """重新解构上传的新版方案只允许改变版本/日期/哈希；方案编号谱系与研究
+        期别必须与持久保存的目标项目一致，否则在确认身份时即给出中文下一步。
+        发布事务仍会复跑同一条确定性校验，此处为更早的人机提示。"""
+        if merged.get("session_kind") != "re_deconstruction":
+            return
+        target_protocol_code = merged.get("target_protocol_code")
+        target_study_phase = merged.get("target_study_phase")
+        mismatched: list[str] = []
+        if target_protocol_code and protocol_code != target_protocol_code:
+            mismatched.append(
+                f"方案编号（目标项目 {target_protocol_code}，本次 {protocol_code}）"
+            )
+        if target_study_phase and study_phase.value != target_study_phase:
+            mismatched.append(
+                f"研究期别（目标项目 {_study_phase_label(target_study_phase)}，"
+                f"本次 {_study_phase_label(study_phase.value)}）"
+            )
+        if not mismatched:
+            return
+        raise ProtocolWorkbenchError(
+            "REDECONSTRUCTION_LINEAGE_MISMATCH",
+            title="新版方案与目标项目不一致",
+            detail="上传的新版方案与所选项目的方案谱系/研究期别不一致：" + "、".join(mismatched),
+            recovery=(
+                "请返回项目列表确认目标项目，或上传与该项目同一方案编号、"
+                "同一研究期别的正式新版本；已确认的方案信息不会应用到目标项目。"
+            ),
+        )
+
     def _draft_summary(self, merged: dict[str, Any]) -> dict[str, Any]:
         revision_id = merged.get("draft_revision_id")
         if not revision_id:
@@ -1197,17 +1615,31 @@ class ProtocolWorkbenchService:
         awaiting_user: str | None = None,
     ) -> str:
         awaiting = awaiting_user or merged.get("awaiting_user")
+        redo = merged.get("session_kind") == "re_deconstruction"
         if awaiting == "identity":
-            return "请核对方案编号、版本、日期与研究期别后确认。"
+            return (
+                "请核对方案编号、版本、日期与研究期别；重新解构的新版方案必须与"
+                "目标项目保持一致（版本、日期与文件哈希可更新）。"
+                if redo
+                else "请核对方案编号、版本、日期与研究期别后确认。"
+            )
         if awaiting == "review":
             if gate_summary.get("publishable"):
-                return "草稿已通过完整性检查，确认无误后可发布正式项目。"
+                return (
+                    "重新解构草稿已通过完整性检查，确认无误后可发布并更新正式规则。"
+                    if redo
+                    else "草稿已通过完整性检查，确认无误后可发布正式项目。"
+                )
             blocking = gate_summary.get("blocking_count")
             if blocking:
                 return f"草稿有 {blocking} 项阻止发布的问题，请先逐项核对修正。"
             return "请审阅草稿与来源定位，修正需要核对的项目。"
         if awaiting == "publish":
-            return "草稿已确认，请确认后发布正式项目。"
+            return (
+                "草稿已确认，确认后将把新的不可变规则版本发布到目标项目。"
+                if redo
+                else "草稿已确认，请确认后发布正式项目。"
+            )
         if not merged.get("snapshot_id"):
             return "系统正在读取方案结构与基本信息，请稍候。"
         if not merged.get("draft_revision_id"):
@@ -1269,6 +1701,9 @@ class ProtocolWorkbenchService:
 __all__ = [
     "PROTOCOL_DECONSTRUCTION_JOB_TYPE",
     "PROTOCOL_DECONSTRUCTION_STEPS",
+    "OfficialProjectView",
+    "ProjectOfficialVersionView",
+    "ProjectVersionView",
     "ProtocolSessionView",
     "ProtocolWorkbenchError",
     "ProtocolWorkbenchService",

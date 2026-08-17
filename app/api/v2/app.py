@@ -22,7 +22,10 @@ from fastapi import FastAPI
 
 from app.api.v2.errors import register_error_handlers
 from app.api.v2.jobs import router as jobs_router
-from app.api.v2.protocols import router as protocols_router
+from app.api.v2.protocols import (
+    projects_router as protocol_projects_router,
+    router as protocols_router,
+)
 from app.services.job_service import JobService, StepSpec
 from app.services.protocol_deconstruction_executor import (
     ProtocolDeconstructionExecutorConfig,
@@ -104,5 +107,6 @@ def create_app(
     app = FastAPI(title="入排审核 V2 持久任务 API", lifespan=lifespan)
     app.include_router(jobs_router)
     app.include_router(protocols_router)
+    app.include_router(protocol_projects_router)
     register_error_handlers(app)
     return app

@@ -24,6 +24,45 @@ class StartDeconstructionResponse(_StrictModel):
     file_name: str
 
 
+class OfficialProjectDTO(_StrictModel):
+    """正式项目投影（重新解构选择使用）。"""
+
+    project_id: str
+    project_code: str
+    project_name: str
+    study_phase: StudyPhase
+    study_phase_label: str
+    protocol_code: str
+    official_version: str
+    official_date_value: str | None = None
+    official_date_precision: DatePrecision | None = None
+    rule_set_id: str
+    rule_set_revision: int
+
+
+class OfficialProjectListResponse(_StrictModel):
+    projects: list[OfficialProjectDTO]
+
+
+class ProjectVersionDTO(_StrictModel):
+    """某个已发布规则版本：revision、方案版本、哈希与规则条数。"""
+
+    rule_set_revision: int
+    protocol_version_id: str
+    official_version: str
+    official_date_value: str | None = None
+    official_date_precision: DatePrecision | None = None
+    sha256: str
+    rule_count: int
+    published_at: str
+
+
+class ProjectOfficialVersionResponse(_StrictModel):
+    project: OfficialProjectDTO
+    versions: list[ProjectVersionDTO]
+    publication_count: int
+
+
 class ProtocolSessionResponse(_StrictModel):
     job_id: str
     job_type: str
@@ -50,6 +89,15 @@ class ProtocolSessionResponse(_StrictModel):
     recovery_step_id: str | None = None
     next_action: str
     publishable: bool | None = None
+    # 重新解构：目标正式项目投影（session_kind="re_deconstruction" 时有值）。
+    target_project_id: str | None = None
+    target_project_name: str | None = None
+    target_project_code: str | None = None
+    target_protocol_code: str | None = None
+    target_study_phase: StudyPhase | None = None
+    target_study_phase_label: str | None = None
+    target_official_version: str | None = None
+    target_rule_set_revision: int | None = None
 
 
 class IdentityDecisionDTO(_StrictModel):
