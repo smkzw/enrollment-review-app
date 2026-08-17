@@ -367,7 +367,7 @@ class ProtocolPublicationService:
             if target_project is not None
             else draft.project_id,
             project_revision=(
-                target_project.revision if target_project is not None else 1
+                target_project.revision + 1 if target_project is not None else 1
             ),
             protocol_version_id=protocol_version.protocol_version_id,
             rule_set_id=rule_set.rule_set_id,
@@ -406,10 +406,17 @@ class ProtocolPublicationService:
                 "project_id": request.project_id,
                 "protocol_version_id": request.protocol_version_id,
                 "actor": request.actor,
-                "identity": request.source_input.identity_decision.model_dump(
-                    mode="json"
-                ),
-                "selected_phase": request.source_input.selected_phase.value,
+                # 幂等键绑定完整发布输入，而不是只绑定身份摘要。否则同一草稿
+                # revision 下替换方案文件、来源定位或解释冲突时，会错误重放旧结果。
+                "source_input": request.source_input.model_dump(mode="json"),
+                "source_spans": {
+                    key: value.model_dump(mode="json")
+                    for key, value in request.source_spans.items()
+                },
+                "interpretation_conflicts": [
+                    item.model_dump(mode="json")
+                    for item in request.interpretation_conflicts
+                ],
             }
         )
 

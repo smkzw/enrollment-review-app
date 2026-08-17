@@ -210,6 +210,26 @@ def test_same_key_different_request_conflicts(slice4_env) -> None:
         )
 
 
+def test_same_key_with_changed_source_document_conflicts(slice4_env) -> None:
+    factory, now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+    r1 = _save_revision(factory, draft)
+    _publish(factory, source_input, draft, spans, r1.revision_id, "pub-source-conflict")
+
+    changed_source = source_input.model_copy(
+        update={"protocol_file_sha256": "f" * 64}
+    )
+    with pytest.raises(IdempotencyConflict):
+        _publish(
+            factory,
+            changed_source,
+            draft,
+            spans,
+            r1.revision_id,
+            "pub-source-conflict",
+        )
+
+
 def test_failed_gate_rolls_back_all_formal_rows(slice4_env) -> None:
     factory, now = slice4_env
     source_input, draft, spans = confirmed_fixture()
@@ -327,6 +347,7 @@ def test_republish_same_protocol_lineage_appends_rule_set_revision(slice4_env) -
     assert result2.project_id == "project-1"
     assert result2.rule_set_id == first.rule_set_id
     assert result2.rule_set_revision == first.rule_set_revision + 1
+    assert result2.project_revision == first.project_revision + 1
     assert result2.protocol_version_id == new_version_id
     with factory() as session:
         project = session.get(ProjectRecord, "project-1")
