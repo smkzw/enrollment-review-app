@@ -22,6 +22,7 @@ from app.storage.idempotency import IdempotencyConflict
 from app.storage.models import (
     EvidenceExpectationTemplateRecord,
     EvidenceRequirementRecord,
+    IdempotencyRecordRow,
     ProjectRecord,
     ProtocolAuthorityConfirmationRecord,
     ProtocolAuthorityRecordRow,
@@ -304,6 +305,45 @@ def test_failed_gate_rolls_back_all_formal_rows(slice4_env) -> None:
         assert _count(session, WorkflowStageRecord) == 0
         assert _count(session, EvidenceExpectationTemplateRecord) == 0
         # 草稿链头仍是可编辑的已保存状态
+        head = ProtocolDraftRevisionRepository(session).get_head(draft.draft_id)
+        assert head.status.value == "saved"
+
+
+def test_failure_after_formal_writes_rolls_back_entire_publication(
+    slice4_env, monkeypatch
+) -> None:
+    factory, now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+    r1 = _save_revision(factory, draft)
+    service = ProtocolPublicationService(factory, now=lambda: now)
+
+    def fail_template_projection(*args, **kwargs):
+        raise RuntimeError("模拟正式记录写入后的模板投影失败")
+
+    monkeypatch.setattr(service, "_templates", fail_template_projection)
+    with pytest.raises(RuntimeError, match="模板投影失败"):
+        service.publish(
+            ProtocolPublicationRequest(
+                idempotency_key="pub-write-fail",
+                draft_revision_id=r1.revision_id,
+                source_input=source_input,
+                source_spans=spans,
+                actor="医学监查员",
+                published_at=now,
+            )
+        )
+
+    with factory() as session:
+        for model in (
+            ProjectRecord,
+            RuleSetRecord,
+            ProtocolAuthorityRecordRow,
+            ProtocolIntegrityManifestRecord,
+            WorkflowStageRecord,
+            EvidenceExpectationTemplateRecord,
+            IdempotencyRecordRow,
+        ):
+            assert _count(session, model) == 0
         head = ProtocolDraftRevisionRepository(session).get_head(draft.draft_id)
         assert head.status.value == "saved"
 
