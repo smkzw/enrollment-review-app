@@ -7,9 +7,13 @@ import { createProtocolWorkbenchHttp } from "./protocolWorkbenchHttp";
 import { createProtocolWorkbenchStub } from "./protocolWorkbenchStub";
 import type {
   ConfirmIdentityInput,
+  DraftComparisonView,
   DraftRevisionView,
+  FeedbackInput,
   IdentityReviewView,
   IntegrityView,
+  OfficialProjectView,
+  ProjectOfficialVersionView,
   ProtocolSessionView,
   PublishResultView,
   SourcesView,
@@ -21,10 +25,13 @@ export {
   PROTOCOL_DEMO_JOB_ID,
   PROTOCOL_IDENTITY_JOB_ID,
   PROTOCOL_RECOVERY_JOB_ID,
+  PROTOCOL_REDO_JOB_ID,
 } from "./protocolWorkbenchStub";
 
 export interface ProtocolWorkbenchRequestOptions {
   signal?: AbortSignal;
+  /** 重新解构：上传目标正式项目编号（非空时进入重新解构路径）。 */
+  projectId?: string;
 }
 
 export interface ProtocolWorkbenchRepository {
@@ -34,6 +41,13 @@ export interface ProtocolWorkbenchRepository {
     idempotencyKey: string,
     options?: ProtocolWorkbenchRequestOptions,
   ): Promise<StartDeconstructionResult>;
+  listOfficialProjects(
+    options?: ProtocolWorkbenchRequestOptions,
+  ): Promise<OfficialProjectView[]>;
+  getProjectOfficialVersion(
+    projectId: string,
+    options?: ProtocolWorkbenchRequestOptions,
+  ): Promise<ProjectOfficialVersionView>;
   getSession(
     jobId: string,
     options?: ProtocolWorkbenchRequestOptions,
@@ -51,6 +65,10 @@ export interface ProtocolWorkbenchRepository {
     jobId: string,
     options?: ProtocolWorkbenchRequestOptions,
   ): Promise<DraftRevisionView>;
+  getDraftComparison(
+    jobId: string,
+    options?: ProtocolWorkbenchRequestOptions,
+  ): Promise<DraftComparisonView>;
   getIntegrity(
     jobId: string,
     options?: ProtocolWorkbenchRequestOptions,
@@ -60,6 +78,16 @@ export interface ProtocolWorkbenchRepository {
     options?: ProtocolWorkbenchRequestOptions,
   ): Promise<SourcesView>;
   saveDraft(
+    jobId: string,
+    expectedRevisionId: string,
+    options?: ProtocolWorkbenchRequestOptions,
+  ): Promise<DraftRevisionView>;
+  submitFeedback(
+    jobId: string,
+    input: FeedbackInput,
+    options?: ProtocolWorkbenchRequestOptions,
+  ): Promise<DraftRevisionView>;
+  cancelDraft(
     jobId: string,
     expectedRevisionId: string,
     options?: ProtocolWorkbenchRequestOptions,

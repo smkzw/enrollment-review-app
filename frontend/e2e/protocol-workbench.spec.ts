@@ -40,11 +40,42 @@ test.describe("方案解构工作台（Slice 5）", () => {
     expect(errors).toEqual([]);
   });
 
-  test("重新解构占位页展示中文空态", async ({ page }) => {
+  test("重新解构入口展示正式项目列表与目标摘要", async ({ page }) => {
     await openRoute(page, "/protocols?mode=redo");
     await expect(page.getByRole("heading", { name: "重新解构已有项目" })).toBeVisible();
-    await expect(page.getByText("重新解构流程尚未在本切片开放")).toBeVisible();
+    const firstProject = page.locator(".protocol-redo__project--selected");
+    await expect(firstProject).toBeVisible();
+    await expect(firstProject).toContainText("TEST-001");
+    await expect(firstProject).toContainText("正式版本");
+    await expect(page.getByRole("button", { name: "选择新版方案文件" })).toBeVisible();
     await expectNoPageOverflow(page);
+  });
+
+  test("重新解构任务并列展示八类差异工作台", async ({ page }) => {
+    await openRoute(page, "/protocols?job=job-demo-redo");
+    await expect(page.getByRole("heading", { name: /并列比较差异/ })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "当前正式版本" }),
+    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "新草稿" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "保存草稿" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "基于反馈修订" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "发布" })).toBeVisible();
+    await expectNoPageOverflow(page);
+  });
+
+  test("重新解构：反馈修订弹层可提交", async ({ page }) => {
+    await openRoute(page, "/protocols?job=job-demo-redo");
+    await page.getByRole("button", { name: "基于反馈修订" }).click();
+    await expect(page.getByRole("dialog", { name: "基于反馈修订草稿" })).toBeVisible();
+    await page
+      .getByRole("radio", { name: /补充解释/ })
+      .check();
+    await page.getByPlaceholder(/例如：EX-04/).fill("核对版本差异后补充说明。");
+    await page.getByRole("button", { name: "提交反馈修订" }).click();
+    // 提交成功后弹层关闭，回到并列差异工作台
+    await expect(page.getByRole("dialog", { name: "基于反馈修订草稿" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: /并列比较差异/ })).toBeVisible();
   });
 
   test("恢复示例展示横幅并可继续到草稿审阅", async ({ page }) => {

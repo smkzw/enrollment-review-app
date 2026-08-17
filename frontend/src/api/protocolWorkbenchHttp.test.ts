@@ -212,4 +212,156 @@ describe("protocolWorkbenchHttp", () => {
 
     expect(() => normalizeIdentityReview(malformed)).toThrow("应为对象");
   });
+
+  it("listOfficialProjects 归一化正式项目列表", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(200, {
+        projects: [
+          {
+            project_id: "project-1",
+            project_code: "TEST",
+            project_name: "测试研究",
+            study_phase: "phase_ii",
+            study_phase_label: "II 期",
+            protocol_code: "TEST-001",
+            official_version: "V1.0",
+            official_date_value: "2026-08-14",
+            official_date_precision: "day",
+            rule_set_id: "ruleset-1",
+            rule_set_revision: 1,
+          },
+        ],
+      }),
+    );
+    const repo = createProtocolWorkbenchHttp({ fetchImpl });
+    const projects = await repo.listOfficialProjects();
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/api/v2/protocol/projects",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(projects).toHaveLength(1);
+    expect(projects[0]!.projectName).toBe("测试研究");
+    expect(projects[0]!.studyPhaseLabel).toBe("II 期");
+    expect(projects[0]!.officialVersion).toBe("V1.0");
+  });
+
+  it("getDraftComparison 解码基线、候选与差异", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(200, {
+        job_id: "job-redo-1",
+        baseline: {
+          revision_id: "rev-base",
+          draft_id: "draft-base",
+          protocol_version_id: "protocol-version-1",
+          official_version: "V1.0",
+          revision_number: 1,
+          status: "published",
+          rule_count: 2,
+          workflow_stage_count: 1,
+          is_formal_baseline: true,
+          content: { proposed_rules: [] },
+          source_refs: ["span-1"],
+        },
+        candidate: {
+          revision_id: "rev-cand",
+          draft_id: "draft-cand",
+          protocol_version_id: "protocol-version-2",
+          official_version: "V2.1",
+          revision_number: 1,
+          status: "saved",
+          rule_count: 2,
+          workflow_stage_count: 1,
+          is_formal_baseline: false,
+          content: { proposed_rules: [] },
+          source_refs: ["span-2"],
+        },
+        diff: {
+          added_rule_codes: [],
+          rule_diffs: [
+            {
+              official_code: "IN-01",
+              added: false,
+              removed: false,
+              original_text_changes: [],
+              logic_changes: [],
+              time_window_changes: [],
+              exception_changes: [],
+              evidence_changes: [],
+              due_stage_changes: [],
+            },
+          ],
+        },
+        source_bound: true,
+      }),
+    );
+    const repo = createProtocolWorkbenchHttp({ fetchImpl });
+    const comparison = await repo.getDraftComparison("job-redo-1");
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/api/v2/protocol/deconstructions/job-redo-1/draft/comparison",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(comparison.baseline.isFormalBaseline).toBe(true);
+    expect(comparison.candidate.officialVersion).toBe("V2.1");
+    expect(comparison.sourceBound).toBe(true);
+    expect(comparison.diff.rule_diffs).toBeDefined();
+  });
+
+  it("submitFeedback 发送 snake_case 反馈正文", async () => {
+    const fetchImpl = vi.fn(async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(body.expected_revision_id).toBe("rev-cand");
+      expect(body.feedback_kind).toBe("clarification");
+      expect(body.feedback_note).toContain("补充解释");
+      expect(body.draft).toEqual({ proposed_rules: [] });
+      return jsonResponse(200, {
+        job_id: "job-redo-1",
+        revision_id: "rev-cand-2",
+        draft_id: "draft-cand",
+        revision_number: 2,
+        status: "saved",
+        status_label: "已保存",
+        reason: "clarification_feedback",
+        reason_label: "补充解释",
+        actor: "用户",
+        created_at: "2026-08-17T10:00:00Z",
+        study_phase: "phase_ii",
+        study_phase_label: "II 期",
+        protocol_code: "TEST-001",
+        official_version: "V2.1",
+        rule_count: 2,
+        workflow_stage_count: 1,
+        content: { proposed_rules: [] },
+        diff: null,
+      });
+    });
+    const repo = createProtocolWorkbenchHttp({ fetchImpl });
+    const revision = await repo.submitFeedback("job-redo-1", {
+      expectedRevisionId: "rev-cand",
+      draft: { proposed_rules: [] },
+      feedbackKind: "clarification",
+      feedbackNote: "这是一条补充解释",
+    });
+    expect(revision.revisionNumber).toBe(2);
+    expect(revision.reasonLabel).toBe("补充解释");
+  });
+
+  it("startDeconstruction 携带 project_id 进入重新解构", async () => {
+    const fetchImpl = vi.fn(async (_url, init) => {
+      const form = init?.body as FormData;
+      expect(form.get("project_id")).toBe("project-1");
+      return jsonResponse(201, {
+        job_id: "job-redo-new",
+        state: "await_identity",
+        state_label: "等待方案信息确认",
+        created: true,
+        source_artifact_id: "artifact-redo",
+        file_name: "新版方案.docx",
+      });
+    });
+    const repo = createProtocolWorkbenchHttp({ fetchImpl });
+    const file = new File(["content"], "新版方案.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+    const result = await repo.startDeconstruction(file, "redo-key", { projectId: "project-1" });
+    expect(result.jobId).toBe("job-redo-new");
+    expect(result.stateLabel).toBe("等待方案信息确认");
+  });
 });

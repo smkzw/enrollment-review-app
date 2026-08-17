@@ -51,6 +51,14 @@ export interface WireProtocolSessionResponse {
   recovery_step_id: string | null;
   next_action: string;
   publishable: boolean | null;
+  target_project_id: string | null;
+  target_project_name: string | null;
+  target_project_code: string | null;
+  target_protocol_code: string | null;
+  target_study_phase: StudyPhase | null;
+  target_study_phase_label: string | null;
+  target_official_version: string | null;
+  target_rule_set_revision: number | null;
 }
 
 export interface WireIdentityDecision {
@@ -176,4 +184,61 @@ export interface WirePublishResponse {
   rule_set_id: string;
   rule_set_revision: number;
   replay: boolean;
+}
+
+export interface WireOfficialProject {
+  project_id: string;
+  project_code: string;
+  project_name: string;
+  study_phase: StudyPhase;
+  study_phase_label: string;
+  protocol_code: string;
+  official_version: string;
+  official_date_value: string | null;
+  official_date_precision: DatePrecision | null;
+  rule_set_id: string;
+  rule_set_revision: number;
+}
+
+export interface WireOfficialProjectListResponse {
+  projects: WireOfficialProject[];
+}
+
+export interface WireProjectVersion {
+  rule_set_revision: number;
+  protocol_version_id: string;
+  official_version: string;
+  official_date_value: string | null;
+  official_date_precision: DatePrecision | null;
+  sha256: string;
+  rule_count: number;
+  published_at: string;
+}
+
+export interface WireProjectOfficialVersionResponse {
+  project: WireOfficialProject;
+  versions: WireProjectVersion[];
+  publication_count: number;
+}
+
+export interface WireDraftComparisonSide {
+  revision_id: string;
+  draft_id: string;
+  protocol_version_id: string;
+  official_version: string | null;
+  revision_number: number | null;
+  status: string | null;
+  rule_count: number;
+  workflow_stage_count: number;
+  is_formal_baseline: boolean;
+  content: Record<string, unknown>;
+  source_refs: string[];
+}
+
+export interface WireDraftComparisonResponse {
+  job_id: string;
+  baseline: WireDraftComparisonSide;
+  candidate: WireDraftComparisonSide;
+  diff: Record<string, unknown>;
+  source_bound: boolean;
 }

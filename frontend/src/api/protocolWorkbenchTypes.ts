@@ -68,6 +68,15 @@ export interface ProtocolSessionView {
   recoveryStepId: string | null;
   nextAction: string;
   publishable: boolean | null;
+  /** 重新解构：目标正式项目投影（sessionKind="re_deconstruction" 时有值）。 */
+  targetProjectId: string | null;
+  targetProjectName: string | null;
+  targetProjectCode: string | null;
+  targetProtocolCode: string | null;
+  targetStudyPhase: StudyPhase | null;
+  targetStudyPhaseLabel: string | null;
+  targetOfficialVersion: string | null;
+  targetRuleSetRevision: number | null;
 }
 
 export interface IdentityDecisionView {
@@ -211,4 +220,67 @@ export interface PublishResultView {
   ruleSetId: string;
   ruleSetRevision: number;
   replay: boolean;
+}
+
+export interface OfficialProjectView {
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  studyPhase: StudyPhase;
+  studyPhaseLabel: string;
+  protocolCode: string;
+  officialVersion: string;
+  officialDateValue: string | null;
+  officialDatePrecision: DatePrecision | null;
+  ruleSetId: string;
+  ruleSetRevision: number;
+}
+
+export interface ProjectVersionView {
+  ruleSetRevision: number;
+  protocolVersionId: string;
+  officialVersion: string;
+  officialDateValue: string | null;
+  officialDatePrecision: DatePrecision | null;
+  sha256: string;
+  ruleCount: number;
+  publishedAt: string;
+}
+
+export interface ProjectOfficialVersionView {
+  project: OfficialProjectView;
+  versions: ProjectVersionView[];
+  publicationCount: number;
+}
+
+export interface DraftComparisonSideView {
+  revisionId: string;
+  draftId: string;
+  protocolVersionId: string;
+  officialVersion: string | null;
+  revisionNumber: number | null;
+  status: string | null;
+  ruleCount: number;
+  workflowStageCount: number;
+  isFormalBaseline: boolean;
+  content: Record<string, unknown>;
+  sourceRefs: string[];
+}
+
+export interface DraftComparisonView {
+  jobId: string;
+  baseline: DraftComparisonSideView;
+  candidate: DraftComparisonSideView;
+  diff: Record<string, unknown>;
+  sourceBound: boolean;
+}
+
+export type FeedbackKind = "source_error" | "clarification";
+
+export interface FeedbackInput {
+  expectedRevisionId: string;
+  draft: Record<string, unknown>;
+  feedbackKind: FeedbackKind;
+  feedbackNote: string | null;
+  actor?: string;
 }

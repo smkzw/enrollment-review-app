@@ -102,10 +102,33 @@ describe("方案工作台", () => {
     expect(screen.getByRole("button", { name: "继续任务" })).toBeInTheDocument();
   });
 
-  it("重新解构占位展示空态说明", async () => {
+  it("重新解构入口展示正式项目选择列表", async () => {
     navigate("/protocols", { mode: "redo" });
     render(<ProtocolsPage />);
-    expect(await screen.findByText("重新解构流程尚未在本切片开放")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: /重新解构已有项目/ }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("测试研究", { exact: true }).length).toBeGreaterThan(0);
+    expect(screen.getByText(/TEST-001/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /测试研究二/ })).toBeInTheDocument();
+  });
+
+  it("重新解构：选择项目后上传新版方案可进入任务", async () => {
+    const user = userEvent.setup();
+    navigate("/protocols", { mode: "redo" });
+    render(<ProtocolsPage />);
+    await screen.findByRole("heading", { name: /重新解构已有项目/ });
+    await user.click(screen.getByRole("button", { name: /测试研究二/ }));
+    const file = new File([btoa("dummy-docx")], "新版方案.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+    expect(screen.getByRole("button", { name: "选择新版方案文件" })).toBeInTheDocument();
+    const uploadInput = document.querySelector("input[type=file]") as HTMLInputElement;
+    expect(uploadInput).not.toBeNull();
+    await user.upload(uploadInput, file);
+    expect(
+      await screen.findByRole("heading", { name: "核对方案信息与研究期别" }),
+    ).toBeInTheDocument();
   });
 
   it("示例草稿保存后显示界面试用状态", async () => {

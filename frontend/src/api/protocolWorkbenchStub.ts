@@ -3,13 +3,18 @@
  */
 
 import {
+  draftComparisonFixture,
   draftRevisionFixture,
   identityReviewFixture,
   integrityFixture,
+  officialProjectsFixture,
+  projectOfficialVersionFixture,
+  protocolRedoSessionFixture,
   protocolSessionFixtures,
   PROTOCOL_DEMO_JOB_ID,
   PROTOCOL_IDENTITY_JOB_ID,
   PROTOCOL_RECOVERY_JOB_ID,
+  PROTOCOL_REDO_JOB_ID,
   sourcesFixture,
 } from "../fixtures/protocol-deconstruction-workbench";
 import type {
@@ -18,9 +23,13 @@ import type {
 } from "./protocolWorkbenchRepository";
 import type {
   ConfirmIdentityInput,
+  DraftComparisonView,
   DraftRevisionView,
+  FeedbackInput,
   IdentityReviewView,
   IntegrityView,
+  OfficialProjectView,
+  ProjectOfficialVersionView,
   ProtocolSessionView,
   PublishResultView,
   SourcesView,
@@ -59,9 +68,10 @@ function baseSession(overrides: Partial<ProtocolSessionView>): ProtocolSessionVi
 }
 
 export function createProtocolWorkbenchStub(): ProtocolWorkbenchRepository {
-  const sessions = new Map<string, ProtocolSessionView>(
-    Object.entries(protocolSessionFixtures),
-  );
+  const sessions = new Map<string, ProtocolSessionView>([
+    ...Object.entries(protocolSessionFixtures),
+    [PROTOCOL_REDO_JOB_ID, protocolRedoSessionFixture],
+  ]);
 
   return {
     kind: "stub",
@@ -75,11 +85,26 @@ export function createProtocolWorkbenchStub(): ProtocolWorkbenchRepository {
       await delay();
       rejectIfAborted(options?.signal);
       const jobId = nextJobId();
-      sessions.set(jobId, {
-        ...protocolSessionFixtures[PROTOCOL_IDENTITY_JOB_ID]!,
-        jobId,
-        fileName: file.name,
-      });
+      if (options?.projectId !== undefined && options.projectId.length > 0) {
+        // 重新解构：目标项目持久保存于任务，任务进入身份确认等待。
+        sessions.set(jobId, {
+          ...protocolRedoSessionFixture,
+          jobId,
+          fileName: file.name,
+          state: "await_identity",
+          stateLabel: "等待方案信息确认",
+          awaitingUser: "identity",
+          awaitingUserLabel: "等待核对方案信息与研究期别",
+          targetProjectId: options.projectId,
+          nextAction: "核对方案编号、版本与研究期别；新版方案需与目标项目一致。",
+        });
+      } else {
+        sessions.set(jobId, {
+          ...protocolSessionFixtures[PROTOCOL_IDENTITY_JOB_ID]!,
+          jobId,
+          fileName: file.name,
+        });
+      }
       return {
         jobId,
         state: "await_identity",
@@ -87,6 +112,107 @@ export function createProtocolWorkbenchStub(): ProtocolWorkbenchRepository {
         created: true,
         sourceArtifactId: `artifact-${jobId}`,
         fileName: file.name,
+      };
+    },
+
+    async listOfficialProjects(
+      options?: ProtocolWorkbenchRequestOptions,
+    ): Promise<OfficialProjectView[]> {
+      rejectIfAborted(options?.signal);
+      await delay();
+      return structuredClone(officialProjectsFixture);
+    },
+
+    async getProjectOfficialVersion(
+      projectId: string,
+      options?: ProtocolWorkbenchRequestOptions,
+    ): Promise<ProjectOfficialVersionView> {
+      rejectIfAborted(options?.signal);
+      await delay();
+      const project = officialProjectsFixture.find(
+        (item) => item.projectId === projectId,
+      );
+      if (project === undefined) {
+        throw new ProtocolWorkbenchApiError(
+          "PROJECT_NOT_FOUND",
+          "找不到正式项目",
+          "该项目编号不存在正式发布记录，无法读取其正式版本。",
+          "请返回项目列表重新选择，或先完成首次解构与发布。",
+        );
+      }
+      return {
+        ...projectOfficialVersionFixture,
+        project: structuredClone(project),
+      };
+    },
+
+    async getDraftComparison(
+      jobId: string,
+      options?: ProtocolWorkbenchRequestOptions,
+    ): Promise<DraftComparisonView> {
+      rejectIfAborted(options?.signal);
+      await delay();
+      if (jobId === PROTOCOL_REDO_JOB_ID || sessions.get(jobId)?.sessionKind === "re_deconstruction") {
+        return { ...draftComparisonFixture, jobId };
+      }
+      throw new ProtocolWorkbenchApiError(
+        "NOT_RE_DECONSTRUCTION_JOB",
+        "不是重新解构任务",
+        "只有重新解构任务提供“当前正式版本与新草稿”并列比较。",
+        "请返回重新解构工作台选择项目后再比较。",
+      );
+    },
+
+    async submitFeedback(
+      jobId: string,
+      input: FeedbackInput,
+      options?: ProtocolWorkbenchRequestOptions,
+    ): Promise<DraftRevisionView> {
+      rejectIfAborted(options?.signal);
+      await delay();
+      if (
+        input.expectedRevisionId !== draftRevisionFixture.revisionId &&
+        input.expectedRevisionId !== draftComparisonFixture.candidate.revisionId
+      ) {
+        throw new ProtocolWorkbenchApiError(
+          "REVISION_CONFLICT",
+          "草稿版本已更新",
+          "其他窗口已保存较新的草稿，当前编辑基于过期版本。",
+          "刷新页面加载最新草稿后再继续编辑。",
+        );
+      }
+      return {
+        ...draftRevisionFixture,
+        jobId,
+        revisionNumber: 2,
+        statusLabel: input.feedbackKind === "clarification" ? "已记录补充解释" : "已记录原文纠错",
+        reasonLabel: input.feedbackKind === "clarification" ? "补充解释" : "原文理解纠错",
+      };
+    },
+
+    async cancelDraft(
+      jobId: string,
+      expectedRevisionId: string,
+      options?: ProtocolWorkbenchRequestOptions,
+    ): Promise<DraftRevisionView> {
+      rejectIfAborted(options?.signal);
+      await delay();
+      if (
+        expectedRevisionId !== draftRevisionFixture.revisionId &&
+        expectedRevisionId !== draftComparisonFixture.candidate.revisionId
+      ) {
+        throw new ProtocolWorkbenchApiError(
+          "REVISION_CONFLICT",
+          "草稿版本已更新",
+          "其他窗口已保存较新的草稿，当前编辑基于过期版本。",
+          "刷新页面加载最新草稿后再继续编辑。",
+        );
+      }
+      return {
+        ...draftRevisionFixture,
+        jobId,
+        status: "cancelled",
+        statusLabel: "已取消",
       };
     },
 
@@ -236,4 +362,5 @@ export {
   PROTOCOL_DEMO_JOB_ID,
   PROTOCOL_IDENTITY_JOB_ID,
   PROTOCOL_RECOVERY_JOB_ID,
+  PROTOCOL_REDO_JOB_ID,
 };

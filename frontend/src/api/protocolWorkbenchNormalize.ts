@@ -6,7 +6,10 @@ import { ProtocolWorkbenchApiError } from "./protocolWorkbenchTypes";
 import type { DatePrecision, StudyPhase } from "../domain/enums";
 import type {
   ConfirmIdentityInput,
+  DraftComparisonSideView,
+  DraftComparisonView,
   DraftRevisionView,
+  FeedbackInput,
   IdentityDecisionView,
   IdentityReviewView,
   IntegrityCheckView,
@@ -14,7 +17,10 @@ import type {
   IntegrityView,
   MetadataCandidateView,
   MetadataConflictView,
+  OfficialProjectView,
   PhaseCandidateView,
+  ProjectOfficialVersionView,
+  ProjectVersionView,
   ProtocolSessionView,
   PublishResultView,
   SourcesView,
@@ -187,6 +193,14 @@ export function normalizeSession(wire: unknown): ProtocolSessionView {
     recoveryStepId: optionalString(row.recovery_step_id),
     nextAction: requireString(row.next_action, "next_action"),
     publishable: optionalBoolean(row.publishable),
+    targetProjectId: optionalString(row.target_project_id),
+    targetProjectName: optionalString(row.target_project_name),
+    targetProjectCode: optionalString(row.target_project_code),
+    targetProtocolCode: optionalString(row.target_protocol_code),
+    targetStudyPhase: optionalStudyPhase(row.target_study_phase, "target_study_phase"),
+    targetStudyPhaseLabel: optionalString(row.target_study_phase_label),
+    targetOfficialVersion: optionalString(row.target_official_version),
+    targetRuleSetRevision: optionalNumber(row.target_rule_set_revision),
   };
 }
 
@@ -396,6 +410,105 @@ export function encodeConfirmIdentity(input: ConfirmIdentityInput): Record<strin
     official_date_precision: input.officialDatePrecision,
     study_phase: input.studyPhase,
     selected_candidate_ids: input.selectedCandidateIds ?? [],
+    actor: input.actor ?? "用户",
+  };
+}
+
+function normalizeOfficialProject(raw: unknown): OfficialProjectView {
+  const row = requireRecord(raw, "projects[]");
+  return {
+    projectId: requireString(row.project_id, "project_id"),
+    projectCode: requireString(row.project_code, "project_code"),
+    projectName: requireString(row.project_name, "project_name"),
+    studyPhase: requireStudyPhase(row.study_phase, "study_phase"),
+    studyPhaseLabel: requireString(row.study_phase_label, "study_phase_label"),
+    protocolCode: requireString(row.protocol_code, "protocol_code"),
+    officialVersion: requireString(row.official_version, "official_version"),
+    officialDateValue: optionalString(row.official_date_value),
+    officialDatePrecision: optionalDatePrecision(
+      row.official_date_precision,
+      "official_date_precision",
+    ),
+    ruleSetId: requireString(row.rule_set_id, "rule_set_id"),
+    ruleSetRevision: requireNumber(row.rule_set_revision, "rule_set_revision"),
+  };
+}
+
+export function normalizeOfficialProjectList(wire: unknown): OfficialProjectView[] {
+  const row = requireRecord(wire, "official_project_list");
+  return requireArray<unknown>(row.projects, "projects").map(normalizeOfficialProject);
+}
+
+export function normalizeProjectOfficialVersion(
+  wire: unknown,
+): ProjectOfficialVersionView {
+  const row = requireRecord(wire, "project_official_version");
+  const versions = requireArray<unknown>(row.versions, "versions").map((item) => {
+    const version = requireRecord(item, "versions[]");
+    return {
+      ruleSetRevision: requireNumber(version.rule_set_revision, "rule_set_revision"),
+      protocolVersionId: requireString(
+        version.protocol_version_id,
+        "protocol_version_id",
+      ),
+      officialVersion: requireString(version.official_version, "official_version"),
+      officialDateValue: optionalString(version.official_date_value),
+      officialDatePrecision: optionalDatePrecision(
+        version.official_date_precision,
+        "official_date_precision",
+      ),
+      sha256: requireString(version.sha256, "sha256"),
+      ruleCount: requireNumber(version.rule_count, "rule_count"),
+      publishedAt: requireString(version.published_at, "published_at"),
+    } as ProjectVersionView;
+  });
+  return {
+    project: normalizeOfficialProject(row.project),
+    versions,
+    publicationCount: requireNumber(row.publication_count, "publication_count"),
+  };
+}
+
+function normalizeDraftComparisonSide(raw: unknown): DraftComparisonSideView {
+  const row = requireRecord(raw, "draft_comparison_side");
+  return {
+    revisionId: requireString(row.revision_id, "revision_id"),
+    draftId: requireString(row.draft_id, "draft_id"),
+    protocolVersionId: requireString(
+      row.protocol_version_id,
+      "protocol_version_id",
+    ),
+    officialVersion: optionalString(row.official_version),
+    revisionNumber: optionalNumber(row.revision_number),
+    status: optionalString(row.status),
+    ruleCount: requireNumber(row.rule_count, "rule_count"),
+    workflowStageCount: requireNumber(row.workflow_stage_count, "workflow_stage_count"),
+    isFormalBaseline: row.is_formal_baseline === true,
+    content: requireRecord(row.content, "content"),
+    sourceRefs: requireArray<unknown>(row.source_refs, "source_refs").map((value) =>
+      requireString(value, "source_refs[]"),
+    ),
+  };
+}
+
+export function normalizeDraftComparison(wire: unknown): DraftComparisonView {
+  const row = requireRecord(wire, "draft_comparison");
+  return {
+    jobId: requireString(row.job_id, "job_id"),
+    baseline: normalizeDraftComparisonSide(row.baseline),
+    candidate: normalizeDraftComparisonSide(row.candidate),
+    diff: requireRecord(row.diff, "diff"),
+    sourceBound: row.source_bound === true,
+  };
+}
+
+/** 反馈修订请求：视图 → wire snake_case（原文理解纠错 / 补充解释）。 */
+export function encodeFeedback(input: FeedbackInput): Record<string, unknown> {
+  return {
+    expected_revision_id: input.expectedRevisionId,
+    draft: input.draft,
+    feedback_kind: input.feedbackKind,
+    feedback_note: input.feedbackNote,
     actor: input.actor ?? "用户",
   };
 }

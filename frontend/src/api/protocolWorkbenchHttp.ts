@@ -2,13 +2,17 @@
  * 方案解构工作台 HTTP 仓储：multipart 上传、错误信封解码、wire 归一化。
  */
 
-import { protocolDeconstructionsUrl } from "./protocolApiConfig";
+import { protocolDeconstructionsUrl, protocolProjectsUrl } from "./protocolApiConfig";
 import {
   decodeProtocolWorkbenchError,
   encodeConfirmIdentity,
+  encodeFeedback,
+  normalizeDraftComparison,
   normalizeDraftRevision,
   normalizeIdentityReview,
   normalizeIntegrity,
+  normalizeOfficialProjectList,
+  normalizeProjectOfficialVersion,
   normalizePublishResult,
   normalizeSession,
   normalizeSources,
@@ -20,9 +24,13 @@ import type {
 } from "./protocolWorkbenchRepository";
 import type {
   ConfirmIdentityInput,
+  DraftComparisonView,
   DraftRevisionView,
+  FeedbackInput,
   IdentityReviewView,
   IntegrityView,
+  OfficialProjectView,
+  ProjectOfficialVersionView,
   ProtocolSessionView,
   PublishResultView,
   SourcesView,
@@ -63,24 +71,109 @@ export function createProtocolWorkbenchHttp(
     return normalize(payload);
   }
 
+  async function projectsRequest<T>(
+    pathSuffix: string,
+    init: RequestInit,
+    normalize: (payload: unknown) => T,
+  ): Promise<T> {
+    const response = await fetchImpl(protocolProjectsUrl(pathSuffix), init);
+    const payload = await readJson(response);
+    if (!response.ok) {
+      throw decodeProtocolWorkbenchError(payload);
+    }
+    if (payload === null || typeof payload !== "object") {
+      throw decodeProtocolWorkbenchError(null);
+    }
+    return normalize(payload);
+  }
+
   return {
     kind: "http",
 
     async startDeconstruction(
       file: File,
       idempotencyKey: string,
-      options?: ProtocolWorkbenchRequestOptions,
+      options?: ProtocolWorkbenchRequestOptions & { projectId?: string },
     ): Promise<StartDeconstructionResult> {
       const body = new FormData();
       body.append("file", file);
       body.append("idempotency_key", idempotencyKey);
       body.append("actor", "用户");
+      if (options?.projectId !== undefined && options.projectId.length > 0) {
+        body.append("project_id", options.projectId);
+      }
       const result = await request(
         "",
         { method: "POST", body, signal: options?.signal },
         normalizeStartDeconstruction,
       );
       return result;
+    },
+
+    async listOfficialProjects(
+      options?: ProtocolWorkbenchRequestOptions,
+    ): Promise<OfficialProjectView[]> {
+      return projectsRequest(
+        "",
+        { method: "GET", signal: options?.signal },
+        normalizeOfficialProjectList,
+      );
+    },
+
+    async getProjectOfficialVersion(
+      projectId: string,
+      options?: ProtocolWorkbenchRequestOptions,
+    ): Promise<ProjectOfficialVersionView> {
+      return projectsRequest(
+        `/${encodeURIComponent(projectId)}`,
+        { method: "GET", signal: options?.signal },
+        normalizeProjectOfficialVersion,
+      );
+    },
+
+    async getDraftComparison(
+      jobId: string,
+      options?: ProtocolWorkbenchRequestOptions,
+    ): Promise<DraftComparisonView> {
+      return request(
+        `/${encodeURIComponent(jobId)}/draft/comparison`,
+        { method: "GET", signal: options?.signal },
+        normalizeDraftComparison,
+      );
+    },
+
+    async submitFeedback(
+      jobId: string,
+      input: FeedbackInput,
+      options?: ProtocolWorkbenchRequestOptions,
+    ): Promise<DraftRevisionView> {
+      return request(
+        `/${encodeURIComponent(jobId)}/draft/feedback`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(encodeFeedback(input)),
+          signal: options?.signal,
+        },
+        normalizeDraftRevision,
+      );
+    },
+
+    async cancelDraft(
+      jobId: string,
+      expectedRevisionId: string,
+      options?: ProtocolWorkbenchRequestOptions,
+    ): Promise<DraftRevisionView> {
+      return request(
+        `/${encodeURIComponent(jobId)}/draft/cancel`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ expected_revision_id: expectedRevisionId }),
+          signal: options?.signal,
+        },
+        normalizeDraftRevision,
+      );
     },
 
     getSession(
