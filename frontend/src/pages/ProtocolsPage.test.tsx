@@ -9,11 +9,23 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { navigate } from "../app/router";
 import { ProtocolsPage } from "./ProtocolsPage";
 import { PROTOCOL_DEMO_JOB_ID, PROTOCOL_IDENTITY_JOB_ID, PROTOCOL_RECOVERY_JOB_ID } from "../api/protocolWorkbenchRepository";
+import {
+  createProtocolWorkbenchStub,
+  createProtocolWorkbenchHttp,
+  setProtocolWorkbenchRepository,
+} from "../api/protocolWorkbenchRepository";
+import {
+  draftRevisionFixture,
+  officialProjectsFixture,
+  protocolSessionFixtures,
+} from "../fixtures/protocol-deconstruction-workbench";
 
 describe("方案工作台", () => {
   beforeEach(() => {
+    setProtocolWorkbenchRepository(createProtocolWorkbenchStub());
     navigate("/protocols");
     window.sessionStorage.clear();
+    window.localStorage.clear();
   });
 
   it("首页展示首次解构与重新解构分流", async () => {
@@ -25,6 +37,18 @@ describe("方案工作台", () => {
       "href",
       "#/protocols?mode=first",
     );
+  });
+
+  it("真实模式可从首页继续上次方案任务", async () => {
+    setProtocolWorkbenchRepository(createProtocolWorkbenchHttp());
+    window.localStorage.setItem("enrollment-review:last-protocol-job", "saved-job-1");
+    render(<ProtocolsPage />);
+    expect(await screen.findByRole("heading", { name: "继续上次方案任务" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "继续处理" })).toHaveAttribute(
+      "href",
+      "#/protocols?job=saved-job-1",
+    );
+    expect(screen.queryByText(/界面试用/)).not.toBeInTheDocument();
   });
 
   it("首次解构上传页使用中文说明", async () => {
@@ -57,6 +81,7 @@ describe("方案工作台", () => {
     navigate("/protocols", { job: PROTOCOL_DEMO_JOB_ID });
     render(<ProtocolsPage />);
     await screen.findByRole("tree", { name: "方案规则树" });
+    await user.click(screen.getByRole("button", { name: /EX-01排除条件/ }));
     await user.click(screen.getByRole("button", { name: /EX-01a/ }));
     const editPane = screen.getByRole("tabpanel", { name: /编辑/ });
     expect(within(editPane).getByText("ALT或AST≥1.5×ULN")).toBeInTheDocument();
@@ -113,6 +138,58 @@ describe("方案工作台", () => {
     expect(screen.getAllByText("测试研究", { exact: true }).length).toBeGreaterThan(0);
     expect(screen.getByText(/TEST-001/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /测试研究二/ })).toBeInTheDocument();
+  });
+
+  it("从已发布任务进入时展示正式版本摘要而不是中断恢复", async () => {
+    const base = createProtocolWorkbenchStub();
+    const completedSession = {
+      ...protocolSessionFixtures[PROTOCOL_DEMO_JOB_ID]!,
+      jobId: "job-published",
+      state: "completed",
+      stateLabel: "已完成",
+      awaitingUser: null,
+      awaitingUserLabel: null,
+      draftStatus: "published",
+      draftStatusLabel: "已发布",
+      recoveryCheckpointId: "checkpoint-published",
+      nextAction: "请刷新查看最新进展。",
+    };
+    setProtocolWorkbenchRepository({
+      ...base,
+      getSession: async () => completedSession,
+      getDraft: async () => ({
+        ...draftRevisionFixture,
+        jobId: "job-published",
+        status: "published",
+        statusLabel: "已发布",
+        content: {
+          ...draftRevisionFixture.content,
+          project_id: officialProjectsFixture[0]!.projectId,
+        },
+      }),
+    });
+    window.localStorage.setItem("enrollment-review:last-protocol-job", "job-published");
+    navigate("/protocols", { job: "job-published" });
+    render(<ProtocolsPage />);
+
+    expect(await screen.findByRole("heading", { name: "方案已发布" })).toBeInTheDocument();
+    expect(screen.queryByText("可从中断处继续")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "重新解构此项目" })).toHaveAttribute(
+      "href",
+      "#/protocols?mode=redo&project=project-demo-1",
+    );
+    await waitFor(() => {
+      expect(window.localStorage.getItem("enrollment-review:last-protocol-job")).toBeNull();
+    });
+  });
+
+  it("从已发布摘要进入重新解构时自动选中目标项目", async () => {
+    navigate("/protocols", { mode: "redo", project: "project-demo-2" });
+    render(<ProtocolsPage />);
+
+    const selected = await screen.findByRole("button", { name: /测试研究二/ });
+    expect(selected).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByText("目标项目与正式版本")).toBeInTheDocument();
   });
 
   it("重新解构：选择项目后上传新版方案可进入任务", async () => {

@@ -26,7 +26,7 @@ const baseSession = (
   state: "await_review",
   stateLabel: "等待审阅",
   progressCompleted: 7,
-  progressTotal: 9,
+  progressTotal: 10,
   sessionKind: "first_deconstruction",
   awaitingUser: "review",
   awaitingUserLabel: "等待审阅草稿",

@@ -7,6 +7,29 @@ import { identityReviewFixture } from "../../fixtures/protocol-deconstruction-wo
 import { ProtocolIdentityPanel } from "./ProtocolIdentityPanel";
 
 describe("方案身份确认", () => {
+  it("多期方案不替用户默认选择期别", () => {
+    render(
+      <ProtocolIdentityPanel
+        review={{
+          ...identityReviewFixture,
+          identity: {
+            ...identityReviewFixture.identity,
+            studyPhase: null,
+            studyPhaseLabel: null,
+          },
+        }}
+        busy={false}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/包含多个研究期别/)).toBeInTheDocument();
+    expect(screen.getAllByRole("radio")).toHaveLength(2);
+    expect(screen.getAllByRole("radio").every((option) => !option.hasAttribute("checked"))).toBe(true);
+    expect(screen.getByRole("button", { name: "确认并继续解构" })).toBeDisabled();
+  });
+
   it("识别缺少版本日期时允许补录并按日精度提交", async () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();
@@ -119,5 +142,41 @@ describe("方案身份确认", () => {
         selectedCandidateIds: ["code-b"],
       }),
     );
+  });
+
+  it("合并完全相同的提取依据但保留候选选择数据", () => {
+    render(
+      <ProtocolIdentityPanel
+        review={{
+          ...identityReviewFixture,
+          metadataCandidates: [
+            {
+              candidateId: "code-page-1",
+              field: "protocol_code",
+              fieldLabel: "方案编号",
+              value: "PROTO-A",
+              sourceLabel: "方案正文",
+              sourceExcerpt: "方案编号：PROTO-A",
+              isFallback: false,
+            },
+            {
+              candidateId: "code-page-2",
+              field: "protocol_code",
+              fieldLabel: "方案编号",
+              value: "PROTO-A",
+              sourceLabel: "方案正文",
+              sourceExcerpt: "方案编号：PROTO-A",
+              isFallback: false,
+            },
+          ],
+        }}
+        busy={false}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByText("方案编号：PROTO-A")).toHaveLength(1);
+    expect(screen.getByText("方案正文 · 共 2 处相同记录")).toBeInTheDocument();
   });
 });

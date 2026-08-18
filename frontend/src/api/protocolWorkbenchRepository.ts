@@ -58,6 +58,10 @@ export interface ProtocolWorkbenchRepository {
     jobId: string,
     options?: ProtocolWorkbenchRequestOptions,
   ): Promise<ProtocolSessionView>;
+  retryFailedStep(
+    jobId: string,
+    options?: ProtocolWorkbenchRequestOptions,
+  ): Promise<void>;
   getIdentityReview(
     jobId: string,
     options?: ProtocolWorkbenchRequestOptions,

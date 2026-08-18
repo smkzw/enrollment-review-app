@@ -4,6 +4,7 @@
 
 import logoUrl from "../../assets/logo_bot.svg";
 import { RouteLink } from "../../app/router";
+import { readRememberedProtocolJob } from "../../app/lastProtocolJob";
 import {
   getProtocolWorkbenchRepository,
   PROTOCOL_DEMO_JOB_ID,
@@ -13,6 +14,7 @@ import { ResumeIcon, HistoryIcon, ProtocolFileIcon } from "../shell/icons";
 
 export function ProtocolWorkbenchHome() {
   const showDemoRecovery = getProtocolWorkbenchRepository().kind === "stub";
+  const rememberedJobId = showDemoRecovery ? null : readRememberedProtocolJob();
 
   return (
     <div className="protocol-home">
@@ -87,6 +89,25 @@ export function ProtocolWorkbenchHome() {
               恢复中断示例任务
             </RouteLink>
           </div>
+        </section>
+      )}
+
+      {rememberedJobId !== null && (
+        <section className="protocol-home-recovery" aria-labelledby="protocol-recovery-title">
+          <h2 id="protocol-recovery-title" className="protocol-home-recovery__title">
+            <ProtocolFileIcon size={16} />
+            继续上次方案任务
+          </h2>
+          <p className="protocol-home-recovery__desc">
+            已保留上次方案任务的处理位置，可继续核对方案信息、审阅草稿或处理未完成步骤。
+          </p>
+          <RouteLink
+            to="/protocols"
+            params={{ job: rememberedJobId }}
+            className="button button--quiet"
+          >
+            继续处理
+          </RouteLink>
         </section>
       )}
 

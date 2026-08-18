@@ -2023,3 +2023,11 @@ OCR concurrency note:
 - 原始两份 DOCX 的 SHA-256、大小和 mtime 前后不变。最终验收 JSON 位于 `.trellis/tasks/08-14-phase3-protocol-deconstruction/metrics/slice7/`。
 - 最终确定性证据：V2 `765 passed, 2 subtests passed`；前端 Vitest `267 passed`；生产构建通过；真实 HTTP/SQLite/后台任务在 1920×1080、2560×1440、3840×2160 为 `3 passed`。
 - 用户要求无损暂停。切片 8 的 CodeBuddy CLI `hy3(max)`、Pi `cms-router/minimax-m3`、Grok Build `grok-4.6 (medium)` 三路视觉医学监查员试用尚未启动；恢复入口为 `CHECKPOINT_20260818_SLICE7_COMPLETE_PAUSED.md`。
+
+## 2026-08-19 Phase 3 完成裁决
+
+- 切片 8-9 已完成共享机制修正、两路有效独立医学监查员视觉复测、Codex 真实浏览器验收、全量回归和阶段清理。终局恢复记录归档于 `.trellis/tasks/archive/2026-08/08-14-phase3-protocol-deconstruction/CHECKPOINT_20260819_PHASE3_COMPLETE.md`。
+- D001 II 保持 IN 6 / EX 30 并已发布；MG III 保持 IN 7 / EX 16，仅 EX-07s 的“6个月内”未命名回溯锚点阻止发布。这是正确的不确定保留，不是待用默认日期消除的系统错误。
+- 共享层新增语义调用前的冻结输入检查点，防止整句来源污染兄弟原子条件时间窗，拒绝局部修订用新问题替换旧问题，并补全父规则实质性来源覆盖。前端将已发布任务与中断恢复分开，规则树默认只展开当前父项并支持深链自动展开。
+- 最终回归：后端 `909 passed, 1 skipped, 18 subtests passed`；Vitest `275 passed`；生产构建通过；Playwright `256 passed, 41 skipped`。CodeBuddy `hy3(max)` 为“修正后接受”，Pi `minimax-m3` 为“接受”。Grok Build 4.6 medium 在旧会话、恢复会话和新会话中均因其 `read_file` 工具输出错误取消，没有可用裁决；未换模型或伪装完成。
+- Phase 3 可归档。下一安全动作是按总实施计划建立 Phase 4 的受试者资料摄取、来源保留 OCR 与证据标准化任务。

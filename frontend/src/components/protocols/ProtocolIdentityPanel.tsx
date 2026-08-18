@@ -7,6 +7,7 @@ import type {
   ConfirmIdentityInput,
   ConfirmableDatePrecision,
   IdentityReviewView,
+  MetadataCandidateView,
 } from "../../api/protocolWorkbenchTypes";
 
 interface ProtocolIdentityPanelProps {
@@ -39,6 +40,33 @@ function datePrecision(value: string): ConfirmableDatePrecision | null {
     : null;
 }
 
+interface MetadataCandidateGroup {
+  candidate: MetadataCandidateView;
+  count: number;
+}
+
+function groupRepeatedMetadataCandidates(
+  candidates: MetadataCandidateView[],
+): MetadataCandidateGroup[] {
+  const groups = new Map<string, MetadataCandidateGroup>();
+  candidates.forEach((candidate) => {
+    const key = [
+      candidate.field,
+      candidate.value,
+      candidate.sourceLabel,
+      candidate.sourceExcerpt,
+    ].join("\u0000");
+    const current = groups.get(key);
+    groups.set(
+      key,
+      current === undefined
+        ? { candidate, count: 1 }
+        : { candidate: current.candidate, count: current.count + 1 },
+    );
+  });
+  return [...groups.values()];
+}
+
 export function ProtocolIdentityPanel({
   review,
   busy,
@@ -56,7 +84,7 @@ export function ProtocolIdentityPanel({
     identity.selectedCandidateIds,
   );
   const [studyPhase, setStudyPhase] = useState(
-    identity.studyPhase ?? phaseCandidates[0]?.phase ?? "phase_ii",
+    identity.studyPhase ?? (phaseCandidates.length === 1 ? phaseCandidates[0].phase : null),
   );
   const officialDatePrecision = datePrecision(officialDateValue);
   const canSubmit =
@@ -64,10 +92,11 @@ export function ProtocolIdentityPanel({
     projectName.trim().length > 0 &&
     officialVersion.trim().length > 0 &&
     officialDatePrecision !== null &&
+    studyPhase !== null &&
     phaseCandidates.some((candidate) => candidate.phase === studyPhase);
 
   const submit = () => {
-    if (!canSubmit || officialDatePrecision === null) return;
+    if (!canSubmit || officialDatePrecision === null || studyPhase === null) return;
     onConfirm({
       protocolCode: protocolCode.trim(),
       projectName: projectName.trim(),
@@ -116,6 +145,7 @@ export function ProtocolIdentityPanel({
   const metadataById = new Map(
     metadataCandidates.map((candidate) => [candidate.candidateId, candidate]),
   );
+  const metadataCandidateGroups = groupRepeatedMetadataCandidates(metadataCandidates);
 
   return (
     <div className="protocol-identity">
@@ -165,12 +195,15 @@ export function ProtocolIdentityPanel({
             方案信息提取依据
           </h2>
           <ul className="protocol-metadata-candidate-list">
-            {metadataCandidates.map((candidate) => (
+            {metadataCandidateGroups.map(({ candidate, count }) => (
               <li key={candidate.candidateId} className="protocol-metadata-candidate">
                 <div className="protocol-metadata-candidate__head">
                   <strong>{candidate.fieldLabel}</strong>
                   <span>{candidate.value}</span>
-                  <small>{candidate.sourceLabel}</small>
+                  <small>
+                    {candidate.sourceLabel}
+                    {count > 1 ? ` · 共 ${count} 处相同记录` : ""}
+                  </small>
                 </div>
                 <p>{candidate.sourceExcerpt}</p>
               </li>
@@ -186,6 +219,12 @@ export function ProtocolIdentityPanel({
         {phaseCandidates.length === 0 ? (
           <p className="protocol-identity__empty">暂无期别候选，请等待结构提取完成。</p>
         ) : (
+          <>
+          {phaseCandidates.length > 1 && studyPhase === null && (
+            <p className="protocol-identity__phase-required" role="status">
+              本方案包含多个研究期别，请先选择本次要建立的独立项目期别。
+            </p>
+          )}
           <ul className="protocol-phase-list">
             {phaseCandidates.map((candidate) => (
               <li key={candidate.candidateId}>
@@ -206,6 +245,7 @@ export function ProtocolIdentityPanel({
               </li>
             ))}
           </ul>
+          </>
         )}
       </section>
 

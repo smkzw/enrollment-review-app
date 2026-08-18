@@ -26,6 +26,13 @@ export function protocolProjectsUrl(suffix = ""): string {
   return base.length > 0 ? `${base}${path}` : path;
 }
 
+/** 持久任务操作（当前仅用于从失败步骤重新开始）。 */
+export function protocolJobsUrl(suffix = ""): string {
+  const base = getProtocolApiBase();
+  const path = `/api/v2/jobs${suffix}`;
+  return base.length > 0 ? `${base}${path}` : path;
+}
+
 /** 构建时显式启用 stub 仓储（组件测试、Playwright 视觉回归）。 */
 export function isProtocolWorkbenchStubMode(): boolean {
   return import.meta.env.VITE_PROTOCOL_WORKBENCH_STUB === "true";

@@ -15,6 +15,7 @@ import { LoadingState } from "../shell/Feedback";
 import { HistoryIcon, ProtocolFileIcon } from "../shell/icons";
 
 interface ProtocolRedoSelectPanelProps {
+  initialProjectId?: string | null;
   busy: boolean;
   error: string | null;
   onUpload: (file: File, projectId: string) => void;
@@ -22,13 +23,16 @@ interface ProtocolRedoSelectPanelProps {
 }
 
 export function ProtocolRedoSelectPanel({
+  initialProjectId = null,
   busy,
   error,
   onUpload,
   onStartFeedback,
 }: ProtocolRedoSelectPanelProps) {
   const repo = getProtocolWorkbenchRepository();
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
+    initialProjectId,
+  );
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [invalidFile, setInvalidFile] = useState<string | null>(null);

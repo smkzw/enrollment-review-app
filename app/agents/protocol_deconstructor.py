@@ -1147,10 +1147,9 @@ def regressing_rule_codes(
         code
         for code in selected_codes
         if revised.get(code, (0, 0, 0)) > previous.get(code, (0, 0, 0))
-        or (
-            revised.get(code, (0, 0, 0)) == previous.get(code, (0, 0, 0))
-            and revised_fingerprints.get(code, set())
-            != previous_fingerprints.get(code, set())
+        or bool(
+            revised_fingerprints.get(code, set())
+            - previous_fingerprints.get(code, set())
         )
     }
 

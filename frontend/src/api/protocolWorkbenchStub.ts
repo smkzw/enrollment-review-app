@@ -58,7 +58,7 @@ function nextJobId(): string {
 function baseSession(overrides: Partial<ProtocolSessionView>): ProtocolSessionView {
   return {
     jobType: "protocol_deconstruction",
-    progressTotal: 9,
+    progressTotal: 10,
     sessionKind: "first_deconstruction",
     sourceArtifactId: "artifact-demo-1",
     snapshotId: "snapshot-demo-1",
@@ -299,6 +299,30 @@ export function createProtocolWorkbenchStub(): ProtocolWorkbenchRepository {
         );
       }
       return session;
+    },
+
+    async retryFailedStep(
+      jobId: string,
+      options?: ProtocolWorkbenchRequestOptions,
+    ): Promise<void> {
+      rejectIfAborted(options?.signal);
+      await delay();
+      rejectIfAborted(options?.signal);
+      const session = sessions.get(jobId);
+      if (session === undefined) {
+        throw new ProtocolWorkbenchApiError(
+          "NOT_FOUND",
+          "任务不存在",
+          "未找到该方案解构任务。",
+          "返回方案工作台首页。",
+        );
+      }
+      sessions.set(jobId, {
+        ...session,
+        state: "queued",
+        stateLabel: "等待执行",
+        nextAction: "将从上次失败的步骤继续，已完成内容不会重复处理。",
+      });
     },
 
     async getIdentityReview(

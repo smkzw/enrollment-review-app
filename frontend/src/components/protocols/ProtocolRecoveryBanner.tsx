@@ -7,21 +7,35 @@ import type { ProtocolSessionView } from "../../api/protocolWorkbenchTypes";
 interface ProtocolRecoveryBannerProps {
   session: ProtocolSessionView;
   onContinue: () => void;
+  busy?: boolean;
+  errorMessage?: string;
 }
 
-export function ProtocolRecoveryBanner({ session, onContinue }: ProtocolRecoveryBannerProps) {
+export function ProtocolRecoveryBanner({
+  session,
+  onContinue,
+  busy = false,
+  errorMessage,
+}: ProtocolRecoveryBannerProps) {
+  const failed = session.state === "failed_final";
   return (
     <section className="protocol-recovery" aria-labelledby="protocol-recovery-banner-title">
       <h2 id="protocol-recovery-banner-title" className="protocol-recovery__title">
-        可从中断处继续
+        {failed ? "草稿生成未完成" : "可从中断处继续"}
       </h2>
       <p className="protocol-recovery__detail">
         {session.fileName !== null && <>已登记文件：{session.fileName}。</>}
-        当前状态：{session.stateLabel}。
+        {failed ? "本次未形成可审阅的草稿。" : <>当前状态：{session.stateLabel}。</>}
       </p>
       <p className="protocol-recovery__action-text">{session.nextAction}</p>
-      <button type="button" className="button button--primary" onClick={onContinue}>
-        继续任务
+      {errorMessage !== undefined && <p role="alert">{errorMessage}</p>}
+      <button
+        type="button"
+        className="button button--primary"
+        onClick={onContinue}
+        disabled={busy}
+      >
+        {busy ? "正在重新开始…" : failed ? "重新生成草稿" : "继续任务"}
       </button>
     </section>
   );

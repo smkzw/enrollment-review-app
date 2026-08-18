@@ -8,6 +8,7 @@ HTTP 层只做协议转换；本服务复用持久 Job、Slice 1–4 领域服�
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import uuid
 from dataclasses import dataclass
@@ -74,6 +75,8 @@ from app.storage.repositories import (
 from app.workflow.errors import JobNotFoundError, JobStateConflictError
 from app.workflow.jobstore import JobStore
 
+logger = logging.getLogger(__name__)
+
 PROTOCOL_DECONSTRUCTION_JOB_TYPE = "protocol_deconstruction"
 
 STEP_REGISTER = "register_file"
@@ -81,6 +84,7 @@ STEP_EXTRACT = "extract_structure"
 STEP_RENDER = "render_and_align"
 STEP_IDENTIFY = "identify_identity_phase"
 STEP_AWAIT_IDENTITY = "await_identity_confirm"
+STEP_FREEZE = "freeze_deconstruction_input"
 STEP_GENERATE = "generate_draft"
 STEP_INTEGRITY = "integrity_check"
 STEP_AWAIT_REVIEW = "await_review"
@@ -97,7 +101,21 @@ PROTOCOL_DECONSTRUCTION_STEPS: tuple[StepSpec, ...] = (
         depends_on=(STEP_IDENTIFY,),
         waiting_user_kind="identity",
     ),
-    StepSpec(STEP_GENERATE, "生成草稿", depends_on=(STEP_AWAIT_IDENTITY,)),
+    StepSpec(
+        STEP_FREEZE,
+        "冻结规则与流程目录",
+        depends_on=(STEP_AWAIT_IDENTITY,),
+    ),
+    # 语义生成依赖远程模型，偶发空正文或单批结构无效不应
+    # 立即把整个任务收口为终止失败。已完成的提取、渲染和期别确认
+    # 由检查点保留，自动重试只重跑这一步。
+    StepSpec(
+        STEP_GENERATE,
+        "生成草稿",
+        max_attempts=2,
+        retryable=True,
+        depends_on=(STEP_FREEZE,),
+    ),
     StepSpec(STEP_INTEGRITY, "完整性检查", depends_on=(STEP_GENERATE,)),
     StepSpec(
         STEP_AWAIT_REVIEW,
@@ -929,7 +947,12 @@ class ProtocolWorkbenchService:
             official_version=merged.get("official_version"),
             recovery_checkpoint_id=recovery_checkpoint,
             recovery_step_id=recovery_step,
-            next_action=self._next_action(merged, gate_summary, awaiting_user=awaiting),
+            next_action=self._next_action(
+                merged,
+                gate_summary,
+                awaiting_user=awaiting,
+                job_state=snapshot.state,
+            ),
             publishable=gate_summary.get("publishable"),
             target_project_id=merged.get("target_project_id"),
             target_project_name=merged.get("target_project_name"),
@@ -1329,6 +1352,11 @@ class ProtocolWorkbenchService:
         draft = current_draft
         if feedback_kind == DraftFeedbackKind.SOURCE_ERROR:
             try:
+                from app.agents.protocol_deconstructor import (
+                    _affected_rule_codes,
+                    regressing_rule_codes,
+                )
+
                 source_input = self._load_source_input(merged)
                 source_spans = self._load_source_spans(merged)
                 previous_gate = self.gate.evaluate(
@@ -1341,8 +1369,6 @@ class ProtocolWorkbenchService:
                 ]
                 model_note = note
                 if self._uses_default_feedback_reviser:
-                    from app.agents.protocol_deconstructor import _affected_rule_codes
-
                     target_gate_issues = [
                         issue
                         for issue in previous_issues
@@ -1356,76 +1382,114 @@ class ProtocolWorkbenchService:
                             f"{issue.issue_code}：{issue.problem}。{issue.next_action}"
                             for issue in target_gate_issues
                         )
-                draft = self.feedback_reviser(
-                    source_input,
-                    current_draft,
-                    target_rule_code,
-                    model_note,
-                )
-                self._validate_source_error_scope(
-                    current_draft,
-                    draft,
-                    target_rule_code=target_rule_code,
-                )
-                changed_codes = set(
-                    compute_draft_diff(current_draft, draft).modified_rule_codes
-                )
-                unresolved_changed = any(
-                    current != revised
-                    for current, revised in (
-                        (
-                            [
-                                item
-                                for item in current_draft.unresolved_items
-                                if target_rule_code in item.affected_scope
-                            ],
-                            [
-                                item
-                                for item in draft.unresolved_items
-                                if target_rule_code in item.affected_scope
-                            ],
-                        ),
-                        (
-                            [
-                                item
-                                for item in current_draft.structural_warnings
-                                if target_rule_code in item.affected_scope
-                            ],
-                            [
-                                item
-                                for item in draft.structural_warnings
-                                if target_rule_code in item.affected_scope
-                            ],
-                        ),
+                # 模型局部修订有小幅随机性。首个候选若未通过确定性
+                # 门禁，将具体问题回填后只重试一次；两次都不合格则
+                # 保留原草稿。注入的测试修订器仍只执行一次。
+                attempt_count = 2 if self._uses_default_feedback_reviser else 1
+                retry_guidance = ""
+                for attempt in range(attempt_count):
+                    attempt_note = model_note + retry_guidance
+                    draft = self.feedback_reviser(
+                        source_input,
+                        current_draft,
+                        target_rule_code,
+                        attempt_note,
                     )
-                )
-                if changed_codes not in ({target_rule_code}, set()) or (
-                    not changed_codes and not unresolved_changed
-                ):
-                    raise ValueError(
-                        "原文理解纠错必须且只能改变选中的一条官方入排标准或其待确认事项"
+                    self._validate_source_error_scope(
+                        current_draft,
+                        draft,
+                        target_rule_code=target_rule_code,
                     )
-                revised_gate = self.gate.evaluate(
-                    source_input,
-                    draft,
-                    source_spans=source_spans,
-                )
-                revised_issues = [
-                    issue for check in revised_gate.checks for issue in check.issues
-                ]
-                from app.agents.protocol_deconstructor import regressing_rule_codes
-
-                if target_rule_code in regressing_rule_codes(
-                    current_draft,
-                    previous_issues,
-                    draft,
-                    revised_issues,
-                    [target_rule_code],
-                ):
-                    raise ValueError(
-                        "局部修订使目标入排标准的完整性问题增加或发生替换，已拒绝保存"
+                    changed_codes = set(
+                        compute_draft_diff(current_draft, draft).modified_rule_codes
+                    )
+                    unresolved_changed = any(
+                        current != revised
+                        for current, revised in (
+                            (
+                                [
+                                    item
+                                    for item in current_draft.unresolved_items
+                                    if target_rule_code in item.affected_scope
+                                ],
+                                [
+                                    item
+                                    for item in draft.unresolved_items
+                                    if target_rule_code in item.affected_scope
+                                ],
+                            ),
+                            (
+                                [
+                                    item
+                                    for item in current_draft.structural_warnings
+                                    if target_rule_code in item.affected_scope
+                                ],
+                                [
+                                    item
+                                    for item in draft.structural_warnings
+                                    if target_rule_code in item.affected_scope
+                                ],
+                            ),
+                        )
+                    )
+                    if changed_codes not in ({target_rule_code}, set()) or (
+                        not changed_codes and not unresolved_changed
+                    ):
+                        rejection = (
+                            "候选稿改动了选定标准以外的内容，或没有形成有效修订"
+                        )
+                    else:
+                        revised_gate = self.gate.evaluate(
+                            source_input,
+                            draft,
+                            source_spans=source_spans,
+                        )
+                        revised_issues = [
+                            issue
+                            for check in revised_gate.checks
+                            for issue in check.issues
+                        ]
+                        if target_rule_code not in regressing_rule_codes(
+                            current_draft,
+                            previous_issues,
+                            draft,
+                            revised_issues,
+                            [target_rule_code],
+                        ):
+                            break
+                        target_revised_issues = [
+                            issue
+                            for issue in revised_issues
+                            if target_rule_code
+                            in _affected_rule_codes(
+                                draft, [issue], fallback_all=False
+                            )
+                        ]
+                        rejection = (
+                            "候选稿产生了新的完整性问题："
+                            + "；".join(
+                                f"{issue.issue_code}：{issue.problem}"
+                                for issue in target_revised_issues
+                            )
+                        )
+                    if attempt + 1 >= attempt_count:
+                        raise ValueError(rejection)
+                    retry_guidance = (
+                        "\n\n上一个候选稿未通过确定性完整性检查，不能保存。"
+                        f"原因：{rejection}。请从当前草稿重新做最小范围修订，"
+                        "不得用新问题替换旧问题。"
                     )
             except Exception as exc:
+                logger.warning(
+                    "方案草稿局部修订被拒绝 job_id=%s target_rule=%s revision=%s "
+                    "error_type=%s error=%s",
+                    job_id,
+                    target_rule_code,
+                    expected_revision_id,
+                    type(exc).__name__,
+                    str(exc)[:2000],
+                    exc_info=True,
+                )
                 raise ProtocolWorkbenchError(
                     "FEEDBACK_REVISION_FAILED",
                     title="未能完成本次反馈修订",
@@ -2494,6 +2558,7 @@ class ProtocolWorkbenchService:
         gate_summary: dict[str, Any],
         *,
         awaiting_user: str | None = None,
+        job_state: str | None = None,
     ) -> str:
         awaiting = awaiting_user or merged.get("awaiting_user")
         redo = merged.get("session_kind") == "re_deconstruction"
@@ -2520,6 +2585,13 @@ class ProtocolWorkbenchService:
                 "草稿已确认，确认后将把新的不可变规则版本发布到目标项目。"
                 if redo
                 else "草稿已确认，请确认后发布正式项目。"
+            )
+        if job_state == "failed_retryable":
+            return "草稿生成暂未完成，系统会从生成草稿这一步自动再试。"
+        if job_state == "failed_final":
+            return (
+                "草稿生成未能完成。可以重新生成草稿；已核对的方案信息"
+                "和研究期别会保留，不需要重新上传。"
             )
         if not merged.get("snapshot_id"):
             return "系统正在读取方案结构与基本信息，请稍候。"

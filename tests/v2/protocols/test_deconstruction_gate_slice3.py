@@ -451,6 +451,81 @@ def test_component_source_mapping_cannot_be_left_empty():
     )
 
 
+def test_parent_rule_substantive_source_spans_must_all_reach_components():
+    source_input, draft, spans = _fixture()
+    missing_span_id = "span-ex-branch"
+    spans[missing_span_id] = _span(missing_span_id, 5)
+    source_input.allowed_source_span_ids.append(missing_span_id)
+    source_input.source_materials.append(
+        ProtocolSourceMaterial(
+            source_span_id=missing_span_id,
+            source_ref="body.p5",
+            block_order=5,
+            text="随机前4周内使用过全身糖皮质激素",
+        )
+    )
+    parent_items = list(source_input.parent_rule_catalog.items)
+    parent_items[1] = parent_items[1].model_copy(
+        update={"source_span_ids": ("span-ex", missing_span_id)}
+    )
+    source_input.parent_rule_catalog = _catalog(
+        CatalogKind.OFFICIAL_PARENT_RULES, parent_items
+    )
+    draft.parent_catalog_mappings[1] = draft.parent_catalog_mappings[1].model_copy(
+        update={"source_span_ids": ["span-ex", missing_span_id]}
+    )
+
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+
+    issue = next(
+        item
+        for item in _issues(result, "source_coverage")
+        if item.issue_code == "PARENT_SOURCE_SEMANTIC_COVERAGE_MISSING"
+    )
+    assert issue.affected_refs == ["EX-01", missing_span_id]
+    assert issue.repair_scope == ["EX-01"]
+    assert not result.publishable
+
+
+def test_parent_rule_structural_lead_in_does_not_require_duplicate_component():
+    source_input, draft, spans = _fixture()
+    lead_span_id = "span-ex-lead"
+    spans[lead_span_id] = _span(lead_span_id, 5)
+    source_input.allowed_source_span_ids.append(lead_span_id)
+    source_input.source_materials.append(
+        ProtocolSourceMaterial(
+            source_span_id=lead_span_id,
+            source_ref="body.p5",
+            block_order=5,
+            text="存在以下实验室检查异常：",
+        )
+    )
+    parent_items = list(source_input.parent_rule_catalog.items)
+    parent_items[1] = parent_items[1].model_copy(
+        update={
+            "label": "存在以下实验室检查异常",
+            "source_span_ids": (lead_span_id, "span-ex"),
+        }
+    )
+    source_input.parent_rule_catalog = _catalog(
+        CatalogKind.OFFICIAL_PARENT_RULES, parent_items
+    )
+    draft.parent_catalog_mappings[1] = draft.parent_catalog_mappings[1].model_copy(
+        update={"source_span_ids": [lead_span_id, "span-ex"]}
+    )
+
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+
+    assert not any(
+        item.issue_code == "PARENT_SOURCE_SEMANTIC_COVERAGE_MISSING"
+        for item in _issues(result, "source_coverage")
+    )
+
+
 def test_procedure_requirement_requires_its_own_source_mapping():
     source_input, draft, spans = _fixture()
     draft.evidence_requirement_drafts = []
@@ -843,6 +918,115 @@ def test_each_atomic_clause_owns_only_its_own_time_anchor():
     )
 
     assert not _issues(result, "temporal_semantics")
+
+
+def test_shared_or_sentence_does_not_cross_contaminate_temporal_branches():
+    source_input, draft, spans = _fixture()
+    text = "随机前3个月内接种活疫苗，或计划在研究期间接种活疫苗"
+    next(
+        item
+        for item in source_input.source_materials
+        if item.source_span_id == "span-ex"
+    ).text = text
+    component = draft.proposed_rules[1].components[0]
+    component.expression = LogicalExpression(
+        operator=LogicalOperator.ANY,
+        children=[
+            AtomicExpression(
+                predicate=AtomicPredicate(
+                    predicate_id="recent-vaccine-shared-source",
+                    subject="受试者",
+                    attribute="随机前3个月内接种活疫苗",
+                    source_clause=text,
+                    comparator=Comparator.EQ,
+                    value=True,
+                ),
+                time_constraint=TimeConstraint(
+                    anchor_type=AnchorType.RANDOMIZATION_DATE,
+                    direction=TimeDirection.BEFORE,
+                    upper_bound=TimeQuantity(value=3, unit=TimeUnit.MONTH),
+                ),
+            ),
+            AtomicExpression(
+                predicate=AtomicPredicate(
+                    predicate_id="planned-vaccine-shared-source",
+                    subject="受试者",
+                    attribute="计划在研究期间接种活疫苗",
+                    source_clause=text,
+                    comparator=Comparator.EQ,
+                    value=True,
+                    prospective_period=ProspectivePeriod(
+                        period=ProtocolPeriod.STUDY_PERIOD
+                    ),
+                )
+            ),
+        ],
+    )
+    draft.component_drafts[1].proposed_component = component
+    draft.component_drafts[1].source_excerpts = [text]
+
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+
+    assert not any(
+        issue.issue_code
+        in {"PROSPECTIVE_PERIOD_NOT_STRUCTURED", "TIME_ANCHOR_MISSING"}
+        for issue in _issues(result, "temporal_semantics")
+    )
+
+
+def test_conjunctive_context_does_not_give_disease_predicate_a_time_window():
+    source_input, draft, spans = _fixture()
+    text = "随机前4周内开始吸入性糖皮质激素治疗的合并哮喘的受试者"
+    next(
+        item
+        for item in source_input.source_materials
+        if item.source_span_id == "span-ex"
+    ).text = text
+    component = draft.proposed_rules[1].components[0]
+    component.expression = LogicalExpression(
+        operator=LogicalOperator.ALL,
+        children=[
+            AtomicExpression(
+                predicate=AtomicPredicate(
+                    predicate_id="ics-start-window",
+                    subject="受试者",
+                    attribute="随机前4周内开始吸入性糖皮质激素治疗",
+                    source_clause=text,
+                    comparator=Comparator.EQ,
+                    value=True,
+                ),
+                time_constraint=TimeConstraint(
+                    anchor_type=AnchorType.RANDOMIZATION_DATE,
+                    direction=TimeDirection.BEFORE,
+                    upper_bound=TimeQuantity(value=4, unit=TimeUnit.WEEK),
+                ),
+            ),
+            AtomicExpression(
+                predicate=AtomicPredicate(
+                    predicate_id="asthma-context",
+                    subject="受试者",
+                    attribute="合并哮喘",
+                    source_clauses=["合并哮喘的受试者", text],
+                    comparator=Comparator.EQ,
+                    value=True,
+                )
+            ),
+        ],
+    )
+    draft.component_drafts[1].proposed_component = component
+    draft.component_drafts[1].source_excerpts = [text]
+
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+
+    assert not any(
+        issue.issue_code == "TIME_ANCHOR_MISSING"
+        and issue.affected_refs == ["asthma-context"]
+        for issue in _issues(result, "temporal_semantics")
+    )
 
 
 def test_future_plan_protocol_period_cannot_be_omitted():
@@ -1727,7 +1911,14 @@ def test_source_validity_window_is_bound_to_named_evidence_at_each_stage():
     )
 
 
-@pytest.mark.parametrize("fact_type, expect_missing", [("胸部CT结果", False), ("生命体征结果", True)])
+@pytest.mark.parametrize(
+    "fact_type, expect_missing",
+    [
+        ("胸部CT结果", False),
+        ("胸部CT结果及研究者评估", False),
+        ("生命体征结果", True),
+    ],
+)
 def test_component_level_validity_window_stays_with_its_named_evidence(
     fact_type, expect_missing
 ):
@@ -1845,6 +2036,40 @@ def test_frequency_definition_without_count_window_is_blocked():
         source_input, draft, source_spans=spans
     )
     assert any(
+        issue.issue_code == "FREQUENCY_WINDOW_NOT_STRUCTURED"
+        for issue in _issues(result, "temporal_semantics")
+    )
+
+
+def test_boolean_history_frequency_allows_leading_possession_word() -> None:
+    source_input, draft, spans = _fixture()
+    text = "复发性带状疱疹（2年内发生2次或以上）"
+    component = draft.proposed_rules[1].components[0]
+    component.expression = AtomicExpression(
+        predicate=AtomicPredicate(
+            predicate_id="predicate-recurrence-history",
+            subject="参与者",
+            attribute="有复发性带状疱疹",
+            comparator=Comparator.EQ,
+            value=True,
+            occurrence_window=OccurrenceWindow(
+                duration=TimeQuantity(value=2, unit=TimeUnit.YEAR),
+                minimum_count=2,
+            ),
+            source_clause=text,
+        )
+    )
+    draft.component_drafts[1].proposed_component = component
+    draft.component_drafts[1].source_excerpts = [text]
+    next(
+        item for item in source_input.source_materials if item.source_span_id == "span-ex"
+    ).text = text
+
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+
+    assert not any(
         issue.issue_code == "FREQUENCY_WINDOW_NOT_STRUCTURED"
         for issue in _issues(result, "temporal_semantics")
     )

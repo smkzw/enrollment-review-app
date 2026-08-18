@@ -9,6 +9,7 @@ import { describe, expect, it, beforeEach } from "vitest";
 import {
   buildHash,
   navigate,
+  parseHash,
   RouteLink,
   updateParams,
   useHashRoute,
@@ -25,7 +26,15 @@ function RouteProbe() {
 
 describe("hash router", () => {
   beforeEach(() => {
+    window.history.replaceState(null, "", "/");
     window.location.hash = "";
+  });
+
+  it("兼容不带井号的方案工作台直达地址", () => {
+    window.history.replaceState(null, "", "/protocols?mode=first");
+    const route = parseHash();
+    expect(route.path).toBe("/protocols");
+    expect(route.params.get("mode")).toBe("first");
   });
 
   it("空 hash 默认进入今日工作（无登录直达）", async () => {

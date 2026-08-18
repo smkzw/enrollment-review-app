@@ -23,6 +23,7 @@ from app.agents.protocol_deconstructor import (
 )
 from app.config import DEEPSEEK_API_KEY
 from app.domain.contracts.agents import PromptVersion
+from app.domain.contracts.agent_io import ProtocolDeconstructionInput
 from app.domain.contracts.enums import AgentNode, ExtractionStatus, PhaseScope, RenderStatus, StudyPhase
 from app.domain.contracts.protocol_ingestion import (
     ProtocolExtractionSnapshot,
@@ -30,6 +31,8 @@ from app.domain.contracts.protocol_ingestion import (
     ProtocolSourceSpan,
 )
 from app.domain.contracts.protocol_metadata import (
+    PhaseApplicabilityGraph,
+    PhaseProjection,
     ProtocolIdentityDecision,
     StudyPhaseSelection,
 )
@@ -62,6 +65,7 @@ from app.services.protocol_workbench_service import (
     STEP_AWAIT_IDENTITY,
     STEP_AWAIT_REVIEW,
     STEP_EXTRACT,
+    STEP_FREEZE,
     STEP_GENERATE,
     STEP_IDENTIFY,
     STEP_INTEGRITY,
@@ -117,6 +121,7 @@ def create_protocol_deconstruction_executor(
             STEP_EXTRACT: lambda ctx: _handle_extract(ctx, config),
             STEP_RENDER: lambda ctx: _handle_render(ctx, config),
             STEP_IDENTIFY: lambda ctx: _handle_identify(ctx, config),
+            STEP_FREEZE: lambda ctx: _handle_freeze(ctx, config),
             STEP_GENERATE: lambda ctx: _handle_generate(ctx, config),
             STEP_INTEGRITY: lambda ctx: _handle_integrity(ctx, config),
         }
@@ -440,21 +445,21 @@ def _resolve_transport(config: ProtocolDeconstructionExecutorConfig) -> Any:
     return DeepSeekProtocolAgentTransport()
 
 
-def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecutorConfig) -> dict[str, Any]:
-    merged = _merged_prior_checkpoints(config, context.job_id, before_step=STEP_GENERATE)
+def _assemble_input_package(
+    context: StepContext,
+    config: ProtocolDeconstructionExecutorConfig,
+    merged: dict[str, Any],
+) -> ProtocolDeconstructionInputPackage:
     artifact = _artifact_from_checkpoint(merged)
     snapshot = _snapshot_from_checkpoint(merged)
     blocks = _load_blocks(config, snapshot)
     spans = _spans_from_checkpoint(merged)
     identity = ProtocolIdentityDecision.model_validate(merged["identity_decision"])
     phase_selection = StudyPhaseSelection.model_validate(merged["phase_selection"])
-    from app.domain.contracts.protocol_metadata import PhaseApplicabilityGraph
-
     phase_graph = PhaseApplicabilityGraph.model_validate(merged["phase_graph"])
-
     project_id = f"draft-project-{context.job_id[:12]}"
     protocol_version_id = f"draft-version-{context.job_id[:12]}"
-    package = ProtocolDeconstructionInputAssembler(
+    return ProtocolDeconstructionInputAssembler(
         frozen_at=datetime.now(timezone.utc)
     ).assemble(
         project_id=project_id,
@@ -467,6 +472,42 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
         identity_decision=identity,
         phase_selection=phase_selection,
     )
+
+
+def _handle_freeze(
+    context: StepContext,
+    config: ProtocolDeconstructionExecutorConfig,
+) -> dict[str, Any]:
+    """Persist deterministic single-phase catalogs before any model call."""
+    merged = _merged_prior_checkpoints(config, context.job_id, before_step=STEP_FREEZE)
+    package = _assemble_input_package(context, config, merged)
+    return {
+        "source_input": package.source_input.model_dump(mode="json"),
+        "source_spans": {
+            key: span.model_dump(mode="json")
+            for key, span in package.source_spans.items()
+        },
+        "phase_projection": package.projection.model_dump(mode="json"),
+        "parent_rule_count": len(package.parent_rule_catalog.items),
+        "required_procedure_count": len(package.required_procedure_catalog.items),
+    }
+
+
+def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecutorConfig) -> dict[str, Any]:
+    merged = _merged_prior_checkpoints(config, context.job_id, before_step=STEP_GENERATE)
+    source_input = ProtocolDeconstructionInput.model_validate(merged["source_input"])
+    source_spans = {
+        span.source_span_id: span for span in _spans_from_checkpoint(merged)
+    }
+    package = ProtocolDeconstructionInputPackage(
+        source_input=source_input,
+        source_spans=source_spans,
+        projection=PhaseProjection.model_validate(merged["phase_projection"]),
+        parent_rule_catalog=source_input.parent_rule_catalog,
+        required_procedure_catalog=source_input.required_procedure_catalog,
+    )
+    project_id = source_input.project_id
+    protocol_version_id = source_input.protocol_version_id
 
     actor = str(context.job_payload.get("actor") or "系统")
     baseline_draft = None

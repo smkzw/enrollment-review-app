@@ -2,7 +2,7 @@
  * 方案解构规则树：官方编号父级 + 子组件层级；不含审核判断状态。
  */
 
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import type { ProtocolDraftRuleView } from "../../domain/protocolViewModels";
 import type { RuleComponentId } from "../../domain/ids";
 import { ChevronDownIcon, ChevronRightIcon } from "../shell/icons";
@@ -18,9 +18,26 @@ export function ProtocolDeconstructionRuleTree({
   selectedComponentId,
   onSelectComponent,
 }: ProtocolDeconstructionRuleTreeProps) {
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(
-    () => new Set(rules.map((rule) => rule.ruleId)),
+  const selectedRuleId = useMemo(
+    () =>
+      rules.find((rule) =>
+        rule.components.some(
+          (component) => component.componentId === selectedComponentId,
+        ),
+      )?.ruleId ?? rules[0]?.ruleId ?? null,
+    [rules, selectedComponentId],
   );
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(
+    () => new Set(selectedRuleId === null ? [] : [selectedRuleId]),
+  );
+
+  useEffect(() => {
+    if (selectedRuleId === null) return;
+    setExpanded((current) => {
+      if (current.has(selectedRuleId)) return current;
+      return new Set([...current, selectedRuleId]);
+    });
+  }, [selectedRuleId]);
 
   const flatKeys = useMemo(() => {
     const keys: string[] = [];

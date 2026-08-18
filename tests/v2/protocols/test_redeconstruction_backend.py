@@ -552,6 +552,63 @@ def test_source_error_feedback_rejects_target_rule_gate_regression(
     )
 
 
+def test_default_feedback_reviser_retries_one_rejected_candidate(
+    slice4_env, data_paths
+) -> None:
+    """默认模型候选首次引入新问题时，携带门禁原因重试一次。"""
+
+    factory, _now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+    notes: list[str] = []
+
+    def revise(_source_input, current_draft, _target_rule_code, feedback_note):
+        notes.append(feedback_note)
+        revised = current_draft.model_copy(deep=True)
+        title = "引入无关变化" if len(notes) == 1 else "按原文完成局部修订"
+        revised.proposed_rules[1].components[0].title = title
+        revised.component_drafts[1].proposed_component.title = title
+        return revised
+
+    service = _make_service(
+        factory,
+        data_paths,
+        gate=FeedbackRegressionGate(),
+    )
+    # 保留默认修订器的自动恢复策略，仅用可控候选替代外部调用。
+    service.feedback_reviser = revise
+    started = service.start_first_deconstruction(
+        upload_path=_write_minimal_docx(data_paths, "feedback-retry.docx"),
+        original_name="feedback-retry.docx",
+        idempotency_key="feedback-retry-first",
+        actor="医学监查员",
+    )
+    service.seed_review_session(
+        started.job_id,
+        source_input=source_input,
+        draft=draft,
+        source_spans=spans,
+        wait_at="await_review",
+    )
+    before = service.get_draft_detail(started.job_id)
+
+    after = service.apply_feedback(
+        started.job_id,
+        expected_revision_id=before.revision.revision_id,
+        feedback_kind=DraftFeedbackKind.SOURCE_ERROR,
+        target_rule_code="EX-01",
+        feedback_note="只修复当前完整性问题。",
+        actor="医学监查员",
+    )
+
+    assert len(notes) == 2
+    assert "上一个候选稿未通过" in notes[1]
+    assert "TARGET_ISSUE_2" in notes[1]
+    assert after.revision.revision_number == before.revision.revision_number + 1
+    assert after.revision.content.proposed_rules[1].components[0].title == (
+        "按原文完成局部修订"
+    )
+
+
 def test_source_error_feedback_may_only_close_selected_rule_unresolved_item(
     slice4_env, data_paths
 ) -> None:

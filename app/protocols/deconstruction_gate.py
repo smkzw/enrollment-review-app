@@ -51,7 +51,7 @@ CHECK_NAMES = (
 
 # 完整性检查结果会写入持久任务检查点。任何会改变问题判定语义的
 # 修改都必须提升此版本，避免旧检查结果在升级后继续冒充当前结论。
-DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/2026-08-18.3"
+DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/2026-08-19.3"
 
 
 class ProtocolGateIssue(VersionedModel):
@@ -177,9 +177,24 @@ def _predicate_text(predicate) -> str:
 
 
 def _predicate_temporal_text(predicate) -> str:
-    """Exclude a sibling item's parenthetical time note from this predicate."""
+    """Return the temporal meaning owned by one atomic predicate.
+
+    Exact source clauses may repeat a complete protocol sentence so that the
+    citation remains verbatim. That sentence can also contain a sibling OR
+    branch or an exception. Temporal checks therefore use the predicate's
+    semantic identity whenever it already names its own window or period, or
+    when it has no temporal meaning at all. The wider exact clause is consulted
+    only for an underspecified temporal identity such as ``计划接种活疫苗``.
+    """
 
     text = _predicate_text(predicate)
+    identity = "\n".join(
+        dict.fromkeys(
+            part.strip()
+            for part in (predicate.source_term, predicate.attribute)
+            if part and part.strip()
+        )
+    )
     binding_terms = {
         _normalized(part)
         for part in (predicate.source_term, predicate.attribute)
@@ -202,7 +217,51 @@ def _predicate_temporal_text(predicate) -> str:
         prefix = match.group(0)[0] if match.group(0)[0] in "、，；。" else ""
         return prefix + match.group("label")
 
-    return pattern.sub(retain_or_remove, text)
+    cleaned_source = pattern.sub(retain_or_remove, text)
+    compact_identity = re.sub(r"\s+", "", identity)
+    identity_owns_window = bool(_source_time_quantities(identity)) or bool(
+        re.search(
+            r"(?:随机|筛选|基线|知情同意|首次给药|首剂|"
+            r"第一次给药|研究药物给药|试验药物给药|"
+            r"末次给药|最后一次给药|研究完成|研究结束)(?:前|后|时)",
+            compact_identity,
+        )
+    )
+    identity_owns_period = any(
+        marker in compact_identity
+        for marker in ("研究期间", "治疗期间", "筛选/导入期", "筛选导入期")
+    )
+    if identity_owns_window or identity_owns_period:
+        return identity
+    normalized_attribute = _normalized(predicate.attribute)
+    clauses = predicate.exact_source_clauses
+    has_direct_non_temporal_clause = any(
+        normalized_attribute
+        and normalized_attribute in _normalized(clause)
+        and not _source_time_quantities(clause)
+        and not re.search(
+            r"(?:随机|筛选|基线|给药|研究完成|研究结束)(?:前|后|时)",
+            re.sub(r"\s+", "", clause),
+        )
+        for clause in clauses
+    )
+    has_broader_temporal_clause = any(
+        normalized_attribute
+        and normalized_attribute in _normalized(clause)
+        and (
+            bool(_source_time_quantities(clause))
+            or bool(
+                re.search(
+                    r"(?:随机|筛选|基线|给药|研究完成|研究结束)(?:前|后|时)",
+                    re.sub(r"\s+", "", clause),
+                )
+            )
+        )
+        for clause in clauses
+    )
+    if has_direct_non_temporal_clause and has_broader_temporal_clause:
+        return identity
+    return cleaned_source
 
 
 def _is_population_scoped_any(expression) -> bool:
@@ -515,9 +574,16 @@ def _predicate_preserves_frequency(
         if spec in _source_frequency_specs(clause)
     ]
     binding = _normalized(predicate.source_term or predicate.attribute)
+    binding_without_possession = re.sub(r"^有", "", binding)
     binding_terms = {
         binding,
         re.sub(r"(?:发生次数|发作次数|复发次数|既往史|现病史|病史|天数)$", "", binding),
+        binding_without_possession,
+        re.sub(
+            r"(?:发生次数|发作次数|复发次数|既往史|现病史|病史|天数)$",
+            "",
+            binding_without_possession,
+        ),
     }
     binding_terms.discard("")
     if not any(
@@ -1414,6 +1480,7 @@ class ProtocolDeconstructionGate:
                     predicate_frequency_specs = _source_frequency_specs(predicate_text)
                     is_frequency_definition = bool(predicate_frequency_specs)
                     source_validity_windows = _source_validity_windows(predicate_text)
+                    predicate_validity_specs = _source_validity_specs(predicate_text)
                     is_future_plan_window = any(
                         marker in predicate_text
                         for marker in (
@@ -1460,9 +1527,23 @@ class ProtocolDeconstructionGate:
                         matching_requirements = [
                             requirement
                             for requirement in component.evidence_requirements
-                            if len(_normalized(requirement.fact_type)) >= 2
-                            and _normalized(requirement.fact_type)
-                            in normalized_predicate_text
+                            if (
+                                any(
+                                    value == validity_value
+                                    and unit == validity_unit
+                                    and _requirement_matches_validity_spec(
+                                        requirement, named_item
+                                    )
+                                    for validity_value, validity_unit, named_item
+                                    in predicate_validity_specs
+                                )
+                                or (
+                                    not predicate_validity_specs
+                                    and len(_normalized(requirement.fact_type)) >= 2
+                                    and _normalized(requirement.fact_type)
+                                    in normalized_predicate_text
+                                )
+                            )
                         ]
                         expected_validity_stages = required_stages or {
                             requirement.due_stage
@@ -2252,6 +2333,44 @@ class ProtocolDeconstructionGate:
             material.source_span_id: material.text
             for material in source_input.source_materials
         }
+        component_refs_by_parent: dict[str, set[str]] = {}
+        for item in draft.component_drafts:
+            component_refs_by_parent.setdefault(
+                item.parent_official_code, set()
+            ).update(item.source_refs)
+
+        for item in source_input.parent_rule_catalog.items:
+            expected_refs = list(item.source_span_ids)
+            if expected_refs:
+                first_text = materials.get(expected_refs[0], "")
+                if _normalized(first_text).rstrip(":") == _normalized(
+                    item.label
+                ).rstrip(":"):
+                    # The first span can be a structural lead-in such as
+                    # "患有以下疾病史". It supplies context but does not itself
+                    # need a duplicate child component. Every subsequent
+                    # substantive span still represents a semantic obligation.
+                    expected_refs = expected_refs[1:]
+            covered_refs = component_refs_by_parent.get(item.official_code or "", set())
+            missing_refs = [
+                span_id
+                for span_id in expected_refs
+                if _normalized(materials.get(span_id, ""))
+                not in {"", "注", "备注", "说明"}
+                and span_id not in covered_refs
+            ]
+            if missing_refs:
+                official_code = item.official_code or item.item_id
+                issues.append(
+                    _issue(
+                        "source_coverage",
+                        "PARENT_SOURCE_SEMANTIC_COVERAGE_MISSING",
+                        f"{official_code} 原文中的列举项、注释或限定条件没有进入任何子规则。",
+                        [official_code, *sorted(set(missing_refs))],
+                        action="请逐段核对该父规则冻结的正式原文，为每个实质性分支、时间窗、阈值、例外和注释建立对应子规则并保留来源定位；不能只结构化‘包括以下情况’等引导语。",
+                        scope=[official_code],
+                    )
+                )
         invalid_excerpts = []
         missing_excerpts = []
         for item in draft.component_drafts:

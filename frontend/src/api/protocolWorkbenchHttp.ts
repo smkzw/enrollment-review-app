@@ -2,7 +2,11 @@
  * 方案解构工作台 HTTP 仓储：multipart 上传、错误信封解码、wire 归一化。
  */
 
-import { protocolDeconstructionsUrl, protocolProjectsUrl } from "./protocolApiConfig";
+import {
+  protocolDeconstructionsUrl,
+  protocolJobsUrl,
+  protocolProjectsUrl,
+} from "./protocolApiConfig";
 import {
   decodeProtocolWorkbenchError,
   encodeConfirmIdentity,
@@ -225,6 +229,18 @@ export function createProtocolWorkbenchHttp(
         { method: "GET", signal: options?.signal },
         normalizeSession,
       );
+    },
+
+    async retryFailedStep(
+      jobId: string,
+      options?: ProtocolWorkbenchRequestOptions,
+    ): Promise<void> {
+      const response = await fetchImpl(
+        protocolJobsUrl(`/${encodeURIComponent(jobId)}/retry`),
+        { method: "POST", signal: options?.signal },
+      );
+      const payload = await readJson(response);
+      if (!response.ok) throw decodeProtocolWorkbenchError(payload);
     },
 
     getIdentityReview(

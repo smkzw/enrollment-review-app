@@ -169,6 +169,35 @@ def _metadata_source_label(candidate: dict) -> str:
 
 
 def _phase_candidate_dtos(candidates: list[dict]) -> list[PhaseCandidateDTO]:
+    def evidence_priority(excerpt: str) -> tuple[int, int]:
+        direct_markers = (
+            "研究目的",
+            "研究设计",
+            "试验阶段",
+            "研究阶段",
+            "入选标准",
+            "排除标准",
+            "研究流程",
+            "访视流程",
+            "给药方案",
+        )
+        historical_markers = (
+            "结果显示",
+            "既往研究",
+            "既往试验",
+            "药效动力学",
+            "药代动力学",
+            "安全性结果",
+            "临床前",
+        )
+        if any(marker in excerpt for marker in direct_markers):
+            rank = 0
+        elif any(marker in excerpt for marker in historical_markers):
+            rank = 2
+        else:
+            rank = 1
+        return rank, len(excerpt)
+
     grouped: dict[str, list[dict]] = {}
     for candidate in candidates:
         phase = str(candidate.get("phase") or "")
@@ -176,13 +205,14 @@ def _phase_candidate_dtos(candidates: list[dict]) -> list[PhaseCandidateDTO]:
             grouped.setdefault(phase, []).append(candidate)
     output = []
     for phase, items in grouped.items():
-        excerpts = list(
+        all_excerpts = list(
             dict.fromkeys(
-                str(item.get("excerpt") or "").strip()
+                str(item.get("excerpt") or "").strip().rstrip("；;：:")
                 for item in items
-                if str(item.get("excerpt") or "").strip()
+                if str(item.get("excerpt") or "").strip().rstrip("；;：:")
             )
         )
+        excerpts = sorted(all_excerpts, key=evidence_priority)[:3]
         source_excerpt = "；".join(excerpts)
         output.append(
             PhaseCandidateDTO(
@@ -190,8 +220,8 @@ def _phase_candidate_dtos(candidates: list[dict]) -> list[PhaseCandidateDTO]:
                 phase=phase,
                 phase_label=study_phase_label(phase),
                 rationale=(
-                    f"方案原文在 {len(excerpts)} 处明确提及该期别：{source_excerpt}"
-                    if len(excerpts) > 1
+                    f"方案原文有 {len(all_excerpts)} 处期别标记，以下展示最直接的 {len(excerpts)} 处依据。"
+                    if len(all_excerpts) > 1
                     else f"方案原文出现“{source_excerpt}”"
                 ),
                 source_excerpt=source_excerpt,

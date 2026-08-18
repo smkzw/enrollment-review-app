@@ -22,6 +22,12 @@ export type RouteParams = Record<string, string | null | undefined>;
 
 export function parseHash(): RouteLocation {
   const raw = window.location.hash.replace(/^#/, "");
+  if (raw === "" && window.location.pathname !== "/") {
+    return {
+      path: window.location.pathname,
+      params: new URLSearchParams(window.location.search),
+    };
+  }
   const questionIndex = raw.indexOf("?");
   const pathPart = questionIndex === -1 ? raw : raw.slice(0, questionIndex);
   const queryPart = questionIndex === -1 ? "" : raw.slice(questionIndex + 1);

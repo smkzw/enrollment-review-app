@@ -386,6 +386,26 @@ def test_equal_count_issue_moved_to_another_predicate_is_regression():
     ) == {"EX-01"}
 
 
+def test_fewer_issues_cannot_replace_old_issues_with_new_failures():
+    _source_input, draft, _spans = _fixture()
+    previous = [
+        _gate_issue(f"OLD-{index}", ["predicate-alt"])
+        for index in range(5)
+    ]
+    revised = [
+        _gate_issue("NEW-A", ["predicate-ast"]),
+        _gate_issue("NEW-B", ["predicate-ast"]),
+    ]
+
+    assert regressing_rule_codes(
+        draft,
+        previous,
+        draft,
+        revised,
+        ["EX-01"],
+    ) == {"EX-01"}
+
+
 def test_lean_semantic_candidate_is_hydrated_from_frozen_catalogs():
     source_input, draft, spans = _fixture()
     candidate = _semantic_candidate(source_input, draft)

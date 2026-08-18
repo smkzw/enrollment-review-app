@@ -29,6 +29,15 @@ async function showDraftEditPane(page: Page) {
   }
 }
 
+async function expandRule(page: Page, officialCode: string) {
+  const parent = page
+    .locator(".protocol-tree__parent")
+    .filter({ hasText: officialCode })
+    .first();
+  await expect(parent).toBeVisible();
+  await parent.click();
+}
+
 test.describe("方案解构工作台（Slice 5）", () => {
   test("未知任务显示中文错误态并可返回首页", async ({ page }) => {
     const errors = collectRuntimeErrors(page);
@@ -116,6 +125,7 @@ test.describe("方案解构工作台（Slice 5）", () => {
 
   test("规则树键盘：Enter 选中子项", async ({ page }) => {
     await openRoute(page, `/protocols?job=${DEMO_JOB}`);
+    await expandRule(page, "EX-01");
     const exChild = page.getByRole("button", { name: /EX-01a/ });
     await exChild.focus();
     await page.keyboard.press("Enter");

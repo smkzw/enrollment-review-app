@@ -15,6 +15,7 @@ import type {
   PublishResultView,
 } from "../../api/protocolWorkbenchTypes";
 import { navigate, RouteLink, updateParams } from "../../app/router";
+import { clearRememberedProtocolJob } from "../../app/lastProtocolJob";
 import { useLoad } from "../../app/useLoad";
 import { useSessionState } from "../../app/useSessionState";
 import { UAT_KEY_PROTOCOL_DRAFT_SAVED } from "../../app/uatTrialState";
@@ -32,6 +33,7 @@ import {
 } from "./ProtocolRedoDialogs";
 import { ProtocolJobProgress } from "./ProtocolJobProgress";
 import { ProtocolPublishResult } from "./ProtocolPublishResult";
+import { ProtocolPublishedSummary } from "./ProtocolPublishedSummary";
 import { ProtocolRecoveryBanner } from "./ProtocolRecoveryBanner";
 import { patchComponentSemantics } from "../../domain/protocolManualEdit";
 
@@ -60,6 +62,8 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
   const [publishOpen, setPublishOpen] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [publishResult, setPublishResult] = useState<PublishResultView | null>(null);
+  const [retryBusy, setRetryBusy] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
   const [draftSaved, setDraftSaved, resetDraftSaved] = useSessionState(
     UAT_KEY_PROTOCOL_DRAFT_SAVED,
     false,
@@ -103,6 +107,16 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
     },
   );
 
+  const publishedDraft = useLoad(
+    (signal) => repo.getDraft(jobId, { signal }),
+    [jobId, repo],
+    {
+      enabled:
+        sessionData?.state === "completed" &&
+        sessionData?.draftStatus === "published",
+    },
+  );
+
   const redoReview = useLoad(
     async (signal) => {
       const [integrity, sources] = await Promise.all([
@@ -130,6 +144,14 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
     const timer = window.setTimeout(session.retry, 1200);
     return () => window.clearTimeout(timer);
   }, [jobState, session.retry, sessionStatus]);
+
+  useEffect(() => {
+    if (sessionData?.state === "completed") clearRememberedProtocolJob();
+  }, [sessionData?.state]);
+
+  useEffect(() => {
+    if (publishResult !== null) clearRememberedProtocolJob();
+  }, [publishResult]);
 
   const handleConfirmIdentity = useCallback(
     async (input: ConfirmIdentityInput) => {
@@ -333,6 +355,19 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
     return <ProtocolPublishResult session={currentSession} result={publishResult} />;
   }
 
+  if (currentSession.state === "completed" && currentSession.draftStatus === "published") {
+    if (publishedDraft.state.status === "loading") return <LoadingState />;
+    if (publishedDraft.state.status === "error") {
+      return <ErrorState message={publishedDraft.state.message} onRetry={publishedDraft.retry} />;
+    }
+    return (
+      <ProtocolPublishedSummary
+        session={currentSession}
+        draft={publishedDraft.state.data}
+      />
+    );
+  }
+
   if (
     currentSession.recoveryCheckpointId !== null &&
     currentSession.awaitingUser !== "review" &&
@@ -342,10 +377,27 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
       <div className="protocols">
         <ProtocolRecoveryBanner
           session={currentSession}
-          onContinue={() => {
+          busy={retryBusy}
+          errorMessage={retryError ?? undefined}
+          onContinue={async () => {
             if (repo.kind === "stub" && jobId === PROTOCOL_RECOVERY_JOB_ID) {
               navigate("/protocols", { job: PROTOCOL_DEMO_JOB_ID });
               return;
+            }
+            if (currentSession.state === "failed_final") {
+              setRetryBusy(true);
+              setRetryError(null);
+              try {
+                await repo.retryFailedStep(jobId);
+              } catch (error) {
+                if (error instanceof ProtocolWorkbenchApiError) {
+                  setRetryError(`${error.message} ${error.recoveryAction}`);
+                } else {
+                  setRetryError("草稿未能重新开始，请稍后再试。");
+                }
+              } finally {
+                setRetryBusy(false);
+              }
             }
             session.retry();
           }}

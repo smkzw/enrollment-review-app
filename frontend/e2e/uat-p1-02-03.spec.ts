@@ -14,6 +14,15 @@ async function showDraftEditPane(page: Page) {
   }
 }
 
+async function expandRule(page: Page, officialCode: string) {
+  const parent = page
+    .locator(".protocol-tree__parent")
+    .filter({ hasText: officialCode })
+    .first();
+  await expect(parent).toBeVisible();
+  await parent.click();
+}
+
 test.describe("UAT-P1-02/P1-03", () => {
   test.beforeEach(async ({ page }) => {
     runtimeErrorsByPage.set(page, collectRuntimeErrors(page));
@@ -60,6 +69,7 @@ test.describe("UAT-P1-02/P1-03", () => {
     await expect(page.getByRole("heading", { name: "审阅解构草稿" })).toBeVisible();
     await expect(page.getByRole("tree", { name: "方案规则树" })).toContainText("IN-01");
     await expect(page.getByRole("tree", { name: "方案规则树" })).toContainText("EX-01");
+    await expandRule(page, "EX-01");
     await page.getByRole("button", { name: /EX-01a/ }).click();
     await showDraftEditPane(page);
     await expect(page.getByRole("tabpanel", { name: /编辑/ })).toContainText("ALT或AST≥1.5×ULN");

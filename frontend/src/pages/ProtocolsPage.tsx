@@ -3,12 +3,13 @@
  * 重新解构：选择目标正式项目 → 上传新版方案 → 并列比较规则变化 → 保存/取消/发布。
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   getProtocolWorkbenchRepository,
   ProtocolWorkbenchApiError,
 } from "../api/protocolWorkbenchRepository";
 import { navigate, useHashRoute } from "../app/router";
+import { rememberProtocolJob } from "../app/lastProtocolJob";
 import { ProtocolWorkbenchHome } from "../components/protocols/ProtocolWorkbenchHome";
 import { ProtocolUploadPanel } from "../components/protocols/ProtocolUploadPanel";
 import { ProtocolRedoSelectPanel } from "../components/protocols/ProtocolRedoSelectPanel";
@@ -23,6 +24,10 @@ export function ProtocolsPage() {
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (jobId !== null) rememberProtocolJob(jobId);
+  }, [jobId]);
+
   const handleUpload = useCallback(
     async (file: File, projectId: string | null = null) => {
       setUploadBusy(true);
@@ -31,6 +36,7 @@ export function ProtocolsPage() {
         const result = await repo.startDeconstruction(file, `upload-${Date.now()}`, {
           projectId: projectId ?? undefined,
         });
+        rememberProtocolJob(result.jobId);
         navigate("/protocols", { job: result.jobId });
       } catch (error) {
         setUploadError(
@@ -62,6 +68,7 @@ export function ProtocolsPage() {
           projectId,
           `feedback-revision-${Date.now()}`,
         );
+        rememberProtocolJob(result.jobId);
         navigate("/protocols", { job: result.jobId });
       } catch (error) {
         setUploadError(
@@ -83,6 +90,7 @@ export function ProtocolsPage() {
   if (mode === "redo" && jobId === null) {
     return (
       <ProtocolRedoSelectPanel
+        initialProjectId={params.get("project")}
         busy={uploadBusy}
         error={uploadError}
         onUpload={handleRedoUpload}

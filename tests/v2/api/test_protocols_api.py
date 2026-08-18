@@ -9,7 +9,7 @@ import pytest
 from docx import Document
 from fastapi.testclient import TestClient
 
-from app.api.v2.protocols import _metadata_candidate_dto
+from app.api.v2.protocols import _metadata_candidate_dto, _phase_candidate_dtos
 from app.domain.contracts.enums import StudyPhase
 from app.services.protocol_deconstruction_executor import (
     ProtocolDeconstructionExecutorConfig,
@@ -19,6 +19,8 @@ from app.services.protocol_deconstruction_executor import (
 from app.services.protocol_workbench_service import (
     PROTOCOL_DECONSTRUCTION_JOB_TYPE,
     PROTOCOL_DECONSTRUCTION_STEPS,
+    STEP_GENERATE,
+    STEP_FREEZE,
     ProtocolWorkbenchService,
 )
 from app.workflow.runner import JobRunner, StepContext
@@ -127,6 +129,79 @@ def test_upload_registers_source_and_creates_protocol_job(client) -> None:
     assert body["source_artifact_id"]
     assert body["progress_total"] == len(PROTOCOL_DECONSTRUCTION_STEPS)
     assert body["progress_completed"] >= 1
+
+
+def test_semantic_draft_step_keeps_one_bounded_automatic_retry() -> None:
+    generate = next(
+        step for step in PROTOCOL_DECONSTRUCTION_STEPS if step.step_id == STEP_GENERATE
+    )
+
+    assert generate.retryable is True
+    assert generate.max_attempts == 2
+
+
+def test_frozen_input_precedes_semantic_generation() -> None:
+    step_ids = [step.step_id for step in PROTOCOL_DECONSTRUCTION_STEPS]
+    assert step_ids.index(STEP_FREEZE) < step_ids.index(STEP_GENERATE)
+    generate = next(step for step in PROTOCOL_DECONSTRUCTION_STEPS if step.step_id == STEP_GENERATE)
+    assert generate.depends_on == (STEP_FREEZE,)
+
+
+def test_sources_remain_available_when_semantic_service_is_unavailable(
+    build_app,
+    monkeypatch,
+) -> None:
+    app = build_app(run_runner=False)
+    with TestClient(app) as client:
+        job_id = _create_protocol_job(
+            client,
+            key="freeze-before-semantic-failure",
+            docx_bytes=_pipeline_docx_bytes(),
+        )
+        _run_until(client, app, job_id, awaiting_user="identity")
+        confirmed = client.post(
+            f"/api/v2/protocol/deconstructions/{job_id}/identity/confirm",
+            json={
+                "protocol_code": "E2E-001",
+                "project_name": "E2E 测试研究",
+                "official_version": "V1.0",
+                "official_date_value": "2026-08-17",
+                "official_date_precision": "day",
+                "study_phase": StudyPhase.PHASE_II.value,
+                "actor": "测试用户",
+            },
+        )
+        assert confirmed.status_code == 200, confirmed.text
+
+        monkeypatch.setattr(
+            "app.services.protocol_deconstruction_executor.DEEPSEEK_API_KEY",
+            "",
+        )
+        executor = create_protocol_deconstruction_executor(
+            ProtocolDeconstructionExecutorConfig(
+                data_paths=app.state.data_paths,
+                session_factory=app.state.session_factory,
+                page_texts_builder=page_texts_from_blocks,
+            )
+        )
+        JobRunner(
+            app.state.session_factory,
+            {PROTOCOL_DECONSTRUCTION_JOB_TYPE: executor},
+            worker_id="no-semantic-runner",
+            poll_interval=0.01,
+        ).run_job(job_id)
+
+        job = client.get(f"/api/v2/jobs/{job_id}").json()
+        freeze = next(step for step in job["steps"] if step["step_id"] == STEP_FREEZE)
+        generate = next(step for step in job["steps"] if step["step_id"] == STEP_GENERATE)
+        assert freeze["state"] == "completed"
+        assert generate["error_code"] == "SEMANTIC_PROVIDER_UNAVAILABLE"
+        assert generate["state"] == "failed_retryable"
+
+        sources = client.get(f"/api/v2/protocol/deconstructions/{job_id}/sources")
+        assert sources.status_code == 200, sources.text
+        assert sources.json()["selected_phase_label"] == "II 期"
+        assert sources.json()["source_materials"]
 
 
 def test_upload_registration_survives_api_claim_race(client, monkeypatch) -> None:
@@ -421,6 +496,84 @@ def test_identity_date_candidate_projection_is_form_ready() -> None:
     )
     assert candidate.value == "2026-08-17"
     assert candidate.source_excerpt == "版本日期：2026年8月17日"
+
+
+def test_phase_candidate_evidence_prefers_current_trial_structure() -> None:
+    candidates = [
+        {
+            "candidate_id": "historical",
+            "phase": "phase_ii",
+            "excerpt": "既往II期PD结果显示药效明确",
+        },
+        {
+            "candidate_id": "purpose",
+            "phase": "phase_ii",
+            "excerpt": "探索试验阶段（II期）研究目的",
+        },
+        {
+            "candidate_id": "design",
+            "phase": "phase_ii",
+            "excerpt": "II期研究设计与给药方案",
+        },
+        {
+            "candidate_id": "eligibility",
+            "phase": "phase_ii",
+            "excerpt": "II期入选标准",
+        },
+        {
+            "candidate_id": "extra",
+            "phase": "phase_ii",
+            "excerpt": "II期其他描述",
+        },
+    ]
+
+    result = _phase_candidate_dtos(candidates)
+
+    assert len(result) == 1
+    assert "研究目的" in result[0].source_excerpt
+    assert "研究设计" in result[0].source_excerpt
+    assert "入选标准" in result[0].source_excerpt
+    assert "PD结果" not in result[0].source_excerpt
+    assert "5 处期别标记" in result[0].rationale
+
+
+def test_phase_candidate_evidence_joins_excerpts_without_duplicate_punctuation() -> None:
+    candidates = [
+        {
+            "candidate_id": "phase-iii-a",
+            "phase": "phase_iii",
+            "excerpt": "优化Ⅲ期入选/排除标准；",
+        },
+        {
+            "candidate_id": "phase-iii-b",
+            "phase": "phase_iii",
+            "excerpt": "Ⅲ期研究设计",
+        },
+    ]
+
+    result = _phase_candidate_dtos(candidates)
+
+    assert result[0].source_excerpt == "Ⅲ期研究设计；优化Ⅲ期入选/排除标准"
+    assert "；；" not in result[0].source_excerpt
+
+
+def test_phase_candidate_evidence_removes_trailing_colon_before_joining() -> None:
+    candidates = [
+        {
+            "candidate_id": "phase-ii-a",
+            "phase": "phase_ii",
+            "excerpt": "II期给药方案:",
+        },
+        {
+            "candidate_id": "phase-ii-b",
+            "phase": "phase_ii",
+            "excerpt": "探索试验阶段（Ⅱ期）",
+        },
+    ]
+
+    result = _phase_candidate_dtos(candidates)
+
+    assert result[0].source_excerpt == "II期给药方案；探索试验阶段（Ⅱ期）"
 
 
 def test_official_projects_list_and_version_read_after_publish(client, build_app) -> None:

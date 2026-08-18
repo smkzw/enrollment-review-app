@@ -17,7 +17,7 @@ const SESSION_WIRE = {
   state: "await_identity",
   state_label: "等待方案信息确认",
   progress_completed: 4,
-  progress_total: 9,
+  progress_total: 10,
   session_kind: "first_deconstruction",
   awaiting_user: "identity",
   awaiting_user_label: "等待确认方案信息与研究期别",
@@ -152,6 +152,25 @@ describe("protocolWorkbenchHttp", () => {
     const repo = createProtocolWorkbenchHttp({ fetchImpl });
 
     await repo.getSession("job-http-1", { signal: controller.signal });
+  });
+
+  it("从失败步骤重新开始时调用持久任务接口", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(200, {
+        job_id: "job-http-1",
+        state: "queued",
+        state_label: "等待执行",
+        changed: true,
+      }),
+    );
+    const repo = createProtocolWorkbenchHttp({ fetchImpl });
+
+    await repo.retryFailedStep("job-http-1");
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/api/v2/jobs/job-http-1/retry",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 
   it("拒绝无法识别的研究期别投影", () => {
