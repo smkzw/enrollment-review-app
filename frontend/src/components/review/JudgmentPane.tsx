@@ -143,6 +143,9 @@ export function JudgmentPane({
                   </div>
                   <span className="judgment-requirement__stage">
                     到期节点：{requirement.dueStageLabel}
+                    {requirement.sourceValidityLabel !== null && (
+                      <>；资料时效：{requirement.sourceValidityLabel}</>
+                    )}
                   </span>
                 </li>
               );

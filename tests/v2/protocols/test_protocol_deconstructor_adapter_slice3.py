@@ -3,13 +3,17 @@ from __future__ import annotations
 import pytest
 
 from app.agents.protocol_deconstructor import (
+    ProtocolDeconstructionAttempt,
+    ProtocolDeconstructionRunResult,
     ProtocolAgentResponse,
     ProtocolDeconstructorRunner,
     _collect_initial_semantic_response,
+    _apply_semantic_repair,
+    _hydrate_semantic_candidate,
     _parse_protocol_draft,
     _parse_semantic_candidate,
     _recover_exact_fragments,
-    _regressing_rule_codes,
+    regressing_rule_codes,
     _select_repair_rule_codes,
     protocol_prompt_template_sha256,
     revise_protocol_draft_from_feedback,
@@ -23,7 +27,9 @@ from app.domain.contracts.agent_io import (
     SemanticRule,
     SemanticRuleComponent,
 )
-from app.domain.contracts.enums import AgentNode, LogicalOperator
+from app.domain.contracts.enums import AgentNode, LogicalOperator, ReviewStage
+from app.domain.contracts.normalization import UnresolvedItem
+from app.domain.contracts.rules import iter_atomic_predicates
 from app.protocols.deconstruction_gate import ProtocolGateIssue
 from tests.v2.protocols.test_deconstruction_gate_slice3 import _fixture
 
@@ -131,6 +137,50 @@ def test_hydrated_draft_can_recover_semantic_candidate_for_persisted_repair():
     assert recovered.created_by_agent_call_id == candidate.created_by_agent_call_id
 
 
+def test_hydration_stably_disambiguates_repeated_predicate_ids():
+    source_input, draft, _spans = _fixture()
+    candidate = _semantic_candidate(source_input, draft)
+    first_predicate = next(
+        iter_atomic_predicates(candidate.proposed_rules[0].components[0].expression)
+    )
+    second_predicate = next(
+        iter_atomic_predicates(candidate.proposed_rules[1].components[0].expression)
+    )
+    second_predicate.predicate_id = first_predicate.predicate_id
+
+    hydrated = _hydrate_semantic_candidate(source_input, candidate)
+    predicate_ids = [
+        predicate.predicate_id
+        for rule in hydrated.proposed_rules
+        for component in rule.components
+        for expression in (component.expression, component.exception_expression)
+        if expression is not None
+        for predicate in iter_atomic_predicates(expression)
+    ]
+
+    assert len(predicate_ids) == len(set(predicate_ids))
+    assert predicate_ids[0] == first_predicate.predicate_id
+    assert any(
+        predicate_id.startswith(
+            f"{first_predicate.predicate_id}:component:EX-01:01:"
+        )
+        for predicate_id in predicate_ids[1:]
+    )
+
+
+def test_hydration_neutralizes_evidence_description_that_prejudges_result():
+    source_input, draft, _spans = _fixture()
+    candidate = _semantic_candidate(source_input, draft)
+    requirement = candidate.proposed_rules[1].components[0].evidence_requirements[0]
+    requirement.fact_type = "既往病史记录"
+    requirement.description = "确认参与者不存在相关既往病史"
+
+    hydrated = _hydrate_semantic_candidate(source_input, candidate)
+    actual = hydrated.proposed_rules[1].components[0].evidence_requirements[0]
+
+    assert actual.description == "筛选期审核：核对既往病史记录"
+
+
 def test_feedback_revision_replaces_only_selected_parent_rule():
     source_input, draft, _spans = _fixture()
     candidate = semantic_candidate_from_draft(draft)
@@ -158,6 +208,37 @@ def test_feedback_revision_replaces_only_selected_parent_rule():
     assert actual.proposed_rules[1].components[0].title == "按方案原文修正后的排除条件"
     assert revised.draft_id == draft.draft_id
     assert "replacement_rules 必须且只能包含 EX-01" in transport.start_prompts[0]
+
+
+def test_feedback_replaces_only_selected_rule_unresolved_items():
+    source_input, draft, _spans = _fixture()
+    candidate = semantic_candidate_from_draft(draft).model_copy(
+        update={
+            "unresolved_items": [
+                UnresolvedItem(code="KEEP_IN", affected_scope=["IN-01"]),
+                UnresolvedItem(code="DROP_EX", affected_scope=["EX-01"]),
+            ]
+        }
+    )
+    replacement = candidate.proposed_rules[1].model_copy(deep=True)
+    repair = ProtocolSemanticRuleRepair(
+        candidate_id=candidate.candidate_id,
+        replacement_rules=[replacement],
+        replacement_unresolved_items=[
+            UnresolvedItem(code="CURRENT_EX", affected_scope=["EX-01"])
+        ],
+    )
+
+    revised = _apply_semantic_repair(
+        candidate,
+        repair,
+        expected_codes=["EX-01"],
+    )
+
+    assert [item.code for item in revised.unresolved_items] == [
+        "KEEP_IN",
+        "CURRENT_EX",
+    ]
 
 
 def test_feedback_namespaced_draft_id_round_trips_without_creating_new_chain():
@@ -240,6 +321,7 @@ def test_valid_json_passes_without_repair():
     assert "exception_expression" in transport.start_prompts[0]
     assert "first_dose_date" in transport.start_prompts[0]
     assert "不得为表示审核阶段而复制原子条件" in transport.start_prompts[0]
+    assert "不得为了‘再次确认’" in transport.start_prompts[0]
     assert "同时引用父级引导段和当前子项" in transport.start_prompts[0]
 
 
@@ -281,7 +363,7 @@ def test_rule_repair_that_adds_blocking_issues_is_detected_as_regression():
         _gate_issue("NEW", ["predicate-ast"]),
     ]
 
-    assert _regressing_rule_codes(
+    assert regressing_rule_codes(
         draft,
         previous,
         draft,
@@ -295,7 +377,7 @@ def test_equal_count_issue_moved_to_another_predicate_is_regression():
     previous = [_gate_issue("TIME_ANCHOR_MISSING", ["predicate-alt"])]
     revised = [_gate_issue("TIME_ANCHOR_MISSING", ["predicate-ast"])]
 
-    assert _regressing_rule_codes(
+    assert regressing_rule_codes(
         draft,
         previous,
         draft,
@@ -330,6 +412,49 @@ def test_lean_semantic_candidate_is_hydrated_from_frozen_catalogs():
         for item in result.final_draft.evidence_requirement_drafts
         if item.procedure_catalog_item_id is not None
     } == {"procedure:screening:lab", "procedure:baseline:lab"}
+
+
+def test_hydration_preserves_rule_only_stage_and_procedure_catalog_order():
+    source_input, draft, _spans = _fixture()
+    first, second = source_input.required_procedure_catalog.items
+    first = first.model_copy(
+        update={
+            "review_stage": ReviewStage.RUN_IN,
+            "visit_instance": "筛选/导入期 D-7~D-1",
+        }
+    )
+    third = first.model_copy(
+        update={
+            "item_id": "procedure:run-in:repeat-lab",
+            "position": 2,
+        }
+    )
+    source_input.required_procedure_catalog = (
+        source_input.required_procedure_catalog.model_copy(
+            update={"items": [first, second, third]}
+        )
+    )
+    candidate = _semantic_candidate(source_input, draft)
+
+    hydrated = _parse_protocol_draft(candidate.model_dump_json(), source_input)
+
+    assert [
+        item.catalog_item_id for item in hydrated.procedure_catalog_mappings
+    ] == [first.item_id, second.item_id, third.item_id]
+    stages = {stage.stage: stage for stage in hydrated.proposed_workflow_stages}
+    assert set(stages) == {
+        ReviewStage.SCREENING,
+        ReviewStage.RUN_IN,
+        ReviewStage.BASELINE,
+    }
+    screening_requirement_ids = {
+        item.proposed_requirement.requirement_id
+        for item in hydrated.evidence_requirement_drafts
+        if item.proposed_requirement.due_stage == ReviewStage.SCREENING
+    }
+    assert screening_requirement_ids <= set(
+        stages[ReviewStage.SCREENING].due_requirement_ids
+    )
 
 
 def test_large_official_catalog_is_collected_in_ordered_same_session_batches():
@@ -582,7 +707,7 @@ def test_semantic_repairs_have_separate_bounded_budget():
                 ProtocolAgentResponse(
                     session_id="session-1", text=bad_repair.model_dump_json()
                 )
-                for _ in range(12)
+                for _ in range(16)
             ],
         ]
     )
@@ -596,8 +721,8 @@ def test_semantic_repairs_have_separate_bounded_budget():
     )
 
     assert result.status == "需要核对"
-    assert len(result.attempts) == 13
-    assert len(transport.repair_prompts) == 12
+    assert len(result.attempts) == 17
+    assert len(transport.repair_prompts) == 16
     assert all("['EX-01']" in prompt for _, prompt in transport.repair_prompts)
 
 
@@ -721,3 +846,24 @@ def test_repair_transport_failure_preserves_prior_draft_and_stops_cleanly():
     assert result.final_gate_result is not None
     assert result.final_draft.draft_id == result.attempts[0].draft_id
     assert result.final_gate_result.publishable is False
+
+
+def test_audit_history_accepts_dynamic_parent_rule_repair_budget():
+    attempts = [
+        ProtocolDeconstructionAttempt(
+            attempt=index,
+            session_id="session-large-protocol",
+            raw_output_sha256="a" * 64,
+            outcome="需要定向修正",
+        )
+        for index in range(1, 37)
+    ]
+
+    result = ProtocolDeconstructionRunResult(
+        status="需要核对",
+        same_session_id="session-large-protocol",
+        attempts=attempts,
+    )
+
+    assert len(result.attempts) == 36
+    assert result.attempts[-1].attempt == 36

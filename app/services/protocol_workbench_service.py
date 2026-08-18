@@ -31,6 +31,7 @@ from app.domain.contracts.protocol_metadata import (
     StudyPhaseSelection,
 )
 from app.protocols.deconstruction_gate import (
+    DECONSTRUCTION_GATE_VERSION,
     ProtocolDeconstructionGate,
     ProtocolDeconstructionGateResult,
     ProtocolDraftDiffDeclaration,
@@ -405,6 +406,7 @@ class ProtocolWorkbenchService:
         self.data_paths = data_paths
         self.now = now
         self.gate = gate or ProtocolDeconstructionGate()
+        self._uses_default_feedback_reviser = feedback_reviser is None
         self.feedback_reviser = feedback_reviser or self._revise_feedback_with_model
         self.jobs = JobService(session_factory, now=now)
 
@@ -868,6 +870,7 @@ class ProtocolWorkbenchService:
                     STEP_INTEGRITY,
                     checkpoint_payload={
                         "gate_result": gate.model_dump(mode="json"),
+                        "gate_version": DECONSTRUCTION_GATE_VERSION,
                         "publishable": gate.publishable,
                     },
                 )
@@ -1070,7 +1073,7 @@ class ProtocolWorkbenchService:
         merged = self._merged_payload(job_id)
         self._require_protocol_job(job_id)
         cached = merged.get("gate_result")
-        if cached:
+        if cached and merged.get("gate_version") == DECONSTRUCTION_GATE_VERSION:
             result = ProtocolDeconstructionGateResult.model_validate(cached)
         else:
             source_input = self._load_source_input(merged)
@@ -1085,6 +1088,7 @@ class ProtocolWorkbenchService:
                 previous_draft=previous,
                 declared_diff=declared,
             )
+            self._persist_gate_checkpoint(job_id, result)
         return self._integrity_view(job_id, result)
 
     # ------------------------------------------------------------- 项目正式版本读取
@@ -1325,11 +1329,38 @@ class ProtocolWorkbenchService:
         draft = current_draft
         if feedback_kind == DraftFeedbackKind.SOURCE_ERROR:
             try:
+                source_input = self._load_source_input(merged)
+                source_spans = self._load_source_spans(merged)
+                previous_gate = self.gate.evaluate(
+                    source_input,
+                    current_draft,
+                    source_spans=source_spans,
+                )
+                previous_issues = [
+                    issue for check in previous_gate.checks for issue in check.issues
+                ]
+                model_note = note
+                if self._uses_default_feedback_reviser:
+                    from app.agents.protocol_deconstructor import _affected_rule_codes
+
+                    target_gate_issues = [
+                        issue
+                        for issue in previous_issues
+                        if target_rule_code
+                        in _affected_rule_codes(
+                            current_draft, [issue], fallback_all=False
+                        )
+                    ]
+                    if target_gate_issues:
+                        model_note += "\n\n当前确定性完整性问题：" + "；".join(
+                            f"{issue.issue_code}：{issue.problem}。{issue.next_action}"
+                            for issue in target_gate_issues
+                        )
                 draft = self.feedback_reviser(
-                    self._load_source_input(merged),
+                    source_input,
                     current_draft,
                     target_rule_code,
-                    note,
+                    model_note,
                 )
                 self._validate_source_error_scope(
                     current_draft,
@@ -1339,9 +1370,60 @@ class ProtocolWorkbenchService:
                 changed_codes = set(
                     compute_draft_diff(current_draft, draft).modified_rule_codes
                 )
-                if changed_codes != {target_rule_code}:
+                unresolved_changed = any(
+                    current != revised
+                    for current, revised in (
+                        (
+                            [
+                                item
+                                for item in current_draft.unresolved_items
+                                if target_rule_code in item.affected_scope
+                            ],
+                            [
+                                item
+                                for item in draft.unresolved_items
+                                if target_rule_code in item.affected_scope
+                            ],
+                        ),
+                        (
+                            [
+                                item
+                                for item in current_draft.structural_warnings
+                                if target_rule_code in item.affected_scope
+                            ],
+                            [
+                                item
+                                for item in draft.structural_warnings
+                                if target_rule_code in item.affected_scope
+                            ],
+                        ),
+                    )
+                )
+                if changed_codes not in ({target_rule_code}, set()) or (
+                    not changed_codes and not unresolved_changed
+                ):
                     raise ValueError(
-                        "原文理解纠错必须且只能改变选中的一条官方入排标准"
+                        "原文理解纠错必须且只能改变选中的一条官方入排标准或其待确认事项"
+                    )
+                revised_gate = self.gate.evaluate(
+                    source_input,
+                    draft,
+                    source_spans=source_spans,
+                )
+                revised_issues = [
+                    issue for check in revised_gate.checks for issue in check.issues
+                ]
+                from app.agents.protocol_deconstructor import regressing_rule_codes
+
+                if target_rule_code in regressing_rule_codes(
+                    current_draft,
+                    previous_issues,
+                    draft,
+                    revised_issues,
+                    [target_rule_code],
+                ):
+                    raise ValueError(
+                        "局部修订使目标入排标准的完整性问题增加或发生替换，已拒绝保存"
                     )
             except Exception as exc:
                 raise ProtocolWorkbenchError(
@@ -1391,6 +1473,23 @@ class ProtocolWorkbenchService:
                 raise ValueError("原文理解纠错不得改写任何子项的父子层级")
             if code != target_rule_code and rule != previous_rules[code]:
                 raise ValueError("原文理解纠错不得修改未选中的官方父规则")
+
+        for previous_items, current_items in (
+            (previous.unresolved_items, current.unresolved_items),
+            (previous.structural_warnings, current.structural_warnings),
+        ):
+            previous_outside = [
+                item
+                for item in previous_items
+                if target_rule_code not in item.affected_scope
+            ]
+            current_outside = [
+                item
+                for item in current_items
+                if target_rule_code not in item.affected_scope
+            ]
+            if previous_outside != current_outside:
+                raise ValueError("原文理解纠错不得改写其他入排标准的待确认事项")
 
         tree_components = [
             (code, component)
@@ -1519,17 +1618,55 @@ class ProtocolWorkbenchService:
         if previous_other_requirements != current_other_requirements:
             raise ValueError("原文理解纠错不得改写其他规则或流程项目的资料要求")
 
+        target_requirement_ids = {
+            item.proposed_requirement.requirement_id
+            for item in [
+                *previous.evidence_requirement_drafts,
+                *current.evidence_requirement_drafts,
+            ]
+            if item.draft_component_id in target_draft_component_ids
+        }
+        previous_stage_scope = {
+            (
+                stage.workflow_stage_id,
+                stage.stage,
+                stage.display_name,
+                stage.visit_instance,
+                stage.visit_window,
+                stage.review_required,
+            ): tuple(
+                requirement_id
+                for requirement_id in stage.due_requirement_ids
+                if requirement_id not in target_requirement_ids
+            )
+            for stage in previous.proposed_workflow_stages
+        }
+        current_stage_scope = {
+            (
+                stage.workflow_stage_id,
+                stage.stage,
+                stage.display_name,
+                stage.visit_instance,
+                stage.visit_window,
+                stage.review_required,
+            ): tuple(
+                requirement_id
+                for requirement_id in stage.due_requirement_ids
+                if requirement_id not in target_requirement_ids
+            )
+            for stage in current.proposed_workflow_stages
+        }
+        if previous_stage_scope != current_stage_scope:
+            raise ValueError("原文理解纠错不得改写审核节点或移动未选中规则的资料要求")
+
         immutable_fields = (
             "draft_id",
             "project_id",
             "protocol_version_id",
             "selected_phase",
             "protocol_metadata",
-            "proposed_workflow_stages",
             "parent_catalog_mappings",
             "procedure_catalog_mappings",
-            "structural_warnings",
-            "unresolved_items",
             "source_refs",
         )
         if any(getattr(previous, field) != getattr(current, field) for field in immutable_fields):
@@ -1894,6 +2031,7 @@ class ProtocolWorkbenchService:
                         STEP_INTEGRITY,
                         {
                             "gate_result": gate.model_dump(mode="json"),
+                            "gate_version": DECONSTRUCTION_GATE_VERSION,
                             "publishable": gate.publishable,
                         },
                     ),
@@ -1970,13 +2108,14 @@ class ProtocolWorkbenchService:
 
             merged = dict(verify_payload_sha256(job.payload_json, job.payload_sha256))
             for step_id in _CHECKPOINT_STEP_ORDER:
-                checkpoint = store.get_last_checkpoint(job_id, step_id)
-                if checkpoint is None:
-                    continue
-                _, payload = checkpoint
-                merged.update(
-                    {key: value for key, value in payload.items() if key != "attempt"}
-                )
+                for _, payload in store.list_checkpoints(job_id, step_id):
+                    merged.update(
+                        {
+                            key: value
+                            for key, value in payload.items()
+                            if key != "attempt"
+                        }
+                    )
             return merged
 
     def _source_context_for_revision(
@@ -2157,6 +2296,7 @@ class ProtocolWorkbenchService:
                 STEP_INTEGRITY,
                 {
                     "gate_result": gate.model_dump(mode="json"),
+                    "gate_version": DECONSTRUCTION_GATE_VERSION,
                     "publishable": gate.publishable,
                 },
             ),
@@ -2175,6 +2315,25 @@ class ProtocolWorkbenchService:
                 step_id=step_id,
                 payload=payload,
             )
+
+    def _persist_gate_checkpoint(
+        self,
+        job_id: str,
+        gate: ProtocolDeconstructionGateResult,
+    ) -> None:
+        """保存按当前门禁语义重算的结果，并保留历史检查点。"""
+        with self.session_factory() as session:
+            with session.begin():
+                JobRepository(session).create_checkpoint(
+                    checkpoint_id=uuid.uuid4().hex,
+                    job_id=job_id,
+                    step_id=STEP_INTEGRITY,
+                    payload={
+                        "gate_result": gate.model_dump(mode="json"),
+                        "gate_version": DECONSTRUCTION_GATE_VERSION,
+                        "publishable": gate.publishable,
+                    },
+                )
 
     def _load_identity_decision(self, merged: dict[str, Any]) -> ProtocolIdentityDecision:
         raw = merged.get("identity_decision")
@@ -2309,8 +2468,8 @@ class ProtocolWorkbenchService:
 
     def _gate_summary(self, merged: dict[str, Any]) -> dict[str, Any]:
         cached = merged.get("gate_result")
-        if not cached:
-            return {"publishable": merged.get("publishable")}
+        if not cached or merged.get("gate_version") != DECONSTRUCTION_GATE_VERSION:
+            return {"publishable": None, "needs_recheck": True}
         result = ProtocolDeconstructionGateResult.model_validate(cached)
         blocking = sum(
             1

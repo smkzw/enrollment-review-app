@@ -19,6 +19,30 @@ from .common import VersionedModel
 from .enums import StableEnum, StudyPhase
 
 
+def _legacy_content_payload_without_source_validity_window(
+    value: Any,
+) -> Any:
+    """重建资料时效字段加入前的草稿哈希载荷。
+
+    旧 revision 的原始 JSON 和整行哈希仍保持不变；合同升级后，仅当新增字段
+    ``source_validity_window`` 为空时，允许用升级前的精确载荷复核内容哈希。
+    非空资料时效和任何其他字段变化均不能走该兼容路径。
+    """
+
+    if isinstance(value, dict):
+        return {
+            key: _legacy_content_payload_without_source_validity_window(item)
+            for key, item in value.items()
+            if not (key == "source_validity_window" and item is None)
+        }
+    if isinstance(value, list):
+        return [
+            _legacy_content_payload_without_source_validity_window(item)
+            for item in value
+        ]
+    return value
+
+
 class DraftRevisionStatus(StableEnum):
     """已保存草稿 revision 的生命周期状态（机器值，中文标签由投影词汇表提供）。"""
 
@@ -166,8 +190,16 @@ class ProtocolDraftRevision(VersionedModel):
             raise ValueError("ProtocolDraftRevision 内外层研究期别不一致")
         if self.content.draft_revision != self.revision_number:
             raise ValueError("ProtocolDraftRevision 内外层 revision 号不一致")
-        expected_hash = canonical_hash(self.content.model_dump(mode="json"))
-        if self.content_sha256 != expected_hash:
+        content_payload = self.content.model_dump(mode="json")
+        accepted_hashes = {
+            canonical_hash(content_payload),
+            canonical_hash(
+                _legacy_content_payload_without_source_validity_window(
+                    content_payload
+                )
+            ),
+        }
+        if self.content_sha256 not in accepted_hashes:
             raise ValueError("ProtocolDraftRevision 内容哈希与草稿快照不一致")
         if self.revision_number == 1:
             if self.previous_revision_id is not None:
@@ -185,9 +217,6 @@ class ProtocolDraftRevision(VersionedModel):
         if self.reason == DraftRevisionReason.SOURCE_ERROR_FEEDBACK:
             if self.feedback_kind != DraftFeedbackKind.SOURCE_ERROR:
                 raise ValueError("原文理解纠错 revision 必须声明纠错反馈分类")
-        if self.reason == DraftRevisionReason.RESTORE:
-            if self.status != DraftRevisionStatus.RESTORED_FROM:
-                raise ValueError("恢复后继 revision 必须标记为 restored_from")
         if self.status == DraftRevisionStatus.RESTORED_FROM:
             if self.reason != DraftRevisionReason.RESTORE:
                 raise ValueError("restored_from 状态只能由恢复后继 revision 使用")

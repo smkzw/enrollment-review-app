@@ -34,6 +34,7 @@ const ANCHOR_LABELS: Record<string, string> = {
   baseline_date: "基线日期",
   randomization_date: "随机日期",
   first_dose_date: "首次用药日期",
+  study_drug_administration_date: "研究药物给药日期",
   last_dose_date: "末次用药日期",
   study_completion_date: "研究完成日期",
   event_date: "相关事件日期",
@@ -225,7 +226,13 @@ function formatEvidence(raw: Record<string, unknown>): string[] {
   const description = typeof raw.description === "string" ? raw.description : null;
   const factType = typeof raw.fact_type === "string" ? raw.fact_type : null;
   const dueStage = typeof raw.due_stage === "string" ? STAGE_LABELS[raw.due_stage] ?? raw.due_stage : null;
-  const lines = [description, factType === null ? null : `需核实：${factType}`, dueStage === null ? null : `应于${dueStage}完成`]
+  const sourceValidity = formatTimeQuantity(raw.source_validity_window);
+  const lines = [
+    description,
+    factType === null ? null : `需核实：${factType}`,
+    dueStage === null ? null : `应于${dueStage}完成`,
+    sourceValidity === null ? null : `可采用${sourceValidity}内的检查结果`,
+  ]
     .filter((item): item is string => item !== null && item.length > 0);
   return lines.length > 0 ? lines : ["资料要求发生变化"];
 }

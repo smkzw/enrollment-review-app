@@ -33,6 +33,14 @@ function stringList(value: unknown): string[] {
     : [];
 }
 
+function protocolSourceLabel(raw: Record<string, unknown>): string {
+  const part = String(raw.document_part ?? "body");
+  if (part === "header") return "页眉";
+  if (part === "footer") return "页脚";
+  if (raw.table_path !== null && raw.table_path !== undefined) return "方案表格";
+  return "方案正文";
+}
+
 export function mapProtocolDraftRules(
   content: Record<string, unknown>,
 ): ProtocolDraftRuleView[] {
@@ -128,7 +136,7 @@ export function mapProtocolSourceLocators(
     return [
       {
         sourceSpanId: ref,
-        sourceRef: String(raw.source_ref ?? ref),
+        sourceRef: protocolSourceLabel(raw),
         pageLabel: pageNumber !== undefined ? `第 ${pageNumber} 页` : null,
         excerpt: String(raw.excerpt ?? ""),
         precision,

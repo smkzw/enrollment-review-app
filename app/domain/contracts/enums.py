@@ -49,6 +49,7 @@ class AnchorType(StableEnum):
     BASELINE_DATE = "baseline_date"
     RANDOMIZATION_DATE = "randomization_date"
     FIRST_DOSE_DATE = "first_dose_date"
+    STUDY_DRUG_ADMINISTRATION_DATE = "study_drug_administration_date"
     LAST_DOSE_DATE = "last_dose_date"
     STUDY_COMPLETION_DATE = "study_completion_date"
     EVENT_DATE = "event_date"

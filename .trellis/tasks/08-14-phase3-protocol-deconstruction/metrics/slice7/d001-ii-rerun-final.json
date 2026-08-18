@@ -1,0 +1,111 @@
+{
+  "data_root": "/private/tmp/enrollment-phase3-slice7-d001-rerun.PNeSRN",
+  "official_projects": [
+    {
+      "official_date_precision": "day",
+      "official_date_value": "2025-12-10",
+      "official_version": "1.0",
+      "project_code": "D001-02",
+      "project_id": "draft-project-2b3b3529c2cd",
+      "project_name": "评价CMS-D001片治疗中度至重度斑块状银屑病成人患者的有效性和安全性的多中心、随机、双盲、安慰剂对照Ⅱ/Ⅲ期临床研究",
+      "protocol_code": "D001-02-002",
+      "rule_set_id": "ruleset:draft-version-2b3b3529c2cd:phase_ii",
+      "rule_set_revision": 1,
+      "study_phase": "phase_ii",
+      "study_phase_label": "II 期"
+    }
+  ],
+  "results": [
+    {
+      "case": "d001-ii",
+      "draft": {
+        "component_count": 61,
+        "official_codes": [
+          "IN-01",
+          "IN-02",
+          "IN-03",
+          "IN-04",
+          "IN-05",
+          "IN-06",
+          "EX-01",
+          "EX-02",
+          "EX-03",
+          "EX-04",
+          "EX-05",
+          "EX-06",
+          "EX-07",
+          "EX-08",
+          "EX-09",
+          "EX-10",
+          "EX-11",
+          "EX-12",
+          "EX-13",
+          "EX-14",
+          "EX-15",
+          "EX-16",
+          "EX-17",
+          "EX-18",
+          "EX-19",
+          "EX-20",
+          "EX-21",
+          "EX-22",
+          "EX-23",
+          "EX-24",
+          "EX-25",
+          "EX-26",
+          "EX-27",
+          "EX-28",
+          "EX-29",
+          "EX-30"
+        ],
+        "procedure_count": 50,
+        "requirement_count": 127,
+        "revision_id": "draft-revision:draft:candidate-2b3b3529c2cd48b2af2baf25136aa36e-phase_ii-001:4",
+        "revision_number": 4,
+        "rule_count": 36,
+        "unresolved_items": [],
+        "workflow_stage_count": 3
+      },
+      "elapsed_seconds": 0.864,
+      "identity": {
+        "official_date": "2025-12-10",
+        "official_version": "1.0",
+        "project_code": "D001-02",
+        "project_name": "评价CMS-D001片治疗中度至重度斑块状银屑病成人患者的有效性和安全性的多中心、随机、双盲、安慰剂对照Ⅱ/Ⅲ期临床研究",
+        "protocol_code": "D001-02-002",
+        "selected_phase": "phase_ii"
+      },
+      "identity_recovery_checkpoint": "161a3b2e73584dab8ad2e8de3d91659f",
+      "integrity": {
+        "blocking_count": 0,
+        "blocking_issue_codes": [],
+        "publishable": true,
+        "reminder_count": 0,
+        "review_count": 0
+      },
+      "job_id": "2b3b3529c2cd48b2af2baf25136aa36e",
+      "publication": {
+        "job_id": "2b3b3529c2cd48b2af2baf25136aa36e",
+        "project_id": "draft-project-2b3b3529c2cd",
+        "protocol_version_id": "draft-version-2b3b3529c2cd",
+        "replay": false,
+        "rule_set_id": "ruleset:draft-version-2b3b3529c2cd:phase_ii",
+        "rule_set_revision": 1
+      },
+      "publication_replay": {
+        "job_id": "2b3b3529c2cd48b2af2baf25136aa36e",
+        "project_id": "draft-project-2b3b3529c2cd",
+        "protocol_version_id": "draft-version-2b3b3529c2cd",
+        "replay": true,
+        "rule_set_id": "ruleset:draft-version-2b3b3529c2cd:phase_ii",
+        "rule_set_revision": 1
+      },
+      "review_recovery_checkpoint": "161a3b2e73584dab8ad2e8de3d91659f",
+      "source_state": {
+        "mtime_ns": 1779871799537588300,
+        "sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+        "size_bytes": 405567
+      }
+    }
+  ]
+}

@@ -102,6 +102,7 @@ const DIFF = completeDiff({
               required_source_types: ["病历"],
               allows_screening_record_transcription: true,
               requires_contemporaneous_objective_source: false,
+              source_validity_window: { value: 1, unit: "month" },
               description: "核对年龄记录",
             },
           },
@@ -146,6 +147,7 @@ describe("mapProtocolDraftDiff", () => {
         required_source_types: ["病历"],
         allows_screening_record_transcription: true,
         requires_contemporaneous_objective_source: false,
+        source_validity_window: { value: 1, unit: "month" },
         description: "核对年龄记录",
       },
     });

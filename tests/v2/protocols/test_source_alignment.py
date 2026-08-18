@@ -275,6 +275,11 @@ def test_two_repeated_instances_between_exact_anchors_remain_non_authoritative()
     assert span.precision == SourceLocatorPrecision.PAGE_ONLY
     assert span.text_start is None
     assert span.text_end is None
+    assert span.excerpt is None
+    # model_copy does not rerun model validators.  The persisted JSON must
+    # still satisfy the source-locator contract when a later job step resumes.
+    restored = ProtocolSourceSpan.model_validate(span.model_dump(mode="json"))
+    assert restored == span
 
 
 def test_equal_operation_labels_are_resolved_inside_separate_table_page_ranges():

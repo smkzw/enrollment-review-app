@@ -33,7 +33,10 @@ from app.domain.contracts.protocol_metadata import (
     ProtocolIdentityDecision,
     StudyPhaseSelection,
 )
-from app.protocols.deconstruction_gate import ProtocolDeconstructionGate
+from app.protocols.deconstruction_gate import (
+    DECONSTRUCTION_GATE_VERSION,
+    ProtocolDeconstructionGate,
+)
 from app.protocols.deconstruction_service import (
     ProtocolDeconstructionInputAssemblyError,
     ProtocolDeconstructionInputAssembler,
@@ -465,41 +468,6 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
         phase_selection=phase_selection,
     )
 
-    prompt_version = PromptVersion(
-        prompt_version_id="protocol-deconstructor/v1",
-        node=AgentNode.PROTOCOL_DECONSTRUCTOR,
-        template_sha256=protocol_prompt_template_sha256(config.prompt_template),
-        schema_version_id="protocol-deconstruction-draft/v1",
-    )
-    if config.draft_response_builder is not None:
-        draft_json = config.draft_response_builder(package)
-        transport = _FakeSingleResponseTransport(draft_json)
-    else:
-        transport = _resolve_transport(config)
-
-    runner = ProtocolDeconstructorRunner(gate=config.gate)
-    try:
-        result = runner.run(
-            package.source_input,
-            prompt_version=prompt_version,
-            prompt_template=config.prompt_template,
-            transport=transport,
-            source_spans=package.source_spans,
-        )
-    except ProtocolAgentCallError as exc:
-        raise StepFailure(
-            retryable=True,
-            error_code="SEMANTIC_CALL_FAILED",
-            detail=f"方案语义解构调用未完成，请稍后重试。（{exc}）",
-        ) from exc
-
-    if result.final_draft is None:
-        raise StepFailure(
-            retryable=True,
-            error_code="SEMANTIC_DRAFT_MISSING",
-            detail="方案语义解构尚未产出可用草稿，请稍后重试或联系维护人员。",
-        )
-
     actor = str(context.job_payload.get("actor") or "系统")
     baseline_draft = None
     if context.job_payload.get("session_kind") == "re_deconstruction":
@@ -529,23 +497,79 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
                 "请联系维护人员核对不可变发布链后重试。",
             ) from exc
 
+    # 模型运行结束后，草稿不可变记录与 Job 步骤检查点分属
+    # 两个短事务。若进程或租约在两者之间中断，重试必须使用
+    # 已持久化的草稿重建检查点，不得再次调用模型。
     with config.session_factory() as session:
-        with session.begin():
-            draft_service = ProtocolDraftService(session)
-            revision = draft_service.save_initial_draft(
-                result.final_draft,
-                actor=actor,
-                created_at=config.now(),
-                baseline=baseline_draft,
-            )
+        persisted = ProtocolDraftRevisionRepository(session).find_by_generation_scope(
+            project_id=project_id,
+            protocol_version_id=protocol_version_id,
+        )
+    if len(persisted) > 1:
+        raise StepFailure(
+            retryable=False,
+            error_code="SEMANTIC_DRAFT_RECOVERY_CONFLICT",
+            detail="本次方案解构存在多份已保存首稿，无法确定应恢复哪一份。"
+            "请联系维护人员核对草稿历史。",
+        )
 
-    gate = result.final_gate_result
+    revision = persisted[0] if persisted else None
+    final_draft = revision.content if revision is not None else None
+    gate = None
+    if revision is None:
+        prompt_version = PromptVersion(
+            prompt_version_id="protocol-deconstructor/v1",
+            node=AgentNode.PROTOCOL_DECONSTRUCTOR,
+            template_sha256=protocol_prompt_template_sha256(config.prompt_template),
+            schema_version_id="protocol-deconstruction-draft/v1",
+        )
+        if config.draft_response_builder is not None:
+            draft_json = config.draft_response_builder(package)
+            transport = _FakeSingleResponseTransport(draft_json)
+        else:
+            transport = _resolve_transport(config)
+
+        runner = ProtocolDeconstructorRunner(gate=config.gate)
+        try:
+            result = runner.run(
+                package.source_input,
+                prompt_version=prompt_version,
+                prompt_template=config.prompt_template,
+                transport=transport,
+                source_spans=package.source_spans,
+            )
+        except ProtocolAgentCallError as exc:
+            raise StepFailure(
+                retryable=True,
+                error_code="SEMANTIC_CALL_FAILED",
+                detail=f"方案语义解构调用未完成，请稍后重试。（{exc}）",
+            ) from exc
+
+        if result.final_draft is None:
+            raise StepFailure(
+                retryable=True,
+                error_code="SEMANTIC_DRAFT_MISSING",
+                detail="方案语义解构尚未产出可用草稿，请稍后重试或联系维护人员。",
+            )
+        final_draft = result.final_draft
+        gate = result.final_gate_result
+        with config.session_factory() as session:
+            with session.begin():
+                revision = ProtocolDraftService(session).save_initial_draft(
+                    final_draft,
+                    actor=actor,
+                    created_at=config.now(),
+                    baseline=baseline_draft,
+                )
+
+    assert revision is not None
+    assert final_draft is not None
     if baseline_draft is not None:
         from app.protocols.deconstruction_gate import ProtocolDraftDiffDeclaration
 
         gate = (config.gate or ProtocolDeconstructionGate()).evaluate(
             package.source_input,
-            result.final_draft,
+            final_draft,
             source_spans=package.source_spans,
             previous_draft=baseline_draft,
             declared_diff=ProtocolDraftDiffDeclaration(
@@ -555,7 +579,7 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
     elif gate is None:
         gate = (config.gate or ProtocolDeconstructionGate()).evaluate(
             package.source_input,
-            result.final_draft,
+            final_draft,
             source_spans=package.source_spans,
         )
 
@@ -563,23 +587,30 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
         "draft_id": revision.draft_id,
         "draft_revision_id": revision.revision_id,
         "draft_status": revision.status.value,
-        "semantic_status": result.status,
+        "semantic_status": (
+            "可以进入审阅" if gate.publishable else "需要核对"
+        ),
         "source_input": package.source_input.model_dump(mode="json"),
         "source_spans": {
             key: span.model_dump(mode="json")
             for key, span in package.source_spans.items()
         },
         "gate_result": gate.model_dump(mode="json"),
+        "gate_version": DECONSTRUCTION_GATE_VERSION,
         "publishable": gate.publishable,
     }
 
 
 def _handle_integrity(context: StepContext, config: ProtocolDeconstructionExecutorConfig) -> dict[str, Any]:
     merged = _merged_prior_checkpoints(config, context.job_id, before_step=STEP_INTEGRITY)
-    if merged.get("gate_result"):
+    if (
+        merged.get("gate_result")
+        and merged.get("gate_version") == DECONSTRUCTION_GATE_VERSION
+    ):
         gate_raw = merged["gate_result"]
         return {
             "gate_result": gate_raw,
+            "gate_version": DECONSTRUCTION_GATE_VERSION,
             "publishable": merged.get("publishable", False),
             "awaiting_user": "review",
         }
@@ -599,6 +630,7 @@ def _handle_integrity(context: StepContext, config: ProtocolDeconstructionExecut
     )
     return {
         "gate_result": gate.model_dump(mode="json"),
+        "gate_version": DECONSTRUCTION_GATE_VERSION,
         "publishable": gate.publishable,
         "awaiting_user": "review",
     }

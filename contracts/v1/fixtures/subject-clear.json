@@ -1283,8 +1283,8 @@
       "input_revision_map": {
         "protocol-v1": 1
       },
-      "input_scope_hash": "f59e68a94989d94c05de81a34b5095824b6bb56273b231e6e29471bbf4494e5d",
-      "output_hash": "f59e68a94989d94c05de81a34b5095824b6bb56273b231e6e29471bbf4494e5d",
+      "input_scope_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
+      "output_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
       "parent_event_id": null,
       "recompute_scope": [
         "protocol-v1"
@@ -1318,8 +1318,8 @@
       "input_revision_map": {
         "ruleset-synthetic-phase-iii": 1
       },
-      "input_scope_hash": "b2c744a657312f9f577d19b3f60af12a28d9ac6faaedeb5d8af7812a8e8ee3a4",
-      "output_hash": "b2c744a657312f9f577d19b3f60af12a28d9ac6faaedeb5d8af7812a8e8ee3a4",
+      "input_scope_hash": "0b1a263f40f0c19b02ea9b17e3fc68c68adc9e593179f7ca2ce12802e83930a2",
+      "output_hash": "0b1a263f40f0c19b02ea9b17e3fc68c68adc9e593179f7ca2ce12802e83930a2",
       "parent_event_id": null,
       "recompute_scope": [
         "protocol-v1"
@@ -1431,7 +1431,7 @@
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "03edd78d48bc15bcd560e106a845f5e6b707a1eeb5466a7cb8d11d5788381977",
+      "input_scope_hash": "0de96b1c3fd6333287e4e279367ae9b2c70c5bacc0f56201b047bdbabe55c5d0",
       "output_hash": "3c4df37be5b09d64901efd817132013bbad2c12cec018a26dedff5c2a79a3830",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1544,7 +1544,7 @@
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "c1875df7170fcd627aa0992471d2a52f1670b4ddef82254fd8445fc67994d349",
+      "input_scope_hash": "1c64ecbfa28bb19b28e0c5ed38e2a2034096d76d4e7f0d1ffb69dd6d4127ed5f",
       "output_hash": "643d7d43bfe502c2c041c4fe0c0bb5cb9fe86177dfae0d5ff43910aa7daa639c",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1657,7 +1657,7 @@
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "04eeffe45362f4580fd087e3f74d91a54691eb002a809177aef4d906484feea4",
+      "input_scope_hash": "837aa293041ba2778e9edad33cb6178d057939161b5c4c5d85139cb9f04de2b5",
       "output_hash": "229f9e3cdfe746b2cabd2675adbdd3cc1ee45580b5902a2b7f40a5e5d502699e",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1770,7 +1770,7 @@
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "74eba8b7dcfbbcd537fa2c7c29563e07c7154df4a35ffcda21647bf796e5caa5",
+      "input_scope_hash": "837bb57f8778801a96f2ddeb9b1fd0cf5782dc6d8aa6ff5a5905b8bb18680c6a",
       "output_hash": "4311ce16b4b554cb9bc7a4a0d51f9485cd988434df4b63feac8df37f0310ae32",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1883,7 +1883,7 @@
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "249953160d675aa7f7e323d6f6e082de02b99ea0b2021cf80ae77ec1ea036a73",
+      "input_scope_hash": "52f1d87f5704b8967c11e79cf1e184552bd54f192cc8f601b5a603ec2cfb0a77",
       "output_hash": "6e0e877065a79e1f6478e5d9a1632ce06f67f0ce293af05346eff5bf6802cfe6",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1996,7 +1996,7 @@
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "31326ff3513db707962808abf345ed63c75e24ba9a80908f9727b57956583ee5",
+      "input_scope_hash": "f22141090c06595c16645a5c077660407151e83b7af2b680b7dbd114cce75828",
       "output_hash": "1a3c4c4f022bd6e48acee2629c54363825d72ac3ac3135bba6de2a9d21c002dd",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2109,7 +2109,7 @@
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "9a48a5f8b8b2f5076be86f69de0dd866859cacf91ce5b27b20de7d37c8e97e0f",
+      "input_scope_hash": "de6ae8f82f7ddbd70f29c8b77bb258dffa7cd7550faa55cc0f178ec368165ce3",
       "output_hash": "6df8a4e0d96fda6f60127392873ef751f287b2f2660094c2ab50399ef056be2c",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2142,7 +2142,7 @@
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "e137bb0e57e999ba0c4823bd48fb84b51fb03dbe7a4837a218ac09cef48e2695",
+      "input_scope_hash": "0529c7b35a7c5f32700f4d4bba99cc646c1f28a504d8e997fc5e82944aee9c02",
       "output_hash": "380fa44e116526a7c318cd5e497ea666836e0511cfe161363b9b25260e9e9f65",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2175,7 +2175,7 @@
       "input_revision_map": {
         "episode-clear": 1
       },
-      "input_scope_hash": "06362fc4ce9a3f2d9a2459c5f5b71348a194eab8ade0141b0d884ebbfa8404b5",
+      "input_scope_hash": "5bf2739862143e6b661411f2804c165a5201a137f12be35ba2f9603f1b024241",
       "output_hash": "0d60e8a907a0f71be6f6a792dc212700aeaf10d77df4d89350eda1cae72d5d94",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2494,9 +2494,9 @@
     "protocol_version": {
       "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
       "authority_gate_result_id": "gate-authority-protocol-v1-phase-iii",
-      "authority_record_sha256": "db893037c6efa127fca2583c102e8afc47a7e0698a1c65f852eb46f9b3d735b2",
+      "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
       "integrity_gate_result_id": "gate-integrity-protocol-v1-phase-iii",
-      "integrity_manifest_sha256": "3ac6a19b3bd4e8d1b2d0965a3f79a631ac3c7926808ec6d7f28bf21a5c7da548",
+      "integrity_manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
       "official_date": {
         "precision": "day",
         "source_text": null,
@@ -2533,9 +2533,9 @@
     "action": "accept_protocol_authority",
     "actor_id": "synthetic-uat-human-acceptance",
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "db893037c6efa127fca2583c102e8afc47a7e0698a1c65f852eb46f9b3d735b2",
+    "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
     "command_id": "command-accept-protocol-v1-phase-iii",
-    "event_sha256": "ee2776cbfdcdb1e8c662b79edb35705edc18b4cdaf3c619d0aa39c9eda8ca37e",
+    "event_sha256": "7ab1ff37b26839e59f3cce56bd38bee319f8048e33a5012c0c70c3bf90e082e0",
     "occurred_at": "2026-08-12T12:00:00Z",
     "protocol_version_id": "protocol-v1",
     "recorded_by_service": "enrollment-review-app",
@@ -2544,10 +2544,10 @@
   "protocol_authority_confirmation": {
     "action": "accept_protocol_authority",
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "db893037c6efa127fca2583c102e8afc47a7e0698a1c65f852eb46f9b3d735b2",
+    "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
     "command_id": "command-accept-protocol-v1-phase-iii",
     "confirmation_id": "confirmation-protocol-v1-phase-iii",
-    "confirmation_sha256": "86ca0b6dd3830a30afc088c66b48844247c32ebcf3320accf19375ce44892fc1",
+    "confirmation_sha256": "0c99db0ca7b1ba09868af56ab50fe9fc7ee5e821b88e99e7e6a01fcbd83107f2",
     "confirmed_at": "2026-08-12T12:00:00Z",
     "confirmed_by": "synthetic-uat-human-acceptance",
     "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -2557,7 +2557,7 @@
   },
   "protocol_authority_record": {
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "db893037c6efa127fca2583c102e8afc47a7e0698a1c65f852eb46f9b3d735b2",
+    "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
     "official_rules": [
       {
         "components": [
@@ -2577,7 +2577,8 @@
                 "requirement_id": "req-age",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-in-01",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -2633,7 +2634,8 @@
                 "requirement_id": "req-composite-risk",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-ex-01",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": {
@@ -2825,7 +2827,8 @@
                 "requirement_id": "req-professional",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-ex-02",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -2880,7 +2883,8 @@
                 "requirement_id": "req-future",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-ex-03",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -2935,7 +2939,8 @@
                 "requirement_id": "req-referenced",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-ex-04",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -2990,7 +2995,8 @@
                 "requirement_id": "req-procedure",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-req-01",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -3045,7 +3051,8 @@
                 "requirement_id": "req-result-fields",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-req-02",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -3192,12 +3199,12 @@
     "verified_by": "synthetic-uat-human-acceptance"
   },
   "protocol_integrity_manifest": {
-    "authoritative_rule_set_sha256": "96b887e73715b7d0043a2839fe3af1cfb6b578b2d4887258c30555b098c3d6c2",
+    "authoritative_rule_set_sha256": "beace579ae41f3a6864b18cd935daaa944f0ef6fcabb77cafb89885356283ce8",
     "authoritative_workflow_sha256": "1d13d5f280706df5152685b4f1a4701a36a3e0a0cf3a13ed985ff8dac47a2ab8",
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "db893037c6efa127fca2583c102e8afc47a7e0698a1c65f852eb46f9b3d735b2",
+    "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
     "manifest_id": "manifest-protocol-v1-phase-iii",
-    "manifest_sha256": "3ac6a19b3bd4e8d1b2d0965a3f79a631ac3c7926808ec6d7f28bf21a5c7da548",
+    "manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
     "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "protocol_version_id": "protocol-v1",
     "schema_version": "fixture/v1",
@@ -3292,7 +3299,8 @@
                 "requirement_id": "req-age",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-in-01",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -3348,7 +3356,8 @@
                 "requirement_id": "req-composite-risk",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-ex-01",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": {
@@ -3540,7 +3549,8 @@
                 "requirement_id": "req-professional",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-ex-02",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -3595,7 +3605,8 @@
                 "requirement_id": "req-future",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-ex-03",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -3650,7 +3661,8 @@
                 "requirement_id": "req-referenced",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-ex-04",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -3705,7 +3717,8 @@
                 "requirement_id": "req-procedure",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-req-01",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -3760,7 +3773,8 @@
                 "requirement_id": "req-result-fields",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-req-02",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,

@@ -874,7 +874,11 @@ def enforce_draft_edit_boundary(
             stage.stage.value,
             stage.visit_instance,
             stage.visit_window,
-        ): tuple(stage.due_requirement_ids)
+        ): (
+            ()
+            if feedback_kind == DraftFeedbackKind.SOURCE_ERROR
+            else tuple(stage.due_requirement_ids)
+        )
         for stage in previous.proposed_workflow_stages
     }
     current_stage_structure = {
@@ -883,14 +887,18 @@ def enforce_draft_edit_boundary(
             stage.stage.value,
             stage.visit_instance,
             stage.visit_window,
-        ): tuple(stage.due_requirement_ids)
+        ): (
+            ()
+            if feedback_kind == DraftFeedbackKind.SOURCE_ERROR
+            else tuple(stage.due_requirement_ids)
+        )
         for stage in current.proposed_workflow_stages
     }
     if previous_stage_structure != current_stage_structure:
         _fail_boundary(
             "WORKFLOW_VISIT_REWRITTEN",
-            "编辑不得增删或重命名流程访视节点、不得改写访视实例/时间窗/到期"
-            "资料要求；同一操作在筛选与基线必须保持两个实例",
+            "编辑不得增删或重命名流程访视节点、不得改写访视实例/时间窗；"
+            "手工修订和解释性澄清也不得移动到期资料要求",
         )
     previous_mapping_bindings = {
         (mapping.catalog_item_id, mapping.proposed_workflow_stage_id): tuple(
@@ -1184,17 +1192,18 @@ class ProtocolDraftService:
     ) -> ProtocolDraftRevision:
         """发布成功后才由发布服务在发布事务内调用的内部路径。
 
-        只能从 已保存/草稿 状态转移到 已发布；已取消、已恢复或已发布的
-        链头都不能被直接标记为已发布（取消必须走恢复，发布必须过发布事务）。
+        只能从已保存、草稿或已恢复状态转移到已发布；已取消或已发布的
+        链头不能被直接标记为已发布（取消必须走恢复，发布必须过发布事务）。
         """
         head = self._require_head(draft_id, expected_revision_id)
         if head.status not in {
             DraftRevisionStatus.SAVED,
             DraftRevisionStatus.DRAFT,
+            DraftRevisionStatus.RESTORED_FROM,
         }:
             raise DraftEditBoundaryError(
                 "DRAFT_NOT_PUBLISHABLE",
-                "只有已保存（或草稿）状态的链头能被发布事务标记为已发布；"
+                "只有已保存、草稿或已恢复状态的链头能被发布事务标记为已发布；"
                 f"当前状态 {head.status.value} 不允许直接发布。",
             )
         return self._transition_status(head, DraftRevisionStatus.PUBLISHED)

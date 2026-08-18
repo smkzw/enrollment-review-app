@@ -206,7 +206,7 @@ export interface ProtocolTimeQuantityPayload {
 export interface ProtocolTimeEntryPayload {
   scope: "main" | "exception";
   time_constraint: null | {
-    anchor_type: "icf_date" | "screening_date" | "baseline_date" | "randomization_date" | "first_dose_date" | "last_dose_date" | "study_completion_date" | "event_date";
+    anchor_type: "icf_date" | "screening_date" | "baseline_date" | "randomization_date" | "first_dose_date" | "study_drug_administration_date" | "last_dose_date" | "study_completion_date" | "event_date";
     direction: "before" | "after" | "on";
     lower_bound_days?: number | null;
     upper_bound_days?: number | null;
@@ -220,7 +220,7 @@ export interface ProtocolTimeEntryPayload {
     minimum_count?: number | null;
   };
   prospective_window: null | {
-    anchor_type: "last_dose_date" | "study_completion_date";
+    anchor_type: "study_drug_administration_date" | "last_dose_date" | "study_completion_date";
     upper_bound: ProtocolTimeQuantityPayload;
   };
   prospective_period: null | {
@@ -247,6 +247,7 @@ export interface ProtocolEvidencePayload {
   required_source_types: string[];
   allows_screening_record_transcription: boolean;
   requires_contemporaneous_objective_source: boolean;
+  source_validity_window: ProtocolTimeQuantityPayload | null;
   description: string;
 }
 

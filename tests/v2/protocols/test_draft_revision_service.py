@@ -3,11 +3,15 @@ from __future__ import annotations
 
 import pytest
 
+from app.domain.contracts.enums import ReviewStage
 from app.domain.contracts.protocol_drafts import (
     DraftFeedbackKind,
     DraftRevisionReason,
     DraftRevisionStatus,
+    ProtocolDraftRevision,
+    _legacy_content_payload_without_source_validity_window,
 )
+from app.domain.publication import canonical_hash
 from app.services.protocol_draft_service import (
     DraftEditBoundaryError,
     DuplicateDraftError,
@@ -40,6 +44,20 @@ def test_initial_save_creates_revision_1_and_rejects_duplicate(session) -> None:
         assert r1.previous_revision_id is None
         with pytest.raises(DuplicateDraftError):
             _save_initial(session)
+
+
+def test_pre_source_validity_revision_hash_remains_readable(session) -> None:
+    with session.begin():
+        revision, _draft = _save_initial(session)
+        payload = revision.model_dump(mode="json")
+        payload["content_sha256"] = canonical_hash(
+            _legacy_content_payload_without_source_validity_window(
+                payload["content"]
+            )
+        )
+
+        restored = ProtocolDraftRevision.model_validate(payload)
+        assert restored.revision_id == revision.revision_id
 
 
 def test_manual_edit_appends_immutable_revision_with_structured_diff(session) -> None:
@@ -169,6 +187,37 @@ def test_restore_creates_auditable_successor_without_overwriting(session) -> Non
         )
         assert r2.content.proposed_workflow_stages[0].display_name == "改坏的名字"
         assert service.revisions.count(draft.draft_id) == 3
+        saved = service.save_draft(
+            draft_id=draft.draft_id,
+            expected_revision_id=restored.revision_id,
+        )
+        assert saved.status == DraftRevisionStatus.SAVED
+        reloaded = service.revisions.get(restored.revision_id)
+        assert reloaded.status == DraftRevisionStatus.SAVED
+        assert reloaded.reason == DraftRevisionReason.RESTORE
+
+
+def test_restored_revision_can_be_published_without_hidden_save_step(session) -> None:
+    with session.begin():
+        r1, draft = _save_initial(session)
+        service = _service(session)
+        restored = service.restore_draft(
+            draft_id=draft.draft_id,
+            expected_revision_id=r1.revision_id,
+            restore_from_revision_id=r1.revision_id,
+            actor="医学监查员",
+            created_at=NOW,
+        )
+        from app.services.protocol_draft_service import mark_revision_published
+
+        published = mark_revision_published(
+            service.revisions,
+            draft_id=draft.draft_id,
+            expected_revision_id=restored.revision_id,
+        )
+
+        assert published.status == DraftRevisionStatus.PUBLISHED
+        assert service.revisions.get(restored.revision_id).reason == DraftRevisionReason.RESTORE
 
 
 def test_edit_cannot_add_or_remove_frozen_parent_members(session) -> None:
@@ -249,6 +298,43 @@ def test_source_error_feedback_may_correct_semantics_and_keeps_kind(session) -> 
         assert r2.feedback_kind == DraftFeedbackKind.SOURCE_ERROR
         assert r2.diff.modified_rule_codes == ["EX-01"]
         assert r2.diff.clarification_semantics_changed is True
+
+
+def test_source_error_feedback_may_move_rule_requirement_to_correct_stage(session) -> None:
+    with session.begin():
+        r1, draft = _save_initial(session)
+        service = _service(session)
+        corrected = draft.model_copy(deep=True)
+        requirement = corrected.proposed_rules[1].components[0].evidence_requirements[0]
+        requirement.due_stage = ReviewStage.BASELINE
+        requirement_draft = next(
+            item
+            for item in corrected.evidence_requirement_drafts
+            if item.proposed_requirement.requirement_id == requirement.requirement_id
+        )
+        requirement_draft.proposed_requirement.due_stage = ReviewStage.BASELINE
+        for stage in corrected.proposed_workflow_stages:
+            stage.due_requirement_ids = [
+                item
+                for item in stage.due_requirement_ids
+                if item != requirement.requirement_id
+            ]
+            if stage.stage == ReviewStage.BASELINE:
+                stage.due_requirement_ids.append(requirement.requirement_id)
+
+        r2 = service.apply_feedback(
+            corrected,
+            expected_revision_id=r1.revision_id,
+            feedback_kind=DraftFeedbackKind.SOURCE_ERROR,
+            feedback_note="原文明确要求在基线核对",
+            actor="医学监查员",
+            created_at=NOW,
+        )
+
+        assert r2.diff.workflow_visit_rewritten is True
+        assert next(
+            item for item in r2.diff.rule_diffs if item.official_code == "EX-01"
+        ).due_stage_changes
 
 
 def test_clarification_feedback_requires_note_and_keeps_semantics(session) -> None:

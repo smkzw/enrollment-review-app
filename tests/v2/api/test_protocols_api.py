@@ -13,6 +13,7 @@ from app.api.v2.protocols import _metadata_candidate_dto
 from app.domain.contracts.enums import StudyPhase
 from app.services.protocol_deconstruction_executor import (
     ProtocolDeconstructionExecutorConfig,
+    _handle_generate,
     create_protocol_deconstruction_executor,
 )
 from app.services.protocol_workbench_service import (
@@ -20,7 +21,7 @@ from app.services.protocol_workbench_service import (
     PROTOCOL_DECONSTRUCTION_STEPS,
     ProtocolWorkbenchService,
 )
-from app.workflow.runner import JobRunner
+from app.workflow.runner import JobRunner, StepContext
 from app.workflow.jobstore import JobStore
 from tests.v2.api.protocol_e2e_helpers import (
     build_passing_draft_json,
@@ -364,6 +365,32 @@ def test_upload_pipeline_reaches_identity_and_review_without_seed(
         sources = client.get(f"/api/v2/protocol/deconstructions/{job_id}/sources")
         assert sources.status_code == 200, sources.text
         assert sources.json()["selected_phase_label"] == "II 期"
+
+        def unexpected_model_call(_package):
+            raise AssertionError("恢复已保存首稿时不得再次调用语义模型")
+
+        recovered = _handle_generate(
+            StepContext(
+                job_id=job_id,
+                job_type=PROTOCOL_DECONSTRUCTION_JOB_TYPE,
+                job_payload={
+                    "actor": "测试用户",
+                    "session_kind": "first_deconstruction",
+                },
+                step_id="generate_draft",
+                name="生成方案解构草稿",
+                attempt=2,
+                last_checkpoint_id=None,
+                last_checkpoint=None,
+            ),
+            ProtocolDeconstructionExecutorConfig(
+                data_paths=app.state.data_paths,
+                session_factory=app.state.session_factory,
+                page_texts_builder=page_texts_from_blocks,
+                draft_response_builder=unexpected_model_call,
+            ),
+        )
+        assert recovered["draft_revision_id"] == draft_body["revision_id"]
 
 
 def test_session_projects_persisted_publish_wait(build_app) -> None:

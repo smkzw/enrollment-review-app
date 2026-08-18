@@ -34,6 +34,8 @@ describe("方案草稿来源映射", () => {
       {
         aligned: {
           source_ref: "body.p7",
+          document_part: "body",
+          table_path: null,
           render_page: 7,
           precision: "text_range",
           excerpt: "方案原文",
@@ -41,6 +43,8 @@ describe("方案草稿来源映射", () => {
         },
         block: {
           source_ref: "table.p0",
+          document_part: "body",
+          table_path: "table.0",
           render_page: null,
           page_number: null,
           precision: "block",
@@ -52,10 +56,12 @@ describe("方案草稿来源映射", () => {
     );
 
     expect(mapped[0]).toMatchObject({
+      sourceRef: "方案正文",
       pageLabel: "第 7 页",
       precision: "text_range",
     });
     expect(mapped[1]).toMatchObject({
+      sourceRef: "方案表格",
       pageLabel: null,
       precision: "block",
       precisionLabel: "结构块",

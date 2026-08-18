@@ -20,6 +20,7 @@ from .rules import (
     Rule,
     RuleComponent,
     RuleExpression,
+    TimeQuantity,
     WorkflowStage,
 )
 from .protocol_ingestion import FrozenProtocolCatalog
@@ -110,6 +111,7 @@ class SemanticEvidenceRequirement(ContractModel):
     allows_screening_record_transcription: bool = True
     requires_contemporaneous_objective_source: bool = False
     due_stage: ReviewStage
+    source_validity_window: TimeQuantity | None = None
     description: str = Field(min_length=1)
 
 
@@ -251,6 +253,8 @@ class ProtocolSemanticRuleRepair(VersionedModel):
 
     candidate_id: str = Field(min_length=1)
     replacement_rules: list[SemanticRule] = Field(min_length=1)
+    replacement_structural_warnings: list[UnresolvedItem] = Field(default_factory=list)
+    replacement_unresolved_items: list[UnresolvedItem] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_unique_codes(self) -> "ProtocolSemanticRuleRepair":

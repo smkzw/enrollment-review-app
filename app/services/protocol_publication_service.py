@@ -238,6 +238,7 @@ class ProtocolPublicationService:
         if revision.status not in {
             DraftRevisionStatus.SAVED,
             DraftRevisionStatus.DRAFT,
+            DraftRevisionStatus.RESTORED_FROM,
         }:
             raise ProtocolPublicationError(
                 "revision_not_editable",
@@ -972,7 +973,10 @@ class ProtocolPublicationService:
             ProjectRepository(session).save(
                 Project(
                     project_id=draft.project_id,
-                    project_code=protocol_version.protocol_code,
+                    project_code=(
+                        request.source_input.identity_decision.project_code
+                        or protocol_version.protocol_code
+                    ),
                     project_name=request.source_input.identity_decision.project_name,
                     study_phase=draft.selected_phase,
                     protocol_version=protocol_version,

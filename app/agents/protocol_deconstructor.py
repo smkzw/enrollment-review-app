@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import unicodedata
 from collections.abc import Mapping, Sequence
 from typing import Literal, Protocol
@@ -26,7 +27,7 @@ from app.domain.contracts.agent_io import (
 from app.domain.contracts.agents import PromptVersion
 from app.domain.contracts.common import VersionedModel
 from app.domain.contracts.enums import AgentNode, ReviewStage, RuleKind
-from app.domain.contracts.normalization import CoverageSummary
+from app.domain.contracts.normalization import CoverageSummary, UnresolvedItem
 from app.domain.contracts.protocol_ingestion import ProtocolSourceSpan
 from app.domain.contracts.protocol_metadata import InterpretationConflict
 from app.domain.contracts.rules import (
@@ -65,7 +66,10 @@ class ProtocolAgentTransport(Protocol):
 
 
 class ProtocolDeconstructionAttempt(VersionedModel):
-    attempt: int = Field(ge=1, le=27)
+    # 实际上限由 ProtocolDeconstructorRunner 的结构修复和按冻结
+    # 父规则数量计算的语义修复预算决定。运行记录不再复制一个
+    # 会随预算演进而失效的静态上限。
+    attempt: int = Field(ge=1)
     session_id: str = Field(min_length=1)
     raw_output_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     outcome: Literal["通过完整性检查", "需要定向修正", "输出格式无效", "会话异常"]
@@ -76,7 +80,7 @@ class ProtocolDeconstructionAttempt(VersionedModel):
 class ProtocolDeconstructionRunResult(VersionedModel):
     status: Literal["可以进入审阅", "需要核对"]
     same_session_id: str = Field(min_length=1)
-    attempts: list[ProtocolDeconstructionAttempt] = Field(min_length=1, max_length=27)
+    attempts: list[ProtocolDeconstructionAttempt] = Field(min_length=1)
     final_draft: ProtocolDeconstructionDraft | None = None
     final_gate_result: ProtocolDeconstructionGateResult | None = None
 
@@ -90,6 +94,8 @@ _SYSTEM_CONTRACT = (
     "不要解释或比较另一研究期别。官方父规则目录和基线及以前必做项目录均已冻结，"
     "不得增加、删除、合并或调换成员。复杂条款可拆成子组件，但父规则官方编号和数量"
     "必须保持不变。必须保留原文中的且/或/例外、研究者复合判断、指标、阈值、单位、"
+    "每个原子条件的 predicate_id 在整份草稿中必须唯一；相同的研究者判断若分别属于"
+    "多个子项，也要使用不同而稳定的 predicate_id，不得跨子项复用身份。"
     "随机/基线/筛选时间锚点和每一个访视实例。每个 RuleComponent 都会独立接受审核："
     "同一个排除触发条件中由‘且/同时’连接的必要条件必须保留在同一组件的 ALL 表达式中，"
     "不能拆成任一条件单独触发；由‘或/任一’连接的替代条件使用 ANY，或仅在每个分支本身"
@@ -114,7 +120,9 @@ _SYSTEM_CONTRACT = (
     "‘计划在治疗期间或研究完成后"
     "N周内’等未来计划应拆分并列分支；治疗期间或研究期间的分支分别用 prospective_period "
     "保存 treatment_period 或 study_period；研究完成后或末次给药后的分支分别用 "
-    "prospective_window 保存 study_completion_date 或 last_dose_date 及原文时长，不得误写成"
+    "prospective_window 保存 study_completion_date、last_dose_date 或 "
+    "study_drug_administration_date 及原文时长，其中原文未指明首次或末次、"
+    "仅写‘研究药物给药后’时才用 study_drug_administration_date，不得误写成"
     "回溯锚点待确认。"
     "不得把同一父规则的全部来源不加区分地套给每个子组件。父规则映射、流程必做项目、"
     "审核节点、方案身份、rule_id、parent_rule_id、rule_component_id、display_code、"
@@ -138,6 +146,17 @@ _SYSTEM_CONTRACT = (
     "凭空添加天数或日期锚点。时间窗必须使用 upper_bound/lower_bound 并保留原文的 day/week/month/year"
     "单位，不得把周、月、年换算成 *_days；‘前N周/月内’不要额外输出原文未写的零日下界。"
     "exception_expression 只能作为子组件字段，不得放入 expression 内；逻辑操作符只用 all/any/not。"
+    "资料要求的 due_stage 必须依据当前条款逐字可见的审核时点或冻结流程确定，不得为了"
+    "‘再次确认’而把每个条件惯性复制到筛选、导入和基线；原文只要求一个节点时只建立一个"
+    "资料要求。若某阶段没有必做项目录条目但条款明确写有该阶段，仍保留该 due_stage，系统会"
+    "确定性建立审核节点。包含‘随机前N时间内或计划在研究期间’的并列条款必须拆成各自完整"
+    "分支：回溯分支使用 time_constraint，未来计划分支使用 prospective_period。"
+    "资料要求 description 只描述需要核对的资料或需要完成的评估，不得预设审核结果；"
+    "不要写‘确认不存在’‘确认无异常’‘确认符合’‘确认不触发’等结论性措辞。"
+    "若原文允许使用‘N天/周/月/年内的某项检查结果’，这是资料时效而不是"
+    "临床事件回溯：必须为该项检查在原文指定的每个 due_stage 分别建立资料要求，"
+    "并用 source_validity_window 保留原文时长和 day/week/month/year 单位；不得把它写成"
+    "谓词 time_constraint，也不得用同组件的其他检查资料代替。"
     "JSON 实例不得复制 Schema 的 $defs、properties "
     "等定义字段；ALL/ANY 必须至少"
     "包含两个子表达式，只有一个子表达式时直接输出该子表达式。"
@@ -249,6 +268,8 @@ def _repair_prompt(
         instruction = (
             "已有完整语义草稿通过结构解析。本次只能返回 ProtocolSemanticRuleRepair，"
             "candidate_id 必须与前稿一致；replacement_rules 必须且只能完整替换以下"
+            "父规则。replacement_unresolved_items 和 replacement_structural_warnings 也只填本次父规则"
+            "修订后仍然真实存在的事项；已解决的不得残留，非本次父规则的不得重复返回。"
             f"官方父规则：{list(replacement_rule_codes)}。不要返回整份草稿，不要返回未列出的父规则；"
             "系统会保持其他父规则完全不变。"
         )
@@ -349,6 +370,21 @@ _RULE_KIND_BY_PREFIX = {
     "IN": RuleKind.INCLUSION,
     "EX": RuleKind.EXCLUSION,
 }
+
+
+def _neutral_evidence_description(
+    description: str,
+    *,
+    fact_type: str,
+    due_stage: ReviewStage,
+) -> str:
+    if re.search(
+        r"(?:确认|证明|判定|确保).{0,80}"
+        r"(?:不存在|无异常|无不可接受|符合|满足|不符合|触发|未触发|排除)",
+        description,
+    ):
+        return f"{_STAGE_DISPLAY_NAMES[due_stage]}：核对{fact_type}"
+    return description
 
 
 def _component_display_code(official_code: str, index: int, total: int) -> str:
@@ -454,6 +490,7 @@ def _hydrate_semantic_candidate(
     component_drafts: list[RuleComponentDraft] = []
     requirement_drafts: list[EvidenceRequirementDraft] = []
     stage_requirements: dict[ReviewStage, list[str]] = {}
+    used_predicate_ids: set[str] = set()
     for item in sorted(
         source_input.parent_rule_catalog.items, key=lambda value: value.position
     ):
@@ -495,7 +532,24 @@ def _hydrate_semantic_candidate(
             for root in (expression, exception_expression):
                 if root is None:
                     continue
-                for predicate in iter_atomic_predicates(root):
+                for predicate_index, predicate in enumerate(
+                    iter_atomic_predicates(root), start=1
+                ):
+                    original_predicate_id = predicate.predicate_id
+                    if original_predicate_id in used_predicate_ids:
+                        candidate_id = (
+                            f"{original_predicate_id}:{component_id}:"
+                            f"{predicate_index:02d}"
+                        )
+                        suffix = 2
+                        while candidate_id in used_predicate_ids:
+                            candidate_id = (
+                                f"{original_predicate_id}:{component_id}:"
+                                f"{predicate_index:02d}:{suffix}"
+                            )
+                            suffix += 1
+                        predicate.predicate_id = candidate_id
+                    used_predicate_ids.add(predicate.predicate_id)
                     if predicate.source_clause:
                         fragments = _recover_exact_fragments(
                             predicate.source_clause, excerpt_sources
@@ -526,7 +580,12 @@ def _hydrate_semantic_candidate(
                         requirement.requires_contemporaneous_objective_source
                     ),
                     due_stage=requirement.due_stage,
-                    description=requirement.description,
+                    source_validity_window=requirement.source_validity_window,
+                    description=_neutral_evidence_description(
+                        requirement.description,
+                        fact_type=requirement.fact_type,
+                        due_stage=requirement.due_stage,
+                    ),
                 )
                 for index, requirement in enumerate(
                     semantic_component.evidence_requirements
@@ -661,7 +720,17 @@ def _hydrate_semantic_candidate(
     for stage, requirement_ids in stage_requirements.items():
         node_id = stage_first_node.get(stage.value)
         if node_id is None:
-            continue
+            # A rule can explicitly name a review point even when the schedule
+            # table has no standalone procedure row there. Preserve that point
+            # instead of silently orphaning its evidence requirements.
+            node_id = f"stage:{stage.value}"
+            stage_first_node[stage.value] = node_id
+            workflow_stages_by_id[node_id] = WorkflowStage(
+                workflow_stage_id=node_id,
+                stage=stage,
+                display_name=_STAGE_DISPLAY_NAMES[stage],
+                due_requirement_ids=[],
+            )
         listed = workflow_stages_by_id[node_id]
         workflow_stages_by_id[node_id] = listed.model_copy(
             update={
@@ -672,6 +741,13 @@ def _hydrate_semantic_candidate(
             }
         )
     workflow_stages = list(workflow_stages_by_id.values())
+    catalog_position = {
+        item.item_id: item.position
+        for item in source_input.required_procedure_catalog.items
+    }
+    # Visit grouping determines workflow nodes, but the immutable procedure
+    # mapping list must retain the protocol catalog's source order.
+    procedure_mappings.sort(key=lambda item: catalog_position[item.catalog_item_id])
     identity = source_input.identity_decision
     source_refs = list(source_input.allowed_source_span_ids)
     return ProtocolDeconstructionDraft(
@@ -742,6 +818,7 @@ def semantic_candidate_from_draft(
                                 requirement.requires_contemporaneous_objective_source
                             ),
                             due_stage=requirement.due_stage,
+                            source_validity_window=requirement.source_validity_window,
                             description=requirement.description,
                         )
                         for requirement in component.evidence_requirements
@@ -793,6 +870,10 @@ def revise_protocol_draft_from_feedback(
         "才能修正。你必须只返回 ProtocolSemanticRuleRepair JSON，"
         f"candidate_id 必须为 {current.candidate_id!r}，replacement_rules 必须且只能"
         f"包含 {target_rule_code}。不得修改官方编号、增删其他父规则或伪造来源。\n\n"
+        "本次是最小范围纠错，不是重写整条规则。除用户明确指出且方案原文支持修改的字段外，"
+        "目标规则中现有的子项、谓词、ALL/ANY/NOT 逻辑、数值和单位、频次结构、时间限定、"
+        "例外、资料要求、应完成阶段、来源片段及全部稳定 ID 都必须逐字段原样保留。"
+        "输出前必须把 replacement_rules 与当前目标规则逐字段比较；任何无关变化都要撤销。\n\n"
         f"用户指出的问题：{note}\n\n"
         f"当前目标规则：{target.model_dump_json()}\n\n"
         f"冻结的方案输入：{source_input.model_dump_json()}\n\n"
@@ -907,12 +988,31 @@ def _apply_semantic_repair(
             f"应为 {list(expected_codes)}，实际为 {actual_codes}"
         )
     replacements = {rule.official_code: rule for rule in repair.replacement_rules}
+    selected = set(expected_codes)
+    for item in (
+        *repair.replacement_structural_warnings,
+        *repair.replacement_unresolved_items,
+    ):
+        if not set(item.affected_scope) <= selected:
+            raise ValueError("局部修正返回了指定父规则之外的待确认事项")
+
+    def outside_selected(item: UnresolvedItem) -> bool:
+        return set(item.affected_scope).isdisjoint(selected)
+
     merged = candidate.model_copy(
         update={
             "proposed_rules": [
                 replacements.get(rule.official_code, rule)
                 for rule in candidate.proposed_rules
+            ],
+            "structural_warnings": [
+                item for item in candidate.structural_warnings if outside_selected(item)
             ]
+            + repair.replacement_structural_warnings,
+            "unresolved_items": [
+                item for item in candidate.unresolved_items if outside_selected(item)
+            ]
+            + repair.replacement_unresolved_items,
         },
         deep=True,
     )
@@ -1030,7 +1130,7 @@ def _issue_severity_by_rule(
     return {code: tuple(values) for code, values in counts.items()}
 
 
-def _regressing_rule_codes(
+def regressing_rule_codes(
     previous_draft: ProtocolDeconstructionDraft,
     previous_issues: Sequence[ProtocolGateIssue],
     revised_draft: ProtocolDeconstructionDraft,
@@ -1230,7 +1330,10 @@ class ProtocolDeconstructorRunner:
 
     MAX_SCHEMA_REPAIRS = 2
     MAX_LOCAL_SCHEMA_REPAIRS = 1
-    MAX_SEMANTIC_REPAIRS = 12
+    # Real mixed-phase protocols have needed fourteen isolated parent repairs
+    # after a structurally valid first draft. The runtime also grants at least
+    # one turn per frozen parent so fair rotation cannot starve a late rule.
+    MAX_SEMANTIC_REPAIRS = 16
     MAX_RULES_PER_REPAIR = 3
     INITIAL_RULE_BATCH_SIZE = 3
 
@@ -1305,6 +1408,10 @@ class ProtocolDeconstructorRunner:
         schema_repairs = 0
         semantic_repairs = 0
         local_schema_repairs = 0
+        semantic_repair_limit = max(
+            self.MAX_SEMANTIC_REPAIRS,
+            len(source_input.parent_rule_catalog.items),
+        )
         while True:
             attempt_number += 1
             raw_hash = _sha256(response.text)
@@ -1362,7 +1469,7 @@ class ProtocolDeconstructorRunner:
                     previous_issues = [
                         issue for check in final_gate.checks for issue in check.issues
                     ]
-                    regressing_codes = _regressing_rule_codes(
+                    regressing_codes = regressing_rule_codes(
                         final_draft,
                         previous_issues,
                         draft,
@@ -1435,7 +1542,7 @@ class ProtocolDeconstructorRunner:
             else:
                 local_schema_repairs = 0
                 if (
-                    semantic_repairs >= self.MAX_SEMANTIC_REPAIRS
+                    semantic_repairs >= semantic_repair_limit
                     or not replacement_rule_codes
                 ):
                     break

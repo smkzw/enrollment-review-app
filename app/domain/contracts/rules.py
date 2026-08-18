@@ -137,10 +137,11 @@ class ProspectiveWindow(ContractModel):
     @model_validator(mode="after")
     def validate_future_anchor(self) -> "ProspectiveWindow":
         if self.anchor_type not in {
+            AnchorType.STUDY_DRUG_ADMINISTRATION_DATE,
             AnchorType.LAST_DOSE_DATE,
             AnchorType.STUDY_COMPLETION_DATE,
         }:
-            raise ValueError("未来计划窗只允许末次给药日或研究完成日")
+            raise ValueError("未来计划窗只允许研究药物给药日、末次给药日或研究完成日")
         return self
 
 
@@ -255,6 +256,7 @@ class EvidenceRequirement(VersionedModel):
     allows_screening_record_transcription: bool = True
     requires_contemporaneous_objective_source: bool = False
     due_stage: ReviewStage
+    source_validity_window: TimeQuantity | None = None
     description: str = Field(min_length=1)
 
     @model_validator(mode="after")

@@ -221,6 +221,12 @@ def _add_conservative_page_hints(
                 update={
                     "render_artifact_id": left_span.render_artifact_id,
                     "render_page": left_span.render_page,
+                    # PAGE_ONLY is a navigation hint, not an assertion that
+                    # the block text occurs on that page.  A repeated block
+                    # may already carry a structure-channel excerpt; clear it
+                    # before changing precision so persisted round-trips do
+                    # not manufacture a page-level quotation.
+                    "excerpt": None,
                     "precision": SourceLocatorPrecision.PAGE_ONLY,
                     "alignment_status": AlignmentStatus.DEGRADED,
                     "degradation_reason": (

@@ -325,6 +325,7 @@ export interface RuleComponentView {
     factType: string;
     dueStage: ReviewStage;
     dueStageLabel: string;
+    sourceValidityLabel: string | null;
     description: string;
   }>;
   decision: ComponentDecisionView | null;

@@ -317,7 +317,7 @@ function normalizeTimeEntry(value: unknown, field: string): ProtocolTimeEntryPay
     timeConstraint = {
       anchor_type: requireOneOf(
         constraint.anchor_type,
-        ["icf_date", "screening_date", "baseline_date", "randomization_date", "first_dose_date", "last_dose_date", "study_completion_date", "event_date"] as const,
+        ["icf_date", "screening_date", "baseline_date", "randomization_date", "first_dose_date", "study_drug_administration_date", "last_dose_date", "study_completion_date", "event_date"] as const,
         `${field}.time_constraint.anchor_type`,
       ),
       direction,
@@ -347,7 +347,7 @@ function normalizeTimeEntry(value: unknown, field: string): ProtocolTimeEntryPay
   if (row.prospective_window !== null) {
     const prospective = requireRecord(row.prospective_window, `${field}.prospective_window`);
     prospectiveWindow = {
-      anchor_type: requireOneOf(prospective.anchor_type, ["last_dose_date", "study_completion_date"] as const, `${field}.prospective_window.anchor_type`),
+      anchor_type: requireOneOf(prospective.anchor_type, ["study_drug_administration_date", "last_dose_date", "study_completion_date"] as const, `${field}.prospective_window.anchor_type`),
       upper_bound: normalizeTimeQuantity(prospective.upper_bound, `${field}.prospective_window.upper_bound`),
     };
   }
@@ -403,6 +403,10 @@ function normalizeEvidence(value: unknown, field: string): ProtocolEvidencePaylo
     required_source_types: requireStringList(row.required_source_types, `${field}.required_source_types`),
     allows_screening_record_transcription: requireBoolean(row.allows_screening_record_transcription, `${field}.allows_screening_record_transcription`),
     requires_contemporaneous_objective_source: requireBoolean(row.requires_contemporaneous_objective_source, `${field}.requires_contemporaneous_objective_source`),
+    source_validity_window: normalizeNullableTimeQuantity(
+      row.source_validity_window ?? null,
+      `${field}.source_validity_window`,
+    ),
     description: requireString(row.description, `${field}.description`),
   };
   return wrapped ? { evidence } : evidence;

@@ -49,6 +49,10 @@ CHECK_NAMES = (
     "diff_integrity",
 )
 
+# 完整性检查结果会写入持久任务检查点。任何会改变问题判定语义的
+# 修改都必须提升此版本，避免旧检查结果在升级后继续冒充当前结论。
+DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/2026-08-18.3"
+
 
 class ProtocolGateIssue(VersionedModel):
     issue_code: str = Field(min_length=1)
@@ -176,13 +180,11 @@ def _predicate_temporal_text(predicate) -> str:
     """Exclude a sibling item's parenthetical time note from this predicate."""
 
     text = _predicate_text(predicate)
-    binding_text = _normalized(
-        "\n".join(
-            part
-            for part in (predicate.source_term, predicate.attribute)
-            if part
-        )
-    )
+    binding_terms = {
+        _normalized(part)
+        for part in (predicate.source_term, predicate.attribute)
+        if part and _normalized(part)
+    }
     pattern = re.compile(
         r"(?:^|[、，；。\n])(?P<label>[^、，；。\n（）()]{1,40})"
         r"(?P<note>[（(][^）)]*\d+(?:\.\d+)?\s*个?(?:天|日|周|月|年)[^）)]*[）)])"
@@ -190,7 +192,12 @@ def _predicate_temporal_text(predicate) -> str:
 
     def retain_or_remove(match: re.Match[str]) -> str:
         label = _normalized(match.group("label"))
-        if label and label in binding_text:
+        following_segment = re.split(
+            r"[、，；。\n]", text[match.end() :].lstrip("、，；。\n"), maxsplit=1
+        )[0]
+        if any(label and label in term for term in binding_terms) or any(
+            term in _normalized(following_segment) for term in binding_terms
+        ):
             return match.group(0)
         prefix = match.group(0)[0] if match.group(0)[0] in "、，；。" else ""
         return prefix + match.group("label")
@@ -358,6 +365,73 @@ def _source_time_quantities(text: str) -> set[tuple[int, TimeUnit]]:
         (int(value), unit_by_marker[marker.lower()])
         for value, marker in re.findall(pattern, text, flags=re.IGNORECASE)
     }
+
+
+def _source_validity_windows(text: str) -> set[tuple[int, TimeUnit]]:
+    """提取“可接受 N 时间内的检查结果”这类资料时效。"""
+
+    unit_map = {
+        "天": TimeUnit.DAY,
+        "日": TimeUnit.DAY,
+        "周": TimeUnit.WEEK,
+        "星期": TimeUnit.WEEK,
+        "个月": TimeUnit.MONTH,
+        "月": TimeUnit.MONTH,
+        "年": TimeUnit.YEAR,
+    }
+    compact = re.sub(r"\s+", "", text)
+    return {
+        (int(match.group("value")), unit_map[match.group("unit")])
+        for match in re.finditer(
+            r"可接受(?P<value>\d+)(?P<unit>星期|个月|天|日|周|月|年)内(?:的)?"
+            r"[^\uff0c\u3002\uff1b\uff1a\uff09)]{0,40}?(?:检查)?结果",
+            compact,
+        )
+    }
+
+
+def _source_validity_specs(
+    text: str,
+) -> set[tuple[int, TimeUnit, str]]:
+    """提取括号中资料时效及其直接限定的检查名称。"""
+
+    unit_map = {
+        "天": TimeUnit.DAY,
+        "日": TimeUnit.DAY,
+        "周": TimeUnit.WEEK,
+        "星期": TimeUnit.WEEK,
+        "个月": TimeUnit.MONTH,
+        "月": TimeUnit.MONTH,
+        "年": TimeUnit.YEAR,
+    }
+    compact = re.sub(r"\s+", "", text)
+    specs: set[tuple[int, TimeUnit, str]] = set()
+    pattern = re.compile(
+        r"(?P<subject>[^，。；：（()]{1,20})[（(]可接受"
+        r"(?P<value>\d+)(?P<unit>星期|个月|天|日|周|月|年)内(?:的)?"
+        r"(?P<result>[^，。；：()）]{0,30}?)(?:检查)?结果[）)]"
+    )
+    for match in pattern.finditer(compact):
+        subject = _normalized(match.group("subject"))
+        result = _normalized(match.group("result"))
+        named_item = result or subject
+        if named_item:
+            specs.add(
+                (
+                    int(match.group("value")),
+                    unit_map[match.group("unit")],
+                    named_item,
+                )
+            )
+    return specs
+
+
+def _requirement_matches_validity_spec(requirement, named_item: str) -> bool:
+    fact = _normalized(requirement.fact_type)
+    item = _normalized(named_item)
+    if len(item) < 2 or len(fact) < 2:
+        return False
+    return item in fact or fact in item
 
 
 def _time_bound_matches_source(value: int, unit: TimeUnit, text: str) -> bool:
@@ -687,6 +761,32 @@ class ProtocolDeconstructionGate:
                     display_codes,
                 )
             )
+        predicate_ids = [
+            predicate.predicate_id
+            for rule in draft.proposed_rules
+            for component in rule.components
+            for expression in (
+                component.expression,
+                component.exception_expression,
+            )
+            if expression is not None
+            for predicate in iter_atomic_predicates(expression)
+        ]
+        duplicate_predicate_ids = sorted(
+            predicate_id
+            for predicate_id, count in Counter(predicate_ids).items()
+            if count > 1
+        )
+        if duplicate_predicate_ids:
+            issues.append(
+                _issue(
+                    "tree_integrity",
+                    "DUPLICATE_PREDICATE_ID",
+                    "不同规则条件使用了相同的内部身份，无法形成稳定的正式规则集。",
+                    duplicate_predicate_ids,
+                    action="请保持条件原文和逻辑不变，为每个原子条件建立唯一且稳定的身份。",
+                )
+            )
         components = {
             component.rule_component_id: component
             for rule in draft.proposed_rules
@@ -958,6 +1058,11 @@ class ProtocolDeconstructionGate:
                             and not isinstance(value, bool)
                             for value in predicate_values
                         )
+                        frequency_specs = _source_frequency_specs(predicate_text)
+                        is_structured_frequency = bool(frequency_specs) and any(
+                            _predicate_preserves_frequency(predicate, spec)
+                            for spec in frequency_specs
+                        )
                         if (
                             has_numeric_value
                             and len(source_comparators) == 1
@@ -985,7 +1090,11 @@ class ProtocolDeconstructionGate:
                                             [predicate.predicate_id],
                                         )
                                     )
-                        if has_numeric_value and has_precise_excerpt:
+                        if (
+                            has_numeric_value
+                            and has_precise_excerpt
+                            and not is_structured_frequency
+                        ):
                             source_term = _normalized(predicate.source_term or "")
                             if not source_term or source_term not in normalized:
                                 issues.append(
@@ -1061,6 +1170,12 @@ class ProtocolDeconstructionGate:
                 "首剂后",
                 "第一次给药前",
                 "第一次给药后",
+            ),
+            AnchorType.STUDY_DRUG_ADMINISTRATION_DATE: (
+                "研究药物给药前",
+                "研究药物给药后",
+                "试验药物给药前",
+                "试验药物给药后",
             ),
             AnchorType.LAST_DOSE_DATE: (
                 "末次给药后",
@@ -1161,8 +1276,75 @@ class ProtocolDeconstructionGate:
                             action="请保留一个原子条件，并为原文明确要求的每个审核阶段分别建立 due_stage 资料要求；不要复制原子条件或添加日期约束。",
                         )
                     )
+                component_validity_specs = _source_validity_specs(component_text)
+                predicate_validity_windows = {
+                    window
+                    for expression in atomic_expressions
+                    for window in _source_validity_windows(
+                        _predicate_text(expression.predicate)
+                    )
+                }
+                for value, unit, named_item in sorted(
+                    component_validity_specs,
+                    key=lambda item: (item[1].value, item[0], item[2]),
+                ):
+                    if (value, unit) in predicate_validity_windows:
+                        continue
+                    matching_requirements = [
+                        requirement
+                        for requirement in component.evidence_requirements
+                        if _requirement_matches_validity_spec(requirement, named_item)
+                    ]
+                    expected_validity_stages = required_stages or {
+                        requirement.due_stage for requirement in matching_requirements
+                    }
+                    missing_validity_stages = [
+                        stage
+                        for stage in expected_validity_stages
+                        if not any(
+                            requirement.due_stage == stage
+                            and requirement.source_validity_window is not None
+                            and requirement.source_validity_window.value == value
+                            and requirement.source_validity_window.unit == unit
+                            for requirement in matching_requirements
+                        )
+                    ]
+                    if not expected_validity_stages or missing_validity_stages:
+                        stage_names = {
+                            ReviewStage.PRE_SCREENING: "预筛选期",
+                            ReviewStage.SCREENING: "筛选期",
+                            ReviewStage.RUN_IN: "筛选/导入期",
+                            ReviewStage.BASELINE: "基线",
+                        }
+                        unit_names = {
+                            TimeUnit.DAY: "天",
+                            TimeUnit.WEEK: "周",
+                            TimeUnit.MONTH: "个月",
+                            TimeUnit.YEAR: "年",
+                        }
+                        missing_text = "、".join(
+                            f"{stage_names.get(stage, stage.value)}{value}{unit_names[unit]}"
+                            for stage in sorted(
+                                missing_validity_stages, key=lambda item: item.value
+                            )
+                        )
+                        issues.append(
+                            _issue(
+                                "temporal_semantics",
+                                "SOURCE_VALIDITY_WINDOW_MISSING",
+                                f"{component.display_code} 的{named_item}检查结果时效未按具体资料和审核节点完整保留"
+                                + (f"：{missing_text}" if missing_text else "")
+                                + "。",
+                                [component.rule_component_id],
+                                action="请为原文点名的检查在每个审核节点分别建立资料要求，并逐项保留可接受的检查结果时效；不得把时效绑定到同条规则中的其他检查。",
+                            )
+                        )
                 if not _has_unambiguous_disjunction(component_text):
                     source_quantities = _source_time_quantities(component_text)
+                    source_quantities -= {
+                        (value, unit)
+                        for value, unit, _named_item in component_validity_specs
+                    }
                     bound_quantities = {
                         quantity
                         for expression in atomic_expressions
@@ -1231,6 +1413,7 @@ class ProtocolDeconstructionGate:
                     )
                     predicate_frequency_specs = _source_frequency_specs(predicate_text)
                     is_frequency_definition = bool(predicate_frequency_specs)
+                    source_validity_windows = _source_validity_windows(predicate_text)
                     is_future_plan_window = any(
                         marker in predicate_text
                         for marker in (
@@ -1242,17 +1425,95 @@ class ProtocolDeconstructionGate:
                             "最后一次给药后",
                         )
                     )
+                    contextual_text = f"{predicate_text}\n{component_text}"
+                    has_multiple_review_anchors = bool(
+                        re.search(
+                            r"筛选(?:期|访视)?(?:或|和|及|与|、)"
+                            r"基线(?:期|访视)?时",
+                            contextual_text,
+                        )
+                    )
+                    has_contextual_review_anchor = (
+                        not has_multiple_review_anchors
+                        and bool(
+                            re.search(
+                                r"(?:筛选|基线)(?:期|访视)?时",
+                                contextual_text,
+                            )
+                        )
+                    )
                     is_unanchored_lookback = (
                         has_explicit_window
                         and not expected
                         and not component_expected
+                        and not has_contextual_review_anchor
                         and "内" in predicate_text
                         and not is_frequency_definition
+                        and not source_validity_windows
                         and not is_future_plan_window
                     )
                     occurrence_window = predicate.occurrence_window
                     prospective_window = predicate.prospective_window
                     prospective_period = predicate.prospective_period
+                    if source_validity_windows:
+                        normalized_predicate_text = _normalized(predicate_text)
+                        matching_requirements = [
+                            requirement
+                            for requirement in component.evidence_requirements
+                            if len(_normalized(requirement.fact_type)) >= 2
+                            and _normalized(requirement.fact_type)
+                            in normalized_predicate_text
+                        ]
+                        expected_validity_stages = required_stages or {
+                            requirement.due_stage
+                            for requirement in matching_requirements
+                        }
+                        missing_validity: list[str] = []
+                        stage_names = {
+                            ReviewStage.PRE_SCREENING: "预筛选期",
+                            ReviewStage.SCREENING: "筛选期",
+                            ReviewStage.RUN_IN: "筛选/导入期",
+                            ReviewStage.BASELINE: "基线",
+                        }
+                        unit_names = {
+                            TimeUnit.DAY: "天",
+                            TimeUnit.WEEK: "周",
+                            TimeUnit.MONTH: "个月",
+                            TimeUnit.YEAR: "年",
+                        }
+                        for stage in sorted(
+                            expected_validity_stages, key=lambda item: item.value
+                        ):
+                            for value, unit in sorted(
+                                source_validity_windows,
+                                key=lambda item: (item[1].value, item[0]),
+                            ):
+                                if not any(
+                                    requirement.due_stage == stage
+                                    and requirement.source_validity_window is not None
+                                    and requirement.source_validity_window.value == value
+                                    and requirement.source_validity_window.unit == unit
+                                    for requirement in matching_requirements
+                                ):
+                                    missing_validity.append(
+                                        f"{stage_names.get(stage, stage.value)}{value}{unit_names[unit]}"
+                                    )
+                        if not expected_validity_stages or missing_validity:
+                            issues.append(
+                                _issue(
+                                    "temporal_semantics",
+                                    "SOURCE_VALIDITY_WINDOW_MISSING",
+                                    f"{component.display_code} 的检查结果时效未按具体资料和审核节点完整保留"
+                                    + (
+                                        "：" + "、".join(missing_validity)
+                                        if missing_validity
+                                        else ""
+                                    )
+                                    + "。",
+                                    [predicate.predicate_id],
+                                    action="请为该项检查在原文指定的每个审核节点分别建立资料要求，并逐项保留可接受的检查结果时效；不得用同一条规则中的其他检查代替。",
+                                )
+                            )
                     if is_frequency_definition:
                         frequency_valid = all(
                             _predicate_preserves_frequency(predicate, spec)
@@ -1278,6 +1539,7 @@ class ProtocolDeconstructionGate:
                             )
                         )
                     future_anchors = {
+                        AnchorType.STUDY_DRUG_ADMINISTRATION_DATE,
                         AnchorType.LAST_DOSE_DATE,
                         AnchorType.STUDY_COMPLETION_DATE,
                     }
@@ -1299,7 +1561,7 @@ class ProtocolDeconstructionGate:
                                     "PROSPECTIVE_WINDOW_NOT_STRUCTURED",
                                     f"{component.display_code} 的未来计划截止范围没有形成可计算结构。",
                                     [predicate.predicate_id],
-                                    action="请拆分未来计划分支，并用 prospective_window 保存研究完成日或末次给药日及原文时长。",
+                                    action="请拆分未来计划分支，并用 prospective_window 保存研究药物给药日、研究完成日或末次给药日及原文时长。",
                                 )
                             )
                     elif prospective_window is not None:
@@ -1738,6 +2000,27 @@ class ProtocolDeconstructionGate:
                     "RULE_COMPONENT_WITHOUT_EVIDENCE_REQUIREMENT",
                     "部分规则组件没有说明需要核对的资料或判断。",
                     missing,
+                )
+            )
+        prejudged_descriptions = sorted(
+            requirement.requirement_id
+            for rule in draft.proposed_rules
+            for component in rule.components
+            for requirement in component.evidence_requirements
+            if re.search(
+                r"(?:确认|证明|判定|确保).{0,80}"
+                r"(?:不存在|无异常|无不可接受|符合|满足|不符合|触发|未触发|排除)",
+                requirement.description,
+            )
+        )
+        if prejudged_descriptions:
+            issues.append(
+                _issue(
+                    "evidence_coverage",
+                    "EVIDENCE_DESCRIPTION_PREJUDGES_RESULT",
+                    "部分资料要求在核对证据前已经预设通过或不通过结论。",
+                    prejudged_descriptions,
+                    action="请只写需要核对的资料、检查或研究者评估，不得预先写成不存在、无异常、符合或不触发。",
                 )
             )
         component_requirement_ids = {

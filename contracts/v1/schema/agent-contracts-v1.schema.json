@@ -354,6 +354,7 @@
         "baseline_date",
         "randomization_date",
         "first_dose_date",
+        "study_drug_administration_date",
         "last_dose_date",
         "study_completion_date",
         "event_date"
@@ -1725,6 +1726,17 @@
           "default": "fixture/v1",
           "title": "Schema Version",
           "type": "string"
+        },
+        "source_validity_window": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeQuantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [

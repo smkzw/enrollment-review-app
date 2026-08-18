@@ -312,6 +312,34 @@ class JobStore:
         payload = verify_payload_sha256(row.payload_json, row.payload_sha256)
         return row.checkpoint_id, payload
 
+    def list_checkpoints(
+        self, job_id: str, step_id: str
+    ) -> list[tuple[str, dict[str, Any]]]:
+        """按写入顺序返回某一步骤的全部追加式检查点。
+
+        步骤完成后的用户修订可以只写入发生变化的字段。调用方需要
+        按顺序折叠这些增量记录，不能让最后一条局部更新遮蔽同步骤
+        早期已持久化的来源上下文。
+        """
+        rows = self.session.execute(
+            select(JobCheckpointRecord)
+            .where(
+                JobCheckpointRecord.job_id == job_id,
+                JobCheckpointRecord.step_id == step_id,
+            )
+            .order_by(
+                JobCheckpointRecord.created_at.asc(),
+                JobCheckpointRecord.checkpoint_id.asc(),
+            )
+        ).scalars().all()
+        return [
+            (
+                row.checkpoint_id,
+                verify_payload_sha256(row.payload_json, row.payload_sha256),
+            )
+            for row in rows
+        ]
+
     def list_event_rows(self, job_id: str, after_seq: int = 0) -> list[EventRow]:
         return [
             EventRow(seq=seq, event=event)
@@ -444,7 +472,13 @@ class JobStore:
         return job
 
     def renew_lease(self, lease: JobLease) -> bool:
-        """续租：仅当前持有者且租约未过期时可续。"""
+        """续租仍由持有者和代号排他，不因本机短暂停顿自行失权。
+
+        本地 Mac 睡眠会同时暂停执行器和心跳线程。唤醒时租约可能已经超过时间，
+        但只要恢复器尚未把任务转为 recovering、也没有递增 generation，原
+        worker 仍是唯一持有者，可以安全续租。恢复器与本更新使用互斥的条件更新：
+        任一方先提交后，另一方都会因状态、owner 或 generation 不匹配而失败。
+        """
         now = self.now()
         result = self.session.execute(
             update(JobRecord)
@@ -454,7 +488,6 @@ class JobStore:
                 JobRecord.lease_owner == lease.owner,
                 JobRecord.lease_generation == lease.generation,
                 JobRecord.lease_expires_at.is_not(None),
-                JobRecord.lease_expires_at >= now,
             )
             .values(
                 lease_expires_at=now + self.lease_ttl,

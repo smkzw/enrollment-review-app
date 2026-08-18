@@ -312,6 +312,11 @@ export type AnchorTypeWire =
 
 export type TimeDirectionWire = "before" | "after" | "on";
 
+export interface TimeQuantityWire {
+  value: number;
+  unit: "day" | "week" | "month" | "year";
+}
+
 export interface TimeConstraintWire {
   anchor_type: AnchorTypeWire;
   direction: TimeDirectionWire;
@@ -334,6 +339,7 @@ export interface EvidenceRequirementWire {
   rule_component_id: string;
   fact_type: string;
   due_stage: ReviewStage;
+  source_validity_window?: TimeQuantityWire | null;
   description: string;
   required_source_types: string[];
   requires_contemporaneous_objective_source: boolean;

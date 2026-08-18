@@ -56,6 +56,7 @@ from app.domain.contracts.rules import (
     TimeQuantity,
     TimeUnit,
     WorkflowStage,
+    iter_atomic_predicates,
 )
 from app.domain.publication import canonical_hash
 from app.protocols.deconstruction_gate import ProtocolDeconstructionGate
@@ -1548,6 +1549,81 @@ def test_component_time_qualifier_cannot_disappear_from_all_predicates():
     )
 
 
+def test_screening_context_prevents_false_unresolved_anchor_for_local_example():
+    source_input, draft, spans = _fixture()
+    text = "筛选时存在鼻部疾病（如1年内鼻术后状态），且可能影响疗效评价"
+    component = draft.proposed_rules[1].components[0]
+    component.expression = _predicate(
+        "predicate-nasal-disease",
+        "存在鼻部疾病且可能影响疗效评价",
+        True,
+        "unitless",
+        source_clause=text,
+    )
+    draft.component_drafts[1].proposed_component = component
+    draft.component_drafts[1].source_excerpts = [text]
+    next(
+        item
+        for item in source_input.source_materials
+        if item.source_span_id == "span-ex"
+    ).text = text
+
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+    assert not any(
+        issue.issue_code == "TIME_ANCHOR_UNRESOLVED"
+        for issue in _issues(result, "temporal_semantics")
+    )
+
+
+def test_duplicate_predicate_identity_is_blocked_before_publication():
+    source_input, draft, spans = _fixture()
+    first = next(
+        iter_atomic_predicates(draft.proposed_rules[0].components[0].expression)
+    )
+    second = next(
+        iter_atomic_predicates(draft.proposed_rules[1].components[0].expression)
+    )
+    second.predicate_id = first.predicate_id
+
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+
+    duplicate = [
+        issue
+        for issue in _issues(result, "tree_integrity")
+        if issue.issue_code == "DUPLICATE_PREDICATE_ID"
+    ]
+    assert len(duplicate) == 1
+    assert duplicate[0].affected_refs == [first.predicate_id]
+
+
+def test_evidence_description_cannot_prejudge_review_result():
+    source_input, draft, spans = _fixture()
+    requirement = draft.proposed_rules[1].components[0].evidence_requirements[0]
+    requirement.description = "确认参与者无异常且符合入组要求"
+    matching_draft = next(
+        item
+        for item in draft.evidence_requirement_drafts
+        if item.proposed_requirement.requirement_id == requirement.requirement_id
+    )
+    matching_draft.proposed_requirement.description = requirement.description
+
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+
+    prejudged = [
+        issue
+        for issue in _issues(result, "evidence_coverage")
+        if issue.issue_code == "EVIDENCE_DESCRIPTION_PREJUDGES_RESULT"
+    ]
+    assert len(prejudged) == 1
+    assert prejudged[0].affected_refs == [requirement.requirement_id]
+
+
 def test_parenthetical_time_note_only_applies_to_its_named_sibling():
     source_input, draft, spans = _fixture()
     text = (
@@ -1582,13 +1658,135 @@ def test_parenthetical_time_note_only_applies_to_its_named_sibling():
     result = ProtocolDeconstructionGate().evaluate(
         source_input, draft, source_spans=spans
     )
-    unresolved = [
+    temporal_issues = _issues(result, "temporal_semantics")
+    assert not any(
+        issue.issue_code == "TIME_ANCHOR_UNRESOLVED" for issue in temporal_issues
+    )
+    missing_validity = [
         issue
-        for issue in _issues(result, "temporal_semantics")
-        if issue.issue_code == "TIME_ANCHOR_UNRESOLVED"
+        for issue in temporal_issues
+        if issue.issue_code == "SOURCE_VALIDITY_WINDOW_MISSING"
     ]
-    assert len(unresolved) == 1
-    assert unresolved[0].affected_refs == ["predicate-4"]
+    assert len(missing_validity) == 1
+    assert missing_validity[0].affected_refs == ["predicate-4"]
+    assert "筛选期1个月" in missing_validity[0].problem
+    assert "基线1个月" in missing_validity[0].problem
+
+
+def test_source_validity_window_is_bound_to_named_evidence_at_each_stage():
+    source_input, draft, spans = _fixture()
+    text = (
+        "筛选或基线时，生命体征、体格检查、12-导联心电图、"
+        "胸部CT（可接受1个月内的CT检查结果）异常且有临床意义"
+    )
+    component = draft.proposed_rules[1].components[0]
+    component.expression = LogicalExpression(
+        operator=LogicalOperator.ANY,
+        children=[
+            _predicate(
+                f"predicate-{index}",
+                attribute,
+                True,
+                "unitless",
+                source_clause=text,
+            )
+            for index, attribute in enumerate(
+                ("生命体征", "体格检查", "12-导联心电图", "胸部CT"),
+                start=1,
+            )
+        ],
+    )
+    component.evidence_requirements = [
+        EvidenceRequirement(
+            requirement_id=f"requirement:ct:{stage.value}",
+            rule_component_id=component.rule_component_id,
+            fact_type="胸部CT",
+            due_stage=stage,
+            source_validity_window=TimeQuantity(value=1, unit=TimeUnit.MONTH),
+            description=f"{stage.value}核对胸部CT结果",
+        )
+        for stage in (ReviewStage.SCREENING, ReviewStage.BASELINE)
+    ]
+    draft.component_drafts[1].proposed_component = component
+    draft.component_drafts[1].source_excerpts = [text]
+    next(
+        item
+        for item in source_input.source_materials
+        if item.source_span_id == "span-ex"
+    ).text = text
+
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+    assert not any(
+        issue.issue_code in {
+            "TIME_ANCHOR_UNRESOLVED",
+            "SOURCE_VALIDITY_WINDOW_MISSING",
+        }
+        for issue in _issues(result, "temporal_semantics")
+    )
+
+
+@pytest.mark.parametrize("fact_type, expect_missing", [("胸部CT结果", False), ("生命体征结果", True)])
+def test_component_level_validity_window_stays_with_its_named_evidence(
+    fact_type, expect_missing
+):
+    source_input, draft, spans = _fixture()
+    text = (
+        "筛选或基线时，生命体征、体格检查、12-导联心电图、"
+        "胸部CT（可接受1个月内的CT检查结果）异常且有临床意义"
+    )
+    component = draft.proposed_rules[1].components[0]
+    component.expression = LogicalExpression(
+        operator=LogicalOperator.ANY,
+        children=[
+            _predicate(
+                f"predicate-split-{index}",
+                f"{attribute}异常且有临床意义",
+                True,
+                "unitless",
+                source_clause=attribute,
+            )
+            for index, attribute in enumerate(
+                ("生命体征", "体格检查", "12-导联心电图", "胸部CT"),
+                start=1,
+            )
+        ],
+    )
+    component.evidence_requirements = [
+        EvidenceRequirement(
+            requirement_id=f"requirement:split:{stage.value}",
+            rule_component_id=component.rule_component_id,
+            fact_type=fact_type,
+            due_stage=stage,
+            source_validity_window=TimeQuantity(value=1, unit=TimeUnit.MONTH),
+            description=f"{stage.value}核对{fact_type}",
+        )
+        for stage in (ReviewStage.SCREENING, ReviewStage.BASELINE)
+    ]
+    draft.component_drafts[1].proposed_component = component
+    draft.component_drafts[1].source_excerpts = [text]
+    next(
+        item
+        for item in source_input.source_materials
+        if item.source_span_id == "span-ex"
+    ).text = text
+
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+    temporal_issues = _issues(result, "temporal_semantics")
+
+    assert not any(
+        issue.issue_code == "TIME_QUALIFIER_DROPPED" for issue in temporal_issues
+    )
+    assert (
+        any(
+            issue.issue_code == "SOURCE_VALIDITY_WINDOW_MISSING"
+            for issue in temporal_issues
+        )
+        is expect_missing
+    )
 
 
 def test_frequency_definition_is_not_misread_as_review_lookback():
@@ -1623,8 +1821,10 @@ def test_frequency_definition_is_not_misread_as_review_lookback():
         issue.issue_code in {
             "TIME_ANCHOR_UNRESOLVED",
             "FREQUENCY_WINDOW_NOT_STRUCTURED",
+            "METRIC_NOT_IN_SOURCE",
         }
-        for issue in _issues(result, "temporal_semantics")
+        for check in result.checks
+        for issue in check.issues
     )
 
 
@@ -1951,6 +2151,42 @@ def test_future_plan_window_requires_named_milestone_and_duration():
         issue.issue_code == "PROSPECTIVE_WINDOW_NOT_STRUCTURED"
         for issue in _issues(accepted, "temporal_semantics")
     )
+
+
+def test_future_plan_window_preserves_unspecified_study_drug_administration_anchor():
+    source_input, draft, spans = _fixture()
+    text = "整个研究期间（从签署ICF到研究药物给药后6个月），同意采取避孕措施"
+    component = draft.proposed_rules[0].components[0]
+    component.expression = _predicate(
+        "predicate-contraception",
+        "同意采取避孕措施",
+        True,
+        "unitless",
+        source_clause=text,
+    )
+    component.expression.predicate.prospective_period = ProspectivePeriod(
+        period=ProtocolPeriod.STUDY_PERIOD
+    )
+    component.expression.predicate.prospective_window = ProspectiveWindow(
+        anchor_type=AnchorType.STUDY_DRUG_ADMINISTRATION_DATE,
+        upper_bound=TimeQuantity(value=6, unit=TimeUnit.MONTH),
+    )
+    draft.component_drafts[0].proposed_component = component
+    draft.component_drafts[0].source_excerpts = [text]
+    next(
+        item for item in source_input.source_materials if item.source_span_id == "span-in"
+    ).text = text
+
+    accepted = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+
+    prospective_issues = [
+        issue
+        for issue in _issues(accepted, "temporal_semantics")
+        if issue.issue_code.startswith("PROSPECTIVE_")
+    ]
+    assert not prospective_issues, prospective_issues
 
 
 def test_component_level_parenthetical_exception_cannot_cover_any_branches():

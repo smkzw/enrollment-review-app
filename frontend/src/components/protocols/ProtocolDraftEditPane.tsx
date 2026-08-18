@@ -6,11 +6,42 @@ import { ExpressionView } from "../review/ExpressionView";
 import type { ProtocolDraftComponentView } from "../../domain/protocolViewModels";
 import type { IntegrityIssueView } from "../../api/protocolWorkbenchTypes";
 import { EmptyState } from "../shell/Feedback";
+import type { ExpressionNodeView } from "../../domain/viewModels";
 
 interface ProtocolDraftEditPaneProps {
   component: ProtocolDraftComponentView | null;
   revisionLabel: string;
   issues: ReadonlyArray<IntegrityIssueView>;
+}
+
+function collectPredicateIds(expression: ExpressionNodeView | null): Set<string> {
+  if (expression === null) return new Set();
+  if (expression.kind === "predicate") return new Set([expression.predicateId]);
+
+  const predicateIds = new Set<string>();
+  expression.children.forEach((child) => {
+    collectPredicateIds(child).forEach((predicateId) => predicateIds.add(predicateId));
+  });
+  return predicateIds;
+}
+
+export function isIntegrityIssueRelatedToComponent(
+  issue: IntegrityIssueView,
+  component: ProtocolDraftComponentView,
+): boolean {
+  const componentRefs = new Set<string>([
+    component.componentId,
+    component.parentRuleId,
+    component.displayCode,
+    component.displayCode.split("-")[0],
+    ...component.sourceRefs,
+    ...collectPredicateIds(component.expression),
+    ...collectPredicateIds(component.exceptionExpression),
+  ]);
+
+  return issue.affectedRefs.some((ref) =>
+    componentRefs.has(ref) || component.displayCode.startsWith(ref),
+  );
 }
 
 export function ProtocolDraftEditPane({
@@ -28,7 +59,7 @@ export function ProtocolDraftEditPane({
   }
 
   const relatedIssues = issues.filter((issue) =>
-    issue.affectedRefs.some((ref) => component.displayCode.startsWith(ref) || ref === component.displayCode.split("-")[0]),
+    isIntegrityIssueRelatedToComponent(issue, component),
   );
 
   return (

@@ -265,6 +265,19 @@ export function formatTimeConstraint(
   return parts.join("；");
 }
 
+function formatSourceValidityWindow(
+  quantity: RuleComponentWire["evidence_requirements"][number]["source_validity_window"],
+): string | null {
+  if (quantity == null) return null;
+  const unitLabels = {
+    day: "天",
+    week: "周",
+    month: "个月",
+    year: "年",
+  } as const;
+  return `可采用${quantity.value}${unitLabels[quantity.unit]}内的检查结果`;
+}
+
 function displayFixtureFileName(fileName: string): string {
   return fileName.replace(
     /^合成筛选资料-(?:clear|barrier|gap_conflict)(\.[^.]+)$/,
@@ -706,6 +719,9 @@ export function mapRuleComponent(
         factType: requirement.fact_type,
         dueStage: requirement.due_stage,
         dueStageLabel: stageLabel[requirement.due_stage],
+        sourceValidityLabel: formatSourceValidityWindow(
+          requirement.source_validity_window,
+        ),
         description: requirement.description,
       }),
     ),

@@ -247,9 +247,20 @@ class JobRunner:
                 with guard:
                     active = current[0]
                 renewed_at = self.now()
-                with self.session_factory() as session:
-                    with session.begin():
-                        renewed = self._store(session).renew_lease(active)
+                try:
+                    with self.session_factory() as session:
+                        with session.begin():
+                            renewed = self._store(session).renew_lease(active)
+                except Exception:
+                    # SQLite 的瞬时忙碌不代表执行权已经转移；下一次心跳继续用
+                    # owner/generation 校验。真正被恢复器接管时 renew_lease 会
+                    # 确定性返回 False，执行器结果仍会被丢弃。
+                    logger.warning(
+                        "任务 %s 租约心跳暂时写入失败，将继续核对执行权",
+                        active.job_id,
+                        exc_info=True,
+                    )
+                    continue
                 if not renewed:
                     lost.set()
                     return

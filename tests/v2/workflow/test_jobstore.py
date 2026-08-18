@@ -93,7 +93,7 @@ def test_claim_assigns_lease_and_blocks_second_claim(session_factory, clock):
     assert second.generation == 3  # 首次认领 +1，恢复器标记 recovering +1，再认领 +1
 
 
-def test_renew_lease_extends_expiry_and_expired_lease_cannot_renew(session_factory, clock):
+def test_expired_lease_can_renew_until_recovery_changes_ownership(session_factory, clock):
     from app.workflow.recovery import recover_expired_jobs
 
     create_job_with_steps(session_factory, clock, job_id="job-1", steps=STEPS)
@@ -106,11 +106,16 @@ def test_renew_lease_extends_expiry_and_expired_lease_cannot_renew(session_facto
 
     clock.advance(DEFAULT_LEASE_TTL.total_seconds() + 1)
     with _store(session_factory, clock) as store:
-        assert store.renew_lease(renewed) is False
-    # 过期后经恢复器 -> queued，才可被新 worker 领取
+        assert store.renew_lease(renewed) is True
+
+    # 本机暂停后迟到心跳可恢复；只有再次过期并由恢复器接管，旧租约才失权。
+    clock.advance(DEFAULT_LEASE_TTL.total_seconds() + 1)
     assert _claim(session_factory, clock, "w2") is None
     recover_expired_jobs(session_factory, now=clock.now)
-    assert _claim(session_factory, clock, "w2") is not None
+    second = _claim(session_factory, clock, "w2")
+    assert second is not None
+    with _store(session_factory, clock) as store:
+        assert store.renew_lease(renewed) is False
 
 def test_complete_step_writes_checkpoint_progress_and_event(session_factory, clock):
     create_job_with_steps(session_factory, clock, job_id="job-1", steps=STEPS)

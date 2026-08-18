@@ -2381,6 +2381,32 @@ class ProtocolDraftRevisionRepository:
             return None
         return max(revisions, key=lambda item: item.revision_number)
 
+    def find_by_generation_scope(
+        self,
+        *,
+        project_id: str,
+        protocol_version_id: str,
+    ) -> list[ProtocolDraftRevision]:
+        """查找某次方案解构任务已持久化的草稿。
+
+        生成步骤会先保存不可变草稿，再提交工作流检查点。两者之间
+        中断时，重试必须恢复已保存的成果，不能重复调用模型。读取先
+        验证全部不可变记录，再按合同真值筛选，避免列漂移隐藏坏记录。
+        """
+        rows = self.session.execute(
+            select(ProtocolDraftRevisionRecord).order_by(
+                ProtocolDraftRevisionRecord.created_at,
+                ProtocolDraftRevisionRecord.revision_number,
+            )
+        ).scalars().all()
+        contracts = [self._decode_record(row) for row in rows]
+        return [
+            item
+            for item in contracts
+            if item.project_id == project_id
+            and item.protocol_version_id == protocol_version_id
+        ]
+
     def count(self, draft_id: str) -> int:
         return len(self.list_by_draft(draft_id))
 

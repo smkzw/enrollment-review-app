@@ -273,6 +273,29 @@ def test_long_running_step_renews_lease_during_executor(session_factory, clock):
     assert snap.steps[0].attempt == 1
 
 
+def test_heartbeat_recovers_after_local_clock_jumps_past_lease(session_factory, clock):
+    """模拟 Mac 睡眠：没有恢复器接管时，唤醒后的原 worker 可继续提交。"""
+    steps = [{"step_id": "s1", "name": "解析", "retryable": True, "max_attempts": 3}]
+    create_job_with_steps(session_factory, clock, job_id="job-1", steps=steps)
+
+    def executor(ctx: StepContext) -> dict:
+        clock.advance(1.0)
+        time.sleep(0.15)
+        return {"step": ctx.step_id}
+
+    runner = JobRunner(
+        session_factory,
+        {"demo": executor},
+        worker_id="w1",
+        now=clock.now,
+        lease_ttl=timedelta(seconds=0.3),
+    )
+    assert runner.run_job("job-1") is True
+    snap = _snapshot(session_factory, clock, "job-1")
+    assert snap.state == "completed"
+    assert snap.steps[0].attempt == 1
+
+
 def test_missing_executor_fails_final_with_typed_error(session_factory, clock):
     create_job_with_steps(session_factory, clock, job_id="job-1", steps=TWO_STEPS)
     runner = JobRunner(session_factory, {}, worker_id="w1")  # 未注册任何执行器

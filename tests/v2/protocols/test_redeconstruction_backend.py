@@ -24,10 +24,13 @@ from app.services.protocol_publication_service import (
 )
 from app.protocols.deconstruction_gate import (
     CHECK_NAMES,
+    DECONSTRUCTION_GATE_VERSION,
     ProtocolDeconstructionGateResult,
     ProtocolGateCheckResult,
+    ProtocolGateIssue,
 )
 from app.domain.contracts.protocol_drafts import DraftFeedbackKind
+from app.domain.contracts.normalization import UnresolvedItem
 from app.services.protocol_workbench_service import (
     ProtocolWorkbenchError,
     ProtocolWorkbenchService,
@@ -45,7 +48,49 @@ class AlwaysPublishableGate:
                 for name in CHECK_NAMES
             ],
         )
+
+
+class CountingPublishableGate(AlwaysPublishableGate):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def evaluate(self, *args, **kwargs):
+        self.calls += 1
+        return super().evaluate(*args, **kwargs)
+
+
+class FeedbackRegressionGate:
+    """目标规则被无关重写时增加阻断问题。"""
+
+    def evaluate(self, _source_input, draft, **_kwargs):
+        target = draft.proposed_rules[1].components[0]
+        issue_count = 2 if target.title == "引入无关变化" else 1
+        issues = [
+            ProtocolGateIssue(
+                issue_code=f"TARGET_ISSUE_{index}",
+                check_name="tree_integrity",
+                level="阻止发布",
+                problem=f"目标规则问题 {index}",
+                impact="当前草稿不能发布。",
+                next_action="请最小范围修订。",
+                affected_refs=[target.rule_component_id],
+                repair_scope=[target.rule_component_id],
+            )
+            for index in range(1, issue_count + 1)
+        ]
+        return ProtocolDeconstructionGateResult(
+            publishable=False,
+            checks=[
+                ProtocolGateCheckResult(
+                    check_name=name,
+                    passed=name != "tree_integrity",
+                    issues=issues if name == "tree_integrity" else [],
+                )
+                for name in CHECK_NAMES
+            ],
+        )
 from app.storage.repositories import (
+    JobRepository,
     ProtocolDraftRevisionRepository,
     get_project_row,
     list_rule_set_revisions,
@@ -222,7 +267,7 @@ def test_redeconstruction_start_persists_target_project(
     session_view = service.get_session(result.job_id)
     assert session_view.session_kind == "re_deconstruction"
     assert session_view.target_project_id == "project-1"
-    assert session_view.target_project_code == "TEST-001"
+    assert session_view.target_project_code == "TEST"
     assert session_view.target_protocol_code == "TEST-001"
     assert session_view.target_study_phase == StudyPhase.PHASE_II.value
     assert session_view.target_study_phase_label == "II 期"
@@ -438,6 +483,136 @@ def test_source_error_feedback_creates_real_local_revision(
     assert after.revision.content.proposed_rules[1].components[0].title == "按原文重新核对后的条件"
     assert after.revision.diff.modified_rule_codes == ["EX-01"]
 
+    # 反馈修订会向生成/完整性步骤追加局部检查点。重启后必须
+    # 继续从该步骤早期检查点恢复方案输入和来源定位，不得被
+    # 后写的 draft_revision_id 局部更新遮蔽。
+    restarted = _make_service(
+        factory,
+        data_paths,
+        gate=AlwaysPublishableGate(),
+        feedback_reviser=revise,
+    )
+    sources = restarted.get_sources(started.job_id)
+    assert sources["snapshot_id"] == source_input.extraction_snapshot_id
+    assert sources["selected_phase"] == source_input.selected_phase.value
+    assert sources["source_spans"] == {
+        key: value.model_dump(mode="json") for key, value in spans.items()
+    }
+    assert restarted.get_draft_detail(started.job_id).revision.revision_id == (
+        after.revision.revision_id
+    )
+
+
+def test_source_error_feedback_rejects_target_rule_gate_regression(
+    slice4_env, data_paths
+) -> None:
+    factory, _now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+
+    def revise(_source_input, current_draft, _target_rule_code, _feedback_note):
+        revised = current_draft.model_copy(deep=True)
+        revised.proposed_rules[1].components[0].title = "引入无关变化"
+        revised.component_drafts[1].proposed_component.title = "引入无关变化"
+        return revised
+
+    service = _make_service(
+        factory,
+        data_paths,
+        gate=FeedbackRegressionGate(),
+        feedback_reviser=revise,
+    )
+    started = service.start_first_deconstruction(
+        upload_path=_write_minimal_docx(data_paths, "feedback-regression.docx"),
+        original_name="feedback-regression.docx",
+        idempotency_key="feedback-regression-first",
+        actor="医学监查员",
+    )
+    service.seed_review_session(
+        started.job_id,
+        source_input=source_input,
+        draft=draft,
+        source_spans=spans,
+        wait_at="await_review",
+    )
+    before = service.get_draft_detail(started.job_id)
+
+    with pytest.raises(ProtocolWorkbenchError) as exc_info:
+        service.apply_feedback(
+            started.job_id,
+            expected_revision_id=before.revision.revision_id,
+            feedback_kind=DraftFeedbackKind.SOURCE_ERROR,
+            target_rule_code="EX-01",
+            feedback_note="只修复当前完整性问题。",
+            actor="医学监查员",
+        )
+
+    assert exc_info.value.code == "FEEDBACK_REVISION_FAILED"
+    assert service.get_draft_detail(started.job_id).revision.revision_id == (
+        before.revision.revision_id
+    )
+
+
+def test_source_error_feedback_may_only_close_selected_rule_unresolved_item(
+    slice4_env, data_paths
+) -> None:
+    factory, _now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+    draft = draft.model_copy(
+        update={
+            "unresolved_items": [
+                UnresolvedItem(code="RESOLVED", affected_scope=["IN-01"]),
+                UnresolvedItem(code="KEEP", affected_scope=["EX-01"]),
+            ]
+        }
+    )
+
+    def revise(_source_input, current_draft, target_rule_code, _feedback_note):
+        assert target_rule_code == "IN-01"
+        return current_draft.model_copy(
+            update={
+                "unresolved_items": [
+                    item
+                    for item in current_draft.unresolved_items
+                    if target_rule_code not in item.affected_scope
+                ]
+            },
+            deep=True,
+        )
+
+    service = _make_service(
+        factory,
+        data_paths,
+        gate=AlwaysPublishableGate(),
+        feedback_reviser=revise,
+    )
+    started = service.start_first_deconstruction(
+        upload_path=_write_minimal_docx(data_paths, "feedback-close-item.docx"),
+        original_name="feedback-close-item.docx",
+        idempotency_key="feedback-close-item-first",
+        actor="医学监查员",
+    )
+    service.seed_review_session(
+        started.job_id,
+        source_input=source_input,
+        draft=draft,
+        source_spans=spans,
+        wait_at="await_review",
+    )
+    before = service.get_draft_detail(started.job_id)
+
+    after = service.apply_feedback(
+        started.job_id,
+        expected_revision_id=before.revision.revision_id,
+        feedback_kind=DraftFeedbackKind.SOURCE_ERROR,
+        target_rule_code="IN-01",
+        feedback_note="原文时间范围已明确，关闭旧待确认事项。",
+        actor="医学监查员",
+    )
+
+    assert after.revision.revision_number == before.revision.revision_number + 1
+    assert [item.code for item in after.revision.content.unresolved_items] == ["KEEP"]
+    assert after.revision.diff.modified_rule_codes == []
+
 
 def test_failed_source_error_feedback_keeps_current_revision(
     slice4_env, data_paths
@@ -629,6 +804,50 @@ def test_redeconstruction_clarification_keeps_integrity_publishable(
     assert integrity.blocking_count == 0
 
 
+def test_integrity_recomputes_and_persists_when_gate_version_is_stale(
+    slice4_env, data_paths
+) -> None:
+    factory, _now = slice4_env
+    gate = CountingPublishableGate()
+    service = _make_service(factory, data_paths, gate=gate)
+    source_input, draft, spans = confirmed_fixture()
+    started = service.start_first_deconstruction(
+        upload_path=_write_minimal_docx(data_paths, "stale-gate.docx"),
+        original_name="stale-gate.docx",
+        idempotency_key="stale-gate-first",
+        actor="医学监查员",
+    )
+    service.seed_review_session(
+        started.job_id,
+        source_input=source_input,
+        draft=draft,
+        source_spans=spans,
+        wait_at="await_review",
+    )
+    gate.calls = 0
+    with factory() as session:
+        with session.begin():
+            JobRepository(session).create_checkpoint(
+                checkpoint_id="stale-gate-checkpoint",
+                job_id=started.job_id,
+                step_id="integrity_check",
+                payload={
+                    "gate_result": AlwaysPublishableGate().evaluate().model_dump(
+                        mode="json"
+                    ),
+                    "gate_version": "protocol-deconstruction-gate/old",
+                    "publishable": True,
+                },
+            )
+
+    integrity = service.get_integrity(started.job_id)
+
+    assert integrity.publishable is True
+    assert gate.calls == 1
+    merged = service._merged_payload(started.job_id)
+    assert merged["gate_version"] == DECONSTRUCTION_GATE_VERSION
+
+
 def test_project_official_version_projection_reads_published_chain(
     slice4_env, data_paths
 ) -> None:
@@ -641,13 +860,13 @@ def test_project_official_version_projection_reads_published_chain(
     assert len(listed) == 1
     project = listed[0]
     assert project.project_id == "project-1"
-    assert project.project_code == "TEST-001"
+    assert project.project_code == "TEST"
     assert project.protocol_code == "TEST-001"
     assert project.official_version == "V1.0"
     assert project.rule_set_revision == 1
 
     projection = service.get_project_official_version("project-1")
-    assert projection.project.project_code == "TEST-001"
+    assert projection.project.project_code == "TEST"
     assert projection.publication_count == 1
     assert len(projection.versions) == 1
     version = projection.versions[0]

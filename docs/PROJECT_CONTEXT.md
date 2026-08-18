@@ -2014,3 +2014,12 @@ OCR concurrency note:
 - 新鲜独立 `gpt-5.6-luna:max` 审查会话三轮拒绝后终局 `ACCEPT`。最终确定性证据：V2 后端 `746 passed, 2 subtests passed`；前端 Vitest `258 passed`；生产构建通过；常规 Playwright `256 passed, 41 skipped`；真实 HTTP 1920/2560/3840 三宽度 `3 passed`。
 - 发生过一次非产品故障：真实 HTTP 生产构建与常规测试仓储共用 `frontend/dist`，且 Playwright 可复用旧 4173 preview，导致常规套件误连未启动 API。终止旧 preview、串行重建测试仓储后全量通过。后续不可并行运行两个会写 `dist` 的套件。
 - 用户要求完成当前步骤后暂停。切片 7 尚未启动；未读取仓库外临床原始资料。恢复时先读取本节和 `CHECKPOINT_20260818_SLICE6_COMPLETE_PAUSED.md`，再用清洁 V2 数据目录开始 MG-K10-SAR III 与 D001 II 真实方案验收。
+
+## 2026-08-18 Phase 3 切片 7 完成裁决与无损暂停
+
+- MG-K10-SAR III 从原始 V2.1 方案完成清洁 V2 全流程：IN 7、EX 16、41 个基线及以前必做项、80 个子组件、201 条资料要求、3 个审核节点。EX-07“6个月内”没有命名回溯锚点，系统保留唯一 `TIME_ANCHOR_UNRESOLVED` 并阻止正式发布，没有猜测筛选/基线/随机日。
+- D001 II 从原始 V1.0 方案完成清洁 V2 全流程并正式发布：方案编号 `D001-02-002`、项目代号 `D001-02`、IN 6、EX 30、50 个必做项、61 个子组件、127 条资料要求、3 个审核节点；完整性阻断 0，发布幂等重放未重复写入。
+- 真实偏差均从共享机制修复：事件频次不再被当作检验指标；检查结果时效不再被当作事件发生窗；时效必须绑定原文点名检查及各审核节点；门禁缓存具备语义版本；局部反馈发生问题替换或增加时拒绝保存；Mac 休眠后的长任务在租约未被抢占时可续订；恢复 revision 可合法进入保存/取消/发布生命周期。
+- 原始两份 DOCX 的 SHA-256、大小和 mtime 前后不变。最终验收 JSON 位于 `.trellis/tasks/08-14-phase3-protocol-deconstruction/metrics/slice7/`。
+- 最终确定性证据：V2 `765 passed, 2 subtests passed`；前端 Vitest `267 passed`；生产构建通过；真实 HTTP/SQLite/后台任务在 1920×1080、2560×1440、3840×2160 为 `3 passed`。
+- 用户要求无损暂停。切片 8 的 CodeBuddy CLI `hy3(max)`、Pi `cms-router/minimax-m3`、Grok Build `grok-4.6 (medium)` 三路视觉医学监查员试用尚未启动；恢复入口为 `CHECKPOINT_20260818_SLICE7_COMPLETE_PAUSED.md`。
