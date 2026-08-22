@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 6
-- **Last Active**: 2026-08-19
+- **Total Sessions**: 7
+- **Last Active**: 2026-08-22
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~121 | Active |
+| `journal-1.md` | ~423 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 7 | 2026-08-22 | Phase 4 证据工作流终局验收与归档 | `b750dda` | `codex/phase4-evidence-ocr-v2` |
 | 6 | 2026-08-19 | Phase 4 Slice 4.0-4.1 验收与无损暂停 | - | `codex/phase4-evidence-ocr-v2` |
 | 5 | 2026-08-19 | Phase 4 批准与 Slice 4.0 启动 | - | `codex/phase4-evidence-ocr-v2` |
 | 4 | 2026-08-19 | Phase 4 证据快照与 OCR V2 最终规划 | `75544f3` | `codex/phase4-evidence-ocr-v2` |

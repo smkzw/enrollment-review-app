@@ -386,3 +386,38 @@
 - 已清理可再生缓存、旧轮次测试目录及 42 MB 等大体积原始模型输出，`runs/` 从约 360 MB 降至约 45 MB。首次清理因 zsh 的 `path`/`PATH` 绑定在删除前失败，未损失文件；后续禁止用 `path` 作为 shell 变量名。
 - 完成记录见 `CHECKPOINT_20260822_PHASE4_COMPLETE.md`。Phase 5 唯一安全输入为已激活的不可变证据快照和完整处理修订；不得读取候选、失败或旧修订。
 - 本地 Qwen 指定路由已完成真实连通性检查，测试完成后已卸载；后续正式试用继续遵守与产品 OCR 串行、完成后卸载的约束。
+
+
+## Session 7: Phase 4 证据工作流终局验收与归档
+
+**Date**: 2026-08-22
+**Task**: Phase 4 证据工作流终局验收与归档
+**Branch**: `codex/phase4-evidence-ocr-v2`
+
+### Summary
+
+完成不可变证据快照、两种上传、OCR、校对、定位、风险核对、恢复和宽屏证据工作台的 Phase 4 验收；三路指定模型完成隔离真实项目试用，独立终审 ACCEPT。
+
+### Main Changes
+
+- 修复处理中快照任务深链、最小校对范围、半开区间覆盖、修订隔离、批量风险聚合和严重整页重复关闭语义。
+- 清理旧轮次缓存与大体积原始输出，并固化 Phase 4 完成检查点。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b750dda` | (see git log) |
+
+### Testing
+
+- [OK] 后端 1633 passed；前端 416 passed；生产构建通过；1080P/2K/4K Playwright 9 passed。
+- [OK] 真实 D001 隔离库证据页可进入准确的资料处理详情，fresh-context 独立检查 ACCEPT。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 新建 Phase 5 任务，仅以已激活的不可变证据快照和完整处理修订作为临床事实抽取入口。
