@@ -28,6 +28,7 @@ from tests.v2.storage.test_migration_0008 import (
     EVIDENCE_UPLOAD_TABLES,
     OCR_TABLES,
     PAGE_REVIEW_TABLES,
+    PHASE5_V2_TABLES,
     SLICE44_TABLES,
     _copy_table_without_slice44,
     _legacy_episode_save,
@@ -39,7 +40,7 @@ from tests.v2.storage.test_repositories_roundtrip import FIXTURES
 
 
 def _metadata_without_upload() -> MetaData:
-    """复制 Phase 3 + 0008 证据表（排除 0008a/0009/0010 表）作为 0008 校验目标。"""
+    """复制 Phase 3 + 0008 证据表（排除 0008a/0009/0010/0012/0013 表）作为 0008 校验目标。"""
     from app.storage.db import Base
 
     target = MetaData()
@@ -49,6 +50,7 @@ def _metadata_without_upload() -> MetaData:
             | OCR_TABLES
             | SLICE44_TABLES
             | PAGE_REVIEW_TABLES
+            | PHASE5_V2_TABLES
         ):
             _copy_table_without_slice44(table, target)
     return target

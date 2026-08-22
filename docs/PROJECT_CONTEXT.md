@@ -2214,4 +2214,16 @@ OCR concurrency note:
 - 首屏突出集合由后端确定性投影，不把所有规则关联都当作风险；本阶段不显示入排主结论、ActionRequest、通过/不通过或方案阈值/洗脱裁决。事实到规则只做精确身份索引。
 - 独立规划会商实际使用 `DeepSeek V4 Flash max` 与 `Grok Build 4.6 high`，均完成一轮且无 fallback；两者的一致阻断意见已由 Codex 在源码中核实并选择性采纳。会商与未来测试者继续分离。
 - 当前第三独立测试者已固定为 `pi/omlx/Qwen3.8-27B-oQ8e-fp16-mtp(medium)`，替换 ox-alpha；仅在 Phase 5 确定性门禁和真实运行完成后先连通性测试、再用隔离真实项目进行端到端试用，测试后卸载本地模型。
+
+## 2026-08-22 Phase 5 独立测试路线更新
+
+- 用户后续指令替换前述 Phase 5 测试路线。当前三名独立测试者固定为 Cursor CLI `auto`、Pi `cms-router/minimax-m3(high)`、Pi `opencode-go/ox-alpha-free`；它们只承担真实项目、真实浏览器与系统内独立 Agent 的端到端试用，不得与执行或会商角色相互替代。
+- 三种 harness 首次使用均先单独做连通性测试；按各自调用方式运行并保持最长 100 分钟等待，不因模型目录预检或短暂无输出而随意 fallback。该测试安排在 Phase 5 确定性门禁、真实 Normalizer 与 Patient Profile 界面可用之后执行，Slice 5.1 不提前制造伪端到端证据。
 - 最终规划产物为 `prd.md`、`design.md`、`implement.md`、`research/current-state-and-conference.md` 及已配置的 implement/check 上下文清单。下一安全动作是等待用户明确批准；批准后才切换为 `in_progress`，从 5.0 基线和 5.1 权威合同/迁移开始。
+
+## 2026-08-22 Phase 5 Slice 5.1 合同与权威存储基座
+
+- 用户已批准进入实施，任务状态为 `in_progress`。Slice 5.1 新增候选/发布分离合同、不可变权威元组、部分日期/来源强度/持续状态、`0013_clinical_facts_profile_v2` 及 v2 仓储；旧占位事实表仍为只读回归锚点。
+- 独立检查修复了三类存储边界：候选 payload 现在自带并镜像校验 `call_id / candidate_kind / created_at`，调用与运行用复合外键防止伪来源；不可变列表和 revision/幂等链头先解码全部 payload 再过滤，权威快照/处理修订/定位/资料/快照成员也先验 canonical hash 与镜像，漂移不再静默隐藏坏行；多态 locator/rule 链接新增类型化真实父外键和一致性 `CHECK`。
+- 事实候选的被断言对象必须与 AssertionBasis 一致，数值拒绝 NaN/无穷值，用药暴露保留独立 `record_time`；Slice 5.1 只能创建未解决冲突，不提前开放 Agent 或无理由的冲突裁决。
+- 验证：合同/仓储/迁移及共享仓储回归 155 项通过，历史迁移 40 项通过，`tests/v2` 全量 `1735 passed, 1 skipped, 2 subtests passed`；跳过项为既有的 oMLX 真实探测工件未提供。Slice 5.2+ 的事实门禁、Normalizer、API、UI、ReviewRun 和入排结论未实施。

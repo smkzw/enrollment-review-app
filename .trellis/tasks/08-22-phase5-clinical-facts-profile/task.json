@@ -3,7 +3,7 @@
   "name": "phase5-clinical-facts-profile",
   "title": "Phase 5 临床事实与 Patient Profile",
   "description": "从 Phase 4 活动证据处理修订生成可回源临床事实、事件、用药暴露、资料覆盖与 Patient Profile，不产生入排最终结论。",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": "backend, frontend, evidence-normalizer, clinical-fact-gate, patient-profile, clinical-regression",
   "package": null,
@@ -25,6 +25,6 @@
     "plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md",
     ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/current-state-and-conference.md"
   ],
-  "notes": "Phase 5 final planning prepared; implementation requires a new explicit user approval message before task start.",
+  "notes": "Phase 5 implementation approved and in progress. Slice 5.0/5.1 accepted on 2026-08-23; next boundary is Slice 5.2 deterministic gates. Do not start API/UI/ReviewRun/eligibility conclusions early.",
   "meta": {}
 }

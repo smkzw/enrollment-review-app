@@ -36,6 +36,8 @@ V2使用 SQLite/WAL、SQLAlchemy 2和Alembic。文件系统只保存原文件、
 - 规范化关键列与canonical JSON/hash同时保存；读取先验hash，再用Pydantic合同还原并交叉校验镜像列，不一致时拒绝发布。
 - 不可变记录的直接读取、列表、计数和链头查询必须执行同一套列/正文镜像校验。不能先用可能漂移的规范化列过滤后把坏行静默隐藏；正文自带的创建时间也属于不可变镜像。
 - 可重建投影仍须在物理表上强制其真实父关系和必要非空字段。应用层的来源闭包与语义校验不能替代 RuleSet、资料要求、审核节点等数据库外键。
+- Agent 候选的 canonical payload 必须自带并镜像校验 `run_id / call_id / candidate_kind / created_at`；候选行使用复合外键证明调用确实属于该运行，不得只靠两个独立外键拼接出伪来源。
+- 使用类型判别列的关联表仍须有真实父外键：每种类型使用独立可空父 ID，由 `CHECK` 约束类型、通用 ID 与唯一非空父 ID 一致；不得仅保存无外键的 `entity_kind + entity_id` 或 `target_kind + target_id`。
 
 ## 命名
 

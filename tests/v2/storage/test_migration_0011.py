@@ -22,6 +22,7 @@ from app.storage.db import build_engine
 from app.storage.migrate import (
     MigrationFailure,
     MigrationManager,
+    resolve_head_revision,
     verify_schema_matches_metadata,
 )
 from tests.v2.storage.test_migration_0008 import (
@@ -55,7 +56,7 @@ def test_0011_upgrade_preserves_legacy_episodes_and_adds_null_stage(data_paths) 
 
     manager = MigrationManager(data_paths)
     result = manager.upgrade("head")
-    assert result.to_revision == "0012"
+    assert result.to_revision == resolve_head_revision()
     engine = build_engine(data_paths.db_path)
     try:
         problems = verify_schema_matches_metadata(engine, manager.metadata)
@@ -160,4 +161,4 @@ def test_0011_legacy_only_downgrade_and_reupgrade(data_paths) -> None:
         engine.dispose()
 
     MigrationManager(data_paths).upgrade("head")
-    assert MigrationManager(data_paths).read_revision(data_paths.db_path) == "0012"
+    assert MigrationManager(data_paths).read_revision(data_paths.db_path) == resolve_head_revision()

@@ -53,6 +53,7 @@ from app.storage.evidence_repositories import BlobRepository
 from app.storage.migrate import (
     MigrationFailure,
     MigrationManager,
+    resolve_head_revision,
     verify_schema_matches_metadata,
 )
 from app.storage.ocr_repositories import OCRProfileRepository
@@ -536,7 +537,7 @@ def test_0010_upgrade_preserves_all_rows_payloads_hashes_and_integrity(data_path
 
     manager = MigrationManager(data_paths)
     result = manager.upgrade("head")
-    assert result.to_revision == "0012"
+    assert result.to_revision == resolve_head_revision()
     engine = build_engine(data_paths.db_path)
     try:
         assert _row_counts(engine) == before_counts
@@ -682,7 +683,7 @@ def test_0010_downgrade_refuses_slice44_history(data_paths):
 
     with pytest.raises(MigrationFailure, match="拒绝有损降级"):
         manager.downgrade("0009")
-    assert manager.read_revision(data_paths.db_path) == "0012"
+    assert manager.read_revision(data_paths.db_path) == resolve_head_revision()
     engine = build_engine(data_paths.db_path)
     try:
         with engine.connect() as connection:
@@ -714,7 +715,7 @@ def test_0010_downgrade_refuses_pointer_or_complete_history(data_paths):
         engine.dispose()
     with pytest.raises(MigrationFailure, match="拒绝有损降级"):
         manager.downgrade("0009")
-    assert manager.read_revision(data_paths.db_path) == "0012"
+    assert manager.read_revision(data_paths.db_path) == resolve_head_revision()
 
 
 def test_0010_empty_greenfield_downgrade_and_reupgrade(data_paths):
@@ -732,4 +733,4 @@ def test_0010_empty_greenfield_downgrade_and_reupgrade(data_paths):
     finally:
         engine.dispose()
     MigrationManager(data_paths).upgrade("head")
-    assert MigrationManager(data_paths).read_revision(data_paths.db_path) == "0012"
+    assert MigrationManager(data_paths).read_revision(data_paths.db_path) == resolve_head_revision()

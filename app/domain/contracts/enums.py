@@ -753,3 +753,77 @@ class ProcessingCandidateEventKind(StableEnum):
     CORRECTION_OR_RESOLUTION = "correction_or_resolution"
     ACTIVATE = "activate"
     REVISION_MISMATCH = "revision_mismatch"
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 临床事实与 Patient Profile（Slice 5.1 冻结）
+# ---------------------------------------------------------------------------
+
+
+class SourceStrength(StableEnum):
+    """来源强度（由文档类型、来源方与定位元数据确定性派生，不直接改变事实值）。
+
+    - contemporaneous_objective_result  同期客观结果（检验/检查报告等）；
+    - historical_primary_document       既往原始资料；
+    - current_study_chart_direct_record 当前研究病历直接记录；
+    - screening_record_transcription    筛选病历转述（阳性长期史可发布为较弱事实，
+                                         必须生成加强溯源提醒）；
+    - unverifiable_source               无法确认来源。
+    """
+
+    CONTEMPORANEOUS_OBJECTIVE = "contemporaneous_objective_result"
+    HISTORICAL_PRIMARY = "historical_primary_document"
+    CURRENT_STUDY_CHART = "current_study_chart_direct_record"
+    SCREENING_RECORD_TRANSCRIPTION = "screening_record_transcription"
+    UNVERIFIABLE = "unverifiable_source"
+
+
+class DurationStatus(StableEnum):
+    """持续状态；“既往”不等于“已结束”，不能从“既往”自动推断终止日期。
+
+    ongoing     持续；
+    ended       已结束（必须由资料明确给出终止信息，不得由“既往”推断）；
+    intermittent 间歇；
+    single      单次；
+    unknown     未知。
+    """
+
+    ONGOING = "ongoing"
+    ENDED = "ended"
+    INTERMITTENT = "intermittent"
+    SINGLE = "single"
+    UNKNOWN = "unknown"
+
+
+class FactGate(StableEnum):
+    """确定性事实门禁步骤（设计书 §4.2 顺序，逐候选记录结果）。"""
+
+    CONTRACT_AND_ENUM = "contract_and_enum"
+    AUTHORITY_AND_ACTIVE_REVISION = "authority_and_active_revision"
+    PAGE_COVERAGE_AND_REFERENCE_CLOSURE = "page_coverage_and_reference_closure"
+    LOCATOR_AND_TEXT_HASH = "locator_and_text_hash"
+    POLARITY_AND_ASSERTED_OBJECT = "polarity_and_asserted_object"
+    VALUE_UNIT_DATE_SOURCE = "value_unit_date_source"
+    IN_DOCUMENT_DEDUP_CONFLICT = "in_document_dedup_conflict"
+    CROSS_DOCUMENT_MERGE_CONFLICT = "cross_document_merge_conflict"
+    TRANSACTIONAL_PUBLISH = "transactional_publish"
+
+
+class FactNormalizationRunStatus(StableEnum):
+    """规范化运行状态（复用持久 Job 语义；失败/取消不污染上一活动 Profile）。"""
+
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    PARTIAL = "partial"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class FactCallStatus(StableEnum):
+    """单个规范化调用的状态（默认每个逻辑文档一次调用）。"""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"

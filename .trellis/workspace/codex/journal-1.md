@@ -33,6 +33,35 @@
 
 [OK] **Completed**
 
+## Session 9: Phase 5 Slice 5.1 合同与权威存储基座
+
+**Date**: 2026-08-23
+**Task**: Phase 5 临床事实与 Patient Profile
+**Branch**: `codex/phase5-clinical-facts-profile`
+
+### Summary
+
+完成 5.0 基线与 5.1 合同/持久化基座。候选与发布实体物理分离，所有发布对象冻结方案、规则、审核节点、活动证据快照和完整处理修订权威元组；旧占位事实表保持只读。
+
+### Root Causes And Fixes
+
+- 初始 worker 结果未直接接受。独立复审发现运行权威未绑定发布、断言哈希未核对定位、候选正文未持久化、事件无法表达独立起止与持续状态，均在共享合同/仓储层修复。
+- Trellis 全量检查继续发现候选缺少调用归属、规范化列可在列表查询前隐藏镜像漂移、多态定位/规则链接缺少真实父外键、数值和记录时间边界不完整；已增加候选 `call_id/candidate_kind/created_at`、先解码后筛选、组合外键/判别约束及相邻合同校验。
+- 事实的断言对象与 AssertionBasis 必须一致，断言原文哈希必须等于 Phase 4 locator 哈希；事件/暴露/冲突只能引用同一不可变权威元组下成员事实的定位闭包。
+
+### Verification
+
+- Codex 聚焦合同/仓储/历史迁移：`129 passed`。
+- Codex 完整 V2：`1735 passed, 1 skipped, 139 warnings, 2 subtests passed`；唯一跳过为既有 oMLX 探测工件缺失。
+- `compileall`、`git diff --check`、Trellis task validate、迁移/ORM parity、含数据降级恢复、legacy 隔离和 governed execution audit 通过。
+- 未安装或配置 `ruff/mypy/pyright/basedpyright`，未为本切片新增依赖。
+
+### Boundaries And Next Step
+
+- Slice 5.2+ 尚未实现：确定性候选门禁、真实 Evidence Normalizer、事实发布编排、Patient Profile API/UI、ReviewRun 和入排结论均未提前放行。
+- 下一安全动作：提交 Slice 5.1 后开始 5.2，以结构化候选 fixture 实现页覆盖、定位/哈希、极性、单位、日期、来源、重复和冲突门禁；失败候选不得生成空 Profile。
+- Phase 5 终局独立测试路线按用户最新要求固定为 Cursor CLI `auto`、Pi `cms-router/minimax-m3(high)`、Pi `opencode-go/ox-alpha-free`，测试与执行/会商角色分离，待 5.8 再做真实项目端到端试用。
+
 ### Next Steps
 
 - 按用户要求暂停；恢复后从 Slice 7 清洁 V2 数据目录真实方案验收开始，不启动 Slice 8。

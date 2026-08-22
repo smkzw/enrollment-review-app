@@ -110,6 +110,27 @@ _SLICE44_EPR_DISCRIMINATOR_COLUMNS = frozenset(
 #: 0012 追加的页级原子风险核对审计表；同样不属于 0007/0008a/0009/0010/0011 schema。
 PAGE_REVIEW_TABLES = frozenset({"ocr_risk_page_reviews"})
 
+#: 0013 追加的 Phase 5 v2 临床事实/Profile 表；同样不属于 0007-0012 任一 schema。
+PHASE5_V2_TABLES = frozenset(
+    {
+        "fact_normalization_runs",
+        "fact_normalization_calls",
+        "fact_normalization_candidates",
+        "fact_gate_results",
+        "clinical_facts_v2",
+        "clinical_events_v2",
+        "medication_exposures_v2",
+        "fact_evidence_locator_links",
+        "event_fact_links",
+        "exposure_fact_links",
+        "clinical_conflict_groups_v2",
+        "clinical_conflict_members_v2",
+        "fact_rule_links_v2",
+        "evidence_expectations_v2",
+        "patient_profile_revisions_v2",
+    }
+)
+
 #: 各表在预 0010 目标中必须剥离的 0010 列。
 _SLICE44_STRIP_COLUMNS = {
     "review_episodes": _SLICE44_EPISODE_POINTER_COLUMNS,
@@ -148,7 +169,7 @@ def _copy_table_without_slice44(table, target: MetaData):
 
 
 def _phase3_metadata() -> MetaData:
-    """复制 Phase 3 表（排除 0008/0008a/0009/0010/0012 的全部 Phase 4 表）作为 0007 校验目标。"""
+    """复制 Phase 3 表（排除 0008/0008a/0009/0010/0012/0013 的全部 Phase 4/5 表）作为 0007 校验目标。"""
     from app.storage.db import Base
 
     excluded = (
@@ -157,6 +178,7 @@ def _phase3_metadata() -> MetaData:
         | OCR_TABLES
         | SLICE44_TABLES
         | PAGE_REVIEW_TABLES
+        | PHASE5_V2_TABLES
     )
     target = MetaData()
     for name, table in Base.metadata.tables.items():
@@ -166,23 +188,23 @@ def _phase3_metadata() -> MetaData:
 
 
 def _metadata_without_ocr() -> MetaData:
-    """复制 Phase 3 + 0008 + 0008a 表（排除 0009/0010/0012 表）作为 0008a 校验目标。"""
+    """复制 Phase 3 + 0008 + 0008a 表（排除 0009/0010/0012/0013 表）作为 0008a 校验目标。"""
     from app.storage.db import Base
 
     target = MetaData()
     for name, table in Base.metadata.tables.items():
-        if name not in OCR_TABLES | SLICE44_TABLES | PAGE_REVIEW_TABLES:
+        if name not in OCR_TABLES | SLICE44_TABLES | PAGE_REVIEW_TABLES | PHASE5_V2_TABLES:
             _copy_table_without_slice44(table, target)
     return target
 
 
 def _metadata_without_slice44() -> MetaData:
-    """复制 Phase 3 + 0008 + 0008a + 0009 表（排除 0010/0012 表）作为 0009 校验目标。"""
+    """复制 Phase 3 + 0008 + 0008a + 0009 表（排除 0010/0012/0013 表）作为 0009 校验目标。"""
     from app.storage.db import Base
 
     target = MetaData()
     for name, table in Base.metadata.tables.items():
-        if name not in SLICE44_TABLES | PAGE_REVIEW_TABLES:
+        if name not in SLICE44_TABLES | PAGE_REVIEW_TABLES | PHASE5_V2_TABLES:
             _copy_table_without_slice44(table, target)
     return target
 

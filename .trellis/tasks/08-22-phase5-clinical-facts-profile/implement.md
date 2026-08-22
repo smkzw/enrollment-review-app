@@ -4,20 +4,22 @@
 
 ## 5.0 规划冻结与基线
 
-- [ ] 记录 Phase 4 基线提交、迁移头、后端/前端基线测试和旧表只读边界。
-- [ ] 将会商裁决转为合同/迁移/界面测试清单。
-- [ ] 确认测试路线与会商路线分离；第三测试者为 `pi/omlx/Qwen3.8-27B-oQ8e-fp16-mtp` medium，首次使用先连通性测试，完成后卸载本地模型。
+- [x] 记录 Phase 4 基线提交、迁移头、后端/前端基线测试和旧表只读边界。
+- [x] 将会商裁决转为合同/迁移/界面测试清单。
+- [x] 确认测试路线与会商路线分离；当前独立测试者固定为 Cursor CLI `auto`、Pi `cms-router/minimax-m3(high)`、Pi `opencode-go/ox-alpha-free`，首次使用均先按各自 harness 做连通性测试，不得相互替代或随意 fallback。
 
 验证：`git diff --check`，Trellis task validate，基线测试留档。
 
 ## 5.1 合同与权威身份
 
-- [ ] 新增候选合同、发布合同、PartialDateRange、SourceStrength、AssertionBasis、DurationStatus。
-- [ ] 新增 `0013_clinical_facts_profile_v2` 及 v2 repositories；所有发布对象绑定不可变权威元组。
-- [ ] 新增 FactNormalizationRun/Call/GateResult；不依赖 ReviewRun。
-- [ ] 证明旧占位表不进入任何 Phase 5 repository/API。
+- [x] 新增候选合同、发布合同、PartialDateRange、SourceStrength、AssertionBasis、DurationStatus。
+- [x] 新增 `0013_clinical_facts_profile_v2` 及 v2 repositories；所有发布对象绑定不可变权威元组。
+- [x] 新增 FactNormalizationRun/Call/GateResult；不依赖 ReviewRun。
+- [x] 证明旧占位表不进入任何 Phase 5 repository/API。
 
 门槛：迁移升降级、外键/唯一约束、错误活动指针、旧 snapshot、非 complete revision、跨节点引用均有失败测试。
+
+审查证据（2026-08-23）：Slice 5.1 合同/仓储/迁移及共享仓储回归 155 项通过；历史迁移 40 项通过；`tests/v2` 全量 `1735 passed, 1 skipped, 2 subtests passed`，唯一跳过为既有 oMLX 真实探测工件缺失。
 
 ## 5.2 确定性门禁先行
 
@@ -79,7 +81,7 @@
 - [ ] 从原始输入在隔离目录创建 D001 II 与 MG-K10-SAR III 新架构测试项目，各选资料结构不同的代表受试者。
 - [ ] Codex 逐事件核对人口学、疾病历程、MH、CM/治疗、检验检查/评分、日期、冲突、弱来源和定位。
 - [ ] 会商只做架构/临床逻辑挑战；测试者使用真实浏览器和系统内独立 Agent 完成端到端操作，两类证据不互相替代。
-- [ ] 测试者依次使用届时用户指定路线；当前第三测试者固定为 `pi/omlx/Qwen3.8-27B-oQ8e-fp16-mtp` medium，不得回退到 ox-alpha。
+- [ ] 测试者依次使用届时用户指定路线；当前固定为 Cursor CLI `auto`、Pi `cms-router/minimax-m3(high)`、Pi `opencode-go/ox-alpha-free`，不得用执行或会商模型替代。
 - [ ] 每个预期外结果定位到合同、OCR、事实门禁、投影或交互根因，修复共享机制后重跑受影响全量。
 
 门槛：P5-AC01 至 P5-AC13 有证据清单；后端全量测试、前端全量测试/构建、三档宽屏浏览器、数据库/文件状态和代表病例人工核对通过。
