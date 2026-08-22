@@ -2204,3 +2204,14 @@ OCR concurrency note:
 - 终局系统修复包括：从不可变提交恢复处理中快照的 `upload_job_id`；关键校对仅持久化最小变化范围；严格半开区间覆盖；风险/审核/校对按处理修订隔离；批量读取消除页数相关 N+1；严重整页重复风险不得由普通阅览关闭。
 - 决定性验证：后端 `1633 passed, 139 warnings, 2 subtests passed`；前端 `49 files / 416 tests passed`；生产构建通过；1080P/2K/4K Playwright `9 passed`；真实隔离 D001 证据页可进入准确的资料处理详情；fresh-context 独立检查最终 `ACCEPT`。
 - 最终恢复记录为 `.trellis/tasks/08-19-phase4-evidence-ocr-v2/CHECKPOINT_20260822_PHASE4_COMPLETE.md`。Phase 5 只能读取当前审核节点已激活的证据快照和完整处理修订，继续保持来源版本、页图、OCR 原文、有效校对和定位可回放；不得让候选或后续阶段资料静默改写早期事实。
+
+## 2026-08-22 Phase 5 最终规划待批准
+
+- 已从 Phase 4 终局提交 `32f5997` 建立隔离工作树 `.worktrees/phase5-clinical-facts-profile`、分支 `codex/phase5-clinical-facts-profile` 和 Trellis 子任务 `.trellis/tasks/08-22-phase5-clinical-facts-profile`；任务保持 `planning`，未修改产品代码或运行 `task.py start`。
+- 当前代码审计确认阻断错链：Phase 2 占位事实/Profile 绑定旧 `evidence_snapshots`，Phase 4 当前权威是审核节点成对指向的 `evidence_snapshots_v2 + complete processing revision`；新规划使用独立 v2 写表并冻结旧占位表读路径，不做外键原地重定向。
+- Evidence Normalizer 只输出候选；候选与发布合同分离。事实、事件、用药暴露、冲突、资料期望和 Profile revision 均绑定完整权威元组，发布前重验活动指针；只引用 Phase 4 已认证 locator，无真实坐标不画红框。
+- 沉默、未提及、缺页或空白只形成资料期望缺口，不能生成否定/正常事实；否定必须有明确对象和原句。部分日期保存上下界，事件时间与记录时间分开，“既往”不推断结束；筛选病历转述的阳性长期史作为较弱事实并产生溯源提醒。
+- 首屏突出集合由后端确定性投影，不把所有规则关联都当作风险；本阶段不显示入排主结论、ActionRequest、通过/不通过或方案阈值/洗脱裁决。事实到规则只做精确身份索引。
+- 独立规划会商实际使用 `DeepSeek V4 Flash max` 与 `Grok Build 4.6 high`，均完成一轮且无 fallback；两者的一致阻断意见已由 Codex 在源码中核实并选择性采纳。会商与未来测试者继续分离。
+- 当前第三独立测试者已固定为 `pi/omlx/Qwen3.8-27B-oQ8e-fp16-mtp(medium)`，替换 ox-alpha；仅在 Phase 5 确定性门禁和真实运行完成后先连通性测试、再用隔离真实项目进行端到端试用，测试后卸载本地模型。
+- 最终规划产物为 `prd.md`、`design.md`、`implement.md`、`research/current-state-and-conference.md` 及已配置的 implement/check 上下文清单。下一安全动作是等待用户明确批准；批准后才切换为 `in_progress`，从 5.0 基线和 5.1 权威合同/迁移开始。

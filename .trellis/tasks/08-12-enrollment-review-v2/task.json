@@ -26,14 +26,15 @@
     "08-13-phase1-5-agent-monitor-uat",
     "08-14-phase2-sqlite-domain-jobs",
     "08-14-phase3-protocol-deconstruction",
-    "08-19-phase4-evidence-ocr-v2"
+    "08-19-phase4-evidence-ocr-v2",
+    "08-22-phase5-clinical-facts-profile"
   ],
   "parent": null,
   "relatedFiles": [],
-  "notes": "Phase 0 至 Phase 4 已完成。Phase 4 已验收不可变证据快照、两种上传方式、OCR、校对、定位、风险核对、恢复和宽屏证据工作台；Phase 5 尚未启动。",
+  "notes": "Phase 0 至 Phase 4 已完成。Phase 5 最终规划、独立会商和 Trellis 上下文已完成，等待用户明确批准后启动实施。",
   "meta": {
-    "current_phase": "4",
-    "gate": "phase4_accepted_phase5_not_started",
-    "last_checkpoint": "2026-08-22-phase4-complete"
+    "current_phase": "5-planning",
+    "gate": "phase5_final_plan_waiting_user_approval",
+    "last_checkpoint": "2026-08-22-phase5-final-planning"
   }
 }

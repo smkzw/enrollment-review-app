@@ -1,0 +1,12 @@
+{"file":".trellis/spec/backend/index.md","reason":"后端分层、开发前检查与质量入口"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"不可变修订、迁移、事务和 repository 边界"}
+{"file":".trellis/spec/backend/persistent-jobs.md","reason":"规范化 Job、检查点、租约、幂等与恢复"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"门禁失败、陈旧结果和用户可理解错误"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"后端测试和跨层质量要求"}
+{"file":".trellis/spec/frontend/index.md","reason":"前端分层、开发前检查与质量入口"}
+{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Patient Profile 宽屏组件与交互结构"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"HTTP 状态、筛选、选择与异步任务状态"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"运行时解码与前后端合同一致性"}
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"前端测试、构建和宽屏验收要求"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"事实、API、投影与证据跳转跨层一致性"}
+{"file":".trellis/tasks/08-22-phase5-clinical-facts-profile/research/current-state-and-conference.md","reason":"当前实现错链、独立会商裁决和明确拒绝项"}
