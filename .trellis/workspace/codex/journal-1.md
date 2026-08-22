@@ -421,3 +421,24 @@
 ### Next Steps
 
 - 新建 Phase 5 任务，仅以已激活的不可变证据快照和完整处理修订作为临床事实抽取入口。
+
+
+## Session 8: Phase 5 临床事实与 Patient Profile 最终规划
+
+**Date**: 2026-08-22
+**Task**: Phase 5 临床事实与 Patient Profile 最终规划
+**Branch**: `codex/phase5-clinical-facts-profile`
+
+### Summary
+
+从 Phase 4 终局建立 Phase 5 隔离任务；完成代码现状审计、双路独立规划会商、PRD/设计/分片实施计划与 Trellis 上下文；修正活动处理修订错链、候选/发布混用、定位权威、沉默/否定、冲突和 Phase 6/7 越界；任务保持 planning，等待用户明确批准。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ad7113a` | (see git log) |
+
+### Status
+
+[OK] **Completed**
