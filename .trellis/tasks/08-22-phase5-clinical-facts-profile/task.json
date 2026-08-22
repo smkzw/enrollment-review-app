@@ -25,6 +25,6 @@
     "plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md",
     ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/current-state-and-conference.md"
   ],
-  "notes": "Phase 5 implementation approved and in progress. Slice 5.0/5.1 accepted on 2026-08-23; next boundary is Slice 5.2 deterministic gates. Do not start API/UI/ReviewRun/eligibility conclusions early.",
+  "notes": "Phase 5 implementation approved and in progress. Slice 5.0-5.2 accepted on 2026-08-23; next boundary is Slice 5.3 Evidence Normalizer and persistent resumable runs. Do not start API/UI/ReviewRun/eligibility conclusions early.",
   "meta": {}
 }

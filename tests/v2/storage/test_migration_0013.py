@@ -82,6 +82,14 @@ LEGACY_PLACEHOLDER_TABLES = frozenset(
     }
 )
 
+FACT_CHILD_TABLES = (
+    "fact_evidence_locator_links",
+    "event_fact_links",
+    "exposure_fact_links",
+    "clinical_conflict_members_v2",
+    "fact_rule_links_v2",
+)
+
 NOW = datetime(2026, 8, 22, 12, 0, 0)
 
 
@@ -462,6 +470,14 @@ def test_0013_legacy_placeholder_tables_untouched_and_unreferenced(
     assert ("evidence_snapshot_v2_id", "evidence_snapshots") not in fact_fks
 
 
+def test_0014_published_fact_asserted_object_is_required(migrated_engine):
+    columns = {
+        column["name"]: column
+        for column in inspect(migrated_engine).get_columns("clinical_facts_v2")
+    }
+    assert columns["assertion_object"]["nullable"] is False
+
+
 def test_0013_foreign_key_check_clean_after_upgrade(data_paths):
     MigrationManager(data_paths).upgrade("head")
     from app.storage.db import build_engine
@@ -810,6 +826,7 @@ def test_0013_payload_hash_matches_mirror_columns(migrated_engine, session_facto
         assert row.payload_sha256 == _sha256(row.payload_json)
         # 镜像列与正文一致：规范化列与 payload 校验在仓储层，这里证明行可回读
         assert row.fact_type == "vital_sign"
+        assert row.assertion_object == "blood pressure"
         assert row.source_strength == "contemporaneous_objective_result"
         assert row.episode_revision == 1
 
@@ -861,3 +878,119 @@ def test_0013_downgrade_greenfield_drops_all_tables_in_reverse_order(data_paths)
         engine.dispose()
     # 空绿地库降级后可重新升级到 head 且 schema 校验通过。
     manager.upgrade("head")
+
+
+# --------------------------------------------------------------------------- 0014
+
+
+def test_0014_upgrades_existing_0013_database_without_rewriting_0013(data_paths):
+    """既有 0013 数据库必须经独立迁移获得必填约束，而不是依赖回改旧脚本。"""
+    from app.storage.db import build_engine, build_session_factory
+
+    manager = MigrationManager(data_paths)
+    manager.upgrade("head")
+    manager.downgrade("0013")
+
+    engine = build_engine(data_paths.db_path)
+    try:
+        columns = {
+            column["name"]: column
+            for column in inspect(engine).get_columns("clinical_facts_v2")
+        }
+        assert columns["assertion_object"]["nullable"] is True
+        factory = build_session_factory(engine)
+        with factory() as session:
+            ids = _seed_authority(session)
+            session.add(ClinicalFactV2Record(**_fact_kwargs(ids)))
+            session.add(
+                FactRuleLinkV2Record(
+                    link_id="frl-before-0014",
+                    fact_id="fact-0013",
+                    target_kind="evidence_requirement",
+                    rule_set_id=ids["rule_set_id"],
+                    rule_set_revision=1,
+                    target_id="req-0013",
+                    evidence_requirement_id="req-0013",
+                )
+            )
+            session.commit()
+    finally:
+        engine.dispose()
+
+    manager.upgrade("head")
+    engine = build_engine(data_paths.db_path)
+    try:
+        columns = {
+            column["name"]: column
+            for column in inspect(engine).get_columns("clinical_facts_v2")
+        }
+        assert columns["assertion_object"]["nullable"] is False
+        inspector = inspect(engine)
+        for table_name in FACT_CHILD_TABLES:
+            fact_foreign_keys = [
+                foreign_key
+                for foreign_key in inspector.get_foreign_keys(table_name)
+                if foreign_key["constrained_columns"] == ["fact_id"]
+            ]
+            assert len(fact_foreign_keys) == 1
+            assert fact_foreign_keys[0]["referred_table"] == "clinical_facts_v2"
+        with engine.connect() as connection:
+            assert connection.exec_driver_sql(
+                "PRAGMA foreign_key_check"
+            ).fetchall() == []
+            assert connection.exec_driver_sql(
+                "SELECT assertion_object FROM clinical_facts_v2 WHERE fact_id = ?",
+                ("fact-0013",),
+            ).scalar_one() == "blood pressure"
+            assert connection.exec_driver_sql(
+                "SELECT fact_id FROM fact_rule_links_v2 WHERE link_id = ?",
+                ("frl-before-0014",),
+            ).scalar_one() == "fact-0013"
+        factory = build_session_factory(engine)
+        with factory() as session:
+            fact = session.get(ClinicalFactV2Record, "fact-0013")
+            assert fact is not None
+            session.delete(fact)
+            with pytest.raises(IntegrityError, match="FOREIGN KEY"):
+                session.commit()
+    finally:
+        engine.dispose()
+
+
+def test_0014_refuses_to_guess_missing_assertion_object(data_paths):
+    """旧库若已有空断言对象，升级应拒绝并完整恢复 0013 状态。"""
+    from app.storage.db import build_engine, build_session_factory
+
+    manager = MigrationManager(data_paths)
+    manager.upgrade("head")
+    manager.downgrade("0013")
+
+    engine = build_engine(data_paths.db_path)
+    factory = build_session_factory(engine)
+    with factory() as session:
+        ids = _seed_authority(session)
+        kwargs = _fact_kwargs(ids)
+        kwargs["assertion_object"] = None
+        session.add(ClinicalFactV2Record(**kwargs))
+        session.commit()
+    engine.dispose()
+
+    with pytest.raises(MigrationFailure, match="缺少断言对象"):
+        manager.upgrade("head")
+
+    assert manager.read_revision(data_paths.db_path) == "0013"
+    engine = build_engine(data_paths.db_path)
+    try:
+        columns = {
+            column["name"]: column
+            for column in inspect(engine).get_columns("clinical_facts_v2")
+        }
+        assert columns["assertion_object"]["nullable"] is True
+        with engine.connect() as connection:
+            row = connection.exec_driver_sql(
+                "SELECT assertion_object FROM clinical_facts_v2 WHERE fact_id = ?",
+                ("fact-0013",),
+            ).one()
+            assert row.assertion_object is None
+    finally:
+        engine.dispose()

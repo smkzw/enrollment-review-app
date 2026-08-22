@@ -2227,3 +2227,12 @@ OCR concurrency note:
 - 独立检查修复了三类存储边界：候选 payload 现在自带并镜像校验 `call_id / candidate_kind / created_at`，调用与运行用复合外键防止伪来源；不可变列表和 revision/幂等链头先解码全部 payload 再过滤，权威快照/处理修订/定位/资料/快照成员也先验 canonical hash 与镜像，漂移不再静默隐藏坏行；多态 locator/rule 链接新增类型化真实父外键和一致性 `CHECK`。
 - 事实候选的被断言对象必须与 AssertionBasis 一致，数值拒绝 NaN/无穷值，用药暴露保留独立 `record_time`；Slice 5.1 只能创建未解决冲突，不提前开放 Agent 或无理由的冲突裁决。
 - 验证：合同/仓储/迁移及共享仓储回归 155 项通过，历史迁移 40 项通过，`tests/v2` 全量 `1735 passed, 1 skipped, 2 subtests passed`；跳过项为既有的 oMLX 真实探测工件未提供。Slice 5.2+ 的事实门禁、Normalizer、API、UI、ReviewRun 和入排结论未实施。
+
+## 2026-08-23 Phase 5 Slice 5.2 确定性门禁验收
+
+- 已在不调用模型的结构化候选上完成九步门禁中发布前可判定部分：完整页覆盖、当前修订定位闭包、有效原文与哈希、否定对象、数值/单位、部分日期、来源、记录时间、候选引用、精确重复和未解决冲突。关键 OCR 风险只阻断实际关联候选；空输出、缺页、虚构定位、跨调用越界和跨权威修订均拒绝。
+- 根因修复不落项目特异规则：否定词必须直接支配被断言对象，不能因同句出现“无”而误判；事实稳定身份包含被断言对象，避免 ALT/AST 等同值同单位事实误合并；事件稳定身份包含去重后的引用事实对象；事件/暴露定位只能来自其引用事实定位并在持久化读回时再次校验。
+- 运行编排只接受成功调用和完整处理修订，并核对项目、受试者、审核节点、活动快照与完整处理修订的冻结权威。发布事务门在 Slice 5.2 不伪造成功，由后续发布仓储负责。
+- 已发布的 `0013` 迁移恢复原始形状；新增 `0014` 单独收紧 `clinical_facts_v2.assertion_object` 为必填。旧库存在空值时拒绝升级并恢复，不根据类型或原文猜测医学事实；有数据升级后五类事实子表外键和删除保护保持完整。
+- 最终证据：聚焦 `222 passed`，历史迁移 `54 passed`，Codex 全量 V2 `1854 passed, 1 skipped, 139 warnings, 2 subtests passed`；`compileall`、`git diff --check`、Trellis validate 通过。独立 Trellis 核查的限定 Ruff/mypy 通过且无未闭合问题。唯一跳过仍为既有 oMLX 真实探测工件缺失。
+- 下一安全边界是 Slice 5.3：真实 Evidence Normalizer 的中文提示词、严格结构化输出、连续页组切分与可恢复持久运行。事实发布、Patient Profile API/UI、ReviewRun、入排结论和真实项目端到端试用仍未放行。

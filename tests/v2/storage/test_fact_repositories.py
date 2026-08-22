@@ -650,6 +650,7 @@ def _fact(ids, **overrides) -> ClinicalFactV2:
         "authority": _authority(ids),
         "fact_type": "vital_sign",
         "polarity": FactPolarity.AFFIRMED,
+        "asserted_object": "血压",
         "value": "120/80",
         "unit": "unitless",
         "source_strength": SourceStrength.CONTEMPORANEOUS_OBJECTIVE,
@@ -666,6 +667,7 @@ def _fact(ids, **overrides) -> ClinicalFactV2:
     if "stable_identity" not in overrides:
         base["stable_identity"] = clinical_fact_stable_identity(
             authority=base["authority"], fact_type=base["fact_type"],
+            asserted_object=base["asserted_object"],
             polarity=base["polarity"], value=base["value"], unit=base["unit"],
             date_range=base["date_range"],
         )
@@ -684,6 +686,7 @@ def _event(ids, **overrides) -> ClinicalEventV2:
         "duration_status": DurationStatus.ONGOING,
         "record_time": NOW,
         "fact_ids": [f"{ids['run_id']}-fact"],
+        "referenced_fact_objects": ["vital_sign:血压"],
         "locator_ids": [ids["locator_id"]],
         "source_strength": SourceStrength.HISTORICAL_PRIMARY,
         "revision": 1,
@@ -693,6 +696,7 @@ def _event(ids, **overrides) -> ClinicalEventV2:
     if "stable_identity" not in overrides:
         base["stable_identity"] = clinical_event_stable_identity(
             authority=base["authority"], event_type=base["event_type"],
+            referenced_fact_objects=base["referenced_fact_objects"],
             start_range=base["start_range"], end_range=base["end_range"],
             duration_status=base["duration_status"],
         )
@@ -1058,6 +1062,14 @@ def test_rejects_event_fact_with_partial_authority_drift(chain, session):
         ClinicalEventV2Repository(session).create(_event(chain))
 
 
+def test_rejects_event_declared_fact_objects_different_from_published_facts(chain, session):
+    ClinicalFactV2Repository(session).create(_fact(chain))
+    with pytest.raises(FactCrossEntityError, match="引用事实对象"):
+        ClinicalEventV2Repository(session).create(
+            _event(chain, referenced_fact_objects=["vital_sign:体温"])
+        )
+
+
 def test_rejects_publish_semantics_different_from_gated_candidate(chain, session):
     with pytest.raises(FactCrossEntityError, match="候选语义"):
         ClinicalFactV2Repository(session).create(_fact(chain, value="130/90"))
@@ -1290,10 +1302,22 @@ def test_fact_roundtrip_preserves_authority_identity_and_locators(chain, session
     got = repo.get(f"{chain['run_id']}-fact")
     assert got.authority == _authority(chain)
     assert got.stable_identity == _fact(chain).stable_identity
+    assert got.asserted_object == "血压"
     assert got.locator_ids == [chain["locator_id"]]
     assert got.assertion_basis.locator_id == chain["locator_id"]
     assert got.value == "120/80"
     assert got.date_range.lower_bound == date(2026, 3, 1)
+
+
+def test_fact_asserted_object_column_payload_mirror_drift_rejected(chain, session):
+    repo = ClinicalFactV2Repository(session)
+    repo.create(_fact(chain))
+    row = session.get(ClinicalFactV2Record, f"{chain['run_id']}-fact")
+    row.assertion_object = "体温"
+    session.flush()
+
+    with pytest.raises(PersistedContractInvalid, match="assertion_object"):
+        repo.get(f"{chain['run_id']}-fact")
 
 
 def test_fact_payload_locator_mirror_drift_rejected(chain, chain_other, session):
@@ -1320,8 +1344,25 @@ def test_event_roundtrip(chain, session):
     repo.create(_event(chain))
     got = repo.get(f"{chain['run_id']}-event")
     assert got.fact_ids == [f"{chain['run_id']}-fact"]
+    assert got.referenced_fact_objects == ["vital_sign:血压"]
     assert got.locator_ids == [chain["locator_id"]]
     assert got.authority == _authority(chain)
+
+
+def test_event_payload_spoofed_fact_objects_rejected_on_read(chain, session):
+    ClinicalFactV2Repository(session).create(_fact(chain))
+    repo = ClinicalEventV2Repository(session)
+    repo.create(_event(chain))
+    spoofed = _event(chain, referenced_fact_objects=["vital_sign:体温"])
+    payload_json, payload_sha256 = encode_contract(spoofed)
+    row = session.get(ClinicalEventV2Record, f"{chain['run_id']}-event")
+    row.payload_json = payload_json
+    row.payload_sha256 = payload_sha256
+    row.stable_identity = spoofed.stable_identity
+    session.flush()
+
+    with pytest.raises(PersistedContractInvalid, match="引用事实对象"):
+        repo.get(f"{chain['run_id']}-event")
 
 
 def test_exposure_roundtrip(chain, session):

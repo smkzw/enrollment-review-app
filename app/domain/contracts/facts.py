@@ -367,6 +367,7 @@ class ClinicalFactV2(Phase5Model):
     authority: FactAuthority
     fact_type: str = Field(min_length=1)
     polarity: FactPolarity
+    asserted_object: str = Field(min_length=1)
     value: ScalarValue | None = None
     unit: str | None = None
     source_strength: SourceStrength
@@ -392,16 +393,22 @@ class ClinicalFactV2(Phase5Model):
             and self.assertion_basis.locator_id not in self.locator_ids
         ):
             raise ValueError("断言依据定位必须属于发布事实的定位集合")
+        if (
+            self.assertion_basis is not None
+            and self.assertion_basis.asserted_object != self.asserted_object
+        ):
+            raise ValueError("发布事实被断言对象必须与断言依据对象一致")
         expected = clinical_fact_stable_identity(
             authority=self.authority,
             fact_type=self.fact_type,
+            asserted_object=self.asserted_object,
             polarity=self.polarity,
             value=self.value,
             unit=self.unit,
             date_range=self.date_range,
         )
         if self.stable_identity != expected:
-            raise ValueError("发布事实稳定身份与权威元组/类型/极性/规范值/单位/日期范围不一致")
+            raise ValueError("发布事实稳定身份与权威元组/类型/对象/极性/规范值/单位/日期范围不一致")
         return self
 
 
@@ -422,6 +429,7 @@ class ClinicalEventV2(Phase5Model):
     duration_status: DurationStatus
     record_time: datetime | None = None
     fact_ids: list[str] = Field(min_length=1)
+    referenced_fact_objects: list[str] = Field(min_length=1)
     locator_ids: list[str] = Field(min_length=1)
     source_strength: SourceStrength
     stable_identity: str = Field(pattern=_SHA256)
@@ -434,17 +442,19 @@ class ClinicalEventV2(Phase5Model):
         if self.record_time is not None:
             _require_utc(self.record_time, "record_time")
         _require_sorted_unique(self.fact_ids, "事件事实引用")
+        _require_sorted_unique(self.referenced_fact_objects, "事件引用事实对象")
         _require_sorted_unique(self.locator_ids, "事件定位")
         _validate_duration_bounds(self.start_range, self.end_range, self.duration_status)
         expected = clinical_event_stable_identity(
             authority=self.authority,
             event_type=self.event_type,
+            referenced_fact_objects=self.referenced_fact_objects,
             start_range=self.start_range,
             end_range=self.end_range,
             duration_status=self.duration_status,
         )
         if self.stable_identity != expected:
-            raise ValueError("发布事件稳定身份与权威元组/事件类型/起止/持续状态不一致")
+            raise ValueError("发布事件稳定身份与权威元组/事件类型/引用事实对象/起止/持续状态不一致")
         return self
 
 
@@ -554,12 +564,13 @@ def clinical_fact_stable_identity(
     *,
     authority: FactAuthority,
     fact_type: str,
+    asserted_object: str,
     polarity: FactPolarity,
     value: ScalarValue | None,
     unit: str | None,
     date_range: PartialDateRange | None,
 ) -> str:
-    """临床事实稳定重复键：权威元组/类型/极性/规范值/单位/日期范围，不含置信度与定位。"""
+    """临床事实稳定重复键：包含被断言对象，排除置信度与定位。"""
     from app.domain.publication import canonical_hash
 
     return canonical_hash(
@@ -567,6 +578,7 @@ def clinical_fact_stable_identity(
             "identity": "clinical_fact/v2",
             "authority": authority.model_dump(mode="json"),
             "fact_type": fact_type,
+            "asserted_object": asserted_object,
             "polarity": polarity.value,
             "value": value,
             "unit": unit,
@@ -579,11 +591,12 @@ def clinical_event_stable_identity(
     *,
     authority: FactAuthority,
     event_type: str,
+    referenced_fact_objects: list[str],
     start_range: PartialDateRange | None,
     end_range: PartialDateRange | None,
     duration_status: DurationStatus,
 ) -> str:
-    """事件稳定重复键：权威元组/事件类型/起止范围/持续状态。"""
+    """事件稳定重复键：包含引用事实对象，防止不同临床对象误合并。"""
     from app.domain.publication import canonical_hash
 
     return canonical_hash(
@@ -591,6 +604,7 @@ def clinical_event_stable_identity(
             "identity": "clinical_event/v2",
             "authority": authority.model_dump(mode="json"),
             "event_type": event_type,
+            "referenced_fact_objects": referenced_fact_objects,
             "start_range": _date_range_identity(start_range),
             "end_range": _date_range_identity(end_range),
             "duration_status": duration_status.value,

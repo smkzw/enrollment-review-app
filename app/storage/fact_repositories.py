@@ -491,6 +491,7 @@ class FactGateResultRepository:
 class _PublishMixin:
     """发布实体公共写入门禁：权威元组、定位闭包、运行/门禁、跨实体事实引用。"""
 
+    session: Session
     _authority: FactAuthorityValidator
 
     def _validate_common(
@@ -554,6 +555,16 @@ class _PublishMixin:
         facts = [fact_repository.get(fact_id) for fact_id in fact_ids]
         return sorted(
             gate_repository.get(fact.gate_id).candidate_id for fact in facts
+        )
+
+    def _fact_semantic_objects(self, fact_ids: list[str]) -> list[str]:
+        repository = ClinicalFactV2Repository(self.session)
+        return sorted(
+            {
+                f"{fact.fact_type}:{fact.asserted_object}"
+                for fact_id in fact_ids
+                for fact in [repository.get(fact_id)]
+            }
         )
 
     def _fact_locator_closure(self, fact_ids: list[str]) -> set[str]:
@@ -667,6 +678,7 @@ class ClinicalFactV2Repository(_PublishMixin):
         if not isinstance(candidate, ClinicalFactCandidateV2) or (
             candidate.fact_type,
             candidate.polarity,
+            candidate.asserted_object,
             candidate.canonical_value,
             candidate.unit,
             candidate.date_range,
@@ -676,6 +688,7 @@ class ClinicalFactV2Repository(_PublishMixin):
         ) != (
             fact.fact_type,
             fact.polarity,
+            fact.asserted_object,
             fact.value,
             fact.unit,
             fact.date_range,
@@ -718,11 +731,7 @@ class ClinicalFactV2Repository(_PublishMixin):
             unit=fact.unit,
             source_strength=fact.source_strength.value,
             record_time=to_utc_naive(fact.record_time),
-            assertion_object=(
-                fact.assertion_basis.asserted_object
-                if fact.assertion_basis is not None
-                else None
-            ),
+            assertion_object=fact.asserted_object,
             assertion_text=(
                 fact.assertion_basis.assertion_text
                 if fact.assertion_basis is not None
@@ -793,7 +802,7 @@ class ClinicalFactV2Repository(_PublishMixin):
                 "date_lower_bound": "date_range.lower_bound",
                 "date_upper_bound": "date_range.upper_bound",
                 "date_source_text": "date_range.source_text",
-                "assertion_object": "assertion_basis.asserted_object",
+                "assertion_object": "asserted_object",
                 "assertion_text": "assertion_basis.assertion_text",
                 "assertion_locator_id": "assertion_basis.locator_id",
                 "assertion_source_text_sha256": "assertion_basis.source_text_sha256",
@@ -850,6 +859,10 @@ class ClinicalEventV2Repository(_PublishMixin):
         if self._fact_candidate_ids(event.fact_ids) != candidate.fact_candidate_ids:
             raise FactCrossEntityError(
                 f"发布事件 {event.event_id} 的事实引用与候选事实引用不一致"
+            )
+        if self._fact_semantic_objects(event.fact_ids) != event.referenced_fact_objects:
+            raise FactCrossEntityError(
+                f"发布事件 {event.event_id} 的引用事实对象与实际发布事实不一致"
             )
         self._require_locators_within_facts(event.locator_ids, event.fact_ids)
         self._require_revision_chain_head(
@@ -980,6 +993,10 @@ class ClinicalEventV2Repository(_PublishMixin):
         if fact_ids != payload["fact_ids"]:
             raise PersistedContractInvalid(
                 f"event {row.event_id} 事实链接与 payload 不一致，拒绝还原合同"
+            )
+        if self._fact_semantic_objects(fact_ids) != payload["referenced_fact_objects"]:
+            raise PersistedContractInvalid(
+                f"event {row.event_id} 引用事实对象与实际发布事实不一致，拒绝还原合同"
             )
         return contract.model_copy(
             update={"fact_ids": fact_ids, "locator_ids": payload["locator_ids"]}

@@ -293,8 +293,8 @@ class ClinicalFactV2Record(EvidenceAppendedRecordMixin, FactAuthorityColumns, Ba
     """发布接受的临床事实：绑定权威元组、Gate id、来源强度与稳定身份。
 
     未知极性不得携带被断言值（``value_json`` 可空）；肯定/否定事实必须携带明确断言
-    依据（``assertion_*`` 列）。``stable_identity`` 由权威元组/类型/极性/规范值/单位/
-    日期范围推导，不含置信度与定位；``(stable_identity, revision)`` 唯一，同身份多
+    依据（``assertion_*`` 列）。``stable_identity`` 由权威元组/类型/被断言对象/极性/
+    规范值/单位/日期范围推导，不含置信度与定位；``(stable_identity, revision)`` 唯一，同身份多
     来源合并为一条事实并保留全部定位（``fact_evidence_locator_links``）。
     """
 
@@ -317,7 +317,7 @@ class ClinicalFactV2Record(EvidenceAppendedRecordMixin, FactAuthorityColumns, Ba
     date_upper_bound: Mapped[date | None] = mapped_column(Date, nullable=True)
     date_source_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     record_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    assertion_object: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    assertion_object: Mapped[str] = mapped_column(String(256), nullable=False)
     assertion_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     assertion_locator_id: Mapped[str | None] = mapped_column(
         String(128), ForeignKey("evidence_locator_artifacts.locator_id"), nullable=True

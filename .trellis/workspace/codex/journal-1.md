@@ -5,6 +5,39 @@
 
 ---
 
+## Session 10: Phase 5 Slice 5.2 确定性门禁
+
+**Date**: 2026-08-23
+**Task**: Phase 5 临床事实与 Patient Profile
+**Branch**: `codex/phase5-clinical-facts-profile`
+
+### Summary
+
+完成不调用模型的候选级确定性门禁、Phase 4 定位/原文/OCR 风险闭包、跨调用批量
+去重与冲突编排，并把每项门禁结果与受影响范围收敛为可持久合同。
+
+### Root Causes And Fixes
+
+- 否定词与被断言对象必须建立直接语义关系，不能以同句共现替代；沉默、缺页和邻近
+  否定不生成否定事实。
+- 事实身份新增被断言对象，事件身份新增去重后的引用事实对象；候选、发布、仓储和读回
+  使用同一身份语义，避免不同检验项目或不同临床事件错误合并。
+- 运行只接受成功调用和完整处理修订，冻结权威元组与当前活动指针均需复核；Slice 5.2
+  不伪造事务发布门成功。
+- 不回改既有 `0013`；以 `0014` 收紧断言对象非空约束，遇历史空值拒绝猜测并恢复。
+
+### Verification
+
+- Codex 聚焦 `222 passed`；全量 V2 `1854 passed, 1 skipped, 139 warnings, 2 subtests passed`。
+- `compileall`、`git diff --check`、Trellis validate 通过；项目未直接安装 Ruff，独立 Trellis
+  核查完成限定 Ruff/mypy、历史迁移与同基线全量测试并无未闭合问题。
+
+### Boundaries And Next Step
+
+- 仅 Slice 5.2 放行；未调用真实模型、未发布事实、未生成 Profile、未新增 API/UI 或入排结论。
+- 下一安全动作是 Slice 5.3 Evidence Normalizer 与可恢复持久运行；5.8 才执行三路指定模型的
+  真实项目浏览器试用，测试角色继续与执行/会商角色分离。
+
 
 
 ## Session 1: Phase 3 Slice 6 完成与无损暂停

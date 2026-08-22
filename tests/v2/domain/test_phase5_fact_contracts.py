@@ -122,6 +122,7 @@ def _fact(**overrides):
         "authority": _authority(),
         "fact_type": "medical_history",
         "polarity": FactPolarity.NEGATED,
+        "asserted_object": "高血压病史",
         "value": "无",
         "unit": None,
         "source_strength": SourceStrength.SCREENING_RECORD_TRANSCRIPTION,
@@ -137,6 +138,7 @@ def _fact(**overrides):
         base["stable_identity"] = clinical_fact_stable_identity(
             authority=base["authority"],
             fact_type=base["fact_type"],
+            asserted_object=base["asserted_object"],
             polarity=base["polarity"],
             value=base["value"],
             unit=base["unit"],
@@ -157,6 +159,7 @@ def _event(**overrides):
         "duration_status": DurationStatus.ONGOING,
         "record_time": _UTC,
         "fact_ids": ["fact-1"],
+        "referenced_fact_objects": ["medical_history:高血压病史"],
         "locator_ids": ["loc-1"],
         "source_strength": SourceStrength.HISTORICAL_PRIMARY,
         "revision": 1,
@@ -167,6 +170,7 @@ def _event(**overrides):
         base["stable_identity"] = clinical_event_stable_identity(
             authority=base["authority"],
             event_type=base["event_type"],
+            referenced_fact_objects=base["referenced_fact_objects"],
             start_range=base["start_range"],
             end_range=base["end_range"],
             duration_status=base["duration_status"],
@@ -480,6 +484,11 @@ def test_published_fact_stable_identity_tamper_rejected():
         _fact(stable_identity="b" * 64)
 
 
+def test_published_fact_asserted_object_must_match_basis():
+    with pytest.raises(ValidationError, match="断言依据对象一致"):
+        _fact(asserted_object="糖尿病")
+
+
 def test_published_fact_unknown_polarity_rejected_with_value():
     with pytest.raises(ValidationError, match="未知极性"):
         _fact(polarity=FactPolarity.UNKNOWN, value="正常", assertion_basis=None)
@@ -490,6 +499,7 @@ def test_stable_identity_excludes_locator_and_confidence():
     a = clinical_fact_stable_identity(
         authority=_authority(),
         fact_type="medical_history",
+        asserted_object="高血压病史",
         polarity=FactPolarity.NEGATED,
         value="无",
         unit=None,
@@ -498,6 +508,7 @@ def test_stable_identity_excludes_locator_and_confidence():
     b = clinical_fact_stable_identity(
         authority=_authority(),
         fact_type="medical_history",
+        asserted_object="高血压病史",
         polarity=FactPolarity.NEGATED,
         value="无",
         unit=None,
@@ -507,15 +518,27 @@ def test_stable_identity_excludes_locator_and_confidence():
     changed_value = clinical_fact_stable_identity(
         authority=_authority(),
         fact_type="medical_history",
+        asserted_object="高血压病史",
         polarity=FactPolarity.NEGATED,
         value="有",
         unit=None,
         date_range=_date_range(),
     )
     assert a != changed_value
+    changed_object = clinical_fact_stable_identity(
+        authority=_authority(),
+        fact_type="medical_history",
+        asserted_object="糖尿病病史",
+        polarity=FactPolarity.NEGATED,
+        value="无",
+        unit=None,
+        date_range=_date_range(),
+    )
+    assert a != changed_object
     changed_authority = clinical_fact_stable_identity(
         authority=_authority(complete_processing_revision_id="complete-rev-2"),
         fact_type="medical_history",
+        asserted_object="高血压病史",
         polarity=FactPolarity.NEGATED,
         value="无",
         unit=None,
@@ -529,6 +552,7 @@ def test_event_and_exposure_published_contracts_ok():
     assert event.stable_identity == clinical_event_stable_identity(
         authority=event.authority,
         event_type=event.event_type,
+        referenced_fact_objects=event.referenced_fact_objects,
         start_range=event.start_range,
         end_range=event.end_range,
         duration_status=event.duration_status,
