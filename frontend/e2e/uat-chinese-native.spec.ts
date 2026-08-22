@@ -138,7 +138,7 @@ test.describe("中文原生与无占位审计", () => {
     test.skip((page.viewportSize()?.width ?? 0) < 1000, "桌面项目执行");
     await openRoute(page, "/help");
     const version = await page.locator(".page-head__meta").innerText();
-    expect(version).toMatch(/^页面版本：界面试用版 \d+\.\d+\.\d+$/);
+    expect(version).toMatch(/^界面版本：界面试用版 \d+\.\d+\.\d+$/);
     // 记录表版本照录说明与帮助页一致
     const recordTemplate = fs.readFileSync(
       path.join(DOC_DIR, "user-uat-record-template.md"),

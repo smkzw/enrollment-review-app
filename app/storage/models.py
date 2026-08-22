@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     Column,
@@ -23,7 +24,6 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
-    JSON,
     String,
     Table,
     Text,
@@ -123,14 +123,31 @@ class ReviewEpisodeRecord(RevisionedRecordMixin, Base):
         ForeignKey("protocol_document_versions.protocol_version_id"),
         nullable=False,
     )
-    evidence_snapshot_id: Mapped[str] = mapped_column(
+    # legacy evidence_snapshot_id 可空：自动创建的空审核节点没有 Phase 2/3 快照。
+    evidence_snapshot_id: Mapped[str | None] = mapped_column(
         String(128),
         ForeignKey(
             "evidence_snapshots.evidence_snapshot_id",
             deferrable=True,
             initially="DEFERRED",
         ),
-        nullable=False,
+        nullable=True,
+    )
+    # 发布方案流程节点身份（命名空间化 workflow_stage_id）；legacy 行可空。
+    workflow_stage_id: Mapped[str | None] = mapped_column(
+        String(128), ForeignKey("workflow_stages.workflow_stage_id"), nullable=True
+    )
+    # Phase 4 活动版本成对指针（Slice 4.4）：legacy evidence_snapshot_id 保留原义，
+    # 本对指针是当前版本唯一权威，迁移 0010 不按时间/ID/历史状态回填。
+    active_evidence_snapshot_id: Mapped[str | None] = mapped_column(
+        String(128),
+        ForeignKey("evidence_snapshots_v2.evidence_snapshot_id"),
+        nullable=True,
+    )
+    active_evidence_processing_revision_id: Mapped[str | None] = mapped_column(
+        String(128),
+        ForeignKey("evidence_processing_revisions.evidence_processing_revision_id"),
+        nullable=True,
     )
     anchor_dates_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -139,6 +156,13 @@ class ReviewEpisodeRecord(RevisionedRecordMixin, Base):
         ForeignKeyConstraint(
             ["rule_set_id", "rule_set_revision"],
             ["rule_sets.rule_set_id", "rule_sets.revision"],
+        ),
+        CheckConstraint(
+            "(active_evidence_snapshot_id IS NULL AND "
+            "active_evidence_processing_revision_id IS NULL) OR "
+            "(active_evidence_snapshot_id IS NOT NULL AND "
+            "active_evidence_processing_revision_id IS NOT NULL)",
+            name="ck_review_episodes_active_pointers_paired",
         ),
         Index("ix_review_episodes_subject_id", "subject_id"),
         Index("ix_review_episodes_project_id", "project_id"),
@@ -1455,4 +1479,23 @@ workflow_stage_requirements = Table(
     Column("position", Integer, nullable=False),
     UniqueConstraint("workflow_stage_id", "requirement_id"),
     UniqueConstraint("workflow_stage_id", "position"),
+)
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 证据快照与资料版本（Slice 4.1）：独立表，注册到 Base.metadata。
+# 表名/列/约束定义在 app.storage.evidence_models，迁移 0008 据此建表。
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Phase 4 上传预览/条目/确认（Slice 4.2）：独立表，注册到 Base.metadata。
+# 表名/列/约束定义在 app.storage.evidence_upload_models，迁移 0008a 据此建表。
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Phase 4 OCR 持久化与基础证据处理修订（Slice 4.3）：独立表，注册到 Base.metadata。
+# 表名/列/约束定义在 app.storage.ocr_models，迁移 0009 据此建表。
+# ---------------------------------------------------------------------------
+from app.storage import (
+    evidence_models,  # noqa: F401  (register on Base.metadata)
+    evidence_upload_models,  # noqa: F401  (register on Base.metadata)
+    ocr_models,  # noqa: F401  (register on Base.metadata)
 )

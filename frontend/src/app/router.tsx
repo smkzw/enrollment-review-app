@@ -7,6 +7,7 @@
  */
 
 import { useSyncExternalStore, type ReactNode } from "react";
+import { isInterfaceTrialMode } from "./runtimeMode";
 
 export interface RouteLocation {
   /** 例如 "/today"、"/board"、"/workbench" */
@@ -15,8 +16,12 @@ export interface RouteLocation {
   params: URLSearchParams;
 }
 
-/** 默认首屏：今日工作（合同 §3.1，无登录直达） */
-export const DEFAULT_PATH = "/today";
+export function defaultPathForMode(interfaceTrial: boolean): string {
+  return interfaceTrial ? "/today" : "/protocols";
+}
+
+/** 空地址与导航注册使用同一正式/试用模式边界。 */
+export const DEFAULT_PATH = defaultPathForMode(isInterfaceTrialMode());
 
 export type RouteParams = Record<string, string | null | undefined>;
 

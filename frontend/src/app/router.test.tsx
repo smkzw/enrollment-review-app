@@ -8,12 +8,14 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, beforeEach } from "vitest";
 import {
   buildHash,
+  defaultPathForMode,
   navigate,
   parseHash,
   RouteLink,
   updateParams,
   useHashRoute,
 } from "./router";
+import { findRoute } from "./routes";
 
 function RouteProbe() {
   const route = useHashRoute();
@@ -28,6 +30,15 @@ describe("hash router", () => {
   beforeEach(() => {
     window.history.replaceState(null, "", "/");
     window.location.hash = "";
+  });
+
+  it("正式模式空地址直接进入已开放的方案工作台", () => {
+    expect(defaultPathForMode(false)).toBe("/protocols");
+    expect(defaultPathForMode(true)).toBe("/today");
+  });
+
+  it("正式模式可打开证据任务详情，不把真实深链落到占位页", () => {
+    expect(findRoute("/tasks")?.component).not.toBeNull();
   });
 
   it("兼容不带井号的方案工作台直达地址", () => {

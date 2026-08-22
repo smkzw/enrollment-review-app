@@ -71,6 +71,16 @@ export function ProtocolPublishedSummary({
         </RouteLink>
         {projectId !== null && (
           <RouteLink
+            to="/subjects"
+            params={{ project: projectId }}
+            className="button"
+            ariaLabel="前往受试者与资料"
+          >
+            前往受试者与资料
+          </RouteLink>
+        )}
+        {projectId !== null && (
+          <RouteLink
             to="/protocols"
             params={{ mode: "redo", project: projectId }}
             className="button"

@@ -16,6 +16,9 @@
  */
 
 import { lazy, type ComponentType, type LazyExoticComponent } from "react";
+import { isInterfaceTrialMode } from "./runtimeMode";
+
+const interfaceTrial = isInterfaceTrialMode();
 
 export type NavGroup = "work" | "tools" | "system";
 
@@ -46,22 +49,24 @@ export const APP_ROUTES: readonly AppRoute[] = [
     label: "今日工作",
     description: "今天需要优先处理的事项",
     group: "work",
-    component: lazy(() => import("../pages/TodayPage")),
-    defaultPath: true,
+    component: interfaceTrial ? lazy(() => import("../pages/TodayPage")) : null,
+    defaultPath: interfaceTrial,
+    showInNavigation: interfaceTrial,
   },
   {
     path: "/board",
     label: "项目看板",
     description: "项目、受试者和各审核节点的全局状态",
     group: "work",
-    component: lazy(() => import("../pages/ProjectBoardPage")),
+    component: interfaceTrial ? lazy(() => import("../pages/ProjectBoardPage")) : null,
+    showInNavigation: interfaceTrial,
   },
   {
     path: "/projects/new",
     label: "新建项目",
     description: "从方案确认研究期别并选择独立审核节点",
     group: "work",
-    component: lazy(() => import("../pages/ProjectCreationPage")),
+    component: interfaceTrial ? lazy(() => import("../pages/ProjectCreationPage")) : null,
     showInNavigation: false,
   },
   {
@@ -70,34 +75,48 @@ export const APP_ROUTES: readonly AppRoute[] = [
     description: "方案版本与规则解构",
     group: "work",
     component: lazy(() => import("../pages/ProtocolsPage")),
+    defaultPath: !interfaceTrial,
   },
   {
     path: "/subjects",
     label: "受试者与资料",
     description: "受试者资料与个例全景",
     group: "work",
-    component: lazy(() => import("../pages/SubjectsPage")),
+    component: interfaceTrial
+      ? lazy(() => import("../pages/SubjectsPage"))
+      : lazy(() => import("../pages/SubjectsCatalogPage")),
+  },
+  {
+    path: "/subjects/:subjectId/evidence",
+    label: "证据工作台",
+    description: "受试者审核节点的资料上传与证据工作台",
+    group: "work",
+    component: lazy(() => import("../pages/EvidencePage")),
+    showInNavigation: false,
   },
   {
     path: "/workbench",
     label: "入排工作台",
     description: "分阶段入排审核、规则与原始证据",
     group: "work",
-    component: lazy(() => import("../pages/WorkbenchPage")),
+    component: interfaceTrial ? lazy(() => import("../pages/WorkbenchPage")) : null,
+    showInNavigation: interfaceTrial,
   },
   {
     path: "/actions",
     label: "行动中心",
     description: "补充资料、研究者判定与人工确认",
     group: "work",
-    component: lazy(() => import("../pages/ActionsPage")),
+    component: interfaceTrial ? lazy(() => import("../pages/ActionsPage")) : null,
+    showInNavigation: interfaceTrial,
   },
   {
     path: "/reports",
     label: "报告",
     description: "个例、中心与项目报告",
     group: "tools",
-    component: lazy(() => import("../pages/ReportsPage")),
+    component: interfaceTrial ? lazy(() => import("../pages/ReportsPage")) : null,
+    showInNavigation: interfaceTrial,
   },
   {
     path: "/tasks",
@@ -105,6 +124,7 @@ export const APP_ROUTES: readonly AppRoute[] = [
     description: "资料整理任务与系统状态",
     group: "system",
     component: lazy(() => import("../pages/TasksPage")),
+    showInNavigation: interfaceTrial,
   },
   {
     path: "/help",
@@ -115,8 +135,39 @@ export const APP_ROUTES: readonly AppRoute[] = [
   },
 ];
 
+/**
+ * 参数化路由匹配：pattern 中的 ``:param`` 段匹配任意非空段。
+ * 返回捕获的参数表；不匹配返回 null。
+ */
+export function matchRouteParams(
+  path: string,
+  pattern: string,
+): Record<string, string> | null {
+  if (!pattern.includes(":")) return null;
+  const patternParts = pattern.split("/");
+  const pathParts = path.split("/");
+  if (patternParts.length !== pathParts.length) return null;
+  const params: Record<string, string> = {};
+  for (let index = 0; index < patternParts.length; index += 1) {
+    const patternPart = patternParts[index];
+    if (patternPart.startsWith(":")) {
+      const value = pathParts[index];
+      if (value.length === 0) return null;
+      params[patternPart.slice(1)] = value;
+    } else if (patternPart !== pathParts[index]) {
+      return null;
+    }
+  }
+  return params;
+}
+
 export function findRoute(path: string): AppRoute | undefined {
-  return APP_ROUTES.find((route) => route.path === path);
+  const exact = APP_ROUTES.find((route) => route.path === path);
+  if (exact !== undefined) return exact;
+  // 参数化路由（/subjects/:subjectId/evidence）：无顶级导航项，按模式匹配。
+  return APP_ROUTES.find(
+    (route) => route.path.includes(":") && matchRouteParams(path, route.path) !== null,
+  );
 }
 
 export function isImplemented(route: AppRoute): boolean {

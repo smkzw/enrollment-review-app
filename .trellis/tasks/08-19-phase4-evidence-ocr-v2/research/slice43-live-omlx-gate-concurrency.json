@@ -1,0 +1,99 @@
+{
+  "schema": "phase4_live_omlx_gate_concurrency_v1",
+  "server": "http://127.0.0.1:8001",
+  "synthetic_no_phi": true,
+  "requested_workers": 12,
+  "returned_results": 12,
+  "successful_requests": 12,
+  "exact_text_requests": 12,
+  "normalized_exact_requests": 12,
+  "observed_gate_peak": 8,
+  "configured_ocr_limit": 8,
+  "leases_remaining": 0,
+  "results": [
+    {
+      "ok": true,
+      "model": "GLM-OCR-bf16",
+      "exact_text": true,
+      "normalized_exact": true,
+      "elapsed_seconds": 5.148
+    },
+    {
+      "ok": true,
+      "model": "GLM-OCR-bf16",
+      "exact_text": true,
+      "normalized_exact": true,
+      "elapsed_seconds": 5.15
+    },
+    {
+      "ok": true,
+      "model": "GLM-OCR-bf16",
+      "exact_text": true,
+      "normalized_exact": true,
+      "elapsed_seconds": 5.215
+    },
+    {
+      "ok": true,
+      "model": "GLM-OCR-bf16",
+      "exact_text": true,
+      "normalized_exact": true,
+      "elapsed_seconds": 5.216
+    },
+    {
+      "ok": true,
+      "model": "GLM-OCR-bf16",
+      "exact_text": true,
+      "normalized_exact": true,
+      "elapsed_seconds": 5.29
+    },
+    {
+      "ok": true,
+      "model": "GLM-OCR-bf16",
+      "exact_text": true,
+      "normalized_exact": true,
+      "elapsed_seconds": 5.292
+    },
+    {
+      "ok": true,
+      "model": "GLM-OCR-bf16",
+      "exact_text": true,
+      "normalized_exact": true,
+      "elapsed_seconds": 5.295
+    },
+    {
+      "ok": true,
+      "model": "GLM-OCR-bf16",
+      "exact_text": true,
+      "normalized_exact": true,
+      "elapsed_seconds": 5.312
+    },
+    {
+      "ok": true,
+      "model": "GLM-OCR-bf16",
+      "exact_text": true,
+      "normalized_exact": true,
+      "elapsed_seconds": 7.805
+    },
+    {
+      "ok": true,
+      "model": "GLM-OCR-bf16",
+      "exact_text": true,
+      "normalized_exact": true,
+      "elapsed_seconds": 10.489
+    },
+    {
+      "ok": true,
+      "model": "GLM-OCR-bf16",
+      "exact_text": true,
+      "normalized_exact": true,
+      "elapsed_seconds": 10.49
+    },
+    {
+      "ok": true,
+      "model": "GLM-OCR-bf16",
+      "exact_text": true,
+      "normalized_exact": true,
+      "elapsed_seconds": 11.759
+    }
+  ]
+}

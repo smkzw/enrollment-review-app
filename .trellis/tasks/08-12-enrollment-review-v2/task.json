@@ -25,14 +25,15 @@
     "08-13-phase1-5-uat-readiness",
     "08-13-phase1-5-agent-monitor-uat",
     "08-14-phase2-sqlite-domain-jobs",
-    "08-14-phase3-protocol-deconstruction"
+    "08-14-phase3-protocol-deconstruction",
+    "08-19-phase4-evidence-ocr-v2"
   ],
   "parent": null,
   "relatedFiles": [],
-  "notes": "Phase 0、0.5、1、1.5、2 已完成。Phase 3 方案解构 V2 的 PRD、技术设计、实施计划和文档解析调研已完成三模型独立审评并按根因修订，当前等待用户批准后启动；尚未实现真实方案解析、规则发布、OCR、事实抽取或临床审核。",
+  "notes": "Phase 0 至 Phase 4 已完成。Phase 4 已验收不可变证据快照、两种上传方式、OCR、校对、定位、风险核对、恢复和宽屏证据工作台；Phase 5 尚未启动。",
   "meta": {
-    "current_phase": "3",
-    "gate": "phase3_plan_awaiting_user_approval",
-    "last_checkpoint": "2026-08-14-phase3-protocol-plan-reviewed"
+    "current_phase": "4",
+    "gate": "phase4_accepted_phase5_not_started",
+    "last_checkpoint": "2026-08-22-phase4-complete"
   }
 }

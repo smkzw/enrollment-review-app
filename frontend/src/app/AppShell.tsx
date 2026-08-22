@@ -18,10 +18,10 @@ function ModulePending({ label }: { label: string }) {
     <div className="feedback feedback--empty" role="status">
       <p className="feedback__title">「{label}」模块将在后续版本中开放。</p>
       <p className="feedback__hint">
-        本版本提供今日工作与项目看板两个工作区入口。
+        当前版本仅开放已经接入真实资料的工作环节。
       </p>
-      <RouteLink to="/today" className="button button--primary">
-        返回今日工作
+      <RouteLink to="/protocols" className="button button--primary">
+        返回方案工作台
       </RouteLink>
     </div>
   );
@@ -32,10 +32,10 @@ function NotFound() {
     <div className="feedback feedback--empty" role="status">
       <p className="feedback__title">未找到这个页面。</p>
       <p className="feedback__hint">
-        地址可能有误，或该入口尚未开放。可返回今日工作继续。
+        地址可能有误，或该入口尚未开放。可返回方案工作台继续。
       </p>
-      <RouteLink to="/today" className="button button--primary">
-        返回今日工作
+      <RouteLink to="/protocols" className="button button--primary">
+        返回方案工作台
       </RouteLink>
     </div>
   );

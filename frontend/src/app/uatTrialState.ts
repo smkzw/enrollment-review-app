@@ -8,6 +8,7 @@
 
 /** 稳定中文页面版本：变更任务语义、示例数据或主要交互时必须显式更新。 */
 export const UAT_PAGE_VERSION = "界面试用版 1.5.2";
+export const APP_PAGE_VERSION = "1.5.2";
 
 /** 行动中心的人工确认记录 */
 export const UAT_KEY_MANUAL_ACTIONS = "eligibility-review:uat:manual-actions";

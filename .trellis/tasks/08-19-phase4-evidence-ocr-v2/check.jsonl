@@ -1,0 +1,11 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "核查不可变性、幂等、迁移和恢复"}
+{"file": ".trellis/spec/backend/persistent-jobs.md", "reason": "核查任务重启、租约、重试和取消"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端独立质量门禁"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "真实浏览器、宽屏和中文界面验收"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "接口和前端状态类型复核"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨层传播和共同原因审计"}
+{"file": ".trellis/tasks/08-19-phase4-evidence-ocr-v2/research/domain-storage-current-state.md", "reason": "对照当前领域与存储缺口验收"}
+{"file": ".trellis/tasks/08-19-phase4-evidence-ocr-v2/research/ocr-provenance-current-state.md", "reason": "对照OCR来源保真和失败模式验收"}
+{"file": ".trellis/tasks/08-19-phase4-evidence-ocr-v2/research/upload-frontend-current-state.md", "reason": "对照真实医学监查员工作流验收"}
+{"file": ".trellis/tasks/08-19-phase4-evidence-ocr-v2/research/external-discovery.md", "reason": "复核外部技术选择与诚实降级"}
+{"file": ".trellis/tasks/08-19-phase4-evidence-ocr-v2/research/slice44-detailed-contract-review.md", "reason": "独立验收 Slice 4.4 共同原因、反例矩阵与停止点"}

@@ -182,10 +182,12 @@ class JobEventType(StableEnum):
     STEP_FAILED = "step_failed"
     RETRY_SCHEDULED = "retry_scheduled"
     WAITING_USER = "waiting_user"
+    USER_RESUMED = "user_resumed"
     CANCEL_REQUESTED = "cancel_requested"
     CANCELLED = "cancelled"
     COMPLETED = "completed"
     FAILED = "failed"
+    PAGE_PROGRESS = "page_progress"
 
 
 class AgentNode(StableEnum):
@@ -414,3 +416,340 @@ class InterpretationChangeField(StableEnum):
     WORKFLOW_NODE = "workflow_node"
     DUE_STAGE = "due_stage"
     FORMAL_REQUIREMENT = "formal_requirement"
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 证据页、OCR 与诚实定位（Slice 4.0 冻结）
+# ---------------------------------------------------------------------------
+
+
+class ExtractionRoute(StableEnum):
+    """页面识别来源路线；决定原始文本从哪一层取得，不决定临床语义。"""
+    SOURCE_TEXT = "source_text"
+    NATIVE_PDF_TEXT = "native_pdf_text"
+    RENDERED_PDF_TEXT = "rendered_pdf_text"
+    VISION_OCR = "vision_ocr"
+
+
+class CoordinateSpace(StableEnum):
+    """证据定位坐标系。PDF points 原点在左下、y 向上；渲染页图像素原点在左上、y 向下。"""
+    PDF_POINTS = "pdf_points"
+    PAGE_IMAGE_PIXELS = "page_image_pixels"
+
+
+class PageArtifactStatus(StableEnum):
+    """页产物状态；失败页必须显式说明原因，不得伪装为成功。"""
+    SUCCEEDED = "succeeded"
+    DEGRADED = "degraded"
+    FAILED = "failed"
+
+
+class OCRPageStatus(StableEnum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class OcrRiskKind(StableEnum):
+    """结构化 OCR 风险类别（Slice 4.0 冻结种子集）。"""
+    NEGATION_POLARITY = "negation_polarity"
+    NUMERIC_VALUE = "numeric_value"
+    DECIMAL_POINT = "decimal_point"
+    UNIT = "unit"
+    DATE = "date"
+    REPEATED_TEXT = "repeated_text"
+    OUTPUT_REPETITION = "output_repetition"
+    LOW_CONFIDENCE = "low_confidence"
+
+
+class OcrRiskLevel(StableEnum):
+    """OCR 风险阻断等级矩阵。BLOCKING 未核对会阻止证据处理修订激活；INFORMATIONAL 不阻断。"""
+    BLOCKING = "blocking"
+    INFORMATIONAL = "informational"
+
+
+class DisambiguationOutcome(StableEnum):
+    """重复文本消歧结果；只有 UNIQUE_MATCH 允许形成区域定位。"""
+    UNIQUE_MATCH = "unique_match"
+    REPEATED_TEXT_DEGRADED = "repeated_text_degraded"
+    NOT_FOUND = "not_found"
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 证据快照与资料版本（Slice 4.1 冻结）
+# ---------------------------------------------------------------------------
+
+
+class SnapshotStatus(StableEnum):
+    """证据快照候选生命周期状态（设计书 §6 状态表）。
+
+    候选状态：staged -> processing -> (needs_attention | retryable_failure |
+    terminal_failure | ready)；ready 经发布门禁后通过 activation 事件进入 active。
+    终态：active、revision_conflict、cancelled、terminal_failure，禁止再发生候选跳转。
+    """
+
+    STAGED = "staged"
+    PROCESSING = "processing"
+    NEEDS_ATTENTION = "needs_attention"
+    RETRYABLE_FAILURE = "retryable_failure"
+    TERMINAL_FAILURE = "terminal_failure"
+    READY = "ready"
+    ACTIVE = "active"
+    REVISION_CONFLICT = "revision_conflict"
+    CANCELLED = "cancelled"
+
+
+class SnapshotMemberOrigin(StableEnum):
+    """快照成员来源：从有效前序快照继承、本次新增，或显式替代旧版本后的新版本。
+
+    完整资料快照的成员只能来自本次选择（added），不得继承前序；补充资料快照的
+    成员可以是继承前序仍有效（inherited）、本次新增（added）或作为原资料新版本
+    显式替代（replaced）后的活动版本。
+    """
+
+    INHERITED = "inherited"
+    ADDED = "added"
+    REPLACED = "replaced"
+
+
+class UploadPreviewStatus(StableEnum):
+    """上传预览候选生命周期（Slice 4.2 冻结）。
+
+    staged -> committed（用户确认）；取消走 staged -> cancel_pending -> cancelled：
+    ``cancel_pending`` 表示用户已取消且取消意图已追加记录，但预览自有暂存清理尚未
+    验证完成（清理失败时保持该状态以便重试），不允许确认使用残缺预览；清理核实
+    完成后进入终态 cancelled。committed/cancelled 为终态，不得再回退或二次提交。
+    """
+
+    STAGED = "staged"
+    COMMITTED = "committed"
+    CANCELLED = "cancelled"
+    CANCEL_PENDING = "cancel_pending"
+
+
+class UploadItemStatus(StableEnum):
+    """逐文件差异分类（Slice 4.2 冻结）。
+
+    - added                  本次新增：内容与文件名均不在有效基准快照中，将首次处理；
+    - duplicate              内容重复：SHA-256 与有效基准快照中某活动成员相同，
+                             存储层去重复用，无需重复保存原始二进制或重复 OCR；
+    - conflict               名称相同但内容不同：必须显式选择“作为新版本”或
+                             “并列保留”，不允许默认覆盖；
+    - unsupported            格式不受支持（如压缩包），明确提示，不静默展开；
+    - unreadable             文件无法读取/格式无法识别/内容为空；
+    - full_snapshot_omission 完整资料模式下，上一有效快照存在、本次未选择导致遗漏；
+    - expected_reprocessing  预计需要重新识别：完整资料模式重新纳入与基准内容相同
+                             的文件，或重复提交后仍需再次处理的成员。
+    """
+
+    ADDED = "added"
+    DUPLICATE = "duplicate"
+    CONFLICT = "conflict"
+    UNSUPPORTED = "unsupported"
+    UNREADABLE = "unreadable"
+    FULL_SNAPSHOT_OMISSION = "full_snapshot_omission"
+    EXPECTED_REPROCESSING = "expected_reprocessing"
+
+
+class UploadConflictResolution(StableEnum):
+    """同名异内容文件的显式处置：不允许默认覆盖。
+
+    new_version   作为原资料的新版本：同逻辑资料递增版本号并显式替代前序链头；
+    keep_parallel 作为另一份资料并列保留：新逻辑资料，原资料保持现状。
+    """
+
+    NEW_VERSION = "new_version"
+    KEEP_PARALLEL = "keep_parallel"
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 OCR 持久化与基础证据处理修订（Slice 4.3）
+# ---------------------------------------------------------------------------
+
+
+class ProcessingRevisionStatus(StableEnum):
+    """证据处理修订状态（Slice 4.3 只冻结基础修订）。
+
+    基础修订在文件/页处理完成后一次性冻结，状态为 READY；它明确不可激活
+    （``is_activatable=False``），不参与活动指针，也不推断或改写审核节点活动版本。
+    Slice 4.4 引入定位/校对关联后才通过新命令创建更完整的处理修订，旧基础修订
+    保持 READY 且永远不可激活、只可回放。
+    """
+
+    READY = "ready"
+
+
+class OcrRunStatus(StableEnum):
+    """文件级 OCR 运行状态；汇总计数与状态必须一致（合同校验）。"""
+
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    PARTIAL = "partial"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class OcrAttemptStatus(StableEnum):
+    """每次真实 OCR 请求的尝试结果（追加写，包含被拒绝的晚到尝试）。
+
+    succeeded      结果已产生并被接受为缓存/页结果；
+    failed         请求失败（含可重试与终止失败，按 failure_category 区分）；
+    rejected_late  结果已产生但晚到/租约代次不匹配，只保留审计，不得进入缓存；
+    cancelled      尝试在安全边界被取消。
+    """
+
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    REJECTED_LATE = "rejected_late"
+    CANCELLED = "cancelled"
+
+
+class OcrFailureCategory(StableEnum):
+    """OCR 尝试失败类别；决定重试范围与用户可见动作，不承载临床判断。"""
+
+    NETWORK = "network"
+    PROVIDER = "provider"
+    TIMEOUT = "timeout"
+    VALIDATION = "validation"
+    STALE_LEASE = "stale_lease"
+    CANCELLED = "cancelled"
+    UNKNOWN = "unknown"
+
+
+# ---------------------------------------------------------------------------
+# Slice 4.4 定位、风险、校对、完整处理修订、处理候选与活动版本（WP-44A 冻结）
+# ---------------------------------------------------------------------------
+
+
+class ProcessingRevisionKind(StableEnum):
+    """证据处理修订类别（Slice 4.4 辨别）。
+
+    ``base``     4.3 产物：只冻结页/PageArtifact/OCRPage，永远不可激活；
+    ``complete`` 新建完整修订：在 base 页清单上冻结全部 4.4 关联，门禁闭合后可激活。
+    """
+
+    BASE = "base"
+    COMPLETE = "complete"
+
+
+class LocatorSourceLayer(StableEnum):
+    """定位来源文本层；决定 source_text_sha256 锚定哪一层。
+
+    native_text      页产物的原生文本层（PDF 字符/词）；
+    raw_ocr          OCRPage.raw_text；
+    effective_text   原 OCR + 所选校对的确定性投影（必须同时绑定处理修订与投影哈希）。
+    """
+
+    NATIVE_TEXT = "native_text"
+    RAW_OCR = "raw_ocr"
+    EFFECTIVE_TEXT = "effective_text"
+
+
+class LocatorAuthenticity(StableEnum):
+    """定位真实性门禁结果。
+
+    ``authenticated``  bbox 由同源字符/词坐标逐字符映射、闭包校验通过；
+    ``degraded``       无真实坐标，按 text_range/excerpt/page_only 诚实降级；
+    ``rejected``       坐标来源无法证明，禁止输出 bbox 也不得伪装为定位。
+    """
+
+    AUTHENTICATED = "authenticated"
+    DEGRADED = "degraded"
+    REJECTED = "rejected"
+
+
+class OcrRiskReviewDecision(StableEnum):
+    """风险核对决议（追加写用户动作）。"""
+
+    CONFIRMED_AS_READ = "confirmed_as_read"
+    CORRECTED = "corrected"
+    NOT_APPLICABLE = "not_applicable"
+
+
+class CorrectionChangeKind(StableEnum):
+    """校对变化类别；前五类沿用 PRD blocking 二次确认规则。
+
+    semantic_connector 不是扫描器的自动“修正”，但用户确实把且/或/以及/任一/全部
+    等连接词改为另一逻辑含义时，必须二次确认并保留前后文本。
+    """
+
+    POLARITY = "polarity"
+    NUMERIC = "numeric"
+    DECIMAL = "decimal"
+    UNIT = "unit"
+    DATE = "date"
+    SEMANTIC_CONNECTOR = "semantic_connector"
+    OTHER_TEXT = "other_text"
+
+
+class ReferencedDocumentOrigin(StableEnum):
+    """被提及资料登记来源：手工登记或确定性文本模式候选。"""
+
+    MANUAL = "manual"
+    DETERMINISTIC_CANDIDATE = "deterministic_candidate"
+
+
+class ReferencedDocumentStatus(StableEnum):
+    """被提及资料状态（经不可变修订演进，不保留可变布尔值）。
+
+    proposed   确定性模式只能生成 proposed，绝不自动 confirmed/provided；
+    confirmed  用户确认，必须保留可回放触发定位；
+    dismissed  用户解除候选，不删除候选/触发原文/历史。
+    """
+
+    PROPOSED = "proposed"
+    CONFIRMED = "confirmed"
+    DISMISSED = "dismissed"
+
+
+class ReferencedDocumentResolutionStatus(StableEnum):
+    """被提及资料满足状态：unresolved 或 provided（provided 必须绑定快照成员）。"""
+
+    UNRESOLVED = "unresolved"
+    PROVIDED = "provided"
+
+
+class ActivationEventKind(StableEnum):
+    """激活事件类别：回滚也是新激活事件，不静默改写指针。"""
+
+    ACTIVATE = "activate"
+    ROLLBACK = "rollback"
+
+
+class EvidenceProcessingCandidateStatus(StableEnum):
+    """证据处理候选状态（Slice 4.4 候选隔离）。
+
+    staged -> processing -> (needs_attention | retryable_failure |
+    terminal_failure | ready)；ready 经 activate 进入 active，或 revision_mismatch
+    进入 revision_conflict。终态：active、revision_conflict、cancelled、
+    terminal_failure，禁止再跳转。候选失败/取消/待核对/冲突不得改变活动指针。
+    """
+
+    STAGED = "staged"
+    PROCESSING = "processing"
+    NEEDS_ATTENTION = "needs_attention"
+    RETRYABLE_FAILURE = "retryable_failure"
+    TERMINAL_FAILURE = "terminal_failure"
+    READY = "ready"
+    REVISION_CONFLICT = "revision_conflict"
+    CANCELLED = "cancelled"
+    ACTIVE = "active"
+
+
+class ProcessingCandidateEventKind(StableEnum):
+    """证据处理候选追加事件（设计书 §6 状态表；未列出的转换一律拒绝）。"""
+
+    WORKER_START = "worker_start"
+    CANCEL = "cancel"
+    CHECKPOINT_SUCCESS = "checkpoint_success"
+    BLOCKING_RISK_FOUND = "blocking_risk_found"
+    RETRYABLE_ERROR = "retryable_error"
+    TERMINAL_ERROR = "terminal_error"
+    CANCEL_AT_SAFE_BOUNDARY = "cancel_at_safe_boundary"
+    ALL_GATES_PASSED = "all_gates_passed"
+    RETRY = "retry"
+    CORRECTION_OR_RESOLUTION = "correction_or_resolution"
+    ACTIVATE = "activate"
+    REVISION_MISMATCH = "revision_mismatch"

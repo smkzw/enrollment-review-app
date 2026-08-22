@@ -1,0 +1,30 @@
+{
+  "id": "phase4-evidence-ocr-v2",
+  "name": "phase4-evidence-ocr-v2",
+  "title": "Phase 4 证据快照、上传与 OCR V2",
+  "description": "建立不可变证据快照、显式增量/全量上传、内容哈希去重、来源保留OCR、文档分类和风险校对能力",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": "Phase 4 only: immutable evidence snapshots, explicit supplemental/full upload preview and commit, content-hash deduplication, page artifacts, source-preserving OCR, honest evidence locators, OCR risk correction, persistent recovery, and wide-screen Chinese evidence workspace; exclude Phase 5+ clinical facts, Patient Profile, eligibility judgments, batch reports, legacy writes, login/multi-user, and security testing.",
+  "package": null,
+  "priority": "P1",
+  "creator": "codex",
+  "assignee": "codex",
+  "createdAt": "2026-08-19",
+  "completedAt": null,
+  "branch": "codex/phase4-evidence-ocr-v2",
+  "base_branch": "codex/phase3-slice7-real-uat",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": "08-12-enrollment-review-v2",
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {
+    "worktree_path": "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase4-evidence-ocr-v2",
+    "execution_mode": "sub_agent_dispatch",
+    "design_track": "kangzhe-site-wide-desktop"
+  }
+}

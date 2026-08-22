@@ -3,6 +3,7 @@
 interface ImportMetaEnv {
   readonly VITE_API_BASE?: string;
   readonly VITE_PROTOCOL_WORKBENCH_STUB?: string;
+  readonly VITE_ENROLLMENT_INTERFACE_TRIAL?: string;
   readonly VITE_V2_API_PROXY_TARGET?: string;
 }
 

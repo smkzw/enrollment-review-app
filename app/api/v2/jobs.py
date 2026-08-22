@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import datetime, timezone
-from typing import Iterator
+from collections.abc import Iterator
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Header, Query, Request, Response, status as http_status
+from fastapi import APIRouter, Header, Query, Request, Response
+from fastapi import status as http_status
 from fastapi.responses import StreamingResponse
 
 from app.api.v2.schemas import (
@@ -34,14 +35,25 @@ from app.workflow.states import FAILED_STEP_STATES, TERMINAL_JOB_STATES
 
 router = APIRouter(prefix="/api/v2/jobs", tags=["v2-jobs"])
 
+_UNKNOWN_STATE_LABEL = "状态待更新"
+_UNKNOWN_EVENT_LABEL = "事件已记录"
+
 
 def _as_utc(value: datetime | None) -> datetime | None:
     """Restore the storage UTC convention at the API boundary."""
     if value is None:
         return None
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _required_utc(value: datetime | None) -> datetime:
+    """Restore a required persisted timestamp or fail closed on corrupt state."""
+    restored = _as_utc(value)
+    if restored is None:
+        raise ValueError("任务持久时间字段缺失")
+    return restored
 
 
 def _service(request: Request) -> JobService:
@@ -70,7 +82,7 @@ def create_job(body: CreateJobRequest, request: Request, response: Response) -> 
     return CreateJobResponse(
         job_id=result.job_id,
         state=result.state,
-        state_label=JOB_STATE_LABELS[result.state],
+        state_label=JOB_STATE_LABELS.get(result.state, _UNKNOWN_STATE_LABEL),
         created=result.created,
     )
 
@@ -82,7 +94,7 @@ def get_job_status(job_id: str, request: Request) -> JobStatusResponse:
         job_id=snapshot.job_id,
         job_type=snapshot.job_type,
         state=snapshot.state,
-        state_label=JOB_STATE_LABELS.get(snapshot.state, snapshot.state),
+        state_label=JOB_STATE_LABELS.get(snapshot.state, _UNKNOWN_STATE_LABEL),
         cancel_requested=snapshot.cancel_requested,
         progress_completed=snapshot.progress_completed,
         progress_total=snapshot.progress_total,
@@ -92,15 +104,15 @@ def get_job_status(job_id: str, request: Request) -> JobStatusResponse:
             step.step_id for step in snapshot.steps if step.state in FAILED_STEP_STATES
         ],
         recovery_action=job_recovery_action(snapshot.state),
-        created_at=_as_utc(snapshot.created_at),
-        updated_at=_as_utc(snapshot.updated_at),
+        created_at=_required_utc(snapshot.created_at),
+        updated_at=_required_utc(snapshot.updated_at),
         last_event_seq=snapshot.last_event_seq,
         steps=[
             JobStepDTO(
                 step_id=step.step_id,
                 name=step.name,
                 state=step.state,
-                state_label=STEP_STATE_LABELS.get(step.state, step.state),
+                state_label=STEP_STATE_LABELS.get(step.state, _UNKNOWN_STATE_LABEL),
                 attempt=step.attempt,
                 max_attempts=step.max_attempts,
                 retryable=step.retryable,
@@ -117,10 +129,10 @@ def get_job_status(job_id: str, request: Request) -> JobStatusResponse:
                 job_event_id=row.event.job_event_id,
                 event_type=row.event.event_type.value,
                 event_type_label=EVENT_TYPE_LABELS.get(
-                    row.event.event_type.value, row.event.event_type.value
+                    row.event.event_type.value, _UNKNOWN_EVENT_LABEL
                 ),
                 step_id=row.event.step_id,
-                occurred_at=_as_utc(row.event.occurred_at),
+                occurred_at=_required_utc(row.event.occurred_at),
                 attempt=row.event.attempt,
                 checkpoint_id=row.event.checkpoint_id,
                 retryable=row.event.retryable,
@@ -139,7 +151,7 @@ def cancel_job(job_id: str, request: Request) -> JobActionResponse:
     return JobActionResponse(
         job_id=job_id,
         state=outcome.state,
-        state_label=JOB_STATE_LABELS[outcome.state],
+        state_label=JOB_STATE_LABELS.get(outcome.state, _UNKNOWN_STATE_LABEL),
         changed=outcome.changed,
     )
 
@@ -150,7 +162,7 @@ def retry_job(job_id: str, request: Request) -> JobActionResponse:
     return JobActionResponse(
         job_id=job_id,
         state=outcome.state,
-        state_label=JOB_STATE_LABELS[outcome.state],
+        state_label=JOB_STATE_LABELS.get(outcome.state, _UNKNOWN_STATE_LABEL),
         changed=outcome.changed,
     )
 
@@ -193,7 +205,7 @@ def _format_event(row: EventRow) -> str:
             "job_id": event.job_id,
             "event_type": event.event_type.value,
             "step_id": event.step_id,
-            "occurred_at": _as_utc(event.occurred_at).isoformat(),
+            "occurred_at": _required_utc(event.occurred_at).isoformat(),
             "attempt": event.attempt,
             "checkpoint_id": event.checkpoint_id,
             "retryable": event.retryable,

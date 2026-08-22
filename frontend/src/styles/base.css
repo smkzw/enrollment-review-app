@@ -100,6 +100,14 @@ blockquote a:not(.button):not(.icon-button),
   opacity: 0.45;
 }
 
+.button:disabled {
+  border-color: var(--color-line);
+  background: var(--color-muted-bg);
+  color: var(--color-muted);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
 /* 主操作按钮（明确命令才使用） */
 .button {
   display: inline-flex;

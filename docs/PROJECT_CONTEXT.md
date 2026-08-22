@@ -1,5 +1,15 @@
 # Enrollment Review App Project Context
 
+## 2026-08-19 Milestone: Phase 4 Slice 4.2 Accepted
+
+- The upload preview service and append-only `0008a_evidence_upload_previews` migration are accepted after counterexample repair: only an effective snapshot may be an incremental base, and every new confirmation request revalidates episode revision and base before duplicate convergence.
+- The frozen six endpoint contract is implemented exactly. Idempotent replay is no longer conflated with a new upload that resolves to an identical collection; the API exposes truthful `created`, `replayed`, and `duplicate` facts.
+- Cancellation cleanup failure remains visible as a retryable cancelling state, blocks commit, and does not leak staging paths or hashes through the error envelope.
+- Codex independently verified `89` focused tests and `1034` full V2 tests, plus clean focused Ruff, Pyright, and `git diff --check`.
+- The `/subjects/:subjectId/evidence?episode=...` workbench now provides the two upload modes, item-level preview review, stable per-preview idempotent retry, cancellation-safe replacement, snapshot-derived current-version display, and a fluid three-column evidence skeleton. It deliberately shows truthful waiting states and no red boxes before real page artifacts and verified coordinates exist.
+- Codex independently verified frontend `310` tests, `9` focused evidence Playwright cases across 1080P/2K/4K, `40` desktop-route cases with `2` viewport-specific skips, and a production build. Final screenshots have no page-level horizontal scroll or sticky-header overlap.
+- Slice 4.2 is accepted and Slice 4.3 is the next safe implementation boundary. Slice 4.4 must replace temporary ACTIVE-status base selection with the unique `ReviewEpisode.active_evidence_snapshot_id` authority.
+
 ## 2026-08-14 Checkpoint: Phase 3 Slice 3 In Progress
 
 Current deterministic results, not yet a completed Phase 3 release:
@@ -2031,3 +2041,166 @@ OCR concurrency note:
 - 共享层新增语义调用前的冻结输入检查点，防止整句来源污染兄弟原子条件时间窗，拒绝局部修订用新问题替换旧问题，并补全父规则实质性来源覆盖。前端将已发布任务与中断恢复分开，规则树默认只展开当前父项并支持深链自动展开。
 - 最终回归：后端 `909 passed, 1 skipped, 18 subtests passed`；Vitest `275 passed`；生产构建通过；Playwright `256 passed, 41 skipped`。CodeBuddy `hy3(max)` 为“修正后接受”，Pi `minimax-m3` 为“接受”。Grok Build 4.6 medium 在旧会话、恢复会话和新会话中均因其 `read_file` 工具输出错误取消，没有可用裁决；未换模型或伪装完成。
 - Phase 3 可归档。下一安全动作是按总实施计划建立 Phase 4 的受试者资料摄取、来源保留 OCR 与证据标准化任务。
+
+## 2026-08-19 Phase 4 最终规划待批准
+
+- 已在隔离工作树 `.worktrees/phase4-evidence-ocr-v2` 和分支 `codex/phase4-evidence-ocr-v2` 建立 Trellis 子任务 `.trellis/tasks/08-19-phase4-evidence-ocr-v2`；状态保持 `planning`，尚未修改 Phase 4 产品代码。
+- 规划基于现有 V2 领域/SQLite/Job/前端审计、旧 OCR 来源保真审计和外部能力核查，形成 `prd.md`、`design.md`、`implement.md`：10 项需求、13 项验收标准、6 个带停止点的实施切片。
+- 冻结的用户语义为“补充资料”和“建立完整资料快照”；两者均先预览后确认。快照不可变、按受试者和审核节点隔离；后续节点不得静默改写早期结果。
+- 原生 PDF 正式路径计划使用现有 MIT 许可的 `pdfplumber` 获取真实坐标；扫描页先验证完整 PaddleOCR-VL 布局流水线。现有 oMLX 纯文本通道可保留，但不能伪装为布局或区域坐标。
+- OCR 缓存身份升级为文件内容哈希、页码、识别配置和页面产物版本；全局 8 路准入使用持久租约，页面渲染另设背压。原文件、原 OCR 和页图不覆盖，校对追加写并记录影响范围。
+- Phase 4 不实现临床事实、Patient Profile、逐条入排判断、行动闭环、跨受试者批量审核或报告。真实临床资料只读，旧项目不迁移。
+- `implement.jsonl` 与 `check.jsonl` 已配置真实规范和研究上下文，`task.py validate` 通过。下一安全动作：等待用户审阅本版最终规划；仅在后续消息明确批准后运行 `task.py start`，从 Slice 4.0 页级金标准与布局能力试验开始。
+- 独立 Sol 规划审查曾拒绝初稿，指出仅固定文件集合不足以复现当时有效 OCR/校对、资料替代与增量继承冲突、候选/失败/回滚状态机不闭合、文件格式分页路线缺失、定位/风险验收可被低质量实现绕过，以及 8 路计数单位不明。规划已统一修正为：快照绑定不可变 EvidenceProcessingRevision，激活/回滚追加 ActivationEvent；同名异内容必须选择新版本或并列保留；逐格式保存渲染/解码版本和页图输入哈希；冻结文本回读/定位/风险量化门槛；共享 oMLX 门禁是唯一真实推理 8 路额度。
+- 宽屏验收不再把 1920×1080 的 200% 缩放错误当作三栏工作台支持范围，而按有效 CSS 宽度≥1280 组合验证。用户已明确不亲自试用，三路模型按量化无辅助任务脚本替代；该结果不得表述为真人可用性研究。
+- 独立 Sol 共进行四轮只读规划审查。终局确认终态候选无出边，校对/回滚/冲突重试均创建新命令或新链；资料元数据和被引用资料关系均进入不可变处理修订；`0009` 基础处理修订不可激活，`0010` 只新建完整修订而不回写。最终裁决为“可提交用户最终审批”，记录见 `.trellis/tasks/08-19-phase4-evidence-ocr-v2/reviews/final-planning-review.md`。
+
+## 2026-08-19 Phase 4 已批准并启动
+
+- 用户已明确批准 Phase 4 最终规划。Trellis 子任务 `.trellis/tasks/08-19-phase4-evidence-ocr-v2` 已由 `planning` 切换为 `in_progress`，当前只执行 Slice 4.0 能力金标准；能力门槛未通过前不得创建正式 OCR 持久化或进入数据库迁移。
+- 用户新增的证据工作台合同已写入 PRD、设计和实施计划：右栏按实际页序连续滚动 PDF、图片、多页 TIFF 和文档派生页；只有通过真实性门禁的页内区域坐标才绘制风险红 `#C00000` 重点框。文本范围、页内摘录或仅页码定位不得估算或伪造红框。
+- 设计轨确定为 Kangzhe `site`，只支持有效 CSS 宽度不低于 1280 的最大化宽屏桌面，并按 1080P、2K、4K 及规定缩放组合验收；不新增窄屏工作流。
+- 执行图已登记为三个顺序工作边界。首个实际工单收窄为 Slice 4.0，由当前日间首选路线 `Pi/cms-smk/deepseek-v4-flash:max` 执行；不因长耗时重复派发，完成后由独立新上下文检查者拥有放行权。
+- 恢复锚点：先读取本节、任务 `prd.md`/`design.md`/`implement.md` 和 `runs/execution/phase4-evidence-ocr-v2/worker_01.md`；核对真实 diff 和量化测试后，才决定是否进入 Slice 4.1。
+- 2026-08-19 检查者已修复并验收 Slice 4.0 基线：跨进程金标准生成确定性、pdfplumber 原生 PDF 四种旋转坐标、四级定位来源/边界绑定、OCR 页级哈希/状态/UTC 时间合同、风险去重与全页覆盖度量均有回归证据。布局候选结果明确是合成度量机制演示，不是 OCR 能力采用结论。
+- 2026-08-19 同会话恢复复核确认：共享 oMLX 门禁下发起选择 `GLM-OCR-bf16` 的隔离请求，在 2 个无 PHI 合成视觉页上逐字回读一致，原始响应和门禁请求可由哈希/SQLite 记录复核；未发现显式机器坐标，因此冻结 text-only 文字路线、无坐标不画红框。响应模型名是 provider 自报，未保留独立服务清单/启动日志，不能宣称实际加载身份、一般准确率或生产适配器完成。
+- Slice 4.0 能力停止条件现已满足；本次复核未进入 Slice 4.1、未创建迁移或正式 OCR 持久化。当前共享树的 Slice 4.1 ORM 已注册 6 张 `*_v2` 证据表但迁移 head 仍为 0007，标准 V2 迁移后校验报告 6 张表缺失；本检查不创建该越界迁移，故不对当前 Slice 4.1 代码放行；验收记录为任务 `research/slice4-real-omlx-probe.json`、`research/slice4-omlx-gate-probe.md` 和 `research/slice4-goldset-coordinate-spike.md`，历史 worker 报告保持不改写。
+
+## 2026-08-19 Phase 4 Slice 4.1 独立检查者裁决
+
+- 在隔离工作树中完成 Slice 4.1 复核并修复边界问题：`0008_evidence_ingestion` 与 ORM 的 6 张 Phase 4 证据表一致，SQLite 外键/WAL/备份及升降级有回归证据；含证据数据的降级会拒绝，避免丢失不可变历史。
+- SourceBlob、逻辑资料版本、元数据修订、EvidenceSnapshot、成员、集合哈希和状态事件的作用域、前序链、镜像字段、成员身份、不可变状态和状态历史均有确定性检查；增量继承/新增/显式替代、完整快照遗漏、重复集合 no-op 和并发重复提交均有反例测试。
+- 受试者/审核节点基础 API 已验证跨项目隔离、重复受试者、时间序列、中文错误信封和查询路径；未引入前端、上传流程或 OCR 正式持久化。
+- Slice 4.0 诚实结论保持不变：真实门禁请求仅证明合成样本下 text-only 行为；provider 自报模型名没有独立身份凭据；无真实坐标不画红框。
+- Slice 4.1 满足停止点，可进入 Slice 4.2。EvidenceProcessingRevision、ActivationEvent 的正式表/仓储以及处理修订漂移、激活、回滚仍是后续切片边界，不能被本裁决解释为已实现 4.2。
+
+## 2026-08-19 Phase 4 Slice 4.1 无损暂停
+
+- 用户在独立检查者终局放行后要求无损暂停；未启动 Slice 4.2、未创建上传预览、未实现正式
+  OCR 持久化，也未运行任何外部视觉试用。
+- 当前隔离工作树为 `.worktrees/phase4-evidence-ocr-v2`，分支为
+  `codex/phase4-evidence-ocr-v2`；所有 Slice 4.0/4.1 代码、测试、研究证据和执行报告均保留，
+  尚未提交或合并。
+- 检查者修订前 Codex 全量 V2 为 `900 passed, 58 warnings, 2 subtests passed`；检查者修订后
+  由新鲜 Luna 会话报告 `914 passed, 58 warnings, 2 subtests`，目标 Ruff、限定 Pyright、编译
+  和 `git diff --check` 通过。暂停时 Codex 未再次重跑修订后的 914 项，因此恢复后第一步必须
+  独立复测，不能把检查者报告替代为 Codex 终局验证。
+- 已知非阻断残余：`subjects(project_id, subject_code)` 无数据库级唯一约束，跨进程并发创建仍
+  有风险；当前单机单用户 Slice 4.1 不阻断，后续迁移设计时需明确处理或保留理由。
+- 下一安全动作：先读取 `CHECKPOINT_20260819_SLICE41_PAUSED.md`，关闭工作树漂移检查，串行运行
+  Slice 4.1 目标回归与 `tests/v2 -q`；全部通过后才按 Slice 4.2 计划建立上传预览、确认和前端骨架。
+
+## 2026-08-19 Phase 4 Slice 4.2 恢复门禁
+
+- Codex 已在检查者修订后独立重跑 V2 全量回归：`914 passed, 58 warnings, 2 subtests passed`；
+  目标 Ruff、使用项目虚拟环境的限定 Pyright、`git diff --check` 和 Trellis 上下文校验均通过。
+- Slice 4.1 执行 review-gate 已通过；三份紧凑 worker 报告已归档，43MB 可再生原始 stdout
+  日志进入清理范围，不作为正式证据保留。
+- 发现总设计与切片拆分的迁移边界不一致：设计原把上传预览表写入 `0008`，但已验收的
+  `0008_evidence_ingestion` 只有六张证据基础表。为不回改已验收迁移，Slice 4.2 新增
+  `0008a_evidence_upload_previews`，后续 `0009_ocr_artifacts` 编号和职责不变。
+
+## 2026-08-19 Phase 4 Slice 4.2 服务层检查点
+
+- 第一工作项已在日间主路由 `Pi/cms-smk/deepseek-v4-flash:max` 完成，并在 Codex 发现基础语义问题后沿用同一 session `01a018bb-d3d6-7000-b82e-f7aa0be82179` 修订；未触发 fallback。
+- `0008a`、上传预览/逐文件差异、补充与完整资料集合、显式冲突处置、取消待清理、候选快照与持久任务同事务写入已实现。候选可用于同集合 no-op 收敛，但不再冒充有效继承基准；所有新确认在任何 no-op 前重验节点修订号和活动基准。
+- 取消清理失败不再静默：预览保持 `cancel_pending`、确认入口关闭、重试可完成自有暂存清理，共享 blob/快照/历史不受影响。
+- Codex 实测：聚焦 `111 passed`；全量 V2 `988 passed, 58 warnings, 2 subtests passed`；Ruff、限定 Pyright、`git diff --check` 通过。
+- 当前 Slice 4.2 尚未完成 API、前端及无辅助宽屏任务。Slice 4.4/`0010` 落地活动指针后，必须以 `ReviewEpisode.active_evidence_snapshot_id` 取代当前过渡性的 `ACTIVE` 状态选择。
+
+## 2026-08-19 Phase 4 Slice 4.3 页产物与识别底座检查点
+
+- 已完成 `0009_ocr_artifacts`、不可变 PageArtifact/OCRProfile/OCRPage/OCRRun/OCRAttempt、
+  原始请求响应工件、页工作租约和不可激活基础处理修订的合同、迁移与仓储；同一证据快照允许
+  产生多个不可变处理修订，失败/取消识别结果不再原地覆盖。
+- 逐格式处理覆盖 PDF、普通图片、多帧 TIFF、TXT、DOCX 和 DOC。失败页不再填充全零哈希、
+  1×1 尺寸或虚构旋转；TXT 保留原文但不伪造坐标；扫描页仅保存文字，无真实坐标不画红框。
+- 页工件身份与数据库唯一键现同时包含渲染、解码和坐标变换版本；DOCX/DOC 使用源内容与
+  转换程序版本形成稳定身份，避免转换文件元数据变化触发重复识别。实际送入文字识别的是
+  内容寻址存储中的同一页图字节，不再二次渲染。
+- 识别流程已拆成“准备请求”和“完成结果”两个阶段，支持任务在真实模型调用前持久化检查点。
+  用户可见失败/降级文本已去除 provider、异常类名、`text-only`、适配器和推理等工程措辞；
+  技术诊断仅通过内部字段交给任务尝试记录。
+- Codex 独立回归：聚焦 `141 passed`；V2 全量 `1187 passed, 58 warnings, 2 subtests passed`；
+  Ruff、Pyright、`git diff --check` 通过。下一步仅实施页级持久执行、共享 oMLX 8 路准入、
+  晚到结果拒绝、渲染背压、限定重试/取消/恢复和 SSE 只读进度；Slice 4.3 尚未最终放行。
+
+## 2026-08-19 Phase 4 Slice 4.3 最终质量检查
+
+- 独立 fresh-context 复核已补齐并验证页工作租约 -> 共享 oMLX 租约 -> 外部推理的固定顺序、
+  租约心跳/代次/晚到结果原子拒绝、取消/重试/进程死亡恢复、持久进度与 SSE 投影，以及
+  失败 provider 响应的原始字节回放工件。聚焦回归 `150 passed`，V2 全量 `1233 passed, 2 subtests passed`；
+  Ruff、生产代码 Pyright、`git diff --check` 通过。
+- 现场真实 oMLX 合成探针使用 `http://127.0.0.1:8001` 和 `GLM-OCR-bf16`：12 路请求全部返回，
+  门禁峰值为 8，剩余租约为 0，响应模型身份与非空文本校验通过。Slice 4.3 仍不生成定位/风险/校对，
+  基础处理修订保持不可激活；启动脚本按项目边界继续使用 legacy 默认入口，V2 通过独立 factory 启动。
+
+## 2026-08-20 Phase 4 Slice 4.4 WP-44A 最终验收
+
+- 已完成 `0010_evidence_locator_corrections`、唯一审核节点合同、基础/完整处理修订辨别，以及定位、识别风险、校对、被提及资料、处理候选和激活事件的追加式持久合同；旧识别原文、旧基础修订和旧审核节点字段未被回写。
+- 完整修订不再只验证候选自报清单：新建时必须完整纳入当前资料元数据、当前有效校对、当前被提及资料和当前满足状态；历史读取则严格按当时冻结的 ID 与内容哈希回放，不因后续合法修订失效。
+- 同一基础修订、同一识别页和同一原文范围只能建立一条校对链，仓储预检与 SQLite 部分唯一索引共同约束；不同非重叠范围可各自拥有校对链。
+- 定位器所有读取路径都复核精确页产物、识别页、来源层和原文哈希；页内摘录必须能在同源文本中回放。完整修订的根、实际页子表和关联表在同一保存点写入并读回，失败不会留下可激活半成品。
+- 最终确定性证据：聚焦 `225 passed`；全量 V2 `1361 passed, 2 subtests passed`；Ruff、限定 Pyright 和 `git diff --check` 通过。独立 `gpt-5.6-sol:high` 复核终局无 P0/P1/P2，裁决 `ACCEPT`。
+- 仅 WP-44A 放行。下一安全动作是 WP-44B 的确定性定位、风险扫描、有效校对投影和原子激活/回滚服务；WP-44C/D 继续阻塞。
+
+## 2026-08-20 Phase 4 Slice 4.4 WP-44B 最终验收
+
+- WP-44B 已完成并由同一新鲜 `gpt-5.6-sol:high` 独立会话终局放行。复核先后两次拒绝，定位到重叠文本误判唯一、被提及资料链头与人工确认混淆、默认激活幂等不足、孤立激活事件，以及陈旧 READY 候选可切换权威指针但不进入 ACTIVE 的仓储旁路。
+- 修复后，重叠 occurrence 不再生成伪红框；确定性发现来源与用户复核状态分离；确认/修改/解除保留非空原因及不可变历史；激活仓储在同一保存点写 ActivationEvent、审核节点成对指针和候选 ACTIVE 事件，并验证候选冻结修订号。
+- 风险种子集固定断言关键漏检 `0/26`、干净页误报 `0/13`、覆盖 `23/23`，仍只代表确定性规则种子集，不代表扫描件/照片识别的一般准确率。
+- Codex 最终证据为聚焦 `209 passed`、V2 全量 `1455 passed, 130 warnings, 2 subtests passed`、限定 Ruff/Pyright 与 `git diff --check` 通过；独立终局无未闭合 P0/P1/P2。
+- 下一安全动作仅为 WP-44C：实现页、校对、完整修订、激活/回滚和被提及资料 API，以及只读 current 指针投影。前端 WP-44D、连续原件滚动与真实红框视觉验收继续阻塞。
+
+## 2026-08-21 Phase 4 Slice 4.4 WP-44C 最终验收
+
+- WP-44C 后端接口已完成并由同一 fresh-context `gpt-5.6-sol:high` 独立会话终局放行。首轮复核拒绝了重复启用当前版本返回 500、跨受试者资料可被登记为已提供，以及 API 错误映射器依赖上传/存储异常三个 P1。
+- 根因修复收敛为共享边界：重复启用当前成对版本返回结构化 `409 CURRENT_VERSION_UNCHANGED`，不追加激活事件、审核节点修订或幂等历史；被提及资料的已提供关系必须与登记链同项目/受试者/审核节点，且资料版本属于该节点当前活动快照，服务与仓储均独立拒绝绕过。
+- API 错误映射器只消费应用错误，不再导入上传服务、存储模块或 SQLAlchemy。上传公共服务把已知内部失败转换为固定中文应用错误；技术异常、绝对路径、SQL 和内部哈希不进入用户错误信封。
+- Codex 证据：聚焦 `39 passed`；API+services `335 passed`；V2 全量 `1537 passed, 130 warnings, 2 subtests passed`；Ruff、项目虚拟环境 Pyright、`git diff --check` 通过。独立复核另跑修复相关 `180 passed, 2 subtests passed`、API+services `335 passed` 和全量 `1537 passed, 2 subtests passed`，终局无未闭合 P0/P1/P2。
+- WP-44D 中文核对闭环现已解锁。下一安全动作仅实施中栏原始识别/校对后文本、风险核对、关键确认、定位精度与降级原因、被提及资料关联以及 409 输入保留；连续原件滚动和真实红框完整体验仍属于 Slice 4.5。
+
+## 2026-08-21 Phase 4 Slice 4.4 最终完成
+
+- WP-44C-R 已把校对、风险核对和显式构建收敛为“原子排队、冻结输入、后台持久执行”；HTTP 请求不再同步构建，进程死亡后可用同一任务与候选恢复，READY/ACTIVE 重放不重复生成完整修订或候选事件。
+- WP-44D 已完成原始识别/校对后文本、风险核对、关键确认、定位精度与中文降级原因、被提及资料闭环及 409 输入保留。旧候选恢复与新候选创建之间增加候选编号和本地锚点双重隔离，晚到成功或 404 均不会覆盖/删除新候选。
+- 独立 fresh-context 检查曾两轮拒绝同步构建、候选输入时序漂移、READY 恢复、轮询退避、恢复竞态和技术术语；按共享状态机修复后，同一 `gpt-5.6-sol:high` 会话终局 `ACCEPT`。
+- 最终验证：后端全量 `1543 passed, 130 warnings, 2 subtests passed`；前端 `336 passed`；生产构建和三档宽屏 Playwright `6 passed`；Ruff、项目虚拟环境 Pyright、`git diff --check` 通过。
+- 当前边界：Slice 4.5 尚未开始。右栏仍是诚实占位，不具备连续原件滚动、真实坐标缩放覆盖层或风险红框；任何无真实坐标的证据继续不得绘制红框。
+- 下一步：实施 Slice 4.5 的文件/页/文本/原图联动、真实证据滚动、真实 bbox 映射、任务中心中文详情、帮助页和 P4-AC01 至 P4-AC13 宽屏验收；通过后才进入三路独立试用。
+
+## 2026-08-21 Phase 4 Slice 4.5/4.6 无损暂停检查点
+
+- Slice 4.5 用户面功能与 P4-AC01 至 P4-AC12 本地确定性验收已完成：连续原始资料滚动、真实坐标红框、无坐标诚实降级、持久任务中文详情和帮助说明均已落地；后端 V2 全量 `1546 passed`，前端 `344 passed`，证据 Playwright `15 passed`，生产构建与限定静态检查通过。
+- P4-AC13 尚未通过。Pi 独立真实浏览器试用发现生产前端仍混用 Phase 1 stub 基线仓储与 V2 HTTP 证据仓储，导致真实 V2 受试者无法从生产前端进入证据链。这是跨项目通用的数据访问边界缺陷，不能靠测试夹具或项目特异逻辑掩盖。
+- CodeBuddy 正式试用受其非交互权限限制，仅作为静态审阅；Grok Build 正式试用需从既有会话 `5dbfce0f-a5e8-4dd6-a249-d86c4fba4e39` 继续，禁止因暂停而新建或替换会话。
+- 恢复顺序：续跑同一 Grok 会话；修复生产默认 HTTP/stub 显式隔离；重跑全量确定性验证与三路独立 UAT；由 Codex 重新裁定 P4-AC13。Phase 4 放行前不进入 Phase 5。
+- 用户已要求立即无损暂停。暂停时无相关活动进程，UAT 报告、截图、提示词与失败证据均保留，未做清理。
+
+## 2026-08-21 15:51 Phase 4 最新暂停锚点
+
+- 会商顾问与独立试用者必须分离：前者只读挑战设计，后者在隔离清洁环境真实操作产品；两者报告不可互相替代。
+- R4 后已修复跨上传方式冗余版本、增量旁路核对沿用、风险扫描时机、真实定位自动纳入、原生文字页进度 `0/0` 和用户界面完成状态歧义。
+- 前端全量 `372 passed` 并构建通过；后端相关回归通过。后端全量最终一轮因用户暂停在约 9% 中断，Phase 4 仍未放行。
+- 精确恢复文件：`.trellis/tasks/08-19-phase4-evidence-ocr-v2/CHECKPOINT_20260821_1551_PAUSED.md`。恢复后先完成后端全量，再做新隔离浏览器矩阵与 R5 三路真实试用；不得直接进入 Phase 5。
+
+## 2026-08-21 22:25 Phase 4 Slice 4.5 终局与独立试用中间检查点
+
+- 后端同一代码基线全量 `1557 passed, 130 warnings, 2 subtests passed`；前端终局 `382 passed`，生产构建、stub 证据流程 `15 passed`、真实后端 1080P/2K/4K `3 passed`。Slice 4.5 用户体验与本地确定性检查完成。
+- 三路 R3 均使用用户指定的测试模型且未替换：CodeBuddy `hy3(max)`、Pi `cms-router/minimax-m3(high)`、Grok Build `grok-4.6(medium)`。共同确认阅读态、单框定位、重复文件、上传收拢和当前版本语义；测试者报告不替代 Codex 浏览器验收。
+- Codex 以实际 1080P 截图确认短文本红框压字，从共享呈现层改为框外描边；通用定位列表过滤纯标点但保留风险核对本身；空白“资料中提及但未提供”登记表默认收拢；受试者与中心增加明确分隔；“页面已就绪”改为“原件可查看”。未添加项目特异规则。
+- 1366×768 意见不采纳，因为产品合同只覆盖最大化 1080P 至 4K、有效 CSS 宽度不低于 1280 的桌面组合。4K 右栏宽度属于偏好，未限制原件阅读空间。
+- P4-AC13 仍未完成：三名模型测试者尚未分别在隔离清洁库完整执行创建/删除项目和受试者、全上传/OCR/校对/失败恢复及量化无辅助脚本。Phase 4 保持 `in_progress`，不得进入 Phase 5。恢复文件为 `.trellis/tasks/08-19-phase4-evidence-ocr-v2/CHECKPOINT_20260821_2225.md`。
+
+## 2026-08-22 Phase 4 P4-AC13 测试路线更新
+
+- 当前三名独立测试者固定为 Cursor CLI `cursor-grok-4.6(medium)`、Pi `cms-router/minimax-m3(high)`、Pi/oMLX `Qwen3.8-27B-oQ8e-fp16-mtp(medium)`；测试角色不得与执行或会商角色互相替代。
+- 本地 Qwen 已完成指定模型与中等推理强度的真实连通性测试，并在测试后卸载；正式端到端试用须与产品 OCR 串行，避免模型占用和性能测量互相污染。
+- 旧 `pi/opencode-go/ox-alpha-free(high)` 连通性结果仅作为被替换路线的历史失败证据保留，不得用于当前 P4-AC13 的连通性或端到端验收。
+
+## 2026-08-22 Phase 4 完成边界
+
+- P4-AC01 至 P4-AC13 已完成。三路指定测试者在互不污染的 D001 II 期隔离副本中完成真实资料试用，Codex 复核实际浏览器、持久任务深链、数据库不变量和临床边界；测试者仍不等同真人可用性研究。
+- 终局系统修复包括：从不可变提交恢复处理中快照的 `upload_job_id`；关键校对仅持久化最小变化范围；严格半开区间覆盖；风险/审核/校对按处理修订隔离；批量读取消除页数相关 N+1；严重整页重复风险不得由普通阅览关闭。
+- 决定性验证：后端 `1633 passed, 139 warnings, 2 subtests passed`；前端 `49 files / 416 tests passed`；生产构建通过；1080P/2K/4K Playwright `9 passed`；真实隔离 D001 证据页可进入准确的资料处理详情；fresh-context 独立检查最终 `ACCEPT`。
+- 最终恢复记录为 `.trellis/tasks/08-19-phase4-evidence-ocr-v2/CHECKPOINT_20260822_PHASE4_COMPLETE.md`。Phase 5 只能读取当前审核节点已激活的证据快照和完整处理修订，继续保持来源版本、页图、OCR 原文、有效校对和定位可回放；不得让候选或后续阶段资料静默改写早期事实。

@@ -8,6 +8,222 @@
   align-items: start;
 }
 
+/* 正式资料目录：仅呈现已保存的项目、受试者与审核节点，不混入后续审核结论。 */
+.catalog-selection,
+.catalog-subjects,
+.catalog-episodes {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-l);
+}
+
+.catalog-selection {
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.catalog-selection__head,
+.catalog-episodes > header,
+.catalog-episode {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.catalog-selection h2,
+.catalog-subjects h2,
+.catalog-episodes h2 {
+  font-size: var(--font-size-title);
+}
+
+.catalog-selection p,
+.catalog-episodes header p,
+.catalog-project-meta span,
+.catalog-episode p {
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+}
+
+.catalog-selection select {
+  inline-size: min(48rem, 55%);
+  min-inline-size: 24rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-m);
+  background: var(--color-surface);
+  font: inherit;
+}
+
+.catalog-layout {
+  display: grid;
+  grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.catalog-subjects,
+.catalog-episodes {
+  padding: var(--space-3);
+}
+
+.catalog-subjects h2,
+.catalog-episodes > header {
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.catalog-subjects .catalog-subject-item__select {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  inline-size: 100%;
+  margin-top: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-m);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.catalog-subjects .catalog-subject-item__select:hover,
+.catalog-subjects .catalog-subject-item__select.is-active {
+  background: var(--color-teal-bg);
+  border-color: #9fd4cf;
+}
+
+.catalog-subjects .catalog-subject-item__select span {
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+}
+
+/* 受试者行：选择按钮占主体，右侧“删除”入口不参与选择。 */
+.catalog-subject-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.catalog-subject-item__select {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.catalog-subject-item__delete {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-top: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+  cursor: pointer;
+}
+
+.catalog-subject-item__delete:hover {
+  border-color: var(--color-line);
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+
+.catalog-subject-item__delete:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* 新增受试者入口：与项目选择同排，仅在选中项目后可操作。 */
+.catalog-selection__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* 新增受试者表单与错误恢复。 */
+.subject-form {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.subject-form__row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.subject-form__field {
+  display: grid;
+  gap: var(--space-1);
+  min-inline-size: 0;
+}
+
+.subject-form__field > span {
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+.subject-form__required {
+  color: var(--color-red);
+  font-style: normal;
+}
+
+.subject-form__field input,
+.subject-form__field select {
+  min-inline-size: 0;
+  inline-size: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-m);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font: inherit;
+}
+
+.subject-form__field input:focus-visible,
+.subject-form__field select:focus-visible {
+  border-color: var(--color-brand);
+  outline: 3px solid color-mix(in srgb, var(--color-brand) 18%, transparent);
+}
+
+.subject-form__error {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--color-red);
+  background: var(--color-red-bg);
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.catalog-project-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.catalog-episode-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+}
+
+.catalog-episode {
+  min-inline-size: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-line);
+  border-left: 3px solid var(--color-teal);
+  border-radius: var(--radius-m);
+}
+
+.catalog-episode h3 {
+  font-size: var(--font-size-title);
+}
+
 /* ---------- 受试者列表 ---------- */
 
 .subjects-list {

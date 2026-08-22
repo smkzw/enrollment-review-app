@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:e2e": "VITE_PROTOCOL_WORKBENCH_STUB=true tsc -b && VITE_PROTOCOL_WORKBENCH_STUB=true vite build",
+    "build:e2e": "VITE_PROTOCOL_WORKBENCH_STUB=true VITE_ENROLLMENT_INTERFACE_TRIAL=true tsc -b && VITE_PROTOCOL_WORKBENCH_STUB=true VITE_ENROLLMENT_INTERFACE_TRIAL=true vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "e2e": "playwright test"

@@ -37,7 +37,7 @@ export async function openRoute(page: Page, hash: string) {
 /**
  * 以缩小布局视口做响应式压力测试。此检查不能替代真实浏览器 150%/200% 缩放验收。
  */
-export async function setLayoutStressFactor(page: Page, factor: 1 | 1.5 | 2) {
+export async function setLayoutStressFactor(page: Page, factor: 1 | 1.25 | 1.5 | 2) {
   let baseViewport = baseViewportByPage.get(page);
   if (baseViewport === undefined) {
     const currentViewport = page.viewportSize();

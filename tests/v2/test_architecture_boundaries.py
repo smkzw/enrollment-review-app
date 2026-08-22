@@ -6,11 +6,11 @@ from pathlib import Path
 
 from app.storage.boundaries import ProtectedPathError, WriteBoundary, snapshot_tree
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 V2_PACKAGES = (
     REPO_ROOT / "app" / "api" / "v2",
     REPO_ROOT / "app" / "domain",
+    REPO_ROOT / "app" / "evidence",
     REPO_ROOT / "app" / "workflow",
     REPO_ROOT / "app" / "storage",
     REPO_ROOT / "app" / "agents",
@@ -54,9 +54,10 @@ class WriteBoundaryTests(unittest.TestCase):
             [REPO_ROOT / "projects", REPO_ROOT / "output"],
         )
         for protected_root in (REPO_ROOT / "projects", REPO_ROOT / "output"):
-            with self.subTest(protected_root=protected_root):
-                with self.assertRaises(ProtectedPathError):
-                    boundary.require_v2_target(protected_root / "phase0-write-probe")
+            with self.subTest(protected_root=protected_root), self.assertRaises(
+                ProtectedPathError
+            ):
+                boundary.require_v2_target(protected_root / "phase0-write-probe")
 
     def test_atomic_writer_preserves_legacy_tree_and_rejects_links(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -111,6 +112,117 @@ class DependencyDirectionTests(unittest.TestCase):
                         if name.startswith(FORBIDDEN_LEGACY_IMPORTS):
                             violations.append(f"{source_path.relative_to(REPO_ROOT)} -> {name}")
         self.assertEqual([], violations)
+
+    def test_api_v2_router_modules_do_not_import_storage_or_sqlalchemy(self) -> None:
+        """薄 API 边界：app/api/v2 路由/schema/vocabulary 模块不得导入 SQLAlchemy
+        或 ``app.storage``（WP-44C 验收）。app 工厂(app.py)与异常映射(errors.py)
+        只允许通过 application services 间接接触存储类型。"""
+        api_dir = REPO_ROOT / "app" / "api" / "v2"
+        violations: list[str] = []
+        for source_path in sorted(api_dir.glob("*.py")):
+            tree = ast.parse(source_path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                imported: list[str] = []
+                if isinstance(node, ast.Import):
+                    imported = [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    imported = [node.module]
+                else:
+                    continue
+                for name in imported:
+                    if name == "sqlalchemy" or name.startswith("sqlalchemy."):
+                        violations.append(
+                            f"{source_path.relative_to(REPO_ROOT)} -> {name}"
+                        )
+                    if name == "app.storage" or name.startswith("app.storage."):
+                        violations.append(
+                            f"{source_path.relative_to(REPO_ROOT)} -> {name}"
+                        )
+        self.assertEqual([], violations)
+
+    def test_api_error_mapping_imports_only_app_errors_not_storage_re_exports(self) -> None:
+        """应用错误由应用层拥有：``app/api/v2/errors.py`` 不得从
+        ``evidence_api_command_service`` 导入（该模块不再再导出存储异常类），也不得
+        直接导入 ``app.storage``。依赖方向测试，而非仅检查字面 API 导入。"""
+        errors_path = REPO_ROOT / "app" / "api" / "v2" / "errors.py"
+        command_service_path = (
+            REPO_ROOT / "app" / "services" / "evidence_api_command_service.py"
+        )
+        tree = ast.parse(errors_path.read_text(encoding="utf-8"))
+        imported_modules: list[str] = []
+        imported_symbols: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported_modules.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported_modules.append(node.module)
+                imported_symbols.extend(alias.name for alias in node.names)
+        forbidden = [
+            name
+            for name in imported_modules
+            if name == "app.storage"
+            or name.startswith(
+                (
+                    "app.storage.",
+                    "app.services.evidence_api_command_service",
+                    "app.services.evidence_upload_service",
+                )
+            )
+            or name == "app.services.evidence_api_command_service"
+            or name == "app.services.evidence_upload_service"
+        ]
+        self.assertEqual([], forbidden, f"errors.py 不得导入存储/命令服务再导出：{forbidden}")
+        forbidden_symbols = {
+            "LegacyIdempotencyConflict",
+            "LegacyStaleRevisionError",
+            "translate_storage_error",
+            "is_operational_error",
+            "is_database_busy_error",
+        }
+        self.assertFalse(
+            forbidden_symbols & set(imported_symbols),
+            "errors.py 不得经应用错误模块间接识别存储实现异常",
+        )
+
+        # 命令服务不得再导出存储异常类（__all__ 只含服务本身）。
+        cmd_tree = ast.parse(command_service_path.read_text(encoding="utf-8"))
+        storage_class_names = {
+            "NotFoundError",
+            "InvalidReferenceError",
+            "ScopeViolationError",
+            "DuplicateRecordError",
+            "IdempotencyConflict",
+            "StaleRevisionError",
+            "PersistedContractInvalid",
+            "PreviewNotFoundError",
+            "PreviewStatusTransitionError",
+            "EvidenceUploadCommitNotFoundError",
+            "CorrectionOverlapError",
+            "LocatorIdentityError",
+            "OcrRevisionKindError",
+            "RevisionClosureError",
+            "RiskScanConflictError",
+            "Slice44RepositoryError",
+            "ActivationSequenceError",
+            "CandidateStateTransitionError",
+            "CandidateIdempotencyConflictError",
+        }
+        for node in ast.walk(cmd_tree):
+            if (
+                isinstance(node, ast.Assign)
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "__all__"
+                and isinstance(node.value, (ast.List, ast.Tuple))
+            ):
+                for elt in node.value.elts:
+                    if (
+                        isinstance(elt, ast.Constant)
+                        and isinstance(elt.value, str)
+                        and elt.value in storage_class_names
+                    ):
+                        self.fail(
+                            f"evidence_api_command_service 不得再导出存储异常类 {elt.value}"
+                        )
 
 
 if __name__ == "__main__":

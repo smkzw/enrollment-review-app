@@ -7,6 +7,7 @@
   枚举或日志词；
 - 所有信封携带 ``correlation_id`` 便于本机日志关联。
 """
+
 from __future__ import annotations
 
 import logging
@@ -16,17 +17,16 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import OperationalError
 
+from app.services.evidence_app_errors import (
+    EvidenceAppError,
+)
 from app.services.protocol_draft_service import DraftEditBoundaryError
 from app.services.protocol_workbench_service import ProtocolWorkbenchError
-from app.storage.codecs import PersistedContractInvalid
-from app.storage.concurrency import StaleRevisionError
-from app.storage.idempotency import IdempotencyConflict
 from app.workflow.errors import (
+    InvalidJobDefinitionError,
     JobNotFoundError,
     JobStateConflictError,
-    InvalidJobDefinitionError,
     LeaseLostError,
     StepDeferredError,
     StepMismatchError,
@@ -34,11 +34,6 @@ from app.workflow.errors import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _is_sqlite_busy(exc: OperationalError) -> bool:
-    message = str(exc.orig or exc).lower()
-    return "database is locked" in message or "database is busy" in message
 
 
 class ErrorSpec:
@@ -85,6 +80,22 @@ _FIELD_LABELS = {
     "official_date_precision": "版本日期精度",
     "study_phase": "研究期别",
     "selected_candidate_ids": "来源候选",
+    "subject_id": "受试者编号",
+    "subject_code": "受试者代号",
+    "project_id": "项目编号",
+    "center_code": "中心编号",
+    "center_name": "中心名称",
+    "sex": "性别",
+    "age_years": "年龄",
+    "review_episode_id": "审核节点编号",
+    "rule_set_id": "规则集编号",
+    "rule_set_revision": "规则集修订号",
+    "protocol_version_id": "方案版本",
+    "evidence_snapshot_id": "证据快照编号",
+    "stage": "审核阶段",
+    "anchor_dates": "锚定日期",
+    "due_at": "截止时间",
+    "revision": "修订号",
 }
 
 
@@ -120,26 +131,21 @@ def _validation_context(exc: RequestValidationError) -> dict[str, Any]:
 
 
 def map_exception(exc: Exception) -> tuple[int, dict[str, Any]]:
-    """异常 -> (HTTP 状态, 信封 dict)；未知异常归入内部错误，绝不泄露技术细节。"""
-    if isinstance(exc, IdempotencyConflict):
+    """异常 -> (HTTP 状态, 信封 dict)；未知异常归入内部错误，绝不泄露技术细节。
+
+    应用错误由应用服务拥有；本映射器不识别或翻译任何存储实现
+    异常。存储失败若逃逸服务边界，只能作为未处理的内部错误，避免 API
+    层反向依赖存储类型。
+    """
+    if isinstance(exc, EvidenceAppError):
         spec = ErrorSpec(
-            409,
-            "IDEMPOTENCY_CONFLICT",
-            "重复提交内容不一致",
-            "同一个幂等键之前已绑定不同的请求内容，系统不会静默复用旧结果。",
-            "请更换幂等键重新提交，或保持与上次提交完全一致后重试。",
+            exc.status_code,
+            exc.code,
+            exc.title,
+            exc.detail(),
+            exc.recovery,
         )
-        context: dict[str, Any] | None = None
-    elif isinstance(exc, StaleRevisionError):
-        spec = ErrorSpec(
-            409,
-            "STALE_REVISION",
-            "记录内容已经更新",
-            "这条记录在您打开之后发生了变化，当前内容与您准备提交的内容不一致。",
-            "请先查看系统列出的差异，再基于最新内容重新编辑；本次提交没有覆盖现有记录。",
-        )
-        context = exc.as_dict()
-        context.pop("code", None)
+        context = exc.context()
     elif isinstance(exc, LeaseLostError):
         spec = ErrorSpec(
             409,
@@ -197,33 +203,6 @@ def map_exception(exc: Exception) -> tuple[int, dict[str, Any]]:
             "请只修正与当前方案来源一致的语义内容，不要增删冻结目录或改写流程结构。",
         )
         context = None
-    elif isinstance(exc, PersistedContractInvalid):
-        spec = ErrorSpec(
-            500,
-            "PERSISTED_CONTRACT_INVALID",
-            "持久化内容校验失败",
-            "任务相关的持久化记录未能通过完整性校验，系统拒绝继续发布不完整结果。",
-            "请稍后重试；若问题持续出现，请使用已验证的备份恢复或联系维护人员。",
-        )
-        context = None
-    elif isinstance(exc, OperationalError) and _is_sqlite_busy(exc):
-        spec = ErrorSpec(
-            503,
-            "DATABASE_BUSY",
-            "数据库暂时繁忙",
-            "本机数据库当前正忙，本次操作没有完成，已完成的步骤记录不受影响。",
-            "请稍后重试；系统不会丢失已完成步骤的记录。",
-        )
-        context = None
-    elif isinstance(exc, OperationalError):
-        spec = ErrorSpec(
-            500,
-            "LOCAL_DATA_ERROR",
-            "本地数据读取失败",
-            "系统未能完成本次本地数据操作，本次操作没有生效。",
-            "请重新打开系统后再试；若仍然失败，请联系维护人员检查本地数据文件。",
-        )
-        context = None
     elif isinstance(exc, (StepDeferredError, StepMismatchError, WorkflowError)):
         spec = ErrorSpec(
             409,
@@ -253,10 +232,10 @@ def register_error_handlers(app: FastAPI) -> None:
         status, content = map_exception(exc)
         return JSONResponse(status_code=status, content=content)
 
-    async def _validation_handler(
-        request: Request, exc: RequestValidationError
-    ) -> JSONResponse:
+    async def _validation_handler(request: Request, exc: Exception) -> JSONResponse:
         del request
+        if not isinstance(exc, RequestValidationError):
+            raise exc
         return JSONResponse(
             status_code=422,
             content={
@@ -279,16 +258,13 @@ def register_error_handlers(app: FastAPI) -> None:
         return JSONResponse(status_code=status, content=content)
 
     for exc_type in (
-        IdempotencyConflict,
-        StaleRevisionError,
+        EvidenceAppError,
         LeaseLostError,
         JobStateConflictError,
         InvalidJobDefinitionError,
         JobNotFoundError,
         ProtocolWorkbenchError,
         DraftEditBoundaryError,
-        PersistedContractInvalid,
-        OperationalError,
         StepDeferredError,
         StepMismatchError,
         WorkflowError,

@@ -8,10 +8,12 @@
 
 import { getDefaultRepository } from "../api";
 import { RouteLink, updateParams, useHashRoute } from "../app/router";
+import { isInterfaceTrialMode } from "../app/runtimeMode";
 import { useLoad } from "../app/useLoad";
 import { useSessionState } from "../app/useSessionState";
 import { UAT_KEY_TASK_PROGRESS } from "../app/uatTrialState";
 import { EmptyState, ErrorState, LoadingState } from "../components/shell/Feedback";
+import { PersistentEvidenceTaskDetail } from "../components/evidence-workspace/PersistentEvidenceTaskDetail";
 import { TaskStateBadge } from "../components/shell/StatusBadge";
 import { OpenIcon, ResumeIcon, RunningIcon, StaleIcon } from "../components/shell/icons";
 import { UI_PHRASES } from "../domain/labels";
@@ -140,7 +142,59 @@ function demoFileStateLabel(state: DemoFileState): string {
   return "尚未处理";
 }
 
-export function TasksPage() {
+function PersistentTaskRoute({
+  jobId,
+  subjectId,
+  reviewEpisodeId,
+}: {
+  jobId: string;
+  subjectId: string | null;
+  reviewEpisodeId: string | null;
+}) {
+  return (
+    <div className="tasks">
+      <header className="page-head">
+        <h1 className="page-head__title">资料处理详情</h1>
+        <p className="page-head__note">
+          查看本次已确认资料的处理进度、需要处理的页面和恢复方式。
+        </p>
+      </header>
+      <PersistentEvidenceTaskDetail
+        jobId={jobId}
+        subjectId={subjectId}
+        reviewEpisodeId={reviewEpisodeId}
+      />
+      <section className="tasks-section" aria-labelledby="persistent-task-help-title">
+        <h2 id="persistent-task-help-title" className="tasks-section__title">
+          遇到问题怎么办
+        </h2>
+        <p className="tasks-section__note">
+          单页处理失败不会删除已完成内容。请先核对失败文件和页数，再重新处理失败部分；
+          若原文件无法打开，请返回受试者资料页补充可读取的原文件。
+        </p>
+      </section>
+    </div>
+  );
+}
+
+function FormalTaskEmptyState() {
+  return (
+    <div className="tasks">
+      <header className="page-head">
+        <h1 className="page-head__title">资料处理详情</h1>
+        <p className="page-head__note">请从受试者资料工作台打开一次具体的处理任务。</p>
+      </header>
+      <section className="tasks-section">
+        <p className="tasks-section__note">当前没有选中需要查看的资料处理任务。</p>
+        <RouteLink to="/subjects" className="button button--primary">
+          返回受试者与资料
+        </RouteLink>
+      </section>
+    </div>
+  );
+}
+
+function TrialTasksPage() {
   const { params } = useHashRoute();
   const jobParam = params.get("job");
 
@@ -184,6 +238,19 @@ export function TasksPage() {
     jobParam !== null
       ? allJobs.find((job) => job.jobId === jobParam) ?? null
       : null;
+  const persistentJobId = jobParam !== null && selectedJob === null ? jobParam : null;
+  const subjectId = params.get("subject");
+  const reviewEpisodeId = params.get("episode");
+
+  if (persistentJobId !== null) {
+    return (
+      <PersistentTaskRoute
+        jobId={persistentJobId}
+        subjectId={subjectId}
+        reviewEpisodeId={reviewEpisodeId}
+      />
+    );
+  }
 
   return (
     <div className="tasks">
@@ -285,7 +352,6 @@ export function TasksPage() {
       </section>
 
       {selectedJob !== null && <JobDetail job={selectedJob} />}
-
       <section className="tasks-section" aria-labelledby="tasks-help-title">
         <h2 id="tasks-help-title" className="tasks-section__title">
           遇到问题怎么办
@@ -296,6 +362,21 @@ export function TasksPage() {
         </p>
       </section>
     </div>
+  );
+}
+
+export function TasksPage() {
+  const { params } = useHashRoute();
+  if (isInterfaceTrialMode()) return <TrialTasksPage />;
+
+  const jobId = params.get("job");
+  if (jobId === null) return <FormalTaskEmptyState />;
+  return (
+    <PersistentTaskRoute
+      jobId={jobId}
+      subjectId={params.get("subject")}
+      reviewEpisodeId={params.get("episode")}
+    />
   );
 }
 

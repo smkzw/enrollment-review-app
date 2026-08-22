@@ -7,9 +7,9 @@ import pytest
 from sqlalchemy import select
 
 from app.storage.models import JobRecord
-from app.workflow.errors import JobStateConflictError
-from app.workflow.runner import JobRunner, StepContext
+from app.workflow.errors import JobStateConflictError, StepAwaitingUser
 from app.workflow.recovery import recover_expired_jobs
+from app.workflow.runner import JobRunner, StepContext
 from tests.v2.workflow.conftest import (
     create_job_with_steps,
     expire_lease,
@@ -272,13 +272,15 @@ def test_complete_user_step_rejects_non_waiting_state(session_factory, clock):
         job_id="job-wait",
         steps=_three_step_pipeline(),
     )
-    with store_transaction(session_factory, clock) as store:
-        with pytest.raises(JobStateConflictError):
-            store.complete_user_step(
-                "job-wait",
-                "confirm",
-                checkpoint_payload={"confirmed": True},
-            )
+    with (
+        store_transaction(session_factory, clock) as store,
+        pytest.raises(JobStateConflictError),
+    ):
+        store.complete_user_step(
+            "job-wait",
+            "confirm",
+            checkpoint_payload={"confirmed": True},
+        )
     runner = JobRunner(
         session_factory,
         {"demo": _wait_executor("identity")},
@@ -298,3 +300,55 @@ def test_complete_user_step_rejects_non_waiting_state(session_factory, clock):
                 "confirm",
                 checkpoint_payload={"confirmed": True},
             )
+
+
+def test_running_step_can_pause_and_resume_same_step_without_failure(
+    session_factory, clock
+):
+    """执行器发现业务核对项时，持久暂停同一步骤，核对后重新排队。"""
+    create_job_with_steps(
+        session_factory,
+        clock,
+        job_id="job-dynamic-review",
+        steps=[{"step_id": "build", "name": "生成资料版本"}],
+    )
+    calls = 0
+
+    def executor(ctx: StepContext) -> dict:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise StepAwaitingUser(
+                awaiting_user="evidence_review",
+                checkpoint={"candidate_id": "candidate-1"},
+            )
+        return {"candidate_id": "candidate-1", "status": "ready"}
+
+    runner = JobRunner(
+        session_factory,
+        {"demo": executor},
+        worker_id="w1",
+        now=clock.now,
+    )
+    assert runner.run_job("job-dynamic-review") is True
+    waiting = _snapshot(session_factory, clock, "job-dynamic-review")
+    assert waiting.state == "waiting_user"
+    assert waiting.steps[0].state == "waiting_user"
+    assert waiting.steps[0].error_code is None
+    assert not any(
+        row.event.event_type.value in {"step_failed", "retry_scheduled"}
+        for row in waiting.events
+    )
+
+    with store_transaction(session_factory, clock) as store:
+        store.resume_waiting_step(
+            "job-dynamic-review",
+            "build",
+            checkpoint_payload={"reviewed": True},
+        )
+    assert _snapshot(session_factory, clock, "job-dynamic-review").state == "queued"
+    assert runner.run_job("job-dynamic-review") is True
+    completed = _snapshot(session_factory, clock, "job-dynamic-review")
+    assert completed.state == "completed"
+    assert completed.steps[0].state == "completed"
+    assert calls == 2

@@ -2,7 +2,21 @@
 set -u
 
 APP_DIR="/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app"
-OMLX_URL="${OMLX_BASE_URL:-http://127.0.0.1:8000}"
+OMLX_CONFIG="$HOME/Library/Application Support/oMLX/config.json"
+OMLX_PORT="$(/usr/bin/python3 - "$OMLX_CONFIG" <<'PY' 2>/dev/null || true
+import json
+import sys
+from pathlib import Path
+
+try:
+    port = int(json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["port"])
+    if 1 <= port <= 65535:
+        print(port)
+except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+    pass
+PY
+)"
+OMLX_URL="${OMLX_BASE_URL:-http://127.0.0.1:${OMLX_PORT:-8000}}"
 LOG_DIR="$APP_DIR/output/runtime_logs"
 STATE_DIR="$APP_DIR/output/runtime_state"
 PORT_FILE="$STATE_DIR/port"
@@ -18,13 +32,13 @@ mkdir -p "$LOG_DIR" "$STATE_DIR"
 cd "$APP_DIR" || exit 1
 
 is_http_up() {
-  /usr/bin/curl -fsS --connect-timeout 2 --max-time 4 "$1" >/dev/null 2>&1
+  /usr/bin/curl --noproxy '*' -fsS --connect-timeout 2 --max-time 4 "$1" >/dev/null 2>&1
 }
 
 is_enrollment_app() {
   local port="$1"
   local body
-  body="$(/usr/bin/curl -fsS --connect-timeout 2 --max-time 4 "http://127.0.0.1:$port/api/health" 2>/dev/null)" || return 1
+  body="$(/usr/bin/curl --noproxy '*' -fsS --connect-timeout 2 --max-time 4 "http://127.0.0.1:$port/api/health" 2>/dev/null)" || return 1
   [[ "$body" == *'"service":"enrollment-review-app"'* ]]
 }
 

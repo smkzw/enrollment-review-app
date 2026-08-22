@@ -10,12 +10,15 @@ import {
   createProtocolWorkbenchStub,
   setProtocolWorkbenchRepository,
 } from "../api/protocolWorkbenchRepository";
+import { createCatalogTrial, setCatalogRepository } from "../api/catalog";
 
 beforeEach(() => {
   setProtocolWorkbenchRepository(createProtocolWorkbenchStub());
+  setCatalogRepository(createCatalogTrial());
 });
 
 afterEach(() => {
   setProtocolWorkbenchRepository(null);
+  setCatalogRepository(null);
   cleanup();
 });

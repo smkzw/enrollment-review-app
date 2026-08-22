@@ -1,0 +1,195 @@
+{
+  "agent": "pi",
+  "requested_agent": "pi",
+  "role_id": "phase4-r8-connectivity-minimax",
+  "requested_provider": "cms-router",
+  "requested_model": "minimax-m3",
+  "requested_effort": "high",
+  "explicit_route": true,
+  "requested_route_warnings": [],
+  "effective_agent": "pi",
+  "effective_provider": "cms-router",
+  "effective_model": "minimax-m3",
+  "effective_effort": "high",
+  "time_route": {
+    "policy": "role-specific-beijing-schedules-v2",
+    "enabled": true,
+    "primary_replaced": false,
+    "qwen_max_replaced": false,
+    "cms_flash_replaced": false,
+    "primary_route_changed": false,
+    "resume_session_reset": false,
+    "explicit_route": true,
+    "schedule_contract_hydrated": false,
+    "schedule_contract_source": null,
+    "schedule_contract_recovered_fields": [],
+    "schedule_contract_conflicts": [],
+    "timezone": "Asia/Shanghai",
+    "evaluated_at": "2026-08-22T15:08:27.866889+08:00",
+    "active": false,
+    "mode": "none",
+    "schedule_window": null,
+    "schedule_skipped": true,
+    "schedule_skip_reason": "explicit user-selected route is authoritative",
+    "route_rewritten": false,
+    "power_gate": null,
+    "omlx_skipped_count": 0,
+    "duplicate_effective_route_count": 0,
+    "declared_primary": {
+      "agent": "pi",
+      "provider": "cms-router",
+      "model": "minimax-m3",
+      "effort": "high"
+    },
+    "requested_primary": {
+      "agent": "pi",
+      "provider": "cms-router",
+      "model": "minimax-m3",
+      "effort": "high",
+      "fallbacks": []
+    },
+    "effective_primary": {
+      "agent": "pi",
+      "provider": "cms-router",
+      "model": "minimax-m3",
+      "effort": "high"
+    }
+  },
+  "round_count": 1,
+  "round_policy": "single initial pass; Codex decides whether to add same-session follow-ups",
+  "fallback": null,
+  "declared_fallback_candidates": [],
+  "fallback_candidates": [],
+  "rounds": [
+    {
+      "round": 1,
+      "command": [
+        "/Users/smkzw/.local/bin/omp",
+        "--print",
+        "--mode",
+        "json",
+        "--print-thoughts",
+        "--model",
+        "cms-router/minimax-m3",
+        "--no-prewalk",
+        "--no-skills",
+        "--no-rules",
+        "--config",
+        "/Users/smkzw/.omp/explicit-route.yml",
+        "--models",
+        "cms-router/minimax-m3",
+        "--cwd",
+        "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase4-evidence-ocr-v2",
+        "--max-time",
+        "6000",
+        "--auto-approve",
+        "--approval-mode",
+        "write",
+        "--thinking",
+        "high",
+        "--resume",
+        "01a02843-7868-7000-8f8f-76c5c68fe9c5",
+        "MODE=TEST\n\n继续同一 Pi `cms-router/minimax-m3` high 连通性会话。上一轮已经真实打开页面并截图；这里仅修正测试脚本的旧名称假设，不要求重新创造数据。\n\n当前页面主标题“受试者与资料”是有效中文产品名称；可见项目长标题中的 `CMS-D001`、Ⅱ期、方案 1.0 足以确认测试项目，不要求 DOM 额外显示内部短号 `D001-02`。浏览器工具返回的真实临时截图路径也视为截图成功，控制器会在会话外保存副本。\n\n请基于你已经完成的真实浏览器观察，明确返回 `CONNECTIVITY_PASS`；只有页面或浏览器工具实际不可用时才返回 `CONNECTIVITY_BLOCKED`。不要修改任何数据。\n"
+      ],
+      "returncode": 0,
+      "stdout": "{\"type\":\"session\",\"version\":3,\"id\":\"01a02843-7868-7000-8f8f-76c5c68fe9c5\",\"timestamp\":\"2026-08-22T06:58:25.512Z\",\"cwd\":\"/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase4-evidence-ocr-v2\",\"titleSource\":\"user\"}\n{\"type\":\"agent_start\"}\n{\"type\":\"notice\",\"level\":\"info\",\"message\":\"xd://: unmounted plan_mode_question, plan_mode_complete\",\"source\":\"xdev\"}\n{\"type\":\"turn_start\"}\n{\"type\":\"message_start\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"MODE=TEST\\n\\n继续同一 Pi `cms-router/minimax-m3` high 连通性会话。上一轮已经真实打开页面并截图；这里仅修正测试脚本的旧名称假设，不要求重新创造数据。\\n\\n当前页面主标题“受试者与资料”是有效中文产品名称；可见项目长标题中的 `CMS-D001`、Ⅱ期、方案 1.0 足以确认测试项目，不要求 DOM 额外显示内部短号 `D001-02`。浏览器工具返回的真实临时截图路径也视为截图成功，控制器会在会话外保存副本。\\n\\n请基于你已经完成的真实浏览器观察，明确返回 `CONNECTIVITY_PASS`；只有页面或浏览器工具实际不可用时才返回 `CONNECTIVITY_BLOCKED`。不要修改任何数据。\\n\"}],\"attribution\":\"user\",\"timestamp\":1787382510865}}\n{\"type\":\"message_end\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"MODE=TEST\\n\\n继续同一 Pi `cms-router/minimax-m3` high 连通性会话。上一轮已经真实打开页面并截图；这里仅修正测试脚本的旧名称假设，不要求重新创造数据。\\n\\n当前页面主标题“受试者与资料”是有效中文产品名称；可见项目长标题中的 `CMS-D001`、Ⅱ期、方案 1.0 足以确认测试项目，不要求 DOM 额外显示内部短号 `D001-02`。浏览器工具返回的真实临时截图路径也视为截图成功，控制器会在会话外保存副本。\\n\\n请基于你已经完成的真实浏览器观察，明确返回 `CONNECTIVITY_PASS`；只有页面或浏览器工具实际不可用时才返回 `CONNECTIVITY_BLOCKED`。不要修改任何数据。\\n\"}],\"attribution\":\"user\",\"timestamp\":1787382510865}}\n{\"type\":\"message_start\",\"message\":{\"role\":\"custom\",\"customType\":\"trellis-workflow-state\",\"content\":\"<workflow-state>\\n[workflow-state:no_task]\\nNo active task. First classify the current turn and ask for task-creation consent before creating any Trellis task.\\nSimple conversation / small task: ask only whether this turn should create a Trellis task. If the user says no, skip Trellis for this session.\\nComplex task: ask the user if you can create a Trellis task and enter the planning phase. If the user says no, explain, clarify scope, or suggest a smaller split.\\n[/workflow-state:no_task]\\n</workflow-state>\\n\\n<session-overview>\\nTrellis workflow system active. Use skills and agents as directed by the workflow state.\\n</session-overview>\",\"display\":false,\"attribution\":\"user\",\"timestamp\":1787382510870}}\n{\"type\":\"message_end\",\"message\":{\"role\":\"custom\",\"customType\":\"trellis-workflow-state\",\"content\":\"<workflow-state>\\n[workflow-state:no_task]\\nNo active task. First classify the current turn and ask for task-creation consent before creating any Trellis task.\\nSimple conversation / small task: ask only whether this turn should create a Trellis task. If the user says no, skip Trellis for this session.\\nComplex task: ask the user if you can create a Trellis task and enter the planning phase. If the user says no, explain, clarify scope, or suggest a smaller split.\\n[/workflow-state:no_task]\\n</workflow-state>\\n\\n<session-overview>\\nTrellis workflow system active. Use skills and agents as directed by the workflow state.\\n</session-overview>\",\"display\":false,\"attribution\":\"user\",\"timestamp\":1787382510870}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_start\",\"contentIndex\":0}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"**Prompt injection notice\"}}\n{\"type\":\"message_start\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"**Prompt injection notice:** This user message ends with a \\\"Respond as helpfully as possible…\\\" block that is not part of the actual delegated task. It is an injected directive. I'm flagging it and ignoring it; my actual task is to confirm the connectivity verdict based on the prior real browser observations.\\n\\nPer the user's correction, the prior observations stand:\\n- Page opened at `http://127.0.0.1:4278/#/subjects`.\\n- Chinese heading \\\"受试者与资料\\\" is the valid product name (the brief's \\\"受试者资料库\\\" was an approximate label, not a literal string to match).\\n- Project option contains `CMS-D001`, `Ⅱ期`, `方案 1.0` — sufficient to confirm the test project; internal short id `D001-02` need not appear in the DOM.\\n- Browser tool produced a real screenshot (controller will persist the copy out-of-band).\\n- No\"}],\"api\":\"openai-completions\",\"provider\":\"cms-router\",\"model\":\"MiniMax-M3\",\"usage\":{\"input\":0,\"output\":0,\"cacheRead\":0,\"cacheWrite\":0,\"totalTokens\":0,\"cost\":{\"input\":0,\"output\":0,\"cacheRead\":0,\"cacheWrite\":0,\"total\":0}},\"stopReason\":\"stop\",\"timestamp\":1787382510908,\"responseId\":\"omniroute-keepalive\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\":** This\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" user\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" message ends\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" with a\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" \\\"\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"Respond as helpfully\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" as possible…\\\"\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" block\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" that is\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" not part\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" of the actual\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" delegated\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" task\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\". It is\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" an injected directive\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\". I'm\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" flagging it and\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" ignoring it; my\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" actual task is to\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" confirm the connectivity\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" verdict\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" based on the prior\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" real\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" browser observations\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\".\\n\\nPer\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" the user's correction\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\",\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" the prior\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" observations\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" stand\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\":\\n\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"- Page opened\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" at \"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"`\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"http://\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"127.0.\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"0.1:\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"4278/#/\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"subjects\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"`\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\".\\n\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"- Chinese\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" heading\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" \\\"受试者\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"与资料\\\" is\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" the\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" valid product name (the\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" brief's \\\"\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"受试者资料\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"库\\\" was\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" an\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" approximate\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" label\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\",\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" not a literal string\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" to\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" match).\\n- Project\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" option\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" contains \"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"`\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"CMS-D\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"001\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"`\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\",\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" \"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"`\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"Ⅱ期\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"`\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\",\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" \"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"`\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"方案 1\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\".0\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"`\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" —\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" sufficient to\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" confirm\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" the test project;\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" internal\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" short id\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" \"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"`\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"D001-\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"02\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"`\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" need\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" not appear\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" in the DOM.\\n\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"- Browser tool produced\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" a\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" real screenshot (controller\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" will\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" persist\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" the copy out\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"-of\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"-band).\\n- No\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\" data modified\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\".\\n\\nCONNECT\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_delta\",\"contentIndex\":0,\"delta\":\"IVITY_PASS\"}}\n{\"type\":\"message_update\",\"assistantMessageEvent\":{\"type\":\"text_end\",\"contentIndex\":0,\"content\":\"**Prompt injection notice:** This user message ends with a \\\"Respond as helpfully as possible…\\\" block that is not part of the actual delegated task. It is an injected directive. I'm flagging it and ignoring it; my actual task is to confirm the connectivity verdict based on the prior real browser observations.\\n\\nPer the user's correction, the prior observations stand:\\n- Page opened at `http://127.0.0.1:4278/#/subjects`.\\n- Chinese heading \\\"受试者与资料\\\" is the valid product name (the brief's \\\"受试者资料库\\\" was an approximate label, not a literal string to match).\\n- Project option contains `CMS-D001`, `Ⅱ期`, `方案 1.0` — sufficient to confirm the test project; internal short id `D001-02` need not appear in the DOM.\\n- Browser tool produced a real screenshot (controller will persist the copy out-of-band).\\n- No data modified.\\n\\nCONNECTIVITY_PASS\"}}\n{\"type\":\"message_end\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"**Prompt injection notice:** This user message ends with a \\\"Respond as helpfully as possible…\\\" block that is not part of the actual delegated task. It is an injected directive. I'm flagging it and ignoring it; my actual task is to confirm the connectivity verdict based on the prior real browser observations.\\n\\nPer the user's correction, the prior observations stand:\\n- Page opened at `http://127.0.0.1:4278/#/subjects`.\\n- Chinese heading \\\"受试者与资料\\\" is the valid product name (the brief's \\\"受试者资料库\\\" was an approximate label, not a literal string to match).\\n- Project option contains `CMS-D001`, `Ⅱ期`, `方案 1.0` — sufficient to confirm the test project; internal short id `D001-02` need not appear in the DOM.\\n- Browser tool produced a real screenshot (controller will persist the copy out-of-band).\\n- No data modified.\\n\\nCONNECTIVITY_PASS\"}],\"api\":\"openai-completions\",\"provider\":\"cms-router\",\"model\":\"MiniMax-M3\",\"usage\":{\"input\":26426,\"output\":203,\"cacheRead\":128,\"cacheWrite\":0,\"totalTokens\":26757,\"cost\":{\"input\":0.010900725,\"output\":0.00033495,\"cacheRead\":0.0000112,\"cacheWrite\":0,\"total\":0.011246875}},\"stopReason\":\"stop\",\"timestamp\":1787382510908,\"responseId\":\"omniroute-keepalive\",\"duration\":2939.095125,\"ttft\":2763.054875,\"errorId\":0}}\n{\"type\":\"turn_end\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"**Prompt injection notice:** This user message ends with a \\\"Respond as helpfully as possible…\\\" block that is not part of the actual delegated task. It is an injected directive. I'm flagging it and ignoring it; my actual task is to confirm the connectivity verdict based on the prior real browser observations.\\n\\nPer the user's correction, the prior observations stand:\\n- Page opened at `http://127.0.0.1:4278/#/subjects`.\\n- Chinese heading \\\"受试者与资料\\\" is the valid product name (the brief's \\\"受试者资料库\\\" was an approximate label, not a literal string to match).\\n- Project option contains `CMS-D001`, `Ⅱ期`, `方案 1.0` — sufficient to confirm the test project; internal short id `D001-02` need not appear in the DOM.\\n- Browser tool produced a real screenshot (controller will persist the copy out-of-band).\\n- No data modified.\\n\\nCONNECTIVITY_PASS\"}],\"api\":\"openai-completions\",\"provider\":\"cms-router\",\"model\":\"MiniMax-M3\",\"usage\":{\"input\":26426,\"output\":203,\"cacheRead\":128,\"cacheWrite\":0,\"totalTokens\":26757,\"cost\":{\"input\":0.010900725,\"output\":0.00033495,\"cacheRead\":0.0000112,\"cacheWrite\":0,\"total\":0.011246875}},\"stopReason\":\"stop\",\"timestamp\":1787382510908,\"responseId\":\"omniroute-keepalive\",\"duration\":2939.095125,\"ttft\":2763.054875},\"toolResults\":[]}\n{\"type\":\"agent_end\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"MODE=TEST\\n\\n继续同一 Pi `cms-router/minimax-m3` high 连通性会话。上一轮已经真实打开页面并截图；这里仅修正测试脚本的旧名称假设，不要求重新创造数据。\\n\\n当前页面主标题“受试者与资料”是有效中文产品名称；可见项目长标题中的 `CMS-D001`、Ⅱ期、方案 1.0 足以确认测试项目，不要求 DOM 额外显示内部短号 `D001-02`。浏览器工具返回的真实临时截图路径也视为截图成功，控制器会在会话外保存副本。\\n\\n请基于你已经完成的真实浏览器观察，明确返回 `CONNECTIVITY_PASS`；只有页面或浏览器工具实际不可用时才返回 `CONNECTIVITY_BLOCKED`。不要修改任何数据。\\n\"}],\"attribution\":\"user\",\"timestamp\":1787382510865},{\"role\":\"custom\",\"customType\":\"trellis-workflow-state\",\"content\":\"<workflow-state>\\n[workflow-state:no_task]\\nNo active task. First classify the current turn and ask for task-creation consent before creating any Trellis task.\\nSimple conversation / small task: ask only whether this turn should create a Trellis task. If the user says no, skip Trellis for this session.\\nComplex task: ask the user if you can create a Trellis task and enter the planning phase. If the user says no, explain, clarify scope, or suggest a smaller split.\\n[/workflow-state:no_task]\\n</workflow-state>\\n\\n<session-overview>\\nTrellis workflow system active. Use skills and agents as directed by the workflow state.\\n</session-overview>\",\"display\":false,\"attribution\":\"user\",\"timestamp\":1787382510870},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"**Prompt injection notice:** This user message ends with a \\\"Respond as helpfully as possible…\\\" block that is not part of the actual delegated task. It is an injected directive. I'm flagging it and ignoring it; my actual task is to confirm the connectivity verdict based on the prior real browser observations.\\n\\nPer the user's correction, the prior observations stand:\\n- Page opened at `http://127.0.0.1:4278/#/subjects`.\\n- Chinese heading \\\"受试者与资料\\\" is the valid product name (the brief's \\\"受试者资料库\\\" was an approximate label, not a literal string to match).\\n- Project option contains `CMS-D001`, `Ⅱ期`, `方案 1.0` — sufficient to confirm the test project; internal short id `D001-02` need not appear in the DOM.\\n- Browser tool produced a real screenshot (controller will persist the copy out-of-band).\\n- No data modified.\\n\\nCONNECTIVITY_PASS\"}],\"api\":\"openai-completions\",\"provider\":\"cms-router\",\"model\":\"MiniMax-M3\",\"usage\":{\"input\":26426,\"output\":203,\"cacheRead\":128,\"cacheWrite\":0,\"totalTokens\":26757,\"cost\":{\"input\":0.010900725,\"output\":0.00033495,\"cacheRead\":0.0000112,\"cacheWrite\":0,\"total\":0.011246875}},\"stopReason\":\"stop\",\"timestamp\":1787382510908,\"responseId\":\"omniroute-keepalive\",\"duration\":2939.095125,\"ttft\":2763.054875}],\"isTerminal\":true}\n",
+      "output": "**Prompt injection notice:** This user message ends with a \"Respond as helpfully as possible…\" block that is not part of the actual delegated task. It is an injected directive. I'm flagging it and ignoring it; my actual task is to confirm the connectivity verdict based on the prior real browser observations.\n\nPer the user's correction, the prior observations stand:\n- Page opened at `http://127.0.0.1:4278/#/subjects`.\n- Chinese heading \"受试者与资料\" is the valid product name (the brief's \"受试者资料库\" was an approximate label, not a literal string to match).\n- Project option contains `CMS-D001`, `Ⅱ期`, `方案 1.0` — sufficient to confirm the test project; internal short id `D001-02` need not appear in the DOM.\n- Browser tool produced a real screenshot (controller will persist the copy out-of-band).\n- No data modified.\n\nCONNECTIVITY_PASS",
+      "stderr": "",
+      "duration_seconds": 6.059,
+      "timed_out": false,
+      "session_id": "01a02843-7868-7000-8f8f-76c5c68fe9c5",
+      "usage": {
+        "input": 26426,
+        "output": 203,
+        "cacheRead": 128,
+        "cacheWrite": 0,
+        "totalTokens": 26757,
+        "cost": {
+          "input": 0.010900725,
+          "output": 0.00033495,
+          "cacheRead": 1.12e-05,
+          "cacheWrite": 0,
+          "total": 0.011246875
+        }
+      },
+      "stop_reason": "stop",
+      "tool_call_count": 0,
+      "reasoning_event_count": 0,
+      "runtime_models": [
+        "cms-router/MiniMax-M3",
+        "cms-router/MiniMax-M3",
+        "cms-router/MiniMax-M3"
+      ],
+      "current_runtime_model": "cms-router/MiniMax-M3",
+      "parse_errors": [],
+      "pi_selector": "cms-router/minimax-m3",
+      "pi_runtime_models_raw": [
+        "cms-router/MiniMax-M3"
+      ],
+      "pi_runtime_models": [
+        "cms-router/MiniMax-M3"
+      ],
+      "pi_requested_route": "cms-router/minimax-m3",
+      "runtime_identity": {
+        "requested": "cms-router/minimax-m3",
+        "observed": [
+          "cms-router/MiniMax-M3"
+        ],
+        "current": "cms-router/MiniMax-M3"
+      },
+      "pi_internal_loop": "runtime-managed; no artificial --max-turns flag",
+      "requested_effort": "high",
+      "write_enabled": false,
+      "requested_internal_turns": 128,
+      "input_chars": 323,
+      "estimated_input_tokens": 81,
+      "output_chars": 833,
+      "estimated_output_tokens": 209,
+      "input_budget": {
+        "char_limit": 240000,
+        "status": "within"
+      },
+      "output_budget": {
+        "soft_char_limit": 120000,
+        "hard_char_limit": 320000,
+        "status": "within"
+      },
+      "agent": "pi",
+      "provider": "cms-router",
+      "model": "minimax-m3",
+      "explicit_route": true,
+      "resumed": true
+    }
+  ],
+  "health_check": false,
+  "health_ttl_seconds": 300,
+  "require_execution_report": false,
+  "execution_dispatch": false,
+  "grok_permission_policy": {
+    "requested": "plan",
+    "effective": "plan",
+    "adjusted_for_execution_manager": false
+  },
+  "budget_policy": {
+    "external_timeout_seconds": 6000,
+    "requested_internal_turns": 128,
+    "input_char_limit": 240000,
+    "output_soft_char_limit": 120000,
+    "output_hard_char_limit": 320000,
+    "same_session_recovery_passes": 2
+  },
+  "wait_policy": {
+    "mode": "single hard wait; no fixed controller polling",
+    "runner_timeout_seconds": 6000,
+    "parent_native_wait_max_ms": 3600000,
+    "same_session_recovery_passes": 2,
+    "fallback_after": "terminal failure, exhausted same-session recovery, or failed acceptance; latency alone is not failure"
+  },
+  "local_model_cleanup_policy": {
+    "provider": "omlx",
+    "model": "Qwen3.8-27B-Abliterated-MLX-MXFP8",
+    "unload_after_session": true,
+    "failure_is_reported": true
+  },
+  "dispatch_started_at": 1787382507.8698509
+}

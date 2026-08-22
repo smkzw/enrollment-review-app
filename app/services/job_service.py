@@ -5,18 +5,22 @@
 - 每次用例是短事务（``with session.begin()``）；SSE 订阅只读，不修改任务；
 - API 层只做协议转换，本层输出结构化 DTO，中文词汇由 API 投影提供。
 """
+
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Callable
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.domain.contracts.enums import JobEventType
+from app.services.evidence_app_errors import app_error_boundary
 from app.storage.codecs import utc_now
 from app.storage.idempotency import IdempotencyRepository, request_hash
+from app.workflow.errors import InvalidJobDefinitionError
 from app.workflow.jobstore import (
     DEFAULT_LEASE_TTL,
     EventRow,
@@ -24,7 +28,6 @@ from app.workflow.jobstore import (
     JobSnapshot,
     JobStore,
 )
-from app.workflow.errors import InvalidJobDefinitionError
 from app.workflow.states import backoff_delay
 
 JOB_IDEMPOTENCY_SCOPE = "jobs"
@@ -69,11 +72,13 @@ class JobService:
         now: Now = utc_now,
         lease_ttl: timedelta = DEFAULT_LEASE_TTL,
         backoff: Callable[[int], timedelta] = backoff_delay,
+        on_cancelled: Callable[[str], None] | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.now = now
         self.lease_ttl = lease_ttl
         self.backoff = backoff
+        self.on_cancelled = on_cancelled
 
     def _store(self, session: Session) -> JobStore:
         return JobStore(
@@ -85,6 +90,7 @@ class JobService:
 
     # ------------------------------------------------------------------ 用例
 
+    @app_error_boundary
     def create_job(
         self,
         *,
@@ -94,15 +100,14 @@ class JobService:
         steps: list[StepSpec] | None = None,
     ) -> CreateJobResult:
         """幂等创建持久 Job：同键同内容复用原任务，同键不同内容冲突。"""
-        with self.session_factory() as session:
-            with session.begin():
-                return self.create_job_in_session(
-                    session,
-                    idempotency_key=idempotency_key,
-                    job_type=job_type,
-                    payload=payload,
-                    steps=steps,
-                )
+        with self.session_factory() as session, session.begin():
+            return self.create_job_in_session(
+                session,
+                idempotency_key=idempotency_key,
+                job_type=job_type,
+                payload=payload,
+                steps=steps,
+            )
 
     def create_job_in_session(
         self,
@@ -233,11 +238,30 @@ class JobService:
             return store.list_event_rows(job_id, after_seq=after_seq)
 
     def cancel(self, job_id: str) -> JobActionOutcome:
-        with self.session_factory() as session:
-            with session.begin():
-                return self._store(session).request_cancel(job_id)
+        with self.session_factory() as session, session.begin():
+            outcome = self._store(session).request_cancel(job_id)
+        if (
+            outcome.changed
+            and outcome.state == "cancelled"
+            and self.on_cancelled is not None
+        ):
+            self.on_cancelled(job_id)
+        return outcome
 
     def retry(self, job_id: str) -> JobActionOutcome:
-        with self.session_factory() as session:
-            with session.begin():
-                return self._store(session).retry_failed(job_id)
+        with self.session_factory() as session, session.begin():
+            return self._store(session).retry_failed(job_id)
+
+    def resume_waiting_step_in_session(
+        self,
+        session: Session,
+        *,
+        job_id: str,
+        step_id: str,
+        checkpoint_payload: dict[str, Any],
+    ) -> int:
+        return self._store(session).resume_waiting_step(
+            job_id,
+            step_id,
+            checkpoint_payload=checkpoint_payload,
+        )

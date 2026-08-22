@@ -1,0 +1,206 @@
+{
+  "coordinate_spike": {
+    "avg_iou": 0.8333,
+    "entries": [
+      {
+        "gold_iou": 0.8333,
+        "image_size": [
+          1240,
+          1755
+        ],
+        "page": "native-01-p1",
+        "pdf_bbox": [
+          128.0,
+          719.2,
+          226.0,
+          733.2
+        ],
+        "pixel_bbox": [
+          266.67,
+          226.67,
+          470.83,
+          255.83
+        ],
+        "target": "否认高血压病史",
+        "within_bounds": true
+      },
+      {
+        "gold_iou": 0.8333,
+        "image_size": [
+          1240,
+          1755
+        ],
+        "page": "native-01-p1",
+        "pdf_bbox": [
+          296.0,
+          719.2,
+          352.0,
+          733.2
+        ],
+        "pixel_bbox": [
+          616.67,
+          226.67,
+          733.33,
+          255.83
+        ],
+        "target": "76.1",
+        "within_bounds": true
+      },
+      {
+        "gold_iou": 0.8333,
+        "image_size": [
+          1240,
+          1755
+        ],
+        "page": "native-01-p1",
+        "pdf_bbox": [
+          254.0,
+          749.2,
+          394.0,
+          763.2
+        ],
+        "pixel_bbox": [
+          529.17,
+          164.17,
+          820.83,
+          193.33
+        ],
+        "target": "2026年3月14日",
+        "within_bounds": true
+      },
+      {
+        "gold_iou": 0.8333,
+        "image_size": [
+          1240,
+          1755
+        ],
+        "page": "native-01-p2",
+        "pdf_bbox": [
+          184.0,
+          679.2,
+          240.0,
+          693.2
+        ],
+        "pixel_bbox": [
+          383.33,
+          310.0,
+          500.0,
+          339.17
+        ],
+        "target": "36.5",
+        "within_bounds": true
+      },
+      {
+        "gold_iou": 0.8333,
+        "image_size": [
+          1240,
+          1755
+        ],
+        "page": "native-01-p3",
+        "pdf_bbox": [
+          114.0,
+          719.2,
+          170.0,
+          733.2
+        ],
+        "pixel_bbox": [
+          237.5,
+          226.67,
+          354.17,
+          255.83
+        ],
+        "target": "32.5",
+        "within_bounds": true
+      }
+    ],
+    "iou_ge_threshold": 5,
+    "iou_total": 5,
+    "mapped": 5,
+    "min_iou": 0.8333,
+    "page_size_pt": [
+      595.0,
+      842.0
+    ],
+    "within_bounds": 5
+  },
+  "gate": {
+    "layout_adoption": false,
+    "layout_metric_mechanism": true,
+    "native_locator": true,
+    "readback": true,
+    "risk_coverage": true,
+    "risk_fp": true,
+    "risk_miss": true
+  },
+  "gold": {
+    "file_sha256": {
+      "bad-image-01.png": "147474249745a43f48c18c925f0c4bd0e6213f40474a8b89d7cd261101711685",
+      "corrupt-01.pdf": "d4aa4dc6b0bfd40493f0a064ffbb7c9c3350eb333bfd6c48f686b42678c2edab",
+      "docx-01.docx": "b68520737ec7b99fe849711b021dc95095e89d4205121c8623aa2823f90f4052",
+      "multi-01.tiff": "649778fd79d95aed46e0a0ab28fd4eed9f510e42fcb25b490804e67f2c1ff910",
+      "native-01.pdf": "2c640e5a5dda9545c26194ba59ea856545c7e64cd1e681f8883e41ed1a4e8165",
+      "photo-01.jpg": "b34ed0d3c4978a2b928763ed5a1f57a7e932f62d528726c40bea6f56ff021d56",
+      "risk-clean-01.txt": "b1baa04bd485f1682aaa3649ee20fbb9d03373cb6bd25636306364533bc963bf",
+      "risk-clean-02.txt": "8f859333b54fb6840dafb2d5b63d154069afcd7ddd4f847a09e20c77929a4cb0",
+      "risk-clean-03.txt": "b5345d59053cdeb05dff92b939e4d0a000f3054faa04e77e07923c39f94d6960",
+      "risk-clean-04.txt": "54848655ba9c12e2b2e47c867c044129095893734fb461c53f61eca94cbe3606",
+      "risk-clean-05.txt": "a9bb35e1520842c54539e24ef616d1460e1a89ad04a8e84302ba277a5677f5d1",
+      "risk-clean-06.txt": "8151d139a996fa4c8cf04ba9105302ff68cca3619c9d4621331d7f566f621ac1",
+      "risk-clean-07.txt": "169b0b37701fab8ac0655d2cd85d59324947400e8de25723e72ffda47c12721f",
+      "risk-clean-08.txt": "231d7d9f10ed5cf7276c0d9a11f7f0ef0b63c0f4d5433c70ce75f69444f989a2",
+      "risk-clean-09.txt": "bb332929e66da8b0e13aeba8a59b73a14c46e7f2d97d149c38271ace28cd2ebb",
+      "risk-clean-10.txt": "117db4524a2c0d3475cbadb5dd3b47b38ea441faa23b33d1790bdb3809832726",
+      "risk-clean-11.txt": "dec0a4f5c3aba894b3cf36bb0e820735169f5bd76815263c302878b9dca586b8",
+      "risk-clean-12.txt": "6f8255306cdc4cfd4de2e564278b29046bf853c54ba29a8292776bb2b2f3fb01",
+      "risk-clean-13.txt": "061951aece3dd9e24bf0e892eb7db07c1a9b7b38cdc9279aa761692485c5cd68",
+      "scanned-01.pdf": "14183bcc12a0ef1630776e6678aa722a0042467bca536fdf83df31fb3a289740",
+      "txt-01.txt": "803f58ffed65cab2a9b1ac53f294b1371fbfb219ddb6801dc77a23fc3a93d71b",
+      "txt-gb18030.txt": "52e6b0a540264569a3106bc561c6f7970d64ed8fd09876671ed8536ab12d0944",
+      "unsupported-01.doc": "e86546a49aeb27b5a2dbad42f53900d78a728bfc507bdb120d8ff5227c1842b4"
+    },
+    "files": 23,
+    "name": "slice4.0-synthetic",
+    "pages": 26
+  },
+  "layout_candidates": {
+    "all_regions_valid": true,
+    "coverage_failures": [],
+    "metric_pass": true,
+    "out_of_bounds": [],
+    "page_mismatches": [],
+    "rate": 1.0,
+    "source": "synthetic_gold_geometry_metric_demo",
+    "success": 6,
+    "text_failures": [],
+    "total": 6
+  },
+  "native_locator": {
+    "failures": [],
+    "pass": true,
+    "rate": 1.0,
+    "success": 7,
+    "total": 7
+  },
+  "readback": {
+    "exact": 18,
+    "failures": [],
+    "pass": true,
+    "rate": 1.0,
+    "total": 18
+  },
+  "risk_seed": {
+    "clean_pages": 13,
+    "complete": true,
+    "eligible_pages": 23,
+    "fp_pages": 0,
+    "fp_rate": 0.0,
+    "miss": 0,
+    "miss_rate": 0.0,
+    "pass_fp": true,
+    "pass_miss": true,
+    "processed_pages": 23,
+    "risk_pages": 10,
+    "total_gold_kinds": 26,
+    "unprocessed_page_ids": []
+  }
+}

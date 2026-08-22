@@ -4,9 +4,10 @@
  * 窄屏只保留当前位置标题与紧凑帮助图标；项目/方案上下文移出窄屏顶栏。
  */
 
+import { RouteLink } from "../../app/router";
 import { getDefaultRepository } from "../../api";
 import { useLoad } from "../../app/useLoad";
-import { RouteLink } from "../../app/router";
+import { isInterfaceTrialMode } from "../../app/runtimeMode";
 import { HelpIcon, ProtocolFileIcon } from "./icons";
 import { projectDisplayLabel } from "./projectDisplay";
 
@@ -24,13 +25,12 @@ export function TopBar({
   showProjectCreation = false,
   showProjectContext = true,
 }: TopBarProps) {
+  const trial = isInterfaceTrialMode();
   const { state } = useLoad(
-    () => getDefaultRepository().getProjectSummary(),
-    [],
+    () => trial ? getDefaultRepository().getProjectSummary() : Promise.resolve(null),
+    [trial],
   );
-  const project =
-    state.status === "success" ? state.data : null;
-
+  const project = state.status === "success" ? state.data : null;
   return (
     <header className="topbar">
       <div className="topbar__position">
@@ -39,16 +39,10 @@ export function TopBar({
       </div>
       {showProjectContext && (
         <div className="topbar__context" aria-live="polite">
-          {project === null ? (
-            <span className="topbar__context-item">项目信息整理中</span>
-          ) : (
+          {trial && project !== null && (
             <>
-              <span className="topbar__context-item" title={project.projectName}>
-                {projectDisplayLabel(project)}
-              </span>
-              <span className="topbar__context-item">
-                方案 {project.protocolVersion}
-              </span>
+              <span className="topbar__context-item">{projectDisplayLabel(project)}</span>
+              <span className="topbar__context-item">方案 {project.protocolVersion}</span>
             </>
           )}
         </div>

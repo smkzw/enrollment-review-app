@@ -7,7 +7,12 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { navigate, RouteLink } from "../app/router";
-import { resetUatTrialState, UAT_PAGE_VERSION } from "../app/uatTrialState";
+import { isInterfaceTrialMode } from "../app/runtimeMode";
+import {
+  APP_PAGE_VERSION,
+  resetUatTrialState,
+  UAT_PAGE_VERSION,
+} from "../app/uatTrialState";
 import { HelpIcon } from "../components/shell/icons";
 
 interface HelpStep {
@@ -16,7 +21,7 @@ interface HelpStep {
   tip?: string;
 }
 
-const HELP_SECTIONS: ReadonlyArray<HelpStep> = [
+const TRIAL_HELP_SECTIONS: ReadonlyArray<HelpStep> = [
   {
     title: "从这里开始：认识界面",
     steps: [
@@ -63,6 +68,20 @@ const HELP_SECTIONS: ReadonlyArray<HelpStep> = [
       "「应备证据覆盖」显示每项应备资料的查找状态；「尚未见到」表示资料中未见这项记录，不等于明确否认。",
       "事件有直接来源时可「打开原始依据」；审核汇总或规则关联事件会明确显示「查看判断依据」或「查看关联规则资料」。没有独立定位时，页面会如实提示，不会用无关片段代替。",
     ],
+  },
+  {
+    title: "上传资料与核对原件",
+    steps: [
+      "先从「受试者与资料」找到受试者，再选择本次审核节点，确认项目、受试者、节点和方案版本均正确后进入资料工作台。",
+      "只补交新资料时选择「补充资料」：系统沿用上一份有效资料集合并加入本次文件；重新提供本节点全部资料时选择「建立完整资料快照」：本次文件构成新的完整集合，旧版本仍保留供追溯。",
+      "选择文件后先逐项核对新增、内容重复、同名但内容不同、无法读取和暂不支持的文件。出现同名不同内容时，必须说明它是原资料的新版本，还是需要并列保留的另一份资料。",
+      "确认后可点击「查看处理详情」。关闭页面不会停止已经确认的整理；再次进入任务详情可看到每份文件已完成、等待处理或需要处理的页数。失败时只重新处理失败部分，不重复已完成页面。",
+      "资料工作台左侧按文件和页码列出资料，中间显示原始识别文字、校对后文字与风险提示，右侧按原文件真实页序连续显示原件。点击「在原件中查看」会移动到对应页面。",
+      "红框只表示系统掌握了可映射到原件页图的真实区域坐标。若页面只显示文字范围、原文摘录或页码，系统会说明定位精度，不会绘制推测的红框。",
+      "发现错字时可修正已识别文字；发现整行漏识别时可选择页首、页末或原文中已选位置补入漏识别文字，并填写原因。系统会根据校对前后的实际文字识别否定或肯定、关键数值、小数点、单位、日期和逻辑关系变化，即使误选了变化类别也会要求再次确认；原始识别文字不会被覆盖。",
+      "某一页无法打开或识别失败时，先核对文件名与页码，再从处理详情重新处理失败部分。上一份有效资料和已经完成的页面不会因单页失败而丢失。",
+    ],
+    tip: "核对重点是原件、识别文字和红框三者是否一致；红框位置不准时不要据此作判断，应先完成校对或按页面定位查看原件。",
   },
   {
     title: "入排工作台：规则、判断与证据",
@@ -137,7 +156,67 @@ const HELP_SECTIONS: ReadonlyArray<HelpStep> = [
   },
 ];
 
+const FORMAL_HELP_SECTIONS: ReadonlyArray<HelpStep> = [
+  {
+    title: "从这里开始：认识当前工作区",
+    steps: [
+      "打开系统后直接进入「方案工作台」，不需要登录账号。",
+      "左侧当前只显示已接入真实资料的入口：方案工作台、受试者与资料、系统帮助。",
+      "进入受试者或证据工作台后，先核对项目、研究期别、方案版本、受试者、中心和审核节点。",
+    ],
+  },
+  {
+    title: "方案工作台：首次解构与重新解构",
+    steps: [
+      "首次解构：上传 DOCX 方案原文，核对方案编号、版本、日期和研究期别，再审阅规则草稿、来源定位与完整性检查。",
+      "重新解构：先选择目标项目，再上传同一项目的新版方案；当前正式版本与新草稿并列展示。",
+      "保存草稿不会改变当前正式版本；发布前必须核对官方编号、父子逻辑、时间要求、例外条件、所需资料和应完成节点。",
+    ],
+    tip: "一份方案含有不能作为同一研究审核的不同期别时，应分别建立项目，不共用受试者和审核结果。",
+  },
+  {
+    title: "受试者与资料：找到正确审核节点",
+    steps: [
+      "先选择项目，再从受试者列表打开需要核对的预筛、筛选或基线节点。",
+      "不同审核节点彼此独立；后续资料不会静默改写早期节点已保留的结果。",
+      "打开证据工作台后，再次核对顶部的项目、受试者、中心、节点和方案版本。",
+    ],
+  },
+  {
+    title: "上传资料与核对原件",
+    steps: [
+      "该节点还没有当前有效资料时，先选择「建立完整资料快照」；已有当前有效资料时，才可选择「补充资料」。",
+      "选择文件后，先逐项核对新增、内容重复、同名但内容不同、无法读取和暂不支持的文件，然后再确认。",
+      "如果本次所选文件全部无法读取或暂不支持，系统不会建立空资料版本。请移除这些文件，转换为支持的 PDF、图片、Word 或文本文件后重新选择。",
+      "左侧按文件和页码展示资料，中间核对原始识别文字、校对后文字和风险提示，右侧按原文件页序查看原件。",
+      "红框只在系统掌握真实页内坐标时显示；只能定位到文字范围、原文摘录或页码时，页面会明确说明，不会画推测红框。",
+      "发现错字时可修正已识别文字；发现整行漏识别时可选择页首、页末或原文中已选位置补入漏识别文字，并填写原因。系统会根据校对前后的实际文字识别否定与肯定、数值、小数点、单位、日期和逻辑连接词变化，即使误选了变化类别也会要求再次确认；原始识别文字始终保留。",
+      "逐项核对识别风险时，核对说明为必填。还有其他关键识别项未核对时，保存本项不会重复整理整套资料；全部关键项完成后才继续生成可启用版本。",
+      "病历提到另一份资料时，在「资料中提及但未提供」登记。候选必须确认并关联真实提及位置，或解除；已确认但尚未提供时应明确标记，不能用未定位的手工描述冒充原文依据。",
+    ],
+    tip: "核对重点是原件、识别文字和定位三者是否一致。定位不准时，不要据此作判断。",
+  },
+  {
+    title: "遇到问题怎么办",
+    steps: [
+      "资料暂时打不开：先点击页面上的「重试」，已保存的资料版本不会丢失。",
+      "某一页无法打开或识别失败：记录文件名和页码，只需重新处理失败部分，不必重复上传已完成资料。",
+      "资料确认后可点「查看处理详情」；即使关闭页面，任务仍会继续。详情页会列出失败文件或页面及可继续方式，不需要重新上传已经完成的资料。",
+      "受试者目录显示「资料已上传，尚待整理和确认」时，表示文件没有丢失，只是还未启用；进入对应审核节点继续处理即可。",
+      "项目、受试者、审核节点或方案版本不对：立即返回受试者列表重新选择，不要在错误对象上继续操作。",
+    ],
+  },
+];
+
+export function helpSectionsForMode(
+  interfaceTrial: boolean,
+): ReadonlyArray<HelpStep> {
+  return interfaceTrial ? TRIAL_HELP_SECTIONS : FORMAL_HELP_SECTIONS;
+}
+
 export function HelpPage() {
+  const interfaceTrial = isInterfaceTrialMode();
+  const helpSections = helpSectionsForMode(interfaceTrial);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const confirmBackRef = useRef<HTMLButtonElement>(null);
   const resetTriggerRef = useRef<HTMLButtonElement>(null);
@@ -178,12 +257,12 @@ export function HelpPage() {
           按顺序阅读即可完成日常工作；所有说明均为当前版本的真实操作。
         </p>
         <p className="page-head__meta">
-          页面版本：{UAT_PAGE_VERSION}
+          界面版本：{interfaceTrial ? UAT_PAGE_VERSION : APP_PAGE_VERSION}
         </p>
       </header>
 
       <ol className="help-sections">
-        {HELP_SECTIONS.map((section, index) => (
+        {helpSections.map((section, index) => (
           <li key={section.title} className="help-section">
             <h2 className="help-section__title">
               <span className="help-section__number">{index + 1}</span>
@@ -203,7 +282,7 @@ export function HelpPage() {
         ))}
       </ol>
 
-      <section className="help-reset" aria-labelledby="help-reset-title">
+      {interfaceTrial && <section className="help-reset" aria-labelledby="help-reset-title">
         <h2 id="help-reset-title" className="help-reset__title">
           开始新的界面试用
         </h2>
@@ -219,41 +298,29 @@ export function HelpPage() {
         >
           开始新的界面试用
         </button>
-      </section>
+      </section>}
 
       <section className="help-links" aria-labelledby="help-links-title">
         <h2 id="help-links-title" className="help-links__title">
           快速前往
         </h2>
         <div className="help-links__grid">
-          <RouteLink to="/today" className="button">
-            今日工作
-          </RouteLink>
-          <RouteLink to="/board" className="button">
-            项目看板
-          </RouteLink>
-          <RouteLink to="/projects/new" className="button">
-            从方案新建项目
-          </RouteLink>
+          {interfaceTrial && <RouteLink to="/today" className="button">今日工作</RouteLink>}
+          {interfaceTrial && <RouteLink to="/board" className="button">项目看板</RouteLink>}
+          {interfaceTrial && <RouteLink to="/projects/new" className="button">从方案新建项目</RouteLink>}
           <RouteLink to="/protocols" className="button">
             方案工作台
           </RouteLink>
           <RouteLink to="/subjects" className="button">
             受试者与资料
           </RouteLink>
-          <RouteLink to="/workbench" className="button">
-            入排工作台
-          </RouteLink>
-          <RouteLink to="/actions" className="button">
-            行动中心
-          </RouteLink>
-          <RouteLink to="/tasks" className="button">
-            任务与系统
-          </RouteLink>
+          {interfaceTrial && <RouteLink to="/workbench" className="button">入排工作台</RouteLink>}
+          {interfaceTrial && <RouteLink to="/actions" className="button">行动中心</RouteLink>}
+          {interfaceTrial && <RouteLink to="/tasks" className="button">任务与系统</RouteLink>}
         </div>
       </section>
 
-      {showResetConfirm && (
+      {interfaceTrial && showResetConfirm && (
         <div className="confirmation-scrim" onClick={closeResetConfirm}>
           <section
             role="dialog"

@@ -13,9 +13,10 @@
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Callable
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import func, or_, select, update
@@ -54,6 +55,11 @@ from app.workflow.states import (
 
 DEFAULT_LEASE_TTL = timedelta(seconds=30)
 Now = Callable[[], datetime]
+
+
+def _rowcount(result: Any) -> int:
+    """Read SQLAlchemy DML row counts without widening the store API types."""
+    return int(getattr(result, "rowcount", 0))
 
 
 @dataclass(frozen=True)
@@ -253,11 +259,13 @@ class JobStore:
                             progress_total=row.progress_total)
 
     def list_steps(self, job_id: str) -> list[JobStepRecord]:
-        return self.session.execute(
-            select(JobStepRecord)
-            .where(JobStepRecord.job_id == job_id)
-            .order_by(JobStepRecord.created_at, JobStepRecord.step_id)
-        ).scalars().all()
+        return list(
+            self.session.execute(
+                select(JobStepRecord)
+                .where(JobStepRecord.job_id == job_id)
+                .order_by(JobStepRecord.created_at, JobStepRecord.step_id)
+            ).scalars().all()
+        )
 
     def _deps_map(self, job_id: str) -> dict[str, tuple[str, ...]]:
         rows = self.session.execute(
@@ -441,7 +449,7 @@ class JobStore:
                 )
             )
             self.session.flush()
-            if result.rowcount == 1:
+            if _rowcount(result) == 1:
                 return JobLease(
                     job_id=candidate_id,
                     owner=worker_id,
@@ -496,7 +504,7 @@ class JobStore:
             )
         )
         self.session.flush()
-        return result.rowcount == 1
+        return _rowcount(result) == 1
 
     def release_deferred(self, lease: JobLease) -> None:
         """无当前可运行步骤（依赖未满足或退避未到期）：退还租约回到 queued。"""
@@ -522,7 +530,7 @@ class JobStore:
             )
         )
         self.session.flush()
-        if result.rowcount != 1:
+        if _rowcount(result) != 1:
             raise LeaseLostError(f"任务 {lease.job_id} 租约失效，无法退还")
 
     # -------------------------------------------------------------- 步骤事务
@@ -648,8 +656,9 @@ class JobStore:
                 event_payload["attempt_exhausted"] = True
         else:
             step.state = "failed_retryable"
-            step.retry_not_before = now + self.backoff(step.attempt)
-            event_payload["retry_not_before"] = step.retry_not_before.isoformat()
+            retry_not_before = now + self.backoff(step.attempt)
+            step.retry_not_before = retry_not_before
+            event_payload["retry_not_before"] = retry_not_before.isoformat()
         step.updated_at = now
         self.append_event(
             self.make_event(
@@ -681,9 +690,16 @@ class JobStore:
             final_state = "cancelled"
         elif step.state == "failed_retryable":
             job.state = "failed_retryable"
+            job.error_code = error_code
+            job.error_classification = classification
             job.lease_owner = None
             job.lease_expires_at = None
             job.updated_at = now
+            retry_not_before = step.retry_not_before
+            if retry_not_before is None:
+                raise JobStateConflictError(
+                    "可重试失败步骤缺少退避时间", current_state=job.state
+                )
             self.append_event(
                 self.make_event(
                     job_id=job.job_id,
@@ -693,7 +709,7 @@ class JobStore:
                     progress_completed=job.progress_completed,
                     progress_total=job.progress_total,
                     payload={
-                        "retry_not_before": step.retry_not_before.isoformat(),
+                        "retry_not_before": retry_not_before.isoformat(),
                         "retry_scope": [step_id],
                     },
                 )
@@ -828,18 +844,143 @@ class JobStore:
         self.session.flush()
         return seq
 
+    def pause_running_step_for_user(
+        self,
+        lease: JobLease,
+        step_id: str,
+        *,
+        awaiting_user: str,
+        checkpoint_payload: dict[str, Any],
+    ) -> int:
+        """执行中的步骤在持久边界暂停，等待用户核对后重跑同一步骤。"""
+        job = self._lease_guard(lease)
+        step = self.session.get(
+            JobStepRecord, {"job_id": job.job_id, "step_id": step_id}
+        )
+        if step is None or step.state != "running":
+            raise StepMismatchError("当前步骤不能进入等待核对状态")
+        now = self.now()
+        checkpoint_id = uuid4().hex
+        self.repo.create_checkpoint(
+            checkpoint_id=checkpoint_id,
+            job_id=job.job_id,
+            step_id=step_id,
+            payload={"attempt": step.attempt, **checkpoint_payload},
+        )
+        step.state = "waiting_user"
+        step.waiting_user_kind = awaiting_user
+        step.updated_at = now
+        job.state = "waiting_user"
+        job.lease_owner = None
+        job.lease_expires_at = None
+        job.updated_at = now
+        seq = self.append_event(
+            self.make_event(
+                job_id=job.job_id,
+                event_type=JobEventType.WAITING_USER,
+                step_id=step_id,
+                attempt=step.attempt,
+                checkpoint_id=checkpoint_id,
+                progress_completed=job.progress_completed,
+                progress_total=job.progress_total,
+                payload={
+                    "awaiting_user": awaiting_user,
+                    "checkpoint_id": checkpoint_id,
+                },
+            )
+        )
+        self.session.flush()
+        return seq
+
+    def resume_waiting_step(
+        self,
+        job_id: str,
+        step_id: str,
+        *,
+        checkpoint_payload: dict[str, Any],
+    ) -> int:
+        """用户完成核对后把动态等待步骤重新入队，不把核对误作步骤完成。"""
+        job = self.get_job(job_id)
+        if job.state != "waiting_user" or job.lease_owner is not None:
+            raise JobStateConflictError(
+                "任务当前不在等待核对状态", current_state=job.state
+            )
+        step = self.session.get(
+            JobStepRecord, {"job_id": job_id, "step_id": step_id}
+        )
+        if step is None or step.state != "waiting_user":
+            raise JobStateConflictError(
+                "任务步骤当前不在等待核对状态", current_state=job.state
+            )
+        now = self.now()
+        checkpoint_id = uuid4().hex
+        self.repo.create_checkpoint(
+            checkpoint_id=checkpoint_id,
+            job_id=job_id,
+            step_id=step_id,
+            payload={"attempt": step.attempt, **checkpoint_payload},
+        )
+        step.state = "queued"
+        step.waiting_user_kind = None
+        step.updated_at = now
+        job.state = "queued"
+        job.updated_at = now
+        seq = self.append_event(
+            self.make_event(
+                job_id=job_id,
+                event_type=JobEventType.USER_RESUMED,
+                step_id=step_id,
+                attempt=max(step.attempt, 1),
+                checkpoint_id=checkpoint_id,
+                progress_completed=job.progress_completed,
+                progress_total=job.progress_total,
+                payload={"checkpoint_id": checkpoint_id},
+            )
+        )
+        self.session.flush()
+        return seq
+
     def finish_success(self, lease: JobLease) -> int:
         job = self._lease_guard(lease)
+        if job.cancel_requested or job.state == "cancel_requested":
+            return self._cancel_at_boundary_record(job, self.now())
         steps = self.list_steps(job.job_id)
         if not all(step.state in TERMINAL_STEP_STATES for step in steps):
             raise JobStateConflictError("仍有未完成步骤，不能标记完成", current_state=job.state)
         if any(step.state == "failed_final" for step in steps):
             raise JobStateConflictError("存在失败步骤，不能标记完成", current_state=job.state)
         now = self.now()
-        job.state = "completed"
-        job.lease_owner = None
-        job.lease_expires_at = None
-        job.updated_at = now
+        # Completion and cancellation must have one database-level winner. The
+        # runner's status read is only a preflight; a cancel request can commit
+        # between that read and this final state transition.
+        result = self.session.execute(
+            update(JobRecord)
+            .where(
+                JobRecord.job_id == job.job_id,
+                JobRecord.state == "running",
+                JobRecord.cancel_requested.is_(False),
+                JobRecord.lease_owner == lease.owner,
+                JobRecord.lease_generation == lease.generation,
+                JobRecord.lease_expires_at.is_not(None),
+                JobRecord.lease_expires_at >= now,
+            )
+            .values(
+                state="completed",
+                lease_owner=None,
+                lease_expires_at=None,
+                updated_at=now,
+                revision=JobRecord.revision + 1,
+            )
+        )
+        self.session.flush()
+        if _rowcount(result) != 1:
+            self.session.expire(job)
+            current = self.get_job(job.job_id)
+            if current.cancel_requested or current.state == "cancel_requested":
+                return self._cancel_at_boundary_record(current, now)
+            raise LeaseLostError(
+                f"任务 {job.job_id} 完成提交时租约或状态已变化，结果未提交"
+            )
         seq = self.append_event(
             self.make_event(
                 job_id=job.job_id,
@@ -854,17 +995,20 @@ class JobStore:
     def finish_failure(self, lease: JobLease) -> None:
         job = self._lease_guard(lease)
         now = self.now()
+        if job.cancel_requested or job.state == "cancel_requested":
+            self._cancel_at_boundary_record(job, now)
+            return
         failed = next(
             (step for step in self.list_steps(job.job_id) if step.state == "failed_final"),
             None,
         )
         self._sync_progress(job.job_id, job)
+        error_code = failed.error_code if failed is not None else None
+        error_classification = failed.error_classification if failed is not None else None
         self._finalize_job_failure(
             job,
-            error_code=failed.error_code if failed is not None else RECOVERY_RESET_CODE,
-            error_classification=(
-                failed.error_classification if failed is not None else "fatal"
-            ),
+            error_code=error_code or RECOVERY_RESET_CODE,
+            error_classification=error_classification or "fatal",
             now=now,
         )
         self.session.flush()
@@ -912,7 +1056,10 @@ class JobStore:
     def cancel_at_boundary(self, lease: JobLease) -> int:
         """worker 在安全步骤边界执行取消：未启动步骤转 cancelled，历史保留。"""
         job = self._lease_guard(lease)
-        now = self.now()
+        return self._cancel_at_boundary_record(job, self.now())
+
+    def _cancel_at_boundary_record(self, job: JobRecord, now: datetime) -> int:
+        """把当前租约持有的任务收束为取消，并保留已提交历史。"""
         self._cancel_steps(job.job_id, now)
         job.state = "cancelled"
         job.cancel_requested = True

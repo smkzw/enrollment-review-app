@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
 
 from .agents import AgentCallContract, GateResult, ModelConfigContract, PromptVersion
 from .common import DateValue, RevisionedModel, ScalarValue, VersionedModel
 from .enums import (
-    AnchorType,
     ActionState,
     ActionTarget,
+    AnchorType,
     BlockingLevel,
     ComponentDecision,
     GapType,
@@ -28,6 +28,7 @@ from .evidence import (
 )
 from .jobs import JobEvent, ReviewRunDiff
 from .normalization import EvidenceNormalizationCandidate
+from .projections import EpisodeRollup
 from .rules import (
     ProtocolAuthorityConfirmation,
     ProtocolAuthorityRecord,
@@ -37,7 +38,15 @@ from .rules import (
     ServiceCommandEvent,
     WorkflowStage,
 )
-from .projections import EpisodeRollup
+
+
+def _require_utc(value: datetime, field_name: str) -> None:
+    """Reject naive or non-UTC timestamps at the Phase 3/4 contract boundary."""
+    offset = value.utcoffset()
+    if value.tzinfo is None or offset is None:
+        raise ValueError(f"{field_name} 必须携带 UTC 时区")
+    if offset.total_seconds() != 0:
+        raise ValueError(f"{field_name} 必须使用 UTC 时区")
 
 
 class ProtocolDocumentVersion(VersionedModel):
@@ -73,6 +82,20 @@ class Subject(RevisionedModel):
 
 
 class ReviewEpisode(RevisionedModel):
+    """审核节点：受试者在某研究期别/审核节点的资料与处理修订活动版本。
+
+    运行期唯一审核节点合同（Slice 4.4 收敛后，``evidence_ingestion`` 不再维护
+    第二套同名合同）。``evidence_snapshot_id`` 是 Phase 2/3 fixture/审核链语义的
+    legacy 字段，本合同保留其原义但**不作为** Phase 4 当前资料版本的 fallback。
+
+    成对活动指针 ``active_evidence_snapshot_id`` 与
+    ``active_evidence_processing_revision_id`` 是 Phase 4 当前版本的唯一权威：
+    只在候选快照通过全部发布门禁后，在同一事务中按预期修订号原子更新；回滚通过
+    新的 ActivationEvent 完成，不静默改写指针。二者必须同时存在或同时为空：活动
+    资料必须既固定文档集合，又固定一份不可变证据处理修订。迁移 0010 不按时间/ID/
+    历史 ACTIVE 状态回填本对指针；升级时保持 NULL，由正式激活命令建立。
+    """
+
     review_episode_id: str = Field(min_length=1)
     subject_id: str = Field(min_length=1)
     project_id: str = Field(min_length=1)
@@ -81,9 +104,46 @@ class ReviewEpisode(RevisionedModel):
     stage: ReviewStage
     protocol_version_id: str = Field(min_length=1)
     rule_set_revision: int = Field(ge=1)
-    evidence_snapshot_id: str = Field(min_length=1)
+    #: 自动创建的空审核节点没有 Phase 2/3 legacy 证据快照；该字段可空，不伪造占位。
+    #: legacy fixture/审核链行仍保留其非空原义。
+    evidence_snapshot_id: str | None = None
+    #: 发布方案中的流程节点身份（命名空间化 ``workflow_stage_id``）。同一审核
+    #: 阶段下多个访视实例各自对应独立审核节点，此字段把它们区分开；legacy 行可空。
+    workflow_stage_id: str | None = None
+    active_evidence_snapshot_id: str | None = None
+    active_evidence_processing_revision_id: str | None = None
     anchor_dates: dict[AnchorType, DateValue] = Field(default_factory=dict)
     due_at: datetime | None = None
+
+    @model_serializer(mode="wrap")
+    def _serialize_omit_null_pointers(self, handler):
+        """序列化时省略为 None 的可空字段。
+
+        这保证旧 payload（无指针键/无 workflow_stage_id，或 legacy
+        evidence_snapshot_id 非空）与新建但仍为空的可空字段 payload 逐字一致，
+        不因新增可空字段改写 legacy 校验/发布哈希（``encode_contract``/Gate 闭包
+        用 ``model_dump(mode=\"json\")``）。指针非 None 时正常出现在 payload。
+        """
+        data = handler(self)
+        if self.active_evidence_snapshot_id is None:
+            data.pop("active_evidence_snapshot_id", None)
+        if self.active_evidence_processing_revision_id is None:
+            data.pop("active_evidence_processing_revision_id", None)
+        if self.evidence_snapshot_id is None:
+            data.pop("evidence_snapshot_id", None)
+        if self.workflow_stage_id is None:
+            data.pop("workflow_stage_id", None)
+        return data
+
+    @model_validator(mode="after")
+    def validate_active_pointers(self) -> ReviewEpisode:
+        if (self.active_evidence_snapshot_id is None) != (
+            self.active_evidence_processing_revision_id is None
+        ):
+            raise ValueError("审核节点的活动证据快照与处理修订必须同时存在或同时为空")
+        if self.due_at is not None:
+            _require_utc(self.due_at, "ReviewEpisode.due_at")
+        return self
 
 
 class ReviewRun(VersionedModel):
@@ -153,7 +213,7 @@ class FinalAssessment(VersionedModel):
     publication_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
-    def validate_gate_owned_state(self) -> "FinalAssessment":
+    def validate_gate_owned_state(self) -> FinalAssessment:
         from app.domain.policies import derive_assessment_blocking_level
 
         expected = derive_assessment_blocking_level(self.decision, set(self.gap_types))
@@ -210,7 +270,7 @@ class ActionRequest(RevisionedModel):
     publication_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
-    def validate_gate_owned_blocking(self) -> "ActionRequest":
+    def validate_gate_owned_blocking(self) -> ActionRequest:
         from app.domain.policies import derive_action_blocking_level
 
         expected = derive_action_blocking_level(self.gap_type)

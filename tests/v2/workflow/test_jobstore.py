@@ -1,24 +1,21 @@
 """JobStore 租约与状态机写入：claim/续租/步骤事务/取消/重试/事件序号。"""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import timedelta
-from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 
 import pytest
-from sqlalchemy import select
 
 from app.domain.contracts.enums import JobEventType
-from app.storage.models import JobCheckpointRecord
 from app.workflow.errors import (
     JobNotFoundError,
     JobStateConflictError,
     LeaseLostError,
-    StepDeferredError,
     StepMismatchError,
 )
-from app.workflow.jobstore import DEFAULT_LEASE_TTL, JobLease, JobStore
+from app.workflow.jobstore import DEFAULT_LEASE_TTL, JobStore
 from tests.v2.workflow.conftest import create_job_with_steps
 
 STEPS = [{"step_id": "s1", "name": "解析", "retryable": True, "max_attempts": 3}]
@@ -139,9 +136,8 @@ def test_complete_step_writes_checkpoint_progress_and_event(session_factory, clo
     assert last[1]["ok"] is True
     assert last[1]["attempt"] == 1
     # 完成后再提交 -> 状态冲突
-    with _store(session_factory, clock) as store:
-        with pytest.raises(StepMismatchError):
-            store.complete_step(lease, "s1", checkpoint_payload={"again": True})
+    with _store(session_factory, clock) as store, pytest.raises(StepMismatchError):
+        store.complete_step(lease, "s1", checkpoint_payload={"again": True})
 
 
 def test_complete_step_rejects_wrong_owner(session_factory, clock):
@@ -150,9 +146,8 @@ def test_complete_step_rejects_wrong_owner(session_factory, clock):
     with _store(session_factory, clock) as store:
         store.start_step(lease, "s1")
     impostor = replace(lease, owner="w2")
-    with _store(session_factory, clock) as store:
-        with pytest.raises(LeaseLostError):
-            store.complete_step(impostor, "s1", checkpoint_payload={})
+    with _store(session_factory, clock) as store, pytest.raises(LeaseLostError):
+        store.complete_step(impostor, "s1", checkpoint_payload={})
     # 结果被丢弃：无 checkpoint、步骤仍 running
     snap = _snapshot(session_factory, clock, "job-1")
     assert snap.steps[0].state == "running"
@@ -167,9 +162,8 @@ def test_complete_step_rejects_wrong_generation(session_factory, clock):
     with _store(session_factory, clock) as store:
         store.start_step(lease, "s1")
     stale = replace(lease, generation=lease.generation + 5)
-    with _store(session_factory, clock) as store:
-        with pytest.raises(LeaseLostError):
-            store.complete_step(stale, "s1", checkpoint_payload={})
+    with _store(session_factory, clock) as store, pytest.raises(LeaseLostError):
+        store.complete_step(stale, "s1", checkpoint_payload={})
     assert _snapshot(session_factory, clock, "job-1").steps[0].state == "running"
 
 
@@ -179,9 +173,8 @@ def test_complete_step_rejects_expired_lease(session_factory, clock):
     with _store(session_factory, clock) as store:
         store.start_step(lease, "s1")
     clock.advance(DEFAULT_LEASE_TTL.total_seconds() + 1)
-    with _store(session_factory, clock) as store:
-        with pytest.raises(LeaseLostError):
-            store.complete_step(lease, "s1", checkpoint_payload={})
+    with _store(session_factory, clock) as store, pytest.raises(LeaseLostError):
+        store.complete_step(lease, "s1", checkpoint_payload={})
     snap = _snapshot(session_factory, clock, "job-1")
     assert snap.steps[0].state == "running"
     with _store(session_factory, clock) as store:
@@ -199,9 +192,8 @@ def test_start_step_increments_attempt_and_step_deferred_rejected(session_factor
     assert snap.events[-1].event.event_type.value == "step_started"
     assert snap.events[-1].event.attempt == 1
     # 重复启动 -> 状态冲突
-    with _store(session_factory, clock) as store:
-        with pytest.raises(StepMismatchError):
-            store.start_step(lease, "s1")
+    with _store(session_factory, clock) as store, pytest.raises(StepMismatchError):
+        store.start_step(lease, "s1")
     # 退避未到期的 failed_retryable 步骤 -> StepDeferredError
     with _store(session_factory, clock) as store:
         store.fail_step(lease, "s1", error_code="E1", retryable=True)
@@ -346,6 +338,25 @@ def test_request_cancel_on_terminal_job_is_noop(session_factory, clock):
     assert [e.event.event_type.value for e in snap.events].count("cancel_requested") == 0
 
 
+def test_finish_success_cancel_request_wins_at_terminal_boundary(session_factory, clock):
+    """最终完成提交必须再次排除已持久化的取消请求。"""
+    create_job_with_steps(session_factory, clock, job_id="job-1", steps=STEPS[:1])
+    lease = _claim(session_factory, clock, "w1")
+    with _store(session_factory, clock) as store:
+        store.start_step(lease, "s1")
+        store.complete_step(lease, "s1", checkpoint_payload={})
+    with _store(session_factory, clock) as store:
+        outcome = store.request_cancel("job-1")
+    assert outcome.state == "cancel_requested"
+
+    with _store(session_factory, clock) as store:
+        store.finish_success(lease)
+
+    snap = _snapshot(session_factory, clock, "job-1")
+    assert snap.state == "cancelled"
+    assert snap.events[-1].event.event_type.value == "cancelled"
+
+
 def test_cancel_wins_at_failure_boundary(session_factory, clock):
     create_job_with_steps(session_factory, clock, job_id="job-1", steps=STEPS)
     lease = _claim(session_factory, clock, "w1")
@@ -394,9 +405,8 @@ def test_retry_resets_only_failed_scope(session_factory, clock):
 
 def test_retry_rejects_non_failed_job(session_factory, clock):
     create_job_with_steps(session_factory, clock, job_id="job-1", steps=STEPS)
-    with _store(session_factory, clock) as store:
-        with pytest.raises(JobStateConflictError):
-            store.retry_failed("job-1")
+    with _store(session_factory, clock) as store, pytest.raises(JobStateConflictError):
+        store.retry_failed("job-1")
 
 
 def test_snapshot_and_event_resume_without_duplicates(session_factory, clock):
@@ -433,16 +443,15 @@ def test_concurrent_sessions_allocate_event_sequences_atomically(session_factory
     barrier = Barrier(workers)
 
     def append_one(index: int) -> int:
-        with session_factory() as session:
-            with session.begin():
-                store = JobStore(session, now=clock.now)
-                event = store.make_event(
-                    job_id="job-1",
-                    event_type=JobEventType.RETRY_SCHEDULED,
-                    payload={"worker": index},
-                )
-                barrier.wait(timeout=5)
-                return store.append_event(event)
+        with session_factory() as session, session.begin():
+            store = JobStore(session, now=clock.now)
+            event = store.make_event(
+                job_id="job-1",
+                event_type=JobEventType.RETRY_SCHEDULED,
+                payload={"worker": index},
+            )
+            barrier.wait(timeout=5)
+            return store.append_event(event)
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         assigned = list(pool.map(append_one, range(workers)))

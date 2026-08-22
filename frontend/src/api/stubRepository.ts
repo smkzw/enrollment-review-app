@@ -33,6 +33,7 @@ import type {
   TodayWorkView,
   WorkspaceView,
 } from "../domain/viewModels";
+import { isInterfaceTrialMode } from "../app/runtimeMode";
 
 export interface EnrollmentRepository {
   readonly kind: "stub";
@@ -202,6 +203,9 @@ function mapWorkspaceView(): WorkspaceView {
 let defaultRepository: EnrollmentRepository | null = null;
 
 export function getDefaultRepository(): EnrollmentRepository {
+  if (!isInterfaceTrialMode()) {
+    throw new Error("合成试用资料未在正式模式启用");
+  }
   if (defaultRepository === null) {
     defaultRepository = createStubRepository();
   }

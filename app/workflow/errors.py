@@ -80,6 +80,17 @@ class StepFailure(WorkflowError):
         self.detail = detail
 
 
+class StepAwaitingUser(WorkflowError):
+    """执行器在持久步骤中发现必须由用户完成的业务核对。"""
+
+    code = "STEP_AWAITING_USER"
+
+    def __init__(self, *, awaiting_user: str, checkpoint: dict[str, Any]) -> None:
+        super().__init__(awaiting_user, awaiting_user=awaiting_user)
+        self.awaiting_user = awaiting_user
+        self.checkpoint = checkpoint
+
+
 class ProcessDeath(BaseException):
     """模拟进程被强制终止（提交前/提交后故障注入）。
 

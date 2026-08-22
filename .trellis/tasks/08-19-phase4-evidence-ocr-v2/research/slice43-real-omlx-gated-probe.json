@@ -1,0 +1,65 @@
+{
+  "schema": "phase4_real_omlx_probe_v1",
+  "server": "http://127.0.0.1:8001",
+  "model": "GLM-OCR-bf16",
+  "synthetic_no_phi": true,
+  "pages": [
+    {
+      "gold_page_id": "scanned-01-p1",
+      "file_ref": "scanned-01.pdf",
+      "route": "vision_ocr",
+      "expected_text": "胸部X线检查未见异常。\n检查日期：2026-04-02",
+      "recognized_text": "胸部X线检查未见异常。\n检查日期：2026-04-02",
+      "exact_text": true,
+      "normalized_exact": true,
+      "expected_fragments_found": [
+        "胸部X线检查未见异常。",
+        "检查日期：2026-04-02"
+      ],
+      "expected_fragment_count": 2,
+      "machine_coordinates_present": false,
+      "request_image_sha256": "0876e89a53726a6ce564b17ea3df820742ac4c42f10ccfe78ef4afdc8e71a5d5",
+      "request_sha256": "81f1c28130a1a8bd98981fe0388822189fe97e4c5497291fbb93e6dc38f2e2f3",
+      "response_status": 200,
+      "response_model": "GLM-OCR-bf16",
+      "model_matches_request": true,
+      "finish_reason": "stop",
+      "elapsed_seconds": 2.828,
+      "response_sha256": "c22e97a3644b3a23fecbf2356ded88a460a0f29eb988c7b8839a503f7971b119",
+      "raw_response_base64": "IHsiaWQiOiJjaGF0Y21wbC0yOWNjMTI2MyIsIm9iamVjdCI6ImNoYXQuY29tcGxldGlvbiIsImNyZWF0ZWQiOjE3ODcxNDI3NzEsIm1vZGVsIjoiR0xNLU9DUi1iZjE2IiwiY2hvaWNlcyI6W3siaW5kZXgiOjAsIm1lc3NhZ2UiOnsicm9sZSI6ImFzc2lzdGFudCIsImNvbnRlbnQiOiLog7jpg6hY57q/5qOA5p+l5pyq6KeB5byC5bi444CCXG7mo4Dmn6Xml6XmnJ/vvJoyMDI2LTA0LTAyIn0sImZpbmlzaF9yZWFzb24iOiJzdG9wIn1dLCJ1c2FnZSI6eyJwcm9tcHRfdG9rZW5zIjoyNTczLCJjb21wbGV0aW9uX3Rva2VucyI6MTksInRvdGFsX3Rva2VucyI6MjU5MiwiaW5wdXRfdG9rZW5zIjoyNTczLCJvdXRwdXRfdG9rZW5zIjoxOSwicHJvbXB0X3Rva2Vuc19kZXRhaWxzIjp7ImNhY2hlZF90b2tlbnMiOjB9LCJtb2RlbF9sb2FkX2R1cmF0aW9uIjoxLjUsInRvdGFsX3RpbWUiOjEuMTd9fQ==",
+      "raw_response_utf8": " {\"id\":\"chatcmpl-29cc1263\",\"object\":\"chat.completion\",\"created\":1787142771,\"model\":\"GLM-OCR-bf16\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"胸部X线检查未见异常。\\n检查日期：2026-04-02\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":2573,\"completion_tokens\":19,\"total_tokens\":2592,\"input_tokens\":2573,\"output_tokens\":19,\"prompt_tokens_details\":{\"cached_tokens\":0},\"model_load_duration\":1.5,\"total_time\":1.17}}"
+    },
+    {
+      "gold_page_id": "photo-01-p1",
+      "file_ref": "photo-01.jpg",
+      "route": "vision_ocr",
+      "expected_text": "胸部X线检查未见异常。\n检查日期：2026-04-02",
+      "recognized_text": "胸部X线检查未见异常。\n检查日期：2026-04-02",
+      "exact_text": true,
+      "normalized_exact": true,
+      "expected_fragments_found": [
+        "胸部X线检查未见异常。",
+        "检查日期：2026-04-02"
+      ],
+      "expected_fragment_count": 2,
+      "machine_coordinates_present": false,
+      "request_image_sha256": "b34ed0d3c4978a2b928763ed5a1f57a7e932f62d528726c40bea6f56ff021d56",
+      "request_sha256": "a4540b020a77ea445f5c81ed574faaa84be99d1d5576ca85d1b148a44db9369c",
+      "response_status": 200,
+      "response_model": "GLM-OCR-bf16",
+      "model_matches_request": true,
+      "finish_reason": "stop",
+      "elapsed_seconds": 0.806,
+      "response_sha256": "0f88f5d7fa63b657fd1b25794be4d95c4b7d5757d512fe698698e771af2fd27f",
+      "raw_response_base64": "IHsiaWQiOiJjaGF0Y21wbC0wYTE5MmExMyIsIm9iamVjdCI6ImNoYXQuY29tcGxldGlvbiIsImNyZWF0ZWQiOjE3ODcxNDI3NzIsIm1vZGVsIjoiR0xNLU9DUi1iZjE2IiwiY2hvaWNlcyI6W3siaW5kZXgiOjAsIm1lc3NhZ2UiOnsicm9sZSI6ImFzc2lzdGFudCIsImNvbnRlbnQiOiLog7jpg6hY57q/5qOA5p+l5pyq6KeB5byC5bi444CCXG7mo4Dmn6Xml6XmnJ/vvJoyMDI2LTA0LTAyIn0sImZpbmlzaF9yZWFzb24iOiJzdG9wIn1dLCJ1c2FnZSI6eyJwcm9tcHRfdG9rZW5zIjoyODI1LCJjb21wbGV0aW9uX3Rva2VucyI6MTksInRvdGFsX3Rva2VucyI6Mjg0NCwiaW5wdXRfdG9rZW5zIjoyODI1LCJvdXRwdXRfdG9rZW5zIjoxOSwicHJvbXB0X3Rva2Vuc19kZXRhaWxzIjp7ImNhY2hlZF90b2tlbnMiOjB9LCJ0b3RhbF90aW1lIjowLjh9fQ==",
+      "raw_response_utf8": " {\"id\":\"chatcmpl-0a192a13\",\"object\":\"chat.completion\",\"created\":1787142772,\"model\":\"GLM-OCR-bf16\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"胸部X线检查未见异常。\\n检查日期：2026-04-02\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":2825,\"completion_tokens\":19,\"total_tokens\":2844,\"input_tokens\":2825,\"output_tokens\":19,\"prompt_tokens_details\":{\"cached_tokens\":0},\"total_time\":0.8}}"
+    }
+  ],
+  "text_exact_pages": 2,
+  "raw_exact_pages": 2,
+  "total_pages": 2,
+  "all_responses_successful": true,
+  "all_response_models_match": true,
+  "all_expected_fragments_found": true,
+  "layout_coordinates_observed": false
+}

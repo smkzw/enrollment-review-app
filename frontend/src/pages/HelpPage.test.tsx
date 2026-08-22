@@ -15,7 +15,7 @@ import {
   UAT_KEY_TASK_PROGRESS,
   UAT_PAGE_VERSION,
 } from "../app/uatTrialState";
-import { HelpPage } from "./HelpPage";
+import { helpSectionsForMode, HelpPage } from "./HelpPage";
 
 describe("系统帮助", () => {
   beforeEach(() => {
@@ -30,6 +30,7 @@ describe("系统帮助", () => {
     expect(screen.getByRole("heading", { name: /今日工作：今天先做什么/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /项目看板：查看全部受试者/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /查看受试者资料与风险/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /上传资料与核对原件/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /入排工作台：规则、判断与证据/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /行动中心：谁负责、补什么、何时完成/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /任务与系统：资料整理进度/ })).toBeInTheDocument();
@@ -37,6 +38,11 @@ describe("系统帮助", () => {
     expect(screen.getByRole("heading", { name: /常见问题：重新解构与发布/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /键盘操作/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /遇到问题怎么办/ })).toBeInTheDocument();
+    expect(screen.getByText(/建立完整资料快照/)).toBeInTheDocument();
+    expect(screen.getByText(/红框只表示系统掌握了可映射到原件页图的真实区域坐标/)).toBeInTheDocument();
+    expect(screen.getByText(/失败时只重新处理失败部分/)).toBeInTheDocument();
+    expect(screen.getAllByText(/补入漏识别文字/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/页首、页末或原文中已选位置/).length).toBeGreaterThan(0);
   });
 
   it("说明中没有内部实现词", async () => {
@@ -48,10 +54,19 @@ describe("系统帮助", () => {
     }
   });
 
+  it("正式模式帮助只介绍当前可用流程", () => {
+    const formalText = helpSectionsForMode(false)
+      .flatMap((section) => [section.title, ...section.steps, section.tip ?? ""])
+      .join("\n");
+    expect(formalText).toContain("打开系统后直接进入「方案工作台」");
+    expect(formalText).toContain("还没有当前有效资料");
+    expect(formalText).not.toMatch(/界面试用|演示|今日工作|项目看板|行动中心|任务与系统/);
+  });
+
   it("显示稳定中文页面版本，可直接照录", async () => {
     render(<HelpPage />);
     await screen.findByRole("heading", { name: "系统帮助" });
-    expect(screen.getByText(new RegExp(`页面版本：${UAT_PAGE_VERSION}`))).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`界面版本：${UAT_PAGE_VERSION}`))).toBeInTheDocument();
     expect(UAT_PAGE_VERSION).toMatch(/^界面试用版 \d+\.\d+\.\d+$/);
   });
 

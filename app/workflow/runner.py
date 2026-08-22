@@ -14,16 +14,27 @@ from __future__ import annotations
 import logging
 import threading
 import time as time_module
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
-from typing import Any, Callable, Iterator, Mapping
+from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.storage.codecs import utc_now, verify_payload_sha256
-from app.workflow.errors import LeaseLostError, ProcessDeath, StepFailure
-from app.workflow.jobstore import DEFAULT_LEASE_TTL, JobLease, JobStore
+from app.workflow.errors import (
+    LeaseLostError,
+    ProcessDeath,
+    StepAwaitingUser,
+    StepFailure,
+)
+from app.workflow.jobstore import (
+    DEFAULT_LEASE_TTL,
+    JobLease,
+    JobStore,
+    StepFailureOutcome,
+)
 from app.workflow.recovery import recover_expired_jobs
 from app.workflow.states import (
     ACTIVE_LEASE_STATES,
@@ -47,6 +58,7 @@ class StepContext:
     attempt: int
     last_checkpoint_id: str | None
     last_checkpoint: dict[str, Any] | None
+    max_attempts: int = 1
 
 
 StepExecutor = Callable[[StepContext], dict[str, Any]]
@@ -65,6 +77,7 @@ class JobRunner:
         sleep: Callable[[float], None] = time_module.sleep,
         lease_ttl: timedelta = DEFAULT_LEASE_TTL,
         backoff: Callable[[int], timedelta] = backoff_delay,
+        on_cancelled: Callable[[str], None] | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.executors = dict(executors)
@@ -74,6 +87,7 @@ class JobRunner:
         self.sleep = sleep
         self.lease_ttl = lease_ttl
         self.backoff = backoff
+        self.on_cancelled = on_cancelled
         self._stop_event = threading.Event()
 
     def _store(self, session: Session) -> JobStore:
@@ -93,6 +107,7 @@ class JobRunner:
         """后台循环：维护（恢复/退避入队）-> 认领一个任务执行 -> 按间隔休眠。"""
         event = stop_event if stop_event is not None else self._stop_event
         while not event.is_set():
+            worked = False
             try:
                 self._maintenance()
                 worked = self.run_once()
@@ -103,9 +118,8 @@ class JobRunner:
             self.sleep(self.poll_interval if not worked else 0.0)
 
     def _maintenance(self) -> None:
-        with self.session_factory() as session:
-            with session.begin():
-                self._store(session).requeue_due_retries()
+        with self.session_factory() as session, session.begin():
+            self._store(session).requeue_due_retries()
         recover_expired_jobs(self.session_factory, now=self.now)
 
     # -------------------------------------------------------------- 单任务
@@ -137,34 +151,37 @@ class JobRunner:
     def _claim(
         self, job_type: str | None = None, *, job_id: str | None = None
     ) -> tuple[JobLease, str] | None:
-        with self.session_factory() as session:
-            with session.begin():
-                store = self._store(session)
-                lease = (
-                    store.claim_job(job_id, self.worker_id)
-                    if job_id is not None
-                    else store.claim_next(self.worker_id, job_type=job_type)
-                )
-                if lease is None:
-                    return None
-                job = store.get_job(lease.job_id)
-                claimed_type = job.job_type
-                # 恢复延续：认领后立刻按恢复规则重置中断步骤（幂等，普通任务为空操作）
-                store.prepare_claimed(lease)
+        with self.session_factory() as session, session.begin():
+            store = self._store(session)
+            lease = (
+                store.claim_job(job_id, self.worker_id)
+                if job_id is not None
+                else store.claim_next(self.worker_id, job_type=job_type)
+            )
+            if lease is None:
+                return None
+            job = store.get_job(lease.job_id)
+            claimed_type = job.job_type
+            # 恢复延续：认领后立刻按恢复规则重置中断步骤（幂等，普通任务为空操作）
+            store.prepare_claimed(lease)
         return lease, claimed_type
 
     def _run_claimed(self, lease: JobLease, job_type: str) -> None:
         while True:
             lease = self._renew_if_due(lease)
-            with self.session_factory() as session:
-                with session.begin():
-                    store = self._store(session)
-                    status = store.job_status(lease.job_id)
-                    if status.state not in ACTIVE_LEASE_STATES:
-                        return
-                    if status.cancel_requested or status.state == "cancel_requested":
-                        store.cancel_at_boundary(lease)
-                        return
+            cancelled_at_boundary = False
+            terminal_at_boundary = False
+            context: StepContext | None = None
+            step_id: str | None = None
+            with self.session_factory() as session, session.begin():
+                store = self._store(session)
+                status = store.job_status(lease.job_id)
+                if status.state not in ACTIVE_LEASE_STATES:
+                    return
+                if status.cancel_requested or status.state == "cancel_requested":
+                    store.cancel_at_boundary(lease)
+                    cancelled_at_boundary = True
+                else:
                     step = store.next_runnable_step(lease.job_id)
                     if step is None:
                         if store.all_steps_terminal(lease.job_id):
@@ -172,31 +189,48 @@ class JobRunner:
                                 store.finish_failure(lease)
                             else:
                                 store.finish_success(lease)
+                            cancelled_at_boundary = (
+                                store.get_job(lease.job_id).state == "cancelled"
+                            )
+                            terminal_at_boundary = True
+                        else:
+                            store.release_deferred(lease)
                             return
-                        store.release_deferred(lease)
-                        return
-                    if step.waiting_user_kind is not None:
-                        store.enter_user_wait(
-                            lease,
-                            step.step_id,
-                            awaiting_user=step.waiting_user_kind,
+                    else:
+                        if step.waiting_user_kind is not None:
+                            store.enter_user_wait(
+                                lease,
+                                step.step_id,
+                                awaiting_user=step.waiting_user_kind,
+                            )
+                            return
+                        started = store.start_step(lease, step.step_id)
+                        last_checkpoint = store.get_last_checkpoint(
+                            lease.job_id, started.step_id
                         )
-                        return
-                    started = store.start_step(lease, step.step_id)
-                    last_checkpoint = store.get_last_checkpoint(
-                        lease.job_id, started.step_id
-                    )
-                    context = StepContext(
-                        job_id=lease.job_id,
-                        job_type=job_type,
-                        job_payload=self._job_payload(store, lease.job_id),
-                        step_id=started.step_id,
-                        name=started.name,
-                        attempt=started.attempt,
-                        last_checkpoint_id=last_checkpoint[0] if last_checkpoint else None,
-                        last_checkpoint=last_checkpoint[1] if last_checkpoint else None,
-                    )
-                    step_id = started.step_id
+                        context = StepContext(
+                            job_id=lease.job_id,
+                            job_type=job_type,
+                            job_payload=self._job_payload(store, lease.job_id),
+                            step_id=started.step_id,
+                            name=started.name,
+                            attempt=started.attempt,
+                            last_checkpoint_id=(
+                                last_checkpoint[0] if last_checkpoint else None
+                            ),
+                            last_checkpoint=(
+                                last_checkpoint[1] if last_checkpoint else None
+                            ),
+                            max_attempts=started.max_attempts,
+                        )
+                        step_id = started.step_id
+            if cancelled_at_boundary:
+                self._notify_cancelled(lease.job_id)
+                return
+            if terminal_at_boundary:
+                return
+            if context is None or step_id is None:
+                return
             # 执行器在事务外运行：不持有写锁（执行时间超出租约由恢复器兜底）
             try:
                 executor = self.executors.get(job_type)
@@ -214,17 +248,31 @@ class JobRunner:
                         lease = lease_ref[0]
             except ProcessDeath:
                 raise
-            except StepFailure as failure:
-                self._commit_step_failure(lease, step_id, failure)
+            except StepAwaitingUser as waiting:
+                lease = self._renew_if_due(lease)
+                with self.session_factory() as session, session.begin():
+                    self._store(session).pause_running_step_for_user(
+                        lease,
+                        step_id,
+                        awaiting_user=waiting.awaiting_user,
+                        checkpoint_payload=waiting.checkpoint,
+                    )
                 return
-            except Exception as exc:  # 意外异常按 fatal 处理，避免无限重试
+            except StepFailure as failure:
+                outcome = self._commit_step_failure(lease, step_id, failure)
+                if outcome.job_state == "cancelled":
+                    self._notify_cancelled(lease.job_id)
+                return
+            except Exception:  # 意外异常按 fatal 处理，避免无限重试
                 logger.exception("任务 %s 步骤 %s 意外失败", lease.job_id, step_id)
                 failure = StepFailure(
                     retryable=False,
                     error_code=EXECUTOR_ERROR_CODE,
-                    detail=str(exc)[:500],
+                    detail="任务执行遇到系统异常，请稍后重试或联系维护人员。",
                 )
-                self._commit_step_failure(lease, step_id, failure)
+                outcome = self._commit_step_failure(lease, step_id, failure)
+                if outcome.job_state == "cancelled":
+                    self._notify_cancelled(lease.job_id)
                 return
             self._commit_step_success(lease, step_id, checkpoint_payload)
 
@@ -248,9 +296,8 @@ class JobRunner:
                     active = current[0]
                 renewed_at = self.now()
                 try:
-                    with self.session_factory() as session:
-                        with session.begin():
-                            renewed = self._store(session).renew_lease(active)
+                    with self.session_factory() as session, session.begin():
+                        renewed = self._store(session).renew_lease(active)
                 except Exception:
                     # SQLite 的瞬时忙碌不代表执行权已经转移；下一次心跳继续用
                     # owner/generation 校验。真正被恢复器接管时 renew_lease 会
@@ -290,23 +337,33 @@ class JobRunner:
 
     def _commit_step_success(self, lease: JobLease, step_id: str, checkpoint: dict) -> None:
         lease = self._renew_if_due(lease)
-        with self.session_factory() as session:
-            with session.begin():
-                self._store(session).complete_step(
-                    lease, step_id, checkpoint_payload=checkpoint
-                )
+        with self.session_factory() as session, session.begin():
+            self._store(session).complete_step(
+                lease, step_id, checkpoint_payload=checkpoint
+            )
 
-    def _commit_step_failure(self, lease: JobLease, step_id: str, failure: StepFailure) -> None:
+    def _commit_step_failure(
+        self, lease: JobLease, step_id: str, failure: StepFailure
+    ) -> StepFailureOutcome:
         lease = self._renew_if_due(lease)
-        with self.session_factory() as session:
-            with session.begin():
-                self._store(session).fail_step(
-                    lease,
-                    step_id,
-                    error_code=failure.error_code,
-                    retryable=failure.retryable,
-                    detail=failure.detail,
-                )
+        with self.session_factory() as session, session.begin():
+            return self._store(session).fail_step(
+                lease,
+                step_id,
+                error_code=failure.error_code,
+                retryable=failure.retryable,
+                detail=failure.detail,
+            )
+
+    def _notify_cancelled(self, job_id: str) -> None:
+        """在任务取消事务提交后投影证据等领域的终态。"""
+        if self.on_cancelled is None:
+            return
+        try:
+            self.on_cancelled(job_id)
+        except Exception:
+            # Job 状态已提交；启动扫描会再次收敛投影，不能让回调故障停掉通用 worker。
+            logger.exception("任务 %s 取消后的领域状态投影失败", job_id)
 
     def _job_payload(self, store: JobStore, job_id: str) -> dict[str, Any]:
         job = store.get_job(job_id)
@@ -316,8 +373,7 @@ class JobRunner:
         """租约剩余不足 1/3 时续租；失败不阻断，交由后续提交的租约校验裁决。"""
         if lease.expires_at - self.now() > self.lease_ttl / 3:
             return lease
-        with self.session_factory() as session:
-            with session.begin():
-                if self._store(session).renew_lease(lease):
-                    return replace(lease, expires_at=self.now() + self.lease_ttl)
+        with self.session_factory() as session, session.begin():
+            if self._store(session).renew_lease(lease):
+                return replace(lease, expires_at=self.now() + self.lease_ttl)
         return lease

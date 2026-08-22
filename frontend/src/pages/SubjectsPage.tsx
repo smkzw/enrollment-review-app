@@ -8,7 +8,7 @@
 
 import { useMemo } from "react";
 import { getDefaultRepository } from "../api";
-import { updateParams, useHashRoute } from "../app/router";
+import { updateParams, RouteLink, useHashRoute } from "../app/router";
 import { useLoad } from "../app/useLoad";
 import { EmptyState, ErrorState, LoadingState } from "../components/shell/Feedback";
 import { ExpectationCoverage } from "../components/profile/ExpectationCoverage";
@@ -288,6 +288,14 @@ export function SubjectsPage() {
                   <span className="count-chip">
                     资料快照第 {episode.revision} 版
                   </span>
+                  <RouteLink
+                    to={`/subjects/${selectedSubjectId}/evidence`}
+                    params={{ episode: episode.episodeId }}
+                    className="button button--primary profile-head__evidence"
+                    title="查看或补充该审核节点的资料"
+                  >
+                    查看/补充资料
+                  </RouteLink>
                 </>
               )}
             </div>

@@ -2708,10 +2708,12 @@
           "step_failed",
           "retry_scheduled",
           "waiting_user",
+          "user_resumed",
           "cancel_requested",
           "cancelled",
           "completed",
-          "failed"
+          "failed",
+          "page_progress"
         ],
         "title": "JobEventType",
         "type": "string"
@@ -3841,7 +3843,32 @@
       },
       "ReviewEpisode": {
         "additionalProperties": false,
+        "description": "审核节点：受试者在某研究期别/审核节点的资料与处理修订活动版本。\n\n运行期唯一审核节点合同（Slice 4.4 收敛后，``evidence_ingestion`` 不再维护\n第二套同名合同）。``evidence_snapshot_id`` 是 Phase 2/3 fixture/审核链语义的\nlegacy 字段，本合同保留其原义但**不作为** Phase 4 当前资料版本的 fallback。\n\n成对活动指针 ``active_evidence_snapshot_id`` 与\n``active_evidence_processing_revision_id`` 是 Phase 4 当前版本的唯一权威：\n只在候选快照通过全部发布门禁后，在同一事务中按预期修订号原子更新；回滚通过\n新的 ActivationEvent 完成，不静默改写指针。二者必须同时存在或同时为空：活动\n资料必须既固定文档集合，又固定一份不可变证据处理修订。迁移 0010 不按时间/ID/\n历史 ACTIVE 状态回填本对指针；升级时保持 NULL，由正式激活命令建立。",
         "properties": {
+          "active_evidence_processing_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Active Evidence Processing Revision Id"
+          },
+          "active_evidence_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Active Evidence Snapshot Id"
+          },
           "anchor_dates": {
             "additionalProperties": {
               "$ref": "#/components/schemas/DateValue"

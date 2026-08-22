@@ -1,6 +1,7 @@
 """Application configuration."""
-from pathlib import Path
+import json
 import os
+from pathlib import Path
 
 # Load .env file if it exists
 _env_path = Path(__file__).resolve().parent.parent / ".env"
@@ -16,8 +17,24 @@ ROOT_DIR = APP_DIR.parent
 PROJECTS_DIR = ROOT_DIR / "projects"
 STATIC_DIR = ROOT_DIR / "static"
 
-# oMLX local model server
-OMLX_BASE_URL = os.getenv("OMLX_BASE_URL", "http://127.0.0.1:8000")
+def _discover_omlx_base_url(config_path: Path | None = None) -> str:
+    """Read the macOS oMLX app's configured port, with a stable local fallback."""
+    path = config_path or (
+        Path.home() / "Library" / "Application Support" / "oMLX" / "config.json"
+    )
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        port = int(payload["port"])
+        if 1 <= port <= 65535:
+            return f"http://127.0.0.1:{port}"
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        pass
+    return "http://127.0.0.1:8000"
+
+
+# oMLX local model server. Explicit environment configuration remains authoritative;
+# otherwise follow the port selected by the installed oMLX macOS application.
+OMLX_BASE_URL = os.getenv("OMLX_BASE_URL", _discover_omlx_base_url())
 OMLX_API_KEY = os.getenv("OMLX_API_KEY", "")
 
 # OCR models (all local oMLX)

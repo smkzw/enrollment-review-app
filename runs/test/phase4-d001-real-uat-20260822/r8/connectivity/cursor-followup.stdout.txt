@@ -1,0 +1,157 @@
+{
+  "agent": "cursor",
+  "requested_agent": "cursor",
+  "role_id": "phase4-r8-connectivity-cursor",
+  "requested_provider": "",
+  "requested_model": "cursor-grok-4.6-medium",
+  "requested_effort": "medium",
+  "explicit_route": true,
+  "requested_route_warnings": [
+    "route is outside the automatic execution/conference manifest"
+  ],
+  "effective_agent": "cursor",
+  "effective_provider": "",
+  "effective_model": "cursor-grok-4.6-medium",
+  "effective_effort": "medium",
+  "time_route": {
+    "policy": "role-specific-beijing-schedules-v2",
+    "enabled": true,
+    "primary_replaced": false,
+    "qwen_max_replaced": false,
+    "cms_flash_replaced": false,
+    "primary_route_changed": false,
+    "resume_session_reset": false,
+    "explicit_route": true,
+    "schedule_contract_hydrated": false,
+    "schedule_contract_source": null,
+    "schedule_contract_recovered_fields": [],
+    "schedule_contract_conflicts": [],
+    "timezone": "Asia/Shanghai",
+    "evaluated_at": "2026-08-22T15:08:27.398806+08:00",
+    "active": false,
+    "mode": "none",
+    "schedule_window": null,
+    "schedule_skipped": true,
+    "schedule_skip_reason": "explicit user-selected route is authoritative",
+    "route_rewritten": false,
+    "power_gate": null,
+    "omlx_skipped_count": 0,
+    "duplicate_effective_route_count": 0,
+    "declared_primary": {
+      "agent": "cursor",
+      "provider": "",
+      "model": "cursor-grok-4.6-medium",
+      "effort": "medium"
+    },
+    "requested_primary": {
+      "agent": "cursor",
+      "provider": "",
+      "model": "cursor-grok-4.6-medium",
+      "effort": "medium",
+      "fallbacks": []
+    },
+    "effective_primary": {
+      "agent": "cursor",
+      "provider": "",
+      "model": "cursor-grok-4.6-medium",
+      "effort": "medium"
+    }
+  },
+  "round_count": 1,
+  "round_policy": "single initial pass; Codex decides whether to add same-session follow-ups",
+  "fallback": null,
+  "declared_fallback_candidates": [],
+  "fallback_candidates": [],
+  "rounds": [
+    {
+      "round": 1,
+      "command": [
+        "/Users/smkzw/.local/bin/cursor-agent",
+        "--print",
+        "--output-format",
+        "json",
+        "--trust",
+        "--workspace",
+        "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase4-evidence-ocr-v2",
+        "--model",
+        "cursor-grok-4.6-medium",
+        "--force",
+        "--resume",
+        "ed45eddd-69dd-47c3-b93f-f40cb4161d39",
+        "MODE=TEST\n\n继续同一 Cursor `cursor-grok-4.6-medium` 连通性会话。控制器已把本会话改为允许浏览器 MCP 工具执行；这只用于解决上一轮工具许可被拒绝，不授权使用终端、读取源码/数据库/日志/接口或修改产品数据。\n\n请再次仅用真实浏览器打开 `http://127.0.0.1:4277/#/subjects`，视口 1920×1080。当前页面主标题允许显示为“受试者与资料”，项目的长标题允许显示 `CMS-D001`，只要同一可见项目明确为Ⅱ期、方案 1.0 即满足身份核对。截图可由浏览器工具保存到其真实临时路径，报告该路径即可；不要求你通过文件工具搬运。\n\n若页面、项目、期别、版本均可见且真实截图成功，输出 `CONNECTIVITY_PASS`；否则输出 `CONNECTIVITY_BLOCKED` 并报告真实错误。不得修改任何数据。\n"
+      ],
+      "returncode": 0,
+      "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":32606,\"duration_api_ms\":32606,\"result\":\"继续同一连通性检查：仅用浏览器打开受试者页、设 1920×1080，核对标题与项目身份后保存截图。页面已打开：`http://127.0.0.1:4277/#/subjects`，视口 1920×1080。浏览器标题为「入排审核工作台」；主标题与当前位置均为「受试者与资料」。已选项目为「评价CMS-D001片治疗中度至重度斑块状银屑病成人患者的有效性和安全性的多中心、随机、双盲、安慰剂对照Ⅱ/Ⅲ期临床研究 · Ⅱ期 · 方案 1.0」。列表提示「这个项目还没有受试者。」未点击、未改数据。截图由 Playwright 保存为 `./connectivity.png`。\\n\\n**CONNECTIVITY_PASS**\",\"session_id\":\"ed45eddd-69dd-47c3-b93f-f40cb4161d39\",\"request_id\":\"fdb8ad91-b27f-49a9-a1ac-e89d881da18a\",\"usage\":{\"inputTokens\":3699,\"outputTokens\":1348,\"cacheReadTokens\":189440,\"cacheWriteTokens\":0}}\n",
+      "output": "继续同一连通性检查：仅用浏览器打开受试者页、设 1920×1080，核对标题与项目身份后保存截图。页面已打开：`http://127.0.0.1:4277/#/subjects`，视口 1920×1080。浏览器标题为「入排审核工作台」；主标题与当前位置均为「受试者与资料」。已选项目为「评价CMS-D001片治疗中度至重度斑块状银屑病成人患者的有效性和安全性的多中心、随机、双盲、安慰剂对照Ⅱ/Ⅲ期临床研究 · Ⅱ期 · 方案 1.0」。列表提示「这个项目还没有受试者。」未点击、未改数据。截图由 Playwright 保存为 `./connectivity.png`。\n\n**CONNECTIVITY_PASS**",
+      "stderr": "",
+      "duration_seconds": 45.664,
+      "timed_out": false,
+      "session_id": "ed45eddd-69dd-47c3-b93f-f40cb4161d39",
+      "usage": {
+        "inputTokens": 3699,
+        "outputTokens": 1348,
+        "cacheReadTokens": 189440,
+        "cacheWriteTokens": 0
+      },
+      "request_id": "fdb8ad91-b27f-49a9-a1ac-e89d881da18a",
+      "cursor_subtype": "success",
+      "cursor_is_error": false,
+      "cursor_model": "cursor-grok-4.6-medium",
+      "cursor_write_enabled": true,
+      "requested_max_turns": 128,
+      "requested_internal_turns": 128,
+      "input_chars": 396,
+      "estimated_input_tokens": 99,
+      "output_chars": 309,
+      "estimated_output_tokens": 78,
+      "input_budget": {
+        "char_limit": 240000,
+        "status": "within"
+      },
+      "output_budget": {
+        "soft_char_limit": 120000,
+        "hard_char_limit": 320000,
+        "status": "within"
+      },
+      "agent": "cursor",
+      "provider": "",
+      "model": "cursor-grok-4.6-medium",
+      "explicit_route": true,
+      "route_warnings": [
+        "route is outside the automatic execution/conference manifest"
+      ],
+      "resumed": true
+    }
+  ],
+  "health_check": false,
+  "health_ttl_seconds": 300,
+  "require_execution_report": false,
+  "execution_dispatch": false,
+  "grok_permission_policy": {
+    "requested": "bypassPermissions",
+    "effective": "bypassPermissions",
+    "adjusted_for_execution_manager": false
+  },
+  "budget_policy": {
+    "external_timeout_seconds": 6000,
+    "requested_internal_turns": 128,
+    "input_char_limit": 240000,
+    "output_soft_char_limit": 120000,
+    "output_hard_char_limit": 320000,
+    "same_session_recovery_passes": 2
+  },
+  "wait_policy": {
+    "mode": "single hard wait; no fixed controller polling",
+    "runner_timeout_seconds": 6000,
+    "parent_native_wait_max_ms": 3600000,
+    "same_session_recovery_passes": 2,
+    "fallback_after": "terminal failure, exhausted same-session recovery, or failed acceptance; latency alone is not failure"
+  },
+  "local_model_cleanup_policy": {
+    "provider": "omlx",
+    "model": "Qwen3.8-27B-Abliterated-MLX-MXFP8",
+    "unload_after_session": true,
+    "failure_is_reported": true
+  },
+  "dispatch_started_at": 1787382507.401772
+}

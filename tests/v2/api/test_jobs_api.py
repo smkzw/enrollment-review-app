@@ -16,7 +16,7 @@ def test_create_job_returns_201_and_queued(client) -> None:
     body = resp.json()
     assert body["job_id"]
     assert body["state"] == "queued"
-    assert body["state_label"] == "等待执行"
+    assert body["state_label"] == "等待处理"
     assert body["created"] is True
 
 

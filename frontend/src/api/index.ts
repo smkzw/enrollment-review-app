@@ -29,9 +29,37 @@ export type {
 } from "./protocolWorkbenchTypes";
 export { FIXTURE_SCHEMA_VERSION } from "./fixtureAssets";
 export {
+  getEvidenceRepository,
+  setEvidenceRepository,
+  createEvidenceHttp,
+  EvidenceApiError,
+  EvidenceDecodeError,
+  type EvidenceRepository,
+  type EvidenceUploadPreviewView,
+  type EvidenceSnapshotView,
+  type EvidenceCommitView,
+  type EvidenceItemView,
+  type EvidenceUploadMode,
+  type EvidenceItemStatus,
+  type EvidenceConflictResolution,
+} from "./evidence";
+export {
   subscribeJobEvents,
   type JobEventSubscription,
   type PersistentJobDone,
   type PersistentJobEvent,
   type SubscribeJobEventsOptions,
 } from "./jobEvents";
+export {
+  getCatalogRepository,
+  setCatalogRepository,
+  createCatalogHttp,
+  createCatalogTrial,
+  CatalogApiError,
+  type CatalogRepository,
+  type CatalogProjectView,
+  type CatalogSubjectView,
+  type CatalogEpisodeView,
+  type EvidenceContextView,
+  type SubjectCreateInput,
+} from "./catalog";

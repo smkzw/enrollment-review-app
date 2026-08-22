@@ -64,6 +64,14 @@ export function ProtocolPublishResult({
         <RouteLink to="/protocols" className="button button--primary">
           返回方案工作台
         </RouteLink>
+        <RouteLink
+          to="/subjects"
+          params={{ project: result.projectId }}
+          className="button"
+          ariaLabel="前往受试者与资料"
+        >
+          前往受试者与资料
+        </RouteLink>
         {isRedo && (
           <RouteLink
             to="/protocols"

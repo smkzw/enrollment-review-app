@@ -1,8 +1,8 @@
 """JobRunner 执行循环与故障注入：依赖顺序、退避重试、取消边界、进程死亡、重复 worker。"""
 from __future__ import annotations
 
-from datetime import timedelta
 import time
+from datetime import timedelta
 
 import pytest
 
@@ -125,11 +125,10 @@ def test_runner_releases_abnormally_queued_deferred_step_without_running_it(
         store.start_step(lease, "s1")
     with _store(session_factory, clock) as store:
         store.fail_step(lease, "s1", error_code="E_RETRY", retryable=True)
-    with session_factory() as session:
-        with session.begin():
-            session.execute(
-                update(JobRecord).where(JobRecord.job_id == "job-1").values(state="queued")
-            )
+    with session_factory() as session, session.begin():
+        session.execute(
+            update(JobRecord).where(JobRecord.job_id == "job-1").values(state="queued")
+        )
 
     calls: list[str] = []
     runner = JobRunner(
@@ -172,6 +171,7 @@ def test_final_failure_after_max_attempts(session_factory, clock):
 def test_cancel_requested_between_steps_stops_before_next_step(session_factory, clock):
     create_job_with_steps(session_factory, clock, job_id="job-1", steps=TWO_STEPS)
     calls: list[str] = []
+    cancelled: list[str] = []
 
     def executor(ctx: StepContext) -> dict:
         calls.append(ctx.step_id)
@@ -181,7 +181,12 @@ def test_cancel_requested_between_steps_stops_before_next_step(session_factory, 
                 store.request_cancel("job-1")
         return {"step": ctx.step_id}
 
-    runner = JobRunner(session_factory, {"demo": executor}, worker_id="w1")
+    runner = JobRunner(
+        session_factory,
+        {"demo": executor},
+        worker_id="w1",
+        on_cancelled=cancelled.append,
+    )
     assert runner.run_job("job-1") is True
     assert calls == ["s1"]  # s2 未执行：取消在安全边界生效
     snap = _snapshot(session_factory, clock, "job-1")
@@ -189,6 +194,7 @@ def test_cancel_requested_between_steps_stops_before_next_step(session_factory, 
     states = {step.step_id: step.state for step in snap.steps}
     assert states["s1"] == "completed"  # 已完成步骤保留
     assert states["s2"] == "cancelled"
+    assert cancelled == ["job-1"]
     kinds = [row.event.event_type.value for row in snap.events]
     assert "cancel_requested" in kinds
     assert "cancelled" in kinds
@@ -322,3 +328,5 @@ def test_unexpected_executor_exception_fails_fatal_without_retry(session_factory
     assert snap.state == "failed_final"
     assert snap.steps[0].error_code == "EXECUTOR_ERROR"
     assert snap.steps[0].attempt == 1  # 缺陷不触发自动重试循环
+    failed = [row.event for row in snap.events if row.event.event_type.value == "step_failed"]
+    assert "模拟执行器缺陷" not in failed[-1].payload.get("detail", "")

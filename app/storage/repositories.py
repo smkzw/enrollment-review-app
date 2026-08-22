@@ -14,9 +14,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel
 from sqlalchemy import delete, func, insert, select, update
@@ -33,40 +34,42 @@ from app.domain.contracts import (
     EvidenceExpectation,
     EvidenceExpectationTemplate,
     EvidenceNormalizationCandidate,
+    EvidenceRequirement,
     EvidenceSnapshot,
     EvidenceSpan,
-    EvidenceRequirement,
     FinalAssessment,
     FixtureV1,
     JobEvent,
     ModelConfigContract,
     PatientProfile,
+    PhaseApplicabilityGraph,
+    PhaseProjection,
     Project,
     PromptVersion,
     ProtocolAuthorityRecord,
     ProtocolDraftRevision,
-    ProtocolDraftRevisionDiff,
     ProtocolIdentityDecision,
     ProtocolIntegrityManifest,
     ProtocolMetadataCandidate,
     ProtocolMetadataConflict,
-    PhaseApplicabilityGraph,
-    PhaseProjection,
     ReviewEpisode,
     ReviewRun,
     ReviewRunDiff,
     Rule,
     RuleComponent,
     RuleSet,
-    Subject,
     StudyPhaseCandidate,
     StudyPhaseSelection,
+    Subject,
     WorkflowStage,
 )
 from app.domain.contracts.agents import CriticRun, GateResult
 from app.domain.contracts.context import ReviewContextSnapshot
 from app.domain.contracts.evidence import ConflictGroup, SourceDocumentVersion
-from app.domain.contracts.protocol_metadata import InterpretationConflict, InterpretationSource
+from app.domain.contracts.protocol_metadata import (
+    InterpretationConflict,
+    InterpretationSource,
+)
 from app.domain.contracts.review import ActionTransition, ProtocolDocumentVersion
 from app.domain.contracts.rules import (
     ProtocolAuthorityConfirmation,
@@ -86,6 +89,7 @@ from app.storage.codecs import (
 )
 from app.storage.concurrency import apply_revisioned_update
 from app.storage.models import (
+    Base,
     ActionRequestRecord,
     ActionTransitionRecord,
     AgentCallRecord,
@@ -102,6 +106,8 @@ from app.storage.models import (
     EvidenceSpanRecord,
     FinalAssessmentRecord,
     GateResultRecord,
+    InterpretationConflictRecord,
+    InterpretationSourceRecord,
     JobCheckpointRecord,
     JobEventRecord,
     JobRecord,
@@ -114,15 +120,13 @@ from app.storage.models import (
     ProtocolAuthorityRecordRow,
     ProtocolDocumentVersionRecord,
     ProtocolDraftRevisionRecord,
-    ProtocolIntegrityManifestRecord,
     ProtocolIdentityDecisionRecord,
+    ProtocolIntegrityManifestRecord,
     ProtocolMetadataCandidateRecord,
     ProtocolMetadataConflictRecord,
     ProtocolPhaseApplicabilityGraphRecord,
     ProtocolPhaseProjectionRecord,
     ProtocolSourceRecordRow,
-    InterpretationConflictRecord,
-    InterpretationSourceRecord,
     ReviewContextSnapshotRecord,
     ReviewEpisodeRecord,
     ReviewRunDiffRecord,
@@ -132,9 +136,9 @@ from app.storage.models import (
     RuleSetRecord,
     ServiceCommandEventRecord,
     SourceDocumentVersionRecord,
-    SubjectRecord,
     StudyPhaseCandidateRecord,
     StudyPhaseSelectionRecord,
+    SubjectRecord,
     WorkflowStageRecord,
     action_transition_spans,
     agent_call_gate_results,
@@ -298,7 +302,9 @@ class AppendRepository:
             return
         table = assoc.table
         ref_column = next(
-            name for name in table.c.keys() if name not in {assoc.owner_column, "position"}
+            column.name
+            for column in table.c
+            if column.name not in {assoc.owner_column, "position"}
         )
         self.session.execute(
             insert(table),
@@ -315,14 +321,22 @@ class AppendRepository:
     # -- 读 ---------------------------------------------------------------
 
     def get(self, *ident: str | int) -> BaseModel:
-        key = ident if len(ident) > 1 else ident[0]
+        if not ident:
+            raise ValueError("至少需要一个主键值")
+        key: str | int | tuple[str | int, ...] = (
+            ident if len(ident) > 1 else next(iter(ident))
+        )
         record = self.session.get(self.config.record_cls, key)
         if record is None:
             raise NotFoundError(f"{self.config.entity_name} {ident!r} 不存在")
         return self._decode(record)
 
     def get_or_none(self, *ident: str | int) -> BaseModel | None:
-        key = ident if len(ident) > 1 else ident[0]
+        if not ident:
+            raise ValueError("至少需要一个主键值")
+        key: str | int | tuple[str | int, ...] = (
+            ident if len(ident) > 1 else next(iter(ident))
+        )
         record = self.session.get(self.config.record_cls, key)
         return self._decode(record) if record is not None else None
 
@@ -1314,7 +1328,7 @@ def save_rule_set(
         )
         _flush_guarded(session)
         for component in rule.components:
-            expression_text, expression_sha256 = encode_value(
+            _expression_text, expression_sha256 = encode_value(
                 component.expression.model_dump(mode="json")
             )
             exception_sha256 = None
@@ -1433,7 +1447,7 @@ def get_rule_component(
         )
     contract = decode_contract(RuleComponent, record.payload_json, record.payload_sha256)
     # 表达式单独校验：canonical JSON 哈希必须与拆分列一致
-    expression_text, expression_sha256 = encode_value(
+    _expression_text, expression_sha256 = encode_value(
         contract.expression.model_dump(mode="json")
     )
     if expression_sha256 != record.expression_sha256:
@@ -1516,6 +1530,7 @@ class ProjectRepository:
             record,
             payload,
             {
+                "project_id": "project_id",
                 "project_code": "project_code",
                 "project_name": "project_name",
                 "study_phase": "study_phase",
@@ -1555,7 +1570,7 @@ class ProjectRepository:
             raise ScopeViolationError(
                 f"Project {project_id} 更新后的 rule_set 与 protocol_version 不一致"
             )
-        return new_contract
+        return cast(Project, new_contract)
 
     def list(self) -> list[Project]:
         rows = self.session.execute(
@@ -1567,7 +1582,12 @@ class ProjectRepository:
         for row, payload in (
             (row, json.loads(row.payload_json)) for row in rows
         ):
-            check_column_mirrors("Project", row, payload, {"rule_set_id": "rule_set_id"})
+            check_column_mirrors(
+                "Project",
+                row,
+                payload,
+                {"project_id": "project_id", "rule_set_id": "rule_set_id"},
+            )
         return contracts
 
 
@@ -1591,8 +1611,40 @@ class SubjectRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
+    @staticmethod
+    def _decode_record(record: SubjectRecord) -> Subject:
+        contract = decode_contract(Subject, record.payload_json, record.payload_sha256)
+        payload = json.loads(record.payload_json)
+        check_column_mirrors(
+            "Subject",
+            record,
+            payload,
+            {
+                "subject_id": "subject_id",
+                "subject_code": "subject_code",
+                "project_id": "project_id",
+                "center_code": "center_code",
+                "center_name": "center_name",
+                "sex": "sex",
+                "age_years": "age_years",
+            },
+        )
+        return contract
+
     def save(self, subject: Subject) -> Subject:
         _get_required(self.session, ProjectRecord, subject.project_id, "Project")
+        existing_rows = self.session.execute(
+            select(SubjectRecord)
+        ).scalars().all()
+        for existing_row in existing_rows:
+            existing = self._decode_record(existing_row)
+            if (
+                existing.project_id == subject.project_id
+                and existing.subject_code == subject.subject_code
+            ):
+                raise DuplicateRecordError(
+                    f"项目 {subject.project_id} 已存在受试者代号 {subject.subject_code}"
+                )
         payload_json, payload_sha256 = encode_contract(subject)
         _insert_revisioned(
             self.session,
@@ -1605,22 +1657,7 @@ class SubjectRepository:
 
     def get(self, subject_id: str) -> Subject:
         record = _get_required(self.session, SubjectRecord, subject_id, "Subject")
-        contract = decode_contract(Subject, record.payload_json, record.payload_sha256)
-        payload = json.loads(record.payload_json)
-        check_column_mirrors(
-            "Subject",
-            record,
-            payload,
-            {
-                "subject_code": "subject_code",
-                "project_id": "project_id",
-                "center_code": "center_code",
-                "center_name": "center_name",
-                "sex": "sex",
-                "age_years": "age_years",
-            },
-        )
-        return contract
+        return self._decode_record(record)
 
     def update(
         self, subject_id: str, expected_revision: int, changes: dict[str, Any]
@@ -1636,15 +1673,26 @@ class SubjectRepository:
             mutable_fields=set(self.MUTABLE_FIELDS),
             entity_type="Subject",
         )
-        return new_contract
+        return cast(Subject, new_contract)
 
     def list_by_project(self, project_id: str) -> list[Subject]:
         rows = self.session.execute(
-            select(SubjectRecord)
-            .where(SubjectRecord.project_id == project_id)
-            .order_by(SubjectRecord.subject_id)
+            select(SubjectRecord).order_by(SubjectRecord.subject_id)
         ).scalars().all()
-        return [decode_contract(Subject, row.payload_json, row.payload_sha256) for row in rows]
+        subjects = [self._decode_record(row) for row in rows]
+        return [subject for subject in subjects if subject.project_id == project_id]
+
+    def delete(self, subject_id: str, project_id: str) -> Subject:
+        """硬删除受试者主记录；仅当调用方已确认该受试者无任何审核节点/证据时调用。
+
+        跨项目引用一律视为不存在（404），不泄露受试者是否存在于其他项目。
+        """
+        subject = self.get(subject_id)
+        if subject.project_id != project_id:
+            raise NotFoundError(f"Subject {subject_id} 不属于项目 {project_id}")
+        record = _get_required(self.session, SubjectRecord, subject_id, "Subject")
+        self.session.delete(record)
+        return subject
 
 
 def _episode_columns(payload: dict[str, Any], scope: dict[str, Any] | None) -> dict[str, Any]:
@@ -1657,7 +1705,12 @@ def _episode_columns(payload: dict[str, Any], scope: dict[str, Any] | None) -> d
         "study_phase": payload["study_phase"],
         "stage": payload["stage"],
         "protocol_version_id": payload["protocol_version_id"],
-        "evidence_snapshot_id": payload["evidence_snapshot_id"],
+        "evidence_snapshot_id": payload.get("evidence_snapshot_id"),
+        "workflow_stage_id": payload.get("workflow_stage_id"),
+        "active_evidence_snapshot_id": payload.get("active_evidence_snapshot_id"),
+        "active_evidence_processing_revision_id": payload.get(
+            "active_evidence_processing_revision_id"
+        ),
         "anchor_dates_json": payload["anchor_dates"],
         "due_at": (
             parse_datetime_column(payload["due_at"]) if payload.get("due_at") else None
@@ -1668,10 +1721,43 @@ def _episode_columns(payload: dict[str, Any], scope: dict[str, Any] | None) -> d
 class EpisodeRepository:
     MUTABLE_FIELDS = frozenset({"stage", "due_at", "evidence_snapshot_id", "anchor_dates"})
 
+    #: 活动版本成对指针只允许通过未来 WP-44B 的原子激活事务修改；
+    #: 通用 save/update 一律拒绝触碰，防止绕过激活门禁。
+    _ACTIVATION_ONLY_FIELDS = frozenset(
+        {"active_evidence_snapshot_id", "active_evidence_processing_revision_id"}
+    )
+
     def __init__(self, session: Session) -> None:
         self.session = session
 
+    @staticmethod
+    def _decode_record(record: ReviewEpisodeRecord) -> ReviewEpisode:
+        contract = decode_contract(ReviewEpisode, record.payload_json, record.payload_sha256)
+        payload = json.loads(record.payload_json)
+        check_column_mirrors(
+            "ReviewEpisode",
+            record,
+            payload,
+            {
+                "review_episode_id": "review_episode_id",
+                "subject_id": "subject_id",
+                "project_id": "project_id",
+                "rule_set_id": "rule_set_id",
+                "rule_set_revision": "rule_set_revision",
+                "study_phase": "study_phase",
+                "stage": "stage",
+                "protocol_version_id": "protocol_version_id",
+                "evidence_snapshot_id": "evidence_snapshot_id",
+                "workflow_stage_id": "workflow_stage_id",
+                "active_evidence_snapshot_id": "active_evidence_snapshot_id",
+                "active_evidence_processing_revision_id": "active_evidence_processing_revision_id",
+                "anchor_dates_json": "anchor_dates",
+            },
+        )
+        return contract
+
     def save(self, episode: ReviewEpisode) -> ReviewEpisode:
+        self._assert_activation_not_set(episode)
         _check_episode_scope(self.session, episode)
         payload_json, payload_sha256 = encode_contract(episode)
         _insert_revisioned(
@@ -1683,33 +1769,33 @@ class EpisodeRepository:
         )
         return episode
 
+    @staticmethod
+    def _assert_activation_not_set(episode: ReviewEpisode) -> None:
+        """通用 save 不得建立非空活动指针对：激活只能由 WP-44B 原子事务完成。"""
+        if (
+            episode.active_evidence_snapshot_id is not None
+            or episode.active_evidence_processing_revision_id is not None
+        ):
+            raise RepositoryError(
+                "ReviewEpisode 通用保存不得建立活动版本指针；活动快照/处理修订"
+                "只能由专用激活事务按预期修订号原子切换"
+            )
+
     def get(self, review_episode_id: str) -> ReviewEpisode:
         record = _get_required(
             self.session, ReviewEpisodeRecord, review_episode_id, "ReviewEpisode"
         )
-        contract = decode_contract(ReviewEpisode, record.payload_json, record.payload_sha256)
-        payload = json.loads(record.payload_json)
-        check_column_mirrors(
-            "ReviewEpisode",
-            record,
-            payload,
-            {
-                "subject_id": "subject_id",
-                "project_id": "project_id",
-                "rule_set_id": "rule_set_id",
-                "rule_set_revision": "rule_set_revision",
-                "study_phase": "study_phase",
-                "stage": "stage",
-                "protocol_version_id": "protocol_version_id",
-                "evidence_snapshot_id": "evidence_snapshot_id",
-                "anchor_dates_json": "anchor_dates",
-            },
-        )
-        return contract
+        return self._decode_record(record)
 
     def update(
         self, review_episode_id: str, expected_revision: int, changes: dict[str, Any]
     ) -> ReviewEpisode:
+        overlap = self._ACTIVATION_ONLY_FIELDS & set(changes)
+        if overlap:
+            raise RepositoryError(
+                "ReviewEpisode 通用更新不得修改活动版本指针 "
+                f"{sorted(overlap)}；活动快照/处理修订只能由专用激活事务切换"
+            )
         new_contract, _record = apply_revisioned_update(
             self.session,
             ReviewEpisodeRecord,
@@ -1721,27 +1807,54 @@ class EpisodeRepository:
             mutable_fields=set(self.MUTABLE_FIELDS),
             entity_type="ReviewEpisode",
         )
-        return new_contract
+        return cast(ReviewEpisode, new_contract)
 
-    def list_by_subject(self, subject_id: str) -> list[ReviewEpisode]:
+    def list_by_subject(
+        self, subject_id: str, *, project_id: str | None = None
+    ) -> list[ReviewEpisode]:
         rows = self.session.execute(
-            select(ReviewEpisodeRecord)
-            .where(ReviewEpisodeRecord.subject_id == subject_id)
-            .order_by(ReviewEpisodeRecord.review_episode_id)
+            select(ReviewEpisodeRecord).order_by(ReviewEpisodeRecord.review_episode_id)
         ).scalars().all()
-        return [
-            decode_contract(ReviewEpisode, row.payload_json, row.payload_sha256) for row in rows
-        ]
+        all_episodes = [self._decode_record(row) for row in rows]
+        episodes = [episode for episode in all_episodes if episode.subject_id == subject_id]
+        if project_id is not None and any(
+            episode.project_id != project_id for episode in episodes
+        ):
+            raise ScopeViolationError(
+                f"受试者 {subject_id} 的审核节点包含跨项目记录"
+            )
+        return episodes
 
     def list_by_project(self, project_id: str) -> list[ReviewEpisode]:
         rows = self.session.execute(
-            select(ReviewEpisodeRecord)
-            .where(ReviewEpisodeRecord.project_id == project_id)
-            .order_by(ReviewEpisodeRecord.review_episode_id)
+            select(ReviewEpisodeRecord).order_by(ReviewEpisodeRecord.review_episode_id)
         ).scalars().all()
-        return [
-            decode_contract(ReviewEpisode, row.payload_json, row.payload_sha256) for row in rows
-        ]
+        episodes = [self._decode_record(row) for row in rows]
+        return [episode for episode in episodes if episode.project_id == project_id]
+
+    def delete(self, review_episode_id: str) -> ReviewEpisode:
+        """硬删除空审核节点：仅允许尚未承载任何不可变证据的节点。
+
+        防御性门禁：legacy 快照或成对活动指针任一非空即拒绝。其余子表依赖
+        （快照/候选/期望/运行等）由命令服务在同一事务内的依赖矩阵先行检查。
+        """
+        record = _get_required(
+            self.session, ReviewEpisodeRecord, review_episode_id, "ReviewEpisode"
+        )
+        if record.evidence_snapshot_id is not None:
+            raise RepositoryError(
+                f"审核节点 {review_episode_id} 已有 legacy 证据快照，禁止删除"
+            )
+        if (
+            record.active_evidence_snapshot_id is not None
+            or record.active_evidence_processing_revision_id is not None
+        ):
+            raise RepositoryError(
+                f"审核节点 {review_episode_id} 已有活动资料版本，禁止删除"
+            )
+        episode = self._decode_record(record)
+        self.session.delete(record)
+        return episode
 
 
 def _expectation_columns(
@@ -1767,7 +1880,9 @@ def _replace_assoc(
     if not ordered_refs:
         return
     ref_column = next(
-        name for name in table.c.keys() if name not in {owner_column, "position"}
+        column.name
+        for column in table.c
+        if column.name not in {owner_column, "position"}
     )
     session.execute(
         insert(table),
@@ -1834,7 +1949,7 @@ class EvidenceExpectationRepository:
     def update(
         self, expectation_id: str, expected_revision: int, changes: dict[str, Any]
     ) -> EvidenceExpectation:
-        new_contract, record = apply_revisioned_update(
+        new_contract, _record = apply_revisioned_update(
             self.session,
             EvidenceExpectationRecord,
             EvidenceExpectation,
@@ -1845,15 +1960,16 @@ class EvidenceExpectationRepository:
             mutable_fields=set(self.MUTABLE_FIELDS),
             entity_type="EvidenceExpectation",
         )
+        typed_contract = cast(EvidenceExpectation, new_contract)
         _replace_assoc(
             self.session,
             evidence_expectation_spans,
             "expectation_id",
             expectation_id,
-            list(new_contract.evidence_span_ids),
+            list(typed_contract.evidence_span_ids),
         )
         _flush_guarded(self.session)
-        return new_contract
+        return typed_contract
 
     def list_by_episode(self, review_episode_id: str) -> list[EvidenceExpectation]:
         rows = self.session.execute(
@@ -2026,14 +2142,15 @@ class ActionRequestRepository:
             mutable_fields=set(self.MUTABLE_FIELDS),
             entity_type="ActionRequest",
         )
+        typed_contract = cast(ActionRequest, new_contract)
         new_transitions = [
             transition
-            for transition in new_contract.transitions
+            for transition in typed_contract.transitions
             if transition.transition_id not in existing_ids
         ]
         _insert_transitions(self.session, action.action_id, new_transitions)
         _flush_guarded(self.session)
-        return new_contract
+        return typed_contract
 
 
 # ---------------------------------------------------------------------------
@@ -2663,6 +2780,91 @@ def find_project_by_protocol_and_phase(
 # ---------------------------------------------------------------------------
 
 
+def list_workflow_stages_for_rule_set(
+    session: Session, rule_set_id: str, rule_set_revision: int
+) -> list[WorkflowStage]:
+    """读取该 RuleSet revision 已发布的全部流程节点（命名空间化 ID，单条 SELECT）。
+
+    发布时流程节点 ID 被改写为 ``{rule_set_id}:{revision}:{stage_id}``
+    （``protocol_publication_service``），本查询按此前缀还原该版本的权威节点清单。
+    """
+    prefix = f"{rule_set_id}:{rule_set_revision}:"
+    rows = session.execute(
+        select(WorkflowStageRecord).where(
+            WorkflowStageRecord.workflow_stage_id.like(f"{prefix}%")
+        )
+    ).scalars().all()
+    return [
+        decode_contract(WorkflowStage, row.payload_json, row.payload_sha256)
+        for row in rows
+    ]
+
+
+def get_workflow_stages_by_ids(
+    session: Session, workflow_stage_ids: Sequence[str]
+) -> dict[str, WorkflowStage]:
+    """按命名空间化 ID 批量读取流程节点（单条 SELECT，禁止 N+1）。"""
+    ids = list(dict.fromkeys(workflow_stage_ids))
+    if not ids:
+        return {}
+    rows = session.execute(
+        select(WorkflowStageRecord).where(
+            WorkflowStageRecord.workflow_stage_id.in_(ids)
+        )
+    ).scalars().all()
+    return {
+        row.workflow_stage_id: decode_contract(
+            WorkflowStage, row.payload_json, row.payload_sha256
+        )
+        for row in rows
+    }
+
+
+def _dependent_rows(
+    session: Session,
+    entity_id: str,
+    column_name: str,
+    exclude_tables: frozenset[str] = frozenset(),
+) -> dict[str, int]:
+    """统计引用该实体 ID 的全部子表行数（按表名），用于删除前的依赖矩阵。
+
+    遍历 ORM 注册的元数据表，凡含 ``column_name`` 列且存在指向 ``entity_id`` 的行
+    即计数；新增子表会自动纳入，未来依赖不会被漏检。
+    """
+    counts: dict[str, int] = {}
+    for table in Base.metadata.tables.values():
+        if table.name in exclude_tables or column_name not in table.columns:
+            continue
+        count = session.execute(
+            select(func.count())
+            .select_from(table)
+            .where(table.c[column_name] == entity_id)
+        ).scalar_one()
+        if count:
+            counts[table.name] = int(count)
+    return counts
+
+
+def episode_dependent_counts(session: Session, episode_id: str) -> dict[str, int]:
+    """审核节点的全部子表依赖（快照/候选/期望/运行/预览/修订等）。"""
+    return _dependent_rows(
+        session,
+        episode_id,
+        "review_episode_id",
+        exclude_tables=frozenset({"review_episodes"}),
+    )
+
+
+def subject_dependent_counts(session: Session, subject_id: str) -> dict[str, int]:
+    """受试者的全部子表依赖（临床事实/个人资料/证据跨度等，不含将删除的节点）。"""
+    return _dependent_rows(
+        session,
+        subject_id,
+        "subject_id",
+        exclude_tables=frozenset({"review_episodes", "subjects"}),
+    )
+
+
 def get_project_row(
     session: Session, project_id: str
 ) -> tuple[Project, int] | None:
@@ -2677,6 +2879,7 @@ def get_project_row(
         record,
         payload,
         {
+            "project_id": "project_id",
             "project_code": "project_code",
             "project_name": "project_name",
             "study_phase": "study_phase",
@@ -2698,7 +2901,12 @@ def list_projects_with_revision(session: Session) -> list[tuple[Project, int]]:
     for row, payload in (
         (row, json.loads(row.payload_json)) for row in rows
     ):
-        check_column_mirrors("Project", row, payload, {"rule_set_id": "rule_set_id"})
+        check_column_mirrors(
+            "Project",
+            row,
+            payload,
+            {"project_id": "project_id", "rule_set_id": "rule_set_id"},
+        )
     return list(zip(contracts, [int(row.rule_set_revision) for row in rows]))
 
 
@@ -2718,11 +2926,14 @@ def list_rule_set_revisions(
     ).scalars().all()
     result: list[tuple[int, ProtocolDocumentVersion, datetime]] = []
     for row in rows:
-        version = AppendRepository(session, PROTOCOL_DOC_CONFIG).get(
-            row.protocol_version_id
+        version = cast(
+            ProtocolDocumentVersion,
+            AppendRepository(session, PROTOCOL_DOC_CONFIG).get(row.protocol_version_id),
         )
+        created_at = to_utc_naive(row.created_at)
+        assert created_at is not None
         result.append(
-            (int(row.revision), version, to_utc_naive(row.created_at))
+            (int(row.revision), version, created_at)
         )
     return result
 
@@ -2971,16 +3182,17 @@ class JobRepository:
                 attempt=1,
                 max_attempts=1,
             )
-        for checkpoint_id, job_id, step_id in dict.fromkeys(
-            (event.checkpoint_id, event.job_id, event.step_id)
-            for event in events
-            if event.checkpoint_id is not None
-        ):
+        for event in events:
+            if event.checkpoint_id is None or event.step_id is None:
+                continue
             self.create_checkpoint(
-                checkpoint_id=checkpoint_id,
-                job_id=job_id,
-                step_id=step_id,
-                payload={"checkpoint_id": checkpoint_id, "step_id": step_id},
+                checkpoint_id=event.checkpoint_id,
+                job_id=event.job_id,
+                step_id=event.step_id,
+                payload={
+                    "checkpoint_id": event.checkpoint_id,
+                    "step_id": event.step_id,
+                },
             )
         for event in events:
             self.append_event(event)
