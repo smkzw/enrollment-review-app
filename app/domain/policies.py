@@ -24,6 +24,7 @@ DEFINITIVE_DECISIONS = {
 }
 
 INDETERMINATE_GAPS = {
+    GapType.OBSERVATION_UNVERIFIED,
     GapType.RECORD_INCOMPLETE,
     GapType.DESCRIPTION_INSUFFICIENT,
     GapType.HISTORICAL_SOURCE_UNAVAILABLE,
@@ -64,6 +65,11 @@ class ActionDirective:
 
 
 ACTION_CONTENT = {
+    GapType.OBSERVATION_UNVERIFIED: (
+        ActionTarget.CRA,
+        "核对现有原始资料及相关记录的归属；核实前不要求补写研究者判断。",
+        "可定位到当前审核节点、对象和具体要求的已核实原始记录。",
+    ),
     GapType.RECORD_INCOMPLETE: (
         ActionTarget.INVESTIGATOR,
         "补充当前审核节点未记录的关键信息，并注明信息来源。",

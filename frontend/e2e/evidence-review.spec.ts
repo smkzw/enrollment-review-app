@@ -31,7 +31,7 @@ test("活动资料版本的识别核对、冲突保留和被提及资料闭环",
   await expect(page.getByAltText("第 1 页原始资料")).toBeVisible();
   await expect(page.getByLabel(/^重点标注/)).toHaveCount(0);
   await page.getByRole("button", { name: /查看 \d+ 处原件定位/ }).click();
-  await expect(page.getByText(/当前识别路线没有取得可信区域坐标/)).toBeVisible();
+  await expect(page.getByText(/当前资料无法稳定框出具体区域/)).toBeVisible();
   await page.getByRole("button", { name: "在原件中查看" }).first().click();
   await expect(page.getByLabel(/^重点标注/)).toHaveClass(
     /original-evidence-page__box--selected/,

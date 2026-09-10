@@ -6,12 +6,16 @@
 import { test, expect } from "@playwright/test";
 import { openRoute, setLayoutStressFactor } from "./helpers";
 import { UAT_TRIAL_STATE_KEYS } from "../src/app/uatTrialState";
+import {
+  PROFILE_HASH,
+  registerProfileRoutes,
+} from "./profile-evidence-fixtures";
 
 const SHOT_PAGES = [
   { hash: "/today", name: "today" },
   { hash: "/board", name: "board" },
   { hash: "/projects/new", name: "project-create" },
-  { hash: "/subjects?subject=subject-uat-03-gap_conflict&stage=screening", name: "subjects-profile" },
+  { hash: PROFILE_HASH.slice(1), name: "subjects-profile" },
   { hash: "/workbench?episode=episode-uat-03-screening-gap_conflict", name: "workbench" },
   { hash: "/actions", name: "actions" },
   { hash: "/tasks", name: "tasks" },
@@ -24,6 +28,7 @@ test.describe("截图收集", () => {
   for (const pageInfo of SHOT_PAGES) {
     test(`截图 ${pageInfo.name}`, async ({ page }) => {
       const project = test.info().project.name;
+      if (pageInfo.name === "subjects-profile") await registerProfileRoutes(page);
       await openRoute(page, pageInfo.hash);
       await page.waitForTimeout(500);
       await page.screenshot({

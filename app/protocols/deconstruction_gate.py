@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Literal
 
 from pydantic import Field
@@ -25,11 +26,20 @@ from app.domain.contracts.enums import (
     LogicalOperator,
     ProtocolPeriod,
     ReviewStage,
+    TimeDirection,
 )
 from app.domain.contracts.protocol_ingestion import ProtocolSourceSpan
-from app.domain.contracts.protocol_metadata import InterpretationConflict
+from app.domain.contracts.protocol_metadata import (
+    AnchorResolutionStatement,
+    InterpretationConflict,
+    InterpretationSource,
+)
 from app.domain.contracts.protocol_drafts import ParentRuleDiff
 from app.domain.contracts.rules import Rule, TimeUnit, iter_atomic_predicates
+from app.domain.interpretation import (
+    InterpretationAuthorityError,
+    clarification_anchor_resolutions,
+)
 from app.domain.publication import canonical_hash
 from app.protocols.section_index import formal_source_span_ids
 
@@ -51,7 +61,7 @@ CHECK_NAMES = (
 
 # 完整性检查结果会写入持久任务检查点。任何会改变问题判定语义的
 # 修改都必须提升此版本，避免旧检查结果在升级后继续冒充当前结论。
-DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/2026-08-19.3"
+DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/2026-09-02.2"
 
 
 class ProtocolGateIssue(VersionedModel):
@@ -112,6 +122,63 @@ def _issue(
         next_action=action,
         affected_refs=list(refs) or ["protocol_draft"],
         repair_scope=list(scope or refs) or ["protocol_draft"],
+    )
+
+
+@dataclass(frozen=True)
+class _AnchorResolutionContext:
+    """解释锚点解析的门禁内部视图：通过权威检查的绑定与权威拒绝问题。
+
+    只有澄清级、标注澄清、无未解决冲突的解释来源可以解析未命名回溯锚点；
+    解析本身只携带锚点身份和目标审核节点集合，不携带窗口量或方向。
+    """
+
+    bindings: tuple[tuple[InterpretationSource, AnchorResolutionStatement], ...] = ()
+    authority_issues: tuple[ProtocolGateIssue, ...] = field(default=())
+
+    @property
+    def bound_rule_codes(self) -> frozenset[str]:
+        return frozenset(
+            code
+            for _source, resolution in self.bindings
+            for code in resolution.affected_rule_refs
+        )
+
+    def resolutions_for_rule(self, official_code: str) -> tuple[AnchorResolutionStatement, ...]:
+        return tuple(
+            resolution
+            for _source, resolution in self.bindings
+            if official_code in resolution.affected_rule_refs
+        )
+
+
+def _anchor_resolution_context(
+    source_input: ProtocolDeconstructionInput,
+    interpretation_conflicts: Sequence[InterpretationConflict],
+) -> _AnchorResolutionContext:
+    """逐来源执行确定性权威检查；解释越权失败关闭为门禁问题。"""
+
+    bindings: list[tuple[InterpretationSource, AnchorResolutionStatement]] = []
+    authority_issues: list[ProtocolGateIssue] = []
+    for source in source_input.interpretation_sources:
+        try:
+            resolutions = clarification_anchor_resolutions(
+                source, conflicts=interpretation_conflicts
+            )
+        except InterpretationAuthorityError as exc:
+            authority_issues.append(
+                _issue(
+                    "interpretation_authority",
+                    "INTERPRETATION_ANCHOR_REJECTED",
+                    f"解释来源 {source.interpretation_source_id} 的锚点解析被拒绝：{exc}",
+                    [source.interpretation_source_id],
+                    action="解释材料只能澄清方案模糊处；请修正解释来源，或改用当前修订案直接修改方案原文。",
+                )
+            )
+            continue
+        bindings.extend((source, resolution) for resolution in resolutions)
+    return _AnchorResolutionContext(
+        bindings=tuple(bindings), authority_issues=tuple(authority_issues)
     )
 
 
@@ -300,6 +367,143 @@ def _any_branches_preserve_internal_conjunction(expression) -> bool:
     return True
 
 
+def _any_is_same_event_time_alternatives(expression, source: str) -> bool:
+    """Allow explicit alternative windows for one unchanged clinical event."""
+
+    if (
+        expression.kind != "logical"
+        or expression.operator != LogicalOperator.ANY
+        or "或" not in source
+    ):
+        return False
+    identities: list[str] = []
+    constraints: list[str] = []
+    for child in expression.children:
+        if child.kind != "predicate" or child.time_constraint is None:
+            return False
+        identities.append(_normalized(child.predicate.attribute))
+        constraints.append(
+            canonical_hash(child.time_constraint.model_dump(mode="json"))
+        )
+    return bool(
+        identities
+        and len(set(identities)) == 1
+        and len(set(constraints)) == len(constraints)
+    )
+
+
+def _source_requires_investigator_judgment(text: str) -> bool:
+    """Distinguish the investigator as decision-maker from other roles.
+
+    Phrases such as ``与研究者进行良好沟通`` name the investigator as the
+    other party, not as the professional assessor.  Only an explicit judgment
+    verb bound to the investigator creates this obligation.
+    """
+
+    compact = re.sub(r"\s+", "", text)
+    judgment = r"(?:评估|评定|判断|判定|认为|认定|确定|决定|确认|同意)"
+    return bool(
+        re.search(
+            rf"(?:由|经|需由|须由|应由|根据)?研究者(?:进行)?{judgment}",
+            compact,
+        )
+        or re.search(rf"{judgment}(?:应|需)?(?:由|经)研究者", compact)
+        or re.search(rf"研究者的?{judgment}", compact)
+    )
+
+
+def _localized_open_list_exception_requires_exclusivity(text: str) -> bool:
+    """Identify a local carve-out inside a non-exhaustive example list."""
+
+    compact = re.sub(r"\s+", "", text)
+    return bool(
+        re.search(r"(?:包括但不限于|但不限于|例如|例如包括|如[：:])", compact)
+        and re.search(r"[（(][^）)]*(?:除外|除非|例外)[^）)]*[）)]", compact)
+    )
+
+
+def _exception_asserts_exclusivity(expression) -> bool:
+    """A component-wide exception is safe only when no sibling trigger coexists."""
+
+    exclusivity_tokens = ("唯一", "仅有", "只有", "单独", "除此之外无", "除该项外无")
+    return any(
+        token
+        in _normalized(f"{predicate.attribute}\n{_predicate_text(predicate)}")
+        for predicate in iter_atomic_predicates(expression)
+        for token in exclusivity_tokens
+    )
+
+
+def _branch_source_anchors(expression, source: str) -> list[tuple[int, int, str]]:
+    """Locate branch-owned clinical terms without using whole-clause overlap."""
+
+    compact_source = re.sub(r"\s+", "", source)
+    candidates: list[str] = []
+    for predicate in iter_atomic_predicates(expression):
+        candidates.extend(
+            item
+            for item in (
+                predicate.source_term,
+                predicate.attribute,
+                *predicate.exact_source_clauses,
+            )
+            if item and len(re.sub(r"\s+", "", item)) >= 2
+        )
+        values = predicate.value if isinstance(predicate.value, list) else []
+        candidates.extend(
+            str(item)
+            for item in values
+            if isinstance(item, str) and len(re.sub(r"\s+", "", item)) >= 2
+        )
+    anchors: list[tuple[int, int, str]] = []
+    for candidate in dict.fromkeys(candidates):
+        compact_candidate = re.sub(r"\s+", "", candidate)
+        start = compact_source.find(compact_candidate)
+        if start >= 0:
+            anchors.append((start, start + len(compact_candidate), compact_candidate))
+    return anchors
+
+
+def _branches_have_source_disjunction(expression, source: str) -> bool:
+    """Verify that sibling branches are individually named around a real OR."""
+
+    if expression.kind != "logical" or expression.operator == LogicalOperator.NOT:
+        return False
+    compact_source = re.sub(r"\s+", "", source)
+    branch_anchors = [
+        _branch_source_anchors(child, compact_source) for child in expression.children
+    ]
+    if any(not anchors for anchors in branch_anchors):
+        return False
+    for first in branch_anchors[0]:
+        paths = [(first, first[0], first[1], [first[2]])]
+        for anchors in branch_anchors[1:]:
+            next_paths = []
+            for path, start, end, terms in paths:
+                for anchor in anchors:
+                    if anchor[0] < end:
+                        continue
+                    next_paths.append(
+                        (anchor, start, anchor[1], [*terms, anchor[2]])
+                    )
+            paths = next_paths
+            if not paths:
+                break
+        for _last, start, end, terms in paths:
+            if all(term in {"筛选", "筛选期", "基线", "基线期"} for term in terms):
+                continue
+            between = compact_source[start:end]
+            if re.search(r"(?:和/或|及/或|或(?!以上|等于))", between):
+                return True
+            # 原文以“满足以下条件之一/任一”显式引导替代关系时，各分支之间的
+            # 分隔可以由顿号、逗号或分号承担；分支本身仍必须逐一定名于原文。
+            if _ALTERNATIVE_LEAD_IN.search(compact_source) and re.search(
+                r"[、，；。;,\n]", between
+            ):
+                return True
+    return False
+
+
 def _walk_expressions(rule: Rule):
     for component in rule.components:
         yield component.expression
@@ -312,6 +516,112 @@ def _walk_expression_tree(expression):
     if expression.kind == "logical":
         for child in expression.children:
             yield from _walk_expression_tree(child)
+
+
+def _negated_predicates(expression):
+    """Yield predicates whose truth value is inverted by an immediate NOT."""
+
+    if expression.kind != "logical":
+        return
+    if expression.operator == LogicalOperator.NOT:
+        yield from iter_atomic_predicates(expression.children[0])
+        return
+    for child in expression.children:
+        yield from _negated_predicates(child)
+
+
+def _source_supports_predicate_negation(predicate) -> bool:
+    """Require an explicit absence construction bound to the asserted object.
+
+    Result words such as ``阴性`` and lexical prefixes inside terms such as
+    ``不良事件`` or ``非特异性抗体`` are categorical content, not a
+    license to invert an arbitrary predicate.
+    """
+
+    source = re.sub(r"\s+", "", _predicate_text(predicate))
+    terms = list(
+        dict.fromkeys(
+            re.sub(r"\s+", "", term)
+            for term in (predicate.source_term, predicate.attribute)
+            if term and len(re.sub(r"\s+", "", term)) >= 2
+        )
+    )
+    if not source or not terms:
+        return False
+    prefixes = (
+        "无",
+        "没有",
+        "否认",
+        "未见",
+        "未发现",
+        "未发生",
+        "未患",
+        "未使用",
+        "未接受",
+        "未接种",
+        "未参加",
+        "未签署",
+        "未完成",
+        "未进行",
+        "不具备",
+        "不符合",
+        "不满足",
+        "不存在",
+    )
+    suffixes = (
+        "不存在",
+        "未发生",
+        "未完成",
+        "未签署",
+        "不符合",
+        "不满足",
+        "不具备",
+    )
+    for term in terms:
+        escaped = re.escape(term)
+        if any(
+            re.search(re.escape(prefix) + r"[^，；。\n]{0,8}" + escaped, source)
+            for prefix in prefixes
+        ):
+            return True
+        if any(
+            re.search(escaped + r"[^，；。\n]{0,4}" + re.escape(suffix), source)
+            for suffix in suffixes
+        ):
+            return True
+    return False
+
+
+def _source_supports_negative_comparator(predicate) -> bool:
+    """Bind NE/NOT_IN to an explicit comparison against the stated value."""
+
+    source = re.sub(r"\s+", "", _predicate_text(predicate))
+    if not source:
+        return False
+    if predicate.comparator == Comparator.NE:
+        rendered = str(predicate.value)
+        if isinstance(predicate.value, float) and predicate.value.is_integer():
+            rendered = str(int(predicate.value))
+        return rendered in source and bool(
+            re.search(r"(?:≠|不等于|不是)", source)
+        )
+    if predicate.comparator != Comparator.NOT_IN:
+        return True
+    values = predicate.value if isinstance(predicate.value, list) else []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        compact_value = re.sub(r"\s+", "", value)
+        if not compact_value or compact_value not in source:
+            continue
+        if re.search(
+            r"(?:不属于|不在|不包括|不含|不是|非)"
+            r"[^，；。\n]{0,4}"
+            + re.escape(compact_value),
+            source,
+        ):
+            return True
+    return False
 
 
 def _exception_applies_to_trigger(text: str, trigger_clauses: Sequence[str]) -> bool:
@@ -343,12 +653,223 @@ def _normalized(text: str) -> str:
     return re.sub(r"[\s，。；：、（）()【】\[\]]+", "", text).lower()
 
 
+def _substantive_obligation_segments(text: str) -> list[str]:
+    """Split one official parent rule into independently material obligations.
+
+    This is deliberately narrower than general Chinese sentence segmentation.
+    We split top-level clinical clauses and explicit conjunctions while keeping
+    parenthetical examples and OR alternatives together. Structural lead-ins
+    are ignored because they do not create an independently assessable fact.
+    """
+
+    segments: list[str] = []
+    current: list[str] = []
+    depth = 0
+    index = 0
+    conjunctions = ("并且", "同时", "而且", "且")
+    while index < len(text):
+        char = text[index]
+        if char in "（(":
+            depth += 1
+        elif char in "）)" and depth:
+            depth -= 1
+        if depth == 0 and char in "，；。\n":
+            candidate = "".join(current).strip()
+            if candidate:
+                segments.append(candidate)
+            current = []
+            index += 1
+            continue
+        matched = next(
+            (
+                token
+                for token in conjunctions
+                if depth == 0 and text.startswith(token, index)
+            ),
+            None,
+        )
+        if matched:
+            candidate = "".join(current).strip()
+            if candidate:
+                segments.append(candidate)
+            current = []
+            index += len(matched)
+            continue
+        current.append(char)
+        index += 1
+    candidate = "".join(current).strip()
+    if candidate:
+        segments.append(candidate)
+
+    # 结构引导语只允许封闭的引导词表：主语、助动词、满足/符合、“以下/下列”、
+    # 量词（所有/全部/各项/任一/之一）和条件、标准等空泛名词。任何临床内容词
+    # 都无法全匹配，因此实质性条件不会被该正则吞掉（fail-closed）。
+    structural = re.compile(
+        r"^(?:受试者|患者|志愿者|男性|女性|男女性|男女|两性|成人|儿童)*"
+        r"(?:均)?(?:必须|应|需|需要)?(?:同时)?(?:均须|均需|均应)?"
+        r"(?:满足|符合|具备|达到)(?:以下|下列|下述|如下)"
+        r"(?:所有|全部|各项|任一|任何一|任意一)?(?:之一|项|条|个)?(?:的)?"
+        r"(?:入选|排除|纳入|除外)?(?:条件|标准|要求|情形|情况|条款)?"
+        r"(?:之一|任一项|任意一项|任何一项|一项或多项)?"
+        r"(?:方可入组|方可参加|才能入组|即可|者)?(?:入组)?$|"
+        r"^(?:包括(?:以下|下列|如下)?(?:情形|情况|条件|要求)?|"
+        r"包括但不限于|如下|具体如下|除外标准|入选标准|排除标准)$|"
+        r"^(?:正在)?(?:使用|接受|具有|患有|存在)(?:或有)?"
+        r"(?:以下|下列)(?:治疗|用药|疾病|病史|情况|条件|情形)(?:史)?"
+        r"(?:或(?:治疗|用药|疾病|病史|情况|条件|情形)(?:史)?)?$|"
+        r"^(?:或者)?(?:以下|下列|如下)列出的(?:相关)?(?:疾病|病史|情况|条件|情形)$|"
+        r"^根据[^，；。]{1,40}(?:推断|判断|评估)$|"
+        r"^(?:整个|全程)?(?:研究|试验|治疗|用药|随访)期间(?:从.{1,80})?$|"
+        r"^(?:预筛|筛选|导入|基线|随机|首次给药)(?:期|访视)?(?:时)?"
+        r"(?:(?:和|与|及|或|、)(?:预筛|筛选|导入|基线|随机|首次给药)(?:期|访视)?(?:时)?)+"
+        r"(?:必须|应|需|需要)?(?:满足|符合|具备|达到)(?:以下|下列|下述|如下)"
+        r"(?:条件|标准|要求|情形|情况|条款)$"
+    )
+    stage_only = re.compile(
+        r"^(?:在)?(?:预筛|筛选|导入|基线|随机|首次给药|签署icf|知情同意)"
+        r"(?:期|访视)?(?:前|后|时|当日)?$"
+    )
+    # 非限制性人群描述：人口学属性名词 + “不限/均可/无特殊要求”等非限制谓语，
+    # 或“无论/不论 + 属性”的让步短语。这些描述不产生可核对的实质性条件，
+    # 不得据此要求模型虚构男/女等分类原子（与提示合同一致）。
+    nonrestrictive = re.compile(
+        r"^(?:不论|无论|不管)?(?:性别|年龄|男女性|男女|两性|种族|民族|婚姻状况|婚姻|宗教信仰|宗教|职业|地域)"
+        r"(?:(?:和|与|及|或|、)?(?:性别|年龄|男女性|男女|两性|种族|民族|婚姻状况|婚姻|宗教信仰|宗教|职业|地域))*"
+        r"(?:均)?(?:不限|无限制|不作限制|无特殊要求|均可)"
+        r"(?:参加|参与|纳入|入组)?(?:本|该)?(?:研究)?$|"
+        r"^不限(?:性别|年龄|男女性|男女|两性|种族|民族|婚姻状况)$|"
+        r"^(?:不论|无论|不管)(?:其)?(?:性别|男女性|男女|两性|种族|民族)(?:如何|怎样|为何)?"
+        r"(?:均)?(?:可|可以|皆可)?(?:参与|纳入|入组|参加)?(?:本|该)?(?:研究)?$|"
+        r"^(?:可以|可|允许)(?:纳入|入组|参加)(?:本|该)?研究$"
+    )
+    return list(
+        dict.fromkeys(
+            segment
+            for segment in segments
+            if len(_normalized(segment)) >= 3
+            and not structural.fullmatch(_normalized(segment))
+            and not stage_only.fullmatch(_normalized(segment))
+            and not nonrestrictive.fullmatch(_normalized(segment))
+        )
+    )
+
+
+def _longest_common_run(first: str, second: str) -> int:
+    """Return the longest contiguous shared run without fuzzy semantics."""
+
+    if not first or not second:
+        return 0
+    previous = [0] * (len(second) + 1)
+    longest = 0
+    for left in first:
+        current = [0]
+        for position, right in enumerate(second, start=1):
+            value = previous[position - 1] + 1 if left == right else 0
+            current.append(value)
+            longest = max(longest, value)
+        previous = current
+    return longest
+
+
+def _predicate_binds_obligation(predicate, segment: str) -> bool:
+    """Require both a verbatim locator and a semantic identity for a clause."""
+
+    normalized_segment = _normalized(segment)
+    clauses = [_normalized(clause) for clause in predicate.exact_source_clauses]
+    if not normalized_segment or not clauses:
+        return False
+    locator_overlaps = any(
+        clause in normalized_segment
+        or normalized_segment in clause
+        or _longest_common_run(clause, normalized_segment) >= 4
+        for clause in clauses
+    )
+    if not locator_overlaps:
+        return False
+
+    terms = [predicate.source_term, predicate.attribute]
+    if isinstance(predicate.value, str):
+        terms.append(predicate.value)
+    elif isinstance(predicate.value, list):
+        terms.extend(value for value in predicate.value if isinstance(value, str))
+    semantic_terms = [_normalized(term) for term in terms if term and _normalized(term)]
+    if any(
+        term in normalized_segment
+        or normalized_segment in term
+        or _longest_common_run(term, normalized_segment) >= 2
+        for term in semantic_terms
+        if len(term) >= 2
+    ):
+        return True
+    if predicate.requires_professional_judgment and "研究者" in normalized_segment:
+        return True
+    values = predicate.value if isinstance(predicate.value, list) else [predicate.value]
+    source_numbers = _numeric_tokens(segment)
+    return any(
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and _numeric_value_in_tokens(value, source_numbers)
+        for value in values
+    )
+
+
+def _categorical_values_are_source_terms(predicate) -> bool:
+    """Reject character fragments while preserving explicit short enumerations."""
+
+    values = predicate.value if isinstance(predicate.value, list) else []
+    if predicate.comparator not in {Comparator.IN, Comparator.NOT_IN} or not values:
+        return True
+    if not all(isinstance(value, str) and value.strip() for value in values):
+        return False
+    source = re.sub(r"\s+", "", _predicate_text(predicate))
+    compact_values = [re.sub(r"\s+", "", value) for value in values]
+    if not source or any(value not in source for value in compact_values):
+        return False
+
+    # One-character categories are valid only when the protocol itself lists
+    # them as alternatives, for example "男或女" or "A/B". This prevents
+    # a model from turning "斑块状" into the invented set ["斑", "块"].
+    if any(len(value) == 1 for value in compact_values):
+        if len(compact_values) < 2:
+            return False
+        separator = r"(?:或|、|/|和|及|与)"
+        patterns = (
+            separator.join(re.escape(value) for value in compact_values),
+            separator.join(re.escape(value) for value in reversed(compact_values)),
+        )
+        return any(re.search(pattern, source) for pattern in patterns)
+
+    source_term = re.sub(r"\s+", "", predicate.source_term or "")
+    for value in compact_values:
+        if source_term and value == source_term:
+            continue
+        start = source.find(value)
+        following = source[start + len(value) : start + len(value) + 1]
+        if following in {"状", "型", "类"} and not value.endswith(("状", "型", "类")):
+            return False
+    return True
+
+
+# 明确的替代关系引导语：只有“之一/任一/任何一项”等替代连接语直接绑定在
+# 条件、标准、项、条等结构名词上时才成立。“常见类型之一”这类非结构用法
+# 不匹配，保持实质条件的 fail-closed。
+_ALTERNATIVE_LEAD_IN = re.compile(
+    r"(?:条件|标准|要求|情形|情况|条款|项|条|者)之一"
+    r"|(?:以下|下列|如下|下述)[^，。；；\n]{0,6}之一"
+    r"|(?:\d+|[一二两三四五六七八九十百]+)(?:种|类|项|个|条)?[^，。；\n]{0,12}之一"
+    r"|任选其一|满足其一|符合其一"
+    r"|一项或多项|至少一项|至少一条|任一条|任意一项|任意一条|任何一条"
+)
+
+
 def _has_unambiguous_disjunction(text: str) -> bool:
     normalized = _normalized(text)
     if any(
         token in normalized
         for token in ("任一", "任何一项", "至少一项", "和/或", "及/或")
     ):
+        return True
+    if _ALTERNATIVE_LEAD_IN.search(normalized):
         return True
     if re.search(r"[，；;。]\s*或", text):
         return True
@@ -564,6 +1085,17 @@ def _source_frequency_specs(text: str) -> set[tuple[int, TimeUnit, int, str]]:
     return specs
 
 
+def _frequency_repair_action() -> str:
+    return (
+        "先区分数值结构缺失与原文绑定缺失。若 occurrence_window.duration、次数阈值或"
+        " minimum_count 已正确，不要反复改写这些值；为同一谓词补全逐字 source_clause"
+        "（或 source_clauses），片段须包含该事件及其频次定义，并用 source_term 保留原文事件名称。"
+        "若数值结构缺失，次数用数值谓词或 occurrence_window.minimum_count，周期内天数用天数阈值；"
+        "均用 occurrence_window.duration 保留观察周期。频次只约束原文直接限定的事件或示例分支，"
+        "不得套到无关兄弟分支，不得新增或改写原文。"
+    )
+
+
 def _predicate_preserves_frequency(
     predicate, spec: tuple[int, TimeUnit, int, str]
 ) -> bool:
@@ -654,12 +1186,19 @@ class ProtocolDeconstructionGate:
         self._tree_integrity(draft, issues["tree_integrity"])
         self._boolean_logic(source_input, draft, issues["boolean_logic"])
         self._numeric_semantics(source_input, draft, issues["numeric_semantics"])
-        self._temporal_semantics(source_input, draft, issues["temporal_semantics"])
+        anchor_context = _anchor_resolution_context(
+            source_input, interpretation_conflicts
+        )
+        self._temporal_semantics(
+            source_input, draft, issues["temporal_semantics"], anchor_context
+        )
         self._workflow_coverage(source_input, draft, issues["workflow_coverage"])
         self._evidence_coverage(draft, issues["evidence_coverage"])
         self._source_coverage(source_input, draft, source_spans, issues["source_coverage"])
         self._interpretation_authority(
-            interpretation_conflicts, issues["interpretation_authority"]
+            interpretation_conflicts,
+            issues["interpretation_authority"],
+            anchor_context.authority_issues,
         )
         self._diff_integrity(
             draft, previous_draft, declared_diff, issues["diff_integrity"]
@@ -964,15 +1503,63 @@ class ProtocolDeconstructionGate:
                     token in normalized
                     for token in ("且", "并且", "同时", "均需", "全部")
                 )
-                has_or = _has_unambiguous_disjunction(text)
+                has_or = _has_unambiguous_disjunction(text) or any(
+                    _branches_have_source_disjunction(node, text)
+                    for node in _walk_expression_tree(component.expression)
+                    if node.kind == "logical"
+                )
                 expression = component.expression
+                expressions = [component.expression]
+                if component.exception_expression is not None:
+                    expressions.append(component.exception_expression)
+                for candidate_expression in expressions:
+                    for predicate in _negated_predicates(candidate_expression):
+                        if _source_supports_predicate_negation(predicate):
+                            continue
+                        issues.append(
+                            _issue(
+                                "boolean_logic",
+                                "NEGATION_NOT_BOUND_TO_SOURCE",
+                                f"{component.display_code} 的否定逻辑没有与原文中被断言的对象直接绑定。",
+                                [predicate.predicate_id],
+                                action=(
+                                    "请只在原文直接表达‘无、未、否认、不存在’等对该对象的否定时使用逻辑否定；"
+                                    "‘阴性’、‘不良事件’、‘非特异性’等应保留为原文分类或术语，不得据此反转整个条件。"
+                                ),
+                            )
+                        )
+                    for predicate in iter_atomic_predicates(candidate_expression):
+                        if predicate.comparator not in {
+                            Comparator.NE,
+                            Comparator.NOT_IN,
+                        } or _source_supports_negative_comparator(predicate):
+                            continue
+                        issues.append(
+                            _issue(
+                                "boolean_logic",
+                                "NEGATIVE_COMPARATOR_NOT_BOUND_TO_SOURCE",
+                                f"{component.display_code} 的否定比较没有与原文中的比较值直接绑定。",
+                                [predicate.predicate_id],
+                                action=(
+                                    "ne 只能对应原文明确的‘≠/不等于’；not_in 必须直接对应‘不属于、不在、不包括、非’及其后的具体分类值。"
+                                ),
+                            )
+                        )
+                unsupported_any = any(
+                    node.kind == "logical"
+                    and node.operator == LogicalOperator.ANY
+                    and not _is_population_scoped_any(node)
+                    and not (
+                        has_or and _any_branches_preserve_internal_conjunction(node)
+                    )
+                    and not _any_is_same_event_time_alternatives(node, text)
+                    and not _branches_have_source_disjunction(node, text)
+                    for node in _walk_expression_tree(expression)
+                )
                 if (
                     has_and
                     and not has_or
-                    and expression.kind == "logical"
-                    and expression.operator == LogicalOperator.ANY
-                    and not _is_population_scoped_any(expression)
-                    and not _any_branches_preserve_internal_conjunction(expression)
+                    and unsupported_any
                 ):
                     issues.append(
                         _issue(
@@ -980,6 +1567,20 @@ class ProtocolDeconstructionGate:
                             "CONJUNCTION_CHANGED_TO_DISJUNCTION",
                             f"{component.display_code} 原文仅表达并列同时满足，草稿却使用了任一满足。",
                             [component.rule_component_id],
+                        )
+                    )
+                elif unsupported_any:
+                    issues.append(
+                        _issue(
+                            "boolean_logic",
+                            "DISJUNCTION_NOT_BOUND_TO_SOURCE",
+                            f"{component.display_code} 的任一满足分支没有与原文中各分支及其‘或/任一’连接语直接绑定。",
+                            [component.rule_component_id],
+                            action=(
+                                "请让每个任一满足分支分别对应原文中的完整条件；"
+                                "顿号、逗号和普通并列列举只是术语清单，原文没有明确‘或/任一/之一’时不得拆成替代分支或补写‘或’；"
+                                "‘筛选或基线’是审核节点，‘2次或以上’是次数阈值，都不能单独作为触发条件的替代路径。"
+                            ),
                         )
                     )
                 if (
@@ -1051,6 +1652,24 @@ class ProtocolDeconstructionGate:
                                 )
                             )
                     if (
+                        _localized_open_list_exception_requires_exclusivity(text)
+                        and not _exception_asserts_exclusivity(
+                            component.exception_expression
+                        )
+                    ):
+                        issues.append(
+                            _issue(
+                                "boolean_logic",
+                                "LOCAL_EXCEPTION_MAY_WAIVE_CONCURRENT_TRIGGER",
+                                f"{component.display_code} 的局部例外可能错误豁免同时存在的其他触发情况。",
+                                [component.rule_component_id],
+                                action=(
+                                    "开放列举中的括号例外只排除其紧邻实例。若保留组件级例外，"
+                                    "请明确结构化为该例外是唯一相关情况；否则拆分为不会互相豁免的独立触发组件。"
+                                ),
+                            )
+                        )
+                    if (
                         parenthetical_exceptions
                         and component.expression.kind == "logical"
                         and component.expression.operator == LogicalOperator.ANY
@@ -1064,7 +1683,7 @@ class ProtocolDeconstructionGate:
                                 action="请把带括号例外的触发分支拆成独立子组件，并把后续‘或’分支放入不带该例外的兄弟子组件。",
                             )
                         )
-                if "研究者" not in text or not has_and:
+                if not _source_requires_investigator_judgment(text):
                     continue
                 predicates = list(iter_atomic_predicates(component.expression))
                 if component.exception_expression is not None:
@@ -1172,6 +1791,28 @@ class ProtocolDeconstructionGate:
                                         action="请在 source_term 逐字填写本数值的原文指标名，避免把兄弟子项的检验指标套入当前阈值。",
                                     )
                                 )
+                            else:
+                                metric_identity = _normalized(
+                                    f"{predicate.subject}{predicate.attribute}"
+                                )
+                                normalized_unit = _normalized(predicate.unit or "")
+                                binds_metric_identity = bool(metric_identity) and (
+                                    source_term in metric_identity
+                                    or metric_identity in source_term
+                                )
+                                if (
+                                    source_term == normalized_unit
+                                    or not binds_metric_identity
+                                ):
+                                    issues.append(
+                                        _issue(
+                                            "numeric_semantics",
+                                            "METRIC_SOURCE_TERM_NOT_METRIC",
+                                            f"{component.display_code} 的原文指标词未绑定当前被测对象。",
+                                            [predicate.predicate_id],
+                                            action="请在 source_term 填写原文指标名，例如‘年龄’、‘病史’、‘ALT’；不得填‘岁’、‘月’、‘ULN’等单位或阈值。",
+                                        )
+                                    )
                         elif not has_precise_excerpt:
                             attribute = _normalized(predicate.attribute)
                             if (
@@ -1209,7 +1850,9 @@ class ProtocolDeconstructionGate:
                             )
 
     @staticmethod
-    def _temporal_semantics(source_input, draft, issues):
+    def _temporal_semantics(source_input, draft, issues, anchor_context=None):
+        if anchor_context is None:
+            anchor_context = _AnchorResolutionContext()
         anchor_markers = {
             AnchorType.RANDOMIZATION_DATE: ("随机前", "随机后", "随机时"),
             AnchorType.BASELINE_DATE: (
@@ -1252,6 +1895,10 @@ class ProtocolDeconstructionGate:
                 "研究结束后",
             ),
         }
+        resolved_component_bindings: dict[
+            tuple[str, str], list[AnchorResolutionStatement]
+        ] = {}
+        rules_with_unanchored_lookback: set[str] = set()
         for rule in draft.proposed_rules:
             for component in rule.components:
                 component_text = _component_text(
@@ -1304,7 +1951,7 @@ class ProtocolDeconstructionGate:
                             "FREQUENCY_WINDOW_NOT_STRUCTURED",
                             f"{component.display_code} 原文中的频次定义 {rendered} 没有形成直接绑定原文的可计算结构。",
                             [component.rule_component_id],
-                            action="请把频次周期和阈值绑定到其直接限定的事件或示例分支：次数用数值谓词或 occurrence_window.minimum_count，周期内天数用天数阈值；两者均用 occurrence_window.duration 保留观察周期，不得套到无关兄弟分支。",
+                            action=_frequency_repair_action(),
                         )
                     )
                 compact_component_text = re.sub(r"\s+", "", component_text)
@@ -1315,6 +1962,21 @@ class ProtocolDeconstructionGate:
                 ):
                     required_stages.add(ReviewStage.SCREENING)
                 if re.search(r"基线(?:期|访视)?时", compact_component_text):
+                    required_stages.add(ReviewStage.BASELINE)
+                baseline_decision_anchors = {
+                    AnchorType.BASELINE_DATE,
+                    AnchorType.RANDOMIZATION_DATE,
+                    AnchorType.FIRST_DOSE_DATE,
+                    AnchorType.STUDY_DRUG_ADMINISTRATION_DATE,
+                }
+                if any(
+                    expression.time_constraint is not None
+                    and expression.time_constraint.anchor_type
+                    in baseline_decision_anchors
+                    and expression.time_constraint.direction
+                    in {TimeDirection.BEFORE, TimeDirection.ON}
+                    for expression in atomic_expressions
+                ):
                     required_stages.add(ReviewStage.BASELINE)
                 actual_stages = {
                     requirement.due_stage
@@ -1339,7 +2001,7 @@ class ProtocolDeconstructionGate:
                             )
                             + "的资料核对要求。",
                             [component.rule_component_id],
-                            action="请保留一个原子条件，并为原文明确要求的每个审核阶段分别建立 due_stage 资料要求；不要复制原子条件或添加日期约束。",
+                            action="请保留一个原子条件，并为原文明确要求的每个审核阶段分别建立 due_stage 资料要求；以基线、随机或首次给药为锚点的前置条件必须在基线节点完成最终复核，筛选期提前关注不能替代该节点；不要复制原子条件或添加日期约束。",
                         )
                     )
                 component_validity_specs = _source_validity_specs(component_text)
@@ -1519,6 +2181,8 @@ class ProtocolDeconstructionGate:
                         and not source_validity_windows
                         and not is_future_plan_window
                     )
+                    if is_unanchored_lookback:
+                        rules_with_unanchored_lookback.add(rule.official_code)
                     occurrence_window = predicate.occurrence_window
                     prospective_window = predicate.prospective_window
                     prospective_period = predicate.prospective_period
@@ -1731,7 +2395,34 @@ class ProtocolDeconstructionGate:
                             )
                         )
                         continue
-                    if not expected:
+                    review_node_binding_ok = False
+                    if constraint.anchor_type == AnchorType.REVIEW_NODE_DATE:
+                        if expected or component_expected:
+                            issues.append(
+                                _issue(
+                                    "temporal_semantics",
+                                    "INTERPRETATION_ANCHOR_REJECTED",
+                                    f"{component.display_code} 的原文已命名时间锚点，不得改用审核节点日期锚点替代。",
+                                    [predicate.predicate_id],
+                                    action="命名锚点以方案原文为准；审核节点日期锚点只用于原文确实未命名回溯锚点的条款。",
+                                )
+                            )
+                            continue
+                        review_node_binding_ok = (
+                            ProtocolDeconstructionGate._evaluate_review_node_constraint(
+                                rule,
+                                component,
+                                component_draft,
+                                predicate.predicate_id,
+                                constraint,
+                                anchor_context,
+                                resolved_component_bindings,
+                                issues,
+                            )
+                        )
+                        if not review_node_binding_ok:
+                            continue
+                    if not expected and not review_node_binding_ok:
                         direction_suffix = {
                             "before": "前",
                             "after": "后",
@@ -1770,18 +2461,21 @@ class ProtocolDeconstructionGate:
                         )
                         continue
                     if constraint.anchor_type not in expected:
-                        issues.append(
-                            _issue(
-                                "temporal_semantics",
-                                "TIME_ANCHOR_CHANGED",
-                                f"{component.display_code} 的时间锚点与当前原子条件原文不一致。",
-                                [
-                                    predicate.predicate_id,
-                                    constraint.anchor_type.value,
-                                ],
-                                action="请按当前原子条件保留随机、基线、筛选或知情同意的实际锚点，不能互相替代。",
+                        if review_node_binding_ok:
+                            pass
+                        else:
+                            issues.append(
+                                _issue(
+                                    "temporal_semantics",
+                                    "TIME_ANCHOR_CHANGED",
+                                    f"{component.display_code} 的时间锚点与当前原子条件原文不一致。",
+                                    [
+                                        predicate.predicate_id,
+                                        constraint.anchor_type.value,
+                                    ],
+                                    action="请按当前原子条件保留随机、基线、筛选或知情同意的实际锚点，不能互相替代。",
+                                )
                             )
-                        )
                     if has_before and not has_on and constraint.direction.value != "before":
                         issues.append(
                             _issue(
@@ -1874,6 +2568,168 @@ class ProtocolDeconstructionGate:
                                 [predicate.predicate_id],
                             )
                         )
+        ProtocolDeconstructionGate._verify_anchor_resolution_coverage(
+            draft,
+            anchor_context,
+            rules_with_unanchored_lookback,
+            resolved_component_bindings,
+            issues,
+        )
+
+    @staticmethod
+    def _evaluate_review_node_constraint(
+        rule,
+        component,
+        component_draft,
+        predicate_id,
+        constraint,
+        anchor_context,
+        resolved_bindings,
+        issues,
+    ) -> bool:
+        """审核节点日期锚点只在合法解释解析绑定下可发布；越权失败关闭。
+
+        返回 True 表示绑定有效，调用方仍需继续执行逐字窗口核验；返回 False
+        表示已生成失败关闭问题。
+        """
+
+        refs = [component.rule_component_id, predicate_id]
+        if constraint.direction != TimeDirection.BEFORE:
+            issues.append(
+                _issue(
+                    "temporal_semantics",
+                    "INTERPRETATION_ANCHOR_REJECTED",
+                    f"{component.display_code} 的审核节点日期锚点只能以 before 方向表达既往回溯。",
+                    refs,
+                    action="请保留唯一正式原子条件，并使用 direction=before 与原文逐字时长；不得改为 after 或 on。",
+                )
+            )
+            return False
+        candidates = anchor_context.resolutions_for_rule(rule.official_code)
+        if not candidates:
+            issues.append(
+                _issue(
+                    "temporal_semantics",
+                    "INTERPRETATION_ANCHOR_REJECTED",
+                    f"{component.display_code} 使用了审核节点日期锚点，但没有来源明确的解释材料解析该未命名回溯锚点。",
+                    refs,
+                    action="没有解释来源时必须保留待确认的回溯缺口，不得自行使用审核节点日期锚点。",
+                )
+            )
+            return False
+        component_source_refs = (
+            set(component_draft.source_refs) if component_draft is not None else set()
+        )
+        matched = [
+            resolution
+            for resolution in candidates
+            if component_source_refs & set(resolution.ambiguous_source_refs)
+        ]
+        if not matched:
+            issues.append(
+                _issue(
+                    "temporal_semantics",
+                    "INTERPRETATION_ANCHOR_REJECTED",
+                    f"{component.display_code} 的方案来源定位与解释解析声明的歧义来源不匹配。",
+                    sorted(
+                        {resolution.resolution_id for resolution in candidates}
+                    )
+                    + refs,
+                    action="解释只能解析其声明的原歧义条款；请核对解析绑定的方案来源定位与该原子条件来源是否一致。",
+                )
+            )
+            return False
+        resolved_bindings[(rule.official_code, component.rule_component_id)] = matched
+        return True
+
+    @staticmethod
+    def _verify_anchor_resolution_coverage(
+        draft,
+        anchor_context,
+        rules_with_unanchored_lookback,
+        resolved_bindings,
+        issues,
+    ) -> None:
+        """解析声明的规则必须有未命名回溯缺口、目标节点必须存在，且绑定组件的
+        资料要求必须覆盖全部目标审核节点。"""
+
+        if not anchor_context.bindings:
+            return
+        stage_values = {stage.stage for stage in draft.proposed_workflow_stages}
+        rules_by_code = {rule.official_code: rule for rule in draft.proposed_rules}
+        for _source, resolution in anchor_context.bindings:
+            for code in resolution.affected_rule_refs:
+                refs = [resolution.resolution_id, code]
+                if code not in rules_by_code:
+                    issues.append(
+                        _issue(
+                            "temporal_semantics",
+                            "INTERPRETATION_ANCHOR_REJECTED",
+                            f"解释解析 {resolution.resolution_id} 声明的父规则 {code} 不在本次草稿中。",
+                            refs,
+                        )
+                    )
+                    continue
+                if code not in rules_with_unanchored_lookback:
+                    issues.append(
+                        _issue(
+                            "temporal_semantics",
+                            "INTERPRETATION_ANCHOR_REJECTED",
+                            f"解释解析 {resolution.resolution_id} 声明 {code} 存在未命名回溯锚点，"
+                            "但该条款的解构结果没有未命名回溯缺口；解释与方案不一致。",
+                            refs,
+                            action="解释材料只能澄清确实模糊的条款；请核对方案原文或撤回该解析。",
+                        )
+                    )
+                missing_stages = [
+                    stage
+                    for stage in resolution.target_review_stages
+                    if stage not in stage_values
+                ]
+                if missing_stages:
+                    rendered = "、".join(
+                        sorted(stage.value for stage in missing_stages)
+                    )
+                    issues.append(
+                        _issue(
+                            "temporal_semantics",
+                            "INTERPRETATION_ANCHOR_REJECTED",
+                            f"解释解析 {resolution.resolution_id} 声明的目标审核节点 {rendered} 在草稿流程中不存在。",
+                            refs,
+                            action="请只声明本次方案流程中已有的审核节点，不得为解析虚构审核节点。",
+                        )
+                    )
+        components_by_id = {
+            component.rule_component_id: component
+            for rule in draft.proposed_rules
+            for component in rule.components
+        }
+        for (rule_code, component_id), matched in sorted(resolved_bindings.items()):
+            component = components_by_id.get(component_id)
+            if component is None:
+                continue
+            required_stages = {
+                stage
+                for resolution in matched
+                for stage in resolution.target_review_stages
+            }
+            actual_stages = {
+                requirement.due_stage
+                for requirement in component.evidence_requirements
+            }
+            missing = required_stages - actual_stages
+            if missing:
+                rendered = "、".join(sorted(stage.value for stage in missing))
+                issues.append(
+                    _issue(
+                        "temporal_semantics",
+                        "INTERPRETATION_ANCHOR_REQUIREMENT_MISSING",
+                        f"{component.display_code} 的资料要求未覆盖解释解析声明的全部目标审核节点（缺 {rendered}）。",
+                        [component.rule_component_id, rule_code],
+                        action="请在该组件下为解释声明的每个目标审核节点分别建立 due_stage 资料要求；"
+                        "它们是同一核对义务的逐节点实例，不得复制原子条件。",
+                    )
+                )
 
     @staticmethod
     def _workflow_coverage(source_input, draft, issues):
@@ -2371,6 +3227,56 @@ class ProtocolDeconstructionGate:
                         scope=[official_code],
                     )
                 )
+
+        rules_by_code = {rule.official_code: rule for rule in draft.proposed_rules}
+        for item in source_input.parent_rule_catalog.items:
+            official_code = item.official_code or item.item_id
+            rule = rules_by_code.get(item.official_code or "")
+            if rule is None:
+                continue
+            parent_texts = [
+                materials[span_id]
+                for span_id in item.source_span_ids
+                if span_id in materials and _normalized(materials[span_id])
+            ]
+            if not parent_texts and item.label:
+                parent_texts = [item.label]
+            obligations = [
+                segment
+                for text in parent_texts
+                for segment in _substantive_obligation_segments(text)
+            ]
+            predicates = [
+                predicate
+                for expression in _walk_expressions(rule)
+                for predicate in iter_atomic_predicates(expression)
+            ]
+            uncovered = [
+                segment
+                for segment in dict.fromkeys(obligations)
+                if not any(
+                    _predicate_binds_obligation(predicate, segment)
+                    for predicate in predicates
+                )
+            ]
+            if uncovered:
+                issues.append(
+                    _issue(
+                        "source_coverage",
+                        "PARENT_RULE_OBLIGATION_NOT_COVERED",
+                        f"{official_code} 原文中有实质性条件没有进入可判定的原子条件。",
+                        [
+                            official_code,
+                            *[f"未承接：{segment[:80]}" for segment in uncovered],
+                        ],
+                        action=(
+                            "请逐项保留父条款中的病史时长、疾病状态、时间窗、数值阈值、"
+                            "研究者判断及其他并列要求；每项必须由原子条件的指标名或分类词与逐字原文共同承接，"
+                            "仅引用整句原文不代表已完成解构。"
+                        ),
+                        scope=[official_code],
+                    )
+                )
         invalid_excerpts = []
         missing_excerpts = []
         for item in draft.component_drafts:
@@ -2437,6 +3343,25 @@ class ProtocolDeconstructionGate:
                     "部分原子条件没有绑定所属子规则中可逐字核对的原文子句。",
                     sorted(set(invalid_clauses)),
                     action="请逐字绑定直接支撑当前原子条件的原文；连续子句使用 source_clause。不连续的共同前缀、当前分支和共同尾句必须用 source_clauses 分段保存，例如‘随机前12周/4周’的4周分支应分别保存‘随机前’与‘4周’，不得拼成原文不存在的‘随机前4周’。",
+                )
+            )
+        fragmented_categories = []
+        for rule in draft.proposed_rules:
+            for expression in _walk_expressions(rule):
+                for predicate in iter_atomic_predicates(expression):
+                    if not _categorical_values_are_source_terms(predicate):
+                        fragmented_categories.append(predicate.predicate_id)
+        if fragmented_categories:
+            issues.append(
+                _issue(
+                    "source_coverage",
+                    "CATEGORICAL_VALUE_NOT_WHOLE_SOURCE_TERM",
+                    "部分分类值不是方案原文中可独立核对的完整分类词。",
+                    sorted(set(fragmented_categories)),
+                    action=(
+                        "请把分类值按原文完整词项保留，不得拆成单个字或截断类型后缀；"
+                        "单字分类只在原文明示枚举时允许，例如‘男或女’或‘A/B’。"
+                    ),
                 )
             )
         parent_sources = {
@@ -2573,7 +3498,9 @@ class ProtocolDeconstructionGate:
         # 此处补充：requirement 来源还必须在 allowed 范围内（上方 DRAFT_SOURCE_NOT_FORMALLY_LOCATED 已覆盖）。
 
     @staticmethod
-    def _interpretation_authority(conflicts, issues):
+    def _interpretation_authority(conflicts, issues, anchor_authority_issues=()):
+        for issue in anchor_authority_issues:
+            issues.append(issue)
         blocking = [item.conflict_id for item in conflicts if item.blocks_publication]
         if blocking:
             issues.append(

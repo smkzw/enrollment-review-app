@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.agents.deepseek_protocol_transport import DeepSeekProtocolAgentTransport
+from app.agents.protocol_semantic_transport import DeepSeekProtocolAgentTransport
 from app.agents.protocol_deconstructor import (
     ProtocolDeconstructorRunner,
     protocol_prompt_template_sha256,

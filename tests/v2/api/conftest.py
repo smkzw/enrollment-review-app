@@ -21,6 +21,14 @@ DEMO_STEPS = [
 ]
 
 
+@pytest.fixture(autouse=True)
+def _stable_semantic_route_preflight_env(monkeypatch):
+    """Keep API lifespan preflight off the network and non-strict by default."""
+
+    monkeypatch.setenv("ENROLLMENT_SEMANTIC_ROUTE_PREFLIGHT_MODE", "degrade")
+    monkeypatch.setenv("ENROLLMENT_SEMANTIC_ENDPOINT_PREFLIGHT", "0")
+
+
 @pytest.fixture
 def build_app(data_paths):
     """构造 V2 应用的工厂：可注入执行器、轮询与后台 runner 开关。"""

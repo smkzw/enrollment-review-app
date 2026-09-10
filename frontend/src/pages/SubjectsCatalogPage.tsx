@@ -298,6 +298,13 @@ export function SubjectsCatalogPage() {
                       ? "上传资料"
                       : `查看${episode.stageLabel}资料`}
                   </RouteLink>
+                  {episode.activeEvidenceProcessingRevisionId !== null && (
+                    <RouteLink to="/profiles" params={{ project: episode.projectId,
+                      subject: episode.subjectId, episode: episode.reviewEpisodeId }}
+                      className="button" ariaLabel={`查看${episode.stageLabel}个例档案`}>
+                      查看个例档案
+                    </RouteLink>
+                  )}
                 </article>
               ))}
             </div>

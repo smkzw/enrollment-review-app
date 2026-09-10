@@ -168,7 +168,7 @@ describe("中文标签：合同词核对", () => {
 
   it("固定界面短语可用", () => {
     expect(UI_PHRASES.precisionPrefix).toBe("定位精度");
-    expect(UI_PHRASES.degradationPrefix).toBe("定位降级原因");
+    expect(UI_PHRASES.degradationPrefix).toBe("定位范围说明");
     expect(UI_PHRASES.evidenceMissing).toBe("资料中提到这份文件，但当前尚未提供");
     expect(UI_PHRASES.prototypeOnly).toBe("界面试用");
     expect(UI_PHRASES.noTodos).toBe("当前没有待处理事项");
@@ -220,6 +220,7 @@ describe("中文标签：穷尽与卫生", () => {
         "requirement_not_met",
       ],
       GapType: [
+        "observation_unverified",
         "record_incomplete",
         "description_insufficient",
         "historical_source_unavailable",

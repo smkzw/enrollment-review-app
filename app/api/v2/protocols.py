@@ -35,6 +35,7 @@ from app.api.v2.protocol_schemas import (
     ProtocolSessionResponse,
     PublishRequest,
     PublishResponse,
+    RegisterInterpretationSourcesRequest,
     SourcesResponse,
     StartDeconstructionResponse,
     StartFeedbackRevisionRequest,
@@ -409,6 +410,7 @@ def start_feedback_re_deconstruction(
     result = _service(request).start_feedback_re_deconstruction(
         project_id=payload.project_id,
         idempotency_key=payload.idempotency_key,
+        interpretation_sources=payload.interpretation_sources,
         actor=payload.actor,
     )
     if not result.created:
@@ -546,6 +548,24 @@ def cancel_draft(
         expected_revision_id=body.expected_revision_id,
     )
     return _draft_dto(view)
+
+@router.post(
+    "/{job_id}/interpretation-sources",
+    response_model=SourcesResponse,
+)
+def register_interpretation_sources(
+    job_id: str,
+    body: RegisterInterpretationSourcesRequest,
+    request: Request,
+) -> SourcesResponse:
+    payload = _service(request).register_interpretation_sources(
+        job_id,
+        expected_revision_id=body.expected_revision_id,
+        idempotency_key=body.idempotency_key,
+        interpretation_sources=body.interpretation_sources,
+        actor=body.actor,
+    )
+    return SourcesResponse(**payload)
 
 
 @router.get("/{job_id}/sources", response_model=SourcesResponse)

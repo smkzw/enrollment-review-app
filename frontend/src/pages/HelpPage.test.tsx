@@ -39,7 +39,7 @@ describe("系统帮助", () => {
     expect(screen.getByRole("heading", { name: /键盘操作/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /遇到问题怎么办/ })).toBeInTheDocument();
     expect(screen.getByText(/建立完整资料快照/)).toBeInTheDocument();
-    expect(screen.getByText(/红框只表示系统掌握了可映射到原件页图的真实区域坐标/)).toBeInTheDocument();
+    expect(screen.getByText(/红框只表示系统能够精确对应原件中的具体区域/)).toBeInTheDocument();
     expect(screen.getByText(/失败时只重新处理失败部分/)).toBeInTheDocument();
     expect(screen.getAllByText(/补入漏识别文字/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/页首、页末或原文中已选位置/).length).toBeGreaterThan(0);

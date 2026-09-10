@@ -14,7 +14,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -28,6 +28,7 @@ from app.domain.contracts.enums import DatePrecision, MetadataResolutionStatus, 
 from app.domain.contracts.protocol_drafts import DraftFeedbackKind, ProtocolDraftRevision
 from app.domain.contracts.protocol_ingestion import ProtocolSourceSpan
 from app.domain.contracts.protocol_metadata import (
+    InterpretationSource,
     ProtocolIdentityDecision,
     StudyPhaseSelection,
 )
@@ -60,6 +61,11 @@ from app.services.protocol_publication_service import (
     PublicationLineageError,
 )
 from app.storage.codecs import utc_now
+from app.storage.idempotency import (
+    IdempotencyConflict,
+    IdempotencyRepository,
+    request_hash,
+)
 from app.storage.config import DataPaths
 from app.storage.models import JobRecord, JobStepRecord
 from app.storage.repositories import (
@@ -435,17 +441,51 @@ class ProtocolWorkbenchService:
         target_rule_code: str,
         feedback_note: str,
     ) -> ProtocolDeconstructionDraft:
-        from app.agents.deepseek_protocol_transport import DeepSeekProtocolAgentTransport
         from app.agents.protocol_deconstructor import (
+            ProtocolAgentCallError,
             revise_protocol_draft_from_feedback,
         )
+        from app.agents.protocol_semantic_model_router import (
+            GRADE_SHORT,
+            build_transport_for_candidate,
+            candidate_availability_error,
+            resolve_route_mode,
+            select_protocol_semantic_route_candidates,
+        )
 
-        return revise_protocol_draft_from_feedback(
-            source_input,
-            current_draft,
-            target_rule_code=target_rule_code,
-            feedback_note=feedback_note,
-            transport=DeepSeekProtocolAgentTransport(),
+        # Feedback is a short, new-session repair: MTPLX then DeepSeek in
+        # graded mode. Each candidate is a whole attempt with a fresh transport.
+        candidates = select_protocol_semantic_route_candidates(
+            GRADE_SHORT,
+            route_mode=resolve_route_mode(),
+        )
+        last_error: Exception | None = None
+        for candidate in candidates:
+            skip_reason = candidate_availability_error(candidate)
+            if skip_reason is not None:
+                last_error = ValueError(skip_reason)
+                continue
+            try:
+                transport = build_transport_for_candidate(candidate)
+            except ValueError as exc:
+                last_error = exc
+                continue
+            try:
+                return revise_protocol_draft_from_feedback(
+                    source_input,
+                    current_draft,
+                    target_rule_code=target_rule_code,
+                    feedback_note=feedback_note,
+                    transport=transport,
+                )
+            except ProtocolAgentCallError as exc:
+                last_error = exc
+                continue
+        if last_error is not None:
+            raise last_error
+        raise ProtocolAgentCallError(
+            "protocol-feedback-route-exhausted",
+            "短提示反馈修订路由候选均已显式跳过或失败，未产出可用修订。",
         )
 
     # ------------------------------------------------------------------ 上传
@@ -458,8 +498,8 @@ class ProtocolWorkbenchService:
         raise ProtocolWorkbenchError(
             "UNSUPPORTED_PROTOCOL_FILE",
             title="当前文件格式不能用于方案解构",
-            detail="现阶段的结构提取和原文定位仅支持 DOCX 格式的正式研究方案。",
-            recovery="请使用 Word 将正式方案另存为 DOCX 后重新上传。",
+            detail="现阶段的结构提取和原文定位支持 DOCX 格式的正式研究方案；方案 PDF 上传入口已下线。",
+            recovery="请以 DOCX 重新上传正式方案。",
         )
 
     def start_first_deconstruction(
@@ -479,7 +519,7 @@ class ProtocolWorkbenchService:
                 "SOURCE_INGESTION_FAILED",
                 title="方案文件无法登记",
                 detail=str(exc),
-                recovery="请确认 DOCX 文件完整可读后重新上传。",
+                recovery="请确认方案文件完整可读后重新上传。",
             ) from exc
 
         source_artifact_id = (
@@ -497,7 +537,7 @@ class ProtocolWorkbenchService:
                 "SOURCE_INGESTION_FAILED",
                 title="方案文件无法登记",
                 detail=str(exc),
-                recovery="请确认 DOCX 文件完整可读后重新上传。",
+                recovery="请确认方案文件完整可读后重新上传。",
             ) from exc
 
         # 将登记结果写入 Job payload，保证 runner 即使在 API 写入首个检查点前
@@ -586,7 +626,7 @@ class ProtocolWorkbenchService:
                 "SOURCE_INGESTION_FAILED",
                 title="方案文件无法登记",
                 detail=str(exc),
-                recovery="请确认 DOCX 文件完整可读后重新上传。",
+                recovery="请确认方案文件完整可读后重新上传。",
             ) from exc
 
         with self.session_factory() as session:
@@ -616,7 +656,7 @@ class ProtocolWorkbenchService:
                 "SOURCE_INGESTION_FAILED",
                 title="方案文件无法登记",
                 detail=str(exc),
-                recovery="请确认 DOCX 文件完整可读后重新上传。",
+                recovery="请确认方案文件完整可读后重新上传。",
             ) from exc
 
         target_version = target_project.protocol_version
@@ -695,6 +735,7 @@ class ProtocolWorkbenchService:
         *,
         project_id: str,
         idempotency_key: str,
+        interpretation_sources: Sequence[InterpretationSource] = (),
         actor: str = "用户",
     ) -> StartDeconstructionResult:
         """无需上传新版文件，复制当前正式草稿为候选稿并进入反馈修订。
@@ -726,6 +767,7 @@ class ProtocolWorkbenchService:
                     recovery=exc.recovery,
                 ) from exc
 
+        target_version = target_project.protocol_version
         source_context = self._source_context_for_revision(baseline.revision_id)
         if source_context is None:
             raise ProtocolWorkbenchError(
@@ -744,9 +786,68 @@ class ProtocolWorkbenchService:
         # 会生成第二个草稿身份并触发错误的并发冲突。
         new_draft_id = f"draft:feedback:{feedback_identity}"
         new_protocol_version_id = f"protocol-version-feedback:{feedback_identity}"
-        source_input = ProtocolDeconstructionInput.model_validate(
+        previous_source_input = ProtocolDeconstructionInput.model_validate(
             source_context["source_input"]
-        ).model_copy(update={"protocol_version_id": new_protocol_version_id})
+        )
+        source_candidates = {
+            item.interpretation_source_id: item
+            for item in previous_source_input.interpretation_sources
+        }
+        for item in interpretation_sources:
+            if item.protocol_version_id != target_version.protocol_version_id:
+                raise ProtocolWorkbenchError(
+                    "INTERPRETATION_VERSION_MISMATCH",
+                    title="解释材料不属于当前方案版本",
+                    detail="解释材料必须针对当前正式方案版本登记，不能带入其他版本或其他项目。",
+                    recovery="请返回当前项目版本后重新添加解释材料。",
+                )
+            existing = source_candidates.get(item.interpretation_source_id)
+            if existing is not None and existing != item:
+                raise ProtocolWorkbenchError(
+                    "INTERPRETATION_SOURCE_CONFLICT",
+                    title="解释材料身份重复",
+                    detail="同一解释材料编号对应了不同内容，系统未创建修订任务。",
+                    recovery="请保留一份来源明确、内容一致的解释材料后重试。",
+                )
+            source_candidates[item.interpretation_source_id] = item
+        if any(
+            item.protocol_version_id != target_version.protocol_version_id
+            for item in source_candidates.values()
+        ):
+            raise ProtocolWorkbenchError(
+                "INTERPRETATION_VERSION_MISMATCH",
+                title="解释材料不属于当前方案版本",
+                detail="当前正式版本保存的解释材料与方案版本不一致，系统未创建修订任务。",
+                recovery="请重新核对当前项目的解释材料来源后再试。",
+            )
+        rebound_sources = []
+        for item in source_candidates.values():
+            bound_id = "interpretation:" + hashlib.sha256(
+                f"{new_protocol_version_id}:{item.interpretation_source_id}".encode(
+                    "utf-8"
+                )
+            ).hexdigest()[:32]
+            rebound_sources.append(
+                InterpretationSource.model_validate(
+                    item.model_dump(mode="json")
+                    | {
+                        "interpretation_source_id": bound_id,
+                        "protocol_version_id": new_protocol_version_id,
+                    }
+                )
+            )
+        source_input = ProtocolDeconstructionInput.model_validate(
+            previous_source_input.model_dump(mode="json")
+            | {
+                "protocol_version_id": new_protocol_version_id,
+                "interpretation_source_ids": [
+                    item.interpretation_source_id for item in rebound_sources
+                ],
+                "interpretation_sources": [
+                    item.model_dump(mode="json") for item in rebound_sources
+                ],
+            }
+        )
         source_input_payload = source_input.model_dump(mode="json")
         candidate = ProtocolDeconstructionDraft.model_validate(
             baseline.content.model_dump(mode="json")
@@ -758,7 +859,6 @@ class ProtocolWorkbenchService:
                 "protocol_version_id": new_protocol_version_id,
             }
         )
-        target_version = target_project.protocol_version
         file_name = str(source_context.get("file_name") or "当前正式方案")
         payload = {
             "session_kind": "re_deconstruction",
@@ -1090,7 +1190,195 @@ class ProtocolWorkbenchService:
             "selected_phase_label": _study_phase_label(source_input.selected_phase.value),
             "source_spans": spans,
             "source_materials": materials,
+            "draft_revision_id": merged.get("draft_revision_id"),
+            "protocol_version_id": source_input.protocol_version_id,
+            "interpretation_sources": [
+                item.model_dump(mode="json")
+                for item in source_input.interpretation_sources
+            ],
         }
+
+    def register_interpretation_sources(
+        self,
+        job_id: str,
+        *,
+        expected_revision_id: str,
+        idempotency_key: str,
+        interpretation_sources: Sequence[InterpretationSource],
+        actor: str = "用户",
+    ) -> dict[str, Any]:
+        """在活动草稿等待边界登记解释材料，并保留完整来源上下文。
+
+        登记只更新任务检查点，不改变草稿 revision，也不会把解释材料混入
+        方案原文 source_materials。后续 ``SOURCE_ERROR`` 反馈仍通过正式的
+        草稿 revision 链执行，发布时由候选方案版本一次性持久化。
+        """
+        if not interpretation_sources:
+            raise ProtocolWorkbenchError(
+                "INTERPRETATION_SOURCES_REQUIRED",
+                title="请至少登记一份解释材料",
+                detail="解释材料列表为空，系统没有新增任何来源绑定。",
+                recovery="请提供来源哈希、原文定位和解释内容后重试。",
+            )
+        merged = self._merged_payload(job_id)
+        self._require_protocol_job(job_id)
+        self._require_draft_session(merged)
+        current_revision = self._load_draft_revision(merged)
+        submitted_hash = request_hash(
+            {
+                "expected_revision_id": expected_revision_id,
+                "actor": actor,
+                "interpretation_sources": [
+                    item.model_dump(mode="json") for item in interpretation_sources
+                ],
+            }
+        )
+        created = False
+        try:
+            with self.session_factory() as session:
+                with session.begin():
+                    _record, created = IdempotencyRepository(session).resolve(
+                        scope=f"protocol-interpretation-sources:{job_id}",
+                        idempotency_key=idempotency_key,
+                        submitted_hash=submitted_hash,
+                        result_type="protocol_interpretation_sources",
+                        result_id=job_id,
+                    )
+                    if created:
+                        live_head = ProtocolDraftRevisionRepository(session).get_head(
+                            current_revision.draft_id
+                        )
+                        if (
+                            live_head is None
+                            or expected_revision_id != live_head.revision_id
+                        ):
+                            raise ProtocolWorkbenchError(
+                                "STALE_REVISION",
+                                title="草稿版本已经更新",
+                                detail="当前草稿已产生新的 revision，本次解释材料没有写入。",
+                                recovery="请刷新草稿，使用最新 revision 重新登记解释材料。",
+                                context={
+                                    "submitted": {
+                                        "expected_revision_id": expected_revision_id,
+                                    },
+                                    "current_revision_id": (
+                                        live_head.revision_id if live_head else None
+                                    ),
+                                },
+                            )
+                        waiting_step_id = None
+                        job = session.get(JobRecord, job_id)
+                        if job is not None and job.state == "waiting_user":
+                            for candidate_step_id in (STEP_AWAIT_REVIEW, STEP_PUBLISH):
+                                step = session.get(
+                                    JobStepRecord,
+                                    {"job_id": job_id, "step_id": candidate_step_id},
+                                )
+                                if step is not None and step.state == "waiting_user":
+                                    waiting_step_id = candidate_step_id
+                                    break
+                        if waiting_step_id is None:
+                            raise ProtocolWorkbenchError(
+                                "INTERPRETATION_SOURCE_REGISTRATION_NOT_ALLOWED",
+                                title="当前草稿不在来源登记边界",
+                                detail="解释材料只能在草稿审阅或发布确认等待边界登记。",
+                                recovery="请刷新任务状态，进入草稿审阅后再登记解释材料。",
+                            )
+
+                        source_input = self._load_source_input(merged)
+                        source_by_id = {
+                            item.interpretation_source_id: item
+                            for item in source_input.interpretation_sources
+                        }
+                        allowed_rule_refs = {
+                            item.official_code
+                            for item in current_revision.content.proposed_rules
+                        }
+                        for item in interpretation_sources:
+                            if item.protocol_version_id != source_input.protocol_version_id:
+                                raise ProtocolWorkbenchError(
+                                    "INTERPRETATION_VERSION_MISMATCH",
+                                    title="解释材料不属于当前草稿版本",
+                                    detail="解释材料必须绑定当前活动草稿的方案版本。",
+                                    recovery="请从当前草稿来源页读取方案版本后重新登记。",
+                                )
+                            if not set(item.applies_to_rule_refs) <= allowed_rule_refs:
+                                raise ProtocolWorkbenchError(
+                                    "INTERPRETATION_SOURCE_SCOPE_INVALID",
+                                    title="解释材料超出当前草稿范围",
+                                    detail="解释材料声明的规则范围不属于当前活动草稿。",
+                                    recovery="请只登记与当前草稿规则对应的解释材料。",
+                                )
+                            existing = source_by_id.get(item.interpretation_source_id)
+                            if existing is not None and existing != item:
+                                raise ProtocolWorkbenchError(
+                                    "INTERPRETATION_SOURCE_CONFLICT",
+                                    title="解释材料身份重复",
+                                    detail="同一解释材料编号对应了不同内容，系统没有覆盖原登记。",
+                                    recovery="请保留一份来源明确、内容一致的解释材料后重试。",
+                                )
+                            source_by_id[item.interpretation_source_id] = item
+                        updated_input = ProtocolDeconstructionInput.model_validate(
+                            source_input.model_dump(mode="json")
+                            | {
+                                "interpretation_source_ids": list(source_by_id),
+                                "interpretation_sources": [
+                                    item.model_dump(mode="json")
+                                    for item in source_by_id.values()
+                                ],
+                            }
+                        )
+                        JobStore(session, now=self.now).record_user_update(
+                            job_id,
+                            waiting_step_id,
+                            checkpoint_payload={
+                                "source_input": updated_input.model_dump(mode="json"),
+                                "interpretation_source_registration": {
+                                    "actor": actor,
+                                    "source_ids": [
+                                        item.interpretation_source_id
+                                        for item in interpretation_sources
+                                    ],
+                                },
+                            },
+                        )
+                        previous = None
+                        if live_head.previous_revision_id:
+                            previous = ProtocolDraftRevisionRepository(session).get(
+                                live_head.previous_revision_id
+                            ).content
+                        gate = self.gate.evaluate(
+                            updated_input,
+                            live_head.content,
+                            source_spans=self._load_source_spans(merged),
+                            previous_draft=previous,
+                            declared_diff=(
+                                ProtocolDraftDiffDeclaration(
+                                    **live_head.diff.model_dump(mode="python")
+                                )
+                                if live_head.revision_number > 1
+                                else None
+                            ),
+                        )
+                        JobRepository(session).create_checkpoint(
+                            checkpoint_id=uuid.uuid4().hex,
+                            job_id=job_id,
+                            step_id=STEP_INTEGRITY,
+                            payload={
+                                "gate_result": gate.model_dump(mode="json"),
+                                "gate_version": DECONSTRUCTION_GATE_VERSION,
+                                "publishable": gate.publishable,
+                            },
+                        )
+        except IdempotencyConflict as exc:
+            raise ProtocolWorkbenchError(
+                "IDEMPOTENCY_CONFLICT",
+                title="重复提交标识已经绑定其他内容",
+                detail="该重复提交标识已经登记了不同的解释材料内容，系统没有覆盖原登记。",
+                recovery="请使用新的重复提交标识，或重试原来的完全相同请求。",
+                context=exc.as_dict(),
+            ) from exc
+        return self.get_sources(job_id)
 
     def get_integrity(self, job_id: str) -> IntegrityView:
         merged = self._merged_payload(job_id)

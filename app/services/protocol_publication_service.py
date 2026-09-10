@@ -83,6 +83,7 @@ from app.storage.repositories import (
     WORKFLOW_STAGE_CONFIG,
     find_project_by_protocol_and_phase,
     save_expectation_templates,
+    save_interpretation_source,
     save_rule_set,
 )
 
@@ -931,6 +932,13 @@ class ProtocolPublicationService:
     ) -> None:
         # 方案版本记录（先于 RuleSet/Project 外键依赖）。
         AppendRepository(session, PROTOCOL_DOC_CONFIG).save(protocol_version)
+        for source in request.source_input.interpretation_sources:
+            if source.protocol_version_id != protocol_version.protocol_version_id:
+                raise ProtocolPublicationError(
+                    "interpretation_version_mismatch",
+                    "解释材料未绑定本次发布的内部方案版本，拒绝写入正式权威链",
+                )
+            save_interpretation_source(session, source)
         source_repo = AppendRepository(session, SOURCE_RECORD_CONFIG)
         for record in source_records:
             source_repo.save(record)

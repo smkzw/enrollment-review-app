@@ -70,7 +70,7 @@ __all__ = [
 #: 解码器身份：任一解码行为（PDF 原生提取/图片解码/文本解码/DOC 转换）变化
 #: 必须提升对应版本，否则同一输入会复用同一解码身份却得到不同页产物。
 DECODER_VERSION_BY_KIND = {
-    "pdf": "slice4.3/pdfplumber/v1",
+    "pdf": "slice61ar/pdfplumber/v2",
     "docx": "slice4.3/libreoffice/v1",
     "doc": "slice4.3/libreoffice/v1",
     "image": "slice4.3/pillow/v1",

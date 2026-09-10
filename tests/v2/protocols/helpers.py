@@ -83,6 +83,41 @@ def build_based_on_numbering_docx(path: Path) -> None:
     doc.save(str(path))
 
 
+def build_custom_outline_style_docx(path: Path) -> None:
+    """Numeric custom styles with a based-on outline and paragraph override."""
+    doc = Document()
+    styles = doc.styles.element
+    styles.append(
+        parse_xml(
+            f'<w:style {nsdecls("w")} w:type="paragraph" w:styleId="17">'
+            '<w:name w:val="中文上位标题"/>'
+            '<w:pPr><w:outlineLvl w:val="2"/></w:pPr>'
+            "</w:style>"
+        )
+    )
+    styles.append(
+        parse_xml(
+            f'<w:style {nsdecls("w")} w:type="paragraph" w:styleId="18">'
+            '<w:name w:val="中文自定义子标题"/>'
+            '<w:basedOn w:val="17"/>'
+            "</w:style>"
+        )
+    )
+
+    inherited = doc.add_paragraph("继承的中文标题")
+    inherited._p.get_or_add_pPr().append(
+        parse_xml(f'<w:pStyle {nsdecls("w")} w:val="18"/>')
+    )
+
+    overridden = doc.add_paragraph("段落覆盖标题")
+    ppr = overridden._p.get_or_add_pPr()
+    ppr.append(parse_xml(f'<w:pStyle {nsdecls("w")} w:val="18"/>'))
+    ppr.append(parse_xml(f'<w:outlineLvl {nsdecls("w")} w:val="0"/>'))
+
+    doc.add_paragraph("无结构样式正文")
+    doc.save(str(path))
+
+
 def build_direct_numbering_docx(path: Path, num_id: int, text: str = "numbered item") -> None:
     """段落直接注入 ``w:numPr``，可指定 ``numId``（含 0 或悬空 id）。"""
     doc = Document()

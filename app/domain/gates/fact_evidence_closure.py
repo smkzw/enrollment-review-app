@@ -178,18 +178,46 @@ def validate_page_coverage_per_candidate(
 
 
 # --------------------------------------------------------------------------- 定位与哈希
-def _fetch_locator(session: Session, locator_id: str):
+def _fetch_locator(session: Session, locator_id: str, visual_batch=None):
     from app.storage.evidence_locator_repositories import EvidenceLocatorRepository
 
     repo = EvidenceLocatorRepository(session)
-    return repo.get(locator_id)
+    if visual_batch is None:
+        return repo.get(locator_id)
+    return repo.get(locator_id, batch=visual_batch)
+
+
+def _cached_locator(session: Session, locator_id: str, cache: dict | None):
+    if cache is None:
+        return _fetch_locator(session, locator_id)
+    if locator_id not in cache:
+        cache[locator_id] = _fetch_locator(session, locator_id)
+    return cache[locator_id]
+
+
+def _fetch_cached(session: Session, locator_id: str, cache: dict | None, visual_batch=None):
+    """Batch-aware fetch that keeps the legacy 3-arg call shape when idle.
+
+    Existing ``visual_batch=None`` callers (and their test doubles) observe
+    exactly the old ``_cached_locator`` behavior; only an explicit batch
+    takes the batched repository path.
+    """
+    if visual_batch is None:
+        return _cached_locator(session, locator_id, cache)
+    if cache is None:
+        return _fetch_locator(session, locator_id, visual_batch)
+    if locator_id not in cache:
+        cache[locator_id] = _fetch_locator(session, locator_id, visual_batch)
+    return cache[locator_id]
 
 
 def _manifest_page_set(revision: CompleteEvidenceProcessingRevision) -> set[tuple[str, int]]:
     return {(e.page_artifact_id, e.page_number) for e in revision.manifest}
 
 
-def _localized_locator_text(session: Session, locator, revision) -> str | None:
+def _localized_locator_text(
+    session: Session, locator, revision, correction_cache: list | None = None
+) -> str | None:
     """还原当前定位实际覆盖的原文；page_only 不足以证明断言。"""
     if locator.precision == LocatorPrecision.PAGE_ONLY:
         return None
@@ -207,10 +235,12 @@ def _localized_locator_text(session: Session, locator, revision) -> str | None:
         from app.evidence.effective_text import project_effective_text
         from app.storage.evidence_locator_repositories import CorrectionRepository
 
-        corrections = [
-            CorrectionRepository(session).get(correction_id)
-            for correction_id in revision.correction_ids
-        ]
+        corrections = correction_cache
+        if corrections is None:
+            corrections = [
+                CorrectionRepository(session).get(correction_id)
+                for correction_id in revision.correction_ids
+            ]
         text = project_effective_text(
             text, [item for item in corrections if item.ocr_page_id == locator.ocr_page_id]
         ).effective_text
@@ -229,6 +259,7 @@ def _has_explicit_negation_relation(assertion: str, asserted_object: str) -> boo
         rf"无\s*{chinese_target_end}",
         rf"(?:未见|没有|不伴|排除)\s*{chinese_target_end}",
         rf"未(?:发现|提示|检出|诊断为|诊断)\s*{chinese_target_end}",
+        rf"否认(?:在|自|于)[^，,。；;]*(?:期间|以内|以来|前|后|时)\s*[，,]\s*有?[^，,。；;]*{chinese_target_end}",
         rf"否认[^，,。；;]{{0,32}}{chinese_target_end}",
         rf"(?:^|[\s,;:])(?:no|denies?|without)\s+(?:history\s+of\s+)?{english_target_end}",
     )
@@ -241,12 +272,22 @@ def _has_explicit_negation_relation(assertion: str, asserted_object: str) -> boo
     return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in (*prefix_patterns, *suffix_patterns))
 
 
-def _validate_assertion_text_closure(session: Session, candidate, revision) -> list[str]:
+def _validate_assertion_text_closure(
+    session: Session,
+    candidate,
+    revision,
+    *,
+    locator_cache: dict | None = None,
+    correction_cache: list | None = None,
+    visual_batch=None,
+) -> list[str]:
     if not isinstance(candidate, ClinicalFactCandidateV2) or candidate.assertion_basis is None:
         return []
     basis = candidate.assertion_basis
-    locator = _fetch_locator(session, basis.locator_id)
-    localized = _localized_locator_text(session, locator, revision)
+    locator = _fetch_cached(session, basis.locator_id, locator_cache, visual_batch)
+    localized = _localized_locator_text(
+        session, locator, revision, correction_cache
+    )
     if localized is None:
         return ["断言依据必须定位到当前有效原文的具体文本范围或摘录"]
     assertion = " ".join(basis.assertion_text.split())
@@ -264,7 +305,53 @@ def _validate_assertion_text_closure(session: Session, candidate, revision) -> l
         ):
             return ["否定表达未直接约束被断言对象，拒绝邻近句、其他状态否定或沉默"]
     elif basis.asserted_object not in source:
-        return ["被断言对象不在当前定位有效原文内"]
+        locators = [
+            _fetch_cached(session, locator_id, locator_cache, visual_batch)
+            for locator_id in candidate.locator_ids
+        ]
+        locators.sort(
+            key=lambda item: (
+                item.page_artifact_id,
+                -1 if item.text_start is None else item.text_start,
+            )
+        )
+        same_source = len(locators) > 1 and all(
+            (
+                item.page_artifact_id,
+                item.ocr_page_id,
+                item.source_layer,
+                item.source_text_sha256,
+            )
+            == (
+                locators[0].page_artifact_id,
+                locators[0].ocr_page_id,
+                locators[0].source_layer,
+                locators[0].source_text_sha256,
+            )
+            for item in locators[1:]
+        )
+        adjacent = same_source and all(
+            left.text_end is not None
+            and right.text_start is not None
+            and 0 <= right.text_start - left.text_end <= 2
+            for left, right in zip(locators, locators[1:])
+        )
+        combined = "".join(
+            "".join(
+                (
+                    _localized_locator_text(
+                        session,
+                        item,
+                        revision,
+                        correction_cache=correction_cache,
+                    )
+                    or ""
+                ).split()
+            )
+            for item in locators
+        )
+        if not adjacent or "".join(basis.asserted_object.split()) not in combined:
+            return ["被断言对象不在单一定位或同页相邻定位共同覆盖的当前有效原文内"]
     return []
 
 
@@ -272,6 +359,10 @@ def validate_locator_and_text_hash(
     session: Session,
     candidate,
     revision: CompleteEvidenceProcessingRevision,
+    *,
+    locator_cache: dict | None = None,
+    correction_cache: list | None = None,
+    visual_batch=None,
 ) -> tuple[GateOutcome, list[str], list[str]]:
     """校验候选定位闭包、真实性与原文哈希一致性（Gate LOCATOR_AND_TEXT_HASH）。
 
@@ -301,7 +392,20 @@ def validate_locator_and_text_hash(
 
     if not locator_ids:
         return GateOutcome.REJECTED, ["候选未提供任何定位引用"], []
-
+    # Visual provenance has its own immutable coverage closure. It must not be
+    # appended to the earlier OCR processing revision's locator membership.
+    for lid in set(locator_ids) - revision_locator_set:
+        try:
+            visual = _fetch_cached(session, lid, locator_cache, visual_batch)
+            if visual.source_layer == LocatorSourceLayer.PAGE_REVIEW_VISUAL:
+                from app.storage.page_review_visual_locator_validation import verify_visual_locator
+                coverage = verify_visual_locator(session, visual, batch=visual_batch)
+                if (coverage.evidence_processing_revision_id == revision.evidence_processing_revision_id
+                        and coverage.evidence_snapshot_id == revision.evidence_snapshot_id
+                        and coverage.review_episode_id == revision.review_episode_id):
+                    revision_locator_set.add(lid)
+        except RepositoryError:
+            pass
     # 检查是否属于当前修订
     for lid in locator_ids:
         if lid not in revision_locator_set:
@@ -313,7 +417,7 @@ def validate_locator_and_text_hash(
         if lid in failed_locators:
             # 已判定为虚构，仍尝试获取以给出更精确原因，但不掩盖虚构错误
             try:
-                locator = _fetch_locator(session, lid)
+                locator = _fetch_cached(session, lid, locator_cache, visual_batch)
             except RepositoryError as exc:
                 errors.append(f"定位 {lid} 无法还原：{exc}")
                 continue
@@ -321,7 +425,7 @@ def validate_locator_and_text_hash(
                 # 即便能还原，虚构错误已记录，不再追加页闭包错误
                 continue
         try:
-            locator = _fetch_locator(session, lid)
+            locator = _fetch_cached(session, lid, locator_cache, visual_batch)
         except RepositoryError as exc:
             errors.append(f"定位 {lid} 不存在或无法验证：{exc}")
             failed_locators.add(lid)
@@ -368,12 +472,17 @@ def validate_locator_and_text_hash(
                 # 仅当该定位未被判定为虚构且能还原时校验哈希
                 if basis_lid not in failed_locators:
                     try:
-                        locator = _fetch_locator(session, basis_lid)
+                        locator = _fetch_cached(session, basis_lid, locator_cache, visual_batch)
                         if basis.source_text_sha256 != locator.source_text_sha256:
                             errors.append(f"候选 {candidate_id} 的原文哈希与定位 {basis_lid} 的源文本哈希不一致")
                             failed_locators.add(basis_lid)
                         closure_errors = _validate_assertion_text_closure(
-                            session, candidate, revision
+                            session,
+                            candidate,
+                            revision,
+                            locator_cache=locator_cache,
+                            correction_cache=correction_cache,
+                            visual_batch=visual_batch,
                         )
                         if closure_errors:
                             errors.extend(closure_errors)
@@ -381,7 +490,6 @@ def validate_locator_and_text_hash(
                     except RepositoryError as exc:
                         errors.append(f"断言依据定位 {basis_lid} 无法还原：{exc}")
                         failed_locators.add(basis_lid)
-
     if errors:
         return GateOutcome.REJECTED, errors, sorted(failed_locators)
     return GateOutcome.ACCEPTED, [], sorted(set(locator_ids))
@@ -407,6 +515,10 @@ def validate_blocking_ocr_for_candidate(
     session: Session,
     candidate,
     revision: CompleteEvidenceProcessingRevision,
+    *,
+    prepared_context: tuple | None = None,
+    locator_cache: dict | None = None,
+    visual_batch=None,
 ) -> tuple[GateOutcome, list[str], list[str]]:
     """候选级阻断 OCR 风险检查。
 
@@ -433,7 +545,83 @@ def validate_blocking_ocr_for_candidate(
     if not locator_ids:
         return GateOutcome.ACCEPTED, [], []
 
-    # 收集该修订的扫描与 flag
+    if prepared_context is None:
+        prepared_context = _prepare_blocking_ocr_context(session, revision)
+    closure_errors, blocking_by_page, resolved_via_review, corrections = prepared_context
+    if closure_errors:
+        return GateOutcome.BLOCKED, list(closure_errors), sorted(set(locator_ids))
+    if not blocking_by_page:
+        return GateOutcome.ACCEPTED, [], sorted(set(locator_ids))
+
+    blocked_locators: set[str] = set()
+    reasons: list[str] = []
+
+    for lid in locator_ids:
+        try:
+            locator = _fetch_cached(session, lid, locator_cache, visual_batch)
+        except RepositoryError:
+            continue
+        ocr_pid = getattr(locator, "ocr_page_id", None)
+        if ocr_pid is None:
+            continue
+        flags = blocking_by_page.get(ocr_pid, [])
+        for scan_id, flag in flags:
+            flag_id = f"{scan_id}:{getattr(flag, 'risk_id', '')}"
+            if flag_id in resolved_via_review:
+                continue
+            covered = False
+            for corr in corrections:
+                if getattr(corr, "ocr_page_id", None) != ocr_pid:
+                    continue
+                c_start = getattr(corr, "text_start", None)
+                c_end = getattr(corr, "text_end", None)
+                f_start = getattr(flag, "text_start", None)
+                f_end = getattr(flag, "text_end", None)
+                if (
+                    c_start is not None
+                    and c_end is not None
+                    and f_start is not None
+                    and f_end is not None
+                    and c_start <= f_start
+                    and c_end >= f_end
+                ):
+                    covered = True
+                    break
+            if covered:
+                continue
+            loc_start = getattr(locator, "text_start", None)
+            loc_end = getattr(locator, "text_end", None)
+            flag_start = getattr(flag, "text_start", None)
+            flag_end = getattr(flag, "text_end", None)
+            if (
+                locator.precision in (LocatorPrecision.BBOX, LocatorPrecision.TEXT_RANGE)
+                and loc_start is not None
+                and loc_end is not None
+                and flag_start is not None
+                and flag_end is not None
+            ):
+                overlapping = not (
+                    flag_end <= loc_start or flag_start >= loc_end
+                )
+            else:
+                overlapping = True
+            if overlapping:
+                detail = getattr(flag, "kind", "")
+                kind_val = detail.value if hasattr(detail, "value") else str(detail)
+                reasons.append(
+                    f"定位 {lid} 所在页存在未解除的阻断级 OCR 风险 "
+                    f"{kind_val}（{flag_start}-{flag_end}）"
+                )
+                blocked_locators.add(lid)
+    if reasons:
+        return GateOutcome.BLOCKED, reasons, sorted(blocked_locators)
+    return GateOutcome.ACCEPTED, [], sorted(set(locator_ids))
+
+
+def _prepare_blocking_ocr_context(
+    session: Session, revision: CompleteEvidenceProcessingRevision
+) -> tuple[list[str], dict[str, list[tuple[str, object]]], set[str], list]:
+    """一次还原完整修订的风险闭包，供同批候选复用。"""
     from app.storage.evidence_locator_repositories import (
         CorrectionRepository,
         OCRRiskReviewRepository,
@@ -515,79 +703,7 @@ def validate_blocking_ocr_for_candidate(
                     f"完整修订选中的校对 {left.correction_id} 与 {right.correction_id} 范围重叠"
                 )
 
-    if closure_errors:
-        return GateOutcome.BLOCKED, closure_errors, sorted(set(locator_ids))
-    if not blocking_by_page:
-        return GateOutcome.ACCEPTED, [], sorted(set(locator_ids))
-
-    blocked_locators: set[str] = set()
-    reasons: list[str] = []
-
-    for lid in locator_ids:
-        try:
-            locator = _fetch_locator(session, lid)
-        except RepositoryError:
-            # 定位本身无效由 locator 门禁负责，此处不重复阻断
-            continue
-        ocr_pid = getattr(locator, "ocr_page_id", None)
-        if ocr_pid is None:
-            # 无 OCR 页关联的定位（如 native_text 无 ocr_page）暂不参与风险阻断
-            continue
-        flags = blocking_by_page.get(ocr_pid, [])
-        for scan_id, flag in flags:
-            flag_id = f"{scan_id}:{getattr(flag, 'risk_id', '')}"
-            if flag_id in resolved_via_review:
-                continue
-            # 检查是否被校对覆盖
-            covered = False
-            for corr in corrections:
-                if getattr(corr, "ocr_page_id", None) != ocr_pid:
-                    continue
-                # 校对范围必须完全覆盖 flag 范围
-                c_start = getattr(corr, "text_start", None)
-                c_end = getattr(corr, "text_end", None)
-                f_start = getattr(flag, "text_start", None)
-                f_end = getattr(flag, "text_end", None)
-                if (
-                    c_start is not None
-                    and c_end is not None
-                    and f_start is not None
-                    and f_end is not None
-                    and c_start <= f_start
-                    and c_end >= f_end
-                ):
-                    covered = True
-                    break
-            if covered:
-                continue
-
-            # 未解除，判断是否与定位重叠
-            loc_start = getattr(locator, "text_start", None)
-            loc_end = getattr(locator, "text_end", None)
-            flag_start = getattr(flag, "text_start", None)
-            flag_end = getattr(flag, "text_end", None)
-            overlapping = False
-            if locator.precision in (LocatorPrecision.BBOX, LocatorPrecision.TEXT_RANGE) and loc_start is not None and loc_end is not None and flag_start is not None and flag_end is not None:
-                # 区间重叠： flag_end > loc_start and flag_start < loc_end
-                if not (flag_end <= loc_start or flag_start >= loc_end):
-                    overlapping = True
-            else:
-                # 页级定位：保守视为重叠
-                overlapping = True
-
-            if overlapping:
-                detail = getattr(flag, "kind", "")
-                kind_val = detail.value if hasattr(detail, "value") else str(detail)
-                reasons.append(
-                    f"定位 {lid} 所在页存在未解除的阻断级 OCR 风险 {kind_val}（{flag_start}-{flag_end}）"
-                )
-                blocked_locators.add(lid)
-                # 同一定位若已阻断，无需对同一定位的多个 flag 重复追加多个原因？此处保留每个 flag 的原因
-        # end for flag
-
-    if reasons:
-        return GateOutcome.BLOCKED, reasons, sorted(blocked_locators)
-    return GateOutcome.ACCEPTED, [], sorted(set(locator_ids))
+    return closure_errors, blocking_by_page, resolved_via_review, corrections
 
 
 _SOURCE_LABEL_TO_STRENGTH = {
@@ -605,42 +721,95 @@ _SOURCE_LABEL_TO_STRENGTH = {
 }
 
 
+def derive_source_strength_from_metadata(
+    document_type: str,
+    source_party: str,
+) -> SourceStrength:
+    """从冻结文档类型与来源方确定性派生单一来源强度。"""
+    document_type = document_type.strip().lower()
+    source_party = source_party.strip().lower()
+    if document_type in {
+        "medical_record",
+        "discharge_summary",
+        "historical_record",
+        "既往病历",
+        "出院记录",
+        "外院病历",
+    } or source_party in {
+        "外院",
+        "外部医院",
+        "external_hospital",
+        "external hospital",
+    }:
+        return SourceStrength.HISTORICAL_PRIMARY
+    if document_type in {
+        "lab",
+        "lab_report",
+        "report",
+        "imaging",
+        "exam_report",
+        "检验报告",
+        "实验室检验结果",
+        "检查报告",
+        "影像报告",
+    } and source_party in {
+        "研究者方",
+        "研究者",
+        "研究者所在机构",
+        "研究中心",
+        "中心",
+        "site",
+        "study site",
+        "investigator",
+        "center",
+    }:
+        return SourceStrength.CONTEMPORANEOUS_OBJECTIVE
+    if document_type in {"screening_record", "筛选病历", "病历资料"}:
+        return SourceStrength.SCREENING_RECORD_TRANSCRIPTION
+    if document_type in {
+        "baseline_record",
+        "study_chart",
+        "current_study_chart",
+        "基线病历",
+        "研究病历",
+    }:
+        return SourceStrength.CURRENT_STUDY_CHART
+    return SourceStrength.UNVERIFIABLE
+
+
 def derive_source_strength_for_candidate(
-    session: Session, candidate, revision: CompleteEvidenceProcessingRevision
+    session: Session,
+    candidate,
+    revision: CompleteEvidenceProcessingRevision,
+    *,
+    metadata_by_document: dict | None = None,
+    locator_cache: dict | None = None,
+    visual_batch=None,
 ) -> SourceStrength:
     """仅从完整修订冻结的 Phase 4 文档元数据确定性派生来源强度。"""
     from app.storage.evidence_repositories import (
         SourceDocumentMetadataRevisionRepository,
     )
 
-    metadata = [
-        SourceDocumentMetadataRevisionRepository(session).get(item)
-        for item in revision.metadata_revision_ids
-    ]
-    by_document = {item.source_document_version_id: item for item in metadata}
+    if metadata_by_document is None:
+        metadata = [
+            SourceDocumentMetadataRevisionRepository(session).get(item)
+            for item in revision.metadata_revision_ids
+        ]
+        metadata_by_document = {
+            item.source_document_version_id: item for item in metadata
+        }
     strengths: list[SourceStrength] = []
     for locator_id in candidate.locator_ids:
-        locator = _fetch_locator(session, locator_id)
-        item = by_document.get(locator.source_document_version_id)
+        locator = _fetch_cached(session, locator_id, locator_cache, visual_batch)
+        item = metadata_by_document.get(locator.source_document_version_id)
         if item is None:
             raise ValueError(
                 f"定位 {locator_id} 的资料未在完整修订中冻结唯一 Phase 4 元数据"
             )
-        document_type = item.document_type.strip().lower()
-        source_party = item.source_party.strip().lower()
-        if document_type in {"lab", "lab_report", "report", "imaging", "exam_report"}:
-            strength = SourceStrength.CONTEMPORANEOUS_OBJECTIVE
-        elif document_type == "screening_record":
-            strength = SourceStrength.SCREENING_RECORD_TRANSCRIPTION
-        elif document_type in {"baseline_record", "study_chart", "current_study_chart"}:
-            strength = SourceStrength.CURRENT_STUDY_CHART
-        elif document_type in {"medical_record", "discharge_summary", "historical_record"} or source_party in {
-            "外院", "hospital", "external_hospital"
-        }:
-            strength = SourceStrength.HISTORICAL_PRIMARY
-        else:
-            strength = SourceStrength.UNVERIFIABLE
-        strengths.append(strength)
+        strengths.append(
+            derive_source_strength_from_metadata(item.document_type, item.source_party)
+        )
     rank = {
         SourceStrength.UNVERIFIABLE: 0,
         SourceStrength.SCREENING_RECORD_TRANSCRIPTION: 1,
@@ -653,18 +822,70 @@ def derive_source_strength_for_candidate(
     return max(strengths, key=rank.__getitem__)
 
 
-def validate_source_strength_for_candidate(session: Session, candidate, revision) -> GateVerdict:
+def resolve_source_strength_for_candidate(
+    session: Session,
+    candidate,
+    revision: CompleteEvidenceProcessingRevision,
+    *,
+    metadata_by_document: dict | None = None,
+    locator_cache: dict | None = None,
+    visual_batch=None,
+) -> SourceStrength:
+    """Resolve the candidate label inside the deterministic document boundary.
+
+    Study charts are mixed sources: they can directly record current-study
+    actions or transcribe earlier history. Other document classes retain the
+    single strength derived from frozen Phase 4 metadata.
+    """
+    derived = derive_source_strength_for_candidate(
+        session,
+        candidate,
+        revision,
+        metadata_by_document=metadata_by_document,
+        locator_cache=locator_cache,
+        visual_batch=visual_batch,
+    )
+    declared = _SOURCE_LABEL_TO_STRENGTH.get(candidate.candidate_source_semantics)
+    allowed = {derived}
+    if derived in {
+        SourceStrength.CURRENT_STUDY_CHART,
+        SourceStrength.SCREENING_RECORD_TRANSCRIPTION,
+    }:
+        allowed.update(
+            {
+                SourceStrength.CURRENT_STUDY_CHART,
+                SourceStrength.SCREENING_RECORD_TRANSCRIPTION,
+            }
+        )
+    if declared not in allowed:
+        raise ValueError(
+            "候选来源语义不在 Phase 4 元数据允许范围内："
+            f"允许 {sorted(item.value for item in allowed)}"
+        )
+    return declared
+
+
+def validate_source_strength_for_candidate(
+    session: Session,
+    candidate,
+    revision,
+    *,
+    metadata_by_document: dict | None = None,
+    locator_cache: dict | None = None,
+    visual_batch=None,
+) -> GateVerdict:
     reasons: list[str] = []
     try:
-        derived = derive_source_strength_for_candidate(session, candidate, revision)
+        resolve_source_strength_for_candidate(
+            session,
+            candidate,
+            revision,
+            metadata_by_document=metadata_by_document,
+            locator_cache=locator_cache,
+            visual_batch=visual_batch,
+        )
     except (RepositoryError, ValueError) as exc:
         reasons.append(str(exc))
-    else:
-        declared = _SOURCE_LABEL_TO_STRENGTH.get(candidate.candidate_source_semantics)
-        if declared != derived:
-            reasons.append(
-                f"候选自由文本来源与 Phase 4 元数据派生结果不一致：派生为 {derived.value}"
-            )
     return GateVerdict(
         candidate_id=candidate.candidate_id,
         gate=FactGate.VALUE_UNIT_DATE_SOURCE,
@@ -673,21 +894,15 @@ def validate_source_strength_for_candidate(session: Session, candidate, revision
         affected_scope=_affected_locators(candidate) if reasons else [],
     )
 
-
-# --------------------------------------------------------------------------- 组合门禁（证据闭包）
 def gate_evidence_closure_for_candidate(
     session: Session,
     candidate,
     revision: CompleteEvidenceProcessingRevision,
     calls: list[FactNormalizationCall],
+    *,
+    visual_batch=None,
 ) -> dict[FactGate, GateVerdict]:
     """对单个候选执行证据闭包门禁，返回逐门的裁决字典。
-
-    覆盖的两门（均落于 FactGate）：
-    - PAGE_COVERAGE_AND_REFERENCE_CLOSURE：必须根据真实 calls 校验页覆盖；
-      调用清单不可省略，避免缺少覆盖证据时隐式通过；
-    - LOCATOR_AND_TEXT_HASH：合并定位真实性/哈希与阻断 OCR 风险，
-      优先级 BLOCKED > REJECTED > ACCEPTED，且 affected_scope 为二者并集。
 
     该函数不触发网络或模型调用，仅读取数据库当前修订与定位状态。
     """
@@ -714,9 +929,14 @@ def gate_evidence_closure_for_candidate(
         )
 
     # 定位与哈希
-    loc_outcome, loc_reasons, loc_affected = validate_locator_and_text_hash(session, candidate, revision)
+    if visual_batch is None:
+        from app.storage.page_review_visual_locator_validation import VisualLocatorBatchContext
+        visual_batch = VisualLocatorBatchContext(session)
+    loc_outcome, loc_reasons, loc_affected = validate_locator_and_text_hash(
+        session, candidate, revision, visual_batch=visual_batch)
     # 阻断 OCR
-    ocr_outcome, ocr_reasons, ocr_affected = validate_blocking_ocr_for_candidate(session, candidate, revision)
+    ocr_outcome, ocr_reasons, ocr_affected = validate_blocking_ocr_for_candidate(
+        session, candidate, revision, visual_batch=visual_batch)
 
     # 合并：BLOCKED 优先
     if ocr_outcome == GateOutcome.BLOCKED:
@@ -779,6 +999,19 @@ def batch_gate_evidence_closure(
 
     result: dict[str, dict[FactGate, GateVerdict]] = {}
     all_candidates = [*fact_candidates, *event_candidates, *exposure_candidates]
+    locator_cache: dict = {}
+    from app.storage.page_review_visual_locator_validation import VisualLocatorBatchContext
+    visual_batch = VisualLocatorBatchContext(session)
+    from app.storage.evidence_repositories import SourceDocumentMetadataRevisionRepository
+    metadata_by_document = {
+        item.source_document_version_id: item
+        for item in (
+            SourceDocumentMetadataRevisionRepository(session).get(metadata_id)
+            for metadata_id in revision.metadata_revision_ids
+        )
+    }
+    ocr_context = _prepare_blocking_ocr_context(session, revision)
+    correction_cache = ocr_context[3]
 
     for cand in all_candidates:
         cid = getattr(cand, "candidate_id", "unknown")
@@ -803,9 +1036,22 @@ def batch_gate_evidence_closure(
             )
 
         # 定位/哈希/阻断
-        loc_outcome, loc_reasons, loc_affected = validate_locator_and_text_hash(session, cand, revision)
-        ocr_outcome, ocr_reasons, ocr_affected = validate_blocking_ocr_for_candidate(session, cand, revision)
-
+        loc_outcome, loc_reasons, loc_affected = validate_locator_and_text_hash(
+            session,
+            cand,
+            revision,
+            locator_cache=locator_cache,
+            correction_cache=correction_cache,
+            visual_batch=visual_batch,
+        )
+        ocr_outcome, ocr_reasons, ocr_affected = validate_blocking_ocr_for_candidate(
+            session,
+            cand,
+            revision,
+            prepared_context=ocr_context,
+            locator_cache=locator_cache,
+            visual_batch=visual_batch,
+        )
         if ocr_outcome == GateOutcome.BLOCKED:
             combined_reasons = list(ocr_reasons)
             if loc_outcome == GateOutcome.REJECTED:
@@ -840,7 +1086,12 @@ def batch_gate_evidence_closure(
         result[cid] = verdicts
 
         verdicts[FactGate.VALUE_UNIT_DATE_SOURCE] = validate_source_strength_for_candidate(
-            session, cand, revision
+            session,
+            cand,
+            revision,
+            metadata_by_document=metadata_by_document,
+            locator_cache=locator_cache,
+            visual_batch=visual_batch,
         )
 
     return result
@@ -914,7 +1165,4 @@ def persist_gate_results(
     from app.storage.fact_repositories import FactGateResultRepository
 
     repo = FactGateResultRepository(session)
-    persisted: list[FactGateResult] = []
-    for r in results:
-        persisted.append(repo.create(r))
-    return persisted
+    return repo.create_many(results)

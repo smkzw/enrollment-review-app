@@ -3,6 +3,9 @@
  * - webServer 启动 vite preview（构建产物），避免 dev server 与测试竞争。
  * - 1080P、2K、4K 三个最大化桌面项目；axe 检查与溢出检查在 spec 中执行。
  * - 截图输出到 e2e/screenshots/（供 Codex 视觉复核，本角色不做最终视觉验收）。
+ * - Phase 5.8 真实隔离验收（phase5-real-acceptance.spec.ts）默认 skip；
+ *   仅当显式设置 PHASE5_ISOLATED_DATASET_ROOT（及配套 BASE_URL/DATA_DIR/
+ *   ROLE=independent_tester）时由独立测试者启用，禁止 fixture 路由冒充。
  */
 
 import { defineConfig } from "@playwright/test";

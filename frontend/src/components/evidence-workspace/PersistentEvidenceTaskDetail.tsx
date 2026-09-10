@@ -9,6 +9,8 @@ import { useLoad } from "../../app/useLoad";
 import { ErrorState, LoadingState } from "../shell/Feedback";
 import { OpenIcon, ResumeIcon } from "../shell/icons";
 import { StatusBadge, type Tone } from "../shell/StatusBadge";
+import { TargetedReviewDetail } from "./TargetedReviewDetail";
+import { PageReviewTaskDetail } from "./PageReviewTaskDetail";
 
 interface PersistentEvidenceTaskDetailProps {
   jobId: string;
@@ -80,7 +82,7 @@ export function PersistentEvidenceTaskDetail({
   const [retryError, setRetryError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (detail.state.status !== "success" || !isActive(detail.state.data.status.state)) return;
+    if (detail.state.status !== "success" || detail.state.data.progress === null || !isActive(detail.state.data.status.state)) return;
     const timer = window.setTimeout(detail.retry, 1500);
     return () => window.clearTimeout(timer);
   }, [detail.retry, detail.state]);
@@ -142,7 +144,13 @@ export function PersistentEvidenceTaskDetail({
           </dl>
         </section>
       )}
-      <section className="tasks-section persistent-task" aria-labelledby="persistent-task-title">
+      {progress === null ? (
+        subjectId !== null && reviewEpisodeId !== null
+          ? status.isPageReview
+            ? <PageReviewTaskDetail subjectId={subjectId} episodeId={reviewEpisodeId} jobId={jobId} />
+            : <TargetedReviewDetail subjectId={subjectId} episodeId={reviewEpisodeId} jobId={jobId} />
+          : <ErrorState message="缺少受试者或审核节点，请从受试者资料重新打开。" onRetry={detail.retry} />
+      ) : <section className="tasks-section persistent-task" aria-labelledby="persistent-task-title">
       <div className="tasks-section__head">
         <div>
           <p className="persistent-task__eyebrow">本次资料整理</p>
@@ -265,7 +273,7 @@ export function PersistentEvidenceTaskDetail({
           </RouteLink>
         )}
       </div>
-      </section>
+      </section>}
     </>
   );
 }

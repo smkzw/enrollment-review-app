@@ -9,10 +9,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.domain.contracts.enums import LocatorSourceLayer, UploadMode
-from app.domain.contracts.evidence_locator import CorrectionRecord, OCRRiskReview
+from app.domain.contracts.evidence_locator import (
+    CorrectionRecord,
+    OCRRiskReview,
+    SOURCE_LINE_TARGET_PREFIX,
+)
 from app.domain.publication import canonical_hash
 from app.evidence.artifacts import ArtifactStore
 from app.evidence.risk import OCR_RISK_RULE_VERSION
@@ -25,6 +30,7 @@ from app.storage.evidence_locator_repositories import (
 )
 from app.storage.evidence_locator_models import (
     CorrectionRecordRecord,
+    EvidenceLocatorArtifactRecord,
     OCRRiskReviewRecord,
 )
 from app.storage.evidence_repositories import EvidenceSnapshotRepository
@@ -35,7 +41,7 @@ from app.storage.ocr_repositories import (
 )
 from app.storage.repositories import EpisodeRepository
 
-__all__ = ["EvidenceSidecarPreparationService"]
+__all__ = ["EvidenceSidecarPreparationService", "SOURCE_LINE_TARGET_PREFIX"]
 
 
 def _utcnow() -> datetime:
@@ -90,6 +96,7 @@ class EvidenceSidecarPreparationService:
 
         self._carry_forward_unchanged_sidecars(session, base, scans)
         self._create_risk_locators(session, scans)
+        self._create_source_line_locators(session, base)
 
     def _carry_forward_unchanged_sidecars(self, session, base, scans) -> None:
         snapshot = EvidenceSnapshotRepository(session).get(base.evidence_snapshot_id)
@@ -214,5 +221,57 @@ class EvidenceSidecarPreparationService:
                         target_text_start=flag.text_start,
                         target_text_end=flag.text_end,
                         excerpt=flag.text,
+                    ),
+                )
+
+    def _create_source_line_locators(self, session, base) -> None:
+        """为每个非空 OCR 原文行建立可回放的引用范围。"""
+        locator_service = EvidenceLocatorService(
+            self.session_factory, self.artifact_store
+        )
+        ocr_repo = OcrPageRepository(session)
+        for entry in base.manifest:
+            if entry.ocr_page_id is None:
+                continue
+            ocr_page = ocr_repo.get(entry.ocr_page_id)
+            offset = 0
+            for raw_line in ocr_page.raw_text.splitlines(keepends=True):
+                line = raw_line.rstrip("\r\n")
+                start = offset
+                offset += len(raw_line)
+                left_trimmed = line.lstrip()
+                if not left_trimmed:
+                    continue
+                start += len(line) - len(left_trimmed)
+                excerpt = left_trimmed.rstrip()
+                end = start + len(excerpt)
+                existing = session.execute(
+                    select(EvidenceLocatorArtifactRecord.locator_id).where(
+                        EvidenceLocatorArtifactRecord.page_artifact_id
+                        == entry.page_artifact_id,
+                        EvidenceLocatorArtifactRecord.source_layer
+                        == LocatorSourceLayer.RAW_OCR.value,
+                        EvidenceLocatorArtifactRecord.source_text_sha256
+                        == ocr_page.raw_text_sha256,
+                        EvidenceLocatorArtifactRecord.text_start == start,
+                        EvidenceLocatorArtifactRecord.text_end == end,
+                    )
+                ).scalar_one_or_none()
+                if existing is not None:
+                    continue
+                locator_service.create_locator_in_session(
+                    session,
+                    LocatorRequest(
+                        page_artifact_id=entry.page_artifact_id,
+                        ocr_page_id=entry.ocr_page_id,
+                        source_layer=LocatorSourceLayer.RAW_OCR,
+                        source_text_sha256=ocr_page.raw_text_sha256,
+                        target_id=(
+                            f"{SOURCE_LINE_TARGET_PREFIX}{entry.ocr_page_id}:"
+                            f"{start}:{end}"
+                        ),
+                        target_text_start=start,
+                        target_text_end=end,
+                        excerpt=excerpt,
                     ),
                 )

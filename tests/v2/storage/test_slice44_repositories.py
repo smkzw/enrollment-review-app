@@ -94,7 +94,11 @@ from app.storage.ocr_repositories import (
     OCRProfileRepository,
     PageArtifactRepository,
 )
-from app.storage.repositories import DuplicateRecordError, InvalidReferenceError
+from app.storage.repositories import (
+    DuplicateRecordError,
+    InvalidReferenceError,
+    NotFoundError,
+)
 from tests.v2.storage.test_ocr_repositories import (
     FIXED_UTC,
     make_artifact,
@@ -275,6 +279,33 @@ def test_locator_append_and_roundtrip(revision_stack):
     got = repo.get("loc-1")
     assert got.target_id == "target-1"
     assert got.source_layer == LocatorSourceLayer.RAW_OCR
+
+
+def test_locator_get_many_preserves_order_deduplicates_and_rejects_missing(
+    revision_stack,
+):
+    session, _fixture, keys = revision_stack
+    repo = EvidenceLocatorRepository(session)
+    repo.create(_locator(keys))
+    repo.create(
+        _locator(
+            keys,
+            locator_id="loc-2",
+            target_id="target-2",
+            text_start=17,
+            text_end=22,
+            excerpt="AST 3",
+        )
+    )
+    locator_ids = [
+        item.locator_id for item in repo.get_many(["loc-2", "loc-1", "loc-2"])
+    ]
+    assert locator_ids == [
+        "loc-2",
+        "loc-1",
+    ]
+    with pytest.raises(NotFoundError, match="loc-missing"):
+        repo.get_many(["loc-1", "loc-missing"])
 
 
 def test_locator_get_or_none_replays_source_proof(revision_stack):

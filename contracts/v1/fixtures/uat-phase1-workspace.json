@@ -1228,8 +1228,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
-          "output_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
+          "input_scope_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
+          "output_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -1263,8 +1263,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "877910808dc8e03bab6a0ec0c28cea81d0d09dff423863e69c87b109441e050e",
-          "output_hash": "877910808dc8e03bab6a0ec0c28cea81d0d09dff423863e69c87b109441e050e",
+          "input_scope_hash": "64c70924dc0b66185fc9f433e2405773f447cb7ec97aa5f71d745f785761c052",
+          "output_hash": "64c70924dc0b66185fc9f433e2405773f447cb7ec97aa5f71d745f785761c052",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -1434,7 +1434,7 @@
           "input_revision_map": {
             "episode-uat-01-screening-clear": 1
           },
-          "input_scope_hash": "250fe813716fef759c15fd2f57377daa6e7bc34b5a3ad1627d037f1a1dca4836",
+          "input_scope_hash": "d9bad9a124b4f807373512457dc46f33f1c1b72678f0a1918db3793a812a6cc2",
           "output_hash": "c4204b6adf2feb66f8ea57415f1f23b4021f6c4ca79f155365b56e4d0b62c566",
           "parent_event_id": null,
           "recompute_scope": [
@@ -1499,7 +1499,7 @@
           "input_revision_map": {
             "episode-uat-01-screening-clear": 1
           },
-          "input_scope_hash": "cea40ebcf1d03d7a02598585e79c5e86b69a46f29f53ac5ea7825cc0314f54a4",
+          "input_scope_hash": "4ef13236e99a8b2302e501ff759f5cadaaf9112a773cf92e529a21a9ff6a075c",
           "output_hash": "523e2753f6934567e61af1af13f78d7fa769be0e28a27404ce1b0d5d670a4947",
           "parent_event_id": null,
           "recompute_scope": [
@@ -1564,7 +1564,7 @@
           "input_revision_map": {
             "episode-uat-01-screening-clear": 1
           },
-          "input_scope_hash": "ef0eb92cac8a40c3004ad963e6bfcf3516eb7f7527ae734e4c0080cb2cbd4641",
+          "input_scope_hash": "d97a2bfdf23ca3a064479b009382046cfd19aefb863c234a5fa2c757d375390c",
           "output_hash": "768216f76275473be78b267c343efdd994c007dde73417b6b4f0b9f30b422059",
           "parent_event_id": null,
           "recompute_scope": [
@@ -1629,7 +1629,7 @@
           "input_revision_map": {
             "episode-uat-01-screening-clear": 1
           },
-          "input_scope_hash": "571b4c0a18c0db8dd2ab639983927e76012bf4ce8b398efaf2bb2f1f6d70db88",
+          "input_scope_hash": "ca97a4cbd8974bcae26c4823b9c894bde40d5533ee0f83f11d3674a9a90adcf2",
           "output_hash": "1e0ff016971110b14b5b5178d2a5768c7231432034dd35f84611aebb7d51c325",
           "parent_event_id": null,
           "recompute_scope": [
@@ -1694,7 +1694,7 @@
           "input_revision_map": {
             "episode-uat-01-screening-clear": 1
           },
-          "input_scope_hash": "7f8414e3b09c0408a54ddd1e2bbdaac6d094961ef5235ffa6a5ac213e6d3a327",
+          "input_scope_hash": "eaeed5c466d546e89c646e9c8865b993231962617c046627161df5aa6ed822bb",
           "output_hash": "42f60f0b997cb4fc55e93cbb984b0e8454646a1df0e112ab23c528ac29c33bcf",
           "parent_event_id": null,
           "recompute_scope": [
@@ -1759,7 +1759,7 @@
           "input_revision_map": {
             "episode-uat-01-screening-clear": 1
           },
-          "input_scope_hash": "1361936abeadb27b3a0bc77679f3bd1abe7d8c707b41533c034c309aa1c93d8e",
+          "input_scope_hash": "f65f2f583fe93956a4d300b726abaed0295bb299174b29b07231d82a6f7b5602",
           "output_hash": "1aa05dd8e402819d8e7ed19156a1781b2e0626afb9ba851dbd0da4d54039c360",
           "parent_event_id": null,
           "recompute_scope": [
@@ -1824,7 +1824,7 @@
           "input_revision_map": {
             "episode-uat-01-screening-clear": 1
           },
-          "input_scope_hash": "5dd140a57b311dde36ff2bef9f549dc760ca37d7da2b5eff8e0f1ffbf0a526ab",
+          "input_scope_hash": "3c5d78d22b98ce742f6f2b631aa379e4ca5b93b3ddf97a159c99569bdbae91d8",
           "output_hash": "ac95fb9cec2949edf6db11a320139007680eb3c8863bb15da6e6a26d3af7529d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -1857,7 +1857,7 @@
           "input_revision_map": {
             "episode-uat-01-screening-clear": 1
           },
-          "input_scope_hash": "18496322377dcec9f12ef90d271766e029716aaa5a4c2a6dac9cd142184ebc8a",
+          "input_scope_hash": "4502266f78ced6b339f89a9370a557a87c85b347642c2b5c4b43661d1e9a0135",
           "output_hash": "a0b5387381b2ec5ba29e18e13d1617c1d82d700a9eec2a049d24ea64ccfbbc1d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -1890,7 +1890,7 @@
           "input_revision_map": {
             "episode-uat-01-screening-clear": 1
           },
-          "input_scope_hash": "8e2f27552fbe9cc04f26aba3995ca62b93038b731f71dab414cb803d7254490d",
+          "input_scope_hash": "e395d94659e35ad1e50e27fe9cef7130ff3a19482cd768ea608abfc8755ad3b9",
           "output_hash": "260181c69357a194d9947b35adbec85bef674ad9a49b4e299565b2fe252431b8",
           "parent_event_id": null,
           "recompute_scope": [
@@ -2209,9 +2209,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-01-screening-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+          "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
           "integrity_gate_result_id": "gate-uat-01-screening-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+          "integrity_manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -2248,9 +2248,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "7ab1ff37b26839e59f3cce56bd38bee319f8048e33a5012c0c70c3bf90e082e0",
+        "event_sha256": "f0cca309988a11748607e8abea82df29eda15aea137767e50cfc8180b01285df",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -2259,10 +2259,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "0c99db0ca7b1ba09868af56ab50fe9fc7ee5e821b88e99e7e6a01fcbd83107f2",
+        "confirmation_sha256": "676c610bcd602c202342f4ecd35b00dc9c5975f435bdec290e37209fd70af1cb",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -2272,7 +2272,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "official_rules": [
           {
             "components": [
@@ -2469,12 +2469,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -2914,12 +2917,12 @@
         "verified_by": "synthetic-uat-human-acceptance"
       },
       "protocol_integrity_manifest": {
-        "authoritative_rule_set_sha256": "beace579ae41f3a6864b18cd935daaa944f0ef6fcabb77cafb89885356283ce8",
+        "authoritative_rule_set_sha256": "259610747cf084d692f7533e88169826ee4f8603aa5de2088f7df8a8f756d3db",
         "authoritative_workflow_sha256": "1d13d5f280706df5152685b4f1a4701a36a3e0a0cf3a13ed985ff8dac47a2ab8",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+        "manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -3191,12 +3194,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -4843,8 +4849,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
-          "output_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
+          "input_scope_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
+          "output_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -4878,8 +4884,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "7c927707a224fa2000e310c7c541b6cd8018359e5c80be55eddf640f498d84fb",
-          "output_hash": "7c927707a224fa2000e310c7c541b6cd8018359e5c80be55eddf640f498d84fb",
+          "input_scope_hash": "c6ba1a02f6272fdd86593060c7e7db01fd068748e260ed7a900e041140de13d7",
+          "output_hash": "c6ba1a02f6272fdd86593060c7e7db01fd068748e260ed7a900e041140de13d7",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -5051,7 +5057,7 @@
           "input_revision_map": {
             "episode-uat-01-baseline-clear": 1
           },
-          "input_scope_hash": "6f772aaa20722d5c4c70853c281d3634166acd611aa876a8bb4b9d6cac6384cd",
+          "input_scope_hash": "4cc3913b8999e14fe9bcd86f11248c665587d2e1a0de7e4a3c3080388e3063e0",
           "output_hash": "b14202d2cd2e47f80687d7432c4751b017a6a3d9417768dcf38959139b928d4a",
           "parent_event_id": null,
           "recompute_scope": [
@@ -5116,7 +5122,7 @@
           "input_revision_map": {
             "episode-uat-01-baseline-clear": 1
           },
-          "input_scope_hash": "54af180908ca2be702e01965b4c23744353d1ae4be486e2f73700cfa711b52b5",
+          "input_scope_hash": "301dd2f6b9f55e9297cc10533ae3b12ebfc1e5e6d96c96b1f22762da5e9ba5f2",
           "output_hash": "a5563fe2036c87fc0406bfcc3a74eb9e206cff6e29c19af2cd7c456c6af5c058",
           "parent_event_id": null,
           "recompute_scope": [
@@ -5181,7 +5187,7 @@
           "input_revision_map": {
             "episode-uat-01-baseline-clear": 1
           },
-          "input_scope_hash": "a2f7c092ada6aa191e6ceedbf7bfc9d1522ee327abc64617b3abd54f5c2549d0",
+          "input_scope_hash": "329c3ad3f003d0dcee16513f93fdc629e91acb1ae3f266465ff099dbd6bb3f3d",
           "output_hash": "9a4c8faf0f3dfad8cf221ed30d5522794f4e4ea44131ccc88e12db1b64404d6b",
           "parent_event_id": null,
           "recompute_scope": [
@@ -5246,7 +5252,7 @@
           "input_revision_map": {
             "episode-uat-01-baseline-clear": 1
           },
-          "input_scope_hash": "a362bc16e407fa58a7bbdd48e92e05fa262e4efb2b716cedc8b6ad0f123f7a93",
+          "input_scope_hash": "965c081e4a344489959885b89b2615d55f1ca0da677c13e9715a45ef8b74e38c",
           "output_hash": "067c75625f9954a96e17b2a34b04fa8967b33787464a19dea1221faec3ce6465",
           "parent_event_id": null,
           "recompute_scope": [
@@ -5311,7 +5317,7 @@
           "input_revision_map": {
             "episode-uat-01-baseline-clear": 1
           },
-          "input_scope_hash": "1442610cb7e103cb4177e53ac1b9232fc0ff548e6ea9b8aac3534527315324af",
+          "input_scope_hash": "654ca9a8bd61f38420ad041dcc3a46d84121a0d60f1eea567e5c0b2e7309a8a3",
           "output_hash": "6d796a79b008711e97dba345ae630ac31db08015a6b7e9a283622ae07deea5da",
           "parent_event_id": null,
           "recompute_scope": [
@@ -5376,7 +5382,7 @@
           "input_revision_map": {
             "episode-uat-01-baseline-clear": 1
           },
-          "input_scope_hash": "9d3adec0b165acee97cbd1b2c83de6b9d45b4eb6eb429611c5bd8486be712e41",
+          "input_scope_hash": "b98b82dfbeaf4c81118b6dcba7f72c986e042197c9d84c6d5aad59920de99bb1",
           "output_hash": "8f977378879787596160b80afc0aca53047294ce957fac6b8090ae060685c084",
           "parent_event_id": null,
           "recompute_scope": [
@@ -5441,7 +5447,7 @@
           "input_revision_map": {
             "episode-uat-01-baseline-clear": 1
           },
-          "input_scope_hash": "64325fd424639cdf27dc480c1fd34af2d7f67403121c3c228932e8ca003db291",
+          "input_scope_hash": "23fdd68a67f85934b4e0f566f20e4da6127551c0535c2ac4f19c2c0603ff5f34",
           "output_hash": "3cd8e7437dce3f81e092e862cad726c137924ccc333255a8808edf7026cdfa10",
           "parent_event_id": null,
           "recompute_scope": [
@@ -5474,7 +5480,7 @@
           "input_revision_map": {
             "episode-uat-01-baseline-clear": 1
           },
-          "input_scope_hash": "8f0fc0e9c1224560fd08b72c98693e0127f3ff10c0bca7d7dcc2533d95987631",
+          "input_scope_hash": "0eb5a744e262d931d0a5be1de1b9664562e15f2aecb2407d0b11d0766596ab62",
           "output_hash": "3c6c2d147233fbdd14ac6c55d936f24bf2abf978ad7052365b813c0978377fd3",
           "parent_event_id": null,
           "recompute_scope": [
@@ -5791,9 +5797,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-01-baseline-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+          "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
           "integrity_gate_result_id": "gate-uat-01-baseline-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+          "integrity_manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -5830,9 +5836,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "7ab1ff37b26839e59f3cce56bd38bee319f8048e33a5012c0c70c3bf90e082e0",
+        "event_sha256": "f0cca309988a11748607e8abea82df29eda15aea137767e50cfc8180b01285df",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -5841,10 +5847,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "0c99db0ca7b1ba09868af56ab50fe9fc7ee5e821b88e99e7e6a01fcbd83107f2",
+        "confirmation_sha256": "676c610bcd602c202342f4ecd35b00dc9c5975f435bdec290e37209fd70af1cb",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -5854,7 +5860,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "official_rules": [
           {
             "components": [
@@ -6051,12 +6057,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -6496,12 +6505,12 @@
         "verified_by": "synthetic-uat-human-acceptance"
       },
       "protocol_integrity_manifest": {
-        "authoritative_rule_set_sha256": "beace579ae41f3a6864b18cd935daaa944f0ef6fcabb77cafb89885356283ce8",
+        "authoritative_rule_set_sha256": "259610747cf084d692f7533e88169826ee4f8603aa5de2088f7df8a8f756d3db",
         "authoritative_workflow_sha256": "1d13d5f280706df5152685b4f1a4701a36a3e0a0cf3a13ed985ff8dac47a2ab8",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+        "manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -6783,12 +6792,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -8470,8 +8482,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
-          "output_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
+          "input_scope_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
+          "output_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -8505,8 +8517,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "548ca494c1eef1499823646edea3101a8ca49bcb7de6b75af1ff0e3b7682cccc",
-          "output_hash": "548ca494c1eef1499823646edea3101a8ca49bcb7de6b75af1ff0e3b7682cccc",
+          "input_scope_hash": "7520dc17de062c5334580fcf2edcda5cbc08b3d48d249bd2612b2bebb177fe3e",
+          "output_hash": "7520dc17de062c5334580fcf2edcda5cbc08b3d48d249bd2612b2bebb177fe3e",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -8680,7 +8692,7 @@
           "input_revision_map": {
             "episode-uat-02-screening-barrier": 1
           },
-          "input_scope_hash": "5ddcb536187c5ca1fe26928baea9624c80ec4b4a722c998c12aade277e137dd7",
+          "input_scope_hash": "8566deee0c6788c3eacdf73e6fa018e00a16d28ffd2344389b65f3089767819a",
           "output_hash": "e80f67e3dc4e385ae87d70047e1b4df90c7c5c6533edd853f60d41b7aa6f1ca5",
           "parent_event_id": null,
           "recompute_scope": [
@@ -8745,7 +8757,7 @@
           "input_revision_map": {
             "episode-uat-02-screening-barrier": 1
           },
-          "input_scope_hash": "48e51b9be8a27b3fa4d9347259b248b59921f54acdb13b3dd97e55b0a43f0182",
+          "input_scope_hash": "8605263398cef5cf41fab42997d9dfd868494c8cc41744f8edcf460dda60d58e",
           "output_hash": "bff2af565c5a5ad893309ebb524bec1376d14c8f02e5c4b26445136b4f40a2f4",
           "parent_event_id": null,
           "recompute_scope": [
@@ -8810,7 +8822,7 @@
           "input_revision_map": {
             "episode-uat-02-screening-barrier": 1
           },
-          "input_scope_hash": "6a86cf3c6254015e16c0e40dff7394cf5342f298a4da9b41e25a4e1f7860754a",
+          "input_scope_hash": "6ee71b538ed549e2257b6e4e24ee727f8e3a054649c2ff58e41a96d243f075bb",
           "output_hash": "120b1d4d4bf70f587446c8a4f10fe0a19ecac30fdb75de0461e748f7cae5aadf",
           "parent_event_id": null,
           "recompute_scope": [
@@ -8875,7 +8887,7 @@
           "input_revision_map": {
             "episode-uat-02-screening-barrier": 1
           },
-          "input_scope_hash": "67c8e981a15b0e8533a02e246fbb9a498def6aaab99816e0b128ef0a5dd2158e",
+          "input_scope_hash": "245af213bf6fe7ef0f6f303dbe94943a27b8b763901346f39af84e18e2a74a55",
           "output_hash": "546c1db5ff4c464bf3694d9fccd58ebd26d198807d357c577c72110358b2a368",
           "parent_event_id": null,
           "recompute_scope": [
@@ -8940,7 +8952,7 @@
           "input_revision_map": {
             "episode-uat-02-screening-barrier": 1
           },
-          "input_scope_hash": "29c72825fa0c2c9391e6ca80246ac4a0c9919eb9dd72a48f64026780bd744eb0",
+          "input_scope_hash": "05003468847c4f6de0bb3fc4be427241c29a19cb3d78e18f4a8719b06d72e84d",
           "output_hash": "ce7372144e5fba3e8c99906ebc711fe56134a59c43a219810ca7bd30cd4dfa18",
           "parent_event_id": null,
           "recompute_scope": [
@@ -9005,7 +9017,7 @@
           "input_revision_map": {
             "episode-uat-02-screening-barrier": 1
           },
-          "input_scope_hash": "92127afeda580f6659c50a03ff3845a626fb9d6392683fe808b3e291c5ad53dc",
+          "input_scope_hash": "3809efb271b7cf84bdb08d63b6d905ea36316f0fa42bef1ca3e47c26849b98d5",
           "output_hash": "00146b1ab8a814b4549872e5eb71da6c723e29cb017ff8efceea89f66a09093d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -9070,7 +9082,7 @@
           "input_revision_map": {
             "episode-uat-02-screening-barrier": 1
           },
-          "input_scope_hash": "6b5ebb748b41ea2eab5c43b6afd0f758ccf12d3437b4930cb8ccafd8a1f05969",
+          "input_scope_hash": "a4793b980a1d1b64d582d4392848b04bfc40598ca9dc0f3f7311d740daebff95",
           "output_hash": "c93f4e57b47c9794ea03be586944833babe719f0a6c9ddcd4fd0a77e6c81f488",
           "parent_event_id": null,
           "recompute_scope": [
@@ -9103,7 +9115,7 @@
           "input_revision_map": {
             "episode-uat-02-screening-barrier": 1
           },
-          "input_scope_hash": "7226c0ea3c3f0696a0cddf3edeab08b9228b7c9d3f974aa57e290f2ffa9ae853",
+          "input_scope_hash": "94d65947d077507e4abb596fd00d88a4c960233525794b2ed59182b83e3c79f7",
           "output_hash": "ac89f5670426746d84a5277a4592afa4a90dd07e66f09e6bd3eb4cf3850ae834",
           "parent_event_id": null,
           "recompute_scope": [
@@ -9428,9 +9440,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-02-screening-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+          "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
           "integrity_gate_result_id": "gate-uat-02-screening-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+          "integrity_manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -9467,9 +9479,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "7ab1ff37b26839e59f3cce56bd38bee319f8048e33a5012c0c70c3bf90e082e0",
+        "event_sha256": "f0cca309988a11748607e8abea82df29eda15aea137767e50cfc8180b01285df",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -9478,10 +9490,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "0c99db0ca7b1ba09868af56ab50fe9fc7ee5e821b88e99e7e6a01fcbd83107f2",
+        "confirmation_sha256": "676c610bcd602c202342f4ecd35b00dc9c5975f435bdec290e37209fd70af1cb",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -9491,7 +9503,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "official_rules": [
           {
             "components": [
@@ -9688,12 +9700,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -10133,12 +10148,12 @@
         "verified_by": "synthetic-uat-human-acceptance"
       },
       "protocol_integrity_manifest": {
-        "authoritative_rule_set_sha256": "beace579ae41f3a6864b18cd935daaa944f0ef6fcabb77cafb89885356283ce8",
+        "authoritative_rule_set_sha256": "259610747cf084d692f7533e88169826ee4f8603aa5de2088f7df8a8f756d3db",
         "authoritative_workflow_sha256": "1d13d5f280706df5152685b4f1a4701a36a3e0a0cf3a13ed985ff8dac47a2ab8",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+        "manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -10410,12 +10425,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -12101,8 +12119,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
-          "output_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
+          "input_scope_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
+          "output_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -12136,8 +12154,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "9d8ed05952fc10eeaaafa1a18dc1c3a07cf9afb1c0dd70bff6655467b191f1e0",
-          "output_hash": "9d8ed05952fc10eeaaafa1a18dc1c3a07cf9afb1c0dd70bff6655467b191f1e0",
+          "input_scope_hash": "ad894376f10cdbd6f27441e810ece36467bff88801b415cbaf514dbc662861df",
+          "output_hash": "ad894376f10cdbd6f27441e810ece36467bff88801b415cbaf514dbc662861df",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -12313,7 +12331,7 @@
           "input_revision_map": {
             "episode-uat-02-baseline-barrier": 1
           },
-          "input_scope_hash": "3e3cbbce484ba51ccaaae43c99d8622046fd7ebd755ea40d6b4d9bbafb3561f4",
+          "input_scope_hash": "1524aaab99d870d0687bda3aa6f3cef388745455221e5c1bcfd6f94e8681e17f",
           "output_hash": "cd03aaa85aa0cd7fddc65ee8cc80bcbace8f21c997b58f2ebf96344a19043472",
           "parent_event_id": null,
           "recompute_scope": [
@@ -12378,7 +12396,7 @@
           "input_revision_map": {
             "episode-uat-02-baseline-barrier": 1
           },
-          "input_scope_hash": "796fb292969ccc5793be68d85f659a3e76f09d91a80d6155fdb6b755401413c7",
+          "input_scope_hash": "8416ddbfdc26ec76fa084e912b5984b3835e3d9496e7b6c172dd20468a4e523e",
           "output_hash": "2469d7e53a0736f7f9292828f589585c4af537d9d792c8313dda644b849b88f9",
           "parent_event_id": null,
           "recompute_scope": [
@@ -12443,7 +12461,7 @@
           "input_revision_map": {
             "episode-uat-02-baseline-barrier": 1
           },
-          "input_scope_hash": "905b9db4f7f73e6020c56c9aed964b3e94802d48a7fd76112f90e516c542113a",
+          "input_scope_hash": "9bd05beb2d252fa6563b6bfa4547843feb14939a3c0940c261b28a045f9ced3c",
           "output_hash": "224a5cd4faf79706d3adfa90b499b7ac008062ef03e5cde085b1f1c9f1124c1b",
           "parent_event_id": null,
           "recompute_scope": [
@@ -12508,7 +12526,7 @@
           "input_revision_map": {
             "episode-uat-02-baseline-barrier": 1
           },
-          "input_scope_hash": "e446dff2ee0e21f92d018c59723c1f39146b0d83aae00d2a15bb205b681f6c98",
+          "input_scope_hash": "64045a01a3c6a692601a04476dd758fbad78dad2a60e0a88e3a9bc7deacc8b8b",
           "output_hash": "0fe48fc9989ce43d8ea1ba98f2df976be51d7fb7561fc13c7e81343039f221ba",
           "parent_event_id": null,
           "recompute_scope": [
@@ -12573,7 +12591,7 @@
           "input_revision_map": {
             "episode-uat-02-baseline-barrier": 1
           },
-          "input_scope_hash": "944de22ad2dd66b2160c827dafc9e5370def733f50adfb7e246f0a7c48b3dc84",
+          "input_scope_hash": "d693a616a426d20b2546e26edcff03bbcacde6da4f99eeb84c37aa6a675df1c8",
           "output_hash": "aa5f892ef5a19938cb4c045b0faf3706da0393abcb81e9037ba6533ee11a57c6",
           "parent_event_id": null,
           "recompute_scope": [
@@ -12638,7 +12656,7 @@
           "input_revision_map": {
             "episode-uat-02-baseline-barrier": 1
           },
-          "input_scope_hash": "656ac8a7c924eb637bebaea836165f45b0242cc7e6d74309aad5459a762f4a03",
+          "input_scope_hash": "48e58e7068280355fab952c95ad63baa34a2c5c8ffacb261581f9be284c74fb6",
           "output_hash": "bd7aa1cae699f6898eecdd474f6c50b3d1cb24a36677fddb02b1a477c6c17c93",
           "parent_event_id": null,
           "recompute_scope": [
@@ -12703,7 +12721,7 @@
           "input_revision_map": {
             "episode-uat-02-baseline-barrier": 1
           },
-          "input_scope_hash": "0832d8b61b969b580c65bb6d25c91e65294857cf6eee68691ba496dedeea4462",
+          "input_scope_hash": "9c85101fe4e46dd7b563d1b1105240dff84c671ec7c3496fc2f04e4e51448b0a",
           "output_hash": "1d710dca9eadea7a01ce3fecd2a5d2e859e4ea8c7894342ac3fb417301734601",
           "parent_event_id": null,
           "recompute_scope": [
@@ -13026,9 +13044,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-02-baseline-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+          "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
           "integrity_gate_result_id": "gate-uat-02-baseline-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+          "integrity_manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -13065,9 +13083,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "7ab1ff37b26839e59f3cce56bd38bee319f8048e33a5012c0c70c3bf90e082e0",
+        "event_sha256": "f0cca309988a11748607e8abea82df29eda15aea137767e50cfc8180b01285df",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -13076,10 +13094,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "0c99db0ca7b1ba09868af56ab50fe9fc7ee5e821b88e99e7e6a01fcbd83107f2",
+        "confirmation_sha256": "676c610bcd602c202342f4ecd35b00dc9c5975f435bdec290e37209fd70af1cb",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -13089,7 +13107,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "official_rules": [
           {
             "components": [
@@ -13286,12 +13304,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -13731,12 +13752,12 @@
         "verified_by": "synthetic-uat-human-acceptance"
       },
       "protocol_integrity_manifest": {
-        "authoritative_rule_set_sha256": "beace579ae41f3a6864b18cd935daaa944f0ef6fcabb77cafb89885356283ce8",
+        "authoritative_rule_set_sha256": "259610747cf084d692f7533e88169826ee4f8603aa5de2088f7df8a8f756d3db",
         "authoritative_workflow_sha256": "1d13d5f280706df5152685b4f1a4701a36a3e0a0cf3a13ed985ff8dac47a2ab8",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+        "manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -14018,12 +14039,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -15712,8 +15736,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
-          "output_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
+          "input_scope_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
+          "output_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -15747,8 +15771,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "71b0c4413c591c8d966365f56879b9166e440e383a6cb43e05a2aed6eeebe175",
-          "output_hash": "71b0c4413c591c8d966365f56879b9166e440e383a6cb43e05a2aed6eeebe175",
+          "input_scope_hash": "1b8e504ca257a5af268f1a7f412130928532853b56ca3db4a325d6f1db447279",
+          "output_hash": "1b8e504ca257a5af268f1a7f412130928532853b56ca3db4a325d6f1db447279",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -15908,7 +15932,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "a33bf3a82a0b8330bbe3667f490e832efcfd422418d963bbabb5aa14bee56051",
+          "input_scope_hash": "514f210deb7cff715a5a2aa8399a92b1072de45d303145f9fae21adbeb0bcf8d",
           "output_hash": "2824a1b586b53a975035e1c33febfb5743313616fcdee42ca370aa0c0fcc3fe4",
           "parent_event_id": null,
           "recompute_scope": [
@@ -15973,7 +15997,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "1543386efb825adf3a8d2caac1e396a516d857472ba777d50b1233de285130f0",
+          "input_scope_hash": "577af3ec86efc0de92f66e1fee9a43a14da857d02f41b88b76909d002d75a7df",
           "output_hash": "d1f5c4c71f8a287783f69341c99cb7928b94fe8d641fde8519cacf9549b3b346",
           "parent_event_id": null,
           "recompute_scope": [
@@ -16038,7 +16062,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "a25739bc4b5df7cb2de97ea14e33b85d85041ded47feac1015802c346677bf0c",
+          "input_scope_hash": "80fe4821d754982cb0779f1d332fde50fa5babff91aa41f8b88f3f8a3aa1e5c5",
           "output_hash": "67f08333bd1d3f654232247a4db40e48679bac95593bf43d5f4cdccb3566699e",
           "parent_event_id": null,
           "recompute_scope": [
@@ -16103,7 +16127,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "c443ed504cfe823d925118220d909c4c70d8f074a7946eb994929608bf62a254",
+          "input_scope_hash": "dd77d4d9cd031fbfa219afe0cf39efc284072dae2e0e2b018ece6595efa1ca00",
           "output_hash": "1ba207df89e7e45852b9158826ab66fee497f1df537d808794f7a574f566e3d6",
           "parent_event_id": null,
           "recompute_scope": [
@@ -16168,7 +16192,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "a5778177658a3a954cfbc9498f49952a9b0bee8621077f45a87a5ffd583e1e2b",
+          "input_scope_hash": "310f16efcd4f4684f4292177c96b2a54c9e0f97a4ef8884429e2f07c8812169e",
           "output_hash": "5e2eff60873798df97e6f211b457d1dbe6fbfbe18d8acff4b11be4a421281ee8",
           "parent_event_id": null,
           "recompute_scope": [
@@ -16233,7 +16257,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "d6d771454e28233f5fe48f73f109e6e3875602f0c4093789e16b10fdf5905d33",
+          "input_scope_hash": "a44ba31f00c0bab8a1f21b68cbfbd57c00f2a41cab1f1a7c1d9e55e8d29733b9",
           "output_hash": "6b5dac6f537c1880783bea2478e9bc9d6d2fb92455b0da664847dafd2eaa6f45",
           "parent_event_id": null,
           "recompute_scope": [
@@ -16298,7 +16322,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "bf8b9fa8e7a97cd3f716cd6c9d09cbde9de9e69208fa23295eaaa6c8cc0e0f7c",
+          "input_scope_hash": "52237497055f7d8d03edcbd465b378a8bb75c65a26e7da3210bfe4762ab123f3",
           "output_hash": "fbff5cbef62dde830d75e9d8661b487169993e3cde98f60555b398a1a0504978",
           "parent_event_id": null,
           "recompute_scope": [
@@ -16331,7 +16355,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "e983e298fed26c7f275c1d58a2e0f5ee897bc8f9f8f6195bed36541698a8970a",
+          "input_scope_hash": "ef0c2f8d6952c89fb4b57c144de4d7a5da6f4c21196e25d6482cbfd1169eccf5",
           "output_hash": "7c1262495bc2381d56359a9a750e5f6d37cf86844a803ae21c2f7b8c15389391",
           "parent_event_id": null,
           "recompute_scope": [
@@ -16364,7 +16388,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "9ef89e2e54ff8dcdb49864c0ac3f4ba2ac74216630c381e1412c9bcdd2228206",
+          "input_scope_hash": "db9bc53ccdebbfd323dbab85ff904b34b7bcc1d843ebf5945279ef3227d6190c",
           "output_hash": "6660f231ddcdfc5019afb5bc9819c395a11e2a850a64e073e8f338542e786b70",
           "parent_event_id": null,
           "recompute_scope": [
@@ -16397,7 +16421,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "9c76487b20c4191b26b17bc11cf1f0f163d3a8554f538419e709ba94d5a5a303",
+          "input_scope_hash": "f23f7942856a63092028bbae0019830c15afa1f8939fc11b5676b212ed0464e0",
           "output_hash": "fc663b478ba732d3466352fe9f7854fc25d22aed7a8dad8f18baf5cebc204e6e",
           "parent_event_id": null,
           "recompute_scope": [
@@ -16430,7 +16454,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "3984c45bfa0c584bdbe9b0c1f0d3caf507cdfea58b5ff916fbad2e54ae0c056b",
+          "input_scope_hash": "cabaefa7c57502dc27666efd7a78e7935e1c96e9e772bc556812cc8fb08706e6",
           "output_hash": "0205c226bcd86e360675ee6bccd7099f7ddda1c76b6beaefc44ab4530b45bb7f",
           "parent_event_id": null,
           "recompute_scope": [
@@ -16463,7 +16487,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "61dafc5f9d23240af555e0d9f3ad33d47347670bb9fdf483f0f2f9635013d663",
+          "input_scope_hash": "2235539f80e787ac1d7e60dd06fa9d34b734979e765ddf0222b846df3a9b702d",
           "output_hash": "bc47a545b0c35d2bd344364920e0ac3fb22eb1e6e4339037a0e3afe67b192c27",
           "parent_event_id": null,
           "recompute_scope": [
@@ -16496,7 +16520,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "58920b0e01aad949134ed24ae2f103c31024c36b3cc760a7833995ac2a23dc73",
+          "input_scope_hash": "65f8edc01d337b293adaa8e5f7f10c60a7fe3839084f44d835f564eb8d631981",
           "output_hash": "81219c658f6644b6a0a9a3cdc3c73e7b46666314c8513c7716e45510bacbbc4d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -16529,7 +16553,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "287bcf5eb0fcda5f19b8449bff644cc0faf0fb1db5ee7d987d3c1abb814af468",
+          "input_scope_hash": "348b0235af453db26ef4cc0cd60c3609fc0976e48df83546fca24f88612893c4",
           "output_hash": "8a6ba72f96b1063caa928f3aa1aebd3af2a520d6bb3fa18262ac817960dae76d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -16562,7 +16586,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "0b3e978be9739daed5226af3ab645a6c59c8e304048fb9b5894bbd30edf69fd3",
+          "input_scope_hash": "2b6999aedcc38c27442466e0f067c95edc93f7e2115480638217c9f56970a454",
           "output_hash": "27a36250e098955d9c0a43525fe604c6d95d3f20b68568eae194011cb9798e13",
           "parent_event_id": null,
           "recompute_scope": [
@@ -16595,7 +16619,7 @@
           "input_revision_map": {
             "episode-uat-03-screening-gap_conflict": 1
           },
-          "input_scope_hash": "ecce82cd410828d45370e92e48fdf94a1ad872507eb48dc7cf6b308d87e4e59d",
+          "input_scope_hash": "428c8ccfe818b3a83d6f1959e8b5d5610d754fbf0fd4cd373885511f6846ccce",
           "output_hash": "bb628103899a976f0c2afefc781af2286b448c8926faae6bebdc4a69274d40a9",
           "parent_event_id": null,
           "recompute_scope": [
@@ -17085,9 +17109,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-03-screening-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+          "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
           "integrity_gate_result_id": "gate-uat-03-screening-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+          "integrity_manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -17124,9 +17148,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "7ab1ff37b26839e59f3cce56bd38bee319f8048e33a5012c0c70c3bf90e082e0",
+        "event_sha256": "f0cca309988a11748607e8abea82df29eda15aea137767e50cfc8180b01285df",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -17135,10 +17159,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "0c99db0ca7b1ba09868af56ab50fe9fc7ee5e821b88e99e7e6a01fcbd83107f2",
+        "confirmation_sha256": "676c610bcd602c202342f4ecd35b00dc9c5975f435bdec290e37209fd70af1cb",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -17148,7 +17172,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "official_rules": [
           {
             "components": [
@@ -17345,12 +17369,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -17790,12 +17817,12 @@
         "verified_by": "synthetic-uat-human-acceptance"
       },
       "protocol_integrity_manifest": {
-        "authoritative_rule_set_sha256": "beace579ae41f3a6864b18cd935daaa944f0ef6fcabb77cafb89885356283ce8",
+        "authoritative_rule_set_sha256": "259610747cf084d692f7533e88169826ee4f8603aa5de2088f7df8a8f756d3db",
         "authoritative_workflow_sha256": "1d13d5f280706df5152685b4f1a4701a36a3e0a0cf3a13ed985ff8dac47a2ab8",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+        "manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -18067,12 +18094,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -19768,8 +19798,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
-          "output_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
+          "input_scope_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
+          "output_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -19803,8 +19833,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "1e8956dc03b9b39b6983cd53e44438a2b2896d158b17dc6ada9061b07687fbc3",
-          "output_hash": "1e8956dc03b9b39b6983cd53e44438a2b2896d158b17dc6ada9061b07687fbc3",
+          "input_scope_hash": "3b6918bb9b4a34866b17b413d1c23376122b00329d638181491354b3f3fa4ace",
+          "output_hash": "3b6918bb9b4a34866b17b413d1c23376122b00329d638181491354b3f3fa4ace",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -19966,7 +19996,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "f977c23161492fd447d998d4f35e23f8e6d05b73de1bb8805f7b797011a5b3f7",
+          "input_scope_hash": "decd761f23d0863f37fdcb3f6227da8921b3649493df5f05bc4166e0e03f966e",
           "output_hash": "0e40c6e43bd74991086bb731d1f201f73e7efd53efd4a777847516c69e651fab",
           "parent_event_id": null,
           "recompute_scope": [
@@ -20031,7 +20061,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "bfcce9809c257080f71df9fd570616bbd034f32f43efe398432e22b9df8bef48",
+          "input_scope_hash": "2077cde105ebf017f9ce1e6a3324f3e665e5c7ba5e8cbf5f38cb4d5193b99984",
           "output_hash": "7c92e598072db12060c13306d30ee38f3665e6a88a7b46cd986fb39ac2a5d697",
           "parent_event_id": null,
           "recompute_scope": [
@@ -20096,7 +20126,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "ef99d481bc5e55b47b4019d003f23631c6f695c0b14cd670c9a860ac6752b087",
+          "input_scope_hash": "4738463b7bdadc4db05c6b5e1417cdcc608c840c3283ffc69c3aaf949636131e",
           "output_hash": "f06a43fa602933ead8bbcfbe323ff26781e6f0f1c973651f507d8655ec6f8409",
           "parent_event_id": null,
           "recompute_scope": [
@@ -20161,7 +20191,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "da2b6ce4a1181a29c31642a32c0e5257205ba5d3fe42895be23dd17e978d5277",
+          "input_scope_hash": "93c84da999b99b1e7368d7797c6411212a4954096df198ee39f9b8e67d6eef4e",
           "output_hash": "526407bac3d06df57eb1e09395510b0ba007b946b83f4ec8abc0a988d640e856",
           "parent_event_id": null,
           "recompute_scope": [
@@ -20226,7 +20256,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "0a9475897ae3813b2d2e85a8648bbb0194503b82fd4b9fed033c868739c3dcbd",
+          "input_scope_hash": "7a741fdaf3bd2263e8cace8523620cc9718bc6a0da331ecca7484712d7eff15f",
           "output_hash": "9321455895ebab1e044d2a652209f54d2c3bc2c264b0b89192e457eb4108f47d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -20291,7 +20321,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "29d6fa25be1bf63dda6e820f641ed61174c93b68ed7902a7aeecbb83f6701647",
+          "input_scope_hash": "a3fc6cee20ac105ebfc3b0edb3fe299ab055bb9f25d697b1a30a04c2a28c2f11",
           "output_hash": "29f0895ee8beec6527a78a0ea9ec0e4c5c78ca6696bf9fe0758f51b618136f3a",
           "parent_event_id": null,
           "recompute_scope": [
@@ -20356,7 +20386,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "39ae63baa5e7974cb09f021ef27f0ebebbdf0c7343da35f4a00b25177252be44",
+          "input_scope_hash": "0d6819ede64321de8acb7f191dbc0424303f916c8f2322c52f501bf903d77d89",
           "output_hash": "aa29fdaeaab79249ba366eee6b3b890020100f37c9a82dd93ad3a68052b314cb",
           "parent_event_id": null,
           "recompute_scope": [
@@ -20389,7 +20419,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "0f499daffa3f18d68bac775ba6a0b62a399a7c1e0bf31f67231e342e13cd7ce8",
+          "input_scope_hash": "aadb5b6618c2d5500fc75577e0c9df5550a512315bafbeb19b46990044565125",
           "output_hash": "71b1e8db26444798224780c12656cc0d128cbad0ecafdda40875d0f72afd8f87",
           "parent_event_id": null,
           "recompute_scope": [
@@ -20422,7 +20452,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "acf2d839edd4c9e38bf883694f30505d0089782c5cdf12e5813b0ba86a41952a",
+          "input_scope_hash": "b71e93f7034ecd6d133317427d8a289d629964615b7d625595b66e3bab6f790f",
           "output_hash": "764d41d7860a717fd22e81770dab3f19c9ea88dd220951fd4d9e311cf441f58b",
           "parent_event_id": null,
           "recompute_scope": [
@@ -20455,7 +20485,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "bd6f2723645d742b858968b5b08ef235c7e32538193ee936dc9716f1f6977a1b",
+          "input_scope_hash": "ba3728d27b0c2219b5a421e52a3ad02c6b0f86582f8332e35690f96caff1ba92",
           "output_hash": "db20932b43c3ba430ce0b7656ea633126d8531a1aca464de47b503d919c59f5a",
           "parent_event_id": null,
           "recompute_scope": [
@@ -20488,7 +20518,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "478d640b2e4fccace14afa1d4d8b26a1621a59a3cf769070d1ec0626f7be2306",
+          "input_scope_hash": "3339ca5ad592a35a4ec7a3b723651ab94f2991b53ecd9f7875d884f0b4c4bc01",
           "output_hash": "59a69f2b557c2179eb40f96ef043c27ad808ec771dcec7ddc7b62856daf47d48",
           "parent_event_id": null,
           "recompute_scope": [
@@ -20521,7 +20551,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "fa5da0df86fccfc6333974b953a068bed741796b15b2ba74a25f359d09e05d7e",
+          "input_scope_hash": "6af49044a949ecbfb3c91107565809c9412e8cb53895317fc6596168d494ddb5",
           "output_hash": "5d72c8db40ace225ef4ee3cd8af13167af08d5dc63ec46f7c0c98e16fa096cd5",
           "parent_event_id": null,
           "recompute_scope": [
@@ -20554,7 +20584,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "a79b0a89d7ff0526c809cf25dd67b2532c4c4a1f9dfd3d7a43a2208ac81db6d7",
+          "input_scope_hash": "29082f8013b16d283c379ae257020aa1f056ebdd5ef22f5c1f4c6fb306df840b",
           "output_hash": "8765761c6cebf2edfbfaf30622c57b949b93ad48b252c01b2e916780eb49911c",
           "parent_event_id": null,
           "recompute_scope": [
@@ -20587,7 +20617,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "4a55c24dd8d4bf95395dd9b9252299040e3b9ef1708c256227b8e1d282c075db",
+          "input_scope_hash": "6ebbd7b69b924571828ec508c0f7de00e01bad96f6056a5b67f466778b98b5ed",
           "output_hash": "d19b98f4c2d90412a3d1961b49882dbf417064983633281ce375884615a794ed",
           "parent_event_id": null,
           "recompute_scope": [
@@ -20620,7 +20650,7 @@
           "input_revision_map": {
             "episode-uat-03-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "ea32701c3880ddb39ff27cdad718f0225aaf96dde8be01d23bf689fa8c234c2b",
+          "input_scope_hash": "3ce09b043303e3afa5df42d02c0ba41fe545deb9e5cbed4253451a7258b8b68d",
           "output_hash": "09be37298d48f45cc7b1d4476dcaecc31b81a882a87ddaa0e61d64a0315df1bf",
           "parent_event_id": null,
           "recompute_scope": [
@@ -21108,9 +21138,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-03-baseline-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+          "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
           "integrity_gate_result_id": "gate-uat-03-baseline-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+          "integrity_manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -21147,9 +21177,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "7ab1ff37b26839e59f3cce56bd38bee319f8048e33a5012c0c70c3bf90e082e0",
+        "event_sha256": "f0cca309988a11748607e8abea82df29eda15aea137767e50cfc8180b01285df",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -21158,10 +21188,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "0c99db0ca7b1ba09868af56ab50fe9fc7ee5e821b88e99e7e6a01fcbd83107f2",
+        "confirmation_sha256": "676c610bcd602c202342f4ecd35b00dc9c5975f435bdec290e37209fd70af1cb",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -21171,7 +21201,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "official_rules": [
           {
             "components": [
@@ -21368,12 +21398,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -21813,12 +21846,12 @@
         "verified_by": "synthetic-uat-human-acceptance"
       },
       "protocol_integrity_manifest": {
-        "authoritative_rule_set_sha256": "beace579ae41f3a6864b18cd935daaa944f0ef6fcabb77cafb89885356283ce8",
+        "authoritative_rule_set_sha256": "259610747cf084d692f7533e88169826ee4f8603aa5de2088f7df8a8f756d3db",
         "authoritative_workflow_sha256": "1d13d5f280706df5152685b4f1a4701a36a3e0a0cf3a13ed985ff8dac47a2ab8",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+        "manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -22100,12 +22133,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -23796,8 +23832,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
-          "output_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
+          "input_scope_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
+          "output_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -23831,8 +23867,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "4678388c7acca7fb013ddcdf6fdecc89484b46f5c0d88efb91ece0c06a962aa6",
-          "output_hash": "4678388c7acca7fb013ddcdf6fdecc89484b46f5c0d88efb91ece0c06a962aa6",
+          "input_scope_hash": "df89b6f50345e38080c9b92d1c98d6d3896c49ee3c6d7caabc7cc52151915883",
+          "output_hash": "df89b6f50345e38080c9b92d1c98d6d3896c49ee3c6d7caabc7cc52151915883",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -23992,7 +24028,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "9da19c5815c213bf4b127ff59d56ac32f8a52526040ab83a167c48aa4462a017",
+          "input_scope_hash": "8afb618f4ee50a9dc22597304044ad0ac6caa891341e7a7a34d83b3ccc39ac40",
           "output_hash": "a91866e4258d1679bf56983e24f961a87ebb52ff927eaf159477014134d66862",
           "parent_event_id": null,
           "recompute_scope": [
@@ -24057,7 +24093,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "602a80c6616b5a0e70fb042d457eab6afad107cdc43e5d5ca0b4508f4dd8d523",
+          "input_scope_hash": "15f8907029859c7140a9d86b782840c00751494a5a2cfeb1e40b40062751c20c",
           "output_hash": "e4874487d3acc746dfc97e844bc0643c25a898ca554c149bb512d5aaa00a920e",
           "parent_event_id": null,
           "recompute_scope": [
@@ -24122,7 +24158,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "9bea99344e433119e398fce903ea764a72ebe52f2ad6da42354ece83e9177829",
+          "input_scope_hash": "ca5e2358c7ea8b19f3c9a2f9bc29d90b83b8c3ec3c575c0c1eed3a5bea1e5684",
           "output_hash": "088d5518422673087298e0fcb16f2b6539eb0462c2aced8c102ec60dc4fbe30b",
           "parent_event_id": null,
           "recompute_scope": [
@@ -24187,7 +24223,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "7e83e65486a2901e93c7343964876499bce8f1520e2126a00dfc5dfcd4a69ee2",
+          "input_scope_hash": "35d5133d980131d3e477fa89fb6cad735761e94afe9ae85325662ad2b2c5f665",
           "output_hash": "2fcab52bb03d4e909e607e407930bb85e20704a9c255a62138e07ee1129bd99d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -24252,7 +24288,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "231ebf7df128890ec32dd26c55ef7577b2af8f69a79b643605d74e1a5acea75c",
+          "input_scope_hash": "91c5e1f8084b544adee2f63d223d5b59172b393ab40b5ef91965031941af2b46",
           "output_hash": "e09b5bf7965c23e8f49153849446ce557fcb3479d92dcb27ff2bb2d875cc508e",
           "parent_event_id": null,
           "recompute_scope": [
@@ -24317,7 +24353,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "bce26f1162380c5698e3dde21f91c27dff11766fc142390ba07155d2515e03e4",
+          "input_scope_hash": "9513e95f85357d387deb38b59056da26a623ce7b4f4cfe260f6baad955602a70",
           "output_hash": "ac9f6de2891e846474fdf71f8623a11a608abae503246b76daf59b87dbbfe056",
           "parent_event_id": null,
           "recompute_scope": [
@@ -24382,7 +24418,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "b0cd273ea9b6350c62c9ed6262a0245fa0c0c309969d6dba76352b26f961d1eb",
+          "input_scope_hash": "17f27faab4512813aeaf7c54e1db2245ff88340b7070f292748ed0c0792f5ccf",
           "output_hash": "f11039a7c60c792108d8ee8a440676052026b11116b78286d7077370e3879b01",
           "parent_event_id": null,
           "recompute_scope": [
@@ -24415,7 +24451,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "16715593213a2dcbcfebb1abd455f6f0f764d833264f91bdf0e183d0156a1844",
+          "input_scope_hash": "a6e0f3e33c57357adce5b5f46d6d796e2dfe746d4a7d7191144a252bf0c7497b",
           "output_hash": "2cc6f44eb85f93f92f03644c873393710a1ebc4c6d1fb3afcc21b50439eb463d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -24448,7 +24484,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "7dee870f116c19eb3604ee33949d4803d8a8d9ac7aa7c6edc02ad7d56d3df228",
+          "input_scope_hash": "f5c761014a30edeb98917858ee2cccdb13235edde6f692f6b4c5293166da7c39",
           "output_hash": "05c24c3437f48f7b4e50473c97d4d10f0ba0cdb19277cef5ef5a226fd909ed55",
           "parent_event_id": null,
           "recompute_scope": [
@@ -24481,7 +24517,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "22aa0a7b491fd3212727fbbd8321dba54416bed7c64d45db11c3c22c1dc512db",
+          "input_scope_hash": "c3a1b1c0880b7e6044001b19cbb03873856d8425ed8ac67a8e2046a497a38695",
           "output_hash": "7f5eacb141e0689b999ccb5d4b95a6920e82c4ac15dd6c9ac006c522a8de59ea",
           "parent_event_id": null,
           "recompute_scope": [
@@ -24514,7 +24550,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "de1d216fe47cc972af77e022f58dd2af6c0608ffeb722e20dfd2ca163a90efba",
+          "input_scope_hash": "d0c6b42470d6fdcc9d710683ecda00147fc893a00929d7fb27ddc7326f47acd4",
           "output_hash": "1b7ea04c0da781168df4d35b67a7de9b96b803e45632f66fe0d814b229ab9ceb",
           "parent_event_id": null,
           "recompute_scope": [
@@ -24547,7 +24583,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "a3acc479a125a9768c0f7ebbdd1a0eb6e5d01a14bd8bfe12d95d586864af808c",
+          "input_scope_hash": "f15ad32522b5caef89df14db34f5f3c659a9963385f756027d0e50c8a0e1971a",
           "output_hash": "5f7dd89fd0780dc7336ab2aed50f2e69fa317a37e4aba78a3bdf7b5f296dd602",
           "parent_event_id": null,
           "recompute_scope": [
@@ -24580,7 +24616,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "8a8fd03c54870bbfc9d6ae3c0bcd15d108cc2be63897f8aa385e5847fbb25f77",
+          "input_scope_hash": "d2446e40c2fd59209cbdb7f10d65388868ab4a7d736ddcab3383f964c34e5809",
           "output_hash": "8e7cb4d961c45598feec1978d4a4a1b8b9d6fc291a1f6351cd64f9bb5684b5dc",
           "parent_event_id": null,
           "recompute_scope": [
@@ -24613,7 +24649,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "5820a16bc6a6d3c38b8c16546165334b5e5fb568fc3d4a79adff9407d79a1cde",
+          "input_scope_hash": "f71746be63a575572e08c17aa7c52236f62d5df6cb66c909697a28e442ff00c3",
           "output_hash": "9c868eca36e79e4475e705d2991fbd96621f6dcc184f78af217844c857499c75",
           "parent_event_id": null,
           "recompute_scope": [
@@ -24646,7 +24682,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "c1f32d3165b49666181529b89b2bde38651e7cc427a322698a010bb27676fe4b",
+          "input_scope_hash": "109e950123bb60399acbb3bc222d5bf60ea2d43734bd6d9436f349659eddc34d",
           "output_hash": "70722d281301f78c3ec4baabe6a5006514fe9bae3c812c90db96f14b249a5e01",
           "parent_event_id": null,
           "recompute_scope": [
@@ -24679,7 +24715,7 @@
           "input_revision_map": {
             "episode-uat-04-screening-gap_conflict": 1
           },
-          "input_scope_hash": "ddc0306b98e77c063d9f9ac73615cd5f55a75f069ad12b4a2a24e39916ce93d9",
+          "input_scope_hash": "014ced0774a538c701b6515308b9b007c9c575ef661ac41457f253bbea88d084",
           "output_hash": "034110e50a5dc73861f024551c3e9dacf3f056af88abd197581991ae482cebb0",
           "parent_event_id": null,
           "recompute_scope": [
@@ -25168,9 +25204,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-04-screening-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+          "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
           "integrity_gate_result_id": "gate-uat-04-screening-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+          "integrity_manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -25207,9 +25243,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "7ab1ff37b26839e59f3cce56bd38bee319f8048e33a5012c0c70c3bf90e082e0",
+        "event_sha256": "f0cca309988a11748607e8abea82df29eda15aea137767e50cfc8180b01285df",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -25218,10 +25254,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "0c99db0ca7b1ba09868af56ab50fe9fc7ee5e821b88e99e7e6a01fcbd83107f2",
+        "confirmation_sha256": "676c610bcd602c202342f4ecd35b00dc9c5975f435bdec290e37209fd70af1cb",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -25231,7 +25267,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "official_rules": [
           {
             "components": [
@@ -25428,12 +25464,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -25873,12 +25912,12 @@
         "verified_by": "synthetic-uat-human-acceptance"
       },
       "protocol_integrity_manifest": {
-        "authoritative_rule_set_sha256": "beace579ae41f3a6864b18cd935daaa944f0ef6fcabb77cafb89885356283ce8",
+        "authoritative_rule_set_sha256": "259610747cf084d692f7533e88169826ee4f8603aa5de2088f7df8a8f756d3db",
         "authoritative_workflow_sha256": "1d13d5f280706df5152685b4f1a4701a36a3e0a0cf3a13ed985ff8dac47a2ab8",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+        "manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -26150,12 +26189,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -27851,8 +27893,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
-          "output_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
+          "input_scope_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
+          "output_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -27886,8 +27928,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "35976380509d7c24e82b1a65010f631002986b2bfc8a7e794ab284a2c47519f0",
-          "output_hash": "35976380509d7c24e82b1a65010f631002986b2bfc8a7e794ab284a2c47519f0",
+          "input_scope_hash": "da0f4fedcc23615b0acda33adda2c2b377f41a2e455fe5e34c5090ef5ac04f9b",
+          "output_hash": "da0f4fedcc23615b0acda33adda2c2b377f41a2e455fe5e34c5090ef5ac04f9b",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -28049,7 +28091,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "d9c38081e2726eaa14b5c8c7fcb6ee2194db6236ed55d6efb05b18b1fe578c5a",
+          "input_scope_hash": "fde5f1ab2f567c8c65a52b1576a6daacfa3e99aca35bd1f9fc8f487e61f31cce",
           "output_hash": "a20179a40e2ad9268225f10aa70cadeb729bc5e10679effd184cd2bcaaf71ccd",
           "parent_event_id": null,
           "recompute_scope": [
@@ -28114,7 +28156,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "a1d02d7bee4b1534598c36d65c2a90d6617cd68f7ba29f86742bd019820a2e63",
+          "input_scope_hash": "518d93c55c65e49ea30441266a29c3ae3ea2be3ec70f3cde5321cb91606af826",
           "output_hash": "f51ff0d724ee13156f7283c4d93395251ec384da400e0f3d33e00094e726f9ae",
           "parent_event_id": null,
           "recompute_scope": [
@@ -28179,7 +28221,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "23be76d7a222695852cebf819d2c4951b4ca1feabcc6518975540eea12b5fce7",
+          "input_scope_hash": "94b22d8893cdc8ab798426ef8bc5acb0d0831a2c30ed5c9617f611e997212b4f",
           "output_hash": "f336ce0e2ab66d63c5d3d8174ffd16a1cd4cf4b5dc8b920da59c1f196c0e1fb7",
           "parent_event_id": null,
           "recompute_scope": [
@@ -28244,7 +28286,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "f97300de432f86dbc2d001bab9a03584ba2cb78e1db5c72a1c15610c40ebeb92",
+          "input_scope_hash": "3eca4e089329cc9059e749a798ddf3e17d327c4768c8f25434a0d8a8d93c8a72",
           "output_hash": "fe7653eb77d4b823a0836e78e151c9ae0b8f14d8f4c0275c52da048dac6b2164",
           "parent_event_id": null,
           "recompute_scope": [
@@ -28309,7 +28351,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "c4258e04cabd128a845160737bfd320382df999299ba36a6ec4e6f0a33b82f4a",
+          "input_scope_hash": "d2c1241ff4b789bdec52184584b6ccb41647b844ca4ef2a468a201fe578ab7f3",
           "output_hash": "3d04f90813442d1833aafa789f64be0efea095835eb211df97b9fd126e4c9127",
           "parent_event_id": null,
           "recompute_scope": [
@@ -28374,7 +28416,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "819db6b4dc4ed64b12589cde424e44a4271526b85af9c96ebc4af9b75a948230",
+          "input_scope_hash": "2389e76bd03a40ac79735dacae23fec23d07cc2fee8b45b28859e2c5e541f0c4",
           "output_hash": "57155fafdbddce22fcafdf17535704d904dc42fde9c6684845564dbd34f11c5b",
           "parent_event_id": null,
           "recompute_scope": [
@@ -28439,7 +28481,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "d5c78fbc8b0be1296e3716d77d5fb24694b8157d94b7bad064d86a461b33ba76",
+          "input_scope_hash": "1b2ec05889d9bca153d2dad7c64f72c514441319b890c55f643f791270da89cb",
           "output_hash": "31c89be13a6803e0a98afa35d183e32897cdef3d2afe0fd5664bc5ee045a796d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -28472,7 +28514,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "7e9ebb6127ab44e70e6b667eedb96e71d388994fd8750a0c498a47962bca3fb0",
+          "input_scope_hash": "364a341325c3240610ea4ec14ca8ac6a20be69677ee2a04fd17ec6822ad2820d",
           "output_hash": "e9dd27eb5e4ad8a2561666c183324112c5f618579fb1bceb90aea70784937919",
           "parent_event_id": null,
           "recompute_scope": [
@@ -28505,7 +28547,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "d15eacc739ab246d160c3f58cd5d682de631cd2536b6e0dbace1ff3598baa3d8",
+          "input_scope_hash": "663e7f75df68ad80072b7d69a7d0f1680a86030b60b456cecb169b95f561e510",
           "output_hash": "0d787f6ed0a7f2b33ac0fb62e090d2240e7957a09ca7d407ecdc452fdbe095a6",
           "parent_event_id": null,
           "recompute_scope": [
@@ -28538,7 +28580,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "524d5f3c30d76d12eb24260e95d2a8b9e86af887bf0c322e97328e5170f5c09a",
+          "input_scope_hash": "0312699d83d4ff92f84d75ffdf4f83476e0fc468202f256658a5a87c0415df85",
           "output_hash": "38c1372a917bfed6dceb9e3f4ca1276ab4f5e18c69c5807298a7642fbcc53e99",
           "parent_event_id": null,
           "recompute_scope": [
@@ -28571,7 +28613,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "ee51d195074263bd797d131faeb1080a7822512c0011539f64a0225e815f3628",
+          "input_scope_hash": "8d5ab70e0f39f0a18c748e7f2ca44f4b7716f4f1049b7c4e651578fbf5a7a1ce",
           "output_hash": "058e2b7f564712ab366a6fb3602cfc5ef9207028090357df59c87b68bcd36654",
           "parent_event_id": null,
           "recompute_scope": [
@@ -28604,7 +28646,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "e25f2f65f6e968f1c62285e45a56627730dda7b4dd65d40fde9652017fea8c17",
+          "input_scope_hash": "d8d463030bee7a849e9115e72115bafcd6f9661de67e8bfd7ad5096ab150d3f8",
           "output_hash": "37a933bb12b42d208661bec6ce8efd1d2e820c4a4f990b43a20ac5ffb36ee4d4",
           "parent_event_id": null,
           "recompute_scope": [
@@ -28637,7 +28679,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "3cd78091bbc5489a0e2923d245fc646c727e9a860dcfbb6d6b67f9c5abbd7b8a",
+          "input_scope_hash": "0b7745ff696c0ac31d3c122467f52a6e6a929d367c090713fc72209a152db5ce",
           "output_hash": "81096be3fb94e675b3e3aefd05c9bfc269d40e1b2e579f50c19fd8f0c98494f1",
           "parent_event_id": null,
           "recompute_scope": [
@@ -28670,7 +28712,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "a55ae6c490184b1fe9f9d300aabe39b60b5ba5d6138de591666c1cef7ce039d3",
+          "input_scope_hash": "01d589ef200cdd4bb64738011d01358e05d80530102435fd086374b09b41e4bd",
           "output_hash": "c506b870b0918eefb72bcd386418b1c14e720ba64a3958912512910483cc04e5",
           "parent_event_id": null,
           "recompute_scope": [
@@ -28703,7 +28745,7 @@
           "input_revision_map": {
             "episode-uat-04-baseline-gap_conflict": 1
           },
-          "input_scope_hash": "fcd64aa790c2f6ad1eebc23cd0c5df09f55d2de052301a9197921c8658e6cd97",
+          "input_scope_hash": "d5c7d311a9b5d43fde0c75487bf861619ae8a922a46e4c0bb08975c84ecb94f7",
           "output_hash": "15d4bb0fe1162f61d5c16b18218e1e9ac529365841eae6f6e061ef311ce740f5",
           "parent_event_id": null,
           "recompute_scope": [
@@ -29191,9 +29233,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-04-baseline-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+          "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
           "integrity_gate_result_id": "gate-uat-04-baseline-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+          "integrity_manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -29230,9 +29272,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "7ab1ff37b26839e59f3cce56bd38bee319f8048e33a5012c0c70c3bf90e082e0",
+        "event_sha256": "f0cca309988a11748607e8abea82df29eda15aea137767e50cfc8180b01285df",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -29241,10 +29283,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "0c99db0ca7b1ba09868af56ab50fe9fc7ee5e821b88e99e7e6a01fcbd83107f2",
+        "confirmation_sha256": "676c610bcd602c202342f4ecd35b00dc9c5975f435bdec290e37209fd70af1cb",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -29254,7 +29296,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "official_rules": [
           {
             "components": [
@@ -29451,12 +29493,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -29896,12 +29941,12 @@
         "verified_by": "synthetic-uat-human-acceptance"
       },
       "protocol_integrity_manifest": {
-        "authoritative_rule_set_sha256": "beace579ae41f3a6864b18cd935daaa944f0ef6fcabb77cafb89885356283ce8",
+        "authoritative_rule_set_sha256": "259610747cf084d692f7533e88169826ee4f8603aa5de2088f7df8a8f756d3db",
         "authoritative_workflow_sha256": "1d13d5f280706df5152685b4f1a4701a36a3e0a0cf3a13ed985ff8dac47a2ab8",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+        "manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -30183,12 +30228,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -31828,8 +31876,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
-          "output_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
+          "input_scope_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
+          "output_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -31863,8 +31911,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "89b227bf96472078d1d05572b4acaf52977c6d609aab3722da22d1ebd3c35671",
-          "output_hash": "89b227bf96472078d1d05572b4acaf52977c6d609aab3722da22d1ebd3c35671",
+          "input_scope_hash": "fe4c8bbb76e660fab900f121a4a44ca5f8d79b07f74672130c2159677f70df5f",
+          "output_hash": "fe4c8bbb76e660fab900f121a4a44ca5f8d79b07f74672130c2159677f70df5f",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -32034,7 +32082,7 @@
           "input_revision_map": {
             "episode-uat-05-screening-clear": 1
           },
-          "input_scope_hash": "6fe9e1972ec357e6fc66af06d4d30c90b8b6c5cf9009b00db37caa67929b5b6c",
+          "input_scope_hash": "97560caa0f74367d7a48bde6b61ec8e5cba0d32811e1ffd89f08486e9f88ab5f",
           "output_hash": "8a3823cd9632ae7495c69e8cb17022418ab0d692b39ddd5e06d1df045a2f9b13",
           "parent_event_id": null,
           "recompute_scope": [
@@ -32099,7 +32147,7 @@
           "input_revision_map": {
             "episode-uat-05-screening-clear": 1
           },
-          "input_scope_hash": "77972638098e55570c9ee5bdfe55ce70b60565ac76aef81ae58ddd9df18c04d9",
+          "input_scope_hash": "cc6939ce5601b34363d13d2a3e43e8f86c4bce98e575018b63f5f021f3235629",
           "output_hash": "b17b0d10463ee2f4e28e2baf2917a2e0679f32987915fb1ea954bb483fe17e3f",
           "parent_event_id": null,
           "recompute_scope": [
@@ -32164,7 +32212,7 @@
           "input_revision_map": {
             "episode-uat-05-screening-clear": 1
           },
-          "input_scope_hash": "67837dd16c7665718d36c837d16b8347d540a4dc9fa673ddbf06f1d4fcb78900",
+          "input_scope_hash": "a06047b428f9cb9c8d128deebc803e3a20fa87bbf9c64e17ea038ebd3167cbf8",
           "output_hash": "4b49ecfbd3e8d226486acb96d2162fec6741a31f368ee68f4c65674b82c865bc",
           "parent_event_id": null,
           "recompute_scope": [
@@ -32229,7 +32277,7 @@
           "input_revision_map": {
             "episode-uat-05-screening-clear": 1
           },
-          "input_scope_hash": "05dc0492887979f4de94fabc2c0ced7882ffa419ae09a0201c318f169ef9dce8",
+          "input_scope_hash": "f422bdbdd16332cf426c8f5dc9bd4a151018f3a8ad431f707d7444700f16f610",
           "output_hash": "e31050f07ed146fddaafb1659d72e5133db3db29e496293df08f87dd452331aa",
           "parent_event_id": null,
           "recompute_scope": [
@@ -32294,7 +32342,7 @@
           "input_revision_map": {
             "episode-uat-05-screening-clear": 1
           },
-          "input_scope_hash": "259a188f1d04f2a9da13b2bdc39d1967a26cfda077dd994b6cc0bb6491540052",
+          "input_scope_hash": "20fcb71fa6d48e62246f0b5980271ba8f5fab3f7dae4ad91b712ab1850a37489",
           "output_hash": "b562a0d63cd640faa147fa10887d931ef02a316c16840e761a873bcf43f0148d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -32359,7 +32407,7 @@
           "input_revision_map": {
             "episode-uat-05-screening-clear": 1
           },
-          "input_scope_hash": "692c4433bda87401117af233ff342d1511935a461a92af8cfe19d8cb74a12317",
+          "input_scope_hash": "7f1a979f2934bc3ae5d59f90409d15405f5589321b2dcac4c6df3924d1663015",
           "output_hash": "5c47c11f16174cce756f111cfc914930b30c3a4715948bed7ae9e8031cb3d7e5",
           "parent_event_id": null,
           "recompute_scope": [
@@ -32424,7 +32472,7 @@
           "input_revision_map": {
             "episode-uat-05-screening-clear": 1
           },
-          "input_scope_hash": "2b97afad2f2d998b0f8ebf588a35f6ca7e70f2e27e4d8c40d9156ac42b8f3eab",
+          "input_scope_hash": "d053d061c7ff33f0315abd337e1926c34afa9f1439556ff63fd92ef43da23338",
           "output_hash": "7a245431cf1245c03bdbb1998ed20cd5be1e8868c663aba3237ad740c1737b2d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -32457,7 +32505,7 @@
           "input_revision_map": {
             "episode-uat-05-screening-clear": 1
           },
-          "input_scope_hash": "bf135a43440a23fe4e2166a8a02f11494e4e948d5bc97535ae559c4f9ca01d32",
+          "input_scope_hash": "855c2ae86abedc9c7385206ed101be77c78c23c0807a7c4da1e7364c357b4a97",
           "output_hash": "8cecc6b6fad4f3f5eb9d09cbd20f82df80a524625439505367e1428d9ba28879",
           "parent_event_id": null,
           "recompute_scope": [
@@ -32490,7 +32538,7 @@
           "input_revision_map": {
             "episode-uat-05-screening-clear": 1
           },
-          "input_scope_hash": "c347be0f8d23b5e7d29f875392c565ade66782d67ee05dac760a602c467de9d6",
+          "input_scope_hash": "86ad04d413e1376fe25821d4cef14a273eceda8032dfdcd15e7c7501c32ebca3",
           "output_hash": "389c723dfc12d8a72461c936b0e543de3cfa60e467ffb0f938352d42cbfe7125",
           "parent_event_id": null,
           "recompute_scope": [
@@ -32809,9 +32857,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-05-screening-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+          "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
           "integrity_gate_result_id": "gate-uat-05-screening-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+          "integrity_manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -32848,9 +32896,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "7ab1ff37b26839e59f3cce56bd38bee319f8048e33a5012c0c70c3bf90e082e0",
+        "event_sha256": "f0cca309988a11748607e8abea82df29eda15aea137767e50cfc8180b01285df",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -32859,10 +32907,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "0c99db0ca7b1ba09868af56ab50fe9fc7ee5e821b88e99e7e6a01fcbd83107f2",
+        "confirmation_sha256": "676c610bcd602c202342f4ecd35b00dc9c5975f435bdec290e37209fd70af1cb",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -32872,7 +32920,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "official_rules": [
           {
             "components": [
@@ -33069,12 +33117,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -33514,12 +33565,12 @@
         "verified_by": "synthetic-uat-human-acceptance"
       },
       "protocol_integrity_manifest": {
-        "authoritative_rule_set_sha256": "beace579ae41f3a6864b18cd935daaa944f0ef6fcabb77cafb89885356283ce8",
+        "authoritative_rule_set_sha256": "259610747cf084d692f7533e88169826ee4f8603aa5de2088f7df8a8f756d3db",
         "authoritative_workflow_sha256": "1d13d5f280706df5152685b4f1a4701a36a3e0a0cf3a13ed985ff8dac47a2ab8",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+        "manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -33791,12 +33842,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -35443,8 +35497,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
-          "output_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
+          "input_scope_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
+          "output_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -35478,8 +35532,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "52536fad7e1dd10d3e6c9c740f6a5346c8209656d21a837c9c51d5facf294894",
-          "output_hash": "52536fad7e1dd10d3e6c9c740f6a5346c8209656d21a837c9c51d5facf294894",
+          "input_scope_hash": "618c6aab134ea50a50edc8ce9cbfc1cea1866702959445f2b768d3bff4125dfa",
+          "output_hash": "618c6aab134ea50a50edc8ce9cbfc1cea1866702959445f2b768d3bff4125dfa",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -35651,7 +35705,7 @@
           "input_revision_map": {
             "episode-uat-05-baseline-clear": 1
           },
-          "input_scope_hash": "a7bc560d71cf54f8ae5fa2c5f0b097ddbd3c622c0247ff3f4ae264dbcebba021",
+          "input_scope_hash": "6cd2d105164da7de88aaa4e1beb2c98e93c9ad8e16ea086a8c0279fd77800859",
           "output_hash": "5238b00f45cf5c6fd7e329e86bb4a12f36d6debc439fe7612f9d8c6c314fe877",
           "parent_event_id": null,
           "recompute_scope": [
@@ -35716,7 +35770,7 @@
           "input_revision_map": {
             "episode-uat-05-baseline-clear": 1
           },
-          "input_scope_hash": "83a57f7d18b2941bc25038b80984d9730eda36aa99e663ff508d745773813eeb",
+          "input_scope_hash": "783ddecaa46903dc8a7fe6a077ee1c12b7a2655f9b22067fb2b88ea76322f2b4",
           "output_hash": "7f2c20de966a47e63b0ff2bc55347a31e56ec1d861ed81373d5e743d6a6d5e6b",
           "parent_event_id": null,
           "recompute_scope": [
@@ -35781,7 +35835,7 @@
           "input_revision_map": {
             "episode-uat-05-baseline-clear": 1
           },
-          "input_scope_hash": "acf298857feeade695e76331c9cb8bc983c1997808c4380e8ee8559ecf8d0256",
+          "input_scope_hash": "51c9d6ccd6d2636c9ab351330e5360c20e2742479c7bb7afd2ca4b874d9eaa0f",
           "output_hash": "6b4dbe430c2cfc834a46d9a0b9a725ac96671e72d2cdb37c170b0a542d85e5e6",
           "parent_event_id": null,
           "recompute_scope": [
@@ -35846,7 +35900,7 @@
           "input_revision_map": {
             "episode-uat-05-baseline-clear": 1
           },
-          "input_scope_hash": "ae927ea7c6dcf9e030c347b52d9440ebd951ce63bbea18dd3cbe9b4d7537686c",
+          "input_scope_hash": "601ee2d6fa32803c299212e855ebf8db139ae189ae0673df9c0172c1fe0cdfae",
           "output_hash": "925ebb1d5bdfd81f7fbcc0fe5cd6d844f571dfcc0b7525ef10375fd590c28a59",
           "parent_event_id": null,
           "recompute_scope": [
@@ -35911,7 +35965,7 @@
           "input_revision_map": {
             "episode-uat-05-baseline-clear": 1
           },
-          "input_scope_hash": "18256bc64e2ada8b3b53b3dce64290c2d857772941ef2742dd06dfe193c936a9",
+          "input_scope_hash": "34fde8b03a8c77c094be8038b261e500d5658794f64c29949b42528964c510d5",
           "output_hash": "8800ed9430f8e34281f2833cdc826012d8bf1889e2fe355e4063d6c479882d75",
           "parent_event_id": null,
           "recompute_scope": [
@@ -35976,7 +36030,7 @@
           "input_revision_map": {
             "episode-uat-05-baseline-clear": 1
           },
-          "input_scope_hash": "9bf44a32e224beb851a5f11b499b3a60a7b2261d8ed9dfc68b3f6ba2c44714eb",
+          "input_scope_hash": "0288a15952351ff0368d6957e1529b7e4fdc7106ff9cc94562098378f5943c89",
           "output_hash": "57a2516e69ca353a4a3882602589286a8749baa94236b75e81d717b75ad7a19e",
           "parent_event_id": null,
           "recompute_scope": [
@@ -36041,7 +36095,7 @@
           "input_revision_map": {
             "episode-uat-05-baseline-clear": 1
           },
-          "input_scope_hash": "2ef09361a3364cb6f8e475a702fb530a08e7b6a26ddf78bfaf48f3c17754cb16",
+          "input_scope_hash": "ac4865abfb12ffce73abd3a8551b09e650f34464bfe35fa3f282691559dba9ec",
           "output_hash": "70b13510f4fbafea73c8faa68f74a877c3a92e2f1005b30e1c590a62d282be08",
           "parent_event_id": null,
           "recompute_scope": [
@@ -36074,7 +36128,7 @@
           "input_revision_map": {
             "episode-uat-05-baseline-clear": 1
           },
-          "input_scope_hash": "ad0ec132ba51239486f654832baf2c97e2f0dd7a8709e9e6963ba24947a031bd",
+          "input_scope_hash": "1c9b754bb3983dc6709ce81fda15a1472102995ab574f709bf4f95dcdf1c29ee",
           "output_hash": "6b0e656351da521b8aa9665feaef8f36f68935b9bfd6ce5a2839c6b49f270118",
           "parent_event_id": null,
           "recompute_scope": [
@@ -36391,9 +36445,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-05-baseline-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+          "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
           "integrity_gate_result_id": "gate-uat-05-baseline-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+          "integrity_manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -36430,9 +36484,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "7ab1ff37b26839e59f3cce56bd38bee319f8048e33a5012c0c70c3bf90e082e0",
+        "event_sha256": "f0cca309988a11748607e8abea82df29eda15aea137767e50cfc8180b01285df",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -36441,10 +36495,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "0c99db0ca7b1ba09868af56ab50fe9fc7ee5e821b88e99e7e6a01fcbd83107f2",
+        "confirmation_sha256": "676c610bcd602c202342f4ecd35b00dc9c5975f435bdec290e37209fd70af1cb",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -36454,7 +36508,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "official_rules": [
           {
             "components": [
@@ -36651,12 +36705,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -37096,12 +37153,12 @@
         "verified_by": "synthetic-uat-human-acceptance"
       },
       "protocol_integrity_manifest": {
-        "authoritative_rule_set_sha256": "beace579ae41f3a6864b18cd935daaa944f0ef6fcabb77cafb89885356283ce8",
+        "authoritative_rule_set_sha256": "259610747cf084d692f7533e88169826ee4f8603aa5de2088f7df8a8f756d3db",
         "authoritative_workflow_sha256": "1d13d5f280706df5152685b4f1a4701a36a3e0a0cf3a13ed985ff8dac47a2ab8",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+        "manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -37383,12 +37440,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -39070,8 +39130,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
-          "output_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
+          "input_scope_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
+          "output_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -39105,8 +39165,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "41c64424abac6e85254b0dd496b3b031e230eae392dc400dea60c09e03976448",
-          "output_hash": "41c64424abac6e85254b0dd496b3b031e230eae392dc400dea60c09e03976448",
+          "input_scope_hash": "bad95c7144f5ee3b2bcbd31b28b3580b55dea54f8570457e3c5d07518d3ca5f3",
+          "output_hash": "bad95c7144f5ee3b2bcbd31b28b3580b55dea54f8570457e3c5d07518d3ca5f3",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -39280,7 +39340,7 @@
           "input_revision_map": {
             "episode-uat-06-screening-barrier": 1
           },
-          "input_scope_hash": "aa469063ad70ec66173ffbcd220330789a4f4075ae4a3fe609175babe55ab480",
+          "input_scope_hash": "a7dfbd45514943e97629086a8ee36ae8ed3e6375afa0e6c20d6ed920daa50850",
           "output_hash": "e841f6ce9f20582ef7768526245b9a6cdc6d7a1ff69fe8f5dce1f93267411bda",
           "parent_event_id": null,
           "recompute_scope": [
@@ -39345,7 +39405,7 @@
           "input_revision_map": {
             "episode-uat-06-screening-barrier": 1
           },
-          "input_scope_hash": "6f7d111a5f0291e5a2c1af31995d8f3e4f304e6a0e6f59fe29c1d1ef922aebee",
+          "input_scope_hash": "984e690d221d0c8f17f94e69d58e4d440e7bb382907379c66c1f51c5090aee9f",
           "output_hash": "b2443b1f8a6b708eb43b787cfa8908559dbcfffa700a5fb83508fdb610cef991",
           "parent_event_id": null,
           "recompute_scope": [
@@ -39410,7 +39470,7 @@
           "input_revision_map": {
             "episode-uat-06-screening-barrier": 1
           },
-          "input_scope_hash": "efd66c291f7b6022080cc797f32cd05e9d314c75b8b5a4980cf3451a1f040745",
+          "input_scope_hash": "399ef246b7ebae5f6b66a9395714198cfcf0a22d78a62637230e61c0cd0c5435",
           "output_hash": "8f93607abcc14ce6526c7ba240fe9fc15559075519f561094a15d0234cc3e919",
           "parent_event_id": null,
           "recompute_scope": [
@@ -39475,7 +39535,7 @@
           "input_revision_map": {
             "episode-uat-06-screening-barrier": 1
           },
-          "input_scope_hash": "83af1c45e6a7709c48ce6e6b8f92a5207454ddbb68897eede99a739968070e34",
+          "input_scope_hash": "712b4ccddebf6c4e1c0a6c827996758b964dc994f508d6d8e397601832b4a127",
           "output_hash": "856ef5242f7469795163afa34a91dc6810ccd400c0978eb1a3d74e0b64c80c63",
           "parent_event_id": null,
           "recompute_scope": [
@@ -39540,7 +39600,7 @@
           "input_revision_map": {
             "episode-uat-06-screening-barrier": 1
           },
-          "input_scope_hash": "db76827d7d6f31714a94417ec9dcdec5e86ae5274f34573700a741406ec20a75",
+          "input_scope_hash": "01b8ede92aaf715f3cefac0295ace47a5b126acdc2757271e5b138d96c729f4f",
           "output_hash": "f83914cba7288b2297701e8b91ab7c1d61a262d3fe5c576503c2d244db2ce945",
           "parent_event_id": null,
           "recompute_scope": [
@@ -39605,7 +39665,7 @@
           "input_revision_map": {
             "episode-uat-06-screening-barrier": 1
           },
-          "input_scope_hash": "1874cec4d225136290ba096149c0436b4298b567f701865b9833b4b4d6518dee",
+          "input_scope_hash": "9a1ad7bdefba65d1626bbc18713777f2d882ea507784f643e53542633a36a7b3",
           "output_hash": "b3dcb229840669768a9c9fb06f8c5458ff682a586c605935abfd23ab38e10406",
           "parent_event_id": null,
           "recompute_scope": [
@@ -39670,7 +39730,7 @@
           "input_revision_map": {
             "episode-uat-06-screening-barrier": 1
           },
-          "input_scope_hash": "b475e0f5a06de60ec4724a8cf942bf2bed3bc3cbe9b52000377aef267a014c0b",
+          "input_scope_hash": "cd98c883a333486faaa2f374612a9c579e6990eac9a2fdafc5d61fbeade60a5e",
           "output_hash": "07065606ef46c9817462b959db9be59d81dccb4bf794799ad5484ee191ea182d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -39703,7 +39763,7 @@
           "input_revision_map": {
             "episode-uat-06-screening-barrier": 1
           },
-          "input_scope_hash": "522fa0c44ce5b408bbbb5b49aa33df174d8643bc5b77f8a79d562689af311488",
+          "input_scope_hash": "f7749995753e11d57e3c10169393db02b4300cfcb15d47a50d09fbb0f8bb76e0",
           "output_hash": "695531cd02d8306a36d95425d0d9148f8f9a0a671141d0551726efb578efdf3e",
           "parent_event_id": null,
           "recompute_scope": [
@@ -40028,9 +40088,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-06-screening-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+          "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
           "integrity_gate_result_id": "gate-uat-06-screening-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+          "integrity_manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -40067,9 +40127,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "7ab1ff37b26839e59f3cce56bd38bee319f8048e33a5012c0c70c3bf90e082e0",
+        "event_sha256": "f0cca309988a11748607e8abea82df29eda15aea137767e50cfc8180b01285df",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -40078,10 +40138,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "0c99db0ca7b1ba09868af56ab50fe9fc7ee5e821b88e99e7e6a01fcbd83107f2",
+        "confirmation_sha256": "676c610bcd602c202342f4ecd35b00dc9c5975f435bdec290e37209fd70af1cb",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -40091,7 +40151,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "official_rules": [
           {
             "components": [
@@ -40288,12 +40348,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -40733,12 +40796,12 @@
         "verified_by": "synthetic-uat-human-acceptance"
       },
       "protocol_integrity_manifest": {
-        "authoritative_rule_set_sha256": "beace579ae41f3a6864b18cd935daaa944f0ef6fcabb77cafb89885356283ce8",
+        "authoritative_rule_set_sha256": "259610747cf084d692f7533e88169826ee4f8603aa5de2088f7df8a8f756d3db",
         "authoritative_workflow_sha256": "1d13d5f280706df5152685b4f1a4701a36a3e0a0cf3a13ed985ff8dac47a2ab8",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+        "manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -41010,12 +41073,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -42701,8 +42767,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
-          "output_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
+          "input_scope_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
+          "output_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -42736,8 +42802,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "be26f9a3bbb77d74c680e4b7f40766d8a442c277086e3526579a7d20f69b830b",
-          "output_hash": "be26f9a3bbb77d74c680e4b7f40766d8a442c277086e3526579a7d20f69b830b",
+          "input_scope_hash": "4444de3487ad40abae30c52f56793c74d971bd004b3ce88906a11154e7078d56",
+          "output_hash": "4444de3487ad40abae30c52f56793c74d971bd004b3ce88906a11154e7078d56",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -42913,7 +42979,7 @@
           "input_revision_map": {
             "episode-uat-06-baseline-barrier": 1
           },
-          "input_scope_hash": "e1de6ff4e013af8206ced6e5b5b6b6cacda8cf0f960219b2778ef6aed71544ec",
+          "input_scope_hash": "a0b2abe42ac0913b5bcb16bfde3be89dcf2080fe6f6cf7424e3cf984d5fe77c8",
           "output_hash": "e0d460b6674f0398f4dcfefca3fe5d2e22026ef7e09bf2260d3d0c10d1feba0c",
           "parent_event_id": null,
           "recompute_scope": [
@@ -42978,7 +43044,7 @@
           "input_revision_map": {
             "episode-uat-06-baseline-barrier": 1
           },
-          "input_scope_hash": "3c61f0ab85b666c551d88f6763d02352dc95eb7460108c8ca7478baca4cb3fa8",
+          "input_scope_hash": "104dd7219e28a192de477bbacdc44d2dd978fc3a05d7cfda09a1ceb812ab3af6",
           "output_hash": "5154baa255271bac21a77e918da414d1fac800aade08c7225fe54c0ccb0b1198",
           "parent_event_id": null,
           "recompute_scope": [
@@ -43043,7 +43109,7 @@
           "input_revision_map": {
             "episode-uat-06-baseline-barrier": 1
           },
-          "input_scope_hash": "2773c567ef4cadc2ba695f5507bfaf0c6218849cb27b72cc7efb4a7e1c32431d",
+          "input_scope_hash": "c3a06da1f341edb3c5a627987c3349065bca73c1301c7035bb59c95d99d3b0ba",
           "output_hash": "8921c619c1e1f4a6e303b84da00192e2a63f9616cf58af6d143fedae9ba86702",
           "parent_event_id": null,
           "recompute_scope": [
@@ -43108,7 +43174,7 @@
           "input_revision_map": {
             "episode-uat-06-baseline-barrier": 1
           },
-          "input_scope_hash": "0719689c638294776a61dc481c45054592a3f8b66b256769e1b0c3097b36abbb",
+          "input_scope_hash": "eabadeee8f17be8fd5f2c51e72607fdcac84edc29dd1055d8524aaa759d4de40",
           "output_hash": "26ed7b08199c8d72bd76abbd23da52cfc880614d66f42531806e033cbf08af27",
           "parent_event_id": null,
           "recompute_scope": [
@@ -43173,7 +43239,7 @@
           "input_revision_map": {
             "episode-uat-06-baseline-barrier": 1
           },
-          "input_scope_hash": "a3343dfe26dd852ee6b6215dece9df684b8d330f5e9d59ec724a6b970333fee8",
+          "input_scope_hash": "0ab0ed7736e09056585251dc998fe05c2d659f46222b67e27263fd5b1299428a",
           "output_hash": "0fc1f81ebe4f588655078751123cffabad410cdd6eeeda9a87de775a07a1e861",
           "parent_event_id": null,
           "recompute_scope": [
@@ -43238,7 +43304,7 @@
           "input_revision_map": {
             "episode-uat-06-baseline-barrier": 1
           },
-          "input_scope_hash": "7e683108a980e14620906f6f73781ca5e21143fde1a1c138bf86c4c8bd12e1e2",
+          "input_scope_hash": "65dd5962b8ba776320fc49758b42aac76390ea4267e9c8288a23b38e5ba3b842",
           "output_hash": "063f679281c5affca3736ee3afe913a868aaa57060be4c3ef9b73ff47af22b6e",
           "parent_event_id": null,
           "recompute_scope": [
@@ -43303,7 +43369,7 @@
           "input_revision_map": {
             "episode-uat-06-baseline-barrier": 1
           },
-          "input_scope_hash": "6c734e1677e52431d6932d049825479a80717e683188743840eaf56ea78c64c5",
+          "input_scope_hash": "85f48df7d41b37b7d0e45c1b86a391bd4826587236b246d21c0138e195d11941",
           "output_hash": "4733d8ae70fbfe8178060f913eecdee4e53eeba01bd24ab305200b043c1ad6e8",
           "parent_event_id": null,
           "recompute_scope": [
@@ -43626,9 +43692,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-06-baseline-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+          "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
           "integrity_gate_result_id": "gate-uat-06-baseline-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+          "integrity_manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -43665,9 +43731,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "7ab1ff37b26839e59f3cce56bd38bee319f8048e33a5012c0c70c3bf90e082e0",
+        "event_sha256": "f0cca309988a11748607e8abea82df29eda15aea137767e50cfc8180b01285df",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -43676,10 +43742,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "0c99db0ca7b1ba09868af56ab50fe9fc7ee5e821b88e99e7e6a01fcbd83107f2",
+        "confirmation_sha256": "676c610bcd602c202342f4ecd35b00dc9c5975f435bdec290e37209fd70af1cb",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -43689,7 +43755,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "official_rules": [
           {
             "components": [
@@ -43886,12 +43952,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -44331,12 +44400,12 @@
         "verified_by": "synthetic-uat-human-acceptance"
       },
       "protocol_integrity_manifest": {
-        "authoritative_rule_set_sha256": "beace579ae41f3a6864b18cd935daaa944f0ef6fcabb77cafb89885356283ce8",
+        "authoritative_rule_set_sha256": "259610747cf084d692f7533e88169826ee4f8603aa5de2088f7df8a8f756d3db",
         "authoritative_workflow_sha256": "1d13d5f280706df5152685b4f1a4701a36a3e0a0cf3a13ed985ff8dac47a2ab8",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+        "manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -44618,12 +44687,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -46420,8 +46492,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
-          "output_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
+          "input_scope_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
+          "output_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -46455,8 +46527,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "81d816212df8fac01a68f627b09ab66bf3f7db2eb2fd9da41c9d57c532a7bd21",
-          "output_hash": "81d816212df8fac01a68f627b09ab66bf3f7db2eb2fd9da41c9d57c532a7bd21",
+          "input_scope_hash": "caab13cd31a200bd4dee36845575f011d45ba9869ecb151efe03856b01017a07",
+          "output_hash": "caab13cd31a200bd4dee36845575f011d45ba9869ecb151efe03856b01017a07",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -46626,7 +46698,7 @@
           "input_revision_map": {
             "episode-uat-07-pre_screening-clear": 1
           },
-          "input_scope_hash": "0834e72ca840fa6c14d22e01eeff9ef11a66c74c906d136164b7f8cbdf63564a",
+          "input_scope_hash": "331c25d72fee894435e6a2d3d93be5d2f15d7d71b761d86e71c4f583439d4a62",
           "output_hash": "68e661d628bb5b1ccc19f2d1ea622e91b2d916f90fe4e13e19c5c406a6bc030b",
           "parent_event_id": null,
           "recompute_scope": [
@@ -46691,7 +46763,7 @@
           "input_revision_map": {
             "episode-uat-07-pre_screening-clear": 1
           },
-          "input_scope_hash": "ec16b8ca5dc428f8067e696c93221d825f23b1a4cb13cc398970718995acaf3b",
+          "input_scope_hash": "e702def98f78983f1d4a4c249fee152eef12d55a4f9d693d33f48f427274ad78",
           "output_hash": "e48b59eba49d1470c465f2291cade48b7e8bbc7d479a8631cd8809789434ee98",
           "parent_event_id": null,
           "recompute_scope": [
@@ -46756,7 +46828,7 @@
           "input_revision_map": {
             "episode-uat-07-pre_screening-clear": 1
           },
-          "input_scope_hash": "84472c64c8b4b68079485bc27f9933246a7a6551f9d2f8048cc8710b9fccc04c",
+          "input_scope_hash": "444185f2b70c9ce0ffe75dec025ffb67cae3b4780974e0aa067a7e04e09e9a65",
           "output_hash": "b09f3fc0b0322c191e392eb5cd80f83c84c245954aa8fd4bdf80ca121683725a",
           "parent_event_id": null,
           "recompute_scope": [
@@ -46821,7 +46893,7 @@
           "input_revision_map": {
             "episode-uat-07-pre_screening-clear": 1
           },
-          "input_scope_hash": "6cba291b5104fd8dc1692038af0f180e8badc19d3391f7efab46cb58e41f0dc2",
+          "input_scope_hash": "36bdabce1b8e51a62e95cd40cd2555d534d87f276711d70bab84bff0cef6641d",
           "output_hash": "c2fc9410e732cebbacf175bc49c827bd0db824d7b3415d132bcdb64560c9a43a",
           "parent_event_id": null,
           "recompute_scope": [
@@ -46886,7 +46958,7 @@
           "input_revision_map": {
             "episode-uat-07-pre_screening-clear": 1
           },
-          "input_scope_hash": "ed02125006aa7ad43f4dfb912098244fd469efde57344f11381f2c1434b27510",
+          "input_scope_hash": "b02d7226dbe88d673e67e2251a8650792ca57e577bc40b81d4edd71702173c0d",
           "output_hash": "de1f9bcc0421a66e1714fce7cb1433b48aef35da25cb27782bab9da802df2974",
           "parent_event_id": null,
           "recompute_scope": [
@@ -46951,7 +47023,7 @@
           "input_revision_map": {
             "episode-uat-07-pre_screening-clear": 1
           },
-          "input_scope_hash": "bf8d28e6a06d737eff08a8e4dcb383a6024f46096d6a0b85e2ad4663283a6a79",
+          "input_scope_hash": "200b6a813df9a6f6c7f12bb19119afc7814dfc6516ba351e77dfe38affeeff36",
           "output_hash": "49c58e2bf3e263d82edc582bdf1933f612af3758efa9e15ecb5d338591dd429c",
           "parent_event_id": null,
           "recompute_scope": [
@@ -47016,7 +47088,7 @@
           "input_revision_map": {
             "episode-uat-07-pre_screening-clear": 1
           },
-          "input_scope_hash": "9005ab719d37a358fa69af758e18535d143e56cc63f7e34d19be601148cdec86",
+          "input_scope_hash": "b5dbde9bb2e236a019fa0c76f328a3cb898e5375706d571c999df28e0e182efe",
           "output_hash": "31e37af37ab4df01fba45b3279318f6983bcffcd628331543c64c9fcf392580b",
           "parent_event_id": null,
           "recompute_scope": [
@@ -47049,7 +47121,7 @@
           "input_revision_map": {
             "episode-uat-07-pre_screening-clear": 1
           },
-          "input_scope_hash": "21c9bd9072a59350251683fa460071f2ae6aa5642198c51376ae0dbbc90920c2",
+          "input_scope_hash": "165a09381664e3f449332172714fc9436c723b870a9e904ce52ffaf9b19b8eb9",
           "output_hash": "41cc1b88c1cc30775a3bc3196cf710dee9340cfe5dcf108402b75f215c63030a",
           "parent_event_id": null,
           "recompute_scope": [
@@ -47082,7 +47154,7 @@
           "input_revision_map": {
             "episode-uat-07-pre_screening-clear": 1
           },
-          "input_scope_hash": "643b1b4aa3b57950ab40fda9f9d1d04f888917db838289ce83318e06f59f714f",
+          "input_scope_hash": "2f7b948d49214e7e3959dd114078a277c4cfd0d5b2302d3094eec532b0863238",
           "output_hash": "e14f9365d25cca306d0f855030d9d09942e7fb6fbd3cf60f10e0362ca2d66e9e",
           "parent_event_id": null,
           "recompute_scope": [
@@ -47115,7 +47187,7 @@
           "input_revision_map": {
             "episode-uat-07-pre_screening-clear": 1
           },
-          "input_scope_hash": "42209f58ccc10885fcfa7700001f8f4d8991a05560006fac9a4a7969a9a4553e",
+          "input_scope_hash": "5bea3e04a01db02e8eb238cc8e457160a34c601d8f7049eebea62b485554b832",
           "output_hash": "fbb79303a3631c5cdcb16bfbd8d6e2efeda4d9c09a1c1dfd0a757e7cd8ce7a8e",
           "parent_event_id": null,
           "recompute_scope": [
@@ -47148,7 +47220,7 @@
           "input_revision_map": {
             "episode-uat-07-pre_screening-clear": 1
           },
-          "input_scope_hash": "ad11da935a19333bbeb0e4da265bbb7256867972cd819ce3fe2b8e00f9281f1e",
+          "input_scope_hash": "2431df9072b7edc387ffd2448778e6ad3f36bd9fdcf90b6381679f01dfd80053",
           "output_hash": "756630f810f6407d3e9322ee2afffb9a61e064e4a2b2ef19053d237b33984a2f",
           "parent_event_id": null,
           "recompute_scope": [
@@ -47181,7 +47253,7 @@
           "input_revision_map": {
             "episode-uat-07-pre_screening-clear": 1
           },
-          "input_scope_hash": "ca179437cc3724b214119d826a7ae6e71cc91a51d4150c0759b708df55e1a46b",
+          "input_scope_hash": "790111dd3b0b5b4b6bd8f098b0ea231dada18f87f6c8b2bdc3abe497386bb886",
           "output_hash": "1eaaaf831a8c0d39808037cc26595386c3b020c9198765ceea1d622ff4e516b7",
           "parent_event_id": null,
           "recompute_scope": [
@@ -47214,7 +47286,7 @@
           "input_revision_map": {
             "episode-uat-07-pre_screening-clear": 1
           },
-          "input_scope_hash": "d72fb7dbdb17eedb75278c8cda6a9af691825a9248fa0bacd86ddf5314fcba17",
+          "input_scope_hash": "7f7f50067e8b1c35f047c1139ff9437f60a3afc6c9f927fdd78b126528e00e40",
           "output_hash": "f5b0f9b4c5077f247ef258232f341d5e4092ed7d70e203649896b4db5d152fc0",
           "parent_event_id": null,
           "recompute_scope": [
@@ -47247,7 +47319,7 @@
           "input_revision_map": {
             "episode-uat-07-pre_screening-clear": 1
           },
-          "input_scope_hash": "2d83c9be8ffb594adca66ca524a1478b5b4c8250e9059a8c02606496c7e68bc8",
+          "input_scope_hash": "c72792bffcb3e9c3ef217ac05dec57532669974603a543ac4155eb3004685109",
           "output_hash": "4e969a3d9aeab562b9bd7dc4c92e78c24c2168bca85302c6712a3fc396159899",
           "parent_event_id": null,
           "recompute_scope": [
@@ -47576,9 +47648,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-07-pre_screening-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+          "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
           "integrity_gate_result_id": "gate-uat-07-pre_screening-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+          "integrity_manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -47615,9 +47687,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "7ab1ff37b26839e59f3cce56bd38bee319f8048e33a5012c0c70c3bf90e082e0",
+        "event_sha256": "f0cca309988a11748607e8abea82df29eda15aea137767e50cfc8180b01285df",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -47626,10 +47698,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "0c99db0ca7b1ba09868af56ab50fe9fc7ee5e821b88e99e7e6a01fcbd83107f2",
+        "confirmation_sha256": "676c610bcd602c202342f4ecd35b00dc9c5975f435bdec290e37209fd70af1cb",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -47639,7 +47711,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "official_rules": [
           {
             "components": [
@@ -47836,12 +47908,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -48281,12 +48356,12 @@
         "verified_by": "synthetic-uat-human-acceptance"
       },
       "protocol_integrity_manifest": {
-        "authoritative_rule_set_sha256": "beace579ae41f3a6864b18cd935daaa944f0ef6fcabb77cafb89885356283ce8",
+        "authoritative_rule_set_sha256": "259610747cf084d692f7533e88169826ee4f8603aa5de2088f7df8a8f756d3db",
         "authoritative_workflow_sha256": "1d13d5f280706df5152685b4f1a4701a36a3e0a0cf3a13ed985ff8dac47a2ab8",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+        "manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -48558,12 +48633,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -50252,8 +50330,8 @@
           "input_revision_map": {
             "protocol-v1": 1
           },
-          "input_scope_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
-          "output_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
+          "input_scope_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
+          "output_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -50287,8 +50365,8 @@
           "input_revision_map": {
             "ruleset-synthetic-phase-iii": 1
           },
-          "input_scope_hash": "9c46bf5cb049c2e1e56d5cfc3a7f7d515902153409d95274d797d4b3b8d8ee00",
-          "output_hash": "9c46bf5cb049c2e1e56d5cfc3a7f7d515902153409d95274d797d4b3b8d8ee00",
+          "input_scope_hash": "d7fd2f8aee863594f904170fc8c7bcda77849f9bf05bfb8e04aabbe30fb6005a",
+          "output_hash": "d7fd2f8aee863594f904170fc8c7bcda77849f9bf05bfb8e04aabbe30fb6005a",
           "parent_event_id": null,
           "recompute_scope": [
             "protocol-v1"
@@ -50448,7 +50526,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "164fc0b2860aa7f37cad947e27780ce5b37eeda5b993354c76a24c93ecca8d3f",
+          "input_scope_hash": "48b2d764a022da1ff5f781176d45928c27034498b14d28907d78c49f7e55d514",
           "output_hash": "c0218efc4112973e5ab21c3ea74072f12c6f3c6e06a6ff41ec3e98a59c3b5a8a",
           "parent_event_id": null,
           "recompute_scope": [
@@ -50513,7 +50591,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "9521fbddd0ff788718eecfe278bde30ac51b81ac57be633e0944962f1a33377a",
+          "input_scope_hash": "203fc714b54b1d56cd7c456a60b3ce136fe352b8969ac2d9b3cc00240f96aa4d",
           "output_hash": "b86145f8ee8782a93015aad6251caa886e308459a78b1ac81f12a5054704a04e",
           "parent_event_id": null,
           "recompute_scope": [
@@ -50578,7 +50656,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "2ee958d6551c0fef7d47da115b4557c0b08d4b3bb9fc8e08834661f87dde3a2a",
+          "input_scope_hash": "2a6a5b4548f4f18c8a2da21fd46b4c1c282a0b176f40d376fe8f3d17655cc6fc",
           "output_hash": "6f5fd67f9e7653a7d8de47bb5b567cdebed5ee97c99e80ca92407caadaaafc16",
           "parent_event_id": null,
           "recompute_scope": [
@@ -50643,7 +50721,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "741a92c9b1a3a27a147effde4bc293a46b449dbaa6beacc00b859d8f9ae24c54",
+          "input_scope_hash": "31bd8f589538ea5e7a1a8006b2bb70f9925a6b9ab3deb16aef34abc1335fc3d6",
           "output_hash": "ee2f1f59caf02d3545ee5395bdafde7dec955c93e030f87c9738addee2a76321",
           "parent_event_id": null,
           "recompute_scope": [
@@ -50708,7 +50786,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "c3f0f54e546dddd39075d4f22489b9aa7bf1deb28a588ee9cea4b518c4dce22d",
+          "input_scope_hash": "bd3fd4a709b351b406a945e84794efe30f0136b68888a7157e718330de7d79f3",
           "output_hash": "35a7c60fc54717bb34ee9fa819b7453cfc9054392b8d25ac78283f17a4ef7704",
           "parent_event_id": null,
           "recompute_scope": [
@@ -50773,7 +50851,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "6c9e0f78f9e3fb54d6caff579fcf85590309d6e7ed107a2724306c1590697197",
+          "input_scope_hash": "80d43b9970ad7aec051a6e89ee04afac0247845881b5bda9d5f9a406ecf432d0",
           "output_hash": "0c3c68ba728038687bfedecfaa70a8fe2a78e14acb73386f1da7109630395708",
           "parent_event_id": null,
           "recompute_scope": [
@@ -50838,7 +50916,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "3765b735b7f4732ca1ff43ab0d28bf4131dd4f32656201ff2b48499410c72efc",
+          "input_scope_hash": "55cc8eb3f0cf6e42626152cbe379a28ff2be8f7fd8a502a8b5157feb1d5889d6",
           "output_hash": "03a081fb603708620d8162dea8ab69a2409a04ee9ff55d53c76eb92fd950c00d",
           "parent_event_id": null,
           "recompute_scope": [
@@ -50871,7 +50949,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "1097edb203c5cf7f2d195c50fca880347a988ffdc80f7e5bd540367599e2daf2",
+          "input_scope_hash": "1b6f63105abc764afd3e8facb0bf0ec0a670d07766a935367633dd7944c35d4c",
           "output_hash": "5def9ea90d1597ccf5a6fce0e1f27335badc32ad07aa96bb4d7757f7c3560c77",
           "parent_event_id": null,
           "recompute_scope": [
@@ -50904,7 +50982,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "89756f8ab1d1c8a40c1843f210a3360a73e1214ddcfc21120e8ced5f15ce7a11",
+          "input_scope_hash": "723e391afea856ad60de9fdf221487d2d548cbddc73cfa013c8da420a3470781",
           "output_hash": "1866e8f77c8e9c9c0228412c22c6086303d75dd0826d46939acf650c949a4d26",
           "parent_event_id": null,
           "recompute_scope": [
@@ -50937,7 +51015,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "89c6b2bac338830edff35b8721f3a57cf2cacb6679aaf879b576e20045803b62",
+          "input_scope_hash": "81ad042f1d909720fd01ab0dd9c63d194020e95e2dcc7f8a257da1af095c6306",
           "output_hash": "8053511eb04869f32cee0dea82de8eb33ed218b4603c19454538a13f4f99175c",
           "parent_event_id": null,
           "recompute_scope": [
@@ -50970,7 +51048,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "547edada6c46a5b5a9b2ca044ede916b82a32b6ac42167276c0c12aca398689c",
+          "input_scope_hash": "52661c2d147cc6603b05170d1cc853364351857093cde25ce141a403f9719f08",
           "output_hash": "13d08e5a2132ac55bd8d8638b9d3ceb403650feebe088680b3a245ed61068e0f",
           "parent_event_id": null,
           "recompute_scope": [
@@ -51003,7 +51081,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "548e847792290e0b8eb06960856ac89bc37ee41f337298e0250bad0608c549a2",
+          "input_scope_hash": "b64737aea97e9fa98587b5a1eae5f2b973a087067b80d40cbee09a79c78ce7dc",
           "output_hash": "59e1f7d3b3054d8216294a60150b1b55a15b7a641f434e377c9d958bb93f3698",
           "parent_event_id": null,
           "recompute_scope": [
@@ -51036,7 +51114,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "6d36b7b36ae1be426eb896a90c914c3a5a4dbb8d690b851f658fb5688f660ef4",
+          "input_scope_hash": "d2aaf364f598d07856dbac65136a013ab0f36d538a8bedf1ddc5528061a8e653",
           "output_hash": "504d213cb826dce242ee00d3ad8a943f5a409ba33bed632bd037ababc51215dd",
           "parent_event_id": null,
           "recompute_scope": [
@@ -51069,7 +51147,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "3c2ac5f59d19b2aa8a18ad5f14c24ca54383e72614b05f56628934a06b91d7ff",
+          "input_scope_hash": "d4312fee4f0a7a1655cf4cc89b17b20ad8bf892688553035f669766b344b20db",
           "output_hash": "43856932e0787dbd1877961b5245bca288b846dc549cbad94dd19fb5ffcb7c71",
           "parent_event_id": null,
           "recompute_scope": [
@@ -51102,7 +51180,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "ab22e45953eac00fae1e93f86350951182adea399df9d2779badecbe74fee958",
+          "input_scope_hash": "ba48a02ac81b3bbc8f4d13d861c12202c3ad6ca59480bf2b170297f75506e23e",
           "output_hash": "3b8b736b309c11dc12e68d067cda60b8ba7b4100ae4901d8338d9d778fbcc176",
           "parent_event_id": null,
           "recompute_scope": [
@@ -51135,7 +51213,7 @@
           "input_revision_map": {
             "episode-uat-08-run_in-gap_conflict": 1
           },
-          "input_scope_hash": "7cce282e83dac61bf35d1c0dee30e37c826718f3186269b0e4166f9c000cfb5b",
+          "input_scope_hash": "0cf3ce6a38df3ff940ca73c6322eb4fbe98ee04301ee09a97bf2baa2a136cdfc",
           "output_hash": "62c5c7a48cd767416d1376f8ffd4a0441105705fa24495977887ef6215f777bc",
           "parent_event_id": null,
           "recompute_scope": [
@@ -51625,9 +51703,9 @@
         "protocol_version": {
           "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
           "authority_gate_result_id": "gate-uat-08-run_in-authority-protocol-v1-phase-iii",
-          "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+          "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
           "integrity_gate_result_id": "gate-uat-08-run_in-integrity-protocol-v1-phase-iii",
-          "integrity_manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+          "integrity_manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
           "official_date": {
             "precision": "day",
             "source_text": null,
@@ -51664,9 +51742,9 @@
         "action": "accept_protocol_authority",
         "actor_id": "synthetic-uat-human-acceptance",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
-        "event_sha256": "7ab1ff37b26839e59f3cce56bd38bee319f8048e33a5012c0c70c3bf90e082e0",
+        "event_sha256": "f0cca309988a11748607e8abea82df29eda15aea137767e50cfc8180b01285df",
         "occurred_at": "2026-08-12T12:00:00Z",
         "protocol_version_id": "protocol-v1",
         "recorded_by_service": "enrollment-review-app",
@@ -51675,10 +51753,10 @@
       "protocol_authority_confirmation": {
         "action": "accept_protocol_authority",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "command_id": "command-accept-protocol-v1-phase-iii",
         "confirmation_id": "confirmation-protocol-v1-phase-iii",
-        "confirmation_sha256": "0c99db0ca7b1ba09868af56ab50fe9fc7ee5e821b88e99e7e6a01fcbd83107f2",
+        "confirmation_sha256": "676c610bcd602c202342f4ecd35b00dc9c5975f435bdec290e37209fd70af1cb",
         "confirmed_at": "2026-08-12T12:00:00Z",
         "confirmed_by": "synthetic-uat-human-acceptance",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -51688,7 +51766,7 @@
       },
       "protocol_authority_record": {
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "official_rules": [
           {
             "components": [
@@ -51885,12 +51963,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -52330,12 +52411,12 @@
         "verified_by": "synthetic-uat-human-acceptance"
       },
       "protocol_integrity_manifest": {
-        "authoritative_rule_set_sha256": "beace579ae41f3a6864b18cd935daaa944f0ef6fcabb77cafb89885356283ce8",
+        "authoritative_rule_set_sha256": "259610747cf084d692f7533e88169826ee4f8603aa5de2088f7df8a8f756d3db",
         "authoritative_workflow_sha256": "1d13d5f280706df5152685b4f1a4701a36a3e0a0cf3a13ed985ff8dac47a2ab8",
         "authority_record_id": "authority-protocol-v1-phase-iii",
-        "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+        "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
         "manifest_id": "manifest-protocol-v1-phase-iii",
-        "manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+        "manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
         "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "protocol_version_id": "protocol-v1",
         "schema_version": "fixture/v1",
@@ -52607,12 +52688,15 @@
                           "time_constraint": {
                             "allow_partial_date": false,
                             "anchor_type": "randomization_date",
+                            "combined_window_selection": null,
                             "direction": "before",
                             "half_life_multiplier": null,
                             "lower_bound": null,
                             "lower_bound_days": null,
+                            "lower_bound_inclusive": true,
                             "upper_bound": null,
-                            "upper_bound_days": 28
+                            "upper_bound_days": 28,
+                            "upper_bound_inclusive": true
                           }
                         }
                       ],
@@ -53241,12 +53325,15 @@
                         "time_constraint": {
                           "allow_partial_date": false,
                           "anchor_type": "randomization_date",
+                          "combined_window_selection": null,
                           "direction": "before",
                           "half_life_multiplier": null,
                           "lower_bound": null,
                           "lower_bound_days": null,
+                          "lower_bound_inclusive": true,
                           "upper_bound": null,
-                          "upper_bound_days": 28
+                          "upper_bound_days": 28,
+                          "upper_bound_inclusive": true
                         }
                       }
                     ],
@@ -53785,12 +53872,15 @@
                         "time_constraint": {
                           "allow_partial_date": false,
                           "anchor_type": "randomization_date",
+                          "combined_window_selection": null,
                           "direction": "before",
                           "half_life_multiplier": null,
                           "lower_bound": null,
                           "lower_bound_days": null,
+                          "lower_bound_inclusive": true,
                           "upper_bound": null,
-                          "upper_bound_days": 35
+                          "upper_bound_days": 35,
+                          "upper_bound_inclusive": true
                         }
                       }
                     ],

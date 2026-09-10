@@ -348,9 +348,12 @@ class OCRPage(VersionedModel):
                 _require_utc(timestamp, f"OCRPage.{field_name}")
         if self.raw_text_sha256 != sha256(self.raw_text.encode("utf-8")).hexdigest():
             raise ValueError("OCRPage 原文哈希与原始文本不一致")
-        from app.domain.publication import ocr_page_cache_hash
+        from app.domain.publication import (
+            legacy_ocr_page_cache_hash,
+            ocr_page_cache_hash,
+        )
 
-        expected_cache_key = ocr_page_cache_hash(
+        legacy_inputs = dict(
             source_sha256=self.source_sha256,
             page_number=self.page_number,
             ocr_profile_sha256=self.ocr_profile_sha256,
@@ -358,7 +361,15 @@ class OCRPage(VersionedModel):
             layout_parser_version=self.layout_parser_version,
             coordinate_transform_version=self.coordinate_transform_version,
         )
-        if self.cache_key != expected_cache_key:
+        expected_cache_key = ocr_page_cache_hash(
+            page_artifact_id=self.page_artifact_id, **legacy_inputs
+        )
+        # 历史行以 v1（仅内容键）持久化且不可改写；解码回放仍必须可验证。
+        # 新写入由适配器/执行器统一产生 v2（绑定 page_artifact_id）。
+        if self.cache_key not in (
+            expected_cache_key,
+            legacy_ocr_page_cache_hash(**legacy_inputs),
+        ):
             raise ValueError("OCRPage 缓存键与页面/识别配置身份不一致")
 
         risk_ids: set[str] = set()

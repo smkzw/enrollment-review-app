@@ -20,6 +20,7 @@ import {
   setEvidenceRepository,
   type EvidenceRepository,
 } from "../api/evidence";
+import { setFactNormalizationRepository } from "../api/fact-normalization";
 import { canSupplementEvidence, EvidencePage } from "./EvidencePage";
 
 const SUBJECT_ID = "subject-uat-01-clear";
@@ -473,6 +474,34 @@ let fns: {
 };
 
 beforeEach(() => {
+  setFactNormalizationRepository({
+    kind: "http",
+    startFactNormalization: vi.fn(async () => ({
+      jobId: "job-normalize-test",
+      runId: "run-normalize-test",
+      created: true,
+      state: "queued" as const,
+      stateLabel: "等待处理",
+      recoveryAction: "无需操作，正在等待开始。",
+    })),
+    getFactNormalizationJobStatus: vi.fn(async () => ({
+      jobId: "job-normalize-test",
+      state: "queued" as const,
+      stateLabel: "等待处理",
+      cancelRequested: false,
+      progressCompleted: 0,
+      progressTotal: 1,
+      recoveryAction: "无需操作，正在等待开始。",
+      createdAt: "2026-08-23T10:00:00Z",
+      updatedAt: "2026-08-23T10:00:00Z",
+    })),
+    retryFactNormalizationJob: vi.fn(async () => ({
+      jobId: "job-normalize-test",
+      state: "queued" as const,
+      stateLabel: "等待处理",
+      changed: false,
+    })),
+  });
   fns = {
     createUploadPreview: vi.fn<EvidenceRepository["createUploadPreview"]>(() =>
       Promise.resolve(decodeUploadPreview(makePreviewWire())),

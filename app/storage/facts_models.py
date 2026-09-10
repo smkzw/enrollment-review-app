@@ -23,8 +23,12 @@
 - ``fact_evidence_locator_links``      发布实体/期望到 Phase 4 ``EvidenceLocatorArtifact``
                                        的不可变引用（``entity_kind`` 判别，locator 外键
                                        强约束；定位只有一个真相源）；
-- ``event_fact_links`` / ``exposure_fact_links`` / ``clinical_conflict_members_v2``
-                                       事件/暴露/冲突组到发布事实的有序引用；
+- ``event_fact_links`` / ``exposure_fact_links``
+                                       事件/暴露到发布事实的有序引用；
+- ``clinical_conflict_members_v2`` / ``clinical_conflict_event_members_v2`` /
+  ``clinical_conflict_exposure_members_v2``
+                                       事实、事件或用药/治疗暴露冲突组的同类型
+                                       有序成员引用；
 - ``clinical_conflict_groups_v2``      未解决冲突组（并列展示，不自动择优；
                                        ``resolution_revision > 0`` 只由来源校对或
                                        人工事实修订生成新 revision 后变化）；
@@ -239,6 +243,36 @@ class FactNormalizationCandidateRecord(EvidenceAppendedRecordMixin, Base):
     )
 
 
+class FactNormalizationUnresolvedItemRecord(EvidenceAppendedRecordMixin, Base):
+    """模型逐页未解决项；供重启、资料期望和 Patient Profile 确定性回放。"""
+
+    __tablename__ = "fact_normalization_unresolved_items"
+
+    unresolved_item_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    run_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("fact_normalization_runs.run_id"), nullable=False
+    )
+    call_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("fact_normalization_calls.call_id"), nullable=False
+    )
+    logical_document_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    code: Mapped[str] = mapped_column(String(128), nullable=False)
+    affected_pages_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    affected_locator_ids_json: Mapped[list] = mapped_column(JSON, nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["call_id", "run_id"],
+            ["fact_normalization_calls.call_id", "fact_normalization_calls.run_id"],
+            name="fk_fnunresolved_call_run",
+        ),
+        UniqueConstraint("call_id", "position", name="uq_fnunresolved_call_position"),
+        Index("ix_fnunresolved_run_id", "run_id"),
+        Index("ix_fnunresolved_call_id", "call_id"),
+    )
+
+
 class FactGateResultRecord(EvidenceAppendedRecordMixin, Base):
     """逐候选门禁结果（设计书 §4.2 九步顺序）；ACCEPTED 可空原因，REJECTED/BLOCKED
     必须有原因。``candidate_id`` 外键绑定门禁实际审查的不可变候选合同。
@@ -430,8 +464,8 @@ class ClinicalConflictGroupV2Record(EvidenceAppendedRecordMixin, FactAuthorityCo
     """同一语义对象的不同来源不兼容值/极性/日期/持续状态时的未解决冲突组。
 
     冲突并列展示，不自动择优或覆盖；``resolution_revision > 0`` 只由来源校对或
-    人工事实修订生成新 revision 后变化，Agent 无权选择赢家。成员事实按
-    ``clinical_conflict_members_v2`` 有序引用。
+    人工事实修订生成新 revision 后变化，Agent 无权选择赢家。事实、事件和用药/治疗
+    暴露分别使用类型化成员表有序引用，冲突组不能混合成员类型。
     """
 
     __tablename__ = "clinical_conflict_groups_v2"
@@ -443,12 +477,19 @@ class ClinicalConflictGroupV2Record(EvidenceAppendedRecordMixin, FactAuthorityCo
     gate_id: Mapped[str] = mapped_column(
         String(128), ForeignKey("fact_gate_results.gate_result_id"), nullable=False
     )
+    member_kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="fact", server_default="fact"
+    )
     resolution_revision: Mapped[int] = mapped_column(Integer, nullable=False)
 
     __table_args__ = (
         _rule_set_fk(),
         CheckConstraint(
             "resolution_revision = 0", name="ck_ccgv2_unresolved_slice51"
+        ),
+        CheckConstraint(
+            "member_kind IN ('fact', 'event', 'exposure')",
+            name="ck_ccgv2_member_kind",
         ),
         Index("ix_ccgv2_review_episode_id", "review_episode_id"),
         Index("ix_ccgv2_subject_id", "subject_id"),
@@ -562,7 +603,7 @@ class ExposureFactLinkRecord(Base):
 class ClinicalConflictMemberV2Record(Base):
     """冲突组成员事实的有序引用（``(conflict_group_id, position)`` 主键）。
 
-    同一冲突组至少两名成员（合同层校验，``fact_ids`` min_length=2）。
+    事实冲突组至少包含两个事实成员（合同层校验）。
     """
 
     __tablename__ = "clinical_conflict_members_v2"
@@ -580,6 +621,42 @@ class ClinicalConflictMemberV2Record(Base):
     __table_args__ = (
         UniqueConstraint("conflict_group_id", "fact_id", name="uq_ccm_conflict_fact"),
         Index("ix_ccm_fact_id", "fact_id"),
+    )
+
+
+class ClinicalConflictEventMemberV2Record(Base):
+    """冲突组成员事件的有序引用。"""
+
+    __tablename__ = "clinical_conflict_event_members_v2"
+    conflict_group_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("clinical_conflict_groups_v2.conflict_group_id"), primary_key=True
+    )
+    position: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("clinical_events_v2.event_id"), nullable=False
+    )
+    __table_args__ = (
+        UniqueConstraint("conflict_group_id", "event_id", name="uq_ccem_conflict_event"),
+        Index("ix_ccem_event_id", "event_id"),
+    )
+
+
+class ClinicalConflictExposureMemberV2Record(Base):
+    """冲突组成员用药/治疗暴露的有序引用。"""
+
+    __tablename__ = "clinical_conflict_exposure_members_v2"
+    conflict_group_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("clinical_conflict_groups_v2.conflict_group_id"), primary_key=True
+    )
+    position: Mapped[int] = mapped_column(Integer, primary_key=True)
+    exposure_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("medication_exposures_v2.exposure_id"), nullable=False
+    )
+    __table_args__ = (
+        UniqueConstraint(
+            "conflict_group_id", "exposure_id", name="uq_ccxm_conflict_exposure"
+        ),
+        Index("ix_ccxm_exposure_id", "exposure_id"),
     )
 
 
@@ -714,4 +791,169 @@ class PatientProfileRevisionV2Record(
         UniqueConstraint("review_episode_id", "revision", name="uq_pprv2_episode_revision"),
         Index("ix_pprv2_review_episode_id", "review_episode_id"),
         Index("ix_pprv2_status", "status"),
+    )
+
+
+class FactCorrectionRecord(EvidenceAppendedRecordMixin, FactAuthorityColumns, Base):
+    """有理由的人工临床事实修订记录：不可变追加写，旧/新两侧谱系与语义快照。
+
+    - 允许修订 ``fact / event / exposure`` 三类实体；冲突与期望只能由新投影变化。
+    - 保存 ``target_id/target_stable_identity/target_revision`` 与
+      ``new_entity_id/new_stable_identity/new_revision`` 的独立谱系；
+      同稳定身份时新 ``revision = target_revision+1``，新旧稳定不同时新身份可从 1 新起；
+      分支由 ``UNIQUE(target_id)`` 与 ``UNIQUE(new_entity_id)`` 阻止（单出边/单入边）。
+    - 旧/新语义快照为仅含用户可审阅字段的规范 JSON（经 ``app.domain.publication`` 规范化），
+      不含 ID/run/gate/revision/时间戳；仓储层校验快照与实际持久化合约一致。
+    - 理由、来源定位、操作者、UTC 时间与影响范围同前；影响范围沿显式反向索引传播，
+      无法证明时 ``impact_scope_kind='node'`` 并给出回退原因。
+    - ``idempotency_key`` 全局唯一。
+    - 类型化外键 ``target_fact/event/exposure_id`` 与 ``new_fact/event/exposure_id``
+      按 ``target_kind`` 精确绑定，防止悬挂指向。
+    """
+
+    __tablename__ = "fact_corrections"
+
+    correction_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    target_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    target_stable_identity: Mapped[str] = mapped_column(String(PAYLOAD_SHA_LEN), nullable=False)
+    new_stable_identity: Mapped[str] = mapped_column(String(PAYLOAD_SHA_LEN), nullable=False)
+    target_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    new_entity_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    new_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_fact_id: Mapped[str | None] = mapped_column(String(128), ForeignKey("clinical_facts_v2.fact_id"), nullable=True)
+    target_event_id: Mapped[str | None] = mapped_column(String(128), ForeignKey("clinical_events_v2.event_id"), nullable=True)
+    target_exposure_id: Mapped[str | None] = mapped_column(String(128), ForeignKey("medication_exposures_v2.exposure_id"), nullable=True)
+    new_fact_id: Mapped[str | None] = mapped_column(String(128), ForeignKey("clinical_facts_v2.fact_id"), nullable=True)
+    new_event_id: Mapped[str | None] = mapped_column(String(128), ForeignKey("clinical_events_v2.event_id"), nullable=True)
+    new_exposure_id: Mapped[str | None] = mapped_column(String(128), ForeignKey("medication_exposures_v2.exposure_id"), nullable=True)
+    old_snapshot_json: Mapped[str] = mapped_column(Text, nullable=False)
+    old_snapshot_sha256: Mapped[str] = mapped_column(String(PAYLOAD_SHA_LEN), nullable=False)
+    new_snapshot_json: Mapped[str] = mapped_column(Text, nullable=False)
+    new_snapshot_sha256: Mapped[str] = mapped_column(String(PAYLOAD_SHA_LEN), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    locator_ids_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    operator_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    corrected_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    impact_scope_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    impact_fallback_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    affected_locator_ids_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    affected_document_ids_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    affected_fact_ids_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    affected_event_ids_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    affected_exposure_ids_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    affected_conflict_group_ids_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    affected_rule_link_ids_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    affected_expectation_ids_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    affected_profile_revision_ids_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    impact_scope_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(PAYLOAD_SHA_LEN), nullable=False)
+
+    __table_args__ = (
+        _rule_set_fk(),
+        CheckConstraint(
+            "target_kind IN ('fact', 'event', 'exposure')",
+            name="ck_fcorr_target_kind",
+        ),
+        CheckConstraint(
+            "impact_scope_kind IN ('local', 'node')",
+            name="ck_fcorr_scope_kind",
+        ),
+        CheckConstraint(
+            "target_revision >= 1 AND new_revision >= 1",
+            name="ck_fcorr_revision_ge",
+        ),
+        CheckConstraint(
+            "target_id != new_entity_id",
+            name="ck_fcorr_target_new_distinct",
+        ),
+        CheckConstraint(
+            "(target_kind = 'fact' AND target_fact_id = target_id AND target_event_id IS NULL AND target_exposure_id IS NULL) OR (target_kind = 'event' AND target_event_id = target_id AND target_fact_id IS NULL AND target_exposure_id IS NULL) OR (target_kind = 'exposure' AND target_exposure_id = target_id AND target_fact_id IS NULL AND target_event_id IS NULL)",
+            name="ck_fcorr_target_typed",
+        ),
+        CheckConstraint(
+            "(target_kind = 'fact' AND new_fact_id = new_entity_id AND new_event_id IS NULL AND new_exposure_id IS NULL) OR (target_kind = 'event' AND new_event_id = new_entity_id AND new_fact_id IS NULL AND new_exposure_id IS NULL) OR (target_kind = 'exposure' AND new_exposure_id = new_entity_id AND new_fact_id IS NULL AND new_event_id IS NULL)",
+            name="ck_fcorr_new_typed",
+        ),
+        UniqueConstraint("idempotency_key", name="uq_fcorr_idempotency_key"),
+        UniqueConstraint("target_id", name="uq_fcorr_target_id"),
+        UniqueConstraint("new_entity_id", name="uq_fcorr_new_entity_id"),
+        Index("ix_fcorr_review_episode_id", "review_episode_id"),
+        Index("ix_fcorr_target_stable_identity", "target_stable_identity"),
+        Index("ix_fcorr_new_stable_identity", "new_stable_identity"),
+        Index("ix_fcorr_target_id", "target_id"),
+        Index("ix_fcorr_new_entity_id", "new_entity_id"),
+        Index("ix_fcorr_idempotency_key", "idempotency_key"),
+        Index("ix_fcorr_corrected_at", "corrected_at"),
+    )
+
+
+class FactCorrectionCommitRecord(EvidenceAppendedRecordMixin, FactAuthorityColumns, Base):
+    """修订提交栅栏：本次 Profile revision 与冲突谱系，追加写、不可变。"""
+
+    __tablename__ = "fact_correction_commits"
+
+    correction_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("fact_corrections.correction_id"), primary_key=True
+    )
+    patient_profile_revision_id: Mapped[str] = mapped_column(
+        String(128),
+        ForeignKey("patient_profile_revisions_v2.patient_profile_revision_id"),
+        nullable=False,
+    )
+    impact_scope_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    impact_fallback_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    impact_scope_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    superseded_conflict_group_ids_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    successor_conflict_group_ids_json: Mapped[list] = mapped_column(JSON, nullable=False)
+
+    __table_args__ = (
+        _rule_set_fk(),
+        CheckConstraint(
+            "impact_scope_kind IN ('local', 'node')",
+            name="ck_fcorr_commit_scope_kind",
+        ),
+        UniqueConstraint(
+            "correction_id", name="uq_fcorr_commit_correction_id"
+        ),
+        Index("ix_fcorr_commit_review_episode_id", "review_episode_id"),
+        Index(
+            "ix_fcorr_commit_profile_revision_id",
+            "patient_profile_revision_id",
+        ),
+    )
+
+
+class FactCorrectionConflictOutcomeRecord(Base):
+    """一次修订对一条冲突组的显式替代或解决（类型化外键，不改旧组）。"""
+
+    __tablename__ = "fact_correction_conflict_outcomes"
+
+    outcome_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    correction_id: Mapped[str] = mapped_column(
+        String(128), ForeignKey("fact_correction_commits.correction_id"), nullable=False
+    )
+    superseded_conflict_group_id: Mapped[str] = mapped_column(
+        String(128),
+        ForeignKey("clinical_conflict_groups_v2.conflict_group_id"),
+        nullable=False,
+    )
+    successor_conflict_group_id: Mapped[str | None] = mapped_column(
+        String(128),
+        ForeignKey("clinical_conflict_groups_v2.conflict_group_id"),
+        nullable=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "successor_conflict_group_id IS NULL OR successor_conflict_group_id != superseded_conflict_group_id",
+            name="ck_fcorr_conflict_outcome_distinct",
+        ),
+        UniqueConstraint(
+            "correction_id",
+            "superseded_conflict_group_id",
+            name="uq_fcorr_conflict_outcome_superseded",
+        ),
+        Index("ix_fcorr_conflict_outcome_correction_id", "correction_id"),
+        Index("ix_fcorr_conflict_outcome_superseded", "superseded_conflict_group_id"),
     )

@@ -11,6 +11,14 @@ import {
   openRoute,
   setLayoutStressFactor,
 } from "./helpers";
+import {
+  EPISODE_ID,
+  PROJECT_ID,
+  SUBJECT_ID,
+  registerProfileRoutes,
+} from "./profile-evidence-fixtures";
+
+const PROFILE_ROUTE = `/subjects?project=${PROJECT_ID}&subject=${SUBJECT_ID}&episode=${EPISODE_ID}`;
 
 const runtimeErrorsByPage = new WeakMap<Page, string[]>();
 
@@ -38,17 +46,18 @@ test.describe("Phase 1.5 交互预试", () => {
   });
 
   test("UAT-P1-06：个例首屏风险优先，完整资料与未提及/明确否认不混淆", async ({ page }) => {
-    await openRoute(page, "/subjects?subject=subject-uat-03-gap_conflict&stage=screening");
-    await expect(page.getByRole("heading", { name: /关键事件与风险/ })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "完整明细" })).toHaveCount(0);
-    await page.getByRole("button", { name: "完整明细" }).click();
-    await expect(page.getByRole("heading", { name: /完整明细/ })).toBeVisible();
-    // B3：空泳道只表示当前没有结构化事件，不再一律写成资料缺口
-    await expect(page.getByText(/当前没有已整理的结构化事件/).first()).toBeVisible();
+    await registerProfileRoutes(page);
+    await openRoute(page, PROFILE_ROUTE);
+    await expect(page.getByRole("heading", { name: /首屏重点/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /人口学\/基线/ })).toHaveCount(0);
+    await page.getByRole("button", { name: "全部历时信息" }).click();
+    await expect(page.getByRole("heading", { name: /人口学\/基线/ })).toBeVisible();
+    // 空分区只表示当前没有已整理记录，不自动判断为资料缺口。
+    await expect(page.getByText("暂无已整理记录").first()).toBeVisible();
+    await expect(page.getByText(/分区暂无记录不代表正常或否认/)).toBeVisible();
     await expect(page.getByText(/按资料缺口处理/)).toHaveCount(0);
-    await page.getByRole("button", { name: "返回风险视图" }).click();
-    await expect(page.getByRole("heading", { name: /关键事件与风险/ })).toBeVisible();
-    await expect(page.getByText(/当前资料缺少记录，不等于明确否认/).first()).toBeVisible();
+    await page.getByRole("button", { name: "返回首屏" }).click();
+    await expect(page.getByRole("heading", { name: /首屏重点/ })).toBeVisible();
   });
 
   test("UAT-P1-07：父子层级和全部满足逻辑可辨，三步内到原始证据", async ({ page }) => {
@@ -178,19 +187,17 @@ test.describe("Phase 1.5 交互预试", () => {
 
   test("UAT-P1-14 自动化补充：三档布局压力均可完成 Profile、规则和证据路径", async ({ page }) => {
     test.skip(page.viewportSize()?.width !== 1920, "仅 1080P 桌面项目执行三档布局压力检查");
+    await registerProfileRoutes(page);
     for (const factor of [1, 1.5, 2] as const) {
       await setLayoutStressFactor(page, factor);
-      await openRoute(page, "/subjects?subject=subject-uat-02-barrier&stage=screening");
-      await expect(page.getByText("关键事件与风险")).toBeVisible();
-      const evidenceLink = page.getByRole("link", { name: /查看判断依据/ }).first();
-      await evidenceLink.click();
-      if (await page.locator(".workbench-tabs").isVisible()) {
-        await page.getByRole("tab", { name: "证据" }).click();
-      }
-      await expect(page.getByText("页内摘录").first()).toBeVisible();
-      await page.getByRole("button", { name: /打开证据/ }).first().click();
-      await expect(page.getByRole("dialog", { name: "原始资料证据" })).toBeVisible();
-      await page.getByRole("button", { name: "关闭证据" }).click();
+      await openRoute(page, PROFILE_ROUTE);
+      await page.getByRole("button", { name: "全部历时信息" }).click();
+      await page
+        .getByRole("button", { name: /查看.基线血压 120\/80 mmHg.的原文证据/ })
+        .click();
+      await expect(page.getByLabel("该条目的原文证据与定位")).toBeVisible();
+      await expect(page.getByRole("img", { name: "第 1 页原始资料" })).toBeVisible();
+      await page.getByRole("button", { name: "关闭原文证据" }).click();
       await expectNoPageOverflow(page);
     }
   });

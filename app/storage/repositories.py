@@ -781,6 +781,68 @@ INTERPRETATION_CONFLICT_CONFIG = _config(
     },
 )
 
+
+def save_interpretation_source(
+    session: Session, source: InterpretationSource
+) -> InterpretationSource:
+    """追加写一条解释来源；锚点解析随契约进入 payload_json，不改镜像列。"""
+
+    return AppendRepository(session, INTERPRETATION_SOURCE_CONFIG).save(source)
+
+
+def list_interpretation_sources(
+    session: Session, protocol_version_id: str
+) -> list[InterpretationSource]:
+    """按方案版本读取全部解释来源；旧记录缺锚点解析字段时按空列表读取。"""
+
+    repository = AppendRepository(session, INTERPRETATION_SOURCE_CONFIG)
+    rows = (
+        session.execute(
+            select(InterpretationSourceRecord)
+            .where(
+                InterpretationSourceRecord.protocol_version_id == protocol_version_id
+            )
+            .order_by(
+                InterpretationSourceRecord.created_at,
+                InterpretationSourceRecord.interpretation_source_id,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [repository._decode(row) for row in rows]
+
+
+def save_interpretation_conflict(
+    session: Session, conflict: InterpretationConflict
+) -> InterpretationConflict:
+    """追加写一条解释冲突记录（未解决冲突阻止发布）。"""
+
+    return AppendRepository(session, INTERPRETATION_CONFLICT_CONFIG).save(conflict)
+
+
+def list_interpretation_conflicts(
+    session: Session, protocol_version_id: str
+) -> list[InterpretationConflict]:
+    """按方案版本读取全部解释冲突记录。"""
+
+    repository = AppendRepository(session, INTERPRETATION_CONFLICT_CONFIG)
+    rows = (
+        session.execute(
+            select(InterpretationConflictRecord)
+            .where(
+                InterpretationConflictRecord.protocol_version_id == protocol_version_id
+            )
+            .order_by(
+                InterpretationConflictRecord.created_at,
+                InterpretationConflictRecord.conflict_id,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [repository._decode(row) for row in rows]
+
 AUTHORITY_RECORD_CONFIG = _config(
     ProtocolAuthorityRecordRow,
     ProtocolAuthorityRecord,
@@ -2589,6 +2651,15 @@ def _decode_expectation_template_record(
         },
     )
     return contract
+
+
+def get_expectation_template(
+    session: Session, template_id: str
+) -> EvidenceExpectationTemplate:
+    record = session.get(EvidenceExpectationTemplateRecord, template_id)
+    if record is None:
+        raise NotFoundError(f"EvidenceExpectationTemplate {template_id} 不存在")
+    return _decode_expectation_template_record(record)
 
 
 def save_expectation_templates(

@@ -33,6 +33,8 @@ EVENT_TYPE_LABELS: dict[str, str] = {
     "step_failed": "本项处理未完成",
     "retry_scheduled": "已安排再次处理",
     "waiting_user": "等待确认",
+    "user_resumed": "已完成核对，继续处理",
+    "user_updated": "已补充确认资料",
     "cancel_requested": "停止请求已受理",
     "cancelled": "本次处理已停止",
     "completed": "本次处理已完成",
@@ -346,8 +348,8 @@ def correction_change_kind_label(kind: str) -> str:
 
 
 LOCATOR_PRECISION_LABELS: dict[str, str] = {
-    "bbox": "区域坐标",
-    "text_range": "文本范围",
+    "bbox": "原文区域",
+    "text_range": "原文文字",
     "page_excerpt": "页内摘录",
     "page_only": "仅页码",
 }
@@ -358,9 +360,10 @@ def locator_precision_label(precision: str) -> str:
 
 
 LOCATOR_SOURCE_LAYER_LABELS: dict[str, str] = {
-    "native_text": "原生文本层",
-    "raw_ocr": "原始识别文本",
-    "effective_text": "校对后文本",
+    "native_text": "文档原文",
+    "raw_ocr": "原始识别文字",
+    "effective_text": "校对后文字",
+    "page_review_visual": "原件核对摘录",
 }
 
 
@@ -417,3 +420,59 @@ GATE_STATUS_LABELS: dict[str, str] = {
 
 def gate_status_label(status: str) -> str:
     return GATE_STATUS_LABELS.get(status, status)
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 页面视觉核验任务（冻结修订后的独立后处理）
+# ---------------------------------------------------------------------------
+
+
+SELECTIVE_VISION_TASK_LABEL = "页面视觉核验"
+
+_SELECTIVE_VISION_RECOVERY_ACTIONS: dict[str, str] = {
+    "queued": "页面视觉核验正在等待开始；关闭页面不会中断任务。",
+    "running": "正在对需要视觉核验的页面进行核验；完成后此处会自动更新。",
+    "completed": "页面视觉核验已完成。",
+    "failed_retryable": "页面视觉核验尚未完成，系统将自动重试；也可以手动重新开始。",
+    "failed_final": "页面视觉核验未完成；可以点击“重新开始核验”，识别原文与核对结果不受影响。",
+    "cancel_requested": "停止请求已受理，将在安全节点停止页面视觉核验。",
+    "cancelled": "页面视觉核验已停止；识别原文与核对结果不受影响。",
+    "recovering": "服务重新启动后正在恢复页面视觉核验，无需操作。",
+    "waiting_user": "页面视觉核验正在等待确认。",
+}
+
+_SELECTIVE_VISION_NOT_CREATED_RECOVERY = (
+    "当前资料版本建立时没有生成页面视觉核验任务；重新处理资料后会自动建立。"
+)
+
+#: 关闭记录的失败类别 -> 中文说明；不出现模型名、提示词或内部日志词。
+_SELECTIVE_VISION_CLOSED_REASON_LABELS: dict[str, str] = {
+    "missing_page_inputs": "部分页面缺少图像或识别输入，无法进行视觉核验",
+    "config_error": "视觉核验配置与当前系统不一致",
+    "source_fidelity": "页面内容与识别来源不一致，核验已停止",
+    "remote_error": "视觉核验服务暂时不可用",
+}
+
+
+def selective_vision_recovery_action(state: str | None) -> str:
+    if state is None:
+        return _SELECTIVE_VISION_NOT_CREATED_RECOVERY
+    return _SELECTIVE_VISION_RECOVERY_ACTIONS.get(
+        state, "请刷新任务状态获取最新进展。"
+    )
+
+
+def selective_vision_closed_reason_label(kind: str | None) -> str | None:
+    if kind is None:
+        return None
+    return _SELECTIVE_VISION_CLOSED_REASON_LABELS.get(
+        kind, "部分页面未能完成视觉核验"
+    )
+
+
+def selective_vision_failed_scope_label(failed_step_names: list[str]) -> str | None:
+    """失败范围的用户可读描述：只使用任务步骤的中文名称。"""
+    names = [name for name in failed_step_names if str(name).strip()]
+    if not names:
+        return None
+    return "、".join(names)

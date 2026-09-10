@@ -489,10 +489,16 @@ def test_native_pdf_creates_replayable_pages_without_external_ocr(env):
     assert all(entry.ocr_page_id is not None for entry in entries)
     assert revision.is_activatable is False
     assert locators
-    assert all(locator.source_layer == "native_text" for locator in locators)
-    assert all(locator.precision == "bbox" for locator in locators)
-    assert all(locator.authenticity == "authenticated" for locator in locators)
-    assert all(locator.bbox_x0 is not None for locator in locators)
+    source_lines = [locator for locator in locators if locator.target_id.startswith("source-line:")]
+    native_locators = [locator for locator in locators if locator not in source_lines]
+    assert source_lines and native_locators
+    assert all(locator.source_layer == "raw_ocr" for locator in source_lines)
+    assert all(locator.precision == "text_range" for locator in source_lines)
+    assert all(locator.authenticity == "degraded" for locator in source_lines)
+    assert all(locator.source_layer == "native_text" for locator in native_locators)
+    assert all(locator.precision == "bbox" for locator in native_locators)
+    assert all(locator.authenticity == "authenticated" for locator in native_locators)
+    assert all(locator.bbox_x0 is not None for locator in native_locators)
     for page, artifact, profile in zip(pages, artifacts, profiles):
         assert page.status == OCRPageStatus.SUCCEEDED
         assert page.page_input_sha256 == artifact.page_image_sha256
@@ -585,6 +591,65 @@ def test_visual_page_ocr_through_gate_and_cache_dedup(env):
     assert runner2.run_job(job_id2) is True
     assert inference.calls == [1]
     assert succeeded_pages(env) == 1
+
+
+def test_same_content_new_version_reuses_inference_and_owns_success_page(env):
+    """执行器级根因回归：同内容新资料版本复用推理结果，落地自有成功页并冻结修订。
+
+    基线期事故链：内容键（v1）使新资料版本**借用**他版成功页 -> 冻结清单
+    ``ocr_page.page_artifact_id != entry.page_artifact_id`` 被完整性门禁拒绝
+    -> EXECUTOR_ERROR。仅改 v2 键又会丢失内容级复用（同内容重传重新推理）。
+    二者必须并存：同内容两页只推理一次，且每个版本冻结引用**自有**成功行的
+    修订，历史行不改写。
+    """
+    content = png_bytes()
+    add_file(
+        env, content=content, media_type="image/png", file_name="a.png",
+        version_id="doc-reuse-v1",
+    )
+    add_file(
+        env, content=content, media_type="image/png", file_name="b.png",
+        version_id="doc-reuse-v2",
+    )
+    snapshot = make_snapshot(
+        env,
+        snapshot_id="snap-reuse",
+        members=[
+            ("logical-reuse-v1", "doc-reuse-v1", SnapshotMemberOrigin.ADDED),
+            ("logical-reuse-v2", "doc-reuse-v2", SnapshotMemberOrigin.ADDED),
+        ],
+    )
+    job_id = create_job(env, snapshot.evidence_snapshot_id, key="k-reuse")
+    inference = FakeInference(text="GLUCOSE 5.6 mmol/L")
+    # 串行处理：确保第二页 prepare 时第一页成功行已提交（并发下内容复用源
+    # 尚未存在则真实推理，属于合法状态，不是本回归的目标场景）。
+    assert (
+        build_runner(env, inference=inference, page_processing_concurrency=1).run_job(
+            job_id
+        )
+        is True
+    )
+
+    assert job_state(env, job_id) == "completed"
+    # 同内容两页只发生一次真实推理（第二页内容级复用，不再调用模型）。
+    assert inference.calls == [1]
+    assert succeeded_pages(env) == 2
+    with env["factory"]() as session:
+        revision = EvidenceProcessingRevisionRepository(session).list_by_snapshot(
+            snapshot.evidence_snapshot_id
+        )[0]
+        page_repo = OcrPageRepository(session)
+        rows_by_version = {}
+        for entry in revision.manifest:
+            page = page_repo.get(entry.ocr_page_id)
+            rows_by_version[entry.source_document_version_id] = page
+            # 清单条目绑定本版本页产物：复用绝不产生跨产物借用。
+            assert page.page_artifact_id == entry.page_artifact_id
+        v1 = rows_by_version["doc-reuse-v1"]
+        v2 = rows_by_version["doc-reuse-v2"]
+    assert v1.ocr_page_id != v2.ocr_page_id
+    assert v1.raw_text == v2.raw_text == "GLUCOSE 5.6 mmol/L"
+    assert v1.cache_key != v2.cache_key
 
 
 def test_dense_page_uses_multiple_gate_calls_but_one_page_attempt(env):
@@ -1086,21 +1151,21 @@ def test_cache_write_failure_does_not_pollute_success_cache(env):
 
     def racing_inference(payload, image_bytes):
         if not seeded["done"]:
-            cache_key = adapter.cache_key(
-                source_sha256=payload["page"]["source_sha256"],
-                page_number=int(payload["page"]["page_number"]),
-                page_input_sha256=payload["page"]["page_input_sha256"],
-            )
             with env["factory"]() as session, session.begin():
                 processing = (
                     session.execute(
                         select(OCRPageRecord).where(
-                            OCRPageRecord.cache_key == cache_key,
                             OCRPageRecord.status == "processing",
                         )
                     )
                     .scalars()
                     .one()
+                )
+                cache_key = adapter.cache_key(
+                    page_artifact_id=processing.page_artifact_id,
+                    source_sha256=processing.source_sha256,
+                    page_number=processing.page_number,
+                    page_input_sha256=processing.page_input_sha256,
                 )
                 page = OCRPage(
                     ocr_page_id="ocr-page-seeded",
@@ -1381,18 +1446,23 @@ def test_blocked_file_does_not_head_of_line_block_sibling_and_global_cap(env):
     counter_lock = threading.Lock()
     active = 0
     peak = 0
+    blocked_source = None
 
     def inference(payload, _image_bytes):
-        nonlocal active, peak
+        nonlocal active, peak, blocked_source
         source_sha256 = payload["page"]["source_sha256"]
         with counter_lock:
+            # File preparation order does not guarantee inference entry order.
+            if blocked_source is None:
+                blocked_source = source_sha256
+            is_blocked = source_sha256 == blocked_source
             active += 1
             peak = max(peak, active)
         try:
-            if source_sha256 == source_hashes["doc-global-a"]:
+            if is_blocked:
                 slow_started.set()
                 assert release_slow.wait(timeout=10)
-            elif source_sha256 == source_hashes["doc-global-b"]:
+            else:
                 sibling_finished.set()
             time.sleep(0.05)
             text = source_sha256[:12]
@@ -1417,13 +1487,15 @@ def test_blocked_file_does_not_head_of_line_block_sibling_and_global_cap(env):
     completed: list[bool] = []
     thread = threading.Thread(target=lambda: completed.append(runner.run_job(job_id)))
     thread.start()
-    assert slow_started.wait(timeout=10)
-    assert sibling_finished.wait(timeout=3), "另一份资料不应等待被阻塞资料完成"
-    with counter_lock:
-        assert peak == 2
-        assert active <= 2
-    release_slow.set()
-    thread.join(timeout=15)
+    try:
+        assert slow_started.wait(timeout=10)
+        assert sibling_finished.wait(timeout=3), "另一份资料不应等待被阻塞资料完成"
+        with counter_lock:
+            assert peak == 2
+            assert active <= 2
+    finally:
+        release_slow.set()
+        thread.join(timeout=15)
 
     assert thread.is_alive() is False
     assert completed == [True]
@@ -1628,6 +1700,7 @@ def test_two_contenders_no_orphan_processing_row(env):
     assert inference.calls == [1]  # 只有胜者调用模型
 
     cache_key = adapter.cache_key(
+        page_artifact_id=artifact.page_artifact_id,
         source_sha256=artifact.source_sha256,
         page_number=1,
         page_input_sha256=artifact.page_image_sha256 or "",

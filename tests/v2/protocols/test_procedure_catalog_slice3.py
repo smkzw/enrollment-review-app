@@ -1,4 +1,5 @@
 """Focused structural tests for the Phase 3 required-procedure sidecar."""
+
 from __future__ import annotations
 
 from collections import Counter
@@ -11,19 +12,25 @@ import pytest
 from app.domain.contracts.enums import (
     AlignmentStatus,
     ApplicabilityGranularity,
+    CatalogItemKind,
     DocumentPart,
     PhaseScope,
     SourceLocatorPrecision,
     StudyPhase,
 )
 from app.domain.contracts.protocol_ingestion import ProtocolSourceSpan
+from app.agents.protocol_control_deconstructor import (
+    ProtocolControlAgentInput,
+    build_protocol_control_agent_prompt,
+)
 from app.domain.contracts.protocol_metadata import (
     PhaseApplicabilityBlock,
     PhaseApplicabilityGraph,
     PhaseProjection,
 )
-from app.protocols.docx_structure import BlockKind, StructureBlock
+from app.protocols.docx_structure import BlockKind, NumberingRef, StructureBlock
 from app.protocols.docx_structure import extract_docx_structure
+from app.protocols.full_protocol_coverage import build_full_protocol_coverage_manifest
 from app.protocols.ingestion import register_source_artifact
 from app.protocols.phase_detection import (
     build_phase_applicability_graph,
@@ -34,6 +41,7 @@ from app.protocols.procedure_catalog import (
     build_required_procedure_catalog,
     derive_review_stage,
 )
+from app.protocols.protocol_control_planning import plan_protocol_control_batches
 from app.protocols.catalogs import freeze_official_parent_rules
 from app.protocols.rendering import pdf_page_texts, render_to_pdf
 from app.protocols.section_index import build_section_index, formal_source_span_ids
@@ -176,9 +184,7 @@ def _projection(
     phase_scopes: dict[str, list[PhaseScope]] | None = None,
 ) -> PhaseProjection:
     included_refs = included_refs or {
-        block.source_ref
-        for block in blocks
-        if block.kind == BlockKind.PARAGRAPH
+        block.source_ref for block in blocks if block.kind == BlockKind.PARAGRAPH
     }
     phase_scopes = phase_scopes or {}
     projected: list[PhaseApplicabilityBlock] = []
@@ -263,9 +269,178 @@ def test_display_footnotes_are_removed_without_damaging_scientific_notation():
         "胸片（正侧位）",
         "ANC<1.2×10^9/L",
     ]
-    assert {item.visit_instance for item in catalog.items} == {
-        "治疗期 / V2（基线）"
-    }
+    assert {item.visit_instance for item in catalog.items} == {"治疗期 / V2（基线）"}
+
+
+def test_flow_display_footnotes_attach_numbered_note_sources_before_label_cleanup():
+    blocks, spans = _matrix(
+        [
+            ["检查项目", "筛选期", "基线期^2"],
+            ["访视", "V1", "V2"],
+            ["血生化^3", "X", "X"],
+            ["ANC<1.2×10^9/L", "X", ""],
+        ],
+        cols=3,
+    )
+    next_order = max(block.block_order for block in blocks) + 1
+    blocks.extend(
+        [
+            StructureBlock(
+                source_ref=f"body.p{index}",
+                document_part=DocumentPart.BODY,
+                section_index=0,
+                block_order=next_order + index,
+                kind=BlockKind.PARAGRAPH,
+                text=text,
+                numbering=NumberingRef(
+                    num_id=7,
+                    level=0,
+                    start=1,
+                    num_fmt="decimal",
+                    lvl_text="%1.",
+                ),
+            )
+            for index, text in enumerate(
+                ["签署知情同意", "基线访视合并规则", "血生化应空腹采样"],
+                start=1,
+            )
+        ]
+    )
+    spans.extend(
+        _span(block) for block in blocks if block.source_ref.startswith("body.p")
+    )
+
+    catalog = _build(blocks, spans, _projection(blocks))
+    baseline_biochemistry = next(
+        item
+        for item in catalog.items
+        if item.label == "血生化" and "基线期" in (item.visit_instance or "")
+    )
+    screening_biochemistry = next(
+        item
+        for item in catalog.items
+        if item.label == "血生化" and "筛选期" in (item.visit_instance or "")
+    )
+    scientific_notation = next(
+        item for item in catalog.items if item.label == "ANC<1.2×10^9/L"
+    )
+
+    assert "span:body.p2" in baseline_biochemistry.source_span_ids
+    assert "span:body.p3" in baseline_biochemistry.source_span_ids
+    assert "基线访视合并规则" in baseline_biochemistry.source_excerpts
+    assert "血生化应空腹采样" in baseline_biochemistry.source_excerpts
+    assert "span:body.p2" not in screening_biochemistry.source_span_ids
+    assert "span:body.p3" in screening_biochemistry.source_span_ids
+    assert all(
+        not span_id.startswith("span:body.p")
+        for span_id in scientific_notation.source_span_ids
+    )
+
+
+def test_visit_header_note_named_for_one_operation_does_not_pollute_sibling_rows():
+    blocks, spans = _matrix(
+        [
+            ["检查项目", "筛选期", "基线期^2^3"],
+            ["访视", "V1", "V2"],
+            ["血生化", "X", "X"],
+            ["生命体征", "X", "X"],
+        ],
+        cols=3,
+    )
+    next_order = max(block.block_order for block in blocks) + 1
+    blocks.extend(
+        StructureBlock(
+            source_ref=f"body.p{index}",
+            document_part=DocumentPart.BODY,
+            section_index=0,
+            block_order=next_order + index,
+            kind=BlockKind.PARAGRAPH,
+            text=text,
+            numbering=NumberingRef(
+                num_id=7,
+                level=0,
+                start=1,
+                num_fmt="decimal",
+                lvl_text="%1.",
+            ),
+        )
+        for index, text in enumerate(
+            ["签署知情同意", "基线访视合并规则", "血生化应空腹采样"],
+            start=1,
+        )
+    )
+    spans.extend(
+        _span(block) for block in blocks if block.source_ref.startswith("body.p")
+    )
+
+    catalog = _build(blocks, spans, _projection(blocks))
+    baseline_biochemistry = next(
+        item
+        for item in catalog.items
+        if item.label == "血生化" and "基线期" in (item.visit_instance or "")
+    )
+    baseline_vital_signs = next(
+        item
+        for item in catalog.items
+        if item.label == "生命体征" and "基线期" in (item.visit_instance or "")
+    )
+
+    assert "span:body.p2" in baseline_biochemistry.source_span_ids
+    assert "span:body.p3" in baseline_biochemistry.source_span_ids
+    assert "span:body.p2" in baseline_vital_signs.source_span_ids
+    assert "span:body.p3" not in baseline_vital_signs.source_span_ids
+    assert "血生化应空腹采样" not in baseline_vital_signs.source_excerpts
+
+
+def test_flow_display_footnotes_stop_before_a_later_numbered_section():
+    blocks, spans = _matrix(
+        [
+            ["检查项目", "筛选期", "基线期^2"],
+            ["访视", "V1", "V2"],
+            ["血生化^3", "X", "X"],
+        ],
+        cols=3,
+    )
+    next_order = max(block.block_order for block in blocks) + 1
+    notes = [
+        ("body.p1", "签署知情同意", 7),
+        ("body.p2", "基线访视合并规则", 7),
+        ("body.p3", "血生化应空腹采样", 7),
+        ("body.p4", "后续章节中的无关编号条目", 8),
+    ]
+    blocks.extend(
+        StructureBlock(
+            source_ref=source_ref,
+            document_part=DocumentPart.BODY,
+            section_index=0,
+            block_order=next_order + index,
+            kind=BlockKind.PARAGRAPH,
+            text=text,
+            numbering=NumberingRef(
+                num_id=num_id,
+                level=0,
+                start=1,
+                num_fmt="decimal",
+                lvl_text="%1.",
+            ),
+        )
+        for index, (source_ref, text, num_id) in enumerate(notes)
+    )
+    spans.extend(
+        _span(block) for block in blocks if block.source_ref.startswith("body.p")
+    )
+
+    catalog = _build(blocks, spans, _projection(blocks))
+    baseline_biochemistry = next(
+        item
+        for item in catalog.items
+        if item.label == "血生化" and "基线期" in (item.visit_instance or "")
+    )
+
+    assert "span:body.p2" in baseline_biochemistry.source_span_ids
+    assert "span:body.p3" in baseline_biochemistry.source_span_ids
+    assert "span:body.p4" not in baseline_biochemistry.source_span_ids
+    assert "后续章节中的无关编号条目" not in baseline_biochemistry.source_excerpts
 
 
 def test_same_operation_at_screening_and_baseline_is_not_text_deduplicated():
@@ -366,7 +541,11 @@ def test_phase_graph_projection_is_the_only_phase_isolation_signal():
         graph_id="graph:procedure",
         snapshot_id=SNAPSHOT,
         blocks=graph_blocks,
-        detected_phase_scopes=[PhaseScope.PHASE_II, PhaseScope.PHASE_III, PhaseScope.SHARED],
+        detected_phase_scopes=[
+            PhaseScope.PHASE_II,
+            PhaseScope.PHASE_III,
+            PhaseScope.SHARED,
+        ],
     )
 
     catalog = build_required_procedure_catalog(
@@ -443,8 +622,7 @@ def test_aligned_page_only_is_formal_but_degraded_page_only_is_not():
     for page_only in tuple(
         span
         for span in spans
-        if span.source_ref.endswith("r0.c2.p0")
-        or span.source_ref.endswith("r1.c2.p0")
+        if span.source_ref.endswith("r0.c2.p0") or span.source_ref.endswith("r1.c2.p0")
     ):
         spans[spans.index(page_only)] = page_only.model_copy(
             update={
@@ -536,10 +714,86 @@ def test_real_protocol_required_procedure_catalog_is_read_only_and_phase_isolate
         frozen_at=FROZEN_AT,
     )
 
+    if label == "CMS-D001":
+        scoring_items = [
+            item
+            for item in catalog.items
+            if item.label in {"PASI评分", "PGA评分", "BSA评分", "DLQI评分"}
+            and item.visit_instance == "治疗期 / W0 / D1 / -"
+        ]
+        assert len(scoring_items) == 4
+        assert all(
+            "不良事件于D1启动给药后开始记录"
+            not in " ".join(item.source_excerpts)
+            for item in scoring_items
+        )
+
     assert Counter(item.visit_instance for item in catalog.items) == expected_counts
     assert all(item.review_stage is not None for item in catalog.items)
-    assert Counter(item.review_stage.value for item in catalog.items) == expected_stage_counts
+    assert (
+        Counter(item.review_stage.value for item in catalog.items)
+        == expected_stage_counts
+    )
     spans_by_id = {span.source_span_id: span for span in aligned.spans}
+    for item in (*parent_catalog.items, *catalog.items):
+        assert item.source_excerpts
+        assert len(item.source_excerpts) == len(item.source_span_ids)
+        assert any(excerpt is not None for excerpt in item.source_excerpts)
+        blocks_by_ref = {block.source_ref: block for block in extraction.blocks}
+        assert all(
+            excerpt is None
+            or excerpt
+            == (
+                (
+                    blocks_by_ref[spans_by_id[source_span_id].source_ref].text
+                    if item.kind == CatalogItemKind.REQUIRED_PROCEDURE
+                    else spans_by_id[source_span_id].excerpt
+                )
+                or spans_by_id[source_span_id].excerpt
+            )
+            for source_span_id, excerpt in zip(
+                item.source_span_ids,
+                item.source_excerpts,
+                strict=True,
+            )
+        )
+
+    coverage = build_full_protocol_coverage_manifest(
+        extraction.blocks,
+        projection,
+        graph,
+        protocol_version_id=f"{label}:real-direct-upload",
+        protocol_document_sha256=before[0],
+        snapshot_id=extraction.snapshot.snapshot_id,
+        manifest_id=f"manifest:{label}:real-direct-upload",
+    )
+    control_plan = plan_protocol_control_batches(
+        coverage,
+        parent_catalog,
+        catalog,
+    )
+    agent_input = ProtocolControlAgentInput.from_batch(control_plan.batches[0])
+    prompt = build_protocol_control_agent_prompt(agent_input)
+    assert agent_input.known_official_targets
+    assert agent_input.known_procedure_targets
+    assert all(target.source_excerpts for target in agent_input.known_official_targets)
+    assert all(target.source_excerpts for target in agent_input.known_procedure_targets)
+    assert agent_input.known_official_targets[0].source_excerpts[0] in prompt
+
+    if label == "CMS-D001":
+        ex20 = next(
+            target
+            for target in agent_input.known_official_targets
+            if target.official_code == "EX-20"
+        )
+        ex20_text = "".join(ex20.source_excerpts)
+        assert (
+            "丙氨酸转氨酶（ALT）或天冬氨酸转氨酶（AST）或总胆红素≥1.5×ULN" in ex20_text
+        )
+        assert "经研究者评估如果参与研究将可能对参与者构成不可接受的风险" in ex20_text
+        assert "γ-谷氨酰转移酶" not in ex20_text
+        assert ex20.source_excerpts[0] in prompt
+
     formal_ids = formal_source_span_ids(aligned.spans)
     inclusion_count = sum(
         item.official_code.startswith("IN-") for item in parent_catalog.items
@@ -548,9 +802,7 @@ def test_real_protocol_required_procedure_catalog_is_read_only_and_phase_isolate
         item.official_code.startswith("EX-") for item in parent_catalog.items
     )
     assert (inclusion_count, exclusion_count) == expected_parent_counts
-    assert all(
-        set(item.source_span_ids) & formal_ids for item in parent_catalog.items
-    )
+    assert all(set(item.source_span_ids) & formal_ids for item in parent_catalog.items)
     assert all(
         verify_excerpt_against_page(span, page_texts[span.render_page - 1])
         for span in aligned.spans
@@ -563,10 +815,20 @@ def test_real_protocol_required_procedure_catalog_is_read_only_and_phase_isolate
         for source_span_id in item.source_span_ids
     }
     assert item_source_refs
-    assert all(
-        source_ref == expected_root or source_ref.startswith(expected_root + ".")
+    table_source_refs = {
+        source_ref
         for source_ref in item_source_refs
+        if source_ref == expected_root or source_ref.startswith(expected_root + ".")
+    }
+    note_source_refs = item_source_refs - table_source_refs
+    assert table_source_refs
+    assert all(
+        (block := blocks_by_ref[source_ref]).numbering is not None
+        and block.numbering.level == 0
+        for source_ref in note_source_refs
     )
+    if label == "CMS-D001":
+        assert "body.p325" in note_source_refs
     assert not any(source_ref.startswith("body.t6") for source_ref in item_source_refs)
     assert all(
         any(
@@ -607,4 +869,6 @@ def test_catalog_ids_hash_and_default_freeze_timestamp_are_stable():
     second = build_required_procedure_catalog(blocks, projection, spans)
     assert first.catalog_id == second.catalog_id
     assert first.catalog_sha256 == second.catalog_sha256
-    assert [item.item_id for item in first.items] == [item.item_id for item in second.items]
+    assert [item.item_id for item in first.items] == [
+        item.item_id for item in second.items
+    ]

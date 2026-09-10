@@ -6,6 +6,7 @@ steps defer with recoverable retry until the workbench API completes them.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -18,10 +19,27 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.agents.protocol_deconstructor import (
     ProtocolAgentCallError,
     ProtocolAgentResponse,
+    ProtocolDeconstructionAttempt,
+    ProtocolDeconstructionRunResult,
     ProtocolDeconstructorRunner,
+    ProtocolSemanticBatchCache,
+    build_protocol_deconstruction_prompt,
     protocol_prompt_template_sha256,
 )
-from app.config import DEEPSEEK_API_KEY
+from app.agents.protocol_semantic_model_router import (
+    ProtocolSemanticRouteAttemptRecord,
+    ProtocolSemanticRouteAudit,
+    build_transport_for_candidate,
+    candidate_availability_error,
+    classify_protocol_semantic_task_grade,
+    dumps_route_audit,
+    resolve_route_mode,
+    route_failure_detail,
+    semantic_repair_limit_for_candidate,
+    select_protocol_semantic_route_candidates,
+    summarize_run_result_for_route,
+)
+from app.config import DECONSTRUCT_BACKEND, DECONSTRUCT_ROUTE_MODE, DEEPSEEK_API_KEY
 from app.domain.contracts.agents import PromptVersion
 from app.domain.contracts.agent_io import ProtocolDeconstructionInput
 from app.domain.contracts.enums import AgentNode, ExtractionStatus, PhaseScope, RenderStatus, StudyPhase
@@ -39,6 +57,7 @@ from app.domain.contracts.protocol_metadata import (
 from app.protocols.deconstruction_gate import (
     DECONSTRUCTION_GATE_VERSION,
     ProtocolDeconstructionGate,
+    ProtocolGateIssue,
 )
 from app.protocols.deconstruction_service import (
     ProtocolDeconstructionInputAssemblyError,
@@ -50,14 +69,18 @@ from app.protocols.docx_structure import (
     StructureExtractionError,
     extract_docx_structure,
 )
-from app.protocols.ingestion import SourceIngestionError
+from app.protocols.ingestion import (
+    ProtocolFileKind,
+    SourceIngestionError,
+    detect_format,
+)
 from app.protocols.metadata import (
     MetadataExtractionError,
     extract_protocol_metadata,
     resolve_protocol_identity,
 )
 from app.protocols.phase_detection import build_phase_applicability_graph
-from app.protocols.rendering import pdf_page_texts, render_to_pdf
+from app.protocols.rendering import RenderingError, pdf_page_texts, render_to_pdf
 from app.protocols.source_alignment import AlignmentResult, align_blocks
 from app.services.protocol_draft_service import ProtocolDraftService
 from app.services.protocol_workbench_service import (
@@ -106,6 +129,65 @@ class ProtocolDeconstructionExecutorConfig:
     page_texts_builder: Callable[[tuple[StructureBlock, ...]], list[str]] | None = None
     draft_response_builder: Callable[[ProtocolDeconstructionInputPackage], str] | None = None
     gate: ProtocolDeconstructionGate | None = None
+
+
+class _ProtocolSemanticBatchFileCache(ProtocolSemanticBatchCache):
+    """Job-scoped, content-addressed cache for validated semantic batches."""
+
+    def __init__(self, data_paths: DataPaths, job_id: str) -> None:
+        self._data_paths = data_paths
+        self._root = data_paths.blobs_dir / "protocol-semantic-batches" / job_id
+
+    def _path(self, cache_key: str) -> Path:
+        if len(cache_key) != 64 or any(
+            char not in "0123456789abcdef" for char in cache_key
+        ):
+            raise ValueError("方案语义批次缓存标识无效")
+        return self._root / f"{cache_key}.json"
+
+    def load(self, cache_key: str) -> str | None:
+        path = self._path(cache_key)
+        if not path.is_file() or path.is_symlink():
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            response_text = payload["response_text"]
+            if payload.get("cache_key") != cache_key or not isinstance(
+                response_text, str
+            ):
+                return None
+            if hashlib.sha256(response_text.encode("utf-8")).hexdigest() != payload.get(
+                "response_sha256"
+            ):
+                return None
+            return response_text
+        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return None
+
+    def store(
+        self,
+        cache_key: str,
+        response_text: str,
+        *,
+        cache_contract: str = "protocol-semantic-batch/v1",
+    ) -> None:
+        payload = {
+            "cache_contract": cache_contract,
+            "cache_key": cache_key,
+            "response_sha256": hashlib.sha256(
+                response_text.encode("utf-8")
+            ).hexdigest(),
+            "response_text": response_text,
+        }
+        self._data_paths.boundary.atomic_write_bytes(
+            self._path(cache_key),
+            json.dumps(
+                payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8"),
+        )
 
 
 def create_protocol_deconstruction_executor(
@@ -283,6 +365,18 @@ def _handle_extract(context: StepContext, config: ProtocolDeconstructionExecutor
     artifact = _artifact_from_checkpoint(merged)
     source_path = _source_path(config, artifact)
     snapshot_id = f"{context.job_id}-snapshot"
+    # 方案 PDF 上传入口已下线：仅 DOCX 具备原生结构通道；历史任务或被篡改的
+    # 登记格式不得回落到纯文本猜测。
+    _mime, kind = detect_format(source_path)
+    if kind != ProtocolFileKind.DOCX:
+        raise StepFailure(
+            retryable=False,
+            error_code="UNSUPPORTED_STRUCTURE_FORMAT",
+            detail=(
+                f"方案结构提取仅支持 DOCX，检测到 {kind.value}：{source_path}；"
+                "方案 PDF 上传入口已下线，请以 DOCX 重新上传正式方案。"
+            ),
+        )
     try:
         extraction = extract_docx_structure(
             source_path,
@@ -290,11 +384,11 @@ def _handle_extract(context: StepContext, config: ProtocolDeconstructionExecutor
             source_artifact=artifact,
             output_dir=config.data_paths.blobs_dir,
         )
-    except StructureExtractionError as exc:
+    except SourceIngestionError as exc:
         raise StepFailure(
             retryable=False,
             error_code="STRUCTURE_EXTRACTION_FAILED",
-            detail=str(exc),
+            detail=f"方案结构读取未完成：{exc}",
         ) from exc
     if extraction.snapshot.status != ExtractionStatus.COMPLETED:
         raise StepFailure(
@@ -324,6 +418,7 @@ def _handle_render(context: StepContext, config: ProtocolDeconstructionExecutorC
         render_status = RenderStatus.SUCCEEDED.value
         pdf_sha256 = None
         page_count = 1
+        render_kind = "test_page_texts"
     else:
         render_dir = config.data_paths.blobs_dir / "renders" / context.job_id
         rendered = render_to_pdf(
@@ -350,6 +445,7 @@ def _handle_render(context: StepContext, config: ProtocolDeconstructionExecutorC
         render_status = rendered.status.value
         pdf_sha256 = rendered.pdf_sha256
         page_count = rendered.page_count
+        render_kind = "libreoffice"
 
     alignment: AlignmentResult = align_blocks(
         blocks,
@@ -359,6 +455,7 @@ def _handle_render(context: StepContext, config: ProtocolDeconstructionExecutorC
     )
     return {
         "render_artifact_id": render_artifact_id,
+        "render_kind": render_kind,
         "render_status": render_status,
         "pdf_sha256": pdf_sha256,
         "page_count": page_count,
@@ -429,20 +526,393 @@ def _handle_identify(context: StepContext, config: ProtocolDeconstructionExecuto
     }
 
 
+def _persist_route_audit(
+    config: ProtocolDeconstructionExecutorConfig,
+    job_id: str,
+    audit: ProtocolSemanticRouteAudit,
+) -> dict[str, Any]:
+    """Write the explicit route ledger under the durable job blob boundary."""
+
+    payload = audit.as_audit_dict()
+    target = (
+        config.data_paths.blobs_dir
+        / "protocol-semantic-route-audits"
+        / job_id
+        / "route-audit.json"
+    )
+    config.data_paths.boundary.atomic_write_bytes(
+        target,
+        dumps_route_audit(audit),
+    )
+    return payload
+
+
+def load_persisted_route_audit(
+    config: ProtocolDeconstructionExecutorConfig,
+    job_id: str,
+) -> dict[str, Any] | None:
+    """Read the job-scoped route ledger; never reuse another job's audit."""
+
+    target = (
+        config.data_paths.blobs_dir
+        / "protocol-semantic-route-audits"
+        / job_id
+        / "route-audit.json"
+    )
+    if not target.is_file() or target.is_symlink():
+        return None
+    try:
+        payload = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("audit_contract") != "protocol-semantic-route-audit/v1":
+        return None
+    if payload.get("job_id") != job_id:
+        return None
+    return payload
+
+
+def _grade_generate_task(
+    package: ProtocolDeconstructionInputPackage,
+    *,
+    prompt_template: str,
+) -> tuple[Any, list[Any]]:
+    """Classify once at generate entry and return ordered route candidates."""
+
+    parent_items = [
+        item
+        for item in package.source_input.parent_rule_catalog.items
+        if item.official_code is not None
+    ]
+    parent_rule_count = len(parent_items)
+    selected_codes = [
+        item.official_code for item in parent_items[:1] if item.official_code
+    ]
+    batch_total = 1 if parent_rule_count <= 1 else max(2, parent_rule_count)
+    prompt_text = build_protocol_deconstruction_prompt(
+        package.source_input,
+        prompt_template=prompt_template,
+        requested_rule_codes=selected_codes or None,
+        batch_number=1 if selected_codes else None,
+        batch_total=1 if selected_codes else None,
+        compact=False,
+        scoped_source=True,
+    )
+    decision = classify_protocol_semantic_task_grade(
+        parent_rule_count=parent_rule_count,
+        prompt_text=prompt_text,
+        batch_total=batch_total,
+    )
+    route_mode = resolve_route_mode(DECONSTRUCT_ROUTE_MODE)
+    candidates = select_protocol_semantic_route_candidates(
+        decision.grade,
+        route_mode=route_mode,
+    )
+    return decision, candidates
+
+
+def _run_semantic_generation_with_routing(
+    *,
+    context: StepContext,
+    config: ProtocolDeconstructionExecutorConfig,
+    package: ProtocolDeconstructionInputPackage,
+    prompt_version: PromptVersion,
+) -> tuple[ProtocolDeconstructionRunResult, dict[str, Any]]:
+    """Run whole-attempt graded fallback with an auditable candidate ledger."""
+
+    route_mode = resolve_route_mode(DECONSTRUCT_ROUTE_MODE)
+    batch_cache = _ProtocolSemanticBatchFileCache(config.data_paths, context.job_id)
+
+    if config.transport is not None or config.transport_factory is not None:
+        runner = ProtocolDeconstructorRunner(gate=config.gate)
+        transport = _resolve_transport(config)
+        result = runner.run(
+            package.source_input,
+            prompt_version=prompt_version,
+            prompt_template=config.prompt_template,
+            transport=transport,
+            source_spans=package.source_spans,
+            batch_cache=batch_cache,
+            transport_factory=config.transport_factory,
+        )
+        backend = getattr(transport, "_backend", "injected")
+        model = getattr(transport, "_model", "injected")
+        effort = getattr(transport, "_reasoning_effort", "injected")
+        outcome, error_class, session_id = summarize_run_result_for_route(result)
+        audit = ProtocolSemanticRouteAudit(
+            job_id=context.job_id,
+            route_mode="pinned" if route_mode == "pinned" else "graded",
+            grade_decision=None,
+            ordered_candidates=[],
+            attempts=[
+                ProtocolSemanticRouteAttemptRecord(
+                    route_attempt=1,
+                    grade="injected_transport",
+                    backend=str(backend),
+                    model=str(model),
+                    reasoning_effort=str(effort),
+                    outcome=outcome,
+                    error_class=error_class,
+                    detail=None if outcome == "accepted" else route_failure_detail(result),
+                    session_id=session_id,
+                )
+            ],
+            final_identity=f"{backend}:{model}:{effort}",
+            final_outcome=outcome,
+        )
+        return result, _persist_route_audit(config, context.job_id, audit)
+
+    if route_mode == "pinned":
+        runner = ProtocolDeconstructorRunner(gate=config.gate)
+        transport = _resolve_transport(config)
+        result = runner.run(
+            package.source_input,
+            prompt_version=prompt_version,
+            prompt_template=config.prompt_template,
+            transport=transport,
+            source_spans=package.source_spans,
+            batch_cache=batch_cache,
+            transport_factory=lambda: _resolve_transport(config),
+        )
+        outcome, error_class, session_id = summarize_run_result_for_route(result)
+        candidate = select_protocol_semantic_route_candidates(
+            "complex_protocol_semantic",
+            route_mode="pinned",
+        )[0]
+        audit = ProtocolSemanticRouteAudit(
+            job_id=context.job_id,
+            route_mode="pinned",
+            grade_decision=None,
+            ordered_candidates=[candidate],
+            attempts=[
+                ProtocolSemanticRouteAttemptRecord(
+                    route_attempt=1,
+                    grade="pinned",
+                    backend=candidate.backend,
+                    model=candidate.model,
+                    reasoning_effort=candidate.reasoning_effort,
+                    outcome=outcome,
+                    error_class=error_class,
+                    detail=None if outcome == "accepted" else route_failure_detail(result),
+                    session_id=session_id,
+                )
+            ],
+            final_identity=candidate.identity,
+            final_outcome=outcome,
+        )
+        return result, _persist_route_audit(config, context.job_id, audit)
+
+    decision, candidates = _grade_generate_task(
+        package,
+        prompt_template=config.prompt_template,
+    )
+    audit = ProtocolSemanticRouteAudit(
+        job_id=context.job_id,
+        route_mode="graded",
+        grade_decision=decision,
+        ordered_candidates=list(candidates),
+    )
+    last_result: ProtocolDeconstructionRunResult | None = None
+    for index, candidate in enumerate(candidates, start=1):
+        semantic_repair_limit = semantic_repair_limit_for_candidate(
+            candidate,
+            decision.grade,
+        )
+        skip_reason = candidate_availability_error(candidate)
+        if skip_reason is not None:
+            audit.attempts.append(
+                ProtocolSemanticRouteAttemptRecord(
+                    route_attempt=index,
+                    grade=decision.grade,
+                    backend=candidate.backend,
+                    model=candidate.model,
+                    reasoning_effort=candidate.reasoning_effort,
+                    outcome="skipped_unavailable",
+                    error_class="PROVIDER_UNAVAILABLE",
+                    detail=skip_reason,
+                    semantic_repair_limit=semantic_repair_limit,
+                    discarded_merged_candidate=False,
+                )
+            )
+            continue
+        try:
+            transport = build_transport_for_candidate(candidate)
+        except ValueError as exc:
+            audit.attempts.append(
+                ProtocolSemanticRouteAttemptRecord(
+                    route_attempt=index,
+                    grade=decision.grade,
+                    backend=candidate.backend,
+                    model=candidate.model,
+                    reasoning_effort=candidate.reasoning_effort,
+                    outcome="skipped_unavailable",
+                    error_class="PROVIDER_UNAVAILABLE",
+                    detail=str(exc),
+                    semantic_repair_limit=semantic_repair_limit,
+                )
+            )
+            continue
+        try:
+            runner = ProtocolDeconstructorRunner(
+                gate=config.gate,
+                max_semantic_repairs=semantic_repair_limit,
+            )
+            result = runner.run(
+                package.source_input,
+                prompt_version=prompt_version,
+                prompt_template=config.prompt_template,
+                transport=transport,
+                source_spans=package.source_spans,
+                batch_cache=batch_cache,
+                transport_factory=lambda candidate=candidate: build_transport_for_candidate(
+                    candidate
+                ),
+            )
+        except ProtocolAgentCallError as exc:
+            error_code = getattr(exc, "error_code", "SEMANTIC_CALL_FAILED")
+            audit.attempts.append(
+                ProtocolSemanticRouteAttemptRecord(
+                    route_attempt=index,
+                    grade=decision.grade,
+                    backend=candidate.backend,
+                    model=candidate.model,
+                    reasoning_effort=candidate.reasoning_effort,
+                    outcome="failed",
+                    error_class=error_code,
+                    detail=str(exc),
+                    session_id=getattr(exc, "session_id", None),
+                    semantic_repair_limit=semantic_repair_limit,
+                    discarded_merged_candidate=True,
+                )
+            )
+            continue
+        last_result = result
+        outcome, error_class, session_id = summarize_run_result_for_route(result)
+        accepted = outcome == "accepted"
+        audit.attempts.append(
+            ProtocolSemanticRouteAttemptRecord(
+                route_attempt=index,
+                grade=decision.grade,
+                backend=candidate.backend,
+                model=candidate.model,
+                reasoning_effort=candidate.reasoning_effort,
+                outcome=outcome,
+                error_class=error_class,
+                detail=None if accepted else route_failure_detail(result),
+                session_id=session_id,
+                semantic_repair_limit=semantic_repair_limit,
+                discarded_merged_candidate=not accepted,
+            )
+        )
+        if accepted:
+            audit.final_identity = candidate.identity
+            audit.final_outcome = "accepted"
+            return result, _persist_route_audit(config, context.job_id, audit)
+        # Whole-attempt boundary: discard this provider's merged candidate and
+        # start the next provider with a fresh transport/session identity.
+    audit.final_outcome = "exhausted"
+    payload = _persist_route_audit(config, context.job_id, audit)
+    if last_result is not None:
+        return last_result, payload
+    detail = "方案语义模型路由候选均已显式跳过或失败，未产出可用草稿。"
+    if audit.attempts:
+        last = audit.attempts[-1]
+        if last.detail:
+            detail = last.detail
+        if all(item.outcome == "skipped_unavailable" for item in audit.attempts):
+            detail = (
+                f"{detail}；请确认已设置 ENROLLMENT_ENV_FILE "
+                "或已注入声明路由所需凭据后重试"
+            )
+    issue = ProtocolGateIssue(
+        issue_code="SEMANTIC_ROUTE_EXHAUSTED",
+        check_name="semantic_model_routing",
+        level="阻止发布",
+        problem=detail,
+        impact="当前作业无法进入草稿审阅",
+        next_action=(
+            "请核对 ENROLLMENT_ENV_FILE / DECONSTRUCT_GLM_API_KEY / "
+            "DEEPSEEK_API_KEY / MTPLX 连通性后重试"
+        ),
+        affected_refs=["semantic_route_audit"],
+        repair_scope=["semantic_route"],
+    )
+    empty = ProtocolDeconstructionRunResult(
+        status="需要核对",
+        same_session_id="protocol-route-exhausted",
+        attempts=[
+            ProtocolDeconstructionAttempt(
+                attempt=1,
+                session_id="protocol-route-exhausted",
+                raw_output_sha256="0" * 64,
+                outcome="会话异常",
+                issues=[issue],
+            )
+        ],
+    )
+    return empty, payload
+
+
 def _resolve_transport(config: ProtocolDeconstructionExecutorConfig) -> Any:
     if config.transport is not None:
         return config.transport
     if config.transport_factory is not None:
         return config.transport_factory()
-    if not DEEPSEEK_API_KEY:
+    backend = DECONSTRUCT_BACKEND.strip().lower()
+    from app.agents.protocol_semantic_transport import (
+        OpenAICompatibleProtocolAgentTransport,
+        SUPPORTED_PROTOCOL_DECONSTRUCTION_BACKENDS,
+    )
+
+    if backend not in SUPPORTED_PROTOCOL_DECONSTRUCTION_BACKENDS:
+        raise StepFailure(
+            retryable=False,
+            error_code="SEMANTIC_PROVIDER_UNSUPPORTED",
+            detail="方案语义解构服务的模型连接方式不受支持；请核对 DECONSTRUCT_BACKEND 配置后重试。",
+        )
+    if backend == "deepseek" and not DEEPSEEK_API_KEY:
         raise StepFailure(
             retryable=True,
             error_code="SEMANTIC_PROVIDER_UNAVAILABLE",
             detail="方案语义解构服务尚未配置，暂不能生成草稿；请联系维护人员完成模型接入后重试。",
         )
-    from app.agents.deepseek_protocol_transport import DeepSeekProtocolAgentTransport
+    if backend in {"zhipu-coding-plan", "glm"}:
+        from app.config import DECONSTRUCT_GLM_API_KEY
 
-    return DeepSeekProtocolAgentTransport()
+        if not DECONSTRUCT_GLM_API_KEY:
+            raise StepFailure(
+                retryable=True,
+                error_code="SEMANTIC_PROVIDER_UNAVAILABLE",
+                detail="GLM 方案语义解构服务尚未配置（缺少 DECONSTRUCT_GLM_API_KEY），暂不能生成草稿。",
+            )
+    return OpenAICompatibleProtocolAgentTransport(backend=backend)
+
+
+def _semantic_failure_detail(result: ProtocolDeconstructionRunResult) -> str:
+    """Keep bounded schema/gate diagnostics when no draft can be persisted."""
+    base = "方案语义解构尚未产出可用草稿，请稍后重试或联系维护人员。"
+    diagnostics: list[str] = []
+    seen: set[tuple[str, str, str]] = set()
+    for attempt in reversed(result.attempts):
+        for issue in reversed(attempt.issues):
+            problem = " ".join(issue.problem.split())[:700]
+            next_action = " ".join(issue.next_action.split())[:300]
+            fingerprint = (issue.issue_code, problem, next_action)
+            if fingerprint in seen:
+                continue
+            seen.add(fingerprint)
+            diagnostics.append(
+                f"{issue.issue_code}: {problem}；下一步：{next_action}"
+            )
+            if len(diagnostics) >= 3:
+                break
+        if len(diagnostics) >= 3:
+            break
+    if not diagnostics:
+        return base
+    return base + " 最近诊断：" + "；".join(diagnostics)[:3000]
 
 
 def _assemble_input_package(
@@ -494,6 +964,7 @@ def _handle_freeze(
 
 
 def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecutorConfig) -> dict[str, Any]:
+    route_audit_payload: dict[str, Any] | None = None
     merged = _merged_prior_checkpoints(config, context.job_id, before_step=STEP_GENERATE)
     source_input = ProtocolDeconstructionInput.model_validate(merged["source_input"])
     source_spans = {
@@ -567,30 +1038,70 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
         if config.draft_response_builder is not None:
             draft_json = config.draft_response_builder(package)
             transport = _FakeSingleResponseTransport(draft_json)
+            runner = ProtocolDeconstructorRunner(gate=config.gate)
+            try:
+                result = runner.run(
+                    package.source_input,
+                    prompt_version=prompt_version,
+                    prompt_template=config.prompt_template,
+                    transport=transport,
+                    source_spans=package.source_spans,
+                    batch_cache=_ProtocolSemanticBatchFileCache(
+                        config.data_paths,
+                        context.job_id,
+                    ),
+                )
+            except ProtocolAgentCallError as exc:
+                error_code = getattr(exc, "error_code", "SEMANTIC_CALL_FAILED")
+                raise StepFailure(
+                    retryable=True,
+                    error_code=error_code,
+                    detail=f"方案语义解构调用未完成，请稍后重试。（{exc}）",
+                ) from exc
         else:
-            transport = _resolve_transport(config)
-
-        runner = ProtocolDeconstructorRunner(gate=config.gate)
-        try:
-            result = runner.run(
-                package.source_input,
-                prompt_version=prompt_version,
-                prompt_template=config.prompt_template,
-                transport=transport,
-                source_spans=package.source_spans,
-            )
-        except ProtocolAgentCallError as exc:
-            raise StepFailure(
-                retryable=True,
-                error_code="SEMANTIC_CALL_FAILED",
-                detail=f"方案语义解构调用未完成，请稍后重试。（{exc}）",
-            ) from exc
+            try:
+                result, route_audit_payload = _run_semantic_generation_with_routing(
+                    context=context,
+                    config=config,
+                    package=package,
+                    prompt_version=prompt_version,
+                )
+            except ProtocolAgentCallError as exc:
+                error_code = getattr(exc, "error_code", "SEMANTIC_CALL_FAILED")
+                raise StepFailure(
+                    retryable=True,
+                    error_code=error_code,
+                    detail=f"方案语义解构调用未完成，请稍后重试。（{exc}）",
+                ) from exc
 
         if result.final_draft is None:
+            detail = _semantic_failure_detail(result)
+            if route_audit_payload is not None:
+                detail = (
+                    detail
+                    + " 模型路由审计："
+                    + json.dumps(
+                        {
+                            "route_mode": route_audit_payload.get("route_mode"),
+                            "final_outcome": route_audit_payload.get("final_outcome"),
+                            "attempts": [
+                                {
+                                    "route_attempt": item.get("route_attempt"),
+                                    "backend": item.get("backend"),
+                                    "model": item.get("model"),
+                                    "outcome": item.get("outcome"),
+                                    "error_class": item.get("error_class"),
+                                }
+                                for item in route_audit_payload.get("attempts", [])
+                            ],
+                        },
+                        ensure_ascii=False,
+                    )
+                )
             raise StepFailure(
                 retryable=True,
                 error_code="SEMANTIC_DRAFT_MISSING",
-                detail="方案语义解构尚未产出可用草稿，请稍后重试或联系维护人员。",
+                detail=detail,
             )
         final_draft = result.final_draft
         gate = result.final_gate_result
@@ -624,7 +1135,7 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
             source_spans=package.source_spans,
         )
 
-    return {
+    payload = {
         "draft_id": revision.draft_id,
         "draft_revision_id": revision.revision_id,
         "draft_status": revision.status.value,
@@ -640,6 +1151,9 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
         "gate_version": DECONSTRUCTION_GATE_VERSION,
         "publishable": gate.publishable,
     }
+    if route_audit_payload is not None:
+        payload["semantic_route_audit"] = route_audit_payload
+    return payload
 
 
 def _handle_integrity(context: StepContext, config: ProtocolDeconstructionExecutorConfig) -> dict[str, Any]:
@@ -700,10 +1214,21 @@ class _FakeSingleResponseTransport:
         self.start_prompts: list[str] = []
         self.repair_prompts: list[tuple[str, str]] = []
 
-    def start(self, *, prompt: str) -> ProtocolAgentResponse:
+    def start(
+        self,
+        *,
+        prompt: str,
+        output_kind: str = "semantic_candidate",
+    ) -> ProtocolAgentResponse:
         self.start_prompts.append(prompt)
         return ProtocolAgentResponse(session_id="test-session", text=self._text)
 
-    def continue_session(self, *, session_id: str, prompt: str) -> ProtocolAgentResponse:
+    def continue_session(
+        self,
+        *,
+        session_id: str,
+        prompt: str,
+        output_kind: str = "semantic_candidate",
+    ) -> ProtocolAgentResponse:
         self.repair_prompts.append((session_id, prompt))
         return ProtocolAgentResponse(session_id=session_id, text=self._text)

@@ -12,6 +12,7 @@ from app.domain.contracts.protocol_drafts import (
     DraftFeedbackKind,
     ProtocolDraftRevisionDiff,
 )
+from app.domain.contracts.protocol_metadata import InterpretationSource
 
 
 class _StrictModel(BaseModel):
@@ -30,6 +31,14 @@ class StartDeconstructionResponse(_StrictModel):
 class StartFeedbackRevisionRequest(_StrictModel):
     project_id: str = Field(min_length=1, max_length=128)
     idempotency_key: str = Field(min_length=1, max_length=256)
+    interpretation_sources: list[InterpretationSource] = Field(default_factory=list)
+    actor: str = Field(default="用户", min_length=1, max_length=128)
+
+
+class RegisterInterpretationSourcesRequest(_StrictModel):
+    expected_revision_id: str = Field(min_length=1, max_length=128)
+    idempotency_key: str = Field(min_length=1, max_length=256)
+    interpretation_sources: list[InterpretationSource] = Field(min_length=1)
     actor: str = Field(default="用户", min_length=1, max_length=128)
 
 
@@ -281,6 +290,9 @@ class SourcesResponse(_StrictModel):
     selected_phase_label: str
     source_spans: dict[str, Any]
     source_materials: dict[str, Any]
+    draft_revision_id: str | None = None
+    protocol_version_id: str
+    interpretation_sources: list[InterpretationSource] = Field(default_factory=list)
 
 
 class PublishRequest(_StrictModel):

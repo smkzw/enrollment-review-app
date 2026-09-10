@@ -58,7 +58,7 @@ export function ProtocolRedoSelectPanel({
 
   const handleFile = (file: File | undefined) => {
     if (file === undefined || busy) return;
-    if (!file.name.toLowerCase().endsWith(".docx")) {
+    if (!/\.docx$/i.test(file.name)) {
       setInvalidFile("当前仅支持 DOCX 方案文件，请选择正式方案新版文件后重试。");
       return;
     }

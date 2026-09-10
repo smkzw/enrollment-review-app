@@ -23,7 +23,11 @@ OCRPage/attempt 插入在**同一事务**内提交结果；被拒的晚到结果
 - 当前路由是 **text-only**：只返回识别文本，不产生任何 bbox/坐标；
   ``OcrRecognition.degradation_reason`` 必须携带真实的降级原因；
 - 只有未来真实适配器从 provider 响应验证过机器坐标后，才允许产生区域定位；
-- 缓存命中必须不可变且作用域中立，但不得绕过内容/识别配置校验；
+- 缓存命中必须不可变且作用域中立，但不得绕过内容/识别配置校验；v2 缓存键
+  绑定页产物身份（命中只在本页产物内），而**内容级推理复用**在 v2 未命中时
+  按设计书内容哈希契约（内容哈希+页码+识别配置版本）寻找他版成功页，并把
+  其推理结果复制为**本页产物自有**的新成功行（新 v2 键）——推理不重复付费，
+  历史行不改写，跨产物借用（清单完整性门禁拒绝的根因）不可能发生；
 - 任一决定性输入（模型/提示词/解析器/渲染/变换）变化必然产生新指纹与新缓存键；
 - 领域失败文本只含稳定中文措辞：异常类名、provider 原文、stderr、密钥等细节
   归 worker_03 尝试/任务技术记录，绝不进入 ``OCRPage.failure_reason``。
@@ -206,6 +210,9 @@ class PreparedOcrRequest:
     segments: tuple[PreparedOcrSegment, ...]
     started_at: datetime
     cached_page: OCRPage | None = None
+    # 内容级推理复用源（v2 键未命中时）：同内容身份的他版成功页。
+    # 命中后由 ``finalize_reuse`` 复制为本页产物自有新成功行，绝不跨产物借用。
+    reused_page: OCRPage | None = None
 
 
 @dataclass(frozen=True)
@@ -222,6 +229,8 @@ class OcrRecognition:
     raw_request_artifact: RawOcrRequestArtifact | None = None
     raw_response_artifact: RawOcrResponseArtifact | None = None
     technical_detail: str | None = None
+    # 内容级推理复用来源页（cached=True 且发生了复用时携带，供审计/技术记录）。
+    reused_from_ocr_page_id: str | None = None
 
 
 def _canonical_json_bytes(payload: Any) -> bytes:
@@ -601,10 +610,16 @@ class TextOnlyOcrAdapter:
         )
 
     def cache_key(
-        self, *, source_sha256: str, page_number: int, page_input_sha256: str
+        self,
+        *,
+        page_artifact_id: str,
+        source_sha256: str,
+        page_number: int,
+        page_input_sha256: str,
     ) -> str:
-        """页级缓存唯一键：任一决定性输入变化必然产生新键。"""
+        """页级缓存唯一键（v2：绑定页产物身份，任一决定性输入变化必然产生新键）。"""
         return build_ocr_cache_key(
+            page_artifact_id=page_artifact_id,
             source_sha256=source_sha256,
             page_number=page_number,
             ocr_profile_sha256=self.profile_fingerprint,
@@ -618,14 +633,17 @@ class TextOnlyOcrAdapter:
         session,
         *,
         cache_key: str,
+        page_artifact_id: str,
         source_sha256: str,
         page_number: int,
         page_input_sha256: str,
     ) -> OCRPage | None:
-        """校验过的缓存命中：不可变且作用域中立，但绝不绕过内容/身份校验。
+        """校验过的缓存命中：不可变且只在本页产物身份内复用，绝不绕过内容/身份校验。
 
         仓储层已对同一缓存键全部行做完整镜像/Profile 闭包校验；此处再复核
         请求身份与命中行一致，防止缓存键空间漂移/投毒被当作命中。
+        v2 缓存键已绑定 ``page_artifact_id``，命中行必然属于当前页产物；
+        下面的身份复核是纵深防御。
         """
         hit = OcrPageRepository(session).get_successful_by_cache_key(cache_key)
         if hit is None:
@@ -638,9 +656,52 @@ class TextOnlyOcrAdapter:
             raise OcrCacheIdentityError(
                 "缓存命中页的页输入哈希与请求不一致，拒绝命中"
             )
-        if hit.source_sha256 != source_sha256 or hit.page_number != page_number:
+        if (
+            hit.source_sha256 != source_sha256
+            or hit.page_number != page_number
+            or hit.page_artifact_id != page_artifact_id
+        ):
             raise OcrCacheIdentityError(
-                "缓存命中页的来源/页码与请求不一致，拒绝命中"
+                "缓存命中页的来源/页码/页产物与请求不一致，拒绝命中"
+            )
+        return hit
+
+    def reusable_page(
+        self,
+        session,
+        *,
+        source_sha256: str,
+        page_number: int,
+        page_input_sha256: str,
+    ) -> OCRPage | None:
+        """内容级推理复用源（仅限 v2 键未命中后调用）：同内容身份的他版成功页。
+
+        复用身份是设计书内容哈希缓存契约：内容哈希 + 页码 + 识别配置指纹 +
+        实际页图输入哈希 + 布局/坐标变换版本；页产物绑定不参与。命中行的
+        请求身份在此复核（纵深防御），仓储层已对全部候选行做完整镜像/闭包
+        校验，漂移行暴露为 :class:`PersistedContractInvalid`，绝不静默复用。
+        """
+        hit = OcrPageRepository(session).get_latest_successful_by_content_identity(
+            source_sha256=source_sha256,
+            page_number=page_number,
+            ocr_profile_sha256=self.profile_fingerprint,
+            page_input_sha256=page_input_sha256,
+            layout_parser_version=self.layout_parser_version,
+            coordinate_transform_version=self.coordinate_transform_version,
+        )
+        if hit is None:
+            return None
+        if hit.ocr_profile_sha256 != self.profile_fingerprint:
+            raise OcrCacheIdentityError(
+                "内容复用页的识别配置指纹与请求不一致，拒绝复用"
+            )
+        if (
+            hit.source_sha256 != source_sha256
+            or hit.page_number != page_number
+            or hit.page_input_sha256 != page_input_sha256
+        ):
+            raise OcrCacheIdentityError(
+                "内容复用页的来源/页码/页输入与请求不一致，拒绝复用"
             )
         return hit
 
@@ -665,6 +726,7 @@ class TextOnlyOcrAdapter:
         started = started_at or _now_utc()
         profile = OCRProfileRepository(session).get_or_create(self.profile())
         cache_key = self.cache_key(
+            page_artifact_id=page_artifact_id,
             source_sha256=source_sha256,
             page_number=page_number,
             page_input_sha256=page_input_sha256,
@@ -672,9 +734,22 @@ class TextOnlyOcrAdapter:
         hit = self.cached_page(
             session,
             cache_key=cache_key,
+            page_artifact_id=page_artifact_id,
             source_sha256=source_sha256,
             page_number=page_number,
             page_input_sha256=page_input_sha256,
+        )
+        # v2（页产物绑定）键未命中时，按设计书内容哈希契约寻找他版成功页作为
+        # 内容级推理复用源；命中后 finalize 复制为本页产物自有新成功行。
+        reused = (
+            None
+            if hit is not None
+            else self.reusable_page(
+                session,
+                source_sha256=source_sha256,
+                page_number=page_number,
+                page_input_sha256=page_input_sha256,
+            )
         )
         plan = segment_page_image(page_image_bytes, config=self.segmentation_config)
         prepared_segments: list[PreparedOcrSegment] = []
@@ -764,6 +839,54 @@ class TextOnlyOcrAdapter:
             segments=segments,
             started_at=started,
             cached_page=hit,
+            reused_page=reused,
+        )
+
+    def finalize_reuse(
+        self,
+        *,
+        session,
+        prepared: PreparedOcrRequest,
+        artifact_store: ArtifactStore | None = None,
+        persist: Callable[[OCRPage], object] | None = None,
+    ) -> OcrRecognition:
+        """内容级推理复用落地：把复用源成功页的识别文本写入**本页产物自有**新成功行。
+
+        历史行不可改写：复用源行原样保留；新行携带当前页产物身份与当前 v2
+        缓存键，因此冻结清单的跨产物完整性校验必然通过。无推理发生、无新
+        响应工件（``cached=True``，原始响应仍由复用源行/尝试持有）。
+        由 worker_03 在 ``commit_guard`` 事务内通过 ``persist`` 提交。
+        """
+        if prepared.cached_page is not None:
+            return OcrRecognition(
+                ocr_page=prepared.cached_page,
+                cached=True,
+                degradation_reason=TEXT_ONLY_DEGRADATION_REASON,
+                raw_request_artifact=prepared.request_artifact,
+            )
+        if prepared.reused_page is None:
+            raise OcrAdapterError("内容级复用落地缺少复用源成功页")
+        page = build_ocr_page(
+            ocr_page_id=f"ocr-page-{uuid4().hex}",
+            page_artifact_id=prepared.page_artifact_id,
+            source_sha256=prepared.source_sha256,
+            page_number=prepared.page_number,
+            page_input_sha256=prepared.page_input_sha256,
+            ocr_profile=prepared.profile,
+            cache_key=prepared.cache_key,
+            raw_text=prepared.reused_page.raw_text,
+            status=OCRPageStatus.SUCCEEDED,
+            started_at=prepared.started_at,
+            completed_at=_now_utc(),
+        )
+        if persist is not None:
+            persist(page)
+        return OcrRecognition(
+            ocr_page=page,
+            cached=True,
+            degradation_reason=TEXT_ONLY_DEGRADATION_REASON,
+            raw_request_artifact=prepared.request_artifact,
+            reused_from_ocr_page_id=prepared.reused_page.ocr_page_id,
         )
 
     def finalize_success(
@@ -787,6 +910,13 @@ class TextOnlyOcrAdapter:
                 cached=True,
                 degradation_reason=TEXT_ONLY_DEGRADATION_REASON,
                 raw_request_artifact=prepared.request_artifact,
+            )
+        if prepared.reused_page is not None:
+            return self.finalize_reuse(
+                session=session,
+                artifact_store=artifact_store,
+                prepared=prepared,
+                persist=persist,
             )
         response_artifact = self.persist_raw_response_artifact(
             session=session,
@@ -860,6 +990,14 @@ class TextOnlyOcrAdapter:
                 degradation_reason=TEXT_ONLY_DEGRADATION_REASON,
                 raw_request_artifact=prepared.request_artifact,
             )
+        if prepared.reused_page is not None:
+            # 复用落地后不存在推理失败：结果已定，只返回既定复用结果，
+            # 绝不写失败页、也绝不在此重复落地成功行（提交属成功路径）。
+            return self.finalize_reuse(
+                session=session,
+                prepared=prepared,
+                artifact_store=artifact_store,
+            )
         raw_response_artifact: RawOcrResponseArtifact | None = None
         if failure.raw_response is not None and artifact_store is not None:
             raw_response_artifact = self.persist_raw_response_artifact(
@@ -929,6 +1067,14 @@ class TextOnlyOcrAdapter:
                 cached=True,
                 degradation_reason=TEXT_ONLY_DEGRADATION_REASON,
                 raw_request_artifact=prepared.request_artifact,
+            )
+        if prepared.reused_page is not None:
+            # 内容级推理复用：同一内容+识别配置已有成功结果，不再发起推理。
+            return self.finalize_reuse(
+                session=session,
+                prepared=prepared,
+                artifact_store=artifact_store,
+                persist=persist,
             )
         completed: list[tuple[PreparedOcrSegment, InferenceResult, dict[str, Any]]] = []
         try:

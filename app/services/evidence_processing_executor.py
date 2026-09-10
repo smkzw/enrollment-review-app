@@ -19,7 +19,9 @@
 - 全部页达到终态后冻结不可变基础证据处理修订（明确不可激活，不触碰活动指针）；
 - 每个文件完成写入 ``page_progress`` JobEvent，SSE 只读回放持久事件；
 - 基础修订冻结后立即生成风险提示与诚实定位，增量复用页以追加记录
-  沿用上一有效版本的核对/校对，使用户首次打开工作台即可看到真实门禁。
+  沿用上一有效版本的核对/校对，使用户首次打开工作台即可看到真实门禁；
+- 冻结后幂等入队独立 ``selective_vision_postprocess`` 任务（不等待 VLM、
+  不续 OCR 页租约、不改写 OCR）；视觉观察在独立任务中事务外调用。
 
 本模块不实现 Slice 4.4 的校正/风险门禁/定位器/激活，也不建立任何活动指针。
 """
@@ -433,6 +435,23 @@ def _execute(
             retryable=True,
             error_code="EVIDENCE_SIDECAR_PREPARATION_FAILED",
             detail="识别结果已保存，但风险提示与原文定位尚未准备完成，系统将继续处理。",
+        ) from exc
+    # 冻结后仅幂等入队独立视觉后处理任务：不等待 VLM、不续 OCR 页租约、不改 OCR。
+    try:
+        from app.services.selective_vision_postprocess_job_service import (
+            enqueue_selective_vision_postprocess_for_revision,
+        )
+
+        enqueue_selective_vision_postprocess_for_revision(
+            config.session_factory,
+            revision_id,
+            trigger="evidence_processing_freeze",
+        )
+    except Exception as exc:
+        raise StepFailure(
+            retryable=True,
+            error_code="SELECTIVE_VISION_ENQUEUE_FAILED",
+            detail="识别结果已保存，但选择性视觉后处理尚未入队，系统将继续处理。",
         ) from exc
     _transition_snapshot_if_processing(
         config,
@@ -1126,6 +1145,7 @@ def _get_or_create_source_text_page(
         created_at=created_at,
     )
     cache_key = build_ocr_cache_key(
+        page_artifact_id=artifact.page_artifact_id,
         source_sha256=artifact.source_sha256,
         page_number=artifact.page_number,
         ocr_profile_sha256=profile.profile_sha256,
@@ -1374,11 +1394,23 @@ def _process_visual_page(
             )
         except PageLeaseBusyError:
             return _VisualOutcome(deferred=True, technical_detail="页工作项由其他执行者持有")
-        OcrPageRepository(session).create(_build_running_page(adapter, prepared))
+        if prepared.reused_page is None:
+            OcrPageRepository(session).create(_build_running_page(adapter, prepared))
 
     # ---- 阶段 (b)：整段外部调用期间页租约续租 + 门禁租约下推理（事务外） ----
     release_page_lease = True
     try:
+        if prepared.reused_page is not None:
+            # 内容级推理复用：同内容+识别配置已有成功结果，不发起推理、不占
+            # 共享门禁；在同一页租约的 commit_guard 事务内落地本页产物自有
+            # 成功行（无尝试行，与不可变缓存命中一致）。
+            return _commit_content_reuse(
+                config=config,
+                adapter=adapter,
+                prepared=prepared,
+                lease=lease,
+                artifact_store=artifact_store,
+            )
         with _page_lease_heartbeat(
             config, prepared.cache_key, owner, lease.lease_generation
         ) as page_hb:
@@ -1633,6 +1665,7 @@ def _commit_ocr_success(
                 prepared.cache_key,
                 lease.lease_owner,
                 lease.lease_generation,
+                page_artifact_id=prepared.page_artifact_id,
                 source_sha256=prepared.source_sha256,
                 page_number=prepared.page_number,
                 ocr_profile_sha256=prepared.profile.profile_sha256,
@@ -1699,6 +1732,48 @@ def _commit_ocr_success(
         return _VisualOutcome(retryable=True, technical_detail=f"{type(exc).__name__}: {exc}")
 
 
+def _commit_content_reuse(
+    *,
+    config: EvidenceProcessingExecutorConfig,
+    adapter: TextOnlyOcrAdapter,
+    prepared,
+    lease,
+    artifact_store: ArtifactStore,
+) -> _VisualOutcome:
+    """内容级推理复用落地：commit_guard 事务内写入本页产物自有成功行。
+
+    无外部推理、无共享门禁租约、无尝试行（与不可变缓存命中一致）。``commit_guard``
+    重算 v2 缓存键并核对页租约 owner/代次/过期，篡改输入或晚到提交被拒绝；
+    历史成功行（复用源）原样保留，绝不跨产物借用他版页行。
+    """
+    try:
+        with config.session_factory() as session, session.begin():
+            PageWorkLeaseRepository(session).commit_guard(
+                prepared.cache_key,
+                lease.lease_owner,
+                lease.lease_generation,
+                page_artifact_id=prepared.page_artifact_id,
+                source_sha256=prepared.source_sha256,
+                page_number=prepared.page_number,
+                ocr_profile_sha256=prepared.profile.profile_sha256,
+                page_input_sha256=prepared.page_input_sha256,
+                layout_parser_version=prepared.profile.layout_parser_version,
+                coordinate_transform_version=prepared.profile.coordinate_transform_version,
+            )
+            recognition = adapter.finalize_reuse(
+                session=session,
+                prepared=prepared,
+                artifact_store=artifact_store,
+            )
+            page = recognition.ocr_page
+            OcrPageRepository(session).create(page)
+        return _VisualOutcome(ocr_page=page)
+    except PageLeaseLostError as exc:
+        return _VisualOutcome(deferred=True, technical_detail=str(exc))
+    except Exception as exc:  # noqa: BLE001 - 复用落地冲突按可重试处理，重放经缓存去重收敛
+        return _VisualOutcome(retryable=True, technical_detail=f"{type(exc).__name__}: {exc}")
+
+
 def _commit_ocr_failure(
     *,
     config: EvidenceProcessingExecutorConfig,
@@ -1717,6 +1792,7 @@ def _commit_ocr_failure(
                 prepared.cache_key,
                 lease.lease_owner,
                 lease.lease_generation,
+                page_artifact_id=prepared.page_artifact_id,
                 source_sha256=prepared.source_sha256,
                 page_number=prepared.page_number,
                 ocr_profile_sha256=prepared.profile.profile_sha256,

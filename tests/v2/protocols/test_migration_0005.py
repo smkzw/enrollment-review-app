@@ -1,6 +1,8 @@
 """Migration 0005 upgrade/downgrade coverage for slice 2."""
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy import inspect
 
 from app.storage.db import Base, build_engine
@@ -44,3 +46,12 @@ def test_0005_upgrade_downgrade_upgrade_roundtrip(data_paths) -> None:
         assert verify_schema_matches_metadata(engine, Base.metadata) == []
     finally:
         engine.dispose()
+
+
+def test_migration_keeps_existing_application_loggers_enabled(data_paths) -> None:
+    application_logger = logging.getLogger("app.agents.protocol_semantic_transport")
+    application_logger.disabled = False
+
+    MigrationManager(data_paths).upgrade("head")
+
+    assert application_logger.disabled is False

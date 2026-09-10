@@ -10,7 +10,12 @@ from docx import Document
 from fastapi.testclient import TestClient
 
 from app.api.v2.protocols import _metadata_candidate_dto, _phase_candidate_dtos
-from app.domain.contracts.enums import StudyPhase
+from app.domain.contracts.enums import (
+    AnchorResolutionMode,
+    InterpretationSourceType,
+    ReviewStage,
+    StudyPhase,
+)
 from app.services.protocol_deconstruction_executor import (
     ProtocolDeconstructionExecutorConfig,
     _handle_generate,
@@ -19,8 +24,9 @@ from app.services.protocol_deconstruction_executor import (
 from app.services.protocol_workbench_service import (
     PROTOCOL_DECONSTRUCTION_JOB_TYPE,
     PROTOCOL_DECONSTRUCTION_STEPS,
-    STEP_GENERATE,
     STEP_FREEZE,
+    STEP_GENERATE,
+    STEP_RENDER,
     ProtocolWorkbenchService,
 )
 from app.workflow.runner import JobRunner, StepContext
@@ -131,6 +137,30 @@ def test_upload_registers_source_and_creates_protocol_job(client) -> None:
     assert body["progress_completed"] >= 1
 
 
+def test_pdf_protocol_upload_rejected_after_entry_decommission(build_app) -> None:
+    """方案 PDF 上传入口已下线：上传直接被拒绝并给出中文指引，不创建任务。"""
+    app = build_app(run_runner=False)
+    with TestClient(app) as client:
+        files = {
+            "file": (
+                "test-protocol.pdf",
+                io.BytesIO(b"%PDF-1.7 decommissioned entry check"),
+                "application/pdf",
+            )
+        }
+        response = client.post(
+            "/api/v2/protocol/deconstructions",
+            files=files,
+            data={"idempotency_key": "pdf-decommissioned", "actor": "测试用户"},
+        )
+
+        assert response.status_code == 409
+        error = response.json()["error"]
+        assert error["code"] == "UNSUPPORTED_PROTOCOL_FILE"
+        assert "方案 PDF 上传入口已下线" in error["detail"]
+        assert error["recovery_action"] == "请以 DOCX 重新上传正式方案。"
+
+
 def test_semantic_draft_step_keeps_one_bounded_automatic_retry() -> None:
     generate = next(
         step for step in PROTOCOL_DECONSTRUCTION_STEPS if step.step_id == STEP_GENERATE
@@ -176,6 +206,14 @@ def test_sources_remain_available_when_semantic_service_is_unavailable(
         monkeypatch.setattr(
             "app.services.protocol_deconstruction_executor.DEEPSEEK_API_KEY",
             "",
+        )
+        monkeypatch.setattr(
+            "app.services.protocol_deconstruction_executor.DECONSTRUCT_BACKEND",
+            "deepseek",
+        )
+        monkeypatch.setattr(
+            "app.services.protocol_deconstruction_executor.DECONSTRUCT_ROUTE_MODE",
+            "pinned",
         )
         executor = create_protocol_deconstruction_executor(
             ProtocolDeconstructionExecutorConfig(
@@ -686,6 +724,72 @@ def test_feedback_redeconstruction_api_starts_without_upload(build_app) -> None:
         )
         assert republished.status_code == 200, republished.text
         assert republished.json()["rule_set_revision"] == 2
+
+
+def test_active_draft_interpretation_sources_api_is_idempotent(build_app) -> None:
+    app = build_app()
+    with TestClient(app) as test_client:
+        job_id = _create_protocol_job(
+            test_client,
+            key="active-source-api",
+        )
+        _seed_review_job(app, job_id, wait_at="await_review")
+        draft = test_client.get(
+            f"/api/v2/protocol/deconstructions/{job_id}/draft"
+        ).json()
+        source_view = test_client.get(
+            f"/api/v2/protocol/deconstructions/{job_id}/sources"
+        ).json()
+        source = {
+            "interpretation_source_id": "source-active-api",
+            "protocol_version_id": source_view["protocol_version_id"],
+            "source_type": InterpretationSourceType.MEDICAL_INTERPRETATION.value,
+            "file_sha256": "c" * 64,
+            "source_ref": "medical-note:api",
+            "excerpt": "既往时间窗未写明起算日期。",
+            "explanation": "按当前审核节点日期逐节点独立核对。",
+            "applies_to_rule_refs": ["IN-01"],
+            "clarifies_ambiguity": True,
+            "anchor_resolutions": [
+                {
+                    "resolution_id": "resolution-active-api",
+                    "affected_rule_refs": ["IN-01"],
+                    "ambiguous_source_refs": ["span-in"],
+                    "target_review_stages": [
+                        ReviewStage.SCREENING.value,
+                        ReviewStage.BASELINE.value,
+                    ],
+                    "resolution_mode": AnchorResolutionMode.CURRENT_REVIEW_NODE_DATE.value,
+                }
+            ],
+        }
+        body = {
+            "expected_revision_id": draft["revision_id"],
+            "idempotency_key": "active-source-api-registration",
+            "interpretation_sources": [source],
+            "actor": "医学监查员",
+        }
+        registered = test_client.post(
+            f"/api/v2/protocol/deconstructions/{job_id}/interpretation-sources",
+            json=body,
+        )
+        assert registered.status_code == 200, registered.text
+        registered_body = registered.json()
+        assert registered_body["draft_revision_id"] == draft["revision_id"]
+        assert registered_body["interpretation_sources"][0][
+            "interpretation_source_id"
+        ] == "source-active-api"
+        assert "source-active-api" not in registered_body["source_materials"]
+
+        replay_body = {**body}
+        replay = test_client.post(
+            f"/api/v2/protocol/deconstructions/{job_id}/interpretation-sources",
+            json=replay_body,
+        )
+        assert replay.status_code == 200, replay.text
+        assert replay.json()["interpretation_sources"] == (
+            registered_body["interpretation_sources"]
+        )
 
 
 def test_redeconstruction_start_unknown_project_returns_chinese_envelope(

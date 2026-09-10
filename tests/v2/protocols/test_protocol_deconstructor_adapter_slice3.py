@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from itertools import product
+
 import pytest
 
 from app.agents.protocol_deconstructor import (
@@ -7,15 +10,25 @@ from app.agents.protocol_deconstructor import (
     ProtocolDeconstructionRunResult,
     ProtocolAgentResponse,
     ProtocolDeconstructorRunner,
+    _parse_semantic_candidate,
+    _plan_semantic_rule_batches,
+    _merge_semantic_batches,
+    _repair_batch_id,
+    _validate_semantic_batch,
+    _validate_semantic_repair,
     _collect_initial_semantic_response,
     _apply_semantic_repair,
     _hydrate_semantic_candidate,
     _parse_protocol_draft,
-    _parse_semantic_candidate,
     _recover_exact_fragments,
+    _wire_atom,
+    _wire_time_constraint,
+    _wire_time_quantity,
+    build_protocol_deconstruction_prompt,
     regressing_rule_codes,
     _select_repair_rule_codes,
     protocol_prompt_template_sha256,
+    protocol_output_response_format,
     revise_protocol_draft_from_feedback,
     semantic_candidate_from_draft,
 )
@@ -27,8 +40,18 @@ from app.domain.contracts.agent_io import (
     SemanticRule,
     SemanticRuleComponent,
 )
-from app.domain.contracts.enums import AgentNode, LogicalOperator, ReviewStage
+from app.domain.contracts.enums import (
+    AgentNode,
+    AnchorResolutionMode,
+    InterpretationSourceType,
+    LogicalOperator,
+    ReviewStage,
+)
 from app.domain.contracts.normalization import UnresolvedItem
+from app.domain.contracts.protocol_metadata import (
+    AnchorResolutionStatement,
+    InterpretationSource,
+)
 from app.domain.contracts.rules import iter_atomic_predicates
 from app.protocols.deconstruction_gate import ProtocolGateIssue
 from tests.v2.protocols.test_deconstruction_gate_slice3 import _fixture
@@ -39,25 +62,105 @@ class FakeTransport:
         self.responses = list(responses)
         self.start_prompts = []
         self.repair_prompts = []
+        self.start_output_kinds = []
+        self.repair_output_kinds = []
 
-    def start(self, *, prompt):
+    def start(self, *, prompt, output_kind="semantic_candidate"):
         self.start_prompts.append(prompt)
+        self.start_output_kinds.append(output_kind)
         return self.responses.pop(0)
 
-    def continue_session(self, *, session_id, prompt):
+    def continue_session(
+        self, *, session_id, prompt, output_kind="semantic_candidate"
+    ):
         self.repair_prompts.append((session_id, prompt))
+        self.repair_output_kinds.append(output_kind)
         return self.responses.pop(0)
+
+
+class CompactFakeTransport(FakeTransport):
+    uses_compact_wire_contract = True
+
+    def __init__(self, responses):
+        super().__init__(responses)
+        self.compact_contexts = []
+        self.histories = {}
+        self.request_histories = []
+        self.output_scopes = []
+
+    def configure_output_scope(self, **scope):
+        self.output_scopes.append(scope)
+
+    def semantic_cache_identity(self, *, output_kind):
+        return f"compact-fake:{output_kind}:{self.output_scopes[-1]}"
+
+    def start(self, *, prompt, output_kind="semantic_candidate"):
+        response = super().start(prompt=prompt, output_kind=output_kind)
+        history = [
+            {"role": "user", "content": prompt},
+            {"role": "assistant", "content": response.text},
+        ]
+        self.histories[response.session_id] = history
+        self.request_histories.append([dict(item) for item in history])
+        return response
+
+    def continue_session(
+        self, *, session_id, prompt, output_kind="semantic_candidate"
+    ):
+        request = [
+            *self.histories[session_id],
+            {"role": "user", "content": prompt},
+        ]
+        self.request_histories.append([dict(item) for item in request])
+        response = super().continue_session(
+            session_id=session_id,
+            prompt=prompt,
+            output_kind=output_kind,
+        )
+        self.histories[session_id] = [
+            *request,
+            {"role": "assistant", "content": response.text},
+        ]
+        return response
+
+    def compact_session_history(self, *, session_id, context):
+        self.compact_contexts.append((session_id, context))
+        self.histories[session_id] = [
+            {"role": "user", "content": context},
+            {"role": "assistant", "content": "已保留冻结上下文和批次身份。"},
+        ]
 
 
 class FailingStartTransport:
-    def start(self, *, prompt):
+    def start(self, *, prompt, output_kind="semantic_candidate"):
         raise RuntimeError("上游连续返回空正文")
 
 
 class FailingRepairTransport(FakeTransport):
-    def continue_session(self, *, session_id, prompt):
+    def continue_session(
+        self, *, session_id, prompt, output_kind="semantic_candidate"
+    ):
         self.repair_prompts.append((session_id, prompt))
+        self.repair_output_kinds.append(output_kind)
         raise RuntimeError("修订请求未完成")
+
+
+class MemoryBatchCache:
+    def __init__(self):
+        self.items = {}
+
+    def load(self, cache_key):
+        return self.items.get(cache_key)
+
+    def store(
+        self,
+        cache_key,
+        response_text,
+        *,
+        cache_contract="protocol-semantic-batch/v1",
+    ):
+        del cache_contract
+        self.items[cache_key] = response_text
 
 
 def _prompt_version(template):
@@ -125,6 +228,105 @@ def _semantic_candidate(source_input, draft):
     )
 
 
+def _wire_candidate(candidate, *, batch_id="1/1"):
+    def atom_wire(expression, *, negated=False):
+        if expression.kind != "predicate":
+            raise AssertionError("DNF test encoder expects an atomic expression")
+        predicate = expression.predicate.model_dump(mode="json")
+        predicate_id = predicate.pop("predicate_id")
+        del predicate_id
+        source_clause = predicate.pop("source_clause")
+        source_clauses = predicate.pop("source_clauses")
+        predicate["source_locator"] = (
+            {"source_clause": source_clause}
+            if source_clause is not None
+            else {"source_clauses": source_clauses}
+        )
+        comparator = predicate.pop("comparator")
+        value = predicate.pop("value")
+        predicate.pop("unit_match_policy", None)
+        predicate["time_constraint"] = (
+            expression.time_constraint.model_dump(mode="json")
+            if expression.time_constraint is not None
+            else None
+        )
+        predicate["negated"] = negated
+        if comparator == "exists":
+            predicate.pop("unit", None)
+            predicate.pop("value", None)
+            return "existence", predicate
+        if comparator in {"in", "not_in"}:
+            predicate["comparator"] = comparator
+            predicate["values"] = value
+            return "set", predicate
+        predicate["comparator"] = comparator
+        predicate["value"] = value
+        return "scalar", predicate
+
+    def dnf(expression, *, negated=False):
+        if expression.kind == "predicate":
+            return [[(expression, negated)]]
+        if expression.operator == LogicalOperator.NOT:
+            return dnf(expression.children[0], negated=not negated)
+        if negated:
+            raise AssertionError("test encoder does not distribute NOT over compound DNF")
+        child_groups = [dnf(child) for child in expression.children]
+        if expression.operator == LogicalOperator.ANY:
+            return [group for groups in child_groups for group in groups]
+        if expression.operator == LogicalOperator.ALL:
+            groups = [[]]
+            for alternatives in child_groups:
+                groups = [left + right for left, right in product(groups, alternatives)]
+            return groups
+        raise AssertionError(f"unsupported operator: {expression.operator}")
+
+    def wire_expression(expression):
+        groups = []
+        for group in dnf(expression):
+            shaped = {"existence_atoms": [], "scalar_atoms": [], "set_atoms": []}
+            for atomic, negated in group:
+                shape, atom = atom_wire(atomic, negated=negated)
+                shaped[f"{shape}_atoms"].append(atom)
+            groups.append(shaped)
+        return groups
+
+    rules = []
+    for rule in candidate.proposed_rules:
+        components = []
+        for component in rule.components:
+            components.append(
+                {
+                    "title": component.title,
+                    "expression": wire_expression(component.expression),
+                    "exception_expression": (
+                        wire_expression(component.exception_expression)
+                        if component.exception_expression is not None
+                        else None
+                    ),
+                    "evidence_requirements": [
+                        requirement.model_dump(mode="json")
+                        for requirement in component.evidence_requirements
+                    ],
+                    "source_span_ids": list(component.source_span_ids),
+                    "source_excerpts": list(component.source_excerpts),
+                }
+            )
+        rules.append({"official_code": rule.official_code, "components": components})
+    return {
+        "wire_version": "dnf-v1",
+        "candidate_id": candidate.candidate_id,
+        "batch_id": batch_id,
+        "proposed_rules": rules,
+        "structural_warnings": [
+            item.model_dump(mode="json") for item in candidate.structural_warnings
+        ],
+        "unresolved_items": [
+            item.model_dump(mode="json") for item in candidate.unresolved_items
+        ],
+        "created_by_agent_call_id": candidate.created_by_agent_call_id,
+    }
+
+
 def test_hydrated_draft_can_recover_semantic_candidate_for_persisted_repair():
     source_input, draft, _spans = _fixture()
     candidate = _semantic_candidate(source_input, draft)
@@ -135,6 +337,510 @@ def test_hydrated_draft_can_recover_semantic_candidate_for_persisted_repair():
     assert recovered.candidate_id == candidate.candidate_id
     assert recovered.proposed_rules == candidate.proposed_rules
     assert recovered.created_by_agent_call_id == candidate.created_by_agent_call_id
+
+
+def test_compact_wire_candidate_hydrates_logic_exception_timing_and_unresolved_items():
+    source_input, draft, _spans = _fixture()
+    candidate = _semantic_candidate(source_input, draft)
+    payload = _wire_candidate(candidate)
+    component = payload["proposed_rules"][1]["components"][0]
+    predicate_atom = component["expression"][0]["scalar_atoms"][0]
+    predicate_atom["negated"] = True
+    predicate_atom["source_locator"] = {
+        "source_clause": "不符合ALT或AST≥1.5×ULN"
+    }
+    predicate_atom["time_constraint"] = {
+        "anchor_type": "screening_date",
+        "direction": "before",
+        "lower_bound_days": None,
+        "upper_bound_days": None,
+        "lower_bound": None,
+        "upper_bound": {"value": 4, "unit": "week"},
+        "half_life_multiplier": None,
+        "allow_partial_date": False,
+    }
+    component["exception_expression"] = [
+        {
+            "existence_atoms": [],
+            "scalar_atoms": [json.loads(json.dumps(predicate_atom))],
+            "set_atoms": [],
+        }
+    ]
+    payload["unresolved_items"] = [
+        {
+            "code": "TIME_ANCHOR_UNRESOLVED",
+            "affected_scope": ["EX-01"],
+            "source_refs": ["span-ex"],
+        }
+    ]
+
+    parsed = _parse_semantic_candidate(
+        json.dumps(payload, ensure_ascii=False),
+        compact=True,
+        expected_batch_id="1/1",
+    )
+
+    expression = parsed.proposed_rules[1].components[0].expression
+    assert expression.kind == "logical"
+    assert expression.operator == LogicalOperator.ANY
+    assert expression.children[0].operator == LogicalOperator.NOT
+    assert expression.children[0].children[0].predicate.comparator.value == "gte"
+    assert (
+        expression.children[0].children[0].predicate.source_clause
+        == "不符合ALT或AST≥1.5×ULN"
+    )
+    assert (
+        expression.children[0].children[0].time_constraint.upper_bound.unit.value
+        == "week"
+    )
+    exception = parsed.proposed_rules[1].components[0].exception_expression
+    assert exception is not None
+    assert exception.kind == "logical"
+    assert exception.operator == LogicalOperator.NOT
+    exception_predicate = exception.children[0].predicate
+    assert exception_predicate.predicate_id != (
+        expression.children[0].children[0].predicate.predicate_id
+    )
+    assert parsed.unresolved_items[0].code == "TIME_ANCHOR_UNRESOLVED"
+
+
+def test_wire_optional_objects_normalize_only_when_semantically_empty():
+    assert _wire_time_quantity({"value": None, "unit": None}) is None
+    assert _wire_time_constraint(
+        {
+            "anchor_type": None,
+            "direction": None,
+            "lower_bound_days": None,
+            "upper_bound_days": None,
+            "lower_bound": {"value": None, "unit": None},
+            "upper_bound": {"value": None, "unit": None},
+            "half_life_multiplier": None,
+            "combined_window_selection": None,
+            "allow_partial_date": False,
+        }
+    ) is None
+
+    longer = _wire_time_constraint(
+        {
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "lower_bound_days": None,
+            "upper_bound_days": None,
+            "lower_bound": {"value": 3, "unit": "month"},
+            "upper_bound": None,
+            "half_life_multiplier": 5,
+            "combined_window_selection": "longer_of_calendar_and_half_life",
+            "allow_partial_date": False,
+        }
+    )
+    assert longer is not None
+    assert longer["combined_window_selection"] == "longer_of_calendar_and_half_life"
+    assert longer["half_life_multiplier"] == 5
+    with pytest.raises(ValueError, match="combined_window_selection"):
+        _wire_time_constraint(
+            {
+                "anchor_type": "first_dose_date",
+                "direction": "before",
+                "lower_bound_days": None,
+                "upper_bound_days": None,
+                "lower_bound": {"value": 3, "unit": "month"},
+                "upper_bound": None,
+                "half_life_multiplier": 5,
+                "combined_window_selection": "guessed_from_or",
+                "allow_partial_date": False,
+            }
+        )
+
+    predicate = _wire_atom(
+        {
+            "subject": "受试者",
+            "attribute": "既往病史",
+            "source_locator": {"source_clause": "既往病史"},
+            "requires_professional_judgment": False,
+            "negated": False,
+            "occurrence_window": {
+                "duration": {"value": None, "unit": None},
+                "minimum_count": None,
+            },
+            "prospective_window": {
+                "anchor_type": None,
+                "upper_bound": {"value": None, "unit": None},
+            },
+            "prospective_period": {"period": None},
+        },
+        shape="existence",
+    )
+    assert predicate["occurrence_window"] is None
+    assert predicate["prospective_window"] is None
+    assert predicate["prospective_period"] is None
+    assert predicate["requires_professional_judgment"] is False
+    assert predicate["unit_match_policy"] == "exact_canonical_label"
+
+
+def test_wire_partial_semantic_objects_are_rejected_precisely():
+    with pytest.raises(ValueError, match="时间数量的 value 和 unit"):
+        _wire_time_quantity({"value": 1, "unit": None})
+    with pytest.raises(ValueError, match="时间约束的 direction"):
+        _wire_time_constraint(
+            {
+                "anchor_type": "screening_date",
+                "direction": None,
+                "allow_partial_date": False,
+            }
+        )
+    with pytest.raises(ValueError, match="occurrence_window 的 duration"):
+        _wire_atom(
+            {
+                "subject": "受试者",
+                "attribute": "病史",
+                "source_locator": {"source_clause": "病史"},
+                "requires_professional_judgment": False,
+                "negated": False,
+                "occurrence_window": {"duration": None, "minimum_count": 1},
+            },
+            shape="existence",
+        )
+    with pytest.raises(ValueError, match="prospective_window 的 upper_bound"):
+        _wire_atom(
+            {
+                "subject": "受试者",
+                "attribute": "计划",
+                "source_locator": {"source_clause": "计划"},
+                "requires_professional_judgment": False,
+                "negated": False,
+                "prospective_window": {
+                    "anchor_type": "last_dose_date",
+                    "upper_bound": None,
+                },
+            },
+            shape="existence",
+        )
+
+
+def test_wire_candidate_round_trips_exact_domain_semantics_without_policy_field():
+    source_input, draft, _spans = _fixture()
+    candidate = _semantic_candidate(source_input, draft)
+    payload = _wire_candidate(candidate)
+
+    assert all(
+        "unit_match_policy" not in atom
+        for rule in payload["proposed_rules"]
+        for component in rule["components"]
+        for expression in (component["expression"], component["exception_expression"])
+        if expression is not None
+        for group in expression
+        for atom_group in (
+            group["existence_atoms"],
+            group["scalar_atoms"],
+            group["set_atoms"],
+        )
+        for atom in atom_group
+    )
+    parsed = _parse_semantic_candidate(
+        json.dumps(payload, ensure_ascii=False),
+        compact=True,
+        expected_batch_id="1/1",
+    )
+
+    def without_internal_identity(value):
+        if isinstance(value, dict):
+            return {
+                key: without_internal_identity(item)
+                for key, item in value.items()
+                if key not in {"predicate_id", "unit_match_policy"}
+            }
+        if isinstance(value, list):
+            return [without_internal_identity(item) for item in value]
+        return value
+
+    assert without_internal_identity(parsed.model_dump(mode="json")) == (
+        without_internal_identity(candidate.model_dump(mode="json"))
+    )
+    assert all(
+        predicate.unit_match_policy == "exact_canonical_label"
+        for rule in parsed.proposed_rules
+        for component in rule.components
+        for expression in (
+            component.expression,
+            component.exception_expression,
+        )
+        if expression is not None
+        for predicate in iter_atomic_predicates(expression)
+    )
+
+
+def test_compact_wire_round_trips_each_comparator_shape_and_categorical_dnf():
+    source_input, draft, _spans = _fixture()
+    candidate = _semantic_candidate(source_input, draft)
+    payload = _wire_candidate(candidate)
+    component = payload["proposed_rules"][1]["components"][0]
+    first_scalar = component["expression"][0]["scalar_atoms"][0]
+    second_scalar = component["expression"][1]["scalar_atoms"][0]
+    first_scalar["comparator"] = "gte"
+    first_scalar["value"] = 1.5
+    first_scalar["unit"] = "ULN"
+    second_scalar["comparator"] = "eq"
+    second_scalar["value"] = 2
+    second_scalar["unit"] = "unitless"
+    existence_atom = {
+        **json.loads(json.dumps(first_scalar)),
+        "subject": "受试者",
+        "attribute": "肝功能记录",
+        "source_locator": {"source_clause": "肝功能记录"},
+        "negated": False,
+    }
+    existence_atom.pop("comparator")
+    existence_atom.pop("value")
+    existence_atom.pop("unit")
+    component["expression"][0]["existence_atoms"] = [existence_atom]
+    first_scalar["time_constraint"] = {
+        "anchor_type": "screening_date",
+        "direction": "before",
+        "lower_bound_days": None,
+        "upper_bound_days": None,
+        "lower_bound": None,
+        "upper_bound": {"value": 4, "unit": "week"},
+        "half_life_multiplier": None,
+        "allow_partial_date": False,
+    }
+    component["expression"][0]["scalar_atoms"] = [first_scalar]
+    set_atom = json.loads(json.dumps(second_scalar))
+    set_atom.pop("value")
+    set_atom.update({"comparator": "in", "values": ["ALT", "AST"]})
+    component["expression"][0]["set_atoms"] = [set_atom]
+    component["exception_expression"] = [
+        {
+            "existence_atoms": [existence_atom],
+            "scalar_atoms": [],
+            "set_atoms": [],
+        }
+    ]
+
+    parsed = _parse_semantic_candidate(
+        json.dumps(payload, ensure_ascii=False),
+        compact=True,
+        expected_batch_id="1/1",
+    )
+    parsed_component = parsed.proposed_rules[1].components[0]
+    predicates = list(iter_atomic_predicates(parsed_component.expression))
+    assert parsed_component.expression.operator == LogicalOperator.ANY
+    assert parsed_component.expression.children[0].operator == LogicalOperator.ALL
+    assert parsed_component.exception_expression.kind == "predicate"
+    assert {predicate.comparator.value for predicate in predicates} == {
+        "exists",
+        "gte",
+        "eq",
+        "in",
+    }
+    by_attribute_and_comparator = {
+        (predicate.attribute, predicate.comparator.value): predicate
+        for predicate in predicates
+    }
+    assert by_attribute_and_comparator[("ALT", "gte")].value == 1.5
+    assert by_attribute_and_comparator[("ALT", "gte")].unit == "ULN"
+    assert by_attribute_and_comparator[("AST", "in")].value == ["ALT", "AST"]
+    assert by_attribute_and_comparator[("AST", "in")].unit == "unitless"
+    assert by_attribute_and_comparator[("肝功能记录", "exists")].value is None
+    assert by_attribute_and_comparator[("肝功能记录", "exists")].predicate_id != (
+        parsed_component.exception_expression.predicate.predicate_id
+    )
+    assert (
+        parsed_component.expression.children[0].children[1].time_constraint.upper_bound.unit.value
+        == "week"
+    )
+
+
+def test_compact_wire_rejects_obsolete_mixed_comparator_shape():
+    source_input, draft, _spans = _fixture()
+    payload = _wire_candidate(_semantic_candidate(source_input, draft))
+    component = payload["proposed_rules"][1]["components"][0]
+    scalar_atom = component["expression"][0]["scalar_atoms"][0]
+    scalar_atom["comparator"] = "exists"
+
+    with pytest.raises(ValueError, match="wire scalar atom 的 comparator 无效"):
+        _parse_semantic_candidate(
+            json.dumps(payload, ensure_ascii=False),
+            compact=True,
+            expected_batch_id="1/1",
+        )
+
+
+def test_compact_wire_requires_exact_source_term_for_numeric_atom():
+    source_input, draft, _spans = _fixture()
+    payload = _wire_candidate(_semantic_candidate(source_input, draft))
+    scalar_atom = payload["proposed_rules"][1]["components"][0]["expression"][0][
+        "scalar_atoms"
+    ][0]
+    scalar_atom.pop("source_term")
+
+    with pytest.raises(ValueError, match="source_term"):
+        _parse_semantic_candidate(
+            json.dumps(payload, ensure_ascii=False),
+            compact=True,
+            expected_batch_id="1/1",
+        )
+
+
+def test_compact_wire_schema_requires_numeric_source_term_but_not_set_source_term():
+    schema = protocol_output_response_format(
+        "semantic_candidate",
+        compact=True,
+    )["json_schema"]["schema"]
+    group = schema["$defs"]["wire_dnf_group"]
+
+    assert "source_term" in group["properties"]["scalar_atoms"]["items"]["required"]
+    assert "source_term" not in group["properties"]["set_atoms"]["items"]["required"]
+
+
+def test_compact_wire_schema_is_bounded_to_frozen_batch_scope():
+    schema = protocol_output_response_format(
+        "semantic_candidate",
+        compact=True,
+        official_codes=["IN-04", "IN-05", "IN-06"],
+        allowed_source_span_ids=["span-4a", "span-4b", "span-5", "span-6"],
+        component_limit=8,
+        group_limit=4,
+        atom_limit=8,
+        requirement_limit=8,
+    )["json_schema"]["schema"]
+    rules = schema["properties"]["proposed_rules"]
+    rule = rules["items"]
+    component = rule["properties"]["components"]
+
+    assert rules["minItems"] == rules["maxItems"] == 3
+    assert rule["properties"]["official_code"]["enum"] == [
+        "IN-04",
+        "IN-05",
+        "IN-06",
+    ]
+    assert component["maxItems"] == 8
+    assert component["items"]["properties"]["expression"]["maxItems"] == 4
+    assert schema["$defs"]["wire_dnf_group"]["properties"]["scalar_atoms"][
+        "maxItems"
+    ] == 8
+    assert component["items"]["properties"]["source_span_ids"]["maxItems"] == 4
+
+def test_compact_batch_prompt_omits_unrequested_source_and_full_schema_prose():
+    source_input, _draft, _spans = _fixture()
+    compact = build_protocol_deconstruction_prompt(
+        source_input,
+        prompt_template="按方案原文解构。",
+        requested_rule_codes=["IN-01"],
+        batch_number=1,
+        batch_total=2,
+        batch_id="1/2",
+        compact=True,
+    )
+    full = build_protocol_deconstruction_prompt(
+        source_input,
+        prompt_template="按方案原文解构。",
+        requested_rule_codes=["IN-01"],
+    )
+
+    assert len(compact) < len(full)
+    assert "wire_version='dnf-v1'" in compact
+    assert "ALT或AST≥1.5×ULN" not in compact
+    assert "年龄≥18岁" in compact
+    assert "span-proc-screen" not in compact
+    assert '"batch_id": "1/2"' in compact
+
+
+def test_remote_batch_prompt_scopes_source_without_changing_full_output_contract():
+    source_input, _draft, _spans = _fixture()
+    prompt = build_protocol_deconstruction_prompt(
+        source_input,
+        prompt_template="按方案原文解构。",
+        requested_rule_codes=["IN-01"],
+        batch_number=1,
+        batch_total=2,
+        scoped_source=True,
+    )
+
+    assert "wire_version='dnf-v1'" not in prompt
+    assert "输出结构：" in prompt
+    assert "年龄≥18岁" in prompt
+    assert "ALT或AST≥1.5×ULN" not in prompt
+    assert "span-proc-screen" not in prompt
+    assert '"batch_rule_codes": ["IN-01"]' in prompt
+
+
+def test_compact_batch_rejects_foreign_unresolved_rule_scope():
+    source_input, draft, _spans = _fixture()
+    candidate = _semantic_candidate(source_input, draft).model_copy(
+        update={
+            "proposed_rules": [
+                _semantic_candidate(source_input, draft).proposed_rules[0]
+            ],
+            "structural_warnings": [
+                UnresolvedItem(
+                    code="CROSS_BATCH",
+                    affected_scope=["EX-01"],
+                    source_refs=["span-in"],
+                )
+            ],
+        },
+        deep=True,
+    )
+
+    with pytest.raises(ValueError, match="污染了其他父规则"):
+        _validate_semantic_batch(
+            candidate,
+            expected_codes=["IN-01"],
+            expected_candidate_id=None,
+            source_input=source_input,
+        )
+
+
+@pytest.mark.parametrize("bad_source_span", ["span-ex", "span-proc-screen"])
+def test_compact_batch_rejects_cross_batch_or_ownerless_component_sources(
+    bad_source_span,
+):
+    source_input, draft, _spans = _fixture()
+    candidate = _semantic_candidate(source_input, draft)
+    rule = candidate.proposed_rules[0].model_copy(deep=True)
+    rule.components[0].source_span_ids = [bad_source_span]
+    candidate = candidate.model_copy(
+        update={"proposed_rules": [rule]},
+        deep=True,
+    )
+
+    with pytest.raises(ValueError, match="来源片段不属于选定父规则来源闭包"):
+        _validate_semantic_batch(
+            candidate,
+            expected_codes=["IN-01"],
+            expected_candidate_id=None,
+            source_input=source_input,
+        )
+
+
+@pytest.mark.parametrize("issue_field", ["structural_warnings", "unresolved_items"])
+def test_compact_batch_rejects_warning_or_unresolved_source_refs_outside_parent_closure(
+    issue_field,
+):
+    source_input, draft, _spans = _fixture()
+    candidate = _semantic_candidate(source_input, draft).model_copy(
+        update={
+            "proposed_rules": [
+                _semantic_candidate(source_input, draft).proposed_rules[0]
+            ],
+            issue_field: [
+                UnresolvedItem(
+                    code="OWNERLESS_SOURCE",
+                    affected_scope=["IN-01"],
+                    source_refs=["span-proc-screen"],
+                )
+            ],
+        },
+        deep=True,
+    )
+
+    with pytest.raises(ValueError, match="来源片段不属于选定父规则来源闭包"):
+        _validate_semantic_batch(
+            candidate,
+            expected_codes=["IN-01"],
+            expected_candidate_id=None,
+            source_input=source_input,
+        )
 
 
 def test_hydration_stably_disambiguates_repeated_predicate_ids():
@@ -207,7 +913,120 @@ def test_feedback_revision_replaces_only_selected_parent_rule():
     assert actual.proposed_rules[0] == original.proposed_rules[0]
     assert actual.proposed_rules[1].components[0].title == "按方案原文修正后的排除条件"
     assert revised.draft_id == draft.draft_id
+    assert transport.start_output_kinds == ["semantic_rule_repair"]
     assert "replacement_rules 必须且只能包含 EX-01" in transport.start_prompts[0]
+
+
+def test_noncompact_feedback_keeps_interpretation_in_dedicated_section():
+    source_input, draft, _spans = _fixture()
+    source_ref = next(
+        item.source_refs[0]
+        for item in draft.component_drafts
+        if item.parent_official_code == "EX-01"
+    )
+    interpretation = InterpretationSource(
+        interpretation_source_id="interpretation-feedback",
+        protocol_version_id=source_input.protocol_version_id,
+        source_type=InterpretationSourceType.MEDICAL_INTERPRETATION,
+        file_sha256="b" * 64,
+        source_ref="medical-note:feedback",
+        excerpt="原文未写明回溯锚点。",
+        explanation="按当前审核节点日期分别核对。",
+        applies_to_rule_refs=["EX-01"],
+        clarifies_ambiguity=True,
+        anchor_resolutions=[
+            AnchorResolutionStatement(
+                resolution_id="resolution-feedback",
+                affected_rule_refs=["EX-01"],
+                ambiguous_source_refs=[source_ref],
+                target_review_stages=[ReviewStage.SCREENING, ReviewStage.BASELINE],
+                resolution_mode=AnchorResolutionMode.CURRENT_REVIEW_NODE_DATE,
+            )
+        ],
+    )
+    source_input = source_input.model_copy(
+        update={
+            "interpretation_source_ids": [interpretation.interpretation_source_id],
+            "interpretation_sources": [interpretation],
+        }
+    )
+    candidate = semantic_candidate_from_draft(draft)
+    repair = ProtocolSemanticRuleRepair(
+        candidate_id=candidate.candidate_id,
+        replacement_rules=[candidate.proposed_rules[1]],
+    )
+    transport = FakeTransport(
+        [ProtocolAgentResponse(session_id="feedback-session", text=repair.model_dump_json())]
+    )
+
+    revise_protocol_draft_from_feedback(
+        source_input,
+        draft,
+        target_rule_code="EX-01",
+        feedback_note="结合解释材料核对。",
+        transport=transport,
+    )
+
+    frozen_input = transport.start_prompts[0].split("冻结的方案输入：", 1)[1].split(
+        "\n\n输出结构：", 1
+    )[0]
+    payload = json.loads(frozen_input)
+    assert "interpretation_sources" not in payload
+    assert "interpretation_source_ids" not in payload
+    assert payload["interpretation_clarifications"][0]["explanation"] == (
+        "按当前审核节点日期分别核对。"
+    )
+
+
+def test_compact_feedback_revision_sends_only_target_rule_source_context():
+    source_input, draft, _spans = _fixture()
+    candidate = semantic_candidate_from_draft(draft)
+    repair_payload = _wire_candidate(
+        candidate.model_copy(
+            update={"proposed_rules": [candidate.proposed_rules[1]]},
+            deep=True,
+        ),
+        batch_id="repair:EX-01",
+    )
+    repair_payload["replacement_rules"] = repair_payload.pop("proposed_rules")
+    repair_payload["replacement_structural_warnings"] = repair_payload.pop(
+        "structural_warnings"
+    )
+    repair_payload["replacement_unresolved_items"] = repair_payload.pop(
+        "unresolved_items"
+    )
+    repair_payload.pop("created_by_agent_call_id")
+    wrong_batch_payload = json.loads(json.dumps(repair_payload))
+    wrong_batch_payload["batch_id"] = "repair:IN-01"
+    transport = CompactFakeTransport(
+        [
+            ProtocolAgentResponse(
+                session_id="feedback-session",
+                text=json.dumps(wrong_batch_payload, ensure_ascii=False),
+            ),
+            ProtocolAgentResponse(
+                session_id="feedback-session",
+                text=json.dumps(repair_payload, ensure_ascii=False),
+            ),
+        ]
+    )
+
+    revised = revise_protocol_draft_from_feedback(
+        source_input,
+        draft,
+        target_rule_code="EX-01",
+        feedback_note="只核对 EX-01。",
+        transport=transport,
+    )
+
+    assert revised.draft_id == draft.draft_id
+    assert "ALT或AST≥1.5×ULN" in transport.start_prompts[0]
+    assert "年龄≥18岁" not in transport.start_prompts[0]
+    assert "span-proc-screen" not in transport.start_prompts[0]
+    assert "parent_rule_catalog_total" not in transport.start_prompts[0]
+    assert "required_procedure_catalog_total" not in transport.start_prompts[0]
+    assert len(transport.repair_prompts) == 1
+    assert "batch_id 必须为 repair:EX-01" in transport.repair_prompts[0][1]
 
 
 def test_feedback_replaces_only_selected_rule_unresolved_items():
@@ -239,6 +1058,62 @@ def test_feedback_replaces_only_selected_rule_unresolved_items():
         "KEEP_IN",
         "CURRENT_EX",
     ]
+
+
+def test_feedback_accepts_target_component_scope_and_rejects_foreign_rule_scope():
+    source_input, draft, _spans = _fixture()
+    candidate = semantic_candidate_from_draft(draft).model_copy(
+        update={
+            "unresolved_items": [
+                UnresolvedItem(
+                    code="OLD_COMPONENT",
+                    affected_scope=["component:EX-01:07"],
+                )
+            ]
+        }
+    )
+    replacement = candidate.proposed_rules[1].model_copy(deep=True)
+    accepted = ProtocolSemanticRuleRepair(
+        candidate_id=candidate.candidate_id,
+        replacement_rules=[replacement],
+        replacement_unresolved_items=[
+            UnresolvedItem(
+                code="CURRENT_COMPONENT",
+                affected_scope=["component:EX-01:08"],
+            )
+        ],
+    )
+
+    revised = _apply_semantic_repair(
+        candidate,
+        accepted,
+        expected_codes=["EX-01"],
+    )
+
+    assert [item.code for item in revised.unresolved_items] == ["CURRENT_COMPONENT"]
+
+    foreign = accepted.model_copy(
+        update={
+            "replacement_unresolved_items": [
+                UnresolvedItem(
+                    code="FOREIGN_COMPONENT",
+                    affected_scope=["component:IN-01:01"],
+                )
+            ]
+        }
+    )
+    with pytest.raises(ValueError, match="指定父规则之外"):
+        _apply_semantic_repair(candidate, foreign, expected_codes=["EX-01"])
+
+    unscoped = accepted.model_copy(
+        update={
+            "replacement_unresolved_items": [
+                UnresolvedItem(code="NO_OWNER", affected_scope=["component:08"])
+            ]
+        }
+    )
+    with pytest.raises(ValueError, match="指定父规则之外"):
+        _apply_semantic_repair(candidate, unscoped, expected_codes=["EX-01"])
 
 
 def test_feedback_namespaced_draft_id_round_trips_without_creating_new_chain():
@@ -316,8 +1191,11 @@ def test_valid_json_passes_without_repair():
     assert result.status == "可以进入审阅"
     assert len(result.attempts) == 1
     assert transport.repair_prompts == []
+    assert transport.start_output_kinds == ["semantic_candidate"]
     assert "不得增加、删除、合并或调换成员" in transport.start_prompts[0]
     assert "不能拆成任一条件单独触发" in transport.start_prompts[0]
+    assert "顿号、逗号和普通并列列举只表示原文术语清单" in transport.start_prompts[0]
+    assert "不得自行补写‘或’" in transport.start_prompts[0]
     assert "exception_expression" in transport.start_prompts[0]
     assert "first_dose_date" in transport.start_prompts[0]
     assert "不得为表示审核阶段而复制原子条件" in transport.start_prompts[0]
@@ -535,6 +1413,349 @@ def test_large_official_catalog_is_collected_in_ordered_same_session_batches():
     assert "第 2/2 批" in transport.repair_prompts[0][1]
 
 
+def test_compact_semantic_batches_isolate_one_oversized_parent_without_splitting_it():
+    source_input, _draft, _spans = _fixture()
+    original_items = source_input.parent_rule_catalog.items
+    materials = list(source_input.source_materials)
+    long_span_id = original_items[1].source_span_ids[0]
+    materials = [
+        material.model_copy(
+            update={"text": "中性方案原文。" * 4_000}
+        )
+        if material.source_span_id == long_span_id
+        else material
+        for material in materials
+    ]
+    codes = ["IN-01", "EX-01", "IN-02"]
+    items = tuple(
+        original_items[index % 2].model_copy(
+            update={
+                "item_id": f"catalog:{code}",
+                "official_code": code,
+                "position": index + 1,
+            }
+        )
+        for index, code in enumerate(codes)
+    )
+    expanded_input = source_input.model_copy(
+        update={
+            "parent_rule_catalog": source_input.parent_rule_catalog.model_copy(
+                update={"items": items}
+            ),
+            "source_materials": tuple(materials),
+        }
+    )
+
+    batches = _plan_semantic_rule_batches(
+        expanded_input,
+        prompt_template="按正式方案原文进行结构化解构。",
+        batch_size=3,
+        compact=True,
+    )
+
+    assert batches == [["IN-01"], ["EX-01"], ["IN-02"]]
+    assert [code for batch in batches for code in batch] == codes
+
+    remote_batches = _plan_semantic_rule_batches(
+        expanded_input,
+        prompt_template="按正式方案原文进行结构化解构。",
+        batch_size=3,
+        compact=False,
+    )
+
+    assert remote_batches == [["IN-01"], ["EX-01"], ["IN-02"]]
+
+
+def test_compact_batch_with_missing_rule_is_not_silently_merged():
+    source_input, draft, _spans = _fixture()
+    base_candidate = _semantic_candidate(source_input, draft)
+    original_items = source_input.parent_rule_catalog.items
+    expanded_input = source_input.model_copy(
+        update={
+            "parent_rule_catalog": source_input.parent_rule_catalog.model_copy(
+                update={
+                    "items": (
+                        original_items[0],
+                        original_items[1],
+                        original_items[0].model_copy(
+                            update={
+                                "item_id": "catalog:in02",
+                                "official_code": "IN-02",
+                                "position": 2,
+                            }
+                        ),
+                    )
+                }
+            )
+        }
+    )
+    missing_rule = base_candidate.model_copy(
+        update={"proposed_rules": [base_candidate.proposed_rules[0]]},
+        deep=True,
+    )
+    missing_payload = json.dumps(
+        _wire_candidate(missing_rule, batch_id="1/2"),
+        ensure_ascii=False,
+    )
+    transport = CompactFakeTransport(
+        [
+            ProtocolAgentResponse(session_id="compact-session", text=missing_payload),
+            ProtocolAgentResponse(session_id="compact-session", text=missing_payload),
+        ]
+    )
+
+    response, error = _collect_initial_semantic_response(
+        expanded_input,
+        prompt_template="按正式方案原文进行结构化解构。",
+        transport=transport,
+        batch_size=2,
+    )
+
+    assert response.session_id == "compact-session"
+    assert error is not None
+    assert "第 1/2 批" in error
+    assert "本批官方父规则" in error
+    assert "['IN-01', 'EX-01']" in transport.repair_prompts[0][1]
+
+
+def test_merge_rejects_mismatched_logical_call_provenance():
+    source_input, draft, _spans = _fixture()
+    candidate = _semantic_candidate(source_input, draft)
+    first = candidate.model_copy(
+        update={
+            "proposed_rules": [candidate.proposed_rules[0]],
+            "created_by_agent_call_id": "call-1",
+        },
+        deep=True,
+    )
+    second = candidate.model_copy(
+        update={
+            "proposed_rules": [candidate.proposed_rules[1]],
+            "created_by_agent_call_id": "call-2",
+        },
+        deep=True,
+    )
+
+    with pytest.raises(ValueError, match="不得更换 created_by_agent_call_id"):
+        _merge_semantic_batches([first, second], expected_codes=["IN-01", "EX-01"])
+
+
+def test_final_merge_rejects_cross_batch_source_provenance():
+    source_input, draft, _spans = _fixture()
+    candidate = _semantic_candidate(source_input, draft)
+    first = candidate.model_copy(
+        update={"proposed_rules": [candidate.proposed_rules[0]]},
+        deep=True,
+    )
+    second_rule = candidate.proposed_rules[1].model_copy(deep=True)
+    second_rule.components[0].source_span_ids = ["span-in"]
+    second = candidate.model_copy(
+        update={"proposed_rules": [second_rule]},
+        deep=True,
+    )
+
+    with pytest.raises(ValueError, match="来源片段不属于选定父规则来源闭包"):
+        _merge_semantic_batches(
+            [first, second],
+            expected_codes=["IN-01", "EX-01"],
+            source_input=source_input,
+        )
+
+
+def test_repair_validation_requires_canonical_expected_batch_id():
+    source_input, draft, _spans = _fixture()
+    candidate = _semantic_candidate(source_input, draft)
+    repair = ProtocolSemanticRuleRepair(
+        candidate_id=candidate.candidate_id,
+        replacement_rules=[candidate.proposed_rules[1]],
+    )
+
+    with pytest.raises(ValueError, match="规范身份"):
+        _validate_semantic_repair(
+            repair,
+            expected_codes=["EX-01"],
+            expected_candidate_id=candidate.candidate_id,
+            expected_batch_id="repair:IN-01",
+            source_input=source_input,
+        )
+
+
+def test_compact_batches_close_exactly_and_drop_previous_batch_source_material():
+    source_input, draft, _spans = _fixture()
+    base_candidate = _semantic_candidate(source_input, draft)
+    codes = ["IN-01", "EX-01", "IN-02", "EX-02"]
+    items = []
+    for index, code in enumerate(codes):
+        template = source_input.parent_rule_catalog.items[index % 2]
+        items.append(
+            template.model_copy(
+                update={
+                    "item_id": f"catalog:{code}",
+                    "official_code": code,
+                    "position": index + 1,
+                }
+            )
+        )
+    expanded_input = source_input.model_copy(
+        update={
+            "parent_rule_catalog": source_input.parent_rule_catalog.model_copy(
+                update={"items": tuple(items)}
+            )
+        }
+    )
+
+    def wire_batch(rule_codes, batch_id):
+        rules = []
+        for code in rule_codes:
+            source_rule = (
+                base_candidate.proposed_rules[0]
+                if code.startswith("IN-")
+                else base_candidate.proposed_rules[1]
+            )
+            rules.append(source_rule.model_copy(update={"official_code": code}))
+        candidate = base_candidate.model_copy(
+            update={"proposed_rules": rules},
+            deep=True,
+        )
+        return json.dumps(
+            _wire_candidate(candidate, batch_id=batch_id),
+            ensure_ascii=False,
+        )
+
+    transport = CompactFakeTransport(
+        [
+            ProtocolAgentResponse(
+                session_id="compact-session",
+                text=wire_batch(codes[:3], "1/2"),
+            ),
+            ProtocolAgentResponse(
+                session_id="compact-session",
+                text=wire_batch(codes[3:], "2/2"),
+            ),
+        ]
+    )
+
+    response, error = _collect_initial_semantic_response(
+        expanded_input,
+        prompt_template="按正式方案原文进行结构化解构。",
+        transport=transport,
+        batch_size=3,
+    )
+    merged = _parse_semantic_candidate(response.text)
+
+    assert error is None
+    assert [rule.official_code for rule in merged.proposed_rules] == codes
+    assert len(transport.compact_contexts) == 1
+    assert len(transport.request_histories[1]) == 3
+    assert transport.request_histories[1][0]["content"] == (
+        "已完成方案解构批次 1/2；candidate_id='candidate-1'。"
+        "只保留冻结上下文和下一批明确身份，不要复述上一批原文或输出。"
+    )
+    assert "年龄≥18岁" not in transport.request_histories[1][0]["content"]
+    next_prompt = transport.repair_prompts[0][1]
+    assert "第 2/2 批" in next_prompt
+    assert "ALT或AST≥1.5×ULN" in next_prompt
+    assert "年龄≥18岁" not in next_prompt
+    assert [scope["official_codes"] for scope in transport.output_scopes] == [
+        ("IN-01", "EX-01", "IN-02"),
+        ("EX-02",),
+    ]
+    assert set(transport.output_scopes[1]["allowed_source_span_ids"]) == {
+        span_id
+        for item in expanded_input.parent_rule_catalog.items
+        if item.official_code == "EX-02"
+        for span_id in item.source_span_ids
+    }
+
+
+def test_compact_semantic_batches_resume_after_completed_batch_without_repeating_it():
+    source_input, draft, _spans = _fixture()
+    base_candidate = _semantic_candidate(source_input, draft)
+    codes = ["IN-01", "EX-01", "IN-02", "EX-02"]
+    items = tuple(
+        source_input.parent_rule_catalog.items[index % 2].model_copy(
+            update={
+                "item_id": f"catalog:{code}",
+                "official_code": code,
+                "position": index + 1,
+            }
+        )
+        for index, code in enumerate(codes)
+    )
+    expanded_input = source_input.model_copy(
+        update={
+            "parent_rule_catalog": source_input.parent_rule_catalog.model_copy(
+                update={"items": items}
+            )
+        }
+    )
+
+    def wire_batch(rule_codes, batch_id):
+        rules = [
+            (
+                base_candidate.proposed_rules[0]
+                if code.startswith("IN-")
+                else base_candidate.proposed_rules[1]
+            ).model_copy(update={"official_code": code}, deep=True)
+            for code in rule_codes
+        ]
+        return json.dumps(
+            _wire_candidate(
+                base_candidate.model_copy(
+                    update={"proposed_rules": rules},
+                    deep=True,
+                ),
+                batch_id=batch_id,
+            ),
+            ensure_ascii=False,
+        )
+
+    cache = MemoryBatchCache()
+    interrupted = CompactFakeTransport(
+        [
+            ProtocolAgentResponse(
+                session_id="first-session",
+                text=wire_batch(codes[:3], "1/2"),
+            )
+        ]
+    )
+    _response, error = _collect_initial_semantic_response(
+        expanded_input,
+        prompt_template="按正式方案原文进行结构化解构。",
+        transport=interrupted,
+        batch_size=3,
+        batch_cache=cache,
+    )
+
+    assert error is not None
+    assert "第 2/2 批调用未完成" in error
+    assert len(cache.items) == 1
+
+    resumed = CompactFakeTransport(
+        [
+            ProtocolAgentResponse(
+                session_id="resumed-session",
+                text=wire_batch(codes[3:], "2/2"),
+            )
+        ]
+    )
+    response, error = _collect_initial_semantic_response(
+        expanded_input,
+        prompt_template="按正式方案原文进行结构化解构。",
+        transport=resumed,
+        batch_size=3,
+        batch_cache=cache,
+    )
+    merged = _parse_semantic_candidate(response.text)
+
+    assert error is None
+    assert [rule.official_code for rule in merged.proposed_rules] == codes
+    assert len(resumed.start_prompts) == 1
+    assert "第 2/2 批" in resumed.start_prompts[0]
+    assert "年龄≥18岁" not in resumed.start_prompts[0]
+    assert len(cache.items) == 2
+
+
 def test_invalid_output_is_repaired_in_same_session():
     source_input, draft, spans = _fixture()
     template = "按正式方案原文进行结构化解构。"
@@ -597,6 +1818,8 @@ def test_valid_candidate_repairs_only_affected_parent_rule():
         "需要定向修正",
         "通过完整性检查",
     ]
+    assert transport.start_output_kinds == ["semantic_candidate"]
+    assert transport.repair_output_kinds == ["semantic_rule_repair"]
     assert "['EX-01']" in transport.repair_prompts[0][1]
     assert "不要返回整份草稿" in transport.repair_prompts[0][1]
     assert result.final_draft is not None
@@ -604,6 +1827,103 @@ def test_valid_candidate_repairs_only_affected_parent_rule():
         result.final_draft.proposed_rules[0].components[0].expression
         == candidate.proposed_rules[0].components[0].expression
     )
+
+
+def test_checkpoint_candidate_starts_targeted_repair_session(monkeypatch):
+    source_input, draft, spans = _fixture()
+    candidate = _semantic_candidate(source_input, draft)
+    bad_candidate = candidate.model_copy(deep=True)
+    bad_candidate.candidate_id = "parent-segment-candidate:test"
+    bad_candidate.proposed_rules[1].components[0].expression.operator = (
+        LogicalOperator.ALL
+    )
+    repair = ProtocolSemanticRuleRepair(
+        candidate_id="model-invented-candidate-id",
+        replacement_rules=[candidate.proposed_rules[1]],
+    )
+    monkeypatch.setattr(
+        "app.agents.protocol_deconstructor._collect_initial_semantic_response",
+        lambda *_args, **_kwargs: (
+            ProtocolAgentResponse(
+                session_id="protocol-parent-segments-checkpoint",
+                text=bad_candidate.model_dump_json(),
+            ),
+            None,
+        ),
+    )
+    transport = FakeTransport(
+        [ProtocolAgentResponse(session_id="repair-session", text=repair.model_dump_json())]
+    )
+    template = "按正式方案原文进行结构化解构。"
+
+    result = ProtocolDeconstructorRunner().run(
+        source_input,
+        prompt_version=_prompt_version(template),
+        prompt_template=template,
+        transport=transport,
+        source_spans=spans,
+    )
+
+    assert result.status == "可以进入审阅"
+    assert transport.start_output_kinds == ["semantic_rule_repair"]
+    assert transport.repair_output_kinds == []
+    assert result.same_session_id == "repair-session"
+
+
+def test_compact_wire_candidate_and_local_repair_keep_domain_gate_path():
+    source_input, draft, spans = _fixture()
+    candidate = _semantic_candidate(source_input, draft)
+    bad_candidate = candidate.model_copy(deep=True)
+    bad_candidate.proposed_rules[1].components[0].expression.operator = (
+        LogicalOperator.ALL
+    )
+    repair_payload = _wire_candidate(
+        candidate.model_copy(update={"proposed_rules": [candidate.proposed_rules[1]]}, deep=True),
+        batch_id="repair:EX-01",
+    )
+    repair_payload["replacement_rules"] = repair_payload.pop("proposed_rules")
+    repair_payload["replacement_structural_warnings"] = repair_payload.pop(
+        "structural_warnings"
+    )
+    repair_payload["replacement_unresolved_items"] = repair_payload.pop(
+        "unresolved_items"
+    )
+    repair_payload.pop("created_by_agent_call_id")
+    wrong_repair_payload = json.loads(json.dumps(repair_payload))
+    wrong_repair_payload["batch_id"] = "repair:IN-01"
+    transport = CompactFakeTransport(
+        [
+            ProtocolAgentResponse(
+                session_id="session-1",
+                text=json.dumps(_wire_candidate(bad_candidate), ensure_ascii=False),
+            ),
+            ProtocolAgentResponse(
+                session_id="session-1",
+                text=json.dumps(wrong_repair_payload, ensure_ascii=False),
+            ),
+            ProtocolAgentResponse(
+                session_id="session-1",
+                text=json.dumps(repair_payload, ensure_ascii=False),
+            ),
+        ]
+    )
+
+    result = ProtocolDeconstructorRunner().run(
+        source_input,
+        prompt_version=_prompt_version("按正式方案原文进行结构化解构。"),
+        prompt_template="按正式方案原文进行结构化解构。",
+        transport=transport,
+        source_spans=spans,
+    )
+
+    assert result.status == "可以进入审阅"
+    assert transport.start_output_kinds == ["semantic_candidate"]
+    assert transport.repair_output_kinds == [
+        "semantic_rule_repair",
+        "semantic_rule_repair",
+    ]
+    assert "batch_id 必须为 repair:EX-01" in transport.repair_prompts[0][1]
+    assert transport.compact_contexts
 
 
 def test_empty_schema_defs_and_singleton_identity_logic_are_normalized():

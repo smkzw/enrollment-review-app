@@ -34,6 +34,7 @@ from typing import Literal
 from pydantic import ConfigDict, Field, model_validator
 
 from .common import ContractModel, ScalarValue
+from .identifier_value import validate_identifier_value
 from .enums import (
     DatePrecision,
     DurationStatus,
@@ -42,6 +43,7 @@ from .enums import (
     FactNormalizationRunStatus,
     FactPolarity,
     GateOutcome,
+    ProfileLane,
     SourceStrength,
 )
 
@@ -236,10 +238,14 @@ class ClinicalFactCandidateV2(Phase5Model):
     """
 
     candidate_id: str = Field(min_length=1)
+    value_kind: Literal["value", "identifier"] | None = Field(default=None, exclude_if=lambda value: value is None)
+    source_observation_refs: list[str] = Field(default_factory=list, exclude_if=lambda value: not value)
     run_id: str = Field(min_length=1)
     call_id: str = Field(min_length=1)
     candidate_kind: Literal["fact"] = "fact"
     fact_type: str = Field(min_length=1)
+    profile_lane: ProfileLane = ProfileLane.EVIDENCE_QUALITY
+    supported_requirement_ids: list[str] = Field(default_factory=list)
     polarity: FactPolarity
     asserted_object: str = Field(min_length=1)
     raw_value: ScalarValue | None = None
@@ -255,10 +261,16 @@ class ClinicalFactCandidateV2(Phase5Model):
 
     @model_validator(mode="after")
     def validate_candidate(self) -> "ClinicalFactCandidateV2":
+        if self.value_kind == "identifier":
+            validate_identifier_value(
+                self.raw_value, self.canonical_value, self.unit,
+                self.assertion_basis.assertion_text if self.assertion_basis else None,
+            )
         _require_utc(self.created_at, "created_at")
         if self.record_time is not None:
             _require_utc(self.record_time, "record_time")
         _require_sorted_unique(self.locator_ids, "候选定位")
+        _require_sorted_unique(self.supported_requirement_ids, "候选支持的资料要求")
         if self.polarity == FactPolarity.UNKNOWN:
             if self.raw_value is not None or self.canonical_value is not None:
                 raise ValueError("未知极性候选不能携带被断言值")
@@ -292,6 +304,7 @@ class ClinicalEventCandidateV2(Phase5Model):
     call_id: str = Field(min_length=1)
     candidate_kind: Literal["event"] = "event"
     event_type: str = Field(min_length=1)
+    profile_lane: ProfileLane = ProfileLane.EVIDENCE_QUALITY
     start_range: PartialDateRange | None = None
     end_range: PartialDateRange | None = None
     duration_status: DurationStatus
@@ -364,8 +377,12 @@ class ClinicalFactV2(Phase5Model):
     fact_id: str = Field(min_length=1)
     run_id: str = Field(min_length=1)
     gate_id: str = Field(min_length=1)
+    source_candidate_ids: list[str] = Field(default_factory=list)
+    gate_ids: list[str] = Field(default_factory=list)
     authority: FactAuthority
     fact_type: str = Field(min_length=1)
+    profile_lane: ProfileLane = ProfileLane.EVIDENCE_QUALITY
+    supported_requirement_ids: list[str] = Field(default_factory=list)
     polarity: FactPolarity
     asserted_object: str = Field(min_length=1)
     value: ScalarValue | None = None
@@ -385,6 +402,11 @@ class ClinicalFactV2(Phase5Model):
         if self.record_time is not None:
             _require_utc(self.record_time, "record_time")
         _require_sorted_unique(self.locator_ids, "发布事实定位")
+        _require_sorted_unique(self.source_candidate_ids, "发布事实来源候选")
+        _require_sorted_unique(self.gate_ids, "发布事实门禁")
+        _require_sorted_unique(self.supported_requirement_ids, "发布事实支持的资料要求")
+        if self.gate_ids and self.gate_id not in self.gate_ids:
+            raise ValueError("主门禁必须属于发布事实的全部门禁")
         _validate_fact_polarity_value(
             self.polarity, self.value, self.unit, self.assertion_basis
         )
@@ -401,6 +423,7 @@ class ClinicalFactV2(Phase5Model):
         expected = clinical_fact_stable_identity(
             authority=self.authority,
             fact_type=self.fact_type,
+            profile_lane=self.profile_lane,
             asserted_object=self.asserted_object,
             polarity=self.polarity,
             value=self.value,
@@ -422,8 +445,11 @@ class ClinicalEventV2(Phase5Model):
     event_id: str = Field(min_length=1)
     run_id: str = Field(min_length=1)
     gate_id: str = Field(min_length=1)
+    source_candidate_ids: list[str] = Field(default_factory=list)
+    gate_ids: list[str] = Field(default_factory=list)
     authority: FactAuthority
     event_type: str = Field(min_length=1)
+    profile_lane: ProfileLane = ProfileLane.EVIDENCE_QUALITY
     start_range: PartialDateRange | None = None
     end_range: PartialDateRange | None = None
     duration_status: DurationStatus
@@ -444,10 +470,15 @@ class ClinicalEventV2(Phase5Model):
         _require_sorted_unique(self.fact_ids, "事件事实引用")
         _require_sorted_unique(self.referenced_fact_objects, "事件引用事实对象")
         _require_sorted_unique(self.locator_ids, "事件定位")
+        _require_sorted_unique(self.source_candidate_ids, "事件来源候选")
+        _require_sorted_unique(self.gate_ids, "事件门禁")
+        if self.gate_ids and self.gate_id not in self.gate_ids:
+            raise ValueError("主门禁必须属于事件的全部门禁")
         _validate_duration_bounds(self.start_range, self.end_range, self.duration_status)
         expected = clinical_event_stable_identity(
             authority=self.authority,
             event_type=self.event_type,
+            profile_lane=self.profile_lane,
             referenced_fact_objects=self.referenced_fact_objects,
             start_range=self.start_range,
             end_range=self.end_range,
@@ -468,6 +499,8 @@ class MedicationExposureV2(Phase5Model):
     exposure_id: str = Field(min_length=1)
     run_id: str = Field(min_length=1)
     gate_id: str = Field(min_length=1)
+    source_candidate_ids: list[str] = Field(default_factory=list)
+    gate_ids: list[str] = Field(default_factory=list)
     authority: FactAuthority
     medication_name: str = Field(min_length=1)
     category: str | None = None
@@ -494,6 +527,10 @@ class MedicationExposureV2(Phase5Model):
             _require_utc(self.record_time, "record_time")
         _require_sorted_unique(self.fact_ids, "暴露事实引用")
         _require_sorted_unique(self.locator_ids, "暴露定位")
+        _require_sorted_unique(self.source_candidate_ids, "暴露来源候选")
+        _require_sorted_unique(self.gate_ids, "暴露门禁")
+        if self.gate_ids and self.gate_id not in self.gate_ids:
+            raise ValueError("主门禁必须属于暴露的全部门禁")
         _validate_duration_bounds(self.start_range, self.end_range, self.duration_status)
         expected = medication_exposure_stable_identity(
             authority=self.authority,
@@ -540,7 +577,10 @@ class ClinicalConflictGroupV2(Phase5Model):
     run_id: str = Field(min_length=1)
     gate_id: str = Field(min_length=1)
     authority: FactAuthority
-    fact_ids: list[str] = Field(min_length=2)
+    member_kind: Literal["fact", "event", "exposure"] = "fact"
+    fact_ids: list[str] = Field(default_factory=list)
+    event_ids: list[str] = Field(default_factory=list)
+    exposure_ids: list[str] = Field(default_factory=list)
     locator_ids: list[str] = Field(min_length=1)
     resolution_revision: int = Field(default=0, ge=0)
     created_at: datetime
@@ -548,7 +588,17 @@ class ClinicalConflictGroupV2(Phase5Model):
     @model_validator(mode="after")
     def validate_conflict(self) -> "ClinicalConflictGroupV2":
         _require_utc(self.created_at, "created_at")
-        _require_sorted_unique(self.fact_ids, "冲突组事实引用")
+        member_lists = {
+            "fact": self.fact_ids,
+            "event": self.event_ids,
+            "exposure": self.exposure_ids,
+        }
+        for kind, member_ids in member_lists.items():
+            _require_sorted_unique(member_ids, f"冲突组 {kind} 引用")
+        if len(member_lists[self.member_kind]) < 2:
+            raise ValueError("冲突组必须包含至少两个同类型成员")
+        if any(member_lists[kind] for kind in member_lists if kind != self.member_kind):
+            raise ValueError("冲突组不得混合事实、事件与用药/治疗暴露成员")
         _require_sorted_unique(self.locator_ids, "冲突组定位")
         if self.resolution_revision != 0:
             raise ValueError(
@@ -569,6 +619,7 @@ def clinical_fact_stable_identity(
     value: ScalarValue | None,
     unit: str | None,
     date_range: PartialDateRange | None,
+    profile_lane: ProfileLane = ProfileLane.EVIDENCE_QUALITY,
 ) -> str:
     """临床事实稳定重复键：包含被断言对象，排除置信度与定位。"""
     from app.domain.publication import canonical_hash
@@ -578,6 +629,7 @@ def clinical_fact_stable_identity(
             "identity": "clinical_fact/v2",
             "authority": authority.model_dump(mode="json"),
             "fact_type": fact_type,
+            "profile_lane": profile_lane.value,
             "asserted_object": asserted_object,
             "polarity": polarity.value,
             "value": value,
@@ -595,6 +647,7 @@ def clinical_event_stable_identity(
     start_range: PartialDateRange | None,
     end_range: PartialDateRange | None,
     duration_status: DurationStatus,
+    profile_lane: ProfileLane = ProfileLane.EVIDENCE_QUALITY,
 ) -> str:
     """事件稳定重复键：包含引用事实对象，防止不同临床对象误合并。"""
     from app.domain.publication import canonical_hash
@@ -604,6 +657,7 @@ def clinical_event_stable_identity(
             "identity": "clinical_event/v2",
             "authority": authority.model_dump(mode="json"),
             "event_type": event_type,
+            "profile_lane": profile_lane.value,
             "referenced_fact_objects": referenced_fact_objects,
             "start_range": _date_range_identity(start_range),
             "end_range": _date_range_identity(end_range),

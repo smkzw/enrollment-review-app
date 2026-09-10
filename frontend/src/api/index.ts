@@ -63,3 +63,13 @@ export {
   type EvidenceContextView,
   type SubjectCreateInput,
 } from "./catalog";
+export {
+  getPatientProfileRepository,
+  setPatientProfileRepository,
+  createPatientProfileHttp,
+  PatientProfileApiError,
+  PatientProfileDecodeError,
+  type PatientProfileRepository,
+  type PatientProfileRevisionView,
+  type PatientProfileHistoryView,
+} from "./patient-profile";

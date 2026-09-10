@@ -495,7 +495,7 @@ def _recover_exact_body_fragments(
 
 
 def _downgrade_colliding_ranges(spans: list[ProtocolSourceSpan]) -> list[ProtocolSourceSpan]:
-    range_counts: dict[tuple[str, int, int, int], int] = {}
+    range_members: dict[tuple[str, int, int, int], list[ProtocolSourceSpan]] = {}
     for span in spans:
         if (
             span.render_artifact_id
@@ -509,9 +509,22 @@ def _downgrade_colliding_ranges(spans: list[ProtocolSourceSpan]) -> list[Protoco
                 span.text_start,
                 span.text_end,
             )
-            range_counts[key] = range_counts.get(key, 0) + 1
+            range_members.setdefault(key, []).append(span)
 
-    collision_keys = {key for key, count in range_counts.items() if count > 1}
+    collision_keys: set[tuple[str, int, int, int]] = set()
+    for key, members in range_members.items():
+        if len(members) <= 1:
+            continue
+        refs = sorted(
+            (item.source_ref for item in members),
+            key=lambda value: (len(value), value),
+        )
+        if len(set(refs)) == len(refs) and all(
+            child.startswith(parent + ".")
+            for parent, child in zip(refs, refs[1:])
+        ):
+            continue
+        collision_keys.add(key)
     if not collision_keys:
         return spans
     revised: list[ProtocolSourceSpan] = []
@@ -532,7 +545,7 @@ def _downgrade_colliding_ranges(spans: list[ProtocolSourceSpan]) -> list[Protoco
                     "precision": SourceLocatorPrecision.BLOCK,
                     "alignment_status": AlignmentStatus.UNALIGNED,
                     "degradation_reason": (
-                        f"{range_counts[key]} 个结构块共享同一渲染范围，"
+                        f"{len(range_members[key])} 个结构块共享同一渲染范围，"
                         "无法判定各自物理实例"
                     ),
                 }
@@ -707,6 +720,7 @@ def align_blocks(
             block,
             snapshot_id=snapshot_id,
             render_artifact_id=render_artifact_id,
+            page_texts=page_texts,
             page_norms=page_norms,
             page_compacts=page_compacts,
             table_anchors=table_anchors,
@@ -815,6 +829,7 @@ def _align_block(
     *,
     snapshot_id: str,
     render_artifact_id: str,
+    page_texts: list[str],
     page_norms: list[tuple[str, list[int]]],
     page_compacts: list[tuple[str, list[int]]],
     table_anchors: dict[str, tuple[str, ...]],

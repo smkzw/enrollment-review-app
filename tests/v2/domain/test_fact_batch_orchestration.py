@@ -357,12 +357,47 @@ def test_semantic_conflict_fact_same_object_different_polarity():
     assert conflicts[0].semantic_type == "fact"
 
 
-def test_semantic_conflict_fact_same_object_different_date():
+def test_semantic_fact_same_payload_different_date_is_longitudinal_not_conflict():
     f1 = _fact_candidate(candidate_id="f-1", date_range=_range_day(date(2020, 1, 1)))
     f2 = _fact_candidate(candidate_id="f-2", date_range=_range_day(date(2021, 1, 1)))
     conflicts = detect_semantic_conflicts(authority=_AUTHORITY, fact_candidates=[f1, f2], event_candidates=[], exposure_candidates=[])
+    assert conflicts == []
+
+
+def test_different_fact_values_at_definitely_disjoint_dates_are_longitudinal():
+    f1 = _fact_candidate(
+        candidate_id="f-1", raw_value="120", canonical_value="120",
+        date_range=_range_day(date(2020, 1, 1)),
+    )
+    f2 = _fact_candidate(
+        candidate_id="f-2", raw_value="130", canonical_value="130",
+        date_range=_range_day(date(2021, 1, 1)),
+    )
+    assert detect_semantic_conflicts(
+        authority=_AUTHORITY,
+        fact_candidates=[f1, f2],
+        event_candidates=[],
+        exposure_candidates=[],
+    ) == []
+
+
+def test_different_fact_values_with_unknown_time_remain_a_conflict():
+    f1 = _fact_candidate(
+        candidate_id="f-1", raw_value="120", canonical_value="120",
+        date_range=_range_unknown(),
+    )
+    f2 = _fact_candidate(
+        candidate_id="f-2", raw_value="130", canonical_value="130",
+        date_range=_range_day(date(2021, 1, 1)),
+    )
+    conflicts = detect_semantic_conflicts(
+        authority=_AUTHORITY,
+        fact_candidates=[f1, f2],
+        event_candidates=[],
+        exposure_candidates=[],
+    )
     assert len(conflicts) == 1
-    assert conflicts[0].candidate_ids == ["f-1", "f-2"]
+    assert "时间重叠无法排除" in conflicts[0].reasons[0]
 
 
 def test_semantic_conflict_event_same_type_different_status():
@@ -383,6 +418,80 @@ def test_semantic_conflict_exposure_same_med_different_dose():
     assert conflicts[0].candidate_ids == ["x-1", "x-2"]
 
 
+def test_serial_exposure_dose_change_is_not_a_conflict():
+    x1 = _exposure_candidate(
+        candidate_id="x-1", dose="500", duration_status=DurationStatus.ENDED,
+        start_range=_range_day(date(2020, 1, 1)),
+        end_range=_range_day(date(2020, 6, 30)),
+    )
+    x2 = _exposure_candidate(
+        candidate_id="x-2", dose="1000", duration_status=DurationStatus.ENDED,
+        start_range=_range_day(date(2020, 7, 1)),
+        end_range=_range_day(date(2020, 12, 31)),
+    )
+    assert detect_semantic_conflicts(
+        authority=_AUTHORITY,
+        fact_candidates=[],
+        event_candidates=[],
+        exposure_candidates=[x1, x2],
+    ) == []
+
+
+def test_separate_single_doses_are_not_a_conflict():
+    x1 = _exposure_candidate(
+        candidate_id="x-1", dose="300", duration_status=DurationStatus.SINGLE,
+        start_range=_range_day(date(2025, 4, 9)), end_range=None,
+    )
+    x2 = _exposure_candidate(
+        candidate_id="x-2", dose="300", duration_status=DurationStatus.SINGLE,
+        start_range=_range_day(date(2025, 6, 4)), end_range=None,
+    )
+    assert detect_semantic_conflicts(
+        authority=_AUTHORITY,
+        fact_candidates=[],
+        event_candidates=[],
+        exposure_candidates=[x1, x2],
+    ) == []
+
+
+def test_unknown_exposure_detail_does_not_conflict_with_more_complete_record():
+    start = _range_day(date(2025, 4, 5))
+    partial = _exposure_candidate(
+        candidate_id="x-1", dose=None, unit=None,
+        duration_status=DurationStatus.UNKNOWN, start_range=start, end_range=None,
+    )
+    complete = _exposure_candidate(
+        candidate_id="x-2", dose="8.8", unit="mg",
+        duration_status=DurationStatus.ENDED, start_range=start,
+        end_range=_range_day(date(2025, 4, 19)),
+    )
+    assert detect_semantic_conflicts(
+        authority=_AUTHORITY,
+        fact_candidates=[],
+        event_candidates=[],
+        exposure_candidates=[partial, complete],
+    ) == []
+
+
+def test_compatible_indication_wording_is_not_a_deterministic_conflict():
+    start = _range_day(date(2025, 4, 5))
+    broad = _exposure_candidate(
+        candidate_id="x-1", indication="过敏性鼻炎",
+        duration_status=DurationStatus.UNKNOWN, start_range=start, end_range=None,
+    )
+    specific = _exposure_candidate(
+        candidate_id="x-2", indication="季节性过敏性鼻炎",
+        duration_status=DurationStatus.ENDED, start_range=start,
+        end_range=_range_day(date(2025, 4, 19)),
+    )
+    assert detect_semantic_conflicts(
+        authority=_AUTHORITY,
+        fact_candidates=[],
+        event_candidates=[],
+        exposure_candidates=[broad, specific],
+    ) == []
+
+
 def test_semantic_conflict_not_triggered_for_duplicates():
     # 同一语义对象且同一稳定身份 => 去重，不应产生冲突
     f1 = _fact_candidate(candidate_id="f-1", locator_ids=["loc-1"])
@@ -400,14 +509,12 @@ def test_semantic_conflict_different_semantic_keys_no_conflict():
     assert len(conflicts) == 0
 
 
-def test_semantic_conflict_multiple_distinct_identities():
+def test_multiple_serial_fact_observations_are_not_a_conflict_group():
     f1 = _fact_candidate(candidate_id="f-1", date_range=_range_day(date(2020, 1, 1)))
     f2 = _fact_candidate(candidate_id="f-2", date_range=_range_day(date(2021, 1, 1)))
     f3 = _fact_candidate(candidate_id="f-3", date_range=_range_day(date(2022, 1, 1)))
     conflicts = detect_semantic_conflicts(authority=_AUTHORITY, fact_candidates=[f1, f2, f3], event_candidates=[], exposure_candidates=[])
-    assert len(conflicts) == 1
-    assert conflicts[0].candidate_ids == ["f-1", "f-2", "f-3"]
-    assert len(conflicts[0].distinct_stable_identities) == 3
+    assert conflicts == []
 
 
 # ---------------------------------------------------------------------------
@@ -646,9 +753,12 @@ def test_property_stable_identity_deterministic_and_sorted():
 
 
 def test_property_no_winner_selection_in_conflict():
-    # 构造 5 个同一语义对象但不同日期的事实，验证冲突组包含全部且无赢家
+    # 构造 5 个同日但值不兼容的事实，验证冲突组包含全部且无赢家。
     candidates = [
-        _fact_candidate(candidate_id=f"f-{i}", date_range=_range_day(date(2020 + i, 1, 1)), locator_ids=[f"loc-{i}"])
+        _fact_candidate(
+            candidate_id=f"f-{i}", raw_value=f"值{i}", canonical_value=f"值{i}",
+            locator_ids=[f"loc-{i}"],
+        )
         for i in range(5)
     ]
     conflicts = detect_semantic_conflicts(authority=_AUTHORITY, fact_candidates=candidates, event_candidates=[], exposure_candidates=[])
@@ -667,9 +777,11 @@ def test_property_dedup_and_conflict_mutually_exclusive_for_same_key():
     # 同一语义键下，若身份相同则只去重不同冲突；若身份不同则只冲突不去重
     f1 = _fact_candidate(candidate_id="f-1", locator_ids=["loc-1"])
     f2 = _fact_candidate(candidate_id="f-2", locator_ids=["loc-2"])  # 同身份 -> 去重
-    f3 = _fact_candidate(candidate_id="f-3", date_range=_range_day(date(2021, 1, 1)), locator_ids=["loc-3"])  # 同语义对象不同日期 -> 冲突
-    # f1 与 f2 同身份，去重组 1；f1/f2 与 f3 同语义键不同身份，冲突组应包含三者？
-    # 但去重逻辑会将 f1/f2 视为同一身份，冲突组 distinct 为 2 (f1/f2 身份 vs f3 身份)
+    f3 = _fact_candidate(
+        candidate_id="f-3", raw_value="另一值", canonical_value="另一值",
+        locator_ids=["loc-3"],
+    )
+    # f1 与 f2 同身份形成去重组；同日不同值的 f3 与两者形成冲突组。
     batch = orchestrate_batch_gates(authority=_AUTHORITY, run_id="run-1", call_id="call-1", fact_candidates=[f1, f2, f3], event_candidates=[], exposure_candidates=[])
     # 此时既有去重组也有冲突组，验证互斥性：去重组身份不应出现在冲突 distinct 之外？
     dedup_sids = {g.stable_identity for g in batch.dedup_groups}
@@ -709,7 +821,10 @@ def test_property_batch_affected_scope_is_union_sorted():
     call = _make_call("doc-1", [1])  # 缺页 2
     f1 = _fact_candidate(candidate_id="f-1", locator_ids=["loc-1"])
     f2 = _fact_candidate(candidate_id="f-2", locator_ids=["loc-2"])  # 同身份去重
-    f3 = _fact_candidate(candidate_id="f-3", date_range=_range_day(date(2021, 1, 1)), locator_ids=["loc-3"])  # 与 f1/f2 冲突
+    f3 = _fact_candidate(
+        candidate_id="f-3", raw_value="另一值", canonical_value="另一值",
+        locator_ids=["loc-3"],
+    )
     batch = orchestrate_batch_gates(authority=_AUTHORITY, run_id="run-1", call_id="call-1", fact_candidates=[f1, f2, f3], event_candidates=[], exposure_candidates=[], revision=rev, calls=[call])
     # affected_scope 必须有序去重
     assert batch.affected_scope == sorted(set(batch.affected_scope))
@@ -739,11 +854,17 @@ def test_property_id_consistency_after_shuffle_and_duplicate():
     # 生成含重复与冲突的随机批次，验证 shuffle 后 Dedup/Conflict 分组幂等
     rng = random.Random(123)
     base = _fact_candidate(candidate_id="f-base", date_range=_range_day(date(2020, 1, 1)))
-    # 3 个与 base 同身份（去重），2 个与 base 同语义不同日期（冲突）
+    # 3 个与 base 同身份（去重），2 个与 base 同日但值不同（冲突）。
     dup1 = _fact_candidate(candidate_id="f-dup1", locator_ids=["loc-10"], date_range=_range_day(date(2020, 1, 1)))
     dup2 = _fact_candidate(candidate_id="f-dup2", locator_ids=["loc-11"], date_range=_range_day(date(2020, 1, 1)))
-    conf1 = _fact_candidate(candidate_id="f-c1", date_range=_range_day(date(2021, 6, 1)), locator_ids=["loc-20"])
-    conf2 = _fact_candidate(candidate_id="f-c2", date_range=_range_day(date(2022, 6, 1)), locator_ids=["loc-21"])
+    conf1 = _fact_candidate(
+        candidate_id="f-c1", raw_value="值A", canonical_value="值A",
+        date_range=_range_day(date(2020, 1, 1)), locator_ids=["loc-20"],
+    )
+    conf2 = _fact_candidate(
+        candidate_id="f-c2", raw_value="值B", canonical_value="值B",
+        date_range=_range_day(date(2020, 1, 1)), locator_ids=["loc-21"],
+    )
     candidates = [base, dup1, dup2, conf1, conf2]
     # 打乱三次
     for _ in range(3):

@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { workspaceFixture } from "../api/fixtureAssets";
 import {
   deriveTaskState,
+  formatTimeConstraint,
   mapAction,
   mapBoard,
   mapConflictGroup,
@@ -19,7 +20,7 @@ import {
   mapWorkspace,
 } from "../domain/mappers";
 import { toId } from "../domain/ids";
-import type { ConflictGroupWire, JobEventWire } from "../api/wire";
+import type { ConflictGroupWire, JobEventWire, TimeConstraintWire } from "../api/wire";
 
 const episodeById = (id: string) => {
   const episode = workspaceFixture.episodes.find(
@@ -28,6 +29,43 @@ const episodeById = (id: string) => {
   if (episode === undefined) throw new Error(`fixture 缺少 episode ${id}`);
   return episode;
 };
+
+describe("时间窗中文显示", () => {
+  const base: TimeConstraintWire = {
+    anchor_type: "first_dose_date",
+    direction: "before",
+    lower_bound_days: null,
+    upper_bound_days: null,
+    lower_bound: null,
+    upper_bound: null,
+    lower_bound_inclusive: true,
+    upper_bound_inclusive: true,
+    half_life_multiplier: null,
+    allow_partial_date: false,
+  };
+
+  it("区分超过7天与至少7天", () => {
+    expect(formatTimeConstraint({
+      ...base,
+      lower_bound_days: 7,
+      lower_bound_inclusive: false,
+    })).toBe("首次给药前超过 7 天");
+    expect(formatTimeConstraint({ ...base, lower_bound_days: 7 })).toBe(
+      "首次给药前至少 7 天",
+    );
+  });
+
+  it("区分7天内与少于7天", () => {
+    expect(formatTimeConstraint({ ...base, upper_bound_days: 7 })).toBe(
+      "首次给药前 7 天内",
+    );
+    expect(formatTimeConstraint({
+      ...base,
+      upper_bound_days: 7,
+      upper_bound_inclusive: false,
+    })).toBe("首次给药前少于 7 天");
+  });
+});
 
 describe("看板映射", () => {
   it("workspace 含 14 个 episode、8 名受试者（6 主要 + 2 模板）、2 个阶段模板", () => {

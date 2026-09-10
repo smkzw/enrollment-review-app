@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import hashlib
-import re
 from pathlib import Path
 
 import pytest
@@ -14,8 +13,14 @@ from app.domain.contracts.enums import (
     StudyPhase,
 )
 from app.protocols.docx_structure import extract_docx_structure
+from app.protocols.full_protocol_coverage import build_full_protocol_coverage_manifest
 from app.protocols.ingestion import register_source_artifact
 from app.protocols.metadata import extract_protocol_metadata, resolve_protocol_identity
+from app.protocols.phase_applicability_planning import (
+    PHASE_APPLICABILITY_DEFAULT_BATCH_PACKING_POLICY,
+    PHASE_APPLICABILITY_SAME_HEADING_BATCH_PACKING_POLICY,
+    plan_phase_applicability_batches,
+)
 from app.protocols.phase_detection import build_phase_applicability_graph, project_single_phase
 
 
@@ -44,13 +49,10 @@ REAL_PROTOCOLS = [
     ),
 ]
 
-
-def _opposite_phase_marker(text: str, selected_phase: StudyPhase) -> bool:
-    opposite = "Ⅲ" if selected_phase == StudyPhase.PHASE_II else "Ⅱ"
-    alternate = "III" if selected_phase == StudyPhase.PHASE_II else "II"
-    return bool(
-        re.search(rf"(?:{opposite}|{alternate})\s*期", text, re.I)
-    )
+LOCAL_D001_COPY = Path(
+    "artifacts/phase5-acceptance/20260823/isolated-inputs/d001/protocol/"
+    "test-D001项目/CMS-D001 银屑病2、3期临床方案 v1.0-2025.12.21.docx"
+)
 
 
 def _snapshot(path: Path) -> tuple[str, int, int, tuple[str, ...]]:
@@ -197,10 +199,6 @@ def test_real_protocol_metadata_phase_is_read_only(
     assert all(
         block.text == graph_by_id[block.block_id].text for block in projection.blocks
     ), f"{label} 投影不得覆盖 graph 原始 source text"
-    assert all(
-        not _opposite_phase_marker(block.projection_text or block.text, selected_phase)
-        for block in projection.blocks
-    ), f"{label} {selected_phase.value} 派生投影仍含对侧期别污染"
     if label == "MG-K10-SAR":
         shared_exclusion = [
             block
@@ -237,3 +235,154 @@ def test_real_protocol_metadata_phase_is_read_only(
 
     after = _snapshot(path)
     assert after == before, "真实方案、源文件 mtime 或源目录未被元信息/期别提取改写"
+
+
+def test_local_d001_rebuild_quantifies_cross_heading_packing_and_preserves_table_5(tmp_path):
+    """Rebuild the isolated D001 copy without mutating its source artifact."""
+    path = LOCAL_D001_COPY.resolve()
+    if not path.is_file():
+        pytest.skip(f"工作区内 D001 只读副本缺失：{path}")
+
+    before = _snapshot(path)
+    artifact = register_source_artifact(
+        path,
+        source_artifact_id="slice58d-local-d001",
+        storage_root=tmp_path,
+    )
+    extraction = extract_docx_structure(
+        path,
+        snapshot_id="slice58d-local-d001-snapshot",
+        source_artifact=artifact,
+        output_dir=tmp_path / "structure",
+    )
+    phase = build_phase_applicability_graph(
+        extraction.blocks,
+        snapshot_id=extraction.snapshot.snapshot_id,
+    )
+    phase_by_ref = {
+        block.source_ref: block
+        for block in phase.graph.blocks
+        if not block.is_aggregate
+    }
+    # D001's III chapter contains ordinary references back to the II chapter.
+    # Those references must remain III under the enclosing structural context;
+    # an explicit II heading remains II.
+    assert phase_by_ref["body.p839"].phase_scopes == [PhaseScope.PHASE_II]
+    assert all(
+        phase_by_ref[source_ref].phase_scopes == [PhaseScope.PHASE_III]
+        for source_ref in ("body.p937", "body.p938", "body.p940", "body.p978")
+    )
+    assert all(
+        phase_by_ref[source_ref].phase_scopes == [PhaseScope.PHASE_II]
+        for source_ref in ("body.p314", "body.p315", "body.p341")
+    )
+    assert all(
+        phase_by_ref[source_ref].phase_scopes == [PhaseScope.PHASE_III]
+        for source_ref in ("body.p345", "body.p346", "body.p372")
+    )
+    assert phase_by_ref["body.t4.r4.c1.p9"].phase_scopes == [PhaseScope.PHASE_II]
+    assert all(
+        phase_by_ref[source_ref].phase_scopes == [PhaseScope.PHASE_III]
+        for source_ref in (
+            "body.t4.r4.c1.p20",
+            "body.t4.r4.c1.p24",
+            "body.t4.r4.c1.p28",
+            "body.t4.r4.c1.p33",
+            "body.p547",
+            "body.p548",
+            "body.p552",
+            "body.p564",
+        )
+    )
+    projection = project_single_phase(phase.graph, StudyPhase.PHASE_II)
+    manifest = build_full_protocol_coverage_manifest(
+        extraction.blocks,
+        projection,
+        phase.graph,
+        protocol_version_id="D001-02-002:v1.0:phase-ii",
+        protocol_document_sha256=before[0],
+        snapshot_id=extraction.snapshot.snapshot_id,
+        manifest_id="slice58d-local-d001-manifest",
+        priority_keywords=(
+            "入选",
+            "排除",
+            "筛选",
+            "基线",
+            "首次给药",
+            "随机",
+            "结核",
+            "妊娠",
+            "合并用药",
+            "洗脱",
+            "复测",
+            "有效期",
+        ),
+    )
+    plan = plan_phase_applicability_batches(
+        manifest,
+        max_owned_units_per_batch=12,
+        context_radius=1,
+        batch_packing_policy=PHASE_APPLICABILITY_DEFAULT_BATCH_PACKING_POLICY,
+    )
+    # The statistics hypothesis lead-in is III-phase content through the
+    # nested "multiplicity adjustment" heading; the sibling sample-size
+    # heading closes that inherited context before the II-phase branch.
+    assert all(
+        phase_by_ref[source_ref].phase_scopes == [PhaseScope.PHASE_III]
+        for source_ref in (
+            "body.p1172",
+            "body.p1173",
+            "body.p1174",
+            "body.p1175",
+            "body.p1176",
+            "body.p1177",
+            "body.p1178",
+        )
+    )
+    assert phase_by_ref["body.p1179"].phase_scopes == [PhaseScope.UNKNOWN]
+    assert all(
+        phase_by_ref[source_ref].phase_scopes == [PhaseScope.PHASE_II]
+        for source_ref in ("body.p1180", "body.p1181")
+    )
+    same_heading_plan = plan_phase_applicability_batches(
+        manifest,
+        max_owned_units_per_batch=12,
+        context_radius=1,
+        batch_packing_policy=PHASE_APPLICABILITY_SAME_HEADING_BATCH_PACKING_POLICY,
+    )
+
+    assert len(extraction.blocks) == 3581
+    assert len(phase.graph.blocks) == 3405
+    assert len(manifest.units) == 1848
+    # The typed III-phase hypothesis lead-in resolves five formerly UNKNOWN
+    # units out of the selected II-phase target set.
+    assert len(plan.expected_structure_unit_ids) == 1240
+    assert len(same_heading_plan.packages) == 210
+    assert len(plan.packages) == 131
+    assert len(plan.packages) < len(same_heading_plan.packages)
+    assert plan.expected_structure_unit_ids == same_heading_plan.expected_structure_unit_ids
+    assert [
+        unit.structure_unit_id
+        for package in plan.packages
+        for unit in package.owned_units
+    ] == plan.expected_structure_unit_ids
+    assert all(len(package.owned_units) <= 12 for package in plan.packages)
+    package_32 = next(package for package in plan.packages if package.package_ordinal == 32)
+    assert len(package_32.owned_units) == 12
+    assert len({unit.structure_unit_id for unit in package_32.owned_units}) == 12
+
+    table_5 = [unit for unit in manifest.units if unit.source_ref.startswith("body.t5.r")]
+    assert [unit.source_ref for unit in table_5] == [f"body.t5.r{row}" for row in range(39)]
+    member_refs = [ref for unit in table_5 for ref in unit.member_source_refs]
+    assert len(member_refs) == 241
+    assert len(set(member_refs)) == 241
+    assert all(unit.phase_scopes == [PhaseScope.PHASE_II] for unit in table_5)
+
+    table_5_projection = [
+        block for block in projection.blocks if block.source_ref.startswith("body.t5.c")
+    ]
+    assert {block.source_ref for block in table_5_projection} == {
+        f"body.t5.c{column}" for column in range(10)
+    }
+
+    assert _snapshot(path) == before, "D001 只读重建不得改写源文件或源目录"

@@ -14,6 +14,7 @@ interface OriginalEvidenceViewerProps {
   selectedLocatorId: string | null;
   selectedPageLocators: LocatorView[];
   onSelectPage: (entryId: string) => void;
+  unavailableRecoveryHint?: string;
 }
 
 function authenticatedBoxes(locators: LocatorView[]): LocatorView[] {
@@ -39,6 +40,7 @@ export function OriginalEvidenceViewer({
   selectedLocatorId,
   selectedPageLocators,
   onSelectPage,
+  unavailableRecoveryHint,
 }: OriginalEvidenceViewerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef(new Map<string, HTMLElement>());
@@ -223,6 +225,7 @@ export function OriginalEvidenceViewer({
                               );
                             }
                           }}
+                          role="img"
                           className={`original-evidence-page__box${locatorSelected ? " original-evidence-page__box--selected" : ""}`}
                           aria-label={label}
                           title={label}
@@ -245,6 +248,9 @@ export function OriginalEvidenceViewer({
                     {page.failureReason ??
                       "原始页图尚未形成，请在处理详情中重试这一页。"}
                   </span>
+                  {unavailableRecoveryHint !== undefined && (
+                    <span>{unavailableRecoveryHint}</span>
+                  )}
                 </div>
               )}
             </article>

@@ -33,7 +33,12 @@ from app.domain.contracts.protocol_metadata import (
     InterpretationConflict,
     InterpretationSource,
 )
-from app.protocols.docx_structure import BlockKind, HeaderFooterKind, StructureBlock
+from app.protocols.docx_structure import (
+    BlockKind,
+    HeaderFooterKind,
+    NumberingRef,
+    StructureBlock,
+)
 from app.protocols.metadata import (
     MetadataExtractionError,
     confirm_protocol_identity,
@@ -50,6 +55,10 @@ def _block(
     *,
     part: DocumentPart = DocumentPart.BODY,
     table_path: tuple[int, ...] | None = None,
+    style: str | None = None,
+    style_name: str | None = None,
+    outline_level: int | None = None,
+    numbering: NumberingRef | None = None,
 ) -> StructureBlock:
     return StructureBlock(
         source_ref=source_ref,
@@ -57,6 +66,10 @@ def _block(
         block_order=order,
         kind=BlockKind.PARAGRAPH,
         text=text,
+        style=style,
+        style_name=style_name,
+        outline_level=outline_level,
+        numbering=numbering,
         table_path=table_path,
         part_kind=HeaderFooterKind.DEFAULT if part in {DocumentPart.HEADER, DocumentPart.FOOTER} else None,
     )
@@ -396,6 +409,419 @@ def test_phase_graph_has_paragraph_row_column_and_strict_single_phase_projection
             assert selected_only == []
 
 
+def test_phase_context_uses_outline_metadata_and_closes_at_sibling_headings() -> None:
+    blocks = [
+        _block(
+            "body.p0",
+            "Ⅱ期临床研究阶段",
+            0,
+            style="116",
+            style_name="中文自定义一级标题",
+            outline_level=1,
+        ),
+        _block("body.p1", "阶段下的研究流程说明", 1),
+        _block(
+            "body.p2",
+            "阶段内的治疗安排",
+            2,
+            style="117",
+            style_name="中文自定义二级标题",
+            outline_level=2,
+        ),
+        _block("body.p3", "未重复标注期别的治疗要求", 3),
+        _block(
+            "body.p4",
+            "研究治疗",
+            4,
+            style="116",
+            style_name="中文自定义一级标题",
+            outline_level=1,
+        ),
+        _block("body.p5", "新章节中未标期别的要求", 5),
+        _block(
+            "body.p6",
+            "Ⅲ期临床研究阶段",
+            6,
+            style="116",
+            style_name="中文自定义一级标题",
+            outline_level=1,
+        ),
+        _block("body.p7", "Ⅲ期阶段下的研究流程说明", 7),
+    ]
+
+    graph = build_phase_applicability_graph(blocks, snapshot_id="outline-phase-context").graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+
+    assert atomic["body.p1"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.p2"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.p3"].phase_scopes == [PhaseScope.PHASE_II]
+    # A same-level structural heading closes the old context; the neutral
+    # section is unresolved, not silently shared.
+    assert atomic["body.p4"].phase_scopes == [PhaseScope.UNKNOWN]
+    assert atomic["body.p5"].phase_scopes == [PhaseScope.UNKNOWN]
+    assert atomic["body.p7"].phase_scopes == [PhaseScope.PHASE_III]
+
+
+def test_exact_phase_heading_without_outline_metadata_starts_narrow_context() -> None:
+    blocks = [
+        _block(
+            "body.p0",
+            "Ⅱ期临床研究阶段",
+            0,
+            style="custom-phase-heading",
+            style_name="中文自定义标题",
+        ),
+        _block("body.p1", "未标期别的普通要求", 1),
+        _block("body.p2", "未标期别的普通程序", 2),
+    ]
+
+    graph = build_phase_applicability_graph(blocks, snapshot_id="unstructured-phase-context").graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+
+    assert atomic["body.p0"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.p1"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.p2"].phase_scopes == [PhaseScope.PHASE_II]
+
+
+def test_phase_visit_table_caption_scopes_trailing_notes_until_next_heading() -> None:
+    blocks = [
+        _block(
+            "body.p0",
+            "表 1 Ⅱ期临床研究阶段流程表",
+            0,
+            style="Normal",
+            style_name="正文",
+        ),
+        _block("body.t0", "", 1),
+        _block("body.t0.r0.c0.p0", "项目", 2, table_path=(0, 0)),
+        _block("body.t0.r0.c1.p0", "筛选期", 3, table_path=(0, 1)),
+        _block("body.p1", "开始任何试验流程之前签署知情同意书。", 4),
+        _block("body.p2", "筛选和基线访视可在规定条件下合并。", 5),
+        _block(
+            "body.p3",
+            "独立研究治疗章节",
+            6,
+            style="Heading 1",
+            style_name="heading 1",
+            outline_level=0,
+        ),
+        _block("body.p4", "未标注期别的后续正文。", 7),
+    ]
+
+    graph = build_phase_applicability_graph(
+        blocks,
+        snapshot_id="phase-visit-table-caption-context",
+    ).graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+
+    assert atomic["body.p0"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.p1"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.p2"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.p3"].phase_scopes == [PhaseScope.UNKNOWN]
+    assert atomic["body.p4"].phase_scopes == [PhaseScope.UNKNOWN]
+    assert all(
+        atomic[ref].phase_scopes == [PhaseScope.PHASE_II]
+        for ref in ("body.t0.r0.c0.p0", "body.t0.r0.c1.p0")
+    )
+
+
+def test_phase_narrative_without_outline_metadata_does_not_start_context() -> None:
+    blocks = [
+        _block(
+            "body.p0",
+            "Ⅱ期计划在完成入组后进行阶段性分析。",
+            0,
+            style="Normal",
+            style_name="正文",
+        ),
+        _block("body.p1", "未标期别的普通要求", 1),
+    ]
+
+    graph = build_phase_applicability_graph(blocks, snapshot_id="unstructured-phase-narrative").graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+
+    assert atomic["body.p0"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.p1"].phase_scopes == [PhaseScope.UNKNOWN]
+
+
+def test_phase_heading_inherits_through_nested_and_sibling_headings_into_table() -> None:
+    blocks = [
+        _block(
+            "body.p0",
+            "Ⅱ期临床研究阶段",
+            0,
+            style="116",
+            style_name="中文自定义一级标题",
+            outline_level=1,
+        ),
+        _block(
+            "body.p1",
+            "研究设计",
+            1,
+            style="117",
+            style_name="中文自定义二级标题",
+            outline_level=2,
+        ),
+        _block(
+            "body.p2",
+            "给药安排",
+            2,
+            style="118",
+            style_name="中文自定义三级标题",
+            outline_level=3,
+        ),
+        _block(
+            "body.p3",
+            "访视安排",
+            3,
+            style="117",
+            style_name="中文自定义二级标题",
+            outline_level=2,
+        ),
+        _block("body.t0", "", 4),
+        _block("body.t0.r0.c0.p0", "访视", 5, table_path=(0, 0)),
+        _block("body.t0.r0.c1.p0", "筛选期", 6, table_path=(0, 1)),
+        _block("body.t0.r1.c0.p0", "关键项目", 7, table_path=(1, 0)),
+        _block("body.t0.r1.c1.p0", "X", 8, table_path=(1, 1)),
+        _block("body.p4", "该阶段下未重复标注期别的要求", 9),
+    ]
+
+    graph = build_phase_applicability_graph(
+        blocks,
+        snapshot_id="phase-heading-nested-table",
+    ).graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+    aggregates = {item.source_ref: item for item in graph.blocks if item.is_aggregate}
+
+    assert atomic["body.p1"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.p2"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.p3"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.p4"].phase_scopes == [PhaseScope.PHASE_II]
+    assert all(
+        atomic[ref].phase_scopes == [PhaseScope.PHASE_II]
+        for ref in (
+            "body.t0.r0.c0.p0",
+            "body.t0.r0.c1.p0",
+            "body.t0.r1.c0.p0",
+            "body.t0.r1.c1.p0",
+        )
+    )
+    assert aggregates["body.t0.r1"].phase_scopes == [PhaseScope.PHASE_II]
+    assert aggregates["body.t0.c1"].phase_scopes == [PhaseScope.PHASE_II]
+
+
+def test_local_phase_mention_does_not_clear_existing_structural_context() -> None:
+    blocks = [
+        _block(
+            "body.p0",
+            "Ⅲ期临床研究阶段",
+            0,
+            style="116",
+            style_name="中文自定义一级标题",
+            outline_level=1,
+        ),
+        _block(
+            "body.p1",
+            "与Ⅱ期临床研究试验一致，详见相关章节。",
+            1,
+            style="Normal",
+            style_name="正文",
+        ),
+        _block(
+            "body.p2",
+            "研究设计",
+            2,
+            style="117",
+            style_name="中文自定义二级标题",
+            outline_level=2,
+        ),
+        _block(
+            "body.p3",
+            "研究流程",
+            3,
+            style="117",
+            style_name="中文自定义二级标题",
+            outline_level=2,
+        ),
+        _block(
+            "body.p4",
+            "列表中的研究要求",
+            4,
+            numbering=NumberingRef(num_id=1, level=0),
+        ),
+        _block("body.p5", "未重复标注期别的研究要求", 5),
+        _block("body.t0", "", 6),
+        _block("body.t0.r0.c0.p0", "访视", 7, table_path=(0, 0)),
+        _block("body.t0.r0.c1.p0", "筛选期", 8, table_path=(0, 1)),
+        _block("body.t0.r1.c0.p0", "关键项目", 9, table_path=(1, 0)),
+        _block("body.t0.r1.c1.p0", "X", 10, table_path=(1, 1)),
+    ]
+
+    graph = build_phase_applicability_graph(
+        blocks,
+        snapshot_id="local-phase-reference-preserves-context",
+    ).graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+
+    # The II mention is a cross-phase reference inside an enclosing III
+    # chapter.  The structural chapter context owns applicability, so the
+    # paragraph itself and all following ordinary content remain III.
+    assert atomic["body.p1"].phase_scopes == [PhaseScope.PHASE_III]
+    assert atomic["body.p2"].phase_scopes == [PhaseScope.PHASE_III]
+    assert atomic["body.p3"].phase_scopes == [PhaseScope.PHASE_III]
+    assert atomic["body.p4"].phase_scopes == [PhaseScope.PHASE_III]
+    assert atomic["body.p5"].phase_scopes == [PhaseScope.PHASE_III]
+    assert all(
+        atomic[ref].phase_scopes == [PhaseScope.PHASE_III]
+        for ref in (
+            "body.t0.r0.c0.p0",
+            "body.t0.r0.c1.p0",
+            "body.t0.r1.c0.p0",
+            "body.t0.r1.c1.p0",
+        )
+    )
+
+
+def test_ordinary_phase_mention_without_structural_context_does_not_spread() -> None:
+    blocks = [
+        _block(
+            "body.p0",
+            "与Ⅱ期临床研究试验一致，详见相关章节。",
+            0,
+            style="Normal",
+            style_name="正文",
+        ),
+        _block(
+            "body.p1",
+            "后续研究流程",
+            1,
+            style="117",
+            style_name="中文自定义一级标题",
+            outline_level=1,
+        ),
+        _block("body.p2", "未重复标注期别的研究要求", 2),
+        _block("body.t0", "", 3),
+        _block("body.t0.r0.c0.p0", "访视", 4, table_path=(0, 0)),
+        _block("body.t0.r0.c1.p0", "筛选期", 5, table_path=(0, 1)),
+    ]
+
+    graph = build_phase_applicability_graph(
+        blocks,
+        snapshot_id="local-phase-reference-without-context",
+    ).graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+
+    assert atomic["body.p0"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.p1"].phase_scopes == [PhaseScope.UNKNOWN]
+    assert atomic["body.p2"].phase_scopes == [PhaseScope.UNKNOWN]
+    assert all(
+        atomic[ref].phase_scopes == [PhaseScope.UNKNOWN]
+        for ref in ("body.t0.r0.c0.p0", "body.t0.r0.c1.p0")
+    )
+
+
+def test_phase_context_closes_after_ancestor_heading_before_following_table() -> None:
+    blocks = [
+        _block(
+            "body.p0",
+            "Ⅱ期临床研究阶段",
+            0,
+            style="116",
+            style_name="中文自定义一级标题",
+            outline_level=1,
+        ),
+        _block(
+            "body.p1",
+            "阶段内的研究设计",
+            1,
+            style="117",
+            style_name="中文自定义二级标题",
+            outline_level=2,
+        ),
+        _block(
+            "body.p2",
+            "阶段内的给药安排",
+            2,
+            style="118",
+            style_name="中文自定义三级标题",
+            outline_level=3,
+        ),
+        _block(
+            "body.p3",
+            "独立的顶层章节",
+            3,
+            style="115",
+            style_name="中文自定义零级标题",
+            outline_level=0,
+        ),
+        _block("body.p4", "独立章节中的普通要求", 4),
+        _block("body.t0", "", 5),
+        _block("body.t0.r0.c0.p0", "访视", 6, table_path=(0, 0)),
+        _block("body.t0.r0.c1.p0", "筛选期", 7, table_path=(0, 1)),
+        _block("body.t0.r1.c0.p0", "关键项目", 8, table_path=(1, 0)),
+        _block("body.t0.r1.c1.p0", "X", 9, table_path=(1, 1)),
+    ]
+
+    graph = build_phase_applicability_graph(
+        blocks,
+        snapshot_id="phase-heading-ancestor-close",
+    ).graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+    aggregates = {item.source_ref: item for item in graph.blocks if item.is_aggregate}
+
+    assert atomic["body.p1"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.p2"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.p3"].phase_scopes == [PhaseScope.UNKNOWN]
+    assert atomic["body.p4"].phase_scopes == [PhaseScope.UNKNOWN]
+    assert all(
+        atomic[ref].phase_scopes == [PhaseScope.UNKNOWN]
+        for ref in (
+            "body.t0.r0.c0.p0",
+            "body.t0.r0.c1.p0",
+            "body.t0.r1.c0.p0",
+            "body.t0.r1.c1.p0",
+        )
+    )
+    assert aggregates["body.t0.r1"].phase_scopes == [PhaseScope.UNKNOWN]
+    assert aggregates["body.t0.c1"].phase_scopes == [PhaseScope.UNKNOWN]
+
+
+def test_phase_mention_in_ordinary_narrative_does_not_spread_to_heading_or_table() -> None:
+    blocks = [
+        _block(
+            "body.p0",
+            "Ⅱ期受试者完成后将进行阶段性分析。",
+            0,
+            style="Normal",
+            style_name="正文",
+        ),
+        _block("body.p1", "后续研究流程", 1),
+        _block("body.t0", "", 2),
+        _block("body.t0.r0.c0.p0", "访视", 3, table_path=(0, 0)),
+        _block("body.t0.r0.c1.p0", "筛选期", 4, table_path=(0, 1)),
+        _block("body.t0.r1.c0.p0", "关键项目", 5, table_path=(1, 0)),
+        _block("body.t0.r1.c1.p0", "X", 6, table_path=(1, 1)),
+    ]
+
+    graph = build_phase_applicability_graph(
+        blocks,
+        snapshot_id="phase-narrative-no-spread",
+    ).graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+
+    assert atomic["body.p0"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.p1"].phase_scopes == [PhaseScope.UNKNOWN]
+    assert all(
+        atomic[ref].phase_scopes == [PhaseScope.UNKNOWN]
+        for ref in (
+            "body.t0.r0.c0.p0",
+            "body.t0.r0.c1.p0",
+            "body.t0.r1.c0.p0",
+            "body.t0.r1.c1.p0",
+        )
+    )
+
+
 def test_large_table_local_scope_does_not_promote_mixed_column_or_row() -> None:
     """A giant table must not become shared from one local comparison cell."""
 
@@ -489,6 +915,114 @@ def test_same_table_cell_inherits_nearest_phase_or_shared_criteria_lead_in() -> 
     assert bare_by_ref["body.t1.r0.c0.p1"].phase_scopes == [PhaseScope.SHARED]
 
 
+def test_same_table_cell_phase_headings_switch_only_the_local_tail() -> None:
+    blocks = [
+        _block(
+            "body.t0.r0.c0.p0",
+            "Ⅱ期临床研究阶段",
+            0,
+            table_path=(0, 0),
+        ),
+        _block("body.t0.r0.c0.p1", "未重复标注期别的Ⅱ期条款", 1, table_path=(0, 0)),
+        _block(
+            "body.t0.r0.c0.p2",
+            "与Ⅲ期临床研究试验一致，详见相关章节。",
+            2,
+            table_path=(0, 0),
+        ),
+        _block("body.t0.r0.c0.p3", "普通说明不应改写前一段标题", 3, table_path=(0, 0)),
+        _block(
+            "body.t0.r0.c0.p4",
+            "Ⅲ期临床研究阶段",
+            4,
+            table_path=(0, 0),
+        ),
+        _block("body.t0.r0.c0.p5", "未重复标注期别的Ⅲ期条款", 5, table_path=(0, 0)),
+    ]
+
+    graph = build_phase_applicability_graph(blocks, snapshot_id="cell-phase-heading-switch").graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+
+    assert atomic["body.t0.r0.c0.p0"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.t0.r0.c0.p1"].phase_scopes == [PhaseScope.PHASE_II]
+    # The ordinary III comparison is local reference text; it does not move
+    # the cell context away from the preceding II heading.
+    assert atomic["body.t0.r0.c0.p2"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.t0.r0.c0.p3"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.t0.r0.c0.p4"].phase_scopes == [PhaseScope.PHASE_III]
+    assert atomic["body.t0.r0.c0.p5"].phase_scopes == [PhaseScope.PHASE_III]
+
+
+def test_same_table_cell_ordinary_phase_sentence_does_not_start_context() -> None:
+    blocks = [
+        _block(
+            "body.t0.r0.c0.p0",
+            "Ⅱ期计划在完成入组后进行阶段性分析。",
+            0,
+            table_path=(0, 0),
+        ),
+        _block("body.t0.r0.c0.p1", "后续未标注期别的说明", 1, table_path=(0, 0)),
+        _block("body.t0.r0.c1.p0", "同一行另一列的普通说明", 2, table_path=(0, 1)),
+    ]
+
+    graph = build_phase_applicability_graph(blocks, snapshot_id="cell-phase-narrative").graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+
+    assert atomic["body.t0.r0.c0.p0"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.t0.r0.c0.p1"].phase_scopes == [PhaseScope.UNKNOWN]
+    assert atomic["body.t0.r0.c1.p0"].phase_scopes == [PhaseScope.UNKNOWN]
+
+
+def test_numeric_slashes_stay_neutral_while_real_phase_pairs_are_mixed() -> None:
+    """Clinical ratios must not become phase evidence inside a table cell."""
+    blocks = [
+        _block(
+            "body.t0.r0.c0.p0",
+            "PGA评分 3/4级；访视周数 2/3",
+            0,
+            table_path=(0, 0),
+        ),
+        _block(
+            "body.t0.r0.c1.p0",
+            "2/3期临床研究",
+            1,
+            table_path=(0, 1),
+        ),
+        _block(
+            "body.t0.r1.c0.p0",
+            "II/III期",
+            2,
+            table_path=(1, 0),
+        ),
+        _block(
+            "body.t0.r2.c0.p0",
+            "Ⅱ期临床研究阶段",
+            3,
+            table_path=(2, 0),
+        ),
+        _block(
+            "body.t0.r2.c0.p1",
+            "PGA评分 3/4级；访视周数 2/3",
+            4,
+            table_path=(2, 0),
+        ),
+    ]
+
+    graph = build_phase_applicability_graph(
+        blocks,
+        snapshot_id="numeric-slash-phase-counterexamples",
+    ).graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+
+    assert atomic["body.t0.r0.c0.p0"].phase_scopes == [PhaseScope.UNKNOWN]
+    assert atomic["body.t0.r0.c1.p0"].phase_scopes == [PhaseScope.MIXED]
+    assert atomic["body.t0.r1.c0.p0"].phase_scopes == [PhaseScope.MIXED]
+    assert atomic["body.t0.r2.c0.p0"].phase_scopes == [PhaseScope.PHASE_II]
+    # The ordinary ratios inherit the nearest explicit cell heading, but do
+    # not create an opposite-phase or mixed scope of their own.
+    assert atomic["body.t0.r2.c0.p1"].phase_scopes == [PhaseScope.PHASE_II]
+
+
 def test_visit_table_inherits_single_phase_from_its_structural_heading() -> None:
     blocks = [
         _block("body.p0", "表 1 Ⅱ期临床研究阶段流程表", 0),
@@ -579,6 +1113,79 @@ def test_single_phase_common_wording_does_not_leak_and_projection_text_is_derive
             phase_scopes=[PhaseScope.PHASE_III],
             projection_text="伪造的Ⅱ期显示",
         )
+
+
+def test_typed_phase_lead_in_inherits_within_heading_boundary() -> None:
+    blocks = [
+        _block(
+            "body.p0",
+            "统计假设",
+            0,
+            style="116",
+            style_name="自控1.1 标题",
+            outline_level=1,
+        ),
+        _block("body.p1", "Ⅲ期研究的主要假设如下：", 1),
+        _block("body.p2", "H0：试验组不优于安慰剂组。", 2),
+        _block("body.p3", "H1：试验组优于安慰剂组。", 3),
+        _block(
+            "body.p4",
+            "多重性校正",
+            4,
+            style="116",
+            style_name="自控1.1 标题",
+            outline_level=2,
+        ),
+        _block("body.p5", "本节说明整体 alpha 水平。", 5),
+        _block(
+            "body.p6",
+            "样本量计算",
+            6,
+            style="116",
+            style_name="自控1.1 标题",
+            outline_level=1,
+        ),
+        _block("body.p7", "后续普通说明不应继承前一节期别。", 7),
+    ]
+
+    graph = build_phase_applicability_graph(
+        blocks,
+        snapshot_id="typed-phase-lead-in-boundary",
+    ).graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+
+    assert all(
+        atomic[ref].phase_scopes == [PhaseScope.PHASE_III]
+        for ref in ("body.p1", "body.p2", "body.p3", "body.p4", "body.p5")
+    )
+    assert atomic["body.p6"].phase_scopes == [PhaseScope.UNKNOWN]
+    assert atomic["body.p7"].phase_scopes == [PhaseScope.UNKNOWN]
+
+
+def test_typed_lead_in_does_not_promote_ordinary_phase_narrative_or_reference() -> None:
+    blocks = [
+        _block("body.p0", "Ⅲ期受试者完成后将进行阶段性分析。", 0),
+        _block("body.p1", "普通说明不应继承阶段语境。", 1),
+        _block("body.p2", "Ⅲ期研究结果具体如下：", 2),
+        _block("body.p3", "与Ⅲ期临床研究试验一致，详见相关章节。", 3),
+        _block("body.p4", "交叉引用后的普通说明仍待确认。", 4),
+    ]
+
+    graph = build_phase_applicability_graph(
+        blocks,
+        snapshot_id="typed-phase-lead-in-negative",
+    ).graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+
+    assert atomic["body.p0"].phase_scopes == [PhaseScope.PHASE_III]
+    # The ordinary phase mention remains local evidence and cannot establish
+    # context for the following ordinary paragraph.
+    assert atomic["body.p1"].phase_scopes == [PhaseScope.UNKNOWN]
+    # Historical result wording and cross-reference wording remain local
+    # evidence; neither one creates an inherited phase context.
+    assert atomic["body.p2"].phase_scopes == [PhaseScope.PHASE_III]
+    assert atomic["body.p3"].phase_scopes == [PhaseScope.PHASE_III]
+    assert atomic["body.p4"].phase_scopes == [PhaseScope.UNKNOWN]
 
 
 @pytest.mark.parametrize(

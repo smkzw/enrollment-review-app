@@ -254,11 +254,15 @@ describe("OriginalEvidenceViewer", () => {
         selectedEntryId="entry-1"
         selectedLocatorId={null}
         selectedPageLocators={[]}
+        unavailableRecoveryHint="请关闭原文面板，并在资料处理详情中重新处理这一页。"
         onSelectPage={onSelectPage}
       />,
     );
 
     expect(screen.getByText("原始页面读取失败。")).toBeInTheDocument();
+    expect(
+      screen.getByText("请关闭原文面板，并在资料处理详情中重新处理这一页。"),
+    ).toBeInTheDocument();
     expect(screen.queryByAltText("第 2 页原始资料")).not.toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", { name: "筛选病历.pdf 第 2 页" }),

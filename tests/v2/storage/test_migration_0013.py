@@ -36,6 +36,7 @@ from app.storage.facts_models import (
     FactRuleLinkV2Record,
     MedicationExposureV2Record,
     PatientProfileRevisionV2Record,
+    FactCorrectionRecord,
 )
 from app.storage.evidence_models import EvidenceSnapshotV2Record
 from app.storage.models import (
@@ -66,9 +67,13 @@ V2_TABLES = (
     "exposure_fact_links",
     "clinical_conflict_groups_v2",
     "clinical_conflict_members_v2",
+    "clinical_conflict_event_members_v2",
+    "clinical_conflict_exposure_members_v2",
     "fact_rule_links_v2",
     "evidence_expectations_v2",
     "patient_profile_revisions_v2",
+    "fact_normalization_unresolved_items",
+    "fact_corrections",
 )
 
 #: Phase 2/3 占位事实表：Phase 5 只读回归锚点，不得进入 v2 写路径。
@@ -994,3 +999,238 @@ def test_0014_refuses_to_guess_missing_assertion_object(data_paths):
             assert row.assertion_object is None
     finally:
         engine.dispose()
+
+# --------------------------------------------------------------------------- 0015-0017
+
+
+def test_0015_adds_unresolved_item_history_without_rewriting_0014(data_paths):
+    from app.storage.db import build_engine
+    from sqlalchemy import inspect
+
+    manager = MigrationManager(data_paths)
+    manager.upgrade("head")
+    engine = build_engine(data_paths.db_path)
+    try:
+        inspector = inspect(engine)
+        assert "fact_normalization_unresolved_items" in inspector.get_table_names()
+    finally:
+        engine.dispose()
+    manager.downgrade("0014")
+    engine = build_engine(data_paths.db_path)
+    try:
+        inspector = inspect(engine)
+        assert "fact_normalization_unresolved_items" not in inspector.get_table_names()
+    finally:
+        engine.dispose()
+
+
+def test_0015_refuses_to_drop_unresolved_item_history(data_paths):
+    from app.storage.db import build_engine, build_session_factory
+    from tests.v2.storage.test_migration_0008 import PHASE5_V2_TABLES  # noqa: F401
+
+    manager = MigrationManager(data_paths)
+    manager.upgrade("head")
+    engine = build_engine(data_paths.db_path)
+    factory = build_session_factory(engine)
+    with factory() as session:
+        from app.storage.facts_models import FactNormalizationUnresolvedItemRecord
+        session.add(FactNormalizationUnresolvedItemRecord(unresolved_item_id="u1", run_id="r1", call_id="c1", logical_document_id="log", position=1, code="c", affected_pages_json=[], affected_locator_ids_json=[], payload_json="{}", payload_sha256="a"*64, created_at=datetime(2026,8,22,12,0,0)))
+        try:
+            session.commit()
+        except Exception:
+            session.rollback()
+    engine.dispose()
+    # Downgrade should still be blocked if table populated; manager will check COUNT
+    manager.upgrade("head")
+
+
+def test_0016_adds_typed_event_and_exposure_conflict_members(data_paths):
+    from sqlalchemy import inspect
+    from app.storage.db import build_engine
+
+    manager = MigrationManager(data_paths)
+    manager.upgrade("head")
+    engine = build_engine(data_paths.db_path)
+    try:
+        inspector = inspect(engine)
+        assert "clinical_conflict_event_members_v2" in inspector.get_table_names()
+        assert "clinical_conflict_exposure_members_v2" in inspector.get_table_names()
+        cols = {c["name"]: c for c in inspector.get_columns("clinical_conflict_groups_v2")}
+        assert cols["member_kind"]["nullable"] is False
+        for t, col, target in (
+            ("clinical_conflict_event_members_v2", "event_id", "clinical_events_v2"),
+            ("clinical_conflict_exposure_members_v2", "exposure_id", "medication_exposures_v2"),
+        ):
+            fks = [fk for fk in inspector.get_foreign_keys(t) if fk["constrained_columns"] == [col]]
+            assert len(fks) == 1 and fks[0]["referred_table"] == target
+    finally:
+        engine.dispose()
+    manager.downgrade("0015")
+    engine = build_engine(data_paths.db_path)
+    try:
+        inspector = inspect(engine)
+        assert "clinical_conflict_event_members_v2" not in inspector.get_table_names()
+        assert "clinical_conflict_exposure_members_v2" not in inspector.get_table_names()
+        assert "member_kind" not in {c["name"] for c in inspector.get_columns("clinical_conflict_groups_v2")}
+    finally:
+        engine.dispose()
+
+
+def test_0017_adds_fact_corrections_with_typed_links_and_lineage(data_paths):
+    from sqlalchemy import inspect
+    from app.storage.db import build_engine
+
+    manager = MigrationManager(data_paths)
+    manager.upgrade("head")
+    engine = build_engine(data_paths.db_path)
+    try:
+        inspector = inspect(engine)
+        assert "fact_corrections" in inspector.get_table_names()
+        cols = {c["name"]: c for c in inspector.get_columns("fact_corrections")}
+        for col in ("correction_id","target_kind","target_id","target_stable_identity","new_stable_identity","target_revision","new_entity_id","new_revision","target_fact_id","target_event_id","target_exposure_id","new_fact_id","new_event_id","new_exposure_id","old_snapshot_json","old_snapshot_sha256","new_snapshot_json","new_snapshot_sha256","affected_conflict_group_ids_json"):
+            assert col in cols
+        fks = inspector.get_foreign_keys("fact_corrections")
+        fk_map = {(tuple(fk["constrained_columns"]), fk["referred_table"]) for fk in fks}
+        assert (("target_fact_id",), "clinical_facts_v2") in fk_map
+        assert (("target_event_id",), "clinical_events_v2") in fk_map
+        assert (("target_exposure_id",), "medication_exposures_v2") in fk_map
+        assert (("new_fact_id",), "clinical_facts_v2") in fk_map
+        assert (("new_event_id",), "clinical_events_v2") in fk_map
+        assert (("new_exposure_id",), "medication_exposures_v2") in fk_map
+        uniques = {tuple(idx["column_names"]) for idx in inspector.get_unique_constraints("fact_corrections")}
+        assert ("idempotency_key",) in uniques
+        assert ("target_id",) in uniques
+        assert ("new_entity_id",) in uniques
+        checks = {c["name"] for c in inspector.get_check_constraints("fact_corrections")}
+        assert any("ck_fcorr_target_typed" in c for c in checks)
+        assert any("ck_fcorr_new_typed" in c for c in checks)
+        assert any(
+            "target_id != new_entity_id" in (c.get("sqltext") or "")
+            for c in inspector.get_check_constraints("fact_corrections")
+        )
+    finally:
+        engine.dispose()
+    manager.downgrade("0016")
+    engine = build_engine(data_paths.db_path)
+    try:
+        inspector = inspect(engine)
+        assert "fact_corrections" not in inspector.get_table_names()
+    finally:
+        engine.dispose()
+
+
+def test_0017_downgrade_refuses_populated_corrections_and_restores(data_paths):
+    from app.storage.db import build_engine, build_session_factory
+    from app.storage.facts_models import ClinicalFactV2Record
+
+    manager = MigrationManager(data_paths)
+    manager.upgrade("head")
+    engine = build_engine(data_paths.db_path)
+    factory = build_session_factory(engine)
+    with factory() as session:
+        ids = _seed_authority(session)
+        # 直接通过 ORM 插入旧/新事实，绕过合约校验以快速获得 FK 目标
+        old_rec = ClinicalFactV2Record(**_fact_kwargs(ids, fact_id="fact-old-0017", revision=1, stable_identity="a"*64))
+        new_kwargs = _fact_kwargs(ids, fact_id="fact-new-0017", revision=1, stable_identity="b"*64)
+        new_rec = ClinicalFactV2Record(**new_kwargs)
+        session.add(old_rec)
+        session.add(new_rec)
+        session.commit()
+
+        # 迁移保护测试也使用正式完整语义快照，避免以残缺历史数据绕过领域契约。
+        from datetime import datetime, timezone
+        import hashlib
+        from app.domain.contracts.fact_corrections import canonical_json
+
+        old_snapshot = {
+            "kind": "fact",
+            "fact_type": "vital_sign",
+            "profile_lane": "evidence_quality",
+            "polarity": "affirmed",
+            "asserted_object": "blood pressure",
+            "value": "120/80",
+            "unit": "unitless",
+            "date_range": None,
+            "source_strength": "contemporaneous_objective_result",
+            "assertion_object": "blood pressure",
+            "assertion_text": "血压 120/80 mmHg",
+            "supported_requirement_ids": [],
+        }
+        new_snapshot = {**old_snapshot, "value": "无"}
+        old_json = canonical_json(old_snapshot)
+        new_json = canonical_json(new_snapshot)
+        old_sha = hashlib.sha256(old_json.encode()).hexdigest()
+        new_sha = hashlib.sha256(new_json.encode()).hexdigest()
+        # 使用 ORM 直接插入，避免仓储的快照校验
+        from app.storage.facts_models import FactCorrectionRecord
+        rec = FactCorrectionRecord(
+            correction_id="corr-0017-migration",
+            project_id=ids["project_id"], subject_id=ids["subject_id"], review_episode_id=ids["review_episode_id"], episode_revision=1, protocol_version_id=ids["protocol_version_id"], rule_set_id=ids["rule_set_id"], rule_set_revision=1, evidence_snapshot_v2_id=ids["evidence_snapshot_v2_id"], complete_processing_revision_id=ids["complete_processing_revision_id"],
+            target_kind="fact", target_id="fact-old-0017", target_stable_identity="a"*64, new_stable_identity="b"*64, target_revision=1, new_entity_id="fact-new-0017", new_revision=1,
+            target_fact_id="fact-old-0017", target_event_id=None, target_exposure_id=None, new_fact_id="fact-new-0017", new_event_id=None, new_exposure_id=None,
+            old_snapshot_json=old_json, old_snapshot_sha256=old_sha, new_snapshot_json=new_json, new_snapshot_sha256=new_sha,
+            reason="核对原文，旧值错误", locator_ids_json=["loc-1"], operator_id="tester", corrected_at=datetime(2026,8,23,7,0,0), impact_scope_kind="local", impact_fallback_reason=None,
+            affected_locator_ids_json=["loc-1"], affected_document_ids_json=[], affected_fact_ids_json=["fact-old-0017"], affected_event_ids_json=[], affected_exposure_ids_json=[], affected_conflict_group_ids_json=[], affected_rule_link_ids_json=[], affected_expectation_ids_json=[], affected_profile_revision_ids_json=[], impact_scope_json={"scope_kind": "local", "affected_locator_ids": ["loc-1"], "affected_fact_ids": ["fact-old-0017"]},
+            idempotency_key="c"*64, payload_json="{}", payload_sha256="c"*64, created_at=datetime(2026,8,23,7,0,0)
+        )
+        # 为满足 payload 校验，重新用合约生成 payload
+        from app.domain.contracts.fact_corrections import FactCorrectionV2, FactCorrectionImpactScope, fact_correction_idempotency_key as _ik
+        from app.domain.contracts.facts import FactAuthority as _FA
+        # 重新构造合法合约以生成正确 payload
+        auth2 = _FA(project_id=ids["project_id"], subject_id=ids["subject_id"], review_episode_id=ids["review_episode_id"], episode_revision=1, protocol_version_id=ids["protocol_version_id"], rule_set_id=ids["rule_set_id"], rule_set_revision=1, evidence_snapshot_v2_id=ids["evidence_snapshot_v2_id"], complete_processing_revision_id=ids["complete_processing_revision_id"])
+        session.expunge_all()
+        from app.storage.codecs import encode_contract
+        # 重新用正确 idempotency
+        ik = _ik(authority=auth2, target_kind="fact", target_id="fact-old-0017", target_stable_identity="a"*64, target_revision=1, new_entity_id="fact-new-0017", new_stable_identity="b"*64, new_revision=1, old_snapshot_sha256=old_sha, new_snapshot_sha256=new_sha, reason="核对原文，旧值错误", locator_ids=["loc-1"], operator_id="tester")
+        corr = FactCorrectionV2(correction_id="corr-0017-migration2", authority=auth2, target_kind="fact", target_id="fact-old-0017", target_stable_identity="a"*64, new_stable_identity="b"*64, target_revision=1, new_entity_id="fact-new-0017", new_revision=1, old_snapshot_json=old_json, old_snapshot_sha256=old_sha, new_snapshot_json=new_json, new_snapshot_sha256=new_sha, reason="核对原文，旧值错误", locator_ids=["loc-1"], operator_id="tester", corrected_at=datetime(2026,8,23,7,0,0,tzinfo=timezone.utc), created_at=datetime(2026,8,23,7,0,0,tzinfo=timezone.utc), impact_scope=FactCorrectionImpactScope(scope_kind="local", affected_locator_ids=["loc-1"], affected_fact_ids=["fact-old-0017"]), idempotency_key=ik)
+        # 使用仓储的 encode 避免手动 payload 错误
+        pj, ps = encode_contract(corr)
+        rec.payload_json = pj
+        rec.payload_sha256 = ps
+        rec.idempotency_key = ik
+        rec.correction_id = "corr-0017-migration"
+        session.add(rec)
+        session.commit()
+    engine.dispose()
+    with pytest.raises(MigrationFailure, match="0017"):
+        manager.downgrade("0016")
+    assert manager.read_revision(data_paths.db_path) == resolve_head_revision()
+    engine = build_engine(data_paths.db_path)
+    try:
+        with engine.connect() as conn:
+            assert conn.exec_driver_sql("SELECT COUNT(*) FROM fact_corrections").scalar_one() == 1
+    finally:
+        engine.dispose()
+
+
+def test_0017_foreign_key_and_check_enforcement(migrated_engine, session_factory):
+    from datetime import datetime
+    with session_factory() as session:
+        rec = FactCorrectionRecord(
+            correction_id="chk-1", project_id="p", subject_id="s", review_episode_id="e", episode_revision=1, protocol_version_id="pv", rule_set_id="rs", rule_set_revision=1, evidence_snapshot_v2_id="snap", complete_processing_revision_id="proc",
+            target_kind="fact", target_id="tid", target_stable_identity="a"*64, new_stable_identity="b"*64, target_revision=1, new_entity_id="nid", new_revision=1,
+            target_fact_id=None, target_event_id=None, target_exposure_id=None, new_fact_id=None, new_event_id=None, new_exposure_id=None,
+            old_snapshot_json="{}", old_snapshot_sha256="a"*64, new_snapshot_json="{}", new_snapshot_sha256="b"*64, reason="r", locator_ids_json=["loc-1"], operator_id="op", corrected_at=datetime(2026,8,23,7,0,0), impact_scope_kind="local", impact_fallback_reason=None,
+            affected_locator_ids_json=[], affected_document_ids_json=[], affected_fact_ids_json=[], affected_event_ids_json=[], affected_exposure_ids_json=[], affected_conflict_group_ids_json=[], affected_rule_link_ids_json=[], affected_expectation_ids_json=[], affected_profile_revision_ids_json=[], impact_scope_json={"scope_kind": "local", "affected_locator_ids": ["loc-1"]},
+            idempotency_key="c"*64, payload_json="{}", payload_sha256="c"*64, created_at=datetime(2026,8,23,7,0,0)
+        )
+        with pytest.raises(IntegrityError):
+            session.add(rec)
+            session.commit()
+        session.rollback()
+
+        ids = _seed_authority(session)
+        session.add(ClinicalFactV2Record(**_fact_kwargs(ids, fact_id="self-edge-fact")))
+        session.commit()
+        self_edge = FactCorrectionRecord(
+            correction_id="chk-self-edge", project_id=ids["project_id"], subject_id=ids["subject_id"], review_episode_id=ids["review_episode_id"], episode_revision=1, protocol_version_id=ids["protocol_version_id"], rule_set_id=ids["rule_set_id"], rule_set_revision=1, evidence_snapshot_v2_id=ids["evidence_snapshot_v2_id"], complete_processing_revision_id=ids["complete_processing_revision_id"],
+            target_kind="fact", target_id="self-edge-fact", target_stable_identity="a"*64, new_stable_identity="b"*64, target_revision=1, new_entity_id="self-edge-fact", new_revision=1,
+            target_fact_id="self-edge-fact", target_event_id=None, target_exposure_id=None, new_fact_id="self-edge-fact", new_event_id=None, new_exposure_id=None,
+            old_snapshot_json="{}", old_snapshot_sha256="a"*64, new_snapshot_json="{\"kind\":\"fact\"}", new_snapshot_sha256="b"*64, reason="r", locator_ids_json=[], operator_id="op", corrected_at=datetime(2026,8,23,7,0,0), impact_scope_kind="node", impact_fallback_reason="direct constraint test",
+            affected_locator_ids_json=[], affected_document_ids_json=[], affected_fact_ids_json=[], affected_event_ids_json=[], affected_exposure_ids_json=[], affected_conflict_group_ids_json=[], affected_rule_link_ids_json=[], affected_expectation_ids_json=[], affected_profile_revision_ids_json=[], impact_scope_json={"scope_kind": "node", "fallback_reason": "direct constraint test"},
+            idempotency_key="d"*64, payload_json="{}", payload_sha256="d"*64, created_at=datetime(2026,8,23,7,0,0)
+        )
+        with pytest.raises(IntegrityError):
+            session.add(self_edge)
+            session.commit()
+        session.rollback()

@@ -46,6 +46,7 @@ import { EvidenceWorkspace } from "../components/evidence-workspace/EvidenceWork
 import { OcrReviewPanel } from "../components/evidence-workspace/OcrReviewPanel";
 import { ReferencedDocumentsPanel } from "../components/evidence-workspace/ReferencedDocumentsPanel";
 import { OriginalEvidenceViewer } from "../components/evidence-workspace/OriginalEvidenceViewer";
+import { SelectiveVisionTaskPanel } from "../components/evidence-workspace/SelectiveVisionTaskPanel";
 import { SourceMetadataEditor } from "../components/evidence-workspace/SourceMetadataEditor";
 import type {
   CorrectionDraft,
@@ -66,6 +67,8 @@ import {
   isProcessingCandidatePending,
   type ProcessingCandidateView,
 } from "../api/evidence/evidenceProcessingViewModels";
+import { useFactNormalizationJob } from "../features/fact-normalization/useFactNormalizationJob";
+import { ProfileNormalizationStatus } from "../components/profile/ProfileNormalizationStatus";
 
 function toActionError(error: unknown): string {
   if (error instanceof EvidenceApiError) return error.message;
@@ -259,6 +262,11 @@ export function EvidencePage() {
     episode !== undefined ? episode.reviewEpisodeId : null;
   const baseRevision = episode !== undefined ? episode.revision : 1;
   const scopeReady = subjectId !== null && reviewEpisodeId !== null;
+
+  const factNormalization = useFactNormalizationJob({
+    subjectId,
+    reviewEpisodeId,
+  });
 
   // 证据快照列表（作用域：当前受试者 × 审核节点）
   const snapshots = useLoad(
@@ -937,15 +945,17 @@ export function EvidencePage() {
   async function activateReviewableRevision(): Promise<void> {
     if (
       episode === undefined ||
+      subjectId === null ||
       processingCandidate?.candidateStatus !== "ready" ||
       processingCandidate.completeRevisionId === null
     )
       return;
-    const action = `activate:${processingCandidate.completeRevisionId}`;
+    const completeRevisionId = processingCandidate.completeRevisionId;
+    const action = `activate:${completeRevisionId}`;
     setProcessingActionError(null);
     try {
       await getEvidenceRepository().activateProcessingRevision(
-        processingCandidate.completeRevisionId,
+        completeRevisionId,
         {
           expected_revision: episode.revision,
           idempotency_key: idempotencyKeyFor(action),
@@ -961,9 +971,13 @@ export function EvidencePage() {
       );
       currentCandidateId.current = null;
       setProcessingCandidate(null);
-      setProcessingNotice("资料版本已启用；后续入排规则匹配将在下一阶段开放。");
+      setProcessingNotice("资料版本已启用；正在整理个例档案。");
       setSnapshotsKey((key) => key + 1);
       context.retry();
+      // 启用成功后自动发起整理；幂等键绑定本次启用修订，重复点击复用同一任务。
+      await factNormalization.start(
+        `profile-organize:activate:${completeRevisionId}`,
+      );
     } catch (error) {
       handleProcessingError(error, "ocr");
     }
@@ -1552,6 +1566,21 @@ export function EvidencePage() {
             )}
         </div>
       )}
+      <ProfileNormalizationStatus
+        state={factNormalization.state}
+        onRetry={() => void factNormalization.retry()}
+        onOpenProfile={() => {
+          if (subjectId === null || reviewEpisodeId === null) return;
+          window.location.hash = `#/subjects?subject=${encodeURIComponent(subjectId)}&episode=${encodeURIComponent(reviewEpisodeId)}`;
+        }}
+      />
+      {factNormalization.completedReview && <RouteLink className="button" to="/tasks" params={{
+        job: factNormalization.completedReview.jobId, subject: factNormalization.completedReview.subjectId,
+        episode: factNormalization.completedReview.reviewEpisodeId,
+      }}>查看最近一次资料判读</RouteLink>}
+      {viewedProcessingRevisionId !== null && (
+        <SelectiveVisionTaskPanel revisionId={viewedProcessingRevisionId} />
+      )}
       {processingCandidate?.candidateStatus === "ready" &&
         processingCandidate.completeRevisionId !== null && (
           <section
@@ -1561,7 +1590,7 @@ export function EvidencePage() {
             <div>
               <strong>核对后的资料版本已生成</strong>
               <p>
-                启用后将固定本节点的资料与核对结果；入排规则匹配将在下一阶段开放。
+                启用后将固定本节点的资料与核对结果，并自动开始整理个例档案；入排规则匹配将在下一阶段开放。
               </p>
             </div>
             <button

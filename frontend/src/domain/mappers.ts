@@ -220,6 +220,10 @@ const anchorLabel: Record<TimeConstraintWire["anchor_type"], string> = {
   screening_date: "筛选",
   baseline_date: "基线",
   randomization_date: "随机",
+  first_dose_date: "首次给药",
+  study_drug_administration_date: "研究药物给药",
+  last_dose_date: "末次给药",
+  study_completion_date: "研究完成",
   event_date: "事件发生",
 };
 
@@ -227,15 +231,21 @@ function formatDayRange(
   direction: Exclude<TimeConstraintWire["direction"], "on">,
   lower: number | null,
   upper: number | null,
+  lowerInclusive: boolean,
+  upperInclusive: boolean,
 ): string | null {
   const side = direction === "before" ? "前" : "后";
   if (lower === null && upper === null) return null;
   if (lower !== null && upper !== null) {
-    if (lower === upper) return `${side}第 ${lower} 天`;
-    return `${side} ${lower} 至 ${upper} 天`;
+    if (lower === upper && lowerInclusive && upperInclusive) {
+      return `${side}第 ${lower} 天`;
+    }
+    return `${side}${lowerInclusive ? "至少" : "超过"} ${lower} 天且${upperInclusive ? "不超过" : "少于"} ${upper} 天`;
   }
-  if (upper !== null) return `${side} ${upper} 天内`;
-  return `${side}至少 ${lower} 天`;
+  if (upper !== null) {
+    return upperInclusive ? `${side} ${upper} 天内` : `${side}少于 ${upper} 天`;
+  }
+  return `${side}${lowerInclusive ? "至少" : "超过"} ${lower} 天`;
 }
 
 export function formatTimeConstraint(
@@ -249,6 +259,8 @@ export function formatTimeConstraint(
     constraint.direction,
     constraint.lower_bound_days,
     constraint.upper_bound_days,
+    constraint.lower_bound_inclusive !== false,
+    constraint.upper_bound_inclusive !== false,
   );
   if (dayRange !== null) parts.push(`${anchor}${dayRange}`);
   if (constraint.half_life_multiplier !== null) {
@@ -388,7 +400,9 @@ export function mapExpectation(
     gapType: expectation.gap_type,
     gapLabel: gapTypeLabel[expectation.gap_type],
     status: expectation.status,
-    statusLabel: expectationStatusLabel[expectation.status],
+    statusLabel: expectation.gap_type === "observation_unverified"
+      ? "资料尚待核实"
+      : expectationStatusLabel[expectation.status],
     evidenceSpanIds: expectation.evidence_span_ids.map((id) =>
       toId<EvidenceSpanId>(id),
     ),

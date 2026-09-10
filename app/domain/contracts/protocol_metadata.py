@@ -20,6 +20,7 @@ from pydantic import Field, model_validator
 from .common import ContractModel, DateValue, VersionedModel
 from .enums import (
     AlignmentStatus,
+    AnchorResolutionMode,
     ApplicabilityGranularity,
     DocumentPart,
     IdentityAuthority,
@@ -31,6 +32,7 @@ from .enums import (
     PhaseDesignType,
     PhaseScope,
     ProtocolMetadataField,
+    ReviewStage,
     SourceLocatorPrecision,
     StudyPhase,
 )
@@ -388,6 +390,34 @@ class PhaseProjection(VersionedModel):
         return self
 
 
+class AnchorResolutionStatement(VersionedModel):
+    """解释材料对未命名回溯锚点的一条结构化解析声明。
+
+    解析只绑定锚点身份：受影响父规则（官方编号）、原歧义方案来源定位、
+    目标审核节点集合和唯一解析模式。它不携带、也不允许携带窗口量、方向、
+    阈值、布尔逻辑或官方编号改写——这些仍必须逐字来自方案原文，并由
+    确定性门禁按原文核验。
+    """
+
+    resolution_id: str = Field(min_length=1)
+    affected_rule_refs: list[str] = Field(min_length=1)
+    ambiguous_source_refs: list[str] = Field(min_length=1)
+    target_review_stages: list[ReviewStage] = Field(min_length=1)
+    resolution_mode: AnchorResolutionMode
+
+    @model_validator(mode="after")
+    def validate_resolution(self) -> "AnchorResolutionStatement":
+        if len(self.affected_rule_refs) != len(set(self.affected_rule_refs)):
+            raise ValueError("锚点解析影响的父规则不得重复")
+        if len(self.ambiguous_source_refs) != len(set(self.ambiguous_source_refs)):
+            raise ValueError("锚点解析的歧义方案来源不得重复")
+        if len(self.target_review_stages) != len(set(self.target_review_stages)):
+            raise ValueError("锚点解析的目标审核节点不得重复")
+        if self.resolution_mode is not AnchorResolutionMode.CURRENT_REVIEW_NODE_DATE:
+            raise ValueError("锚点解析只能使用当前审核节点日期这一项目无关模式")
+        return self
+
+
 class InterpretationSource(VersionedModel):
     """方案修订/解释材料来源及其可改变的权威边界。"""
 
@@ -404,6 +434,7 @@ class InterpretationSource(VersionedModel):
     is_current_amendment: bool = False
     clarifies_ambiguity: bool = False
     formal_change_summary: str | None = None
+    anchor_resolutions: list[AnchorResolutionStatement] = Field(default_factory=list)
     authority: InterpretationAuthority | None = None
 
     @model_validator(mode="after")
@@ -419,6 +450,21 @@ class InterpretationSource(VersionedModel):
         self.authority = expected
         if self.authority == InterpretationAuthority.CLARIFICATION_ONLY and self.formal_change_summary:
             raise ValueError("Q&A、澄清函、邮件和医学解释不能声明正式规则变更")
+        if self.anchor_resolutions:
+            if self.authority != InterpretationAuthority.CLARIFICATION_ONLY:
+                raise ValueError(
+                    "锚点解析只能由澄清级解释材料提供；当前修订案应直接修改方案原文"
+                )
+            if not self.clarifies_ambiguity:
+                raise ValueError("携带锚点解析的解释材料必须明确标注为方案模糊处的补充说明")
+            if not self.applies_to_rule_refs:
+                raise ValueError("携带锚点解析的解释材料必须声明其适用的父规则范围")
+            covered = set(self.applies_to_rule_refs)
+            for resolution in self.anchor_resolutions:
+                if not set(resolution.affected_rule_refs) <= covered:
+                    raise ValueError(
+                        "锚点解析影响的父规则必须在该解释材料声明的适用范围内"
+                    )
         return self
 
 

@@ -84,6 +84,7 @@ export const gapTypeLabel: Record<GapType, string> = {
   result_fields_missing: "结果字段缺失",
   date_or_anchor_missing: "日期或时间锚点缺失",
   professional_judgment: "待研究者判断",
+  observation_unverified: "资料尚待核实",
   source_conflict: "来源存在冲突",
   interpretation_conflict: "解释材料与方案不一致",
   ocr_or_parse_risk: "文字或数值需要核对",
@@ -231,8 +232,8 @@ export const UI_PHRASES = {
   prototypeOnly: "界面试用",
   /** 定位精度前缀 */
   precisionPrefix: "定位精度",
-  /** 定位降级原因前缀 */
-  degradationPrefix: "定位降级原因",
+  /** 定位范围有限时的说明前缀 */
+  degradationPrefix: "定位范围说明",
   /** 看板状态计数口径：可叠加类别（合同 §4.1，B2 修复） */
   boardCountHint:
     "状态计数为该范围内审核节点数；「存在冲突」「需专业判断」是可叠加的关注类别，同一节点可同时命中多个类别，分类计数合计可大于节点数。筛选与排序只改变显示，不影响资料本身。",

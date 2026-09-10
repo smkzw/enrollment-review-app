@@ -14,12 +14,15 @@ from __future__ import annotations
 import logging
 import threading
 import time as time_module
-from collections.abc import Callable, Iterator, Mapping
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections.abc import Callable, Iterator, Mapping, Sequence
+import fnmatch
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any
 
+from sqlalchemy import event
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.storage.codecs import utc_now, verify_payload_sha256
@@ -61,8 +64,25 @@ class StepContext:
     max_attempts: int = 1
 
 
-StepExecutor = Callable[[StepContext], dict[str, Any]]
-"""执行器协议：返回 checkpoint payload dict；失败抛 :class:`StepFailure`。"""
+StepApply = Callable[[Session], None]
+
+
+@dataclass(frozen=True)
+class PreparedStepResult:
+    """事务外已计算的步骤结果。
+
+    ``apply`` 只接收 Runner 提供的 SQLAlchemy ``Session``，必须保持短小、
+    幂等，并且只能 ``flush``，不得 ``commit``。Runner 会在获得原子租约
+    写栅栏后，将其与 checkpoint、step、progress 和 event 放在同一事务提交。
+    """
+
+    checkpoint: dict[str, Any]
+    apply: StepApply
+
+
+StepExecutionResult = dict[str, Any] | PreparedStepResult
+StepExecutor = Callable[[StepContext], StepExecutionResult]
+"""执行器协议：返回 checkpoint dict 或 PreparedStepResult；失败抛 StepFailure。"""
 
 
 class JobRunner:
@@ -78,7 +98,11 @@ class JobRunner:
         lease_ttl: timedelta = DEFAULT_LEASE_TTL,
         backoff: Callable[[int], timedelta] = backoff_delay,
         on_cancelled: Callable[[str], None] | None = None,
+        on_failed: Callable[[str], None] | None = None,
+        max_parallel_steps: int = 1,
     ) -> None:
+        if isinstance(max_parallel_steps, bool) or max_parallel_steps < 1:
+            raise ValueError("max_parallel_steps 必须是 >= 1 的整数")
         self.session_factory = session_factory
         self.executors = dict(executors)
         self.worker_id = worker_id
@@ -88,6 +112,8 @@ class JobRunner:
         self.lease_ttl = lease_ttl
         self.backoff = backoff
         self.on_cancelled = on_cancelled
+        self.on_failed = on_failed
+        self.max_parallel_steps = max_parallel_steps
         self._stop_event = threading.Event()
 
     def _store(self, session: Session) -> JobStore:
@@ -120,7 +146,11 @@ class JobRunner:
     def _maintenance(self) -> None:
         with self.session_factory() as session, session.begin():
             self._store(session).requeue_due_retries()
-        recover_expired_jobs(self.session_factory, now=self.now)
+        report = recover_expired_jobs(self.session_factory, now=self.now)
+        for job_id in report.cancelled_jobs:
+            self._notify_cancelled(job_id)
+        for job_id in report.failed_final_jobs:
+            self._notify_failed(job_id)
 
     # -------------------------------------------------------------- 单任务
 
@@ -166,13 +196,87 @@ class JobRunner:
             store.prepare_claimed(lease)
         return lease, claimed_type
 
+
+    @staticmethod
+    def _parallel_policy(payload: Mapping[str, Any] | None) -> tuple[int | None, set[str] | None, str]:
+        """从冻结 payload 读取并行上限、白名单与前缀作用域。"""
+        if not isinstance(payload, Mapping):
+            return None, None, "discovery_*"
+        control = payload.get("execution_control")
+        if isinstance(control, Mapping):
+            raw_max = control.get("max_parallel_steps")
+            allow = control.get("parallelizable_step_ids")
+            allowlist = (
+                {item for item in allow if isinstance(item, str)}
+                if isinstance(allow, list)
+                else None
+            )
+            max_parallel = raw_max if isinstance(raw_max, int) and raw_max >= 1 else None
+            return max_parallel, allowlist, "discovery_*"
+        parallel_execution = payload.get("parallel_execution")
+        if isinstance(parallel_execution, Mapping):
+            raw_max = parallel_execution.get("max_parallel")
+            scope = parallel_execution.get("scope")
+            if not isinstance(scope, str) or not scope.strip():
+                scope = "discovery_*"
+            max_parallel = raw_max if isinstance(raw_max, int) and raw_max >= 1 else None
+            return max_parallel, None, scope
+        return None, None, "discovery_*"
+
+    def _effective_parallel_limit(
+        self, payload: Mapping[str, Any] | None
+    ) -> tuple[int, set[str] | None, str]:
+        payload_max, allowlist, scope = self._parallel_policy(payload)
+        if self.max_parallel_steps <= 1:
+            # Runner 默认串行；仅当任务冻结了 execution_control 时允许 payload 提升并行。
+            if (
+                isinstance(payload, Mapping)
+                and isinstance(payload.get("execution_control"), Mapping)
+                and isinstance(payload_max, int)
+                and payload_max > 1
+            ):
+                return payload_max, allowlist, scope
+            return 1, allowlist, scope
+        if isinstance(payload_max, int):
+            return min(self.max_parallel_steps, payload_max), allowlist, scope
+        return self.max_parallel_steps, allowlist, scope
+
+    def _select_parallel_wave(
+        self,
+        store: JobStore,
+        job_id: str,
+        payload: Mapping[str, Any] | None,
+    ) -> list[Any] | None:
+        limit, allowlist, scope = self._effective_parallel_limit(payload)
+        if limit <= 1:
+            return None
+        runnables = store.list_runnable_steps(job_id)
+        if len(runnables) <= 1:
+            return None
+
+        def eligible(step: Any) -> bool:
+            if step.waiting_user_kind is not None:
+                return False
+            if allowlist is not None:
+                return step.step_id in allowlist
+            return fnmatch.fnmatchcase(step.step_id, scope)
+
+        if not eligible(runnables[0]):
+            return None
+        wave = [step for step in runnables if eligible(step)][:limit]
+        if len(wave) <= 1:
+            return None
+        return wave
+
     def _run_claimed(self, lease: JobLease, job_type: str) -> None:
         while True:
             lease = self._renew_if_due(lease)
             cancelled_at_boundary = False
+            failed_at_boundary = False
             terminal_at_boundary = False
             context: StepContext | None = None
             step_id: str | None = None
+            parallel_contexts: list[StepContext] | None = None
             with self.session_factory() as session, session.begin():
                 store = self._store(session)
                 status = store.job_status(lease.job_id)
@@ -187,6 +291,7 @@ class JobRunner:
                         if store.all_steps_terminal(lease.job_id):
                             if store.any_step_failed(lease.job_id):
                                 store.finish_failure(lease)
+                                failed_at_boundary = True
                             else:
                                 store.finish_success(lease)
                             cancelled_at_boundary = (
@@ -204,33 +309,76 @@ class JobRunner:
                                 awaiting_user=step.waiting_user_kind,
                             )
                             return
-                        started = store.start_step(lease, step.step_id)
-                        last_checkpoint = store.get_last_checkpoint(
-                            lease.job_id, started.step_id
+                        payload_preview = self._job_payload(store, lease.job_id)
+                        wave = self._select_parallel_wave(
+                            store, lease.job_id, payload_preview
                         )
-                        context = StepContext(
-                            job_id=lease.job_id,
-                            job_type=job_type,
-                            job_payload=self._job_payload(store, lease.job_id),
-                            step_id=started.step_id,
-                            name=started.name,
-                            attempt=started.attempt,
-                            last_checkpoint_id=(
-                                last_checkpoint[0] if last_checkpoint else None
-                            ),
-                            last_checkpoint=(
-                                last_checkpoint[1] if last_checkpoint else None
-                            ),
-                            max_attempts=started.max_attempts,
-                        )
-                        step_id = started.step_id
+                        parallel_contexts: list[StepContext] | None
+                        if wave is not None:
+                            parallel_contexts = []
+                            for wave_step in wave:
+                                started_wave = store.start_step(lease, wave_step.step_id)
+                                last_checkpoint = store.get_last_checkpoint(
+                                    lease.job_id, started_wave.step_id
+                                )
+                                parallel_contexts.append(
+                                    StepContext(
+                                        job_id=lease.job_id,
+                                        job_type=job_type,
+                                        job_payload=payload_preview,
+                                        step_id=started_wave.step_id,
+                                        name=started_wave.name,
+                                        attempt=started_wave.attempt,
+                                        last_checkpoint_id=(
+                                            last_checkpoint[0]
+                                            if last_checkpoint
+                                            else None
+                                        ),
+                                        last_checkpoint=(
+                                            last_checkpoint[1]
+                                            if last_checkpoint
+                                            else None
+                                        ),
+                                        max_attempts=started_wave.max_attempts,
+                                    )
+                                )
+                            context = parallel_contexts[0]
+                            step_id = parallel_contexts[0].step_id
+                        else:
+                            parallel_contexts = None
+                            started = store.start_step(lease, step.step_id)
+                            last_checkpoint = store.get_last_checkpoint(
+                                lease.job_id, started.step_id
+                            )
+                            context = StepContext(
+                                job_id=lease.job_id,
+                                job_type=job_type,
+                                job_payload=payload_preview,
+                                step_id=started.step_id,
+                                name=started.name,
+                                attempt=started.attempt,
+                                last_checkpoint_id=(
+                                    last_checkpoint[0] if last_checkpoint else None
+                                ),
+                                last_checkpoint=(
+                                    last_checkpoint[1] if last_checkpoint else None
+                                ),
+                                max_attempts=started.max_attempts,
+                            )
+                            step_id = started.step_id
             if cancelled_at_boundary:
                 self._notify_cancelled(lease.job_id)
                 return
             if terminal_at_boundary:
+                if failed_at_boundary:
+                    self._notify_failed(lease.job_id)
                 return
             if context is None or step_id is None:
                 return
+            if parallel_contexts is not None and len(parallel_contexts) > 1:
+                if self._run_parallel_wave(lease, job_type, parallel_contexts):
+                    return
+                continue
             # 执行器在事务外运行：不持有写锁（执行时间超出租约由恢复器兜底）
             try:
                 executor = self.executors.get(job_type)
@@ -242,11 +390,15 @@ class JobRunner:
                     )
                 with self._lease_heartbeat(lease) as lease_ref:
                     try:
-                        checkpoint_payload = executor(context)
+                        step_result = executor(context)
                     finally:
                         # 失败提交也必须使用心跳期间刷新的租约到期时间。
                         lease = lease_ref[0]
             except ProcessDeath:
+                raise
+            except LeaseLostError:
+                # 执行权已转移时不得把当前 worker 的结果解释为步骤失败；
+                # 外层只丢弃结果，后续由租约恢复流程接管。
                 raise
             except StepAwaitingUser as waiting:
                 lease = self._renew_if_due(lease)
@@ -262,6 +414,8 @@ class JobRunner:
                 outcome = self._commit_step_failure(lease, step_id, failure)
                 if outcome.job_state == "cancelled":
                     self._notify_cancelled(lease.job_id)
+                elif outcome.job_state in {"failed", "failed_final"}:
+                    self._notify_failed(lease.job_id)
                 return
             except Exception:  # 意外异常按 fatal 处理，避免无限重试
                 logger.exception("任务 %s 步骤 %s 意外失败", lease.job_id, step_id)
@@ -273,8 +427,157 @@ class JobRunner:
                 outcome = self._commit_step_failure(lease, step_id, failure)
                 if outcome.job_state == "cancelled":
                     self._notify_cancelled(lease.job_id)
+                elif outcome.job_state in {"failed", "failed_final"}:
+                    self._notify_failed(lease.job_id)
                 return
-            self._commit_step_success(lease, step_id, checkpoint_payload)
+            try:
+                self._commit_step_success(lease, step_id, step_result)
+            except LeaseLostError:
+                raise
+            except StepFailure as failure:
+                outcome = self._commit_step_failure(lease, step_id, failure)
+                if outcome.job_state == "cancelled":
+                    self._notify_cancelled(lease.job_id)
+                elif outcome.job_state in {"failed", "failed_final"}:
+                    self._notify_failed(lease.job_id)
+                return
+            except Exception:
+                logger.exception(
+                    "任务 %s 步骤 %s 提交结果失败", lease.job_id, step_id
+                )
+                failure = StepFailure(
+                    retryable=False,
+                    error_code=EXECUTOR_ERROR_CODE,
+                    detail="任务结果写入失败，请重试或联系维护人员。",
+                )
+                outcome = self._commit_step_failure(lease, step_id, failure)
+                if outcome.job_state == "cancelled":
+                    self._notify_cancelled(lease.job_id)
+                elif outcome.job_state in {"failed", "failed_final"}:
+                    self._notify_failed(lease.job_id)
+                return
+    def _run_parallel_wave(
+        self,
+        lease: JobLease,
+        job_type: str,
+        contexts: Sequence[StepContext],
+    ) -> bool:
+        """在同一租约下并行执行独立步骤波次；返回 True 表示任务应停止。"""
+        executor = self.executors.get(job_type)
+        if executor is None:
+            failure = StepFailure(
+                retryable=False,
+                error_code=EXECUTOR_MISSING_CODE,
+                detail="当前任务暂时无法执行，请联系维护人员检查任务配置。",
+            )
+            outcome = self._commit_step_failure(
+                lease, contexts[0].step_id, failure, settle_job=True
+            )
+            if outcome.job_state == "cancelled":
+                self._notify_cancelled(lease.job_id)
+            elif outcome.job_state in {"failed", "failed_final"}:
+                self._notify_failed(lease.job_id)
+            return True
+
+        results: dict[str, tuple[str, Any]] = {}
+        process_death: ProcessDeath | None = None
+        try:
+            with self._lease_heartbeat(lease) as lease_ref:
+                try:
+                    with ThreadPoolExecutor(max_workers=len(contexts)) as pool:
+                        future_map = {
+                            pool.submit(executor, ctx): ctx for ctx in contexts
+                        }
+                        for future in as_completed(future_map):
+                            ctx = future_map[future]
+                            try:
+                                result = future.result()
+                                # Persist completed reads before slower siblings finish.
+                                self._commit_step_success(lease_ref[0], ctx.step_id, result)
+                                results[ctx.step_id] = ("ok", None)
+                            except ProcessDeath as death:
+                                # 排空同波其余 future：成功结果独立提交，
+                                # 死亡步骤保持 running，交由租约恢复器收敛。
+                                process_death = death
+                            except LeaseLostError:
+                                raise
+                            except StepFailure as failure:
+                                results[ctx.step_id] = ("fail", failure)
+                            except Exception:
+                                logger.exception(
+                                    "任务 %s 并行步骤 %s 意外失败",
+                                    lease.job_id,
+                                    ctx.step_id,
+                                )
+                                results[ctx.step_id] = (
+                                    "fail",
+                                    StepFailure(
+                                        retryable=False,
+                                        error_code=EXECUTOR_ERROR_CODE,
+                                        detail="任务执行遇到系统异常，请稍后重试或联系维护人员。",
+                                    ),
+                                )
+                finally:
+                    lease = lease_ref[0]
+        except LeaseLostError:
+            raise
+
+        with self.session_factory() as session, session.begin():
+            status = self._store(session).job_status(lease.job_id)
+            cancelled = status.cancel_requested or status.state == "cancel_requested"
+            if cancelled:
+                self._store(session).cancel_at_boundary(lease)
+        if cancelled:
+            self._notify_cancelled(lease.job_id)
+            return True
+
+        if process_death is not None:
+            # 已提交成功步骤；未入结果的死亡步骤保持 running，由恢复器重置。
+            raise process_death
+
+        failures = [
+            (ctx.step_id, results[ctx.step_id][1])
+            for ctx in sorted(contexts, key=lambda item: item.step_id)
+            if results.get(ctx.step_id, ("ok", None))[0] == "fail"
+        ]
+        if not failures:
+            return False
+
+        had_fatal = False
+        had_retryable = False
+        for index, (step_id, failure) in enumerate(failures):
+            is_last = index == len(failures) - 1
+            settle = is_last
+            # 非最后一次失败先保留租约，避免其余 running 成为孤儿。
+            outcome = self._commit_step_failure(
+                lease,
+                step_id,
+                failure,
+                settle_job=settle,
+            )
+            if outcome.job_state == "cancelled":
+                self._notify_cancelled(lease.job_id)
+                return True
+            if outcome.step_state == "failed_final":
+                had_fatal = True
+            if outcome.step_state == "failed_retryable":
+                had_retryable = True
+            if settle and outcome.job_state in {"failed", "failed_final"}:
+                self._notify_failed(lease.job_id)
+                return True
+            if settle and outcome.job_state == "failed_retryable":
+                return True
+
+        if had_fatal:
+            lease = self._renew_if_due(lease)
+            with self.session_factory() as session, session.begin():
+                self._store(session).finish_failure(lease)
+            self._notify_failed(lease.job_id)
+            return True
+        if had_retryable:
+            # 理论上最后一次 settle 已转 failed_retryable；兜底停止。
+            return True
+        return False
 
     @contextmanager
     def _lease_heartbeat(self, lease: JobLease) -> Iterator[list[JobLease]]:
@@ -335,15 +638,53 @@ class JobRunner:
                     f"任务 {lease.job_id} 执行期间租约续期失败，结果已丢弃"
                 )
 
-    def _commit_step_success(self, lease: JobLease, step_id: str, checkpoint: dict) -> None:
+    def _commit_step_success(
+        self,
+        lease: JobLease,
+        step_id: str,
+        result: StepExecutionResult,
+    ) -> None:
         lease = self._renew_if_due(lease)
         with self.session_factory() as session, session.begin():
-            self._store(session).complete_step(
-                lease, step_id, checkpoint_payload=checkpoint
+            store = self._store(session)
+            store.acquire_step_commit(lease, step_id)
+            if isinstance(result, PreparedStepResult):
+                self._apply_without_commit(session, result.apply)
+                # SQLite 在领域写事务期间排斥恢复器写入；提交前刷新租约，
+                # 避免长 apply 完成后仍以事务开始时的过期时间校验自身。
+                if not store.renew_lease(lease):
+                    raise LeaseLostError(
+                        f"任务 {lease.job_id} 提交前无法确认执行权"
+                    )
+                checkpoint = result.checkpoint
+            else:
+                checkpoint = result
+            store.complete_step_after_commit_fence(
+                lease,
+                step_id,
+                checkpoint_payload=checkpoint,
             )
 
+    @staticmethod
+    def _apply_without_commit(session: Session, apply: StepApply) -> None:
+        """执行领域写入回调，并拒绝回调提前提交 Runner 事务。"""
+
+        def reject_commit(_session: Session) -> None:
+            raise RuntimeError("PreparedStepResult.apply 不得调用 Session.commit()")
+
+        event.listen(session, "before_commit", reject_commit)
+        try:
+            apply(session)
+        finally:
+            event.remove(session, "before_commit", reject_commit)
+
     def _commit_step_failure(
-        self, lease: JobLease, step_id: str, failure: StepFailure
+        self,
+        lease: JobLease,
+        step_id: str,
+        failure: StepFailure,
+        *,
+        settle_job: bool = True,
     ) -> StepFailureOutcome:
         lease = self._renew_if_due(lease)
         with self.session_factory() as session, session.begin():
@@ -353,6 +694,7 @@ class JobRunner:
                 error_code=failure.error_code,
                 retryable=failure.retryable,
                 detail=failure.detail,
+                settle_job=settle_job,
             )
 
     def _notify_cancelled(self, job_id: str) -> None:
@@ -364,6 +706,15 @@ class JobRunner:
         except Exception:
             # Job 状态已提交；启动扫描会再次收敛投影，不能让回调故障停掉通用 worker。
             logger.exception("任务 %s 取消后的领域状态投影失败", job_id)
+
+    def _notify_failed(self, job_id: str) -> None:
+        """在任务终败事务提交后投影领域运行终态。"""
+        if self.on_failed is None:
+            return
+        try:
+            self.on_failed(job_id)
+        except Exception:
+            logger.exception("任务 %s 失败后的领域状态投影失败", job_id)
 
     def _job_payload(self, store: JobStore, job_id: str) -> dict[str, Any]:
         job = store.get_job(job_id)

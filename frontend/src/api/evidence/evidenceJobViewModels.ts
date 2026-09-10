@@ -25,6 +25,8 @@ export interface EvidenceJobEventView {
 
 export interface EvidenceJobStatusView {
   jobId: string;
+  isTargetedReview?: boolean;
+  isPageReview?: boolean;
   state: string;
   stateLabel: string;
   cancelRequested: boolean;
@@ -61,7 +63,37 @@ export interface EvidenceJobProgressView {
 
 export interface EvidenceJobDetailView {
   status: EvidenceJobStatusView;
-  progress: EvidenceJobProgressView;
+  progress: EvidenceJobProgressView | null;
+}
+
+/** 页面视觉核验任务（修订级投影）：组件只消费中文业务字段与稳定机器状态。 */
+export interface SelectiveVisionTaskView {
+  evidenceProcessingRevisionId: string;
+  found: boolean;
+  jobId: string | null;
+  state: string | null;
+  stateLabel: string;
+  cancelRequested: boolean;
+  progressCompleted: number;
+  progressTotal: number;
+  recoveryAction: string;
+  canRetry: boolean;
+  canCancel: boolean;
+  eligiblePageCount: number | null;
+  skippedPageCount: number | null;
+  observationPageCount: number | null;
+  closedPageCount: number | null;
+  closedReasonLabel: string | null;
+  failedScopeLabel: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface SelectiveVisionTaskActionView {
+  jobId: string;
+  state: string;
+  stateLabel: string;
+  changed: boolean;
 }
 
 function record(value: unknown, path: string): Record<string, unknown> {
@@ -107,6 +139,8 @@ export function decodeEvidenceJobStatus(payload: unknown): EvidenceJobStatusView
   const row = record(payload, "task");
   return {
     jobId: stringValue(row, "job_id", "task"),
+    isTargetedReview: optionalStringValue(row, "job_type", "task") === "r3_targeted_page_review",
+    isPageReview: optionalStringValue(row, "job_type", "task") === "r3_page_review",
     state: stringValue(row, "state", "task"),
     stateLabel: stringValue(row, "state_label", "task"),
     cancelRequested: booleanValue(row, "cancel_requested", "task"),
@@ -140,6 +174,95 @@ export function decodeEvidenceJobStatus(payload: unknown): EvidenceJobStatusView
         progressTotal: numberValue(event, "progress_total", `task.events[${index}]`),
       };
     }),
+  };
+}
+
+function optionalStringValue(
+  row: Record<string, unknown>,
+  key: string,
+  path: string,
+): string | null {
+  const value = row[key];
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") {
+    throw new EvidenceDecodeError(`${path}.${key} 不是有效的文字内容。`);
+  }
+  return value;
+}
+
+function optionalNumberValue(
+  row: Record<string, unknown>,
+  key: string,
+  path: string,
+): number | null {
+  const value = row[key];
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new EvidenceDecodeError(`${path}.${key} 不是有效数量。`);
+  }
+  return value;
+}
+
+export function decodeSelectiveVisionTask(
+  payload: unknown,
+): SelectiveVisionTaskView {
+  const row = record(payload, "visionTask");
+  return {
+    evidenceProcessingRevisionId: stringValue(
+      row,
+      "evidence_processing_revision_id",
+      "visionTask",
+    ),
+    found: booleanValue(row, "found", "visionTask"),
+    jobId: optionalStringValue(row, "job_id", "visionTask"),
+    state: optionalStringValue(row, "state", "visionTask"),
+    stateLabel: stringValue(row, "state_label", "visionTask"),
+    cancelRequested: booleanValue(row, "cancel_requested", "visionTask"),
+    progressCompleted: numberValue(row, "progress_completed", "visionTask"),
+    progressTotal: numberValue(row, "progress_total", "visionTask"),
+    recoveryAction: stringValue(row, "recovery_action", "visionTask"),
+    canRetry: booleanValue(row, "can_retry", "visionTask"),
+    canCancel: booleanValue(row, "can_cancel", "visionTask"),
+    eligiblePageCount: optionalNumberValue(
+      row,
+      "eligible_page_count",
+      "visionTask",
+    ),
+    skippedPageCount: optionalNumberValue(
+      row,
+      "skipped_page_count",
+      "visionTask",
+    ),
+    observationPageCount: optionalNumberValue(
+      row,
+      "observation_page_count",
+      "visionTask",
+    ),
+    closedPageCount: optionalNumberValue(row, "closed_page_count", "visionTask"),
+    closedReasonLabel: optionalStringValue(
+      row,
+      "closed_reason_label",
+      "visionTask",
+    ),
+    failedScopeLabel: optionalStringValue(
+      row,
+      "failed_scope_label",
+      "visionTask",
+    ),
+    createdAt: optionalStringValue(row, "created_at", "visionTask"),
+    updatedAt: optionalStringValue(row, "updated_at", "visionTask"),
+  };
+}
+
+export function decodeSelectiveVisionTaskAction(
+  payload: unknown,
+): SelectiveVisionTaskActionView {
+  const row = record(payload, "visionTaskAction");
+  return {
+    jobId: stringValue(row, "job_id", "visionTaskAction"),
+    state: stringValue(row, "state", "visionTaskAction"),
+    stateLabel: stringValue(row, "state_label", "visionTaskAction"),
+    changed: booleanValue(row, "changed", "visionTaskAction"),
   };
 }
 

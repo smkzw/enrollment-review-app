@@ -137,7 +137,9 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
   useEffect(() => {
     if (
       sessionStatus !== "success" ||
-      !["queued", "running", "recovering"].includes(jobState ?? "")
+      !["queued", "running", "recovering", "failed_retryable"].includes(
+        jobState ?? "",
+      )
     ) {
       return;
     }
@@ -370,6 +372,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
 
   if (
     currentSession.recoveryCheckpointId !== null &&
+    ["resumable", "failed_final"].includes(currentSession.state) &&
     currentSession.awaitingUser !== "review" &&
     currentSession.awaitingUser !== "identity"
   ) {

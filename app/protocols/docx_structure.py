@@ -48,7 +48,7 @@ from .ingestion import (
 )
 
 PARSER_NAME = "docx-ooxml"
-PARSER_VERSION = "1.3.0"
+PARSER_VERSION = "1.4.0"
 
 # OOXML 限定名
 _W_P = qn("w:p")
@@ -68,6 +68,8 @@ _W_NUMID = qn("w:numId")
 _W_SECTPR = qn("w:sectPr")
 _W_PPR = qn("w:pPr")
 _W_PSTYLE = qn("w:pStyle")
+_W_NAME = qn("w:name")
+_W_OUTLINE_LVL = qn("w:outlineLvl")
 _W_VAL = qn("w:val")
 _W_INS = qn("w:ins")
 _W_DEL = qn("w:del")
@@ -137,6 +139,11 @@ class StructureBlock(BaseModel):
     kind: BlockKind
     text: str
     style: str | None = None
+    # Paragraph style metadata: ``style`` remains the raw style ID for
+    # backwards compatibility; these fields retain the human-readable name
+    # and effective outline level from styles.xml.
+    style_name: str | None = None
+    outline_level: int | None = None
     numbering: NumberingRef | None = None
     # 段落/嵌套表所在单元格的完整祖先 (row, col, ...) 链；body 顶层内容为 None。
     table_path: tuple[int, ...] | None = None
@@ -158,7 +165,7 @@ class StructureExtraction:
 
 
 class StructureExtractionError(SourceIngestionError):
-    """DOCX 结构提取失败（格式错误或零内容）。"""
+    """DOCX 结构提取失败（格式错误、解析失败或零内容）。"""
 
 
 def _int_attr(element, attr_qname: str) -> int | None:
@@ -348,6 +355,101 @@ def _styles_element(document):
         return None
 
 
+@dataclass(frozen=True)
+class _StyleMetadata:
+    """Resolved paragraph-style metadata from ``styles.xml``.
+
+    ``style_name`` is the name declared by the concrete style.  Numbering and
+    outline level are effective values: when the concrete style omits them,
+    they are inherited through ``w:basedOn``.
+    """
+
+    style_name: str | None
+    based_on: str | None
+    numbering: tuple[int, int] | None
+    outline_level: int | None
+
+
+def _style_metadata(document) -> dict[str, _StyleMetadata]:
+    """解析 ``styles.xml`` 中的段落样式名称和有效结构元数据。
+
+    ``w:outlineLvl`` 与 ``w:numPr`` 都位于样式的 ``w:pPr`` 下；它们缺失时
+    沿 ``w:basedOn`` 样式链继承。样式名称不继承，保留段落实际引用样式
+    自己声明的 ``w:name``。循环继承不会抛出异常，而是只使用循环中各样式
+    自己明确声明的值。
+    """
+    root = _styles_element(document)
+    if root is None:
+        return {}
+
+    styles: dict[str, _StyleMetadata] = {}
+    for style_el in root.findall(_W_STYLE):
+        style_id = style_el.get(_W_STYLE_ID)
+        if style_id is None:
+            continue
+
+        name_el = style_el.find(_W_NAME)
+        style_name = name_el.get(_W_VAL) if name_el is not None else None
+        based_on_el = style_el.find(_W_BASED_ON)
+        based_on = based_on_el.get(_W_VAL) if based_on_el is not None else None
+
+        numbering: tuple[int, int] | None = None
+        outline_level: int | None = None
+        ppr = style_el.find(_W_PPR)
+        if ppr is not None:
+            numpr = ppr.find(_W_NUMPR)
+            if numpr is not None:
+                numid_el = numpr.find(_W_NUMID)
+                num_id = _int_attr(numid_el, _W_VAL) if numid_el is not None else None
+                if num_id is not None and num_id != 0:
+                    ilvl_el = numpr.find(_W_ILVL)
+                    level = _int_attr(ilvl_el, _W_VAL) if ilvl_el is not None else 0
+                    numbering = (num_id, level if level is not None else 0)
+            outline_el = ppr.find(_W_OUTLINE_LVL)
+            if outline_el is not None:
+                outline_level = _int_attr(outline_el, _W_VAL)
+
+        styles[style_id] = _StyleMetadata(
+            style_name=style_name,
+            based_on=based_on,
+            numbering=numbering,
+            outline_level=outline_level,
+        )
+
+    resolved: dict[str, _StyleMetadata] = {}
+
+    def resolve(style_id: str, seen: frozenset[str]) -> _StyleMetadata | None:
+        if style_id in resolved:
+            return resolved[style_id]
+        if style_id in seen:
+            return None
+        own = styles.get(style_id)
+        if own is None:
+            return None
+
+        inherited = (
+            resolve(own.based_on, seen | {style_id})
+            if own.based_on is not None
+            else None
+        )
+        result = _StyleMetadata(
+            style_name=own.style_name,
+            based_on=own.based_on,
+            numbering=own.numbering
+            if own.numbering is not None
+            else (inherited.numbering if inherited is not None else None),
+            outline_level=own.outline_level
+            if own.outline_level is not None
+            else (inherited.outline_level if inherited is not None else None),
+        )
+        resolved[style_id] = result
+        return result
+
+    for style_id in styles:
+        resolve(style_id, frozenset())
+    return resolved
+
+
 def _style_numbering_definitions(document) -> dict[str, tuple[int, int]]:
     """从 ``styles.xml`` 解析段落样式的编号引用，含 ``w:basedOn`` 样式链继承。
 
@@ -355,61 +457,38 @@ def _style_numbering_definitions(document) -> dict[str, tuple[int, int]]:
     的样式。Word 常把自动编号定义在段落样式上，段落本身不带 ``w:numPr``，
     必须沿样式继承链才能还原官方编号（章节标题编号等）。
     """
-    root = _styles_element(document)
-    if root is None:
-        return {}
-
-    styles: dict[str, dict] = {}
-    for style_el in root.findall(_W_STYLE):
-        style_id = style_el.get(_W_STYLE_ID)
-        if style_id is None:
-            continue
-        ppr = style_el.find(_W_PPR)
-        based_on = None
-        num_id = None
-        level = 0
-        based_on_el = style_el.find(_W_BASED_ON)
-        if based_on_el is not None:
-            based_on = based_on_el.get(_W_VAL)
-        if ppr is not None:
-            numpr = ppr.find(_W_NUMPR)
-            if numpr is not None:
-                numid_el = numpr.find(_W_NUMID)
-                ilvl_el = numpr.find(_W_ILVL)
-                num_id = _int_attr(numid_el, _W_VAL) if numid_el is not None else None
-                level = _int_attr(ilvl_el, _W_VAL) if ilvl_el is not None else 0
-        styles[style_id] = {"based_on": based_on, "num_id": num_id, "level": level}
-
-    resolved: dict[str, tuple[int, int] | None] = {}
-
-    def resolve(style_id: str, seen: frozenset[str]) -> tuple[int, int] | None:
-        if style_id in resolved:
-            return resolved[style_id]
-        if style_id in seen:
-            return None
-        info = styles.get(style_id)
-        if info is None:
-            resolved[style_id] = None
-            return None
-        if info["num_id"] is not None and info["num_id"] != 0:
-            result: tuple[int, int] = (info["num_id"], info["level"])
-            resolved[style_id] = result
-            return result
-        based_on = info["based_on"]
-        if based_on is not None:
-            inherited = resolve(based_on, seen | {style_id})
-            resolved[style_id] = inherited
-            return inherited
-        resolved[style_id] = None
-        return None
-
-    for style_id in styles:
-        resolve(style_id, frozenset())
     return {
-        style_id: result
-        for style_id, result in resolved.items()
-        if result is not None
+        style_id: metadata.numbering
+        for style_id, metadata in _style_metadata(document).items()
+        if metadata.numbering is not None
     }
+
+
+def _paragraph_style_metadata(
+    p_el, style_metadata: dict[str, _StyleMetadata]
+) -> tuple[str | None, str | None, int | None]:
+    """Return ``(style_id, style_name, effective_outline_level)`` for a paragraph.
+
+    A paragraph-level ``w:outlineLvl`` is more specific than the value from its
+    paragraph style. An invalid explicit value is treated as unknown rather
+    than silently promoted to the inherited level.
+    """
+    style_id = _para_style(p_el)
+    metadata = style_metadata.get(style_id) if style_id is not None else None
+    ppr = p_el.find(_W_PPR)
+    if ppr is not None:
+        outline_el = ppr.find(_W_OUTLINE_LVL)
+        if outline_el is not None:
+            return (
+                style_id,
+                metadata.style_name if metadata is not None else None,
+                _int_attr(outline_el, _W_VAL),
+            )
+    return (
+        style_id,
+        metadata.style_name if metadata is not None else None,
+        metadata.outline_level if metadata is not None else None,
+    )
 
 
 def _effective_numbering(num_id, level, abstracts, nums) -> NumberingRef:
@@ -448,7 +527,13 @@ def _effective_numbering(num_id, level, abstracts, nums) -> NumberingRef:
 class _Extractor:
     """一次提取的可变状态：全局块序、计数、编号上下文与异常。"""
 
-    def __init__(self, abstracts, nums, style_numbering: dict[str, tuple[int, int]] | None = None) -> None:
+    def __init__(
+        self,
+        abstracts,
+        nums,
+        style_numbering: dict[str, tuple[int, int]] | None = None,
+        style_metadata: dict[str, _StyleMetadata] | None = None,
+    ) -> None:
         self.blocks: list[StructureBlock] = []
         self.paragraph_count = 0
         self.table_count = 0
@@ -458,6 +543,7 @@ class _Extractor:
         self.abstracts = abstracts
         self.nums = nums
         self.style_numbering = style_numbering or {}
+        self.style_metadata = style_metadata or {}
         self.anomalies: list[ExtractionAnomaly] = []
 
     def _next_order(self) -> int:
@@ -528,6 +614,9 @@ class _Extractor:
         section_indexes: tuple[int, ...] | None = None,
     ) -> None:
         text = _para_text(p_el)
+        style_id, style_name, outline_level = _paragraph_style_metadata(
+            p_el, self.style_metadata
+        )
         self.blocks.append(
             StructureBlock(
                 source_ref=source_ref,
@@ -536,7 +625,9 @@ class _Extractor:
                 block_order=self._next_order(),
                 kind=BlockKind.PARAGRAPH,
                 text=text,
-                style=_para_style(p_el),
+                style=style_id,
+                style_name=style_name,
+                outline_level=outline_level,
                 numbering=self._para_numbering(p_el, source_ref),
                 table_path=table_path,
                 tracked_change=_para_tracked_change(p_el),
@@ -894,8 +985,13 @@ def extract_docx_structure(
         ) from exc
 
     abstracts, nums = _numbering_definitions(document)
-    style_numbering = _style_numbering_definitions(document)
-    extractor = _Extractor(abstracts, nums, style_numbering)
+    style_metadata = _style_metadata(document)
+    style_numbering = {
+        style_id: metadata.numbering
+        for style_id, metadata in style_metadata.items()
+        if metadata.numbering is not None
+    }
+    extractor = _Extractor(abstracts, nums, style_numbering, style_metadata)
     _walk_body(document, extractor)
     header_footer_parts = _walk_headers_footers(document, extractor)
 

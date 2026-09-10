@@ -20,6 +20,7 @@ def canonical_hash(value: Any) -> str:
 
 def ocr_page_cache_hash(
     *,
+    page_artifact_id: str,
     source_sha256: str,
     page_number: int,
     ocr_profile_sha256: str,
@@ -32,6 +33,44 @@ def ocr_page_cache_hash(
     This identity belongs to the domain contract so both the pure adapter helper
     and ``OCRPage`` validation use the same canonical payload.  File names and
     timestamps are deliberately excluded.
+
+    ``ocr_page_cache/v2`` binds the identity to the page artifact that owns the
+    OCR result.  A content-key-only identity (v1) let two snapshots sharing the
+    same source bytes reuse one succeeded OCRPage whose ``page_artifact_id``
+    belonged to the first snapshot; every manifest integrity gate then rejects
+    that cross-artifact binding at freeze time.  Scoping the key by artifact
+    keeps retry/replay reuse inside one artifact while each new document
+    version deterministically owns its own succeeded OCRPage.
+    """
+    return hashlib.sha256(
+        canonical_hash(
+            {
+                "cache": "ocr_page_cache/v2",
+                "page_artifact_id": page_artifact_id,
+                "source_sha256": source_sha256,
+                "page_number": page_number,
+                "ocr_profile_sha256": ocr_profile_sha256,
+                "page_input_sha256": page_input_sha256,
+                "layout_parser_version": layout_parser_version,
+                "coordinate_transform_version": coordinate_transform_version,
+            }
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def legacy_ocr_page_cache_hash(
+    *,
+    source_sha256: str,
+    page_number: int,
+    ocr_profile_sha256: str,
+    page_input_sha256: str,
+    layout_parser_version: str | None,
+    coordinate_transform_version: str,
+) -> str:
+    """``ocr_page_cache/v1`` identity (content key only, no artifact binding).
+
+    Kept only so historically persisted OCRPage rows still decode and replay;
+    new writes must use the artifact-scoped :func:`ocr_page_cache_hash`.
     """
     return hashlib.sha256(
         canonical_hash(

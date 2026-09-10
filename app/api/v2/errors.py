@@ -96,6 +96,16 @@ _FIELD_LABELS = {
     "anchor_dates": "锚定日期",
     "due_at": "截止时间",
     "revision": "修订号",
+    "target_kind": "修订对象类型",
+    "target_id": "修订对象编号",
+    "locator_ids": "原文定位",
+    "reason": "修订理由",
+    "operator_id": "操作者",
+    "asserted_object": "被断言对象",
+    "value": "记录值",
+    "unit": "单位",
+    "date_range": "日期范围",
+    "polarity": "肯定或否定",
 }
 
 

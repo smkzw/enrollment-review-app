@@ -13,12 +13,17 @@ from datetime import datetime
 from pydantic import Field, model_validator
 
 from app.api.v2.schemas import _StrictModel
+from app.api.v2.vocabulary import (
+    locator_precision_label,
+    locator_source_layer_label,
+)
 from app.domain.contracts.enums import (
     CorrectionChangeKind,
     OcrRiskReviewDecision,
     ReferencedDocumentOrigin,
     ReferencedDocumentResolutionStatus,
 )
+from app.domain.contracts.evidence_locator import EvidenceLocatorArtifact
 
 # --------------------------------------------------------------------------- 页读取
 
@@ -132,6 +137,55 @@ class CoordinateFrameDTO(_StrictModel):
     page_height: float
     rotation: int
     transform_version: str
+
+
+def locator_dto(locator: EvidenceLocatorArtifact) -> LocatorDTO:
+    """把已通过真实性门禁的定位合同投影为可导航 DTO。"""
+    layer = locator.source_layer.value
+    precision = locator.precision.value
+    return LocatorDTO(
+        locator_id=locator.locator_id,
+        page_artifact_id=locator.page_artifact_id,
+        ocr_page_id=locator.ocr_page_id,
+        source_document_version_id=locator.source_document_version_id,
+        page_number=locator.page_number,
+        source_layer=layer,
+        source_layer_label=locator_source_layer_label(layer),
+        source_text_sha256=locator.source_text_sha256,
+        target_id=locator.target_id,
+        precision=precision,
+        precision_label=locator_precision_label(precision),
+        degradation_reason=locator.degradation_reason,
+        text_start=locator.text_start,
+        text_end=locator.text_end,
+        excerpt=locator.excerpt,
+        disambiguation=locator.disambiguation.value,
+        locator_algorithm_version=locator.locator_algorithm_version,
+        authenticity=locator.authenticity.value,
+        match_confidence=locator.match_confidence,
+        bbox=(
+            BoundingBoxDTO(
+                x0=locator.bbox.x0,
+                y0=locator.bbox.y0,
+                x1=locator.bbox.x1,
+                y1=locator.bbox.y1,
+            )
+            if locator.bbox is not None
+            else None
+        ),
+        coordinate_frame=(
+            CoordinateFrameDTO(
+                space=locator.coordinate_frame.space.value,
+                page_width=locator.coordinate_frame.page_width,
+                page_height=locator.coordinate_frame.page_height,
+                rotation=locator.coordinate_frame.rotation,
+                transform_version=locator.coordinate_frame.transform_version,
+            )
+            if locator.coordinate_frame is not None
+            else None
+        ),
+        coordinate_transform_version=locator.coordinate_transform_version,
+    )
 
 
 class OcrPageDTO(_StrictModel):
@@ -392,6 +446,43 @@ class ProcessingCandidateDTO(_StrictModel):
     candidate_status_label: str
     candidate_event_seq: int = Field(ge=0)
     complete_revision_id: str | None = None
+
+
+class SelectiveVisionTaskDTO(_StrictModel):
+    """页面视觉核验任务的修订级只读投影（用户安全字段）。
+
+    不含模型名、提示词、令牌、内部错误分类、负载或日志文本；中文标签由
+    API 词汇表投影，失败范围只使用任务步骤中文名与页面计数。
+    """
+
+    evidence_processing_revision_id: str
+    found: bool
+    job_id: str | None = None
+    state: str | None = None
+    state_label: str
+    cancel_requested: bool = False
+    progress_completed: int = Field(default=0, ge=0)
+    progress_total: int = Field(default=0, ge=0)
+    recovery_action: str
+    can_retry: bool = False
+    can_cancel: bool = False
+    eligible_page_count: int | None = Field(default=None, ge=0)
+    skipped_page_count: int | None = Field(default=None, ge=0)
+    observation_page_count: int | None = Field(default=None, ge=0)
+    closed_page_count: int | None = Field(default=None, ge=0)
+    closed_reason_label: str | None = None
+    failed_scope_label: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class SelectiveVisionTaskActionDTO(_StrictModel):
+    """页面视觉核验任务的人工动作结果（重试/取消共用）。"""
+
+    job_id: str
+    state: str
+    state_label: str
+    changed: bool
 
 
 class ActivateRequest(_StrictModel):

@@ -467,6 +467,7 @@ def test_ocr_page_requires_matching_raw_text_hash() -> None:
         "page_input_sha256": "d" * 64,
         "ocr_profile_sha256": "a" * 64,
         "cache_key": build_ocr_cache_key(
+            page_artifact_id="artifact-1",
             source_sha256="c" * 64,
             page_number=1,
             ocr_profile_sha256="a" * 64,
@@ -497,6 +498,7 @@ def test_ocr_page_failed_requires_reason() -> None:
             page_input_sha256="d" * 64,
             ocr_profile_sha256="a" * 64,
             cache_key=build_ocr_cache_key(
+                page_artifact_id="a",
                 source_sha256="c" * 64,
                 page_number=1,
                 ocr_profile_sha256="a" * 64,
@@ -525,6 +527,7 @@ def test_ocr_page_cache_status_time_and_risk_ranges_are_closed() -> None:
         "page_input_sha256": "d" * 64,
         "ocr_profile_sha256": "a" * 64,
         "cache_key": build_ocr_cache_key(
+            page_artifact_id="artifact-1",
             source_sha256="c" * 64,
             page_number=1,
             ocr_profile_sha256="a" * 64,
@@ -564,3 +567,45 @@ def test_ocr_page_cache_status_time_and_risk_ranges_are_closed() -> None:
         OCRPage(**{**base, "completed_at": None})
     with pytest.raises(ValidationError, match="早于"):
         OCRPage(**{**base, "completed_at": datetime(2026, 8, 19, 7, 0, 0, tzinfo=UTC)})
+
+
+def test_ocr_page_accepts_legacy_v1_cache_key_but_not_arbitrary_drift() -> None:
+    """历史 v1（仅内容键）行必须仍可解码回放；任意漂移键被拒绝。
+
+    v2 缓存键绑定 ``page_artifact_id``（基线期跨版本缓存命中导致冻结清单
+    跨产物绑定被拒的根因修复）；已持久化的 v1 行不可改写，解码时仍接受。
+    """
+    from hashlib import sha256
+
+    from app.domain.publication import legacy_ocr_page_cache_hash
+
+    raw = "否认高血压病史"
+    legacy_inputs = {
+        "source_sha256": "c" * 64,
+        "page_number": 1,
+        "ocr_profile_sha256": "a" * 64,
+        "page_input_sha256": "d" * 64,
+        "layout_parser_version": None,
+        "coordinate_transform_version": _T,
+    }
+    common = {
+        "ocr_page_id": "page-legacy",
+        "page_artifact_id": "artifact-legacy",
+        "raw_text": raw,
+        "raw_text_sha256": sha256(raw.encode("utf-8")).hexdigest(),
+        "quality": PageQualityMetrics(char_count=len(raw), word_count=1),
+        "status": OCRPageStatus.SUCCEEDED,
+        "started_at": _ts,
+        "completed_at": _ts,
+    }
+    # 历史 v1 键：仍可解码。
+    OCRPage(**common, cache_key=legacy_ocr_page_cache_hash(**legacy_inputs), **legacy_inputs)
+    # 当前 v2 键：绑定页产物身份。
+    OCRPage(**common, cache_key=build_ocr_cache_key(page_artifact_id="artifact-legacy", **legacy_inputs), **legacy_inputs)
+    # 与页产物身份无关的漂移键：拒绝。
+    with pytest.raises(ValidationError, match="缓存键"):
+        OCRPage(
+            **common,
+            cache_key=build_ocr_cache_key(page_artifact_id="other-artifact", **legacy_inputs),
+            **legacy_inputs,
+        )

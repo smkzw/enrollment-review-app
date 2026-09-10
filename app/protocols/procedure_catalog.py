@@ -13,6 +13,7 @@ source wording through its source spans.  Superscript footnote markers are not
 part of a visit or operation name, but scientific notation such as ``10^9``
 must remain intact.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -20,7 +21,7 @@ from datetime import datetime, timezone
 from enum import Enum
 import hashlib
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
 from app.domain.contracts.enums import (
@@ -35,20 +36,20 @@ from app.domain.contracts.protocol_ingestion import (
     FrozenCatalogItem,
     FrozenProtocolCatalog,
     ProtocolSourceSpan,
+    frozen_catalog_content_hash,
+    optional_source_excerpts_for_spans,
 )
 from app.domain.contracts.protocol_metadata import (
     PhaseApplicabilityBlock,
     PhaseApplicabilityGraph,
     PhaseProjection,
 )
-from app.domain.publication import canonical_hash
-
 from .docx_structure import BlockKind, StructureBlock
 from .phase_detection import project_single_phase
 from .section_index import formal_source_span_ids
 
 
-CATALOG_BUILDER_VERSION = "required-procedures/v1"
+CATALOG_BUILDER_VERSION = "required-procedures/v2"
 """Stable implementation marker used in IDs, not a project-specific rule."""
 
 _DEFAULT_FROZEN_AT = datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -56,15 +57,15 @@ _DEFAULT_FROZEN_BY = CATALOG_BUILDER_VERSION
 
 _MARK_RE = re.compile(r"^\s*[\(（]?\s*[xX×]\s*[\)）]?\s*$")
 _CELL_REF_RE = re.compile(r"\.r(?P<row>\d+)\.c(?P<col>\d+)")
-_TRAILING_FOOTNOTE_RE = re.compile(
-    r"\^\d+(?=\s*(?:\^\d+|[\uff09)\]\u3011]|$))"
+_TRAILING_FOOTNOTE_RE = re.compile(r"\^\d+(?=\s*(?:\^\d+|[\uff09)\]\u3011]|$))")
+_DISPLAY_FOOTNOTE_NUMBER_RE = re.compile(
+    r"\^(?P<number>\d+)(?=\s*(?:\^\d+|[\uff09)\]\u3011]|$))"
 )
+_FLOW_NOTE_PREFACE_RE = re.compile(r"^\s*(?:注(?:意)?|说明|备注)\s*[:：]")
 
 _PRE_SCREENING_RE = re.compile(r"(?:预筛|预筛选|pre[\s_-]*screen)", re.I)
 _SCREENING_RE = re.compile(r"(?:筛选|screen(?:ing)?|screening)", re.I)
-_RUN_IN_RE = re.compile(
-    r"(?:导入|洗脱|run[\s_-]*in|runin|run-in|lead[\s_-]*in)", re.I
-)
+_RUN_IN_RE = re.compile(r"(?:导入|洗脱|run[\s_-]*in|runin|run-in|lead[\s_-]*in)", re.I)
 _BASELINE_RE = re.compile(r"(?:基线|随机(?:化)?|baseline|randomi[sz]ation)", re.I)
 _EXPLICIT_POST_BASELINE_RE = re.compile(
     r"(?:提前(?:退出|终止)|早退|退出访视|末次给药后|安全性随访|随访期|"
@@ -322,6 +323,110 @@ def _without_display_footnotes(value: str) -> str:
     return re.sub(r"\s+", " ", cleaned).strip()
 
 
+def _display_footnote_numbers(value: str) -> tuple[int, ...]:
+    """Return trailing display-note numbers without matching ``10^9`` units."""
+
+    return tuple(
+        dict.fromkeys(
+            int(match.group("number"))
+            for match in _DISPLAY_FOOTNOTE_NUMBER_RE.finditer(value)
+        )
+    )
+
+
+def _flow_footnote_refs(
+    blocks: Sequence[StructureBlock],
+    root: StructureBlock,
+) -> dict[int, str]:
+    """Map one flow table's numbered notes to their stable paragraph refs.
+
+    DOCX list numbering carries the note identity even when the visible list
+    number is not repeated in extracted text. Only the first level-zero list
+    immediately following the table is eligible, so later numbered protocol
+    sections cannot be mistaken for table notes.
+    """
+
+    table_orders = [
+        block.block_order
+        for block in blocks
+        if block.source_ref == root.source_ref
+        or block.source_ref.startswith(root.source_ref + ".")
+    ]
+    if not table_orders:
+        return {}
+    after_table = sorted(
+        (
+            block
+            for block in blocks
+            if block.document_part == root.document_part
+            and block.table_path is None
+            and block.block_order > max(table_orders)
+        ),
+        key=lambda block: (block.block_order, block.source_ref),
+    )
+    numbered: list[StructureBlock] = []
+    numbering_id: int | None = None
+    for block in after_table:
+        if block.kind == BlockKind.TABLE:
+            break
+        numbering = block.numbering
+        if not numbered:
+            if numbering is None or numbering.level != 0:
+                if block.text.strip() and not _FLOW_NOTE_PREFACE_RE.match(block.text):
+                    return {}
+                continue
+            numbering_id = numbering.num_id
+        elif (
+            numbering is None
+            or numbering.level != 0
+            or numbering.num_id != numbering_id
+        ):
+            if block.text.strip():
+                break
+            continue
+        numbered.append(block)
+    if not numbered:
+        return {}
+    first_numbering = numbered[0].numbering
+    assert first_numbering is not None
+    start = first_numbering.start or 1
+    return {start + offset: block.source_ref for offset, block in enumerate(numbered)}
+
+
+def _operation_labels_named_by_note(
+    note_text: str,
+    operation_labels: Sequence[str],
+) -> frozenset[str]:
+    """Return table operations explicitly named by a visit-header note.
+
+    A superscript on a merged visit header is usually visit-wide, but some
+    protocols place an operation-specific note there for visual convenience.
+    When the note names a concrete operation from the same table, attaching it
+    to every marked row corrupts provenance.  Longest matches win so a broad
+    label such as ``体重`` does not shadow ``身高和体重``.
+    """
+
+    normalized_note = re.sub(r"\s+", "", note_text).casefold()
+    matches = {
+        label
+        for label in operation_labels
+        if len(normalized_label := re.sub(r"\s+", "", label).casefold()) >= 2
+        and not _is_generic_header(label)
+        and not _is_placeholder_operation(label)
+        and normalized_label in normalized_note
+    }
+    return frozenset(
+        label
+        for label in matches
+        if not any(
+            label != other
+            and re.sub(r"\s+", "", label).casefold()
+            in re.sub(r"\s+", "", other).casefold()
+            for other in matches
+        )
+    )
+
+
 def _normalized_header_key(value: str) -> str:
     return _without_display_footnotes(value).casefold()
 
@@ -379,8 +484,7 @@ def _header_projection(
     effective: dict[tuple[int, int], tuple[str, tuple[str, ...]]] = {}
     for row in range(first_mark_row):
         row_values = [
-            _non_mark_text(cells.get((row, col)))
-            for col in range(1, max_columns)
+            _non_mark_text(cells.get((row, col))) for col in range(1, max_columns)
         ]
         propagate_group = any(
             value
@@ -438,8 +542,7 @@ def _is_non_enrollment_operation(
     if _RANDOMIZATION_ACTION_RE.fullmatch(value):
         return True
     if not _CONCOMITANT_THERAPY_RE.search(value) and (
-        _INVESTIGATIONAL_TREATMENT_RE.search(value)
-        or _VISIT_LOGISTICS_RE.search(value)
+        _INVESTIGATIONAL_TREATMENT_RE.search(value) or _VISIT_LOGISTICS_RE.search(value)
     ):
         return True
     # A D1/randomization column can mix pre-randomization checks with
@@ -525,7 +628,9 @@ def _resolve_context(
     *,
     phase_projection: PhaseProjection | None,
     phase_graph: PhaseApplicabilityGraph | None,
-    source_spans: Sequence[ProtocolSourceSpan] | Mapping[str, ProtocolSourceSpan] | None,
+    source_spans: Sequence[ProtocolSourceSpan]
+    | Mapping[str, ProtocolSourceSpan]
+    | None,
     selected_phase: StudyPhase | None,
 ) -> tuple[
     PhaseProjection | None,
@@ -564,7 +669,9 @@ def _resolve_context(
         try:
             spans = list(spans)  # type: ignore[arg-type]
         except TypeError as exc:
-            raise TypeError("source_spans 必须是 ProtocolSourceSpan 序列或映射") from exc
+            raise TypeError(
+                "source_spans 必须是 ProtocolSourceSpan 序列或映射"
+            ) from exc
     return projection, graph, spans, phase
 
 
@@ -595,7 +702,11 @@ def _validate_phase_context(
             "phase_context_missing",
             "必须提供已建立的 PhaseProjection 或 PhaseApplicabilityGraph",
         )
-    if projection is not None and graph is not None and projection.graph_id != graph.graph_id:
+    if (
+        projection is not None
+        and graph is not None
+        and projection.graph_id != graph.graph_id
+    ):
         raise ProcedureCatalogError(
             "phase_scope_mismatch", "PhaseProjection 不属于给定的期别适用图"
         )
@@ -736,6 +847,7 @@ def _build_instances_for_table(
     spans_by_ref: Mapping[str, ProtocolSourceSpan],
     blocks_by_ref: Mapping[str, StructureBlock],
     snapshot_id: str,
+    footnote_refs: Mapping[int, str],
 ) -> list[_OperationInstance]:
     first_mark_row = min(cell.row for cell in all_marks)
     header = _header_projection(
@@ -824,6 +936,27 @@ def _build_instances_for_table(
     ]
     instances: list[_OperationInstance] = []
     selected_rows = sorted({cell.row for cell in selected_marks})
+    table_operations = tuple(
+        dict.fromkeys(
+            operation
+            for row in selected_rows
+            if (
+                label_result := _operation_label(
+                    cells,
+                    row=row,
+                    mark_columns=sorted(
+                        {
+                            cell.col
+                            for cell in selected_marks
+                            if cell.row == row
+                        }
+                    ),
+                )
+            )
+            for operation in (_without_display_footnotes(label_result[0]),)
+            if not _is_placeholder_operation(operation)
+        )
+    )
     for row in selected_rows:
         row_marks = [cell for cell in selected_marks if cell.row == row]
         all_label_result = _operation_label(
@@ -890,11 +1023,7 @@ def _build_instances_for_table(
                     table_root=root.source_ref,
                 )
             mark_cells = [cell for cell in row_marks if cell.col == visit.column]
-            mark_refs = tuple(
-                ref
-                for cell in mark_cells
-                for ref in cell.source_refs
-            )
+            mark_refs = tuple(ref for cell in mark_cells for ref in cell.source_refs)
             # Formal coverage is checked separately for operation and visit
             # ranges.  A repeated mark glyph is retained when it has a formal
             # locator, but an unalignable/degraded mark cannot mask a missing
@@ -953,8 +1082,57 @@ def _build_instances_for_table(
                 role="标记",
                 required=False,
             )
+            operation_note_numbers = tuple(
+                dict.fromkeys(
+                    number
+                    for ref in operation_refs
+                    if (block := blocks_by_ref.get(ref)) is not None
+                    for number in _display_footnote_numbers(block.text)
+                )
+            )
+            visit_note_numbers: list[int] = []
+            for ref in visit.header_refs:
+                block = blocks_by_ref.get(ref)
+                if block is None:
+                    continue
+                for number in _display_footnote_numbers(block.text):
+                    note_ref = footnote_refs.get(number)
+                    note_block = blocks_by_ref.get(note_ref) if note_ref else None
+                    named_operations = (
+                        _operation_labels_named_by_note(
+                            note_block.text,
+                            table_operations,
+                        )
+                        if note_block is not None
+                        else frozenset()
+                    )
+                    if not named_operations or operation in named_operations:
+                        visit_note_numbers.append(number)
+            display_note_numbers = tuple(
+                dict.fromkeys((*operation_note_numbers, *visit_note_numbers))
+            )
+            note_span_ids = _formal_span_ids(
+                [
+                    footnote_refs[number]
+                    for number in display_note_numbers
+                    if number in footnote_refs
+                ],
+                spans_by_ref=spans_by_ref,
+                blocks_by_ref=blocks_by_ref,
+                snapshot_id=snapshot_id,
+                table_root=root.source_ref,
+                role="流程表注释",
+                required=False,
+            )
             refs = tuple(
-                dict.fromkeys((*operation_span_ids, *visit_span_ids, *mark_span_ids))
+                dict.fromkeys(
+                    (
+                        *operation_span_ids,
+                        *visit_span_ids,
+                        *mark_span_ids,
+                        *note_span_ids,
+                    )
+                )
             )
             instances.append(
                 _OperationInstance(
@@ -1044,7 +1222,9 @@ def build_required_procedure_catalog(
 
     blocks_by_ref = {block.source_ref: block for block in blocks}
     if len(blocks_by_ref) != len(blocks):
-        raise ProcedureCatalogError("source_ref_ambiguous", "结构块 source_ref 必须唯一")
+        raise ProcedureCatalogError(
+            "source_ref_ambiguous", "结构块 source_ref 必须唯一"
+        )
     if snapshot_id is None:
         if graph is not None:
             snapshot_id = graph.snapshot_id
@@ -1118,13 +1298,13 @@ def build_required_procedure_catalog(
                 spans_by_ref=spans_by_ref,
                 blocks_by_ref=blocks_by_ref,
                 snapshot_id=snapshot_id,
+                footnote_refs=_flow_footnote_refs(blocks, root),
             )
         )
     if structural_roots == 0 or not all_instances:
         raise ProcedureCatalogError(
             "flow_table_empty" if structural_roots else "flow_table_missing",
-            "未找到当前选定期别中结构完整且含基线及以前必做"
-            "操作的研究流程表",
+            "未找到当前选定期别中结构完整且含基线及以前必做操作的研究流程表",
         )
 
     # Deduplication is structural: phase + original visit instance + source
@@ -1191,6 +1371,12 @@ def build_required_procedure_catalog(
             source_ids,
         )
         item_id = f"procedure:{_short_digest(*item_key)}"
+        source_excerpts = optional_source_excerpts_for_spans(
+            source_ids,
+            by_id=spans_by_id,
+            by_ref=spans_by_ref,
+            blocks_by_ref=blocks_by_ref,
+        )
         items.append(
             FrozenCatalogItem(
                 item_id=item_id,
@@ -1200,6 +1386,7 @@ def build_required_procedure_catalog(
                 review_stage=instance.visit.stage,
                 position=position,
                 source_span_ids=list(source_ids),
+                source_excerpts=source_excerpts,
             )
         )
 
@@ -1225,9 +1412,8 @@ def build_required_procedure_catalog(
     }
     # The contract hashes the serialized model excluding catalog_sha256.  Use
     # the same exact representation rather than hashing an ad-hoc item list.
-    payload["catalog_sha256"] = canonical_hash(
+    payload["catalog_sha256"] = frozen_catalog_content_hash(
         FrozenProtocolCatalog.model_construct(**payload)
-        .model_dump(mode="json", exclude={"catalog_sha256"})
     )
     return FrozenProtocolCatalog.model_validate(payload)
 

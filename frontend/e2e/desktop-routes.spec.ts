@@ -10,12 +10,13 @@ import {
   openRoute,
   setLayoutStressFactor,
 } from "./helpers";
+import { registerProfileRoutes } from "./profile-evidence-fixtures";
 
 const ROUTES = [
   { hash: "today", title: "今日工作", key: "待处理事项" },
   { hash: "board", title: "项目看板", key: "受试者" },
   { hash: "protocols", title: "方案工作台", key: "首次解构新方案" },
-  { hash: "subjects", title: "受试者与资料", key: "应备证据覆盖" },
+  { hash: "subjects", title: "受试者与资料", key: "首屏重点" },
   { hash: "workbench", title: "入排工作台", key: "规则与判断状态" },
   { hash: "actions", title: "行动中心", key: "行动列表" },
   { hash: "reports", title: "报告", key: "生成报告" },
@@ -27,6 +28,7 @@ test.describe("一级路由", () => {
   for (const route of ROUTES) {
     test(`${route.title} 可达且无页面级横向滚动`, async ({ page }) => {
       const runtimeErrors = collectRuntimeErrors(page);
+      if (route.hash === "subjects") await registerProfileRoutes(page);
       await openRoute(page, `/${route.hash}`);
       await expect(
         page.getByRole("heading", { name: route.title, level: 1 }),
@@ -83,6 +85,7 @@ test.describe("一级路由", () => {
   test("1080P 物理宽度在缩小布局视口压力下无页面级横向滚动", async ({ page }) => {
     test.skip(page.viewportSize()?.width !== 1920, "仅 1080P 桌面项目执行");
     for (const route of ROUTES) {
+      if (route.hash === "subjects") await registerProfileRoutes(page);
       await openRoute(page, `/${route.hash}`);
       await expect(
         page.getByRole("heading", { name: route.title, level: 1 }),
@@ -95,6 +98,7 @@ test.describe("一级路由", () => {
       const visibleText = await page.locator("#main-content").innerText();
       expect(visibleText).not.toMatch(/\bREQ-/);
       expect(visibleText).not.toMatch(/\b(?:undefined|null|year|xULN)\b/);
+      if (route.hash === "subjects") await page.unroute("**/api/v2/**");
     }
   });
 });

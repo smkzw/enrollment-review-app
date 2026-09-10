@@ -33,6 +33,7 @@ from app.domain.contracts.protocol_ingestion import (
     ProtocolSourceSpan,
 )
 from app.domain.contracts.protocol_metadata import (
+    InterpretationSource,
     PhaseApplicabilityGraph,
     PhaseProjection,
     ProtocolIdentityDecision,
@@ -454,6 +455,35 @@ class ProtocolDeconstructionInputAssembler:
         self._frozen_at = frozen_at
         self._frozen_by = frozen_by
 
+    def _validate_interpretation_sources(
+        self,
+        sources: Sequence[InterpretationSource],
+        *,
+        protocol_version_id: str,
+    ) -> list[InterpretationSource]:
+        """解释来源必须绑定本次方案版本，且由仓储校验后整体进入输入包。"""
+
+        seen: set[str] = set()
+        for source in sources:
+            if not isinstance(source, InterpretationSource):
+                _fail(
+                    "interpretation_source_type_invalid",
+                    "解释来源必须是经仓储校验的 InterpretationSource 对象。",
+                )
+            if source.protocol_version_id != protocol_version_id:
+                _fail(
+                    "interpretation_protocol_mismatch",
+                    f"解释来源 {source.interpretation_source_id} 绑定的方案版本"
+                    "与本次解构不一致，不能带入输入包。",
+                )
+            if source.interpretation_source_id in seen:
+                _fail(
+                    "interpretation_source_duplicate",
+                    f"解释来源 {source.interpretation_source_id} 重复。",
+                )
+            seen.add(source.interpretation_source_id)
+        return list(sources)
+
     def assemble(
         self,
         *,
@@ -472,7 +502,7 @@ class ProtocolDeconstructionInputAssembler:
         phase_graph: PhaseApplicabilityGraph | None = None,
         identity_decision: ProtocolIdentityDecision,
         phase_selection: StudyPhaseSelection,
-        interpretation_source_ids: Sequence[str] = (),
+        interpretation_sources: Sequence[InterpretationSource] = (),
         frozen_at: datetime | None = None,
         frozen_by: str | None = None,
     ) -> ProtocolDeconstructionInputPackage:
@@ -496,6 +526,10 @@ class ProtocolDeconstructionInputAssembler:
             phase_graph=resolved_graph,
             blocks=resolved_blocks,
             spans_by_id=spans_by_id,
+        )
+        validated_interpretation_sources = self._validate_interpretation_sources(
+            interpretation_sources,
+            protocol_version_id=protocol_version_id,
         )
         effective_frozen_at = self._frozen_at if frozen_at is None else frozen_at
         effective_frozen_by = self._frozen_by if frozen_by is None else frozen_by
@@ -568,7 +602,8 @@ class ProtocolDeconstructionInputAssembler:
                 source_materials=materials,
                 parent_rule_catalog=parent_catalog,
                 required_procedure_catalog=required_catalog,
-                interpretation_source_ids=list(interpretation_source_ids),
+                interpretation_source_ids=[item.interpretation_source_id for item in validated_interpretation_sources],
+                interpretation_sources=validated_interpretation_sources,
             )
         except Exception as exc:
             _fail("input_contract_invalid", f"方案解构输入合同校验失败：{exc}")

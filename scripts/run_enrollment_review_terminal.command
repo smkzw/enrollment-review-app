@@ -1,7 +1,12 @@
 #!/bin/zsh
 set -u
 
-APP_DIR="/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "$SCRIPT_DIR/../app/main.py" ]; then
+  APP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+else
+  APP_DIR="${ENROLLMENT_REVIEW_APP_DIR:-/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app}"
+fi
 PORT_FILE="$APP_DIR/output/runtime_state/port"
 if [ -z "${PORT:-}" ] && [ -f "$PORT_FILE" ]; then
   PORT="$(tr -cd '0-9' < "$PORT_FILE")"

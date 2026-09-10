@@ -352,6 +352,31 @@ def test_fact_value_unit_text_must_not_carry_unit():
     assert validate_fact_value_unit(cand2) == []
 
 
+@pytest.mark.parametrize(
+    ("value", "unit"),
+    [
+        ("132/96", "mmHg"),
+        (">1000.00阳性(+)", "mIU/mL"),
+        ("46/-4/34", "deg"),
+    ],
+)
+def test_fact_value_unit_accepts_compact_measurement_strings(value, unit):
+    assert validate_fact_value_unit(
+        _fact_candidate(canonical_value=value, unit=unit)
+    ) == []
+
+
+def test_fact_value_unit_rejects_narrative_with_embedded_number_and_unit():
+    errs = validate_fact_value_unit(
+        _fact_candidate(
+            canonical_value="某药 300mg 皮下注射一次（2018.09）",
+            unit="mg",
+        )
+    )
+
+    assert any("不应携带单位" in error for error in errs)
+
+
 def test_fact_value_unit_blank_text_rejected():
     cand = _fact_candidate(canonical_value="   ", unit=None, raw_value="   ")
     errs = validate_fact_value_unit(cand)
@@ -412,6 +437,31 @@ def test_exposure_gate_aggregates_value_unit():
     v = verdicts[FactGate.VALUE_UNIT_DATE_SOURCE]
     assert v.outcome == GateOutcome.REJECTED
     assert any("不能在无剂量" in r for r in v.reasons)
+
+
+def test_exposure_reference_closure_rejects_negated_only_support():
+    negated = _fact_candidate(
+        candidate_id="f-negated-medication",
+        polarity=FactPolarity.NEGATED,
+        asserted_object="二甲双胍用药史",
+        raw_value="否认",
+        canonical_value=False,
+        assertion_basis=_basis("loc-1", "二甲双胍用药史", "否认使用二甲双胍"),
+    )
+    exposure = _exposure_candidate(
+        candidate_id="exp-from-negation",
+        fact_candidate_ids=[negated.candidate_id],
+    )
+
+    errors = validate_candidate_reference_closure(
+        fact_candidates=[negated],
+        event_candidates=[],
+        exposure_candidates=[exposure],
+        run_id="run-1",
+        call_id="call-1",
+    )
+
+    assert any("否认事实不能生成暴露" in error for error in errors[exposure.candidate_id])
 
 
 # --------------------------------------------------------------------------- 部分日期边界

@@ -4,11 +4,13 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from app.domain.contracts.enums import (
+    AnchorResolutionMode,
     InterpretationAuthority,
     InterpretationChangeField,
     InterpretationConflictStatus,
 )
 from app.domain.contracts.protocol_metadata import (
+    AnchorResolutionStatement,
     InterpretationAssessment,
     InterpretationConflict,
     InterpretationSource,
@@ -188,6 +190,65 @@ def publication_blockers(conflicts: Iterable[InterpretationConflict]) -> list[st
         if item.blocks_publication
         and item.status != InterpretationConflictStatus.RESOLVED_BY_CURRENT_AMENDMENT
     )
+
+
+def has_blocking_conflict(
+    source: InterpretationSource,
+    conflicts: Iterable[InterpretationConflict],
+) -> bool:
+    """Whether one interpretation source carries a publication-blocking conflict."""
+
+    return any(
+        item.interpretation_source_id == source.interpretation_source_id
+        and item.blocks_publication
+        and item.status != InterpretationConflictStatus.RESOLVED_BY_CURRENT_AMENDMENT
+        for item in conflicts
+    )
+
+
+def clarification_anchor_resolutions(
+    source: InterpretationSource,
+    *,
+    conflicts: Iterable[InterpretationConflict] = (),
+) -> tuple[AnchorResolutionStatement, ...]:
+    """Return the anchor resolutions a clarification source may contribute.
+
+    只有来源明确的澄清级解释材料可以解析未命名回溯锚点：必须标注为方案
+    模糊处补充说明，不得携带正式变更摘要，也不得与方案或当前修订案存在
+    未解决冲突。解释越权时失败关闭（抛出 :class:`InterpretationAuthorityError`），
+    而不是按来源优先级消解。窗口量、方向、阈值与官方编号不进入解析载荷；
+    它们仍须逐字来自方案原文并由确定性门禁核验。
+    """
+
+    if not source.anchor_resolutions:
+        return ()
+    if authority_for_source(source) != InterpretationAuthority.CLARIFICATION_ONLY:
+        raise InterpretationAuthorityError(
+            "锚点解析只能由澄清级解释材料提供；当前修订案应直接修改方案原文"
+        )
+    if source.formal_change_summary:
+        raise InterpretationAuthorityError(
+            "携带锚点解析的解释材料不能同时声明正式规则变更"
+        )
+    if not source.clarifies_ambiguity:
+        raise InterpretationAuthorityError(
+            "携带锚点解析的解释材料必须明确标注为方案模糊处的补充说明"
+        )
+    if has_blocking_conflict(source, conflicts):
+        raise InterpretationAuthorityError(
+            "解释材料与方案或当前修订案存在未解决冲突时不得解析锚点"
+        )
+    covered = set(source.applies_to_rule_refs)
+    for resolution in source.anchor_resolutions:
+        if resolution.resolution_mode is not AnchorResolutionMode.CURRENT_REVIEW_NODE_DATE:
+            raise InterpretationAuthorityError(
+                "锚点解析只能使用当前审核节点日期这一项目无关模式"
+            )
+        if not set(resolution.affected_rule_refs) <= covered:
+            raise InterpretationAuthorityError(
+                "锚点解析影响的父规则必须在该解释材料声明的适用范围内"
+            )
+    return tuple(source.anchor_resolutions)
 
 
 # Concise aliases for service/gate call sites.

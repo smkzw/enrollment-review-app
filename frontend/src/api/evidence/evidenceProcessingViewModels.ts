@@ -1078,9 +1078,13 @@ function decodeCorrection(
   };
 }
 
-function decodeLocator(value: unknown, index: number): LocatorView {
-  const row = record(value, `page.locators[${index}]`);
-  const path = `page.locators[${index}]`;
+export function decodeEvidenceLocator(
+  value: unknown,
+  index: number,
+  pathRoot = "page.locators",
+): LocatorView {
+  const path = `${pathRoot}[${index}]`;
+  const row = record(value, path);
   const precision = enumValue(
     field(row, "precision", `${path}.precision`),
     ["bbox", "text_range", "page_excerpt", "page_only"],
@@ -1372,7 +1376,7 @@ export function decodeOcrPage(wire: unknown): OcrPageView {
     locators: arrayValue(
       field(row, "locators", "page.locators"),
       "page.locators",
-    ).map(decodeLocator),
+    ).map((locator, index) => decodeEvidenceLocator(locator, index)),
   };
 }
 

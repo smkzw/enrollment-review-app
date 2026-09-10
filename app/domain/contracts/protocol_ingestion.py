@@ -12,9 +12,12 @@
 这些契约只描述结构通道与渲染通道，不承载规则语义或发布权威；
 发布权威仍由 ``ProtocolAuthorityRecord`` / ``ProtocolDocumentVersion`` 等持有。
 """
+
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from datetime import datetime
+from typing import Any
 
 from pydantic import ConfigDict, Field, model_validator
 
@@ -70,7 +73,11 @@ class ProtocolRenderArtifact(VersionedModel):
     @model_validator(mode="after")
     def validate_status(self) -> "ProtocolRenderArtifact":
         if self.status == RenderStatus.SUCCEEDED:
-            if self.pdf_sha256 is None or self.page_count is None or self.storage_ref is None:
+            if (
+                self.pdf_sha256 is None
+                or self.page_count is None
+                or self.storage_ref is None
+            ):
                 raise ValueError("渲染成功必须提供 PDF 哈希、页数与存储引用")
             if self.render_error is not None:
                 raise ValueError("渲染成功不应携带渲染错误说明")
@@ -129,7 +136,10 @@ class ProtocolSourceSpan(VersionedModel):
             raise ValueError("table_path 坐标必须非负")
         if len(self.table_path) < 2:
             raise ValueError("table_path 至少应含一对 (row, col)")
-        if self.table_row != self.table_path[-2] or self.table_col != self.table_path[-1]:
+        if (
+            self.table_row != self.table_path[-2]
+            or self.table_col != self.table_path[-1]
+        ):
             raise ValueError("table_row/table_col 必须等于 table_path 的最内层坐标")
         return self
 
@@ -139,18 +149,24 @@ class ProtocolSourceSpan(VersionedModel):
             raise ValueError("bbox 定位必须提供坐标")
         if self.precision != SourceLocatorPrecision.BBOX and self.bbox is not None:
             raise ValueError("非 bbox 定位不能携带坐标")
-        if self.precision == SourceLocatorPrecision.TEXT_RANGE:
+        if self.precision in (
+            SourceLocatorPrecision.TEXT_RANGE,
+            SourceLocatorPrecision.BBOX,
+        ):
             if (
                 self.text_start is None
                 or self.text_end is None
                 or self.text_end <= self.text_start
             ):
-                raise ValueError("text_range 必须提供有效字符范围")
+                raise ValueError("text_range/bbox 定位必须提供有效字符范围")
         elif self.text_start is not None or self.text_end is not None:
             raise ValueError("非 text_range 定位不能携带字符范围")
         if self.precision == SourceLocatorPrecision.PAGE_EXCERPT and not self.excerpt:
             raise ValueError("page_excerpt 必须提供页面摘录")
-        if self.precision == SourceLocatorPrecision.PAGE_ONLY and self.excerpt is not None:
+        if (
+            self.precision == SourceLocatorPrecision.PAGE_ONLY
+            and self.excerpt is not None
+        ):
             raise ValueError("page_only 不能携带伪精确页面摘录")
         if (self.render_page is None) != (self.render_artifact_id is None):
             raise ValueError("渲染页与渲染派生物引用必须成对出现")
@@ -159,7 +175,10 @@ class ProtocolSourceSpan(VersionedModel):
                 raise ValueError("未对齐跨度不能携带渲染定位")
             if not self.degradation_reason:
                 raise ValueError("未对齐必须说明降级原因")
-        if self.alignment_status == AlignmentStatus.DEGRADED and not self.degradation_reason:
+        if (
+            self.alignment_status == AlignmentStatus.DEGRADED
+            and not self.degradation_reason
+        ):
             raise ValueError("降级对齐必须说明降级原因")
         return self
 
@@ -216,6 +235,49 @@ class ProtocolExtractionSnapshot(VersionedModel):
         return self
 
 
+def optional_source_excerpts_for_spans(
+    source_span_ids: Sequence[str],
+    *,
+    by_id: Mapping[str, ProtocolSourceSpan],
+    by_ref: Mapping[str, ProtocolSourceSpan] | None = None,
+    blocks_by_ref: Mapping[str, object] | None = None,
+) -> tuple[str | None, ...]:
+    """Return immutable source text, retaining ``None`` for structural spans.
+
+    A formally aligned span may be only an exact page fragment when one DOCX
+    paragraph crosses a rendered page.  The span remains the physical locator;
+    catalog prompts receive the complete extracted source block when available.
+    """
+
+    excerpts: list[str | None] = []
+    for span_id in source_span_ids:
+        span = by_id.get(span_id)
+        if span is None and by_ref is not None:
+            span = by_ref.get(span_id)
+        if span is None:
+            return ()
+        text = None
+        if blocks_by_ref is not None:
+            block = blocks_by_ref.get(span.source_ref)
+            text = getattr(block, "text", None) if block is not None else None
+        if not (text and str(text).strip()):
+            text = span.excerpt
+        excerpts.append(str(text) if text and str(text).strip() else None)
+    return tuple(excerpts) if any(excerpt is not None for excerpt in excerpts) else ()
+
+
+def frozen_catalog_content_hash(catalog: Any) -> str:
+    """Hash catalog content while preserving legacy empty-excerpt artifacts."""
+
+    from app.domain.publication import canonical_hash
+
+    payload = catalog.model_dump(mode="json", exclude={"catalog_sha256"})
+    for item in payload.get("items", []):
+        if not item.get("source_excerpts"):
+            item.pop("source_excerpts", None)
+    return canonical_hash(payload)
+
+
 class FrozenCatalogItem(ContractModel):
     """冻结目录项：稳定 ID、原文范围与来源片段（期别继承自所属目录）。"""
 
@@ -229,6 +291,24 @@ class FrozenCatalogItem(ContractModel):
     review_stage: ReviewStage | None = None
     position: int = Field(ge=0)
     source_span_ids: tuple[str, ...] = Field(min_length=1)
+    source_excerpts: tuple[str | None, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_source_excerpts(self) -> "FrozenCatalogItem":
+        if self.source_excerpts and len(self.source_excerpts) != len(
+            self.source_span_ids
+        ):
+            raise ValueError("目录项来源摘录必须与来源定位一一对应")
+        if self.source_excerpts and not any(
+            excerpt is not None for excerpt in self.source_excerpts
+        ):
+            raise ValueError("目录项至少需要一段可核验的来源摘录")
+        if self.source_excerpts and any(
+            excerpt is not None and not excerpt.strip()
+            for excerpt in self.source_excerpts
+        ):
+            raise ValueError("目录项来源摘录不得为空")
+        return self
 
 
 class FrozenProtocolCatalog(VersionedModel):
@@ -254,10 +334,11 @@ class FrozenProtocolCatalog(VersionedModel):
     def validate_catalog(self) -> "FrozenProtocolCatalog":
         from app.domain.publication import canonical_hash
 
-        expected = canonical_hash(
+        expected = frozen_catalog_content_hash(self)
+        current_shape_hash = canonical_hash(
             self.model_dump(mode="json", exclude={"catalog_sha256"})
         )
-        if self.catalog_sha256 != expected:
+        if self.catalog_sha256 not in {expected, current_shape_hash}:
             raise ValueError("FrozenProtocolCatalog 哈希与目录内容不一致")
         item_ids = [item.item_id for item in self.items]
         if len(item_ids) != len(set(item_ids)):

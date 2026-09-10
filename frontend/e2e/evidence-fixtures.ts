@@ -504,12 +504,12 @@ export function syntheticOcrPage() {
       source_document_version_id: "version-e2e-active",
       page_number: 1,
       source_layer: "raw_ocr",
-      source_layer_label: "原始识别文本",
+      source_layer_label: "原始识别文字",
       source_text_sha256: "e".repeat(64),
       target_id: "target-e2e-degraded",
       precision: "page_excerpt",
       precision_label: "页内摘录",
-      degradation_reason: "当前识别路线没有取得可信区域坐标，仅保留页内摘录。",
+      degradation_reason: "当前资料无法稳定框出具体区域，仅保留页内摘录。",
       text_start: 0,
       text_end: 8,
       excerpt: "患者否认近期发热",
@@ -575,6 +575,8 @@ export interface RegisterEvidenceRoutesOptions {
   activeReview?: boolean;
   /** 校对提交返回结构化修订冲突，验证草稿和差异保留。 */
   correctionConflict?: boolean;
+  /** 显示页面视觉核验任务；默认不显示，避免影响其他证据工作台场景。 */
+  selectiveVisionTask?: "failed_final";
 }
 
 /** 注册 /api/v2/** 路由拦截并返回请求日志。 */
@@ -586,6 +588,7 @@ export async function registerEvidenceRoutes(
   let createdMode: "incremental" | "full" | null = null;
   let referencedStatus = "proposed";
   let referencedProvided = false;
+  let selectiveVisionState = options.selectiveVisionTask ?? null;
 
   await page.route("**/api/v2/**", async (route) => {
     const request = route.request();
@@ -823,6 +826,73 @@ export async function registerEvidenceRoutes(
           </svg>`,
       });
       return;
+    }
+
+    const selectiveVisionMatch = url.match(
+      /\/evidence-processing-revisions\/([^/]+)\/selective-vision-task(?:\/(retry|cancel))?$/,
+    );
+    if (selectiveVisionMatch !== null) {
+      const revisionId = decodeURIComponent(selectiveVisionMatch[1] ?? "");
+      const action = selectiveVisionMatch[2] ?? null;
+      log.push({ url, method, form, body: null });
+
+      if (method === "POST" && action !== null) {
+        selectiveVisionState = action === "retry" ? "queued" : "cancelled";
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            job_id: "job-selective-vision-e2e",
+            state: selectiveVisionState,
+            state_label: action === "retry" ? "等待处理" : "已停止",
+            changed: true,
+          }),
+        });
+        return;
+      }
+
+      if (method === "GET") {
+        const found = selectiveVisionState !== null;
+        const waiting = selectiveVisionState === "queued";
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            evidence_processing_revision_id: revisionId,
+            found,
+            job_id: found ? "job-selective-vision-e2e" : null,
+            state: selectiveVisionState,
+            state_label: !found
+              ? "尚无页面视觉核验任务"
+              : waiting
+                ? "等待处理"
+                : selectiveVisionState === "cancelled"
+                  ? "已停止"
+                  : "未完成，需要处理",
+            cancel_requested: false,
+            progress_completed: found && !waiting ? 1 : 0,
+            progress_total: found ? 3 : 0,
+            recovery_action: !found
+              ? "重新处理资料后会自动建立。"
+              : waiting
+                ? "系统只会核验存在识别风险的页面，已确认的识别结果不会重复处理。"
+                : "请重新开始未完成的页面核验，已保存的识别结果不受影响。",
+            can_retry: selectiveVisionState === "failed_final",
+            can_cancel: waiting,
+            eligible_page_count: found ? 3 : null,
+            skipped_page_count: found ? 7 : null,
+            observation_page_count: found ? 1 : null,
+            closed_page_count: selectiveVisionState === "failed_final" ? 2 : 0,
+            closed_reason_label:
+              selectiveVisionState === "failed_final" ? "部分页面暂时无法核验" : null,
+            failed_scope_label:
+              selectiveVisionState === "failed_final" ? "筛选期病历第 1页、检查报告第 2 页" : null,
+            created_at: found ? "2026-09-01T01:00:00Z" : null,
+            updated_at: found ? "2026-09-01T01:01:00Z" : null,
+          }),
+        });
+        return;
+      }
     }
 
     if (method === "GET" && url.includes("/evidence-processing-revisions/")) {

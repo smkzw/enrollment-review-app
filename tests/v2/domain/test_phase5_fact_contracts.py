@@ -20,6 +20,7 @@ from app.domain.contracts.enums import (
     FactNormalizationRunStatus,
     FactPolarity,
     GateOutcome,
+    ProfileLane,
     SourceStrength,
 )
 from app.domain.contracts.facts import (
@@ -545,6 +546,17 @@ def test_stable_identity_excludes_locator_and_confidence():
         date_range=_date_range(),
     )
     assert a != changed_authority
+    changed_lane = clinical_fact_stable_identity(
+        authority=_authority(),
+        fact_type="medical_history",
+        profile_lane=ProfileLane.TARGET_DISEASE,
+        asserted_object="高血压病史",
+        polarity=FactPolarity.NEGATED,
+        value="无",
+        unit=None,
+        date_range=_date_range(),
+    )
+    assert a != changed_lane
 
 
 def test_event_and_exposure_published_contracts_ok():

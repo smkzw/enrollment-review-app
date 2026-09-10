@@ -37,6 +37,13 @@
 - Conference participants are read-only advisers. They must not modify source or application files and must not read raw clinical material outside this workspace.
 - Codex owns final synthesis, clinical/product acceptance, and user delivery.
 
+## Codex Dispatch Boundary
+
+- Trellis Codex implementation, checking, and research are inline in this project. Do not dispatch a native child directly from a Trellis workflow prompt.
+- A native Codex child is permitted only from a workflow packet created by `/Users/smkzw/.codex/tools/hermes_workflow_guard.py`; the packet must provide an explicit model and reasoning effort that match the live route.
+- Never call `multi_agent_v1__spawn_agent` with an omitted model or effort, and never let a child inherit the parent session's model or effort. `agent_type` alone is not a route.
+- If the live route has no Codex subAgent node, keep the work inline or use the packet's declared CLI fallback after a verified native transport failure.
+
 <!-- TRELLIS:START -->
 # Trellis Instructions
 

@@ -217,6 +217,9 @@ def test_replay_r1_frozen_corrections_not_later(client) -> None:
     from app.storage.evidence_locator_repositories import (
         CompleteEvidenceProcessingRevisionRepository,
     )
+    from app.domain.contracts.evidence_locator import SOURCE_LINE_TARGET_PREFIX
+    from app.storage.evidence_locator_models import EvidenceLocatorArtifactRecord
+    from sqlalchemy import select
     from tests.v2.storage.test_slice44_repositories import (
         _seed_metadata,
         _seed_scan_and_review,
@@ -227,6 +230,13 @@ def test_replay_r1_frozen_corrections_not_later(client) -> None:
     with client.app.state.session_factory() as session, session.begin():
         metadata_id = _seed_metadata(session, keys)
         scan_id, review_ids = _seed_scan_and_review(session, keys)
+        locator_ids = session.execute(
+            select(EvidenceLocatorArtifactRecord.locator_id).where(
+                EvidenceLocatorArtifactRecord.target_id.startswith(
+                    SOURCE_LINE_TARGET_PREFIX
+                )
+            )
+        ).scalars().all()
         revision = _complete_revision(
             keys,
             session,
@@ -236,6 +246,7 @@ def test_replay_r1_frozen_corrections_not_later(client) -> None:
             risk_scan_ids=[scan_id],
             risk_review_ids=review_ids,
             correction_ids=[correction_id],
+            locator_ids=sorted(locator_ids),
         )
         CompleteEvidenceProcessingRevisionRepository(session).create(revision)
     _later_sidecars(client, keys, correction_id)

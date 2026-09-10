@@ -38,6 +38,14 @@ function progressPayload(failedPages: number) {
 }
 
 describe("资料整理任务读取", () => {
+  it("辅助复核不查询 OCR 进度或伪造页面完成数量", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      ...statusPayload(), job_type: "r3_targeted_page_review",
+    })));
+    const detail = await getEvidenceJobDetail("job-1", undefined, fetchImpl);
+    expect(detail.progress).toBeNull();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
   it("拒绝总体已完成但仍有失败页的矛盾组合", async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const target = String(input);

@@ -42,6 +42,17 @@ from app.services.evidence_risk_service import (
     EvidenceRiskScanService,
     RiskScanSideEffectError,
 )
+from app.services.phase_applicability_execution import (
+    PHASE_APPLICABILITY_EXECUTION_VERSION,
+    PhaseApplicabilityBatchExecutionRecord,
+    PhaseApplicabilityBatchExecutor,
+    PhaseApplicabilityExecutionError,
+    PhaseApplicabilityExecutionService,
+    PhaseApplicabilityExecutionState,
+    PhaseApplicabilityExecutionStore,
+    create_phase_applicability_execution,
+    run_phase_applicability_execution,
+)
 
 __all__ = [
     "ActivationAlreadyActiveError",
@@ -62,6 +73,13 @@ __all__ = [
     "EvidenceRevisionBuilder",
     "EvidenceRevisionWorkflow",
     "EvidenceRiskScanService",
+    "PHASE_APPLICABILITY_EXECUTION_VERSION",
+    "PhaseApplicabilityBatchExecutionRecord",
+    "PhaseApplicabilityBatchExecutor",
+    "PhaseApplicabilityExecutionError",
+    "PhaseApplicabilityExecutionService",
+    "PhaseApplicabilityExecutionState",
+    "PhaseApplicabilityExecutionStore",
     "LocatorInputError",
     "LocatorRequest",
     "MissingMetadataRevisionError",
@@ -70,6 +88,8 @@ __all__ = [
     "RevisionClosure",
     "RiskScanSideEffectError",
     "RollbackTargetError",
+    "create_phase_applicability_execution",
+    "run_phase_applicability_execution",
     "UnresolvedBlockingRiskError",
     "WorkflowError",
 ]

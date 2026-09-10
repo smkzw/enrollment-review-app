@@ -31,6 +31,7 @@ export type ComponentDecision =
   | "requirement_not_met";
 
 export type GapType =
+  | "observation_unverified"
   | "record_incomplete"
   | "description_insufficient"
   | "historical_source_unavailable"

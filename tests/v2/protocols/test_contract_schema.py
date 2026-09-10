@@ -150,6 +150,19 @@ def test_span_contract_forbids_inconsistent_locator():
         degradation_reason="未对齐",
     )
     ProtocolSourceSpan(**base)
+    # bbox 必须同时绑定同源字符范围，不允许只自报坐标。
+    with pytest.raises(Exception):
+        ProtocolSourceSpan(
+            **{
+                **base,
+                "render_artifact_id": "render-1",
+                "render_page": 1,
+                "bbox": {"x0": 1, "y0": 1, "x1": 2, "y1": 2},
+                "precision": SourceLocatorPrecision.BBOX,
+                "alignment_status": AlignmentStatus.ALIGNED,
+                "degradation_reason": None,
+            }
+        )
     # page_only 携带伪精确摘录必须被拒绝
     with pytest.raises(Exception):
         ProtocolSourceSpan(

@@ -26,6 +26,7 @@ from . import (
     pdf_native,
     render,
     risk,
+    selective_vision_review,
     text,
 )
 from .coordinates import (
@@ -121,6 +122,17 @@ from .risk import (
     scan_ocr_risks,
     would_block_activation,
 )
+from .selective_vision_review import (
+    SELECTIVE_VISION_PLAN_VERSION,
+    PageVisionEligibility,
+    PageVisionTriageSignals,
+    SelectiveVisionClosedError,
+    SelectiveVisionPlan,
+    SelectiveVisionReviewOutcome,
+    assess_page_vision_eligibility,
+    plan_selective_vision_reviews,
+    run_selective_vision_review,
+)
 from .text import DecodedText, TextDecodeError, decode_text_bytes
 
 __all__ = [
@@ -134,6 +146,7 @@ __all__ = [
     "PAGING_VERSION",
     "RENDERER_VERSION",
     "RENDER_DPI",
+    "SELECTIVE_VISION_PLAN_VERSION",
     "SUPPORTED_MEDIA_KINDS",
     "TEXT_ONLY_DEGRADATION_REASON",
     "CoordinateError",
@@ -159,6 +172,8 @@ __all__ = [
     "PageInput",
     "PagePlan",
     "PageProcessorError",
+    "PageVisionEligibility",
+    "PageVisionTriageSignals",
     "PagingError",
     "PreparedOcrRequest",
     "ProjectionOverlapError",
@@ -166,9 +181,13 @@ __all__ = [
     "RenderError",
     "RenderedPage",
     "RiskEval",
+    "SelectiveVisionClosedError",
+    "SelectiveVisionPlan",
+    "SelectiveVisionReviewOutcome",
     "TextDecodeError",
     "TextOnlyOcrAdapter",
     "artifacts",
+    "assess_page_vision_eligibility",
     "bbox_contains",
     "bbox_overlap_ratio",
     "build_ocr_cache_key",
@@ -205,13 +224,16 @@ __all__ = [
     "paging",
     "pdf_native",
     "pdf_points_to_image_pixels",
+    "plan_selective_vision_reviews",
     "precision_rank",
     "process_source",
     "project_effective_text",
     "render",
     "render_page_image",
     "risk",
+    "run_selective_vision_review",
     "scan_ocr_risks",
+    "selective_vision_review",
     "serialize_native_coordinates",
     "target_locator_success",
     "text",

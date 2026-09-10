@@ -27,7 +27,8 @@
     "08-14-phase2-sqlite-domain-jobs",
     "08-14-phase3-protocol-deconstruction",
     "08-19-phase4-evidence-ocr-v2",
-    "08-22-phase5-clinical-facts-profile"
+    "08-22-phase5-clinical-facts-profile",
+    "09-05-phase55-dual-vlm-page-review"
   ],
   "parent": null,
   "relatedFiles": [],

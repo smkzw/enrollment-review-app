@@ -1,4 +1,4 @@
-"""Phase 5 v2 临床事实仓储（Slice 5.1，worker_03）。
+"""Phase 5 v2 临床事实仓储。
 
 在 ``facts_models`` ORM 之上提供追加写/读取的确定性仓储，并在持久化边界强制权威
 元组与定位闭包门禁（调用 :class:`~app.storage.fact_authority.FactAuthorityValidator`）：
@@ -9,8 +9,8 @@
 - ``ClinicalEventV2Repository``  发布事件：事实/定位引用必须同一权威元组且事件定位
   属于其引用事实的定位闭包（P5-R06；事件借用同节点其他事实证据时拒绝）；
 - ``MedicationExposureV2Repository``  发布用药/治疗暴露（同事件约束）；
-- ``ClinicalConflictGroupV2Repository` 未解决冲突组（成员≥2、同一权威元组、定位属于
-  成员事实闭包，不自动择优）。
+- ``ClinicalConflictGroupV2Repository`` 未解决冲突组（同类型成员不少于两个、共享
+  权威元组、定位属于成员实体闭包，不自动择优）。
 
 所有写入先 ``validate`` 权威元组、再 ``validate_locators`` 定位闭包，然后追加写
 canonical JSON + SHA-256 与规范化镜像列；读取时用 :func:`decode_contract` 还原并经
@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any
+from typing import Any, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -44,13 +44,21 @@ from app.domain.contracts.facts import (
     MedicationExposureV2,
     PartialDateRange,
 )
-from app.domain.contracts.enums import FactGate, GateOutcome
+from app.domain.contracts.evidence_normalizer import (
+    PersistedEvidenceNormalizerUnresolvedItem,
+)
+from app.domain.contracts.enums import (
+    FactGate,
+    FactNormalizationRunStatus,
+    GateOutcome,
+    SourceStrength,
+)
 from app.storage.codecs import (
     PersistedContractInvalid,
     check_column_mirrors,
     decode_contract,
     encode_contract,
-    mirror_json,
+    mirror_values_equal,
     parse_datetime_column,
     to_utc_naive,
 )
@@ -60,6 +68,8 @@ from app.storage.fact_authority import (
 )
 from app.storage.evidence_locator_models import EvidenceLocatorArtifactRecord
 from app.storage.facts_models import (
+    ClinicalConflictEventMemberV2Record,
+    ClinicalConflictExposureMemberV2Record,
     ClinicalConflictGroupV2Record,
     ClinicalConflictMemberV2Record,
     ClinicalEventV2Record,
@@ -71,6 +81,7 @@ from app.storage.facts_models import (
     FactNormalizationCandidateRecord,
     FactNormalizationCallRecord,
     FactNormalizationRunRecord,
+    FactNormalizationUnresolvedItemRecord,
     MedicationExposureV2Record,
 )
 from app.storage.repositories import (
@@ -88,9 +99,12 @@ __all__ = [
     "FactNormalizationCandidateRepository",
     "FactNormalizationCallRepository",
     "FactNormalizationRunRepository",
+    "FactNormalizationUnresolvedItemRepository",
     "FactRevisionChainError",
     "MedicationExposureV2Repository",
     "Phase5RepositoryError",
+    "authority_column_filters",
+    "prefetch_locator_link_ids",
 ]
 
 
@@ -121,6 +135,96 @@ def _authority_columns(authority: FactAuthority) -> dict[str, Any]:
     }
 
 
+def authority_column_filters(model: Any, authority: FactAuthority) -> tuple[Any, ...]:
+    """用规范化权威列在 SQL 中限定冻结权威，避免解码库内无关行。"""
+    return (
+        model.project_id == authority.project_id,
+        model.subject_id == authority.subject_id,
+        model.review_episode_id == authority.review_episode_id,
+        model.episode_revision == authority.episode_revision,
+        model.protocol_version_id == authority.protocol_version_id,
+        model.rule_set_id == authority.rule_set_id,
+        model.rule_set_revision == authority.rule_set_revision,
+        model.evidence_snapshot_v2_id == authority.evidence_snapshot_v2_id,
+        model.complete_processing_revision_id == authority.complete_processing_revision_id,
+    )
+
+
+def prefetch_locator_link_ids(
+    session: Session, entity_kind: str, entity_ids: Sequence[str]
+) -> dict[str, list[str]]:
+    """一次装载选定实体的定位链接，按 position 分组。缺行视为空列表。"""
+    unique_ids = list(dict.fromkeys(entity_ids))
+    grouped = {entity_id: [] for entity_id in unique_ids}
+    if not unique_ids:
+        return grouped
+    rows = session.execute(
+        select(FactEvidenceLocatorLinkRecord)
+        .where(
+            FactEvidenceLocatorLinkRecord.entity_kind == entity_kind,
+            FactEvidenceLocatorLinkRecord.entity_id.in_(unique_ids),
+        )
+        .order_by(
+            FactEvidenceLocatorLinkRecord.entity_id,
+            FactEvidenceLocatorLinkRecord.position,
+        )
+    ).scalars().all()
+    for row in rows:
+        grouped[row.entity_id].append(row.locator_id)
+    return grouped
+
+
+def _prefetch_event_fact_ids(
+    session: Session, event_ids: Sequence[str]
+) -> dict[str, list[str]]:
+    grouped = {event_id: [] for event_id in event_ids}
+    if not event_ids:
+        return grouped
+    rows = session.execute(
+        select(EventFactLinkRecord)
+        .where(EventFactLinkRecord.event_id.in_(list(event_ids)))
+        .order_by(EventFactLinkRecord.event_id, EventFactLinkRecord.position)
+    ).scalars().all()
+    for row in rows:
+        grouped[row.event_id].append(row.fact_id)
+    return grouped
+
+
+def _prefetch_exposure_fact_ids(
+    session: Session, exposure_ids: Sequence[str]
+) -> dict[str, list[str]]:
+    grouped = {exposure_id: [] for exposure_id in exposure_ids}
+    if not exposure_ids:
+        return grouped
+    rows = session.execute(
+        select(ExposureFactLinkRecord)
+        .where(ExposureFactLinkRecord.exposure_id.in_(list(exposure_ids)))
+        .order_by(ExposureFactLinkRecord.exposure_id, ExposureFactLinkRecord.position)
+    ).scalars().all()
+    for row in rows:
+        grouped[row.exposure_id].append(row.fact_id)
+    return grouped
+
+
+def _prefetch_conflict_member_ids(
+    session: Session,
+    record_cls: Any,
+    child_attr: str,
+    group_ids: Sequence[str],
+) -> dict[str, list[str]]:
+    grouped = {group_id: [] for group_id in group_ids}
+    if not group_ids:
+        return grouped
+    rows = session.execute(
+        select(record_cls)
+        .where(record_cls.conflict_group_id.in_(list(group_ids)))
+        .order_by(record_cls.conflict_group_id, record_cls.position)
+    ).scalars().all()
+    for row in rows:
+        grouped[row.conflict_group_id].append(getattr(row, child_attr))
+    return grouped
+
+
 def _date_range_columns(dr: PartialDateRange | None) -> dict[str, Any]:
     if dr is None:
         return {
@@ -135,6 +239,12 @@ def _date_range_columns(dr: PartialDateRange | None) -> dict[str, Any]:
         "date_upper_bound": dr.upper_bound,
         "date_source_text": dr.source_text,
     }
+
+
+def _date_range_semantics(dr: PartialDateRange | None) -> tuple[Any, ...] | None:
+    if dr is None:
+        return None
+    return (dr.precision, dr.lower_bound, dr.upper_bound)
 
 
 def _payload_path_opt(payload: dict, path: str) -> Any:
@@ -161,7 +271,7 @@ def _check_tolerant_mirrors(
                 parsed_payload = payload_value
             equal = to_utc_naive(column_value) == parsed_payload
         else:
-            equal = mirror_json(column_value) == mirror_json(payload_value)
+            equal = mirror_values_equal(column_value, payload_value)
         if not equal:
             raise PersistedContractInvalid(
                 f"{entity_name} 列 {column_attr} 与已验证 payload 不一致，拒绝还原合同"
@@ -213,6 +323,45 @@ class FactNormalizationRunRepository:
             self.session, FactNormalizationRunRecord, run_id, "FactNormalizationRun"
         )
         return self._decode_record(row)
+
+    def set_status(
+        self, run_id: str, status: FactNormalizationRunStatus
+    ) -> FactNormalizationRun:
+        """在受任务租约保护的事务中同步更新运行状态及其不可变镜像。"""
+        row = _get_required(
+            self.session, FactNormalizationRunRecord, run_id, "FactNormalizationRun"
+        )
+        current = self._decode_record(row)
+        if current.status == status:
+            return current
+        if current.status != FactNormalizationRunStatus.RUNNING:
+            raise Phase5RepositoryError(
+                f"规范化运行 {run_id} 当前状态 {current.status.value}，不能转为 {status.value}"
+            )
+        updated = current.model_copy(update={"status": status})
+        row.status = status.value
+        row.payload_json, row.payload_sha256 = encode_contract(updated)
+        _flush_guarded(self.session)
+        return updated
+
+    def reopen_for_retry(self, run_id: str) -> FactNormalizationRun:
+        """人工重试或受控续跑同一任务时，把对应终态恢复为运行中。"""
+        row = _get_required(
+            self.session, FactNormalizationRunRecord, run_id, "FactNormalizationRun"
+        )
+        current = self._decode_record(row)
+        if current.status not in {
+            FactNormalizationRunStatus.FAILED,
+            FactNormalizationRunStatus.CANCELLED,
+        }:
+            raise Phase5RepositoryError(
+                f"规范化运行 {run_id} 当前状态 {current.status.value}，不能人工重试"
+            )
+        updated = current.model_copy(update={"status": FactNormalizationRunStatus.RUNNING})
+        row.status = FactNormalizationRunStatus.RUNNING.value
+        row.payload_json, row.payload_sha256 = encode_contract(updated)
+        _flush_guarded(self.session)
+        return updated
 
     def _by_idempotency_key(self, key: str) -> FactNormalizationRunRecord | None:
         rows = self.session.execute(select(FactNormalizationRunRecord)).scalars().all()
@@ -406,6 +555,120 @@ class FactNormalizationCandidateRepository:
         )
         return contract
 
+    def list_by_run(self, run_id: str) -> list[CandidateContract]:
+        rows = self.session.execute(select(FactNormalizationCandidateRecord)).scalars().all()
+        contracts = [self._decode_record(row) for row in rows]
+        return sorted(
+            (candidate for candidate in contracts if candidate.run_id == run_id),
+            key=lambda candidate: (candidate.created_at, candidate.candidate_id),
+        )
+
+    def _decode_record(self, row: FactNormalizationCandidateRecord) -> CandidateContract:
+        contract_type = self._TYPE_BY_KIND.get(row.candidate_kind)
+        if contract_type is None:
+            raise PersistedContractInvalid(
+                f"候选 {row.candidate_id} 类型无法识别，拒绝还原"
+            )
+        contract = decode_contract(contract_type, row.payload_json, row.payload_sha256)
+        payload = json.loads(row.payload_json)
+        check_column_mirrors(
+            "FactNormalizationCandidate",
+            row,
+            payload,
+            {
+                "candidate_id": "candidate_id",
+                "run_id": "run_id",
+                "call_id": "call_id",
+                "candidate_kind": "candidate_kind",
+                "created_at": "created_at",
+            },
+        )
+        return contract
+
+
+class FactNormalizationUnresolvedItemRepository:
+    """逐页未解决项追加写仓储；与调用、运行和逻辑资料身份严格绑定。"""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def create(
+        self, unresolved: PersistedEvidenceNormalizerUnresolvedItem
+    ) -> PersistedEvidenceNormalizerUnresolvedItem:
+        call = FactNormalizationCallRepository(self.session).get(unresolved.call_id)
+        if call.run_id != unresolved.run_id:
+            raise Phase5RepositoryError("未解决项与调用不属于同一规范化运行")
+        if call.logical_document_id != unresolved.logical_document_id:
+            raise Phase5RepositoryError("未解决项与调用不属于同一逻辑资料")
+        if not set(unresolved.item.affected_pages).issubset(set(call.page_numbers)):
+            raise Phase5RepositoryError("未解决项引用了调用页清单之外的页面")
+        payload_json, payload_sha256 = encode_contract(unresolved)
+        self.session.add(
+            FactNormalizationUnresolvedItemRecord(
+                unresolved_item_id=unresolved.unresolved_item_id,
+                run_id=unresolved.run_id,
+                call_id=unresolved.call_id,
+                logical_document_id=unresolved.logical_document_id,
+                position=unresolved.position,
+                code=unresolved.item.code,
+                affected_pages_json=unresolved.item.affected_pages,
+                affected_locator_ids_json=unresolved.item.affected_locator_ids,
+                payload_json=payload_json,
+                payload_sha256=payload_sha256,
+                created_at=to_utc_naive(unresolved.created_at),
+            )
+        )
+        _flush_guarded(self.session)
+        return unresolved
+
+    def get(self, unresolved_item_id: str) -> PersistedEvidenceNormalizerUnresolvedItem:
+        row = _get_required(
+            self.session,
+            FactNormalizationUnresolvedItemRecord,
+            unresolved_item_id,
+            "FactNormalizationUnresolvedItem",
+        )
+        return self._decode_record(row)
+
+    def list_by_run(self, run_id: str) -> list[PersistedEvidenceNormalizerUnresolvedItem]:
+        rows = self.session.execute(
+            select(FactNormalizationUnresolvedItemRecord).where(
+                FactNormalizationUnresolvedItemRecord.run_id == run_id
+            )
+        ).scalars().all()
+        return sorted(
+            (self._decode_record(row) for row in rows),
+            key=lambda item: (item.call_id, item.position, item.unresolved_item_id),
+        )
+
+    @staticmethod
+    def _decode_record(
+        row: FactNormalizationUnresolvedItemRecord,
+    ) -> PersistedEvidenceNormalizerUnresolvedItem:
+        contract = decode_contract(
+            PersistedEvidenceNormalizerUnresolvedItem,
+            row.payload_json,
+            row.payload_sha256,
+        )
+        payload = json.loads(row.payload_json)
+        check_column_mirrors(
+            "FactNormalizationUnresolvedItem",
+            row,
+            payload,
+            {
+                "unresolved_item_id": "unresolved_item_id",
+                "run_id": "run_id",
+                "call_id": "call_id",
+                "logical_document_id": "logical_document_id",
+                "position": "position",
+                "code": "item.code",
+                "affected_pages_json": "item.affected_pages",
+                "affected_locator_ids_json": "item.affected_locator_ids",
+                "created_at": "created_at",
+            },
+        )
+        return contract
+
 
 class FactGateResultRepository:
     """逐候选门禁结果：绑定运行与调用（调用必须属于该运行）。"""
@@ -414,36 +677,78 @@ class FactGateResultRepository:
         self.session = session
 
     def create(self, result: FactGateResult) -> FactGateResult:
-        FactNormalizationRunRepository(self.session).get(result.run_id)
-        call = FactNormalizationCallRepository(self.session).get(result.call_id)
-        if call.run_id != result.run_id:
-            raise Phase5RepositoryError(
-                f"门禁结果调用 {result.call_id} 不属于运行 {result.run_id}"
-            )
-        candidate = FactNormalizationCandidateRepository(self.session).get(
-            result.candidate_id
-        )
-        if candidate.run_id != result.run_id or candidate.call_id != result.call_id:
-            raise Phase5RepositoryError(
-                f"门禁结果 {result.gate_result_id} 与候选 {result.candidate_id} "
-                "不属于同一运行/调用"
-            )
-        payload_json, payload_sha256 = encode_contract(result)
-        row = FactGateResultRecord(
-            gate_result_id=result.gate_result_id,
-            run_id=result.run_id,
-            call_id=result.call_id,
-            candidate_id=result.candidate_id,
-            gate=result.gate.value,
-            outcome=result.outcome.value,
-            reasons_json=result.reasons,
-            created_at=to_utc_naive(result.created_at),
-            payload_json=payload_json,
-            payload_sha256=payload_sha256,
-        )
-        self.session.add(row)
-        _flush_guarded(self.session)
+        self.create_many([result])
         return result
+
+    def create_many(self, results: Sequence[FactGateResult]) -> list[FactGateResult]:
+        """批量校验归属并单次落库，避免逐门禁重复查询和刷新。"""
+        items = list(results)
+        if not items:
+            return []
+        run_ids = {item.run_id for item in items}
+        existing_run_ids = set(
+            self.session.execute(
+                select(FactNormalizationRunRecord.run_id).where(
+                    FactNormalizationRunRecord.run_id.in_(run_ids)
+                )
+            ).scalars()
+        )
+        missing_runs = sorted(run_ids - existing_run_ids)
+        if missing_runs:
+            raise Phase5RepositoryError(f"门禁结果引用了不存在的运行：{missing_runs}")
+        call_ids = {item.call_id for item in items}
+        calls = {
+            row.call_id: row
+            for row in self.session.execute(
+                select(FactNormalizationCallRecord).where(
+                    FactNormalizationCallRecord.call_id.in_(call_ids)
+                )
+            ).scalars()
+        }
+        candidate_ids = {item.candidate_id for item in items}
+        candidates = {
+            row.candidate_id: row
+            for row in self.session.execute(
+                select(FactNormalizationCandidateRecord).where(
+                    FactNormalizationCandidateRecord.candidate_id.in_(candidate_ids)
+                )
+            ).scalars()
+        }
+        rows = []
+        for result in items:
+            call = calls.get(result.call_id)
+            if call is None or call.run_id != result.run_id:
+                raise Phase5RepositoryError(
+                    f"门禁结果调用 {result.call_id} 不属于运行 {result.run_id}"
+                )
+            candidate = candidates.get(result.candidate_id)
+            if (
+                candidate is None
+                or candidate.run_id != result.run_id
+                or candidate.call_id != result.call_id
+            ):
+                raise Phase5RepositoryError(
+                    f"门禁结果 {result.gate_result_id} 与候选 {result.candidate_id} "
+                    "不属于同一运行/调用"
+                )
+            payload_json, payload_sha256 = encode_contract(result)
+            rows.append(
+                FactGateResultRecord(
+                    gate_result_id=result.gate_result_id,
+                    run_id=result.run_id,
+                    call_id=result.call_id,
+                    candidate_id=result.candidate_id,
+                    gate=result.gate.value,
+                    outcome=result.outcome.value,
+                    reasons_json=result.reasons,
+                    created_at=to_utc_naive(result.created_at),
+                    payload_json=payload_json,
+                    payload_sha256=payload_sha256,
+                )
+            )
+        self.session.add_all(rows)
+        _flush_guarded(self.session)
+        return items
 
     def get(self, gate_result_id: str) -> FactGateResult:
         row = _get_required(
@@ -493,6 +798,29 @@ class _PublishMixin:
 
     session: Session
     _authority: FactAuthorityValidator
+    _complete_revision: Any | None
+
+    def list_entity_links_for_locators(
+        self, locator_ids: Sequence[str]
+    ) -> list[tuple[str, str, str]]:
+        """定位 -> 实体的显式反向索引（``fact_evidence_locator_links``）。
+
+        返回 ``(locator_id, entity_kind, entity_id)``，按三者稳定排序。空输入
+        返回空列表，不扫描全表。
+        """
+        unique_ids = sorted(set(locator_ids))
+        if not unique_ids:
+            return []
+        rows = self.session.execute(
+            select(FactEvidenceLocatorLinkRecord)
+            .where(FactEvidenceLocatorLinkRecord.locator_id.in_(unique_ids))
+            .order_by(
+                FactEvidenceLocatorLinkRecord.locator_id,
+                FactEvidenceLocatorLinkRecord.entity_kind,
+                FactEvidenceLocatorLinkRecord.entity_id,
+            )
+        ).scalars().all()
+        return [(row.locator_id, row.entity_kind, row.entity_id) for row in rows]
 
     def _validate_common(
         self,
@@ -534,6 +862,126 @@ class _PublishMixin:
             )
         return candidate
 
+    def _validate_publication_group(
+        self,
+        *,
+        authority: FactAuthority,
+        run_id: str,
+        primary_gate_id: str,
+        gate_ids: list[str],
+        candidate_ids: list[str],
+        locator_ids: list[str],
+        expected_candidate_kind: str,
+    ) -> list[CandidateContract]:
+        """校验一个发布实体的全部来源候选。
+
+        旧调用方没有显式溯源集时仍按主门禁对应的单候选校验；
+        新发布路径必须提供候选与最终门禁的一一对应集。
+        """
+        primary_candidate = self._validate_common(
+            authority, run_id, primary_gate_id, locator_ids, expected_candidate_kind
+        )
+        effective_candidate_ids = candidate_ids or [primary_candidate.candidate_id]
+        effective_gate_ids = gate_ids or [primary_gate_id]
+        if primary_candidate.candidate_id not in effective_candidate_ids:
+            raise FactCrossEntityError("主门禁对应候选必须属于发布溯源集")
+        if primary_gate_id not in effective_gate_ids:
+            raise FactCrossEntityError("主门禁必须属于发布门禁集")
+
+        candidates: list[CandidateContract] = []
+        gate_candidate_ids: list[str] = []
+        gate_repository = FactGateResultRepository(self.session)
+        candidate_repository = FactNormalizationCandidateRepository(self.session)
+        for gate_id in effective_gate_ids:
+            gate = gate_repository.get(gate_id)
+            if (
+                gate.run_id != run_id
+                or gate.gate != FactGate.TRANSACTIONAL_PUBLISH
+                or gate.outcome != GateOutcome.ACCEPTED
+            ):
+                raise Phase5RepositoryError(
+                    f"门禁结果 {gate_id} 不是当前运行已接受的最终发布门禁"
+                )
+            gate_candidate_ids.append(gate.candidate_id)
+        if sorted(gate_candidate_ids) != effective_candidate_ids:
+            raise FactCrossEntityError("发布门禁与来源候选必须一一对应")
+        for candidate_id in effective_candidate_ids:
+            candidate = candidate_repository.get(candidate_id)
+            if candidate.run_id != run_id or candidate.candidate_kind != expected_candidate_kind:
+                raise FactCrossEntityError(
+                    f"来源候选 {candidate_id} 与发布实体类型或运行不一致"
+                )
+            candidates.append(candidate)
+        locator_union = sorted(
+            {locator_id for candidate in candidates for locator_id in candidate.locator_ids}
+        )
+        if locator_union != locator_ids:
+            raise FactLocatorReferenceError("发布定位必须等于全部来源候选的定位并集")
+        return candidates
+
+    def _require_published_source_strength(
+        self,
+        authority: FactAuthority,
+        candidates: list[CandidateContract],
+        published_strength: SourceStrength,
+    ) -> None:
+        from app.domain.gates.fact_evidence_closure import (
+            derive_source_strength_for_candidate,
+            resolve_source_strength_for_candidate,
+        )
+        from app.storage.evidence_locator_repositories import (
+            CompleteEvidenceProcessingRevisionRepository,
+        )
+
+        revision = self._complete_revision
+        if revision is None:
+            revision = CompleteEvidenceProcessingRevisionRepository(self.session).get(
+                authority.complete_processing_revision_id
+            )
+        elif (
+            revision.evidence_processing_revision_id
+            != authority.complete_processing_revision_id
+        ):
+            raise FactCrossEntityError(
+                "批量发布复用的完整处理修订与权威元组不一致"
+            )
+        rank = {
+            SourceStrength.UNVERIFIABLE: 0,
+            SourceStrength.SCREENING_RECORD_TRANSCRIPTION: 1,
+            SourceStrength.CURRENT_STUDY_CHART: 2,
+            SourceStrength.HISTORICAL_PRIMARY: 3,
+            SourceStrength.CONTEMPORANEOUS_OBJECTIVE: 4,
+        }
+        expected_from_metadata = max(
+            (
+                derive_source_strength_for_candidate(
+                    self.session, candidate, revision
+                )
+                for candidate in candidates
+            ),
+            key=rank.__getitem__,
+        )
+        if published_strength == expected_from_metadata:
+            return
+        try:
+            expected_from_candidates = max(
+                (
+                    resolve_source_strength_for_candidate(
+                        self.session, candidate, revision
+                    )
+                    for candidate in candidates
+                ),
+                key=rank.__getitem__,
+            )
+        except ValueError as exc:
+            raise FactCrossEntityError(
+                "发布来源强度超出完整处理修订允许范围"
+            ) from exc
+        if published_strength != expected_from_candidates:
+            raise FactCrossEntityError(
+                "发布来源强度超出完整处理修订允许范围"
+            )
+
     def _require_facts_same_authority(
         self, authority: FactAuthority, fact_ids: list[str]
     ) -> None:
@@ -554,8 +1002,42 @@ class _PublishMixin:
         gate_repository = FactGateResultRepository(self.session)
         facts = [fact_repository.get(fact_id) for fact_id in fact_ids]
         return sorted(
-            gate_repository.get(fact.gate_id).candidate_id for fact in facts
+            {
+                candidate_id
+                for fact in facts
+                for candidate_id in (
+                    fact.source_candidate_ids
+                    or [gate_repository.get(fact.gate_id).candidate_id]
+                )
+            }
         )
+
+    def _require_fact_candidate_reference_closure(
+        self,
+        fact_ids: list[str],
+        referenced_candidate_ids: list[str],
+        *,
+        entity_label: str,
+    ) -> None:
+        fact_repository = ClinicalFactV2Repository(self.session)
+        gate_repository = FactGateResultRepository(self.session)
+        referenced = set(referenced_candidate_ids)
+        sources_by_fact = []
+        for fact_id in fact_ids:
+            fact = fact_repository.get(fact_id)
+            sources_by_fact.append(
+                set(
+                    fact.source_candidate_ids
+                    or [gate_repository.get(fact.gate_id).candidate_id]
+                )
+            )
+        if (
+            not referenced.issubset(set().union(*sources_by_fact))
+            or any(not referenced.intersection(sources) for sources in sources_by_fact)
+        ):
+            raise FactCrossEntityError(
+                f"发布{entity_label}的事实引用与候选事实引用不一致"
+            )
 
     def _fact_semantic_objects(self, fact_ids: list[str]) -> list[str]:
         repository = ClinicalFactV2Repository(self.session)
@@ -651,8 +1133,19 @@ class _PublishMixin:
         ).scalars().all()
         return [row.locator_id for row in rows]
 
-    def _assert_link_mirror(self, entity_kind: str, entity_id: str, payload_ids: list[str]) -> None:
-        links = self._locator_ids_for(entity_kind, entity_id)
+    def _assert_link_mirror(
+        self,
+        entity_kind: str,
+        entity_id: str,
+        payload_ids: list[str],
+        *,
+        locator_ids: list[str] | None = None,
+    ) -> None:
+        links = (
+            list(locator_ids)
+            if locator_ids is not None
+            else self._locator_ids_for(entity_kind, entity_id)
+        )
         if links != payload_ids:
             raise PersistedContractInvalid(
                 f"{entity_kind} {entity_id} 定位链接与 payload 定位不一致，拒绝还原合同"
@@ -667,38 +1160,68 @@ class _PublishMixin:
 class ClinicalFactV2Repository(_PublishMixin):
     """发布接受的事实：权威元组 + 定位闭包 + 断言依据定位约束 + revision 链追加。"""
 
-    def __init__(self, session: Session) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        authority_validator: FactAuthorityValidator | None = None,
+        complete_revision: Any | None = None,
+    ) -> None:
         self.session = session
-        self._authority = FactAuthorityValidator(session)
+        self._authority = authority_validator or FactAuthorityValidator(session)
+        self._complete_revision = complete_revision
 
     def create(self, fact: ClinicalFactV2) -> ClinicalFactV2:
-        candidate = self._validate_common(
-            fact.authority, fact.run_id, fact.gate_id, fact.locator_ids, "fact"
+        candidates = self._validate_publication_group(
+            authority=fact.authority,
+            run_id=fact.run_id,
+            primary_gate_id=fact.gate_id,
+            gate_ids=fact.gate_ids,
+            candidate_ids=fact.source_candidate_ids,
+            locator_ids=fact.locator_ids,
+            expected_candidate_kind="fact",
         )
-        if not isinstance(candidate, ClinicalFactCandidateV2) or (
-            candidate.fact_type,
-            candidate.polarity,
-            candidate.asserted_object,
-            candidate.canonical_value,
-            candidate.unit,
-            candidate.date_range,
-            candidate.record_time,
-            candidate.locator_ids,
-            candidate.assertion_basis,
-        ) != (
+        expected_semantics = (
             fact.fact_type,
             fact.polarity,
             fact.asserted_object,
             fact.value,
             fact.unit,
-            fact.date_range,
-            fact.record_time,
-            fact.locator_ids,
-            fact.assertion_basis,
-        ):
+            _date_range_semantics(fact.date_range),
+        )
+        for candidate in candidates:
+            if not isinstance(candidate, ClinicalFactCandidateV2) or (
+                candidate.fact_type,
+                candidate.polarity,
+                candidate.asserted_object,
+                candidate.canonical_value,
+                candidate.unit,
+                _date_range_semantics(candidate.date_range),
+            ) != expected_semantics:
+                raise FactCrossEntityError(
+                    f"发布事实 {fact.fact_id} 与最终门禁审查的候选语义不一致"
+                )
+        record_times = {candidate.record_time for candidate in candidates}
+        expected_record_time = next(iter(record_times)) if len(record_times) == 1 else None
+        representative = min(candidates, key=lambda candidate: candidate.candidate_id)
+        expected_requirement_ids = sorted(
+            {
+                requirement_id
+                for candidate in candidates
+                for requirement_id in candidate.supported_requirement_ids
+            }
+        )
+        if fact.supported_requirement_ids != expected_requirement_ids:
             raise FactCrossEntityError(
-                f"发布事实 {fact.fact_id} 与最终门禁审查的候选语义不一致"
+                f"发布事实 {fact.fact_id} 支持的资料要求与来源候选确定性并集不一致"
             )
+        if fact.record_time != expected_record_time or fact.assertion_basis != representative.assertion_basis:
+            raise FactCrossEntityError(
+                f"发布事实 {fact.fact_id} 的记录时间或断言依据与来源候选的确定性合并结果不一致"
+            )
+        self._require_published_source_strength(
+            fact.authority, candidates, fact.source_strength
+        )
         if fact.assertion_basis is not None:
             if fact.assertion_basis.locator_id not in fact.locator_ids:
                 raise FactLocatorReferenceError(
@@ -766,6 +1289,48 @@ class ClinicalFactV2Repository(_PublishMixin):
         )
         return self._decode_record(row)
 
+    def get_many(self, fact_ids: Sequence[str]) -> dict[str, ClinicalFactV2]:
+        """按 ID 批量还原已发布事实；缺失不得静默省略。定位镜像一次预取。"""
+        ordered = list(dict.fromkeys(fact_ids))
+        if not ordered:
+            return {}
+        rows = self.session.execute(
+            select(ClinicalFactV2Record).where(
+                ClinicalFactV2Record.fact_id.in_(ordered)
+            )
+        ).scalars().all()
+        by_id = {row.fact_id: row for row in rows}
+        missing = [fact_id for fact_id in ordered if fact_id not in by_id]
+        if missing:
+            raise Phase5RepositoryError(
+                f"ClinicalFactV2 不存在: {missing}"
+            )
+        locators = prefetch_locator_link_ids(self.session, "fact", ordered)
+        return {
+            fact_id: self._decode_record(
+                by_id[fact_id], locator_ids=locators[fact_id]
+            )
+            for fact_id in ordered
+        }
+
+    def list_for_authority(self, authority: FactAuthority) -> list[ClinicalFactV2]:
+        """按冻结权威 SQL 过滤后批量解码；定位镜像一次预取。"""
+        rows = self.session.execute(
+            select(ClinicalFactV2Record).where(
+                *authority_column_filters(ClinicalFactV2Record, authority)
+            )
+        ).scalars().all()
+        locators = prefetch_locator_link_ids(
+            self.session, "fact", [row.fact_id for row in rows]
+        )
+        contracts = [
+            self._decode_record(row, locator_ids=locators[row.fact_id]) for row in rows
+        ]
+        return sorted(
+            (fact for fact in contracts if fact.authority == authority),
+            key=lambda fact: (fact.created_at, fact.fact_id),
+        )
+
     def list_by_episode(self, review_episode_id: str) -> list[ClinicalFactV2]:
         rows = self.session.execute(select(ClinicalFactV2Record)).scalars().all()
         contracts = [self._decode_record(row) for row in rows]
@@ -778,7 +1343,9 @@ class ClinicalFactV2Repository(_PublishMixin):
             key=lambda fact: (fact.created_at, fact.fact_id),
         )
 
-    def _decode_record(self, row: ClinicalFactV2Record) -> ClinicalFactV2:
+    def _decode_record(
+        self, row: ClinicalFactV2Record, *, locator_ids: list[str] | None = None
+    ) -> ClinicalFactV2:
         contract = decode_contract(ClinicalFactV2, row.payload_json, row.payload_sha256)
         payload = json.loads(row.payload_json)
         _check_tolerant_mirrors(
@@ -817,7 +1384,9 @@ class ClinicalFactV2Repository(_PublishMixin):
                 "complete_processing_revision_id": "authority.complete_processing_revision_id",
             },
         )
-        self._assert_link_mirror("fact", row.fact_id, payload["locator_ids"])
+        self._assert_link_mirror(
+            "fact", row.fact_id, payload["locator_ids"], locator_ids=locator_ids
+        )
         return contract.model_copy(update={"locator_ids": payload["locator_ids"]})
 
 
@@ -829,37 +1398,61 @@ class ClinicalFactV2Repository(_PublishMixin):
 class ClinicalEventV2Repository(_PublishMixin):
     """发布事件：事实与定位引用必须同一权威元组，事件定位属于成员事实定位闭包。"""
 
-    def __init__(self, session: Session) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        authority_validator: FactAuthorityValidator | None = None,
+        complete_revision: Any | None = None,
+    ) -> None:
         self.session = session
-        self._authority = FactAuthorityValidator(session)
+        self._authority = authority_validator or FactAuthorityValidator(session)
+        self._complete_revision = complete_revision
 
     def create(self, event: ClinicalEventV2) -> ClinicalEventV2:
-        candidate = self._validate_common(
-            event.authority, event.run_id, event.gate_id, event.locator_ids, "event"
+        candidates = self._validate_publication_group(
+            authority=event.authority,
+            run_id=event.run_id,
+            primary_gate_id=event.gate_id,
+            gate_ids=event.gate_ids,
+            candidate_ids=event.source_candidate_ids,
+            locator_ids=event.locator_ids,
+            expected_candidate_kind="event",
         )
-        if not isinstance(candidate, ClinicalEventCandidateV2) or (
-            candidate.event_type,
-            candidate.start_range,
-            candidate.end_range,
-            candidate.duration_status,
-            candidate.record_time,
-            candidate.locator_ids,
-        ) != (
+        expected_semantics = (
             event.event_type,
-            event.start_range,
-            event.end_range,
+            _date_range_semantics(event.start_range),
+            _date_range_semantics(event.end_range),
             event.duration_status,
-            event.record_time,
-            event.locator_ids,
-        ):
+        )
+        for candidate in candidates:
+            if not isinstance(candidate, ClinicalEventCandidateV2) or (
+                candidate.event_type,
+                _date_range_semantics(candidate.start_range),
+                _date_range_semantics(candidate.end_range),
+                candidate.duration_status,
+            ) != expected_semantics:
+                raise FactCrossEntityError(
+                    f"发布事件 {event.event_id} 与最终门禁审查的候选语义不一致"
+                )
+        record_times = {candidate.record_time for candidate in candidates}
+        expected_record_time = next(iter(record_times)) if len(record_times) == 1 else None
+        if event.record_time != expected_record_time:
             raise FactCrossEntityError(
-                f"发布事件 {event.event_id} 与最终门禁审查的候选语义不一致"
+                f"发布事件 {event.event_id} 的记录时间与来源候选的确定性合并结果不一致"
             )
+        self._require_published_source_strength(
+            event.authority, candidates, event.source_strength
+        )
         self._require_facts_same_authority(event.authority, event.fact_ids)
-        if self._fact_candidate_ids(event.fact_ids) != candidate.fact_candidate_ids:
-            raise FactCrossEntityError(
-                f"发布事件 {event.event_id} 的事实引用与候选事实引用不一致"
-            )
+        expected_fact_candidates = sorted(
+            {fact_id for candidate in candidates for fact_id in candidate.fact_candidate_ids}
+        )
+        self._require_fact_candidate_reference_closure(
+            event.fact_ids,
+            expected_fact_candidates,
+            entity_label=f"事件 {event.event_id}",
+        )
         if self._fact_semantic_objects(event.fact_ids) != event.referenced_fact_objects:
             raise FactCrossEntityError(
                 f"发布事件 {event.event_id} 的引用事实对象与实际发布事实不一致"
@@ -934,6 +1527,41 @@ class ClinicalEventV2Repository(_PublishMixin):
         row = _get_required(self.session, ClinicalEventV2Record, event_id, "ClinicalEventV2")
         return self._decode_record(row)
 
+    def list_for_authority(self, authority: FactAuthority) -> list[ClinicalEventV2]:
+        rows = self.session.execute(
+            select(ClinicalEventV2Record).where(
+                *authority_column_filters(ClinicalEventV2Record, authority)
+            )
+        ).scalars().all()
+        event_ids = [row.event_id for row in rows]
+        locators = prefetch_locator_link_ids(self.session, "event", event_ids)
+        fact_ids_by_event = _prefetch_event_fact_ids(self.session, event_ids)
+        referenced = sorted(
+            {fact_id for ids in fact_ids_by_event.values() for fact_id in ids}
+        )
+        facts_by_id = ClinicalFactV2Repository(self.session).get_many(referenced)
+        contracts = []
+        for row in rows:
+            fact_ids = fact_ids_by_event[row.event_id]
+            objects = sorted(
+                {
+                    f"{facts_by_id[fact_id].fact_type}:{facts_by_id[fact_id].asserted_object}"
+                    for fact_id in fact_ids
+                }
+            )
+            contracts.append(
+                self._decode_record(
+                    row,
+                    locator_ids=locators[row.event_id],
+                    fact_ids=fact_ids,
+                    referenced_fact_objects=objects,
+                )
+            )
+        return sorted(
+            (event for event in contracts if event.authority == authority),
+            key=lambda event: (event.created_at, event.event_id),
+        )
+
     def list_by_episode(self, review_episode_id: str) -> list[ClinicalEventV2]:
         rows = self.session.execute(select(ClinicalEventV2Record)).scalars().all()
         contracts = [self._decode_record(row) for row in rows]
@@ -946,7 +1574,30 @@ class ClinicalEventV2Repository(_PublishMixin):
             key=lambda event: (event.created_at, event.event_id),
         )
 
-    def _decode_record(self, row: ClinicalEventV2Record) -> ClinicalEventV2:
+    def list_event_fact_links(self, fact_ids: Sequence[str]) -> list[tuple[str, str]]:
+        """一次查出 ``(event_id, fact_id)``，禁止按事实 N+1。"""
+        unique_ids = sorted(set(fact_ids))
+        if not unique_ids:
+            return []
+        rows = self.session.execute(
+            select(EventFactLinkRecord.event_id, EventFactLinkRecord.fact_id)
+            .where(EventFactLinkRecord.fact_id.in_(unique_ids))
+            .order_by(EventFactLinkRecord.event_id, EventFactLinkRecord.fact_id)
+        ).all()
+        return [(row[0], row[1]) for row in rows]
+
+    def list_event_ids_for_facts(self, fact_ids: Sequence[str]) -> list[str]:
+        """事实 -> 引用它的事件（``event_fact_links.fact_id`` 反向索引）。"""
+        return sorted({event_id for event_id, _fact_id in self.list_event_fact_links(fact_ids)})
+
+    def _decode_record(
+        self,
+        row: ClinicalEventV2Record,
+        *,
+        locator_ids: list[str] | None = None,
+        fact_ids: list[str] | None = None,
+        referenced_fact_objects: list[str] | None = None,
+    ) -> ClinicalEventV2:
         contract = decode_contract(ClinicalEventV2, row.payload_json, row.payload_sha256)
         payload = json.loads(row.payload_json)
         _check_tolerant_mirrors(
@@ -983,18 +1634,26 @@ class ClinicalEventV2Repository(_PublishMixin):
                 "complete_processing_revision_id": "authority.complete_processing_revision_id",
             },
         )
-        self._assert_link_mirror("event", row.event_id, payload["locator_ids"])
-        fact_rows = self.session.execute(
-            select(EventFactLinkRecord)
-            .where(EventFactLinkRecord.event_id == row.event_id)
-            .order_by(EventFactLinkRecord.position)
-        ).scalars().all()
-        fact_ids = [link.fact_id for link in fact_rows]
+        self._assert_link_mirror(
+            "event", row.event_id, payload["locator_ids"], locator_ids=locator_ids
+        )
+        if fact_ids is None:
+            fact_rows = self.session.execute(
+                select(EventFactLinkRecord)
+                .where(EventFactLinkRecord.event_id == row.event_id)
+                .order_by(EventFactLinkRecord.position)
+            ).scalars().all()
+            fact_ids = [link.fact_id for link in fact_rows]
         if fact_ids != payload["fact_ids"]:
             raise PersistedContractInvalid(
                 f"event {row.event_id} 事实链接与 payload 不一致，拒绝还原合同"
             )
-        if self._fact_semantic_objects(fact_ids) != payload["referenced_fact_objects"]:
+        objects = (
+            referenced_fact_objects
+            if referenced_fact_objects is not None
+            else self._fact_semantic_objects(fact_ids)
+        )
+        if objects != payload["referenced_fact_objects"]:
             raise PersistedContractInvalid(
                 f"event {row.event_id} 引用事实对象与实际发布事实不一致，拒绝还原合同"
             )
@@ -1006,32 +1665,28 @@ class ClinicalEventV2Repository(_PublishMixin):
 class MedicationExposureV2Repository(_PublishMixin):
     """发布暴露：同事件约束，保留原始药名/起止/持续状态。"""
 
-    def __init__(self, session: Session) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        authority_validator: FactAuthorityValidator | None = None,
+        complete_revision: Any | None = None,
+    ) -> None:
         self.session = session
-        self._authority = FactAuthorityValidator(session)
+        self._authority = authority_validator or FactAuthorityValidator(session)
+        self._complete_revision = complete_revision
 
     def create(self, exposure: MedicationExposureV2) -> MedicationExposureV2:
-        candidate = self._validate_common(
-            exposure.authority,
-            exposure.run_id,
-            exposure.gate_id,
-            exposure.locator_ids,
-            "exposure",
+        candidates = self._validate_publication_group(
+            authority=exposure.authority,
+            run_id=exposure.run_id,
+            primary_gate_id=exposure.gate_id,
+            gate_ids=exposure.gate_ids,
+            candidate_ids=exposure.source_candidate_ids,
+            locator_ids=exposure.locator_ids,
+            expected_candidate_kind="exposure",
         )
-        if not isinstance(candidate, MedicationExposureCandidateV2) or (
-            candidate.medication_name,
-            candidate.category,
-            candidate.indication,
-            candidate.dose,
-            candidate.unit,
-            candidate.frequency,
-            candidate.route,
-            candidate.start_range,
-            candidate.end_range,
-            candidate.duration_status,
-            candidate.record_time,
-            candidate.locator_ids,
-        ) != (
+        expected_semantics = (
             exposure.medication_name,
             exposure.category,
             exposure.indication,
@@ -1039,20 +1694,44 @@ class MedicationExposureV2Repository(_PublishMixin):
             exposure.unit,
             exposure.frequency,
             exposure.route,
-            exposure.start_range,
-            exposure.end_range,
+            _date_range_semantics(exposure.start_range),
+            _date_range_semantics(exposure.end_range),
             exposure.duration_status,
-            exposure.record_time,
-            exposure.locator_ids,
-        ):
+        )
+        for candidate in candidates:
+            if not isinstance(candidate, MedicationExposureCandidateV2) or (
+                candidate.medication_name,
+                candidate.category,
+                candidate.indication,
+                candidate.dose,
+                candidate.unit,
+                candidate.frequency,
+                candidate.route,
+                _date_range_semantics(candidate.start_range),
+                _date_range_semantics(candidate.end_range),
+                candidate.duration_status,
+            ) != expected_semantics:
+                raise FactCrossEntityError(
+                    f"发布暴露 {exposure.exposure_id} 与最终门禁审查的候选语义不一致"
+                )
+        record_times = {candidate.record_time for candidate in candidates}
+        expected_record_time = next(iter(record_times)) if len(record_times) == 1 else None
+        if exposure.record_time != expected_record_time:
             raise FactCrossEntityError(
-                f"发布暴露 {exposure.exposure_id} 与最终门禁审查的候选语义不一致"
+                f"发布暴露 {exposure.exposure_id} 的记录时间与来源候选的确定性合并结果不一致"
             )
+        self._require_published_source_strength(
+            exposure.authority, candidates, exposure.source_strength
+        )
         self._require_facts_same_authority(exposure.authority, exposure.fact_ids)
-        if self._fact_candidate_ids(exposure.fact_ids) != candidate.fact_candidate_ids:
-            raise FactCrossEntityError(
-                f"发布暴露 {exposure.exposure_id} 的事实引用与候选事实引用不一致"
-            )
+        expected_fact_candidates = sorted(
+            {fact_id for candidate in candidates for fact_id in candidate.fact_candidate_ids}
+        )
+        self._require_fact_candidate_reference_closure(
+            exposure.fact_ids,
+            expected_fact_candidates,
+            entity_label=f"暴露 {exposure.exposure_id}",
+        )
         self._require_locators_within_facts(exposure.locator_ids, exposure.fact_ids)
         self._require_revision_chain_head(
             MedicationExposureV2Record,
@@ -1141,6 +1820,28 @@ class MedicationExposureV2Repository(_PublishMixin):
         )
         return self._decode_record(row)
 
+    def list_for_authority(self, authority: FactAuthority) -> list[MedicationExposureV2]:
+        rows = self.session.execute(
+            select(MedicationExposureV2Record).where(
+                *authority_column_filters(MedicationExposureV2Record, authority)
+            )
+        ).scalars().all()
+        exposure_ids = [row.exposure_id for row in rows]
+        locators = prefetch_locator_link_ids(self.session, "exposure", exposure_ids)
+        fact_ids_by_exposure = _prefetch_exposure_fact_ids(self.session, exposure_ids)
+        contracts = [
+            self._decode_record(
+                row,
+                locator_ids=locators[row.exposure_id],
+                fact_ids=fact_ids_by_exposure[row.exposure_id],
+            )
+            for row in rows
+        ]
+        return sorted(
+            (item for item in contracts if item.authority == authority),
+            key=lambda item: (item.created_at, item.exposure_id),
+        )
+
     def list_by_episode(self, review_episode_id: str) -> list[MedicationExposureV2]:
         rows = self.session.execute(select(MedicationExposureV2Record)).scalars().all()
         contracts = [self._decode_record(row) for row in rows]
@@ -1153,7 +1854,31 @@ class MedicationExposureV2Repository(_PublishMixin):
             key=lambda exposure: (exposure.created_at, exposure.exposure_id),
         )
 
-    def _decode_record(self, row: MedicationExposureV2Record) -> MedicationExposureV2:
+    def list_exposure_fact_links(self, fact_ids: Sequence[str]) -> list[tuple[str, str]]:
+        """一次查出 ``(exposure_id, fact_id)``，禁止按事实 N+1。"""
+        unique_ids = sorted(set(fact_ids))
+        if not unique_ids:
+            return []
+        rows = self.session.execute(
+            select(ExposureFactLinkRecord.exposure_id, ExposureFactLinkRecord.fact_id)
+            .where(ExposureFactLinkRecord.fact_id.in_(unique_ids))
+            .order_by(ExposureFactLinkRecord.exposure_id, ExposureFactLinkRecord.fact_id)
+        ).all()
+        return [(row[0], row[1]) for row in rows]
+
+    def list_exposure_ids_for_facts(self, fact_ids: Sequence[str]) -> list[str]:
+        """事实 -> 引用它的暴露（``exposure_fact_links.fact_id`` 反向索引）。"""
+        return sorted(
+            {exposure_id for exposure_id, _fact_id in self.list_exposure_fact_links(fact_ids)}
+        )
+
+    def _decode_record(
+        self,
+        row: MedicationExposureV2Record,
+        *,
+        locator_ids: list[str] | None = None,
+        fact_ids: list[str] | None = None,
+    ) -> MedicationExposureV2:
         contract = decode_contract(
             MedicationExposureV2, row.payload_json, row.payload_sha256
         )
@@ -1198,13 +1923,19 @@ class MedicationExposureV2Repository(_PublishMixin):
                 "complete_processing_revision_id": "authority.complete_processing_revision_id",
             },
         )
-        self._assert_link_mirror("exposure", row.exposure_id, payload["locator_ids"])
-        fact_rows = self.session.execute(
-            select(ExposureFactLinkRecord)
-            .where(ExposureFactLinkRecord.exposure_id == row.exposure_id)
-            .order_by(ExposureFactLinkRecord.position)
-        ).scalars().all()
-        fact_ids = [link.fact_id for link in fact_rows]
+        self._assert_link_mirror(
+            "exposure",
+            row.exposure_id,
+            payload["locator_ids"],
+            locator_ids=locator_ids,
+        )
+        if fact_ids is None:
+            fact_rows = self.session.execute(
+                select(ExposureFactLinkRecord)
+                .where(ExposureFactLinkRecord.exposure_id == row.exposure_id)
+                .order_by(ExposureFactLinkRecord.position)
+            ).scalars().all()
+            fact_ids = [link.fact_id for link in fact_rows]
         if fact_ids != payload["fact_ids"]:
             raise PersistedContractInvalid(
                 f"exposure {row.exposure_id} 事实链接与 payload 不一致，拒绝还原合同"
@@ -1215,27 +1946,55 @@ class MedicationExposureV2Repository(_PublishMixin):
 
 
 class ClinicalConflictGroupV2Repository(_PublishMixin):
-    """未解决冲突组：成员事实同一权威元组、定位属于成员事实闭包、不自动择优。"""
+    """未解决冲突组：同类成员共享权威元组，定位属于成员闭包，不自动择优。"""
 
-    def __init__(self, session: Session) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        authority_validator: FactAuthorityValidator | None = None,
+        complete_revision: Any | None = None,
+    ) -> None:
         self.session = session
-        self._authority = FactAuthorityValidator(session)
+        self._authority = authority_validator or FactAuthorityValidator(session)
+        self._complete_revision = complete_revision
 
     def create(self, group: ClinicalConflictGroupV2) -> ClinicalConflictGroupV2:
         candidate = self._validate_common(
             group.authority, group.run_id, group.gate_id, group.locator_ids, None
         )
-        self._require_facts_same_authority(group.authority, group.fact_ids)
-        if candidate.candidate_id not in self._fact_candidate_ids(group.fact_ids):
+        members = self._load_members(group)
+        if any(member.authority != group.authority for member in members):
+            raise FactCrossEntityError("冲突组成员不属于同一不可变权威元组")
+        gate_repository = FactGateResultRepository(self.session)
+        member_candidate_ids = sorted(
+            {
+                candidate_id
+                for member in members
+                for candidate_id in (
+                    member.source_candidate_ids
+                    or [gate_repository.get(member.gate_id).candidate_id]
+                )
+            }
+        )
+        if candidate.candidate_id not in member_candidate_ids:
             raise FactCrossEntityError(
-                f"冲突组 {group.conflict_group_id} 的最终门禁候选不属于成员事实"
+                f"冲突组 {group.conflict_group_id} 的最终门禁候选不属于其成员"
             )
-        self._require_locators_within_facts(group.locator_ids, group.fact_ids)
+        locator_closure = {
+            locator_id for member in members for locator_id in member.locator_ids
+        }
+        outside = sorted(set(group.locator_ids) - locator_closure)
+        if outside:
+            raise FactLocatorReferenceError(
+                f"冲突组定位 {outside} 不属于其成员实体的定位闭包"
+            )
         payload_json, payload_sha256 = encode_contract(group)
         row = ClinicalConflictGroupV2Record(
             conflict_group_id=group.conflict_group_id,
             run_id=group.run_id,
             gate_id=group.gate_id,
+            member_kind=group.member_kind,
             resolution_revision=group.resolution_revision,
             created_at=to_utc_naive(group.created_at),
             payload_json=payload_json,
@@ -1252,10 +2011,36 @@ class ClinicalConflictGroupV2Repository(_PublishMixin):
                     fact_id=fact_id,
                 )
             )
+        for position, event_id in enumerate(group.event_ids, start=1):
+            self.session.add(
+                ClinicalConflictEventMemberV2Record(
+                    conflict_group_id=group.conflict_group_id,
+                    position=position,
+                    event_id=event_id,
+                )
+            )
+        for position, exposure_id in enumerate(group.exposure_ids, start=1):
+            self.session.add(
+                ClinicalConflictExposureMemberV2Record(
+                    conflict_group_id=group.conflict_group_id,
+                    position=position,
+                    exposure_id=exposure_id,
+                )
+            )
         self._write_locator_links(
             "conflict", group.conflict_group_id, group.locator_ids
         )
         return group
+
+    def _load_members(self, group: ClinicalConflictGroupV2) -> list[Any]:
+        if group.member_kind == "fact":
+            repository = ClinicalFactV2Repository(self.session)
+            return [repository.get(member_id) for member_id in group.fact_ids]
+        if group.member_kind == "event":
+            repository = ClinicalEventV2Repository(self.session)
+            return [repository.get(member_id) for member_id in group.event_ids]
+        repository = MedicationExposureV2Repository(self.session)
+        return [repository.get(member_id) for member_id in group.exposure_ids]
 
     def get(self, conflict_group_id: str) -> ClinicalConflictGroupV2:
         row = _get_required(
@@ -1265,6 +2050,41 @@ class ClinicalConflictGroupV2Repository(_PublishMixin):
             "ClinicalConflictGroupV2",
         )
         return self._decode_record(row)
+
+    def list_for_authority(self, authority: FactAuthority) -> list[ClinicalConflictGroupV2]:
+        rows = self.session.execute(
+            select(ClinicalConflictGroupV2Record).where(
+                *authority_column_filters(ClinicalConflictGroupV2Record, authority)
+            )
+        ).scalars().all()
+        group_ids = [row.conflict_group_id for row in rows]
+        locators = prefetch_locator_link_ids(self.session, "conflict", group_ids)
+        fact_ids = _prefetch_conflict_member_ids(
+            self.session, ClinicalConflictMemberV2Record, "fact_id", group_ids
+        )
+        event_ids = _prefetch_conflict_member_ids(
+            self.session, ClinicalConflictEventMemberV2Record, "event_id", group_ids
+        )
+        exposure_ids = _prefetch_conflict_member_ids(
+            self.session,
+            ClinicalConflictExposureMemberV2Record,
+            "exposure_id",
+            group_ids,
+        )
+        contracts = [
+            self._decode_record(
+                row,
+                locator_ids=locators[row.conflict_group_id],
+                fact_ids=fact_ids[row.conflict_group_id],
+                event_ids=event_ids[row.conflict_group_id],
+                exposure_ids=exposure_ids[row.conflict_group_id],
+            )
+            for row in rows
+        ]
+        return sorted(
+            (item for item in contracts if item.authority == authority),
+            key=lambda item: (item.created_at, item.conflict_group_id),
+        )
 
     def list_by_episode(self, review_episode_id: str) -> list[ClinicalConflictGroupV2]:
         rows = self.session.execute(select(ClinicalConflictGroupV2Record)).scalars().all()
@@ -1278,8 +2098,43 @@ class ClinicalConflictGroupV2Repository(_PublishMixin):
             key=lambda group: (group.created_at, group.conflict_group_id),
         )
 
+    def list_group_ids_for_members(
+        self, member_kind: str, member_ids: Sequence[str]
+    ) -> list[str]:
+        """冲突成员 -> 冲突组（类型化成员表反向索引）。"""
+        unique_ids = sorted(set(member_ids))
+        if not unique_ids:
+            return []
+        table_and_column = {
+            "fact": (ClinicalConflictMemberV2Record, ClinicalConflictMemberV2Record.fact_id),
+            "event": (
+                ClinicalConflictEventMemberV2Record,
+                ClinicalConflictEventMemberV2Record.event_id,
+            ),
+            "exposure": (
+                ClinicalConflictExposureMemberV2Record,
+                ClinicalConflictExposureMemberV2Record.exposure_id,
+            ),
+        }.get(member_kind)
+        if table_and_column is None:
+            raise Phase5RepositoryError(f"不支持的冲突成员类型 {member_kind}")
+        table, column = table_and_column
+        rows = self.session.execute(
+            select(table.conflict_group_id)
+            .where(column.in_(unique_ids))
+            .distinct()
+            .order_by(table.conflict_group_id)
+        ).all()
+        return [row[0] for row in rows]
+
     def _decode_record(
-        self, row: ClinicalConflictGroupV2Record
+        self,
+        row: ClinicalConflictGroupV2Record,
+        *,
+        locator_ids: list[str] | None = None,
+        fact_ids: list[str] | None = None,
+        event_ids: list[str] | None = None,
+        exposure_ids: list[str] | None = None,
     ) -> ClinicalConflictGroupV2:
         contract = decode_contract(
             ClinicalConflictGroupV2, row.payload_json, row.payload_sha256
@@ -1306,17 +2161,59 @@ class ClinicalConflictGroupV2Repository(_PublishMixin):
                 "complete_processing_revision_id": "authority.complete_processing_revision_id",
             },
         )
-        self._assert_link_mirror("conflict", row.conflict_group_id, payload["locator_ids"])
-        member_rows = self.session.execute(
-            select(ClinicalConflictMemberV2Record)
-            .where(ClinicalConflictMemberV2Record.conflict_group_id == row.conflict_group_id)
-            .order_by(ClinicalConflictMemberV2Record.position)
-        ).scalars().all()
-        fact_ids = [m.fact_id for m in member_rows]
-        if fact_ids != payload["fact_ids"]:
+        if row.member_kind != contract.member_kind:
+            raise PersistedContractInvalid(
+                f"ClinicalConflictGroupV2 列 member_kind 与已验证合同不一致，拒绝还原合同"
+            )
+        self._assert_link_mirror(
+            "conflict",
+            row.conflict_group_id,
+            payload["locator_ids"],
+            locator_ids=locator_ids,
+        )
+        if fact_ids is None:
+            member_rows = self.session.execute(
+                select(ClinicalConflictMemberV2Record)
+                .where(
+                    ClinicalConflictMemberV2Record.conflict_group_id
+                    == row.conflict_group_id
+                )
+                .order_by(ClinicalConflictMemberV2Record.position)
+            ).scalars().all()
+            fact_ids = [m.fact_id for m in member_rows]
+        if event_ids is None:
+            event_rows = self.session.execute(
+                select(ClinicalConflictEventMemberV2Record)
+                .where(
+                    ClinicalConflictEventMemberV2Record.conflict_group_id
+                    == row.conflict_group_id
+                )
+                .order_by(ClinicalConflictEventMemberV2Record.position)
+            ).scalars().all()
+            event_ids = [m.event_id for m in event_rows]
+        if exposure_ids is None:
+            exposure_rows = self.session.execute(
+                select(ClinicalConflictExposureMemberV2Record)
+                .where(
+                    ClinicalConflictExposureMemberV2Record.conflict_group_id
+                    == row.conflict_group_id
+                )
+                .order_by(ClinicalConflictExposureMemberV2Record.position)
+            ).scalars().all()
+            exposure_ids = [m.exposure_id for m in exposure_rows]
+        if (
+            fact_ids != payload.get("fact_ids", [])
+            or event_ids != payload.get("event_ids", [])
+            or exposure_ids != payload.get("exposure_ids", [])
+        ):
             raise PersistedContractInvalid(
                 f"conflict {row.conflict_group_id} 成员链接与 payload 不一致，拒绝还原合同"
             )
         return contract.model_copy(
-            update={"fact_ids": fact_ids, "locator_ids": payload["locator_ids"]}
+            update={
+                "fact_ids": fact_ids,
+                "event_ids": event_ids,
+                "exposure_ids": exposure_ids,
+                "locator_ids": payload["locator_ids"],
+            }
         )

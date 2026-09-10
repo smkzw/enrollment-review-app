@@ -44,6 +44,7 @@ def build_profile_fingerprint(
 
 def build_ocr_cache_key(
     *,
+    page_artifact_id: str,
     source_sha256: str,
     page_number: int,
     ocr_profile_sha256: str,
@@ -51,12 +52,16 @@ def build_ocr_cache_key(
     layout_parser_version: str | None = None,
     coordinate_transform_version: str,
 ) -> str:
-    """页级 OCR 缓存唯一键。
+    """页级 OCR 缓存唯一键（v2：绑定持有 OCR 结果的页产物身份）。
 
     ``layout_parser_version`` 与 ``coordinate_transform_version`` 参与键值，
     保证布局解析器或坐标变换升级后不会错误命中旧坐标缓存。
+    ``page_artifact_id`` 使同一内容在不同资料版本下各自拥有独立成功页：
+    仅内容键（v1）的跨版本命中会让冻结清单引用不属于本版本的 OCRPage，
+    被清单完整性门禁拒绝（基线期 EXECUTOR_ERROR 根因）。
     """
     return ocr_page_cache_hash(
+        page_artifact_id=page_artifact_id,
         source_sha256=source_sha256,
         page_number=page_number,
         ocr_profile_sha256=ocr_profile_sha256,

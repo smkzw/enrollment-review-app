@@ -1282,6 +1282,14 @@
         "title": "ClinicalFact",
         "type": "object"
       },
+      "CombinedWindowSelection": {
+        "description": "固定日历窗与半衰期窗并存时的择窗语义。\n\n``longer_of_calendar_and_half_life`` 表示“固定窗口或 N 个半衰期，以时间较长者为准”。\n这是同一洗脱/禁限窗的两种度量取较长者，不是把独立分支改写成 ``LogicalOperator.ANY``，\n也不得从原文“或”字自行推断；合同字段必须显式给出。",
+        "enum": [
+          "longer_of_calendar_and_half_life"
+        ],
+        "title": "CombinedWindowSelection",
+        "type": "string"
+      },
       "Comparator": {
         "enum": [
           "eq",
@@ -2457,6 +2465,7 @@
       },
       "GapType": {
         "enum": [
+          "observation_unverified",
           "record_incomplete",
           "description_insufficient",
           "historical_source_unavailable",
@@ -2709,6 +2718,7 @@
           "retry_scheduled",
           "waiting_user",
           "user_resumed",
+          "user_updated",
           "cancel_requested",
           "cancelled",
           "completed",
@@ -3893,9 +3903,16 @@
             "title": "Due At"
           },
           "evidence_snapshot_id": {
-            "minLength": 1,
-            "title": "Evidence Snapshot Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Evidence Snapshot Id"
           },
           "project_id": {
             "minLength": 1,
@@ -3944,6 +3961,18 @@
             "minLength": 1,
             "title": "Subject Id",
             "type": "string"
+          },
+          "workflow_stage_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Workflow Stage Id"
           }
         },
         "required": [
@@ -3954,8 +3983,7 @@
           "study_phase",
           "stage",
           "protocol_version_id",
-          "rule_set_revision",
-          "evidence_snapshot_id"
+          "rule_set_revision"
         ],
         "title": "ReviewEpisode",
         "type": "object"
@@ -4585,39 +4613,7 @@
       },
       "TimeConstraint": {
         "additionalProperties": false,
-        "allOf": [
-          {
-            "if": {
-              "properties": {
-                "direction": {
-                  "const": "on"
-                }
-              },
-              "required": [
-                "direction"
-              ]
-            },
-            "then": {
-              "properties": {
-                "half_life_multiplier": {
-                  "type": "null"
-                },
-                "lower_bound": {
-                  "type": "null"
-                },
-                "lower_bound_days": {
-                  "type": "null"
-                },
-                "upper_bound": {
-                  "type": "null"
-                },
-                "upper_bound_days": {
-                  "type": "null"
-                }
-              }
-            }
-          }
-        ],
+        "description": "相对命名锚点的时间窗。\n\n固定日历窗与半衰期倍数可同时出现，但必须显式声明\n``combined_window_selection=longer_of_calendar_and_half_life``；\n不得仅因两类字段并存或原文含“或”而推断择长语义。\n锚点必须使用方案命名的日期类型（如 ``first_dose_date``），由调用方按原文填写。",
         "properties": {
           "allow_partial_date": {
             "default": false,
@@ -4626,6 +4622,17 @@
           },
           "anchor_type": {
             "$ref": "#/components/schemas/AnchorType"
+          },
+          "combined_window_selection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CombinedWindowSelection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           },
           "direction": {
             "$ref": "#/components/schemas/TimeDirection"
@@ -4667,6 +4674,11 @@
             "default": null,
             "title": "Lower Bound Days"
           },
+          "lower_bound_inclusive": {
+            "default": true,
+            "title": "Lower Bound Inclusive",
+            "type": "boolean"
+          },
           "upper_bound": {
             "anyOf": [
               {
@@ -4690,6 +4702,11 @@
             ],
             "default": null,
             "title": "Upper Bound Days"
+          },
+          "upper_bound_inclusive": {
+            "default": true,
+            "title": "Upper Bound Inclusive",
+            "type": "boolean"
           }
         },
         "required": [

@@ -59,6 +59,14 @@ describe("方案工作台", () => {
     });
     expect(screen.getByText(/核对方案信息与研究期别/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "选择方案文件" })).toBeInTheDocument();
+    expect(document.querySelector("input[type=file]")).toHaveAttribute(
+      "accept",
+      expect.stringContaining(".docx"),
+    );
+    expect(document.querySelector("input[type=file]")).toHaveAttribute(
+      "accept",
+      expect.not.stringContaining("application/pdf"),
+    );
   });
 
   it("示例草稿任务展示规则树、编辑区与来源定位", async () => {
@@ -127,6 +135,28 @@ describe("方案工作台", () => {
     render(<ProtocolsPage />);
     expect(await screen.findByRole("heading", { name: "可从中断处继续" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "继续任务" })).toBeInTheDocument();
+  });
+
+  it("正常运行中的任务即使已有检查点也继续展示处理进度", async () => {
+    const base = createProtocolWorkbenchStub();
+    setProtocolWorkbenchRepository({
+      ...base,
+      getSession: async () => ({
+        ...protocolSessionFixtures[PROTOCOL_RECOVERY_JOB_ID]!,
+        state: "running",
+        stateLabel: "正在处理",
+        progressCompleted: 6,
+        progressTotal: 10,
+        nextAction: "等待生成方案解构草稿。",
+      }),
+    });
+    navigate("/protocols", { job: PROTOCOL_RECOVERY_JOB_ID });
+    render(<ProtocolsPage />);
+
+    expect(
+      await screen.findByRole("heading", { name: "方案解构进行中" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "可从中断处继续" })).not.toBeInTheDocument();
   });
 
   it("重新解构入口展示正式项目选择列表", async () => {

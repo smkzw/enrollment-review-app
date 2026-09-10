@@ -222,6 +222,7 @@ def _calendar_bound_satisfied(
     quantity: TimeQuantity,
     *,
     is_lower_bound: bool,
+    inclusive: bool,
 ) -> bool:
     """Evaluate a month/year boundary using calendar arithmetic.
 
@@ -235,22 +236,18 @@ def _calendar_bound_satisfied(
         if _calendar_shift_is_boundary(
             event_date, anchor_date, shifted_event_date, quantity
         ):
-            return True
-        return (
-            shifted_event_date <= anchor_date
-            if is_lower_bound
-            else shifted_event_date >= anchor_date
-        )
+            return inclusive
+        if is_lower_bound:
+            return shifted_event_date < anchor_date if not inclusive else shifted_event_date <= anchor_date
+        return shifted_event_date > anchor_date if not inclusive else shifted_event_date >= anchor_date
     shifted_event_date = _shift_date(event_date, quantity, sign=-1)
     if _calendar_shift_is_boundary(
         event_date, anchor_date, shifted_event_date, quantity
     ):
-        return True
-    return (
-        shifted_event_date >= anchor_date
-        if is_lower_bound
-        else shifted_event_date <= anchor_date
-    )
+        return inclusive
+    if is_lower_bound:
+        return shifted_event_date > anchor_date if not inclusive else shifted_event_date >= anchor_date
+    return shifted_event_date < anchor_date if not inclusive else shifted_event_date <= anchor_date
 
 
 def _date_bounds(value: DateValue, *, allow_partial: bool) -> tuple[date, date] | None:
@@ -280,6 +277,7 @@ def _calendar_bound_truth(
     quantity: TimeQuantity,
     *,
     is_lower_bound: bool,
+    inclusive: bool,
 ) -> TruthValue:
     """Evaluate every endpoint combination represented by partial dates.
 
@@ -295,6 +293,7 @@ def _calendar_bound_truth(
             direction,
             quantity,
             is_lower_bound=is_lower_bound,
+            inclusive=inclusive,
         )
         for event_date in event_bounds
         for anchor_date in anchor_bounds
@@ -405,14 +404,34 @@ def _evaluate_time(
         half_life_bound = ceil(half_life * constraint.half_life_multiplier)
         lower_bound = max(lower_bound or 0, half_life_bound)
     if lower_bound is not None:
-        if distance_max < lower_bound:
+        below_window = (
+            distance_max < lower_bound
+            if constraint.lower_bound_inclusive
+            else distance_max <= lower_bound
+        )
+        crosses_boundary = (
+            distance_min < lower_bound <= distance_max
+            if constraint.lower_bound_inclusive
+            else distance_min <= lower_bound < distance_max
+        )
+        if below_window:
             return _result(TruthValue.FALSE, "below_time_window", used_fact_ids=[fact.fact_id])
-        if distance_min < lower_bound <= distance_max:
+        if crosses_boundary:
             return _result(TruthValue.UNKNOWN, "ambiguous_time_window", used_fact_ids=[fact.fact_id])
     if upper_bound is not None:
-        if distance_min > upper_bound:
+        above_window = (
+            distance_min > upper_bound
+            if constraint.upper_bound_inclusive
+            else distance_min >= upper_bound
+        )
+        crosses_boundary = (
+            distance_min <= upper_bound < distance_max
+            if constraint.upper_bound_inclusive
+            else distance_min < upper_bound <= distance_max
+        )
+        if above_window:
             return _result(TruthValue.FALSE, "above_time_window", used_fact_ids=[fact.fact_id])
-        if distance_min <= upper_bound < distance_max:
+        if crosses_boundary:
             return _result(TruthValue.UNKNOWN, "ambiguous_time_window", used_fact_ids=[fact.fact_id])
     if constraint.lower_bound is not None and constraint.lower_bound.unit in {
         TimeUnit.MONTH,
@@ -424,6 +443,7 @@ def _evaluate_time(
             constraint.direction.value,
             constraint.lower_bound,
             is_lower_bound=True,
+            inclusive=constraint.lower_bound_inclusive,
         )
         if lower_truth == TruthValue.FALSE:
             return _result(
@@ -447,6 +467,7 @@ def _evaluate_time(
             constraint.direction.value,
             constraint.upper_bound,
             is_lower_bound=False,
+            inclusive=constraint.upper_bound_inclusive,
         )
         if upper_truth == TruthValue.FALSE:
             return _result(

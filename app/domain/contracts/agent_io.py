@@ -24,7 +24,11 @@ from .rules import (
     WorkflowStage,
 )
 from .protocol_ingestion import FrozenProtocolCatalog
-from .protocol_metadata import ProtocolIdentityDecision, StudyPhaseSelection
+from .protocol_metadata import (
+    InterpretationSource,
+    ProtocolIdentityDecision,
+    StudyPhaseSelection,
+)
 
 
 class ProtocolMetadataDraft(VersionedModel):
@@ -143,6 +147,26 @@ class ProtocolDeconstructionInput(VersionedModel):
     parent_rule_catalog: FrozenProtocolCatalog
     required_procedure_catalog: FrozenProtocolCatalog
     interpretation_source_ids: list[str] = Field(default_factory=list)
+    interpretation_sources: list[InterpretationSource] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_interpretation_scope(self) -> "ProtocolDeconstructionInput":
+        """解释来源必须携带经校验的完整对象，不能只传裸 ID。"""
+
+        source_ids = [item.interpretation_source_id for item in self.interpretation_sources]
+        if len(source_ids) != len(set(source_ids)):
+            raise ValueError("解释来源不得重复")
+        if self.interpretation_source_ids:
+            if set(self.interpretation_source_ids) != set(source_ids):
+                raise ValueError("解释来源 ID 集合必须与解释来源对象集合完全一致")
+        elif self.interpretation_sources:
+            raise ValueError(
+                "解释来源必须同时提供与对象集合一致的 ID 集合，不能只携带对象"
+            )
+        for source in self.interpretation_sources:
+            if source.protocol_version_id != self.protocol_version_id:
+                raise ValueError("解释来源必须绑定本次解构的方案版本")
+        return self
 
     @model_validator(mode="after")
     def validate_frozen_scope(self) -> "ProtocolDeconstructionInput":

@@ -24,7 +24,7 @@ export function ProtocolUploadPanel({
 
   const handleFile = (file: File | undefined) => {
     if (file === undefined) return;
-    if (!file.name.toLowerCase().endsWith(".docx")) {
+    if (!/\.docx$/i.test(file.name)) {
       onInvalidFile?.("当前仅支持 DOCX 方案文件，请选择正式方案文件后重试。");
       return;
     }

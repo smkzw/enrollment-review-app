@@ -12,6 +12,7 @@ from app.storage.codecs import (
     check_column_mirrors,
     decode_contract,
     encode_contract,
+    mirror_values_equal,
     parse_datetime_column,
     to_utc_naive,
 )
@@ -108,6 +109,25 @@ def test_datetime_column_parsing_normalizes_to_utc_naive() -> None:
     parsed = parse_datetime_column("2026-08-12T12:00:00Z")
     assert parsed.tzinfo is None
     assert parsed.isoformat() == "2026-08-12T12:00:00"
+
+
+def test_json_mirror_treats_integral_float_as_same_number() -> None:
+    assert mirror_values_equal(5, 5.0)
+    assert mirror_values_equal({"result": [5, 2.5]}, {"result": [5.0, 2.5]})
+
+
+def test_json_mirror_keeps_boolean_distinct_from_number() -> None:
+    assert not mirror_values_equal(True, 1)
+    assert not mirror_values_equal({"result": False}, {"result": 0.0})
+
+
+def test_json_mirror_accepts_iso_date_and_datetime_columns() -> None:
+    assert mirror_values_equal(__import__("datetime").date(2026, 8, 23), "2026-08-23")
+    assert mirror_values_equal(
+        __import__("datetime").datetime(2026, 8, 23, 8, 30),
+        "2026-08-23T08:30:00Z",
+    )
+    assert not mirror_values_equal(__import__("datetime").date(2026, 8, 23), "临床记录")
 
 
 def test_contract_with_extra_field_is_rejected_by_codec() -> None:

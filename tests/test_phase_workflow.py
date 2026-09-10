@@ -4,6 +4,7 @@ import io
 import json
 import shutil
 import asyncio
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -68,6 +69,22 @@ def login_headers(client: TestClient, username: str, password: str = "") -> dict
         "X-Enrollment-User": data["username"],
         "X-Enrollment-Token": data["token"],
     }
+
+
+@contextmanager
+def temporary_api_project(client: TestClient, headers: dict, code: str):
+    """Create an isolated legacy-API project instead of relying on local clinical data."""
+    client.delete(f"/api/projects/{code}", headers=headers)
+    response = client.post(
+        "/api/projects",
+        json={"project_code": code, "protocol_id": "UT-001", "name": "上传行为测试"},
+        headers=headers,
+    )
+    assert response.status_code == 201, response.text
+    try:
+        yield code
+    finally:
+        client.delete(f"/api/projects/{code}", headers=headers)
 
 
 class ProtocolWorkflowTests(unittest.TestCase):
@@ -373,9 +390,12 @@ class ProtocolWorkflowTests(unittest.TestCase):
         self.assertIn("#### IN-01 知情同意", cleaned)
         self.assertNotIn("```", cleaned)
 
+    @unittest.skipUnless(
+        (ROOT / "projects" / "MG-K10-SAR" / "criteria_rules.md").exists(),
+        "MG-K10-SAR saved-rules anchor not available",
+    )
     def test_mgk10_saved_rules_do_not_mark_shared_items_as_only_phase3(self):
         rules_path = ROOT / "projects" / "MG-K10-SAR" / "criteria_rules.md"
-        self.assertTrue(rules_path.exists(), "MG-K10-SAR rules fixture missing")
         text = rules_path.read_text(encoding="utf-8")
 
         self.assertNotRegex(text, r"仅\s*(?:Ⅲ期|III期|III\s*期)")
@@ -385,9 +405,12 @@ class ProtocolWorkflowTests(unittest.TestCase):
 
 
 class EvidencePhaseTests(unittest.TestCase):
+    @unittest.skipUnless(
+        (ROOT / "projects" / "MG-K10-SAR" / "subjects" / "06003").exists(),
+        "MG-K10-SAR/06003 evidence anchor not available",
+    )
     def test_screening_phase_bundle_excludes_baseline_named_documents(self):
         subject_dir = ROOT / "projects" / "MG-K10-SAR" / "subjects" / "06003"
-        self.assertTrue(subject_dir.exists(), "MG-K10-SAR/06003 fixture missing")
         if not (subject_dir / "cache").exists():
             self.skipTest("MG-K10-SAR/06003 OCR cache fixture not available")
 
@@ -2675,16 +2698,15 @@ class SubjectUploadTests(unittest.TestCase):
         sid = "__upload_merge_test__"
         with TestClient(app) as client:
             headers = admin_headers(client)
-            client.delete(f"/api/projects/MG-K10-SAR/subjects/{sid}", headers=headers)
-            create_resp = client.post(
-                "/api/projects/MG-K10-SAR/subjects",
-                json={"subject_id": sid},
-                headers=headers,
-            )
-            self.assertEqual(create_resp.status_code, 201, create_resp.text)
-            try:
+            with temporary_api_project(client, headers, "UT-UPLOAD-MERGE") as project_code:
+                create_resp = client.post(
+                    f"/api/projects/{project_code}/subjects",
+                    json={"subject_id": sid},
+                    headers=headers,
+                )
+                self.assertEqual(create_resp.status_code, 201, create_resp.text)
                 first = client.post(
-                    f"/api/projects/MG-K10-SAR/subjects/{sid}/upload",
+                    f"/api/projects/{project_code}/subjects/{sid}/upload",
                     files=[
                         ("files", ("筛选期病历.pdf", io.BytesIO(b"screening"), "application/pdf")),
                         ("categories", (None, "screening_record")),
@@ -2694,7 +2716,7 @@ class SubjectUploadTests(unittest.TestCase):
                 self.assertEqual(first.status_code, 200, first.text)
 
                 second = client.post(
-                    f"/api/projects/MG-K10-SAR/subjects/{sid}/upload",
+                    f"/api/projects/{project_code}/subjects/{sid}/upload",
                     files=[
                         ("files", ("基线血常规.pdf", io.BytesIO(b"baseline"), "application/pdf")),
                         ("categories", (None, "screening_lab")),
@@ -2703,33 +2725,30 @@ class SubjectUploadTests(unittest.TestCase):
                 )
                 self.assertEqual(second.status_code, 200, second.text)
 
-                cat_path = ROOT / "projects" / "MG-K10-SAR" / "subjects" / sid / "file_categories.json"
+                cat_path = ROOT / "projects" / project_code / "subjects" / sid / "file_categories.json"
                 cat_map = projects_router.json.loads(cat_path.read_text(encoding="utf-8"))
                 self.assertEqual(cat_map["筛选期病历.pdf"], "screening_record")
                 self.assertEqual(cat_map["基线血常规.pdf"], "screening_lab")
-            finally:
-                client.delete(f"/api/projects/MG-K10-SAR/subjects/{sid}", headers=headers)
 
     def test_incremental_upload_preserves_same_named_files_and_marks_review_stale(self):
         sid = "__upload_same_name_test__"
         with TestClient(app) as client:
             headers = admin_headers(client)
-            client.delete(f"/api/projects/MG-K10-SAR/subjects/{sid}", headers=headers)
-            create_resp = client.post(
-                "/api/projects/MG-K10-SAR/subjects",
-                json={"subject_id": sid},
-                headers=headers,
-            )
-            self.assertEqual(create_resp.status_code, 201, create_resp.text)
-            try:
-                subject_path = ROOT / "projects" / "MG-K10-SAR" / "subjects" / sid
+            with temporary_api_project(client, headers, "UT-UPLOAD-SAME-NAME") as project_code:
+                create_resp = client.post(
+                    f"/api/projects/{project_code}/subjects",
+                    json={"subject_id": sid},
+                    headers=headers,
+                )
+                self.assertEqual(create_resp.status_code, 201, create_resp.text)
+                subject_path = ROOT / "projects" / project_code / "subjects" / sid
                 info = load_subject_info(subject_path)
                 info.status = SubjectStatus.REVIEWED.value
                 info.overall_verdict = "pass"
                 save_subject_info(subject_path, info)
 
                 first = client.post(
-                    f"/api/projects/MG-K10-SAR/subjects/{sid}/upload",
+                    f"/api/projects/{project_code}/subjects/{sid}/upload",
                     files=[
                         ("files", ("同名报告.pdf", io.BytesIO(b"old"), "application/pdf")),
                         ("categories", (None, "screening_record")),
@@ -2738,7 +2757,7 @@ class SubjectUploadTests(unittest.TestCase):
                 )
                 self.assertEqual(first.status_code, 200, first.text)
                 second = client.post(
-                    f"/api/projects/MG-K10-SAR/subjects/{sid}/upload",
+                    f"/api/projects/{project_code}/subjects/{sid}/upload",
                     files=[
                         ("files", ("同名报告.pdf", io.BytesIO(b"new"), "application/pdf")),
                         ("categories", (None, "screening_lab")),
@@ -2757,23 +2776,20 @@ class SubjectUploadTests(unittest.TestCase):
                 updated = load_subject_info(subject_path)
                 self.assertEqual(updated.status, SubjectStatus.PENDING.value)
                 self.assertEqual(updated.overall_verdict, "")
-            finally:
-                client.delete(f"/api/projects/MG-K10-SAR/subjects/{sid}", headers=headers)
 
     def test_subject_icf_date_can_be_manually_saved_and_not_overwritten_by_cache_backfill(self):
         sid = "__icf_date_test__"
         with TestClient(app) as client:
             headers = admin_headers(client)
-            client.delete(f"/api/projects/MG-K10-SAR/subjects/{sid}", headers=headers)
-            create_resp = client.post(
-                "/api/projects/MG-K10-SAR/subjects",
-                json={"subject_id": sid},
-                headers=headers,
-            )
-            self.assertEqual(create_resp.status_code, 201, create_resp.text)
-            try:
+            with temporary_api_project(client, headers, "UT-ICF-DATE") as project_code:
+                create_resp = client.post(
+                    f"/api/projects/{project_code}/subjects",
+                    json={"subject_id": sid},
+                    headers=headers,
+                )
+                self.assertEqual(create_resp.status_code, 201, create_resp.text)
                 patch_resp = client.patch(
-                    f"/api/projects/MG-K10-SAR/subjects/{sid}",
+                    f"/api/projects/{project_code}/subjects/{sid}",
                     json={"icf_date": "2026-01-02"},
                     headers=headers,
                 )
@@ -2781,7 +2797,7 @@ class SubjectUploadTests(unittest.TestCase):
                 self.assertEqual(patch_resp.json()["icf_date"], "2026-01-02")
                 self.assertTrue(patch_resp.json()["icf_date_manual"])
 
-                subject_path = ROOT / "projects" / "MG-K10-SAR" / "subjects" / sid
+                subject_path = ROOT / "projects" / project_code / "subjects" / sid
                 cache_dir = subject_path / "cache"
                 cache_dir.mkdir(exist_ok=True)
                 (cache_dir / "知情同意书_p1.md").write_text(
@@ -2791,8 +2807,6 @@ class SubjectUploadTests(unittest.TestCase):
                 changed = backfill_subject_icf_date(subject_path)
                 self.assertFalse(changed)
                 self.assertEqual(load_subject_info(subject_path).icf_date, "2026-01-02")
-            finally:
-                client.delete(f"/api/projects/MG-K10-SAR/subjects/{sid}", headers=headers)
 
     def test_extract_icf_date_from_cache_prefers_signed_informed_consent_context(self):
         with tempfile.TemporaryDirectory() as tmp:

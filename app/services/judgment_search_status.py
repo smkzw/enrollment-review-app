@@ -1,0 +1,164 @@
+"""判断检索任务的用户可见状态与候选结果读取（只读，不触发模型）。"""
+
+from __future__ import annotations
+
+from sqlalchemy.orm import sessionmaker, Session
+
+from app.domain.contracts.facts import FactAuthority
+from app.domain.contracts.judgment_search import JudgmentSearchCoverageSummary
+from app.services.evidence_app_errors import AppNotFoundError
+from app.services.judgment_search_job_service import JUDGMENT_SEARCH_JOB_TYPE
+from app.storage.codecs import verify_payload_sha256
+from app.storage.judgment_search_repository import JudgmentSearchSummaryRepository
+from app.storage.repositories import EpisodeRepository
+from app.workflow.errors import JobNotFoundError
+from app.workflow.jobstore import JobStore
+
+#: 面向用户的检索状态中文说明；只描述检索状态，绝不表述临床结论。
+JUDGMENT_SEARCH_STATUS_LABELS = {
+    "candidates_present": "已发现疑似研究者书面判断的内容，待人工核对原件",
+    "all_supplied_pages_searched_without_candidate":
+        "本次提交的全部资料中未检索到研究者书面判断",
+    "coverage_incomplete": "检索尚未完成（部分页面未读取或内容不清）",
+}
+
+
+def judgment_search_status_labels(status: str) -> str:
+    return JUDGMENT_SEARCH_STATUS_LABELS.get(status, "检索状态待更新")
+
+
+def _load_job(session: Session, session_factory, *, subject_id: str,
+              review_episode_id: str, job_id: str):
+    store = JobStore(session)
+    try:
+        job = store.get_job(job_id)
+    except JobNotFoundError as exc:
+        raise AppNotFoundError() from exc
+    if job.job_type != JUDGMENT_SEARCH_JOB_TYPE:
+        raise AppNotFoundError()
+    frozen = verify_payload_sha256(job.payload_json, job.payload_sha256)
+    authority = frozen.get("authority", {})
+    if (authority.get("subject_id") != subject_id
+            or authority.get("review_episode_id") != review_episode_id):
+        raise AppNotFoundError()
+    return job, frozen
+
+
+def judgment_search_job_status(session_factory: sessionmaker[Session], *, subject_id: str,
+                               review_episode_id: str, job_id: str) -> dict:
+    """判断检索任务的进度与每条要求的检索状态（中文标签，不含内部字段）。"""
+    with session_factory() as session:
+        job, frozen = _load_job(session, session_factory, subject_id=subject_id,
+                                review_episode_id=review_episode_id, job_id=job_id)
+        total_pages = len(frozen.get("pages", []))
+        read_steps = [
+            (step_id, state) for step_id, state in (
+                (step.step_id, step.state) for step in store_steps(session, job_id)
+            ) if step_id.startswith("read:")
+        ]
+        completed_reads = sum(1 for _, state in read_steps if state == "completed")
+        authority = FactAuthority.model_validate(frozen["authority"])
+        summaries = JudgmentSearchSummaryRepository(session).latest_for_authority(authority)
+        requirement_results = [
+            {
+                "requirement_id": item["requirement_id"],
+                "status": summaries[item["requirement_id"]].status.value,
+                "status_label": judgment_search_status_labels(
+                    summaries[item["requirement_id"]].status.value),
+                "found_candidate_count": len(
+                    summaries[item["requirement_id"]].found_candidates),
+            }
+            for item in frozen.get("requirements", [])
+            if item["requirement_id"] in summaries
+        ]
+        return {
+            "job_id": job_id,
+            "state": job.state,
+            "state_label": _job_state_label(job.state),
+            "total_pages": total_pages,
+            "completed_reads": completed_reads,
+            "total_reads": len(read_steps),
+            "requirement_results": requirement_results,
+            "can_resume": job.state == "cancelled",
+        }
+
+
+def judgment_search_job_results(session_factory: sessionmaker[Session], *, subject_id: str,
+                                review_episode_id: str, job_id: str) -> dict:
+    """每条要求的完整检索结果：候选摘录（含原件定位）与未完成缺口，供原件核对。"""
+    with session_factory() as session:
+        job, frozen = _load_job(session, session_factory, subject_id=subject_id,
+                                review_episode_id=review_episode_id, job_id=job_id)
+        authority = FactAuthority.model_validate(frozen["authority"])
+        summaries = JudgmentSearchSummaryRepository(session).latest_for_authority(authority)
+        results = []
+        for item in frozen.get("requirements", []):
+            requirement_id = item["requirement_id"]
+            summary = summaries.get(requirement_id)
+            if summary is None:
+                results.append({
+                    "requirement_id": requirement_id,
+                    "status": None,
+                    "status_label": "尚未完成检索",
+                    "found_candidates": [],
+                    "incomplete_pages": [],
+                })
+                continue
+            results.append({
+                "requirement_id": requirement_id,
+                "status": summary.status.value,
+                "status_label": judgment_search_status_labels(summary.status.value),
+                "found_candidates": [
+                    {
+                        "lane": candidate.lane.value,
+                        "channel": candidate.channel.value,
+                        "source_document_version_id": candidate.source_document_version_id,
+                        "page_artifact_id": candidate.page_artifact_id,
+                        "page_number": candidate.page_number,
+                        "excerpts": [excerpt.model_dump(mode="json")
+                                     for excerpt in candidate.candidates],
+                    }
+                    for candidate in summary.found_candidates
+                ],
+                "incomplete_pages": _incomplete_pages(summary),
+            })
+        return {
+            "job_id": job_id,
+            "state": job.state,
+            "searched_page_count": len(frozen.get("pages", [])),
+            "results": results,
+        }
+
+
+def _incomplete_pages(summary: JudgmentSearchCoverageSummary) -> list[dict]:
+    pages: dict[int, dict] = {}
+
+    def mark(page_number: int, reason: str) -> None:
+        pages.setdefault(page_number, {"page_number": page_number, "reasons": []})
+        pages[page_number]["reasons"].append(reason)
+
+    for gap in summary.pages_without_lane_result:
+        mark(gap.page_number, f"{gap.lane.value} 未完成该页检索")
+    for gap in summary.unreadable_channels:
+        mark(gap.page_number, f"{gap.lane.value} {gap.channel.value} 内容未能读取")
+    for gap in summary.ambiguous_channels:
+        mark(gap.page_number, f"{gap.lane.value} {gap.channel.value} 内容存在歧义")
+    return [pages[number] for number in sorted(pages)]
+
+
+def store_steps(session: Session, job_id: str):
+    return JobStore(session).list_steps(job_id)
+
+
+def _job_state_label(state: str) -> str:
+    from app.api.v2.vocabulary import JOB_STATE_LABELS
+
+    return JOB_STATE_LABELS.get(state, "状态待更新")
+
+
+__all__ = [
+    "JUDGMENT_SEARCH_STATUS_LABELS",
+    "judgment_search_job_results",
+    "judgment_search_job_status",
+    "judgment_search_status_labels",
+]

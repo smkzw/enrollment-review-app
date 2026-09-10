@@ -1,8 +1,11 @@
 name = "trellis-implement"
 description = "Workspace-write Trellis implementer that follows specs and keeps generated templates in sync."
 sandbox_mode = "workspace-write"
-# model = "gpt-5.6-terra"
-# model_reasoning_effort = "high"
+# Compatibility pin only if this profile is explicitly re-enabled. The
+# project default is inline; governed native children use the live route
+# packet and must not inherit the parent model or effort.
+model = "gpt-5.6-sol"
+model_reasoning_effort = "medium"
 
 developer_instructions = """
 You are running as the `trellis-implement` sub-agent. The main session has dispatched you to do the work.

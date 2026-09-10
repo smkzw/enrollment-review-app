@@ -330,6 +330,7 @@ def make_ocr_page(
     source_sha = source_sha or _SHA
     if cache_key is None:
         cache_key = build_ocr_cache_key(
+            page_artifact_id=artifact_id,
             source_sha256=source_sha,
             page_number=page_number,
             ocr_profile_sha256=profile_sha,
@@ -1075,6 +1076,7 @@ def test_lease_work_identity_must_match_frozen_inputs(seeded):
     with pytest.raises(orr.OcrIdentityError, match="身份不符"):
         repo.validate_work_identity(
             _SHA,
+            page_artifact_id="pa-identity",
             source_sha256="a" * 64,
             page_number=1,
             ocr_profile_sha256="e" * 64,
@@ -1084,6 +1086,7 @@ def test_lease_work_identity_must_match_frozen_inputs(seeded):
         )
     # 正确输入通过
     key = build_ocr_cache_key(
+        page_artifact_id="pa-identity",
         source_sha256="a" * 64,
         page_number=1,
         ocr_profile_sha256="e" * 64,
@@ -1093,6 +1096,7 @@ def test_lease_work_identity_must_match_frozen_inputs(seeded):
     )
     assert repo.validate_work_identity(
         key,
+        page_artifact_id="pa-identity",
         source_sha256="a" * 64,
         page_number=1,
         ocr_profile_sha256="e" * 64,
@@ -1491,6 +1495,7 @@ def test_late_attempt_cannot_enter_cache_or_manifest(seeded):
     # 独立页图输入 → 独立缓存键（与种子的成功行无关）
     fresh_input = "e" * 64
     fresh_key = build_ocr_cache_key(
+        page_artifact_id="pa-2",
         source_sha256=_SHA,
         page_number=1,
         ocr_profile_sha256=keys["profile_sha"],
@@ -1529,6 +1534,7 @@ def test_late_attempt_cannot_enter_cache_or_manifest(seeded):
             fresh_key,
             "worker-A",
             lease_a.lease_generation,
+            page_artifact_id="pa-2",
             source_sha256=_SHA,
             page_number=1,
             ocr_profile_sha256=keys["profile_sha"],
@@ -1557,6 +1563,7 @@ def test_late_attempt_cannot_enter_cache_or_manifest(seeded):
         fresh_key,
         "worker-B",
         lease_b.lease_generation,
+        page_artifact_id="pa-2",
         source_sha256=_SHA,
         page_number=1,
         ocr_profile_sha256=keys["profile_sha"],
@@ -1631,6 +1638,7 @@ def _seed_fresh_page_scope(session, fixture) -> dict[str, Any]:
         )
     )
     fresh_key = build_ocr_cache_key(
+        page_artifact_id="pa-2",
         source_sha256=_SHA,
         page_number=1,
         ocr_profile_sha256=keys["profile_sha"],
@@ -1657,6 +1665,7 @@ def test_commit_guard_success_path_same_transaction(seeded):
         keys["fresh_key"],
         "worker-A",
         lease.lease_generation,
+        page_artifact_id=keys["fresh_artifact"],
         source_sha256=_SHA,
         page_number=1,
         ocr_profile_sha256=keys["profile_sha"],
@@ -1731,6 +1740,7 @@ def test_commit_guard_stale_generation_rejected_two_sessions(seeded):
                 keys["fresh_key"],
                 "worker-A",
                 lease_a.lease_generation,
+                page_artifact_id=keys["fresh_artifact"],
                 source_sha256=_SHA,
                 page_number=1,
                 ocr_profile_sha256=keys["profile_sha"],
@@ -1767,6 +1777,7 @@ def test_commit_guard_stale_generation_rejected_two_sessions(seeded):
             keys["fresh_key"],
             "worker-B",
             lease_b.lease_generation,
+            page_artifact_id=keys["fresh_artifact"],
             source_sha256=_SHA,
             page_number=1,
             ocr_profile_sha256=keys["profile_sha"],

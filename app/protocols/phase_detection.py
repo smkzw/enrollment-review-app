@@ -33,17 +33,27 @@ _CELL_REF_RE = re.compile(
     r"^(?P<table>.+?\.t\d+)\.r(?P<row>\d+)\.c(?P<col>\d+)(?:\.p\d+)?$"
 )
 
-_PHASE_II_RE = re.compile(r"(?:Ⅱ|II|2|二)\s*(?:期|[/／])", re.I)
-_PHASE_III_RE = re.compile(r"(?:Ⅲ|III|3|三)\s*(?:期|[/／])", re.I)
+_PHASE_II_TOKEN_RE = r"(?<![A-Za-z0-9])(?:Ⅱ|II|2|二)\s*期"
+_PHASE_III_TOKEN_RE = r"(?<![A-Za-z0-9])(?:Ⅲ|III|3|三)\s*期"
+# A slash is phase syntax only when it forms a complete II/III pair whose
+# final member carries the phase marker.  Without this guard, ordinary values
+# such as ``PGA 3/4`` and ``访视周数 2/3`` become false phase references.
+_PHASE_PAIR_RE = (
+    r"(?<![A-Za-z0-9])(?:Ⅱ|II|2|二)\s*(?:期\s*)?"
+    r"(?:临床研究)?(?:阶段)?\s*"
+    r"(?:和|及|与|、|/|／)\s*"
+    r"(?:Ⅲ|III|3|三)\s*期\s*(?:临床研究)?(?:阶段)?"
+)
+_PHASE_II_RE = re.compile(
+    rf"(?:{_PHASE_II_TOKEN_RE}|{_PHASE_PAIR_RE})", re.I
+)
+_PHASE_III_RE = re.compile(
+    rf"(?:{_PHASE_III_TOKEN_RE}|{_PHASE_PAIR_RE})", re.I
+)
 _SHARED_WITHOUT_PHASE_RE = re.compile(
     r"均适用|共同适用|适用于两期|两期(?:均|共同)|各期(?:均|共同)"
     r"|共同(?:入选|纳入|排除|入排|适用)标准|两期通用(?:标准|要求|程序)",
     re.I,
-)
-_PHASE_PAIR_RE = (
-    r"(?:Ⅱ|II|2|二)\s*期+\s*(?:临床研究)?(?:阶段)?\s*"
-    r"(?:和|及|与|、|/|／)\s*"
-    r"(?:Ⅲ|III|3|三)\s*期+\s*(?:临床研究)?(?:阶段)?"
 )
 _SHARED_AFTER_PAIR_RE = re.compile(
     _PHASE_PAIR_RE
@@ -80,11 +90,37 @@ _VISIT_RE = re.compile(
     r"筛选|导入|基线|随机|(?:D|W|V)\s*[-]?\s*\d+|访视|visit",
     re.I,
 )
-_HEADING_RE = re.compile(r"阶段|研究目的|入选标准|排除标准|流程|给药|研究设计|主要终点|临床研究")
 _TABLE_APPLICABILITY_HEADING_RE = re.compile(
     r"(?:研究)?(?:流程|日程|访视)(?:图|表)|临床研究阶段流程表",
     re.I,
 )
+# Table cells often carry plain ``Normal`` paragraphs rather than a Word
+# outline style.  Keep the fallback deliberately narrow: only a phase marker
+# at the start of the paragraph followed by a small vocabulary of heading
+# nouns can establish context.  Narrative such as ``Ⅱ期计划在...`` therefore
+# remains local evidence and cannot retag the rest of the cell.
+_PLAIN_PHASE_HEADING_RE = re.compile(
+    r"^(?:[（(]?\s*(?:\d+|[一二三四五六七八九十]+)\s*[）).、]\s*|[-–—•·]\s*)?"
+    r"(?:Ⅱ|II|2|二|Ⅲ|III|3|三)\s*期"
+    r"(?:临床)?(?:研究|试验)?"
+    r"(?:阶段|部分|入选标准|排除标准|适用标准|共同标准|标准|要求|"
+    r"设计|方案|流程|日程|主要终点|次要终点|研究目的|队列|治疗|给药)?"
+    r"\s*[：:]?\s*$",
+    re.I,
+)
+_PHASE_CONTENT_LEAD_IN_RE = re.compile(
+    r"(?:"
+    # ``如下的假设检验`` / ``以下的定义`` style lead-ins.
+    r"(?:具体|内容)?(?:如下|以下|下列)(?:所示|列示|列出)?(?:的)?"
+    r"(?:假设(?:检验)?|定义|公式|参数|列表|说明|内容|方法|步骤|状态)"
+    # ``假设如下`` / ``公式如下所示`` style lead-ins.
+    r"|(?:假设(?:检验)?|定义|公式|参数|列表|说明|内容|方法|步骤|状态)"
+    r"(?:如下|如下所示|如下列出)"
+    # ``内容如下`` is still typed; a bare ``如下`` is intentionally not.
+    r")\s*[：:]",
+    re.I,
+)
+_MAX_OUTLINE_LEVEL = 8
 
 
 @dataclass(frozen=True)
@@ -169,13 +205,42 @@ def _has_unpaired_phase_reference(text: str) -> bool:
     residual.append(text[cursor:])
     return bool(_PHASE_II_RE.search(" ".join(residual)) or _PHASE_III_RE.search(" ".join(residual)))
 
+def _has_phase_content_lead_in(text: str) -> bool:
+    """Return whether a typed forward lead-in follows a local phase marker."""
+
+    lead_in = _PHASE_CONTENT_LEAD_IN_RE.search(text)
+    if lead_in is None:
+        return False
+    phase_markers = (
+        *tuple(_PHASE_II_RE.finditer(text)),
+        *tuple(_PHASE_III_RE.finditer(text)),
+    )
+    return any(marker.start() <= lead_in.start() for marker in phase_markers)
+
 
 def _looks_like_heading(block: StructureBlock) -> bool:
+    """Return whether a block has an authoritative structural heading marker.
+
+    Phase context is a source-structure fact, not a lexical guess.  In
+    particular, a short paragraph or a paragraph whose raw style ID happens to
+    contain ``heading`` is not enough: Word documents frequently use numeric
+    custom style IDs, and ordinary numbered rules can look like headings.
+    ``outline_level`` is populated by the DOCX extractor from the effective
+    paragraph style/paragraph properties, so it is the only heading signal
+    used here.  The text-length guard keeps empty/very large paragraphs from
+    becoming context anchors while retaining the original block as an atomic
+    source node.
+    """
+
     text = _normalize(block.text)
+    level = block.outline_level
     return bool(
-        len(text) <= 90
-        or (block.style and "heading" in block.style.lower())
-        or _HEADING_RE.search(text)
+        text
+        and len(text) <= 120
+        and block.document_part == DocumentPart.BODY
+        and block.table_path is None
+        and isinstance(level, int)
+        and 0 <= level <= _MAX_OUTLINE_LEVEL
     )
 
 
@@ -187,15 +252,38 @@ def _establishes_scope_context(
 
     A phase name inside an ordinary sentence must not silently retag subsequent
     paragraphs.  Context starts only from a heading or an applicability lead-in
-    such as "III期符合下列所有标准".
+    such as "III期符合下列所有标准", or a typed forward lead-in such as
+    "III期的假设如下：".  The latter is deliberately vocabulary- and
+    punctuation-bounded: a phase mention followed by ordinary narrative,
+    comparison, or cross-reference text remains local evidence.
     """
 
     if not _scope_is_clear(scopes):
         return False
     text = _normalize(block.text)
+    phase_table_caption = bool(
+        len(text) <= 120
+        and re.match(r"^(?:表|附表)\s*\d+\s*", text)
+        and _TABLE_APPLICABILITY_HEADING_RE.search(text)
+    )
     return bool(
-        (block.style and "heading" in block.style.lower())
-        or _HEADING_RE.search(text)
+        _looks_like_heading(block)
+        or (
+            block.document_part == DocumentPart.BODY
+            and _PLAIN_PHASE_HEADING_RE.fullmatch(text) is not None
+        )
+        # A phase-specific visit-table caption also governs its trailing
+        # notes and procedure explanations. DOCX protocols commonly render
+        # these captions as ordinary paragraphs rather than outline headings.
+        or (
+            block.document_part == DocumentPart.BODY
+            and block.table_path is None
+            and phase_table_caption
+        )
+        # Typed forward lead-ins bind the immediately following source units
+        # to the phase, subject to the structural boundary tracked by the
+        # caller.  Do not broaden this to any ``如下``/``以下`` phrase.
+        or _has_phase_content_lead_in(text)
         or re.search(
             r"(?:符合|满足|遵守|执行|完成|适用于|需|应).{0,35}"
             r"(?:以下|下列|所有|任一|标准|条件|要求|程序|操作)",
@@ -204,34 +292,105 @@ def _establishes_scope_context(
     )
 
 
+def _scope_with_context(
+    text: str,
+    inherited: tuple[PhaseScope, ...] | None,
+    *,
+    allow_local_context_switch: bool,
+) -> tuple[tuple[PhaseScope, ...], bool]:
+    """Apply a local signal without letting ordinary references switch scope.
+
+    ``_scope_from_text`` describes the words in one source unit.  This helper
+    adds the structural applicability context: an explicit shared statement
+    always wins, a real heading/applicability lead-in may switch the context,
+    and an ordinary phase mention remains local evidence only when there is no
+    clear inherited scope.  A sentence comparing the opposite phase therefore
+    cannot reclassify the surrounding section.
+    """
+
+    local, cross_phase = _scope_from_text(text)
+    if inherited is None or not _scope_is_clear(inherited):
+        return local, cross_phase
+    if local == (PhaseScope.SHARED,) or allow_local_context_switch:
+        return local, cross_phase
+    return inherited, cross_phase
+
+
 def _body_contexts(blocks: Sequence[StructureBlock]) -> Mapping[str, tuple[PhaseScope, ...]]:
-    """Infer only a narrow heading context; neutral content stays unknown."""
+    """Infer narrow heading/table-caption context; neutral content stays unknown."""
 
     context: tuple[PhaseScope, ...] | None = None
+    context_heading_level: int | None = None
+    # Retain the active structural heading path independently from the phase
+    # context.  A plain lead-in can establish a phase while its enclosing
+    # heading remains the boundary for later siblings.
+    heading_levels: list[int] = []
     result: dict[str, tuple[PhaseScope, ...]] = {}
-    last_part: DocumentPart | None = None
     for block in sorted(blocks, key=lambda item: item.block_order):
         if block.document_part != DocumentPart.BODY or block.table_path is not None:
             continue
-        if last_part is not None and block.document_part != last_part:
-            context = None
+
+        is_heading = _looks_like_heading(block)
+        heading_level = block.outline_level if is_heading else None
+        if is_heading and heading_level is not None:
+            # Same-level and ancestor headings close a prior context; deeper
+            # headings remain inside the current context's boundary.
+            heading_levels = [
+                level for level in heading_levels if level < heading_level
+            ]
+            heading_levels.append(heading_level)
+        nearest_heading_level = heading_levels[-1] if heading_levels else None
+
         text = _normalize(block.text)
         explicit, _shared = _scope_from_text(text)
         has_explicit = bool(_PHASE_II_RE.search(text) or _PHASE_III_RE.search(text))
         if has_explicit or explicit == (PhaseScope.SHARED,):
-            result[block.source_ref] = explicit
-            if (
-                len(explicit) == 1
-                and explicit[0]
-                in {PhaseScope.PHASE_II, PhaseScope.PHASE_III, PhaseScope.SHARED}
-                and _establishes_scope_context(block, explicit)
-            ):
+            establishes_context = _establishes_scope_context(block, explicit)
+            effective, _cross = _scope_with_context(
+                text,
+                context,
+                allow_local_context_switch=establishes_context,
+            )
+            result[block.source_ref] = effective
+            if establishes_context:
+                # The local scope of this block and the context governing
+                # later siblings are separate facts.  A heading or explicit
+                # applicability lead-in may replace the structural context.
                 context = explicit
-            else:
+                context_heading_level = (
+                    heading_level if is_heading else nearest_heading_level
+                )
+            elif is_heading:
+                # A structural heading with an unclear/mixed phase scope is a
+                # real boundary, but it cannot safely establish inheritance.
                 context = None
+                context_heading_level = None
+            # Keep ordinary phase references in the source text, but do not
+            # let them erase a context established by an enclosing heading or
+            # create one when no such heading exists.
         else:
-            result[block.source_ref] = context or (PhaseScope.UNKNOWN,)
-        last_part = block.document_part
+            if is_heading:
+                level = heading_level
+                if (
+                    context is not None
+                    and context_heading_level is not None
+                    and level is not None
+                    and level > context_heading_level
+                ):
+                    # A heading nested below an explicit phase heading may
+                    # inherit that phase.  A same-level or ancestor heading
+                    # closes the previous phase context instead of leaking it
+                    # into an unrelated section.  Keep the original phase
+                    # heading as the boundary: updating this value to the
+                    # first child would make the next sibling look like a
+                    # boundary and drop the still-valid phase context.
+                    result[block.source_ref] = context
+                else:
+                    result[block.source_ref] = (PhaseScope.UNKNOWN,)
+                    context = None
+                    context_heading_level = None
+            else:
+                result[block.source_ref] = context or (PhaseScope.UNKNOWN,)
     return result
 
 
@@ -248,6 +407,7 @@ def _table_groups(blocks: Sequence[StructureBlock]):
 
 def _table_heading_scopes(
     blocks: Sequence[StructureBlock],
+    body_contexts: Mapping[str, tuple[PhaseScope, ...]] | None = None,
 ) -> Mapping[str, tuple[PhaseScope, ...]]:
     """Bind a top-level table to its nearest explicit applicability heading.
 
@@ -264,9 +424,22 @@ def _table_heading_scopes(
         if block.document_part == DocumentPart.BODY and block.table_path is None
     ]
     result: dict[str, tuple[PhaseScope, ...]] = {}
+    body_contexts = body_contexts or {}
     for index, block in enumerate(top_level):
         if not re.fullmatch(r"body\.t\d+", block.source_ref):
             continue
+
+        # The table root occupies the same source-order position as the table
+        # in the body stream.  If the structural walker has already proven a
+        # clear phase context there, use that context directly; this covers
+        # tables whose cells and ordinary table title do not repeat II/III.
+        # UNKNOWN is deliberately not promoted and falls through to the
+        # narrow explicit-title check below.
+        structural_scope = body_contexts.get(block.source_ref)
+        if structural_scope is not None and _scope_is_clear(structural_scope):
+            result[block.source_ref] = structural_scope
+            continue
+
         inspected = 0
         for candidate in reversed(top_level[:index]):
             if re.fullmatch(r"body\.t\d+", candidate.source_ref):
@@ -339,7 +512,17 @@ def _clear_header_scope(cells: Sequence[StructureBlock]) -> tuple[PhaseScope, ..
         if not _normalize(cell.text):
             continue
         scopes, _shared = _scope_from_text(cell.text)
-        if _scope_is_clear(scopes):
+        if _scope_is_clear(scopes) and (
+            _establishes_scope_context(cell, scopes)
+            or (
+                scopes == (PhaseScope.SHARED,)
+                and _has_shared_evidence(
+                    _normalize(cell.text),
+                    has_ii=False,
+                    has_iii=False,
+                )
+            )
+        ):
             return scopes
         return None
     return None
@@ -359,6 +542,7 @@ def _projection_text(text: str, selected_phase: StudyPhase) -> str:
         cleaned,
         flags=re.I,
     )
+    cleaned = re.sub(_PHASE_PAIR_RE, label, cleaned, flags=re.I)
     cleaned = re.sub(
         r"(?:Ⅱ|II|2|二)\s*期+\s*(?:临床研究)?(?:阶段)?\s*"
         r"(?:和|及|与|、|/|／)\s*"
@@ -489,9 +673,10 @@ def _effective_table_scopes(
 ) -> dict[str, tuple[tuple[PhaseScope, ...], bool]]:
     """Classify each table cell from local text plus narrow headers.
 
-    Row and column hints are intentionally one-cell signals.  They are applied
-    only to an otherwise unknown cell; a local phase mention or a local mixed
-    statement always wins.  Conflicting row/column hints become ``MIXED``.
+    Row and column hints are intentionally one-cell signals.  A clear local
+    heading/applicability lead-in may switch them, while an ordinary phase
+    mention inherits the established context.  Conflicting row/column hints
+    become ``MIXED``.
     """
 
     all_cells = [cell for cells in groups.values() for cell in cells]
@@ -509,22 +694,13 @@ def _effective_table_scopes(
     for (table, row), cells in groups.items():
         row_hint = row_hints[(table, row)]
         for cell in sorted(cells, key=lambda item: (item.block_order, item.source_ref)):
-            local, cross = _scope_from_text(cell.text)
+            local, _local_cross = _scope_from_text(cell.text)
             match = _CELL_REF_RE.match(cell.source_ref)
             cell_key = (
                 table,
                 row,
                 int(match.group("col")) if match is not None else -1,
             )
-            if local != (PhaseScope.UNKNOWN,):
-                result[cell.source_ref] = (local, cross)
-                if _establishes_scope_context(cell, local):
-                    cell_contexts[cell_key] = local
-                continue
-            cell_context = cell_contexts.get(cell_key)
-            if cell_context is not None:
-                result[cell.source_ref] = (cell_context, False)
-                continue
             col_hint = (
                 column_hints.get((table, int(match.group("col"))))
                 if match is not None
@@ -539,7 +715,19 @@ def _effective_table_scopes(
                     or table_heading_scopes.get(table)
                     or (PhaseScope.UNKNOWN,)
                 )
-            result[cell.source_ref] = (inherited, False)
+            cell_context = cell_contexts.get(cell_key)
+            inherited = cell_context or inherited
+            effective, effective_cross = _scope_with_context(
+                cell.text,
+                inherited,
+                allow_local_context_switch=_establishes_scope_context(cell, local),
+            )
+            result[cell.source_ref] = (
+                effective,
+                effective_cross if local != (PhaseScope.UNKNOWN,) else False,
+            )
+            if _establishes_scope_context(cell, local) and _scope_is_clear(local):
+                cell_contexts[cell_key] = local
     return result
 
 
@@ -565,7 +753,8 @@ def build_phase_applicability_graph(
     for block in body_blocks:
         if not _normalize(block.text):
             continue
-        scopes, cross = _scope_from_text(block.text, contexts.get(block.source_ref))
+        local_scopes, cross = _scope_from_text(block.text)
+        scopes = contexts.get(block.source_ref, local_scopes)
         span_ref = (source_span_ids or {}).get(block.source_ref, block.source_ref)
         nodes.append(
             _make_block(
@@ -588,7 +777,10 @@ def build_phase_applicability_graph(
         )
 
     groups = _table_groups(table_blocks)
-    effective = _effective_table_scopes(groups, _table_heading_scopes(blocks))
+    effective = _effective_table_scopes(
+        groups,
+        _table_heading_scopes(blocks, contexts),
+    )
     atomic_by_ref: dict[str, PhaseApplicabilityBlock] = {}
     for cell in sorted(table_blocks, key=lambda item: (item.block_order, item.source_ref)):
         if not _normalize(cell.text):

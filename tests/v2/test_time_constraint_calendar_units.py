@@ -7,9 +7,11 @@ import pytest
 from app.domain.contracts.common import DateValue
 from app.domain.contracts.enums import (
     AnchorType,
+    CombinedWindowSelection,
     Comparator,
     DatePrecision,
     FactPolarity,
+    ReviewStage,
     TimeDirection,
     TruthValue,
 )
@@ -86,6 +88,30 @@ def _after(**bounds) -> TimeConstraint:
         anchor_type=AnchorType.RANDOMIZATION_DATE,
         direction=TimeDirection.AFTER,
         **bounds,
+    )
+
+
+def _add_baseline_review_requirement(draft) -> None:
+    """Keep calendar-unit tests focused on units, not review-stage coverage."""
+
+    component = draft.proposed_rules[0].components[0]
+    baseline = component.evidence_requirements[0].model_copy(
+        update={
+            "requirement_id": "req-in-baseline",
+            "due_stage": ReviewStage.BASELINE,
+        }
+    )
+    component.evidence_requirements.append(baseline)
+    draft.evidence_requirement_drafts.append(
+        draft.evidence_requirement_drafts[0].model_copy(
+            update={
+                "draft_requirement_id": "draft-req-in-baseline",
+                "proposed_requirement": baseline,
+            }
+        )
+    )
+    draft.proposed_workflow_stages[1].due_requirement_ids.append(
+        baseline.requirement_id
     )
 
 
@@ -198,6 +224,66 @@ def test_legacy_twenty_eight_day_constraint_remains_compatible() -> None:
     )
 
     assert result.truth == TruthValue.TRUE
+
+
+@pytest.mark.parametrize(
+    ("constraint", "event_day", "expected"),
+    [
+        (_before(lower_bound_days=7), 8, TruthValue.TRUE),
+        (
+            _before(lower_bound_days=7, lower_bound_inclusive=False),
+            8,
+            TruthValue.FALSE,
+        ),
+        (
+            _before(lower_bound_days=7, lower_bound_inclusive=False),
+            7,
+            TruthValue.TRUE,
+        ),
+        (_before(upper_bound_days=7), 8, TruthValue.TRUE),
+        (
+            _before(upper_bound_days=7, upper_bound_inclusive=False),
+            8,
+            TruthValue.FALSE,
+        ),
+        (
+            _before(upper_bound_days=7, upper_bound_inclusive=False),
+            9,
+            TruthValue.TRUE,
+        ),
+    ],
+)
+def test_day_bounds_preserve_open_and_closed_edges(
+    constraint: TimeConstraint,
+    event_day: int,
+    expected: TruthValue,
+) -> None:
+    result = _evaluate(
+        date(2026, 8, event_day),
+        date(2026, 8, 15),
+        constraint,
+    )
+
+    assert result.truth == expected
+
+
+def test_calendar_quantity_preserves_open_and_closed_edges() -> None:
+    inclusive = _evaluate(
+        date(2024, 1, 31),
+        date(2024, 2, 29),
+        _before(lower_bound=TimeQuantity(value=1, unit=TimeUnit.MONTH)),
+    )
+    exclusive = _evaluate(
+        date(2024, 1, 31),
+        date(2024, 2, 29),
+        _before(
+            lower_bound=TimeQuantity(value=1, unit=TimeUnit.MONTH),
+            lower_bound_inclusive=False,
+        ),
+    )
+
+    assert inclusive.truth == TruthValue.TRUE
+    assert exclusive.truth == TruthValue.FALSE
 
 
 def test_partial_calendar_date_is_unknown_even_when_partial_dates_are_allowed() -> None:
@@ -339,6 +425,111 @@ def test_time_constraint_rejects_duplicate_boundary_and_on_boundary() -> None:
         TimeConstraint.model_validate(on_with_quantity)
 
 
+def test_time_constraint_rejects_exclusive_edge_without_matching_bound() -> None:
+    with pytest.raises(ValueError, match="没有时间窗下界"):
+        _before(lower_bound_inclusive=False)
+    with pytest.raises(ValueError, match="没有时间窗上界"):
+        _before(upper_bound_inclusive=False)
+
+
+def test_longer_of_calendar_and_half_life_requires_explicit_selection() -> None:
+    """固定窗与半衰期并存必须显式择长；不得仅因两类字段并存而推断。"""
+
+    accepted = TimeConstraint(
+        anchor_type=AnchorType.FIRST_DOSE_DATE,
+        direction=TimeDirection.BEFORE,
+        upper_bound=TimeQuantity(value=3, unit=TimeUnit.MONTH),
+        half_life_multiplier=5,
+        combined_window_selection=(
+            CombinedWindowSelection.LONGER_OF_CALENDAR_AND_HALF_LIFE
+        ),
+    )
+    round_tripped = TimeConstraint.model_validate_json(accepted.model_dump_json())
+
+    assert (
+        round_tripped.combined_window_selection
+        == CombinedWindowSelection.LONGER_OF_CALENDAR_AND_HALF_LIFE
+    )
+    assert round_tripped.anchor_type == AnchorType.FIRST_DOSE_DATE
+    assert round_tripped.upper_bound == TimeQuantity(value=3, unit=TimeUnit.MONTH)
+    assert round_tripped.half_life_multiplier == 5
+
+    with pytest.raises(ValueError, match="必须显式声明 combined_window_selection"):
+        TimeConstraint(
+            anchor_type=AnchorType.FIRST_DOSE_DATE,
+            direction=TimeDirection.BEFORE,
+            upper_bound=TimeQuantity(value=3, unit=TimeUnit.MONTH),
+            half_life_multiplier=5,
+        )
+
+
+def test_combined_window_selection_rejects_incomplete_pairs() -> None:
+    with pytest.raises(ValueError, match="仅用于固定窗口与半衰期并存"):
+        TimeConstraint(
+            anchor_type=AnchorType.FIRST_DOSE_DATE,
+            direction=TimeDirection.BEFORE,
+            upper_bound=TimeQuantity(value=4, unit=TimeUnit.WEEK),
+            combined_window_selection=(
+                CombinedWindowSelection.LONGER_OF_CALENDAR_AND_HALF_LIFE
+            ),
+        )
+    with pytest.raises(ValueError, match="仅用于固定窗口与半衰期并存"):
+        TimeConstraint(
+            anchor_type=AnchorType.FIRST_DOSE_DATE,
+            direction=TimeDirection.BEFORE,
+            half_life_multiplier=5,
+            combined_window_selection=(
+                CombinedWindowSelection.LONGER_OF_CALENDAR_AND_HALF_LIFE
+            ),
+        )
+
+
+def test_calendar_only_and_half_life_only_remain_valid_without_selection() -> None:
+    calendar_only = TimeConstraint(
+        anchor_type=AnchorType.FIRST_DOSE_DATE,
+        direction=TimeDirection.BEFORE,
+        upper_bound=TimeQuantity(value=3, unit=TimeUnit.MONTH),
+    )
+    half_life_only = TimeConstraint(
+        anchor_type=AnchorType.FIRST_DOSE_DATE,
+        direction=TimeDirection.BEFORE,
+        half_life_multiplier=5,
+    )
+
+    assert calendar_only.combined_window_selection is None
+    assert half_life_only.combined_window_selection is None
+
+
+def test_on_direction_rejects_combined_window_selection() -> None:
+    with pytest.raises(ValueError, match="on 仅表示"):
+        TimeConstraint(
+            anchor_type=AnchorType.FIRST_DOSE_DATE,
+            direction=TimeDirection.ON,
+            combined_window_selection=(
+                CombinedWindowSelection.LONGER_OF_CALENDAR_AND_HALF_LIFE
+            ),
+        )
+
+
+def test_longer_of_is_one_constraint_not_any_rewrite() -> None:
+    """择长是单一 TimeConstraint 语义，不是把且/或改写成 LogicalOperator.ANY。"""
+
+    constraint = TimeConstraint.model_validate(
+        {
+            "anchor_type": "first_dose_date",
+            "direction": "before",
+            "upper_bound": {"value": 4, "unit": "week"},
+            "half_life_multiplier": 5,
+            "combined_window_selection": "longer_of_calendar_and_half_life",
+        }
+    )
+
+    assert constraint.combined_window_selection == (
+        CombinedWindowSelection.LONGER_OF_CALENDAR_AND_HALF_LIFE
+    )
+    assert "operator" not in constraint.model_dump()
+
+
 @pytest.mark.parametrize("value", [0, -1, 1.5, True])
 def test_time_quantity_requires_a_positive_integer(value) -> None:
     with pytest.raises(ValueError):
@@ -347,6 +538,7 @@ def test_time_quantity_requires_a_positive_integer(value) -> None:
 
 def test_gate_accepts_three_months_only_when_month_unit_is_preserved() -> None:
     source_input, draft, spans = _fixture()
+    _add_baseline_review_requirement(draft)
     source_input.parent_rule_catalog = source_input.parent_rule_catalog.model_copy(
         update={
             "items": (
@@ -377,6 +569,7 @@ def test_gate_accepts_three_months_only_when_month_unit_is_preserved() -> None:
 
 def test_gate_blocks_ninety_days_for_a_three_month_source_window() -> None:
     source_input, draft, spans = _fixture()
+    _add_baseline_review_requirement(draft)
     source_input.parent_rule_catalog = source_input.parent_rule_catalog.model_copy(
         update={
             "items": (
@@ -408,6 +601,7 @@ def test_gate_blocks_ninety_days_for_a_three_month_source_window() -> None:
 
 def test_gate_can_prove_four_weeks_equals_twenty_eight_days() -> None:
     source_input, draft, spans = _fixture()
+    _add_baseline_review_requirement(draft)
     source_input.parent_rule_catalog = source_input.parent_rule_catalog.model_copy(
         update={
             "items": (

@@ -66,6 +66,7 @@ from app.storage.codecs import (
     decode_contract,
     encode_contract,
     mirror_json,
+    mirror_values_equal,
     to_utc_naive,
     utc_now,
 )
@@ -185,7 +186,7 @@ def _check_json_mirror(entity: str, column_value: str, payload_value: Any, label
         raise PersistedContractInvalid(
             f"{entity} {label} 列无法解析为 JSON，拒绝还原合同"
         ) from exc
-    if mirror_json(parsed) != mirror_json(payload_value):
+    if not mirror_values_equal(parsed, payload_value):
         raise PersistedContractInvalid(
             f"{entity} {label} 列与已验证 payload 不一致，拒绝还原合同"
         )
@@ -856,6 +857,74 @@ class OcrPageRepository:
             success = page
         return success
 
+    def list_by_content_identity(
+        self,
+        *,
+        source_sha256: str,
+        page_number: int,
+        ocr_profile_sha256: str,
+        page_input_sha256: str,
+        layout_parser_version: str | None,
+        coordinate_transform_version: str,
+    ) -> list[OCRPage]:
+        """内容级身份（设计书内容哈希契约，不含页产物绑定）的全部不可变行。
+
+        内容身份 = 文件内容哈希 + 页码 + 识别配置指纹 + 实际页图输入哈希 +
+        布局/坐标变换版本；``page_artifact_id`` 不参与。跨资料版本的成功/失败行
+        全部还原并逐行做完整镜像/闭包校验，坏行漂移照常抛
+        :class:`PersistedContractInvalid`，绝不静默隐藏；供适配器在 v2
+        （页产物绑定）键未命中时做内容级推理复用。
+        """
+        rows = self.session.execute(
+            select(OCRPageRecord)
+            .where(
+                OCRPageRecord.source_sha256 == source_sha256,
+                OCRPageRecord.page_number == page_number,
+                OCRPageRecord.ocr_profile_sha256 == ocr_profile_sha256,
+                OCRPageRecord.page_input_sha256 == page_input_sha256,
+                OCRPageRecord.layout_parser_version == layout_parser_version,
+                OCRPageRecord.coordinate_transform_version
+                == coordinate_transform_version,
+            )
+            .order_by(OCRPageRecord.created_at, OCRPageRecord.ocr_page_id)
+        ).scalars().all()
+        return [self._decode_with_closure(row) for row in rows]
+
+    def get_latest_successful_by_content_identity(
+        self,
+        *,
+        source_sha256: str,
+        page_number: int,
+        ocr_profile_sha256: str,
+        page_input_sha256: str,
+        layout_parser_version: str | None,
+        coordinate_transform_version: str,
+    ) -> OCRPage | None:
+        """内容级推理复用源：同内容身份下最新的成功行（可来自他版页产物）。
+
+        同一内容身份在多个页产物上各自拥有成功行是 v2 缓存身份下的合法状态；
+        复用源按 ``(completed_at, ocr_page_id)`` 确定性取最新，保证同一数据库
+        状态的复用选择唯一。失败/取消/处理中行永不充当复用源。
+        """
+        latest: OCRPage | None = None
+        for page in self.list_by_content_identity(
+            source_sha256=source_sha256,
+            page_number=page_number,
+            ocr_profile_sha256=ocr_profile_sha256,
+            page_input_sha256=page_input_sha256,
+            layout_parser_version=layout_parser_version,
+            coordinate_transform_version=coordinate_transform_version,
+        ):
+            if page.status != OCRPageStatus.SUCCEEDED:
+                continue
+            if (
+                latest is None
+                or (page.completed_at, page.ocr_page_id)
+                > (latest.completed_at, latest.ocr_page_id)
+            ):
+                latest = page
+        return latest
+
     def list_by_page_artifact(self, page_artifact_id: str) -> list[OCRPage]:
         rows = self.session.execute(
             select(OCRPageRecord)
@@ -1350,6 +1419,7 @@ class PageWorkLeaseRepository:
     def validate_work_identity(
         cache_key: str,
         *,
+        page_artifact_id: str,
         source_sha256: str,
         page_number: int,
         ocr_profile_sha256: str,
@@ -1360,6 +1430,7 @@ class PageWorkLeaseRepository:
         """结果提交前重算缓存唯一键，证明冻结输入/Profile 身份未被篡改。"""
         _require_cache_key(cache_key)
         expected = ocr_page_cache_hash(
+            page_artifact_id=page_artifact_id,
             source_sha256=source_sha256,
             page_number=page_number,
             ocr_profile_sha256=ocr_profile_sha256,
@@ -1489,6 +1560,7 @@ class PageWorkLeaseRepository:
         owner: str,
         generation: int,
         *,
+        page_artifact_id: str,
         source_sha256: str,
         page_number: int,
         ocr_profile_sha256: str,
@@ -1512,6 +1584,7 @@ class PageWorkLeaseRepository:
         _require_cache_key(work_item_id)
         self.validate_work_identity(
             work_item_id,
+            page_artifact_id=page_artifact_id,
             source_sha256=source_sha256,
             page_number=page_number,
             ocr_profile_sha256=ocr_profile_sha256,

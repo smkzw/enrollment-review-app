@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import UTC, date, datetime
 
 import pytest
@@ -37,6 +38,7 @@ from app.domain.contracts.enums import (
     LocatorAuthenticity,
     LocatorPrecision,
     LocatorSourceLayer,
+    ProfileLane,
     SnapshotMemberOrigin,
     SnapshotStatus,
     SourceStrength,
@@ -104,6 +106,7 @@ from app.storage.fact_repositories import (
     Phase5RepositoryError,
 )
 from app.storage.facts_models import (
+    ClinicalConflictGroupV2Record,
     ClinicalConflictMemberV2Record,
     ClinicalEventV2Record,
     ClinicalFactV2Record,
@@ -137,6 +140,8 @@ from app.storage.repositories import DuplicateRecordError, RepositoryError
 NOW = datetime(2026, 8, 22, 12, 0, 0, tzinfo=UTC)
 _PAYLOAD = '{"kind": "test"}'
 _PAYLOAD_SHA = hashlib.sha256(_PAYLOAD.encode("utf-8")).hexdigest()
+_SOURCE_HASH_BY_LOCATOR: dict[str, str] = {}
+_EXCERPT_BY_LOCATOR: dict[str, str] = {}
 
 
 def _sha(text: str) -> str:
@@ -175,7 +180,7 @@ def _update_episode(session, episode: ReviewEpisodeRecord, **changes) -> None:
     session.expire_all()
 
 
-def _seed_chain(session, prefix: str) -> dict[str, str]:
+def _seed_chain_legacy(session, prefix: str) -> dict[str, str]:
     """播种一条完整活动证据链（protocol/rule_set/project/subject/episode(已激活)/
     snapshot_v2/source doc/page artifact/base+complete 修订/prompt/model_config/
     run/call/gate/locator）。返回全部 id 供权威元组与发布实体引用。"""
@@ -610,6 +615,137 @@ def _seed_chain(session, prefix: str) -> dict[str, str]:
     }
 
 
+def _seed_chain(
+    session, prefix: str, *, fixture_index: int = 0
+) -> dict[str, str]:
+    """以正式 Phase 4 仓储构造逐页闭合的权威链，再补齐本文件所需候选。"""
+    from tests.v2.helpers.phase5_fact_chain import seed_valid_fact_chain
+
+    chain = seed_valid_fact_chain(
+        session,
+        prefix,
+        fixture_index=fixture_index,
+        create_run=True,
+    )
+    fact_candidate_id = f"{prefix}-cand"
+    event_candidate_id = f"{prefix}-event-cand"
+    exposure_candidate_id = f"{prefix}-exposure-cand"
+    gate_id = f"{prefix}-gate"
+    event_gate_id = f"{prefix}-event-gate"
+    exposure_gate_id = f"{prefix}-exposure-gate"
+    locator = session.get(EvidenceLocatorArtifactRecord, chain["locator_id"])
+    locator_2 = session.get(EvidenceLocatorArtifactRecord, chain["locator_id_2"])
+    assert locator is not None and locator_2 is not None
+    _SOURCE_HASH_BY_LOCATOR.update(
+        {
+            chain["locator_id"]: locator.source_text_sha256,
+            chain["locator_id_2"]: locator_2.source_text_sha256,
+        }
+    )
+    _EXCERPT_BY_LOCATOR.update(
+        {
+            chain["locator_id"]: locator.excerpt or "血压 120/80 mmHg",
+            chain["locator_id_2"]: locator_2.excerpt or "血压 120/80 mmHg",
+        }
+    )
+    basis = AssertionBasis(
+        asserted_object="血压",
+        assertion_text=locator.excerpt or "血压 120/80 mmHg",
+        locator_id=chain["locator_id"],
+        source_text_sha256=locator.source_text_sha256,
+    )
+    candidate_repository = FactNormalizationCandidateRepository(session)
+    candidate_repository.create(
+        chain["call_id"],
+        ClinicalFactCandidateV2(
+            candidate_id=fact_candidate_id,
+            run_id=chain["run_id"],
+            call_id=chain["call_id"],
+            fact_type="vital_sign",
+            polarity=FactPolarity.AFFIRMED,
+            asserted_object="血压",
+            raw_value="120/80",
+            canonical_value="120/80",
+            unit="unitless",
+            date_range=_date_range(),
+            record_time=NOW,
+            locator_ids=[chain["locator_id"]],
+            candidate_source_semantics="objective_result",
+            assertion_basis=basis,
+            model_uncertainty=0.01,
+            created_at=NOW,
+        ),
+    )
+    candidate_repository.create(
+        chain["call_id"],
+        ClinicalEventCandidateV2(
+            candidate_id=event_candidate_id,
+            run_id=chain["run_id"],
+            call_id=chain["call_id"],
+            event_type="diagnosis",
+            start_range=_date_range(),
+            end_range=None,
+            duration_status=DurationStatus.ONGOING,
+            record_time=NOW,
+            fact_candidate_ids=[fact_candidate_id],
+            locator_ids=[chain["locator_id"]],
+            candidate_source_semantics="historical_primary",
+            model_uncertainty=0.02,
+            created_at=NOW,
+        ),
+    )
+    candidate_repository.create(
+        chain["call_id"],
+        MedicationExposureCandidateV2(
+            candidate_id=exposure_candidate_id,
+            run_id=chain["run_id"],
+            call_id=chain["call_id"],
+            medication_name="二甲双胍",
+            category="降糖药",
+            indication="2 型糖尿病",
+            dose="500",
+            unit="mg",
+            frequency="bid",
+            route="口服",
+            start_range=_date_range(),
+            end_range=None,
+            duration_status=DurationStatus.ONGOING,
+            record_time=NOW,
+            fact_candidate_ids=[fact_candidate_id],
+            locator_ids=[chain["locator_id"]],
+            candidate_source_semantics="current_chart",
+            model_uncertainty=0.03,
+            created_at=NOW,
+        ),
+    )
+    gate_repository = FactGateResultRepository(session)
+    for candidate_id, candidate_gate_id in (
+        (fact_candidate_id, gate_id),
+        (event_candidate_id, event_gate_id),
+        (exposure_candidate_id, exposure_gate_id),
+    ):
+        gate_repository.create(
+            FactGateResult(
+                gate_result_id=candidate_gate_id,
+                run_id=chain["run_id"],
+                call_id=chain["call_id"],
+                candidate_id=candidate_id,
+                gate=FactGate.TRANSACTIONAL_PUBLISH,
+                outcome=GateOutcome.ACCEPTED,
+                reasons=[],
+                created_at=NOW,
+            )
+        )
+    return {
+        **chain,
+        "gate_id": gate_id,
+        "fact_candidate_id": fact_candidate_id,
+        "event_candidate_id": event_candidate_id,
+        "event_gate_id": event_gate_id,
+        "exposure_gate_id": exposure_gate_id,
+    }
+
+
 def _authority(ids: dict[str, str], **overrides) -> FactAuthority:
     base = {
         "project_id": ids["project_id"],
@@ -635,10 +771,21 @@ def _date_range():
     )
 
 
+def _same_date_range_in_chinese():
+    return PartialDateRange(
+        source_text="2026年3月1日",
+        precision=DatePrecision.DAY,
+        lower_bound=date(2026, 3, 1),
+        upper_bound=date(2026, 3, 1),
+    )
+
+
 def _basis(locator_id: str) -> AssertionBasis:
     return AssertionBasis(
-        asserted_object="血压", assertion_text="血压 120/80 mmHg",
-        locator_id=locator_id, source_text_sha256=_sha("alt"),
+        asserted_object="血压",
+        assertion_text=_EXCERPT_BY_LOCATOR.get(locator_id, "血压 120/80 mmHg"),
+        locator_id=locator_id,
+        source_text_sha256=_SOURCE_HASH_BY_LOCATOR.get(locator_id, _sha("alt")),
     )
 
 
@@ -667,6 +814,7 @@ def _fact(ids, **overrides) -> ClinicalFactV2:
     if "stable_identity" not in overrides:
         base["stable_identity"] = clinical_fact_stable_identity(
             authority=base["authority"], fact_type=base["fact_type"],
+            profile_lane=base.get("profile_lane", ProfileLane.EVIDENCE_QUALITY),
             asserted_object=base["asserted_object"],
             polarity=base["polarity"], value=base["value"], unit=base["unit"],
             date_range=base["date_range"],
@@ -688,7 +836,7 @@ def _event(ids, **overrides) -> ClinicalEventV2:
         "fact_ids": [f"{ids['run_id']}-fact"],
         "referenced_fact_objects": ["vital_sign:血压"],
         "locator_ids": [ids["locator_id"]],
-        "source_strength": SourceStrength.HISTORICAL_PRIMARY,
+        "source_strength": SourceStrength.CONTEMPORANEOUS_OBJECTIVE,
         "revision": 1,
         "created_at": NOW,
     }
@@ -696,6 +844,7 @@ def _event(ids, **overrides) -> ClinicalEventV2:
     if "stable_identity" not in overrides:
         base["stable_identity"] = clinical_event_stable_identity(
             authority=base["authority"], event_type=base["event_type"],
+            profile_lane=base.get("profile_lane", ProfileLane.EVIDENCE_QUALITY),
             referenced_fact_objects=base["referenced_fact_objects"],
             start_range=base["start_range"], end_range=base["end_range"],
             duration_status=base["duration_status"],
@@ -719,7 +868,7 @@ def _exposure(ids, **overrides) -> MedicationExposureV2:
         "record_time": NOW,
         "fact_ids": [f"{ids['run_id']}-fact"],
         "locator_ids": [ids["locator_id"]],
-        "source_strength": SourceStrength.CURRENT_STUDY_CHART,
+        "source_strength": SourceStrength.CONTEMPORANEOUS_OBJECTIVE,
         "revision": 1,
         "created_at": NOW,
     }
@@ -744,7 +893,7 @@ def chain(session):
 @pytest.fixture
 def chain_other(session):
     """第二条独立审核节点链（跨节点定位引用测试用）。"""
-    return _seed_chain(session, "t2")
+    return _seed_chain(session, "t2", fixture_index=1)
 
 
 # ------------------------------------------------------------- 权威元组拒绝
@@ -844,7 +993,7 @@ def test_rejects_non_complete_processing_revision(chain, session):
         episode,
         active_evidence_processing_revision_id=chain["base_processing_revision_id"],
     )
-    with pytest.raises(RepositoryError, match="不是 complete 修订"):
+    with pytest.raises(FactAuthorityError, match="闭包不完整"):
         ClinicalFactV2Repository(session).create(
             _fact(chain, authority=_authority(
                 chain, complete_processing_revision_id=chain["base_processing_revision_id"]
@@ -874,7 +1023,7 @@ def test_rejects_complete_revision_wrong_snapshot(chain, session):
         evidence_snapshot_id="other-snapshot",
     )
     session.flush()
-    with pytest.raises(FactAuthorityError, match="与权威快照"):
+    with pytest.raises(FactAuthorityError, match="闭包不完整"):
         ClinicalFactV2Repository(session).create(_fact(chain))
 
 
@@ -897,7 +1046,7 @@ def test_rejects_locator_outside_snapshot_members(chain, session):
     ).scalars().first()
     session.delete(member)
     session.flush()
-    with pytest.raises(FactLocatorReferenceError, match="不属于当前活动快照成员"):
+    with pytest.raises(FactAuthorityError, match="闭包不完整"):
         ClinicalFactV2Repository(session).create(_fact(chain))
 
 
@@ -905,7 +1054,7 @@ def test_rejects_locator_processing_revision_mirror_drift(chain, session):
     locator = session.get(EvidenceLocatorArtifactRecord, chain["locator_id"])
     locator.processing_revision_id = chain["base_processing_revision_id"]
     session.flush()
-    with pytest.raises(PersistedContractInvalid, match="不一致"):
+    with pytest.raises(FactAuthorityError, match="闭包不完整"):
         ClinicalFactV2Repository(session).create(_fact(chain))
 
 
@@ -919,7 +1068,29 @@ def test_rejects_locator_not_in_complete_revision_closure(chain, session):
     ).scalar_one()
     session.delete(membership)
     session.flush()
-    with pytest.raises(FactLocatorReferenceError, match="未收录于当前活动完整处理修订"):
+    with pytest.raises(FactAuthorityError, match="闭包不完整"):
+        ClinicalFactV2Repository(session).create(_fact(chain))
+
+
+def test_rejects_complete_revision_with_falsified_empty_page_manifest(
+    chain, session
+):
+    """有快照成员的完整修订不能通过伪造空页清单绕过逐页闭包。"""
+    complete = session.get(
+        EvidenceProcessingRevisionRecord,
+        chain["complete_processing_revision_id"],
+    )
+    empty_manifest_hash = evidence_processing_manifest_hash(entries=[])
+    complete.manifest_sha256 = empty_manifest_hash
+    _update_payload(
+        complete,
+        CompleteEvidenceProcessingRevision,
+        manifest=[],
+        manifest_sha256=empty_manifest_hash,
+    )
+    session.flush()
+
+    with pytest.raises(FactAuthorityError, match="闭包不完整"):
         ClinicalFactV2Repository(session).create(_fact(chain))
 
 
@@ -939,7 +1110,7 @@ def test_rejects_locator_source_hash_mirror_drift(chain, session):
     locator = session.get(EvidenceLocatorArtifactRecord, chain["locator_id"])
     locator.source_text_sha256 = _sha("other-source-text")
     session.flush()
-    with pytest.raises(PersistedContractInvalid, match="不一致"):
+    with pytest.raises(FactAuthorityError, match="闭包不完整"):
         ClinicalFactV2Repository(session).create(_fact(chain))
 
 
@@ -1004,6 +1175,33 @@ def test_rejects_gate_not_belonging_to_run(chain, chain_other, session):
         ClinicalFactV2Repository(session).create(
             _fact(chain_other, gate_id=chain["gate_id"])
         )
+
+
+def test_gate_results_create_many_preserves_run_and_candidate_links(chain, session):
+    results = [
+        FactGateResult(
+            gate_result_id=f"batch-gate-{index}",
+            run_id=chain["run_id"],
+            call_id=chain["call_id"],
+            candidate_id=candidate_id,
+            gate=FactGate.CONTRACT_AND_ENUM,
+            outcome=GateOutcome.ACCEPTED,
+            reasons=[],
+            created_at=NOW,
+        )
+        for index, candidate_id in enumerate(
+            (chain["fact_candidate_id"], chain["event_candidate_id"]),
+            start=1,
+        )
+    ]
+
+    persisted = FactGateResultRepository(session).create_many(results)
+
+    assert persisted == results
+    assert [
+        FactGateResultRepository(session).get(item.gate_result_id)
+        for item in results
+    ] == results
 
 
 def test_rejects_publish_run_authority_mismatch(chain, chain_other, session):
@@ -1130,6 +1328,20 @@ def test_candidate_roundtrip_preserves_complete_contract(chain, session):
     assert candidate.run_id == chain["run_id"]
     assert candidate.locator_ids == [chain["locator_id"]]
     assert candidate.assertion_basis == _basis(chain["locator_id"])
+
+
+def test_candidate_roundtrip_preserves_profile_lane(chain, session):
+    repository = FactNormalizationCandidateRepository(session)
+    original = repository.get(chain["fact_candidate_id"])
+    candidate = original.model_copy(
+        update={
+            "candidate_id": "profile-lane-candidate",
+            "profile_lane": ProfileLane.MEDICAL_HISTORY,
+        }
+    )
+    repository.create(chain["call_id"], candidate)
+
+    assert repository.get(candidate.candidate_id).profile_lane == ProfileLane.MEDICAL_HISTORY
 
 
 def test_candidate_payload_hash_drift_is_rejected(chain, session):
@@ -1309,6 +1521,14 @@ def test_fact_roundtrip_preserves_authority_identity_and_locators(chain, session
     assert got.date_range.lower_bound == date(2026, 3, 1)
 
 
+def test_published_fact_roundtrip_preserves_profile_lane(chain, session):
+    repository = ClinicalFactV2Repository(session)
+    fact = _fact(chain, profile_lane=ProfileLane.TEST_EXAM_SCORE)
+    repository.create(fact)
+
+    assert repository.get(fact.fact_id).profile_lane == ProfileLane.TEST_EXAM_SCORE
+
+
 def test_fact_asserted_object_column_payload_mirror_drift_rejected(chain, session):
     repo = ClinicalFactV2Repository(session)
     repo.create(_fact(chain))
@@ -1349,6 +1569,23 @@ def test_event_roundtrip(chain, session):
     assert got.authority == _authority(chain)
 
 
+def test_fact_publication_accepts_equivalent_date_with_different_source_text(chain, session):
+    got = ClinicalFactV2Repository(session).create(
+        _fact(chain, date_range=_same_date_range_in_chinese())
+    )
+
+    assert got.date_range.source_text == "2026年3月1日"
+
+
+def test_event_publication_accepts_equivalent_date_with_different_source_text(chain, session):
+    ClinicalFactV2Repository(session).create(_fact(chain))
+    got = ClinicalEventV2Repository(session).create(
+        _event(chain, start_range=_same_date_range_in_chinese())
+    )
+
+    assert got.start_range.source_text == "2026年3月1日"
+
+
 def test_event_payload_spoofed_fact_objects_rejected_on_read(chain, session):
     ClinicalFactV2Repository(session).create(_fact(chain))
     repo = ClinicalEventV2Repository(session)
@@ -1376,7 +1613,16 @@ def test_exposure_roundtrip(chain, session):
     assert got.locator_ids == [chain["locator_id"]]
 
 
-def test_conflict_group_roundtrip(chain, session):
+def test_exposure_publication_accepts_equivalent_date_with_different_source_text(chain, session):
+    ClinicalFactV2Repository(session).create(_fact(chain))
+    got = MedicationExposureV2Repository(session).create(
+        _exposure(chain, start_range=_same_date_range_in_chinese())
+    )
+
+    assert got.start_range.source_text == "2026年3月1日"
+
+
+def _create_and_assert_fact_conflict_group(chain, session):
     repo = ClinicalFactV2Repository(session)
     repo.create(_fact(chain, fact_id="fact-a"))
     second_candidate = ClinicalFactCandidateV2(
@@ -1433,3 +1679,28 @@ def test_conflict_group_roundtrip(chain, session):
     assert got.fact_ids == ["fact-a", "fact-b"]
     assert got.locator_ids == [chain["locator_id"]]
     assert got.resolution_revision == 0
+
+
+def test_conflict_group_roundtrip(chain, session):
+    _create_and_assert_fact_conflict_group(chain, session)
+
+
+def test_legacy_fact_conflict_payload_reads_after_member_kind_migration(chain, session):
+    """0016 回填成员类型后，0013 旧事实冲突正文仍须可回放。"""
+    _create_and_assert_fact_conflict_group(chain, session)
+    row = session.get(ClinicalConflictGroupV2Record, "conflict-1")
+    assert row is not None
+    payload = json.loads(row.payload_json)
+    payload.pop("member_kind")
+    payload.pop("event_ids")
+    payload.pop("exposure_ids")
+    row.payload_json = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
+    row.payload_sha256 = hashlib.sha256(row.payload_json.encode()).hexdigest()
+    session.flush()
+    session.expire_all()
+
+    got = ClinicalConflictGroupV2Repository(session).get("conflict-1")
+    assert got.member_kind == "fact"
+    assert got.fact_ids == ["fact-a", "fact-b"]

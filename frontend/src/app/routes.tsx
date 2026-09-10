@@ -87,6 +87,14 @@ export const APP_ROUTES: readonly AppRoute[] = [
       : lazy(() => import("../pages/SubjectsCatalogPage")),
   },
   {
+    path: "/profiles",
+    label: "个例档案",
+    description: "当前受试者审核节点的原文关联档案",
+    group: "work",
+    component: lazy(() => import("../pages/SubjectsPage")),
+    showInNavigation: false,
+  },
+  {
     path: "/subjects/:subjectId/evidence",
     label: "证据工作台",
     description: "受试者审核节点的资料上传与证据工作台",

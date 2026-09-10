@@ -5,6 +5,10 @@
 
 import { test, expect } from "@playwright/test";
 import { openRoute } from "./helpers";
+import {
+  PROFILE_HASH,
+  registerProfileRoutes,
+} from "./profile-evidence-fixtures";
 
 test.describe("风险到证据路径", () => {
   test("今日工作冲突 → 对应规则 → 证据（不超过 3 次操作）", async ({ page }) => {
@@ -44,62 +48,47 @@ test.describe("风险到证据路径", () => {
     await expect(dialog).toContainText("扫描页无法稳定定位字符或坐标");
   });
 
-  test("受试者资料页事件 → 证据直达（URL 定位，≤3 次操作）", async ({ page }) => {
-    await openRoute(page, "/subjects?subject=subject-uat-03-gap_conflict&stage=screening");
-    // 操作 1：点击汇总事件的“查看判断依据”直达工作台证据区
+  test("受试者资料页事件 → 原文证据（≤3 次操作）", async ({ page }) => {
+    await registerProfileRoutes(page);
+    await page.goto(`/${PROFILE_HASH}&all=1`);
+    await page.getByRole("heading", { name: /症状体征/ }).waitFor();
+    // 操作 1：事件直接打开其自身原文，不借道其他规则或页面。
     await page
-      .getByRole("link", { name: /查看判断依据：资料缺口与冲突待处理/ })
-      .first()
+      .getByRole("button", { name: /查看.发热.的原文证据/ })
       .click();
-    // 证据卡自动定位（高亮）且文件/页码/精度可见
-    await expect(page.locator(".workbench-episode__subject")).toHaveText("UAT-03");
-    await expect(page.locator(".evidence-pane__item--focus")).toBeVisible();
-    await expect(
-      page.getByText("合成筛选资料.pdf").first(),
-    ).toBeVisible();
+    const panel = page.getByLabel("该条目的原文证据与定位");
+    await expect(panel).toBeVisible();
+    await expect(panel.getByText("体温 38.2°C，伴发热")).toBeVisible();
+    await expect(panel.getByText("筛选病历.pdf")).toBeVisible();
+    await expect(page.getByLabel(/^重点标注/)).toHaveCount(1);
   });
 
-  test("个例事件只提供与证据关系相符的入口，不用共享片段冒充原始依据", async ({
+  test("事实与事件分别打开自身原文，不共用不相干的定位", async ({
     page,
   }) => {
-    await openRoute(
-      page,
-      "/subjects?subject=subject-uat-01-clear&stage=screening&all=1",
-    );
-    const surgery = page
-      .getByRole("heading", { name: "阑尾切除术" })
-      .locator("xpath=ancestor::article");
-    await expect(surgery).toContainText("尚无该事件的独立原始资料定位");
-    await expect(surgery.getByRole("link")).toHaveCount(0);
+    await registerProfileRoutes(page);
+    await page.goto(`/${PROFILE_HASH}&all=1`);
+    await page.getByRole("heading", { name: /人口学\/基线/ }).waitFor();
 
-    await openRoute(
-      page,
-      "/subjects?subject=subject-uat-03-gap_conflict&stage=screening",
-    );
-    const summaryLink = page.getByRole("link", {
-      name: "查看判断依据：资料缺口与冲突待处理",
-    });
-    await expect(summaryLink).toHaveAttribute("href", /component=component-ex-01/);
-    await summaryLink.click();
-    await expect(page).toHaveURL(/component=component-ex-01/);
-    await expect(page.locator(".workbench-episode__subject")).toHaveText("UAT-03");
-    if (await page.locator(".workbench-tabs").isVisible()) {
-      await page.getByRole("tab", { name: "规则" }).click();
-    }
+    await page
+      .getByRole("button", { name: /查看.基线血压 120\/80 mmHg.的原文证据/ })
+      .click();
+    let panel = page.getByLabel("该条目的原文证据与定位");
     await expect(
-      page.getByRole("button", {
-        name: /EX-01a 实验室异常与研究者风险的复合条件/,
-      }),
-    ).toHaveAttribute("aria-current", "true");
-
-    await openRoute(
-      page,
-      "/subjects?subject=subject-uat-03-gap_conflict&stage=screening",
-    );
-    await expect(
-      page.getByRole("link", {
-        name: "查看关联规则资料：合并用药时间轴待核对",
+      panel.locator(".profile-locator__excerpt", {
+        hasText: "基线血压 120/80 mmHg",
       }),
     ).toBeVisible();
+    await expect(panel.getByText("体温 38.2°C，伴发热")).toHaveCount(0);
+    await page.getByRole("button", { name: "关闭原文证据" }).click();
+
+    await page.getByRole("button", { name: /查看.发热.的原文证据/ }).click();
+    panel = page.getByLabel("该条目的原文证据与定位");
+    await expect(panel.getByText("体温 38.2°C，伴发热")).toBeVisible();
+    await expect(
+      panel.locator(".profile-locator__excerpt", {
+        hasText: "基线血压 120/80 mmHg",
+      }),
+    ).toHaveCount(0);
   });
 });

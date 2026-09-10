@@ -138,7 +138,7 @@ describe("ProtocolCategoryChangeRow", () => {
 
     expect(screen.getByText("例外条件：基线日期当日")).toBeInTheDocument();
     expect(
-      screen.getByText("例外条件：随机日期前4周至6个月；同时核对5个半衰期"),
+      screen.getByText("例外条件：随机日期前至少4周且不超过6个月；同时核对5个半衰期"),
     ).toBeInTheDocument();
   });
 

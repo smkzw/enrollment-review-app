@@ -7,6 +7,7 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { openRoute } from "./helpers";
+import { registerProfileRoutes } from "./profile-evidence-fixtures";
 
 const ROUTES = [
   { hash: "today", title: "今日工作" },
@@ -23,6 +24,7 @@ const ROUTES = [
 test.describe("axe 扫描", () => {
   for (const route of ROUTES) {
     test(`${route.title} 无 serious/critical 违规`, async ({ page }) => {
+      if (route.hash === "subjects") await registerProfileRoutes(page);
       await openRoute(page, `/${route.hash}`);
       // 等待异步 stub 数据加载完成
       await page.waitForTimeout(400);

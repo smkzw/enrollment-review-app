@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 from typing import cast
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from app.domain.contracts.enums import (
     ActivationEventKind,
@@ -46,6 +46,7 @@ from app.domain.contracts.evidence_locator import (
     OCRRiskPageReview,
     OCRRiskReview,
     OCRRiskScan,
+    SOURCE_LINE_TARGET_PREFIX,
     ReferencedDocumentResolutionRevision,
     ReferencedDocumentRevision,
     completion_manifest_hash,
@@ -116,6 +117,7 @@ from app.storage.repositories import (
     DuplicateRecordError,
     EpisodeRepository,
     InvalidReferenceError,
+    NotFoundError,
     RepositoryError,
     _episode_columns,
     _flush_guarded,
@@ -319,6 +321,9 @@ class EvidenceLocatorRepository:
         - page_only/not-found：页工件 + 来源层/哈希 + 稳定目标身份 +
           降级/消歧证明 + 算法版本（不同目标不碰撞，同一目标精确别名碰撞）。
         """
+        if artifact.source_layer == LocatorSourceLayer.PAGE_REVIEW_VISUAL:
+            # The verified visual ID includes coverage and the individual reader.
+            return [EvidenceLocatorArtifactRecord.locator_id == artifact.locator_id]
         base = [
             EvidenceLocatorArtifactRecord.page_artifact_id == artifact.page_artifact_id,
             EvidenceLocatorArtifactRecord.source_layer == artifact.source_layer.value,
@@ -570,7 +575,7 @@ class EvidenceLocatorRepository:
                 "（诚实降级为 text_range/excerpt/page_only）"
             )
 
-    def _verify_source(self, artifact: EvidenceLocatorArtifact) -> None:
+    def _verify_source(self, artifact: EvidenceLocatorArtifact, batch=None) -> None:
         artifact_record = self.session.get(PageArtifactRecord, artifact.page_artifact_id)
         if artifact_record is None:
             raise InvalidReferenceError(
@@ -591,6 +596,11 @@ class EvidenceLocatorRepository:
             self._verify_raw_ocr(artifact, artifact_record)
         elif artifact.source_layer == LocatorSourceLayer.EFFECTIVE_TEXT:
             self._verify_effective_text(artifact)
+        elif artifact.source_layer == LocatorSourceLayer.PAGE_REVIEW_VISUAL:
+            from app.storage.page_review_visual_locator_validation import verify_visual_locator
+            verify_visual_locator(self.session, artifact, batch=batch)
+        else:
+            raise LocatorIdentityError("该定位来源尚未接入原始记录核验，不能保存或采信")
 
     @staticmethod
     def _verify_range_on_text(
@@ -619,7 +629,28 @@ class EvidenceLocatorRepository:
                 f"定位 {artifact.locator_id} 的页面摘录不能在 {label} 中回放证明"
             )
 
-    def create(self, artifact: EvidenceLocatorArtifact) -> EvidenceLocatorArtifact:
+    def create(self, artifact: EvidenceLocatorArtifact, *, batch=None) -> EvidenceLocatorArtifact:
+        created = self._prepare_create(artifact, batch=batch)
+        self.session.add(created)
+        _flush_guarded(self.session)
+        return self.get(artifact.locator_id, batch=batch)
+
+    def create_visual_many(self, artifacts: list[EvidenceLocatorArtifact]) -> list[EvidenceLocatorArtifact]:
+        """Visual identity is its ID; source validation does not depend on this table."""
+        from app.storage.page_review_visual_locator_validation import VisualLocatorBatchContext
+
+        if any(item.source_layer != LocatorSourceLayer.PAGE_REVIEW_VISUAL for item in artifacts):
+            raise InvalidReferenceError("批量保存仅用于原件判读定位")
+        if len({item.locator_id for item in artifacts}) != len(artifacts):
+            raise DuplicateRecordError("本批原件定位包含重复编号")
+        batch = VisualLocatorBatchContext(self.session)
+        # Validate every source before inserting anything; writes invalidate reuse.
+        rows = [self._prepare_create(artifact, batch=batch) for artifact in artifacts]
+        self.session.add_all(rows)
+        _flush_guarded(self.session)
+        return [self._decode(row) for row in rows]
+
+    def _prepare_create(self, artifact: EvidenceLocatorArtifact, *, batch=None):
         existing = self.session.get(
             EvidenceLocatorArtifactRecord, artifact.locator_id
         )
@@ -628,7 +659,7 @@ class EvidenceLocatorRepository:
                 f"定位旁路工件 {artifact.locator_id} 已存在，拒绝重复创建"
             )
         _require_artifact(artifact)
-        self._verify_source(artifact)
+        self._verify_source(artifact, batch)
         row = self.session.execute(
             select(EvidenceLocatorArtifactRecord).where(
                 *self._identity_conditions(artifact)
@@ -690,25 +721,51 @@ class EvidenceLocatorRepository:
             payload_sha256=payload_sha256,
             created_at=to_utc_naive(artifact.created_at),
         )
-        self.session.add(created)
-        _flush_guarded(self.session)
-        return self.get(artifact.locator_id)
+        return created
 
-    def get(self, locator_id: str) -> EvidenceLocatorArtifact:
+    def get(self, locator_id: str, *, batch=None) -> EvidenceLocatorArtifact:
         record = _get_required(
             self.session, EvidenceLocatorArtifactRecord, locator_id, "EvidenceLocatorArtifact"
         )
         artifact = self._decode(record)
-        self._verify_source(artifact)
+        self._verify_source(artifact, batch)
         return artifact
 
-    def get_or_none(self, locator_id: str) -> EvidenceLocatorArtifact | None:
+    def get_or_none(self, locator_id: str, *, batch=None) -> EvidenceLocatorArtifact | None:
         record = self.session.get(EvidenceLocatorArtifactRecord, locator_id)
         if record is None:
             return None
         artifact = self._decode(record)
-        self._verify_source(artifact)
+        self._verify_source(artifact, batch)
         return artifact
+
+    def get_many(self, locator_ids: list[str], *, batch=None) -> list[EvidenceLocatorArtifact]:
+        """按调用方顺序一次取齐定位；缺失或损坏记录不得被静默省略。
+
+        未显式传入 ``batch`` 时，本次调用内部共享一个批量核验上下文，
+        同一事务内的重复修订核验只执行一次。
+        """
+        ordered_ids = list(dict.fromkeys(locator_ids))
+        if not ordered_ids:
+            return []
+        if batch is None:
+            from app.storage.page_review_visual_locator_validation import (
+                VisualLocatorBatchContext,
+            )
+            batch = VisualLocatorBatchContext(self.session)
+        rows = self.session.execute(
+            select(EvidenceLocatorArtifactRecord).where(
+                EvidenceLocatorArtifactRecord.locator_id.in_(ordered_ids)
+            )
+        ).scalars().all()
+        by_id = {row.locator_id: row for row in rows}
+        missing = [locator_id for locator_id in ordered_ids if locator_id not in by_id]
+        if missing:
+            raise NotFoundError(f"EvidenceLocatorArtifact 不存在: {missing}")
+        artifacts = [self._decode(by_id[locator_id]) for locator_id in ordered_ids]
+        for artifact in artifacts:
+            self._verify_source(artifact, batch)
+        return artifacts
 
 
 # --------------------------------------------------------------------------- 风险
@@ -3260,13 +3317,18 @@ class CompleteEvidenceProcessingRevisionRepository:
             for scan_id in revision.risk_scan_ids
             for flag in OCRRiskScanRepository(self.session).get(scan_id).flags
         }
-        if base_page_artifact_ids and risk_flag_ids:
+        if base_page_artifact_ids:
             automatic_locator_ids = self.session.execute(
                 select(EvidenceLocatorArtifactRecord.locator_id).where(
                     EvidenceLocatorArtifactRecord.page_artifact_id.in_(
                         base_page_artifact_ids
                     ),
-                    EvidenceLocatorArtifactRecord.target_id.in_(risk_flag_ids),
+                    or_(
+                        EvidenceLocatorArtifactRecord.target_id.in_(risk_flag_ids),
+                        EvidenceLocatorArtifactRecord.target_id.startswith(
+                            SOURCE_LINE_TARGET_PREFIX
+                        ),
+                    ),
                 )
             ).scalars().all()
             expected_locator_ids.update(automatic_locator_ids)

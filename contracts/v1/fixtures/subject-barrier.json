@@ -1325,8 +1325,8 @@
       "input_revision_map": {
         "protocol-v1": 1
       },
-      "input_scope_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
-      "output_hash": "bf3dd37087cdf7c965df8caf62a0037eadff8a23e5ea122f76ac9b1488158c85",
+      "input_scope_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
+      "output_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
       "parent_event_id": null,
       "recompute_scope": [
         "protocol-v1"
@@ -1360,8 +1360,8 @@
       "input_revision_map": {
         "ruleset-synthetic-phase-iii": 1
       },
-      "input_scope_hash": "0b1a263f40f0c19b02ea9b17e3fc68c68adc9e593179f7ca2ce12802e83930a2",
-      "output_hash": "0b1a263f40f0c19b02ea9b17e3fc68c68adc9e593179f7ca2ce12802e83930a2",
+      "input_scope_hash": "38e700c6b7339dd2c6975a988d9fa72f2e8582c35d27f5d5ccb6dfa152287462",
+      "output_hash": "38e700c6b7339dd2c6975a988d9fa72f2e8582c35d27f5d5ccb6dfa152287462",
       "parent_event_id": null,
       "recompute_scope": [
         "protocol-v1"
@@ -1477,7 +1477,7 @@
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "f961d7d2f66486725bf2b038b8850e7e3f244e30797cce4af95e68de4fd995b8",
+      "input_scope_hash": "07b36df44d9e439c494d37393e4a07cc428e9cab21c6189d4f03062a92bc421a",
       "output_hash": "072759fd9b6c36adbe63ce15afdcb02d3309458253e87c85125d17cfe61e9c86",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1594,7 +1594,7 @@
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "13d9c039e4bdfffd8bd845e586b7575419e6ef533f337132f7deff045b2729bc",
+      "input_scope_hash": "5fa171027b71d11bd4ec3624b58cd6e1c75dfc79b01f76eaef45d939c9e0c519",
       "output_hash": "dafa20fa5c997c0450d1b611e8d91e4cef5329158d28a1eef00939e0e7b4b805",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1711,7 +1711,7 @@
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "8ed43452e7f4f99384be5fa55ea041464a52097ad78a895f184a7aed7e349521",
+      "input_scope_hash": "60acb09bfc6284124b4a3d7fafb272d95cf93a6a83703a81c3038d8466d2a7b8",
       "output_hash": "14386fc30b4e112a4f199dbd970a3742a1ac3803e5def89bf93201286e90f218",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1828,7 +1828,7 @@
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "d4ae032633464075ee49495b950d82916d17f8ec3bc91076f20cae0e5b3c92e3",
+      "input_scope_hash": "7eecadd2b3f78ae9d0b295a24e97046a0b1b4edabd5080acc4bea3f492e7082a",
       "output_hash": "18c13d3fe42dbb1533f873dc952d00283dbca8b19cac4550042f42b4dce9ff5f",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1945,7 +1945,7 @@
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "28418215f715ce157fc41c91375fb4904748740346a1aeb375addcf446a0ffab",
+      "input_scope_hash": "ecbdf022d7abaa4deb366697ebfd403739fc60b6b223523ffc91e3b8e1c8d3aa",
       "output_hash": "e4c5b93abae0a3fa9dfe9bd51a2f8b053826d311056eaa36569663dc47b37f28",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2062,7 +2062,7 @@
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "4d4ae97b0bd391a2f694c1e3b3d3ee9b1d39bb658dfd428e6921c3223d8efd92",
+      "input_scope_hash": "89ca96e92a02606500f4cc32e1cf97fa3165b02af136e5e5679421c6c17c4bc5",
       "output_hash": "e58aed7a124b97066c47ea1a88b1a8cfa7e488ef7ae58d9782a823b2d1358e9b",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2179,7 +2179,7 @@
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "042ea329434ce960dcd67bc03038e196f00c9e1a993b3e42c769b376d3bbc1c0",
+      "input_scope_hash": "bce97d589df246b9ff8e4d247623802f6ec2c32f520e3f79a7413c1ec0e0191e",
       "output_hash": "9e42fd5bafe3872476e88ce97201f8bd821615f06b94a084d222b74b139767dc",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2212,7 +2212,7 @@
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "86ee3f167f4adae9d23b414a10dedda81666eca5bf5a8bd248d3add86c4de023",
+      "input_scope_hash": "8671d43b74d2fa76b25762c40633f91e3fde26e7961525124ae033632f961347",
       "output_hash": "0c1458884e342f11270ea4e52d26143bf8ade73b875f16d7edee3b20a59ef6ff",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2537,9 +2537,9 @@
     "protocol_version": {
       "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
       "authority_gate_result_id": "gate-authority-protocol-v1-phase-iii",
-      "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+      "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
       "integrity_gate_result_id": "gate-integrity-protocol-v1-phase-iii",
-      "integrity_manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+      "integrity_manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
       "official_date": {
         "precision": "day",
         "source_text": null,
@@ -2576,9 +2576,9 @@
     "action": "accept_protocol_authority",
     "actor_id": "synthetic-uat-human-acceptance",
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+    "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
     "command_id": "command-accept-protocol-v1-phase-iii",
-    "event_sha256": "7ab1ff37b26839e59f3cce56bd38bee319f8048e33a5012c0c70c3bf90e082e0",
+    "event_sha256": "f0cca309988a11748607e8abea82df29eda15aea137767e50cfc8180b01285df",
     "occurred_at": "2026-08-12T12:00:00Z",
     "protocol_version_id": "protocol-v1",
     "recorded_by_service": "enrollment-review-app",
@@ -2587,10 +2587,10 @@
   "protocol_authority_confirmation": {
     "action": "accept_protocol_authority",
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+    "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
     "command_id": "command-accept-protocol-v1-phase-iii",
     "confirmation_id": "confirmation-protocol-v1-phase-iii",
-    "confirmation_sha256": "0c99db0ca7b1ba09868af56ab50fe9fc7ee5e821b88e99e7e6a01fcbd83107f2",
+    "confirmation_sha256": "676c610bcd602c202342f4ecd35b00dc9c5975f435bdec290e37209fd70af1cb",
     "confirmed_at": "2026-08-12T12:00:00Z",
     "confirmed_by": "synthetic-uat-human-acceptance",
     "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -2600,7 +2600,7 @@
   },
   "protocol_authority_record": {
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+    "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
     "official_rules": [
       {
         "components": [
@@ -2797,12 +2797,15 @@
                       "time_constraint": {
                         "allow_partial_date": false,
                         "anchor_type": "randomization_date",
+                        "combined_window_selection": null,
                         "direction": "before",
                         "half_life_multiplier": null,
                         "lower_bound": null,
                         "lower_bound_days": null,
+                        "lower_bound_inclusive": true,
                         "upper_bound": null,
-                        "upper_bound_days": 28
+                        "upper_bound_days": 28,
+                        "upper_bound_inclusive": true
                       }
                     }
                   ],
@@ -3242,12 +3245,12 @@
     "verified_by": "synthetic-uat-human-acceptance"
   },
   "protocol_integrity_manifest": {
-    "authoritative_rule_set_sha256": "beace579ae41f3a6864b18cd935daaa944f0ef6fcabb77cafb89885356283ce8",
+    "authoritative_rule_set_sha256": "259610747cf084d692f7533e88169826ee4f8603aa5de2088f7df8a8f756d3db",
     "authoritative_workflow_sha256": "1d13d5f280706df5152685b4f1a4701a36a3e0a0cf3a13ed985ff8dac47a2ab8",
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "0c02494e7290f9ffef939d010fdc26297369c84cdfec248e489db9fba14c225d",
+    "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
     "manifest_id": "manifest-protocol-v1-phase-iii",
-    "manifest_sha256": "96089204ebeec33814a035ea586d02720d5867c8a1d65e5847a847b940deed6e",
+    "manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
     "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "protocol_version_id": "protocol-v1",
     "schema_version": "fixture/v1",
@@ -3519,12 +3522,15 @@
                       "time_constraint": {
                         "allow_partial_date": false,
                         "anchor_type": "randomization_date",
+                        "combined_window_selection": null,
                         "direction": "before",
                         "half_life_multiplier": null,
                         "lower_bound": null,
                         "lower_bound_days": null,
+                        "lower_bound_inclusive": true,
                         "upper_bound": null,
-                        "upper_bound_days": 28
+                        "upper_bound_days": 28,
+                        "upper_bound_inclusive": true
                       }
                     }
                   ],

@@ -28,7 +28,7 @@ from typing import Literal
 
 from sqlalchemy.orm import Session
 
-from app.domain.contracts.enums import FactCallStatus, FactGate, GateOutcome
+from app.domain.contracts.enums import DurationStatus, FactCallStatus, FactGate, GateOutcome
 from app.domain.contracts.fact_gates import (
     BatchGateResult,
     DedupGroup,
@@ -258,8 +258,109 @@ def _event_semantic_key(
 
 
 def _exposure_semantic_key(candidate: MedicationExposureCandidateV2) -> str:
-    # 按药名聚合；类别/剂量/频次等差异视为冲突
+    # 按药名聚合；是否冲突还需结合临床内容与暴露时间范围。
     return f"exposure:{candidate.medication_name}"
+
+
+def _clinical_payload_signature(candidate) -> tuple:
+    """排除时间字段后的临床内容；纯时间变化不构成冲突。"""
+    if isinstance(candidate, ClinicalFactCandidateV2):
+        return (candidate.polarity, candidate.canonical_value, candidate.unit)
+    if isinstance(candidate, ClinicalEventCandidateV2):
+        return (candidate.duration_status,)
+    return (
+        candidate.category,
+        candidate.indication,
+        candidate.dose,
+        candidate.unit,
+        candidate.frequency,
+        candidate.route,
+        candidate.duration_status,
+    )
+
+
+def _known_fact_bounds(candidate: ClinicalFactCandidateV2):
+    date_range = candidate.date_range
+    if (
+        date_range is None
+        or date_range.lower_bound is None
+        or date_range.upper_bound is None
+    ):
+        return None
+    return date_range.lower_bound, date_range.upper_bound
+
+
+def _known_span_bounds(candidate):
+    start = candidate.start_range
+    if (
+        start is None
+        or start.lower_bound is None
+        or start.upper_bound is None
+    ):
+        return None
+    if candidate.duration_status == DurationStatus.SINGLE:
+        return start.lower_bound, start.upper_bound
+    if candidate.end_range is None or candidate.end_range.upper_bound is None:
+        return start.lower_bound, None
+    return start.lower_bound, candidate.end_range.upper_bound
+
+
+def _exposures_have_known_conflict(left, right) -> bool:
+    """Missing details and unknown duration are uncertainty, not contradiction."""
+    for field in ("dose", "unit", "frequency", "route"):
+        left_value = getattr(left, field)
+        right_value = getattr(right, field)
+        if left_value is not None and right_value is not None and left_value != right_value:
+            return True
+    return (
+        left.duration_status != DurationStatus.UNKNOWN
+        and right.duration_status != DurationStatus.UNKNOWN
+        and left.duration_status != right.duration_status
+    )
+
+
+def _definitely_disjoint_in_time(left, right) -> bool:
+    """仅在两个候选可证明前后分离时返回 True；未知边界保持保守。"""
+    if isinstance(left, ClinicalFactCandidateV2):
+        left_bounds = _known_fact_bounds(left)
+        right_bounds = _known_fact_bounds(right)
+    else:
+        left_bounds = _known_span_bounds(left)
+        right_bounds = _known_span_bounds(right)
+    if left_bounds is None or right_bounds is None:
+        return False
+    left_start, left_end = left_bounds
+    right_start, right_end = right_bounds
+    return bool(
+        (left_end is not None and left_end < right_start)
+        or (right_end is not None and right_end < left_start)
+    )
+
+
+def _temporal_components(candidate_ids: list[str], candidates_by_id: dict) -> list[list[str]]:
+    """按“时间不能证明互斥”关系生成稳定连通分量。"""
+    remaining = set(candidate_ids)
+    components: list[list[str]] = []
+    while remaining:
+        seed = min(remaining)
+        remaining.remove(seed)
+        component = {seed}
+        frontier = [seed]
+        while frontier:
+            current = frontier.pop()
+            connected = sorted(
+                candidate_id
+                for candidate_id in remaining
+                if not _definitely_disjoint_in_time(
+                    candidates_by_id[current], candidates_by_id[candidate_id]
+                )
+            )
+            for candidate_id in connected:
+                remaining.remove(candidate_id)
+                component.add(candidate_id)
+                frontier.append(candidate_id)
+        components.append(sorted(component))
+    return components
 
 
 def detect_semantic_conflicts(
@@ -269,13 +370,10 @@ def detect_semantic_conflicts(
     event_candidates: list[ClinicalEventCandidateV2],
     exposure_candidates: list[MedicationExposureCandidateV2],
 ) -> list[SemanticConflictGroup]:
-    """同一语义对象出现多于一种稳定身份时建立未解决冲突组。
+    """同一语义对象在时间可重叠且临床内容不兼容时建立冲突组。
 
-    每个 semantic_key 下若 distinct stable_identities >=2，则生成一个
-    ``SemanticConflictGroup``，``candidate_ids`` 包含该语义对象下全部候选，
-    ``distinct_stable_identities`` 为去重后的稳定身份集合，``reasons`` 说明
-    冲突维度，``affected_scope`` 为同一组内其他候选 ID（有序去重）。
-    不自动选择赢家，所有成员平等进入冲突组。
+    可证明时间前后分离的数值、事件或用药变化属于纵向历程，不是冲突。日期未知、
+    部分日期重叠或边界相接时保守保留冲突，绝不自动选择赢家。
     """
     stable_map = compute_stable_identity_map(
         authority=authority,
@@ -300,6 +398,11 @@ def detect_semantic_conflicts(
         sem_to_cids.setdefault(k, []).append(exposure_candidate.candidate_id)
         sem_to_type[k] = "exposure"
 
+    candidates_by_id = {
+        candidate.candidate_id: candidate
+        for candidate in [*fact_candidates, *event_candidates, *exposure_candidates]
+    }
+
     # 收集定位用于 affected_scope（候选级受影响范围另算）
     locator_map: dict[str, list[str]] = {}
     for fact_candidate in fact_candidates:
@@ -311,40 +414,47 @@ def detect_semantic_conflicts(
 
     groups: list[SemanticConflictGroup] = []
     for sem_key in sorted(sem_to_cids.keys()):
-        cids = sorted(set(sem_to_cids[sem_key]))
-        if len(cids) < 2:
-            continue
-        distinct_sids = sorted({stable_map[cid] for cid in cids})
-        if len(distinct_sids) < 2:
-            continue  # 同身份已由去重覆盖，非冲突
         stype = sem_to_type[sem_key]
-        reasons: list[str]
-        if stype == "fact":
-            reasons = ["同一被断言对象的不同来源存在不兼容的值/极性/单位/日期"]
-        elif stype == "event":
-            reasons = ["同一事件类型的不同来源存在不兼容的起止范围或持续状态"]
-        else:
-            reasons = ["同一药物/治疗的不同来源存在不兼容的剂量/单位/频次/途径/起止或持续状态"]
-        # affected_scope 为组内全部定位的有序并集 + 其他候选 ID 的并集？
-        # 根据 gate 合同，affected_scope 仅使用候选自带的 locator_ids 或相关候选 IDs；
-        # 此处为冲突组层面聚合，取全部候选的定位并集用于批次级聚合展示。
-        merged_locators: set[str] = set()
-        for cid in cids:
-            merged_locators.update(locator_map.get(cid, []))
-        # 组级 affected_scope 使用 candidate_ids 中除自身外的其他 ID 的并集？
-        # 为保持确定性，组级 affected_scope 设为全部 candidate_ids 的排序（与 dedup 类似）
-        # 而逐候选的 gate verdict 将单独计算其他成员。
-        affected = sorted(set(merged_locators) | set(cids))
-        groups.append(
-            SemanticConflictGroup(
-                semantic_key=sem_key,
-                semantic_type=stype,
-                candidate_ids=cids,
-                distinct_stable_identities=distinct_sids,
-                reasons=reasons,
-                affected_scope=affected,
+        for cids in _temporal_components(
+            sorted(set(sem_to_cids[sem_key])), candidates_by_id
+        ):
+            if len(cids) < 2:
+                continue
+            if stype == "exposure":
+                if not any(
+                    _exposures_have_known_conflict(
+                        candidates_by_id[left_id], candidates_by_id[right_id]
+                    )
+                    for index, left_id in enumerate(cids)
+                    for right_id in cids[index + 1 :]
+                ):
+                    continue
+            else:
+                signatures = {
+                    _clinical_payload_signature(candidates_by_id[cid]) for cid in cids
+                }
+                if len(signatures) < 2:
+                    continue
+            distinct_sids = sorted({stable_map[cid] for cid in cids})
+            if stype == "fact":
+                reasons = ["同一时间范围内或时间重叠无法排除时，事实值、极性或单位不兼容"]
+            elif stype == "event":
+                reasons = ["同一事件在时间重叠无法排除时，持续状态不兼容"]
+            else:
+                reasons = ["同一用药或治疗在时间重叠无法排除时，剂量、频次、途径或状态不兼容"]
+            merged_locators = {
+                locator_id for cid in cids for locator_id in locator_map.get(cid, [])
+            }
+            groups.append(
+                SemanticConflictGroup(
+                    semantic_key=sem_key,
+                    semantic_type=stype,
+                    candidate_ids=cids,
+                    distinct_stable_identities=distinct_sids,
+                    reasons=reasons,
+                    affected_scope=sorted(merged_locators | set(cids)),
+                )
             )
-        )
     groups.sort(key=lambda g: g.semantic_key)
     return groups
 
@@ -745,10 +855,7 @@ def persist_batch_gate_results(
         return []
     gate_results = batch_gate_results_to_fact_gate_results(batch_result, created_at=created_at)
     repo = FactGateResultRepository(session)
-    persisted: list[FactGateResult] = []
-    for gr in gate_results:
-        persisted.append(repo.create(gr))
-    return persisted
+    return repo.create_many(gate_results)
 
 
 def orchestrate_run_gates(

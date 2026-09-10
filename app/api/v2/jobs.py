@@ -158,7 +158,11 @@ def cancel_job(job_id: str, request: Request) -> JobActionResponse:
 
 @router.post("/{job_id}/retry", response_model=JobActionResponse)
 def retry_job(job_id: str, request: Request) -> JobActionResponse:
-    outcome = _service(request).retry(job_id)
+    service = _service(request)
+    snapshot = service.get_status(job_id)
+    retry_services = getattr(request.app.state, "job_retry_services", {})
+    retry_service = retry_services.get(snapshot.job_type, service)
+    outcome = retry_service.retry(job_id)
     return JobActionResponse(
         job_id=job_id,
         state=outcome.state,

@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import date, datetime, timezone
+from decimal import Decimal, InvalidOperation
 from enum import Enum
 from typing import Any, TypeVar
 
@@ -104,6 +105,58 @@ def mirror_json(value: Any) -> str:
     )
 
 
+def _mirror_semantic_value(value: Any) -> Any:
+    """Normalize persisted JSON for semantic mirror comparison.
+
+    SQLite's JSON affinity may read an integral JSON number such as ``5.0``
+    back as the Python integer ``5``.  Those values are the same clinical
+    number, while booleans must remain distinct from ``0``/``1``.
+    """
+    if isinstance(value, Enum):
+        return _mirror_semantic_value(value.value)
+    if isinstance(value, (datetime, date)):
+        return ("date", value.isoformat())
+    if isinstance(value, bool):
+        return ("bool", value)
+    if isinstance(value, (int, float)):
+        try:
+            return ("number", Decimal(str(value)))
+        except InvalidOperation:
+            return ("number_text", str(value))
+    if isinstance(value, dict):
+        return (
+            "object",
+            tuple(
+                sorted(
+                    (str(key), _mirror_semantic_value(item))
+                    for key, item in value.items()
+                )
+            ),
+        )
+    if isinstance(value, (list, tuple)):
+        return ("array", tuple(_mirror_semantic_value(item) for item in value))
+    return ("scalar", value)
+
+
+def mirror_values_equal(left: Any, right: Any) -> bool:
+    """Compare persisted column values with their JSON contract mirrors."""
+    if isinstance(left, datetime) and isinstance(right, str):
+        try:
+            return to_utc_naive(left) == parse_datetime_column(right)
+        except ValueError:
+            return False
+    if isinstance(right, datetime) and isinstance(left, str):
+        return mirror_values_equal(right, left)
+    if isinstance(left, date) and not isinstance(left, datetime) and isinstance(right, str):
+        try:
+            return left == date.fromisoformat(right)
+        except ValueError:
+            return False
+    if isinstance(right, date) and not isinstance(right, datetime) and isinstance(left, str):
+        return mirror_values_equal(right, left)
+    return _mirror_semantic_value(left) == _mirror_semantic_value(right)
+
+
 def payload_get(payload: dict[str, Any], path: str) -> Any:
     """按点路径取 payload 字段（如 ``official_date.precision``）。"""
     current: Any = payload
@@ -128,7 +181,7 @@ def check_column_mirrors(
                 parsed_payload = payload_value
             equal = to_utc_naive(column_value) == parsed_payload
         else:
-            equal = mirror_json(column_value) == mirror_json(payload_value)
+            equal = mirror_values_equal(column_value, payload_value)
         if not equal:
             raise PersistedContractInvalid(
                 f"{entity_name} 列 {column_attr} 与已验证 payload 不一致，拒绝还原合同"

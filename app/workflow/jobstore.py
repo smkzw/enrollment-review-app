@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import exists, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.domain.contracts.enums import JobEventType
@@ -283,18 +283,24 @@ class JobStore:
 
     def next_runnable_step(self, job_id: str) -> JobStepRecord | None:
         """依赖已满足且未终态的下一个步骤；失败步骤按重试范围参与。"""
+        runnable = self.list_runnable_steps(job_id)
+        return runnable[0] if runnable else None
+
+    def list_runnable_steps(self, job_id: str) -> list[JobStepRecord]:
+        """依赖已满足的全部可运行步骤，顺序与 :meth:`list_steps` 一致。"""
         steps = self.list_steps(job_id)
         deps = self._deps_map(job_id)
         completed = {step.step_id for step in steps if step.state == "completed"}
         now = self.now()
+        runnable: list[JobStepRecord] = []
         for step in steps:
             if step.state not in RUNNABLE_STEP_STATES:
                 continue
             if step_is_deferred(step.state, step.retry_not_before, now):
                 continue
             if all(dep in completed for dep in deps.get(step.step_id, ())):
-                return step
-        return None
+                runnable.append(step)
+        return runnable
 
     def all_steps_terminal(self, job_id: str) -> bool:
         return all(step.state in TERMINAL_STEP_STATES for step in self.list_steps(job_id))
@@ -568,6 +574,76 @@ class JobStore:
         self.session.flush()
         return step
 
+    def acquire_step_commit(self, lease: JobLease, step_id: str) -> JobStepRecord:
+        """原子写栅栏：确认租约仍有效且步骤仍为 running，再允许领域写入。
+
+        使用单条条件 UPDATE（任务 ACTIVE + owner/generation + 未过期，且目标
+        步骤 state=running）作为栅栏。失败时回退到 :meth:`_lease_guard` /
+        步骤校验，抛出 :class:`LeaseLostError` 或 :class:`StepMismatchError`，
+        调用方同一事务内的领域副作用会一并回滚。
+        """
+        now = self.now()
+        step_still_running = exists(
+            select(1).where(
+                JobStepRecord.job_id == JobRecord.job_id,
+                JobStepRecord.step_id == step_id,
+                JobStepRecord.state == "running",
+            )
+        )
+        result = self.session.execute(
+            update(JobRecord)
+            .where(
+                JobRecord.job_id == lease.job_id,
+                JobRecord.state.in_(ACTIVE_LEASE_STATES),
+                JobRecord.lease_owner == lease.owner,
+                JobRecord.lease_generation == lease.generation,
+                JobRecord.lease_expires_at.is_not(None),
+                JobRecord.lease_expires_at >= now,
+                step_still_running,
+            )
+            .values(
+                revision=JobRecord.revision + 1,
+                updated_at=now,
+            )
+        )
+        self.session.flush()
+        if _rowcount(result) != 1:
+            self._lease_guard(lease)
+            step = self.session.get(
+                JobStepRecord, {"job_id": lease.job_id, "step_id": step_id}
+            )
+            if step is None or step.job_id != lease.job_id:
+                raise StepMismatchError(
+                    f"步骤 {step_id!r} 不属于任务 {lease.job_id}"
+                )
+            if step.state != "running":
+                raise StepMismatchError(
+                    f"步骤 {step_id} 当前状态 {step.state}，不能提交完成"
+                )
+            raise LeaseLostError(f"任务 {lease.job_id} 写栅栏获取失败")
+        step = self.session.get(
+            JobStepRecord, {"job_id": lease.job_id, "step_id": step_id}
+        )
+        if step is None or step.state != "running":
+            raise StepMismatchError(
+                f"步骤 {step_id} 当前状态不可提交"
+            )
+        return step
+
+    def complete_step_after_commit_fence(
+        self,
+        lease: JobLease,
+        step_id: str,
+        *,
+        checkpoint_payload: dict[str, Any],
+    ) -> int:
+        """写栅栏已通过后：Checkpoint + 步骤完成 + 进度 + STEP_COMPLETED。"""
+        return self.complete_step(
+            lease,
+            step_id,
+            checkpoint_payload=checkpoint_payload,
+        )
+
     def complete_step(
         self,
         lease: JobLease,
@@ -628,8 +704,14 @@ class JobStore:
         error_code: str,
         retryable: bool,
         detail: str | None = None,
+        settle_job: bool = True,
     ) -> StepFailureOutcome:
-        """一个事务提交步骤失败：错误分类、退避时间、任务状态与事件。"""
+        """一个事务提交步骤失败：错误分类、退避时间、任务状态与事件。
+
+        ``settle_job=False`` 用于同一租约下的并行波次：先记录步骤终态/级联，
+        保留租约，待波次内其余结果提交后再由调用方 :meth:`finish_failure`
+        或等价路径收束任务。取消请求仍立即收束。
+        """
         job = self._lease_guard(lease)
         now = self.now()
         step = self.session.get(
@@ -688,6 +770,11 @@ class JobStore:
                 )
             )
             final_state = "cancelled"
+        elif not settle_job:
+            if step.state == "failed_final":
+                self._cascade_final_failure(job.job_id, step_id, now)
+                self._sync_progress(job.job_id, job)
+            final_state = job.state
         elif step.state == "failed_retryable":
             job.state = "failed_retryable"
             job.error_code = error_code
@@ -843,6 +930,59 @@ class JobStore:
         )
         self.session.flush()
         return seq
+    def record_user_update(
+        self,
+        job_id: str,
+        step_id: str,
+        *,
+        checkpoint_payload: dict[str, Any],
+    ) -> int:
+        """用户在等待边界补充可追溯输入，不完成步骤或重新入队。"""
+        job = self.get_job(job_id)
+        if job.state != "waiting_user":
+            raise JobStateConflictError(
+                "任务当前不在等待确认状态",
+                current_state=job.state,
+            )
+        if job.lease_owner is not None:
+            raise JobStateConflictError(
+                "任务仍被占用，不能补充确认资料",
+                current_state=job.state,
+            )
+        step = self.session.get(
+            JobStepRecord, {"job_id": job_id, "step_id": step_id}
+        )
+        if step is None or step.job_id != job_id:
+            raise StepMismatchError(f"步骤 {step_id!r} 不属于任务 {job_id}")
+        if step.state != "waiting_user":
+            raise JobStateConflictError(
+                f"步骤 {step_id} 不在等待确认状态",
+                current_state=step.state,
+            )
+        now = self.now()
+        checkpoint_id = uuid4().hex
+        self.repo.create_checkpoint(
+            checkpoint_id=checkpoint_id,
+            job_id=job_id,
+            step_id=step_id,
+            payload={"attempt": step.attempt, **checkpoint_payload},
+        )
+        job.updated_at = now
+        seq = self.append_event(
+            self.make_event(
+                job_id=job_id,
+                event_type=JobEventType.USER_UPDATED,
+                step_id=step_id,
+                attempt=max(step.attempt, 1),
+                checkpoint_id=checkpoint_id,
+                progress_completed=job.progress_completed,
+                progress_total=job.progress_total,
+                payload={"checkpoint_id": checkpoint_id},
+            )
+        )
+        self.session.flush()
+        return seq
+
 
     def pause_running_step_for_user(
         self,
@@ -1105,6 +1245,47 @@ class JobStore:
                 progress_completed=job.progress_completed,
                 progress_total=job.progress_total,
                 payload={"retry_scope": [step.step_id for step in failed]},
+            )
+        )
+        self.session.flush()
+        return JobActionOutcome(state="queued", changed=True)
+
+    def resume_cancelled(self, job_id: str) -> JobActionOutcome:
+        """受控续跑已取消任务：保留完成历史，只把取消范围恢复为 queued。"""
+        job = self.get_job(job_id)
+        if job.state != "cancelled":
+            raise JobStateConflictError(
+                "只有已取消的任务可以受控续跑", current_state=job.state
+            )
+        if job.lease_owner is not None:
+            raise JobStateConflictError("任务仍被占用，不能续跑", current_state=job.state)
+        now = self.now()
+        cancelled = [
+            step for step in self.list_steps(job_id) if step.state == "cancelled"
+        ]
+        if not cancelled:
+            raise JobStateConflictError("没有可续跑的已取消步骤", current_state=job.state)
+        for step in cancelled:
+            step.state = "queued"
+            step.error_code = None
+            step.error_classification = None
+            step.retry_not_before = None
+            step.updated_at = now
+        job.state = "queued"
+        job.cancel_requested = False
+        job.error_code = None
+        job.error_classification = None
+        job.updated_at = now
+        self.append_event(
+            self.make_event(
+                job_id=job_id,
+                event_type=JobEventType.RETRY_SCHEDULED,
+                progress_completed=job.progress_completed,
+                progress_total=job.progress_total,
+                payload={
+                    "retry_scope": [step.step_id for step in cancelled],
+                    "resume_cancelled": True,
+                },
             )
         )
         self.session.flush()

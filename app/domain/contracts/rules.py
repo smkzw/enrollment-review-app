@@ -3,11 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Literal, Union
 
-from pydantic import AliasChoices, ConfigDict, Field, StrictInt, model_validator
+from pydantic import AliasChoices, Field, StrictInt, model_validator
 
 from .common import ContractModel, RevisionedModel, ScalarValue, VersionedModel
 from .enums import (
     AnchorType,
+    CombinedWindowSelection,
     Comparator,
     LogicalOperator,
     ProtocolPeriod,
@@ -39,28 +40,14 @@ class TimeQuantity(ContractModel):
 
 
 class TimeConstraint(ContractModel):
-    model_config = ConfigDict(
-        extra="forbid",
-        json_schema_extra={
-            "allOf": [
-                {
-                    "if": {
-                        "properties": {"direction": {"const": "on"}},
-                        "required": ["direction"],
-                    },
-                    "then": {
-                        "properties": {
-                            "lower_bound_days": {"type": "null"},
-                            "upper_bound_days": {"type": "null"},
-                            "lower_bound": {"type": "null"},
-                            "upper_bound": {"type": "null"},
-                            "half_life_multiplier": {"type": "null"},
-                        }
-                    },
-                }
-            ]
-        },
-    )
+    """相对命名锚点的时间窗。
+
+    固定日历窗与半衰期倍数可同时出现，但必须显式声明
+    ``combined_window_selection=longer_of_calendar_and_half_life``；
+    不得仅因两类字段并存或原文含“或”而推断择长语义。
+    锚点必须使用方案命名的日期类型（如 ``first_dose_date``），由调用方按原文填写。
+    """
+
     anchor_type: AnchorType
     direction: TimeDirection
     lower_bound_days: int | None = Field(default=None, ge=0)
@@ -73,7 +60,10 @@ class TimeConstraint(ContractModel):
         default=None,
         validation_alias=AliasChoices("upper_bound", "upper_bound_quantity"),
     )
+    lower_bound_inclusive: bool = True
+    upper_bound_inclusive: bool = True
     half_life_multiplier: float | None = Field(default=None, gt=0)
+    combined_window_selection: CombinedWindowSelection | None = None
     allow_partial_date: bool = False
 
     @model_validator(mode="after")
@@ -82,6 +72,12 @@ class TimeConstraint(ContractModel):
             raise ValueError("时间窗下界不能同时使用 lower_bound_days 和带单位数量")
         if self.upper_bound_days is not None and self.upper_bound is not None:
             raise ValueError("时间窗上界不能同时使用 upper_bound_days 和带单位数量")
+        has_lower_bound = self.lower_bound_days is not None or self.lower_bound is not None
+        has_upper_bound = self.upper_bound_days is not None or self.upper_bound is not None
+        if not has_lower_bound and not self.lower_bound_inclusive:
+            raise ValueError("没有时间窗下界时不能声明下界为开区间")
+        if not has_upper_bound and not self.upper_bound_inclusive:
+            raise ValueError("没有时间窗上界时不能声明上界为开区间")
         if (
             self.lower_bound_days is not None
             and self.upper_bound_days is not None
@@ -103,9 +99,42 @@ class TimeConstraint(ContractModel):
                 self.lower_bound,
                 self.upper_bound,
                 self.half_life_multiplier,
+                self.combined_window_selection,
             )
         ):
             raise ValueError("on 仅表示与锚点同一日，不能携带时间窗或半衰期参数")
+        if (
+            self.anchor_type == AnchorType.REVIEW_NODE_DATE
+            and self.direction == TimeDirection.ON
+        ):
+            raise ValueError(
+                "审核节点日期锚点不能用作 on 同日约束；审核阶段本身由资料要求的"
+                " due_stage 表达，不得编码成日期约束"
+            )
+        has_calendar_bound = any(
+            value is not None
+            for value in (
+                self.lower_bound_days,
+                self.upper_bound_days,
+                self.lower_bound,
+                self.upper_bound,
+            )
+        )
+        has_half_life = self.half_life_multiplier is not None
+        if has_calendar_bound and has_half_life:
+            if (
+                self.combined_window_selection
+                != CombinedWindowSelection.LONGER_OF_CALENDAR_AND_HALF_LIFE
+            ):
+                raise ValueError(
+                    "固定窗口与半衰期并存时必须显式声明 combined_window_selection="
+                    "longer_of_calendar_and_half_life，不得从原文推断"
+                )
+        elif self.combined_window_selection is not None:
+            raise ValueError(
+                "combined_window_selection 仅用于固定窗口与半衰期并存的择长语义，"
+                "不能单独搭配其中一类窗口"
+            )
         return self
 
     @property

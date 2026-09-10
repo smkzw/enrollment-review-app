@@ -7,9 +7,9 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-1.md`
-- **Total Sessions**: 8
-- **Last Active**: 2026-08-22
+- **Active File**: `journal-2.md`
+- **Total Sessions**: 54
+- **Last Active**: 2026-08-30
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,8 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~444 | Active |
+| `journal-2.md` | ~42 | Active |
+| `journal-1.md` | ~1966 | Archived |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +30,23 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 54 | 2026-08-30 | 第79包SAE尾段模型外边界验收 | - | `codex/phase5-clinical-facts-profile` |
+| 53 | 2026-08-30 | 第 78 包 SAE 严重性模型外边界验收 | - | `codex/phase5-clinical-facts-profile` |
+| 52 | 2026-08-30 | 第 77 包 AE/TEAE 与给药前病史边界验收 | - | `codex/phase5-clinical-facts-profile` |
+| 51 | 2026-08-30 | 第 76 包安全性摘要模型外边界验收 | - | `codex/phase5-clinical-facts-profile` |
+| 50 | 2026-08-30 | Session 50 - 第75包模型外语义边界验收 | - | `codex/phase5-clinical-facts-profile` |
+| 49 | 2026-08-30 | Phase 5.8d 疗效评分方法与阶段来源闭包验收 | - | `codex/phase5-clinical-facts-profile` |
+| 48 | 2026-08-29 | Phase 5.8d 生命体征模态与严格结构输出验收 | - | `codex/phase5-clinical-facts-profile` |
+| 47 | 2026-08-29 | Phase 5.8d 生命体征模态代码闭环与模型阻断 | - | `codex/phase5-clinical-facts-profile` |
+| 46 | 2026-08-29 | Phase 5.8d 心电图控制点与动作合同验收 | - | `codex/phase5-clinical-facts-profile` |
+| 45 | 2026-08-29 | Phase 5.8d 原生文字 PDF 结构保真验收 | - | `codex/phase5-clinical-facts-profile` |
+| 44 | 2026-08-29 | Phase 5.8d 原生文字 PDF 结构入口验收 | - | `codex/phase5-clinical-facts-profile` |
+| 43 | 2026-08-29 | Phase 5.8d 模型无关重放与修订预算验收 | - | `codex/phase5-clinical-facts-profile` |
+| 42 | 2026-08-28 | Phase 5.8d p804 来源闭包权限验收 | - | `codex/phase5-clinical-facts-profile` |
+| 22 | 2026-08-28 | Phase 5.8d 妊娠/FSH V7 最早节点对齐未接受 | - | `codex/phase5-clinical-facts-profile` |
+| 21 | 2026-08-28 | Phase 5.8d 妊娠/FSH 控制点加固，父级未接受 | - | `codex/phase5-clinical-facts-profile` |
+| 20 | 2026-08-28 | Phase 5.8d 病毒学与结核跨章节控制点验收 | - | `codex/phase5-clinical-facts-profile` |
+| 9 | 2026-08-26 | Phase 5.8d 期别合批与理由门禁验收 | - | `codex/phase5-clinical-facts-profile` |
 | 8 | 2026-08-22 | Phase 5 临床事实与 Patient Profile 最终规划 | `ad7113a` | `codex/phase5-clinical-facts-profile` |
 | 7 | 2026-08-22 | Phase 4 证据工作流终局验收与归档 | `b750dda` | `codex/phase4-evidence-ocr-v2` |
 | 6 | 2026-08-19 | Phase 4 Slice 4.0-4.1 验收与无损暂停 | - | `codex/phase4-evidence-ocr-v2` |

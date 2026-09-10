@@ -1325,8 +1325,8 @@
       "input_revision_map": {
         "protocol-v1": 1
       },
-      "input_scope_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
-      "output_hash": "ca0276141ff1587cd68a25bdc8ebf6d4af437c38edd98337eda74e8ca58d79c9",
+      "input_scope_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
+      "output_hash": "d9833ca4b9ed40feb8501a9dad91cf4be70e80af60402aa6873f1388840d75ce",
       "parent_event_id": null,
       "recompute_scope": [
         "protocol-v1"
@@ -1360,8 +1360,8 @@
       "input_revision_map": {
         "ruleset-synthetic-phase-iii": 1
       },
-      "input_scope_hash": "a9ad5c4a209027491d695ea64f400df0afc378cd3f9afbece5e269c76fe4507d",
-      "output_hash": "a9ad5c4a209027491d695ea64f400df0afc378cd3f9afbece5e269c76fe4507d",
+      "input_scope_hash": "38e700c6b7339dd2c6975a988d9fa72f2e8582c35d27f5d5ccb6dfa152287462",
+      "output_hash": "38e700c6b7339dd2c6975a988d9fa72f2e8582c35d27f5d5ccb6dfa152287462",
       "parent_event_id": null,
       "recompute_scope": [
         "protocol-v1"
@@ -1477,7 +1477,7 @@
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "14f630836a1c65d5a341ade1d2ad8914078516495ed797baba8be222f6bd5d59",
+      "input_scope_hash": "07b36df44d9e439c494d37393e4a07cc428e9cab21c6189d4f03062a92bc421a",
       "output_hash": "072759fd9b6c36adbe63ce15afdcb02d3309458253e87c85125d17cfe61e9c86",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1594,7 +1594,7 @@
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "2f4b03e0945bd4b7b1bdc129c4e55443efe2992cdbe4c05b61296058ff01ba1c",
+      "input_scope_hash": "5fa171027b71d11bd4ec3624b58cd6e1c75dfc79b01f76eaef45d939c9e0c519",
       "output_hash": "dafa20fa5c997c0450d1b611e8d91e4cef5329158d28a1eef00939e0e7b4b805",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1711,7 +1711,7 @@
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "c7b14840c98d6fdc6cba5fffb1fe273daf0bbc4fba0f155edc405ae309bd68e4",
+      "input_scope_hash": "60acb09bfc6284124b4a3d7fafb272d95cf93a6a83703a81c3038d8466d2a7b8",
       "output_hash": "14386fc30b4e112a4f199dbd970a3742a1ac3803e5def89bf93201286e90f218",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1828,7 +1828,7 @@
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "b748e6773f5a8eda5bbbc6947904d9e2ac18f249e8301102618c6f338d707f69",
+      "input_scope_hash": "7eecadd2b3f78ae9d0b295a24e97046a0b1b4edabd5080acc4bea3f492e7082a",
       "output_hash": "18c13d3fe42dbb1533f873dc952d00283dbca8b19cac4550042f42b4dce9ff5f",
       "parent_event_id": null,
       "recompute_scope": [
@@ -1945,7 +1945,7 @@
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "32397fee62a3085836308fa8465f70cf9f7ac3b225306e02b8a71a2ac884f33f",
+      "input_scope_hash": "ecbdf022d7abaa4deb366697ebfd403739fc60b6b223523ffc91e3b8e1c8d3aa",
       "output_hash": "e4c5b93abae0a3fa9dfe9bd51a2f8b053826d311056eaa36569663dc47b37f28",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2062,7 +2062,7 @@
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "1be42633a07ee42e5884d3ef2961294ccac8c2d66a0c089987114678ddfb5650",
+      "input_scope_hash": "89ca96e92a02606500f4cc32e1cf97fa3165b02af136e5e5679421c6c17c4bc5",
       "output_hash": "e58aed7a124b97066c47ea1a88b1a8cfa7e488ef7ae58d9782a823b2d1358e9b",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2179,7 +2179,7 @@
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "78f4f4a448387e2295a9422e69dde8d93d1c0ae7454f65911c1273e893a3d618",
+      "input_scope_hash": "bce97d589df246b9ff8e4d247623802f6ec2c32f520e3f79a7413c1ec0e0191e",
       "output_hash": "9e42fd5bafe3872476e88ce97201f8bd821615f06b94a084d222b74b139767dc",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2212,7 +2212,7 @@
       "input_revision_map": {
         "episode-barrier": 1
       },
-      "input_scope_hash": "861ef818eb70aebbbf0fc778038303475593b50a1c49056a643a60a4fac857e7",
+      "input_scope_hash": "8671d43b74d2fa76b25762c40633f91e3fde26e7961525124ae033632f961347",
       "output_hash": "0c1458884e342f11270ea4e52d26143bf8ade73b875f16d7edee3b20a59ef6ff",
       "parent_event_id": null,
       "recompute_scope": [
@@ -2537,9 +2537,9 @@
     "protocol_version": {
       "authority_confirmation_id": "confirmation-protocol-v1-phase-iii",
       "authority_gate_result_id": "gate-authority-protocol-v1-phase-iii",
-      "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+      "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
       "integrity_gate_result_id": "gate-integrity-protocol-v1-phase-iii",
-      "integrity_manifest_sha256": "2de5fd424882bff4d484a0f849e2a0f6e249ed9d7252391f334ac19f6d498135",
+      "integrity_manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
       "official_date": {
         "precision": "day",
         "source_text": null,
@@ -2576,9 +2576,9 @@
     "action": "accept_protocol_authority",
     "actor_id": "synthetic-uat-human-acceptance",
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+    "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
     "command_id": "command-accept-protocol-v1-phase-iii",
-    "event_sha256": "ae94cdcbbb137aedd8f6176274ecc36043c2c0326f6f0cbfc001f2f0468bbda6",
+    "event_sha256": "f0cca309988a11748607e8abea82df29eda15aea137767e50cfc8180b01285df",
     "occurred_at": "2026-08-12T12:00:00Z",
     "protocol_version_id": "protocol-v1",
     "recorded_by_service": "enrollment-review-app",
@@ -2587,10 +2587,10 @@
   "protocol_authority_confirmation": {
     "action": "accept_protocol_authority",
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+    "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
     "command_id": "command-accept-protocol-v1-phase-iii",
     "confirmation_id": "confirmation-protocol-v1-phase-iii",
-    "confirmation_sha256": "1f213715bd1253931704f1aaee0fd985d1cb3192ac7e29e3773de220d914c9ac",
+    "confirmation_sha256": "676c610bcd602c202342f4ecd35b00dc9c5975f435bdec290e37209fd70af1cb",
     "confirmed_at": "2026-08-12T12:00:00Z",
     "confirmed_by": "synthetic-uat-human-acceptance",
     "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -2600,7 +2600,7 @@
   },
   "protocol_authority_record": {
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+    "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
     "official_rules": [
       {
         "components": [
@@ -2612,6 +2612,7 @@
                 "description": "筛选节点应有可定位的年龄记录。",
                 "due_stage": "screening",
                 "fact_type": "demographics.age_years",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record",
                   "identity_record"
@@ -2619,7 +2620,8 @@
                 "requirement_id": "req-age",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-in-01",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -2629,8 +2631,14 @@
                 "applicable_population": null,
                 "attribute": "age_years",
                 "comparator": "gte",
+                "occurrence_window": null,
                 "predicate_id": "predicate-demographics-age_years-gte",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": false,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "demographics",
                 "unit": "year",
                 "unit_match_policy": "exact_canonical_label",
@@ -2661,6 +2669,7 @@
                 "description": "异常指标与研究者不可接受风险判断必须同时有证据。",
                 "due_stage": "screening",
                 "fact_type": "laboratory_and_investigator_risk",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "laboratory_report",
                   "investigator_assessment"
@@ -2668,7 +2677,8 @@
                 "requirement_id": "req-composite-risk",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-ex-01",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": {
@@ -2679,8 +2689,14 @@
                     "applicable_population": null,
                     "attribute": "protocol_exception_documented",
                     "comparator": "eq",
+                    "occurrence_window": null,
                     "predicate_id": "predicate-exception-protocol_exception_documented-eq",
+                    "prospective_period": null,
+                    "prospective_window": null,
                     "requires_professional_judgment": false,
+                    "source_clause": null,
+                    "source_clauses": [],
+                    "source_term": null,
                     "subject": "exception",
                     "unit": null,
                     "unit_match_policy": "exact_canonical_label",
@@ -2694,8 +2710,14 @@
                     "applicable_population": null,
                     "attribute": "exception_confirmed",
                     "comparator": "eq",
+                    "occurrence_window": null,
                     "predicate_id": "predicate-investigator-exception_confirmed-eq",
+                    "prospective_period": null,
+                    "prospective_window": null,
                     "requires_professional_judgment": true,
+                    "source_clause": null,
+                    "source_clauses": [],
+                    "source_term": null,
                     "subject": "investigator",
                     "unit": null,
                     "unit_match_policy": "exact_canonical_label",
@@ -2715,8 +2737,14 @@
                     "applicable_population": null,
                     "attribute": "unacceptable_participation_risk",
                     "comparator": "eq",
+                    "occurrence_window": null,
                     "predicate_id": "predicate-investigator-unacceptable_participation_risk-eq",
+                    "prospective_period": null,
+                    "prospective_window": null,
                     "requires_professional_judgment": true,
+                    "source_clause": null,
+                    "source_clauses": [],
+                    "source_term": null,
                     "subject": "investigator",
                     "unit": null,
                     "unit_match_policy": "exact_canonical_label",
@@ -2732,8 +2760,14 @@
                         "applicable_population": null,
                         "attribute": "target_ratio_uln",
                         "comparator": "gte",
+                        "occurrence_window": null,
                         "predicate_id": "predicate-laboratory-target_ratio_uln-gte",
+                        "prospective_period": null,
+                        "prospective_window": null,
                         "requires_professional_judgment": false,
+                        "source_clause": null,
+                        "source_clauses": [],
+                        "source_term": null,
                         "subject": "laboratory",
                         "unit": "xULN",
                         "unit_match_policy": "exact_canonical_label",
@@ -2747,8 +2781,14 @@
                         "applicable_population": null,
                         "attribute": "prohibited_exposure",
                         "comparator": "eq",
+                        "occurrence_window": null,
                         "predicate_id": "predicate-medication-prohibited-window",
+                        "prospective_period": null,
+                        "prospective_window": null,
                         "requires_professional_judgment": false,
+                        "source_clause": null,
+                        "source_clauses": [],
+                        "source_term": null,
                         "subject": "medication",
                         "unit": null,
                         "unit_match_policy": "exact_canonical_label",
@@ -2757,10 +2797,15 @@
                       "time_constraint": {
                         "allow_partial_date": false,
                         "anchor_type": "randomization_date",
+                        "combined_window_selection": null,
                         "direction": "before",
                         "half_life_multiplier": null,
+                        "lower_bound": null,
                         "lower_bound_days": null,
-                        "upper_bound_days": 28
+                        "lower_bound_inclusive": true,
+                        "upper_bound": null,
+                        "upper_bound_days": 28,
+                        "upper_bound_inclusive": true
                       }
                     }
                   ],
@@ -2775,8 +2820,14 @@
                         "applicable_population": null,
                         "attribute": "critical_measurement_invalid",
                         "comparator": "eq",
+                        "occurrence_window": null,
                         "predicate_id": "predicate-laboratory-critical_measurement_invalid-eq",
+                        "prospective_period": null,
+                        "prospective_window": null,
                         "requires_professional_judgment": false,
+                        "source_clause": null,
+                        "source_clauses": [],
+                        "source_term": null,
                         "subject": "laboratory",
                         "unit": null,
                         "unit_match_policy": "exact_canonical_label",
@@ -2815,13 +2866,15 @@
                 "description": "待研究者判断的合成规则",
                 "due_stage": "screening",
                 "fact_type": "investigator.rule_specific_judgment",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record"
                 ],
                 "requirement_id": "req-professional",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-ex-02",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -2831,8 +2884,14 @@
                 "applicable_population": null,
                 "attribute": "rule_specific_judgment",
                 "comparator": "eq",
+                "occurrence_window": null,
                 "predicate_id": "predicate-investigator-rule_specific_judgment-eq",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": true,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "investigator",
                 "unit": null,
                 "unit_match_policy": "exact_canonical_label",
@@ -2863,13 +2922,15 @@
                 "description": "后续节点才到期的合成规则",
                 "due_stage": "baseline",
                 "fact_type": "baseline.future_assessment",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record"
                 ],
                 "requirement_id": "req-future",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-ex-03",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -2879,8 +2940,14 @@
                 "applicable_population": null,
                 "attribute": "future_assessment",
                 "comparator": "eq",
+                "occurrence_window": null,
                 "predicate_id": "predicate-baseline-future_assessment-eq",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": false,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "baseline",
                 "unit": null,
                 "unit_match_policy": "exact_canonical_label",
@@ -2911,13 +2978,15 @@
                 "description": "病历引用资料必须提供的合成规则",
                 "due_stage": "screening",
                 "fact_type": "history.referenced_document",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record"
                 ],
                 "requirement_id": "req-referenced",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-ex-04",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -2927,8 +2996,14 @@
                 "applicable_population": null,
                 "attribute": "referenced_document",
                 "comparator": "eq",
+                "occurrence_window": null,
                 "predicate_id": "predicate-history-referenced_document-eq",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": false,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "history",
                 "unit": null,
                 "unit_match_policy": "exact_canonical_label",
@@ -2959,13 +3034,15 @@
                 "description": "当前节点必做检查的合成规则",
                 "due_stage": "screening",
                 "fact_type": "procedure.required_completed",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record"
                 ],
                 "requirement_id": "req-procedure",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-req-01",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -2975,8 +3052,14 @@
                 "applicable_population": null,
                 "attribute": "required_completed",
                 "comparator": "eq",
+                "occurrence_window": null,
                 "predicate_id": "predicate-procedure-required_completed-eq",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": false,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "procedure",
                 "unit": null,
                 "unit_match_policy": "exact_canonical_label",
@@ -3007,13 +3090,15 @@
                 "description": "检验结果关键字段的合成规则",
                 "due_stage": "screening",
                 "fact_type": "laboratory.required_fields_complete",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record"
                 ],
                 "requirement_id": "req-result-fields",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-req-02",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -3023,8 +3108,14 @@
                 "applicable_population": null,
                 "attribute": "required_fields_complete",
                 "comparator": "eq",
+                "occurrence_window": null,
                 "predicate_id": "predicate-laboratory-required_fields_complete-eq",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": false,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "laboratory",
                 "unit": null,
                 "unit_match_policy": "exact_canonical_label",
@@ -3053,6 +3144,7 @@
         "review_required": true,
         "schema_version": "fixture/v1",
         "stage": "pre_screening",
+        "visit_instance": null,
         "visit_window": "签署知情同意前",
         "workflow_stage_id": "stage-pre-screening"
       },
@@ -3069,6 +3161,7 @@
         "review_required": true,
         "schema_version": "fixture/v1",
         "stage": "screening",
+        "visit_instance": null,
         "visit_window": "D-28至D-1",
         "workflow_stage_id": "stage-screening"
       },
@@ -3078,6 +3171,7 @@
         "review_required": true,
         "schema_version": "fixture/v1",
         "stage": "run_in",
+        "visit_instance": null,
         "visit_window": "筛选后至基线前",
         "workflow_stage_id": "stage-run-in"
       },
@@ -3089,12 +3183,38 @@
         "review_required": true,
         "schema_version": "fixture/v1",
         "stage": "baseline",
+        "visit_instance": null,
         "visit_window": "D1随机前",
         "workflow_stage_id": "stage-baseline"
       }
     ],
+    "procedure_evidence_requirements": [],
+    "procedure_requirement_source_anchor_refs": {},
     "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "protocol_version_id": "protocol-v1",
+    "requirement_source_anchor_refs": {
+      "req-age": [
+        "protocol-v1:IN-01"
+      ],
+      "req-composite-risk": [
+        "protocol-v1:EX-01"
+      ],
+      "req-future": [
+        "protocol-v1:EX-03"
+      ],
+      "req-procedure": [
+        "protocol-v1:REQ-01"
+      ],
+      "req-professional": [
+        "protocol-v1:EX-02"
+      ],
+      "req-referenced": [
+        "protocol-v1:EX-04"
+      ],
+      "req-result-fields": [
+        "protocol-v1:REQ-02"
+      ]
+    },
     "rule_source_anchor_refs": {
       "EX-01": [
         "protocol-v1:EX-01"
@@ -3125,12 +3245,12 @@
     "verified_by": "synthetic-uat-human-acceptance"
   },
   "protocol_integrity_manifest": {
-    "authoritative_rule_set_sha256": "bf83d54fd8f132f92066ddd8abdd6a43710d21d23696eddd1c1bd40d8abcc1ee",
-    "authoritative_workflow_sha256": "a23d202d8be74ed1778906492e89e7c194371d702e13738c49362520154d9033",
+    "authoritative_rule_set_sha256": "259610747cf084d692f7533e88169826ee4f8603aa5de2088f7df8a8f756d3db",
+    "authoritative_workflow_sha256": "1d13d5f280706df5152685b4f1a4701a36a3e0a0cf3a13ed985ff8dac47a2ab8",
     "authority_record_id": "authority-protocol-v1-phase-iii",
-    "authority_record_sha256": "14536911a5a5a00d79261a3f10a9067eb8c4663b29ec6a62fd9c6eb05ec2df5e",
+    "authority_record_sha256": "c1e50d2d7cbffbbb507013ead64049caa4092978ad202866f911544aaf3ebbc0",
     "manifest_id": "manifest-protocol-v1-phase-iii",
-    "manifest_sha256": "2de5fd424882bff4d484a0f849e2a0f6e249ed9d7252391f334ac19f6d498135",
+    "manifest_sha256": "5975303a8279071650db9ca1e6e408dae1ad2bbb97fd7e86ab55bea75db2f920",
     "protocol_document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "protocol_version_id": "protocol-v1",
     "schema_version": "fixture/v1",
@@ -3217,6 +3337,7 @@
                 "description": "筛选节点应有可定位的年龄记录。",
                 "due_stage": "screening",
                 "fact_type": "demographics.age_years",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record",
                   "identity_record"
@@ -3224,7 +3345,8 @@
                 "requirement_id": "req-age",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-in-01",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -3234,8 +3356,14 @@
                 "applicable_population": null,
                 "attribute": "age_years",
                 "comparator": "gte",
+                "occurrence_window": null,
                 "predicate_id": "predicate-demographics-age_years-gte",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": false,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "demographics",
                 "unit": "year",
                 "unit_match_policy": "exact_canonical_label",
@@ -3266,6 +3394,7 @@
                 "description": "异常指标与研究者不可接受风险判断必须同时有证据。",
                 "due_stage": "screening",
                 "fact_type": "laboratory_and_investigator_risk",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "laboratory_report",
                   "investigator_assessment"
@@ -3273,7 +3402,8 @@
                 "requirement_id": "req-composite-risk",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-ex-01",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": {
@@ -3284,8 +3414,14 @@
                     "applicable_population": null,
                     "attribute": "protocol_exception_documented",
                     "comparator": "eq",
+                    "occurrence_window": null,
                     "predicate_id": "predicate-exception-protocol_exception_documented-eq",
+                    "prospective_period": null,
+                    "prospective_window": null,
                     "requires_professional_judgment": false,
+                    "source_clause": null,
+                    "source_clauses": [],
+                    "source_term": null,
                     "subject": "exception",
                     "unit": null,
                     "unit_match_policy": "exact_canonical_label",
@@ -3299,8 +3435,14 @@
                     "applicable_population": null,
                     "attribute": "exception_confirmed",
                     "comparator": "eq",
+                    "occurrence_window": null,
                     "predicate_id": "predicate-investigator-exception_confirmed-eq",
+                    "prospective_period": null,
+                    "prospective_window": null,
                     "requires_professional_judgment": true,
+                    "source_clause": null,
+                    "source_clauses": [],
+                    "source_term": null,
                     "subject": "investigator",
                     "unit": null,
                     "unit_match_policy": "exact_canonical_label",
@@ -3320,8 +3462,14 @@
                     "applicable_population": null,
                     "attribute": "unacceptable_participation_risk",
                     "comparator": "eq",
+                    "occurrence_window": null,
                     "predicate_id": "predicate-investigator-unacceptable_participation_risk-eq",
+                    "prospective_period": null,
+                    "prospective_window": null,
                     "requires_professional_judgment": true,
+                    "source_clause": null,
+                    "source_clauses": [],
+                    "source_term": null,
                     "subject": "investigator",
                     "unit": null,
                     "unit_match_policy": "exact_canonical_label",
@@ -3337,8 +3485,14 @@
                         "applicable_population": null,
                         "attribute": "target_ratio_uln",
                         "comparator": "gte",
+                        "occurrence_window": null,
                         "predicate_id": "predicate-laboratory-target_ratio_uln-gte",
+                        "prospective_period": null,
+                        "prospective_window": null,
                         "requires_professional_judgment": false,
+                        "source_clause": null,
+                        "source_clauses": [],
+                        "source_term": null,
                         "subject": "laboratory",
                         "unit": "xULN",
                         "unit_match_policy": "exact_canonical_label",
@@ -3352,8 +3506,14 @@
                         "applicable_population": null,
                         "attribute": "prohibited_exposure",
                         "comparator": "eq",
+                        "occurrence_window": null,
                         "predicate_id": "predicate-medication-prohibited-window",
+                        "prospective_period": null,
+                        "prospective_window": null,
                         "requires_professional_judgment": false,
+                        "source_clause": null,
+                        "source_clauses": [],
+                        "source_term": null,
                         "subject": "medication",
                         "unit": null,
                         "unit_match_policy": "exact_canonical_label",
@@ -3362,10 +3522,15 @@
                       "time_constraint": {
                         "allow_partial_date": false,
                         "anchor_type": "randomization_date",
+                        "combined_window_selection": null,
                         "direction": "before",
                         "half_life_multiplier": null,
+                        "lower_bound": null,
                         "lower_bound_days": null,
-                        "upper_bound_days": 28
+                        "lower_bound_inclusive": true,
+                        "upper_bound": null,
+                        "upper_bound_days": 28,
+                        "upper_bound_inclusive": true
                       }
                     }
                   ],
@@ -3380,8 +3545,14 @@
                         "applicable_population": null,
                         "attribute": "critical_measurement_invalid",
                         "comparator": "eq",
+                        "occurrence_window": null,
                         "predicate_id": "predicate-laboratory-critical_measurement_invalid-eq",
+                        "prospective_period": null,
+                        "prospective_window": null,
                         "requires_professional_judgment": false,
+                        "source_clause": null,
+                        "source_clauses": [],
+                        "source_term": null,
                         "subject": "laboratory",
                         "unit": null,
                         "unit_match_policy": "exact_canonical_label",
@@ -3420,13 +3591,15 @@
                 "description": "待研究者判断的合成规则",
                 "due_stage": "screening",
                 "fact_type": "investigator.rule_specific_judgment",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record"
                 ],
                 "requirement_id": "req-professional",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-ex-02",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -3436,8 +3609,14 @@
                 "applicable_population": null,
                 "attribute": "rule_specific_judgment",
                 "comparator": "eq",
+                "occurrence_window": null,
                 "predicate_id": "predicate-investigator-rule_specific_judgment-eq",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": true,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "investigator",
                 "unit": null,
                 "unit_match_policy": "exact_canonical_label",
@@ -3468,13 +3647,15 @@
                 "description": "后续节点才到期的合成规则",
                 "due_stage": "baseline",
                 "fact_type": "baseline.future_assessment",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record"
                 ],
                 "requirement_id": "req-future",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-ex-03",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -3484,8 +3665,14 @@
                 "applicable_population": null,
                 "attribute": "future_assessment",
                 "comparator": "eq",
+                "occurrence_window": null,
                 "predicate_id": "predicate-baseline-future_assessment-eq",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": false,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "baseline",
                 "unit": null,
                 "unit_match_policy": "exact_canonical_label",
@@ -3516,13 +3703,15 @@
                 "description": "病历引用资料必须提供的合成规则",
                 "due_stage": "screening",
                 "fact_type": "history.referenced_document",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record"
                 ],
                 "requirement_id": "req-referenced",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-ex-04",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -3532,8 +3721,14 @@
                 "applicable_population": null,
                 "attribute": "referenced_document",
                 "comparator": "eq",
+                "occurrence_window": null,
                 "predicate_id": "predicate-history-referenced_document-eq",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": false,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "history",
                 "unit": null,
                 "unit_match_policy": "exact_canonical_label",
@@ -3564,13 +3759,15 @@
                 "description": "当前节点必做检查的合成规则",
                 "due_stage": "screening",
                 "fact_type": "procedure.required_completed",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record"
                 ],
                 "requirement_id": "req-procedure",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-req-01",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -3580,8 +3777,14 @@
                 "applicable_population": null,
                 "attribute": "required_completed",
                 "comparator": "eq",
+                "occurrence_window": null,
                 "predicate_id": "predicate-procedure-required_completed-eq",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": false,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "procedure",
                 "unit": null,
                 "unit_match_policy": "exact_canonical_label",
@@ -3612,13 +3815,15 @@
                 "description": "检验结果关键字段的合成规则",
                 "due_stage": "screening",
                 "fact_type": "laboratory.required_fields_complete",
+                "procedure_catalog_item_id": null,
                 "required_source_types": [
                   "screening_record"
                 ],
                 "requirement_id": "req-result-fields",
                 "requires_contemporaneous_objective_source": false,
                 "rule_component_id": "component-req-02",
-                "schema_version": "fixture/v1"
+                "schema_version": "fixture/v1",
+                "source_validity_window": null
               }
             ],
             "exception_expression": null,
@@ -3628,8 +3833,14 @@
                 "applicable_population": null,
                 "attribute": "required_fields_complete",
                 "comparator": "eq",
+                "occurrence_window": null,
                 "predicate_id": "predicate-laboratory-required_fields_complete-eq",
+                "prospective_period": null,
+                "prospective_window": null,
                 "requires_professional_judgment": false,
+                "source_clause": null,
+                "source_clauses": [],
+                "source_term": null,
                 "subject": "laboratory",
                 "unit": null,
                 "unit_match_policy": "exact_canonical_label",
@@ -3686,6 +3897,7 @@
       "review_required": true,
       "schema_version": "fixture/v1",
       "stage": "pre_screening",
+      "visit_instance": null,
       "visit_window": "签署知情同意前",
       "workflow_stage_id": "stage-pre-screening"
     },
@@ -3702,6 +3914,7 @@
       "review_required": true,
       "schema_version": "fixture/v1",
       "stage": "screening",
+      "visit_instance": null,
       "visit_window": "D-28至D-1",
       "workflow_stage_id": "stage-screening"
     },
@@ -3711,6 +3924,7 @@
       "review_required": true,
       "schema_version": "fixture/v1",
       "stage": "run_in",
+      "visit_instance": null,
       "visit_window": "筛选后至基线前",
       "workflow_stage_id": "stage-run-in"
     },
@@ -3722,6 +3936,7 @@
       "review_required": true,
       "schema_version": "fixture/v1",
       "stage": "baseline",
+      "visit_instance": null,
       "visit_window": "D1随机前",
       "workflow_stage_id": "stage-baseline"
     }

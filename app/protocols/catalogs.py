@@ -29,9 +29,9 @@ from app.domain.contracts.protocol_ingestion import (
     FrozenCatalogItem,
     FrozenProtocolCatalog,
     ProtocolSourceSpan,
+    frozen_catalog_content_hash,
+    optional_source_excerpts_for_spans,
 )
-from app.domain.publication import canonical_hash
-
 from .section_index import (
     EligibilitySection,
     OfficialParentRuleRange,
@@ -448,6 +448,11 @@ def freeze_official_parent_rules(
     items: list[FrozenCatalogItem] = []
     for position, rule in enumerate(ordered_rules):
         source_ids = source_ids_by_ref[rule.source_ref]
+        source_excerpts = optional_source_excerpts_for_spans(
+            source_ids,
+            by_id=by_id,
+            by_ref=by_ref,
+        )
         items.append(
             FrozenCatalogItem(
                 item_id=_item_id(
@@ -462,6 +467,7 @@ def freeze_official_parent_rules(
                 label=rule.label,
                 position=position,
                 source_span_ids=source_ids,
+                source_excerpts=source_excerpts,
             )
         )
 
@@ -480,9 +486,8 @@ def freeze_official_parent_rules(
         "frozen_by": frozen_by,
         "schema_version": "fixture/v1",
     }
-    payload["catalog_sha256"] = canonical_hash(
+    payload["catalog_sha256"] = frozen_catalog_content_hash(
         FrozenProtocolCatalog.model_construct(**payload)
-        .model_dump(mode="json", exclude={"catalog_sha256"})
     )
     return FrozenProtocolCatalog.model_validate(payload)
 

@@ -1,78 +1,309 @@
 // @vitest-environment jsdom
 /**
- * Patient Profile（受试者与资料）组件测试：首屏风险过滤、完整明细、
- * 应备证据覆盖与“尚未见到 ≠ 明确否认”的显示语义（UAT-P1-06）。
+ * 受试者与 Patient Profile 页面测试（Phase 5.6）：
+ * - 正式项目目录（catalog）选择项目/受试者/审核节点；
+ * - 读取真实 Profile（严格解码后的视图），首屏只展示后端 highlights；
+ * - "全部历时信息"展开 13 条泳道；
+ * - 生成中/失败/陈旧/空态显式区分；
+ * - 去除旧总体结论与旧 fixture 文案，不显示 Phase 6/7 结论或行动。
  */
 
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
+import { setPatientProfileRepository, type PatientProfileRepository } from "../api/patient-profile";
+import { decodePatientProfileRevision, PatientProfileApiError } from "../api/patient-profile/patientProfileViewModels";
+import {
+  makeFactItem,
+  makeLaneSection,
+  makeLocator,
+  makeRevision,
+  PROFILE_LANE_ORDER,
+} from "../api/patient-profile/patientProfileFixtures";
+import { setFactNormalizationRepository } from "../api/fact-normalization";
 import { SubjectsPage } from "./SubjectsPage";
 
-async function openUat03(user: ReturnType<typeof userEvent.setup>) {
-  render(<SubjectsPage />);
-  // 默认进入第一位受试者（UAT-01）
-  await screen.findByRole("heading", { name: "UAT-01" });
-  await user.click(screen.getByRole("button", { name: /UAT-03/ }));
-  await screen.findByRole("heading", { name: "UAT-03" });
+const PROJECT_ID = "project-synthetic-phase-iii";
+const SUBJECT_UAT03 = "subject-uat-03-gap_conflict";
+const EP_UAT01_BASELINE = "episode-uat-01-baseline-clear";
+const GENERATED_TITLE = "血压 130/85 mmHg";
+const GENERATED_EXCERPT = "基线血压 130/85 mmHg";
+const PRE_CORRECTION_TITLE = "血压 120/80 mmHg";
+const PRE_CORRECTION_EXCERPT = "基线血压 120/80 mmHg";
+const CITED_LOCATOR_ID = "loc-bp-1";
+const PRE_CORRECTION_LOCATOR_ID = "loc-bp-pre";
+
+function factSnapshot(value: string) {
+  return {
+    kind: "fact",
+    fact_type: "vital_sign",
+    profile_lane: "demographics",
+    polarity: "affirmed",
+    asserted_object: "血压",
+    value,
+    unit: "mmHg",
+    date_range: null,
+    source_strength: "current_study_chart_direct_record",
+    assertion_object: "血压",
+    assertion_text: `基线血压 ${value} mmHg`,
+    supported_requirement_ids: ["req-1"],
+  };
 }
 
-describe("受试者与资料页", () => {
+function lanesWithFact(
+  title: string,
+  value: string,
+  locatorIds: string[],
+  sourceId = "fact-source-1",
+) {
+  return PROFILE_LANE_ORDER.map((lane) => {
+    if (lane === "demographics") {
+      return makeLaneSection(lane, [
+        makeFactItem({ title, value, locator_ids: locatorIds, source_id: sourceId }),
+      ]);
+    }
+    return makeLaneSection(lane, []);
+  });
+}
+
+function makeProfileRepo(
+  resolve: (subjectId: string, reviewEpisodeId: string) => ReturnType<typeof makeRevision> | Error,
+  options: {
+    listHistory?: PatientProfileRepository["listFactCorrectionHistory"];
+    getRevision?: PatientProfileRepository["getPatientProfileRevision"];
+  } = {},
+): PatientProfileRepository {
+  return {
+    kind: "http",
+    async getLatestPatientProfile(subjectId, reviewEpisodeId) {
+      const result = resolve(subjectId, reviewEpisodeId);
+      if (result instanceof Error) throw result;
+      return decodePatientProfileRevision(result);
+    },
+    async listPatientProfileHistory() {
+      throw new Error("not used");
+    },
+    async getPatientProfileRevision(subjectId, revisionId, requestOptions) {
+      if (options.getRevision !== undefined) {
+        return options.getRevision(subjectId, revisionId, requestOptions);
+      }
+      throw new Error("not used");
+    },
+    async previewFactCorrection() {
+      throw new Error("not used");
+    },
+    async submitFactCorrection() {
+      throw new Error("not used");
+    },
+    async listFactCorrectionHistory(subjectId, reviewEpisodeId, requestOptions) {
+      if (options.listHistory !== undefined) {
+        return options.listHistory(subjectId, reviewEpisodeId, requestOptions);
+      }
+      return {
+        subjectId,
+        reviewEpisodeId,
+        items: [],
+      };
+    },
+    async getFactCorrectionJobStatus() {
+      throw new Error("not used");
+    },
+    async cancelFactCorrectionJob() {
+      throw new Error("not used");
+    },
+    async retryFactCorrectionJob() {
+      throw new Error("not used");
+    },
+  };
+}
+
+/** 默认成功档案：人口学事实条目 + 原报告异常 highlight。 */
+function defaultRevision(subjectId: string, episodeId: string) {
+  return makeRevision({
+    patient_profile_revision_id: `rev-${episodeId}`,
+    evidence_navigation: {
+      project_id: PROJECT_ID,
+      subject_id: subjectId,
+      review_episode_id: episodeId,
+      evidence_snapshot_v2_id: "snapshot-1",
+      complete_processing_revision_id: "complete-1",
+    },
+  });
+}
+
+describe("受试者与 Patient Profile 页", () => {
   beforeEach(() => {
     window.location.hash = "";
-  });
-
-  it("默认显示首位受试者并列出全部受试者", async () => {
-    render(<SubjectsPage />);
-    expect(await screen.findByRole("heading", { name: "UAT-01" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /UAT-02/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /UAT-08/ })).toBeInTheDocument();
-  });
-
-  it("切换受试者后风险视图突出关键事件并给出证据直达", async () => {
-    const user = userEvent.setup();
-    await openUat03(user);
-    const riskSection = screen
-      .getByRole("heading", { name: /关键事件与风险/ })
-      .closest("section");
-    expect(riskSection).not.toBeNull();
-    // 7 个事件全部带风险分类 → 风险视图应全部可见
-    expect(
-      within(riskSection as HTMLElement).getAllByRole("article"),
-    ).toHaveLength(7);
-    expect(riskSection).toHaveTextContent("资料缺口与冲突待处理");
-    // 汇总事件只链接到判断依据，不冒充事件本身的原始依据。
-    const link = within(riskSection as HTMLElement).getAllByRole("link", {
-      name: /查看判断依据/,
-    })[0];
-    expect(link.getAttribute("href")).toMatch(
-      /^#\/workbench\?episode=episode-uat-03-screening-gap_conflict/,
+    window.localStorage.clear();
+    setPatientProfileRepository(
+      makeProfileRepo((subjectId, episodeId) => defaultRevision(subjectId, episodeId)),
     );
+    setFactNormalizationRepository({
+      kind: "http",
+      startFactNormalization: vi.fn(async () => ({
+        jobId: "job-normalize-test",
+        runId: "run-normalize-test",
+        created: false,
+        state: "queued" as const,
+        stateLabel: "等待处理",
+        recoveryAction: "无需操作，正在等待开始。",
+      })),
+      getFactNormalizationJobStatus: vi.fn(async () => ({
+        jobId: "job-normalize-test",
+        state: "queued" as const,
+        stateLabel: "等待处理",
+        cancelRequested: false,
+        progressCompleted: 0,
+        progressTotal: 1,
+        recoveryAction: "无需操作，正在等待开始。",
+        createdAt: "2026-08-23T10:00:00Z",
+        updatedAt: "2026-08-23T10:00:00Z",
+      })),
+      retryFactNormalizationJob: vi.fn(async () => ({
+        jobId: "job-normalize-test",
+        state: "queued" as const,
+        stateLabel: "等待处理",
+        changed: false,
+      })),
+    });
+  });
+  afterEach(() => {
+    setPatientProfileRepository(null);
+    setFactNormalizationRepository(null);
   });
 
-  it("Profile 事件按证据关系显示诚实入口，不用无关片段冒充原始依据", async () => {
+  it("默认选择首个项目/受试者/审核节点并读取真实档案，首屏只显示后端 highlights", async () => {
+    render(<SubjectsPage />);
+    // 正式目录：项目、受试者、审核节点
+    expect(await screen.findByRole("heading", { name: "受试者" })).toBeInTheDocument();
+    const projectSelect = screen.getByRole("combobox", { name: "选择项目" });
+    expect(projectSelect).toHaveValue(PROJECT_ID);
+
+    // 首屏标题与后端 highlight 原因（来自 makeRevision 默认 highlight：原报告异常）
+    expect(await screen.findByRole("heading", { name: /首屏重点/ })).toBeInTheDocument();
+    expect(screen.getByText("原报告异常")).toBeInTheDocument();
+    // 突出条目标题来自档案
+    expect(screen.getByText("基线血压 120/80 mmHg")).toBeInTheDocument();
+    // 首屏不应直接展开 13 条泳道
+    expect(screen.queryByRole("heading", { name: /生育/ })).not.toBeInTheDocument();
+    // 审核节点选择存在
+    expect(screen.getByRole("button", { name: "筛选期" })).toBeInTheDocument();
+  });
+
+  it("“全部历时信息”展开 13 条泳道，空泳道不判为资料缺口", async () => {
     const user = userEvent.setup();
     render(<SubjectsPage />);
-    await screen.findByRole("heading", { name: "UAT-01" });
-    await user.click(screen.getByRole("button", { name: "完整明细" }));
+    await screen.findByRole("heading", { name: /首屏重点/ });
+    await user.click(screen.getByRole("button", { name: "全部历时信息" }));
+    // 泳道标题（含空泳道）
+    expect(await screen.findByRole("heading", { name: /人口学\/基线/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /生育/ })).toBeInTheDocument();
+    expect(screen.getByText(/分区暂无记录不代表正常或否认/)).toBeInTheDocument();
+    expect(screen.queryByText(/按资料缺口处理/)).not.toBeInTheDocument();
+  });
 
-    const surgeryEvent = screen
-      .getByRole("heading", { name: "阑尾切除术" })
-      .closest("article");
-    expect(surgeryEvent).not.toBeNull();
-    expect(
-      within(surgeryEvent as HTMLElement).queryByRole("link"),
-    ).not.toBeInTheDocument();
-    expect(surgeryEvent).toHaveTextContent("尚无该事件的独立原始资料定位");
-
-    await user.click(screen.getByRole("button", { name: "返回风险视图" }));
+  it("切换受试者后重新读取该受试者档案，URL 记录新 subject", async () => {
+    const user = userEvent.setup();
+    render(<SubjectsPage />);
+    await screen.findByRole("heading", { name: /首屏重点/ });
     await user.click(screen.getByRole("button", { name: /UAT-03/ }));
-    await screen.findByRole("heading", { name: "UAT-03" });
+    await screen.findByRole("heading", { name: /首屏重点/ });
+    expect(window.location.hash).toContain(`subject=${SUBJECT_UAT03}`);
+  });
+
+  it("切换审核节点后重新读取档案，URL 记录新 episode", async () => {
+    const user = userEvent.setup();
+    render(<SubjectsPage />);
+    await screen.findByRole("heading", { name: /首屏重点/ });
+    await user.click(screen.getByRole("button", { name: "基线/随机前" }));
+    await screen.findByRole("heading", { name: /首屏重点/ });
+    expect(window.location.hash).toContain(`episode=${EP_UAT01_BASELINE}`);
+  });
+
+  it("生成中状态：提示生成中，不渲染泳道列表", async () => {
+    setPatientProfileRepository(
+      makeProfileRepo(() => makeRevision({ status: "generating", status_label: "生成中" })),
+    );
+    render(<SubjectsPage />);
+    // 状态提示（role=status）只出现一次（横幅），正文不再重复
+    expect(await screen.findByText(/档案正在生成中/)).toBeInTheDocument();
+    expect(screen.getByText("生成中", { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText("基线血压 120/80 mmHg")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "全部历时信息" })).not.toBeInTheDocument();
+  });
+
+  it("失败状态：提示生成失败（role=alert）", async () => {
+    setPatientProfileRepository(
+      makeProfileRepo(() => makeRevision({ status: "failed", status_label: "生成失败" })),
+    );
+    render(<SubjectsPage />);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("生成失败");
+  });
+
+  it("陈旧状态：提示资料已更新且仍展示历史档案内容", async () => {
+    setPatientProfileRepository(
+      makeProfileRepo(() =>
+        makeRevision({ status: "stale", status_label: "资料已更新，档案待重新生成" }),
+      ),
+    );
+    render(<SubjectsPage />);
+    // 状态提示（role=status）
+    expect(await screen.findByText(/档案待重新生成/)).toBeInTheDocument();
+    expect(screen.getByText(/资料已更新，档案待重新生成/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新整理个例档案" })).toBeInTheDocument();
+    // 仍展示历史内容（首屏重点）
+    expect(screen.getByText("基线血压 120/80 mmHg")).toBeInTheDocument();
+  });
+
+  it("已生成空态：区分于生成中/失败", async () => {
+    setPatientProfileRepository(
+      makeProfileRepo(() =>
+        makeRevision({
+          lanes: PROFILE_LANE_ORDER.map((lane) => ({
+            lane,
+            lane_label: lane,
+            items: [],
+          })),
+          highlights: [],
+          evidence_locators: [],
+        }),
+      ),
+    );
+    render(<SubjectsPage />);
     expect(
-      screen.getByRole("link", {
-        name: "查看关联规则资料：合并用药时间轴待核对",
-      }),
+      await screen.findByText("该审核节点已生成档案，但当前没有已整理的资料条目。"),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/档案正在生成中/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("档案尚未生成（404）时自动发起整理并展示任务状态", async () => {
+    setPatientProfileRepository(
+      makeProfileRepo(() =>
+        new PatientProfileApiError(
+          "NOT_FOUND",
+          "未找到",
+          "该审核节点还没有生成病历档案。",
+          "请先完成资料整理并生成档案，或从项目目录选择其他审核节点。",
+          404,
+        ),
+      ),
+    );
+    render(<SubjectsPage />);
+    expect(await screen.findByLabelText("个例档案整理状态")).toHaveTextContent(
+      /个例档案整理排队中|正在整理个例档案/,
+    );
+    expect(screen.queryByText(/Agent|pipeline|schema/i)).not.toBeInTheDocument();
+  });
+
+  it("不显示旧 fixture 文案、旧总体结论或 Phase 6/7 结论/行动", async () => {
+    render(<SubjectsPage />);
+    await screen.findByRole("heading", { name: /首屏重点/ });
+    expect(screen.queryByText(/界试用：展示合成示例数据/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/关键事件与风险/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/入排结论|行动数量|负责方|通过|不通过/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/后续节点关注/)).not.toBeInTheDocument();
   });
 
   it("资料页元信息使用中文项目展示名，不暴露原始项目代号", async () => {
@@ -81,114 +312,123 @@ describe("受试者与资料页", () => {
     expect(screen.queryByText(/SYNTHETIC-001-III/)).not.toBeInTheDocument();
   });
 
-  it("窄屏受试者选择器（下拉）存在且可切换受试者", async () => {
-    const user = userEvent.setup();
+  it("待核对数与生成时间来自真实档案模型", async () => {
     render(<SubjectsPage />);
-    await screen.findByRole("heading", { name: "UAT-01" });
-    const picker = screen.getByLabelText("受试者");
-    expect(picker.tagName).toBe("SELECT");
-    expect(screen.getAllByRole("option")).toHaveLength(8);
-    await user.selectOptions(picker, "subject-uat-03-gap_conflict");
-    await screen.findByRole("heading", { name: "UAT-03" });
-    expect(window.location.hash).toContain("subject=subject-uat-03-gap_conflict");
+    await screen.findByRole("heading", { name: /首屏重点/ });
+    expect(screen.getByText(/待核对 0 项/)).toBeInTheDocument();
+    expect(screen.getByText(/生成时间 2026年8月22日 20:00（北京时间）/)).toBeInTheDocument();
   });
 
-  it("风险过滤可按“存在冲突”缩小事件范围", async () => {
+  it("修订记录绑定本次修订生成的档案版本，原文入口不回退到修订前定位", async () => {
     const user = userEvent.setup();
-    await openUat03(user);
-    const filterButton = screen.getByRole("button", { name: "存在冲突" });
-    await user.click(filterButton);
-    const riskSection = screen
-      .getByRole("heading", { name: /关键事件与风险/ })
-      .closest("section");
-    await waitFor(() => {
-      expect(
-        within(riskSection as HTMLElement).getAllByRole("article"),
-      ).toHaveLength(1);
+    const getRevision = vi.fn(async (_subjectId: string, revisionId: string) => {
+      expect(revisionId).toBe("profile-revision-3");
+      return decodePatientProfileRevision(
+        makeRevision({
+          patient_profile_revision_id: "profile-revision-3",
+          revision: 3,
+          lanes: lanesWithFact(
+            GENERATED_TITLE,
+            "130/85",
+            [CITED_LOCATOR_ID],
+            "fact-source-2",
+          ),
+          evidence_locators: [
+            makeLocator({
+              locator_id: CITED_LOCATOR_ID,
+              page_number: 1,
+              excerpt: GENERATED_EXCERPT,
+              precision_label: "原文区域",
+            }),
+          ],
+        }),
+      );
     });
-    expect(riskSection).toHaveTextContent("同一判断存在冲突来源");
-  });
+    setPatientProfileRepository(
+      makeProfileRepo(
+        () =>
+          makeRevision({
+            patient_profile_revision_id: "profile-revision-3",
+            revision: 3,
+            lanes: lanesWithFact(
+              GENERATED_TITLE,
+              "130/85",
+              [CITED_LOCATOR_ID],
+              "fact-source-2",
+            ),
+            evidence_locators: [
+              makeLocator({
+                locator_id: CITED_LOCATOR_ID,
+                page_number: 1,
+                excerpt: GENERATED_EXCERPT,
+                precision_label: "原文区域",
+              }),
+              // 修订前定位仅存在于旧档案；同 id 不得在此改页改摘录。
+              makeLocator({
+                locator_id: PRE_CORRECTION_LOCATOR_ID,
+                page_number: 7,
+                excerpt: PRE_CORRECTION_EXCERPT,
+                precision_label: "原文区域",
+              }),
+            ],
+          }),
+        {
+          getRevision,
+          listHistory: async () => ({
+            subjectId: "subject-uat-01-clear",
+            reviewEpisodeId: "episode-uat-01-screening-clear",
+            items: [
+              {
+                correctionId: "correction-1",
+                targetKind: "fact",
+                targetKindLabel: "事实",
+                targetId: "fact-source-1",
+                newEntityId: "fact-source-2",
+                reason: "原始报告数值与当前记录不一致。",
+                operatorId: "local-reviewer",
+                locatorIds: [CITED_LOCATOR_ID],
+                correctedAt: "2026-08-23T08:00:00Z",
+                oldSnapshot: factSnapshot("120/80"),
+                newSnapshot: factSnapshot("130/85"),
+                impact: {
+                  scopeKind: "local",
+                  scopeKindLabel: "当前记录及相关内容",
+                  fallbackReason: null,
+                  affectedLocatorIds: [CITED_LOCATOR_ID],
+                  affectedDocumentIds: ["document-1"],
+                  affectedFactIds: ["fact-source-1"],
+                  affectedEventIds: [],
+                  affectedExposureIds: [],
+                  affectedConflictGroupIds: [],
+                  affectedRuleLinkIds: [],
+                  affectedExpectationIds: [],
+                  affectedProfileRevisionIds: ["profile-revision-1"],
+                },
+                profileRevisionId: "profile-revision-3",
+                profileRevision: 3,
+              },
+            ],
+          }),
+        },
+      ),
+    );
 
-  it("完整明细按主题展开并标记未记录≠否认", async () => {
-    const user = userEvent.setup();
-    await openUat03(user);
-    await user.click(screen.getByRole("button", { name: "完整明细" }));
-    expect(
-      await screen.findByRole("heading", { name: /完整明细/ }),
-    ).toBeInTheDocument();
-    // 主题分组标题
-    expect(screen.getByRole("heading", { name: "既往史" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "用药" })).toBeInTheDocument();
-    // 空主题只表示当前没有结构化事件，缺口与否由应备证据覆盖决定（B3），
-    // 不再把所有空泳道一律写成资料缺口
-    expect(screen.getAllByText(/没有已整理的结构化事件/).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/按资料缺口处理/)).not.toBeInTheDocument();
-  });
-
-  it("冲突来源在 Profile 风险视图内并列：立场、来源文件/页码/精度与快照版本（UAT-P1-06）", async () => {
-    const user = userEvent.setup();
-    await openUat03(user);
-    expect(
-      screen.getByRole("heading", { name: "冲突来源并列" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/不自动选择其中一方/)).toBeInTheDocument();
-    // 两个事实并列，各自带立场与属性名
-    expect(screen.getByText("明确记载")).toBeInTheDocument();
-    expect(screen.getByText("明确否认")).toBeInTheDocument();
-    expect(
-      screen.getAllByText("研究者·构成不可接受参与风险").length,
-    ).toBeGreaterThanOrEqual(2);
-    // 每条来源：文件、页码、定位精度、资料快照版本
-    const conflictSection = screen.getByLabelText("冲突来源并列");
-    expect(
-      within(conflictSection).getAllByText("合成筛选资料.pdf").length,
-    ).toBeGreaterThanOrEqual(2);
-    expect(
-      within(conflictSection).getAllByText(/第 4 页/).length,
-    ).toBeGreaterThanOrEqual(2);
-    expect(
-      within(conflictSection).getAllByText("仅页码").length,
-    ).toBeGreaterThanOrEqual(2);
-    expect(
-      within(conflictSection).getByText(/资料快照：第 1 版（2026-08-12 整理）/),
-    ).toBeInTheDocument();
-    // 原始后端 ID 不作为主标签出现
-    expect(screen.queryByText(/component-ex-01/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/fact-uat-03/)).not.toBeInTheDocument();
-  });
-
-  it("无冲突受试者的风险视图不显示冲突并列区块，完整明细视图也不重复显示", async () => {
-    const user = userEvent.setup();
     render(<SubjectsPage />);
-    await screen.findByRole("heading", { name: "UAT-01" });
+    expect(await screen.findByText(GENERATED_TITLE)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /修订记录/ }));
+    expect(await screen.findByText("本次修订形成档案第 3 版。")).toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: "冲突来源并列" }),
-    ).not.toBeInTheDocument();
-    // UAT-03 完整明细视图不重复展示冲突并列（只在风险视图）
-    await user.click(screen.getByRole("button", { name: /UAT-03/ }));
-    await screen.findByRole("heading", { name: "UAT-03" });
-    await user.click(screen.getByRole("button", { name: "完整明细" }));
-    await screen.findByRole("heading", { name: /完整明细/ });
+      screen.getByText(`第 1 页 · 原文区域 · “${GENERATED_EXCERPT}”`),
+    ).toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: "冲突来源并列" }),
+      screen.queryByText(`第 7 页 · 原文区域 · “${PRE_CORRECTION_EXCERPT}”`),
     ).not.toBeInTheDocument();
-  });
+    expect(screen.queryByText(PRE_CORRECTION_TITLE)).not.toBeInTheDocument();
 
-  it("应备证据覆盖区分五类状态，引用未提供显示固定文案", async () => {
-    const user = userEvent.setup();
-    await openUat03(user);
-    const coverage = screen
-      .getByRole("heading", { name: /应备证据覆盖/ })
-      .closest("section");
-    expect(coverage).not.toBeNull();
-    expect(coverage).toHaveTextContent("尚未见到");
-    expect(coverage).toHaveTextContent("后续节点尚未到期");
-    expect(coverage).toHaveTextContent("已引用但资料未提供");
-    expect(coverage).toHaveTextContent("资料中提到这份文件，但当前尚未提供");
-    // I4：每行带规则编号与到期节点（如 IN-01 年龄要求 → 筛选期）
-    expect(coverage).toHaveTextContent("IN-01");
-    expect(coverage).toHaveTextContent("筛选节点应有可定位的年龄记录。");
-    expect(coverage).toHaveTextContent("到期节点：筛选期");
-    expect(coverage).toHaveTextContent("到期节点：基线/随机前");
+    await user.click(screen.getByRole("button", { name: "查看原文" }));
+    const evidence = await screen.findByLabelText("该条目的原文证据与定位");
+    expect(within(evidence).getByRole("heading", { name: GENERATED_TITLE })).toBeInTheDocument();
+    expect(within(evidence).queryByText(PRE_CORRECTION_TITLE)).not.toBeInTheDocument();
+    expect(getRevision).toHaveBeenCalled();
   });
 });

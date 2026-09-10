@@ -11,6 +11,14 @@ import {
   expectNoPageOverflow,
   openRoute,
 } from "./helpers";
+import {
+  EPISODE_ID,
+  PROJECT_ID,
+  SUBJECT_ID,
+  registerProfileRoutes,
+} from "./profile-evidence-fixtures";
+
+const PROFILE_ROUTE = `/subjects?project=${PROJECT_ID}&subject=${SUBJECT_ID}&episode=${EPISODE_ID}`;
 
 const runtimeErrorsByPage = new WeakMap<Page, string[]>();
 
@@ -97,13 +105,14 @@ test.describe("14 项任务目标可达性", () => {
   test("UAT-P1-06：受试者资料页首屏风险视图可切换完整明细并返回", async ({
     page,
   }) => {
-    await openRoute(page, "/subjects?subject=subject-uat-03-gap_conflict&stage=screening");
-    await expect(page.getByRole("heading", { name: /关键事件与风险/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: "完整明细" })).toBeVisible();
-    await page.getByRole("button", { name: "完整明细" }).click();
-    await expect(page.getByRole("heading", { name: /完整明细/ })).toBeVisible();
-    await page.getByRole("button", { name: "返回风险视图" }).click();
-    await expect(page.getByRole("heading", { name: /关键事件与风险/ })).toBeVisible();
+    await registerProfileRoutes(page);
+    await openRoute(page, PROFILE_ROUTE);
+    await expect(page.getByRole("heading", { name: /首屏重点/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "全部历时信息" })).toBeVisible();
+    await page.getByRole("button", { name: "全部历时信息" }).click();
+    await expect(page.getByRole("heading", { name: /人口学\/基线/ })).toBeVisible();
+    await page.getByRole("button", { name: "返回首屏" }).click();
+    await expect(page.getByRole("heading", { name: /首屏重点/ })).toBeVisible();
     await expectNoPageOverflow(page);
   });
 
@@ -226,10 +235,11 @@ test.describe("14 项任务目标可达性", () => {
   test("UAT-P1-14：UAT-02 个例风险 → 证据入口可达（缩放由真实浏览器专项覆盖）", async ({
     page,
   }) => {
-    await openRoute(page, "/subjects?subject=subject-uat-02-barrier&stage=screening");
-    await expect(page.getByText("关键事件与风险")).toBeVisible();
+    await registerProfileRoutes(page);
+    await openRoute(page, PROFILE_ROUTE);
+    await page.getByRole("button", { name: "全部历时信息" }).click();
     await expect(
-      page.getByRole("link", { name: /查看判断依据/ }).first(),
+      page.getByRole("button", { name: /查看.基线血压 120\/80 mmHg.的原文证据/ }),
     ).toBeVisible();
     await expectNoPageOverflow(page);
   });

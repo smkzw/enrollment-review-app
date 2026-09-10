@@ -14,6 +14,10 @@ import { test, expect } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 import { openRoute } from "./helpers";
+import {
+  PROFILE_HASH,
+  registerProfileRoutes,
+} from "./profile-evidence-fixtures";
 
 const DOC_DIR = path.resolve(
   process.cwd(),
@@ -74,7 +78,7 @@ const ROUTES = [
   "/today",
   "/board?stage=screening",
   "/protocols",
-  "/subjects?subject=subject-uat-03-gap_conflict&stage=screening",
+  PROFILE_HASH.slice(1),
   "/workbench?episode=episode-uat-03-screening-gap_conflict&component=component-ex-01",
   "/actions?action=action-uat-03-screening-gap-professional",
   "/tasks",
@@ -86,6 +90,7 @@ test.describe("中文原生与无占位审计", () => {
   test("渲染文本不含工程内部词（允许临床专有缩写）", async ({ page }) => {
     test.skip((page.viewportSize()?.width ?? 0) < 1000, "桌面项目执行");
     for (const route of ROUTES) {
+      if (route.startsWith("/subjects")) await registerProfileRoutes(page);
       await openRoute(page, route);
       const text = await page.locator("#main-content").innerText();
       for (const pattern of FORBIDDEN_TERMS) {
@@ -95,6 +100,7 @@ test.describe("中文原生与无占位审计", () => {
           `路由 ${route} 出现内部词「${match?.[0] ?? pattern}」`,
         ).toBeNull();
       }
+      if (route.startsWith("/subjects")) await page.unroute("**/api/v2/**");
     }
   });
 

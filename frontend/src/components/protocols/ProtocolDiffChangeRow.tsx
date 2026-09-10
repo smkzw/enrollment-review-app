@@ -167,18 +167,20 @@ function formatTimeConstraint(raw: Record<string, unknown>): string {
   const upper = typeof raw.upper_bound_days === "number" ? raw.upper_bound_days : null;
   const lowerQuantity = formatTimeQuantity(raw.lower_bound);
   const upperQuantity = formatTimeQuantity(raw.upper_bound);
+  const lowerInclusive = raw.lower_bound_inclusive !== false;
+  const upperInclusive = raw.upper_bound_inclusive !== false;
   const range = lowerQuantity !== null && upperQuantity !== null
-    ? `${lowerQuantity}至${upperQuantity}`
+    ? `${lowerInclusive ? "至少" : "超过"}${lowerQuantity}且${upperInclusive ? "不超过" : "少于"}${upperQuantity}`
     : upperQuantity !== null
-      ? `${upperQuantity}内`
+      ? upperInclusive ? `${upperQuantity}内` : `少于${upperQuantity}`
       : lowerQuantity !== null
-        ? `至少${lowerQuantity}`
+        ? `${lowerInclusive ? "至少" : "超过"}${lowerQuantity}`
         : lower !== null && upper !== null
-    ? `${lower}至${upper}天`
+    ? `${lowerInclusive ? "至少" : "超过"}${lower}天且${upperInclusive ? "不超过" : "少于"}${upper}天`
     : upper !== null
-      ? `${upper}天内`
+      ? upperInclusive ? `${upper}天内` : `少于${upper}天`
       : lower !== null
-        ? `至少${lower}天`
+        ? `${lowerInclusive ? "至少" : "超过"}${lower}天`
         : "方案规定时段";
   const halfLife = typeof raw.half_life_multiplier === "number"
     ? `；同时核对${raw.half_life_multiplier}个半衰期`

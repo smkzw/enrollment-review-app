@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.domain.contracts.enums import (
@@ -29,6 +29,7 @@ from app.domain.contracts.evidence_locator import (
     CompleteEvidenceProcessingRevision,
     CorrectionRecord,
     OCRRiskScan,
+    SOURCE_LINE_TARGET_PREFIX,
 )
 from app.domain.contracts.evidence_processing import EvidenceProcessingRevision
 from app.evidence.risk import (
@@ -210,11 +211,16 @@ class EvidenceRevisionBuilder:
         # 的风险 flag，不按时间或“最新”猜测。
         locator_ids = list(selected_locator_ids or [])
         page_artifact_ids = {entry.page_artifact_id for entry in base.manifest}
-        if selected_flag_ids and page_artifact_ids:
+        if page_artifact_ids:
             automatic_rows = session.execute(
                 select(EvidenceLocatorArtifactRecord).where(
-                    EvidenceLocatorArtifactRecord.target_id.in_(selected_flag_ids),
                     EvidenceLocatorArtifactRecord.page_artifact_id.in_(page_artifact_ids),
+                    or_(
+                        EvidenceLocatorArtifactRecord.target_id.in_(selected_flag_ids),
+                        EvidenceLocatorArtifactRecord.target_id.startswith(
+                            SOURCE_LINE_TARGET_PREFIX
+                        ),
+                    ),
                 )
             ).scalars().all()
             for row in automatic_rows:

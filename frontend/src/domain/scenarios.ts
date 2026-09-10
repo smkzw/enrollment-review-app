@@ -216,8 +216,8 @@ export const UAT_SCENARIOS: ReadonlyArray<UiScenario> = [
   {
     id: "uat-p1-08",
     uatId: "UAT-P1-08",
-    title: "EvidenceSpan 降级与定位诚实性",
-    task: "依次打开页内摘录和仅页码定位，说明系统能确定到什么程度、哪些位置不能当作坐标高亮，并解释定位降级原因。",
+    title: "原文定位范围与诚实说明",
+    task: "依次打开页内摘录和仅页码定位，说明系统能确定到什么程度、哪些位置不能作为重点标注，并解释定位范围有限的原因。",
     entrySurface: "入排工作台/证据区",
     fixtureRefs: {
       episodeIds: [CLEAR_SCREENING, BARRIER_SCREENING, GAP_SCREENING],
@@ -240,7 +240,7 @@ export const UAT_SCENARIOS: ReadonlyArray<UiScenario> = [
       "页面显示坐标区域/文本范围/页内摘录/仅页码等实际中文精度",
       "仅页码项没有坐标框或虚假高亮",
       "能指出文件、版本和页码，并能打开整页查看",
-      "定位降级原因自然可读，不被误解为已精确到文字坐标",
+      "定位范围说明自然可读，不被误解为已精确到具体文字",
     ],
     prototypeOnly: false,
   },

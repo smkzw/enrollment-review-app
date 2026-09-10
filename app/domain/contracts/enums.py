@@ -53,6 +53,14 @@ class AnchorType(StableEnum):
     LAST_DOSE_DATE = "last_dose_date"
     STUDY_COMPLETION_DATE = "study_completion_date"
     EVENT_DATE = "event_date"
+    # 项目无关锚点：当前 ReviewRun 所绑定审核节点的日期。它不是筛选/基线
+    # 的默认值；只有在来源明确的解释材料把未命名回溯锚点解析到“当前审核
+    # 节点日期”后才允许出现在正式条件中，且不得用作 on 同日约束（审核
+    # 阶段本身由资料要求的 due_stage 表达）。求值时由调用方按 episode 向
+    # ``EvaluationContext.anchor_dates`` 注入当前审核节点日期；筛选与基线
+    # 各自注入各自节点日期并独立评判，结果互不覆盖。锚点未注入时求值器
+    # 保持 ``date_or_anchor_missing`` 的失败关闭行为。
+    REVIEW_NODE_DATE = "review_node_date"
 
 
 class ProtocolPeriod(StableEnum):
@@ -64,6 +72,17 @@ class TimeDirection(StableEnum):
     BEFORE = "before"
     AFTER = "after"
     ON = "on"
+
+
+class CombinedWindowSelection(StableEnum):
+    """固定日历窗与半衰期窗并存时的择窗语义。
+
+    ``longer_of_calendar_and_half_life`` 表示“固定窗口或 N 个半衰期，以时间较长者为准”。
+    这是同一洗脱/禁限窗的两种度量取较长者，不是把独立分支改写成 ``LogicalOperator.ANY``，
+    也不得从原文“或”字自行推断；合同字段必须显式给出。
+    """
+
+    LONGER_OF_CALENDAR_AND_HALF_LIFE = "longer_of_calendar_and_half_life"
 
 
 class DatePrecision(StableEnum):
@@ -103,6 +122,7 @@ class ComponentDecision(StableEnum):
 
 
 class GapType(StableEnum):
+    OBSERVATION_UNVERIFIED = "observation_unverified"
     RECORD_INCOMPLETE = "record_incomplete"
     DESCRIPTION_INSUFFICIENT = "description_insufficient"
     HISTORICAL_SOURCE_UNAVAILABLE = "historical_source_unavailable"
@@ -183,6 +203,7 @@ class JobEventType(StableEnum):
     RETRY_SCHEDULED = "retry_scheduled"
     WAITING_USER = "waiting_user"
     USER_RESUMED = "user_resumed"
+    USER_UPDATED = "user_updated"
     CANCEL_REQUESTED = "cancel_requested"
     CANCELLED = "cancelled"
     COMPLETED = "completed"
@@ -418,6 +439,18 @@ class InterpretationChangeField(StableEnum):
     FORMAL_REQUIREMENT = "formal_requirement"
 
 
+class AnchorResolutionMode(StableEnum):
+    """解释材料解析未命名回溯锚点的受限模式。
+
+    初始只有一个项目无关成员：把未命名回溯锚点解析为“当前审核节点日期”。
+    解析只能提供锚点身份；窗口量、方向、阈值、布尔逻辑和官方编号仍必须
+    逐字来自方案原文，不得由解释载荷携带或改写。目标审核节点集合是逐条款
+    数据（由解析声明并经确定性门禁核验），不是代码常量。
+    """
+
+    CURRENT_REVIEW_NODE_DATE = "current_review_node_date"
+
+
 # ---------------------------------------------------------------------------
 # Phase 4 证据页、OCR 与诚实定位（Slice 4.0 冻结）
 # ---------------------------------------------------------------------------
@@ -637,14 +670,18 @@ class ProcessingRevisionKind(StableEnum):
 class LocatorSourceLayer(StableEnum):
     """定位来源文本层；决定 source_text_sha256 锚定哪一层。
 
-    native_text      页产物的原生文本层（PDF 字符/词）；
-    raw_ocr          OCRPage.raw_text；
-    effective_text   原 OCR + 所选校对的确定性投影（必须同时绑定处理修订与投影哈希）。
+    native_text        页产物的原生文本层（PDF 字符/词）；
+    raw_ocr            OCRPage.raw_text；
+    effective_text     原 OCR + 所选校对的确定性投影（必须同时绑定处理修订与投影哈希）；
+    page_review_visual 页级双主读判读的逐字视觉摘录层（OCR 不是其逐字权威）。必须携带
+                       类型化视觉溯源绑定；摘录哈希锚定判读原文，页图哈希只存在于溯源
+                       绑定中，原图哈希与摘录文本哈希严格分立。
     """
 
     NATIVE_TEXT = "native_text"
     RAW_OCR = "raw_ocr"
     EFFECTIVE_TEXT = "effective_text"
+    PAGE_REVIEW_VISUAL = "page_review_visual"
 
 
 class LocatorAuthenticity(StableEnum):

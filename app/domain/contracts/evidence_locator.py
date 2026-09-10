@@ -7,6 +7,9 @@
 - ``EvidenceLocatorArtifact``        occurrence-aware 定位旁路工件：绑定页产物、
                                      来源层、来源文本哈希、目标范围/摘录、
                                      坐标系与坐标 sidecar、消歧证据与真实性门禁；
+                                     ``page_review_visual`` 层额外携带紧凑类型化视觉
+                                     溯源绑定（原图哈希只存在于该绑定，与摘录文本
+                                     哈希严格分立）；
 - ``OCRRiskScan`` / ``OcrRiskFlag``   对某一原始 OCR 哈希与规则版本运行的完整风险
                                      集合（追加旁路，不改原 OCR、不写临床事实）；
 - ``OCRRiskReview``                   用户对单个风险的追加写核对决议；
@@ -29,12 +32,13 @@ bbox 必须由同源坐标 sidecar 证明；base 修订永不可激活；活动�
 """
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
-from .common import VersionedModel
+from .common import ContractModel, VersionedModel
 from .enums import (
     ActivationEventKind,
     CorrectionChangeKind,
@@ -57,6 +61,7 @@ from .ocr import CoordinateFrame, OcrRiskFlag
 __all__ = [
     "BLOCKING_CORRECTION_KINDS",
     "CANDIDATE_TRANSITIONS",
+    "SOURCE_LINE_TARGET_PREFIX",
     "CompleteEvidenceProcessingRevision",
     "CorrectionRecord",
     "EvidenceActivationEvent",
@@ -66,6 +71,7 @@ __all__ = [
     "OCRRiskPageReview",
     "OCRRiskReview",
     "OCRRiskScan",
+    "PageReviewVisualProvenance",
     "ProcessingCandidateAttemptManifest",
     "ReferencedDocumentResolutionRevision",
     "ReferencedDocumentRevision",
@@ -75,7 +81,17 @@ __all__ = [
     "validate_correction_source_anchor",
 ]
 
+SOURCE_LINE_TARGET_PREFIX = "source-line:"
+
 _SHA256 = r"^[0-9a-f]{64}$"
+
+
+def _excerpt_text_sha256(excerpt: str) -> str:
+    return hashlib.sha256(excerpt.encode("utf-8")).hexdigest()
+
+
+def _contains_chinese(text: str) -> bool:
+    return any("\u4e00" <= char <= "\u9fff" for char in text)
 
 
 def _require_utc(value: datetime, field_name: str) -> None:
@@ -207,6 +223,26 @@ def locator_anchor_hash(
     return canonical_hash(material)
 
 
+class PageReviewVisualProvenance(ContractModel):
+    """页级判读视觉定位的紧凑类型化溯源绑定（R3 独立追加，未接入存储/发布）。
+
+    只描述“这条定位来自哪个已采信视觉来源集合的哪条主读读道”：来源集合、
+    页覆盖处置、既有完整处理修订、来源目标（已采信事实/手写来源 ID）、所选
+    页审记录与原图哈希。原图哈希只存在于本绑定中，与定位的
+    ``source_text_sha256``（所选判读摘录的真实 sha256）严格分立；内容寻址
+    不是来源真实性证明，持久化与发布前仍须按仓库记录重新核对权威绑定。
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    source_set_id: str = Field(pattern=r"^visual-source-set:[0-9a-f]{32}$")
+    coverage_id: str = Field(min_length=1)
+    processing_revision_id: str = Field(min_length=1)
+    source_target_id: str = Field(min_length=1)
+    page_review_id: str = Field(min_length=1)
+    page_image_sha256: str = Field(pattern=_SHA256)
+
+
 class EvidenceLocatorArtifact(VersionedModel):
     """occurrence-aware 定位旁路工件（追加写，不可变）。
 
@@ -240,6 +276,9 @@ class EvidenceLocatorArtifact(VersionedModel):
     processing_revision_id: str | None = None
     match_confidence: float | None = Field(default=None, ge=0, le=1)
     degradation_reason: str | None = None
+    page_review_visual: PageReviewVisualProvenance | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     created_at: datetime
 
     @model_validator(mode="after")
@@ -334,6 +373,42 @@ class EvidenceLocatorArtifact(VersionedModel):
                 raise ValueError("effective_text 定位必须绑定处理修订与有效文本投影哈希")
         elif self.processing_revision_id is not None or self.effective_text_sha256 is not None:
             raise ValueError("非 effective_text 定位不能携带处理修订/投影哈希")
+
+        if self.source_layer == LocatorSourceLayer.PAGE_REVIEW_VISUAL:
+            provenance = self.page_review_visual
+            if provenance is None:
+                raise ValueError("page_review_visual 定位必须携带类型化视觉溯源绑定")
+            if self.precision != LocatorPrecision.PAGE_EXCERPT:
+                raise ValueError("page_review_visual 定位只能使用 page_excerpt 精度")
+            if self.authenticity != LocatorAuthenticity.DEGRADED:
+                raise ValueError("page_review_visual 定位必须保持诚实降级，不得声明已认证坐标")
+            if (
+                self.bbox is not None
+                or self.coordinate_frame is not None
+                or self.sidecar_sha256 is not None
+            ):
+                raise ValueError("page_review_visual 定位不得携带坐标或坐标 sidecar")
+            if self.text_start is not None or self.text_end is not None:
+                raise ValueError("page_review_visual 定位不得携带字符范围")
+            if self.ocr_page_id is not None:
+                raise ValueError("page_review_visual 定位不得绑定 OCR 页：OCR 不是视觉摘录的逐字权威")
+            if self.effective_text_sha256 is not None or self.processing_revision_id is not None:
+                raise ValueError("page_review_visual 定位不得携带有效文本投影；处理修订绑定在溯源绑定内")
+            if self.match_confidence is not None:
+                raise ValueError("page_review_visual 定位不做原文检索匹配，不得自报匹配置信度")
+            if not self.degradation_reason or not _contains_chinese(self.degradation_reason):
+                raise ValueError("page_review_visual 定位必须给出明确的中文降级原因")
+            if self.excerpt is None or self.source_text_sha256 != _excerpt_text_sha256(self.excerpt):
+                raise ValueError(
+                    "page_review_visual 定位的来源文本哈希必须等于所选判读摘录的真实 sha256，"
+                    "绝不能写入页图哈希"
+                )
+            if provenance.page_image_sha256 == self.source_text_sha256:
+                raise ValueError("原图哈希与摘录文本哈希必须严格分立，不得写入同一哈希")
+            if provenance.source_target_id != self.target_id:
+                raise ValueError("视觉溯源的来源目标必须与定位目标一致")
+        elif self.page_review_visual is not None:
+            raise ValueError("非 page_review_visual 定位不能携带视觉溯源绑定")
         return self
 
 

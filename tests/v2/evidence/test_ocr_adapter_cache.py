@@ -26,6 +26,7 @@ from app.evidence.ocr_adapter import (
     InferenceResult,
     OcrFailure,
     TextOnlyOcrAdapter,
+    build_ocr_page,
 )
 from app.evidence.page_processor import build_page_artifact
 from app.evidence.paging import page_source_document
@@ -336,16 +337,30 @@ def test_dense_page_partial_failure_preserves_prior_and_failed_raw_responses(
 
 def test_cache_key_changes_on_deciding_input():
     adapter = make_adapter()
-    key_a = adapter.cache_key(source_sha256="a" * 64, page_number=1, page_input_sha256="b" * 64)
-    assert key_a == adapter.cache_key(source_sha256="a" * 64, page_number=1, page_input_sha256="b" * 64)
-    assert key_a != adapter.cache_key(source_sha256="c" * 64, page_number=1, page_input_sha256="b" * 64)
-    assert key_a != adapter.cache_key(source_sha256="a" * 64, page_number=2, page_input_sha256="b" * 64)
-    assert key_a != adapter.cache_key(source_sha256="a" * 64, page_number=1, page_input_sha256="d" * 64)
+    key_a = adapter.cache_key(
+        page_artifact_id="pa-1", source_sha256="a" * 64, page_number=1, page_input_sha256="b" * 64
+    )
+    assert key_a == adapter.cache_key(
+        page_artifact_id="pa-1", source_sha256="a" * 64, page_number=1, page_input_sha256="b" * 64
+    )
+    assert key_a != adapter.cache_key(
+        page_artifact_id="pa-1", source_sha256="c" * 64, page_number=1, page_input_sha256="b" * 64
+    )
+    assert key_a != adapter.cache_key(
+        page_artifact_id="pa-1", source_sha256="a" * 64, page_number=2, page_input_sha256="b" * 64
+    )
+    assert key_a != adapter.cache_key(
+        page_artifact_id="pa-1", source_sha256="a" * 64, page_number=1, page_input_sha256="d" * 64
+    )
     assert key_a != make_adapter(model_id="x").cache_key(
-        source_sha256="a" * 64, page_number=1, page_input_sha256="b" * 64
+        page_artifact_id="pa-1", source_sha256="a" * 64, page_number=1, page_input_sha256="b" * 64
     )
     assert key_a != make_adapter(coordinate_transform_version="t/v2").cache_key(
-        source_sha256="a" * 64, page_number=1, page_input_sha256="b" * 64
+        page_artifact_id="pa-1", source_sha256="a" * 64, page_number=1, page_input_sha256="b" * 64
+    )
+    # v2：缓存键绑定持有 OCR 结果的页产物身份（跨资料版本不再共享成功页）。
+    assert key_a != adapter.cache_key(
+        page_artifact_id="pa-2", source_sha256="a" * 64, page_number=1, page_input_sha256="b" * 64
     )
 
 
@@ -415,7 +430,8 @@ def test_cache_poisoning_drift_is_surfaced_not_bypassed(
     # 缓存必须暴露漂移，绝不静默当作命中。
     with pytest.raises(PersistedContractInvalid):
         adapter.cached_page(
-            session, cache_key=cache_key, source_sha256=sha(content),
+            session, cache_key=cache_key, page_artifact_id=artifact.page_artifact_id,
+            source_sha256=sha(content),
             page_number=1, page_input_sha256=page_image_sha,
         )
     with pytest.raises(PersistedContractInvalid):
@@ -445,8 +461,10 @@ def test_cache_miss_for_different_profile_identity(
     adapter_b = make_adapter(model_id="other-model")
     hit = adapter_b.cached_page(
         session, cache_key=adapter_b.cache_key(
+            page_artifact_id=artifact.page_artifact_id,
             source_sha256=sha(content), page_number=1, page_input_sha256=page_image_sha
         ),
+        page_artifact_id=artifact.page_artifact_id,
         source_sha256=sha(content), page_number=1, page_input_sha256=page_image_sha,
     )
     assert hit is None
@@ -462,10 +480,19 @@ def test_cache_miss_for_different_profile_identity(
     assert rec.ocr_page.raw_text == "OTHER MODEL TEXT"
 
 
-def test_cache_is_scope_neutral_by_content_identity(
+def test_cache_is_scoped_by_page_artifact_identity(
     seeded, artifact_store, gold_root, gold_set
 ):
-    """同内容同识别配置：不同资料版本共享同一缓存命中（作用域中立）。"""
+    """同内容同识别配置：v2 命中限定本页产物，内容级复用落地为自有成功页。
+
+    事故反例（基线期 EXECUTOR_ERROR 根因）：v1 内容键使第二个资料版本直接命中
+    第一版本的成功页并把它冻结进自己的清单；该 OCRPage 的 ``page_artifact_id``
+    属于第一版本，冻结清单完整性校验必然拒绝跨产物绑定，整个证据处理以不可
+    诊断的 EXECUTOR_ERROR 终败。修复后 v2 键把缓存命中限定在页产物身份内；
+    内容级推理复用在 v2 未命中时按设计书内容哈希契约复用同内容成功结果，并
+    把它复制为**本页产物自有**的新成功行（不重复推理、不改写历史行），跨产物
+    借用不可能发生。
+    """
     session, fixture = seeded
     content = (gold_root / "scanned-01.pdf").read_bytes()
     artifact_v1, image_bytes, page_sha_v1 = _seed_vision_page(
@@ -474,29 +501,397 @@ def test_cache_is_scope_neutral_by_content_identity(
     adapter = make_adapter()
     repo = orr.OcrPageRepository(session)
     inference, state = make_inference()
-    adapter.recognize(
+    first = adapter.recognize(
         session=session, artifact_store=artifact_store,
         source_sha256=sha(content), page_number=1,
         page_artifact_id=artifact_v1.page_artifact_id,
         page_input_sha256=page_sha_v1,
         page_image_bytes=image_bytes, inference=inference, persist=repo.create,
     )
-    # 第二个资料版本引用同一内容 blob -> 同一页图 -> 同一缓存键。
-    _artifact_v2, _image_bytes2, page_sha_v2 = _seed_vision_page(
+    assert first.cached is False
+    # 第二个资料版本引用同一内容 blob -> 同一页图，但页产物身份不同。
+    artifact_v2, _image_bytes2, page_sha_v2 = _seed_vision_page(
         session, artifact_store, fixture, content=content, version_id="doc-s2"
     )
     assert page_sha_v2 == page_sha_v1
-    hit = adapter.cached_page(
-        session, cache_key=adapter.cache_key(
-            source_sha256=sha(content), page_number=1, page_input_sha256=page_sha_v2
-        ),
+    second = adapter.recognize(
+        session=session, artifact_store=artifact_store,
+        source_sha256=sha(content), page_number=1,
+        page_artifact_id=artifact_v2.page_artifact_id,
+        page_input_sha256=page_sha_v2,
+        page_image_bytes=image_bytes, inference=inference, persist=repo.create,
+    )
+    # 内容级推理复用：不重复调用模型，但落地的是第二个版本自有的新成功行。
+    assert second.cached is True
+    assert state["calls"] == 1
+    assert second.reused_from_ocr_page_id == first.ocr_page.ocr_page_id
+    assert second.ocr_page.ocr_page_id != first.ocr_page.ocr_page_id
+    assert second.ocr_page.page_artifact_id == artifact_v2.page_artifact_id
+    assert second.ocr_page.cache_key == adapter.cache_key(
+        page_artifact_id=artifact_v2.page_artifact_id,
         source_sha256=sha(content), page_number=1, page_input_sha256=page_sha_v2,
     )
-    assert hit is not None
-    assert hit.cache_key == adapter.cache_key(
-        source_sha256=sha(content), page_number=1, page_input_sha256=page_sha_v2
+    assert second.ocr_page.raw_text == first.ocr_page.raw_text
+    # 历史行不可改写：第一版本的成功行保持原身份与原文。
+    first_again = repo.get(first.ocr_page.ocr_page_id)
+    assert first_again.page_artifact_id == artifact_v1.page_artifact_id
+    assert first_again.cache_key == first.ocr_page.cache_key
+    assert first_again.raw_text == first.ocr_page.raw_text
+    # 同一版本重试命中自己的成功行（不再复用他版，也不新增成功行）。
+    replay = adapter.recognize(
+        session=session, artifact_store=artifact_store,
+        source_sha256=sha(content), page_number=1,
+        page_artifact_id=artifact_v2.page_artifact_id,
+        page_input_sha256=page_sha_v2,
+        page_image_bytes=image_bytes, inference=inference, persist=repo.create,
     )
+    assert replay.cached is True
+    assert replay.ocr_page.ocr_page_id == second.ocr_page.ocr_page_id
     assert state["calls"] == 1
+    # 两个版本的成功行并存：单一成功缓存不变量按（v2）缓存键各自成立。
+    assert repo.get_successful_by_cache_key(first.ocr_page.cache_key) is not None
+    assert repo.get_successful_by_cache_key(second.ocr_page.cache_key) is not None
+
+
+def test_same_content_second_version_freezes_own_revision(
+    seeded, artifact_store, gold_root, gold_set
+):
+    """事故级回归：同内容第二资料版本可完成识别并冻结自己的基础处理修订。
+
+    复现基线期失败链：v1 缓存键使第二次上传**借用**第一版本的成功 OCRPage，
+    ``EvidenceProcessingRevisionRepository`` 的清单完整性校验拒绝
+    ``ocr_page.page_artifact_id != entry.page_artifact_id`` 的跨产物绑定，
+    异常逃逸为 EXECUTOR_ERROR 且快照进入 terminal_failure。修复后：第一版本
+    真实识别；第二版本按内容哈希契约复用推理结果（不重复调用模型），但落地
+    **自有**成功行（绑定第二版本页产物），冻结与回放全部通过。
+    """
+    from app.domain.contracts.enums import (
+        PageArtifactStatus,
+        ProcessingRevisionStatus,
+        SnapshotMemberOrigin,
+        SnapshotStatus,
+        UploadMode,
+    )
+    from app.domain.contracts.evidence_ingestion import (
+        EvidenceSnapshot,
+        EvidenceSnapshotMember,
+    )
+    from app.domain.contracts.evidence_processing import (
+        EvidenceProcessingRevision,
+        EvidenceProcessingRevisionPage,
+    )
+    from app.domain.publication import (
+        evidence_processing_manifest_hash,
+        evidence_snapshot_collection_hash,
+    )
+    from app.storage.evidence_repositories import EvidenceSnapshotRepository
+
+    session, fixture = seeded
+    content = (gold_root / "scanned-01.pdf").read_bytes()
+    project_id, subject_id, episode_id = _scope(fixture)
+    adapter = make_adapter()
+    repo = orr.OcrPageRepository(session)
+    inference, _state = make_inference()
+    revision_repo = orr.EvidenceProcessingRevisionRepository(session)
+
+    def _freeze_for(snapshot_id: str, version_id: str, *, expect_cached: bool) -> None:
+        artifact, image_bytes, page_sha = _seed_vision_page(
+            session, artifact_store, fixture, content=content, version_id=version_id
+        )
+        rec = adapter.recognize(
+            session=session, artifact_store=artifact_store,
+            source_sha256=sha(content), page_number=1,
+            page_artifact_id=artifact.page_artifact_id,
+            page_input_sha256=page_sha,
+            page_image_bytes=image_bytes, inference=inference, persist=repo.create,
+        )
+        assert rec.cached is expect_cached
+        # 冻结的必然是本版本页产物自有的成功行，绝不借用他版页行。
+        assert rec.ocr_page.page_artifact_id == artifact.page_artifact_id
+        logical_id = f"log-{version_id}"
+        member = EvidenceSnapshotMember(
+            member_id=f"{snapshot_id}-{logical_id}",
+            snapshot_id=snapshot_id,
+            logical_document_id=logical_id,
+            source_document_version_id=version_id,
+            origin=SnapshotMemberOrigin.ADDED,
+        )
+        snapshot = EvidenceSnapshot(
+            evidence_snapshot_id=snapshot_id,
+            project_id=project_id,
+            subject_id=subject_id,
+            review_episode_id=episode_id,
+            upload_mode=UploadMode.FULL,
+            members=[member],
+            collection_sha256=evidence_snapshot_collection_hash(
+                members=[(member.logical_document_id, member.source_document_version_id)]
+            ),
+            status=SnapshotStatus.STAGED,
+            created_at=FIXED,
+            created_by="tester",
+        )
+        EvidenceSnapshotRepository(session).create_full(snapshot)
+        EvidenceSnapshotRepository(session).transition_status(
+            snapshot_id, event="worker_start", new_status=SnapshotStatus.PROCESSING,
+            actor="tester", reason="start",
+        )
+        entry = EvidenceProcessingRevisionPage(
+            entry_id=f"{snapshot_id}-entry-1",
+            position=1,
+            source_document_version_id=version_id,
+            page_number=1,
+            original_frame=None,
+            page_artifact_id=artifact.page_artifact_id,
+            ocr_page_id=rec.ocr_page.ocr_page_id,
+            status=PageArtifactStatus.SUCCEEDED,
+        )
+        revision = EvidenceProcessingRevision(
+            evidence_processing_revision_id=f"rev-{snapshot_id}",
+            evidence_snapshot_id=snapshot_id,
+            project_id=project_id,
+            subject_id=subject_id,
+            review_episode_id=episode_id,
+            manifest=[entry],
+            manifest_sha256=evidence_processing_manifest_hash(
+                entries=[
+                    (
+                        entry.source_document_version_id,
+                        entry.page_number,
+                        entry.original_frame,
+                        entry.page_artifact_id,
+                        entry.ocr_page_id,
+                        entry.status.value,
+                    )
+                ]
+            ),
+            status=ProcessingRevisionStatus.READY,
+            is_activatable=False,
+            created_at=FIXED,
+            created_by="tester",
+        )
+        frozen = revision_repo.create(revision)
+        got = revision_repo.get(frozen.evidence_processing_revision_id)
+        assert got.manifest[0].page_artifact_id == artifact.page_artifact_id
+        assert got.manifest[0].ocr_page_id == rec.ocr_page.ocr_page_id
+
+    _freeze_for("snap-first", "doc-second-v1", expect_cached=False)
+    _freeze_for("snap-second", "doc-second-v2", expect_cached=True)
+
+
+def test_prepare_reports_content_reuse_and_finalize_reuse_mints_owned_row(
+    seeded, artifact_store, gold_root, gold_set
+):
+    """分阶段 API 根因回归：prepare 报告复用源（零推理），finalize_reuse 落地自有行。
+
+    根因：v2 页产物键修复跨产物借用后，同内容新资料版本被迫重新推理（内容级
+    复用丢失）。修复后 prepare 在 v2 未命中时按内容哈希契约定位复用源；
+    ``finalize_reuse`` 把复用文本落地为本页产物自有成功行，历史行不改写。
+    """
+    session, fixture = seeded
+    content = (gold_root / "scanned-01.pdf").read_bytes()
+    artifact_a, image_bytes, page_sha_a = _seed_vision_page(
+        session, artifact_store, fixture, content=content, version_id="doc-phase-a"
+    )
+    adapter = make_adapter()
+    repo = orr.OcrPageRepository(session)
+    inference, state = make_inference()
+    first = adapter.recognize(
+        session=session, artifact_store=artifact_store,
+        source_sha256=sha(content), page_number=1,
+        page_artifact_id=artifact_a.page_artifact_id,
+        page_input_sha256=page_sha_a,
+        page_image_bytes=image_bytes, inference=inference, persist=repo.create,
+    )
+    assert first.cached is False
+    artifact_b, _image_b, page_sha_b = _seed_vision_page(
+        session, artifact_store, fixture, content=content, version_id="doc-phase-b"
+    )
+    prepared = adapter.prepare(
+        session=session, artifact_store=artifact_store,
+        source_sha256=sha(content), page_number=1,
+        page_artifact_id=artifact_b.page_artifact_id,
+        page_input_sha256=page_sha_b,
+        page_image_bytes=image_bytes, started_at=FIXED,
+    )
+    # prepare 零推理且明确报告复用源（不发起任何模型调用）。
+    assert prepared.cached_page is None
+    assert prepared.reused_page is not None
+    assert prepared.reused_page.ocr_page_id == first.ocr_page.ocr_page_id
+    assert state["calls"] == 1  # 仅第一版本的初始推理；prepare 本身零推理
+    recognition = adapter.finalize_reuse(
+        session=session, prepared=prepared,
+        artifact_store=artifact_store, persist=repo.create,
+    )
+    assert recognition.cached is True
+    assert recognition.reused_from_ocr_page_id == first.ocr_page.ocr_page_id
+    assert recognition.ocr_page.page_artifact_id == artifact_b.page_artifact_id
+    assert recognition.ocr_page.cache_key == prepared.cache_key
+    assert recognition.ocr_page.raw_text == first.ocr_page.raw_text
+    assert repo.get_successful_by_cache_key(prepared.cache_key) is not None
+    # 防御路径：复用已定结果后 finalize_failure 绝不写失败行。
+    failure_rec = adapter.finalize_failure(
+        session=session, prepared=prepared,
+        failure=OcrFailure(
+            category=OcrFailureCategory.UNKNOWN, reason="本页文字识别未完成，请稍后重试"
+        ),
+        persist=repo.create,
+    )
+    assert failure_rec.cached is True
+    assert failure_rec.ocr_page.status == OCRPageStatus.SUCCEEDED
+    assert len(repo.list_by_cache_key(prepared.cache_key)) == 1
+
+
+def test_content_reuse_never_uses_failed_rows(
+    seeded, artifact_store, gold_root, gold_set
+):
+    """失败行永不充当内容级复用源：下一版本重新推理并拥有自己的成功行。"""
+    session, fixture = seeded
+    content = (gold_root / "scanned-01.pdf").read_bytes()
+    artifact_a, image_bytes, page_sha_a = _seed_vision_page(
+        session, artifact_store, fixture, content=content, version_id="doc-fail-src"
+    )
+    adapter = make_adapter()
+    repo = orr.OcrPageRepository(session)
+
+    def failing(payload, image_bytes_):
+        raise RuntimeError("provider down")
+
+    failed = adapter.recognize(
+        session=session, artifact_store=artifact_store,
+        source_sha256=sha(content), page_number=1,
+        page_artifact_id=artifact_a.page_artifact_id,
+        page_input_sha256=page_sha_a,
+        page_image_bytes=image_bytes, inference=failing, persist=repo.create,
+    )
+    assert failed.ocr_page.status == OCRPageStatus.FAILED
+    artifact_b, _image_b, page_sha_b = _seed_vision_page(
+        session, artifact_store, fixture, content=content, version_id="doc-fail-next"
+    )
+    inference, state = make_inference()
+    rec = adapter.recognize(
+        session=session, artifact_store=artifact_store,
+        source_sha256=sha(content), page_number=1,
+        page_artifact_id=artifact_b.page_artifact_id,
+        page_input_sha256=page_sha_b,
+        page_image_bytes=image_bytes, inference=inference, persist=repo.create,
+    )
+    # 失败行不是复用源：真实推理发生，成功行属于当前页产物。
+    assert rec.cached is False
+    assert state["calls"] == 1
+    assert rec.ocr_page.page_artifact_id == artifact_b.page_artifact_id
+    assert rec.ocr_page.status == OCRPageStatus.SUCCEEDED
+
+
+def test_content_reuse_surfaces_poisoned_source_row(
+    seeded, artifact_store, gold_root, gold_set
+):
+    """复用源的规范化列漂移必须暴露，绝不静默当作复用结果。"""
+    session, fixture = seeded
+    content = (gold_root / "scanned-01.pdf").read_bytes()
+    artifact_a, image_bytes, page_sha_a = _seed_vision_page(
+        session, artifact_store, fixture, content=content, version_id="doc-poison-src"
+    )
+    adapter = make_adapter()
+    repo = orr.OcrPageRepository(session)
+    inference, _state = make_inference()
+    adapter.recognize(
+        session=session, artifact_store=artifact_store,
+        source_sha256=sha(content), page_number=1,
+        page_artifact_id=artifact_a.page_artifact_id,
+        page_input_sha256=page_sha_a,
+        page_image_bytes=image_bytes, inference=inference, persist=repo.create,
+    )
+    artifact_b, _image_b, page_sha_b = _seed_vision_page(
+        session, artifact_store, fixture, content=content, version_id="doc-poison-dst"
+    )
+    # 投毒：篡改复用源成功行 raw_text 规范化列。
+    session.execute(
+        update(orr.OCRPageRecord)
+        .where(orr.OCRPageRecord.page_artifact_id == artifact_a.page_artifact_id)
+        .values(raw_text="POISONED")
+    )
+    session.expire_all()
+    with pytest.raises(PersistedContractInvalid):
+        adapter.recognize(
+            session=session, artifact_store=artifact_store,
+            source_sha256=sha(content), page_number=1,
+            page_artifact_id=artifact_b.page_artifact_id,
+            page_input_sha256=page_sha_b,
+            page_image_bytes=image_bytes, inference=inference, persist=repo.create,
+        )
+
+
+def test_latest_successful_content_identity_is_deterministic(
+    seeded, artifact_store, gold_root, gold_set
+):
+    """仓储级：同内容身份多成功行按 (completed_at, id) 取最新；失败行永不胜出。"""
+    from datetime import timedelta
+
+    session, fixture = seeded
+    content = (gold_root / "scanned-01.pdf").read_bytes()
+    adapter = make_adapter()
+    repo = orr.OcrPageRepository(session)
+    orr.OCRProfileRepository(session).get_or_create(adapter.profile())
+    artifact_old, _img, page_sha = _seed_vision_page(
+        session, artifact_store, fixture, content=content, version_id="doc-pick-old"
+    )
+    artifact_new, _img2, _ps2 = _seed_vision_page(
+        session, artifact_store, fixture, content=content, version_id="doc-pick-new"
+    )
+    artifact_fail, _img3, _ps3 = _seed_vision_page(
+        session, artifact_store, fixture, content=content, version_id="doc-pick-fail"
+    )
+
+    def _page(artifact, *, status, completed_at, text=""):
+        return build_ocr_page(
+            ocr_page_id=f"ocr-page-{artifact.page_artifact_id[:24]}-{status.value}",
+            page_artifact_id=artifact.page_artifact_id,
+            source_sha256=sha(content), page_number=1,
+            page_input_sha256=page_sha,
+            ocr_profile=adapter.profile(),
+            cache_key=adapter.cache_key(
+                page_artifact_id=artifact.page_artifact_id,
+                source_sha256=sha(content), page_number=1,
+                page_input_sha256=page_sha,
+            ),
+            raw_text=text, status=status,
+            failure_reason=None if status == OCRPageStatus.SUCCEEDED else "本页文字识别未完成，请稍后重试",
+            started_at=FIXED, completed_at=completed_at,
+        )
+
+    repo.create(_page(
+        artifact_old, status=OCRPageStatus.SUCCEEDED,
+        completed_at=FIXED, text="OLD",
+    ))
+    repo.create(_page(
+        artifact_new, status=OCRPageStatus.SUCCEEDED,
+        completed_at=FIXED + timedelta(hours=1), text="NEW",
+    ))
+    identity = dict(
+        source_sha256=sha(content), page_number=1,
+        ocr_profile_sha256=adapter.profile_fingerprint,
+        page_input_sha256=page_sha,
+        layout_parser_version=adapter.layout_parser_version,
+        coordinate_transform_version=adapter.coordinate_transform_version,
+    )
+    latest = repo.get_latest_successful_by_content_identity(**identity)
+    assert latest is not None
+    assert latest.page_artifact_id == artifact_new.page_artifact_id
+    assert latest.raw_text == "NEW"
+    # 更新的失败行永不取代成功行。
+    repo.create(_page(
+        artifact_fail, status=OCRPageStatus.FAILED,
+        completed_at=FIXED + timedelta(hours=2),
+    ))
+    still = repo.get_latest_successful_by_content_identity(**identity)
+    assert still is not None
+    assert still.ocr_page_id == latest.ocr_page_id
+    # 全部内容行可见（追加写历史完整回放）。
+    rows = repo.list_by_content_identity(**identity)
+    assert {row.status for row in rows} == {
+        OCRPageStatus.SUCCEEDED,
+        OCRPageStatus.FAILED,
+    }
 
 
 def test_text_only_route_returns_no_coordinates_with_truthful_reason(

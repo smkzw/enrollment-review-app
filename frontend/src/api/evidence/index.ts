@@ -12,11 +12,19 @@ export {
   type EvidenceRequestOptions,
 } from "./evidenceRepository";
 export { evidencePageImageUrl } from "./evidenceHttp";
-export { getEvidenceJobDetail, retryEvidenceJob } from "./evidenceJobHttp";
+export {
+  getEvidenceJobDetail,
+  retryEvidenceJob,
+  getSelectiveVisionTask,
+  retrySelectiveVisionTask,
+  cancelSelectiveVisionTask,
+} from "./evidenceJobHttp";
 export type {
   EvidenceJobDetailView,
   EvidenceJobStatusView,
   EvidenceJobProgressView,
+  SelectiveVisionTaskView,
+  SelectiveVisionTaskActionView,
 } from "./evidenceJobViewModels";
 export {
   decodeUploadPreview,

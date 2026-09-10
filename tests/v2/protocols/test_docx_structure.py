@@ -5,9 +5,11 @@ from docx import Document
 from docx.oxml import parse_xml
 from docx.oxml.ns import nsdecls
 
-from app.domain.contracts.enums import ExtractionStatus
+from app.domain.contracts.enums import DocumentPart, ExtractionStatus
 from app.protocols.docx_structure import (
+    BlockKind,
     HeaderFooterKind,
+    StructureBlock,
     _effective_numbering,
     extract_docx_structure,
     parse_numbering,
@@ -15,6 +17,7 @@ from app.protocols.docx_structure import (
 from app.protocols.ingestion import register_source_artifact
 from .helpers import (
     build_altchunk_body_docx,
+    build_custom_outline_style_docx,
     build_gridspan_docx,
     build_header_docx,
     build_nested_table_docx,
@@ -83,6 +86,42 @@ def test_superscript_and_subscript_are_preserved_as_semantic_text(tmp_path):
 
     assert any(block.text == "ANC<1.2×10^9/L，H_2O" for block in ext.blocks)
     assert any(block.text == "胸片（正侧位）^14" for block in ext.blocks)
+
+
+def test_custom_style_name_and_inherited_outline_level_are_preserved(tmp_path):
+    ext = _extract(tmp_path, "custom-outline", build_custom_outline_style_docx)
+    paragraphs = {
+        block.text: block
+        for block in ext.blocks
+        if block.kind == BlockKind.PARAGRAPH
+    }
+
+    inherited = paragraphs["继承的中文标题"]
+    assert inherited.style == "18"  # raw numeric style ID remains available
+    assert inherited.style_name == "中文自定义子标题"
+    assert inherited.outline_level == 2  # inherited from style 17
+
+    overridden = paragraphs["段落覆盖标题"]
+    assert overridden.style == "18"
+    assert overridden.style_name == "中文自定义子标题"
+    assert overridden.outline_level == 0  # paragraph pPr wins over styles.xml
+
+    unstyled = paragraphs["无结构样式正文"]
+    assert unstyled.style is None
+    assert unstyled.style_name is None
+    assert unstyled.outline_level is None
+
+
+def test_structure_block_heading_metadata_is_optional_for_legacy_construction():
+    block = StructureBlock(
+        source_ref="body.p0",
+        document_part=DocumentPart.BODY,
+        block_order=0,
+        kind=BlockKind.PARAGRAPH,
+        text="legacy block",
+    )
+    assert block.style_name is None
+    assert block.outline_level is None
 
 
 def test_headers_capture_default_first_even_and_dedup(tmp_path):

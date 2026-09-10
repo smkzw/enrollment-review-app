@@ -24,6 +24,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.contracts.facts import FactAuthority
+from app.domain.contracts.evidence_locator import CompleteEvidenceProcessingRevision
+from app.storage.codecs import PersistedContractInvalid
 from app.storage.evidence_locator_models import EvidenceLocatorArtifactRecord
 from app.storage.evidence_locator_models import ProcessingRevisionLocatorRecord
 from app.storage.evidence_locator_repositories import (
@@ -73,9 +75,15 @@ class FactAuthorityValidator:
 
     def validate(self, authority: FactAuthority) -> None:
         """校验权威元组对应当前活动证据链；任一不满足即拒绝。"""
+        self.validate_and_get_revision(authority)
+
+    def validate_and_get_revision(
+        self, authority: FactAuthority
+    ) -> CompleteEvidenceProcessingRevision:
+        """完整核验并返回本次读取的修订；不缓存，也不接受外部已验证标记。"""
         self._validate_snapshot(authority)
         self._validate_episode(authority)
-        self._validate_complete_revision(authority)
+        return self._validate_complete_revision(authority)
 
     def _validate_snapshot(self, authority: FactAuthority) -> None:
         snapshot = self.session.get(
@@ -155,16 +163,25 @@ class FactAuthorityValidator:
                 f"权威元组与审核节点 {authority.review_episode_id} 作用域不一致，拒绝发布"
             )
 
-    def _validate_complete_revision(self, authority: FactAuthority) -> None:
-        revision = self.session.get(
-            EvidenceProcessingRevisionRecord,
-            authority.complete_processing_revision_id,
+    def _validate_complete_revision(
+        self, authority: FactAuthority
+    ) -> CompleteEvidenceProcessingRevision:
+        revision_row = self.session.get(
+            EvidenceProcessingRevisionRecord, authority.complete_processing_revision_id
         )
-        if revision is None:
+        if revision_row is None:
             raise FactAuthorityError(
                 f"完整处理修订 {authority.complete_processing_revision_id} 不存在"
             )
-        decoded = CompleteEvidenceProcessingRevisionRepository._decode_record(revision)
+        try:
+            decoded = CompleteEvidenceProcessingRevisionRepository(self.session).get(
+                authority.complete_processing_revision_id
+            )
+        except (RepositoryError, PersistedContractInvalid) as exc:
+            raise FactAuthorityError(
+                f"完整处理修订 {authority.complete_processing_revision_id} "
+                "的页、定位、风险或资料元数据闭包不完整"
+            ) from exc
         if not decoded.is_activatable or decoded.status.value != "ready":
             raise FactAuthorityError(
                 f"处理修订 {authority.complete_processing_revision_id} 不是可激活的"
@@ -180,21 +197,35 @@ class FactAuthorityValidator:
                 f"完整处理修订 {authority.complete_processing_revision_id} 与审核节点 "
                 f"{authority.review_episode_id} 不一致"
             )
+        return decoded
 
     # ------------------------------------------------------------------ 定位引用
 
     def validate_locators(
         self, authority: FactAuthority, locator_ids: list[str]
     ) -> None:
-        """逐个校验定位引用都在当前审核节点/活动快照/处理修订闭包内。"""
-        for locator_id in sorted(set(locator_ids)):
-            self._validate_locator(authority, locator_id)
+        """逐个校验定位引用都在当前审核节点/活动快照/处理修订闭包内。
 
-    def _validate_locator(self, authority: FactAuthority, locator_id: str) -> None:
+        同一批定位共享一个视觉核验上下文：同一事务内重复的整修订核验只
+        执行一次；上下文随本次调用结束而丢弃，不跨事务复用。
+        """
+        from app.storage.page_review_visual_locator_validation import (
+            VisualLocatorBatchContext,
+        )
+
+        batch = VisualLocatorBatchContext(self.session)
+        for locator_id in sorted(set(locator_ids)):
+            self._validate_locator(authority, locator_id, batch)
+
+    def _validate_locator(self, authority: FactAuthority, locator_id: str, batch=None) -> None:
         locator = self.session.get(EvidenceLocatorArtifactRecord, locator_id)
         if locator is None:
             raise FactLocatorReferenceError(f"定位 {locator_id} 不存在")
         decoded_locator = EvidenceLocatorRepository._decode(locator)
+        if decoded_locator.page_review_visual is not None:
+            from app.storage.page_review_visual_locator_validation import verify_visual_locator_authority
+            verify_visual_locator_authority(self.session, decoded_locator, authority, batch=batch)
+            return
         document = self.session.get(
             SourceDocumentVersionV2Record,
             decoded_locator.source_document_version_id,
@@ -211,12 +242,14 @@ class FactAuthorityValidator:
                 f"({decoded_document.review_episode_id})，跨审核节点定位引用拒绝"
             )
         member_rows = self.session.execute(
-            select(EvidenceSnapshotMemberRecord)
+            select(EvidenceSnapshotMemberRecord).where(
+                EvidenceSnapshotMemberRecord.snapshot_id == authority.evidence_snapshot_v2_id
+            )
         ).scalars().all()
         decoded_members = [
             EvidenceSnapshotRepository._decode_member_record(
                 row,
-                expected_snapshot_id=None,
+                expected_snapshot_id=authority.evidence_snapshot_v2_id,
             )
             for row in member_rows
         ]

@@ -27,15 +27,12 @@ from fastapi import status as http_status
 from app.api.v2.evidence_processing_schemas import (
     ActivateRequest,
     ActivationEventDTO,
-    BoundingBoxDTO,
     BuildRevisionRequest,
     BuildRevisionResponse,
-    CoordinateFrameDTO,
     CorrectionCreateRequest,
     CorrectionCreateResponse,
     CorrectionDTO,
     GateResultDTO,
-    LocatorDTO,
     OcrPageDTO,
     OcrRiskFlagDTO,
     OcrRiskReviewDTO,
@@ -56,13 +53,15 @@ from app.api.v2.evidence_processing_schemas import (
     ReferencedDocumentReviseRequest,
     RiskReviewCreateRequest,
     RiskReviewCreateResponse,
+    SelectiveVisionTaskActionDTO,
+    SelectiveVisionTaskDTO,
+    locator_dto,
 )
 from app.api.v2.vocabulary import (
+    JOB_STATE_LABELS,
     activation_event_kind_label,
     correction_change_kind_label,
     gate_status_label,
-    locator_precision_label,
-    locator_source_layer_label,
     ocr_page_status_label,
     ocr_risk_kind_label,
     ocr_risk_level_label,
@@ -72,6 +71,9 @@ from app.api.v2.vocabulary import (
     referenced_document_resolution_label,
     referenced_document_status_label,
     revision_kind_label,
+    selective_vision_closed_reason_label,
+    selective_vision_failed_scope_label,
+    selective_vision_recovery_action,
     snapshot_status_label,
 )
 from app.services.evidence_api_command_service import EvidenceApiCommandService
@@ -82,6 +84,11 @@ from app.services.evidence_api_read_service import (
     ReferencedHeadView,
     RevisionView,
 )
+from app.services.selective_vision_postprocess_job_service import (
+    SelectiveVisionPostprocessJobService,
+    SelectiveVisionRevisionTaskView,
+)
+from app.workflow.states import TERMINAL_JOB_STATES
 
 router = APIRouter(tags=["v2-evidence-processing"])
 
@@ -213,72 +220,6 @@ def _correction_dto(correction) -> CorrectionDTO:
     )
 
 
-def _locator_dto(locator) -> LocatorDTO:
-    layer = (
-        locator.source_layer.value
-        if hasattr(locator.source_layer, "value")
-        else locator.source_layer
-    )
-    precision = (
-        locator.precision.value
-        if hasattr(locator.precision, "value")
-        else locator.precision
-    )
-    authenticity = (
-        locator.authenticity.value
-        if hasattr(locator.authenticity, "value")
-        else locator.authenticity
-    )
-    disambiguation = (
-        locator.disambiguation.value
-        if hasattr(locator.disambiguation, "value")
-        else locator.disambiguation
-    )
-    return LocatorDTO(
-        locator_id=locator.locator_id,
-        page_artifact_id=locator.page_artifact_id,
-        ocr_page_id=locator.ocr_page_id,
-        source_document_version_id=locator.source_document_version_id,
-        page_number=locator.page_number,
-        source_layer=layer,
-        source_layer_label=locator_source_layer_label(layer),
-        source_text_sha256=locator.source_text_sha256,
-        target_id=locator.target_id,
-        precision=precision,
-        precision_label=locator_precision_label(precision),
-        degradation_reason=locator.degradation_reason,
-        text_start=locator.text_start,
-        text_end=locator.text_end,
-        excerpt=locator.excerpt,
-        disambiguation=disambiguation,
-        locator_algorithm_version=locator.locator_algorithm_version,
-        authenticity=authenticity,
-        match_confidence=locator.match_confidence,
-        bbox=(
-            BoundingBoxDTO(
-                x0=locator.bbox.x0,
-                y0=locator.bbox.y0,
-                x1=locator.bbox.x1,
-                y1=locator.bbox.y1,
-            )
-            if locator.bbox is not None
-            else None
-        ),
-        coordinate_frame=(
-            CoordinateFrameDTO(
-                space=locator.coordinate_frame.space.value,
-                page_width=locator.coordinate_frame.page_width,
-                page_height=locator.coordinate_frame.page_height,
-                rotation=locator.coordinate_frame.rotation,
-                transform_version=locator.coordinate_frame.transform_version,
-            )
-            if locator.coordinate_frame is not None
-            else None
-        ),
-        coordinate_transform_version=locator.coordinate_transform_version,
-    )
-
-
 def _gate_dto(gate: GateSummary) -> GateResultDTO:
     return GateResultDTO(
         gate=gate.gate,
@@ -316,7 +257,7 @@ def _page_dto(view: OcrPageView) -> OcrPageDTO:
         selected_corrections=[_correction_dto(c) for c in view.selected_corrections],
         risk_scans=[_scan_dto(s) for s in view.risk_scans],
         risk_reviews=[_review_dto(r) for r in view.risk_reviews],
-        locators=[_locator_dto(l) for l in view.locators],
+        locators=[locator_dto(l) for l in view.locators],
     )
 
 
@@ -758,6 +699,119 @@ def build_processing_revision(
         complete_revision_id=candidate_view.candidate.complete_revision_id,
         created=result.created,
         revision=revision_dto,
+    )
+
+
+# ---------------------------------------------------- 页面视觉核验任务
+
+
+_VISION_TASK_RETRYABLE_STATES = {"failed_final", "failed_retryable"}
+_VISION_TASK_UNKNOWN_STATE_LABEL = "状态待更新"
+_VISION_TASK_MISSING_STATE_LABEL = "暂无页面视觉核验任务"
+
+
+def _vision_service(request: Request) -> SelectiveVisionPostprocessJobService:
+    return request.app.state.selective_vision_postprocess_job_service
+
+
+def _selective_vision_task_dto(
+    view: SelectiveVisionRevisionTaskView,
+) -> SelectiveVisionTaskDTO:
+    """把服务投影翻译为用户可读中文；不暴露模型/日志/工程字段。"""
+    can_retry = bool(
+        view.found
+        and view.state in _VISION_TASK_RETRYABLE_STATES
+        and view.plan_supported
+    )
+    can_cancel = bool(
+        view.found
+        and view.state is not None
+        and view.state not in TERMINAL_JOB_STATES
+        and view.state != "cancel_requested"
+    )
+    if view.state is None:
+        state_label = _VISION_TASK_MISSING_STATE_LABEL
+    else:
+        state_label = JOB_STATE_LABELS.get(view.state, _VISION_TASK_UNKNOWN_STATE_LABEL)
+    return SelectiveVisionTaskDTO(
+        evidence_processing_revision_id=view.evidence_processing_revision_id,
+        found=view.found,
+        job_id=view.job_id,
+        state=view.state,
+        state_label=state_label,
+        cancel_requested=bool(view.cancel_requested),
+        progress_completed=max(int(view.progress_completed), 0),
+        progress_total=max(int(view.progress_total), 0),
+        recovery_action=selective_vision_recovery_action(view.state),
+        can_retry=can_retry,
+        can_cancel=can_cancel,
+        eligible_page_count=view.eligible_page_count,
+        skipped_page_count=view.skipped_page_count,
+        observation_page_count=view.observation_page_count,
+        closed_page_count=view.closed_page_count,
+        closed_reason_label=selective_vision_closed_reason_label(
+            view.closed_failure_kind
+        ),
+        failed_scope_label=selective_vision_failed_scope_label(
+            list(view.failed_step_names)
+        ),
+        created_at=_as_utc_opt(view.created_at),
+        updated_at=_as_utc_opt(view.updated_at),
+    )
+
+
+@router.get(
+    "/api/v2/evidence-processing-revisions/{revision_id}/selective-vision-task",
+    response_model=SelectiveVisionTaskDTO,
+)
+def get_selective_vision_task(
+    revision_id: str, request: Request
+) -> SelectiveVisionTaskDTO:
+    """修订 -> 页面视觉核验任务的稳定查询投影。
+
+    浏览器刷新后凭修订编号即可恢复任务状态，无需保存任务编号；
+    修订不存在按 404 信封返回。
+    """
+    return _selective_vision_task_dto(
+        _vision_service(request).get_revision_task(revision_id)
+    )
+
+
+@router.post(
+    "/api/v2/evidence-processing-revisions/{revision_id}/selective-vision-task/retry",
+    response_model=SelectiveVisionTaskActionDTO,
+)
+def retry_selective_vision_task(
+    revision_id: str, request: Request
+) -> SelectiveVisionTaskActionDTO:
+    """人工重试：服务端先校验任务类型/修订关联/核验方式，再复用失败范围重试。"""
+    result = _vision_service(request).retry_revision_task(revision_id)
+    return SelectiveVisionTaskActionDTO(
+        job_id=result.job_id,
+        state=result.state,
+        state_label=JOB_STATE_LABELS.get(
+            result.state, _VISION_TASK_UNKNOWN_STATE_LABEL
+        ),
+        changed=result.changed,
+    )
+
+
+@router.post(
+    "/api/v2/evidence-processing-revisions/{revision_id}/selective-vision-task/cancel",
+    response_model=SelectiveVisionTaskActionDTO,
+)
+def cancel_selective_vision_task(
+    revision_id: str, request: Request
+) -> SelectiveVisionTaskActionDTO:
+    """停止视觉核验：服务端先校验任务类型与修订关联，再提交持久取消请求。"""
+    result = _vision_service(request).cancel_revision_task(revision_id)
+    return SelectiveVisionTaskActionDTO(
+        job_id=result.job_id,
+        state=result.state,
+        state_label=JOB_STATE_LABELS.get(
+            result.state, _VISION_TASK_UNKNOWN_STATE_LABEL
+        ),
+        changed=result.changed,
     )
 
 

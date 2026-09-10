@@ -7,10 +7,41 @@ from app.domain.contracts.enums import AlignmentStatus, DocumentPart, SourceLoca
 from app.domain.contracts.protocol_ingestion import ProtocolSourceSpan
 from app.protocols.docx_structure import BlockKind, StructureBlock
 from app.protocols.source_alignment import (
+    _downgrade_colliding_ranges,
     align_blocks,
     verify_excerpt_against_blocks,
     verify_excerpt_against_page,
 )
+
+
+def _aligned_span(source_ref: str) -> ProtocolSourceSpan:
+    return ProtocolSourceSpan(
+        source_span_id=f"span-{source_ref}",
+        snapshot_id="snap",
+        source_ref=source_ref,
+        document_part=DocumentPart.BODY,
+        block_order=0,
+        render_artifact_id="render",
+        render_page=1,
+        text_start=4,
+        text_end=12,
+        excerpt="共同范围",
+        precision=SourceLocatorPrecision.TEXT_RANGE,
+        alignment_status=AlignmentStatus.ALIGNED,
+    )
+
+
+def test_collision_exemption_allows_only_one_linear_ancestry_chain():
+    chain = [_aligned_span("p1.t0"), _aligned_span("p1.t0.r0.c0.p0")]
+    assert all(
+        span.alignment_status == AlignmentStatus.ALIGNED
+        for span in _downgrade_colliding_ranges(chain)
+    )
+
+    siblings = chain + [_aligned_span("p1.t0.r0.c1.p0")]
+    downgraded = _downgrade_colliding_ranges(siblings)
+    assert all(span.alignment_status == AlignmentStatus.UNALIGNED for span in downgraded)
+    assert all(span.render_page is None for span in downgraded)
 
 
 def _para(

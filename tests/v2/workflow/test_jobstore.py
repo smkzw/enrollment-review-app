@@ -409,6 +409,43 @@ def test_retry_rejects_non_failed_job(session_factory, clock):
         store.retry_failed("job-1")
 
 
+def test_resume_cancelled_preserves_completed_scope_and_checkpoint(
+    session_factory, clock
+):
+    steps = [
+        {"step_id": "s1", "name": "第一页"},
+        {"step_id": "s2", "name": "第二页", "depends_on": ("s1",)},
+    ]
+    create_job_with_steps(session_factory, clock, job_id="job-1", steps=steps)
+    lease = _claim(session_factory, clock, "w1")
+    with _store(session_factory, clock) as store:
+        store.start_step(lease, "s1")
+        store.complete_step(lease, "s1", checkpoint_payload={"facts": 29})
+        checkpoint_before_cancel = store.get_last_checkpoint("job-1", "s1")
+        assert checkpoint_before_cancel is not None
+        store.request_cancel("job-1")
+        store.cancel_at_boundary(lease)
+
+    with _store(session_factory, clock) as store:
+        outcome = store.resume_cancelled("job-1")
+        checkpoint = store.get_last_checkpoint("job-1", "s1")
+
+    assert outcome.state == "queued"
+    snap = _snapshot(session_factory, clock, "job-1")
+    assert snap.cancel_requested is False
+    assert {step.step_id: step.state for step in snap.steps} == {
+        "s1": "completed",
+        "s2": "queued",
+    }
+    assert checkpoint == checkpoint_before_cancel
+    retry_event = snap.events[-1].event
+    assert retry_event.event_type.value == "retry_scheduled"
+    assert retry_event.payload == {
+        "retry_scope": ["s2"],
+        "resume_cancelled": True,
+    }
+
+
 def test_snapshot_and_event_resume_without_duplicates(session_factory, clock):
     steps = [
         {"step_id": "s1", "name": "解析"},

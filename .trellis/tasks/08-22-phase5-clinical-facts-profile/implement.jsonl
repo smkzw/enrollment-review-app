@@ -10,3 +10,5 @@
 {"file":".trellis/spec/frontend/quality-guidelines.md","reason":"前端测试、构建和宽屏验收要求"}
 {"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"事实、API、投影与证据跳转跨层一致性"}
 {"file":".trellis/tasks/08-22-phase5-clinical-facts-profile/research/current-state-and-conference.md","reason":"当前实现错链、独立会商裁决和明确拒绝项"}
+{"checkpoint":"CHECKPOINT_20260901_FRESH_SUBJECT_RUNTIME_ROUTING_ACCEPTED.md","status":"accepted_infrastructure_only","claims_complete":false,"next":"start isolated V2 with sar31001-fresh and create a new GLM-primary protocol job; do not resume old failed jobs"}
+{"checkpoint":"CHECKPOINT_20260901_SAR_FRESH_PROTOCOL_LIVE_PAUSED.md","status":"lossless_paused","claims_complete":false,"job_id":"da944f6e2a504694bbfbc888fa44d184","progress":"6/10","active_step":"generate_draft","attempt":2,"next":"verify dedicated V2 credential/config loading before controlled recovery; do not start worker 03"}

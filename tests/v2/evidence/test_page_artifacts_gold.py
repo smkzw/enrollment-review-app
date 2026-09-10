@@ -17,7 +17,11 @@ from app.domain.contracts.enums import (
     PageArtifactStatus,
 )
 from app.evidence.artifacts import ArtifactIntegrityError, ArtifactStore
-from app.evidence.page_processor import build_page_artifact, decide_route
+from app.evidence.page_processor import (
+    DECODER_VERSION_BY_KIND,
+    build_page_artifact,
+    decide_route,
+)
 from app.evidence.paging import page_source_document
 from app.storage import ocr_repositories as orr
 from app.storage.evidence_repositories import (
@@ -214,7 +218,7 @@ def test_scanned_image_artifact_is_text_only_no_coordinates(
         assert artifact.native_text_sha256 is None
         assert artifact.native_coordinates_sha256 is None
         assert artifact.rotation == 0
-        assert artifact.decoder_version == "slice4.3/pillow/v1" or artifact.decoder_version == "slice4.3/pdfplumber/v1"
+        assert artifact.decoder_version == DECODER_VERSION_BY_KIND[kind]
 
 
 def test_failed_files_produce_explicit_failed_artifacts(

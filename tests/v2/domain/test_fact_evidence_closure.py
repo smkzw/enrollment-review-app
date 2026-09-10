@@ -54,6 +54,7 @@ from app.domain.gates.fact_evidence_closure import (
     validate_locator_and_text_hash,
     validate_page_coverage,
     derive_source_strength_for_candidate,
+    resolve_source_strength_for_candidate,
     validate_source_strength_for_candidate,
 )
 from app.storage.codecs import encode_contract, to_utc_naive
@@ -89,6 +90,63 @@ def sha(s: str) -> str:
 
 RAW_TEXT = "ALT 5.6 mmol/L 且 AST 3.5 mmol/L"
 RAW_SHA = sha(RAW_TEXT)
+
+
+def test_affirmed_object_may_span_adjacent_same_page_locators(monkeypatch):
+    from app.domain.gates import fact_evidence_closure as closure
+
+    locators = {
+        "loc-1": SimpleNamespace(
+            locator_id="loc-1", page_artifact_id="page-1", ocr_page_id="ocr-1",
+            source_layer=LocatorSourceLayer.RAW_OCR, source_text_sha256=RAW_SHA,
+            text_start=0, text_end=3,
+        ),
+        "loc-2": SimpleNamespace(
+            locator_id="loc-2", page_artifact_id="page-1", ocr_page_id="ocr-1",
+            source_layer=LocatorSourceLayer.RAW_OCR, source_text_sha256=RAW_SHA,
+            text_start=4, text_end=7,
+        ),
+    }
+    texts = {"loc-1": "孟鲁司", "loc-2": "特钠片"}
+    monkeypatch.setattr(
+        closure,
+        "_cached_locator",
+        lambda _session, locator_id, _cache: locators[locator_id],
+    )
+    monkeypatch.setattr(
+        closure,
+        "_localized_locator_text",
+        lambda _session, locator, _revision, *_args, **_kwargs: texts[locator.locator_id],
+    )
+    candidate = _make_fact_candidate(locator_ids=["loc-1", "loc-2"]).model_copy(
+        update={
+            "asserted_object": "孟鲁司特钠片",
+            "raw_value": True,
+            "canonical_value": True,
+            "unit": None,
+            "assertion_basis": AssertionBasis(
+                asserted_object="孟鲁司特钠片",
+                assertion_text="口服孟鲁司特钠片 10 mg",
+                locator_id="loc-1",
+                source_text_sha256=RAW_SHA,
+            ),
+        }
+    )
+
+    assert closure._validate_assertion_text_closure(None, candidate, None) == []
+
+    locators["loc-2"].text_start = 9
+    assert closure._validate_assertion_text_closure(None, candidate, None)
+    locators["loc-2"].text_start = 4
+
+    negated = candidate.model_copy(
+        update={
+            "polarity": FactPolarity.NEGATED,
+            "raw_value": False,
+            "canonical_value": False,
+        }
+    )
+    assert closure._validate_assertion_text_closure(None, negated, None)
 
 # --------------------------------------------------------------------------- 辅助：资料与页
 def _make_authority(
@@ -319,6 +377,7 @@ def _insert_ocr_page_direct(session, *, op_id: str, pa_id: str, page_num: int, r
 
     profile = make_profile()
     cache_key = build_ocr_cache_key(
+        page_artifact_id=pa_id,
         source_sha256=source_sha,
         page_number=page_num,
         ocr_profile_sha256=profile.profile_sha256,
@@ -1938,12 +1997,24 @@ def test_negation_rejects_other_state_denial_in_same_sentence(monkeypatch):
         ("患者无高血压治疗史", False),
         ("高血压：无", True),
         ("高血压：无治疗", False),
+        ("否认糖尿病，有高血压病史", False),
     ],
 )
 def test_negation_relation_respects_asserted_object_boundary(text, accepted):
     from app.domain.gates.fact_evidence_closure import _has_explicit_negation_relation
 
     assert _has_explicit_negation_relation(text, "高血压") is accepted
+
+
+def test_negation_relation_accepts_temporal_scope_before_asserted_object():
+    from app.domain.gates.fact_evidence_closure import _has_explicit_negation_relation
+
+    text = (
+        "患者否认在筛选/导入期及双盲治疗（访视5）期间，"
+        "有离开已知花粉区48小时及以上的旅行计划"
+    )
+
+    assert _has_explicit_negation_relation(text, "旅行计划") is True
 
 
 def test_source_strength_is_derived_from_phase4_metadata_not_free_text(monkeypatch):
@@ -1971,6 +2042,141 @@ def test_source_strength_is_derived_from_phase4_metadata_not_free_text(monkeypat
     verdict = validate_source_strength_for_candidate(None, candidate, revision)
     assert verdict.outcome == GateOutcome.REJECTED
     assert any("Phase 4" in reason for reason in verdict.reasons)
+
+
+@pytest.mark.parametrize(
+    ("declared", "expected"),
+    [
+        ("当前研究病历直接记录", "current_study_chart_direct_record"),
+        ("筛选病历转述", "screening_record_transcription"),
+    ],
+)
+def test_screening_chart_allows_direct_study_records_and_history_transcription(
+    monkeypatch, declared, expected
+):
+    from app.domain.gates import fact_evidence_closure as module
+    from app.storage.evidence_repositories import SourceDocumentMetadataRevisionRepository
+
+    monkeypatch.setattr(
+        module, "_fetch_locator",
+        lambda session, locator_id: SimpleNamespace(source_document_version_id="doc-1"),
+    )
+    monkeypatch.setattr(
+        SourceDocumentMetadataRevisionRepository,
+        "get",
+        lambda self, item_id: SimpleNamespace(
+            source_document_version_id="doc-1",
+            document_type="screening_record",
+            source_party="研究者方",
+        ),
+    )
+    candidate = _make_fact_candidate().model_copy(
+        update={"candidate_source_semantics": declared}
+    )
+    revision = SimpleNamespace(metadata_revision_ids=["meta-1"])
+
+    assert resolve_source_strength_for_candidate(None, candidate, revision).value == expected
+    assert validate_source_strength_for_candidate(None, candidate, revision).outcome == GateOutcome.ACCEPTED
+
+
+def test_screening_chart_cannot_claim_historical_primary_document(monkeypatch):
+    from app.domain.gates import fact_evidence_closure as module
+    from app.storage.evidence_repositories import SourceDocumentMetadataRevisionRepository
+
+    monkeypatch.setattr(
+        module, "_fetch_locator",
+        lambda session, locator_id: SimpleNamespace(source_document_version_id="doc-1"),
+    )
+    monkeypatch.setattr(
+        SourceDocumentMetadataRevisionRepository,
+        "get",
+        lambda self, item_id: SimpleNamespace(
+            source_document_version_id="doc-1",
+            document_type="screening_record",
+            source_party="研究者方",
+        ),
+    )
+    candidate = _make_fact_candidate().model_copy(
+        update={"candidate_source_semantics": "既往原始资料"}
+    )
+
+    verdict = validate_source_strength_for_candidate(
+        None, candidate, SimpleNamespace(metadata_revision_ids=["meta-1"])
+    )
+
+    assert verdict.outcome == GateOutcome.REJECTED
+    assert any("允许范围" in reason for reason in verdict.reasons)
+
+
+@pytest.mark.parametrize(
+    ("document_type", "expected"),
+    [
+        ("检验报告", "contemporaneous_objective_result"),
+        ("实验室检验结果", "contemporaneous_objective_result"),
+        ("筛选病历", "screening_record_transcription"),
+        ("病历资料", "screening_record_transcription"),
+        ("研究病历", "current_study_chart_direct_record"),
+        ("既往病历", "historical_primary_document"),
+    ],
+)
+def test_source_strength_accepts_chinese_native_document_types(
+    monkeypatch, document_type, expected
+):
+    from app.domain.gates import fact_evidence_closure as module
+    from app.storage.evidence_repositories import SourceDocumentMetadataRevisionRepository
+
+    monkeypatch.setattr(
+        module,
+        "_fetch_locator",
+        lambda session, locator_id: SimpleNamespace(source_document_version_id="doc-1"),
+    )
+    monkeypatch.setattr(
+        SourceDocumentMetadataRevisionRepository,
+        "get",
+        lambda self, item_id: SimpleNamespace(
+            source_document_version_id="doc-1",
+            document_type=document_type,
+            source_party="研究者方",
+        ),
+    )
+    strength = derive_source_strength_for_candidate(
+        None, _make_fact_candidate(), SimpleNamespace(metadata_revision_ids=["meta-1"])
+    )
+    assert strength.value == expected
+
+
+@pytest.mark.parametrize(
+    ("source_party", "expected"),
+    [
+        ("外部医院", "historical_primary_document"),
+        ("来源待确认", "unverifiable_source"),
+    ],
+)
+def test_objective_report_does_not_claim_contemporaneous_without_current_site_source(
+    monkeypatch, source_party, expected
+):
+    from app.domain.gates import fact_evidence_closure as module
+    from app.storage.evidence_repositories import SourceDocumentMetadataRevisionRepository
+
+    monkeypatch.setattr(
+        module,
+        "_fetch_locator",
+        lambda session, locator_id: SimpleNamespace(source_document_version_id="doc-1"),
+    )
+    monkeypatch.setattr(
+        SourceDocumentMetadataRevisionRepository,
+        "get",
+        lambda self, item_id: SimpleNamespace(
+            source_document_version_id="doc-1",
+            document_type="检验报告",
+            source_party=source_party,
+        ),
+    )
+
+    strength = derive_source_strength_for_candidate(
+        None, _make_fact_candidate(), SimpleNamespace(metadata_revision_ids=["meta-1"])
+    )
+    assert strength.value == expected
 
 
 def test_three_modules_merge_one_candidate_gate_before_persistence(migrated_session):

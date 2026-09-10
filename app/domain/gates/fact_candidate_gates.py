@@ -36,6 +36,7 @@ from app.domain.contracts.enums import (
     GateOutcome,
 )
 from app.domain.contracts.fact_gates import GateVerdict
+from app.domain.contracts.identifier_value import validate_identifier_value
 from app.domain.contracts.facts import (
     ClinicalEventCandidateV2,
     ClinicalFactCandidateV2,
@@ -138,16 +139,38 @@ def validate_fact_polarity_assertion(candidate: ClinicalFactCandidateV2) -> list
 
 # --------------------------------------------------------------------------- 值 / 单位
 
+_COMPACT_MEASUREMENT_VALUE = re.compile(
+    r"[0-9.+\-<>=/()（）\[\]，,;；:：%％*×xX阳性阴性]+"
+)
+
+
+def _is_compact_measurement_value(value: str) -> bool:
+    """识别仍需独立单位的比较值、多分量值或带定性标记的测量值。"""
+    normalized = "".join(value.split())
+    return bool(re.search(r"\d", normalized)) and bool(
+        _COMPACT_MEASUREMENT_VALUE.fullmatch(normalized)
+    )
+
+
 def validate_fact_value_unit(candidate: ClinicalFactCandidateV2) -> list[str]:
     """校验事实候选的值/单位语义（Gate VALUE_UNIT_DATE_SOURCE 子项）。
 
     - 数值（int/float，非 bool）必须声明单位；无量纲显式使用 ``unitless``；
-    - 非数值（str/bool）不应携带单位；
+    - 紧凑比较值/多分量测量值可用字符串保留原结构并携带单位；
+    - 其他文本或布尔值不应携带单位；
     - 数值必须有限；单位字符串需满足基本格式。
     """
     errors: list[str] = []
     val = candidate.canonical_value
     unit = candidate.unit
+    if candidate.value_kind == "identifier":
+        try:
+            validate_identifier_value(
+                candidate.raw_value, val, unit,
+                candidate.assertion_basis.assertion_text if candidate.assertion_basis else None,
+            )
+        except ValueError as exc:
+            errors.append(str(exc))
 
     # 单位格式先验
     errors.extend(_validate_unit_string(unit, "单位"))
@@ -165,8 +188,9 @@ def validate_fact_value_unit(candidate: ClinicalFactCandidateV2) -> list[str]:
         if isinstance(val, float) and not math.isfinite(val):
             errors.append("候选规范数值必须是有限数")
     else:
-        # 文本/布尔事实不应携带单位（避免把 string 值误标单位）
-        if unit is not None:
+        if unit is not None and not (
+            isinstance(val, str) and _is_compact_measurement_value(val)
+        ):
             errors.append("非数值事实不应携带单位")
         if isinstance(val, str) and _is_blank(val):
             errors.append("文本规范值不能为空或空白")
@@ -392,6 +416,12 @@ def validate_linked_candidate_locator_closure(
     errors = [f"引用了不存在的事实候选 {fact_id}" for fact_id in missing]
     if missing:
         return errors
+
+    if isinstance(candidate, MedicationExposureCandidateV2) and not any(
+        fact_candidates_by_id[fact_id].polarity == FactPolarity.AFFIRMED
+        for fact_id in candidate.fact_candidate_ids
+    ):
+        errors.append("实际药物或治疗暴露必须由至少一条肯定事实支撑，否认事实不能生成暴露")
 
     allowed_locator_ids = {
         locator_id

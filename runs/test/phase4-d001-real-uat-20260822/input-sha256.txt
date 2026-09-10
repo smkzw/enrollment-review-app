@@ -1,9 +1,0 @@
-62ccfd6afa49217be786fa38e85793b5c0debf4751fed176f559acec7c323ee9  runs/test/phase4-d001-real-uat-20260822/codebuddy/input/01-知情病历.pdf
-fff9969be4ddabd8b0a4573d0a267f0e93108de21e461173dc9d5645d5c54f72  runs/test/phase4-d001-real-uat-20260822/codebuddy/input/02-筛选期检查.pdf
-87e0af36398cfd68ab388047c78ffaa8e434479c8450177a807a58ba487691be  runs/test/phase4-d001-real-uat-20260822/codebuddy/input/03-既往病历.pdf
-cfc6cc4299220e0da887164278878609c23de2efc817dc5bfc3470338604e484  runs/test/phase4-d001-real-uat-20260822/minimax/input/01-筛选病历.pdf
-b7c665afed29a07184afc9751ae543c38bfe04108b6f748ba7198b3b00bbe6cf  runs/test/phase4-d001-real-uat-20260822/minimax/input/02-筛选检验检查报告.pdf
-f11732383627e2235dca694b9e2743213740ecabca7598edc6832eb13aea1f27  runs/test/phase4-d001-real-uat-20260822/minimax/input/03-既往病历.pdf
-86ca9ed589b5788c49a40f0f67b8232a2276ce086d3aa89495c3e67d923b31b1  runs/test/phase4-d001-real-uat-20260822/qwen/input/01-筛选期病历.pdf
-99d1a69fdbabb1de496ed03d5677e990df1be6755905d56ab9a9f7649883dc77  runs/test/phase4-d001-real-uat-20260822/qwen/input/02-筛选期检查.pdf
-d4f72cfad76a3cf3ee436b788abd039739a509c2e843cb8ba1a987ed63dfbc23  runs/test/phase4-d001-real-uat-20260822/qwen/input/03-既往病历.pdf

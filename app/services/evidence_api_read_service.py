@@ -44,7 +44,11 @@ from app.evidence.risk import (
     allows_risk_review,
     correction_covers_risk,
 )
-from app.services.evidence_app_errors import AppNotFoundError, app_error_boundary
+from app.services.evidence_app_errors import (
+    AppInternalError,
+    AppNotFoundError,
+    app_error_boundary,
+)
 from app.services.evidence_referenced_document_service import (
     EvidenceReferencedDocumentService,
 )
@@ -962,6 +966,45 @@ class EvidenceApiReadService:
     def source_document_version(self, version_id: str):
         with self.session_factory() as session:
             return SourceDocumentRepository(session).get(version_id)
+
+    @app_error_boundary
+    def locators_by_ids(
+        self,
+        locator_ids: list[str],
+        *,
+        complete_processing_revision_id: str,
+    ) -> dict[str, EvidenceLocatorArtifact]:
+        """批量读取冻结完整修订内的定位，供档案原文深链使用。"""
+        ordered_ids = list(dict.fromkeys(locator_ids))
+        if not ordered_ids:
+            return {}
+        with self.session_factory() as session:
+            complete = self._load_complete(session, complete_processing_revision_id)
+            outside = sorted(set(ordered_ids) - set(complete.locator_ids))
+            try:
+                locators = EvidenceLocatorRepository(
+                    session, self.artifact_store
+                ).get_many(ordered_ids)
+            except NotFoundError as exc:
+                raise AppInternalError(
+                    "病历档案的证据定位与冻结资料版本不一致，无法安全打开原文。"
+                    if outside else "病历档案引用的原文定位已不完整，无法安全打开原文。"
+                ) from exc
+            by_id = {locator.locator_id: locator for locator in locators}
+            for locator_id in outside:
+                from app.storage.page_review_visual_locator_validation import verify_visual_locator
+
+                locator = by_id[locator_id]
+                if locator.page_review_visual is None:
+                    raise AppInternalError("病历档案的证据定位与资料版本不一致，暂时无法打开原文。")
+                coverage = verify_visual_locator(session, locator)
+                if (coverage.evidence_processing_revision_id, coverage.evidence_snapshot_id,
+                    coverage.review_episode_id) != (
+                    complete.evidence_processing_revision_id, complete.evidence_snapshot_id,
+                    complete.review_episode_id
+                ):
+                    raise AppInternalError("病历档案的证据定位与资料版本不一致，暂时无法打开原文。")
+            return {locator.locator_id: locator for locator in locators}
 
     @app_error_boundary
     def source_document_metadata_heads(

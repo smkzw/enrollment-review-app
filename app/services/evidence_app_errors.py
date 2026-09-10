@@ -34,6 +34,7 @@ __all__ = [
     "AppDuplicateRecordError",
     "AppEvidenceReviewIncompleteError",
     "AppEvidenceUploadError",
+    "AppFactCorrectionError",
     "AppIdempotencyConflictError",
     "AppInternalError",
     "AppInvalidReferenceError",
@@ -45,6 +46,8 @@ __all__ = [
     "AppRiskReviewError",
     "AppRollbackTargetError",
     "AppScopeMismatchError",
+    "AppSelectiveVisionPlanUnsupportedError",
+    "AppStaleAuthorityError",
     "AppStaleRevisionError",
     "AppSubjectInUseError",
     "EvidenceAppError",
@@ -275,6 +278,22 @@ class AppStaleRevisionError(EvidenceAppError):
         }
 
 
+class AppFactCorrectionError(EvidenceAppError):
+    """人工事实修订请求无法执行。"""
+
+    status_code = 422
+    code = "FACT_CORRECTION_REJECTED"
+    title = "事实记录无法按当前内容修订"
+    recovery = "请核对原文、拟修改内容和理由后重新提交。"
+
+
+class AppStaleAuthorityError(EvidenceAppError):
+    status_code = 409
+    code = "STALE_AUTHORITY"
+    title = "审核节点证据已更新"
+    recovery = "请刷新病历档案后重新核对原文并提交；本次修订没有写入。"
+
+
 class AppIdempotencyConflictError(EvidenceAppError):
     """同幂等键已绑定不同命令：409 且不产生新历史。"""
 
@@ -444,6 +463,15 @@ class AppBuildConfigurationError(EvidenceAppError):
     code = "BUILD_CONFIGURATION_UNAVAILABLE"
     title = "当前资料处理方式已更新"
     recovery = "请刷新页面后重试；系统将自动使用当前的识别核对方式。"
+
+
+class AppSelectiveVisionPlanUnsupportedError(EvidenceAppError):
+    """视觉核验任务使用的规划版本与当前系统不一致：人工重试无法成功。"""
+
+    status_code = 409
+    code = "VISION_PLAN_UNSUPPORTED"
+    title = "该视觉核验任务使用的核验方式已过期"
+    recovery = "请在重新处理资料后建立新的页面视觉核验任务；本任务无法在当前系统下重试。"
 
 
 class AppNonCompleteRevisionError(EvidenceAppError):
@@ -796,6 +824,29 @@ def translate_storage_error(exc: Exception) -> EvidenceAppError | None:
             submitted={},
             detail="完整处理修订闭包不完整，请重新构建。",
         )
+    from app.services.fact_correction_service import (
+        FactCorrectionError,
+        FactCorrectionStaleError,
+        FactCorrectionValidationError,
+    )
+    from app.storage.fact_authority import FactAuthorityError, FactLocatorReferenceError
+    from app.storage.fact_correction_repository import FactCorrectionRevisionError
+
+    if isinstance(exc, FactCorrectionStaleError) or isinstance(exc, FactAuthorityError):
+        return AppStaleAuthorityError(str(exc) or None)
+    if isinstance(
+        exc,
+        (
+            FactCorrectionValidationError,
+            FactCorrectionRevisionError,
+            FactLocatorReferenceError,
+            FactCorrectionError,
+        ),
+    ):
+        status = 409 if isinstance(exc, FactCorrectionRevisionError) else 422
+        mapped = AppFactCorrectionError(str(exc) or None)
+        mapped.status_code = status
+        return mapped
     return None
 
 

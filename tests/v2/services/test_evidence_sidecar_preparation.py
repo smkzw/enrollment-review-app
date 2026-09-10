@@ -30,8 +30,12 @@ from app.services.evidence_revision_workflow import (
     EvidenceRevisionBuildRequest,
     EvidenceRevisionWorkflow,
 )
-from app.services.evidence_sidecar_preparation import EvidenceSidecarPreparationService
+from app.services.evidence_sidecar_preparation import (
+    EvidenceSidecarPreparationService,
+    SOURCE_LINE_TARGET_PREFIX,
+)
 from app.storage.evidence_locator_repositories import (
+    CompleteEvidenceProcessingRevisionRepository,
     CorrectionRepository,
     OCRRiskReviewRepository,
     OCRRiskScanRepository,
@@ -96,6 +100,13 @@ def test_incremental_reuses_unchanged_reviews_and_corrections_on_new_base(
         CorrectionRepository(current).create(_correction(keys))
         raw_ocr_locators = current.query(EvidenceLocatorArtifactRecord).all()
         assert raw_ocr_locators
+        source_line_locators = [
+            item
+            for item in raw_ocr_locators
+            if item.target_id.startswith(SOURCE_LINE_TARGET_PREFIX)
+        ]
+        assert source_line_locators
+        assert any(item.excerpt in RAW_TEXT for item in source_line_locators)
         assert all(item.source_layer == "raw_ocr" for item in raw_ocr_locators)
         assert all(item.precision == "text_range" for item in raw_ocr_locators)
         assert all(item.bbox_x0 is None for item in raw_ocr_locators)
@@ -117,6 +128,16 @@ def test_incremental_reuses_unchanged_reviews_and_corrections_on_new_base(
         )
     )
     first_built = workflow.run_build(first_candidate.candidate_id)
+    with session_factory() as current:
+        complete = CompleteEvidenceProcessingRevisionRepository(
+            current, keys["artifact_store"]
+        ).get(first_built.complete_revision_id)
+        source_line_ids = {
+            item.locator_id
+            for item in current.query(EvidenceLocatorArtifactRecord).all()
+            if item.target_id.startswith(SOURCE_LINE_TARGET_PREFIX)
+        }
+    assert source_line_ids <= set(complete.locator_ids)
     EvidenceActivationService(session_factory, keys["artifact_store"]).activate(
         target_snapshot_id="snap-1",
         target_revision_id=first_built.complete_revision_id,

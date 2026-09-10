@@ -110,7 +110,8 @@ _SLICE44_EPR_DISCRIMINATOR_COLUMNS = frozenset(
 #: 0012 追加的页级原子风险核对审计表；同样不属于 0007/0008a/0009/0010/0011 schema。
 PAGE_REVIEW_TABLES = frozenset({"ocr_risk_page_reviews"})
 
-#: 0013 追加的 Phase 5 v2 临床事实/Profile 表；同样不属于 0007-0012 任一 schema。
+#: 0013 起追加的 Phase 5 v2 临床事实/Profile 表；同样不属于此前任一 schema。
+#: 集中维护这组排除项，避免后续 Phase 5 迁移污染历史版本的 metadata 快照。
 PHASE5_V2_TABLES = frozenset(
     {
         "fact_normalization_runs",
@@ -125,9 +126,21 @@ PHASE5_V2_TABLES = frozenset(
         "exposure_fact_links",
         "clinical_conflict_groups_v2",
         "clinical_conflict_members_v2",
+        "clinical_conflict_event_members_v2",
+        "clinical_conflict_exposure_members_v2",
         "fact_rule_links_v2",
         "evidence_expectations_v2",
         "patient_profile_revisions_v2",
+        "fact_normalization_unresolved_items",
+        "fact_corrections",
+        "fact_correction_commits",
+        "fact_correction_conflict_outcomes",
+        "selective_vision_observations",
+        "page_review_records",
+        "page_reconciliations",
+        "page_reconciliation_reviews",
+        "subject_page_coverages",
+        "subject_page_coverage_entries",
     }
 )
 

@@ -292,7 +292,9 @@ def _seed_populated_0009(data_paths) -> dict:
                 "status": "succeeded",
                 "failure_reason": None,
             })
+            # 历史行按 v1（仅内容键）身份持久化；OCRPage 校验仍接受 v1 解码。
             cache_key = ocr_page_cache_hash(
+                page_artifact_id="pa-1",
                 source_sha256=_SHA,
                 page_number=1,
                 ocr_profile_sha256=profile_sha,

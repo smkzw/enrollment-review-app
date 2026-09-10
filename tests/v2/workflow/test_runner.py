@@ -201,6 +201,32 @@ def test_cancel_requested_between_steps_stops_before_next_step(session_factory, 
     assert "step_completed" in kinds  # 历史事件保留
 
 
+def test_maintenance_notifies_cancelled_after_expired_inflight_request(
+    session_factory, clock
+):
+    create_job_with_steps(session_factory, clock, job_id="job-1", steps=TWO_STEPS)
+    with _store(session_factory, clock) as store:
+        assert store.claim_job("job-1", "lost-worker") is not None
+        store.request_cancel("job-1")
+    expire_lease(
+        session_factory,
+        "job-1",
+        before=clock.now() - timedelta(seconds=1),
+    )
+    cancelled: list[str] = []
+    runner = JobRunner(
+        session_factory,
+        {"demo": lambda _ctx: {}},
+        now=clock.now,
+        on_cancelled=cancelled.append,
+    )
+
+    runner._maintenance()
+
+    assert job_state(session_factory, "job-1") == "cancelled"
+    assert cancelled == ["job-1"]
+
+
 def test_process_death_before_commit_leaves_job_for_recovery(session_factory, clock):
     # 中断步骤必须有剩余尝试预算，恢复器才会重新排队（design.md §5）。
     steps = [
@@ -300,6 +326,38 @@ def test_heartbeat_recovers_after_local_clock_jumps_past_lease(session_factory, 
     snap = _snapshot(session_factory, clock, "job-1")
     assert snap.state == "completed"
     assert snap.steps[0].attempt == 1
+
+
+def test_heartbeat_lease_loss_does_not_mark_step_failed(
+    session_factory, clock, monkeypatch
+):
+    """执行权已经转移时只丢弃结果，不产生伪造的步骤失败事件。"""
+    create_job_with_steps(
+        session_factory,
+        clock,
+        job_id="job-lease-lost",
+        steps=[{"step_id": "s1", "name": "解析", "retryable": True, "max_attempts": 3}],
+    )
+    monkeypatch.setattr(JobStore, "renew_lease", lambda self, lease: False)
+
+    def executor(_ctx: StepContext) -> dict:
+        time.sleep(0.2)
+        return {"prepared": True}
+
+    runner = JobRunner(
+        session_factory,
+        {"demo": executor},
+        worker_id="w-lease-lost",
+        now=clock.now,
+        lease_ttl=timedelta(seconds=0.15),
+    )
+    assert runner.run_job("job-lease-lost") is True
+    snap = _snapshot(session_factory, clock, "job-lease-lost")
+    assert snap.state == "running"
+    assert snap.steps[0].state == "running"
+    assert all(
+        row.event.event_type.value != "step_failed" for row in snap.events
+    )
 
 
 def test_missing_executor_fails_final_with_typed_error(session_factory, clock):

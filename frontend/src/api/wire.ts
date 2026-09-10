@@ -83,6 +83,7 @@ export interface ReviewEpisodeWire {
 }
 
 export interface GapCountsWire {
+  observation_unverified?: number;
   record_incomplete?: number;
   description_insufficient?: number;
   historical_source_unavailable?: number;
@@ -308,6 +309,10 @@ export type AnchorTypeWire =
   | "screening_date"
   | "baseline_date"
   | "randomization_date"
+  | "first_dose_date"
+  | "study_drug_administration_date"
+  | "last_dose_date"
+  | "study_completion_date"
   | "event_date";
 
 export type TimeDirectionWire = "before" | "after" | "on";
@@ -322,6 +327,10 @@ export interface TimeConstraintWire {
   direction: TimeDirectionWire;
   lower_bound_days: number | null;
   upper_bound_days: number | null;
+  lower_bound: TimeQuantityWire | null;
+  upper_bound: TimeQuantityWire | null;
+  lower_bound_inclusive: boolean;
+  upper_bound_inclusive: boolean;
   half_life_multiplier: number | null;
   allow_partial_date: boolean;
 }

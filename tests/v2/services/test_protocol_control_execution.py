@@ -1,0 +1,769 @@
+"""Deterministic end-to-end checks for protocol-control execution."""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+import hashlib
+import json
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from app.agents.protocol_control_deconstructor import (
+    CONTROL_AGENT_WIRE_VERSION,
+    CONTROL_DISCOVERY_WIRE_VERSION,
+    ProtocolControlAgentResponse,
+    ProtocolControlDiscoveryAgentResponse,
+)
+from app.domain.contracts.enums import ReviewStage
+from app.domain.contracts.protocol_controls import (
+    ControlObligationKind,
+    ProtocolControlDiscoveryDisposition,
+    ReviewNodeRole,
+    StructureUnitDispositionKind,
+)
+from app.domain.contracts.rules import WorkflowStage
+from app.protocols.deconstruction_service import ProtocolDeconstructionInputAssembler
+from app.protocols.docx_structure import StructureExtraction, serialize_blocks
+from app.protocols.protocol_control_gate import ProtocolControlGateError
+from app.services import protocol_control_execution as protocol_control_execution_module
+from app.services.job_service import JobService, StepSpec
+from app.services.protocol_control_execution import (
+    CANDIDATE_CONTROL_PACKAGE_RESULT_KIND,
+    FORMAL_CATALOG_STATUS_NOT_MATERIALIZED,
+    PROTOCOL_CONTROL_EXECUTION_JOB_TYPE,
+    ProtocolControlExecutorConfig,
+    ProtocolControlJobService,
+    create_protocol_control_executor,
+)
+from app.services.protocol_workbench_service import PROTOCOL_DECONSTRUCTION_JOB_TYPE
+from app.storage.codecs import verify_payload_sha256
+from app.workflow.errors import ProcessDeath
+from app.workflow.jobstore import JobStore
+from app.workflow.recovery import recover_expired_jobs
+from app.workflow.runner import JobRunner, StepContext
+
+from tests.v2.protocols.test_deconstruction_service import _synthetic_fixture
+
+
+NOW = datetime(2026, 8, 14, tzinfo=timezone.utc)
+_DB_NOW = datetime(2026, 8, 14)
+_SOURCE_STEP_ORDER = (
+    "register_file",
+    "extract_structure",
+    "render_and_align",
+    "identify_identity_phase",
+    "await_identity_confirm",
+    "freeze_deconstruction_input",
+)
+
+
+def _now() -> datetime:
+    return _DB_NOW
+
+
+@dataclass(frozen=True)
+class _Seed:
+    source_job_id: str
+    snapshot_path: Path
+    source_span_excerpts: dict[str, str]
+    workflow_stages: tuple[WorkflowStage, ...]
+
+
+def _seed_frozen_source(data_paths, session_factory, *, key: str) -> _Seed:
+    fixture = _synthetic_fixture()
+    blocks = fixture.extraction.blocks
+    serialized = serialize_blocks(blocks)
+    content_sha256 = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+    snapshot = fixture.extraction.snapshot.model_copy(
+        update={
+            "content_sha256": content_sha256,
+            "content_storage_ref": f"blobs/protocol_blocks/{key}.json",
+        }
+    )
+    extraction = StructureExtraction(blocks=blocks, snapshot=snapshot)
+    package = ProtocolDeconstructionInputAssembler(frozen_at=NOW).assemble(
+        project_id="execution-project",
+        protocol_version_id="execution-protocol",
+        source_artifact=fixture.artifact,
+        extraction=extraction,
+        source_spans=fixture.spans,
+        phase_graph=fixture.phase_graph,
+        identity_decision=fixture.identity,
+        phase_selection=fixture.selection,
+    )
+
+    snapshot_path = data_paths.blobs_dir / snapshot.content_storage_ref
+    snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+    snapshot_path.write_text(serialized, encoding="utf-8")
+
+    steps: list[StepSpec] = []
+    previous: str | None = None
+    for step_id in _SOURCE_STEP_ORDER:
+        steps.append(
+            StepSpec(
+                step_id=step_id,
+                name=step_id,
+                depends_on=(previous,) if previous is not None else (),
+            )
+        )
+        previous = step_id
+    source = JobService(session_factory, now=_now).create_job(
+        idempotency_key=key,
+        job_type=PROTOCOL_DECONSTRUCTION_JOB_TYPE,
+        payload={"source_input": package.source_input.model_dump(mode="json")},
+        steps=steps,
+    )
+
+    checkpoint = {
+        "source_input": package.source_input.model_dump(mode="json"),
+        "extraction_snapshot": snapshot.model_dump(mode="json"),
+        "phase_graph": fixture.phase_graph.model_dump(mode="json"),
+        "phase_projection": package.projection.model_dump(mode="json"),
+        "source_spans": {
+            span_id: span.model_dump(mode="json")
+            for span_id, span in package.source_spans.items()
+        },
+    }
+    with session_factory() as session, session.begin():
+        store = JobStore(session, now=_now)
+        lease = store.claim_job(source.job_id, "source-seed")
+        assert lease is not None
+        for step in steps:
+            store.start_step(lease, step.step_id)
+            store.complete_step(lease, step.step_id, checkpoint_payload=checkpoint)
+        store.finish_success(lease)
+
+    workflow_stages = tuple(
+        WorkflowStage(
+            workflow_stage_id=f"workflow-{item.item_id}",
+            stage=item.review_stage,
+            display_name=f"stage-{item.item_id}",
+            visit_instance=item.visit_instance,
+        )
+        for item in package.source_input.required_procedure_catalog.items
+    )
+    assert all(isinstance(stage.stage, ReviewStage) for stage in workflow_stages)
+    source_span_excerpts = {
+        span_id: span.excerpt
+        for span_id, span in package.source_spans.items()
+        if span.excerpt
+    }
+    return _Seed(
+        source_job_id=source.job_id,
+        snapshot_path=snapshot_path,
+        source_span_excerpts=source_span_excerpts,
+        workflow_stages=workflow_stages,
+    )
+
+
+def _build_service(data_paths, session_factory, seed: _Seed, **overrides: Any):
+    config = {
+        "max_discovery_units_per_batch": 256,
+        "discovery_context_radius": 1,
+        "max_deep_units_per_batch": 2,
+        "actor": "system",
+        "workflow_stages": seed.workflow_stages,
+        "now": _now,
+    }
+    config.update(overrides)
+    return ProtocolControlJobService(
+        session_factory,
+        data_paths=data_paths,
+        **config,
+    )
+
+
+def test_service_derives_unique_workflow_nodes_from_frozen_source(
+    data_paths,
+    session_factory,
+) -> None:
+    seed = _seed_frozen_source(data_paths, session_factory, key="derived-workflow")
+    result = ProtocolControlJobService(
+        session_factory,
+        data_paths=data_paths,
+        max_discovery_units_per_batch=256,
+        now=_now,
+    ).create_from_deconstruction(
+        source_job_id=seed.source_job_id,
+        idempotency_key="derived-workflow-control",
+    )
+
+    with session_factory() as session:
+        job = JobStore(session, now=_now).get_job(result.job_id)
+    payload = json.loads(job.payload_json)
+    procedures = payload["source_input"]["required_procedure_catalog"]["items"]
+    stages = payload["workflow_stages"]
+    procedure_keys = {
+        (item["review_stage"], item["visit_instance"]) for item in procedures
+    }
+    stage_keys = {(item["stage"], item["visit_instance"]) for item in stages}
+
+    assert stage_keys == procedure_keys
+    assert len(stages) == len(stage_keys)
+    assert len({item["workflow_stage_id"] for item in stages}) == len(stages)
+    assert all(item["display_name"] == item["visit_instance"] for item in stages)
+
+
+def _build_runner(data_paths, session_factory, discovery, deep):
+    executor = create_protocol_control_executor(
+        ProtocolControlExecutorConfig(
+            data_paths=data_paths,
+            session_factory=session_factory,
+            now=_now,
+            discovery_transport=discovery,
+            deep_transport=deep,
+        )
+    )
+    return JobRunner(
+        session_factory,
+        {PROTOCOL_CONTROL_EXECUTION_JOB_TYPE: executor},
+        worker_id="execution-test-worker",
+        now=_now,
+        sleep=lambda _seconds: None,
+    ), executor
+
+
+def _prompt_payload(prompt: str, marker: str) -> dict[str, Any]:
+    return json.loads(prompt.split(marker, 1)[1].split("\n\n", 1)[0])
+
+
+class _DiscoveryTransport:
+    def __init__(self, *, invalid: bool = False) -> None:
+        self.invalid = invalid
+        self.start_calls = 0
+        self.continue_calls = 0
+        self.routing: dict[str, ProtocolControlDiscoveryDisposition] = {}
+        self.candidate_unit_ids: set[str] = set()
+
+    def _response(self, prompt: str) -> ProtocolControlDiscoveryAgentResponse:
+        payload = _prompt_payload(prompt, "本次发现输入：")
+        units = payload["target_units"]
+        if self.invalid:
+            return ProtocolControlDiscoveryAgentResponse(session_id="discovery-session", text="{}")
+
+        for unit in units:
+            unit_id = unit["structure_unit_id"]
+            if unit_id in self.routing:
+                continue
+            if unit.get("excerpt", "").strip() and len(self.candidate_unit_ids) < 4:
+                disposition = (
+                    ProtocolControlDiscoveryDisposition.CANDIDATE
+                    if len(self.candidate_unit_ids) % 2 == 0
+                    else ProtocolControlDiscoveryDisposition.UNCERTAIN
+                )
+                self.candidate_unit_ids.add(unit_id)
+            else:
+                disposition = (
+                    ProtocolControlDiscoveryDisposition.CONTEXT_ONLY
+                    if len(self.routing) % 2 == 0
+                    else ProtocolControlDiscoveryDisposition.NON_CONTROL
+                )
+            self.routing[unit_id] = disposition
+
+        decisions = [
+            {
+                "structure_unit_id": unit["structure_unit_id"],
+                "disposition": self.routing[unit["structure_unit_id"]].value,
+                "required_context_structure_unit_ids": [],
+                "rationale": "synthetic routing",
+            }
+            for unit in units
+        ]
+        return ProtocolControlDiscoveryAgentResponse(
+            session_id="discovery-session",
+            text=json.dumps(
+                {
+                    "wire_version": CONTROL_DISCOVERY_WIRE_VERSION,
+                    "decisions": decisions,
+                },
+                ensure_ascii=False,
+            ),
+        )
+
+    def start(self, *, prompt: str) -> ProtocolControlDiscoveryAgentResponse:
+        self.start_calls += 1
+        return self._response(prompt)
+
+    def continue_session(
+        self,
+        *,
+        session_id: str,
+        prompt: str,
+    ) -> ProtocolControlDiscoveryAgentResponse:
+        self.continue_calls += 1
+        raise AssertionError(f"automatic discovery repair unexpectedly opened {session_id}")
+
+
+class _DeepTransport:
+    def __init__(
+        self,
+        source_span_excerpts: dict[str, str],
+        *,
+        invalid: bool = False,
+        process_death_once: bool = False,
+    ) -> None:
+        self.source_span_excerpts = source_span_excerpts
+        self.invalid = invalid
+        self.process_death_once = process_death_once
+        self.start_calls = 0
+        self.continue_calls = 0
+        self.owned_batches: list[tuple[str, ...]] = []
+        self._death_raised = False
+
+    def _response(self, prompt: str) -> ProtocolControlAgentResponse:
+        payload = _prompt_payload(prompt, "本次冻结输入：")
+        units = payload["owned_units"]
+        self.owned_batches.append(tuple(unit["structure_unit_id"] for unit in units))
+        if self.invalid:
+            return ProtocolControlAgentResponse(session_id="deep-session", text="{}")
+
+        targets = payload["known_workflow_stage_targets"]
+        assert targets
+        stage = targets[0]
+        dispositions = []
+        candidates = []
+        for unit in units:
+            unit_id = unit["structure_unit_id"]
+            span_ids = sorted(unit["source_span_ids"])
+            excerpts = [
+                self.source_span_excerpts.get(span_id, unit["excerpt"])
+                for span_id in span_ids
+            ]
+            assert all(excerpt.strip() for excerpt in excerpts)
+            dispositions.append(
+                {
+                    "structure_unit_id": unit_id,
+                    "disposition": StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE.value,
+                    "linked_official_code": None,
+                    "linked_procedure_catalog_item_id": None,
+                    "linked_procedure_catalog_item_ids": [],
+                    "notes": "synthetic candidate",
+                }
+            )
+            candidates.append(
+                {
+                    "title": "candidate package",
+                    "applicable_population": "selected scope",
+                    "applicability_expression": None,
+                    "trigger_expression": None,
+                    "obligation_expression": {
+                        "groups": [
+                            {
+                                "atoms": [
+                                    {
+                                        "kind": ControlObligationKind.REACH_CONDITION.value,
+                                        "statement": "record source state",
+                                        "time_constraint": None,
+                                        "prospective_period": None,
+                                        "modality": "mandatory",
+                                        "temporal_scope": None,
+                                        "source_span_ids": span_ids,
+                                        "source_excerpts": excerpts,
+                                        "requires_professional_judgment": False,
+                                    }
+                                ],
+                                "applies_to_trigger_branch_indexes": [],
+                            }
+                        ]
+                    },
+                    "exception_expression": None,
+                    "review_node_bindings": [
+                        {
+                            "workflow_stage_id": stage["workflow_stage_id"],
+                            "review_stage": stage["review_stage"],
+                            "role": ReviewNodeRole.DECIDE_AT_NODE.value,
+                            "guidance": None,
+                        }
+                    ],
+                    "minimum_evidence": [
+                        {
+                            "fact_type": "source",
+                            "description": "source evidence",
+                            "due_stage": stage["review_stage"],
+                            "required_source_types": ["source"],
+                        }
+                    ],
+                    "source_structure_unit_ids": [unit_id],
+                    "source_span_ids": span_ids,
+                    "cross_source_relations": [],
+                }
+            )
+        return ProtocolControlAgentResponse(
+            session_id="deep-session",
+            text=json.dumps(
+                {
+                    "wire_version": CONTROL_AGENT_WIRE_VERSION,
+                    "dispositions": dispositions,
+                    "candidate_drafts": candidates,
+                },
+                ensure_ascii=False,
+            ),
+        )
+
+    def start(self, *, prompt: str) -> ProtocolControlAgentResponse:
+        self.start_calls += 1
+        if self.process_death_once and not self._death_raised:
+            self._death_raised = True
+            raise ProcessDeath()
+        return self._response(prompt)
+
+    def continue_session(
+        self,
+        *,
+        session_id: str,
+        prompt: str,
+    ) -> ProtocolControlAgentResponse:
+        self.continue_calls += 1
+        raise AssertionError(f"automatic deep repair unexpectedly opened {session_id}")
+
+
+class _RepairingDeepTransport(_DeepTransport):
+    def __init__(self, source_span_excerpts: dict[str, str]) -> None:
+        super().__init__(source_span_excerpts)
+        self._last_response: ProtocolControlAgentResponse | None = None
+
+    def start(self, *, prompt: str) -> ProtocolControlAgentResponse:
+        self.start_calls += 1
+        self._last_response = self._response(prompt)
+        return self._last_response
+
+    def continue_session(
+        self,
+        *,
+        session_id: str,
+        prompt: str,
+    ) -> ProtocolControlAgentResponse:
+        self.continue_calls += 1
+        assert self._last_response is not None
+        assert session_id == self._last_response.session_id
+        return self._last_response
+
+
+def _job_snapshot_and_payload(session_factory, job_id: str):
+    with session_factory() as session:
+        store = JobStore(session, now=_now)
+        job = store.get_job(job_id)
+        return (
+            store.snapshot(job_id),
+            verify_payload_sha256(job.payload_json, job.payload_sha256),
+        )
+
+
+def test_service_reuses_frozen_snapshot_and_builds_candidate_package(
+    data_paths,
+    session_factory,
+):
+    seed = _seed_frozen_source(data_paths, session_factory, key="full-pipeline")
+    discovery = _DiscoveryTransport()
+    deep = _DeepTransport(seed.source_span_excerpts)
+    service = _build_service(data_paths, session_factory, seed)
+    result = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id,
+        idempotency_key="control-full-pipeline",
+    )
+    seed.snapshot_path.unlink()
+    runner, executor = _build_runner(data_paths, session_factory, discovery, deep)
+
+    assert runner.run_job(result.job_id)
+    snapshot, payload = _job_snapshot_and_payload(session_factory, result.job_id)
+    assert snapshot.state == "completed"
+    step_ids = {step.step_id for step in snapshot.steps}
+    assert {"deterministic_closure", "hydrate", "gate"} <= step_ids
+    assert {step_id for step_id in step_ids if step_id.startswith("deep_")} == {
+        "deep_0001",
+        "deep_0002",
+    }
+    assert set().union(*map(set, deep.owned_batches)) == discovery.candidate_unit_ids
+    assert all(set(batch) <= discovery.candidate_unit_ids for batch in deep.owned_batches)
+
+    with session_factory() as session:
+        gate_checkpoint = JobStore(session, now=_now).get_last_checkpoint(
+            result.job_id, "gate"
+        )
+    assert gate_checkpoint is not None
+    _, gate = gate_checkpoint
+    assert gate["result_kind"] == CANDIDATE_CONTROL_PACKAGE_RESULT_KIND
+    assert gate["formal_catalog_status"] == FORMAL_CATALOG_STATUS_NOT_MATERIALIZED
+    assert "catalog" not in gate
+    assert gate["batch_dispositions"]
+    assert gate["candidate_ids"]
+    assert set(gate["candidate_ids"]) == {
+        candidate_id
+        for batch in gate["batch_dispositions"]
+        for candidate in batch["candidates"]
+        for candidate_id in [candidate["control_candidate_id"]]
+    }
+    assert payload["source_snapshot_id"] == result.snapshot_id
+
+    gate_step = next(step for step in snapshot.steps if step.step_id == "gate")
+    replay_context = StepContext(
+        job_id=result.job_id,
+        job_type=PROTOCOL_CONTROL_EXECUTION_JOB_TYPE,
+        job_payload=payload,
+        step_id="gate",
+        name=gate_step.name,
+        attempt=gate_step.attempt,
+        last_checkpoint_id=gate_checkpoint[0],
+        last_checkpoint=gate,
+        max_attempts=gate_step.max_attempts,
+    )
+    starts_before = (discovery.start_calls, deep.start_calls)
+    assert executor(replay_context) == gate
+    assert (discovery.start_calls, deep.start_calls) == starts_before
+
+
+def test_deep_publication_gate_repairs_in_the_originating_session(
+    data_paths,
+    session_factory,
+    monkeypatch,
+) -> None:
+    seed = _seed_frozen_source(data_paths, session_factory, key="deep-gate-repair")
+    discovery = _DiscoveryTransport()
+    deep = _RepairingDeepTransport(seed.source_span_excerpts)
+    real_validator = (
+        protocol_control_execution_module.validate_protocol_control_batch_candidates
+    )
+    validator_calls = 0
+
+    def reject_once(batch, output):
+        nonlocal validator_calls
+        validator_calls += 1
+        if validator_calls == 1:
+            candidate = output.candidates[0]
+            raise ProtocolControlGateError(
+                "MIXED_DECISION_STAGE_CONTROL",
+                "当前操作与后续节点有效性必须拆分",
+                entity_id=candidate.control_candidate_id,
+                structure_unit_ids=candidate.frozen_structure_unit_ids,
+                candidate_ids=(candidate.control_candidate_id,),
+            )
+        return real_validator(batch, output)
+
+    monkeypatch.setattr(
+        protocol_control_execution_module,
+        "validate_protocol_control_batch_candidates",
+        reject_once,
+    )
+    result = _build_service(
+        data_paths,
+        session_factory,
+        seed,
+        max_deep_units_per_batch=256,
+    ).create_from_deconstruction(
+        source_job_id=seed.source_job_id,
+        idempotency_key="control-deep-gate-repair",
+    )
+    runner, _ = _build_runner(data_paths, session_factory, discovery, deep)
+
+    assert runner.run_job(result.job_id)
+    snapshot, _ = _job_snapshot_and_payload(session_factory, result.job_id)
+    assert snapshot.state == "completed"
+    assert deep.start_calls == 1
+    assert deep.continue_calls == 1
+    with session_factory() as session:
+        deep_step = next(
+            step for step in snapshot.steps if step.step_id.startswith("deep_")
+        )
+        checkpoint = JobStore(session, now=_now).get_last_checkpoint(
+            result.job_id,
+            deep_step.step_id,
+        )
+    assert checkpoint is not None
+    attempts = checkpoint[1]["run_result"]["attempts"]
+    assert [attempt["outcome"] for attempt in attempts] == [
+        "publication_invalid",
+        "parsed",
+    ]
+    assert {attempt["session_id"] for attempt in attempts} == {"deep-session"}
+
+
+def test_uncertain_discovery_is_final_without_blind_retry(data_paths, session_factory):
+    seed = _seed_frozen_source(data_paths, session_factory, key="discovery-review")
+    discovery = _DiscoveryTransport(invalid=True)
+    deep = _DeepTransport(seed.source_span_excerpts)
+    service = _build_service(
+        data_paths,
+        session_factory,
+        seed,
+        discovery_max_schema_repairs=0,
+    )
+    result = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id,
+        idempotency_key="control-discovery-review",
+    )
+    runner, _ = _build_runner(data_paths, session_factory, discovery, deep)
+
+    assert runner.run_job(result.job_id)
+    snapshot, _ = _job_snapshot_and_payload(session_factory, result.job_id)
+    assert snapshot.state == "failed_final"
+    discovery_step = next(
+        step for step in snapshot.steps if step.step_id.startswith("discovery_")
+    )
+    assert discovery_step.state == "failed_final"
+    assert discovery_step.error_code == "PROTOCOL_CONTROL_DISCOVERY_NEEDS_REVIEW"
+    assert discovery.start_calls == 1
+    assert discovery.continue_calls == 0
+    assert not runner.run_job(result.job_id)
+    assert discovery.start_calls == 1
+
+
+def test_uncertain_deep_is_final_without_blind_retry(data_paths, session_factory):
+    seed = _seed_frozen_source(data_paths, session_factory, key="deep-review")
+    discovery = _DiscoveryTransport()
+    deep = _DeepTransport(seed.source_span_excerpts, invalid=True)
+    service = _build_service(
+        data_paths,
+        session_factory,
+        seed,
+        deep_max_schema_repairs=0,
+    )
+    result = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id,
+        idempotency_key="control-deep-review",
+    )
+    runner, _ = _build_runner(data_paths, session_factory, discovery, deep)
+
+    assert runner.run_job(result.job_id)
+    snapshot, _ = _job_snapshot_and_payload(session_factory, result.job_id)
+    assert snapshot.state == "failed_final"
+    deep_step = next(step for step in snapshot.steps if step.step_id.startswith("deep_"))
+    assert deep_step.state == "failed_final"
+    assert deep_step.error_code == "PROTOCOL_CONTROL_DEEP_NEEDS_REVIEW"
+    assert deep.start_calls == 1
+    assert deep.continue_calls == 0
+    assert not runner.run_job(result.job_id)
+    assert deep.start_calls == 1
+
+
+def test_process_death_recovers_dynamic_step_from_durable_boundary(
+    data_paths,
+    session_factory,
+):
+    seed = _seed_frozen_source(data_paths, session_factory, key="process-recovery")
+    discovery = _DiscoveryTransport()
+    deep = _DeepTransport(seed.source_span_excerpts, process_death_once=True)
+    service = _build_service(
+        data_paths,
+        session_factory,
+        seed,
+        max_deep_units_per_batch=256,
+    )
+    result = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id,
+        idempotency_key="control-process-recovery",
+    )
+    runner, _ = _build_runner(data_paths, session_factory, discovery, deep)
+
+    with pytest.raises(ProcessDeath):
+        runner.run_job(result.job_id)
+    snapshot, _ = _job_snapshot_and_payload(session_factory, result.job_id)
+    assert snapshot.state == "running"
+
+    with session_factory() as session, session.begin():
+        job = JobStore(session, now=_now).get_job(result.job_id)
+        job.lease_expires_at = _DB_NOW - timedelta(seconds=1)
+    recovery = recover_expired_jobs(session_factory, now=_now)
+    assert result.job_id in recovery.requeued_jobs
+
+    assert runner.run_job(result.job_id)
+    snapshot, _ = _job_snapshot_and_payload(session_factory, result.job_id)
+    assert snapshot.state == "completed"
+    assert deep.start_calls == 2
+    assert deep.continue_calls == 0
+
+def test_recovery_requeues_interrupted_dynamic_step_without_replaying_source_or_discovery(
+    data_paths,
+    session_factory,
+):
+    """恢复动态深析步骤时只重跑未提交步骤和其后的动态步骤。
+
+    发现批次已经各自持久化 checkpoint；删除结构快照后恢复，证明恢复
+    依赖冻结任务 payload/checkpoint，而不是重新读取来源文件。
+    """
+    seed = _seed_frozen_source(data_paths, session_factory, key="recovery-boundary")
+    discovery = _DiscoveryTransport()
+    deep = _DeepTransport(seed.source_span_excerpts, process_death_once=True)
+    result = _build_service(
+        data_paths,
+        session_factory,
+        seed,
+        max_discovery_units_per_batch=2,
+        max_deep_units_per_batch=256,
+    ).create_from_deconstruction(
+        source_job_id=seed.source_job_id,
+        idempotency_key="control-recovery-boundary",
+    )
+    initial_snapshot, payload = _job_snapshot_and_payload(
+        session_factory, result.job_id
+    )
+    discovery_step_ids = tuple(
+        entry["step_id"] for entry in payload["discovery_step_ids"]
+    )
+    assert len(discovery_step_ids) > 1
+    assert {step.step_id for step in initial_snapshot.steps} >= set(
+        discovery_step_ids
+    )
+
+    # The control execution must use the frozen payload/checkpoints after
+    # creation; the source structure blob is intentionally unavailable.
+    seed.snapshot_path.unlink()
+    assert not seed.snapshot_path.exists()
+    runner, _ = _build_runner(data_paths, session_factory, discovery, deep)
+
+    with pytest.raises(ProcessDeath):
+        runner.run_job(result.job_id)
+
+    interrupted, _ = _job_snapshot_and_payload(session_factory, result.job_id)
+    assert interrupted.state == "running"
+    discovery_steps = [
+        step for step in interrupted.steps if step.step_id in discovery_step_ids
+    ]
+    assert len(discovery_steps) == len(discovery_step_ids)
+    assert all(step.state == "completed" and step.attempt == 1 for step in discovery_steps)
+    dynamic_steps = [
+        step for step in interrupted.steps if step.step_id.startswith("deep_")
+    ]
+    assert dynamic_steps
+    interrupted_dynamic = next(
+        step for step in dynamic_steps if step.state == "running"
+    )
+    discovery_calls_before_recovery = discovery.start_calls
+    assert discovery_calls_before_recovery == len(discovery_step_ids)
+    assert deep.start_calls == 1
+
+    with session_factory() as session, session.begin():
+        job = JobStore(session, now=_now).get_job(result.job_id)
+        job.lease_expires_at = _DB_NOW - timedelta(seconds=1)
+    recovery = recover_expired_jobs(session_factory, now=_now)
+    assert result.job_id in recovery.requeued_jobs
+
+    queued, _ = _job_snapshot_and_payload(session_factory, result.job_id)
+    assert queued.state == "queued"
+    queued_dynamic = next(
+        step for step in queued.steps if step.step_id == interrupted_dynamic.step_id
+    )
+    assert queued_dynamic.state == "queued"
+    assert queued_dynamic.attempt == interrupted_dynamic.attempt
+    assert discovery.start_calls == discovery_calls_before_recovery
+
+    assert runner.run_job(result.job_id)
+    completed, _ = _job_snapshot_and_payload(session_factory, result.job_id)
+    assert completed.state == "completed"
+    assert all(
+        step.state == "completed" and step.attempt == 1
+        for step in completed.steps
+        if step.step_id in discovery_step_ids
+    )
+    assert discovery.start_calls == discovery_calls_before_recovery
+    assert deep.start_calls == 1 + len(dynamic_steps)
+    assert all(
+        sum(
+            event.event.event_type.value == "step_started"
+            and event.event.step_id == step_id
+            for event in completed.events
+        )
+        == 1
+        for step_id in discovery_step_ids
+    )

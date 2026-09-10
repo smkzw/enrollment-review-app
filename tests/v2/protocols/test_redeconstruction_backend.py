@@ -16,7 +16,18 @@ from pathlib import Path
 
 import pytest
 
-from app.domain.contracts.enums import StudyPhase
+from app.domain.contracts.agent_io import ProtocolDeconstructionInput
+from app.domain.contracts.enums import (
+    AnchorResolutionMode,
+    InterpretationSourceType,
+    JobEventType,
+    ReviewStage,
+    StudyPhase,
+)
+from app.domain.contracts.protocol_metadata import (
+    AnchorResolutionStatement,
+    InterpretationSource,
+)
 from app.services.protocol_draft_service import ProtocolDraftService
 from app.services.protocol_publication_service import (
     ProtocolPublicationRequest,
@@ -35,6 +46,8 @@ from app.services.protocol_workbench_service import (
     ProtocolWorkbenchError,
     ProtocolWorkbenchService,
 )
+from app.storage.repositories import list_interpretation_sources
+from app.workflow.jobstore import JobStore
 
 
 class AlwaysPublishableGate:
@@ -57,6 +70,33 @@ class CountingPublishableGate(AlwaysPublishableGate):
     def evaluate(self, *args, **kwargs):
         self.calls += 1
         return super().evaluate(*args, **kwargs)
+
+
+class InterpretationAwareGate(AlwaysPublishableGate):
+    def evaluate(self, source_input, *args, **kwargs):
+        if source_input.interpretation_sources:
+            return super().evaluate(source_input, *args, **kwargs)
+        issue = ProtocolGateIssue(
+            issue_code="INTERPRETATION_REQUIRED",
+            check_name="interpretation_authority",
+            level="阻止发布",
+            problem="尚未登记解释材料。",
+            impact="当前草稿不能发布。",
+            next_action="请登记解释材料。",
+            affected_refs=["IN-01"],
+            repair_scope=["IN-01"],
+        )
+        return ProtocolDeconstructionGateResult(
+            publishable=False,
+            checks=[
+                ProtocolGateCheckResult(
+                    check_name=name,
+                    passed=name != "interpretation_authority",
+                    issues=[issue] if name == "interpretation_authority" else [],
+                )
+                for name in CHECK_NAMES
+            ],
+        )
 
 
 class FeedbackRegressionGate:
@@ -292,25 +332,42 @@ def test_redeconstruction_unknown_project_rejected(
     assert exc_info.value.code == "PROJECT_NOT_FOUND"
     assert "找不到正式项目" in exc_info.value.title
 
-
 def test_protocol_upload_rejects_formats_without_source_preserving_extraction(
     slice4_env, data_paths
 ) -> None:
     factory, _now = slice4_env
     service = _make_service(factory, data_paths)
+    unsupported = data_paths.root / "protocol.txt"
+    unsupported.write_text("not a DOCX or native PDF", encoding="utf-8")
+
+    with pytest.raises(ProtocolWorkbenchError) as exc_info:
+        service.start_first_deconstruction(
+            upload_path=unsupported,
+            original_name="protocol.txt",
+            idempotency_key="unsupported-txt",
+        )
+
+    assert exc_info.value.code == "UNSUPPORTED_PROTOCOL_FILE"
+    assert "请以 DOCX 重新上传正式方案" in exc_info.value.recovery
+
+def test_protocol_upload_rejects_pdf_after_entry_decommission(
+    slice4_env, data_paths
+) -> None:
+    """方案 PDF 上传入口已下线：PDF 必须在上传门禁被拒绝，不创建任务。"""
+    factory, _now = slice4_env
+    service = _make_service(factory, data_paths)
     pdf = data_paths.root / "protocol.pdf"
-    pdf.write_bytes(b"%PDF-1.4")
+    pdf.write_bytes(b"%PDF-1.7 decommissioned entry check")
 
     with pytest.raises(ProtocolWorkbenchError) as exc_info:
         service.start_first_deconstruction(
             upload_path=pdf,
             original_name="protocol.pdf",
-            idempotency_key="unsupported-pdf",
+            idempotency_key="pdf-decommissioned",
         )
 
     assert exc_info.value.code == "UNSUPPORTED_PROTOCOL_FILE"
-    assert "另存为 DOCX" in exc_info.value.recovery
-
+    assert "方案 PDF 上传入口已下线" in exc_info.value.detail
 
 def test_redeconstruction_rejects_publish_when_formal_baseline_has_advanced(
     slice4_env, data_paths
@@ -373,10 +430,31 @@ def test_feedback_redeconstruction_starts_from_formal_draft_without_upload(
         idempotency_key="publish-with-source-context",
         actor="医学监查员",
     )
+    interpretation = InterpretationSource(
+        interpretation_source_id="source-node-relative",
+        protocol_version_id=published.protocol_version_id,
+        source_type=InterpretationSourceType.MEDICAL_INTERPRETATION,
+        file_sha256="8" * 64,
+        source_ref="medical-note:1",
+        excerpt="既往时间窗未写明起算日期。",
+        explanation="按当前审核节点日期逐节点独立核对。",
+        applies_to_rule_refs=["IN-01"],
+        clarifies_ambiguity=True,
+        anchor_resolutions=[
+            AnchorResolutionStatement(
+                resolution_id="resolution-node-relative",
+                affected_rule_refs=["IN-01"],
+                ambiguous_source_refs=["span-in"],
+                target_review_stages=[ReviewStage.SCREENING, ReviewStage.BASELINE],
+                resolution_mode=AnchorResolutionMode.CURRENT_REVIEW_NODE_DATE,
+            )
+        ],
+    )
 
     result = service.start_feedback_re_deconstruction(
         project_id=published.project_id,
         idempotency_key="feedback-from-formal",
+        interpretation_sources=[interpretation],
         actor="医学监查员",
     )
     assert result.created is True
@@ -390,10 +468,21 @@ def test_feedback_redeconstruction_starts_from_formal_draft_without_upload(
     assert comparison.diff["removed_rule_codes"] == []
     assert comparison.diff["modified_rule_codes"] == []
     assert all(not item["added"] and not item["removed"] for item in comparison.diff["rule_diffs"])
+    rebound_input = ProtocolDeconstructionInput.model_validate(
+        service._merged_payload(result.job_id)["source_input"]
+    )
+    assert len(rebound_input.interpretation_sources) == 1
+    assert rebound_input.interpretation_sources[0].protocol_version_id == (
+        rebound_input.protocol_version_id
+    )
+    assert rebound_input.interpretation_sources[0].interpretation_source_id != (
+        interpretation.interpretation_source_id
+    )
 
     replay = service.start_feedback_re_deconstruction(
         project_id=published.project_id,
         idempotency_key="feedback-from-formal",
+        interpretation_sources=[interpretation],
         actor="医学监查员",
     )
     assert replay.created is False
@@ -406,6 +495,15 @@ def test_feedback_redeconstruction_starts_from_formal_draft_without_upload(
     )
     assert republished.project_id == published.project_id
     assert republished.rule_set_revision == 2
+    with factory() as session:
+        stored = list_interpretation_sources(
+            session, republished.protocol_version_id
+        )
+    assert len(stored) == 1
+    assert stored[0].anchor_resolutions[0].target_review_stages == [
+        ReviewStage.SCREENING,
+        ReviewStage.BASELINE,
+    ]
     current = service.get_project_official_version(published.project_id)
     assert current.project.official_version == "V1.0"
     assert current.publication_count == 2
@@ -452,7 +550,7 @@ def test_source_error_feedback_creates_real_local_revision(
     service = _make_service(
         factory,
         data_paths,
-        gate=AlwaysPublishableGate(),
+        gate=InterpretationAwareGate(),
         feedback_reviser=revise,
     )
     started = service.start_first_deconstruction(
@@ -501,6 +599,143 @@ def test_source_error_feedback_creates_real_local_revision(
     assert restarted.get_draft_detail(started.job_id).revision.revision_id == (
         after.revision.revision_id
     )
+
+
+def test_active_draft_interpretation_registration_revises_and_publishes(
+    slice4_env, data_paths
+) -> None:
+    """活动草稿登记解释材料后，语义修订读取同一来源并随版本原子发布。"""
+    factory, _now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+    seen_source_ids: list[str] = []
+
+    def revise(current_input, current_draft, target_rule_code, _feedback_note):
+        assert target_rule_code == "IN-01"
+        seen_source_ids.extend(
+            item.interpretation_source_id
+            for item in current_input.interpretation_sources
+        )
+        revised = current_draft.model_copy(deep=True)
+        revised.proposed_rules[0].components[0].title = "按解释材料重新核对后的条件"
+        revised.component_drafts[0].proposed_component.title = (
+            "按解释材料重新核对后的条件"
+        )
+        return revised
+
+    service = _make_service(
+        factory,
+        data_paths,
+        gate=AlwaysPublishableGate(),
+        feedback_reviser=revise,
+    )
+    started = service.start_first_deconstruction(
+        upload_path=_write_minimal_docx(data_paths, "active-source-registration.docx"),
+        original_name="active-source-registration.docx",
+        idempotency_key="active-source-registration-first",
+        actor="医学监查员",
+    )
+    service.seed_review_session(
+        started.job_id,
+        source_input=source_input,
+        draft=draft,
+        source_spans=spans,
+        wait_at="await_review",
+    )
+    before = service.get_draft_detail(started.job_id)
+    interpretation = InterpretationSource(
+        interpretation_source_id="source-active-draft",
+        protocol_version_id=source_input.protocol_version_id,
+        source_type=InterpretationSourceType.MEDICAL_INTERPRETATION,
+        file_sha256="b" * 64,
+        source_ref="medical-note:active-draft",
+        excerpt="既往时间窗未写明起算日期。",
+        explanation="按当前审核节点日期逐节点独立核对。",
+        applies_to_rule_refs=["IN-01"],
+        clarifies_ambiguity=True,
+        anchor_resolutions=[
+            AnchorResolutionStatement(
+                resolution_id="resolution-active-draft",
+                affected_rule_refs=["IN-01"],
+                ambiguous_source_refs=["span-in"],
+                target_review_stages=[ReviewStage.SCREENING, ReviewStage.BASELINE],
+                resolution_mode=AnchorResolutionMode.CURRENT_REVIEW_NODE_DATE,
+            )
+        ],
+    )
+
+    registered = service.register_interpretation_sources(
+        started.job_id,
+        expected_revision_id=before.revision.revision_id,
+        idempotency_key="active-source-registration",
+        interpretation_sources=[interpretation],
+        actor="医学监查员",
+    )
+    assert registered["draft_revision_id"] == before.revision.revision_id
+    assert registered["protocol_version_id"] == source_input.protocol_version_id
+    assert [
+        item["interpretation_source_id"]
+        for item in registered["interpretation_sources"]
+    ] == ["source-active-draft"]
+    assert registered["source_materials"]["span-in"]["text"] == "年龄≥18岁"
+    assert service.get_session(started.job_id).awaiting_user == "review"
+    with factory() as session:
+        event_types = [
+            row.event.event_type
+            for row in JobStore(session).list_event_rows(started.job_id)
+        ]
+    assert JobEventType.USER_UPDATED in event_types
+    assert service.get_draft_detail(started.job_id).revision.revision_id == (
+        before.revision.revision_id
+    )
+    assert service.get_integrity(started.job_id).publishable
+
+    replay = service.register_interpretation_sources(
+        started.job_id,
+        expected_revision_id=before.revision.revision_id,
+        idempotency_key="active-source-registration",
+        interpretation_sources=[interpretation],
+        actor="医学监查员",
+    )
+    assert replay["interpretation_sources"] == registered["interpretation_sources"]
+
+    after = service.apply_feedback(
+        started.job_id,
+        expected_revision_id=before.revision.revision_id,
+        feedback_kind=DraftFeedbackKind.SOURCE_ERROR,
+        target_rule_code="IN-01",
+        feedback_note="原文需要结合解释材料重新核对。",
+        actor="医学监查员",
+    )
+    assert seen_source_ids == ["source-active-draft"]
+    assert after.revision.revision_number == before.revision.revision_number + 1
+    assert after.revision.diff.modified_rule_codes == ["IN-01"]
+
+    with pytest.raises(ProtocolWorkbenchError) as exc_info:
+        service.register_interpretation_sources(
+            started.job_id,
+            expected_revision_id=before.revision.revision_id,
+            idempotency_key="active-source-registration-stale",
+            interpretation_sources=[interpretation],
+            actor="医学监查员",
+        )
+    assert exc_info.value.code == "STALE_REVISION"
+
+    published = service.publish_first_project(
+        started.job_id,
+        idempotency_key="active-source-registration-publish",
+        actor="医学监查员",
+    )
+    with factory() as session:
+        stored = list_interpretation_sources(
+            session, published.protocol_version_id
+        )
+    assert [item.interpretation_source_id for item in stored] == [
+        "source-active-draft"
+    ]
+    assert stored[0].anchor_resolutions[0].target_review_stages == [
+        ReviewStage.SCREENING,
+        ReviewStage.BASELINE,
+    ]
 
 
 def test_source_error_feedback_rejects_target_rule_gate_regression(
