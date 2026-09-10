@@ -24,6 +24,8 @@ export interface ProfileEvidencePanelProps {
   model: PatientProfileModel;
   item: ProfileItemView;
   onClose: () => void;
+  /** 可选的初始页：书面判断候选跳入时优先打开该原件页。 */
+  initialPageArtifactId?: string | null;
 }
 
 /** 页面定位：pageArtifactId -> 处理修订页 entryId。 */
@@ -51,6 +53,7 @@ export function ProfileEvidencePanel({
   model,
   item,
   onClose,
+  initialPageArtifactId = null,
 }: ProfileEvidencePanelProps) {
   const navigation = model.evidenceNavigation;
 
@@ -112,8 +115,20 @@ export function ProfileEvidencePanel({
   );
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
 
-  // 条目或原件页变化时初始化到最精确定位；用户后续选择不会改变这些依赖。
+  // 条目或原件页变化时初始化到候选指定页；没有指定页时选最精确定位。
   useEffect(() => {
+    if (initialPageArtifactId !== null) {
+      const initialEntryId = entryByArtifact.get(initialPageArtifactId);
+      if (initialEntryId !== undefined) {
+        const initialLocator =
+          consistentItemLocators.find(
+            (locator) => locator.pageArtifactId === initialPageArtifactId,
+          ) ?? null;
+        setSelectedLocatorId(initialLocator?.locatorId ?? null);
+        setSelectedEntryId(initialEntryId);
+        return;
+      }
+    }
     const firstReal =
       consistentItemLocators.find((locator) => isRealBboxLocator(locator)) ??
       consistentItemLocators[0] ??
@@ -127,7 +142,12 @@ export function ProfileEvidencePanel({
     setSelectedEntryId(
       entryByArtifact.get(firstReal.pageArtifactId) ?? null,
     );
-  }, [item.itemId, consistentItemLocators, entryByArtifact]);
+  }, [
+    item.itemId,
+    consistentItemLocators,
+    entryByArtifact,
+    initialPageArtifactId,
+  ]);
 
   const selectedPageLocators: LocatorView[] = useMemo(() => {
     if (selectedEntryId === null) return [];

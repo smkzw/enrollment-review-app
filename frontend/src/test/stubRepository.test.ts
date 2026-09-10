@@ -104,7 +104,7 @@ describe("stub 仓储：今日工作、行动与任务", () => {
       repository.getTodayWork(),
     ]);
     expect(actions.length).toBeGreaterThan(today.dueActions.length);
-    expect(actions.some((action) => action.gapLabel === "溯源待办")).toBe(true);
+    expect(actions.some((action) => action.gapLabel === "来源待补充核实")).toBe(true);
     expect(actions.some((action) => action.blockingLevel === "none")).toBe(
       true,
     );

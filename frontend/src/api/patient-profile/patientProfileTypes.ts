@@ -85,6 +85,7 @@ export type ProfileGapTypeWire =
   | "required_procedure_not_done"
   | "result_fields_missing"
   | "date_or_anchor_missing"
+  | "observation_unverified"
   | "professional_judgment"
   | "source_conflict"
   | "ocr_or_parse_risk"

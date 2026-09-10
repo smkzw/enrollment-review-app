@@ -15,6 +15,7 @@ import {
   makeFactItem,
   makeHighlight,
   makeHistory,
+  makeLaneSection,
   makeLocator,
   makePageOnlyLocator,
   makeRevision,
@@ -99,6 +100,39 @@ describe("decodePatientProfileRevision", () => {
     expect(expectation.expectationStatus).toBe("referenced_missing");
     expect(expectation.gapType).toBe("referenced_file_missing");
     expect(expectation.provenanceFollowup).toBe(true);
+  });
+
+  it("decodes the four newly surfaced gap types", () => {
+    const gapTypes = [
+      "observation_unverified",
+      "interpretation_conflict",
+      "provenance_followup",
+      "historical_source_unavailable",
+    ] as const;
+
+    for (const gapType of gapTypes) {
+      const view = decodePatientProfileRevision(
+        makeRevision({
+          lanes: PROFILE_LANE_ORDER.map((lane) =>
+            lane === "test_exam_score"
+              ? makeLaneSection(lane, [
+                  makeExpectationItem({
+                    item_id: `gap-${gapType}`,
+                    gap_type: gapType,
+                    gap_type_label: gapType,
+                  }),
+                ])
+              : makeLaneSection(lane, []),
+          ),
+          highlights: [],
+        }),
+      );
+      const item = required(
+        view.lanes.find((lane) => lane.lane === "test_exam_score"),
+        "检验检查分区",
+      ).items[0];
+      expect(item.gapType).toBe(gapType);
+    }
   });
 
   it("rejects an unknown schema version", () => {

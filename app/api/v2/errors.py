@@ -91,7 +91,7 @@ _FIELD_LABELS = {
     "rule_set_id": "规则集编号",
     "rule_set_revision": "规则集修订号",
     "protocol_version_id": "方案版本",
-    "evidence_snapshot_id": "证据快照编号",
+    "evidence_snapshot_id": "证据资料版本编号",
     "stage": "审核阶段",
     "anchor_dates": "锚定日期",
     "due_at": "截止时间",

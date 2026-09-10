@@ -319,6 +319,38 @@ describe("受试者与 Patient Profile 页", () => {
     expect(screen.getByText(/生成时间 2026年8月22日 20:00（北京时间）/)).toBeInTheDocument();
   });
 
+  it("点击待办组时展开全部泳道并滚动到对应首条目", async () => {
+    const user = userEvent.setup();
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+
+    try {
+      render(<SubjectsPage />);
+      await screen.findByRole("heading", { name: /首屏重点/ });
+      await user.click(screen.getByRole("button", { name: "待补资料 1 项" }));
+
+      expect(
+        await screen.findByRole("heading", { name: /检验检查\/评分/ }),
+      ).toBeInTheDocument();
+      expect(scrollIntoView).toHaveBeenCalledWith({
+        behavior: "smooth",
+        block: "center",
+      });
+      expect(
+        document.getElementById("profile-item-item-expectation-1"),
+      ).toHaveClass("profile-item--highlighted");
+    } finally {
+      Object.defineProperty(Element.prototype, "scrollIntoView", {
+        configurable: true,
+        value: originalScrollIntoView,
+      });
+    }
+  });
+
   it("修订记录绑定本次修订生成的档案版本，原文入口不回退到修订前定位", async () => {
     const user = userEvent.setup();
     const getRevision = vi.fn(async (_subjectId: string, revisionId: string) => {

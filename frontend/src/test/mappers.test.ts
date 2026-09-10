@@ -233,7 +233,7 @@ describe("行动映射", () => {
       (action) => action.action_id === "action-uat-01-screening-clear-provenance",
     );
     const view = mapAction(wire!, episode);
-    expect(view.gapLabel).toBe("溯源待办");
+    expect(view.gapLabel).toBe("来源待补充核实");
     expect(view.blockingLevel).toBe("none");
     expect(view.targetPartyLabel).toBe("CRA");
   });

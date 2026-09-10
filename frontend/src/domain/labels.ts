@@ -84,12 +84,12 @@ export const gapTypeLabel: Record<GapType, string> = {
   result_fields_missing: "结果字段缺失",
   date_or_anchor_missing: "日期或时间锚点缺失",
   professional_judgment: "待研究者判断",
-  observation_unverified: "资料尚待核实",
+  observation_unverified: "待研究者判断",
   source_conflict: "来源存在冲突",
   interpretation_conflict: "解释材料与方案不一致",
   ocr_or_parse_risk: "文字或数值需要核对",
   future_stage_not_due: "后续节点尚未到期",
-  provenance_followup: "溯源待办",
+  provenance_followup: "来源待补充核实",
 };
 
 /** 阻断程度：长说明 + 短徽标词。溯源待办/关注类一律不称为“阻断”。 */

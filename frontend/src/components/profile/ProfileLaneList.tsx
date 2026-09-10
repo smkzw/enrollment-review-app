@@ -37,7 +37,7 @@ export function ProfileLaneList({
           ) : (
             <ul className="profile-item-list">
               {lane.items.map((item) => (
-                <li key={item.itemId}>
+                <li key={item.itemId} id={`profile-item-${item.itemId}`}>
                   <ProfileItemCard
                     model={model}
                     item={item}

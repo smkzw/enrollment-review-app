@@ -136,7 +136,7 @@ DRAFT_REASON_LABELS: dict[str, str] = {
 
 UPLOAD_MODE_LABELS: dict[str, str] = {
     "incremental": "补充资料",
-    "full": "建立完整资料快照",
+    "full": "建立完整资料版本",
 }
 
 
@@ -176,7 +176,7 @@ _PROCESSING_HINT_LABELS: dict[str, str] = {
     "reuse_existing": "复用已有处理结果",
     "require_resolution": "需要选择处置方式",
     "rejected": "不纳入处理",
-    "omitted": "不纳入本次快照",
+    "omitted": "不纳入本次资料版本",
     "reprocess": "需要重新识别",
 }
 
@@ -186,13 +186,13 @@ def processing_hint_label(hint: str) -> str:
 
 
 _ITEM_STATUS_REASONS: dict[str, str] = {
-    "added": "该文件内容与文件名均未出现在上一有效快照中，为本次新增资料。",
-    "duplicate": "该文件内容与上一有效快照中已存在的资料完全相同。",
+    "added": "该文件内容与文件名均未出现在上一有效资料版本中，为本次新增资料。",
+    "duplicate": "该文件内容与上一有效资料版本中已存在的资料完全相同。",
     "conflict": "存在同名文件但内容不同，系统不会自动覆盖。",
     "unsupported": "该文件格式当前不受支持。",
     "unreadable": "该文件无法读取，可能为空、损坏或格式无法识别。",
-    "full_snapshot_omission": "该资料存在于上一有效快照，但本次未选择。",
-    "expected_reprocessing": "完整资料快照重新纳入了与基准内容相同的文件。",
+    "full_snapshot_omission": "该资料存在于上一有效资料版本，但本次未选择。",
+    "expected_reprocessing": "完整资料版本重新纳入了与基准内容相同的文件。",
 }
 
 
@@ -209,8 +209,8 @@ _ITEM_NEXT_ACTIONS: dict[str, str] = {
     "conflict": "请选择“作为原资料的新版本”或“作为另一份资料并列保留”。",
     "unsupported": "请解压或转换为受支持的格式（PDF、Word、TXT、常用图片）后重新选择。",
     "unreadable": "请检查文件是否损坏或为空后重新选择。",
-    "full_snapshot_omission": "如确认遗漏，请重新选择该文件；完整资料快照只包含本次选择。",
-    "expected_reprocessing": "系统将按本次快照重新处理该文件。",
+    "full_snapshot_omission": "如确认遗漏，请重新选择该文件；完整资料版本只包含本次选择。",
+    "expected_reprocessing": "系统将按本次资料版本重新处理该文件。",
 }
 
 
@@ -236,7 +236,7 @@ def snapshot_status_label(status: str) -> str:
 
 
 SNAPSHOT_MEMBER_ORIGIN_LABELS: dict[str, str] = {
-    "inherited": "继承自上一快照",
+    "inherited": "继承自上一资料版本",
     "added": "本次新增",
     "replaced": "替代旧版本",
 }

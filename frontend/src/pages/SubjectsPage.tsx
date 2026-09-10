@@ -24,6 +24,15 @@ import { EmptyState, ErrorState, LoadingState } from "../components/shell/Feedba
 import { ProfileStatusBanner } from "../components/profile/ProfileStatusBanner";
 import { ProfileNormalizationStatus } from "../components/profile/ProfileNormalizationStatus";
 import { ProfileHighlights } from "../components/profile/ProfileHighlights";
+import {
+  ProfileTodoSummaryCard,
+  firstProfileTodoItemId,
+  type ProfileTodoGroup,
+} from "../components/profile/ProfileTodoSummaryCard";
+import {
+  JudgmentSearchCard,
+  type JudgmentSearchCandidateSelection,
+} from "../components/profile/JudgmentSearchCard";
 import { ProfileLaneList } from "../components/profile/ProfileLaneList";
 import { ProfileEvidencePanel } from "../components/profile/ProfileEvidencePanel";
 import {
@@ -179,6 +188,7 @@ export function SubjectsPage() {
   const showAll = params.get("all") === "1";
   const [evidenceItemId, setEvidenceItemId] = useState<string | null>(null);
   const [evidenceModelSnapshot, setEvidenceModelSnapshot] = useState<PatientProfileModel | null>(null);
+  const [evidencePageArtifactId, setEvidencePageArtifactId] = useState<string | null>(null);
   const evidenceTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [correctionItemId, setCorrectionItemId] = useState<string | null>(null);
   const correctionTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -258,6 +268,7 @@ export function SubjectsPage() {
   // 切换受试者/审核节点后关闭已打开的证据面板和修订工作区。
   useEffect(() => {
     setEvidenceItemId(null);
+    setEvidencePageArtifactId(null);
     setEvidenceModelSnapshot(null);
     evidenceTriggerRef.current = null;
     setCorrectionItemId(null);
@@ -267,12 +278,16 @@ export function SubjectsPage() {
     autoStartKeyRef.current = null;
   }, [selectedSubject?.subjectId, selectedEpisode?.reviewEpisodeId]);
 
-  /** 打开原文时固定当时传入的档案模型；历史修订不得回退到最新档案。 */
-  const openEvidence = useCallback((item: ProfileItemView, model: PatientProfileModel) => {
+  const openEvidence = useCallback((
+    item: ProfileItemView,
+    model: PatientProfileModel,
+    pageArtifactId: string | null = null,
+  ) => {
     evidenceTriggerRef.current =
       document.activeElement instanceof HTMLButtonElement
         ? document.activeElement
         : null;
+    setEvidencePageArtifactId(pageArtifactId);
     setEvidenceModelSnapshot(model);
     setEvidenceItemId(item.itemId);
   }, []);
@@ -284,9 +299,26 @@ export function SubjectsPage() {
     },
     [openEvidence, profile.state],
   );
+  const openJudgmentSearchCandidate = useCallback(
+    (selection: JudgmentSearchCandidateSelection) => {
+      if (profile.state.status !== "success") return;
+      const model = profile.state.data;
+      const item = model.items.find((candidate) =>
+        candidate.locatorIds.some(
+          (locatorId) =>
+            model.locatorById.get(locatorId)?.pageArtifactId ===
+            selection.page_artifact_id,
+        ),
+      );
+      if (item === undefined) return;
+      openEvidence(item, model, selection.page_artifact_id);
+    },
+    [openEvidence, profile.state],
+  );
 
   const closeEvidence = useCallback(() => {
     const trigger = evidenceTriggerRef.current;
+    setEvidencePageArtifactId(null);
     setEvidenceItemId(null);
     setEvidenceModelSnapshot(null);
     window.requestAnimationFrame(() => {
@@ -304,6 +336,7 @@ export function SubjectsPage() {
         : null;
     evidenceTriggerRef.current = null;
     setEvidenceItemId(null);
+    setEvidencePageArtifactId(null);
     setEvidenceModelSnapshot(null);
     setCorrectionItemId(item.itemId);
   }, [profile.state]);
@@ -313,6 +346,7 @@ export function SubjectsPage() {
     setCorrectionItemId(null);
     setCorrectionModelSnapshot(null);
     setEvidenceItemId(null);
+    setEvidencePageArtifactId(null);
     setEvidenceModelSnapshot(null);
     evidenceTriggerRef.current = null;
     window.requestAnimationFrame(() => {
@@ -330,6 +364,7 @@ export function SubjectsPage() {
         ? document.activeElement
         : null;
     setEvidenceModelSnapshot(model);
+    setEvidencePageArtifactId(null);
     setEvidenceItemId(item.itemId);
   }, [correctionModelSnapshot]);
 
@@ -523,6 +558,14 @@ export function SubjectsPage() {
               onToggleHistory={() => setHistoryOpen((value) => !value)}
             />
           )}
+          {profile.state.status === "success" && (
+            <JudgmentSearchCard
+              subjectId={selectedSubject.subjectId}
+              reviewEpisodeId={selectedEpisode.reviewEpisodeId}
+              evidenceNavigation={profile.state.data.evidenceNavigation}
+              onSelectCandidate={openJudgmentSearchCandidate}
+            />
+          )}
           {historyOpen && (
             <section className="profile-section profile-correction-history-section" aria-labelledby="profile-correction-history-title">
               <header className="profile-section__heading">
@@ -551,6 +594,7 @@ export function SubjectsPage() {
           <ProfileEvidencePanel
             model={evidenceModel}
             item={evidenceItem}
+            initialPageArtifactId={evidencePageArtifactId}
             onClose={closeEvidence}
           />
         )}
@@ -601,6 +645,71 @@ function ProfileBody({
   historyCount: number;
   onToggleHistory: () => void;
 }) {
+  const pendingTodoGroupRef = useRef<ProfileTodoGroup | null>(null);
+  const highlightTimerRef = useRef<number | null>(null);
+  const highlightedTargetRef = useRef<HTMLElement | null>(null);
+
+  const scrollToTodo = useCallback(
+    (group: ProfileTodoGroup) => {
+      const itemId = firstProfileTodoItemId(model, group);
+      if (itemId === null) return;
+      const item = model.itemById.get(itemId);
+      if (item === undefined) return;
+      const target = document.getElementById(`profile-item-${item.itemId}`);
+      if (target === null) return;
+      if (typeof target.scrollIntoView === "function") {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      if (highlightedTargetRef.current !== null && highlightedTargetRef.current !== target) {
+        highlightedTargetRef.current.classList.remove("profile-item--highlighted");
+      }
+      highlightedTargetRef.current = target;
+      target.classList.add("profile-item--highlighted");
+      if (highlightTimerRef.current !== null) {
+        window.clearTimeout(highlightTimerRef.current);
+      }
+      highlightTimerRef.current = window.setTimeout(() => {
+        target.classList.remove("profile-item--highlighted");
+        if (highlightedTargetRef.current === target) {
+          highlightedTargetRef.current = null;
+        }
+        highlightTimerRef.current = null;
+      }, 1800);
+    },
+    [model],
+  );
+
+  useEffect(() => {
+    if (!showAll || pendingTodoGroupRef.current === null) return;
+    const group = pendingTodoGroupRef.current;
+    pendingTodoGroupRef.current = null;
+    scrollToTodo(group);
+  }, [scrollToTodo, showAll]);
+
+  useEffect(
+    () => () => {
+      if (highlightTimerRef.current !== null) {
+        window.clearTimeout(highlightTimerRef.current);
+      }
+      highlightedTargetRef.current?.classList.remove("profile-item--highlighted");
+      highlightedTargetRef.current = null;
+    },
+    [],
+  );
+
+  const onNavigateTodo = useCallback(
+    (group: ProfileTodoGroup) => {
+      if (firstProfileTodoItemId(model, group) === null) return;
+      if (!showAll) {
+        pendingTodoGroupRef.current = group;
+        onToggleAll();
+        return;
+      }
+      scrollToTodo(group);
+    },
+    [model, onToggleAll, scrollToTodo, showAll],
+  );
+
   return (
     <>
       <ProfileStatusBanner model={model} />
@@ -630,6 +739,10 @@ function ProfileBody({
           </RouteLink>
         </div>
       </header>
+
+      {!model.isGenerating && !model.isFailed && (
+        <ProfileTodoSummaryCard model={model} onNavigate={onNavigateTodo} />
+      )}
 
       <div className="profile-toolbar">
         <div className="profile-toolbar__switch">

@@ -57,4 +57,10 @@ describe("ProfileLaneList", () => {
     const demographics = screen.getByRole("region", { name: "人口学/基线" });
     expect(within(demographics).getByText("基线血压 120/80 mmHg")).toBeInTheDocument();
   });
+
+  it("条目根节点提供稳定的 profile-item 锚点", () => {
+    const model = adaptPatientProfile(decodePatientProfileRevision(makeRevision()));
+    render(<ProfileLaneList model={model} />);
+    expect(document.getElementById("profile-item-item-fact-1")).toBeInTheDocument();
+  });
 });

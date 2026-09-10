@@ -401,7 +401,7 @@ export function mapExpectation(
     gapLabel: gapTypeLabel[expectation.gap_type],
     status: expectation.status,
     statusLabel: expectation.gap_type === "observation_unverified"
-      ? "资料尚待核实"
+      ? gapTypeLabel.observation_unverified
       : expectationStatusLabel[expectation.status],
     evidenceSpanIds: expectation.evidence_span_ids.map((id) =>
       toId<EvidenceSpanId>(id),

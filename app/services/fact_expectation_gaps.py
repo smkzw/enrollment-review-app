@@ -264,7 +264,7 @@ def expectation_gap_signals(
                     detail=(
                         "本次提交的资料中未见与该项要求对应的研究者书面判断，"
                         f"因此暂无法判定是否符合：{template.description}"
-                        "（已对本次提交的全部资料完成两路独立检索）"
+                        "（已对本次提交的全部资料完成两次独立检索）"
                     ),
                     applies_to_template_id=template.template_id,
                 ))

@@ -111,7 +111,7 @@ describe("中文标签：合同词核对", () => {
     expect(decisionLabel.requirement_not_met).toBe("未满足");
   });
 
-  it("缺口词与交互合同 1.2 节一致（13 类）", () => {
+  it("缺口词与交互合同 1.2 节一致（14 类）", () => {
     expect(gapTypeLabel.record_incomplete).toBe("记录不完整");
     expect(gapTypeLabel.description_insufficient).toBe("描述不充分");
     expect(gapTypeLabel.historical_source_unavailable).toBe("既往来源无法取得");
@@ -120,11 +120,12 @@ describe("中文标签：合同词核对", () => {
     expect(gapTypeLabel.result_fields_missing).toBe("结果字段缺失");
     expect(gapTypeLabel.date_or_anchor_missing).toBe("日期或时间锚点缺失");
     expect(gapTypeLabel.professional_judgment).toBe("待研究者判断");
+    expect(gapTypeLabel.observation_unverified).toBe("待研究者判断");
     expect(gapTypeLabel.source_conflict).toBe("来源存在冲突");
     expect(gapTypeLabel.interpretation_conflict).toBe("解释材料与方案不一致");
     expect(gapTypeLabel.ocr_or_parse_risk).toBe("文字或数值需要核对");
     expect(gapTypeLabel.future_stage_not_due).toBe("后续节点尚未到期");
-    expect(gapTypeLabel.provenance_followup).toBe("溯源待办");
+    expect(gapTypeLabel.provenance_followup).toBe("来源待补充核实");
   });
 
   it("定位精度词与交互合同 6.1 节一致", () => {
@@ -301,7 +302,13 @@ describe("中文标签：穷尽与卫生", () => {
         expect(label.trim().length, `${name}.${key} 非空`).toBeGreaterThan(0);
       }
       const values = entries.map(([, label]) => label);
-      expect(new Set(values).size, `${name} 无重复标签`).toBe(values.length);
+      // observation_unverified 与 professional_judgment 都表示需研究者判断，
+      // 按前端契约使用同一中文标签，允许这一组有意别名。
+      const expectedUniqueCount =
+        name === "gapTypeLabel" ? values.length - 1 : values.length;
+      expect(new Set(values).size, `${name} 无意外重复标签`).toBe(
+        expectedUniqueCount,
+      );
     }
   });
 
