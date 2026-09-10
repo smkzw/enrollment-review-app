@@ -29,8 +29,10 @@ export interface AppRoute {
   /** 入口说明：导航 title 与 aria 用途 */
   description: string;
   group: NavGroup;
-  /** null 表示该模块由后续工作项接入（本阶段不渲染假页面） */
+  /** null 表示该地址只作为正式模式跳转入口 */
   component: LazyExoticComponent<ComponentType> | null;
+  /** 正式模式下将深链带回已接入的真实工作区 */
+  redirectTo?: string;
   /** 是否默认首屏 */
   defaultPath?: boolean;
   /** 仅作为上下文页面访问，不在主导航重复占位 */
@@ -50,6 +52,7 @@ export const APP_ROUTES: readonly AppRoute[] = [
     description: "今天需要优先处理的事项",
     group: "work",
     component: interfaceTrial ? lazy(() => import("../pages/TodayPage")) : null,
+    redirectTo: interfaceTrial ? undefined : "/protocols",
     defaultPath: interfaceTrial,
     showInNavigation: interfaceTrial,
   },
@@ -59,6 +62,7 @@ export const APP_ROUTES: readonly AppRoute[] = [
     description: "项目、受试者和各审核节点的全局状态",
     group: "work",
     component: interfaceTrial ? lazy(() => import("../pages/ProjectBoardPage")) : null,
+    redirectTo: interfaceTrial ? undefined : "/protocols",
     showInNavigation: interfaceTrial,
   },
   {
@@ -67,6 +71,16 @@ export const APP_ROUTES: readonly AppRoute[] = [
     description: "从方案确认研究期别并选择独立审核节点",
     group: "work",
     component: interfaceTrial ? lazy(() => import("../pages/ProjectCreationPage")) : null,
+    redirectTo: interfaceTrial ? undefined : "/protocols",
+    showInNavigation: false,
+  },
+  {
+    path: "/projects-new",
+    label: "新建项目",
+    description: "从方案确认研究期别并选择独立审核节点",
+    group: "work",
+    component: null,
+    redirectTo: interfaceTrial ? undefined : "/protocols",
     showInNavigation: false,
   },
   {
@@ -107,8 +121,10 @@ export const APP_ROUTES: readonly AppRoute[] = [
     label: "入排工作台",
     description: "分阶段入排审核、规则与原始证据",
     group: "work",
-    component: interfaceTrial ? lazy(() => import("../pages/WorkbenchPage")) : null,
-    showInNavigation: interfaceTrial,
+    component: interfaceTrial
+      ? lazy(() => import("../pages/WorkbenchPage"))
+      : lazy(() => import("../pages/EligibilityWorkbenchPage")),
+    showInNavigation: true,
   },
   {
     path: "/actions",
@@ -116,15 +132,16 @@ export const APP_ROUTES: readonly AppRoute[] = [
     description: "补充资料、研究者判定与人工确认",
     group: "work",
     component: interfaceTrial ? lazy(() => import("../pages/ActionsPage")) : null,
+    redirectTo: interfaceTrial ? undefined : "/protocols",
     showInNavigation: interfaceTrial,
   },
   {
     path: "/reports",
     label: "报告",
-    description: "个例、中心与项目报告",
+    description: "入排审核结果打印版",
     group: "tools",
-    component: interfaceTrial ? lazy(() => import("../pages/ReportsPage")) : null,
-    showInNavigation: interfaceTrial,
+    component: lazy(() => import("../pages/ReportsPage")),
+    showInNavigation: true,
   },
   {
     path: "/tasks",
@@ -132,12 +149,12 @@ export const APP_ROUTES: readonly AppRoute[] = [
     description: "资料整理任务与系统状态",
     group: "system",
     component: lazy(() => import("../pages/TasksPage")),
-    showInNavigation: interfaceTrial,
+    showInNavigation: true,
   },
   {
     path: "/help",
     label: "系统帮助",
-    description: "流程化操作帮助",
+    description: "流程化帮助",
     group: "system",
     component: lazy(() => import("../pages/HelpPage")),
   },

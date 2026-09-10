@@ -1,24 +1,24 @@
 /**
  * 全局壳：响应式 Grid 布局（侧栏 + 顶栏 + 主工作区），无登录直达（合同 §3.1）。
  * 主工作区为容器查询上下文，页面级无横向滚动；窄屏侧栏收起为抽屉（SideNav 负责）。
- * 路由解析：已实现页面懒加载渲染；未注册模块显示明确的“尚未开放”说明；
- * 未知路径显示“未找到此页面”，两者都不伪装功能已完成。
+ * 路由解析：已实现页面懒加载渲染；正式模式的旧入口会先回到方案工作台。
+ * 未知路径显示“未找到这个页面”。
  */
 
-import { Suspense } from "react";
-import { RouteLink, useHashRoute } from "./router";
+import { Suspense, useEffect } from "react";
+import { RouteLink, navigate, useHashRoute } from "./router";
 import { findRoute, isImplemented } from "./routes";
 import { SideNav } from "../components/shell/SideNav";
 import { TopBar } from "../components/shell/TopBar";
 import { LoadingState } from "../components/shell/Feedback";
 
-/** 尚未开放模块：诚实说明，不渲染假页面 */
-function ModulePending({ label }: { label: string }) {
+
+function NotFound() {
   return (
     <div className="feedback feedback--empty" role="status">
-      <p className="feedback__title">「{label}」模块将在后续版本中开放。</p>
+      <p className="feedback__title">未找到这个页面。</p>
       <p className="feedback__hint">
-        当前版本仅开放已经接入真实资料的工作环节。
+        地址可能有误，请返回方案工作台继续。
       </p>
       <RouteLink to="/protocols" className="button button--primary">
         返回方案工作台
@@ -27,18 +27,11 @@ function ModulePending({ label }: { label: string }) {
   );
 }
 
-function NotFound() {
-  return (
-    <div className="feedback feedback--empty" role="status">
-      <p className="feedback__title">未找到这个页面。</p>
-      <p className="feedback__hint">
-        地址可能有误，或该入口尚未开放。可返回方案工作台继续。
-      </p>
-      <RouteLink to="/protocols" className="button button--primary">
-        返回方案工作台
-      </RouteLink>
-    </div>
-  );
+function RouteRedirect({ to }: { to: string }) {
+  useEffect(() => {
+    navigate(to);
+  }, [to]);
+  return <LoadingState />;
 }
 
 function CurrentPage() {
@@ -47,8 +40,11 @@ function CurrentPage() {
   if (route === undefined) {
     return <NotFound />;
   }
+  if (route.redirectTo !== undefined) {
+    return <RouteRedirect to={route.redirectTo} />;
+  }
   if (!isImplemented(route) || route.component === null) {
-    return <ModulePending label={route.label} />;
+    return <NotFound />;
   }
   const Page = route.component;
   return (

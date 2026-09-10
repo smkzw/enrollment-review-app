@@ -737,6 +737,19 @@ function ProfileBody({
           >
             查看/补充资料
           </RouteLink>
+          <RouteLink
+            to="/workbench"
+            params={{
+              project: project?.projectId ?? undefined,
+              subject: subjectId,
+              episode: episode.reviewEpisodeId,
+            }}
+            className="button button--primary profile-head__eligibility"
+            title="打开该审核节点的入排审核工作台"
+            ariaLabel={`打开 ${subjectCode} 的入排审核工作台`}
+          >
+            入排审核
+          </RouteLink>
         </div>
       </header>
 

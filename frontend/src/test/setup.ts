@@ -11,6 +11,7 @@ import {
   setProtocolWorkbenchRepository,
 } from "../api/protocolWorkbenchRepository";
 import { createCatalogTrial, setCatalogRepository } from "../api/catalog";
+import { setEligibilityReviewRepository } from "../api/eligibility-review";
 
 beforeEach(() => {
   setProtocolWorkbenchRepository(createProtocolWorkbenchStub());
@@ -20,5 +21,6 @@ beforeEach(() => {
 afterEach(() => {
   setProtocolWorkbenchRepository(null);
   setCatalogRepository(null);
+  setEligibilityReviewRepository(null);
   cleanup();
 });

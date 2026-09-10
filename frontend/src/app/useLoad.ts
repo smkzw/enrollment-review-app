@@ -8,6 +8,7 @@ import { StubApiError } from "../api";
 import { ProtocolWorkbenchApiError } from "../api/protocolWorkbenchRepository";
 import { EvidenceApiError } from "../api/evidence";
 import { CatalogApiError } from "../api/catalog";
+import { EligibilityReviewApiError } from "../api/eligibility-review";
 import { UI_PHRASES } from "../domain/labels";
 
 export type LoadState<T> =
@@ -21,6 +22,7 @@ function toUserMessage(error: unknown): string {
   if (error instanceof ProtocolWorkbenchApiError) return error.message;
   if (error instanceof EvidenceApiError) return error.message;
   if (error instanceof CatalogApiError) return error.message;
+  if (error instanceof EligibilityReviewApiError) return error.message;
   return UI_PHRASES.temporarilyUnavailable;
 }
 

@@ -1,4 +1,4 @@
-/* 任务与系统：任务列表、任务详情时间线、原型状态演示（合同 §8）。 */
+/* 任务与系统：任务列表、任务详情时间线和资料恢复状态。 */
 
 .tasks-section {
   background: var(--color-surface);
@@ -265,81 +265,3 @@
   font-weight: 600;
 }
 
-/* 原型状态演示 */
-
-.demo-job {
-  margin-top: var(--space-3);
-  border: 1px dashed var(--color-line);
-  border-radius: var(--radius-l);
-  padding: var(--space-3);
-  background: var(--color-canvas);
-}
-
-.demo-job__head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.demo-job__subject {
-  font-weight: 600;
-}
-
-.demo-job__stage {
-  font-size: var(--font-size-small);
-  color: var(--color-muted);
-}
-
-.demo-job__progress {
-  margin-left: auto;
-  font-size: var(--font-size-small);
-  color: var(--color-muted);
-}
-
-.demo-job__desc {
-  margin-top: var(--space-2);
-  font-size: var(--font-size-small);
-  overflow-wrap: anywhere;
-}
-
-.demo-job__files {
-  display: grid;
-  gap: var(--space-1);
-  margin-top: var(--space-3);
-}
-
-.demo-job__files li {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-2);
-  background: var(--color-surface);
-  border: 1px solid var(--color-line);
-  border-radius: var(--radius-m);
-}
-
-.demo-job__files strong {
-  color: var(--color-muted);
-  font-size: var(--font-size-small);
-  text-align: right;
-}
-
-@media (max-width: 560px) {
-  .demo-job__files li {
-    flex-direction: column;
-    gap: var(--space-1);
-  }
-
-  .demo-job__files strong {
-    text-align: left;
-  }
-}
-
-.demo-job__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  margin-top: var(--space-3);
-}

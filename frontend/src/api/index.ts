@@ -73,3 +73,19 @@ export {
   type PatientProfileRevisionView,
   type PatientProfileHistoryView,
 } from "./patient-profile";
+export {
+  getEligibilityReviewRepository,
+  setEligibilityReviewRepository,
+  createEligibilityReviewHttp,
+  EligibilityReviewApiError,
+  EligibilityReviewDecodeError,
+  type EligibilityReviewRepository,
+  type EligibilityReviewHttpOptions,
+  type EligibilityReviewRequestOptions,
+  type EligibilityReviewView,
+  type EligibilityClauseView,
+  type EligibilityFactRefView,
+  type EligibilityDecision,
+  type EligibilityDeterminationMode,
+  type EligibilityRuleKind,
+} from "./eligibility-review";

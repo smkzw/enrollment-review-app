@@ -1,0 +1,722 @@
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  getCatalogRepository,
+  getEvidenceRepository,
+  type CatalogEpisodeView,
+  type CatalogProjectView,
+  type CatalogSubjectView,
+} from "../api";
+import {
+  getEligibilityReviewRepository,
+  type EligibilityClauseView,
+  type EligibilityDecision,
+  type EligibilityReviewView,
+} from "../api/eligibility-review";
+import { updateParams, useHashRoute, RouteLink } from "../app/router";
+import { useLoad } from "../app/useLoad";
+import { OriginalEvidenceViewer } from "../components/evidence-workspace/OriginalEvidenceViewer";
+import { ErrorState, EmptyState, LoadingState } from "../components/shell/Feedback";
+import { BarrierIcon, AttentionIcon, CheckIcon, ConflictIcon, JudgmentIcon } from "../components/shell/icons";
+import { StatusBadge, type Tone } from "../components/shell/StatusBadge";
+import { formatSnapshotVersion } from "../domain/labels";
+
+export type EligibilityDecisionFilter =
+  | "all"
+  | "undetermined"
+  | "triggered"
+  | "met"
+  | "not_due"
+  | "not_applicable";
+
+const DECISION_FILTERS: ReadonlyArray<{
+  id: EligibilityDecisionFilter;
+  label: string;
+}> = [
+  { id: "all", label: "全部" },
+  { id: "undetermined", label: "无法判定" },
+  { id: "triggered", label: "已触发（排除）或未满足（入选）" },
+  { id: "met", label: "未触发（排除）或已满足（入选）" },
+  { id: "not_due", label: "尚未到期" },
+  { id: "not_applicable", label: "不适用" },
+];
+
+function clauseKindLabel(kind: EligibilityClauseView["ruleKind"]): string {
+  switch (kind) {
+    case "inclusion":
+      return "入选标准";
+    case "exclusion":
+      return "排除标准";
+    case "required_procedure":
+      return "流程要求";
+  }
+}
+
+export function isUndeterminedDecision(decision: EligibilityDecision): boolean {
+  return decision === "professional_judgment" || decision === "conflict";
+}
+
+function decisionMatchesFilter(
+  decision: EligibilityDecision,
+  filter: EligibilityDecisionFilter,
+): boolean {
+  switch (filter) {
+    case "all":
+      return true;
+    case "undetermined":
+      return isUndeterminedDecision(decision);
+    case "triggered":
+      return (
+        decision === "exclusion_triggered" ||
+        decision === "inclusion_not_met" ||
+        decision === "requirement_not_met"
+      );
+    case "met":
+      return (
+        decision === "exclusion_not_triggered" ||
+        decision === "inclusion_met" ||
+        decision === "requirement_met"
+      );
+    case "not_due":
+      return decision === "not_due";
+    case "not_applicable":
+      return decision === "not_applicable";
+  }
+}
+
+function decisionTone(decision: EligibilityDecision): Tone {
+  switch (decision) {
+    case "inclusion_met":
+    case "requirement_met":
+    case "exclusion_not_triggered":
+      return "ok";
+    case "inclusion_not_met":
+    case "requirement_not_met":
+    case "exclusion_triggered":
+    case "conflict":
+      return "danger";
+    case "professional_judgment":
+      return "info";
+    case "not_due":
+    case "not_applicable":
+      return "neutral";
+  }
+}
+
+function decisionIcon(decision: EligibilityDecision): ReactNode {
+  switch (decision) {
+    case "inclusion_met":
+    case "requirement_met":
+    case "exclusion_not_triggered":
+      return <CheckIcon size={13} />;
+    case "inclusion_not_met":
+    case "requirement_not_met":
+    case "exclusion_triggered":
+      return <BarrierIcon size={13} />;
+    case "professional_judgment":
+      return <JudgmentIcon size={13} />;
+    case "conflict":
+      return <ConflictIcon size={13} />;
+    case "not_due":
+    case "not_applicable":
+      return <AttentionIcon size={13} />;
+  }
+}
+
+function centerLabel(subject: CatalogSubjectView): string {
+  if (subject.centerCode !== null && subject.centerName !== null) {
+    return `${subject.centerCode}｜${subject.centerName}`;
+  }
+  return subject.centerCode ?? subject.centerName ?? "中心信息尚未填写";
+}
+
+function episodeLabel(episode: CatalogEpisodeView): string {
+  return episode.workflowStageLabel ?? episode.stageLabel;
+}
+
+function clauseDepth(
+  clause: EligibilityClauseView,
+  byCode: ReadonlyMap<string, EligibilityClauseView>,
+): number {
+  let depth = 0;
+  const visited = new Set<string>();
+  let parent = clause.parentRuleCode;
+  while (parent !== null && !visited.has(parent)) {
+    visited.add(parent);
+    const parentClause = byCode.get(parent);
+    if (parentClause === undefined) break;
+    depth += 1;
+    parent = parentClause.parentRuleCode;
+  }
+  return depth;
+}
+
+function projectOption(project: CatalogProjectView): string {
+  return `${project.projectName} · ${project.studyPhaseLabel} · 方案 ${project.officialVersion}`;
+}
+
+interface EligibilitySelectionProps {
+  projects: ReadonlyArray<CatalogProjectView>;
+  selectedProject: CatalogProjectView;
+  subjects: ReadonlyArray<CatalogSubjectView>;
+  selectedSubject: CatalogSubjectView;
+  episodes: ReadonlyArray<CatalogEpisodeView>;
+  selectedEpisode: CatalogEpisodeView;
+  onProjectChange: (projectId: string) => void;
+  onSubjectChange: (subjectId: string) => void;
+  onEpisodeChange: (episodeId: string) => void;
+}
+
+function EligibilitySelection({
+  projects,
+  selectedProject,
+  subjects,
+  selectedSubject,
+  episodes,
+  selectedEpisode,
+  onProjectChange,
+  onSubjectChange,
+  onEpisodeChange,
+}: EligibilitySelectionProps) {
+  return (
+    <section className="eligibility-selection" aria-label="选择审核对象">
+      <label>
+        <span>项目</span>
+        <select
+          aria-label="选择项目"
+          value={selectedProject.projectId}
+          onChange={(event) => onProjectChange(event.target.value)}
+        >
+          {projects.map((project) => (
+            <option key={project.projectId} value={project.projectId}>
+              {projectOption(project)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>受试者</span>
+        <select
+          aria-label="选择受试者"
+          value={selectedSubject.subjectId}
+          onChange={(event) => onSubjectChange(event.target.value)}
+        >
+          {subjects.map((subject) => (
+            <option key={subject.subjectId} value={subject.subjectId}>
+              {subject.subjectCode} · {centerLabel(subject)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>审核节点</span>
+        <select
+          aria-label="选择审核节点"
+          value={selectedEpisode.reviewEpisodeId}
+          onChange={(event) => onEpisodeChange(event.target.value)}
+        >
+          {episodes.map((episode) => (
+            <option key={episode.reviewEpisodeId} value={episode.reviewEpisodeId}>
+              {episodeLabel(episode)}
+            </option>
+          ))}
+        </select>
+      </label>
+    </section>
+  );
+}
+
+interface EligibilityClauseListProps {
+  clauses: ReadonlyArray<EligibilityClauseView>;
+  selectedRuleCode: string | null;
+  filter: EligibilityDecisionFilter;
+  onFilterChange: (filter: EligibilityDecisionFilter) => void;
+  onSelect: (ruleCode: string) => void;
+}
+
+function EligibilityClauseList({
+  clauses,
+  selectedRuleCode,
+  filter,
+  onFilterChange,
+  onSelect,
+}: EligibilityClauseListProps) {
+  const byCode = useMemo(
+    () => new Map(clauses.map((clause) => [clause.ruleCode, clause])),
+    [clauses],
+  );
+  const groups: ReadonlyArray<{
+    kind: EligibilityClauseView["ruleKind"];
+    title: string;
+  }> = [
+    { kind: "inclusion", title: "入选标准" },
+    { kind: "exclusion", title: "排除标准" },
+    { kind: "required_procedure", title: "流程要求" },
+  ];
+  return (
+    <div className="eligibility-clause-list">
+      <div className="eligibility-clause-list__toolbar">
+        <label>
+          <span>按判定筛选</span>
+          <select
+            aria-label="按判定筛选"
+            value={filter}
+            onChange={(event) =>
+              onFilterChange(event.target.value as EligibilityDecisionFilter)
+            }
+          >
+            {DECISION_FILTERS.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {groups.map((group) => {
+        const groupClauses = clauses.filter(
+          (clause) =>
+            clause.ruleKind === group.kind &&
+            decisionMatchesFilter(clause.decision, filter),
+        );
+        if (groupClauses.length === 0) return null;
+        return (
+          <section key={group.kind} className="eligibility-clause-group" aria-labelledby={`eligibility-group-${group.kind}`}>
+            <h3 id={`eligibility-group-${group.kind}`}>{group.title}</h3>
+            <ul>
+              {groupClauses.map((clause) => {
+                const selected = clause.ruleCode === selectedRuleCode;
+                const depth = clauseDepth(clause, byCode);
+                return (
+                  <li key={clause.ruleCode}>
+                    <button
+                      type="button"
+                      className={`eligibility-clause${selected ? " eligibility-clause--selected" : ""}`}
+                      style={{ paddingInlineStart: `calc(var(--space-2) + ${depth} * var(--space-3))` }}
+                      aria-pressed={selected}
+                      onClick={() => onSelect(clause.ruleCode)}
+                    >
+                      <span className="eligibility-clause__identity">
+                        <strong>{clause.ruleCode}</strong>
+                        <span
+                          className="eligibility-clause__summary"
+                          title={clause.textSummary}
+                        >
+                          {clause.textSummary}
+                        </span>
+                      </span>
+                      <StatusBadge
+                        tone={decisionTone(clause.decision)}
+                        text={clause.decisionLabel}
+                        hint={clause.reason}
+                        icon={decisionIcon(clause.decision)}
+                      />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        );
+      })}
+      {clauses.every((clause) => !decisionMatchesFilter(clause.decision, filter)) && (
+        <p className="eligibility-clause-list__empty">没有符合当前筛选条件的条款。</p>
+      )}
+    </div>
+  );
+}
+
+interface EligibilityClauseDetailProps {
+  clause: EligibilityClauseView;
+  selectedFactIndex: number;
+  onSelectFact: (index: number) => void;
+}
+
+function EligibilityClauseDetail({
+  clause,
+  selectedFactIndex,
+  onSelectFact,
+}: EligibilityClauseDetailProps) {
+  return (
+    <div className="eligibility-clause-detail">
+      <div className="eligibility-clause-detail__decision">
+        <StatusBadge
+          tone={decisionTone(clause.decision)}
+          text={clause.decisionLabel}
+          hint={clause.reason}
+          icon={decisionIcon(clause.decision)}
+        />
+        <p>{clause.reason}</p>
+      </div>
+      <section className="eligibility-detail-section" aria-labelledby="eligibility-original-clause-title">
+        <h3 id="eligibility-original-clause-title">条款原文</h3>
+        <p className="eligibility-clause-detail__text">{clause.textSummary}</p>
+      </section>
+      <section className="eligibility-detail-section" aria-labelledby="eligibility-facts-title">
+        <h3 id="eligibility-facts-title">关联事实</h3>
+        {clause.factRefs.length === 0 ? (
+          <p className="eligibility-muted">当前条款没有关联事实。</p>
+        ) : (
+          <ul className="eligibility-fact-list">
+            {clause.factRefs.map((fact, index) => (
+              <li key={`${fact.factId}-${fact.locatorId ?? "no-locator"}-${index}`}>
+                <button
+                  type="button"
+                  className={`eligibility-fact-list__item${selectedFactIndex === index ? " is-active" : ""}`}
+                  aria-pressed={selectedFactIndex === index}
+                  onClick={() => onSelectFact(index)}
+                >
+                  <strong>{fact.factId}</strong>
+                  <span>
+                    {fact.pageNumber === null
+                      ? "该事实未附页码定位"
+                      : `第 ${fact.pageNumber} 页`}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      <p className="eligibility-clause-detail__mode">
+        {determinationModeLabel(clause.determinationMode)}
+      </p>
+    </div>
+  );
+}
+
+function determinationModeLabel(mode: EligibilityClauseView["determinationMode"]): string {
+  switch (mode) {
+    case "deterministic":
+      return "系统按结构化资料完成判断";
+    case "semantic":
+      return "系统按资料内容完成判断";
+    case "investigator_judgment":
+      return "需要研究者结合资料确认";
+  }
+}
+
+interface EligibilityEvidencePanelProps {
+  review: EligibilityReviewView;
+  clause: EligibilityClauseView;
+  selectedFactIndex: number;
+  onSelectFact: (index: number) => void;
+}
+
+function EligibilityEvidencePanel({
+  review,
+  clause,
+  selectedFactIndex,
+  onSelectFact,
+}: EligibilityEvidencePanelProps) {
+  const processing = useLoad(
+    (signal) =>
+      getEvidenceRepository().getProcessingRevision(
+        review.completeProcessingRevisionId,
+        { signal },
+      ),
+    [review.completeProcessingRevisionId],
+  );
+  const snapshot = useLoad(
+    (signal) =>
+      getEvidenceRepository().getEvidenceSnapshot(review.evidenceSnapshotV2Id, {
+        signal,
+      }),
+    [review.evidenceSnapshotV2Id],
+  );
+  const pages = processing.state.status === "success" ? processing.state.data.pages : [];
+  const documentNames = useMemo(() => {
+    if (snapshot.state.status !== "success") return new Map<string, string>();
+    return new Map(
+      snapshot.state.data.members.map((member) => [
+        member.sourceDocumentVersionId,
+        member.fileName,
+      ]),
+    );
+  }, [snapshot.state]);
+  const selectedFact = clause.factRefs[selectedFactIndex] ?? clause.factRefs[0] ?? null;
+  const selectedPage = selectedFact?.pageNumber === null || selectedFact === null
+    ? null
+    : pages.find((page) => page.pageNumber === selectedFact.pageNumber) ?? null;
+
+  return (
+    <aside className="eligibility-evidence" aria-label="原件面板">
+      <header className="workbench-pane__head">
+        <div>
+          <h2 className="workbench-pane__title">原件</h2>
+          <p className="workbench-pane__subtitle">{clause.ruleCode} · {clauseKindLabel(clause.ruleKind)}</p>
+        </div>
+      </header>
+      {clause.factRefs.length === 0 ? (
+        <p className="eligibility-muted">当前条款没有可查看的关联事实。</p>
+      ) : (
+        <>
+          <ul className="eligibility-evidence__refs" aria-label="关联事实原件定位">
+            {clause.factRefs.map((fact, index) => (
+              <li key={`${fact.factId}-${fact.locatorId ?? "no-locator"}-${index}`}>
+                {fact.pageNumber === null ? (
+                  <span className="eligibility-evidence__ref eligibility-evidence__ref--unavailable">
+                    <strong>{fact.factId}</strong>
+                    <span>该事实未附页码定位</span>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className={`eligibility-evidence__ref${selectedFactIndex === index ? " is-active" : ""}`}
+                    aria-pressed={selectedFactIndex === index}
+                    onClick={() => onSelectFact(index)}
+                  >
+                    <strong>{fact.factId}</strong>
+                    <span>定位到第 {fact.pageNumber} 页</span>
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+          {selectedFact?.pageNumber === null && (
+            <p className="eligibility-evidence__empty" role="status">
+              该事实未附页码定位，暂时无法打开对应原件页。
+            </p>
+          )}
+          {selectedFact !== null && selectedFact.pageNumber !== null && selectedPage === null && processing.state.status === "success" && (
+            <p className="eligibility-evidence__empty" role="status">
+              当前处理资料中没有找到第 {selectedFact.pageNumber} 页。
+            </p>
+          )}
+          {processing.state.status === "loading" || snapshot.state.status === "loading" ? (
+            <LoadingState />
+          ) : processing.state.status === "error" ? (
+            <ErrorState message={processing.state.message} onRetry={processing.retry} />
+          ) : snapshot.state.status === "error" ? (
+            <ErrorState message={snapshot.state.message} onRetry={snapshot.retry} />
+          ) : pages.length === 0 ? (
+            <EmptyState message="当前没有可查看的原件页。" hint="请先完成资料处理并确认可查看的原件。" />
+          ) : selectedFact?.pageNumber === null ? null : (
+            <OriginalEvidenceViewer
+              revisionId={review.completeProcessingRevisionId}
+              pages={pages}
+              documentNames={documentNames}
+              selectedEntryId={selectedPage?.entryId ?? null}
+              selectedLocatorId={null}
+              selectedPageLocators={[]}
+              onSelectPage={() => undefined}
+              unavailableRecoveryHint="当前页面无法显示时，请回到受试者资料页检查资料处理状态。"
+            />
+          )}
+        </>
+      )}
+    </aside>
+  );
+}
+
+export function EligibilityWorkbenchPage() {
+  const { params } = useHashRoute();
+  const projectParam = params.get("project");
+  const subjectParam = params.get("subject");
+  const episodeParam = params.get("episode");
+  const componentParam = params.get("component");
+  const [filter, setFilter] = useState<EligibilityDecisionFilter>("all");
+  const [selectedFactIndex, setSelectedFactIndex] = useState(0);
+
+  const projects = useLoad((signal) => getCatalogRepository().listProjects(signal), []);
+  const projectList = projects.state.status === "success" ? projects.state.data : [];
+  const selectedProject =
+    projectParam !== null
+      ? projectList.find((project) => project.projectId === projectParam) ?? null
+      : projectList[0] ?? null;
+
+  const subjects = useLoad(
+    (signal) =>
+      getCatalogRepository().listSubjects(selectedProject?.projectId ?? "", signal),
+    [selectedProject?.projectId],
+    { enabled: selectedProject !== null },
+  );
+  const subjectList =
+    subjects.state.status === "success"
+      ? subjects.state.data.filter((subject) => subject.projectId === selectedProject?.projectId)
+      : [];
+  const selectedSubject =
+    subjectParam !== null
+      ? subjectList.find((subject) => subject.subjectId === subjectParam) ?? null
+      : subjectList[0] ?? null;
+
+  const episodes = useLoad(
+    (signal) =>
+      getCatalogRepository().listEpisodes(selectedSubject?.subjectId ?? "", signal),
+    [selectedSubject?.subjectId],
+    { enabled: selectedSubject !== null },
+  );
+  const episodeList =
+    episodes.state.status === "success"
+      ? episodes.state.data.filter((episode) => episode.subjectId === selectedSubject?.subjectId)
+      : [];
+  const selectedEpisode =
+    episodeParam !== null
+      ? episodeList.find((episode) => episode.reviewEpisodeId === episodeParam) ?? null
+      : episodeList[0] ?? null;
+
+  const review = useLoad(
+    (signal) =>
+      getEligibilityReviewRepository().getEligibilityReview(
+        selectedSubject?.subjectId ?? "",
+        selectedEpisode?.reviewEpisodeId ?? "",
+        { signal },
+      ),
+    [selectedSubject?.subjectId, selectedEpisode?.reviewEpisodeId],
+    { enabled: selectedSubject !== null && selectedEpisode !== null },
+  );
+
+  useEffect(() => {
+    setSelectedFactIndex(0);
+  }, [selectedEpisode?.reviewEpisodeId, componentParam]);
+
+  const setProject = (projectId: string) =>
+    updateParams({ project: projectId, subject: null, episode: null, component: null });
+  const setSubject = (subjectId: string) =>
+    updateParams({ subject: subjectId, episode: null, component: null });
+  const setEpisode = (episodeId: string) =>
+    updateParams({ episode: episodeId, component: null });
+
+  if (projects.state.status === "loading") return <LoadingState />;
+  if (projects.state.status === "error") {
+    return <ErrorState message={projects.state.message} onRetry={projects.retry} />;
+  }
+  if (projectList.length === 0) {
+    return <EmptyState message="当前还没有已保存的项目。" hint="请先在方案工作台确认研究方案。" />;
+  }
+  if (selectedProject === null) {
+    return <ErrorState message="链接中的项目不存在，请重新选择。" onRetry={() => updateParams({ project: null, subject: null, episode: null, component: null })} />;
+  }
+  if (subjects.state.status === "loading") return <LoadingState />;
+  if (subjects.state.status === "error") {
+    return <ErrorState message={subjects.state.message} onRetry={subjects.retry} />;
+  }
+  if (subjectList.length === 0) {
+    return <EmptyState message="这个项目还没有受试者。" hint="请先在受试者资料目录中登记受试者。" />;
+  }
+  if (selectedSubject === null) {
+    return <ErrorState message="链接中的受试者不属于当前项目，请重新选择。" onRetry={() => updateParams({ subject: null, episode: null, component: null })} />;
+  }
+  if (episodes.state.status === "loading") return <LoadingState />;
+  if (episodes.state.status === "error") {
+    return <ErrorState message={episodes.state.message} onRetry={episodes.retry} />;
+  }
+  if (episodeList.length === 0) {
+    return <EmptyState message="该受试者还没有审核节点。" hint="请先在方案工作台确认审核节点。" />;
+  }
+  if (selectedEpisode === null) {
+    return <ErrorState message="链接中的审核节点不存在，请重新选择。" onRetry={() => updateParams({ episode: null, component: null })} />;
+  }
+  if (review.state.status === "loading") return <LoadingState />;
+  if (review.state.status === "error") {
+    return <ErrorState message={review.state.message} onRetry={review.retry} />;
+  }
+
+  const reviewData = review.state.data;
+  const allClauses = reviewData.clauses;
+  const selectedClause =
+    (componentParam === null
+      ? allClauses[0]
+      : allClauses.find((clause) => clause.ruleCode === componentParam)) ?? allClauses[0];
+  if (selectedClause === undefined) {
+    return <EmptyState message="当前审核节点没有可展示的条款。" />;
+  }
+  const undeterminedCount = allClauses.filter((clause) => isUndeterminedDecision(clause.decision)).length;
+  const subjectLabel = `${selectedSubject.subjectCode} · ${centerLabel(selectedSubject)}`;
+
+  return (
+    <div className="eligibility-workbench workbench">
+      <header className="page-head">
+        <h1 className="page-head__title">入排审核工作台</h1>
+        <p className="page-head__note">
+          {subjectLabel} · {selectedProject.projectName} · {episodeLabel(selectedEpisode)} · 方案 {selectedProject.officialVersion}
+        </p>
+      </header>
+      <EligibilitySelection
+        projects={projectList}
+        selectedProject={selectedProject}
+        subjects={subjectList}
+        selectedSubject={selectedSubject}
+        episodes={episodeList}
+        selectedEpisode={selectedEpisode}
+        onProjectChange={setProject}
+        onSubjectChange={setSubject}
+        onEpisodeChange={setEpisode}
+      />
+      <div className="eligibility-context-bar">
+        <span
+          className="eligibility-undetermined"
+          role="status"
+          aria-label={`无法判定 ${undeterminedCount} 条`}
+        >
+          无法判定 {undeterminedCount} 条
+        </span>
+        <RouteLink
+          to="/subjects"
+          params={{ project: selectedProject.projectId, subject: selectedSubject.subjectId, episode: selectedEpisode.reviewEpisodeId }}
+          className="button button--quiet"
+          ariaLabel={`查看 ${selectedSubject.subjectCode} 的资料页`}
+        >
+          查看受试者资料
+        </RouteLink>
+        <RouteLink
+          to="/reports"
+          params={{ project: selectedProject.projectId, subject: selectedSubject.subjectId, episode: selectedEpisode.reviewEpisodeId }}
+          className="button button--quiet"
+          ariaLabel="打开报告页"
+        >
+          打开报告
+        </RouteLink>
+      </div>
+      <div className="workbench-panes">
+        <aside className="workbench-col eligibility-workbench__clauses" aria-label="条款列表">
+          <div className="workbench-pane">
+            <header className="workbench-pane__head">
+              <div>
+                <h2 className="workbench-pane__title">审核条款</h2>
+                <p className="workbench-pane__subtitle">共 {allClauses.length} 条</p>
+              </div>
+            </header>
+            <EligibilityClauseList
+              clauses={allClauses}
+              selectedRuleCode={selectedClause.ruleCode}
+              filter={filter}
+              onFilterChange={setFilter}
+              onSelect={(ruleCode) => updateParams({ component: ruleCode })}
+            />
+          </div>
+        </aside>
+        <section className="workbench-col eligibility-workbench__detail" aria-label="条款详情">
+          <div className="workbench-pane">
+            <header className="workbench-pane__head">
+              <div>
+                <h2 className="workbench-pane__title">
+                  <span className="workbench-pane__code">{selectedClause.ruleCode}</span>
+                  <span>{clauseKindLabel(selectedClause.ruleKind)}</span>
+                </h2>
+                <p className="workbench-pane__subtitle">条款详情</p>
+              </div>
+            </header>
+            <EligibilityClauseDetail
+              clause={selectedClause}
+              selectedFactIndex={selectedFactIndex}
+              onSelectFact={setSelectedFactIndex}
+            />
+          </div>
+        </section>
+        <section className="workbench-col eligibility-workbench__evidence">
+          <EligibilityEvidencePanel
+            review={reviewData}
+            clause={selectedClause}
+            selectedFactIndex={selectedFactIndex}
+            onSelectFact={setSelectedFactIndex}
+          />
+        </section>
+      </div>
+      <footer className="eligibility-workbench__footnote">
+        资料版本：{formatSnapshotVersion(selectedEpisode.revision, null)} · 档案版本：{formatSnapshotVersion(reviewData.ruleSetRevision, null)}
+      </footer>
+    </div>
+  );
+}
+
+export default EligibilityWorkbenchPage;
