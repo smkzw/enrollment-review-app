@@ -30,6 +30,7 @@ from app.api.v2.protocol_control import router as protocol_control_router
 from app.api.v2.fact_corrections import router as fact_corrections_router
 from app.api.v2.fact_normalization import router as fact_normalization_router
 from app.api.v2.judgment_search import router as judgment_search_router
+from app.api.v2.eligibility_review import router as eligibility_review_router
 from app.api.v2.page_review import router as page_review_router
 from app.services.judgment_search_job_service import JUDGMENT_SEARCH_JOB_TYPE
 from app.services.page_review_runtime import PageReviewRuntime
@@ -92,6 +93,7 @@ from app.services.fact_normalization_job_service import (
 from app.services.job_service import JobService
 from app.services.omlx_gate import OmlxGateClient, omlx_http_inference
 from app.services.patient_profile_service import PatientProfileService
+from app.services.eligibility_review_projection import EligibilityReviewProjectionService
 from app.services.selective_vision_postprocess_executor import (
     SelectiveVisionPostprocessExecutorConfig,
     create_selective_vision_postprocess_executor,
@@ -241,6 +243,7 @@ def create_app(
             session_factory, artifact_store=artifact_store
         )
         app.state.patient_profile_service = PatientProfileService()
+        app.state.eligibility_review_projection_service = EligibilityReviewProjectionService()
         app.state.fact_normalization_job_service = FactNormalizationJobService(
             session_factory, lease_ttl=lease_ttl
         )
@@ -360,5 +363,6 @@ def create_app(
     app.include_router(fact_normalization_router)
     app.include_router(page_review_router)
     app.include_router(judgment_search_router)
+    app.include_router(eligibility_review_router)
     register_error_handlers(app)
     return app
