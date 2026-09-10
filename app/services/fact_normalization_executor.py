@@ -146,8 +146,9 @@ def _expectation_gap_signals(
     """兼容别名：信号推导唯一实现在 ``fact_expectation_gaps.expectation_gap_signals``。
 
     模板清单与审核节点依赖经由本模块全局注入，保持既有针对本模块
-    monkeypatch 这两个名字的单测语义不变。书面判断检索摘要按当前权威只读加载：
-    未检索/覆盖不完整维持原兜底，双读完整未见候选才升级专业判断缺口。
+    monkeypatch 这两个名字的单测语义不变。书面判断检索摘要以 callable 惰性
+    加载：仅当研究者判断类到期模板走到兜底分支才查询；未检索/覆盖不完整
+    维持原兜底，双读完整未见候选才升级专业判断缺口。
     """
     return expectation_gap_signals(
         session,
@@ -155,9 +156,10 @@ def _expectation_gap_signals(
         unresolved_items,
         fact_candidates=fact_candidates,
         gate_results=gate_results,
-        judgment_search_summaries=JudgmentSearchSummaryRepository(
-            session
-        ).latest_for_authority(authority),
+        judgment_search_summaries=lambda: (
+            JudgmentSearchSummaryRepository(session).latest_for_authority(authority)
+            if isinstance(session, Session) else None
+        ),
         _templates_lookup=list_expectation_templates,
         _episode_lookup=EpisodeRepository,
     )

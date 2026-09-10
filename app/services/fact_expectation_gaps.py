@@ -14,7 +14,6 @@
   目标沿不可变修订记录回溯可达的运行；绝不收集全部历史运行或已被丢弃的分支，
   也绝不因事实被取代而推断风险已解除；
 - 被拒候选的压制使用当前未被取代的已发布事实所支持的资料要求，历史「曾经
-  接受」的候选不得继续压制其风险信号；
 - 先前期望中无法按所选源记录复核的具体输入信号，以非默认 ``observation_unverified``
   保守保留（detail 关联该先期同权威期望；具体/兜底按冻结的 ``input_gap_signals``
   精确判断，绝不从可见状态反推），绝不改写历史期望行，也绝不把旧缺口原样
@@ -27,7 +26,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Literal
 
 from sqlalchemy.orm import Session
@@ -93,6 +92,23 @@ EXPECTATION_INPUT_INCOMPLETE_CODE = _EXPECTATION_INPUT_INCOMPLETE_CODE
 _TargetKind = Literal["fact", "event", "exposure"]
 
 
+def _lazy_judgment_search_summaries(session, authority):
+    """惰性加载判断检索摘要：仅当推导真正需要时才查询数据库。
+
+    缺口推导绝大多数输入（未解决项/被拒候选）不需要检索摘要；只有
+    ``investigator_assessment`` 类到期模板走到兜底分支时才读取。以
+    callable 传入 ``expectation_gap_signals``，避免无谓查询；传入的不是
+    真实 Session（如既有单测的假 session）时不触发查询，保持原兜底语义。
+    """
+    def _load():
+        if not isinstance(session, Session):
+            return None
+        return JudgmentSearchSummaryRepository(session).latest_for_authority(
+            authority
+        )
+    return _load
+
+
 def expectation_gap_signals(
     session: Session,
     authority: FactAuthority,
@@ -101,7 +117,9 @@ def expectation_gap_signals(
     fact_candidates: list[ClinicalFactCandidateV2] | None = None,
     gate_results: list[FactGateResult] | None = None,
     accepted_requirements: set[str] | None = None,
-    judgment_search_summaries: Mapping[str, JudgmentSearchCoverageSummary] | None = None,
+    judgment_search_summaries: Mapping[str, JudgmentSearchCoverageSummary]
+    | Callable[[], Mapping[str, JudgmentSearchCoverageSummary]]
+    | None = None,
     _templates_lookup=None,
     _episode_lookup=None,
 ) -> list[CoverageGapSignal]:
@@ -206,6 +224,11 @@ def expectation_gap_signals(
         and signal.kind in concrete_gap_types
     }
     episode = episode_lookup(session).get(authority.review_episode_id)
+    summaries: Mapping[str, JudgmentSearchCoverageSummary] | None = (
+        judgment_search_summaries
+        if not callable(judgment_search_summaries)
+        else None  # callable 惰性：仅在首个研究者判断兜底分支触发一次
+    )
     for template in templates:
         if (
             template.template_id in signaled_template_ids
@@ -223,7 +246,9 @@ def expectation_gap_signals(
             "investigator_assessment" in required_source_types
         )
         if needs_investigator_judgment:
-            search_summary = (judgment_search_summaries or {}).get(
+            if callable(judgment_search_summaries) and summaries is None:
+                summaries = judgment_search_summaries()
+            search_summary = (summaries or {}).get(
                 template.requirement_id
             )
             if (
@@ -551,9 +576,7 @@ def reconstruct_reprojection_gap_signals(
         fact_candidates=fact_candidates,
         gate_results=gate_results,
         accepted_requirements=accepted_requirements,
-        judgment_search_summaries=JudgmentSearchSummaryRepository(
-            session
-        ).latest_for_authority(authority),
+        judgment_search_summaries=_lazy_judgment_search_summaries(session, authority),
     )
     signals.extend(
         _prior_unreconfirmed_signals(

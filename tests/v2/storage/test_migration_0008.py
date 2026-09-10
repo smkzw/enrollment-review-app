@@ -141,6 +141,7 @@ PHASE5_V2_TABLES = frozenset(
         "page_reconciliation_reviews",
         "subject_page_coverages",
         "subject_page_coverage_entries",
+        "judgment_search_summaries",
     }
 )
 

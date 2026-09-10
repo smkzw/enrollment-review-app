@@ -31,13 +31,22 @@ def _history(path):
 def test_upgrade_preserves_linked_history_and_refuses_lossy_downgrade(data_paths):
     historical = MetaData()
     for table in Base.metadata.tables.values():
+        # 0022 表不属于 0020 目标 schema；其余表连带 FK 依赖一并复制进历史快照。
+        if table.name == "judgment_search_summaries":
+            continue
         table.to_metadata(historical)
     historical.tables["page_review_records"].append_constraint(UniqueConstraint(
         "page_artifact_id", "clause_pack_sha256", "lane", "response_sha256",
         name="uq_prr_page_pack_lane_response",
     ))
     MigrationManager(data_paths, metadata=historical).upgrade("0020")
-    manager = MigrationManager(data_paths)
+    # 钉住 0021 升级目标时，校验用 metadata 不得包含 0022 ORM 表（0021 schema 没有它）。
+    pre_0022_metadata = MetaData()
+    for table in Base.metadata.tables.values():
+        if table.name == "judgment_search_summaries":
+            continue
+        table.to_metadata(pre_0022_metadata)
+    manager = MigrationManager(data_paths, metadata=pre_0022_metadata)
     engine = build_engine(data_paths.db_path)
     try:
         with Session(engine) as session, session.begin():
