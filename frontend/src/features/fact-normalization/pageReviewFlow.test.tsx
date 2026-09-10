@@ -36,7 +36,7 @@ it("停止后由用户继续同一任务，不自动恢复或新建", async () =
   pages.resume.mockResolvedValue("child");
   const onReady = vi.fn();
   render(<PageOnly subjectId="s" onReady={onReady} />);
-  const button = await screen.findByRole("button", { name: "继续判读" });
+  const button = await screen.findByRole("button", { name: "继续识别" });
   expect(pages.resume).not.toHaveBeenCalled();
   await userEvent.click(button);
   await waitFor(() => expect(onReady).toHaveBeenCalledOnce());
@@ -46,7 +46,7 @@ it("停止后由用户继续同一任务，不自动恢复或新建", async () =
 
 it("失败页重读完成后自动继续整理，成功历史不重新提交", async () => {
   const start = vi.fn().mockRejectedValueOnce(new FactNormalizationApiError(
-    "PAGE_COVERAGE_NOT_READY", "资料判读尚未完成", "请先判读", "请先判读", 409,
+    "PAGE_COVERAGE_NOT_READY", "资料识别尚未完成", "请先判读", "请先判读", 409,
   )).mockResolvedValue({ jobId: "normalizer", runId: "run", created: true, state: "queued", stateLabel: "等待", recoveryAction: "" });
   setFactNormalizationRepository({ kind: "http", startFactNormalization: start,
     getFactNormalizationJobStatus: vi.fn().mockResolvedValue({ jobId: "normalizer", state: "completed",
@@ -90,7 +90,7 @@ it("切换受试者后丢弃迟到结果，也不整理新受试者", async () =
   await act(async () => { resolve(ready); });
   expect(signal.aborted).toBe(true);
   expect(onReady).not.toHaveBeenCalled();
-  expect(screen.queryByLabelText("资料判读进度")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("资料识别进度")).not.toBeInTheDocument();
 });
 
 it("已完成入口刷新后只查询服务端，不再次触发整理", async () => {

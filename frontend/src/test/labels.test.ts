@@ -104,7 +104,7 @@ describe("中文标签：合同词核对", () => {
     expect(decisionLabel.inclusion_not_met).toBe("不满足");
     expect(decisionLabel.exclusion_not_triggered).toBe("未触发");
     expect(decisionLabel.exclusion_triggered).toBe("已触发");
-    expect(decisionLabel.indeterminate).toBe("暂不能明确");
+    expect(decisionLabel.indeterminate).toBe("无法判定");
     expect(decisionLabel.not_due).toBe("尚未到期");
     expect(decisionLabel.not_applicable).toBe("不适用");
     expect(decisionLabel.requirement_met).toBe("已满足");

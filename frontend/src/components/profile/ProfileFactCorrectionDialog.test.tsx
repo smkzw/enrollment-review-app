@@ -31,7 +31,7 @@ const evidenceSnapshot: EvidenceSnapshotView = {
   subjectId: SUBJECT,
   reviewEpisodeId: EPISODE,
   uploadMode: "full",
-  uploadModeLabel: "建立完整资料快照",
+  uploadModeLabel: "建立完整资料版本",
   priorSnapshotId: null,
   comparisonSnapshotId: null,
   status: "active",

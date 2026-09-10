@@ -20,7 +20,7 @@ export const PRECISION_DESCRIPTIONS: Record<PrecisionBadgeValue, string> = {
   text_range: "可定位到识别文字中的一段文字范围，并显示页码与摘录。",
   page_excerpt: "可定位到页内摘录区域，但不能精确到具体字符位置。",
   page_only:
-    "只能确定到整页，没有文字坐标或文本高亮；界面试用阶段未附带原始页图，不提供整页预览。",
+    "只能确定到整页，没有文字坐标或文本高亮；当前页面未附带原始页图，仅提供页码与摘录。",
   block:
     "只能回溯到文档结构块，尚未可靠对齐到渲染页或页码；界面不显示高亮或虚假页码。",
 };

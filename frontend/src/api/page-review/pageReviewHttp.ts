@@ -1,7 +1,7 @@
 import { getProtocolApiBase } from "../protocolApiConfig";
 
 export class PageReviewApiError extends Error {
-  constructor(message = "暂时无法读取资料判读进度。") { super(message); }
+  constructor(message = "暂时无法读取资料识别进度。") { super(message); }
 }
 
 export interface PageReviewStatus {

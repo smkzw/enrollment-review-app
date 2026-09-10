@@ -186,7 +186,7 @@ describe("入排工作台", () => {
     expect(screen.getByText("明确记载")).toBeInTheDocument();
     expect(screen.getByText("明确否认")).toBeInTheDocument();
     expect(screen.getByText(/受影响子项：EX-01a/)).toBeInTheDocument();
-    expect(screen.getByText(/资料快照：第 1 版（2026-08-12 整理）/)).toBeInTheDocument();
+    expect(screen.getByText(/资料版本：第 1 版（2026-08-12 整理）/)).toBeInTheDocument();
     // 每个事实都带来源定位：文件、页码、精度
     const conflictSection = screen.getByLabelText("冲突来源并列");
     expect(
@@ -195,13 +195,13 @@ describe("入排工作台", () => {
     expect(
       within(conflictSection).getAllByText("仅页码").length,
     ).toBeGreaterThanOrEqual(2);
-    // 打开其中一个来源，证据弹窗显示资料快照版本且不声称可打开整页
+    // 打开其中一个来源，证据弹窗显示资料版本版本且不声称可打开整页
     await user.click(
       within(conflictSection)
         .getAllByRole("button", { name: /打开证据：合成筛选资料/ })[0],
     );
     const dialog = screen.getByRole("dialog", { name: "原始资料证据" });
-    expect(dialog).toHaveTextContent("资料快照");
+    expect(dialog).toHaveTextContent("资料版本");
     expect(dialog).toHaveTextContent("第 1 版（2026-08-12 整理）");
     expect(dialog).not.toHaveTextContent("可打开整页");
     await user.keyboard("{Escape}");

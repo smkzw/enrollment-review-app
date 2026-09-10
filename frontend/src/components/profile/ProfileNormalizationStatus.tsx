@@ -21,7 +21,7 @@ export function ProfileNormalizationStatus({
 
   if (state.status === "page_review") {
     return (
-      <div className={`profile-normalization profile-normalization--${state.needsAttention ? "failed" : "progress"}`} role="status" aria-label="资料判读进度">
+      <div className={`profile-normalization profile-normalization--${state.needsAttention ? "failed" : "progress"}`} role="status" aria-label="资料识别进度">
         <div className="profile-normalization__body">
           <p className="profile-normalization__title">{state.title}</p>
           <p className="profile-normalization__hint">{state.message}</p>

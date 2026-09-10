@@ -209,7 +209,7 @@ export function WorkbenchPage() {
         <p className="page-head__note">
           {UI_PHRASES.prototypeOnly}：展示合成示例数据。{episodeData.subject.subjectCode} ·{" "}
           {episodeData.episode.stageLabel} · 方案 {episodeData.project.protocolVersion} ·
-          资料快照第 {episodeData.episode.revision} 版
+          资料版本 第 {episodeData.episode.revision} 版
         </p>
       </header>
 

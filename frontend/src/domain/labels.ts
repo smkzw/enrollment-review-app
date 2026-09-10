@@ -66,7 +66,7 @@ export const decisionLabel: Record<ComponentDecision, string> = {
   inclusion_not_met: "不满足",
   exclusion_not_triggered: "未触发",
   exclusion_triggered: "已触发",
-  indeterminate: "暂不能明确",
+  indeterminate: "无法判定",
   professional_judgment: "需专业判断",
   conflict: "存在冲突",
   not_due: "尚未到期",
@@ -276,8 +276,8 @@ export const UI_PHRASES = {
 } as const;
 
 /**
- * 资料快照版本的人读表达（I3 修复）：与工作台/资料页头部“资料快照第 N 版”一致，
- * 并附快照整理日期（如有）。
+ * 资料版本的人读表达（I3 修复）：与工作台/资料页头部“资料版本 第 N 版”一致，
+ * 并附整理日期（如有）。
  */
 export function formatSnapshotVersion(
   revision: number,

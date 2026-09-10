@@ -419,7 +419,7 @@ function JobDetail({ job }: { job: JobView }) {
           {completed ? (
             <>
               <span className="job-detail__note">
-                已完成部分保留在资料快照中；重新开始不会覆盖历史结果。
+                已完成部分保留在资料版本中；重新开始不会覆盖历史结果。
               </span>
               <RouteLink
                 to="/workbench"
@@ -592,7 +592,7 @@ function demoActions(
       return (
         <>
           <span className="job-detail__note">
-            已完成部分仍保留在资料快照中，不会被删除。
+            已完成部分仍保留在资料版本中，不会被删除。
           </span>
           <button
             type="button"

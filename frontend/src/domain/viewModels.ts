@@ -202,7 +202,7 @@ export interface ConflictFactView {
   polarityLabel: string;
   certainty: number | null;
   value: boolean | number | string | null;
-  /** 该事实的来源定位（文件、资料快照版本、页码、摘录、精度）；不自动选择来源 */
+  /** 该事实的来源定位（文件、资料版本、页码、摘录、精度）；不自动选择来源 */
   evidence: ReadonlyArray<EvidenceLocatorView>;
 }
 
@@ -213,7 +213,7 @@ export interface ConflictGroupView {
   /** 受影响子项的显示编号（如“EX-01a”）；原始组件 ID 不进入界面 */
   affectedDisplayCodes: ReadonlyArray<string>;
   resolved: boolean;
-  /** 资料快照版本（人读，如“第 1 版（2026-08-12 整理）”） */
+  /** 资料版本（人读，如“第 1 版（2026-08-12 整理）”） */
   snapshotVersion: string;
   /** 冲突来源并列展示，不隐藏为“系统选择” */
   facts: ReadonlyArray<ConflictFactView>;
@@ -355,7 +355,7 @@ export interface EpisodeDetailView {
     fileName: string;
     documentType: string;
     sourceParty: string;
-    /** 资料快照版本（人读，如“第 1 版（2026-08-12 整理）”；I3 修复） */
+    /** 资料版本（人读，如“第 1 版（2026-08-12 整理）”；I3 修复） */
     snapshotVersion: string;
   }>;
   reviewRunId: ReviewRunId | null;

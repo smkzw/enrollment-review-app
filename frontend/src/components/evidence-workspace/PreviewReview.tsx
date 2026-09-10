@@ -2,7 +2,7 @@
  * 确认前逐文件复核（P4-R02）：新增、内容重复、名称相同但内容不同、
  * 不支持、无法读取、完整资料遗漏与预计重新识别逐行展示。
  * - 每行一个清晰的下一步动作；同名异内容必须显式选择处置后才能确认。
- * - 取消只清理暂存，不建立任何快照；确认按钮在所有阻塞选择解决前保持禁用。
+ * - 取消只清理暂存，不建立任何资料版本；确认按钮在所有阻塞选择解决前保持禁用。
  * - 每份已选文件可“移除”（重新生成预览）；完整资料遗漏行不携带文件，无移除动作。
  */
 
@@ -50,7 +50,7 @@ const GROUPS: ReadonlyArray<{
   },
   {
     id: "omission",
-    title: "上一快照有、本次未选择",
+    title: "上一资料版本有、本次未选择",
     statuses: ["full_snapshot_omission"],
   },
 ];
@@ -141,7 +141,7 @@ export function PreviewReview({
         </h3>
         <p className="evidence-review__summary">
           {preview.uploadModeLabel}：{preview.items.length} 份文件
-          {omissions > 0 ? `，其中 ${omissions} 份来自上一快照且本次未选择` : ""}
+          {omissions > 0 ? `，其中 ${omissions} 份来自上一资料版本且本次未选择` : ""}
           {conflictsUnresolved > 0
             ? `，${conflictsUnresolved} 份同名文件等待处置`
             : ""}
@@ -242,9 +242,9 @@ export function PreviewReview({
               当前选择中没有可纳入的资料，请移除无法读取或不支持的文件后重新选择。
             </p>
           ) : duplicateOnly ? (
-            <p>所选资料已在当前版本中，无需再次上传或建立资料快照。</p>
+            <p>所选资料已在当前版本中，无需再次上传或建立资料版本。</p>
           ) : (
-            <p>逐项核对无误后即可确认；确认将建立资料快照并开始处理。</p>
+            <p>逐项核对无误后即可确认；确认将建立资料版本并开始处理。</p>
           )}
         </div>
         <div className="evidence-review__actions">

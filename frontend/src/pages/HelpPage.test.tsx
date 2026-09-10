@@ -38,7 +38,7 @@ describe("系统帮助", () => {
     expect(screen.getByRole("heading", { name: /常见问题：重新解构与发布/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /键盘操作/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /遇到问题怎么办/ })).toBeInTheDocument();
-    expect(screen.getByText(/建立完整资料快照/)).toBeInTheDocument();
+    expect(screen.getByText(/建立完整资料版本/)).toBeInTheDocument();
     expect(screen.getByText(/红框只表示系统能够精确对应原件中的具体区域/)).toBeInTheDocument();
     expect(screen.getByText(/失败时只重新处理失败部分/)).toBeInTheDocument();
     expect(screen.getAllByText(/补入漏识别文字/).length).toBeGreaterThan(0);

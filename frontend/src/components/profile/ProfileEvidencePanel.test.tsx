@@ -35,7 +35,7 @@ function makeSnapshotWire() {
     subject_id: SUBJECT,
     review_episode_id: EPISODE,
     upload_mode: "full" as const,
-    upload_mode_label: "建立完整资料快照",
+    upload_mode_label: "建立完整资料版本",
     prior_snapshot_id: null,
     comparison_snapshot_id: null,
     status: "active" as const,

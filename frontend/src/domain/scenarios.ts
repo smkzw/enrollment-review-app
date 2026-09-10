@@ -151,7 +151,7 @@ export const UAT_SCENARIOS: ReadonlyArray<UiScenario> = [
     id: "uat-p1-05",
     uatId: "UAT-P1-05",
     title: "从看板进入指定受试者阶段",
-    task: "从看板直接打开指定受试者的筛选审核（不先打开基线），说出当前受试者、审核节点和证据快照，再返回看板。",
+    task: "从看板直接打开指定受试者的筛选审核（不先打开基线），说出当前受试者、审核节点和资料版本，再返回看板。",
     entrySurface: "项目看板",
     fixtureRefs: {
       episodeIds: [GAP_SCREENING],
@@ -163,7 +163,7 @@ export const UAT_SCENARIOS: ReadonlyArray<UiScenario> = [
     keyEvidence: keyTarget("span-uat-03-screening-gap-page", 4, "page_only"),
     acceptance: [
       "直接进入正确受试者的筛选 ReviewEpisode",
-      "页面明确显示阶段、方案版本和证据快照",
+      "页面明确显示阶段、方案版本和资料版本",
       "不把基线资料混成筛选结论",
       "返回后保留看板筛选、排序和滚动位置",
     ],

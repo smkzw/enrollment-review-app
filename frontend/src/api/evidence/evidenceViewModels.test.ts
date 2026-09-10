@@ -190,7 +190,7 @@ describe("decodeSnapshot / decodeSnapshotList", () => {
       subject_id: "subject-uat-01-clear",
       review_episode_id: "episode-uat-01-screening-clear",
       upload_mode: "full",
-      upload_mode_label: "建立完整资料快照",
+      upload_mode_label: "建立完整资料版本",
       prior_snapshot_id: null,
       comparison_snapshot_id: null,
       status: "active",
@@ -279,7 +279,7 @@ describe("decodeSnapshot / decodeSnapshotList", () => {
     });
   });
 
-  it("未知快照状态抛出 EvidenceDecodeError", () => {
+  it("未知资料版本状态抛出 EvidenceDecodeError", () => {
     expect(() => decodeSnapshot(makeSnapshotWire({ status: "bogus" }))).toThrow(
       EvidenceDecodeError,
     );
@@ -304,7 +304,7 @@ describe("decodeSnapshot / decodeSnapshotList", () => {
       source_document_version_id: "version-other",
     });
     expect(() => decodeSnapshot(wire)).toThrow(
-      "资料分类信息与快照成员不属于同一份资料",
+      "资料分类信息与资料版本成员不属于同一份资料",
     );
   });
 });
@@ -414,7 +414,7 @@ describe("decodeCommitResponse", () => {
     expect(view.duplicate).toBe(false);
     expect(view.jobId).toBe("job-1");
     expect(view.snapshot.statusLabel).toBe("待处理");
-    expect(commitResultMessage(view)).toContain("已建立资料快照");
+    expect(commitResultMessage(view)).toContain("已建立资料版本");
   });
 
   it.each([
@@ -461,8 +461,8 @@ describe("decodeCommitResponse", () => {
     );
     const message = commitResultMessage(view);
     expect(message).toContain("已处理过");
-    expect(message).toContain("未重复建立快照");
-    expect(message).toContain("与已有快照相同");
+    expect(message).toContain("未重复建立资料版本");
+    expect(message).toContain("与已有资料版本相同");
   });
 });
 

@@ -501,7 +501,7 @@ export function SubjectsPage() {
           {factNormalization.completedReview && <RouteLink className="button" to="/tasks" params={{
             job: factNormalization.completedReview.jobId, subject: factNormalization.completedReview.subjectId,
             episode: factNormalization.completedReview.reviewEpisodeId,
-          }}>查看最近一次资料判读</RouteLink>}
+          }}>查看最近一次资料识别</RouteLink>}
           <ProfileNormalizationStatus
             state={
               factNormalization.state.status !== "idle"

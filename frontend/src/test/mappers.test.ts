@@ -330,14 +330,14 @@ describe("规则树映射", () => {
       expect(ops).toContain("不满足以下条件");
     }
     expect(component?.exceptionExpression?.kind).toBe("logic");
-    expect(component?.decision?.decisionLabel).toMatch(/^(已触发|暂不能明确|需专业判断|存在冲突|尚未到期|不适用)$/);
+    expect(component?.decision?.decisionLabel).toMatch(/^(已触发|无法判定|需专业判断|存在冲突|尚未到期|不适用)$/);
   });
 
   it("规则组件带判断、缺口词与证据链接", () => {
     const detail = mapEpisodeDetail(episodeById("episode-uat-03-screening-gap_conflict"));
     const in01 = detail.rules.find((rule) => rule.officialCode === "IN-01");
     const component = in01?.components[0];
-    expect(component?.decision?.decisionLabel).toBe("暂不能明确");
+    expect(component?.decision?.decisionLabel).toBe("无法判定");
     expect(component?.decision?.gapLabels).toContain("记录不完整");
     expect(component?.decision?.blockingLevel).toBe("blocking");
   });
@@ -404,7 +404,7 @@ describe("冲突来源并列映射（B1）", () => {
     }
   });
 
-  it("受影响子项显示编号与资料快照版本为人读中文，原始 ID 不作为标签", () => {
+  it("受影响子项显示编号与资料版本版本为人读中文，原始 ID 不作为标签", () => {
     const group = gapDetail().conflicts[0];
     expect(group.affectedDisplayCodes).toEqual(["EX-01a"]);
     expect(group.snapshotVersion).toBe("第 1 版（2026-08-12 整理）");
@@ -428,7 +428,7 @@ describe("冲突来源并列映射（B1）", () => {
   });
 });
 
-describe("应备证据与资料快照版本映射（I3/I4）", () => {
+describe("应备证据与资料版本版本映射（I3/I4）", () => {
   it("期望条目投影所属规则编号、具体要求与到期节点", () => {
     const detail = mapEpisodeDetail(
       episodeById("episode-uat-03-screening-gap_conflict"),

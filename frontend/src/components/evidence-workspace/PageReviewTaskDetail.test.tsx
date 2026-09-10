@@ -18,7 +18,7 @@ it("从原页启动服务端受限复核，不传轮次或模型参数", async (
   fireEvent.click(await screen.findByRole("button", { name: "复核原件" }));
   await screen.findByText("复核记录 aux");
   expect(start).toHaveBeenCalledWith("subject", "episode", "original", 0);
-  fireEvent.click(screen.getByRole("button", { name: "返回页面判读概况" }));
+  fireEvent.click(screen.getByRole("button", { name: "返回页面识别概况" }));
   expect(screen.getByText("报告.pdf · 第 1 页")).toBeInTheDocument();
 });
 
@@ -26,6 +26,6 @@ it.each(["stopped", "needs_reread"])("%s 不把空列表说成未发现分歧", 
   status.reviewStatus = state;
   conflicts.mockResolvedValueOnce([]);
   render(<PageReviewTaskDetail subjectId="subject" episodeId="episode" jobId="original" />);
-  expect(await screen.findByText("资料判读尚未完成，暂不能据此确认是否存在读法分歧。")).toBeInTheDocument();
+  expect(await screen.findByText("资料识别尚未完成，暂不能据此确认两次识别是否一致。")).toBeInTheDocument();
   expect(screen.queryByText(/本次未发现/)).not.toBeInTheDocument();
 });

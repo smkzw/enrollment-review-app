@@ -194,7 +194,7 @@ export function ReferencedDocumentsPanel({
         <span className="section-count">{items.length}</span>
       </div>
       <p className="evidence-subtle">
-        候选资料必须经过确认或解除；已提供资料只能关联当前有效资料快照中的成员。
+        候选资料必须经过确认或解除；已提供资料只能关联当前有效资料版本中的成员。
       </p>
 
       <details className="evidence-referenced-create-shell">
@@ -409,7 +409,7 @@ export function ReferencedDocumentsPanel({
                     {resolution?.sourceDocumentVersionId !== null &&
                       resolution?.sourceDocumentVersionId !== undefined && (
                         <span className="evidence-subtle">
-                          已关联当前快照成员
+                          已关联当前资料版本成员
                         </span>
                       )}
                   </div>
@@ -428,7 +428,7 @@ export function ReferencedDocumentsPanel({
                     >
                       <option value="">
                         {canResolve
-                          ? "请选择当前快照成员"
+                          ? "请选择当前资料版本成员"
                           : "当前没有可关联的活动资料"}
                       </option>
                       {currentMembers.map((member) => (

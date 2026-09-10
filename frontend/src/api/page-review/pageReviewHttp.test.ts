@@ -4,7 +4,7 @@ import { createPageReviewHttp, decodePageReviewStatus } from "./pageReviewHttp";
 const ready = { job_id: "job", state: "completed", review_status: "ready", total_pages: 1,
   accepted_pages: 1, unrelated_pages: 0, failed_pages: 0, pending_pages: 0, can_reread: false };
 
-describe("资料判读接口", () => {
+describe("资料识别接口", () => {
   it("补读用尽仍显示未读清资料，不误报接口异常", () => {
     const result = decodePageReviewStatus({ ...ready, review_status: "needs_reread", accepted_pages: 0, failed_pages: 1 });
     expect(result.reviewStatus).toBe("needs_reread");

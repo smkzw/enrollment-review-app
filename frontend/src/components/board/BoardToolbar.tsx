@@ -108,7 +108,7 @@ export function BoardToolbar({
           <input
             type="search"
             value={query}
-            placeholder="如 UAT-03"
+            placeholder="如 S-2026-101"
             aria-label="按受试者代号筛选"
             onChange={(event) => onQueryChange(event.target.value)}
           />

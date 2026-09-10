@@ -1,6 +1,6 @@
 /**
  * 冲突来源并列（合同 §6.2 / B1、F6 修复）：未解决冲突组内每个事实
- * 并列展示立场、值与其来源定位（文件、资料快照版本、页码、摘录、精度）。
+ * 并列展示立场、值与其来源定位（文件、资料版本、页码、摘录、精度）。
  * - 不自动选择其中一方；每条来源可打开证据详情弹窗。
  * - 原始组件/事实 ID 不作为主标签出现。
  */
@@ -48,7 +48,7 @@ export function ConflictSources({
                 {group.affectedDisplayCodes.join("、")}
               </span>
               <span className="conflict-group__snapshot">
-                资料快照：{group.snapshotVersion}
+                资料版本：{group.snapshotVersion}
               </span>
             </header>
             <div className="conflict-group__facts">

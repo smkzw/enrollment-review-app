@@ -3,7 +3,7 @@
  * 只描述网络载荷的原始结构；组件经 evidenceViewModels.ts 解码消费领域模型，
  * 不直接使用 wire 结构（spec: type-safety）。
  *
- * 服务端为每个上传预览/快照投影自然中文标签（upload_mode_label、status_label、
+ * 服务端为每个上传预览/资料版本投影自然中文标签（upload_mode_label、status_label、
  * reason、next_action），前端不自行翻译内部枚举；中文标签的兜底映射只在解码层。
  */
 
@@ -46,7 +46,7 @@ export interface EvidenceUploadPreviewWire {
   created_by: string;
 }
 
-/** 资料类型与来源方的不可变修订；快照成员固定投影当前链头。 */
+/** 资料类型与来源方的不可变修订；资料版本成员固定投影当前链头。 */
 export interface EvidenceMetadataRevisionWire {
   metadata_revision_id: string;
   source_document_version_id: string;

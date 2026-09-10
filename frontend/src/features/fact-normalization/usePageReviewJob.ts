@@ -31,13 +31,13 @@ function save(key: string, jobId: string | null) {
 
 function display(job: PageReviewStatus): PageReviewUiState {
   const failed = job.reviewStatus === "needs_reread" || job.reviewStatus === "stopped";
-  return { status: "page_review", title: failed ? "资料判读尚未完成" : "正在判读资料",
+  return { status: "page_review", title: failed ? "资料识别尚未完成" : "正在识别资料",
     message: job.reviewStatus === "needs_reread" && !job.canReread ? "补读后仍有资料未能读清，请核对原件。已完成的结果会保留。"
       : job.failedPages > 0 ? `${job.failedPages} 页暂未读完，已完成的结果会保留。`
       : failed ? "请查看原任务并恢复处理，已完成的结果会保留。" : "读页完成后将继续整理个例档案。",
     canRetry: job.canReread || job.state === "cancelled", totalPages: job.totalPages,
     completedPages: job.acceptedPages + job.unrelatedPages, jobId: job.jobId,
-    retryLabel: job.state === "cancelled" ? "继续判读" : "重读未完成资料", needsAttention: failed };
+    retryLabel: job.state === "cancelled" ? "继续识别" : "重读未完成资料", needsAttention: failed };
 }
 
 export function usePageReviewJob({ subjectId, reviewEpisodeId, onReady, pollIntervalMs = 2000 }: {
@@ -85,7 +85,7 @@ export function usePageReviewJob({ subjectId, reviewEpisodeId, onReady, pollInte
       if (signal.aborted || current.current !== owner) return;
       if (!notifyReady) return;
       setState({ status: "page_review", title: "暂时无法查看资料进度",
-        message: error instanceof PageReviewApiError ? error.message : "请重新查询进度，已完成的判读结果会保留。",
+        message: error instanceof PageReviewApiError ? error.message : "请重新查询进度，已完成的识别结果会保留。",
         canRetry: true, totalPages: 0, completedPages: 0, jobId, retryLabel: "重新查询进度", needsAttention: true });
     }
   }, [subjectId, reviewEpisodeId, key, pollIntervalMs]);
@@ -120,7 +120,7 @@ export function usePageReviewJob({ subjectId, reviewEpisodeId, onReady, pollInte
     const owner = { controller: new AbortController(), job: null, jobId: null as string | null };
     current.current = owner;
     starting.current = true;
-    setState({ status: "page_review", title: "正在准备资料判读", message: "已完成的结果会保留。",
+    setState({ status: "page_review", title: "正在准备资料识别", message: "已完成的结果会保留。",
       canRetry: false, totalPages: 0, completedPages: 0 });
     try {
       const jobId = previous?.job?.state === "cancelled" && previous.jobId
@@ -135,11 +135,11 @@ export function usePageReviewJob({ subjectId, reviewEpisodeId, onReady, pollInte
       if (owner.controller.signal.aborted || current.current !== owner) return;
       // Keep the predecessor on submission failure so retry cannot silently start a root.
       current.current = previous ?? owner;
-      setState({ status: "page_review", title: "资料判读未能开始",
+      setState({ status: "page_review", title: "资料识别未能开始",
         message: error instanceof PageReviewApiError ? error.message : "请稍后重试。",
         canRetry: true, totalPages: 0, completedPages: 0,
         jobId: previous?.jobId ?? undefined,
-        retryLabel: previous?.job?.state === "cancelled" ? "重试继续判读" : "重新开始判读", needsAttention: true });
+        retryLabel: previous?.job?.state === "cancelled" ? "重试继续识别" : "重新开始识别", needsAttention: true });
     } finally {
       if (current.current === owner || current.current === previous) starting.current = false;
     }

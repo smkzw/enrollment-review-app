@@ -199,7 +199,7 @@ function makeSnapshotWire(
     subject_id: SUBJECT_ID,
     review_episode_id: EPISODE_ID,
     upload_mode: "full",
-    upload_mode_label: "建立完整资料快照",
+    upload_mode_label: "建立完整资料版本",
     prior_snapshot_id: null,
     comparison_snapshot_id: null,
     status,
@@ -730,7 +730,7 @@ describe("证据工作台", () => {
       );
     });
     expect(
-      await screen.findByRole("radio", { name: "建立完整资料快照" }),
+      await screen.findByRole("radio", { name: "建立完整资料版本" }),
     ).toBeInTheDocument();
   });
 
@@ -753,7 +753,7 @@ describe("证据工作台", () => {
     await user.click(screen.getByRole("button", { name: "补充或重建资料" }));
     expect(screen.getByRole("radio", { name: "补充资料" })).toBeInTheDocument();
     expect(
-      screen.getByRole("radio", { name: "建立完整资料快照" }),
+      screen.getByRole("radio", { name: "建立完整资料版本" }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("radio", { name: "补充资料" }));
     await user.click(screen.getByRole("button", { name: "暂不补充" }));
@@ -1565,10 +1565,10 @@ describe("证据工作台", () => {
       await screen.findByRole("radio", { name: "补充资料" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("radio", { name: "建立完整资料快照" }),
+      screen.getByRole("radio", { name: "建立完整资料版本" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/尚无有效资料版本，请先选择「建立完整资料快照」/),
+      screen.getByText(/尚无有效资料版本，请先选择「建立完整资料版本」/),
     ).toBeInTheDocument();
     // 界面不暴露内部英文/技术词
     expect(
@@ -1583,9 +1583,9 @@ describe("证据工作台", () => {
     await openActiveUpload(user);
     await user.click(screen.getByRole("radio", { name: "补充资料" }));
     expect(
-      screen.getByText(/在上一有效快照的全部资料基础上/),
+      screen.getByText(/在上一有效资料版本的全部资料基础上/),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: "建立完整资料快照" }));
+    await user.click(screen.getByRole("radio", { name: "建立完整资料版本" }));
     expect(
       screen.getByText(/本次选择的文件构成新的完整资料集合/),
     ).toBeInTheDocument();
@@ -1645,7 +1645,7 @@ describe("证据工作台", () => {
     expect(confirm).toBeEnabled();
     await user.click(confirm);
 
-    await screen.findByText(/已建立资料快照/);
+    await screen.findByText(/已建立资料版本/);
     expect(fns.confirmUpload).toHaveBeenCalledWith(
       PREVIEW_ID,
       expect.objectContaining({
@@ -1661,14 +1661,14 @@ describe("证据工作台", () => {
     expect(band).toHaveTextContent("筛选期");
   });
 
-  it("只有不支持文件时不允许建立空资料快照", async () => {
+  it("只有不支持文件时不允许建立空资料版本", async () => {
     const user = userEvent.setup();
     fns.createUploadPreview.mockResolvedValueOnce(
       decodeUploadPreview(makePreviewWire({ items: [ITEMS[3]] })),
     );
     await openValid(user);
     await user.click(
-      await screen.findByRole("radio", { name: "建立完整资料快照" }),
+      await screen.findByRole("radio", { name: "建立完整资料版本" }),
     );
     const input = screen.getByLabelText("选择文件");
     await user.upload(
@@ -1695,7 +1695,7 @@ describe("证据工作台", () => {
 
     expect(
       await screen.findByText(
-        "所选资料已在当前版本中，无需再次上传或建立资料快照。",
+        "所选资料已在当前版本中，无需再次上传或建立资料版本。",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "确认上传" })).toBeNull();
@@ -1713,7 +1713,7 @@ describe("证据工作台", () => {
       decodeUploadPreview(
         makePreviewWire({
           upload_mode: "full",
-          upload_mode_label: "建立完整资料快照",
+          upload_mode_label: "建立完整资料版本",
           items: [ITEMS[0]],
           matching_snapshot_id: "snap-pending",
           matching_snapshot_status: "processing",
@@ -1723,7 +1723,7 @@ describe("证据工作台", () => {
     );
     await openValid(user);
     await user.click(
-      await screen.findByRole("radio", { name: "建立完整资料快照" }),
+      await screen.findByRole("radio", { name: "建立完整资料版本" }),
     );
     await user.upload(
       screen.getByLabelText("选择文件"),
@@ -1776,7 +1776,7 @@ describe("证据工作台", () => {
     // 方式锁定：两个 radio 均禁用
     expect(screen.getByRole("radio", { name: "补充资料" })).toBeDisabled();
     expect(
-      screen.getByRole("radio", { name: "建立完整资料快照" }),
+      screen.getByRole("radio", { name: "建立完整资料版本" }),
     ).toBeDisabled();
     expect(
       screen.getByText(/如需更换上传方式，请先点击「取消预览」/),
@@ -1790,7 +1790,7 @@ describe("证据工作台", () => {
       screen.getByRole("button", { name: "补充或重建资料" }),
     ).toBeEnabled();
     expect(
-      screen.queryByRole("radio", { name: "建立完整资料快照" }),
+      screen.queryByRole("radio", { name: "建立完整资料版本" }),
     ).toBeNull();
   });
 
@@ -1816,7 +1816,7 @@ describe("证据工作台", () => {
 
     // 第二次确认成功：必须复用完全相同的幂等键（同键回放，不会重复建快照）
     await user.click(screen.getByRole("button", { name: "确认上传" }));
-    await screen.findByText(/已建立资料快照/);
+    await screen.findByText(/已建立资料版本/);
     const firstKey = fns.confirmUpload.mock.calls[0][1].idempotency_key;
     const secondKey = fns.confirmUpload.mock.calls[1][1].idempotency_key;
     expect(firstKey.length).toBeGreaterThan(0);
@@ -1836,7 +1836,7 @@ describe("证据工作台", () => {
     await screen.findByText("确认前复核");
     await user.click(screen.getByLabelText("作为原资料的新版本"));
     await user.click(screen.getByRole("button", { name: "确认上传" }));
-    await screen.findByText(/已建立资料快照/);
+    await screen.findByText(/已建立资料版本/);
     const thirdKey = fns.confirmUpload.mock.calls[2][1].idempotency_key;
     expect(thirdKey).not.toBe(firstKey);
   });
@@ -1853,7 +1853,7 @@ describe("证据工作台", () => {
       processing_hint: "omitted",
       processing_hint_label: "不纳入本次快照",
       reason: "该资料存在于上一有效快照，但本次未选择。",
-      next_action: "如确认遗漏，请重新选择该文件；完整资料快照只包含本次选择。",
+      next_action: "如确认遗漏，请重新选择该文件；完整资料版本只包含本次选择。",
       logical_document_id: "logical-5",
       existing_version_id: "version-5",
       error_detail: null,
@@ -1862,14 +1862,14 @@ describe("证据工作台", () => {
       decodeUploadPreview(
         makePreviewWire({
           upload_mode: "full",
-          upload_mode_label: "建立完整资料快照",
+          upload_mode_label: "建立完整资料版本",
           items: [...ITEMS, omissionItem],
         }),
       ),
     );
     await openValid(user);
     await user.click(
-      await screen.findByRole("radio", { name: "建立完整资料快照" }),
+      await screen.findByRole("radio", { name: "建立完整资料版本" }),
     );
     await user.upload(screen.getByLabelText("选择文件"), [
       new File(["a"], "检查报告.pdf", { type: "application/pdf" }),

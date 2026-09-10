@@ -1469,7 +1469,7 @@ export function EvidencePage() {
           <p className="evidence-subtle">正在读取识别页清单…</p>
         ) : snapshots.state.status === "error" ? (
           <p className="evidence-subtle">
-            资料快照暂时无法读取，页清单不会使用猜测编号。
+            资料版本暂时无法读取，页清单不会使用猜测编号。
           </p>
         ) : viewedProcessingRevisionId === null ? (
           <p className="evidence-subtle">当前资料尚未形成可核对的识别版本。</p>
@@ -1577,7 +1577,7 @@ export function EvidencePage() {
       {factNormalization.completedReview && <RouteLink className="button" to="/tasks" params={{
         job: factNormalization.completedReview.jobId, subject: factNormalization.completedReview.subjectId,
         episode: factNormalization.completedReview.reviewEpisodeId,
-      }}>查看最近一次资料判读</RouteLink>}
+      }}>查看最近一次资料识别</RouteLink>}
       {viewedProcessingRevisionId !== null && (
         <SelectiveVisionTaskPanel revisionId={viewedProcessingRevisionId} />
       )}
@@ -2001,12 +2001,12 @@ function SnapshotListPanel({
   building: boolean;
 }) {
   if (snapshots.state.status === "loading") {
-    return <p className="evidence-pages-hint">正在读取资料快照…</p>;
+    return <p className="evidence-pages-hint">正在读取资料版本…</p>;
   }
   if (snapshots.state.status === "error") {
     return (
       <div className="evidence-notice evidence-notice--error" role="alert">
-        资料快照暂时打不开：{snapshots.state.message}
+        资料版本暂时打不开：{snapshots.state.message}
         <button type="button" className="button" onClick={snapshots.retry}>
           重试
         </button>
@@ -2015,12 +2015,12 @@ function SnapshotListPanel({
   }
   const items = snapshots.state.data.items;
   if (items.length === 0) {
-    return <p className="evidence-pages-hint">该审核节点还没有资料快照。</p>;
+    return <p className="evidence-pages-hint">该审核节点还没有资料版本。</p>;
   }
   return (
-    <section className="evidence-snapshots" aria-label="资料快照">
+    <section className="evidence-snapshots" aria-label="资料版本">
       <h4 className="evidence-snapshots__title">
-        资料快照
+        资料版本
         <span className="section-count">{items.length}</span>
       </h4>
       <ul className="evidence-snapshots__list">

@@ -30,12 +30,12 @@ export function TargetedReviewDetail({ subjectId, episodeId, jobId }: {
     <div className="targeted-review__columns">
       <section className="targeted-review__readings" aria-label="逐轮摘录">
         <div className="targeted-review__tabs" role="group" aria-label="选择复核轮次">
-          {["最初读法", "第一轮", "第二轮"].map((label, index) => <button key={label} type="button" aria-pressed={round === index} onClick={() => setRound(index)}>{label}</button>)}
+          {["最初识别", "第一轮", "第二轮"].map((label, index) => <button key={label} type="button" aria-pressed={round === index} onClick={() => setRound(index)}>{label}</button>)}
         </div>
         {[1, 2].map((reader) => {
           const items = data.excerpts.filter((item) => item.round === round && item.reader === reader);
           return <section className="targeted-review__reader" key={reader}>
-            <h3>{reader === 1 ? "第一份读法" : "第二份读法"}</h3>
+            <h3>{reader === 1 ? "第一次独立识别" : "第二次独立识别"}</h3>
             {items.length === 0 && <p>本轮尚无可展示的摘录。</p>}
             {items.map((item, index) => <div className="targeted-review__excerpt" key={index}>
               <h4>{item.field}</h4><p className="targeted-review__value">{item.value}</p>

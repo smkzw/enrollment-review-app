@@ -229,7 +229,7 @@ export class EvidenceDecodeError extends Error {
 
 const UPLOAD_MODE_FALLBACK_LABELS: Record<EvidenceUploadMode, string> = {
   incremental: "补充资料",
-  full: "建立完整资料快照",
+  full: "建立完整资料版本",
 };
 
 const ITEM_STATUS_FALLBACK_LABELS: Record<EvidenceItemStatus, string> = {
@@ -274,8 +274,8 @@ const ITEM_NEXT_ACTION_FALLBACK: Record<EvidenceItemStatus, string> = {
   unsupported: "该文件格式当前不受支持。",
   unreadable: "该文件无法读取，请检查后重新选择。",
   full_snapshot_omission:
-    "如确认遗漏，请重新选择该文件；完整资料快照只包含本次选择。",
-  expected_reprocessing: "系统将按本次快照重新处理该文件。",
+    "如确认遗漏，请重新选择该文件；完整资料版本只包含本次选择。",
+  expected_reprocessing: "系统将按本次资料版本重新处理该文件。",
 };
 
 // ---------------------------------------------------------------------------
@@ -477,7 +477,7 @@ function asSnapshotStatus(
     "cancelled",
   ];
   if (!statuses.includes(raw as EvidenceSnapshotStatus)) {
-    throw new EvidenceDecodeError(`未知的快照状态 ${raw}`);
+    throw new EvidenceDecodeError(`未知的资料版本状态 ${raw}`);
   }
   return raw as EvidenceSnapshotStatus;
 }
@@ -735,7 +735,7 @@ function decodeSnapshotMember(wire: unknown): EvidenceSnapshotMemberView {
   );
   const metadataHead = decodeMetadataRevision(row.metadata_head);
   if (metadataHead.sourceDocumentVersionId !== sourceDocumentVersionId) {
-    throw new EvidenceDecodeError("资料分类信息与快照成员不属于同一份资料");
+    throw new EvidenceDecodeError("资料分类信息与资料版本成员不属于同一份资料");
   }
   return {
     memberId: requireString(row.member_id, "member.member_id"),
@@ -888,7 +888,7 @@ export function decodeSnapshotList(wire: unknown): EvidenceSnapshotListView {
       item.evidenceSnapshotId === activeEvidenceSnapshotId;
     if (item.isCurrent !== expectedCurrent) {
       throw new EvidenceDecodeError(
-        "资料快照的当前标记与审核节点活动指针不一致",
+        "资料版本的当前标记与审核节点活动指针不一致",
       );
     }
   }
@@ -1003,13 +1003,13 @@ export function formatByteSize(bytes: number): string {
 /** 确认结果的中文说明：同时诚实表达“请求已处理”与“命中已有资料集合”两种事实。 */
 export function commitResultMessage(commit: EvidenceCommitView): string {
   if (commit.created) {
-    return "已建立资料快照，正在处理；处理完成并确认启用前，当前有效资料版本不会改变。";
+    return "已建立资料版本，正在处理；处理完成并确认启用前，当前有效资料版本不会改变。";
   }
   if (commit.replayed && commit.duplicate) {
-    return "该请求已处理过，未重复建立快照；原确认命中的资料集合与已有快照相同。";
+    return "该请求已处理过，未重复建立资料版本；原确认命中的资料集合与已有资料版本相同。";
   }
   if (commit.replayed) {
-    return "该请求与之前提交的内容相同，未重复建立快照。";
+    return "该请求与之前提交的内容相同，未重复建立资料版本。";
   }
-  return "所选资料集合与已存在的快照相同，未重复建立快照。";
+  return "所选资料集合与已存在的资料版本相同，未重复建立。";
 }
