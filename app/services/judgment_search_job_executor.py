@@ -120,7 +120,7 @@ class JudgmentSearchJobExecutor:
         route = self.routes[lane]
         attempts: list[dict] = []
 
-        async def recorded_completion(messages, max_tokens):
+        async def recorded_completion(route, messages, max_tokens):
             started = monotonic()
             try:
                 result = await self.completion(route, messages, max_tokens)
