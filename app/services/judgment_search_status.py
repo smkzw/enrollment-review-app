@@ -169,17 +169,13 @@ def judgment_search_job_results(session_factory: sessionmaker[Session], *, subje
 def _incomplete_pages(summary: JudgmentSearchCoverageSummary) -> list[dict]:
     pages: dict[int, dict] = {}
 
-    # 面向用户的原生中文：不暴露内部读道/通道枚举（main-A/main-B、
-    # handwritten/printed_analysis），统一为“第一次/第二次识别”与
-    # “手写内容/打印病历分析”的临床可读表述。
-    lane_label = {"main-A": "第一次识别", "main-B": "第二次识别"}
-    channel_label = {"handwritten": "手写内容", "printed_analysis": "打印病历分析"}
-
+    # 面向用户的原生中文：复用模块级 _LANE_LABELS/_CHANNEL_LABELS，
+    # 不在函数内重复定义（避免将来只改其一导致内部枚举泄漏给用户）。
     def lane(value: str) -> str:
-        return lane_label.get(value, value)
+        return _LANE_LABELS.get(value, value)
 
     def channel(value: str) -> str:
-        return channel_label.get(value, value)
+        return _CHANNEL_LABELS.get(value, value)
 
     def mark(page_number: int, reason: str) -> None:
         pages.setdefault(page_number, {"page_number": page_number, "reasons": []})

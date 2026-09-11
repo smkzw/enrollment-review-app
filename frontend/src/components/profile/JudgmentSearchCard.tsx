@@ -246,7 +246,7 @@ export function JudgmentSearchCard({
         return (
           <li key={requirement.requirementId} className="judgment-search-card__requirement">
             <div className="judgment-search-card__requirement-head">
-              <strong title={requirement.requirementId}>{requirement.requirementLabel ?? "研究者书面判断"}</strong>
+              <strong>{requirement.requirementLabel ?? "研究者书面判断"}</strong>
               <span>{requirement.statusLabel}</span>
               {canExpand && requirement.foundCandidateCount > 0 && (
                 <button

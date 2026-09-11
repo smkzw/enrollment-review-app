@@ -34,6 +34,7 @@ from app.llm.page_review_harness import (
     PageReaderRoute,
     PageReviewInput,
 )
+from app.services.page_review_job_service import route_identity
 
 _IMAGE = b"\x89PNG-wiring-page-bytes"
 _TARGET = "ALT 5.6 mmol/L 的研究者临床意义判断"
@@ -118,3 +119,107 @@ def test_executor_style_wrapper_accepts_protocol_three_args():
     assert route.lane == PageReviewLane.MAIN_A
     assert max_tokens == 2048
     assert isinstance(messages, list) and messages
+
+
+def test_executor_read_step_drives_real_wrapper_and_saves_receipts(
+        data_paths, session_factory):
+    """实例化执行器本体驱动 read 步：必须产出回执引用而非页级失败。
+
+    回归锚：若 recorded_completion 被退回 2 参签名（runtime06 e7327bec
+    的原始 P0），本测试会在进入函数体前抛 TypeError、被包装为 transport
+    页级失败，断言 receipt_refs 时失败——读器侧协议测试无法拦住这种
+    生产侧回归，只有执行器本体受测才能守住。
+    """
+    from tests.v2.helpers.phase5_fact_chain import seed_valid_fact_chain
+    from app.evidence.artifacts import ArtifactStore
+    store = ArtifactStore(data_paths)
+    seed_page = b"\x89PNG-wiring-page-bytes"
+    stored_page = store.put("page_image", seed_page)
+    page_sha = stored_page.sha256
+
+    with session_factory() as session:
+        chain = seed_valid_fact_chain(session, prefix="jsew-exec", create_run=False)
+        session.commit()
+        authority = chain["authority"]
+        scope = JudgmentSearchScope(
+            authority=authority,
+            requirement_id="req-wiring",
+            pages=(JudgmentSearchPageIdentity(
+                source_document_version_id=chain["doc_id"],
+                page_artifact_id=chain["page_artifact_id"],
+                page_number=1,
+                page_image_sha256=page_sha,
+            ),),
+            scope_sha256=judgment_search_scope_sha256(
+                authority=authority, requirement_id="req-wiring",
+                pages=(JudgmentSearchPageIdentity(
+                    source_document_version_id=chain["doc_id"],
+                    page_artifact_id=chain["page_artifact_id"],
+                    page_number=1,
+                    page_image_sha256=page_sha,
+                ),),
+            ),
+        )
+    from app.services.judgment_search_job_executor import JudgmentSearchJobExecutor
+    from app.services.judgment_search_job_service import judgment_search_execution_versions
+
+    routes = {PageReviewLane.MAIN_A: _route()}
+    routes[PageReviewLane.MAIN_B] = PageReaderRoute(
+        lane=PageReviewLane.MAIN_B, provider="google", base_url="https://b.example",
+        api_key="k", model="gemini-3.7-flash", reasoning_effort="high",
+        max_tokens=2048, max_concurrency=2)
+
+    async def ok_completion(route, messages, max_tokens):
+        return PageCompletion(text=_ok_text("req-wiring"), finish_reason="stop",
+                              usage={}, response_model=route.model)
+
+    executor = JudgmentSearchJobExecutor(
+        session_factory, store, routes, completion=ok_completion)
+
+    payload = {
+        **judgment_search_execution_versions(),
+        "authority": authority.model_dump(mode="json"),
+        "routes": {lane.value: route_identity(route) for lane, route in routes.items()},
+        "pages": [{
+            "page_artifact_id": scope.pages[0].page_artifact_id,
+            "source_document_version_id": scope.pages[0].source_document_version_id,
+            "page_number": scope.pages[0].page_number,
+            "page_image_sha256": page_sha,
+        }],
+        "requirements": [{
+            "requirement_id": "req-wiring",
+            "scope": scope.model_dump(mode="json"),
+            "target_text": _TARGET,
+            "target_sha256": hashlib.sha256(_TARGET.encode("utf-8")).hexdigest(),
+        }],
+    }
+
+    # run_cancellable 会按 job_id 轮询取消状态：先落一个真实任务行。
+    from app.services.job_service import JobService
+    from app.services.judgment_search_job_service import judgment_search_steps
+    created = JobService(session_factory).create_job(
+        idempotency_key="wiring-executor-test",
+        job_type="judgment_search", payload=payload,
+        steps=judgment_search_steps(len(payload["pages"])))
+
+    class _Ctx:
+        job_id = created.job_id
+        job_type = "judgment_search"
+        job_payload = payload
+        step_id = "read:0:main-A"
+        name = "test"
+        attempt = 1
+        last_checkpoint_id = None
+        last_checkpoint = None
+        max_attempts = 2
+
+    result = executor(_Ctx())
+    refs = (result.checkpoint or {}).get("receipt_refs")
+    assert refs, f"read 步必须产出回执引用，得到: {result.checkpoint}"
+    assert refs[0]["requirement_id"] == "req-wiring"
+
+
+def _page_image_sha(session, chain) -> str:
+    from app.storage.ocr_repositories import PageArtifactRepository
+    artifact = PageArtifactRepository(session).get(chain["page_artifact_id"])
+    return artifact.page_image_sha256
