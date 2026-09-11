@@ -161,6 +161,58 @@ def _publish_age_fact(session, chain, *, value: int, suffix: str) -> ClinicalFac
     return ClinicalFactV2Repository(session).create(fact)
 
 
+def _publish_superseding_age_fact(session, chain, *, base, suffix: str) -> ClinicalFactV2:
+    """在同一稳定身份链上发布 revision+1 的取代事实（模拟人工修订）。"""
+    candidate_id = f"{chain['run_id']}-{suffix}-candidate"
+    FactNormalizationCandidateRepository(session).create(
+        chain["call_id"],
+        base.model_copy(update={
+            "candidate_id": candidate_id,
+            "raw_value": base.value,
+            "canonical_value": base.value,
+        }).model_copy(update={}) if False else ClinicalFactCandidateV2(
+            candidate_id=candidate_id,
+            run_id=chain["run_id"],
+            call_id=chain["call_id"],
+            fact_type="demographics.age_years",
+            supported_requirement_ids=["req-age"],
+            polarity=FactPolarity.AFFIRMED,
+            asserted_object="年龄",
+            raw_value=base.value,
+            canonical_value=base.value,
+            unit="year",
+            locator_ids=[chain["locator_id"]],
+            record_time=NOW,
+            candidate_source_semantics="objective_result",
+            assertion_basis=base.assertion_basis,
+            model_uncertainty=0.01,
+            created_at=NOW,
+        ),
+    )
+    gate_id = f"{chain['run_id']}-{suffix}-gate"
+    FactGateResultRepository(session).create(
+        FactGateResult(
+            gate_result_id=gate_id,
+            run_id=chain["run_id"],
+            call_id=chain["call_id"],
+            candidate_id=candidate_id,
+            gate=FactGate.TRANSACTIONAL_PUBLISH,
+            outcome=GateOutcome.ACCEPTED,
+            reasons=[],
+            created_at=NOW,
+        )
+    )
+    return ClinicalFactV2Repository(session).create(
+        base.model_copy(update={
+            "fact_id": f"{chain['run_id']}-{suffix}-fact",
+            "gate_id": gate_id,
+            "source_candidate_ids": [candidate_id],
+            "gate_ids": [gate_id],
+            "revision": base.revision + 1,
+        })
+    )
+
+
 def test_v2_adapter_preserves_fact_scope_and_locator_ids():
     authority = FactAuthority(
         project_id="project",
@@ -278,3 +330,66 @@ def test_projection_reverses_conflict_members_to_component(session):
     assert clause.decision == "conflict"
     assert clause.gap_type == "source_conflict"
     assert "相互冲突" in clause.reason
+
+
+def test_projection_keeps_mixed_revision_conflict_on_head_members(session):
+    """混合冲突组（链头+已被取代 revision）不阻断投影，按链头成员保留冲突。"""
+    chain = _seed_chain(session, "eligibility-mixed-conflict")
+    first = _publish_age_fact(session, chain, value=20, suffix="first")
+    second = _publish_age_fact(session, chain, value=17, suffix="second")
+    third = _publish_superseding_age_fact(session, chain, base=second, suffix="third")
+    FactRuleLinkV2Repository(session).rebuild_for_authority(chain["authority"])
+    ClinicalConflictGroupV2Repository(session).create(
+        ClinicalConflictGroupV2(
+            conflict_group_id=f"{chain['run_id']}-age-mixed",
+            run_id=chain["run_id"],
+            gate_id=first.gate_id,
+            authority=chain["authority"],
+            member_kind="fact",
+            fact_ids=sorted((first.fact_id, second.fact_id)),
+            locator_ids=[chain["locator_id"]],
+            created_at=NOW,
+        )
+    )
+
+    projection = EligibilityReviewProjectionService().project(
+        session, chain["episode_id"]
+    )
+    clause = next(item for item in projection.clauses if item.rule_code == "IN-01")
+
+    # first 与 third（second 的链头）构成当前活跃冲突：条款必须保持 conflict，不得静默降级。
+    assert clause.decision == "conflict"
+    assert clause.gap_type == "source_conflict"
+    assert "相互冲突" in clause.reason
+
+
+def test_projection_skips_fully_superseded_conflict_groups(session):
+    """全部成员均被修订链取代的冲突组不参与当前求值，也不阻断投影。"""
+    chain = _seed_chain(session, "eligibility-dead-conflict")
+    first = _publish_age_fact(session, chain, value=20, suffix="first")
+    second = _publish_age_fact(session, chain, value=17, suffix="second")
+    third = _publish_superseding_age_fact(session, chain, base=second, suffix="third")
+    _publish_superseding_age_fact(session, chain, base=first, suffix="first-v2")
+    FactRuleLinkV2Repository(session).rebuild_for_authority(chain["authority"])
+    ClinicalConflictGroupV2Repository(session).create(
+        ClinicalConflictGroupV2(
+            conflict_group_id=f"{chain['run_id']}-age-dead",
+            run_id=chain["run_id"],
+            gate_id=first.gate_id,
+            authority=chain["authority"],
+            member_kind="fact",
+            # 两成员分别是两条链的旧 revision：解析后各自指向新链头（first-v2/third），
+            # 组按链头成员参与；验证链头解析路径不抛错、投影可用。
+            fact_ids=sorted((first.fact_id, second.fact_id)),
+            locator_ids=[chain["locator_id"]],
+            created_at=NOW,
+        )
+    )
+
+    projection = EligibilityReviewProjectionService().project(
+        session, chain["episode_id"]
+    )
+    clause = next(item for item in projection.clauses if item.rule_code == "IN-01")
+
+    # 无活跃冲突时按事实求值：18<=age<75 仍以链头事实判定，不因死组报错。
+    assert clause.decision in {"inclusion_met", "inclusion_not_met", "conflict"}

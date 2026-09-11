@@ -310,14 +310,54 @@ def _phase3_conflict_groups(
         return [], {}
 
     active_fact_ids = {fact.fact_id for fact in facts}
-    member_ids = sorted({fact_id for group in groups for fact_id in group.fact_ids})
-    missing_members = sorted(set(member_ids) - active_fact_ids)
-    if missing_members:
-        raise EligibilityReviewProjectionError(
-            "冲突组引用了已折叠链头之外的事实，拒绝静默并入历史事实："
-            f"{missing_members}"
-        )
+    head_by_stable_identity = {
+        fact.stable_identity: fact.fact_id for fact in facts
+    }
+    # 历史冲突组可能引用已被链头折叠的旧 revision 成员。按 stable_identity
+    # 把旧成员解析到其当前链头：冲突语义随链转移（旧成员在当前世界即其链头），
+    # 既不静默丢弃未解决冲突，也不把旧 revision 事实并入求值集合。
+    from sqlalchemy import select as _select
 
+    from app.storage.facts_models import ClinicalFactV2Record as _FactRecord
+
+    all_rows = session.execute(
+        _select(_FactRecord.fact_id, _FactRecord.stable_identity).where(
+            _FactRecord.review_episode_id == authority.review_episode_id
+        )
+    ).all()
+    head_of_fact: dict[str, str] = {}
+    for row_fact_id, row_stable_identity in all_rows:
+        head_id = head_by_stable_identity.get(row_stable_identity)
+        if head_id is not None:
+            head_of_fact[row_fact_id] = head_id
+
+    live_groups = []
+    resolved_members: list[tuple[str, list[str]]] = []
+    for group in groups:
+        member_set = set(group.fact_ids)
+        if not member_set:
+            continue
+        if member_set <= active_fact_ids:
+            live_groups.append(group)
+            resolved_members.append((group.conflict_group_id, sorted(member_set)))
+            continue
+        resolved = sorted(
+            {
+                head_of_fact.get(fact_id, fact_id)
+                for fact_id in member_set
+            }
+            & active_fact_ids
+        )
+        if len(resolved) < 2:
+            # 解析后不足两方：冲突描述的内容已整体被修订链取代，不再参与。
+            continue
+        live_groups.append(group)
+        resolved_members.append((group.conflict_group_id, resolved))
+    if not live_groups:
+        return [], {}
+    member_ids = sorted(
+        {fact_id for _, members in resolved_members for fact_id in members}
+    )
     links_by_fact = FactRuleLinkV2Repository(session).list_for_facts(
         member_ids, facts=facts
     )
@@ -326,11 +366,13 @@ def _phase3_conflict_groups(
     }
     phase3_groups: list[ConflictGroup] = []
     conflict_group_by_fact: dict[str, str] = {}
-    for group in groups:
+    members_by_group = dict(resolved_members)
+    for group in live_groups:
+        head_members = members_by_group.get(group.conflict_group_id, [])
         affected_component_ids = sorted(
             {
                 link.target_id
-                for fact_id in group.fact_ids
+                for fact_id in head_members
                 for link in links_by_fact.get(fact_id, [])
                 if link.target_kind == "rule_component"
                 and link.target_id in known_component_ids
@@ -342,13 +384,13 @@ def _phase3_conflict_groups(
         phase3_groups.append(
             ConflictGroup(
                 conflict_group_id=group.conflict_group_id,
-                fact_ids=list(group.fact_ids),
+                fact_ids=head_members,
                 affected_rule_component_ids=affected_component_ids,
                 resolved=False,
                 resolution_evidence_span_ids=[],
             )
         )
-        for fact_id in group.fact_ids:
+        for fact_id in head_members:
             # 一个 Phase 3 fact 只能携带一个冲突组标记；按冲突组 ID 稳定取最先者。
             conflict_group_by_fact.setdefault(fact_id, group.conflict_group_id)
     return phase3_groups, conflict_group_by_fact
