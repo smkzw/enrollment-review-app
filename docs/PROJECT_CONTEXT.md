@@ -1,6 +1,15 @@
 # Enrollment Review App Project Context
 
-## 当前产品摘要（2026-09-10，以本节和活动检查点为准）
+## 当前产品摘要（2026-09-11 晚间，以本节为准；下方 09-10 摘要保留供沿革对照）
+
+- 09-11 全天进展：ZCode 线程（383fd08→0b6ea2c）完成判断检索五层接线（持久作业/API/缺口投影/前端卡片/术语统一）与入排工作台、报告打印页、占位路由清除；OMP 会话（24a8c77→09bfe2b）核实该基线并完成真实全链验证与三项 P0/P1 修复。当前活动任务 `.trellis/tasks/09-11-e2e-eligibility-review/`，恢复入口 `HANDOFF_20260911_OMP_PAUSE.md` + task.json notes。
+- **判断检索真实全链首次跑通**（runtime06b，作业 dcf6786e）：49/49 步、47/48 读步带回执、7 条要求 6 条 candidates_present（含第 8 页手写“CS 肝功能不全”候选）、1 条诚实 coverage_incomplete。前置 P0：执行器 completion 包装 2 参签名 vs 读器 3 参协议，此前所有真实判断检索必然 48/48 假 transport 失败（eaa428d 修复 + 接线契约测试；runtime06 目录保留为失败证据）。
+- **真实浏览器三档验收通过**（1080P/2K/4K，数据根指向 runtime06b）：档案页（约 20s 加载，此前挂死 >210s）、待办汇总卡四组计数、判断检索卡全中文（官方规则编号+组件标题、第一次/第二次识别、手写内容/打印病历分析，零内部 ID/JSON 转储/英文枚举）、候选→定位详情→原件页图跳转、入排工作台 81 条款（55 无法判定+理由置顶）、报告页无法判定清单+打印 CSS。三项修复见 09bfe2b：档案页挂死（闭包外 100 视觉定位逐个无批处理核验→共享 VisualLocatorBatchContext）、wire 漂移（resolution_revision 0→null；前端补 page_review_visual 层）、中文原生（后端 requirement_label/lane_label/channel_label）。
+- 测试基线（09-11 实测）：后端全量 tests/v2 4627/0 失败/3 跳过；前端 vitest 564/564；判断检索聚焦 64/64+40/40。
+- 已知遗留（非阻断）：候选跳转对不在档案定位集的页（如 p3 病历）静默无响应，需加反馈；06b 第 19 页 schema 失败系 GLM 偶发多余 note:null 字段（extra=forbid 正确拒绝，原样重试该页即可）；legacy v1 栈退役与 authz 硬编码口令按用户裁决排在功能验收后专项处理。
+- Phase5/5.5 仍未临床收口，claims_complete=false。下一步：独立会商审阅冻结的验收证据 → Phase 5 收口建议（原件 QC 单独判定）。
+
+## 2026-09-10 产品摘要（保留供沿革对照）
 
 - 用户最新要求完成手头工作后无损暂停并交接另一Agent；本产品线程已收尾，未经新继续指令不恢复。主入口为 `.trellis/tasks/09-05-phase55-dual-vlm-page-review/HANDOFF_20260910_PRODUCT_PAUSED_AGENT_TAKEOVER.md`，含完整决策沿革、接线现状、停滞复盘、代码/证据地址和恢复计划。另一线程本地横评不受本次暂停影响。
 - 判断检索single-v4/batch-v1、当前来源/目标绑定、既有工件库存取和两页两目标隔离批次完成；130项相关回归通过/12.42秒。尚未接正式持久任务、缺口生产者和UI。批次减少调用数，未证明整链提速；手写分歧及未测页保留，不认定缺判断或符合。接任先纵向接线，不再新增一轮叶子合同。仅GLM low/Gemini high产品自有HTTP/OAuth，旧goal的MTPLX文字已失效。
