@@ -43,7 +43,7 @@ export type OcrRiskReviewDecision =
 export type CorrectionChangeKind = CorrectionChangeKindWire;
 export type LocatorPrecision =
   "bbox" | "text_range" | "page_excerpt" | "page_only";
-export type LocatorSourceLayer = "native_text" | "raw_ocr" | "effective_text";
+export type LocatorSourceLayer = "native_text" | "raw_ocr" | "effective_text" | "page_review_visual";
 export type LocatorAuthenticity = "authenticated" | "degraded" | "rejected";
 export type DisambiguationOutcome =
   "unique_match" | "repeated_text_degraded" | "not_found";
@@ -1093,7 +1093,7 @@ export function decodeEvidenceLocator(
   );
   const sourceLayer = enumValue(
     field(row, "source_layer", `${path}.source_layer`),
-    ["native_text", "raw_ocr", "effective_text"],
+    ["native_text", "raw_ocr", "effective_text", "page_review_visual"],
     `${path}.source_layer`,
     "定位文本层",
   );

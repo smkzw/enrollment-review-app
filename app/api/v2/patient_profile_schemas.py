@@ -408,7 +408,12 @@ def profile_item_dto(item: ProfileItem) -> ProfileItemDTO:
         fact_ids=list(item.fact_ids),
         conflict_member_kind=item.conflict_member_kind,
         conflict_member_ids=list(item.conflict_member_ids),
-        conflict_resolution_revision=item.conflict_resolution_revision,
+        conflict_resolution_revision=(
+            # 域模型用 0 表示未解决；wire 契约为“正整数或 null（null=未解决）”。
+            item.conflict_resolution_revision
+            if (item.conflict_resolution_revision or 0) > 0
+            else None
+        ),
         template_id=item.template_id,
         expectation_status=(
             item.expectation_status.value

@@ -35,7 +35,9 @@ const runningStatus = {
 
 const candidate = {
   lane: "main-A" as const,
+  laneLabel: "第一次识别",
   channel: "handwritten" as const,
+  channelLabel: "手写内容",
   sourceDocumentVersionId: "doc-1",
   pageArtifactId: "page-1",
   pageNumber: 2,
@@ -56,6 +58,7 @@ const results = {
   results: [
     {
       requirementId: "req-1",
+      requirementLabel: "ALT 升高的研究者临床意义判断",
       status: "candidates_present" as const,
       statusLabel: "已发现疑似研究者书面判断的内容，待人工核对原件",
       foundCandidates: [candidate],

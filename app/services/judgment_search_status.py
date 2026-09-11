@@ -22,6 +22,38 @@ JUDGMENT_SEARCH_STATUS_LABELS = {
     "coverage_incomplete": "检索尚未完成（部分页面未读取或内容不清）",
 }
 
+#: 面向用户的读道/通道中文名（内部枚举不直接出现在界面文案）。
+_LANE_LABELS = {"main-A": "第一次识别", "main-B": "第二次识别"}
+_CHANNEL_LABELS = {"handwritten": "手写内容", "printed_analysis": "打印病历分析"}
+
+
+def _requirement_label(target_text: str | None) -> str:
+    """从冻结的结构化目标提取一行临床可读摘要（内部 ID 不出现在界面）。
+
+    优先组合官方规则编号 + 组件标题；无法解析时退回原文截断，绝不显示
+    requirement_id 或 JSON 转储。
+    """
+    if not target_text:
+        return "研究者书面判断"
+    import json as _json
+    try:
+        data = _json.loads(target_text)
+    except ValueError:
+        text = " ".join(target_text.split())
+        return text if len(text) <= 40 else text[:39] + "…"
+    rule = data.get("rule", {}) if isinstance(data, dict) else {}
+    component = data.get("component", {}) if isinstance(data, dict) else {}
+    code = str(rule.get("official_code") or component.get("display_code") or "").strip()
+    title = str(component.get("title") or "").strip()
+    kind = str(rule.get("kind") or "").strip()
+    kind_label = {"inclusion": "入选标准", "exclusion": "排除标准"}.get(kind, "")
+    parts = [p for p in (kind_label, code) if p]
+    head = " ".join(parts) if parts else "研究者书面判断"
+    if title:
+        text = " ".join(title.split())
+        head = f"{head}：{text}" if len(head) + len(text) <= 60 else f"{head}：{text[:59 - len(head)]}…"
+    return head
+
 
 def judgment_search_status_labels(status: str) -> str:
     return JUDGMENT_SEARCH_STATUS_LABELS.get(status, "检索状态待更新")
@@ -98,6 +130,7 @@ def judgment_search_job_results(session_factory: sessionmaker[Session], *, subje
             if summary is None:
                 results.append({
                     "requirement_id": requirement_id,
+                    "requirement_label": _requirement_label(item.get("target_text")),
                     "status": None,
                     "status_label": "尚未完成检索",
                     "found_candidates": [],
@@ -106,12 +139,15 @@ def judgment_search_job_results(session_factory: sessionmaker[Session], *, subje
                 continue
             results.append({
                 "requirement_id": requirement_id,
+                "requirement_label": _requirement_label(item.get("target_text")),
                 "status": summary.status.value,
                 "status_label": judgment_search_status_labels(summary.status.value),
                 "found_candidates": [
                     {
                         "lane": candidate.lane.value,
+                        "lane_label": _LANE_LABELS.get(candidate.lane.value, candidate.lane.value),
                         "channel": candidate.channel.value,
+                        "channel_label": _CHANNEL_LABELS.get(candidate.channel.value, candidate.channel.value),
                         "source_document_version_id": candidate.source_document_version_id,
                         "page_artifact_id": candidate.page_artifact_id,
                         "page_number": candidate.page_number,
@@ -133,16 +169,28 @@ def judgment_search_job_results(session_factory: sessionmaker[Session], *, subje
 def _incomplete_pages(summary: JudgmentSearchCoverageSummary) -> list[dict]:
     pages: dict[int, dict] = {}
 
+    # 面向用户的原生中文：不暴露内部读道/通道枚举（main-A/main-B、
+    # handwritten/printed_analysis），统一为“第一次/第二次识别”与
+    # “手写内容/打印病历分析”的临床可读表述。
+    lane_label = {"main-A": "第一次识别", "main-B": "第二次识别"}
+    channel_label = {"handwritten": "手写内容", "printed_analysis": "打印病历分析"}
+
+    def lane(value: str) -> str:
+        return lane_label.get(value, value)
+
+    def channel(value: str) -> str:
+        return channel_label.get(value, value)
+
     def mark(page_number: int, reason: str) -> None:
         pages.setdefault(page_number, {"page_number": page_number, "reasons": []})
         pages[page_number]["reasons"].append(reason)
 
     for gap in summary.pages_without_lane_result:
-        mark(gap.page_number, f"{gap.lane.value} 未完成该页检索")
+        mark(gap.page_number, f"{lane(gap.lane.value)}未完成该页检索")
     for gap in summary.unreadable_channels:
-        mark(gap.page_number, f"{gap.lane.value} {gap.channel.value} 内容未能读取")
+        mark(gap.page_number, f"{lane(gap.lane.value)}的{channel(gap.channel.value)}未能读取")
     for gap in summary.ambiguous_channels:
-        mark(gap.page_number, f"{gap.lane.value} {gap.channel.value} 内容存在歧义")
+        mark(gap.page_number, f"{lane(gap.lane.value)}的{channel(gap.channel.value)}存在歧义")
     return [pages[number] for number in sorted(pages)]
 
 

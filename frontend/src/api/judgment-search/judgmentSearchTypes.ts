@@ -69,7 +69,9 @@ export interface JudgmentSearchExcerptView {
 
 export interface JudgmentSearchCandidateView {
   lane: JudgmentSearchLane;
+  laneLabel: string;
   channel: JudgmentSearchChannel;
+  channelLabel: string;
   sourceDocumentVersionId: string;
   pageArtifactId: string;
   pageNumber: number;
@@ -83,6 +85,7 @@ export interface JudgmentSearchIncompletePageView {
 
 export interface JudgmentSearchRequirementResultView {
   requirementId: string;
+  requirementLabel: string;
   status: JudgmentSearchResultStatus | null;
   statusLabel: string;
   foundCandidates: ReadonlyArray<JudgmentSearchCandidateView>;

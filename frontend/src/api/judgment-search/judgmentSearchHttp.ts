@@ -196,7 +196,9 @@ function decodeCandidate(value: unknown, path: string): JudgmentSearchCandidateV
     raw,
     [
       "lane",
+      "lane_label",
       "channel",
+      "channel_label",
       "source_document_version_id",
       "page_artifact_id",
       "page_number",
@@ -210,11 +212,13 @@ function decodeCandidate(value: unknown, path: string): JudgmentSearchCandidateV
   }
   return {
     lane: enumValue<JudgmentSearchLane>(field(raw, "lane", path), LANE_VALUES, `${path}.lane`),
+    laneLabel: nonBlankString(field(raw, "lane_label", path), `${path}.lane_label`),
     channel: enumValue<JudgmentSearchChannel>(
       field(raw, "channel", path),
       CHANNEL_VALUES,
       `${path}.channel`,
     ),
+    channelLabel: nonBlankString(field(raw, "channel_label", path), `${path}.channel_label`),
     sourceDocumentVersionId: nonBlankString(
       field(raw, "source_document_version_id", path),
       `${path}.source_document_version_id`,
@@ -266,7 +270,7 @@ function decodeRequirementResult(
   path: string,
 ): JudgmentSearchRequirementResultView {
   const raw = record(value, path);
-  exactKeys(raw, ["requirement_id", "status", "status_label", "found_candidates", "incomplete_pages"], path);
+  exactKeys(raw, ["requirement_id", "requirement_label", "status", "status_label", "found_candidates", "incomplete_pages"], path);
   const rawCandidates = field(raw, "found_candidates", path);
   if (!Array.isArray(rawCandidates)) {
     throw new JudgmentSearchDecodeError(`${path}.found_candidates 应为数组`);
@@ -278,6 +282,7 @@ function decodeRequirementResult(
   const rawStatus = field(raw, "status", path);
   return {
     requirementId: nonBlankString(field(raw, "requirement_id", path), `${path}.requirement_id`),
+    requirementLabel: nonBlankString(field(raw, "requirement_label", path), `${path}.requirement_label`),
     status:
       rawStatus === null
         ? null

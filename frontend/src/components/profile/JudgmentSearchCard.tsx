@@ -11,8 +11,6 @@ import type {
   JudgmentSearchResultsView,
   JudgmentSearchStatusView,
 } from "../../api/judgment-search/judgmentSearchTypes";
-import type { ProfileLane } from "../../domain/enums";
-import { laneLabel } from "../../domain/labels";
 
 const POLL_MS = 2_500;
 
@@ -92,16 +90,6 @@ function errorMessage(error: unknown): string {
 
 function isRetryableFailure(state: JudgmentSearchStatusView["state"]): boolean {
   return state === "failed_retryable" || state === "failed_final";
-}
-
-function isProfileLane(value: string): value is ProfileLane {
-  return Object.prototype.hasOwnProperty.call(laneLabel, value);
-}
-
-function displayLane(value: JudgmentSearchCandidateView["lane"]): string {
-  if (isProfileLane(value)) return laneLabel[value];
-  if (value === "main-A") return "第一次识别";
-  return "第二次识别";
 }
 
 function candidateCount(results: JudgmentSearchResultsView): number {
@@ -240,6 +228,7 @@ export function JudgmentSearchCard({
   const renderRequirements = (
     requirements: ReadonlyArray<{
       requirementId: string;
+      requirementLabel?: string;
       statusLabel: string;
       foundCandidateCount: number;
       foundCandidates?: ReadonlyArray<JudgmentSearchCandidateView>;
@@ -257,7 +246,7 @@ export function JudgmentSearchCard({
         return (
           <li key={requirement.requirementId} className="judgment-search-card__requirement">
             <div className="judgment-search-card__requirement-head">
-              <strong>{requirement.requirementId}</strong>
+              <strong title={requirement.requirementId}>{requirement.requirementLabel ?? "研究者书面判断"}</strong>
               <span>{requirement.statusLabel}</span>
               {canExpand && requirement.foundCandidateCount > 0 && (
                 <button
@@ -288,7 +277,7 @@ export function JudgmentSearchCard({
                       }
                     >
                       <span>
-                        第 {candidate.pageNumber} 页 · {displayLane(candidate.lane)}
+                        第 {candidate.pageNumber} 页 · {candidate.laneLabel} · {candidate.channelLabel}
                       </span>
                       <span className="judgment-search-card__excerpt-list">
                         {candidate.excerpts.map((excerpt, excerptIndex) => (
@@ -322,6 +311,7 @@ export function JudgmentSearchCard({
     state.kind === "completed"
       ? state.results.results.map((result) => ({
           requirementId: result.requirementId,
+          requirementLabel: result.requirementLabel,
           statusLabel: result.statusLabel,
           foundCandidateCount: result.foundCandidates.length,
           foundCandidates: result.foundCandidates,
@@ -330,6 +320,7 @@ export function JudgmentSearchCard({
       : state.kind === "cancelled" && state.results !== null
         ? state.results.results.map((result) => ({
             requirementId: result.requirementId,
+            requirementLabel: result.requirementLabel,
             statusLabel: result.statusLabel,
             foundCandidateCount: result.foundCandidates.length,
             foundCandidates: result.foundCandidates,

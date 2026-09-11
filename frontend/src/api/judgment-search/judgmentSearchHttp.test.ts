@@ -38,12 +38,15 @@ const resultPayload = {
   results: [
     {
       requirement_id: "req-1",
+      requirement_label: "ALT 升高的研究者临床意义判断",
       status: "candidates_present",
       status_label: "已发现疑似研究者书面判断的内容，待人工核对原件",
       found_candidates: [
         {
           lane: "main-A",
+          lane_label: "第一次识别",
           channel: "handwritten",
+          channel_label: "手写内容",
           source_document_version_id: "doc-1",
           page_artifact_id: "page-1",
           page_number: 2,

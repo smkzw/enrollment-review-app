@@ -991,19 +991,28 @@ class EvidenceApiReadService:
                     if outside else "病历档案引用的原文定位已不完整，无法安全打开原文。"
                 ) from exc
             by_id = {locator.locator_id: locator for locator in locators}
-            for locator_id in outside:
-                from app.storage.page_review_visual_locator_validation import verify_visual_locator
+            if outside:
+                from app.storage.page_review_visual_locator_validation import (
+                    VisualLocatorBatchContext,
+                    verify_visual_locator,
+                )
 
-                locator = by_id[locator_id]
-                if locator.page_review_visual is None:
-                    raise AppInternalError("病历档案的证据定位与资料版本不一致，暂时无法打开原文。")
-                coverage = verify_visual_locator(session, locator)
-                if (coverage.evidence_processing_revision_id, coverage.evidence_snapshot_id,
-                    coverage.review_episode_id) != (
-                    complete.evidence_processing_revision_id, complete.evidence_snapshot_id,
-                    complete.review_episode_id
-                ):
-                    raise AppInternalError("病历档案的证据定位与资料版本不一致，暂时无法打开原文。")
+                # 闭包外视觉定位（页判读发布后追加）也共享同一会话的批量核验
+                # 上下文：核验语义不变，只去掉每个定位重复的完整修订闭包
+                # 重验（实测每定位约 1.4-2.1s，100 个定位会把档案页拖到
+                # 3 分钟以上直至前端超时）。
+                batch = VisualLocatorBatchContext(session)
+                for locator_id in outside:
+                    locator = by_id[locator_id]
+                    if locator.page_review_visual is None:
+                        raise AppInternalError("病历档案的证据定位与资料版本不一致，暂时无法打开原文。")
+                    coverage = verify_visual_locator(session, locator, batch=batch)
+                    if (coverage.evidence_processing_revision_id, coverage.evidence_snapshot_id,
+                        coverage.review_episode_id) != (
+                        complete.evidence_processing_revision_id, complete.evidence_snapshot_id,
+                        complete.review_episode_id
+                    ):
+                        raise AppInternalError("病历档案的证据定位与资料版本不一致，暂时无法打开原文。")
             return {locator.locator_id: locator for locator in locators}
 
     @app_error_boundary
