@@ -599,8 +599,34 @@ def _reason(
             return "本次提交的资料中发现疑似相关记录，但尚未完成原件核实，因此无法判定。"
         if gap == GapType.DATE_OR_ANCHOR_MISSING:
             return "本次提交的资料中事实日期或审核节点锚点缺失，因此无法判定。"
+        # 按缺口类型生成完整通顺的中文句子（第三方测试 B1/B2：名词填空
+        # 拼接会产生"未见…识别或解析风险"等病句）。
+        sentences: dict[GapType, str] = {
+            GapType.RECORD_INCOMPLETE:
+                "本次提交的资料中尚未见到足以判定该条款的病历记录，因此无法判定。",
+            GapType.OCR_OR_PARSE_RISK:
+                "相关原始资料的文字识别或内容解析存在不确定，需先核对原件，因此无法判定。",
+            GapType.RESULT_FIELDS_MISSING:
+                "相关记录缺少判定所需的具体结果数值，因此无法判定。",
+            GapType.DESCRIPTION_INSUFFICIENT:
+                "相关记录的描述不够充分，无法支持判定，因此无法判定。",
+            GapType.HISTORICAL_SOURCE_UNAVAILABLE:
+                "判定该条款需要的历史资料目前无法取得，因此无法判定。",
+            GapType.REFERENCED_FILE_MISSING:
+                "资料中提到了某份文件，但该文件未在本次提交中提供，因此无法判定。",
+            GapType.REQUIRED_PROCEDURE_NOT_DONE:
+                "该条款要求的检查或操作尚未执行，因此无法判定。",
+            GapType.PROVENANCE_FOLLOWUP:
+                "相关记录的来源尚需进一步核对，因此无法判定。",
+            GapType.INTERPRETATION_CONFLICT:
+                "对该条款的解释材料与方案原文存在不一致，因此无法判定。",
+            GapType.FUTURE_STAGE_NOT_DUE:
+                "该条款的资料要求属于后续审核节点，目前尚未到期。",
+        }
+        if gap is not None and gap in sentences:
+            return sentences[gap]
         label = _GAP_LABELS.get(gap, "具体资料缺口") if gap else "可判定资料"
-        return f"本次提交的资料中未见可用于判定该条款的{label}，因此无法判定。"
+        return f"本次提交的资料中尚缺{label}，因此无法判定。"
 
     if decision == ComponentDecision.INCLUSION_MET:
         return "已找到满足该入选条件的已核实事实。"

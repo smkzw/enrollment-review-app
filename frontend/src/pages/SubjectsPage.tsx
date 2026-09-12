@@ -187,6 +187,7 @@ export function SubjectsPage() {
   const episodeParam = params.get("episode");
   const showAll = params.get("all") === "1";
   const [evidenceItemId, setEvidenceItemId] = useState<string | null>(null);
+  const [unlinkedCandidatePage, setUnlinkedCandidatePage] = useState<number | null>(null);
   const [evidenceModelSnapshot, setEvidenceModelSnapshot] = useState<PatientProfileModel | null>(null);
   const [evidencePageArtifactId, setEvidencePageArtifactId] = useState<string | null>(null);
   const evidenceTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -310,8 +311,12 @@ export function SubjectsPage() {
             selection.page_artifact_id,
         ),
       );
-      if (item === undefined) return;
-      openEvidence(item, model, selection.page_artifact_id);
+      if (item !== undefined) {
+        openEvidence(item, model, selection.page_artifact_id);
+        return;
+      }
+      // 候选所在页尚未关联档案条目：明确提示，不再静默无响应（第三方测试 P1-1）。
+      setUnlinkedCandidatePage(selection.page_number);
     },
     [openEvidence, profile.state],
   );
@@ -559,12 +564,27 @@ export function SubjectsPage() {
             />
           )}
           {profile.state.status === "success" && (
+            <>
+            {unlinkedCandidatePage !== null && (
+              <div className="profile-status-banner" role="status">
+                该候选所在页（第 {unlinkedCandidatePage} 页）尚未关联到档案条目，
+                请到「受试者与资料」打开该页原件进行人工核对。
+                <button
+                  type="button"
+                  className="chip"
+                  onClick={() => setUnlinkedCandidatePage(null)}
+                >
+                  知道了
+                </button>
+              </div>
+            )}
             <JudgmentSearchCard
               subjectId={selectedSubject.subjectId}
               reviewEpisodeId={selectedEpisode.reviewEpisodeId}
               evidenceNavigation={profile.state.data.evidenceNavigation}
               onSelectCandidate={openJudgmentSearchCandidate}
             />
+            </>
           )}
           {historyOpen && (
             <section className="profile-section profile-correction-history-section" aria-labelledby="profile-correction-history-title">
