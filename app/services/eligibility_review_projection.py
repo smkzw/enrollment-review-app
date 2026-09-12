@@ -30,6 +30,7 @@ from app.domain.contracts.judgment_search import (
     JudgmentSearchCoverageStatus,
     JudgmentSearchCoverageSummary,
 )
+from app.domain.contracts.rules import iter_atomic_predicates
 from app.domain.expression import (
     ComponentEvaluation,
     EvaluationContext,
@@ -536,6 +537,28 @@ def _reason(
     }:
         return "本次提交的资料中存在相互冲突的事实，尚未完成核对，因此无法判定。"
 
+    # 终局判定优先给结论文案；缺口转"附带提醒"，避免"未触发排除标准"却配
+    # "无法判定"理由的决策-文案矛盾（C 桥接激活确定性判定后暴露）。
+    if decision in {
+        ComponentDecision.EXCLUSION_NOT_TRIGGERED,
+        ComponentDecision.EXCLUSION_TRIGGERED,
+        ComponentDecision.INCLUSION_MET,
+        ComponentDecision.INCLUSION_NOT_MET,
+        ComponentDecision.REQUIREMENT_MET,
+        ComponentDecision.REQUIREMENT_NOT_MET,
+    }:
+        base = {
+            ComponentDecision.EXCLUSION_NOT_TRIGGERED: "本次提交的资料中未见满足该排除条款的记录。",
+            ComponentDecision.EXCLUSION_TRIGGERED: "本次提交的资料中存在满足该排除条款的记录。",
+            ComponentDecision.INCLUSION_MET: "本次提交的资料支持满足该入选条款。",
+            ComponentDecision.INCLUSION_NOT_MET: "本次提交的资料显示不满足该入选条款。",
+            ComponentDecision.REQUIREMENT_MET: "本次提交的资料显示已完成该必做项目。",
+            ComponentDecision.REQUIREMENT_NOT_MET: "本次提交的资料显示未完成该必做项目。",
+        }[decision]
+        if gap is not None:
+            return f"{base}（另有待核对事项：{_GAP_LABELS.get(gap, "具体资料缺口")}）"
+        return base
+
     if decision in {
         ComponentDecision.PROFESSIONAL_JUDGMENT,
         ComponentDecision.INDETERMINATE,
@@ -630,6 +653,40 @@ class EligibilityReviewProjectionService:
         phase3_facts = adapt_clinical_facts_v2(
             facts, conflict_group_by_fact=conflict_group_by_fact
         )
+
+        templates = list_expectation_templates(
+            session, authority.rule_set_id, authority.rule_set_revision
+        )
+        # 词汇表桥接（C 方案）：expectation 模板的 fact_type 是发布事实使用的
+        # 中文临床类型名；把「组件谓词键 → 该组件资料要求允许的事实类型集合」
+        # 注入求值上下文，打通两套词表。无模板覆盖的谓词保持严格匹配。
+        predicate_fact_type_aliases: dict[str, list[str]] = {}
+        for clause in clause_pack.clauses:
+            requirement_fact_types = [
+                requirement.fact_type for requirement in clause.evidence_requirements
+            ]
+            if not requirement_fact_types:
+                continue
+            for predicate in iter_atomic_predicates(clause.expression):
+                predicate_fact_type_aliases.setdefault(
+                    f"{predicate.subject}.{predicate.attribute}",
+                    [],
+                ).extend(
+                    fact_type
+                    for fact_type in requirement_fact_types
+                    if fact_type not in predicate_fact_type_aliases.get(
+                        f"{predicate.subject}.{predicate.attribute}", []
+                    )
+                )
+            if clause.exception_expression is not None:
+                for predicate in iter_atomic_predicates(clause.exception_expression):
+                    key = f"{predicate.subject}.{predicate.attribute}"
+                    predicate_fact_type_aliases.setdefault(key, []).extend(
+                        fact_type
+                        for fact_type in requirement_fact_types
+                        if fact_type not in predicate_fact_type_aliases.get(key, [])
+                    )
+
         context = EvaluationContext(
             project_id=authority.project_id,
             subject_id=authority.subject_id,
@@ -638,10 +695,7 @@ class EligibilityReviewProjectionService:
             accepted_fact_ids=[fact.fact_id for fact in phase3_facts],
             facts=phase3_facts,
             anchor_dates=dict(episode.anchor_dates),
-        )
-
-        templates = list_expectation_templates(
-            session, authority.rule_set_id, authority.rule_set_revision
+            predicate_fact_type_aliases=predicate_fact_type_aliases,
         )
         templates_by_id = {template.template_id: template for template in templates}
         templates_by_requirement = {

@@ -36,6 +36,12 @@ class EvaluationContext(ContractModel):
     facts: list[ClinicalFact] = Field(default_factory=list)
     anchor_dates: dict[AnchorType, DateValue] = Field(default_factory=dict)
     half_life_days: dict[str, float] = Field(default_factory=dict)
+    # 词汇表桥接（C 方案，FINDING_20260911_FACT_TYPE_DISCONNECT）：
+    # 谓词匹配键 ``subject.attribute`` 与已发布事实 fact_type（中文临床类型名）
+    # 分属两套词表。桥接映射由调用方（eligibility 投影）从组件资料要求的
+    # fact_type 生成：谓词键 → 允许的事实类型集合。空映射保持原严格匹配
+    # （合成测试 fixture 的两侧对齐行为不变）。
+    predicate_fact_type_aliases: dict[str, list[str]] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_fact_scope(self) -> "EvaluationContext":
@@ -487,7 +493,13 @@ def _evaluate_time(
 def _evaluate_atomic(expression: AtomicExpression, context: EvaluationContext) -> EvaluationResult:
     predicate = expression.predicate
     fact_type = f"{predicate.subject}.{predicate.attribute}"
-    matching = [fact for fact in context.facts if fact.fact_type == fact_type]
+    # 词汇表桥接：优先按谓词别名集合匹配（expectation 模板 fact_type）；
+    # 无别名时保持原严格匹配。别名集合仍要求唯一可判定事实，语义不变。
+    alias_types = context.predicate_fact_type_aliases.get(fact_type)
+    if alias_types:
+        matching = [fact for fact in context.facts if fact.fact_type in alias_types]
+    else:
+        matching = [fact for fact in context.facts if fact.fact_type == fact_type]
     if not matching:
         reason = (
             "professional_judgment_missing"
