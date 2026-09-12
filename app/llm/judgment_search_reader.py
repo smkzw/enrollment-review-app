@@ -26,11 +26,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
 from collections.abc import Sequence
 from typing import Any, Literal
+
+# 429 限流有界等待：与页判读 harness（page_review_harness.read_page）同语义——
+# 等待不消耗内容核查轮次，也不占用步骤尝试预算；上限耗尽才落 transport 失败。
+_MAX_RATE_LIMIT_WAITS = 12
+_RATE_LIMIT_WAIT_SECONDS = 60.0
 
 from pydantic import ConfigDict, Field, ValidationError
 
@@ -441,8 +447,6 @@ async def read_judgment_search_page(
     route: PageReaderRoute,
     completion: Completion = direct_completion,
 ) -> JudgmentSearchReaderReceipt:
-    """对一页做恰好一次候选检索完成调用；语义见模块 docstring 的诚实边界。"""
-    # model_copy 可绕过 frozen 合同验证器：先按转储重验证，身份以重验结果为准。
     try:
         scope = JudgmentSearchScope.model_validate(scope.model_dump())
     except ValidationError as exc:
@@ -456,14 +460,26 @@ async def read_judgment_search_page(
     scope_page, frozen_input = _freeze_page_input(scope, page_input)
     messages = build_judgment_search_messages(frozen_input, target_text)
 
-    try:
-        page_completion = await completion(route, messages, route.max_tokens)
-    except JudgmentSearchReaderError:
-        raise
-    except Exception as exc:
-        raise JudgmentSearchReaderError(
-            f"候选检索完成调用失败：{exc}", failure_kind="transport"
-        ) from exc
+    rate_limit_waits = 0
+    while True:
+        try:
+            page_completion = await completion(route, messages, route.max_tokens)
+        except JudgmentSearchReaderError:
+            raise
+        except Exception as exc:
+            # 与批次读器/页判读 harness 同语义：429 有界等待（不消耗内容核查轮次）。
+            status = getattr(exc, "status_code", None)
+            response = getattr(exc, "response", None)
+            if response is not None:
+                status = status or getattr(response, "status_code", None)
+            if status == 429 and rate_limit_waits < _MAX_RATE_LIMIT_WAITS:
+                rate_limit_waits += 1
+                await asyncio.sleep(_RATE_LIMIT_WAIT_SECONDS)
+                continue
+            raise JudgmentSearchReaderError(
+                f"候选检索完成调用失败：{exc}", failure_kind="transport"
+            ) from exc
+        break
 
     text = page_completion.text or ""
     if page_completion.finish_reason != "stop":
@@ -643,7 +659,6 @@ async def read_judgment_search_page_batch(
         )
         scopes.append(scope)
         stripped_targets.append(stripped)
-
     scope_page, frozen_input = _freeze_page_input(first_scope, page_input)
     messages = build_judgment_search_batch_messages(
         frozen_input,
@@ -652,15 +667,29 @@ async def read_judgment_search_page_batch(
             for scope, stripped_target in zip(scopes, stripped_targets)
         ],
     )
+    rate_limit_waits = 0
+    while True:
+        try:
+            page_completion = await completion(route, messages, route.max_tokens)
+        except JudgmentSearchReaderError:
+            raise
+        except Exception as exc:
+            # 与页判读 harness 同语义：429 限流按有界等待重试（不消耗内容
+            # 核查轮次）；其余传输异常原样收敛为 transport 失败。runtime06c
+            # 第19页 429 被 2 次硬重试耗尽即此缺口（见 HANDOFF_20260911_LATE_PAUSE）。
+            status = getattr(exc, "status_code", None)
+            response = getattr(exc, "response", None)
+            if response is not None:
+                status = status or getattr(response, "status_code", None)
+            if status == 429 and rate_limit_waits < _MAX_RATE_LIMIT_WAITS:
+                rate_limit_waits += 1
+                await asyncio.sleep(_RATE_LIMIT_WAIT_SECONDS)
+                continue
+            raise JudgmentSearchReaderError(
+                f"候选检索完成调用失败：{exc}", failure_kind="transport"
+            ) from exc
+        break
 
-    try:
-        page_completion = await completion(route, messages, route.max_tokens)
-    except JudgmentSearchReaderError:
-        raise
-    except Exception as exc:
-        raise JudgmentSearchReaderError(
-            f"候选检索完成调用失败：{exc}", failure_kind="transport"
-        ) from exc
 
     text = page_completion.text or ""
     if page_completion.finish_reason != "stop":
