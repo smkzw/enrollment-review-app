@@ -156,3 +156,9 @@ C链数据管线已通，只差表达式求值消费qualified binding selections
 - 分支: codex/phase5-clinical-facts-profile
 - 最新commit: 6f9df88e
 - 全部代码+文档+检查点已推送
+
+## 规则级别结果汇总
+- 23条规则中15条全量有判定(65%)、8条部分无法判定(35%)
+- IN-01 年龄≥18 → inclusion_met（年龽51岁）
+- 49个排除条件 → exclusion_not_triggered
+- 剩余8条⏳需额外资料或候选补充：EX-04/EX-06/EX-07(partial)/EX-09/EX-10/EX-12/EX-16/IN-06
