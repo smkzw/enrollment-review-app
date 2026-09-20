@@ -209,3 +209,38 @@ A✅发布 → B✅发布 → C✅报告(56有判定+13需专业判断+0全UNKNO
 - exclusion_not_triggered: 50
 - indeterminate: 12 (需专业判断的正确标记)
 - 后端重启后API确认，WP01验收标准达成
+
+## C链第10次运行结果（所有修复已生效）
+- 第10次workflow 47c4ef67: 全绿（candidates+verification+ready）
+- predicate binding: COMPLETED
+- control binding: COMPLETED（enum repair修复后首次通过）
+- predicate qualification: COMPLETED
+- control qualification: COMPLETED（summary步qualified binding selection fallback修复后首次通过）
+- judgment_content × 2: COMPLETED
+
+### eligibility review API确认结果
+- inclusion_met: 1 (IN-01)
+- inclusion_not_met: 6
+- exclusion_not_triggered: 50
+- indeterminate: 12
+- 总计: 57/69 (83%) 有实际判定
+
+### 尚待实施
+- qualified review publish需要method approval gate（WP06范围）
+- 12条indeterminate是需要专业判断的条件（正确行为）
+- WP02-WP08
+
+### 本会话完成的所有代码修改
+1. v2分组处置合同（candidate_fact_accounting）
+2. 包内短别名（predicate_binding_candidates + control_binding_candidates）
+3. 围栏剥离×3处（predicate + control + qualification）
+4. 单位等价映射（岁=周岁）
+5. 空选择→FALSE
+6. 控制期望模板级处置PENDING_CONTROL_APPLICABILITY
+7. 结构化账目即有效未决说明
+8. 比较层v1+v2兼容+默认处置按全集展开
+9. qualification围栏剥离+unresolved_reasons修复+enum repair
+10. binding selections→eligibility review接入
+11. R13定位去重修复
+12. Source Policy新合同
+13. 前端labels/types同步

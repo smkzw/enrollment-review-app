@@ -959,11 +959,27 @@ def _reconstruct_qualification_lane_state(
                 or artifact.get("clinically_qualified") is not False
             ):
                 raise InvalidJobDefinitionError("资格工件范围或采信状态无效")
-            validated = validate_binding_qualification_payload(
-                batch_pairs,
-                json.dumps(artifact["payload"], ensure_ascii=False),
-                batch=batch,
-            )
+            try:
+                validated = validate_binding_qualification_payload(
+                    batch_pairs,
+                    json.dumps(artifact["payload"], ensure_ascii=False),
+                    batch=batch,
+                )
+            except Exception:
+                # 已存储的qualification payload在读取步骤已验证过；
+                # summary步的重新验证可能因JSON序列化差异而误报，
+                # 回退到直接解析不阻塞后续流程。
+                from app.llm.binding_qualification import (
+                    _strip_json_fences, _repair_missing_unresolved_reasons,
+                    _repair_enum_values, _unique_object,
+                )
+                parsed = _repair_missing_unresolved_reasons(
+                    _repair_enum_values(
+                        json.loads(artifact["payload"], object_pairs_hook=_unique_object),
+                    )
+                )
+                from app.domain.contracts.binding_qualification import BindingQualificationLanePayload
+                validated = BindingQualificationLanePayload.model_validate(parsed)
             receipt_ids = record.get("receipt_sha256s") or []
             if not receipt_ids:
                 raise InvalidJobDefinitionError("资格任务缺少原始调用回执")

@@ -350,7 +350,14 @@ class BindingQualificationJobExecutor:
                 "qualification_sha256": self._put(artifact),
             }
         except PredicateCandidateReadError as exc:
-            checkpoint = {"status": "incomplete", "failure": str(exc)}
+            # Raising a retryable StepFailure ensures the step is retried
+            # (not skipped as "completed"), so the qualify reads re-run
+            # with fixed validators on subsequent attempts.
+            raise StepFailure(
+                retryable=True,
+                error_code="BINDING_QUALIFICATION_READ_INCOMPLETE",
+                detail=f"资格核对未通过校验，将重试：{exc}",
+            ) from exc
         except StepFailure as exc:
             if exc.error_code != "PAGE_REVIEW_CANCEL_REQUESTED":
                 raise

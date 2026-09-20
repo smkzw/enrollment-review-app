@@ -249,7 +249,11 @@ def _repair_enum_values(data):
         "attribute_match": {"direct", "derivation_operand", "context_only", "uncertain"},
         "denial_scope": {"compatible", "uncertain", "incompatible"},
         "temporal_role": {"event_date", "record_date", "reference_date", "not_applicable", "uncertain", "mismatched"},
-        "direct_operand_usable": {"usable", "not_usable", "uncertain"},
+        "direct_operand_usable": {"usable", "not_usable", "unresolved"},
+    }
+    # 不同字段的安全回退值不同
+    _FALLBACK = {
+        "direct_operand_usable": "unresolved",
     }
     for result in data.get("results", []):
         judgment = result.get("judgment") if "judgment" in result else result
@@ -258,7 +262,7 @@ def _repair_enum_values(data):
         for field, valid_values in _ENUM_FIELDS.items():
             value = judgment.get(field)
             if value is not None and value not in valid_values:
-                judgment[field] = "uncertain"
+                judgment[field] = _FALLBACK.get(field, "uncertain")
 
 
 def validate_binding_qualification_payload(
