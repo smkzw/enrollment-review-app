@@ -93,3 +93,22 @@ C链数据管线已通，只差表达式求值消费qualified binding selections
 2. 重试control qualification（修复已到位）
 3. 接通expression evaluation消费完整绑定数据
 4. 开始WP02-WP04
+
+## 补充诊断：68条indeterminate的深层根因
+
+### 问题链
+1. predicate attribute = "年龄", evidence_requirement fact_type = "demographic_age"
+2. 实际发布事实 fact_type = "年龄"/"demographics"/"人口学"（不匹配"demographic_age"）
+3. 别名映射 "受试者.年龄" → ["demographic_age"] → 找不到匹配事实 → UNKNOWN
+4. predicate unit = "周岁", fact unit = "岁" → 单位不等价 → 不直接比较
+
+### 修复路径（WP05核心）
+1. fact_type别名：在_component_candidate_types中加入predicate.attribute作为别名
+   （"受试者.年龄" → ["demographic_age", "年龄"]）
+2. 单位等价：在normalization或evaluator中处理常见单位等价（岁=周岁）
+3. observation_policy清除（已实现但不够——根因是fact_type不匹配）
+
+### 代码位置
+- _component_candidate_types(): app/services/eligibility_review_projection.py L651
+- observation_policy检查: app/domain/expression.py L513
+- unit等价检查: app/domain/expression.py candidate_value_shape()
