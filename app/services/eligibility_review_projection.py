@@ -6,9 +6,12 @@
 """
 from __future__ import annotations
 
+import json
+import os
 from dataclasses import asdict, dataclass
 from typing import Any, Iterable, Mapping
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.domain.contracts.clause_pack import ClausePackClause
@@ -720,6 +723,7 @@ class EligibilityReviewProjectionService:
         summaries = JudgmentSearchSummaryRepository(session).latest_for_authority(authority)
         facts_by_id = {fact.fact_id: fact for fact in facts}
 
+        predicate_fact_ids = _load_binding_predicate_fact_ids(session)
         output: list[EligibilityClauseProjection] = []
         for clause in clauses:
             component = clause_to_rule_component(clause)
@@ -745,6 +749,8 @@ class EligibilityReviewProjectionService:
                     item.requirement_id: item.workflow_stage_id for item in templates
                 } if episode.workflow_stage_id is not None else None,
                 source_gaps=frozenset(judgment_gaps.values()),
+                predicate_fact_ids=_filter_for_component(
+                    predicate_fact_ids, component),
             )
             evaluation = result.evaluation
             gaps = set(result.gaps)
@@ -812,3 +818,86 @@ def clause_to_rule_component(clause: ClausePackClause):
         repeat_trigger_conditions=list(clause.repeat_trigger_conditions),
         evidence_requirements=clause.evidence_requirements,
     )
+
+
+def _load_binding_predicate_fact_ids(session):
+    """Load predicate fact selections from the latest completed binding job."""
+    try:
+        from app.workflow.jobstore import JobStore
+        from app.domain.contracts.predicate_binding import PredicateBindingFrozenInput
+        from app.llm.predicate_binding_candidates import PredicateCandidatePayload
+        from app.evidence.artifacts import ArtifactStore
+        from app.services.evidence_app_bootstrap import resolve_data_paths
+
+        rows = session.execute(
+            text("SELECT job_id FROM jobs "
+                 "WHERE job_type = 'predicate_binding_candidates' "
+                 "AND state = 'completed' ORDER BY created_at DESC LIMIT 1")
+        ).fetchall()
+        if not rows:
+            return None
+        binding_job_id = rows[0][0]
+        job_row = session.execute(
+            text("SELECT payload_json FROM jobs WHERE job_id = :jid"),
+            {"jid": binding_job_id},
+        ).fetchone()
+        if job_row is None:
+            return None
+        binding_payload = json.loads(job_row[0])
+        frozen_data = binding_payload.get("frozen_input")
+        if not frozen_data:
+            return None
+        frozen = PredicateBindingFrozenInput.model_validate(frozen_data)
+
+        art_store = ArtifactStore(resolve_data_paths())
+        store = JobStore(session)
+        lane_payloads = {}
+        for lane in ("main-A", "main-B"):
+            cp = store.get_last_checkpoint(binding_job_id, f"read:{lane}")
+            if cp is None or cp[1].get("status") != "unverified":
+                return None
+            cand_sha = cp[1].get("candidate_sha256")
+            if not cand_sha:
+                return None
+            raw = art_store.read_by_sha("raw_response", cand_sha)
+            artifact = json.loads(raw)
+            lane_payloads[lane] = PredicateCandidatePayload.model_validate(
+                artifact.get("payload", {}))
+
+        result = {}
+        for component in frozen.components:
+            for pred in component.binding_predicates:
+                pid = pred.predicate_identity_sha256
+                key = pred.predicate_id
+                fact_sets = []
+                for lane in ("main-A", "main-B"):
+                    lp = lane_payloads.get(lane)
+                    if lp is None:
+                        continue
+                    for r in lp.results:
+                        if r.predicate_identity_sha256 == pid:
+                            fact_sets.append({c.fact_id for c in r.candidates})
+                if len(fact_sets) == 2:
+                    result[key] = sorted(fact_sets[0] & fact_sets[1])
+                else:
+                    result[key] = []
+        return result if result else None
+    except Exception:
+        return None
+
+
+def _filter_for_component(global_mapping, component):
+    """Filter global mapping to only this component's predicates, or None."""
+    if global_mapping is None:
+        return None
+    from app.domain.expression import _iter_atomic_expressions
+    expressions = [component.expression]
+    if component.exception_expression is not None:
+        expressions.append(component.exception_expression)
+    expected = set()
+    for expr in expressions:
+        for atom in _iter_atomic_expressions(expr):
+            expected.add(atom.predicate.predicate_id)
+    if not expected:
+        return None
+    return {pid: global_mapping.get(pid, []) for pid in expected}
