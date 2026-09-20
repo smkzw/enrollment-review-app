@@ -1,0 +1,20 @@
+{
+  "attached_count": 10,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-d702700534c543564e8eabec",
+  "group_id": "d001-ii-history-treatment-collection-v2",
+  "lookup_counts": {
+    "coverage_manifest": 2,
+    "frozen_plan_context": 8,
+    "frozen_plan_owned": 4
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-history-treatment-collection-v2",
+  "owned_count": 4,
+  "prompt_char_count": 29285,
+  "prompt_sha256": "246b119cf304e271fd211c045b2be496ff4dd4b819ad472cc8da69ace640e7b0",
+  "task_id": "phase5-slice60p-20260828",
+  "unit_count": 14,
+  "worker": "codex-parent"
+}

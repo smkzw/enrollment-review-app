@@ -43,6 +43,7 @@ __all__ = [
     "AppNotFoundError",
     "AppReferencedDocumentError",
     "AppReviewPendingError",
+    "AppReviewSourceIncompleteError",
     "AppRiskReviewError",
     "AppRollbackTargetError",
     "AppScopeMismatchError",
@@ -85,6 +86,16 @@ class AppNotFoundError(EvidenceAppError):
     code = "NOT_FOUND"
     title = "记录不存在"
     recovery = "请检查编号，或返回列表重新选择。"
+
+
+class AppReviewSourceIncompleteError(EvidenceAppError):
+    status_code = 409
+    code = "REVIEW_SOURCE_INCOMPLETE"
+    title = "资料关联尚未核对完整"
+    recovery = "请联系维护人员核对资料关联，无需重复上传原件。"
+
+    def __init__(self) -> None:
+        super().__init__("部分记录与原件尚未对应完整，暂时无法生成本次审核。已有资料已保留。")
 
 
 class AppInvalidReferenceError(EvidenceAppError):

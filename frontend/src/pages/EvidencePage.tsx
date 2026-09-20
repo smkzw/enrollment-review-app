@@ -30,7 +30,7 @@ import {
   type LocatorView,
 } from "../api/evidence";
 import { matchRouteParams } from "../app/routes";
-import { RouteLink, useHashRoute } from "../app/router";
+import { RouteLink, updateParams, useHashRoute } from "../app/router";
 import { useLoad, type UseLoadResult } from "../app/useLoad";
 import {
   EmptyState,
@@ -47,6 +47,7 @@ import { OcrReviewPanel } from "../components/evidence-workspace/OcrReviewPanel"
 import { ReferencedDocumentsPanel } from "../components/evidence-workspace/ReferencedDocumentsPanel";
 import { OriginalEvidenceViewer } from "../components/evidence-workspace/OriginalEvidenceViewer";
 import { SelectiveVisionTaskPanel } from "../components/evidence-workspace/SelectiveVisionTaskPanel";
+import { OcrReprocessingPanel } from "../components/evidence-workspace/OcrReprocessingPanel";
 import { SourceMetadataEditor } from "../components/evidence-workspace/SourceMetadataEditor";
 import type {
   CorrectionDraft,
@@ -244,6 +245,11 @@ export function EvidencePage() {
     null,
   );
   const [snapshotsKey, setSnapshotsKey] = useState(0);
+  const reprocessedView = params.get("ocrSnapshot") && params.get("ocrRevision")
+    ? { episodeId: episodeParam, snapshotId: params.get("ocrSnapshot")!, revisionId: params.get("ocrRevision")! } : null;
+  function setReprocessedView(value: { episodeId: string; snapshotId: string; revisionId: string } | null) {
+    updateParams({ ocrSnapshot: value?.snapshotId ?? null, ocrRevision: value?.revisionId ?? null });
+  }
   /** 幂等键随预览生命周期：从首次确认尝试到成功/取消/被替换复用同一键，不显示给用户。 */
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
 
@@ -279,8 +285,14 @@ export function EvidencePage() {
     { enabled: scopeReady },
   );
 
+  const requestedOcrSnapshot = params.get("ocrSnapshot");
+  useEffect(() => {
+    if (requestedOcrSnapshot) setSelectedSnapshotId(requestedOcrSnapshot);
+  }, [requestedOcrSnapshot]);
+
   useEffect(() => {
     if (snapshots.state.status !== "success") return;
+    if (requestedOcrSnapshot && selectedSnapshotId === requestedOcrSnapshot) return;
     if (
       selectedSnapshotId !== null &&
       snapshots.state.data.items.some(
@@ -289,11 +301,11 @@ export function EvidencePage() {
     )
       return;
     setSelectedSnapshotId(
-      snapshots.state.data.activeEvidenceSnapshotId ??
+      requestedOcrSnapshot ?? snapshots.state.data.activeEvidenceSnapshotId ??
         snapshots.state.data.items[0]?.evidenceSnapshotId ??
         null,
     );
-  }, [selectedSnapshotId, snapshots.state]);
+  }, [selectedSnapshotId, snapshots.state, requestedOcrSnapshot]);
 
   const selectedSnapshot =
     snapshots.state.status === "success" && selectedSnapshotId !== null
@@ -322,7 +334,9 @@ export function EvidencePage() {
     snapshots.state.status === "success"
       ? snapshots.state.data.activeEvidenceSnapshotId
       : null;
-  const viewedProcessingRevisionId =
+  const viewingReprocessed = reprocessedView !== null && reprocessedView.episodeId === reviewEpisodeId
+    && reprocessedView.snapshotId === selectedSnapshotId;
+  const viewedProcessingRevisionId = viewingReprocessed ? reprocessedView.revisionId :
     selectedSnapshotId === activeSnapshotId
       ? activeProcessingRevisionId
       : (selectedSnapshot?.baseProcessingRevisionId ?? null);
@@ -335,10 +349,11 @@ export function EvidencePage() {
     { enabled: scopeReady && viewedProcessingRevisionId !== null },
   );
   const viewedRevisionConsistent =
+    selectedSnapshot !== null &&
     processingRevision.state.status === "success" &&
     processingRevision.state.data.revisionId === viewedProcessingRevisionId &&
     processingRevision.state.data.evidenceSnapshotId === selectedSnapshotId &&
-    (selectedSnapshotId !== activeSnapshotId ||
+    (viewingReprocessed || selectedSnapshotId !== activeSnapshotId ||
       processingRevision.state.data.isCurrent);
   useEffect(() => {
     if (
@@ -897,30 +912,37 @@ export function EvidencePage() {
   }
 
   function idempotencyKeyFor(action: string): string {
-    const existing = actionIdempotencyKeys.current[action];
-    if (existing !== undefined) return existing;
+    const storageKey = `evidence-command:${subjectIdParam}:${episodeParam}:${action}`;
+    const existing = actionIdempotencyKeys.current[storageKey] ?? window.localStorage.getItem(storageKey);
+    if (existing != null) return existing;
     const key = crypto.randomUUID();
-    actionIdempotencyKeys.current[action] = key;
+    window.localStorage.setItem(storageKey, key);
+    actionIdempotencyKeys.current[storageKey] = key;
     return key;
   }
 
   function completeAction(action: string) {
-    delete actionIdempotencyKeys.current[action];
+    const storageKey = `evidence-command:${subjectIdParam}:${episodeParam}:${action}`;
+    window.localStorage.removeItem(storageKey);
+    delete actionIdempotencyKeys.current[storageKey];
   }
 
   async function buildReviewableRevision(
     snapshot: EvidenceSnapshotListView["items"][number],
+    reprocessedBaseId?: string,
   ) {
-    if (episode === undefined || snapshot.baseProcessingRevisionId === null)
+    const baseId = reprocessedBaseId ?? snapshot.baseProcessingRevisionId;
+    if (episode === undefined || baseId === null)
       return;
-    const action = `build:${snapshot.evidenceSnapshotId}:${snapshot.baseProcessingRevisionId}`;
+    if (reprocessedBaseId && (!viewingReprocessed || !viewedRevisionConsistent || viewedProcessingRevisionId !== reprocessedBaseId)) return;
+    const action = `build:${snapshot.evidenceSnapshotId}:${baseId}:revision:${episode.revision}`;
     setBuildBusy(true);
     setProcessingActionError(null);
     setProcessingNotice("正在生成可启用的资料版本…");
     try {
       const result = await getEvidenceRepository().buildProcessingRevision({
         evidence_snapshot_id: snapshot.evidenceSnapshotId,
-        base_processing_revision_id: snapshot.baseProcessingRevisionId,
+        base_processing_revision_id: baseId,
         expected_revision: episode.revision,
         idempotency_key: idempotencyKeyFor(action),
         actor: "本地用户",
@@ -971,6 +993,7 @@ export function EvidencePage() {
       );
       currentCandidateId.current = null;
       setProcessingCandidate(null);
+      setReprocessedView(null);
       setProcessingNotice("资料版本已启用；正在整理个例档案。");
       setSnapshotsKey((key) => key + 1);
       context.retry();
@@ -1779,6 +1802,26 @@ export function EvidencePage() {
         backSubjectId={subjectId as SubjectId}
       />
 
+      {activeSnapshotId && activeProcessingRevisionId && <OcrReprocessingPanel
+        key={`${project.projectId}:${episode.reviewEpisodeId}:${activeSnapshotId}:${activeProcessingRevisionId}`}
+        scope={{ projectId: project.projectId, subjectId: subjectId!, episodeId: episode.reviewEpisodeId,
+          snapshotId: activeSnapshotId, completeId: activeProcessingRevisionId }}
+        blocked={processingCandidate !== null || unfinishedSnapshot !== null || buildBusy}
+        onView={(revisionId) => {
+          if (processingCandidate !== null || buildBusy) {
+            setProcessingNotice("请先完成当前资料版本的核对，再打开新的识别结果。");
+            return;
+          }
+          setSelectedSnapshotId(activeSnapshotId);
+          setReprocessedView({ episodeId: episode.reviewEpisodeId, snapshotId: activeSnapshotId, revisionId });
+        }}
+      />}
+      {viewingReprocessed && <div className="evidence-notice" role="status">
+        <strong>正在查看所选识别结果，原报告未改变。</strong>
+        <button type="button" className="button" disabled={buildBusy} onClick={() => setReprocessedView(null)}>返回已启用资料</button>
+        {selectedSnapshot && viewedRevisionConsistent && processingCandidate === null && <button type="button" className="button button--primary" disabled={buildBusy}
+          onClick={() => void buildReviewableRevision(selectedSnapshot, viewedProcessingRevisionId!)}>检查核对结果并生成资料版本</button>}
+      </div>}
       <section className="evidence-upload" aria-label="资料上传">
         <div className="evidence-upload__head">
           <h2 className="evidence-upload__title">

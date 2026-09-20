@@ -31,7 +31,7 @@ describe("ProfileStatusBanner", () => {
       <ProfileStatusBanner model={modelFor({ status: "generating", status_label: "生成中" })} />,
     );
     expect(screen.getByRole("status")).toHaveTextContent("生成中");
-    expect(screen.getByText(/档案正在生成中/)).toBeInTheDocument();
+    expect(screen.getByText(/正在整理已核实的病史、用药和检查记录/)).toBeInTheDocument();
   });
 
   it("失败：role=alert 提示生成失败，不提示已生成", () => {
@@ -39,6 +39,7 @@ describe("ProfileStatusBanner", () => {
       <ProfileStatusBanner model={modelFor({ status: "failed", status_label: "生成失败" })} />,
     );
     expect(screen.getByRole("alert")).toHaveTextContent("生成失败");
+    expect(screen.getByRole("alert")).toHaveTextContent("不表示病史、用药或检查记录为空");
     expect(screen.queryByText(/已生成/)).not.toBeInTheDocument();
   });
 

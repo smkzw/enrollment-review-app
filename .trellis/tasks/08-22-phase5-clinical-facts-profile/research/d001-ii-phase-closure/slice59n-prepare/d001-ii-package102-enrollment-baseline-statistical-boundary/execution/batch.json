@@ -1,0 +1,446 @@
+{
+  "batch_id": "pcb-ae6445779530de5f67ee058a",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [
+    "body.p1198",
+    "body.p1199",
+    "body.p1206",
+    "body.p1207",
+    "body.p1208",
+    "body.p1209"
+  ],
+  "context_structure_unit_ids": [
+    "su-32fd0f455b0bd776fc598b59",
+    "su-b0ce365cdbfceab1aa44fa96",
+    "su-b4abfa7c46b218f7acde0996",
+    "su-ce3c60a390ac2e4d3a48dff4",
+    "su-1be194815474be01733b25a2",
+    "su-15bbbc5411c7a00315b6abb4"
+  ],
+  "context_units": [
+    {
+      "excerpt": "Ⅱ期临床阶段，列出总体入选及完成参与者例数，对各分析集的纳入和剔除情况进行总结。提供提前结束试验的参与者清单，对各分析集的参与者分布进行详细列表。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "参与者入组分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1198"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30610,
+      "source_ref": "body.p1198",
+      "source_span_ids": [
+        "body.p1198"
+      ],
+      "structure_unit_id": "su-32fd0f455b0bd776fc598b59",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "Ⅲ期临床阶段，列出总体入选、完成16周基础期治疗、扩展期治疗以及完成试验的参与者例数，对各分析集的纳入和剔除情况进行总结。提供提前结束试验的参与者清单，对各分析集的参与者分布进行详细列表。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "参与者入组分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1199"
+      ],
+      "phase_scopes": [
+        "phase_iii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30620,
+      "source_ref": "body.p1199",
+      "source_span_ids": [
+        "body.p1199"
+      ],
+      "structure_unit_id": "su-b0ce365cdbfceab1aa44fa96",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "Ⅱ期临床研究阶段",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "疗效分析",
+        "Ⅱ期临床研究阶段"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1206"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30690,
+      "source_ref": "body.p1206",
+      "source_span_ids": [
+        "body.p1206"
+      ],
+      "structure_unit_id": "su-b4abfa7c46b218f7acde0996",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "主要疗效指标分析",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "疗效分析",
+        "Ⅱ期临床研究阶段",
+        "主要疗效指标分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1207"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30700,
+      "source_ref": "body.p1207",
+      "source_span_ids": [
+        "body.p1207"
+      ],
+      "structure_unit_id": "su-ce3c60a390ac2e4d3a48dff4",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "主要疗效指标为第12周，银屑病面积和严重程度指数较基线改善至少75%（PASI-75）的参与者比例。将采用CMH检验比较各剂量组与安慰剂组间PASI-75应答率的差异及其95%的置信区间。主要疗效指标的缺失，将采用多重填补。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "疗效分析",
+        "Ⅱ期临床研究阶段",
+        "主要疗效指标分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1208"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30710,
+      "source_ref": "body.p1208",
+      "source_span_ids": [
+        "body.p1208"
+      ],
+      "structure_unit_id": "su-1be194815474be01733b25a2",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "针对主要疗效指标的缺失还将采用末次观察结转（Last Observational Carried Forward，LOCF）、无应答填补（Non-Response Imputation，NRI）法等进行敏感性分析。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "疗效分析",
+        "Ⅱ期临床研究阶段",
+        "主要疗效指标分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1209"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30720,
+      "source_ref": "body.p1209",
+      "source_span_ids": [
+        "body.p1209"
+      ],
+      "structure_unit_id": "su-15bbbc5411c7a00315b6abb4",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "coverage_manifest_id": "manifest:slice61co-package102-enrollment-baseline-statistical-boundary",
+  "known_official_targets": [],
+  "known_procedure_targets": [],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "D1给药前",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "D1给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {},
+  "owned_required_action_kinds_by_structure_unit_id": {},
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.p1197",
+    "body.p1200",
+    "body.p1201",
+    "body.p1202",
+    "body.p1203",
+    "body.p1204",
+    "body.p1205"
+  ],
+  "owned_structure_unit_ids": [
+    "su-68aa4b2c1ab5edd47f362535",
+    "su-01be15f15941c1f467f99117",
+    "su-8f1031a63b30f3a7e14a955a",
+    "su-9c8b013993ae776f7f8dc4b7",
+    "su-5142d2c6161c2593bcdee76a",
+    "su-2a0e3803fabfe3dd0ed49732",
+    "su-a34910314dc30700e4870936"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "参与者入组分析",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "参与者入组分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1197"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30600,
+      "source_ref": "body.p1197",
+      "source_span_ids": [
+        "body.p1197"
+      ],
+      "structure_unit_id": "su-68aa4b2c1ab5edd47f362535",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "人口统计学和基线特征分析",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "人口统计学和基线特征分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1200"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30630,
+      "source_ref": "body.p1200",
+      "source_span_ids": [
+        "body.p1200"
+      ],
+      "structure_unit_id": "su-01be15f15941c1f467f99117",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "将基于ITT集，采用描述性统计方法来总结按组别及总体的参与者人口统计学特征和基线特性。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "人口统计学和基线特征分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1201"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30640,
+      "source_ref": "body.p1201",
+      "source_span_ids": [
+        "body.p1201"
+      ],
+      "structure_unit_id": "su-8f1031a63b30f3a7e14a955a",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "药物治疗与非药物治疗分析",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "药物治疗与非药物治疗分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1202"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30650,
+      "source_ref": "body.p1202",
+      "source_span_ids": [
+        "body.p1202"
+      ],
+      "structure_unit_id": "su-9c8b013993ae776f7f8dc4b7",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "根据WHO Drug分类统计合并用药的参与者例数和百分比；",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "药物治疗与非药物治疗分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1203"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30660,
+      "source_ref": "body.p1203",
+      "source_span_ids": [
+        "body.p1203"
+      ],
+      "structure_unit_id": "su-5142d2c6161c2593bcdee76a",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "根据MedDRA编码的系统器官分类（SOC）和首选术语（PT）分类统计合并治疗的参与者例数与百分比。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "药物治疗与非药物治疗分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1204"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30670,
+      "source_ref": "body.p1204",
+      "source_span_ids": [
+        "body.p1204"
+      ],
+      "structure_unit_id": "su-2a0e3803fabfe3dd0ed49732",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "疗效分析",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "疗效分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1205"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30680,
+      "source_ref": "body.p1205",
+      "source_span_ids": [
+        "body.p1205"
+      ],
+      "structure_unit_id": "su-a34910314dc30700e4870936",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [
+    "su-68aa4b2c1ab5edd47f362535",
+    "su-01be15f15941c1f467f99117",
+    "su-9c8b013993ae776f7f8dc4b7",
+    "su-a34910314dc30700e4870936"
+  ],
+  "study_phase": "phase_ii"
+}

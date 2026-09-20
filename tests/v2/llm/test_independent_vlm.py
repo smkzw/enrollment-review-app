@@ -67,7 +67,7 @@ def test_independent_vlm_defaults_use_direct_coding_plan_and_stay_isolated():
         CODING_PLAN_BASE_URL,
         "glm-5.3-flash",
         "high",
-        "8192",
+        "65536",
         "mtplx",
         "omlx",
     ]

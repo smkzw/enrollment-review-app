@@ -4,10 +4,11 @@
 逻辑文档调用所需的 PageInput 与逻辑文档映射，供纯确定性规划器消费。
 
 职责边界：
-- 仅从不可变有效文本层（raw OCR + 完整修订所选校对投影）读取，
+- 从不可变有效文本层（raw OCR + 完整修订所选校对投影）读取；显式视觉来源
+  路径允许无 OCR 的原件页，正文保持为空，事实仍由绑定的双读与视觉定位提供。
   绝不借用筛选日/上传日/操作日填补 PartialDateRange；
-- 显式闭合：每个 manifest 页必须有对应 PageArtifact/OcrPage/有效文本，
-  缺页一律报错；
+- 显式闭合：每个 manifest 页必须有对应页产物；文字路径核对 OCR 和有效文本，
+  视觉路径核对原件图像及双读来源，缺页一律报错；
 - 无跨审核节点借用：仅处理传入修订所在审核节点的资料版本与页产物，
   映射不一致一律拒绝；
 - 稳定哈希：effective_text_sha256 来自 EffectiveTextProjection 的确定性 sha256。
@@ -270,6 +271,7 @@ def build_effective_text_map(
     revision: CompleteEvidenceProcessingRevision,
     *,
     doc_version_to_logical: dict[str, str] | None = None,
+    allow_image_only: bool = False,
 ) -> dict[tuple[str, int], PageInput]:
     """为修订每页确定性投影有效文本并构建 PageInput 映射。
 
@@ -281,7 +283,7 @@ def build_effective_text_map(
     返回 key=(source_document_version_id, page_number) -> PageInput
     """
     from app.storage.evidence_locator_repositories import CorrectionRepository
-    from app.storage.ocr_repositories import OcrPageRepository
+    from app.storage.ocr_repositories import OcrPageRepository, PageArtifactRepository
 
     if doc_version_to_logical is None:
         doc_version_to_logical, _ = build_doc_version_to_logical_map(session, revision)
@@ -328,19 +330,23 @@ def build_effective_text_map(
                 f"资料版本 {entry.source_document_version_id} 缺少逻辑文档映射"
             )
         if entry.ocr_page_id is None:
-            raise FactPlanningSourceError(
-                f"页清单条目 {entry.entry_id} 缺少 ocr_page_id，无法投影有效文本"
-            )
-        ocr = OcrPageRepository(session).get(entry.ocr_page_id)
-        # 校验页产物归属一致（无跨页/跨修订借用）
-        if ocr.page_artifact_id != entry.page_artifact_id or ocr.page_number != entry.page_number:
-            raise FactPlanningSourceError(
-                f"OCR 页 {entry.ocr_page_id} 与清单条目 {entry.entry_id} 归属不一致"
-            )
+            if not allow_image_only:
+                raise FactPlanningSourceError("本页没有文字识别结果，请通过原件双读整理资料")
+            artifact = PageArtifactRepository(session).get(entry.page_artifact_id)
+            if (not artifact.page_image_sha256 or artifact.page_number != entry.page_number):
+                raise FactPlanningSourceError("原件页图像缺失或页码不一致，不能整理资料")
+            raw_text = ""
+        else:
+            ocr = OcrPageRepository(session).get(entry.ocr_page_id)
+            if ocr.page_artifact_id != entry.page_artifact_id or ocr.page_number != entry.page_number:
+                raise FactPlanningSourceError(
+                    f"OCR 页 {entry.ocr_page_id} 与清单条目 {entry.entry_id} 归属不一致"
+                )
+            raw_text = ocr.raw_text
         corrections = correction_by_ocr.get(entry.ocr_page_id, [])
         try:
             projection: EffectiveTextProjection = project_effective_text(
-                ocr.raw_text, corrections
+                raw_text, corrections
             )
         except Exception as exc:
             raise FactPlanningSourceError(
@@ -358,7 +364,7 @@ def build_effective_text_map(
                 if locator.source_layer == LocatorSourceLayer.EFFECTIVE_TEXT:
                     source_text = projection.effective_text
                 elif locator.source_layer == LocatorSourceLayer.RAW_OCR:
-                    source_text = ocr.raw_text
+                    source_text = raw_text
                 else:
                     source_text = ""
                 if locator.text_start is not None and locator.text_end is not None:
@@ -403,6 +409,7 @@ def build_fact_normalization_plan(
     revision_id: str | None = None,
     max_pages_per_call: int = 20,
     contract_version: str = "phase5/facts/v1",
+    allow_image_only: bool = False,
 ) -> tuple[FactNormalizationPlan, FactSourceAdapterResult]:
     """一站式适配 + 确定性规划（DB 读取 + 纯规划）。
 
@@ -440,7 +447,8 @@ def build_fact_normalization_plan(
         logical_to_metadata_revision=logical_to_meta,
     )
     page_inputs = build_effective_text_map(
-        session, revision, doc_version_to_logical=doc_version_to_logical
+        session, revision, doc_version_to_logical=doc_version_to_logical,
+        allow_image_only=allow_image_only,
     )
     adapter_result = FactSourceAdapterResult(
         revision=revision,
@@ -483,6 +491,7 @@ def build_evidence_normalizer_input(
         authority=authority,
         revision_id=authority.complete_processing_revision_id,
         max_pages_per_call=max_pages_per_call,
+        allow_image_only=include_visual_sources and page_review_coverage_id is not None,
     )
     matches = [
         call

@@ -44,6 +44,14 @@ function numberValue(source: ObjectValue, key: string): number {
   return value;
 }
 
+function listValue(source: ObjectValue, key: string): unknown[] {
+  const items = source[key];
+  if (!Array.isArray(items)) {
+    throw new CatalogApiError("未能完整读取资料目录。", "请刷新重试，已有资料不会因此删除。");
+  }
+  return items;
+}
+
 function phaseLabel(phase: string, supplied: string): string {
   const labels: Record<string, string> = {
     phase_i: "Ⅰ期",
@@ -156,8 +164,7 @@ export function createCatalogHttp(fetchImpl: typeof fetch = fetch.bind(globalThi
     kind: "http",
     async listProjects(signal) {
       const payload = objectValue(await get("/api/v2/protocol/projects", signal));
-      if (!Array.isArray(payload.projects)) return [];
-      return payload.projects.map(projectOf);
+      return listValue(payload, "projects").map(projectOf);
     },
     async getProject(projectId, signal) {
       const payload = objectValue(await get(`/api/v2/protocol/projects/${encodeURIComponent(projectId)}`, signal));
@@ -165,8 +172,11 @@ export function createCatalogHttp(fetchImpl: typeof fetch = fetch.bind(globalThi
     },
     async listSubjects(projectId, signal) {
       const payload = objectValue(await get(`/api/v2/projects/${encodeURIComponent(projectId)}/subjects`, signal));
-      if (!Array.isArray(payload.items)) return [];
-      return payload.items.map(subjectOf);
+      const items = listValue(payload, "items").map(subjectOf);
+      if (items.some((item) => item.projectId !== projectId)) {
+        throw new CatalogApiError("受试者资料与所选项目不一致。", "请刷新后重新选择项目。");
+      }
+      return items;
     },
     async getSubject(subjectId, signal) {
       const projects = await this.listProjects(signal);
@@ -212,8 +222,11 @@ export function createCatalogHttp(fetchImpl: typeof fetch = fetch.bind(globalThi
     },
     async listEpisodes(subjectId, signal) {
       const payload = objectValue(await get(`/api/v2/subjects/${encodeURIComponent(subjectId)}/review-episodes`, signal));
-      if (!Array.isArray(payload.items)) return [];
-      return payload.items.map(episodeOf);
+      const items = listValue(payload, "items").map(episodeOf);
+      if (items.some((item) => item.subjectId !== subjectId)) {
+        throw new CatalogApiError("审核节点与所选受试者不一致。", "请刷新后重新选择受试者。");
+      }
+      return items;
     },
     async getEvidenceContext(subjectId, reviewEpisodeId, signal): Promise<EvidenceContextView> {
       const subject = await this.getSubject(subjectId, signal);
@@ -222,7 +235,7 @@ export function createCatalogHttp(fetchImpl: typeof fetch = fetch.bind(globalThi
         this.listEpisodes(subjectId, signal),
       ]);
       const episode = episodes.find((item) => item.reviewEpisodeId === reviewEpisodeId);
-      if (episode === undefined) {
+      if (episode === undefined || episode.projectId !== project.projectId) {
         throw new CatalogApiError(
           "未找到这个审核节点。",
           "请从受试者资料页重新选择审核节点。",

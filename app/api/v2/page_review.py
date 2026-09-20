@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Literal
+from typing import Annotated, Literal
 
 from app.api.v2.schemas import JobActionResponse
 from app.api.v2.vocabulary import JOB_STATE_LABELS
@@ -19,6 +19,7 @@ class PageReviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     predecessor_job_id: str | None = Field(default=None, min_length=1)
     single_length_recovery: bool = Field(default=False, strict=True)
+    reading_rotations: dict[str, Annotated[int, Field(strict=True)]] | None = None
 
 
 class PageReviewSubmit(BaseModel):
@@ -111,7 +112,8 @@ def create_page_review(subject_id: str, review_episode_id: str, body: PageReview
     request.app.state.evidence_api_read_service.require_subject_episode(subject_id, review_episode_id)
     result = request.app.state.page_review_runtime.enqueue(
         subject_id=subject_id, review_episode_id=review_episode_id,
-        predecessor_job_id=body.predecessor_job_id, single_length_recovery=body.single_length_recovery)
+        predecessor_job_id=body.predecessor_job_id, single_length_recovery=body.single_length_recovery,
+        reading_rotations=body.reading_rotations)
     if not result.created:
         response.status_code = 200
     return PageReviewSubmit(job_id=result.job_id, state=result.state, created=result.created,

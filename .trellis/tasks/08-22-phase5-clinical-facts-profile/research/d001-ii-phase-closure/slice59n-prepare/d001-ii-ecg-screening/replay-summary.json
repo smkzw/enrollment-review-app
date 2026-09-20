@@ -1,0 +1,20 @@
+{
+  "attached_count": 3,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-b9de21f97afc59d8e43903b6",
+  "group_id": "d001-ii-ecg-screening",
+  "lookup_counts": {
+    "coverage_manifest": 1,
+    "frozen_plan_context": 1,
+    "frozen_plan_owned": 6
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-ecg-screening",
+  "owned_count": 5,
+  "prompt_char_count": 31791,
+  "prompt_sha256": "f7e5db24c27d6671e17b9d501a964d09c2af6aeacc0fa1e9aa39b03961ee4d80",
+  "task_id": "phase5-slice61as-20260829",
+  "unit_count": 8,
+  "worker": "codex-parent"
+}

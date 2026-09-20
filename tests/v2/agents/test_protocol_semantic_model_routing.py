@@ -131,18 +131,12 @@ def _failed_result(
     )
 
 
-def test_default_complex_route_prefers_glm_then_mtplx_then_deepseek_high(monkeypatch):
+def test_default_complex_route_is_single_glm_high_candidate(monkeypatch):
     monkeypatch.setattr(router, "DECONSTRUCT_ROUTE_MODE", "graded")
     monkeypatch.setattr(router, "DECONSTRUCT_ROUTE_COMPLEX", "")
     monkeypatch.setattr(router, "DECONSTRUCT_GLM_PROVIDER", "zhipu-coding-plan")
     monkeypatch.setattr(router, "DECONSTRUCT_GLM_MODEL", "glm-5.3-flash")
     monkeypatch.setattr(router, "DECONSTRUCT_GLM_REASONING_EFFORT", "high")
-    monkeypatch.setattr(router, "MTPLX_MODEL", "mtplx-qwen38-27b-optimized-quality")
-    monkeypatch.setattr(router, "MTPLX_REASONING_EFFORT", "medium")
-    monkeypatch.setattr(router, "DECONSTRUCT_FALLBACK_DEEPSEEK_MODEL", "deepseek-v4-flash")
-    monkeypatch.setattr(
-        router, "DECONSTRUCT_FALLBACK_DEEPSEEK_REASONING_EFFORT", "high"
-    )
 
     decision = classify_protocol_semantic_task_grade(
         parent_rule_count=3,
@@ -152,23 +146,43 @@ def test_default_complex_route_prefers_glm_then_mtplx_then_deepseek_high(monkeyp
     candidates = select_protocol_semantic_route_candidates(decision.grade)
 
     assert decision.grade == GRADE_COMPLEX
+    # 默认复杂路由只有 GLM high：不存在隐式第三模型回退。
     assert [item.identity for item in candidates] == [
         "zhipu-coding-plan:glm-5.3-flash:high",
-        "mtplx:mtplx-qwen38-27b-optimized-quality:medium",
-        "deepseek:deepseek-v4-flash:high",
     ]
 
 
-def test_short_prompt_task_classifies_and_prefers_mtplx(monkeypatch):
+def test_invalid_glm_profile_is_not_silently_replaced(monkeypatch):
+    monkeypatch.setattr(router, "DECONSTRUCT_GLM_PROVIDER", "misspelled-provider")
+    with pytest.raises(ValueError, match="不能静默替换"):
+        router._default_glm_candidate()
+
+
+def test_explicit_route_spec_keeps_ordered_fallback_chain(monkeypatch):
+    """显式 DECONSTRUCT_ROUTE_COMPLEX 仍支持多候选整次尝试链。"""
+
+    monkeypatch.setattr(router, "DECONSTRUCT_ROUTE_MODE", "graded")
+    monkeypatch.setattr(
+        router,
+        "DECONSTRUCT_ROUTE_COMPLEX",
+        "zhipu-coding-plan:glm-5.3-flash:high,"
+        "mtplx:mtplx-flash-next-optimized-speed:xhigh",
+    )
+
+    candidates = select_protocol_semantic_route_candidates(GRADE_COMPLEX)
+
+    assert [item.identity for item in candidates] == [
+        "zhipu-coding-plan:glm-5.3-flash:high",
+        "mtplx:mtplx-flash-next-optimized-speed:xhigh",
+    ]
+
+
+def test_short_prompt_task_defaults_to_glm_high_without_third_model(monkeypatch):
     monkeypatch.setattr(router, "DECONSTRUCT_ROUTE_MODE", "graded")
     monkeypatch.setattr(router, "DECONSTRUCT_ROUTE_SHORT", "")
     monkeypatch.setattr(router, "DECONSTRUCT_SHORT_PROMPT_MAX_INPUT_TOKENS", 4096)
-    monkeypatch.setattr(router, "MTPLX_MODEL", "mtplx-qwen38-27b-optimized-quality")
-    monkeypatch.setattr(router, "MTPLX_REASONING_EFFORT", "medium")
-    monkeypatch.setattr(router, "DECONSTRUCT_FALLBACK_DEEPSEEK_MODEL", "deepseek-v4-flash")
-    monkeypatch.setattr(
-        router, "DECONSTRUCT_FALLBACK_DEEPSEEK_REASONING_EFFORT", "high"
-    )
+    monkeypatch.setattr(router, "DECONSTRUCT_GLM_MODEL", "glm-5.3-flash")
+    monkeypatch.setattr(router, "DECONSTRUCT_GLM_REASONING_EFFORT", "high")
 
     decision = classify_protocol_semantic_task_grade(
         parent_rule_count=1,
@@ -179,12 +193,27 @@ def test_short_prompt_task_classifies_and_prefers_mtplx(monkeypatch):
 
     assert decision.grade == GRADE_SHORT
     assert "all_short_gates_passed" in decision.reasons
-    assert candidates[0].backend == "mtplx"
+    # 默认短提示路由同样只选 GLM high，不隐式切换 MTPLX/DeepSeek。
     assert [item.identity for item in candidates] == [
-        "mtplx:mtplx-qwen38-27b-optimized-quality:medium",
+        "zhipu-coding-plan:glm-5.3-flash:high",
+    ]
+
+
+def test_explicit_short_route_spec_keeps_mtplx_first_legacy_chain(monkeypatch):
+    monkeypatch.setattr(router, "DECONSTRUCT_ROUTE_MODE", "graded")
+    monkeypatch.setattr(
+        router,
+        "DECONSTRUCT_ROUTE_SHORT",
+        "mtplx:mtplx-flash-next-optimized-speed:xhigh,"
+        "deepseek:deepseek-v4-flash:high",
+    )
+
+    candidates = select_protocol_semantic_route_candidates(GRADE_SHORT)
+
+    assert [item.identity for item in candidates] == [
+        "mtplx:mtplx-flash-next-optimized-speed:xhigh",
         "deepseek:deepseek-v4-flash:high",
     ]
-    assert all(item.backend != "zhipu-coding-plan" for item in candidates)
 
 
 def test_route_repair_budgets_keep_primary_quality_and_bound_fallback_latency():

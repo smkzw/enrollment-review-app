@@ -1,0 +1,75 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_viral_tb.v1.json",
+  "group_id": "d001-ii-tb-cross-chapter",
+  "artifact_dir_name": "phase5-slice59n-d001-tb-control-replay-20260827",
+  "owned_source_refs": [
+    "body.p806",
+    "body.p807",
+    "body.p808",
+    "body.p809",
+    "body.p810",
+    "body.p811",
+    "body.p812",
+    "body.p813"
+  ],
+  "attached_source_refs": [
+    "body.t5.r19",
+    "body.p329",
+    "body.p649",
+    "body.p650",
+    "body.p651",
+    "body.p652",
+    "body.p653",
+    "body.p655"
+  ],
+  "required_candidate_source_refs": [
+    "body.p807",
+    "body.p809",
+    "body.p813"
+  ],
+  "batching": {
+    "reason": "结核评估段落为唯一处置对象；EX-09和流程必做15作为携带原文的只读权威目标。"
+  },
+  "known_targets": {
+    "official_rules": [
+      {
+        "catalog_item_id": "pcm-row-761a05dceb59800d35de15eb",
+        "official_code": "EX-09",
+        "label": "结核感染筛查及预防治疗风险",
+        "position": 15,
+        "source_span_ids": [
+          "span-19e8610e18ab91904f94eeb0295a90b9",
+          "span-2b6db1412472805ddd31a8595940dd4e",
+          "span-8268c906ae0d5a62201932240f3ce54b",
+          "span-de40e66cf4537055654ddb605e2100e3",
+          "span-de8a9b3139ae2f1a89349543a31642ed",
+          "span-e55345e2ccdd449e1986b83cf9b50701"
+        ]
+      }
+    ],
+    "required_procedures": [
+      {
+        "catalog_item_id": "pcm-row-e190c160c55279c0aaf5f5a2",
+        "label": "结核检测",
+        "visit_instance": "筛选访视",
+        "review_stage": "screening",
+        "position": 51,
+        "source_span_ids": [
+          "span-3d5f1e52d0bfa96d4dc8677b9a63892f",
+          "span-9157bdc7ebe0976aeab45940ca2e491d",
+          "span-bc91034d48ed3caa604f5903ff46dd81"
+        ]
+      }
+    ]
+  },
+  "ids": {
+    "manifest_id": "manifest:slice59n-tb-reps",
+    "catalog_id": "catalog:slice59n-tb-reps"
+  },
+  "notes": [
+    "结核评估与官方EX-09、流程必做15跨章节闭合。",
+    "随机前4周与首次给药前4周是不同时间锚点，不得合并。",
+    "只读目标来自原始DOCX自动结构化产物，不以人工预处理文本替代。"
+  ]
+}

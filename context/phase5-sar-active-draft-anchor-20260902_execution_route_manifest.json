@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "policy": "beijing-peak-off-peak-v1",
+  "timezone": "Asia/Shanghai",
+  "peak_start": "12:00",
+  "peak_end": "18:00",
+  "period_labels": {
+    "peak": "高峰",
+    "off_peak": "非高峰"
+  },
+  "packet_period": "peak",
+  "packet_evaluated_at": "2026-09-02T12:38:14.951608+08:00",
+  "variants": {
+    "peak": {
+      "agent": "pi",
+      "provider": "openai-codex",
+      "model": "gpt-5.6-luna",
+      "effort": "max",
+      "default_provider": "openai-codex",
+      "default_model": "gpt-5.6-luna",
+      "default_effort": "max",
+      "escalate_provider": "openai-codex",
+      "escalate_model": "gpt-5.6-luna",
+      "escalate_effort": "max",
+      "primary": {
+        "agent": "pi",
+        "provider": "openai-codex",
+        "model": "gpt-5.6-luna",
+        "effort": "max"
+      },
+      "fallbacks": [
+        {
+          "agent": "codex-subagent",
+          "provider": "codex",
+          "model": "gpt-5.6-luna",
+          "effort": "max"
+        }
+      ],
+      "execution_route": "Long-horizon code and complex tool calls: Pi/openai-codex/gpt-5.6-luna max -> Codex subAgent/gpt-5.6-luna max"
+    },
+    "off_peak": {
+      "agent": "zcode",
+      "provider": "zcode",
+      "model": "GLM-5.3-Flash",
+      "effort": "max",
+      "default_provider": "zcode",
+      "default_model": "GLM-5.3-Flash",
+      "default_effort": "max",
+      "escalate_provider": "zcode",
+      "escalate_model": "GLM-5.3-Flash",
+      "escalate_effort": "max",
+      "primary": {
+        "agent": "zcode",
+        "provider": "zcode",
+        "model": "GLM-5.3-Flash",
+        "effort": "max"
+      },
+      "fallbacks": [
+        {
+          "agent": "pi",
+          "provider": "openai-codex",
+          "model": "gpt-5.6-luna",
+          "effort": "max"
+        },
+        {
+          "agent": "codex-subagent",
+          "provider": "codex",
+          "model": "gpt-5.6-luna",
+          "effort": "max"
+        }
+      ],
+      "execution_route": "Long-horizon code and complex tool calls: zcode/GLM-5.3-Flash max -> Pi/openai-codex/gpt-5.6-luna max -> Codex subAgent/gpt-5.6-luna max"
+    }
+  }
+}

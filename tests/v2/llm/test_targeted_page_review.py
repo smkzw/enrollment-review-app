@@ -27,6 +27,8 @@ def page():
     {"round_number": 3}, {"round_number": True}, {"candidate_excerpts": ("候选",)},
     {"round_number": 2}, {"round_number": 2, "previous_round_review_ids": ("a", "a")},
     {"targets": (" ",)}, {"targets": ("甲", "甲")},
+    {"time_review_targets": ("项目乙",)},
+    {"time_review_targets": ("项目甲", "项目甲")},
 ])
 def test_invalid_scope_rejected(changes):
     with pytest.raises(ValidationError):
@@ -67,7 +69,7 @@ def test_targeted_scope_is_identity_bound_and_candidates_are_explicit():
                                     review_focus=scope)) for scope in scopes]
     assert len({record.page_review_id for record in records}) == 3
     assert len({record.response_sha256 for record in records}) == 1
-    assert records[1].prompt_version.startswith("page-targeted-review/v3:")
+    assert records[1].prompt_version.startswith("page-targeted-review/v4:")
     assert "clause_pack" in json.loads(seen[0][1]["content"][1]["text"])
     assert "clause_pack" not in json.loads(seen[1][1]["content"][1]["text"])
     assert json.loads(seen[1][-1]["content"])["candidates_visible"] is False

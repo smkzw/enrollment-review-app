@@ -32,9 +32,9 @@ from app.projections.clause_pack import project_clause_pack
 HASH = hashlib.sha256(b"page-image").hexdigest()
 
 
-def test_current_main_reader_efforts_follow_september_6_decision():
+def test_explicit_cloud_pair_efforts_are_preserved():
     routes = _routes()
-    assert routes[PageReviewLane.MAIN_A].reasoning_effort == "low"
+    assert routes[PageReviewLane.MAIN_A].reasoning_effort == "high"
     assert routes[PageReviewLane.MAIN_B].reasoning_effort == "high"
     assert set(routes) == {PageReviewLane.MAIN_A, PageReviewLane.MAIN_B}
 
@@ -80,7 +80,7 @@ def test_explicit_comparison_route_records_actual_effort_without_changing_defaul
         _page_input(), _clause_pack(), completion=completion))
     assert record.reasoning_effort == effort
     assert _routes()[PageReviewLane.MAIN_B].reasoning_effort == "high"
-    assert _routes()[PageReviewLane.MAIN_A].reasoning_effort == "low"
+    assert _routes()[PageReviewLane.MAIN_A].reasoning_effort == "high"
 
 
 def test_atomic_observation_instructions_are_symmetric_across_main_readers():
@@ -288,10 +288,12 @@ def _routes():
             "INDEPENDENT_VLM_API_KEY": "main-a-key",
             "CMS_SMK_API_KEY": "main-b-key",
             "PAGE_REVIEW_MAIN_B_PROVIDER": "cms-smk",
+            "PAGE_REVIEW_MAIN_A_REASONING_EFFORT": "high",
+            "PAGE_REVIEW_MAIN_B_REASONING_EFFORT": "high",
             "PAGE_REVIEW_MAIN_B_MODEL": "MiniMax-M3",
             "PAGE_REVIEW_MAIN_B_BASE_URL": "https://new-api.mediportal.com.cn/v1",
             "PAGE_REVIEW_CLOUD_CONCURRENCY": "3",
-            "PAGE_REVIEW_MAX_TOKENS": "12000",
+            "PAGE_REVIEW_MAX_TOKENS": "65536",
         }
     )
 
@@ -377,7 +379,7 @@ def test_route_contract_fails_closed_without_cloud_keys(monkeypatch) -> None:
         require_page_reader_routes(
             {
                 "PAGE_REVIEW_CLOUD_CONCURRENCY": "2",
-                "PAGE_REVIEW_MAX_TOKENS": "12000",
+                "PAGE_REVIEW_MAX_TOKENS": "65536",
             }
         )
 
@@ -397,8 +399,8 @@ def test_route_contract_rejects_concurrency_outside_two_or_three() -> None:
     ("name", "value", "message"),
     [
         ("INDEPENDENT_VLM_PROVIDER", "bigmodel", "main-A"),
-        ("PAGE_REVIEW_MAIN_A_MODEL", "other", "main-A"),
-        ("PAGE_REVIEW_MAIN_B_MODEL", "other", "main-B"),
+        ("PAGE_REVIEW_MAIN_A_MODEL", "", "main-A"),
+        ("PAGE_REVIEW_MAIN_B_MODEL", "", "main-B"),
     ],
 )
 def test_route_contract_rejects_model_identity_drift(
@@ -408,6 +410,8 @@ def test_route_contract_rejects_model_identity_drift(
         "INDEPENDENT_VLM_API_KEY": "a",
         "CMS_SMK_API_KEY": "b",
         "PAGE_REVIEW_MAIN_B_PROVIDER": "cms-smk",
+        "PAGE_REVIEW_MAIN_B_REASONING_EFFORT": "high",
+        "PAGE_REVIEW_MAIN_B_BASE_URL": "https://test.example/v1",
         "PAGE_REVIEW_MAIN_B_MODEL": "MiniMax-M3",
         name: value,
     }
@@ -526,7 +530,7 @@ def test_length_finish_retries_once_with_double_budget() -> None:
     record = asyncio.run(
         read_page(route, _page_input(), _clause_pack(), completion=completion)
     )
-    assert budgets == [12000, 24000]
+    assert budgets == [65536, 131072]
     assert record.lane == PageReviewLane.MAIN_A
 
 

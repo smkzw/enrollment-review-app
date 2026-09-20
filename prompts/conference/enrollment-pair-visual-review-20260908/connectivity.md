@@ -1,0 +1,1 @@
+Bounded connectivity probe only. Do not read files, call tools, search, write, or delegate. No clinical data is supplied. Return exactly CONNECTIVITY_OK. The transport receipt, not your self-description, will be used to verify the route.

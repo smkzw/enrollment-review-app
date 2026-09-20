@@ -1,0 +1,18 @@
+{
+  "attached_count": 10,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-71e25286a1c54a4490e1606b",
+  "group_id": "d001-ii-package94-sae-record-form-death-route-boundary",
+  "lookup_counts": {
+    "frozen_plan_owned": 21
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package94-sae-record-form-death-route-boundary",
+  "owned_count": 11,
+  "prompt_char_count": 37024,
+  "prompt_sha256": "ef22db9040ede9dd2d46ced51f027ce3c881c1b121d6f40bd15fbd6c2af7e98e",
+  "task_id": "phase5-slice61cf-20260830",
+  "unit_count": 21,
+  "worker": "cursor-worker_01"
+}

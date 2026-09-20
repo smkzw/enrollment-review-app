@@ -288,10 +288,10 @@ def test_merged_fact_chain_head_appears_once(chain, session):
     assert fact_items[0].source_revision == 2
 
 
-def test_complete_rerun_profile_uses_only_current_run_entities(
+def test_run_filter_cannot_hide_unresolved_historical_references(
     chain, session, monkeypatch
 ):
-    """完整重跑不得把旧运行未复现的事件混入当前 Profile。"""
+    """换run不能掩盖旧事件悬挂引用，须先修复引用而不是省略事件。"""
     old_fact = _fact(chain, fact_id="rerun-fact-v1")
     old_event = _event(
         chain,
@@ -330,13 +330,52 @@ def test_complete_rerun_profile_uses_only_current_run_entities(
     with pytest.raises(PatientProfileProjectionError, match="引用已折叠链头之外"):
         service.generate(session, authority=_authority(chain))
 
-    revision = service.generate(
-        session,
-        authority=_authority(chain),
-        run_id=current_run_id,
+    with pytest.raises(PatientProfileProjectionError, match="引用已折叠链头之外"):
+        service.generate(
+            session,
+            authority=_authority(chain),
+            run_id=current_run_id,
+        )
+
+
+def test_incremental_profile_keeps_previous_facts_events_and_exposures(
+    chain, session, monkeypatch
+):
+    old = _fact(chain, fact_id="earlier-fact")
+    added = _fact(
+        {**chain, "run_id": "supplemental-run"},
+        fact_id="additional-fact", value="130/85",
     )
-    source_ids = {item.source_id for item in profile_items(revision)}
-    assert source_ids == {current_fact.fact_id}
+    event = _event(chain, event_id="earlier-event", fact_ids=[old.fact_id])
+    exposure = _exposure(chain, exposure_id="earlier-exposure", fact_ids=[old.fact_id])
+    monkeypatch.setattr(ClinicalFactV2Repository, "list_by_episode", lambda *_: [old, added])
+    monkeypatch.setattr(ClinicalEventV2Repository, "list_by_episode", lambda *_: [event])
+    monkeypatch.setattr(MedicationExposureV2Repository, "list_by_episode", lambda *_: [exposure])
+    monkeypatch.setattr(ClinicalConflictGroupV2Repository, "list_by_episode", lambda *_: [])
+    revision = PatientProfileService().generate(
+        session, authority=old.authority, run_id=added.run_id,
+    )
+    assert {item.source_id for item in profile_items(revision)} == {
+        old.fact_id, added.fact_id, event.event_id, exposure.exposure_id,
+    }
+
+
+@pytest.mark.parametrize("kind", ["event", "exposure"])
+def test_corrected_event_or_exposure_does_not_revive_old_revision(
+    chain, session, monkeypatch, kind
+):
+    import app.services.patient_profile_service as module
+
+    factory = _event if kind == "event" else _exposure
+    identifier = f"{kind}_id"
+    old = factory(chain, **{identifier: "old", "revision": 1})
+    head = factory(chain, **{identifier: "head", "revision": 2})
+    repository = ClinicalEventV2Repository if kind == "event" else MedicationExposureV2Repository
+    monkeypatch.setattr(repository, "list_by_episode", lambda *_: [old, head])
+    monkeypatch.setattr(module, "_superseded_ids", lambda *_: {"head"})
+    service = PatientProfileService()
+    read = service._published_events if kind == "event" else service._published_exposures
+    assert read(session, old.authority) == []
 
 
 def test_regenerate_identical_content_is_idempotent(chain, session):

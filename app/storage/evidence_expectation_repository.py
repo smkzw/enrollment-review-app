@@ -139,6 +139,22 @@ class EvidenceExpectationV2Repository:
 
     def project(self, expectation: EvidenceExpectationV2) -> EvidenceExpectationV2:
         """投影一条期望；同内容幂等返回最新行，变化时只允许追加链头 +1。"""
+        if expectation.source_revision_of is not None:
+            from app.storage.source_reference_successors import validate_source_fact_references
+            prior = self.get(expectation.source_revision_of)
+            mutable = {
+                "expectation_id", "source_revision_of", "revision", "created_at",
+                "coverage_fact_ids", "locator_ids",
+            }
+            if (
+                expectation.model_dump(exclude=mutable) != prior.model_dump(exclude=mutable)
+                or expectation.revision != prior.revision + 1
+            ):
+                raise Phase5RepositoryError("来源衔接不得改变原资料要求状态或缺口")
+            validate_source_fact_references(
+                self.session, expectation.authority,
+                prior.coverage_fact_ids, expectation.coverage_fact_ids,
+            )
         self._authority.validate(expectation.authority)
         self._authority.validate_locators(
             expectation.authority, expectation.locator_ids

@@ -104,6 +104,10 @@ def load_enrollment_env_file(
 
 # Worktree / dedicated V2 contract: prefer ENROLLMENT_ENV_FILE, else repo .env.
 ENROLLMENT_ENV_FILE_LOADED = load_enrollment_env_file()
+# An existing verified approval reference, never an approval bypass.
+ENROLLMENT_REVIEW_METHOD_APPROVAL_GATE_ID = os.environ.get(
+    "ENROLLMENT_REVIEW_METHOD_APPROVAL_GATE_ID", ""
+).strip()
 ENROLLMENT_ENV_FILE = (
     str(ENROLLMENT_ENV_FILE_LOADED) if ENROLLMENT_ENV_FILE_LOADED is not None else ""
 )
@@ -135,7 +139,7 @@ MTPLX_API_KEY = os.getenv("MTPLX_API_KEY", "")
 MTPLX_MODEL = os.getenv(
     "MTPLX_MODEL", "mtplx-flash-next-optimized-speed"
 ).strip()
-MTPLX_REASONING_EFFORT = os.getenv("MTPLX_REASONING_EFFORT", "medium").strip().lower()
+MTPLX_REASONING_EFFORT = os.getenv("MTPLX_REASONING_EFFORT", "xhigh").strip().lower()
 
 # OCR models (all local oMLX)
 OCR_MODEL_LONG = os.getenv("OCR_MODEL_LONG", "models--PaddlePaddle--PaddleOCR-VL-1.6")
@@ -179,12 +183,12 @@ INDEPENDENT_VLM_MODEL = os.getenv("INDEPENDENT_VLM_MODEL", "glm-5.3-flash").stri
 INDEPENDENT_VLM_REASONING_EFFORT = os.getenv(
     "INDEPENDENT_VLM_REASONING_EFFORT", "high"
 ).strip().lower()
-INDEPENDENT_VLM_MAX_TOKENS = int(os.getenv("INDEPENDENT_VLM_MAX_TOKENS", "8192"))
+INDEPENDENT_VLM_MAX_TOKENS = int(os.getenv("INDEPENDENT_VLM_MAX_TOKENS", "65536"))
 INDEPENDENT_VLM_TIMEOUT_SECONDS = float(
-    os.getenv("INDEPENDENT_VLM_TIMEOUT_SECONDS", "180")
+    os.getenv("INDEPENDENT_VLM_TIMEOUT_SECONDS", "900")
 )
 
-# Gemini (google-antigravity native vision transport) main-B. The access
+# Optional Gemini native transport, retained for explicit deployments/history. The access
 # token and project ID are main-thread explicit env credentials: no runtime
 # discovery, no home-config reads, never logged. The endpoint default is the
 # verified antigravity host and stays env-overridable.
@@ -205,11 +209,14 @@ PAGE_REVIEW_MAIN_A_API_KEY = (
 PAGE_REVIEW_MAIN_A_MODEL = os.getenv(
     "PAGE_REVIEW_MAIN_A_MODEL", "glm-5.3-flash"
 ).strip()
+PAGE_REVIEW_MAIN_A_REASONING_EFFORT = os.getenv(
+    "PAGE_REVIEW_MAIN_A_REASONING_EFFORT", INDEPENDENT_VLM_REASONING_EFFORT
+).strip().lower()
 PAGE_REVIEW_MAIN_A_FALLBACK_BASE_URL = os.getenv(
     "PAGE_REVIEW_MAIN_A_FALLBACK_BASE_URL", ""
 ).strip()
 PAGE_REVIEW_MAIN_B_PROVIDER = os.getenv(
-    "PAGE_REVIEW_MAIN_B_PROVIDER", "google-antigravity"
+    "PAGE_REVIEW_MAIN_B_PROVIDER", "mtplx"
 ).strip()
 PAGE_REVIEW_MAIN_B_BASE_URL = os.getenv(
     "PAGE_REVIEW_MAIN_B_BASE_URL",
@@ -221,8 +228,11 @@ PAGE_REVIEW_MAIN_B_API_KEY = (
     or (os.getenv("CMS_SMK_API_KEY", "").strip() if PAGE_REVIEW_MAIN_B_PROVIDER == "cms-smk" else "")
 )
 PAGE_REVIEW_MAIN_B_MODEL = os.getenv(
-    "PAGE_REVIEW_MAIN_B_MODEL", "gemini-3.7-flash"
+    "PAGE_REVIEW_MAIN_B_MODEL", MTPLX_MODEL
 ).strip()
+PAGE_REVIEW_MAIN_B_REASONING_EFFORT = os.getenv(
+    "PAGE_REVIEW_MAIN_B_REASONING_EFFORT", MTPLX_REASONING_EFFORT
+).strip().lower()
 PAGE_REVIEW_MAIN_B_FALLBACK_BASE_URL = os.getenv(
     "PAGE_REVIEW_MAIN_B_FALLBACK_BASE_URL", ""
 ).strip()
@@ -257,21 +267,21 @@ MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", str(100 * 1024 * 1024)))  # 1
 # the legacy review defaults: the two tasks have different prompts, output
 # budgets, and model availability.  Every value remains explicitly overridable
 # for isolated runs or a deliberately selected remote backend.
-DECONSTRUCT_BACKEND = os.getenv("DECONSTRUCT_BACKEND", "mtplx").strip().lower()
+DECONSTRUCT_BACKEND = os.getenv("DECONSTRUCT_BACKEND", "zhipu-coding-plan").strip().lower()
 DECONSTRUCT_MODEL = os.getenv(
-    "DECONSTRUCT_MODEL", MTPLX_MODEL
+    "DECONSTRUCT_MODEL", "glm-5.3-flash"
 ).strip()
 DECONSTRUCT_REASONING_EFFORT = os.getenv(
-    "DECONSTRUCT_REASONING_EFFORT", MTPLX_REASONING_EFFORT
+    "DECONSTRUCT_REASONING_EFFORT", "high"
 ).strip().lower()
-DECONSTRUCT_MAX_TOKENS = int(os.getenv("DECONSTRUCT_MAX_TOKENS", "60000"))
-# Strict local batches contain only 1-3 parent rules; keep constrained decoding
-# from inheriting the legacy 60k-token budget. DeepSeek keeps DECONSTRUCT_MAX_TOKENS.
+DECONSTRUCT_MAX_TOKENS = int(os.getenv("DECONSTRUCT_MAX_TOKENS", "65536"))
+# Explicit platform limits remain separate; new defaults must not silently cap
+# an otherwise sufficient semantic budget at the historical 8K/16K values.
 OMLX_PROTOCOL_BATCH_MAX_TOKENS = int(
-    os.getenv("OMLX_PROTOCOL_BATCH_MAX_TOKENS", "8192")
+    os.getenv("OMLX_PROTOCOL_BATCH_MAX_TOKENS", "131072")
 )
 MTPLX_PROTOCOL_BATCH_MAX_TOKENS = int(
-    os.getenv("MTPLX_PROTOCOL_BATCH_MAX_TOKENS", "16384")
+    os.getenv("MTPLX_PROTOCOL_BATCH_MAX_TOKENS", "131072")
 )
 
 # Graded semantic-model routing for protocol deconstruction.  ``graded`` picks
@@ -280,7 +290,7 @@ MTPLX_PROTOCOL_BATCH_MAX_TOKENS = int(
 # This profile owns its model, endpoint, and effort. It may reuse the same
 # BigModel account credential as Independent VLM so a local single-user setup
 # does not require the user to paste the same secret twice.
-DECONSTRUCT_ROUTE_MODE = os.getenv("DECONSTRUCT_ROUTE_MODE", "graded").strip().lower()
+DECONSTRUCT_ROUTE_MODE = os.getenv("DECONSTRUCT_ROUTE_MODE", "pinned").strip().lower()
 DECONSTRUCT_SHORT_PROMPT_MAX_INPUT_TOKENS = int(
     os.getenv("DECONSTRUCT_SHORT_PROMPT_MAX_INPUT_TOKENS", "4096")
 )
@@ -378,13 +388,13 @@ EVIDENCE_NORMALIZER_GLM_REASONING_EFFORT = os.getenv(
 # Other-protocol control Agent uses an independent connection profile so it
 # cannot silently inherit the official IN/EX deconstruction Schema or route.
 PROTOCOL_CONTROL_BACKEND = os.getenv(
-    "PROTOCOL_CONTROL_BACKEND", "mtplx"
+    "PROTOCOL_CONTROL_BACKEND", "zhipu-coding-plan"
 ).strip().lower()
 PROTOCOL_CONTROL_MODEL = os.getenv(
-    "PROTOCOL_CONTROL_MODEL", MTPLX_MODEL
+    "PROTOCOL_CONTROL_MODEL", "glm-5.3-flash"
 ).strip()
 PROTOCOL_CONTROL_REASONING_EFFORT = os.getenv(
-    "PROTOCOL_CONTROL_REASONING_EFFORT", MTPLX_REASONING_EFFORT
+    "PROTOCOL_CONTROL_REASONING_EFFORT", "high"
 ).strip().lower()
 PROTOCOL_CONTROL_MAX_TOKENS = int(
     os.getenv("PROTOCOL_CONTROL_MAX_TOKENS", str(DECONSTRUCT_MAX_TOKENS))
@@ -401,7 +411,7 @@ PROTOCOL_CONTROL_DISCOVERY_MAX_INPUT_TOKENS = int(
 PROTOCOL_CONTROL_DISCOVERY_MAX_OUTPUT_TOKENS = int(
     os.getenv(
         "PROTOCOL_CONTROL_DISCOVERY_MAX_OUTPUT_TOKENS",
-        str(min(8192, PROTOCOL_CONTROL_MAX_TOKENS)),
+        str(PROTOCOL_CONTROL_MAX_TOKENS),
     )
 )
 PROTOCOL_CONTROL_DISCOVERY_OUTPUT_TOKENS_PER_UNIT = int(

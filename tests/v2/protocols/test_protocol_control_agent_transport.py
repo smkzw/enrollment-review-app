@@ -306,18 +306,18 @@ def _valid_wire_text() -> str:
     return wire.model_dump_json()
 
 
-def test_protocol_control_defaults_use_exact_mtplx_product_route() -> None:
+def test_protocol_control_defaults_use_exact_glm_product_route() -> None:
     values = _config_probe()
 
     assert values == [
-        "mtplx",
-        "mtplx-flash-next-optimized-speed",
-        "medium",
-        "60000",
-        "mtplx",
-        "mtplx-flash-next-optimized-speed",
-        "medium",
-        "16384",
+        "zhipu-coding-plan",
+        "glm-5.3-flash",
+        "high",
+        "65536",
+        "zhipu-coding-plan",
+        "glm-5.3-flash",
+        "high",
+        "131072",
     ]
 
 
@@ -379,8 +379,10 @@ def test_mtplx_client_disables_proxy_inheritance_and_uses_control_schema(
     assert transport.backend == "mtplx"
     assert transport.model == "mtplx-qwen38-27b-optimized-quality"
     assert transport.reasoning_effort == "medium"
-    assert transport.max_tokens == MTPLX_PROTOCOL_BATCH_MAX_TOKENS
-    assert kwargs["temperature"] == 0.0
+    # env 继承预算 60000 在平台上限内原样生效，不被静默压缩。
+    assert transport.max_tokens == 60000
+    # 未显式配置 temperature 时保留供应商采样默认：不发送 temperature。
+    assert "temperature" not in kwargs
     assert kwargs["reasoning_effort"] == "medium"
     assert kwargs["extra_body"] == {"generation_mode": "ar"}
     assert kwargs["response_format"]["json_schema"]["name"] == CONTROL_RESPONSE_FORMAT_NAME
@@ -394,7 +396,7 @@ def test_mtplx_client_disables_proxy_inheritance_and_uses_control_schema(
     )
 
 
-def test_mtplx_output_budget_clamps_to_product_batch_cap() -> None:
+def test_mtplx_explicit_budget_within_cap_is_kept_not_clamped() -> None:
     transport = OpenAICompatibleProtocolControlAgentTransport(
         client=object(),
         backend="mtplx",
@@ -402,8 +404,56 @@ def test_mtplx_output_budget_clamps_to_product_batch_cap() -> None:
         max_tokens=60000,
     )
 
-    assert transport.max_tokens == MTPLX_PROTOCOL_BATCH_MAX_TOKENS
-    assert transport.max_tokens > OMLX_PROTOCOL_BATCH_MAX_TOKENS
+    # 显式 60000 在平台上限内原样生效；不静默 min() 压缩，也不抬高。
+    assert transport.max_tokens == 60000
+
+
+def test_explicit_budget_above_platform_cap_fails_without_silent_shrink() -> None:
+    with pytest.raises(ValueError, match="不会静默压缩显式请求"):
+        OpenAICompatibleProtocolControlAgentTransport(
+            client=object(),
+            backend="mtplx",
+            model="mtplx-qwen38-27b-optimized-quality",
+            max_tokens=MTPLX_PROTOCOL_BATCH_MAX_TOKENS + 1,
+        )
+
+
+def test_control_transport_omits_temperature_unless_explicitly_configured() -> None:
+    def build_kwargs(temperature):
+        transport = OpenAICompatibleProtocolControlAgentTransport(
+            client=object(),
+            backend="mtplx",
+            model="mtplx-qwen38-27b-optimized-quality",
+            max_tokens=16384,
+            temperature=temperature,
+        )
+        return transport._completion_kwargs([{"role": "user", "content": "控制"}])
+
+    # 未配置 → 供应商采样默认（不发 temperature）；显式 0 与显式非零原样发送。
+    assert "temperature" not in build_kwargs(None)
+    assert build_kwargs(0.0)["temperature"] == 0.0
+    assert build_kwargs(0.7)["temperature"] == 0.7
+
+
+def test_control_length_retry_budget_capped_at_131072() -> None:
+    client, completions = _client(
+        [
+            ('{"partial":true', "length"),
+            ('{"complete":true}', "stop"),
+        ]
+    )
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client,
+        backend="mtplx",
+        model="mtplx-qwen38-27b-optimized-quality",
+        max_tokens=100000,
+    )
+
+    transport.start(prompt="冻结控制输入")
+
+    budgets = [call["max_tokens"] for call in completions.calls]
+    # length 只重试一次：100000*2 封顶 131072，不静默翻倍到 200000。
+    assert budgets == [100000, 131072]
 
 
 def test_injected_official_inex_schema_is_rejected_visibly() -> None:
@@ -446,8 +496,9 @@ def test_factory_preserves_frozen_model_identity_without_substitution() -> None:
     assert transport.backend == "mtplx"
     assert kwargs["model"] == "mtplx-qwen38-27b-optimized-quality"
     assert kwargs["reasoning_effort"] == "medium"
+    # 冻结配置显式给出的 temperature=0 是真实请求值，原样发送。
     assert kwargs["temperature"] == 0.0
-    assert kwargs["max_tokens"] == MTPLX_PROTOCOL_BATCH_MAX_TOKENS
+    assert kwargs["max_tokens"] == 60000
     assert kwargs["response_format"]["json_schema"]["name"] == (
         CONTROL_RESPONSE_FORMAT_NAME
     )
@@ -475,7 +526,8 @@ def test_same_session_history_and_restore_continue_keep_one_session_id() -> None
         CONTROL_RESPONSE_FORMAT_NAME
     )
     assert completions.calls[0]["reasoning_effort"] == "medium"
-    assert completions.calls[0]["temperature"] == 0.0
+    # 未显式配置 temperature：保留供应商采样默认，请求中不出现 temperature。
+    assert "temperature" not in completions.calls[0]
     assert [item["role"] for item in completions.calls[1]["messages"]] == [
         "user",
         "assistant",
@@ -559,6 +611,8 @@ def test_length_finish_reason_retries_once_then_succeeds_in_same_call() -> None:
 
     assert response.text == '{"complete":true}'
     assert len(completions.calls) == 2
+    # length 只重试一次：共享思考+正文预算 16384 → 32768。
+    assert [call["max_tokens"] for call in completions.calls] == [16384, 32768]
     assert "长度上限" in completions.calls[1]["messages"][-1]["content"]
     assert CONTROL_RESPONSE_FORMAT_NAME in completions.calls[1]["messages"][-1]["content"]
     assert "不要重复分析" in completions.calls[1]["messages"][-1]["content"]
@@ -712,7 +766,8 @@ def test_runner_uses_real_transport_same_session_repair_without_inex_schema() ->
         ]["name"]
         for call in completions.calls
     )
-    assert all(call["temperature"] == 0.0 for call in completions.calls)
+    # 未显式配置 temperature：两次调用都保留供应商采样默认。
+    assert all("temperature" not in call for call in completions.calls)
     assert all(call["reasoning_effort"] == "medium" for call in completions.calls)
     assert [item["role"] for item in completions.calls[1]["messages"]] == [
         "user",
@@ -800,3 +855,69 @@ def test_transport_handles_server_500_internal_error_with_session_and_error_deta
     assert exc_info.value.session_id.startswith("protocol-control-chat-")
     assert "internal server error" in str(exc_info.value)
     assert "e0c906e5d034" in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# GLM（zhipu-coding-plan）协议控制路由：连接档案、GLM 词表与采样默认
+# ---------------------------------------------------------------------------
+
+
+_BIGMODEL_CODING_PLAN_URL = "https://open.bigmodel.cn/api/coding/paas/v4"
+
+
+def test_control_glm_backend_uses_coding_plan_profile_and_glm_wire(monkeypatch) -> None:
+    _FakeOpenAI.calls.clear()
+    _FakeHTTPClient.calls.clear()
+    monkeypatch.setattr(transport_module, "OpenAI", _FakeOpenAI)
+    monkeypatch.setattr(transport_module.httpx, "Client", _FakeHTTPClient)
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_BACKEND", "zhipu-coding-plan")
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_MODEL", "glm-5.3-flash")
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_REASONING_EFFORT", "high")
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_MAX_TOKENS", 65536)
+    monkeypatch.setattr(
+        transport_module, "PROTOCOL_CONTROL_GLM_BASE_URL", f"{_BIGMODEL_CODING_PLAN_URL}/"
+    )
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_GLM_API_KEY", "glm-key")
+    _FakeHTTPClient.calls.clear()
+
+    transport = protocol_control_transport_from_environment()
+
+    # Coding Plan 的 .../paas/v4 路径原样保留，不追加 /v1；直连不走系统代理。
+    assert _FakeOpenAI.calls[0]["base_url"] == _BIGMODEL_CODING_PLAN_URL
+    assert _FakeOpenAI.calls[0]["api_key"] == "glm-key"
+    assert _FakeHTTPClient.calls == [{"trust_env": False}]
+    kwargs = transport._completion_kwargs([{"role": "user", "content": "控制"}])
+    assert kwargs["model"] == "glm-5.3-flash"
+    assert kwargs["reasoning_effort"] == "high"
+    assert kwargs["max_tokens"] == 65536
+    assert "temperature" not in kwargs
+    assert kwargs["extra_body"] == {
+        "thinking": {"type": "enabled", "clear_thinking": False}
+    }
+    assert kwargs["response_format"]["json_schema"]["name"] == CONTROL_RESPONSE_FORMAT_NAME
+    # GLM 路由不带 MTPLX 的 AR 兼容措施。
+    assert kwargs["extra_body"] != {"generation_mode": "ar"}
+
+
+def test_control_glm_backend_rejects_unsupported_effort_instead_of_mapping_down() -> None:
+    with pytest.raises(ValueError, match="low/high/max"):
+        OpenAICompatibleProtocolControlAgentTransport(
+            client=object(),
+            backend="zhipu-coding-plan",
+            model="glm-5.3-flash",
+            reasoning_effort="xhigh",
+            api_key="glm-key",
+        )
+
+
+def test_control_glm_backend_requires_credential_before_any_request(
+    monkeypatch,
+) -> None:
+    _FakeOpenAI.calls.clear()
+    monkeypatch.setattr(transport_module, "OpenAI", _FakeOpenAI)
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_GLM_API_KEY", "")
+
+    with pytest.raises(ValueError, match="尚未配置 api_key"):
+        protocol_control_transport_from_environment()
+
+    assert _FakeOpenAI.calls == []

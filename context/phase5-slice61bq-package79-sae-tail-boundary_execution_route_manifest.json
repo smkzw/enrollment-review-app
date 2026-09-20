@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "policy": "beijing-day-night-v1",
+  "timezone": "Asia/Shanghai",
+  "day_start": "08:00",
+  "night_start": "22:00",
+  "packet_period": "night",
+  "packet_evaluated_at": "2026-08-30T02:37:30.990755+08:00",
+  "variants": {
+    "day": {
+      "agent": "pi",
+      "provider": "cursor",
+      "model": "auto",
+      "effort": "",
+      "default_provider": "cursor",
+      "default_model": "auto",
+      "default_effort": "",
+      "escalate_provider": "cursor",
+      "escalate_model": "auto",
+      "escalate_effort": "",
+      "primary": {
+        "agent": "pi",
+        "provider": "cursor",
+        "model": "auto",
+        "effort": ""
+      },
+      "fallbacks": [
+        {
+          "agent": "pi",
+          "provider": "google-antigravity",
+          "model": "gemini-3.7-flash",
+          "effort": "high"
+        },
+        {
+          "agent": "pi",
+          "provider": "mtplx",
+          "model": "mtplx-qwen38-27b-optimized-quality",
+          "effort": "medium",
+          "requires_ac_power": true,
+          "requires_available_memory_gb": 50,
+          "max_input_context_tokens": 65536
+        },
+        {
+          "agent": "pi",
+          "provider": "opencode-go",
+          "model": "muse-spark-1.2-contributor",
+          "effort": "xhigh"
+        },
+        {
+          "agent": "pi",
+          "provider": "openai-codex",
+          "model": "gpt-5.6-luna",
+          "effort": "max"
+        }
+      ],
+      "execution_route": "Finite code: Pi/Cursor/auto -> Pi/google-antigravity/gemini-3.7-flash high -> Pi/mtplx/mtplx-qwen38-27b-optimized-quality medium (AC power, available memory >50 GB, input context <=64k) -> Pi/OpenCode Go/Muse xhigh -> Pi/openai-codex/gpt-5.6-luna max"
+    },
+    "night": {
+      "agent": "codebuddy",
+      "provider": "codebuddy-cli",
+      "model": "glm-5.3-flash",
+      "effort": "max",
+      "default_provider": "codebuddy-cli",
+      "default_model": "glm-5.3-flash",
+      "default_effort": "max",
+      "escalate_provider": "codebuddy-cli",
+      "escalate_model": "glm-5.3-flash",
+      "escalate_effort": "max",
+      "primary": {
+        "agent": "codebuddy",
+        "provider": "codebuddy-cli",
+        "model": "glm-5.3-flash",
+        "effort": "max"
+      },
+      "fallbacks": [
+        {
+          "agent": "codebuddy",
+          "provider": "codebuddy-cli",
+          "model": "deepseek-v4-flash",
+          "effort": "max"
+        },
+        {
+          "agent": "pi",
+          "provider": "mtplx",
+          "model": "mtplx-qwen38-27b-optimized-quality",
+          "effort": "medium",
+          "requires_ac_power": true,
+          "requires_available_memory_gb": 50,
+          "max_input_context_tokens": 65536
+        },
+        {
+          "agent": "pi",
+          "provider": "openai-codex",
+          "model": "gpt-5.6-luna",
+          "effort": "xhigh"
+        }
+      ],
+      "execution_route": "Finite code: CodeBuddy/glm-5.3-flash max -> CodeBuddy/deepseek-v4-flash max -> Pi/mtplx/mtplx-qwen38-27b-optimized-quality medium (AC power, available memory >50 GB, input context <=64k) -> Pi/openai-codex/gpt-5.6-luna xhigh"
+    }
+  }
+}

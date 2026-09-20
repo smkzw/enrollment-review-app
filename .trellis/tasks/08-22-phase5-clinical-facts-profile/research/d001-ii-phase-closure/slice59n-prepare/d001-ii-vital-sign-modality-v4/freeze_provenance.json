@@ -1,0 +1,35 @@
+{
+  "attached_source_refs": [
+    "body.t5.r10",
+    "body.p321",
+    "body.p684",
+    "body.p885"
+  ],
+  "claims_complete": false,
+  "config_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/configs/representative_group_vital_sign_modality.v4.json",
+  "config_sha256": "6ec11ebc5918c9ebcd479f47076e42dd8fc2e854391d992b9d30066f5312bf55",
+  "control_batch_id": "pcb-1b500118704447959f5e1565",
+  "control_plan_id": "pcp-fcc3b8aa4ac48c9b9e375f4c",
+  "coverage_manifest_id": "manifest:slice61ay-vital-sign-modality",
+  "coverage_manifest_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/coverage_manifest.json",
+  "coverage_manifest_sha256": "89c7f00a8ed2d7eda666fb62538b1941b10c59f4375b8c4491436f66ea0b51e6",
+  "created_at": "2026-08-29T12:05:43.767038+00:00",
+  "frozen_plan_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/frozen_phase_plan.json",
+  "frozen_plan_sha256": "f0aa7e4bccad782ad5472c1f446f079e26343f694ad3ddca401bfbef89f38250",
+  "group_id": "d001-ii-vital-sign-modality-v4",
+  "mode": "dry_run_prepare",
+  "owned_source_refs": [
+    "body.p784",
+    "body.p785",
+    "body.p786"
+  ],
+  "parent_phase_qc_path": null,
+  "parent_phase_qc_sha256": null,
+  "prompt_char_count": 30753,
+  "prompt_sha256": "92365be053baf729c9f570a2b16ec6dc3ba85b926f569149694c931bf170a5f7",
+  "prompt_template_sha256": "7ac4d5134c5359eaedaf90d595f0b2639b8c27dc27404d4feddbb8e1c9ee3a71",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "replay_mode": "product_protocol_control_agent_runner_mtplx",
+  "task_id": "phase5-slice61ay-20260829",
+  "worker": "codex-parent"
+}

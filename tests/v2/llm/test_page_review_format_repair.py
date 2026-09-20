@@ -219,7 +219,7 @@ def test_length_boundary_still_applies_to_the_repair_turn():
     def respond(messages, budget):
         if len(messages) == 2:
             return asyncio.sleep(0, result=PageCompletion(_main_response(has_eligibility_value=True), "stop", {}))
-        if budget == 24000:
+        if budget == 131072:
             return asyncio.sleep(0, result=PageCompletion(_main_response(), "stop", {}))
         return asyncio.sleep(0, result=PageCompletion(_main_response(), "length", {}))
 
@@ -227,7 +227,7 @@ def test_length_boundary_still_applies_to_the_repair_turn():
     record = asyncio.run(read_page(_routes()[PageReviewLane.MAIN_A], _page_input(),
                                    _clause_pack(), completion=completion))
 
-    assert budgets == [12000, 12000, 24000]
+    assert budgets == [65536, 65536, 131072]
     assert len(calls) == 3
     assert len(calls[2]) == 3
     assert record.prompt_version == "page-review-r3/v13"
@@ -313,7 +313,7 @@ def test_targeted_review_repair_stays_inside_focus_scope():
     assert len(calls[0]) == 3 and len(calls[1]) == 4
     assert calls[1][:3] == calls[0]
     assert "format_repair" in calls[1][3]["content"]
-    assert record.prompt_version.startswith("page-targeted-review/v3:")
+    assert record.prompt_version.startswith("page-targeted-review/v4:")
     assert record.clause_signals == []
 
 

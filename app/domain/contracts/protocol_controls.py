@@ -30,11 +30,17 @@ import json
 import re
 from typing import Literal, Sequence
 
-from pydantic import AliasChoices, ConfigDict, Field, model_validator
+from pydantic import AliasChoices, ConfigDict, Field, model_serializer, model_validator
 
 from .common import ContractModel
+from .control_evaluation_spec import ControlAtomEvaluationSpec, validate_control_atom_evaluation
+from .control_evidence_policy import ControlEvidenceSourcePolicy
+from .control_evidence_dependency import ControlEvidenceAtomReference
+from .control_time_binding import ControlTimeBinding, validate_control_time_bindings
 from .enums import LogicalOperator, PhaseScope, ReviewStage, StableEnum, StudyPhase
 from .rules import ProspectivePeriod, TimeConstraint
+from .repeat_scheme import (RepeatEvidenceRole, RepeatEvidenceRoleReference,
+                            resolve_repeat_evidence_roles, validate_repeat_evidence_roles)
 
 __all__ = [
     "ControlConditionAtom",
@@ -848,6 +854,14 @@ class ControlObligationAtom(Phase5ControlModel):
     """正式控制的单个类型化义务原子。"""
 
     obligation_id: str = Field(min_length=1)
+    evaluation: ControlAtomEvaluationSpec | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_evaluation(self, handler):
+        value = handler(self)
+        if self.evaluation is None:
+            value.pop("evaluation", None)
+        return value
     kind: ControlObligationKind
     statement: str = Field(min_length=1)
     time_constraint: TimeConstraint | None = None
@@ -864,6 +878,7 @@ class ControlObligationAtom(Phase5ControlModel):
 
     @model_validator(mode="after")
     def validate_obligation_sources(self) -> "ControlObligationAtom":
+        validate_control_atom_evaluation(self)
         _validate_obligation_semantics(
             kind=self.kind,
             modality=self.modality,
@@ -889,6 +904,14 @@ class ControlConditionAtomDraft(Phase5ControlModel):
     """
 
     statement: str = Field(min_length=1)
+    evaluation: ControlAtomEvaluationSpec | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_evaluation(self, handler):
+        value = handler(self)
+        if self.evaluation is None:
+            value.pop("evaluation", None)
+        return value
     source_span_ids: list[str] = Field(min_length=1)
     source_excerpts: list[str] = Field(min_length=1)
     time_constraint: TimeConstraint | None = None
@@ -896,6 +919,7 @@ class ControlConditionAtomDraft(Phase5ControlModel):
 
     @model_validator(mode="after")
     def validate_condition_sources(self) -> "ControlConditionAtomDraft":
+        validate_control_atom_evaluation(self)
         _validate_atom_sources(
             self.source_span_ids,
             self.source_excerpts,
@@ -922,6 +946,14 @@ class ControlObligationAtomDraft(Phase5ControlModel):
     """Provider-neutral typed obligation atom; stable obligation IDs are injected."""
 
     kind: ControlObligationKind
+    evaluation: ControlAtomEvaluationSpec | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_evaluation(self, handler):
+        value = handler(self)
+        if self.evaluation is None:
+            value.pop("evaluation", None)
+        return value
     statement: str = Field(min_length=1)
     time_constraint: TimeConstraint | None = None
     prospective_period: ProspectivePeriod | None = None
@@ -933,6 +965,7 @@ class ControlObligationAtomDraft(Phase5ControlModel):
 
     @model_validator(mode="after")
     def validate_obligation_draft_sources(self) -> "ControlObligationAtomDraft":
+        validate_control_atom_evaluation(self)
         _validate_obligation_semantics(
             kind=self.kind,
             modality=self.modality,
@@ -1178,6 +1211,98 @@ class ControlExceptionDnf(Phase5ControlModel):
         return self
 
 
+class ControlRepeatTriggerDraft(Phase5ControlModel):
+    condition_id: str = Field(min_length=1)
+    expression: ControlConditionDnfDraft
+    evidence_roles: list[RepeatEvidenceRoleReference] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_roles(self, handler):
+        value = handler(self)
+        if not self.evidence_roles:
+            value.pop("evidence_roles", None)
+        return value
+
+    @model_validator(mode="after")
+    def validate_role_references(self):
+        resolve_repeat_evidence_roles(self.evidence_roles, [
+            [f"{i}:{j}" for j, _ in enumerate(group.atoms)]
+            for i, group in enumerate(self.expression.groups)
+        ])
+        return self
+
+
+class ControlRepeatTrigger(Phase5ControlModel):
+    condition_id: str = Field(min_length=1)
+    expression: ControlConditionDnf
+    predicate_evidence_roles: dict[str, RepeatEvidenceRole] = Field(default_factory=dict)
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_roles(self, handler):
+        value = handler(self)
+        if not self.predicate_evidence_roles:
+            value.pop("predicate_evidence_roles", None)
+        return value
+
+    @model_validator(mode="after")
+    def validate_role_identities(self):
+        validate_repeat_evidence_roles(self.predicate_evidence_roles, [
+            atom.condition_atom_id for group in self.expression.groups for atom in group.atoms
+        ])
+        return self
+
+
+def validate_control_repeat_conditions(control):
+    conditions = {item.condition_id: item for item in control.repeat_trigger_conditions}
+    if len(conditions) != len(control.repeat_trigger_conditions) or any(not key.strip() for key in conditions):
+        raise ValueError("复查触发条件身份须非空且不能重复")
+    owners = [atom for name in ("applicability_expression", "trigger_expression",
+                               "obligation_expression", "exception_expression")
+              for expression in (getattr(control, name),) if expression is not None
+              for group in expression.groups for atom in group.atoms]
+    if getattr(control, "obligation_expression", None) is None:
+        owners.extend(getattr(control, "obligations", []))
+    atoms = [*owners, *(atom for condition in conditions.values()
+                       for group in condition.expression.groups for atom in group.atoms)]
+    identities = [identity for atom in atoms
+                  if (identity := getattr(atom, "condition_atom_id", None)
+                      or getattr(atom, "obligation_id", None)) is not None]
+    if len(identities) != len(set(identities)):
+        raise ValueError("复查条件与本控制其他条件的原子编号不得重复")
+    referenced = set()
+    for owner in owners:
+        scheme = owner.evaluation.repeat_scheme if owner.evaluation is not None else None
+        if scheme is None:
+            continue
+        sources = dict(zip(scheme.source_span_ids, scheme.source_excerpts, strict=True))
+        for condition_id in scheme.ancillary_condition_ids:
+            referenced.add(condition_id)
+            condition = conditions.get(condition_id)
+            if condition is None:
+                raise ValueError("复查要求缺少对应的完整触发或许可条件")
+            roles = (condition.predicate_evidence_roles.values()
+                     if isinstance(condition, ControlRepeatTrigger)
+                     else (item.evidence_role for item in condition.evidence_roles))
+            if any(not any(quote in source for source in scheme.source_excerpts)
+                   for role in roles for quote in role.source_excerpts):
+                raise ValueError("复查取证范围须来自本项复查要求的方案原文")
+            for group in condition.expression.groups:
+                if any(getattr(group, field, []) for field in (
+                    "waives_trigger_branch_indexes", "activates_obligation_group_indexes",
+                    "waives_trigger_branch_ids", "activates_obligation_group_ids",
+                    "trigger_branch_id",
+                )):
+                    raise ValueError("复查条件不能豁免或激活补充控制的入排分支")
+                for atom in group.atoms:
+                    if atom.evaluation is not None and atom.evaluation.repeat_scheme is not None:
+                        raise ValueError("复查条件不能再次嵌套复查要求")
+                    if any(span not in sources or excerpt not in sources[span]
+                           for span, excerpt in zip(atom.source_span_ids, atom.source_excerpts, strict=True)):
+                        raise ValueError("复查条件须来自本项复查要求的方案原文")
+    if referenced != set(conditions):
+        raise ValueError("不得加入未被本控制复查要求引用的额外条件")
+
+
 class ProtocolControlCandidateSemanticDraft(Phase5ControlModel):
     """Non-identity semantic draft for one frozen candidate.
 
@@ -1193,6 +1318,7 @@ class ProtocolControlCandidateSemanticDraft(Phase5ControlModel):
     trigger_expression: ControlConditionDnfDraft | None = None
     obligation_expression: ControlObligationDnfDraft = Field(...)
     exception_expression: ControlConditionDnfDraft | None = None
+    repeat_trigger_conditions: list[ControlRepeatTriggerDraft] = Field(default_factory=list)
     review_node_bindings: list["ReviewNodeBinding"] = Field(min_length=1)
     minimum_evidence: list["ControlMinimumEvidenceDraft"] = Field(min_length=1)
     source_structure_unit_ids: list[str] = Field(min_length=1)
@@ -1203,6 +1329,7 @@ class ProtocolControlCandidateSemanticDraft(Phase5ControlModel):
 
     @model_validator(mode="after")
     def validate_draft_scope(self) -> "ProtocolControlCandidateSemanticDraft":
+        validate_control_repeat_conditions(self)
         _require_sorted_unique(
             self.source_structure_unit_ids,
             "语义草稿 source_structure_unit_ids",
@@ -1312,6 +1439,14 @@ class ProtocolControlCandidateSemanticDraft(Phase5ControlModel):
         return self
 
 
+    @model_serializer(mode="wrap")
+    def preserve_old_repeat_conditions(self, handler):
+        value = handler(self)
+        if not self.repeat_trigger_conditions:
+            value.pop("repeat_trigger_conditions", None)
+        return value
+
+
 class ProtocolControlCandidateSemantics(Phase5ControlModel):
     """System-hydrated semantic layers with stable atom identities."""
 
@@ -1324,6 +1459,7 @@ class ProtocolControlCandidateSemantics(Phase5ControlModel):
     trigger_expression: ControlConditionDnf | None = None
     obligation_expression: ControlObligationDnf
     exception_expression: ControlExceptionDnf | None = None
+    repeat_trigger_conditions: list[ControlRepeatTrigger] = Field(default_factory=list)
     review_node_bindings: list["ReviewNodeBinding"] = Field(min_length=1)
     minimum_evidence: list["ControlMinimumEvidence"] = Field(min_length=1)
     source_structure_unit_ids: list[str] = Field(min_length=1)
@@ -1334,6 +1470,7 @@ class ProtocolControlCandidateSemantics(Phase5ControlModel):
 
     @model_validator(mode="after")
     def validate_hydrated_scope(self) -> "ProtocolControlCandidateSemantics":
+        validate_control_repeat_conditions(self)
         _require_sorted_unique(
             self.source_structure_unit_ids,
             "水合语义 source_structure_unit_ids",
@@ -1387,6 +1524,14 @@ class ProtocolControlCandidateSemantics(Phase5ControlModel):
         return self
 
 
+    @model_serializer(mode="wrap")
+    def preserve_old_repeat_conditions(self, handler):
+        value = handler(self)
+        if not self.repeat_trigger_conditions:
+            value.pop("repeat_trigger_conditions", None)
+        return value
+
+
 class ReviewNodeBinding(Phase5ControlModel):
     """控制在审核节点上的显式作用绑定。"""
 
@@ -1404,12 +1549,29 @@ class ControlMinimumEvidence(Phase5ControlModel):
     description: str = Field(min_length=1)
     due_stage: ReviewStage
     required_source_types: list[str] = Field(default_factory=list)
+    # Empty only for decoding historical catalogs; new publication requires IDs.
+    workflow_stage_ids: list[str] = Field(default_factory=list)
+    source_policy: ControlEvidenceSourcePolicy | None = None
+    atom_refs: list[ControlEvidenceAtomReference] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def serialize_evidence(self, handler):
+        data = handler(self)
+        if not self.atom_refs:
+            data.pop("atom_refs", None)
+        if not self.workflow_stage_ids:
+            data.pop("workflow_stage_ids", None)
+        if self.source_policy is None:
+            data.pop("source_policy", None)
+        return data
 
     @model_validator(mode="after")
     def validate_evidence(self) -> "ControlMinimumEvidence":
         _reject_forbidden_control_identity(self.evidence_key, "evidence_key")
         if any(not item.strip() for item in self.required_source_types):
             raise ValueError("最低证据资料类型不得包含空字符串")
+        if any(not item.strip() for item in self.workflow_stage_ids) or len(self.workflow_stage_ids) != len(set(self.workflow_stage_ids)):
+            raise ValueError("最低证据节点身份不得为空或重复")
         return self
 
 
@@ -1420,11 +1582,27 @@ class ControlMinimumEvidenceDraft(Phase5ControlModel):
     description: str = Field(min_length=1)
     due_stage: ReviewStage
     required_source_types: list[str] = Field(default_factory=list)
+    workflow_stage_ids: list[str] = Field(default_factory=list)
+    source_policy: ControlEvidenceSourcePolicy | None = None
+    atom_refs: list[ControlEvidenceAtomReference] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def serialize_evidence_draft(self, handler):
+        data = handler(self)
+        if not self.atom_refs:
+            data.pop("atom_refs", None)
+        if not self.workflow_stage_ids:
+            data.pop("workflow_stage_ids", None)
+        if self.source_policy is None:
+            data.pop("source_policy", None)
+        return data
 
     @model_validator(mode="after")
     def validate_evidence_draft(self) -> "ControlMinimumEvidenceDraft":
         if any(not item.strip() for item in self.required_source_types):
             raise ValueError("最低证据资料类型不得包含空字符串")
+        if any(not item.strip() for item in self.workflow_stage_ids) or len(self.workflow_stage_ids) != len(set(self.workflow_stage_ids)):
+            raise ValueError("最低证据节点身份不得为空或重复")
         return self
 
 
@@ -1542,7 +1720,9 @@ class ProtocolReviewControl(Phase5ControlModel):
     trigger_expression: ControlConditionDnf | None = None
     obligation_expression: ControlObligationDnf | None = None
     exception_expression: ControlExceptionDnf | None = None
+    repeat_trigger_conditions: list[ControlRepeatTrigger] = Field(default_factory=list)
     control_time_constraint: TimeConstraint | None = None
+    control_time_bindings: list[ControlTimeBinding] = Field(default_factory=list)
     review_node_bindings: list[ReviewNodeBinding] = Field(min_length=1)
     minimum_evidence: list[ControlMinimumEvidence] = Field(min_length=1)
     source_span_ids: list[str] = Field(min_length=1)
@@ -1551,6 +1731,15 @@ class ProtocolReviewControl(Phase5ControlModel):
         default_factory=list
     )
     originating_candidate_id: str | None = Field(default=None, min_length=1)
+
+    @model_serializer(mode="wrap")
+    def serialize_time_bindings(self, handler):
+        value = handler(self)
+        if not self.control_time_bindings:
+            value.pop("control_time_bindings", None)
+        if not self.repeat_trigger_conditions:
+            value.pop("repeat_trigger_conditions", None)
+        return value
 
     @property
     def display_label(self) -> str:
@@ -1570,6 +1759,8 @@ class ProtocolReviewControl(Phase5ControlModel):
 
     @model_validator(mode="after")
     def validate_published_control(self) -> "ProtocolReviewControl":
+        validate_control_repeat_conditions(self)
+        validate_control_time_bindings(self)
         _reject_forbidden_control_identity(
             self.protocol_control_id,
             "protocol_control_id",
@@ -2692,14 +2883,21 @@ def stable_protocol_control_exception_group_id(
 
 def stable_protocol_control_atom_id(
     control_candidate_id: str,
-    layer: Literal["applicability", "trigger", "obligation", "exception"],
+    layer: Literal["applicability", "trigger", "obligation", "exception", "repeat_trigger"],
     group_index: int,
     atom_index: int,
+    *, repeat_condition_id: str | None = None,
 ) -> str:
     """Return a system-owned atom identity scoped to one hydrated candidate."""
 
     if group_index < 0 or atom_index < 0:
         raise ValueError("DNF group/atom index 必须非负")
+    if (layer == "repeat_trigger") != (repeat_condition_id is not None):
+        raise ValueError("复查触发原子须携带独立条件归属，不能与正式入排层混用")
+    if repeat_condition_id is not None:
+        if not repeat_condition_id.strip():
+            raise ValueError("复查条件身份不得为空白")
+        return "pca-" + _stable_digest(control_candidate_id, layer, repeat_condition_id, group_index, atom_index)
     return "pca-" + _stable_digest(
         control_candidate_id,
         layer,
@@ -2728,7 +2926,8 @@ def hydrate_protocol_control_candidate_semantics(
     def condition_dnf(
         value: ControlConditionDnfDraft | None,
         *,
-        layer: Literal["applicability", "trigger"],
+        layer: Literal["applicability", "trigger", "repeat_trigger"],
+        repeat_condition_id: str | None = None,
     ) -> ControlConditionDnf | None:
         if value is None:
             return None
@@ -2749,8 +2948,10 @@ def hydrate_protocol_control_candidate_semantics(
                         layer,
                         group_index,
                         atom_index,
+                        repeat_condition_id=repeat_condition_id,
                     ),
                     statement=atom.statement,
+                    evaluation=atom.evaluation,
                     source_span_ids=list(atom.source_span_ids),
                     source_excerpts=list(atom.source_excerpts),
                     time_constraint=atom.time_constraint,
@@ -2824,6 +3025,7 @@ def hydrate_protocol_control_candidate_semantics(
                         atom_index,
                     ),
                     statement=atom.statement,
+                    evaluation=atom.evaluation,
                     source_span_ids=list(atom.source_span_ids),
                     source_excerpts=list(atom.source_excerpts),
                     time_constraint=atom.time_constraint,
@@ -2870,6 +3072,7 @@ def hydrate_protocol_control_candidate_semantics(
                     atom_index,
                 ),
                 kind=atom.kind,
+                evaluation=atom.evaluation,
                 statement=atom.statement,
                 time_constraint=atom.time_constraint,
                 prospective_period=atom.prospective_period,
@@ -2906,6 +3109,9 @@ def hydrate_protocol_control_candidate_semantics(
             description=item.description,
             due_stage=item.due_stage,
             required_source_types=list(item.required_source_types),
+            workflow_stage_ids=list(item.workflow_stage_ids),
+            source_policy=item.source_policy,
+            atom_refs=list(item.atom_refs),
         )
         for evidence_index, item in enumerate(draft.minimum_evidence)
     ]
@@ -2959,6 +3165,14 @@ def hydrate_protocol_control_candidate_semantics(
             layer="applicability",
         ),
         trigger_expression=trigger_expression,
+        repeat_trigger_conditions=[ControlRepeatTrigger(
+            condition_id=item.condition_id, expression=expression,
+            predicate_evidence_roles=resolve_repeat_evidence_roles(item.evidence_roles, [
+                [atom.condition_atom_id for atom in group.atoms] for group in expression.groups
+            ]),
+        ) for item in draft.repeat_trigger_conditions for expression in (
+            condition_dnf(item.expression, layer="repeat_trigger", repeat_condition_id=item.condition_id),
+        )],
         obligation_expression=ControlObligationDnf(groups=obligation_groups),
         exception_expression=(
             ControlExceptionDnf(groups=exception_groups)

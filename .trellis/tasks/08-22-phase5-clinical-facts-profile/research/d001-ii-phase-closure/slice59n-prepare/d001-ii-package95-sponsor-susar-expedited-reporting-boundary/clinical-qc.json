@@ -1,0 +1,291 @@
+{
+  "attached_source_refs": [
+    "body.p1018",
+    "body.p1019",
+    "body.p1096",
+    "body.p1136",
+    "body.p1137"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package95-sponsor-susar-expedited-reporting-boundary",
+  "notes": [
+    "本切片为模型外来源闭包切片：不调用临床语义模型，不并入131包正式目录，不运行受试者审核，claims_complete=false。",
+    "第95包十二个拥有单元（body.p1124-p1135）：p1124仅作结构；p1125-p1135保持post_treatment_execution处置。required_candidate_source_refs显式为空。",
+    "只读附加第80包body.p1018-p1019、第90包body.p1096、第96包body.p1136-p1137；不得转移所有权、重复发布候选，不得把通常/一般/不建议强化成绝对禁止。",
+    "不得提前吸收第94包body.p1113-p1123的SAE记录/报告表/死亡途径细则，也不得提前吸收第97包body.p1138+不良事件随访所有权。",
+    "本包及只读附加来源全部属于治疗后药物警戒执行，禁止升格为预筛、筛选或基线入排门槛。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1124",
+    "body.p1125",
+    "body.p1126",
+    "body.p1127",
+    "body.p1128",
+    "body.p1129",
+    "body.p1130",
+    "body.p1131",
+    "body.p1132",
+    "body.p1133",
+    "body.p1134",
+    "body.p1135"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "所有权与候选发射权归第80包": "pending_codex",
+        "用于限制p1127/p1132的严重、相关、非预期三维关系；不得转移所有权或重复发布候选": "pending_codex",
+        "第80包拥有：SUSAR定义（可疑且非预期严重不良反应），只读": "pending_codex"
+      },
+      "frozen_excerpt": "可疑且非预期严重不良反应（Suspected Unexpected Serious Adverse Reaction，SUSAR）指临床表现的性质和严重程度超出了试验药物《研究者手册》、已上市药品的说明书或者产品特性摘要等已有资料信息的可疑并且非预期的严重不良反应。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1018",
+      "structure_unit_id": "su-3a466b9df7a0012b972a2b3d"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "所有权与候选发射权归第80包": "pending_codex",
+        "用于限制p1127/p1132的非预期维度与预期性参考来源；不得转移所有权或以第95包细则改写第80包定义": "pending_codex",
+        "第80包拥有：非预期不良反应定义及《研究者手册》作为预期性主要参考，只读": "pending_codex"
+      },
+      "frozen_excerpt": "非预期不良反应指不良反应的性质、严重程度、后果或频率，不同于试验药物当前相关资料（如《研究者手册》等文件）所描述的预期风险。《研究者手册》作为主要文件提供用以判断某不良反应是否预期或非预期的安全性参考信息。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1019",
+      "structure_unit_id": "su-0230c1ca32146e5682365991"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "所有权与候选发射权归第90包": "pending_codex",
+        "用于校验p1132分歧快速报告边界；不得转移所有权，不得要求双方一致或改成最终确认相关": "pending_codex",
+        "第90包拥有：研究者/申办者分歧时任一方判断相关即属报告范围，只读": "pending_codex"
+      },
+      "frozen_excerpt": "严重不良事件（SAE）与试验用药品的因果关系由研究者和申办者双方共同判断。当双方意见不一致时，对研究者或/和申办者任意一方判断与试验用药品相关的严重不良事件，均属报告范围。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1096",
+      "structure_unit_id": "su-d41dd8a6ab4c85237c0b2e49"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "具体评估、快速报告、时钟、区间与通常不快速报告规则由下属段落拥有，标题不义务化": "pending_codex",
+        "标题只闭合不良事件报告下的申办者报告要求章节层级，不独立形成科学评估、SUSAR对象、接收方、时限或除外列表义务": "pending_codex",
+        "第95包拥有：申办者的报告要求（结构标题），仅作结构": "pending_codex"
+      },
+      "frozen_excerpt": "申办者的报告要求",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1124",
+      "structure_unit_id": "su-79021ae623bcb6b31a8cd34a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "任何来源安全信息触发科学评估，不等于任何信息均为SUSAR；保持治疗后药物警戒执行职责，零候选": "pending_codex",
+        "必须保留任何来源触发、科学全面分析，以及严重性、相关性、预期性、风险-获益比等评估维度；不得漏失任一维度": "pending_codex",
+        "第95包拥有：申办者收到任何来源的安全性相关信息后，均应科学全面分析评估，包括严重性、与试验用药品的相关性、预期性以及评估风险-获益比等": "pending_codex"
+      },
+      "frozen_excerpt": "申办者收到任何来源的安全性相关信息后，均应当科学全面地分析评估，包括严重性、与试验用药品的相关性、预期性以及评估风险-获益比等。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1125",
+      "structure_unit_id": "su-8cb002b5da53ffb63fd15d55"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把'所有参加临床试验的'错误扩到监管部门修饰语；不得凭当前机构名称改写方案原文；保持治疗后执行职责，零候选": "pending_codex",
+        "接收方集合不得漏项或互相替代：研究者、临床试验机构、伦理委员会、药品监督管理部门、卫生健康主管部门均须保留": "pending_codex",
+        "第95包拥有：SUSAR快速报告给所有参加临床试验的研究者、临床试验机构及伦理委员会；并向药品监督管理部门和卫生健康主管部门报告SUSAR": "pending_codex"
+      },
+      "frozen_excerpt": "申办者应当将SUSAR快速报告给所有参加临床试验的研究者、临床试验机构及伦理委员会；申办者应当向药品监督管理部门和卫生健康主管部门报告SUSAR。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1126",
+      "structure_unit_id": "su-1518dc0b91c86c76765673de"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读附加p1018/p1019限制严重、相关、非预期三维关系，不转移第80包所有权；保持治疗后执行职责，零候选": "pending_codex",
+        "合取关系必须保持为(肯定相关 OR 可疑) AND 非预期 AND 严重；不得把AND弱化成任一维度满足；不得把'可疑'误解为已证实相关": "pending_codex",
+        "第95包拥有：研究期间全部与试验用药品肯定相关或可疑、且非预期、且严重的不良反应，按后续时限向国家药品监督管理总局药品审评中心快速报告": "pending_codex"
+      },
+      "frozen_excerpt": "对于研究期间发生的所有与试验用药品肯定相关或可疑的非预期且严重的不良反应，申办者都应按照下述规定时限向国家药品监督管理总局药品审评中心进行快速报告：",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1127",
+      "structure_unit_id": "su-8e1cfe3a7475acb38bf9851f"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "保留含第7天、第0天及随后8天随访；不得改成工作日口径；保持治疗后执行职责，零候选": "pending_codex",
+        "对象与时限严格限定为致死或危及生命SUSAR的7天首次报告+随后8天随访；不得与p1129的15天时钟互换或合并相加": "pending_codex",
+        "第95包拥有：致死或危及生命的SUSAR，首次获知后7天内（含7天）尽快报告，并在随后的8天内报告、完善随访信息；首次获知当天为第0天": "pending_codex"
+      },
+      "frozen_excerpt": "对于致死或危及生命的SUSAR，应在首次获知后7天内（含7天）尽快报告，并在随后的8天内报告、完善随访信息（首次获知当天为第0天）；",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1128",
+      "structure_unit_id": "su-ad001484e2bad323dd288136"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "保留含第15天；不得改成工作日口径；保持治疗后执行职责，零候选": "pending_codex",
+        "对象与时限严格限定为非（致死或危及生命）SUSAR的15天首次报告；不得解析为（非致死）OR（危及生命），不得与p1128的7/8天时钟互换或合并": "pending_codex",
+        "第95包拥有：非（致死或危及生命）的SUSAR，首次获知后15天内（含15天）尽快报告": "pending_codex"
+      },
+      "frozen_excerpt": "对于非致死或危及生命的SUSAR，应在首次获知后15天内（含15天）尽快报告。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1129",
+      "structure_unit_id": "su-ef45e8ae2585d607a1ad64a9"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得用方案签署、首例入组、数据库锁定等替换起点或终点；保持治疗后执行职责，零候选": "pending_codex",
+        "必须同时保留两个可能起点（批准日期或默示许可开始日期）和唯一结束点（国内最后一例参与者随访结束）": "pending_codex",
+        "第95包拥有：快速报告开始时间为临床试验批准日期或国家药品审评机构默示许可开始日期；结束时间为国内最后一例参与者随访结束日期": "pending_codex"
+      },
+      "frozen_excerpt": "快速报告开始时间为临床试验批准日期或国家药品审评机构默示许可开始日期；结束时间为国内最后一例参与者随访结束日期。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1130",
+      "structure_unit_id": "su-bd1b0b456693d93037bab527"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把研究结束后全部SAE都改成快速报告；SUSAR条件仍必须满足": "pending_codex",
+        "更新/更改的15天从获得新信息起算，不沿用首次事件获知时钟；保持治疗后执行职责，零候选": "pending_codex",
+        "第95包拥有：研究/随访结束后获知任何SAE仍报告申办者；只有属于SUSAR时才快速报告；首次报告后继续跟踪严重不良反应，并在获得新信息起15天内报送更新或更改": "pending_codex"
+      },
+      "frozen_excerpt": "在临床试验结束或随访结束后，研究者获知的任何严重不良事件研究者应报告申办者。若属于SUSAR，还应进行快速报告。申办者在首次报告后，应继续跟踪严重不良反应，以随访报告的形式及时报送有关更新的信息或对前次报告的更改信息等，报告时限为获得新信息起15天内。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1131",
+      "structure_unit_id": "su-597067c477d314783bc08403"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "任一方'不能排除相关'即可适用分歧规则，不等于任意分歧均快速报告，不等于最终确认相关，也不得要求双方一致": "pending_codex",
+        "只读附加p1096只校验上游报告范围，不能把未满足相关、非预期、严重三要件的任意分歧升级为快速报告；不转移第90包所有权；保持治疗后执行职责，零候选": "pending_codex",
+        "第95包拥有：快速报告对象仍须满足(肯定相关 OR 可疑) AND 非预期 AND 严重；在该对象范围内，因果关系分歧时只要研究者或申办者任一方判断不能排除与研究药物相关，即向国家药品审评机构快速报告": "pending_codex"
+      },
+      "frozen_excerpt": "对于临床试验期间发生的所有与试验用药品肯定相关或可疑非预期的严重不良反应，即使申办者和研究者在不良事件与研究药物因果关系判断中不能达成一致时，只要其中任何一方判断不能排除与研究药物相关的，申办者也应向国家药品审评机构进行快速报告。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1132",
+      "structure_unit_id": "su-2ef939e9c604aa8ea86b8098"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把引导语强化成绝对禁止，也不得截断后续列表；保持治疗后执行职责，零候选": "pending_codex",
+        "必须保留'一般'非绝对强度；本引导语开启跨第96包的连续'通常不快速报告'列表": "pending_codex",
+        "第95包拥有：以下情况一般不作为快速报告内容（跨包列表引导语）": "pending_codex"
+      },
+      "frozen_excerpt": "以下情况一般不作为快速报告内容：",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1133",
+      "structure_unit_id": "su-98140a88b2bec06fa03040e6"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得只保留本项而截断跨第96包的连续列表；保持治疗后执行职责，零候选": "pending_codex",
+        "必须保留其作为'一般不作为快速报告内容'列表项的非绝对强度，不得改成绝对禁止报告": "pending_codex",
+        "第95包拥有：非严重不良事件，继承p1133'以下情况一般不作为快速报告内容'的列表强度（跨包列表第1项）": "pending_codex"
+      },
+      "frozen_excerpt": "非严重不良事件；",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1134",
+      "structure_unit_id": "su-e90c66dfbc7f1ca0e2bf3a15"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得截断后续第96包p1136/p1137连续项，也不得夺取第96包所有权；保持治疗后执行职责，零候选": "pending_codex",
+        "必须保留其作为'一般不作为快速报告内容'列表项的非绝对强度，不得改成绝对禁止报告": "pending_codex",
+        "第95包拥有：严重不良事件与试验用药品无关，继承p1133'以下情况一般不作为快速报告内容'的列表强度（跨包列表第2项）": "pending_codex"
+      },
+      "frozen_excerpt": "严重不良事件与试验用药品无关；",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1135",
+      "structure_unit_id": "su-3805178b03c7b8cacabd6f96"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "必须只读闭合为本包p1133引导列表的连续后项；保留非绝对强度，不得强化成绝对禁止，不得转移第96包所有权": "pending_codex",
+        "所有权与候选发射权归第96包": "pending_codex",
+        "第96包拥有：严重但属预期的不良反应（跨包'通常不快速报告'列表连续后项），只读": "pending_codex"
+      },
+      "frozen_excerpt": "严重但属预期的不良反应；",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1136",
+      "structure_unit_id": "su-b67409702cdd94eca252289a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "必须只读闭合为本包p1133引导列表的连续后项；保留'不建议'非绝对强度，不得强化成绝对禁止，不得转移第96包所有权": "pending_codex",
+        "所有权与候选发射权归第96包": "pending_codex",
+        "第96包拥有：当以严重不良事件为主要疗效终点时，不建议申请人以个例安全性报告形式向国家药品审评机构报告（跨包列表连续后项），只读": "pending_codex"
+      },
+      "frozen_excerpt": "当以严重不良事件为主要疗效终点时，不建议申请人以个例安全性报告形式向国家药品审评机构报告。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1137",
+      "structure_unit_id": "su-9aefc1fcee2ad36efca4fd7b"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61cg-20260830",
+  "worker": "cursor-worker_01"
+}

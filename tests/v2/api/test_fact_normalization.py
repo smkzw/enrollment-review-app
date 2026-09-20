@@ -79,8 +79,8 @@ def test_mtplx_dual_main_coverage_is_selectable_for_normalization(client, monkey
     monkeypatch.setenv("PAGE_REVIEW_MAIN_B_MODEL", "mtplx-flash-next-optimized-speed")
     routes = require_page_reader_routes(require_credentials=False)
     assert set(routes) == {PageReviewLane.MAIN_A, PageReviewLane.MAIN_B}
-    assert routes[PageReviewLane.MAIN_A].reasoning_effort == "low"
-    assert routes[PageReviewLane.MAIN_B].reasoning_effort == "high"
+    assert routes[PageReviewLane.MAIN_A].reasoning_effort == "high"
+    assert routes[PageReviewLane.MAIN_B].reasoning_effort == "xhigh"
 
     factory = client.app.state.session_factory
     with factory() as session, session.begin():
@@ -93,6 +93,17 @@ def test_mtplx_dual_main_coverage_is_selectable_for_normalization(client, monkey
     assert response.status_code == 201, response.text
     body = response.json()
     assert body["job_id"]
+
+
+def test_formal_normalization_rejects_stale_reader_prompt(client, monkeypatch):
+    from tests.v2.services import test_r3_page_review_normalizer_wiring as fixtures
+
+    monkeypatch.setattr(fixtures, "PAGE_REVIEW_PROMPT_VERSION", "page-review-r3/obsolete")
+    with client.app.state.session_factory() as session, session.begin():
+        chain = _seed_chain(session, prefix="api-stale-reader-prompt")
+    response = client.post(_endpoint(chain["subject_id"], chain["episode_id"]), json={})
+    assert response.status_code == 409, response.text
+    assert "PAGE_COVERAGE_NOT_READY" in response.text
 
 
 def test_create_normalization_job_idempotent_and_chinese(client):

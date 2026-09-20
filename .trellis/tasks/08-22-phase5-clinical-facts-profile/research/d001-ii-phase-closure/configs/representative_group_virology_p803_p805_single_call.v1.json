@@ -1,0 +1,12 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_virology_p803_p805_closure.v1.json",
+  "group_id": "d001-ii-virology-p803-p805-single-call",
+  "task_id": "phase5-slice60zy-virology-single-mtplx-20260828",
+  "worker": "codex-parent",
+  "artifact_dir_name": "phase5-slice60zy-virology-single-mtplx-20260828",
+  "notes": [
+    "基于已通过父级来源闭包和独立医学审查的唯一一次 MTPLX medium 调用。",
+    "仅处置 body.p803-p805；流程第14项与 EX-22 只读携带；本次不发布控制点。"
+  ]
+}

@@ -20,6 +20,7 @@ from app.domain.contracts.rules import (
     iter_atomic_predicates,
 )
 from app.domain.publication import canonical_hash
+from app.domain.contracts.control_catalog_publication import ControlCatalogPublication
 
 
 class ClausePackProjectionError(ValueError):
@@ -59,6 +60,8 @@ def determine_component_mode(component: RuleComponent) -> DeterminationMode:
     ]
     if any(item.requires_professional_judgment for item in predicates):
         return DeterminationMode.INVESTIGATOR_JUDGMENT
+    if any(item.semantic_proposition is not None for item in predicates):
+        return DeterminationMode.SEMANTIC
 
     expressions = [
         *_expressions(component.expression),
@@ -117,6 +120,7 @@ def clause_pack_hash_material(rule_set: RuleSet) -> dict[str, object]:
                     source_text=rule.source_text,
                     expression=component.expression,
                     exception_expression=component.exception_expression,
+                    repeat_trigger_conditions=list(component.repeat_trigger_conditions),
                     evidence_requirements=sorted(
                         component.evidence_requirements,
                         key=lambda item: item.requirement_id,
@@ -125,7 +129,9 @@ def clause_pack_hash_material(rule_set: RuleSet) -> dict[str, object]:
                 ).model_dump(mode="json")
             )
     return {
-        "projection_version": "clause-pack/v1",
+        "projection_version": ("clause-pack/v3" if any(
+            item.get("repeat_trigger_conditions") for item in clauses
+        ) else "clause-pack/v1"),
         "rule_set_id": rule_set.rule_set_id,
         "rule_set_revision": rule_set.revision,
         "protocol_version_id": rule_set.protocol_version_id,
@@ -134,14 +140,36 @@ def clause_pack_hash_material(rule_set: RuleSet) -> dict[str, object]:
     }
 
 
-def project_clause_pack(rule_set: RuleSet) -> ClausePack:
+def project_clause_pack(
+    rule_set: RuleSet, *, control_publication: ControlCatalogPublication | None = None,
+) -> ClausePack:
     material = clause_pack_hash_material(rule_set)
+    if control_publication is not None:
+        if control_publication.rule_set_sha256 != canonical_hash(rule_set.model_dump(mode="json")):
+            raise ClausePackProjectionError("补充要求引用的完整规则内容不同")
+        if material["projection_version"] != "clause-pack/v3":
+            material["projection_version"] = "clause-pack/v2"
+        material["control_publication"] = control_publication.model_dump(mode="json")
     digest = canonical_hash(material)
     return ClausePack(
         clause_pack_id=f"clause-pack:{digest[:32]}",
         clause_pack_sha256=digest,
         **material,
     )
+
+
+def clause_determination_modes(pack: ClausePack) -> dict[str, DeterminationMode]:
+    """Page reconciliation policy only, not semantic atom/evaluator routing.
+
+    Control atoms retain their professional-judgment and modality fields in
+    the catalog. Their page-level direction is never a four-layer proof.
+    """
+    modes = {item.clause_id: item.determination_mode for item in pack.clauses}
+    if pack.control_publication is not None:
+        # Page-reader direction cannot decide the control's four-layer logic.
+        modes.update({item.protocol_control_id: DeterminationMode.DETERMINISTIC
+                      for item in pack.control_publication.catalog.controls})
+    return modes
 
 
 def verify_clause_pack(clause_pack: ClausePack) -> None:
@@ -160,6 +188,7 @@ __all__ = [
     "ClausePackProjectionError",
     "clause_pack_hash_material",
     "determine_component_mode",
+    "clause_determination_modes",
     "project_clause_pack",
     "verify_clause_pack",
 ]

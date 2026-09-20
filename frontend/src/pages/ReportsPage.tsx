@@ -1,18 +1,18 @@
-import { useMemo } from "react";
 import {
   getCatalogRepository,
   type CatalogEpisodeView,
   type CatalogProjectView,
   type CatalogSubjectView,
 } from "../api";
-import {
-  getEligibilityReviewRepository,
-  type EligibilityClauseView,
-} from "../api/eligibility-review";
+import { createReviewHistoryHttp } from "../api/review-history/reviewHistoryHttp";
+import { FrozenReviewReport, reviewTime } from "../components/review/FrozenReviewReport";
 import { updateParams, useHashRoute } from "../app/router";
 import { useLoad } from "../app/useLoad";
 import { ErrorState, EmptyState, LoadingState } from "../components/shell/Feedback";
-import { formatSnapshotVersion } from "../domain/labels";
+import { ArrowLeft } from "lucide-react";
+import { PreparedReviewPanel } from "../components/review/PreparedReviewPanel";
+import { useApplicationMode } from "../app/applicationMode";
+const historyRepository = createReviewHistoryHttp();
 
 function centerLabel(subject: CatalogSubjectView): string {
   if (subject.centerCode !== null && subject.centerName !== null) {
@@ -23,15 +23,6 @@ function centerLabel(subject: CatalogSubjectView): string {
 
 function episodeLabel(episode: CatalogEpisodeView): string {
   return episode.workflowStageLabel ?? episode.stageLabel;
-}
-
-function formatGeneratedAt(date: Date): string {
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function isUndetermined(clause: EligibilityClauseView): boolean {
-  return clause.decision === "professional_judgment" || clause.decision === "conflict";
 }
 
 interface ReportSelectionProps {
@@ -105,158 +96,13 @@ function ReportSelection({
   );
 }
 
-function SubjectInformation({
-  project,
-  subject,
-  episode,
-}: {
-  project: CatalogProjectView;
-  subject: CatalogSubjectView;
-  episode: CatalogEpisodeView;
-}) {
-  return (
-    <section className="reports-print__section" aria-labelledby="reports-subject-title">
-      <h3 id="reports-subject-title">受试者信息</h3>
-      <table className="reports-print__table reports-print__subject-table">
-        <tbody>
-          <tr>
-            <th scope="row">受试者代号</th>
-            <td>{subject.subjectCode}</td>
-            <th scope="row">中心</th>
-            <td>{centerLabel(subject)}</td>
-          </tr>
-          <tr>
-            <th scope="row">项目</th>
-            <td>{project.projectName}</td>
-            <th scope="row">研究期别</th>
-            <td>{project.studyPhaseLabel}</td>
-          </tr>
-          <tr>
-            <th scope="row">性别</th>
-            <td>{subject.sex ?? "未填写"}</td>
-            <th scope="row">年龄</th>
-            <td>{subject.ageYears === null ? "未填写" : `${subject.ageYears} 岁`}</td>
-          </tr>
-          <tr>
-            <th scope="row">审核节点</th>
-            <td colSpan={3}>{episodeLabel(episode)}</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-  );
-}
-
-function UndeterminedSection({ clauses }: { clauses: ReadonlyArray<EligibilityClauseView> }) {
-  const items = clauses.filter(isUndetermined);
-  return (
-    <section className="reports-print__section" aria-labelledby="reports-undetermined-title">
-      <h3 id="reports-undetermined-title">
-        无法判定清单 <span className="section-count">{items.length}</span>
-      </h3>
-      {items.length === 0 ? (
-        <p className="reports-print__empty">本次结果中没有无法判定条款。</p>
-      ) : (
-        <ol className="reports-print__undetermined-list">
-          {items.map((clause) => (
-            <li key={clause.ruleCode}>
-              <div className="reports-print__clause-line">
-                <strong>{clause.ruleCode}</strong>
-                <span className="reports-print__decision">{clause.decisionLabel}</span>
-              </div>
-              <p>{clause.textSummary}</p>
-              <p className="reports-print__reason">{clause.reason}</p>
-            </li>
-          ))}
-        </ol>
-      )}
-    </section>
-  );
-}
-
-function DecisionTable({ clauses }: { clauses: ReadonlyArray<EligibilityClauseView> }) {
-  return (
-    <section className="reports-print__section" aria-labelledby="reports-decisions-title">
-      <h3 id="reports-decisions-title">逐条判定</h3>
-      <table className="reports-print__table reports-print__decision-table">
-        <thead>
-          <tr>
-            <th scope="col">条款</th>
-            <th scope="col">类别</th>
-            <th scope="col">判定</th>
-            <th scope="col">原因</th>
-          </tr>
-        </thead>
-        <tbody>
-          {clauses.map((clause) => (
-            <tr key={clause.ruleCode}>
-              <th scope="row">
-                <span>{clause.ruleCode}</span>
-                <small>{clause.textSummary}</small>
-              </th>
-              <td>
-                {clause.ruleKind === "inclusion"
-                  ? "入选标准"
-                  : clause.ruleKind === "exclusion"
-                    ? "排除标准"
-                    : "流程要求"}
-              </td>
-              <td>
-                <span className="reports-print__badge">{clause.decisionLabel}</span>
-              </td>
-              <td className="reports-print__reason">{clause.reason}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  );
-}
-
-function EligibilityReport({
-  project,
-  subject,
-  episode,
-  clauses,
-  ruleSetRevision,
-}: {
-  project: CatalogProjectView;
-  subject: CatalogSubjectView;
-  episode: CatalogEpisodeView;
-  clauses: ReadonlyArray<EligibilityClauseView>;
-  ruleSetRevision: number;
-}) {
-  const generatedAt = useMemo(() => formatGeneratedAt(new Date()), []);
-  return (
-    <article className="reports-print" data-testid="reports-print">
-      <header className="reports-print__head">
-        <div>
-          <p className="reports-print__eyebrow">入排审核结果</p>
-          <h2>{subject.subjectCode} · {episodeLabel(episode)}</h2>
-        </div>
-        <button
-          type="button"
-          className="button button--primary reports-print__action"
-          onClick={() => window.print()}
-        >
-          生成打印版
-        </button>
-      </header>
-      <SubjectInformation project={project} subject={subject} episode={episode} />
-      <UndeterminedSection clauses={clauses} />
-      <DecisionTable clauses={clauses} />
-      <footer className="reports-print__footnote">
-        资料版本：{formatSnapshotVersion(episode.revision, null)} · 档案版本：{formatSnapshotVersion(ruleSetRevision, null)} · 生成时间：{generatedAt}
-      </footer>
-    </article>
-  );
-}
-
 export function ReportsPage() {
+  const { canModify } = useApplicationMode();
   const { params } = useHashRoute();
   const projectParam = params.get("project");
   const subjectParam = params.get("subject");
   const episodeParam = params.get("episode");
+  const runParam = params.get("run");
 
   const projects = useLoad((signal) => getCatalogRepository().listProjects(signal), []);
   const projectList = projects.state.status === "success" ? projects.state.data : [];
@@ -290,9 +136,9 @@ export function ReportsPage() {
     episodeParam === null
       ? episodeList[0] ?? null
       : episodeList.find((episode) => episode.reviewEpisodeId === episodeParam) ?? null;
-  const eligibility = useLoad(
+  const history = useLoad(
     (signal) =>
-      getEligibilityReviewRepository().getEligibilityReview(
+      historyRepository.listRuns(
         selectedSubject?.subjectId ?? "",
         selectedEpisode?.reviewEpisodeId ?? "",
         { signal },
@@ -300,12 +146,24 @@ export function ReportsPage() {
     [selectedSubject?.subjectId, selectedEpisode?.reviewEpisodeId],
     { enabled: selectedSubject !== null && selectedEpisode !== null },
   );
+  const runs = history.state.status === "success"
+    && history.state.data.subjectId === selectedSubject?.subjectId
+    && history.state.data.reviewEpisodeId === selectedEpisode?.reviewEpisodeId
+      ? history.state.data.items : [];
+  const selectedRun = runParam === null ? runs.at(-1) ?? null
+    : runs.find((run) => run.reviewRunId === runParam) ?? null;
+  const detail = useLoad(
+    (signal) => historyRepository.getRun(selectedSubject?.subjectId ?? "",
+      selectedEpisode?.reviewEpisodeId ?? "", selectedRun?.reviewRunId ?? "", { signal }),
+    [selectedSubject?.subjectId, selectedEpisode?.reviewEpisodeId, selectedRun?.reviewRunId],
+    { enabled: selectedRun !== null },
+  );
 
   const setProject = (projectId: string) =>
-    updateParams({ project: projectId, subject: null, episode: null });
+    updateParams({ project: projectId, subject: null, episode: null, run: null, action: null, workflow: null, review_request: null });
   const setSubject = (subjectId: string) =>
-    updateParams({ subject: subjectId, episode: null });
-  const setEpisode = (episodeId: string) => updateParams({ episode: episodeId });
+    updateParams({ subject: subjectId, episode: null, run: null, action: null, workflow: null, review_request: null });
+  const setEpisode = (episodeId: string) => updateParams({ episode: episodeId, run: null, action: null, workflow: null, review_request: null });
 
   if (projects.state.status === "loading") return <LoadingState />;
   if (projects.state.status === "error") {
@@ -337,36 +195,62 @@ export function ReportsPage() {
   if (selectedEpisode === null) {
     return <ErrorState message="链接中的审核节点不存在，请重新选择。" onRetry={() => updateParams({ episode: null })} />;
   }
-  if (eligibility.state.status === "loading") return <LoadingState />;
-  if (eligibility.state.status === "error") {
-    return <ErrorState message={eligibility.state.message} onRetry={eligibility.retry} />;
-  }
-
-  const report = eligibility.state.data;
+  const report = detail.state.status === "success"
+    && detail.state.data.run.reviewRunId === selectedRun?.reviewRunId
+    && detail.state.data.context.subjectId === selectedSubject.subjectId
+    && detail.state.data.context.reviewEpisodeId === selectedEpisode.reviewEpisodeId
+      ? detail.state.data : null;
   return (
     <div className="reports">
       <header className="page-head">
         <h1 className="page-head__title">报告</h1>
-        <p className="page-head__note">选择项目、受试者和审核节点，查看完整的入排审核结果并生成打印版。</p>
       </header>
-      <ReportSelection
-        projects={projectList}
-        selectedProject={selectedProject}
-        subjects={subjectList}
-        selectedSubject={selectedSubject}
-        episodes={episodeList}
-        selectedEpisode={selectedEpisode}
-        onProjectChange={setProject}
-        onSubjectChange={setSubject}
-        onEpisodeChange={setEpisode}
-      />
-      <EligibilityReport
-        project={selectedProject}
-        subject={selectedSubject}
-        episode={selectedEpisode}
-        clauses={report.clauses}
-        ruleSetRevision={report.ruleSetRevision}
-      />
+      <div className="reports-toolbar">
+        {params.has("worklist") && <a className="button"
+          href={`#/actions?${new URLSearchParams(params.get("worklist") ?? "")}`}>
+          <ArrowLeft size={16} aria-hidden="true" />返回待办事项
+        </a>}
+        <ReportSelection
+          projects={projectList}
+          selectedProject={selectedProject}
+          subjects={subjectList}
+          selectedSubject={selectedSubject}
+          episodes={episodeList}
+          selectedEpisode={selectedEpisode}
+          onProjectChange={setProject}
+          onSubjectChange={setSubject}
+          onEpisodeChange={setEpisode}
+        />
+        {runs.length > 0 && (
+          <section className="reports-controls reports-controls--run" aria-label="选择审核记录">
+            <label>
+              <span>审核记录</span>
+              <select aria-label="选择审核记录" value={selectedRun?.reviewRunId ?? ""}
+                onChange={(event) => updateParams({ run: event.target.value, action: null })}>
+                {selectedRun === null && <option value="">请重新选择审核记录</option>}
+                {[...runs].reverse().map((run) => <option key={run.reviewRunId} value={run.reviewRunId}>
+                  {reviewTime(run.completedAt ?? run.startedAt)} · {run.status === "completed" ? "记录已保存，打开查看" : "尚未完成"}
+                </option>)}
+              </select>
+            </label>
+          </section>
+        )}
+      </div>
+      {canModify && <PreparedReviewPanel key={`${selectedEpisode.reviewEpisodeId}:${params.get("workflow") ?? "new"}`}
+        episode={selectedEpisode} workflowId={params.get("workflow")} requestKey={params.get("review_request")}
+        onRequestKey={(key) => updateParams({ project: selectedProject.projectId,
+          subject: selectedSubject.subjectId, episode: selectedEpisode.reviewEpisodeId, review_request: key })}
+        onStarted={(workflow) => updateParams({ project: selectedProject.projectId,
+          subject: selectedSubject.subjectId, episode: selectedEpisode.reviewEpisodeId, workflow })}
+        onPublished={(run) => { updateParams({ project: selectedProject.projectId,
+          subject: selectedSubject.subjectId, episode: selectedEpisode.reviewEpisodeId, run }); history.retry(); }}
+        onNewReview={() => { updateParams({ workflow: null, review_request: null }); episodes.retry(); }} />}
+      {history.state.status === "loading" ? <LoadingState />
+        : history.state.status === "error" ? <ErrorState message={history.state.message} onRetry={history.retry} />
+        : runs.length === 0 ? <EmptyState message="该节点尚无正式审核记录。" hint="审核完成后，报告会保留当时的资料与结论。" />
+        : selectedRun === null ? <ErrorState message="链接中的审核记录不属于该节点。" onRetry={() => updateParams({ run: null })} />
+        : detail.state.status === "error" ? <ErrorState message={detail.state.message} onRetry={detail.retry} />
+        : report === null ? <LoadingState /> : <FrozenReviewReport report={report} onActionChanged={detail.retry} focusActionId={params.get("action")} />}
     </div>
   );
 }

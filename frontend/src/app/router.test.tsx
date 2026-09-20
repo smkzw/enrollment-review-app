@@ -32,8 +32,8 @@ describe("hash router", () => {
     window.location.hash = "";
   });
 
-  it("正式模式空地址直接进入已开放的方案工作台", () => {
-    expect(defaultPathForMode(false)).toBe("/protocols");
+  it("正式模式空地址直接进入今日工作", () => {
+    expect(defaultPathForMode(false)).toBe("/today");
     expect(defaultPathForMode(true)).toBe("/today");
   });
 

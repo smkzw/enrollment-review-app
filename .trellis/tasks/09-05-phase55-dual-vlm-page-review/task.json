@@ -1,0 +1,28 @@
+{
+  "id": "phase55-dual-vlm-page-review",
+  "name": "phase55-dual-vlm-page-review",
+  "title": "Phase 5.5 双模型逐页判读合同与评测",
+  "description": "按 R3 设计建立 ClausePack 投影、页级判读与对账合同，并在 Phase 5 临床手写覆盖阻断保持开放的条件下准备产品自有双 VLM harness。",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "codex",
+  "assignee": "codex",
+  "createdAt": "2026-09-05",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "codex/phase5-clinical-facts-profile",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "09-11-e2e-eligibility-review"
+  ],
+  "parent": "08-12-enrollment-review-v2",
+  "relatedFiles": [],
+  "notes": "2026-09-10 ZCode接管生效（用户已发继续实施指令）：接管核对通过（HEAD/SHA256/env/runtime05只读核对），审查见ENGINEERING_REVIEW_20260910_ZCODE_TAKEOVER.md，prd.md已修正模型路线漂移（GLM low+Gemini high）。当前主线=判断检索纵向接线五切片（持久作业→API→缺口→UI+术语→真实实例），详见审查§5。前端554/554通过（1项白名单漂移已修）；后端全量复跑回填中。Phase5/5.5未临床收口，claims_complete=false；用药分项保持隔离；广泛横评/框架迁移继续后置。",
+  "meta": {}
+}

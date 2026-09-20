@@ -310,6 +310,7 @@ class FactNormalizationJobService:
                 authority=authority,
                 revision_id=authority.complete_processing_revision_id,
                 max_pages_per_call=max_pages_per_call,
+                allow_image_only=include_visual_sources and page_review_coverage_id is not None,
             )
             attachments = (
                 ()

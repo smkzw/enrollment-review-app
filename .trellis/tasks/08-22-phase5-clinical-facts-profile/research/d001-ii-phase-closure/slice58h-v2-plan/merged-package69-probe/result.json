@@ -1,0 +1,94 @@
+{
+  "finished_at": "2026-08-25T19:18:48.716005+00:00",
+  "model": "Qwen3.8-27B-oQ8e-fp16-mtp",
+  "package_id": "pap-e2ecad607cf61c1757ebc571",
+  "package_ordinal": 69,
+  "reasoning_effort": "default",
+  "result": {
+    "attempts": [
+      {
+        "attempt": 1,
+        "issues": [
+          "RATIONALE_INCOMPLETE: 共发现 6 个目标的理由质量问题：RATIONALE_INCOMPLETE: EVIDENCE_RATIONALE_RELATION_MISSING: 证据 rationale必须说明该来源为何形成支持、反对或仍待确认的证据关系；RATIONALE_INCOMPLETE: EVIDENCE_RATIONALE_BASIS_MISSING: 证据 rationale必须说明原文、来源或结构语境，不能只给出结论或残句；RATIONALE_INCOMPLETE: RATIONALE_BASIS_MISSING: 结果 rationale必须说明来源依据、证据或结构语境，不能只给出结论或残句；RATIONALE_INCOMPLETE: EVIDENCE_RATIONALE_RELATION_MISSING: 证据 rationale必须说明该来源为何形成支持、反对或仍待确认的证据关系；RATIONALE_INCOMPLETE: EVIDENCE_RATIONALE_BASIS_MISSING: 证据 rationale必须说明原文、来源或结构语境，不能只给出结论或残句；RATIONALE_INCOMPLETE: EVIDENCE_RATIONALE_RELATION_MISSING: 证据 rationale必须说明该来源为何形成支持、反对或仍待确认的证据关系"
+        ],
+        "outcome": "schema_invalid",
+        "output": null,
+        "raw_output_sha256": "b9796b31bc70c24bc06ecedd78b84cf14d908f5b8e05467c2c2a6df64a19c53a",
+        "rejected_structure_unit_ids": [
+          "su-f0aa4a3510f3be9cd68b34e8",
+          "su-f082f00b4ee093ce794e2b47",
+          "su-d0b1c7d16e60b250b133e792",
+          "su-e0c9c55ccee73ec3cb53ecd2",
+          "su-982550089ac464b79da21905",
+          "su-00742fef29e2f40170885472"
+        ],
+        "rejected_unit_indexes": [
+          2,
+          3,
+          7,
+          8,
+          9,
+          10
+        ],
+        "session_id": "phase-applicability-chat-7b13e9fcd40c46a689466c8e35386cfc"
+      },
+      {
+        "attempt": 2,
+        "issues": [
+          "RATIONALE_INCOMPLETE: 共发现 6 个目标的理由质量问题：RATIONALE_INCOMPLETE: EVIDENCE_RATIONALE_RELATION_MISSING: 证据 rationale必须说明该来源为何形成支持、反对或仍待确认的证据关系；RATIONALE_INCOMPLETE: EVIDENCE_RATIONALE_BASIS_MISSING: 证据 rationale必须说明原文、来源或结构语境，不能只给出结论或残句；RATIONALE_INCOMPLETE: RATIONALE_BASIS_MISSING: 结果 rationale必须说明来源依据、证据或结构语境，不能只给出结论或残句；RATIONALE_INCOMPLETE: EVIDENCE_RATIONALE_RELATION_MISSING: 证据 rationale必须说明该来源为何形成支持、反对或仍待确认的证据关系；RATIONALE_INCOMPLETE: EVIDENCE_RATIONALE_BASIS_MISSING: 证据 rationale必须说明原文、来源或结构语境，不能只给出结论或残句；RATIONALE_INCOMPLETE: EVIDENCE_RATIONALE_RELATION_MISSING: 证据 rationale必须说明该来源为何形成支持、反对或仍待确认的证据关系"
+        ],
+        "outcome": "schema_invalid",
+        "output": null,
+        "raw_output_sha256": "101796cb7511ecb6a97d93f7588e5c962e47bced511ee291bde9a03b28c6a479",
+        "rejected_structure_unit_ids": [
+          "su-f0aa4a3510f3be9cd68b34e8",
+          "su-f082f00b4ee093ce794e2b47",
+          "su-d0b1c7d16e60b250b133e792",
+          "su-e0c9c55ccee73ec3cb53ecd2",
+          "su-982550089ac464b79da21905",
+          "su-00742fef29e2f40170885472"
+        ],
+        "rejected_unit_indexes": [
+          2,
+          3,
+          7,
+          8,
+          9,
+          10
+        ],
+        "session_id": "phase-applicability-chat-7b13e9fcd40c46a689466c8e35386cfc"
+      },
+      {
+        "attempt": 3,
+        "issues": [
+          "RATIONALE_INCOMPLETE: 共发现 6 个目标的理由质量问题：RATIONALE_INCOMPLETE: EVIDENCE_RATIONALE_RELATION_MISSING: 证据 rationale必须说明该来源为何形成支持、反对或仍待确认的证据关系；RATIONALE_INCOMPLETE: EVIDENCE_RATIONALE_BASIS_MISSING: 证据 rationale必须说明原文、来源或结构语境，不能只给出结论或残句；RATIONALE_INCOMPLETE: RATIONALE_BASIS_MISSING: 结果 rationale必须说明来源依据、证据或结构语境，不能只给出结论或残句；RATIONALE_INCOMPLETE: EVIDENCE_RATIONALE_RELATION_MISSING: 证据 rationale必须说明该来源为何形成支持、反对或仍待确认的证据关系；RATIONALE_INCOMPLETE: EVIDENCE_RATIONALE_BASIS_MISSING: 证据 rationale必须说明原文、来源或结构语境，不能只给出结论或残句；RATIONALE_INCOMPLETE: EVIDENCE_RATIONALE_RELATION_MISSING: 证据 rationale必须说明该来源为何形成支持、反对或仍待确认的证据关系"
+        ],
+        "outcome": "schema_invalid",
+        "output": null,
+        "raw_output_sha256": "101796cb7511ecb6a97d93f7588e5c962e47bced511ee291bde9a03b28c6a479",
+        "rejected_structure_unit_ids": [
+          "su-f0aa4a3510f3be9cd68b34e8",
+          "su-f082f00b4ee093ce794e2b47",
+          "su-d0b1c7d16e60b250b133e792",
+          "su-e0c9c55ccee73ec3cb53ecd2",
+          "su-982550089ac464b79da21905",
+          "su-00742fef29e2f40170885472"
+        ],
+        "rejected_unit_indexes": [
+          2,
+          3,
+          7,
+          8,
+          9,
+          10
+        ],
+        "session_id": "phase-applicability-chat-7b13e9fcd40c46a689466c8e35386cfc"
+      }
+    ],
+    "final_output": null,
+    "package_id": "pap-e2ecad607cf61c1757ebc571",
+    "session_id": "phase-applicability-chat-7b13e9fcd40c46a689466c8e35386cfc",
+    "status": "需要核对"
+  },
+  "started_at": "2026-08-25T19:05:13.615702+00:00"
+}

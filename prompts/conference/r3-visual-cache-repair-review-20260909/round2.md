@@ -1,0 +1,2 @@
+沿用本会话只读范围与权限。请复审最新最小增量：EvidenceLocatorRepository.create_visual_many只接视觉定位，先完成整批来源验证、再add_all/flush并decode；既有单条create不变。persist_visual_locators先收集新定位再批量写，旧定位仍逐项核验。文字定位成员查询已限制当前snapshot_id。22项批量测试通过，包括首次写入仅一次重建、第二项不合法时第一项不落库；真实8定位只读全量/批量覆盖hash一致，25.86秒/3.28秒。不据此声称全例或临床通过。
+请重点审查新批量写是否削弱原create的身份碰撞、失败原子性、来源验证；不要仅复述计时或测试。你上一报告建议直接返回artifact仍会导致下一条因INSERT重建，因此未照抄，而采取验证与插入分离。裸SQL SAVEPOINT在先修好再缓存后rollback时total_changes不变化，不能声称仅计数即可覆盖；当前产品使用ORM事务，指出边界，不虚称任意SQL可靠。必要直接依赖可读，禁止写文件、读取病例数据库/个人配置和调用模型。输出发现及是否可接受该限定增量。

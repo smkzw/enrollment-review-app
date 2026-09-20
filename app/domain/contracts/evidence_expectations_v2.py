@@ -185,6 +185,7 @@ class EvidenceExpectationV2(ContractModel):
     model_config = ConfigDict(extra="forbid")
 
     expectation_id: str = Field(min_length=1)
+    source_revision_of: str | None = Field(default=None, min_length=1)
     authority: FactAuthority
     template_id: str = Field(min_length=1)
     status: ExpectationStatus

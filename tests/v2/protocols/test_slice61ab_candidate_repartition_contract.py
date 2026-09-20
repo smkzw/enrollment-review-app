@@ -48,6 +48,9 @@ from app.protocols.protocol_control_repair_errors import (
 )
 from tests.v2.protocols.test_slice58c_control_deconstructor import (
     _FakeTransport,
+    _evidence_policy,
+    _evaluation,
+    _timed_evaluation,
     _wire,
 )
 from tests.v2.protocols.test_slice60zz_cross_stage_supplement_contract import (
@@ -209,6 +212,11 @@ def _conditional_exemption_expression(*, keep_validity: bool):
         atoms.append(
             ProtocolControlAgentWireObligationAtom(
                 kind=ControlObligationKind.VERIFY_RESULT_VALIDITY,
+                evaluation=_timed_evaluation(
+                    "病毒学检查结果在首次给药前28天内有效",
+                    "span:02",
+                    "可接受在首次给药前28天内的结果",
+                ),
                 statement="病毒学检查结果在首次给药前28天内有效",
                 time_constraint={
                     "anchor_type": "first_dose_date",
@@ -224,6 +232,11 @@ def _conditional_exemption_expression(*, keep_validity: bool):
     atoms.append(
         ProtocolControlAgentWireObligationAtom(
             kind=ControlObligationKind.COMPLETE_OR_VERIFY,
+            evaluation=_evaluation(
+                "筛选期/基线期无需再次检查",
+                "span:02",
+                "筛选期/基线期无需再次检查",
+            ),
             statement="筛选期/基线期无需再次检查",
             time_constraint=None,
             prospective_period=None,
@@ -373,6 +386,11 @@ def _scope_split_entities():
                         atoms=[
                             ProtocolControlAgentWireObligationAtom(
                                 kind=ControlObligationKind.COMPLETE_OR_VERIFY,
+                                evaluation=_evaluation(
+                                    "按标准程序完成三项检查",
+                                    "span:02",
+                                    "将根据标准程序进行八项检查",
+                                ),
                                 statement="按标准程序完成三项检查",
                                 time_constraint=None,
                                 prospective_period=None,
@@ -649,9 +667,17 @@ def test_scope_split_runner_uses_source_closure_not_atom_repair() -> None:
         }
     )
     first = _screening_execution_split_candidate()
-    second_atom = first.obligation_expression.groups[0].atoms[0].model_copy(
+    first_atom = first.obligation_expression.groups[0].atoms[0]
+    second_atom = first_atom.model_copy(
         update={
             "statement": "筛选时记录末次用药日期",
+            "evaluation": first_atom.evaluation.__class__.model_validate(
+                _evaluation(
+                    "筛选时记录末次用药日期",
+                    "span:02",
+                    "筛选时记录末次用药日期",
+                )
+            ),
             "source_excerpts": ["筛选时记录末次用药日期"],
         }
     )
@@ -945,6 +971,11 @@ def test_source_closure_rewrite_allows_split_within_closure() -> None:
                         atoms=[
                             ProtocolControlAgentWireObligationAtom(
                                 kind=ControlObligationKind.COMPLETE_OR_VERIFY,
+                                evaluation=_evaluation(
+                                    "筛选期应完成病毒学检查",
+                                    "span:02",
+                                    "筛选期应完成病毒学检查",
+                                ),
                                 statement="筛选期应完成病毒学检查",
                                 time_constraint=None,
                                 prospective_period=None,
@@ -1207,6 +1238,11 @@ def test_combined_routine_action_and_waiver_still_requires_stage_split() -> None
                 atoms=[
                     ProtocolControlAgentWireObligationAtom(
                         kind=ControlObligationKind.COMPLETE_OR_VERIFY,
+                        evaluation=_evaluation(
+                            "完成三项检查，满足28天有效期时无需再次检查",
+                            "span:02",
+                            "完成三项检查，满足28天有效期时无需再次检查",
+                        ),
                         statement="完成三项检查，满足28天有效期时无需再次检查",
                         time_constraint=None,
                         prospective_period=None,
@@ -1216,6 +1252,11 @@ def test_combined_routine_action_and_waiver_still_requires_stage_split() -> None
                     ),
                     ProtocolControlAgentWireObligationAtom(
                         kind=ControlObligationKind.VERIFY_RESULT_VALIDITY,
+                        evaluation=_timed_evaluation(
+                            "核对结果在首次给药前28天内有效",
+                            "span:02",
+                            "可接受首次给药前28天内的结果",
+                        ),
                         statement="核对结果在首次给药前28天内有效",
                         time_constraint={
                             "anchor_type": "first_dose_date",
@@ -1273,6 +1314,13 @@ def _mixed_decision_stage_candidate() -> ProtocolControlAgentWireCandidate:
                 description="核对首次给药前28天内结果",
                 due_stage=ReviewStage.BASELINE,
                 required_source_types=["实验室报告"],
+                workflow_stage_ids=["stage:baseline:1"],
+                source_policy=_evidence_policy(
+                    "span:01", "首次给药前28天内的结果有效"
+                ),
+                atom_refs=[
+                    {"layer": "obligation", "group_index": 0, "atom_index": 0}
+                ],
             )
         ],
     ).model_copy(
@@ -1288,6 +1336,11 @@ def _mixed_decision_stage_candidate() -> ProtocolControlAgentWireCandidate:
                         atoms=[
                             ProtocolControlAgentWireObligationAtom(
                                 kind=ControlObligationKind.COMPLETE_OR_VERIFY,
+                                evaluation=_evaluation(
+                                    "筛选期应完成病毒学检查",
+                                    "span:02",
+                                    "筛选期应完成病毒学检查",
+                                ),
                                 statement="筛选期应完成病毒学检查",
                                 time_constraint=None,
                                 prospective_period=None,
@@ -1297,6 +1350,11 @@ def _mixed_decision_stage_candidate() -> ProtocolControlAgentWireCandidate:
                             ),
                             ProtocolControlAgentWireObligationAtom(
                                 kind=ControlObligationKind.VERIFY_RESULT_VALIDITY,
+                                evaluation=_timed_evaluation(
+                                    "首次给药前28天内的结果有效",
+                                    "span:01",
+                                    "首次给药前28天内的结果有效",
+                                ),
                                 statement="首次给药前28天内的结果有效",
                                 time_constraint={
                                     "anchor_type": "first_dose_date",
@@ -1333,6 +1391,13 @@ def _screening_execution_split_candidate() -> ProtocolControlAgentWireCandidate:
                 description="核对筛选期检查完成",
                 due_stage=ReviewStage.SCREENING,
                 required_source_types=["实验室报告"],
+                workflow_stage_ids=["stage:screening:one"],
+                source_policy=_evidence_policy(
+                    "span:02", "筛选期应完成病毒学检查"
+                ),
+                atom_refs=[
+                    {"layer": "obligation", "group_index": 0, "atom_index": 0}
+                ],
             )
         ],
     ).model_copy(
@@ -1358,6 +1423,11 @@ def _screening_execution_split_candidate() -> ProtocolControlAgentWireCandidate:
                         atoms=[
                             ProtocolControlAgentWireObligationAtom(
                                 kind=ControlObligationKind.COMPLETE_OR_VERIFY,
+                                evaluation=_evaluation(
+                                    "筛选期应完成病毒学检查",
+                                    "span:02",
+                                    "筛选期应完成病毒学检查",
+                                ),
                                 statement="筛选期应完成病毒学检查",
                                 time_constraint=None,
                                 prospective_period=None,
@@ -1390,6 +1460,13 @@ def _baseline_validity_split_candidate() -> ProtocolControlAgentWireCandidate:
                 description="核对首次给药前28天内结果",
                 due_stage=ReviewStage.BASELINE,
                 required_source_types=["实验室报告"],
+                workflow_stage_ids=["stage:baseline:1"],
+                source_policy=_evidence_policy(
+                    "span:01", "首次给药前28天内的结果有效"
+                ),
+                atom_refs=[
+                    {"layer": "obligation", "group_index": 0, "atom_index": 0}
+                ],
             )
         ],
     ).model_copy(
@@ -1405,6 +1482,11 @@ def _baseline_validity_split_candidate() -> ProtocolControlAgentWireCandidate:
                         atoms=[
                             ProtocolControlAgentWireObligationAtom(
                                 kind=ControlObligationKind.VERIFY_RESULT_VALIDITY,
+                                evaluation=_timed_evaluation(
+                                    "首次给药前28天内的结果有效",
+                                    "span:01",
+                                    "首次给药前28天内的结果有效",
+                                ),
                                 statement="首次给药前28天内的结果有效",
                                 time_constraint={
                                     "anchor_type": "first_dose_date",

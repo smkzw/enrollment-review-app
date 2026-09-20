@@ -7,6 +7,7 @@ can fault-inject without touching the real network.
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import socket
 from collections.abc import Callable, Mapping, Sequence
@@ -163,7 +164,8 @@ def candidate_endpoint_url(candidate: ProtocolSemanticRouteCandidate) -> str | N
     if backend == "deepseek":
         return (DEEPSEEK_BASE_URL or "").strip() or None
     if backend in {"mtplx", "mtplx-api"}:
-        return (MTPLX_BASE_URL or "").strip() or None
+        url = (MTPLX_BASE_URL or "").strip().rstrip("/")
+        return (url if url.endswith("/v1") else f"{url}/v1") if url else None
     if backend == "omlx":
         return (OMLX_BASE_URL or "").strip() or None
     return None
@@ -238,7 +240,15 @@ def _evaluate_candidate(
             detail=detail,
             executable=False,
         )
-    ok, reason = endpoint_prober(endpoint_url)
+    if endpoint_prober is default_tcp_endpoint_prober:
+        from app.llm.mtplx_model_lifecycle import sync_mtplx_model_session
+
+        with sync_mtplx_model_session(
+            candidate.backend, endpoint_url, candidate.model, candidate.reasoning_effort
+        ):
+            ok, reason = endpoint_prober(endpoint_url)
+    else:
+        ok, reason = endpoint_prober(endpoint_url)
     detail = sanitize_preflight_text(reason)
     return ProtocolSemanticCandidatePreflight(
         grade=grade,
@@ -383,6 +393,39 @@ def preflight_protocol_semantic_routes(
             short_identities=report.short_executable_identities,
         )
     return report
+
+
+async def preflight_protocol_semantic_routes_at_startup(**kwargs):
+    """Keep blocking startup probes off the loop and release their owned model."""
+    from app.llm.mtplx_model_lifecycle import close_owned_mtplx_models
+
+    def probe():
+        try:
+            try:
+                return preflight_protocol_semantic_routes(**kwargs)
+            finally:
+                asyncio.run(close_owned_mtplx_models())
+        except BaseException:
+            reset_active_protocol_semantic_routes()
+            raise
+
+    task = asyncio.create_task(asyncio.to_thread(probe))
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        # Cancelling to_thread does not stop its thread. Finish cleanup before
+        # returning control, including when shutdown is requested repeatedly.
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                continue
+            except Exception:
+                break
+        if not task.cancelled():
+            task.exception()
+        reset_active_protocol_semantic_routes()
+        raise
 
 
 def should_run_semantic_route_preflight(

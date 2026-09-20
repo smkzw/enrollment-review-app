@@ -119,6 +119,7 @@ class EvidenceProcessingRevision(VersionedModel):
     manifest_sha256: str = Field(pattern=_SHA256)
     status: ProcessingRevisionStatus = ProcessingRevisionStatus.READY
     is_activatable: Literal[False] = False
+    preparation_policy: Literal["legacy-text/v1", "original-page-images/v1"] = "legacy-text/v1"
     created_at: datetime
     created_by: str = Field(min_length=1)
 

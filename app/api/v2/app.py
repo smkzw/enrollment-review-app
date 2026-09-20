@@ -14,6 +14,7 @@ Phase 2 只新增独立 /api/v2 应用，不切换 legacy 默认入口；``app/m
 from __future__ import annotations
 
 import json
+import asyncio
 import threading
 from collections.abc import Callable, Mapping
 from contextlib import asynccontextmanager
@@ -31,9 +32,12 @@ from app.api.v2.fact_corrections import router as fact_corrections_router
 from app.api.v2.fact_normalization import router as fact_normalization_router
 from app.api.v2.judgment_search import router as judgment_search_router
 from app.api.v2.eligibility_review import router as eligibility_review_router
+from app.api.v2.review_history import router as review_history_router
+from app.api.v2.qualified_review import router as qualified_review_router
 from app.api.v2.page_review import router as page_review_router
 from app.services.judgment_search_job_service import JUDGMENT_SEARCH_JOB_TYPE
 from app.services.page_review_runtime import PageReviewRuntime
+from app.services.review_runtime_ownership import OWNED_TYPES, prepared_review_job_scope
 from app.services.page_review_job_service import PAGE_REVIEW_JOB_TYPE
 from app.api.v2.patient_profiles import router as patient_profiles_router
 from app.api.v2.protocols import (
@@ -118,7 +122,7 @@ from app.services.protocol_control_executor import (
 from app.services.protocol_control_job_service import ProtocolControlJobService
 from app.agents.protocol_semantic_route_preflight import (
     EndpointProber,
-    preflight_protocol_semantic_routes,
+    preflight_protocol_semantic_routes_at_startup,
     should_run_semantic_route_preflight,
 )
 from app.agents.protocol_semantic_model_router import (
@@ -145,21 +149,26 @@ def create_app(
     | None = None,
     semantic_route_preflight: bool | None = None,
     semantic_route_endpoint_prober: EndpointProber | None = None,
+    browse_only: bool = False,
 ) -> FastAPI:
     """构造 V2 应用；测试可注入临时数据根、执行器与循环参数。"""
+    if browse_only:
+        from app.api.v2.browse import create_browse_app
+        return create_browse_app(data_paths=data_paths)
     executors = dict(executors or {})
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI):
+    async def initialize(app: FastAPI):
         if should_run_semantic_route_preflight(explicit=semantic_route_preflight):
             # Credential/endpoint gate before migrations or background jobs.
             # Injected probers keep tests off the real network.
-            app.state.semantic_route_preflight = preflight_protocol_semantic_routes(
+            app.state.semantic_route_preflight = await preflight_protocol_semantic_routes_at_startup(
                 endpoint_prober=semantic_route_endpoint_prober,
             )
         else:
             app.state.semantic_route_preflight = None
         paths, engine, session_factory = upgrade_or_fail(data_paths)
+        app.state.engine = engine
         if app.state.semantic_route_preflight is not None:
             paths.boundary.atomic_write_bytes(
                 paths.root / "runtime" / "protocol-semantic-route-preflight.json",
@@ -170,7 +179,7 @@ def create_app(
                     indent=2,
                 ).encode("utf-8"),
             )
-        recovery_report = run_startup_recovery(session_factory)
+        recovery_report = run_startup_recovery(session_factory, job_scope=prepared_review_job_scope())
         recover_evidence_ocr_runs(
             session_factory,
             recovered_job_ids=recovery_report.recovered_jobs,
@@ -182,12 +191,19 @@ def create_app(
             register_evidence_normalizer_runtime_config(session_factory)
         )
         app.state.data_paths = paths
-        app.state.engine = engine
         app.state.session_factory = session_factory
         artifact_store = ArtifactStore(paths)
         app.state.artifact_store = artifact_store
 
         def project_cancelled_evidence_job(job_id: str) -> None:
+            from app.services.batch_review_workflow import cancel_batch_children
+            if cancel_batch_children(session_factory, job_id):
+                return
+            from app.services.batch_evidence_reprocessing import cancel_batch_children as cancel_ocr_batch
+            if cancel_ocr_batch(session_factory, job_id):
+                return
+            from app.services.prepared_review_workflow import cancel_workflow_children
+            cancel_workflow_children(session_factory, job_id)
             recover_evidence_ocr_runs(
                 session_factory,
                 cancelled_job_ids=[job_id],
@@ -270,7 +286,16 @@ def create_app(
         app.state.sse_heartbeat_seconds = sse_heartbeat_seconds
         evidence_ocr_gate = OmlxGateClient(owner="phase4-evidence-ocr-v2")
         app.state.page_review_runtime = PageReviewRuntime(session_factory, artifact_store)
+        from app.evidence.ocr_adapter import TextOnlyOcrAdapter
+        from app.services.evidence_reprocessing import JOB_TYPE as REPROCESS_JOB_TYPE, create_reprocessing_executor, ReprocessingRetryService
+        app.state.evidence_reprocess_adapter = TextOnlyOcrAdapter()
+        evidence_processing_config = EvidenceProcessingExecutorConfig(
+            data_paths=paths, session_factory=session_factory, gate=evidence_ocr_gate,
+            inference=omlx_http_inference(gate=evidence_ocr_gate),
+            adapter=app.state.evidence_reprocess_adapter,
+        )
         default_executors = {
+            **{job_type: app.state.page_review_runtime for job_type in OWNED_TYPES},
             PAGE_REVIEW_JOB_TYPE: app.state.page_review_runtime,
             "r3_targeted_page_review": app.state.page_review_runtime,
             JUDGMENT_SEARCH_JOB_TYPE: app.state.page_review_runtime,
@@ -286,14 +311,8 @@ def create_app(
                     session_factory=session_factory,
                 )
             ),
-            EVIDENCE_PROCESSING_JOB_TYPE: create_evidence_processing_executor(
-                EvidenceProcessingExecutorConfig(
-                    data_paths=paths,
-                    session_factory=session_factory,
-                    gate=evidence_ocr_gate,
-                    inference=omlx_http_inference(gate=evidence_ocr_gate),
-                )
-            ),
+            EVIDENCE_PROCESSING_JOB_TYPE: create_evidence_processing_executor(evidence_processing_config),
+            REPROCESS_JOB_TYPE: create_reprocessing_executor(evidence_processing_config),
             EVIDENCE_REVISION_BUILD_JOB_TYPE: create_evidence_revision_build_executor(
                 EvidenceRevisionBuildExecutorConfig(
                     session_factory=session_factory,
@@ -323,9 +342,46 @@ def create_app(
         app.state.job_executors = merged_executors
         app.state.job_cancelled_callback = project_cancelled_evidence_job
         app.state.job_failed_callback = project_failed_job
+        from app.services.batch_review_workflow import BATCH_JOB_TYPE, BatchReviewRetryService
+        app.state.job_retry_services[BATCH_JOB_TYPE] = BatchReviewRetryService(
+            session_factory, app.state.page_review_runtime.prepared_review_routes,
+        )
+        app.state.job_retry_services[REPROCESS_JOB_TYPE] = ReprocessingRetryService(
+            session_factory, app.state.evidence_reprocess_adapter,
+        )
+        from app.services.batch_evidence_reprocessing import (
+            BATCH_JOB_TYPE as OCR_BATCH_JOB_TYPE, BatchReprocessingRetryService, BatchReprocessingContinuation,
+        )
+        app.state.job_retry_services[OCR_BATCH_JOB_TYPE] = BatchReprocessingRetryService(
+            session_factory, app.state.evidence_reprocess_adapter,
+        )
         runner: JobRunner | None = None
         thread: threading.Thread | None = None
         if run_runner:
+            from app.services.prepared_review_workflow import PreparedReviewContinuation
+            from app.services.batch_review_workflow import BatchReviewContinuation
+            prepared_continuation = PreparedReviewContinuation(
+                session_factory, artifact_store, app.state.page_review_runtime.prepared_review_routes,
+                worker_id=f"{worker_id}:prepared-review",
+            )
+            batch_continuation = BatchReviewContinuation(
+                session_factory, app.state.page_review_runtime.prepared_review_routes,
+                worker_id=f"{worker_id}:batch-review",
+            )
+
+            def continue_reviews(active_runner):
+                try:
+                    batch_continuation(active_runner)
+                finally:
+                    try:
+                        ocr_batch_continuation(active_runner)
+                    finally:
+                        prepared_continuation(active_runner)
+
+            ocr_batch_continuation = BatchReprocessingContinuation(
+                session_factory, app.state.evidence_reprocess_adapter, worker_id=f"{worker_id}:batch-ocr",
+            )
+
             runner = JobRunner(
                 session_factory,
                 merged_executors,
@@ -334,6 +390,8 @@ def create_app(
                 lease_ttl=lease_ttl,
                 on_cancelled=project_cancelled_evidence_job,
                 on_failed=project_failed_job,
+                job_scope=prepared_review_job_scope(),
+                on_maintenance=continue_reviews,
             )
             thread = threading.Thread(
                 target=runner.serve, name="v2-job-runner", daemon=True
@@ -343,14 +401,34 @@ def create_app(
         try:
             yield
         finally:
-            reset_active_protocol_semantic_routes()
             if runner is not None:
                 runner.request_stop()
             if thread is not None:
-                thread.join(timeout=5.0)
-            engine.dispose()
+                await asyncio.to_thread(thread.join)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        app.state.engine = None
+        try:
+            async with initialize(app):
+                yield
+        finally:
+            # Recovery/configuration failures happen before initialize yields.
+            # They must release the opened store just like normal shutdown.
+            from app.llm.mtplx_model_lifecycle import close_owned_mtplx_models
+
+            try:
+                await close_owned_mtplx_models()
+            finally:
+                reset_active_protocol_semantic_routes()
+                if app.state.engine is not None:
+                    app.state.engine.dispose()
 
     app = FastAPI(title="入排审核 V2 持久任务 API", lifespan=lifespan)
+    @app.get("/api/v2/application-status")
+    def application_status():
+        return {"mode": "standard", "can_modify": True}
+
     app.include_router(jobs_router)
     app.include_router(protocol_control_router)
     app.include_router(protocols_router)
@@ -364,5 +442,19 @@ def create_app(
     app.include_router(page_review_router)
     app.include_router(judgment_search_router)
     app.include_router(eligibility_review_router)
+    app.include_router(review_history_router)
+    app.include_router(qualified_review_router)
+    from app.api.v2.review_actions import router as review_actions_router
+    app.include_router(review_actions_router)
+    from app.api.v2.review_action_worklist import router as review_action_worklist_router
+    app.include_router(review_action_worklist_router)
+    from app.api.v2.project_reports import router as project_reports_router
+    app.include_router(project_reports_router)
+    from app.api.v2.evidence_reprocessing import router as evidence_reprocessing_router
+    app.include_router(evidence_reprocessing_router)
+    from app.api.v2.batch_reviews import router as batch_reviews_router
+    app.include_router(batch_reviews_router)
+    from app.api.v2.batch_evidence_reprocessing import router as reprocessing_batches_router
+    app.include_router(reprocessing_batches_router)
     register_error_handlers(app)
     return app

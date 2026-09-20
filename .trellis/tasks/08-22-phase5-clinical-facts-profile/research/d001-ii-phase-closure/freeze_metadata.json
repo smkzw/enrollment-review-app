@@ -1,0 +1,71 @@
+{
+  "context_radius": 1,
+  "counts": {
+    "ambiguous_unit_count": 1298,
+    "claims_full_coverage": false,
+    "coverage_unit_count": 1840,
+    "frozen_batch_count": 217,
+    "phase_graph_block_count": 3405,
+    "selected_phase": "phase_ii",
+    "structure_block_count": 3581
+  },
+  "expected_counts": {
+    "ambiguous_unit_count": 1298,
+    "coverage_unit_count": 1840,
+    "frozen_batch_count": 217,
+    "phase_graph_block_count": 3405,
+    "structure_block_count": 3581
+  },
+  "extraction_snapshot": {
+    "anomalies": [],
+    "content_sha256": "3946ea2c9780d0399b60245eafc4ab85087328a5da158b9d0938f8858302343d",
+    "content_storage_ref": "blobs/protocol_blocks/3946ea2c9780d0399b60245eafc4ab85087328a5da158b9d0938f8858302343d.json",
+    "coverage": {
+      "footer_detected": true,
+      "header_detected": true,
+      "nested_table_count": 1,
+      "paragraph_count": 3556,
+      "section_count": 10,
+      "table_count": 25,
+      "tracked_change_count": 0
+    },
+    "created_at": "2026-08-25T15:14:21.874263Z",
+    "parser_name": "docx-ooxml",
+    "parser_version": "1.4.0",
+    "render_artifact_ids": [],
+    "schema_version": "fixture/v1",
+    "snapshot_id": "d001-ii-phase-closure-20260825-slice58e-snapshot",
+    "source_artifact_id": "d001-ii-phase-closure-source",
+    "source_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+    "status": "completed"
+  },
+  "manifest_file_sha256": "b9fae80301e7947e259e2be22a31b5baa0e6de8a26b53afae9dfb68688577329",
+  "manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+  "manifest_payload_sha256": "2223b63a5f05c82674c5683b862bd4301865dfa4dca4c12be946e8403eb1736b",
+  "max_owned_units_per_batch": 12,
+  "phase_graph_id": "phase-500663e0e9dfcbda9a69",
+  "plan_file_sha256": "b4a191396309d78a4266c836861b3550d9ab5b672c65cf978185f3fce20963b8",
+  "plan_payload_sha256": "9f0cdd56dd32c90cc132e9cc06184ea8b87099d11a9ee7f388c5a5a600de7150",
+  "projection_id": "phase-6dd8cc698df87f964936",
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "run_id": "d001-ii-phase-closure-20260825-slice58e",
+  "schema_version": "phase5/d001-ii-phase-closure-build/v1",
+  "snapshot_id": "d001-ii-phase-closure-20260825-slice58e-snapshot",
+  "source": {
+    "mtime_ns": 1779871799537588300,
+    "path": "/Users/smkzw/Documents/康哲项目资料/AI/入排/test-D001项目/CMS-D001 银屑病2、3期临床方案 v1.0-2025.12.21.docx",
+    "sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+    "size_bytes": 405567
+  },
+  "source_artifact": {
+    "file_name": "CMS-D001 银屑病2、3期临床方案 v1.0-2025.12.21.docx",
+    "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "schema_version": "fixture/v1",
+    "sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+    "size_bytes": 405567,
+    "source_artifact_id": "d001-ii-phase-closure-source",
+    "storage_ref": "blobs/protocol_sources/362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98.docx",
+    "uploaded_at": "2026-08-25T15:14:21.642844Z"
+  },
+  "source_unchanged": true
+}

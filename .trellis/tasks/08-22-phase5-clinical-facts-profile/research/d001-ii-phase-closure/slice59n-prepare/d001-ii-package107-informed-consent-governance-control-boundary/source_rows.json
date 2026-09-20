@@ -1,0 +1,154 @@
+[
+  {
+    "excerpt": "伦理考虑",
+    "heading_path": [
+      "伦理考虑"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-b119517783facd407b628e1e",
+    "package_ordinal": 107,
+    "role": "owned",
+    "source_ref": "body.p1251",
+    "source_span_ids": [
+      "body.p1251"
+    ],
+    "structure_unit_id": "su-6a7523d0552d7252ab656d42",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "遵守法律法规",
+    "heading_path": [
+      "伦理考虑",
+      "遵守法律法规"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-b119517783facd407b628e1e",
+    "package_ordinal": 107,
+    "role": "owned",
+    "source_ref": "body.p1252",
+    "source_span_ids": [
+      "body.p1252"
+    ],
+    "structure_unit_id": "su-7a8a6ff830ba5360e2886b21",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "本研究将完全按照ICH E6和我国GCP指导原则、赫尔辛基宣言、相关法律法规及伦理委员会审核意见进行，以提供并加强对个人的保护。",
+    "heading_path": [
+      "伦理考虑",
+      "遵守法律法规"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-b119517783facd407b628e1e",
+    "package_ordinal": 107,
+    "role": "owned",
+    "source_ref": "body.p1253",
+    "source_span_ids": [
+      "body.p1253"
+    ],
+    "structure_unit_id": "su-6b34e705408952504dc14483",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "在研究开始之前，研究者应将研究方案、知情同意书以及其他必需的材料交于伦理委员会供其审阅及批准。申办者只有在接到伦理委员会的批准件后才能提供研究药物。同时必须告知伦理委员会可能会影响参与者安全和继续参加研究的后续方案增补件和在试验过程中发生的严重不良事件。研究者有责任向伦理委员会报告有关研究的进展情况。此外，研究者必须及时将与伦理委员会之间的所有的通讯副本交于申办者。伦理委员会在审阅及批准研究方案时，必须确认方案/研究标题，方案/研究编号，并注明已评审的方案文件及评审日期。在研究进行期间，如果研究方案、知情同意书等有任何新增修订，都应根据法规再次获得相关管理单位的书面核准意见。",
+    "heading_path": [
+      "伦理考虑",
+      "遵守法律法规"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-b119517783facd407b628e1e",
+    "package_ordinal": 107,
+    "role": "owned",
+    "source_ref": "body.p1254",
+    "source_span_ids": [
+      "body.p1254"
+    ],
+    "structure_unit_id": "su-dc4e71188db6982381753f4a",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "知情同意",
+    "heading_path": [
+      "伦理考虑",
+      "知情同意"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-b119517783facd407b628e1e",
+    "package_ordinal": 107,
+    "role": "owned",
+    "source_ref": "body.p1255",
+    "source_span_ids": [
+      "body.p1255"
+    ],
+    "structure_unit_id": "su-cd5e0b5234b76f2b92a304cf",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "ICF（和研究方案一起）必须经伦理委员会审查及批准。",
+    "heading_path": [
+      "伦理考虑",
+      "知情同意"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-b119517783facd407b628e1e",
+    "package_ordinal": 107,
+    "role": "owned",
+    "source_ref": "body.p1256",
+    "source_span_ids": [
+      "body.p1256"
+    ],
+    "structure_unit_id": "su-3a88a604091928e2361f1bb8",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "研究者必须以口头和书面两种方式告知有关本研究的信息。若参与者或者其监护人无阅读能力，公正见证人须阅读ICF和其他书面资料（如有），并见证知情同意。研究者或其指定人员有责任用参与者可以理解的方式和措词就ICF的内容向参与者（或其监护人、见证人）解释，使参与者或者其监护人、见证人易于理解。研究者获得可能影响参与者继续参加研究的新信息时，应及时告知参与者（或其监护人），并做相应记录。",
+    "heading_path": [
+      "伦理考虑",
+      "知情同意"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-b119517783facd407b628e1e",
+    "package_ordinal": 107,
+    "role": "owned",
+    "source_ref": "body.p1257",
+    "source_span_ids": [
+      "body.p1257"
+    ],
+    "structure_unit_id": "su-0d7cb6b10c6bdc36f8a58b1f",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "最终的ICF文本和提供给参与者的其他资料应包含以下内容：研究概况、研究目的、研究的过程与期限、参与者需要遵守的研究步骤、参与者的义务、参与者预期可能的受益（包括不获益的可能性）和风险，告知参与者可能被分配到研究的不同组别及分配至各组的可能性；如发生与研究相关的损害时，参与者可以获得的治疗和相应的补偿；参与者参加临床研究可能获得的补偿；参与者自愿参加本研究；参与者个人资料的保密原则等。",
+    "heading_path": [
+      "伦理考虑",
+      "知情同意"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-b119517783facd407b628e1e",
+    "package_ordinal": 107,
+    "role": "owned",
+    "source_ref": "body.p1258",
+    "source_span_ids": [
+      "body.p1258"
+    ],
+    "structure_unit_id": "su-6c8a4a1b41ed16bf9c2aa0c7",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "签署ICF之前，研究者或其指定研究人员应当给予参与者（或其监护人）充分的时间和机会了解临床研究的详细情况。参与者（或其监护人）以及执行知情同意的研究者应当在ICF上分别签名并注明日期（若非参与者本人签署，应当注明关系）。ICF应由研究者和参与者各保留1份。如发现涉及研究药物的重要新资料，则必须将ICF作书面修改送伦理委员会批准后，再次取得参与者（或其监护人）同意。",
+    "heading_path": [
+      "伦理考虑",
+      "知情同意"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-b119517783facd407b628e1e",
+    "package_ordinal": 107,
+    "role": "owned",
+    "source_ref": "body.p1259",
+    "source_span_ids": [
+      "body.p1259"
+    ],
+    "structure_unit_id": "su-60dbe4b8dd44990f9435d144",
+    "unit_kind": "paragraph"
+  }
+]

@@ -148,7 +148,7 @@ def test_main_read_raw_response_is_retained_even_when_schema_rejected(session_fa
             assert artifacts.read_by_sha("raw_response", attempt["response_sha256"]).decode() == raw
 
 
-@pytest.mark.parametrize("field", ["contract", "main_prompt_version", "reconciliation_version", "page_review_contract_version"])
+@pytest.mark.parametrize("field", ["contract", "main_prompt_version", "reconciliation_version", "page_review_contract_version", "transport_version"])
 def test_changed_execution_contract_is_rejected_before_artifact_or_model_access(session_factory, field):
     with session_factory() as session, session.begin():
         chain = _seed_chain(session, prefix="r3-executor-version")
@@ -178,13 +178,21 @@ def test_changed_execution_contract_is_rejected_before_artifact_or_model_access(
 
 
 @pytest.mark.parametrize("source_assisted", [False, True])
-def test_runner_persists_each_read_and_closed_coverage(session_factory, data_paths, source_assisted, monkeypatch):
+@pytest.mark.parametrize("native_local", [False, True])
+def test_runner_persists_each_read_and_closed_coverage(session_factory, data_paths, source_assisted, native_local, monkeypatch):
     prefix = "r3-executor-complete"
     with session_factory() as session, session.begin():
         chain = _seed_chain(session, prefix=prefix)
     artifacts = ArtifactStore(data_paths)
     artifacts.put("page_image", f"{prefix}-page-input".encode())
     routes = _routes()
+    if native_local:
+        from dataclasses import replace
+        from app.domain.contracts.page_review import PageReviewLane
+        routes[PageReviewLane.MAIN_B] = replace(
+            routes[PageReviewLane.MAIN_B], provider="mtplx", model="mtplx-flash-next-optimized-speed",
+            reasoning_effort="xhigh",
+        )
     job = PageReviewJobService(session_factory).enqueue(
         subject_id=chain["subject_id"], review_episode_id=chain["episode_id"], routes=routes,
     )
@@ -204,7 +212,8 @@ def test_runner_persists_each_read_and_closed_coverage(session_factory, data_pat
                                  "location_text": route.lane.value})
             for key in ("normalized_value", "normalized_unit", "normalization_key"):
                 fact.pop(key)
-        return PageCompletion(json.dumps(response), "stop", {})
+        from app.llm.page_review_transport_options import page_transport_contract
+        return PageCompletion(json.dumps(response), "stop", {}, transport_contract=page_transport_contract(route.provider))
 
     executor = PageReviewJobExecutor(session_factory, artifacts, routes, completion=completion)
     assert JobRunner(session_factory, {PAGE_REVIEW_JOB_TYPE: executor}).run_job(job.job_id)

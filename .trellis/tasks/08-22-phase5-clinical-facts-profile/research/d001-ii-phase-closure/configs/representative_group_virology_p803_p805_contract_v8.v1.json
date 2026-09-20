@@ -1,0 +1,14 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_virology_p803_p805_contract_v7.v1.json",
+  "group_id": "d001-ii-virology-p803-p805-contract-v8",
+  "task_id": "phase5-slice61aj-fixed-candidate-expression-replay-20260828",
+  "worker": "codex-parent",
+  "artifact_dir_name": "phase5-slice61aj-fixed-candidate-expression-replay-20260828",
+  "notes": [
+    "固定候选数量与来源键、仅开放候选内部义务表达式重组后的唯一次 MTPLX medium 产品重放。",
+    "同一义务组必须同时保留带首次给药前28天有效期的 verify_result_validity 与不带时间约束的免予 complete_or_verify；不得把两个原子拆成替代义务组。",
+    "仅处置 body.p803-p805；流程第14项与 EX-22 只读携带；不覆盖 v5/v6/v7 工件，不直接发布控制点。",
+    "运行前聚焦合同测试26项及完整方案层986项通过；父级临床验收仍由 Codex 独立执行。"
+  ]
+}

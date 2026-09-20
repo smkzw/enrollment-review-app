@@ -33,7 +33,7 @@ worker_03 的执行器在调用 ``decide_route`` / ``build_page_artifact`` /
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from hashlib import sha256
 from typing import Any
 
@@ -53,7 +53,7 @@ from app.evidence.pdf_native import (
     extract_native_page,
     serialize_native_coordinates,
 )
-from app.evidence.render import RENDERER_VERSION, render_page_image
+from app.evidence.render import RENDERER_VERSION, TextPageOverflowError, render_page_image
 from app.evidence.text import decode_text_bytes
 from app.storage.ocr_repositories import PageArtifactRepository
 
@@ -301,7 +301,19 @@ def _build_page_artifact_detailed(
     )
     if effective_route is not None and not isinstance(effective_route, ExtractionRoute):
         raise PageProcessorError("页面识别路线无效，无法继续处理")
-    rendered = render_page_image(page_input, renderer_version=renderer_version)
+    try:
+        rendered = render_page_image(page_input, renderer_version=renderer_version)
+    except TextPageOverflowError as exc:
+        return _build_page_artifact_detailed(
+            page_input=replace(
+                page_input, status=PageArtifactStatus.FAILED,
+                render_source=None, input_sha256=None, failure_reason=str(exc),
+            ),
+            source_document_version_id=source_document_version_id,
+            source_sha256=source_sha256, artifact_store=artifact_store,
+            renderer_version=renderer_version, decoder_version=decoder_version,
+            transform_version=transform_version, persist=persist,
+        )
     image_artifact = artifact_store.put("page_image", rendered.image_bytes)
     input_sha256 = page_input.input_sha256
     assert input_sha256 is not None  # 成功页必然携带渲染输入身份
@@ -334,13 +346,14 @@ def _build_page_artifact_detailed(
                 "native_coordinates", serialize_native_coordinates(native)
             ).sha256
 
-    if native is not None:
+    if native is not None and transform_version == "slice4.0/v1":
+        # Preserve explicit historical reproduction; new artifacts use image pixels.
         page_width, page_height, rotation = native.page_width, native.page_height, native.rotation
     else:
         page_width, page_height, rotation = (
             float(rendered.width),
             float(rendered.height),
-            0,
+            native.rotation if native is not None else 0,
         )
 
     artifact = PageArtifact(

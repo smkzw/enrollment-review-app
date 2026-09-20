@@ -3,9 +3,15 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Literal, Union
 
-from pydantic import AliasChoices, Field, StrictInt, model_validator
+from pydantic import AliasChoices, Field, StrictInt, model_serializer, model_validator
 
 from .common import ContractModel, RevisionedModel, ScalarValue, VersionedModel
+from .control_evidence_origin import ControlEvidenceOrigin
+from .half_life_evidence import HalfLifeEvidence
+from .occurrence_scope import OccurrenceScope
+from .frequency_source_date import FrequencySourceDate
+from .repeat_scheme import RepeatScheme, RepeatEvidenceRole, validate_repeat_evidence_roles
+from .observation_selection import ObservationPolicy, validate_observation_window_order
 from .enums import (
     AnchorType,
     CombinedWindowSelection,
@@ -62,12 +68,15 @@ class TimeConstraint(ContractModel):
     )
     lower_bound_inclusive: bool = True
     upper_bound_inclusive: bool = True
-    half_life_multiplier: float | None = Field(default=None, gt=0)
+    half_life_multiplier: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    half_life_evidence: HalfLifeEvidence | None = None
     combined_window_selection: CombinedWindowSelection | None = None
     allow_partial_date: bool = False
 
     @model_validator(mode="after")
     def validate_window(self) -> "TimeConstraint":
+        if self.half_life_evidence is not None and self.half_life_multiplier is None:
+            raise ValueError("半衰期依据只用于方案明确要求半衰期倍数的时间窗")
         if self.lower_bound_days is not None and self.lower_bound is not None:
             raise ValueError("时间窗下界不能同时使用 lower_bound_days 和带单位数量")
         if self.upper_bound_days is not None and self.upper_bound is not None:
@@ -137,6 +146,13 @@ class TimeConstraint(ContractModel):
             )
         return self
 
+    @model_serializer(mode="wrap")
+    def preserve_historical_duration(self, handler):
+        payload = handler(self)
+        if self.half_life_evidence is None:
+            payload.pop("half_life_evidence", None)
+        return payload
+
     @property
     def lower_bound_quantity(self) -> TimeQuantity | None:
         """兼容调用方对新带单位下界的显式命名。"""
@@ -150,11 +166,90 @@ class TimeConstraint(ContractModel):
         return self.upper_bound
 
 
+class FrequencyRelativeHorizon(ContractModel):
+    """Finite source-declared calendar range, without unrelated washout fields."""
+
+    anchor_type: AnchorType
+    direction: Literal["before", "after"]
+    lower_bound: TimeQuantity | None = None
+    upper_bound: TimeQuantity
+    lower_bound_inclusive: bool | None = None
+    upper_bound_inclusive: bool | None = None
+
+
+class FrequencyHorizon(ContractModel):
+    """Source-declared domain of periods, never borrowed from an outer filter."""
+
+    basis: Literal["explicit_dates", "anchor_span", "relative_window", "unbounded", "unresolved"]
+    start: FrequencySourceDate | None = None
+    end: FrequencySourceDate | None = None
+    start_anchor: AnchorType | None = None
+    end_anchor: AnchorType | None = None
+    relative_window: FrequencyRelativeHorizon | None = None
+    start_inclusive: bool | None = None
+    end_inclusive: bool | None = None
+    source_excerpts: list[str] = Field(min_length=1)
+    unresolved_reason: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def validate_horizon(self):
+        fields = {"explicit_dates": (self.start, self.end),
+                  "anchor_span": (self.start_anchor, self.end_anchor),
+                  "relative_window": (self.relative_window,)}
+        for basis, values in fields.items():
+            if basis == self.basis and any(value is None for value in values):
+                raise ValueError("统计范围须保留完整的起止或相对期间")
+            if basis != self.basis and any(value is not None for value in values):
+                raise ValueError("统计范围不能混用不同日期定义")
+        if self.basis in {"unbounded", "unresolved"} and (
+                self.start_inclusive is not None or self.end_inclusive is not None):
+            raise ValueError("未定义日期范围不能补入起止当天规则")
+        if self.basis == "relative_window" and (
+                self.start_inclusive is not None or self.end_inclusive is not None):
+            raise ValueError("相对期间使用自身开闭界限，不能重复定义")
+        if any(not quote.strip() for quote in self.source_excerpts):
+            raise ValueError("统计范围须有逐字依据")
+        if self.basis == "unresolved":
+            if not self.unresolved_reason or not self.unresolved_reason.strip():
+                raise ValueError("统计范围不明须保留具体疑问")
+        elif self.unresolved_reason is not None:
+            raise ValueError("已声明统计范围不能同时标为未决")
+        if any(value is not None and not any(value.excerpt in quote for quote in self.source_excerpts)
+               for value in (self.start, self.end)):
+            raise ValueError("统计日期须属于本范围的逐字依据")
+        anchors = (self.start_anchor, self.end_anchor,
+                   self.relative_window.anchor_type if self.relative_window is not None else None)
+        if any(value in {AnchorType.REVIEW_NODE_DATE, AnchorType.EVENT_DATE} for value in anchors):
+            raise ValueError("多期间范围须有明确命名节点，不能借用未指定事件或审核默认日期")
+        return self
+
+
 class OccurrenceWindow(ContractModel):
-    """Rolling duration used by frequency definitions."""
+    """Frequency duration; absent historical scope is not an inferred rolling window."""
 
     duration: TimeQuantity
     minimum_count: int | None = Field(default=None, gt=0)
+    scope: OccurrenceScope | None = None
+    horizon: FrequencyHorizon | None = None
+
+    @model_serializer(mode="wrap")
+    def preserve_historical_scope(self, handler):
+        payload = handler(self)
+        if self.scope is None:
+            payload.pop("scope", None)
+        if self.horizon is None:
+            payload.pop("horizon", None)
+        return payload
+
+    @model_validator(mode="after")
+    def validate_horizon_scope(self):
+        if self.horizon is not None and (self.scope is None or self.scope.quantifier == "single"):
+            raise ValueError("多期间统计范围不能套入单个计数期间")
+        if self.horizon is not None and self.scope.version != "occurrence-scope/v4":
+            raise ValueError("旧期间声明不能补入未保存的统计范围")
+        if self.scope is not None and self.scope.calendar_week_start is not None and self.duration.unit != TimeUnit.WEEK:
+            raise ValueError("日历周起点不能用于非周周期")
+        return self
 
 
 class ProspectiveWindow(ContractModel):
@@ -195,7 +290,32 @@ class AtomicPredicate(ContractModel):
     occurrence_window: OccurrenceWindow | None = None
     prospective_window: ProspectiveWindow | None = None
     prospective_period: ProspectivePeriod | None = None
+    # 显式原文命题（来源含义核实）：条件本身是非确定性的语义判断，只能保留
+    # 方案原文的原方向含义及其限定条件，不能伪装成数值、分类或日期比较。
+    # 该字段不得由旧字段推断；为空时序列化省略，旧内容身份保持不变。
+    semantic_proposition: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "需要按方案来源核实原方向语义的命题；仅与 comparator=exists 且无 "
+            "value、unit 的条件同时使用，不与研究者专业判断或发生频次混用。"
+        ),
+    )
     unit_match_policy: Literal["exact_canonical_label"] = "exact_canonical_label"
+    observation_policy: ObservationPolicy | None = None
+    repeat_scheme: RepeatScheme | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_fields(self, handler):
+        value = handler(self)
+        if self.observation_policy is None:
+            value.pop("observation_policy", None)
+        if self.semantic_proposition is None:
+            # 省略空命题：旧条件的规范化字节与其内容身份保持完全一致。
+            value.pop("semantic_proposition", None)
+        if self.repeat_scheme is None:
+            value.pop("repeat_scheme", None)
+        return value
 
     @model_validator(mode="after")
     def validate_comparator_value(self) -> "AtomicPredicate":
@@ -203,6 +323,16 @@ class AtomicPredicate(ContractModel):
             raise ValueError("原子条件不能同时使用单段和多段原文定位")
         if len(self.source_clauses) != len(set(self.source_clauses)):
             raise ValueError("原子条件的多段原文定位不得重复")
+        if self.repeat_scheme is not None and any(
+            not any(excerpt in clause for clause in self.exact_source_clauses)
+            for excerpt in self.repeat_scheme.source_excerpts
+        ):
+            raise ValueError("复查要求须保留在本条件逐字原文内，跨段依据须列入原文片段")
+        if self.observation_policy is not None and any(
+            not any(excerpt in clause for clause in self.exact_source_clauses)
+            for excerpt in self.observation_policy.source_excerpts
+        ):
+            raise ValueError("观察选择须保留在本条件逐字原文内，跨段依据须列入原文片段")
         if self.comparator == "exists" and self.value is not None:
             raise ValueError("exists 比较器不接受 value")
         if self.comparator != "exists" and self.value is None:
@@ -220,6 +350,17 @@ class AtomicPredicate(ContractModel):
         if has_numeric_value and not self.unit:
             raise ValueError("数值谓词必须声明单位；无量纲值显式使用 unitless")
         if self.occurrence_window is not None:
+            scope = self.occurrence_window.scope
+            horizon = self.occurrence_window.horizon
+            if horizon is not None and any(not any(text in clause for clause in self.exact_source_clauses)
+                                           for text in horizon.source_excerpts):
+                raise ValueError("多期间统计范围须属于本条件逐字原文")
+            if scope is not None:
+                if any(not any(text in clause for clause in self.exact_source_clauses)
+                       for text in scope.source_excerpts):
+                    raise ValueError("频次期间依据须保留在本条件逐字原文内")
+                if self.repeat_scheme is not None or self.observation_policy is not None:
+                    raise ValueError("频次计数不能与未定义先后关系的复查或观察选择混用")
             direct_count = has_numeric_value and self.unit == "次"
             occurrence_day_count = has_numeric_value and self.unit in {
                 "天",
@@ -232,6 +373,33 @@ class AtomicPredicate(ContractModel):
                 raise ValueError(
                     "频率窗口必须与带‘次’或发生天数单位的数值谓词配套，或声明括号定义的最小次数"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def validate_semantic_proposition(self) -> "AtomicPredicate":
+        """语义命题只声明来源含义待核实，不能承载或替代确定性计算。"""
+
+        if self.semantic_proposition is None:
+            return self
+        if not self.semantic_proposition.strip():
+            raise ValueError("语义命题必须是非空文字，不能用空白占位")
+        if (
+            self.comparator != "exists"
+            or self.value is not None
+            or self.unit is not None
+        ):
+            raise ValueError(
+                "语义命题只能与 comparator=exists 且无 value、unit 的条件同时使用；"
+                "数值、分类和日期判断仍须使用各自的确定性比较结构"
+            )
+        if self.requires_professional_judgment:
+            raise ValueError(
+                "语义命题不能与研究者专业判断混用；研究者判断仍走其专属判断链"
+            )
+        if self.occurrence_window is not None:
+            raise ValueError(
+                "语义命题不接受发生频次窗口；频次仍须用数值谓词或最小次数结构保留"
+            )
         return self
 
     @property
@@ -247,6 +415,12 @@ class AtomicExpression(ContractModel):
     kind: Literal["predicate"] = "predicate"
     predicate: AtomicPredicate
     time_constraint: TimeConstraint | None = None
+
+    @model_validator(mode="after")
+    def validate_observation_window(self):
+        validate_observation_window_order(self.predicate.observation_policy,
+                                          has_time_constraint=self.time_constraint is not None)
+        return self
 
 
 class LogicalExpression(ContractModel):
@@ -280,21 +454,123 @@ class EvidenceRequirement(VersionedModel):
     requirement_id: str = Field(min_length=1)
     rule_component_id: str | None = Field(default=None, min_length=1)
     procedure_catalog_item_id: str | None = Field(default=None, min_length=1)
+    control_origin: ControlEvidenceOrigin | None = None
     fact_type: str = Field(min_length=1)
     required_source_types: list[str] = Field(default_factory=list)
-    allows_screening_record_transcription: bool = True
-    requires_contemporaneous_objective_source: bool = False
+    allows_screening_record_transcription: bool | None = True
+    requires_contemporaneous_objective_source: bool | None = False
     due_stage: ReviewStage
     source_validity_window: TimeQuantity | None = None
+    control_validity_status: Literal["specified", "not_specified", "unknown"] | None = None
+    control_validity_constraint: TimeConstraint | None = None
     description: str = Field(min_length=1)
+    # Optional explicit attribution to atomic predicates in the same component.
+    # Absent/empty keeps legacy unattributed serialization; never infer from fact_type.
+    predicate_ids: list[str] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def serialize_origin(self, handler):
+        data = handler(self)
+        if self.control_origin is None:
+            data.pop("control_origin", None)
+        for name in ("control_validity_status", "control_validity_constraint"):
+            if getattr(self, name) is None:
+                data.pop(name, None)
+        if not self.predicate_ids:
+            data.pop("predicate_ids", None)
+        return data
 
     @model_validator(mode="after")
     def validate_requirement_origin(self) -> "EvidenceRequirement":
-        if (self.rule_component_id is None) == (
-            self.procedure_catalog_item_id is None
+        if sum(value is not None for value in (
+            self.rule_component_id, self.procedure_catalog_item_id, self.control_origin,
+        )) != 1:
+            raise ValueError("资料要求必须且只能绑定子规则、流程必做项目或已发布补充控制之一")
+        if self.predicate_ids:
+            if not {"allows_screening_record_transcription",
+                    "requires_contemporaneous_objective_source"}.issubset(self.model_fields_set):
+                raise ValueError("明确关联条件的资料要求须同时明确来源要求，不能沿用默认值")
+            if any(not item.strip() for item in self.predicate_ids):
+                raise ValueError("资料要求的谓词引用不得为空字符串")
+            if len(self.predicate_ids) != len(set(self.predicate_ids)):
+                raise ValueError("资料要求的谓词引用不得重复")
+            if self.procedure_catalog_item_id is not None or self.control_origin is not None:
+                raise ValueError("流程或补充控制资料要求不能声明官方谓词归属")
+        if self.control_origin is not None:
+            if self.control_validity_status is None or self.source_validity_window is not None:
+                raise ValueError("补充资料须明确有效期状态，不能套用旧时间窗")
+            if (self.control_validity_status == "specified") != (self.control_validity_constraint is not None):
+                raise ValueError("补充资料的明确有效期必须保留完整时间约束")
+        elif (
+            self.control_validity_status is not None
+            or self.control_validity_constraint is not None
+            or self.allows_screening_record_transcription is None
+            or self.requires_contemporaneous_objective_source is None
         ):
-            raise ValueError("资料要求必须且只能绑定子规则或流程必做项目之一")
+            raise ValueError("补充控制的来源状态不能用于既有规则资料要求")
         return self
+
+
+class RepeatTriggerCondition(ContractModel):
+    """Ancillary expression; never an eligibility trigger or exception."""
+
+    condition_id: str = Field(min_length=1)
+    expression: RuleExpression
+    predicate_evidence_roles: dict[str, RepeatEvidenceRole] = Field(default_factory=dict)
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_roles(self, handler):
+        value = handler(self)
+        if not self.predicate_evidence_roles:
+            value.pop("predicate_evidence_roles", None)
+        return value
+
+    @model_validator(mode="after")
+    def validate_nonrecursive_condition(self):
+        predicates = list(iter_atomic_predicates(self.expression))
+        identifiers = [item.predicate_id for item in predicates]
+        validate_repeat_evidence_roles(self.predicate_evidence_roles, identifiers)
+        if not self.condition_id.strip() or len(identifiers) != len(set(identifiers)):
+            raise ValueError("复查触发条件及其子条件身份须明确且不得重复")
+        if any(item.repeat_scheme is not None for item in predicates):
+            raise ValueError("复查触发条件不能再嵌套复查要求")
+        return self
+
+
+def validate_repeat_trigger_conditions(expression, exception_expression, repeat_trigger_conditions):
+    owners = [predicate for root in (expression, exception_expression)
+              if root is not None for predicate in iter_atomic_predicates(root)]
+    conditions = {item.condition_id: item for item in repeat_trigger_conditions}
+    if len(conditions) != len(repeat_trigger_conditions):
+        raise ValueError("同一组件的复查触发条件不得重名")
+    referenced = set()
+    for owner in owners:
+        scheme = owner.repeat_scheme
+        if scheme is None:
+            continue
+        for condition_id in scheme.ancillary_condition_ids:
+            referenced.add(condition_id)
+            condition = conditions.get(condition_id)
+            if condition is None:
+                raise ValueError("复查要求引用的触发或许可条件不在本组件内")
+            validate_repeat_evidence_roles(
+                condition.predicate_evidence_roles,
+                [item.predicate_id for item in iter_atomic_predicates(condition.expression)],
+                scheme.source_excerpts,
+            )
+            for predicate in iter_atomic_predicates(condition.expression):
+                if not predicate.exact_source_clauses or any(
+                    not any(clause in excerpt for excerpt in scheme.source_excerpts)
+                    for clause in predicate.exact_source_clauses
+                ):
+                    raise ValueError("复查条件须逐项来自该复查要求的方案原文")
+    if referenced != set(conditions):
+        raise ValueError("不得夹带未被本组件复查要求引用的附加条件")
+    all_ids = [item.predicate_id for item in owners]
+    all_ids.extend(predicate.predicate_id for item in repeat_trigger_conditions
+                   for predicate in iter_atomic_predicates(item.expression))
+    if conditions and len(all_ids) != len(set(all_ids)):
+        raise ValueError("复查触发条件不能与入排条件或其他复查条件使用相同身份")
 
 
 class RuleComponent(VersionedModel):
@@ -304,7 +580,45 @@ class RuleComponent(VersionedModel):
     title: str = Field(min_length=1)
     expression: RuleExpression
     exception_expression: RuleExpression | None = None
+    repeat_trigger_conditions: list[RepeatTriggerCondition] = Field(default_factory=list)
     evidence_requirements: list[EvidenceRequirement] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def preserve_historical_repeat_conditions(self, handler):
+        value = handler(self)
+        if not self.repeat_trigger_conditions:
+            value.pop("repeat_trigger_conditions", None)
+        return value
+
+    @model_validator(mode="after")
+    def validate_repeat_condition_ownership(self):
+        validate_repeat_trigger_conditions(self.expression, self.exception_expression, self.repeat_trigger_conditions)
+        return self
+
+    @model_validator(mode="after")
+    def validate_evidence_predicate_links(self) -> "RuleComponent":
+        predicate_ids = [
+            predicate.predicate_id
+            for expression in (self.expression, self.exception_expression,
+                               *(item.expression for item in self.repeat_trigger_conditions))
+            if expression is not None
+            for predicate in iter_atomic_predicates(expression)
+        ]
+        component_predicate_ids = set(predicate_ids)
+        if (any(item.predicate_ids for item in self.evidence_requirements)
+                and len(predicate_ids) != len(component_predicate_ids)):
+            raise ValueError("资料要求所引用的条件编号必须在本组件内唯一")
+        for requirement in self.evidence_requirements:
+            if not requirement.predicate_ids:
+                continue
+            unknown = [
+                predicate_id
+                for predicate_id in requirement.predicate_ids
+                if predicate_id not in component_predicate_ids
+            ]
+            if unknown:
+                raise ValueError("资料要求引用了本组件不存在的谓词")
+        return self
 
 
 class Rule(VersionedModel):
@@ -356,6 +670,7 @@ class RuleSet(RevisionedModel):
                 expressions = [component.expression]
                 if component.exception_expression is not None:
                     expressions.append(component.exception_expression)
+                expressions.extend(item.expression for item in component.repeat_trigger_conditions)
                 for expression in expressions:
                     for predicate in iter_atomic_predicates(expression):
                         if predicate.predicate_id in predicate_ids:

@@ -258,8 +258,10 @@ function decodeIncompletePage(
   path: string,
 ): JudgmentSearchIncompletePageView {
   const raw = record(value, path);
-  exactKeys(raw, ["page_number", "reasons"], path);
+  exactKeys(raw, ["source_document_version_id", "page_artifact_id", "page_number", "reasons"], path);
   return {
+    sourceDocumentVersionId: nonBlankString(field(raw, "source_document_version_id", path), `${path}.source_document_version_id`),
+    pageArtifactId: nonBlankString(field(raw, "page_artifact_id", path), `${path}.page_artifact_id`),
     pageNumber: positiveInteger(field(raw, "page_number", path), `${path}.page_number`),
     reasons: stringArray(field(raw, "reasons", path), `${path}.reasons`),
   };

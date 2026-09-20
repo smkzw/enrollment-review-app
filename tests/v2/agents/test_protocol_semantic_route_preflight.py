@@ -116,7 +116,7 @@ def test_subprocess_loads_enrollment_env_file_into_deconstruct_glm_key(tmp_path:
     assert SECRET not in output
 
 
-def test_missing_glm_key_degrades_without_leaking_secret(monkeypatch):
+def test_missing_glm_key_fails_closed_without_third_model_substitution(monkeypatch):
     monkeypatch.setattr(router, "DECONSTRUCT_GLM_API_KEY", "")
     monkeypatch.setattr(router, "DECONSTRUCT_ROUTE_MODE", "graded")
     monkeypatch.setattr(router, "DECONSTRUCT_ROUTE_COMPLEX", "")
@@ -126,26 +126,60 @@ def test_missing_glm_key_degrades_without_leaking_secret(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", SECRET)
     monkeypatch.setenv("DECONSTRUCT_GLM_API_KEY", "")
 
+    # 默认链只声明 GLM：GLM 凭据缺失时即使 DeepSeek 凭据在环，也不得隐式
+    # 切换第三模型——预检显式失败并给出中文指引。
+    with pytest.raises(ProtocolSemanticRoutePreflightError) as caught:
+        preflight_protocol_semantic_routes(
+            mode="degrade",
+            probe_endpoints=False,
+            raise_on_error=True,
+        )
+    message = str(caught.value)
+    assert "启动失败" in message
+    assert "均不可执行" in message
+    assert SECRET not in message
+    report = caught.value.report
+    assert report.complex_declared_identities == [
+        "zhipu-coding-plan:glm-5.3-flash:high"
+    ]
+    assert report.complex_executable_identities == []
+    assert report.degraded is True
+    assert SECRET not in str(report.as_audit_dict())
+
+
+def test_explicit_route_spec_restores_degrade_path_with_other_provider(
+    monkeypatch,
+):
+    monkeypatch.setattr(router, "DECONSTRUCT_GLM_API_KEY", "")
+    monkeypatch.setattr(router, "DECONSTRUCT_ROUTE_MODE", "graded")
+    monkeypatch.setattr(
+        router,
+        "DECONSTRUCT_ROUTE_COMPLEX",
+        "mtplx:mtplx-flash-next-optimized-speed:xhigh",
+    )
+    monkeypatch.setattr(
+        router,
+        "DECONSTRUCT_ROUTE_SHORT",
+        "mtplx:mtplx-flash-next-optimized-speed:xhigh",
+    )
+    monkeypatch.setattr(app_config, "DECONSTRUCT_GLM_API_KEY", "")
+    monkeypatch.setenv("DECONSTRUCT_GLM_API_KEY", "")
+
+    # 显式路由规格命名了其他模型：声明链全部可执行，预检按声明链放行，
+    # 缺失的 GLM 凭据不会触发隐式第三模型替换。
     report = preflight_protocol_semantic_routes(
         mode="degrade",
         probe_endpoints=False,
         raise_on_error=True,
     )
-    assert report.degraded is True
-    assert any(
-        item.identity.startswith("zhipu-coding-plan:") and not item.executable
-        for item in report.complex_candidates
-    )
-    assert report.complex_executable_identities
-    payload = report.as_audit_dict()
-    assert SECRET not in str(payload)
-    assert SECRET not in sanitize_preflight_text(
-        f"accidentally {SECRET} embedded",
-        environ={"DEEPSEEK_API_KEY": SECRET},
-    )
-    active = router.select_protocol_semantic_route_candidates(router.GRADE_COMPLEX)
-    assert [item.identity for item in active] == report.complex_executable_identities
-    assert all(not item.identity.startswith("zhipu-coding-plan:") for item in active)
+    assert report.complex_declared_identities == [
+        "mtplx:mtplx-flash-next-optimized-speed:xhigh"
+    ]
+    assert report.complex_executable_identities == [
+        "mtplx:mtplx-flash-next-optimized-speed:xhigh"
+    ]
+    assert report.blocking_errors == []
+    assert SECRET not in str(report.as_audit_dict())
 
 
 def test_missing_credentials_fail_closed_in_strict_mode(monkeypatch):

@@ -25,8 +25,14 @@ DEMO_STEPS = [
 def _stable_semantic_route_preflight_env(monkeypatch):
     """Keep API lifespan preflight off the network and non-strict by default."""
 
+    from app.agents import protocol_semantic_model_router
+
     monkeypatch.setenv("ENROLLMENT_SEMANTIC_ROUTE_PREFLIGHT_MODE", "degrade")
     monkeypatch.setenv("ENROLLMENT_SEMANTIC_ENDPOINT_PREFLIGHT", "0")
+    # The credential presence check remains active; offline API tests need no real key.
+    monkeypatch.setattr(
+        protocol_semantic_model_router, "DECONSTRUCT_GLM_API_KEY", "offline-test-only"
+    )
 
 
 @pytest.fixture

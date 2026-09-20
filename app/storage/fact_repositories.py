@@ -1171,16 +1171,61 @@ class ClinicalFactV2Repository(_PublishMixin):
         self._authority = authority_validator or FactAuthorityValidator(session)
         self._complete_revision = complete_revision
 
-    def create(self, fact: ClinicalFactV2) -> ClinicalFactV2:
-        candidates = self._validate_publication_group(
-            authority=fact.authority,
-            run_id=fact.run_id,
+    def _publication_candidates(self, fact: ClinicalFactV2) -> list[CandidateContract]:
+        if fact.inherited_from_fact_id is None:
+            return self._validate_publication_group(
+                authority=fact.authority, run_id=fact.run_id,
+                primary_gate_id=fact.gate_id, gate_ids=fact.gate_ids,
+                candidate_ids=fact.source_candidate_ids, locator_ids=fact.locator_ids,
+                expected_candidate_kind="fact",
+            )
+        from app.storage.fact_correction_repository import FactCorrectionRepository
+
+        prior = self.get(fact.inherited_from_fact_id)
+        if (
+            prior.authority != fact.authority
+            or prior.stable_identity != fact.stable_identity
+            or prior.run_id == fact.run_id
+            or prior.revision + 1 != fact.revision
+            or prior.fact_id in FactCorrectionRepository(self.session).superseded_entity_ids(
+                fact.authority
+            )
+        ):
+            raise FactCrossEntityError("继承来源必须是同一事实未经更正的上一版本")
+        inherited_ids = set(prior.source_candidate_ids)
+        inherited_gates = set(prior.gate_ids)
+        if (
+            not inherited_ids or not inherited_gates
+            or not inherited_ids <= set(fact.source_candidate_ids)
+            or not inherited_gates <= set(fact.gate_ids)
+        ):
+            raise FactCrossEntityError("继承来源必须完整保留上一版本的候选与发布记录")
+        repository = FactNormalizationCandidateRepository(self.session)
+        current_ids = sorted(set(fact.source_candidate_ids) - inherited_ids)
+        if not current_ids or not (set(fact.gate_ids) - inherited_gates):
+            raise FactCrossEntityError("继承发布必须包含本次已核实的新来源")
+        current_candidates = [repository.get(item) for item in current_ids]
+        current_locators = sorted({
+            locator for candidate in current_candidates for locator in candidate.locator_ids
+        })
+        current = self._validate_publication_group(
+            authority=fact.authority, run_id=fact.run_id,
             primary_gate_id=fact.gate_id,
-            gate_ids=fact.gate_ids,
-            candidate_ids=fact.source_candidate_ids,
-            locator_ids=fact.locator_ids,
+            gate_ids=sorted(set(fact.gate_ids) - inherited_gates),
+            candidate_ids=current_ids, locator_ids=current_locators,
             expected_candidate_kind="fact",
         )
+        inherited = [repository.get(item) for item in sorted(inherited_ids)]
+        if sorted({loc for item in inherited for loc in item.locator_ids}) != prior.locator_ids:
+            raise FactLocatorReferenceError("继承来源与上一版本定位不一致")
+        candidates = sorted(current + inherited, key=lambda item: item.candidate_id)
+        if sorted({loc for item in candidates for loc in item.locator_ids}) != fact.locator_ids:
+            raise FactLocatorReferenceError("发布定位必须完整保留本次与继承来源")
+        self._authority.validate_locators(fact.authority, fact.locator_ids)
+        return candidates
+
+    def create(self, fact: ClinicalFactV2) -> ClinicalFactV2:
+        candidates = self._publication_candidates(fact)
         expected_semantics = (
             fact.fact_type,
             fact.polarity,
@@ -1410,9 +1455,15 @@ class ClinicalEventV2Repository(_PublishMixin):
         self._complete_revision = complete_revision
 
     def create(self, event: ClinicalEventV2) -> ClinicalEventV2:
+        origin_run = event.run_id
+        if event.source_revision_of is not None:
+            from app.storage.source_reference_successors import source_successor_origin_run
+            origin_run = source_successor_origin_run(
+                self.session, event, self, id_field="event_id"
+            )
         candidates = self._validate_publication_group(
             authority=event.authority,
-            run_id=event.run_id,
+            run_id=origin_run,
             primary_gate_id=event.gate_id,
             gate_ids=event.gate_ids,
             candidate_ids=event.source_candidate_ids,
@@ -1677,9 +1728,15 @@ class MedicationExposureV2Repository(_PublishMixin):
         self._complete_revision = complete_revision
 
     def create(self, exposure: MedicationExposureV2) -> MedicationExposureV2:
+        origin_run = exposure.run_id
+        if exposure.source_revision_of is not None:
+            from app.storage.source_reference_successors import source_successor_origin_run
+            origin_run = source_successor_origin_run(
+                self.session, exposure, self, id_field="exposure_id"
+            )
         candidates = self._validate_publication_group(
             authority=exposure.authority,
-            run_id=exposure.run_id,
+            run_id=origin_run,
             primary_gate_id=exposure.gate_id,
             gate_ids=exposure.gate_ids,
             candidate_ids=exposure.source_candidate_ids,
@@ -1960,8 +2017,12 @@ class ClinicalConflictGroupV2Repository(_PublishMixin):
         self._complete_revision = complete_revision
 
     def create(self, group: ClinicalConflictGroupV2) -> ClinicalConflictGroupV2:
+        origin_run = group.run_id
+        if group.source_revision_of is not None:
+            from app.storage.source_conflict_successors import validate_conflict_successor
+            origin_run = validate_conflict_successor(self.session, group, self)
         candidate = self._validate_common(
-            group.authority, group.run_id, group.gate_id, group.locator_ids, None
+            group.authority, origin_run, group.gate_id, group.locator_ids, None
         )
         members = self._load_members(group)
         if any(member.authority != group.authority for member in members):

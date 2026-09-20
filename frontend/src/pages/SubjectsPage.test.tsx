@@ -226,7 +226,7 @@ describe("受试者与 Patient Profile 页", () => {
     );
     render(<SubjectsPage />);
     // 状态提示（role=status）只出现一次（横幅），正文不再重复
-    expect(await screen.findByText(/档案正在生成中/)).toBeInTheDocument();
+    expect(await screen.findByText(/正在整理已核实的病史、用药和检查记录/)).toBeInTheDocument();
     expect(screen.getByText("生成中", { exact: true })).toBeInTheDocument();
     expect(screen.queryByText("基线血压 120/80 mmHg")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "全部历时信息" })).not.toBeInTheDocument();
@@ -274,7 +274,7 @@ describe("受试者与 Patient Profile 页", () => {
     expect(
       await screen.findByText("该审核节点已生成档案，但当前没有已整理的资料条目。"),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/档案正在生成中/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/正在整理已核实的病史、用药和检查记录/)).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 

@@ -11,13 +11,19 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from app.domain.contracts.evidence import EvidenceExpectationTemplate
+from app.domain.contracts.evidence import (
+    EvidenceExpectationTemplate,
+    expectation_validity_projection_fields,
+)
 from app.domain.contracts.rules import (
     EvidenceRequirement,
     RuleSet,
     WorkflowStage,
+    TimeQuantity,
 )
 from app.domain.publication import canonical_hash
+from app.domain.contracts.control_evidence_origin import ControlEvidenceOrigin
+from app.domain.contracts.rules import TimeConstraint
 
 
 class ExpectationTemplateProjectionError(ValueError):
@@ -61,6 +67,7 @@ def project_evidence_expectation_templates(
     rule_set: RuleSet,
     workflow_stages: Sequence[WorkflowStage],
     procedure_requirements: Sequence[EvidenceRequirement] = (),
+    control_requirements: Sequence[EvidenceRequirement] = (),
     created_at: datetime | None = None,
 ) -> list[EvidenceExpectationTemplate]:
     """投影一个 RuleSet revision 的全部资料核对期望模板。
@@ -86,6 +93,21 @@ def project_evidence_expectation_templates(
                 )
             due_stage_by_requirement[requirement_id] = stage.stage
             stage_by_requirement[requirement_id] = stage
+    stages_by_id = {stage.workflow_stage_id: stage for stage in workflow_stages}
+    if len(stages_by_id) != len(workflow_stages):
+        _fail("duplicate_workflow_stage", "正式审核节点身份重复")
+    for requirement in control_requirements:
+        origin = requirement.control_origin
+        if origin is None:
+            _fail("control_origin_missing", "补充资料要求缺少已发布控制来源")
+        if requirement.requirement_id in requirements:
+            _fail("duplicate_requirement", "补充资料要求与既有资料要求身份重复")
+        stage = stages_by_id.get(origin.workflow_stage_id)
+        if stage is None:
+            _fail("control_node_missing", "补充资料要求引用的正式审核访视不存在")
+        requirements[requirement.requirement_id] = requirement
+        due_stage_by_requirement[requirement.requirement_id] = stage.stage
+        stage_by_requirement[requirement.requirement_id] = stage
     missing = sorted(set(requirements) - set(due_stage_by_requirement))
     if missing:
         _fail(
@@ -102,7 +124,12 @@ def project_evidence_expectation_templates(
             )
         projection_sha256 = canonical_hash(
             {
-                "projection": "evidence_expectation_template/v1",
+                **expectation_validity_projection_fields(
+                    requirement.source_validity_window,
+                    control_origin=requirement.control_origin,
+                    control_validity_status=requirement.control_validity_status,
+                    control_validity_constraint=requirement.control_validity_constraint,
+                ),
                 "rule_set_id": rule_set.rule_set_id,
                 "rule_set_revision": rule_set.revision,
                 "requirement_id": requirement.requirement_id,
@@ -150,6 +177,10 @@ def project_evidence_expectation_templates(
                     requirement.allows_screening_record_transcription
                 ),
                 description=requirement.description,
+                source_validity_window=requirement.source_validity_window,
+                control_origin=requirement.control_origin,
+                control_validity_status=requirement.control_validity_status,
+                control_validity_constraint=requirement.control_validity_constraint,
                 projection_sha256=projection_sha256,
                 created_at=created_at or datetime.now(UTC),
             )
@@ -187,6 +218,10 @@ def template_projection_sha256(
     requires_contemporaneous_objective_source: bool | None = None,
     allows_screening_record_transcription: bool | None = None,
     description: str | None = None,
+    source_validity_window: TimeQuantity | None = None,
+    control_origin: ControlEvidenceOrigin | None = None,
+    control_validity_status: str | None = None,
+    control_validity_constraint: TimeConstraint | None = None,
 ) -> str:
     """稳定投影哈希；与模板合同校验使用同一算法。
 
@@ -196,7 +231,12 @@ def template_projection_sha256(
 
     return canonical_hash(
         {
-            "projection": "evidence_expectation_template/v1",
+            **expectation_validity_projection_fields(
+                source_validity_window,
+                control_origin=control_origin,
+                control_validity_status=control_validity_status,
+                control_validity_constraint=control_validity_constraint,
+            ),
             "rule_set_id": rule_set_id,
             "rule_set_revision": revision,
             "requirement_id": requirement_id,
@@ -239,6 +279,10 @@ def verify_template_identity(template: EvidenceExpectationTemplate) -> None:
             template.allows_screening_record_transcription
         ),
         description=template.description,
+        source_validity_window=template.source_validity_window,
+        control_origin=template.control_origin,
+        control_validity_status=template.control_validity_status,
+        control_validity_constraint=template.control_validity_constraint,
     ):
         _fail("template_projection_mismatch", "模板投影哈希与身份字段不一致")
 

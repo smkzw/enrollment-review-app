@@ -1,9 +1,13 @@
 """Project-agnostic graded model routing for protocol semantic deconstruction.
 
-Complex protocol-semantic work prefers GLM-5.3-Flash, then MTPLX, then DeepSeek
-V4 Flash high. Short new-session prompts prefer MTPLX first. Provider switches
-are whole-attempt only: no cross-model session continuation, candidate merge,
-or silent fallback. Routing decisions must not hardcode study/protocol IDs.
+The default graded route for both complex and short protocol-semantic work is
+the configured GLM-5.3-Flash profile alone. MTPLX/DeepSeek candidates are only
+used when an explicit ``DECONSTRUCT_ROUTE_COMPLEX``/``DECONSTRUCT_ROUTE_SHORT``
+spec or a pinned route names them; the default chain never silently substitutes
+a third model when GLM is unavailable. Provider switches across explicit
+candidates are whole-attempt only: no cross-model session continuation,
+candidate merge, or silent fallback. Routing decisions must not hardcode
+study/protocol IDs.
 """
 from __future__ import annotations
 
@@ -13,8 +17,6 @@ from typing import Any, Literal
 
 from app.config import (
     DECONSTRUCT_BACKEND,
-    DECONSTRUCT_FALLBACK_DEEPSEEK_MODEL,
-    DECONSTRUCT_FALLBACK_DEEPSEEK_REASONING_EFFORT,
     DECONSTRUCT_GLM_API_KEY,
     DECONSTRUCT_GLM_MODEL,
     DECONSTRUCT_GLM_PROVIDER,
@@ -25,8 +27,6 @@ from app.config import (
     DECONSTRUCT_ROUTE_MODE,
     DECONSTRUCT_ROUTE_SHORT,
     DECONSTRUCT_SHORT_PROMPT_MAX_INPUT_TOKENS,
-    MTPLX_MODEL,
-    MTPLX_REASONING_EFFORT,
 )
 from app.protocols.adaptive_batch_budget import estimate_text_tokens
 
@@ -220,46 +220,32 @@ def _parse_route_spec(raw: str) -> list[ProtocolSemanticRouteCandidate]:
     return candidates
 
 
-def _default_complex_candidates() -> list[ProtocolSemanticRouteCandidate]:
+def _default_glm_candidate() -> list[ProtocolSemanticRouteCandidate]:
+    """The single default semantic candidate: the configured GLM profile.
+
+    Both grades share it. There is no implicit MTPLX/DeepSeek fallback: other
+    models enter a route only through an explicit route spec or pinned config,
+    and an unavailable GLM candidate is skipped/reported, never replaced.
+    """
+
     glm_backend = (DECONSTRUCT_GLM_PROVIDER or "zhipu-coding-plan").strip().lower()
     if glm_backend not in {"zhipu-coding-plan", "glm"}:
-        glm_backend = "zhipu-coding-plan"
+        raise ValueError("GLM 服务连接类型配置无效，不能静默替换")
     return [
         ProtocolSemanticRouteCandidate(
             backend=glm_backend,
             model=DECONSTRUCT_GLM_MODEL or "glm-5.3-flash",
             reasoning_effort=DECONSTRUCT_GLM_REASONING_EFFORT or "high",
-        ),
-        ProtocolSemanticRouteCandidate(
-            backend="mtplx",
-            model=MTPLX_MODEL,
-            reasoning_effort=MTPLX_REASONING_EFFORT or "medium",
-        ),
-        ProtocolSemanticRouteCandidate(
-            backend="deepseek",
-            model=DECONSTRUCT_FALLBACK_DEEPSEEK_MODEL or "deepseek-v4-flash",
-            reasoning_effort=(
-                DECONSTRUCT_FALLBACK_DEEPSEEK_REASONING_EFFORT or "high"
-            ),
-        ),
+        )
     ]
+
+
+def _default_complex_candidates() -> list[ProtocolSemanticRouteCandidate]:
+    return _default_glm_candidate()
 
 
 def _default_short_candidates() -> list[ProtocolSemanticRouteCandidate]:
-    return [
-        ProtocolSemanticRouteCandidate(
-            backend="mtplx",
-            model=MTPLX_MODEL,
-            reasoning_effort=MTPLX_REASONING_EFFORT or "medium",
-        ),
-        ProtocolSemanticRouteCandidate(
-            backend="deepseek",
-            model=DECONSTRUCT_FALLBACK_DEEPSEEK_MODEL or "deepseek-v4-flash",
-            reasoning_effort=(
-                DECONSTRUCT_FALLBACK_DEEPSEEK_REASONING_EFFORT or "high"
-            ),
-        ),
-    ]
+    return _default_glm_candidate()
 
 
 def _pinned_candidate() -> ProtocolSemanticRouteCandidate:
@@ -407,6 +393,13 @@ def summarize_run_result_for_route(
         error_class = "SESSION_ANOMALY"
     elif outcome == "输出格式无效":
         error_class = "SCHEMA_INVALID"
+    call_codes = {getattr(issue, "issue_code", "") for issue in getattr(last, "issues", [])}
+    if "AGENT_CALL_QUOTA_EXHAUSTED" in call_codes:
+        error_class = "QUOTA_EXHAUSTED"
+    elif "AGENT_CALL_TRANSPORT_TIMEOUT" in call_codes:
+        error_class = "TRANSPORT_TIMEOUT"
+    elif "AGENT_CALL_FAILED" in call_codes:
+        error_class = "SEMANTIC_CALL_FAILED"
     detail_parts: list[str] = []
     for issue in list(getattr(last, "issues", []) or [])[:3]:
         problem = " ".join(str(getattr(issue, "problem", "")).split())[:240]

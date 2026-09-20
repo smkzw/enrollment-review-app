@@ -11,15 +11,20 @@ export type EligibilityDecision = EligibilityDecisionWire;
 export type EligibilityDeterminationMode = EligibilityDeterminationModeWire;
 
 export interface EligibilityFactRefView {
+  excerpt: string | null;
+  sourceDocumentVersionId: string | null;
+  pageArtifactId: string | null;
   factId: string;
   locatorId: string | null;
   pageNumber: number | null;
 }
 
 export interface EligibilityClauseView {
+  ruleComponentId: string;
   ruleCode: string;
   ruleKind: EligibilityRuleKind;
   textSummary: string;
+  sourceText?: string | null;
   parentRuleCode: string | null;
   decision: EligibilityDecision;
   decisionLabel: string;
@@ -30,6 +35,7 @@ export interface EligibilityClauseView {
 }
 
 export interface EligibilityReviewView {
+  unassignedConflicts?: { conflictGroupId: string; memberKind: "event" | "exposure"; memberIds: string[] }[];
   subjectId: string;
   reviewEpisodeId: string;
   ruleSetId: string;
@@ -139,6 +145,7 @@ const DECISIONS: readonly EligibilityDecision[] = [
   "exclusion_triggered",
   "exclusion_not_triggered",
   "professional_judgment",
+  "indeterminate",
   "conflict",
   "not_due",
   "not_applicable",
@@ -153,7 +160,10 @@ function decodeFactRef(value: unknown, index: number): EligibilityFactRefView {
   const path = `clauses[].fact_refs[${index}]`;
   const row = objectValue(value, path);
   return {
+    excerpt: nullableString(field(row, "excerpt", path), `${path}.excerpt`),
     factId: requiredString(field(row, "fact_id", path), `${path}.fact_id`),
+    sourceDocumentVersionId: nullableString(field(row, "source_document_version_id", path), `${path}.source_document_version_id`),
+    pageArtifactId: nullableString(field(row, "page_artifact_id", path), `${path}.page_artifact_id`),
     locatorId: nullableString(field(row, "locator_id", path), `${path}.locator_id`),
     pageNumber: nullablePositiveInteger(
       field(row, "page_number", path),
@@ -179,6 +189,7 @@ function decodeClause(value: unknown, index: number): EligibilityClauseView {
   const refs = arrayValue(field(row, "fact_refs", path), `${path}.fact_refs`);
   return {
     ruleCode,
+    ruleComponentId: requiredString(field(row, "rule_component_id", path), `${path}.rule_component_id`),
     ruleKind: enumValue(
       field(row, "rule_kind", path),
       RULE_KINDS,
@@ -188,6 +199,8 @@ function decodeClause(value: unknown, index: number): EligibilityClauseView {
       field(row, "text_summary", path),
       `${path}.text_summary`,
     ),
+    sourceText: "source_text" in row
+      ? nullableString(row.source_text, `${path}.source_text`) : null,
     parentRuleCode,
     decision: enumValue(field(row, "decision", path), DECISIONS, `${path}.decision`),
     decisionLabel: requiredString(
@@ -211,7 +224,30 @@ export function decodeEligibilityReview(value: unknown): EligibilityReviewView {
   if (clauses.length === 0) {
     throw new EligibilityReviewDecodeError("clauses 不能为空");
   }
+  const decodedClauses = clauses.map(decodeClause);
+  if (new Set(decodedClauses.map((clause) => clause.ruleComponentId)).size !== decodedClauses.length) {
+    throw new EligibilityReviewDecodeError("审核要点重复，请重新读取审核结果。");
+  }
+  const unassignedConflicts = ("unassigned_conflicts" in row
+      ? arrayValue(row.unassigned_conflicts, "unassigned_conflicts") : []).map((value, index) => {
+      const path = `unassigned_conflicts[${index}]`;
+      const item = objectValue(value, path);
+      const members = arrayValue(field(item, "member_ids", path), `${path}.member_ids`)
+        .map((member) => requiredString(member, `${path}.member_ids[]`));
+      if (members.length < 2 || new Set(members).size !== members.length) {
+        throw new EligibilityReviewDecodeError("争议记录的来源成员不完整或重复");
+      }
+      return {
+        conflictGroupId: requiredString(field(item, "conflict_group_id", path), `${path}.conflict_group_id`),
+        memberKind: enumValue(field(item, "member_kind", path), ["event", "exposure"] as const, `${path}.member_kind`),
+        memberIds: members,
+      };
+    });
+  if (new Set(unassignedConflicts.map((item) => item.conflictGroupId)).size !== unassignedConflicts.length) {
+    throw new EligibilityReviewDecodeError("争议记录重复，请重新读取审核结果。");
+  }
   return {
+    unassignedConflicts,
     subjectId: requiredString(field(row, "subject_id", "eligibility_review"), "subject_id"),
     reviewEpisodeId: requiredString(
       field(row, "review_episode_id", "eligibility_review"),
@@ -230,7 +266,7 @@ export function decodeEligibilityReview(value: unknown): EligibilityReviewView {
       field(row, "complete_processing_revision_id", "eligibility_review"),
       "complete_processing_revision_id",
     ),
-    clauses: clauses.map(decodeClause),
+    clauses: decodedClauses,
   };
 }
 

@@ -1,0 +1,269 @@
+{
+  "attached_source_refs": [
+    "body.p1180",
+    "body.p1181",
+    "body.p1182",
+    "body.p1183",
+    "body.p1184",
+    "body.p1185"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package101-analysis-set-boundary",
+  "notes": [
+    "模型外闭包：12个拥有来源，6个只读来源，0个候选。",
+    "零候选表示不发射受试者级控制，不表示删除样本量、分析集或统计方法事实。",
+    "claims_complete=false；本配置不调用模型、不发布控制点。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1179",
+    "body.p1186",
+    "body.p1187",
+    "body.p1188",
+    "body.p1189",
+    "body.p1190",
+    "body.p1191",
+    "body.p1192",
+    "body.p1193",
+    "body.p1194",
+    "body.p1195",
+    "body.p1196"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "样本量计算标题，仅提供结构归属，不独立形成控制点": "pending_codex"
+      },
+      "frozen_excerpt": "样本量计算",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1179",
+      "structure_unit_id": "su-16e9bca649de0099da16794e"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅱ期样本量分支标签，只读，不独立形成控制点": "pending_codex"
+      },
+      "frozen_excerpt": "Ⅱ期临床阶段",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1180",
+      "structure_unit_id": "su-0cb401ac2481a4e59b260d73"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅱ期剂量探索、1:1:1和约120例为研究总体设计，不是个例入排条件": "pending_codex",
+        "第12周PASI 75疗效终点不得与基线PASI入选阈值混同": "pending_codex"
+      },
+      "frozen_excerpt": "Ⅱ期临床阶段的主要终点是第12周达到PASI 75应答的参与者比例。本阶段研究的主要目的为剂量探索，样本量的估算不做正式的假设检验。2个剂量组与安慰剂组，随机比例为1:1:1，预计每组纳入40例，合计约120例参与者参与本次Ⅱ期临床试验。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1181",
+      "structure_unit_id": "su-78de15bbdcbf785954946591"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅲ期样本量分支标签，只读，不得进入Ⅱ期控制": "pending_codex"
+      },
+      "frozen_excerpt": "Ⅲ期临床阶段",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1182",
+      "structure_unit_id": "su-8589eeb8962e296bc5a62c0d"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅲ期PASI 75效能与样本量假设只读，不得倒灌Ⅱ期或个例审核": "pending_codex"
+      },
+      "frozen_excerpt": "本研究为随机、双盲、安慰剂对照评价CMS-D001片治疗中度至重度斑块状银屑病的疗效，采用优效设计，即试验组第16周达到PASI 75应答的参与者比例优于安慰剂组。国外同类药物Deucravacitinib两项Ⅲ期临床试验结果的meta分析显示，试验组第16周时PASI 75应答率55.2% [51.8%; 58.5%]，安慰剂组为10.7% [7.8%; 13.9%]，试验组与安慰剂组第16周时PASI 75应答率差值为44.5% [40.0%; 49.0%]，假定本研究药物的疗效与国外同类药物相似，保守估计安慰剂组应答率为13.9%，两组差异为40.0%，单侧检验显著性水平α=0.025，按照2:1比例随机分配至试验组与安慰剂组，两组合计201例参与者完成第16周评估，有99%的把握度检验出试验组PASI 75应答率显著优于安慰剂组。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1183",
+      "structure_unit_id": "su-e0176c3d0c6457699f9b153e"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅲ期PGA-TS效能与样本量假设只读，不得与基线PGA入选阈值混同": "pending_codex"
+      },
+      "frozen_excerpt": "同时，根据Deucravacitinib两项Ⅲ期临床试验结果的meta分析显示，试验组第16周时PGA-TS应答率51.3% [47.9%; 54.6%]，安慰剂组为8.1% [5.8%; 11.1%]，试验组与安慰剂组第16周时PGA-TS应答率差值为43.2% [38.9%; 47.4%]，保守假定安慰剂组第16周PGA-TS应答率为11.1%，试验组与安慰剂组的差异为47.4%，上述201例参与者同样可提供99%的把握度在单侧alpha=0.025的水平上检验出两组的差异。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1184",
+      "structure_unit_id": "su-81580ef4a41882213150a500"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅲ期20%脱落、最多420例和2:2:1分配为总体设计，不是个例资格条件": "pending_codex"
+      },
+      "frozen_excerpt": "本次Ⅲ期临床试验计划按照Ⅱ期临床试验设置2个剂量组（或基于Ⅱ期研究结果确定的推荐剂量组）和1个安慰剂组，考虑20%的脱落，计划最多入组420例参与者，按照2:2:1的比例分配至试验组或安慰剂组（其中每个试验组不计转组治疗例数时最多168例，安慰剂组最多84例），可同时满足疗效与安全性分析需求。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1185",
+      "structure_unit_id": "su-f7c429d6a6a424dcf626473c"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "统计分析集定义标题，仅提供结构归属": "pending_codex"
+      },
+      "frozen_excerpt": "统计分析集的定义",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1186",
+      "structure_unit_id": "su-b91cca43f28eb5e7de89c8ee"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "统计分析数据集引导语，仅提供结构归属": "pending_codex"
+      },
+      "frozen_excerpt": "统计分析数据集：",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1187",
+      "structure_unit_id": "su-96f6344776707b251b659b03"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "ITT是随机化后的统计分析人群；基线仅指分析领域，不是基线访视必做或缺口": "pending_codex"
+      },
+      "frozen_excerpt": "ITT集（Intention-to-Treat，ITT）：包括所有经随机化分组后的参与者。参与者将根据随机分配的治疗组进行分析。ITT集将作为人口学、基线及有效性指标的主要分析集。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1188",
+      "structure_unit_id": "su-34f8c812d5115db1bd307c69"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "安全性分析集条件为随机、给药和给药后安全性数据形成后的分析归属，不得前置为入组条件": "pending_codex"
+      },
+      "frozen_excerpt": "安全性分析集（Safety Set，SS）：包括所有经随机化分组且至少接受一次试验用药品且具有用药后安全性评价数据的参与者。安全性人群将主要用于药物暴露和其他安全性数据的分析，将基于接受的实际治疗进行分析。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1189",
+      "structure_unit_id": "su-c3d5f54bbd68ec4a2435350c"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "PK浓度集为随机和给药后的分析集，不得生成随机前采样或筛选必做": "pending_codex"
+      },
+      "frozen_excerpt": "药代动力学浓度集（Pharmacokinetics Concentration Set，PKCS）：包括所有经随机化分组且至少接受一次CMS-D001片，且至少有1个给药后CMS-D001及其主要代谢产物（如适用）有效血浆浓度数据的所有参与者。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1190",
+      "structure_unit_id": "su-fe1c5343f4ff47900723e35c"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "药效学分析集为随机和给药后的分析集，不得生成基线PD必做": "pending_codex"
+      },
+      "frozen_excerpt": "药效学分析集（Pharmacodynamic Set，PDS）：所有随机化后至少接受1次试验用药品，且至少有1个给药后有效PD数据的参与者。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1191",
+      "structure_unit_id": "su-b5acdb8bc815cff05ed9bf0a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "剔除分析集不等于排除受试者；盲态审核后且锁库揭盲前是统计数据管理时序": "pending_codex"
+      },
+      "frozen_excerpt": "Ⅱ期临床阶段和Ⅲ期基础研究阶段各个分析数据集的划分及剔除各分析数据集的参与者名单均在盲态数据审核后，在数据库锁库和揭盲之前确定。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1192",
+      "structure_unit_id": "su-f8d9e239afd831f053e4d300"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "统计分析标题，仅提供结构归属": "pending_codex"
+      },
+      "frozen_excerpt": "统计分析",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1193",
+      "structure_unit_id": "su-b4b794299c377bfd953db9c8"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "一般方法标题，仅提供结构归属": "pending_codex"
+      },
+      "frozen_excerpt": "一般方法",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1194",
+      "structure_unit_id": "su-99b545411660322636f37b91"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "SAS和WinNonlin版本是统计软件要求，不是受试者级义务": "pending_codex"
+      },
+      "frozen_excerpt": "所有疗效及安全性统计分析使用SAS9.4（或以上版本）软件完成。PK参数的统计分析将采用WinNonlin软件（8.1或以上版本）完成。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1195",
+      "structure_unit_id": "su-fd0d6e64090a07d1ce5965ee"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "MedDRA和WHO Drug用于统计编码汇总，不新增病史筛查、用药禁限或入组证据要求": "pending_codex"
+      },
+      "frozen_excerpt": "对连续型变量，描述性统计量包括观测数、均数、中位数、标准差、最大值和最小值。对分类变量，描述性统计量将包括参与者例数和百分比。所有疾病史和不良事件均采用最新版监管活动医学词典（Medical Dictionary for Regulatory Activities，MedDRA）进行编码，并按照MedDRA编码中的系统器官分类（System Organ Class，SOC）和首选语（Preferred Terms，PT）进行相应的汇总分析。所有合并药物的治疗将使用最新版本世界卫生组织药物词典（World Health Organization Drug Dictionaries，WHO Drug）进行编码。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1196",
+      "structure_unit_id": "su-2e4249d27de85ce4f7d1beef"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61cn-20260830",
+  "worker": "codex-parent"
+}

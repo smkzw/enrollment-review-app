@@ -3,13 +3,14 @@
 from dataclasses import replace
 
 from app.domain.contracts.facts import FactAuthority
-from app.domain.targeted_page_review import explicit_conflict_fields
+from app.domain.targeted_page_review import explicit_conflict_fields, missing_time_review_fields
 from app.domain.targeted_handwriting_review import handwriting_needs_review
 from app.domain.contracts.page_review import PageReviewLane
 from app.domain.contracts.page_review_focus import PageReviewFocus
 from app.llm.page_review_harness import PAGE_REVIEW_PROMPT_VERSION, TARGETED_REVIEW_PROMPT_VERSION
+from app.llm.page_reader_capabilities import LOCAL_PAGE_PROVIDERS
 from app.services.job_service import JobService, StepSpec
-from app.services.page_review_job_service import PAGE_REVIEW_JOB_TYPE, route_identity
+from app.services.page_review_job_service import PAGE_REVIEW_JOB_TYPE, route_identity, page_review_execution_versions
 from app.storage.codecs import verify_payload_sha256
 from app.storage.idempotency import IdempotencyConflict
 from app.storage.fact_authority import FactAuthorityValidator
@@ -25,12 +26,15 @@ class TargetedReviewNotReady(EvidenceAppError):
     recovery = "请查看原资料判读结果，确认需要核对的具体内容。"
 
 TARGETED_REVIEW_JOB_TYPE = "r3_targeted_page_review"
-TARGETED_REVIEW_VERSION = "targeted-page-review-job/v2"
+TARGETED_REVIEW_VERSION = "targeted-page-review-job/v8"
 MAIN_LANES = (PageReviewLane.MAIN_A, PageReviewLane.MAIN_B)
 
 
 def targeted_routes(routes):
-    return {lane: replace(routes[lane], reasoning_effort="high") for lane in MAIN_LANES}
+    # Keep the approved floor for historical readers without downgrading xhigh/max.
+    return {lane: replace(routes[lane], reasoning_effort="high")
+            if routes[lane].reasoning_effort in {"low", "medium"} else routes[lane]
+            for lane in MAIN_LANES}
 
 
 def enqueue_targeted_review(session_factory, *, original_job_id, page_index,
@@ -62,26 +66,37 @@ def enqueue_targeted_review(session_factory, *, original_job_id, page_index,
         records = [record for record in records if record.lane in MAIN_LANES]
         if any(record.page_image_sha256 != page["page_image_sha256"] for record in records):
             raise TargetedReviewNotReady("复核原件图像不一致")
+        rotation = old.get("reading_rotations", {}).get(page["page_artifact_id"])
+        if any((record.reading_view.clockwise_degrees if record.reading_view else None) != rotation
+               for record in records):
+            raise TargetedReviewNotReady("原判读记录与任务的阅读方向不一致")
         targets = explicit_conflict_fields(records)
         handwriting = handwriting_needs_review(records)
         if not targets and not handwriting:
-            raise TargetedReviewNotReady("该页没有明确的数值、日期或标记分歧；文字表述与对应关系需另行核对")
+            raise TargetedReviewNotReady("该页没有可复核的数值、日期或标记差异；其他文字表述与对应关系需另行核对")
         focus = PageReviewFocus(original_reconciliation_id=reconciliation_id,
                                page_image_sha256=page["page_image_sha256"],
                                review_episode_id=review_episode_id, round_number=1, targets=targets,
+                               time_review_targets=tuple(sorted(missing_time_review_fields(records))),
                                handwriting_review=handwriting)
         payload = {"version": TARGETED_REVIEW_VERSION, "base_prompt_version": PAGE_REVIEW_PROMPT_VERSION,
+                   "execution_versions": page_review_execution_versions(),
+                   "reading_rotations": {page["page_artifact_id"]: rotation} if rotation is not None else {},
                    "targeted_prompt_version": TARGETED_REVIEW_PROMPT_VERSION,
                    "original_job_id": original_job_id, "authority": old["authority"],
                    "page": page, "review_context": old["review_context"],
                    "clause_pack": old["clause_pack"], "focus": focus.model_dump(mode="json"),
                    "routes": {lane.value: route_identity(route) for lane, route in routes.items()}}
         steps = []
+        serial_lanes = all(routes[lane].provider in LOCAL_PAGE_PROVIDERS for lane in MAIN_LANES)
         for number in (1, 2):
             reads = tuple(f"read:{number}:{lane.value}" for lane in MAIN_LANES)
-            for step_id in reads:
+            for index, step_id in enumerate(reads):
+                preceding = ("compare:1",) if number == 2 else ()
+                if serial_lanes and index:
+                    preceding += (reads[index - 1],)
                 steps.append(StepSpec(step_id=step_id, name=f"第{number}轮原件复核",
-                                      depends_on=("compare:1",) if number == 2 else (),
+                                      depends_on=preceding,
                                       retryable=True, max_attempts=2))
             steps.append(StepSpec(step_id=f"compare:{number}", name=f"整理第{number}轮复核结果",
                                   depends_on=reads, retryable=True, max_attempts=2))

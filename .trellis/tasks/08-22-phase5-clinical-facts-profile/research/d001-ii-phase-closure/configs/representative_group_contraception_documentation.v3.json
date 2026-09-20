@@ -1,0 +1,14 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_contraception_documentation.v2.json",
+  "task_id": "phase5-slice60k-20260828",
+  "artifact_dir_name": "phase5-slice60k-d001-contraception-documentation-replay-semantic-guidance-20260828",
+  "notes": [
+    "原始DOCX产品链直接提取，用户无需预处理方案文本。",
+    "本组不向Agent披露父级是否预期新增候选；父级在模型输出完成后盲态核对。",
+    "沟通、确认和记录动作不继承被沟通内容本身的持续期。",
+    "告知参与者一项条件指令时，当前审核核实告知和记录是否完成，不假定未来条件已经发生。",
+    "must_record仅用于原文明示的记录动作；告知、说明和讨论不得仅因需要留痕而改写为must_record。",
+    "计划访视作用域必须保留，但只允许绑定当前冻结的筛选或基线节点，不得发明治疗期访视。"
+  ]
+}

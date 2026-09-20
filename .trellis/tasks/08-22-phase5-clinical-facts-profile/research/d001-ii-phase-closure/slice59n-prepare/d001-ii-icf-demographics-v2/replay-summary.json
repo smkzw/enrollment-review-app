@@ -1,0 +1,20 @@
+{
+  "attached_count": 8,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-703d8c1710e72768fc807805",
+  "group_id": "d001-ii-icf-demographics-v2",
+  "lookup_counts": {
+    "coverage_manifest": 2,
+    "frozen_plan_context": 2,
+    "frozen_plan_owned": 6
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-icf-demographics-v2",
+  "owned_count": 2,
+  "prompt_char_count": 30081,
+  "prompt_sha256": "930f2ec105594ac46231f733d22590d3e679053cad6487d660085b83bc8aff9b",
+  "task_id": "phase5-slice60z-20260828",
+  "unit_count": 10,
+  "worker": "codex-parent"
+}

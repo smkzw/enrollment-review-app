@@ -1,0 +1,26 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_history_collection.v8.json",
+  "group_id": "d001-ii-history-treatment-collection-v9",
+  "task_id": "phase5-slice60w-20260828",
+  "artifact_dir_name": "phase5-slice60w-d001-history-treatment-collection-replay-structured-family-20260828",
+  "owned_procedure_semantic_families_by_source_ref": {
+    "body.p858": [
+      "medical_history",
+      "treatment_history"
+    ],
+    "body.p871": [
+      "medical_history",
+      "treatment_history"
+    ]
+  },
+  "ids": {
+    "manifest_id": "manifest:slice60w-history-treatment-reps",
+    "catalog_id": "catalog:slice60w-history-treatment-reps"
+  },
+  "notes": [
+    "v8结果临床形状正确，但其词面家族门禁在父级代码自审中被拒绝，保留为不可变诊断证据。",
+    "v9由冻结流程目标声明资料家族，独立结构期望只进入确定性门禁，不进入Agent首轮输入。",
+    "共享代码不扫描模型理由或项目特异目录编号推断家族。"
+  ]
+}

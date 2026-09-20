@@ -35,6 +35,27 @@ from app.storage.db import Base
 
 PAYLOAD_SHA_LEN = 64
 
+#: 正式审核实体的资料谱系判别（ReviewRun/AssessmentCandidate/FinalAssessment/
+#: ActionRequest）：恰好一条谱系。legacy 行只绑 legacy 快照；V2 行只绑 V2 快照 +
+#: 完整处理修订，``evidence_snapshot_id`` 必须为 NULL（绝不把 V2 id 写入 legacy 列）。
+REVIEW_EVIDENCE_LINEAGE_CHECK_SQL = (
+    "(evidence_snapshot_id IS NOT NULL AND evidence_snapshot_v2_id IS NULL "
+    "AND complete_processing_revision_id IS NULL) OR "
+    "(evidence_snapshot_id IS NULL AND evidence_snapshot_v2_id IS NOT NULL "
+    "AND complete_processing_revision_id IS NOT NULL)"
+)
+
+#: AgentCall 允许协议-only 调用三条资料指针全空（真实存在的无审核证据调用）；
+#: 一旦携带资料指针，仍必须恰好一条谱系，不套用正式审核实体的强制判别。
+AGENT_CALL_EVIDENCE_LINEAGE_CHECK_SQL = (
+    "(evidence_snapshot_id IS NULL AND evidence_snapshot_v2_id IS NULL "
+    "AND complete_processing_revision_id IS NULL AND node = 'protocol_deconstructor') OR "
+    "(evidence_snapshot_id IS NOT NULL AND evidence_snapshot_v2_id IS NULL "
+    "AND complete_processing_revision_id IS NULL) OR "
+    "(evidence_snapshot_id IS NULL AND evidence_snapshot_v2_id IS NOT NULL "
+    "AND complete_processing_revision_id IS NOT NULL)"
+)
+
 
 class AppendedRecordMixin:
     """不可变追加记录公共列：canonical JSON payload + 哈希 + 写入时间。"""
@@ -212,18 +233,35 @@ class ActionRequestRecord(RevisionedRecordMixin, Base):
     )
     rule_set_id: Mapped[str] = mapped_column(String(128), nullable=False)
     rule_set_revision: Mapped[int] = mapped_column(Integer, nullable=False)
-    rule_component_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    rule_component_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    control_snapshot_run_id: Mapped[str | None] = mapped_column(
+        String(128), ForeignKey("review_control_snapshots.review_run_id"), nullable=True
+    )
+    protocol_control_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    control_obligation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    control_obligation_group_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     review_episode_id: Mapped[str] = mapped_column(
         String(128), ForeignKey("review_episodes.review_episode_id"), nullable=False
     )
-    evidence_snapshot_id: Mapped[str] = mapped_column(
-        String(128), ForeignKey("evidence_snapshots.evidence_snapshot_id"), nullable=False
+    # 双谱系指针：legacy 快照与（V2 快照 + 完整处理修订）恰好一条，见 CHECK。
+    evidence_snapshot_id: Mapped[str | None] = mapped_column(
+        String(128), ForeignKey("evidence_snapshots.evidence_snapshot_id"), nullable=True
+    )
+    evidence_snapshot_v2_id: Mapped[str | None] = mapped_column(
+        String(128),
+        ForeignKey("evidence_snapshots_v2.evidence_snapshot_id"),
+        nullable=True,
+    )
+    complete_processing_revision_id: Mapped[str | None] = mapped_column(
+        String(128),
+        ForeignKey("evidence_processing_revisions.evidence_processing_revision_id"),
+        nullable=True,
     )
     review_run_id: Mapped[str] = mapped_column(
         String(128), ForeignKey("review_runs.review_run_id"), nullable=False
     )
-    assessment_id: Mapped[str] = mapped_column(
-        String(128), ForeignKey("final_assessments.assessment_id"), nullable=False
+    assessment_id: Mapped[str | None] = mapped_column(
+        String(128), ForeignKey("final_assessments.assessment_id"), nullable=True
     )
     gap_type: Mapped[str] = mapped_column(String(64), nullable=False)
     target_party: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -234,6 +272,12 @@ class ActionRequestRecord(RevisionedRecordMixin, Base):
     trigger_evidence_span_id: Mapped[str | None] = mapped_column(
         String(128), ForeignKey("evidence_spans.evidence_span_id"), nullable=True
     )
+    # V2 谱系的触发定位（Phase 4 locator）；legacy 行继续用 evidence_spans，绝不混用。
+    trigger_locator_id: Mapped[str | None] = mapped_column(
+        String(128),
+        ForeignKey("evidence_locator_artifacts.locator_id"),
+        nullable=True,
+    )
     state: Mapped[str] = mapped_column(String(32), nullable=False)
     recompute_scope_json: Mapped[list] = mapped_column(JSON, nullable=False)
     gate_result_id: Mapped[str] = mapped_column(
@@ -242,6 +286,24 @@ class ActionRequestRecord(RevisionedRecordMixin, Base):
     publication_fingerprint: Mapped[str] = mapped_column(String(PAYLOAD_SHA_LEN), nullable=False)
 
     __table_args__ = (
+        CheckConstraint(
+            REVIEW_EVIDENCE_LINEAGE_CHECK_SQL,
+            name="ck_action_requests_evidence_lineage",
+        ),
+        CheckConstraint(
+            "(assessment_id IS NOT NULL AND rule_component_id IS NOT NULL AND "
+            "control_snapshot_run_id IS NULL AND protocol_control_id IS NULL AND control_obligation_id IS NULL AND control_obligation_group_id IS NULL) OR "
+            "(assessment_id IS NULL AND rule_component_id IS NULL AND control_snapshot_run_id IS NOT NULL AND "
+            "control_snapshot_run_id = review_run_id AND protocol_control_id IS NOT NULL AND "
+            "((control_obligation_id IS NOT NULL AND control_obligation_group_id IS NULL) OR "
+            "(control_obligation_id IS NULL AND control_obligation_group_id IS NOT NULL)) AND evidence_snapshot_v2_id IS NOT NULL)",
+            name="ck_action_requests_requirement_origin",
+        ),
+        CheckConstraint(
+            "(evidence_snapshot_v2_id IS NULL AND trigger_locator_id IS NULL) OR "
+            "(evidence_snapshot_v2_id IS NOT NULL AND trigger_evidence_span_id IS NULL)",
+            name="ck_action_requests_trigger_lineage",
+        ),
         ForeignKeyConstraint(
             ["rule_set_id", "rule_set_revision", "rule_component_id"],
             [
@@ -347,21 +409,34 @@ class EvidenceRequirementRecord(AppendedRecordMixin, Base):
     rule_set_revision: Mapped[int] = mapped_column(Integer, primary_key=True)
     requirement_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     # One-and-only-one origin: a requirement is produced either by a rule
-    # component or by a frozen procedure-catalog item (visit instance).  The
-    # CHECK constraint mirrors the domain contract; procedure-origin rows keep
-    # rule_component_id NULL instead of fabricating a component binding.
+    # component, by a frozen procedure-catalog item (visit instance), or by a
+    # published node-specific control of a frozen control catalog.  The CHECK
+    # constraint mirrors the domain contract; procedure- and control-origin rows
+    # keep rule_component_id NULL instead of fabricating a component binding.
     rule_component_id: Mapped[str | None] = mapped_column(
         String(128), nullable=True
     )
     procedure_catalog_item_id: Mapped[str | None] = mapped_column(
         String(128), nullable=True
     )
+    # 镜像已发布目录的 publication_id（不可变 0024 表）；控制来源的
+    # protocol_control_id / evidence_key / workflow_stage_id 只存在 payload 正文。
+    control_publication_id: Mapped[str | None] = mapped_column(
+        String(128),
+        ForeignKey("protocol_control_catalog_publications.publication_id"),
+        nullable=True,
+    )
     fact_type: Mapped[str] = mapped_column(String(128), nullable=False)
     due_stage: Mapped[str] = mapped_column(String(32), nullable=False)
 
     __table_args__ = (
         CheckConstraint(
-            "(rule_component_id IS NULL) != (procedure_catalog_item_id IS NULL)",
+            "(rule_component_id IS NOT NULL AND procedure_catalog_item_id IS NULL "
+            "AND control_publication_id IS NULL) OR "
+            "(rule_component_id IS NULL AND procedure_catalog_item_id IS NOT NULL "
+            "AND control_publication_id IS NULL) OR "
+            "(rule_component_id IS NULL AND procedure_catalog_item_id IS NULL "
+            "AND control_publication_id IS NOT NULL)",
             name="one_origin",
         ),
         ForeignKeyConstraint(
@@ -954,8 +1029,22 @@ class ReviewRunRecord(AppendedRecordMixin, Base):
         nullable=False,
     )
     rule_set_revision: Mapped[int] = mapped_column(Integer, nullable=False)
-    evidence_snapshot_id: Mapped[str] = mapped_column(
-        String(128), ForeignKey("evidence_snapshots.evidence_snapshot_id"), nullable=False
+    context_id: Mapped[str | None] = mapped_column(
+        String(128), ForeignKey("review_context_snapshots.context_id"), nullable=True
+    )
+    # 双谱系指针：legacy 快照与（V2 快照 + 完整处理修订）恰好一条，见 CHECK。
+    evidence_snapshot_id: Mapped[str | None] = mapped_column(
+        String(128), ForeignKey("evidence_snapshots.evidence_snapshot_id"), nullable=True
+    )
+    evidence_snapshot_v2_id: Mapped[str | None] = mapped_column(
+        String(128),
+        ForeignKey("evidence_snapshots_v2.evidence_snapshot_id"),
+        nullable=True,
+    )
+    complete_processing_revision_id: Mapped[str | None] = mapped_column(
+        String(128),
+        ForeignKey("evidence_processing_revisions.evidence_processing_revision_id"),
+        nullable=True,
     )
     started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -963,7 +1052,18 @@ class ReviewRunRecord(AppendedRecordMixin, Base):
         String(128), ForeignKey("review_runs.review_run_id"), nullable=True
     )
 
-    __table_args__ = (Index("ix_review_runs_review_episode_id", "review_episode_id"),)
+    __table_args__ = (
+        CheckConstraint(
+            REVIEW_EVIDENCE_LINEAGE_CHECK_SQL,
+            name="ck_review_runs_evidence_lineage",
+        ),
+        CheckConstraint(
+            "(evidence_snapshot_v2_id IS NULL AND context_id IS NULL) OR "
+            "(evidence_snapshot_v2_id IS NOT NULL AND context_id IS NOT NULL)",
+            name="ck_review_runs_context_lineage",
+        ),
+        Index("ix_review_runs_review_episode_id", "review_episode_id"),
+    )
 
 
 class AssessmentCandidateRecord(AppendedRecordMixin, Base):
@@ -990,14 +1090,29 @@ class AssessmentCandidateRecord(AppendedRecordMixin, Base):
     review_run_id: Mapped[str] = mapped_column(
         String(128), ForeignKey("review_runs.review_run_id"), nullable=False
     )
-    evidence_snapshot_id: Mapped[str] = mapped_column(
-        String(128), ForeignKey("evidence_snapshots.evidence_snapshot_id"), nullable=False
+    # 双谱系指针：legacy 快照与（V2 快照 + 完整处理修订）恰好一条，见 CHECK。
+    evidence_snapshot_id: Mapped[str | None] = mapped_column(
+        String(128), ForeignKey("evidence_snapshots.evidence_snapshot_id"), nullable=True
+    )
+    evidence_snapshot_v2_id: Mapped[str | None] = mapped_column(
+        String(128),
+        ForeignKey("evidence_snapshots_v2.evidence_snapshot_id"),
+        nullable=True,
+    )
+    complete_processing_revision_id: Mapped[str | None] = mapped_column(
+        String(128),
+        ForeignKey("evidence_processing_revisions.evidence_processing_revision_id"),
+        nullable=True,
     )
     rule_set_id: Mapped[str] = mapped_column(String(128), nullable=False)
     rule_set_revision: Mapped[int] = mapped_column(Integer, nullable=False)
     rule_component_id: Mapped[str] = mapped_column(String(128), nullable=False)
 
     __table_args__ = (
+        CheckConstraint(
+            REVIEW_EVIDENCE_LINEAGE_CHECK_SQL,
+            name="ck_assessment_candidates_evidence_lineage",
+        ),
         ForeignKeyConstraint(
             ["rule_set_id", "rule_set_revision", "rule_component_id"],
             [
@@ -1031,8 +1146,19 @@ class FinalAssessmentRecord(AppendedRecordMixin, Base):
     review_run_id: Mapped[str] = mapped_column(
         String(128), ForeignKey("review_runs.review_run_id"), nullable=False
     )
-    evidence_snapshot_id: Mapped[str] = mapped_column(
-        String(128), ForeignKey("evidence_snapshots.evidence_snapshot_id"), nullable=False
+    # 双谱系指针：legacy 快照与（V2 快照 + 完整处理修订）恰好一条，见 CHECK。
+    evidence_snapshot_id: Mapped[str | None] = mapped_column(
+        String(128), ForeignKey("evidence_snapshots.evidence_snapshot_id"), nullable=True
+    )
+    evidence_snapshot_v2_id: Mapped[str | None] = mapped_column(
+        String(128),
+        ForeignKey("evidence_snapshots_v2.evidence_snapshot_id"),
+        nullable=True,
+    )
+    complete_processing_revision_id: Mapped[str | None] = mapped_column(
+        String(128),
+        ForeignKey("evidence_processing_revisions.evidence_processing_revision_id"),
+        nullable=True,
     )
     rule_set_id: Mapped[str] = mapped_column(String(128), nullable=False)
     rule_set_revision: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -1045,6 +1171,10 @@ class FinalAssessmentRecord(AppendedRecordMixin, Base):
     publication_fingerprint: Mapped[str] = mapped_column(String(PAYLOAD_SHA_LEN), nullable=False)
 
     __table_args__ = (
+        CheckConstraint(
+            REVIEW_EVIDENCE_LINEAGE_CHECK_SQL,
+            name="ck_final_assessments_evidence_lineage",
+        ),
         ForeignKeyConstraint(
             ["rule_set_id", "rule_set_revision", "rule_component_id"],
             [
@@ -1146,11 +1276,26 @@ class AgentCallRecord(AppendedRecordMixin, Base):
     evidence_snapshot_id: Mapped[str | None] = mapped_column(
         String(128), ForeignKey("evidence_snapshots.evidence_snapshot_id"), nullable=True
     )
+    # V2 审核调用的资料谱系：与 legacy 成对互斥；协议-only 调用三列全空仍合法。
+    evidence_snapshot_v2_id: Mapped[str | None] = mapped_column(
+        String(128),
+        ForeignKey("evidence_snapshots_v2.evidence_snapshot_id"),
+        nullable=True,
+    )
+    complete_processing_revision_id: Mapped[str | None] = mapped_column(
+        String(128),
+        ForeignKey("evidence_processing_revisions.evidence_processing_revision_id"),
+        nullable=True,
+    )
     input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     estimated_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     __table_args__ = (
+        CheckConstraint(
+            AGENT_CALL_EVIDENCE_LINEAGE_CHECK_SQL,
+            name="ck_agent_calls_evidence_lineage",
+        ),
         Index("ix_agent_calls_project_id", "project_id"),
         Index("ix_agent_calls_idempotency_key", "idempotency_key"),
     )
@@ -1423,6 +1568,43 @@ action_transition_spans = _assoc_table(
     "action_transitions.transition_id",
     "evidence_span_id",
     "evidence_spans.evidence_span_id",
+)
+# V2 谱系的有序引用（与 legacy span/fact 关联表物理分离，绝不混写）：
+# 正式评估引用 Phase 5 已发布事实与 Phase 4 locator，候选引用事实，转换引用 locator。
+assessment_candidate_facts_v2 = _assoc_table(
+    "assessment_candidate_facts_v2",
+    "assessment_candidate_id",
+    "assessment_candidates.assessment_candidate_id",
+    "fact_id",
+    "clinical_facts_v2.fact_id",
+)
+assessment_candidate_locators = _assoc_table(
+    "assessment_candidate_locators",
+    "assessment_candidate_id",
+    "assessment_candidates.assessment_candidate_id",
+    "locator_id",
+    "evidence_locator_artifacts.locator_id",
+)
+final_assessment_facts_v2 = _assoc_table(
+    "final_assessment_facts_v2",
+    "assessment_id",
+    "final_assessments.assessment_id",
+    "fact_id",
+    "clinical_facts_v2.fact_id",
+)
+final_assessment_locators = _assoc_table(
+    "final_assessment_locators",
+    "assessment_id",
+    "final_assessments.assessment_id",
+    "locator_id",
+    "evidence_locator_artifacts.locator_id",
+)
+action_transition_locators = _assoc_table(
+    "action_transition_locators",
+    "transition_id",
+    "action_transitions.transition_id",
+    "locator_id",
+    "evidence_locator_artifacts.locator_id",
 )
 agent_call_sources = Table(
     "agent_call_sources",

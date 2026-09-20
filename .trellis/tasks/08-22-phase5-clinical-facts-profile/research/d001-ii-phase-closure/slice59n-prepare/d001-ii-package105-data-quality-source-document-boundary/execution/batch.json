@@ -1,0 +1,338 @@
+{
+  "batch_id": "pcb-8488f844d1298b90d4a45bbf",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [],
+  "context_structure_unit_ids": [],
+  "context_units": [],
+  "coverage_manifest_id": "manifest:slice61cr-package105-data-quality-source-document-boundary",
+  "known_official_targets": [],
+  "known_procedure_targets": [],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "D1给药前",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "D1给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {},
+  "owned_required_action_kinds_by_structure_unit_id": {},
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.p1238",
+    "body.p1239",
+    "body.p1240",
+    "body.p1241",
+    "body.p1242",
+    "body.p1243",
+    "body.p1244",
+    "body.p1245",
+    "body.p1246",
+    "body.p1247"
+  ],
+  "owned_structure_unit_ids": [
+    "su-0064ebeb47b8f2cbccbb58dc",
+    "su-9b871a5ca4969ff1c9063841",
+    "su-2409cd24ca9f082fa789552a",
+    "su-89501971f78337044a6bf70e",
+    "su-addcbd5e6aece04c56c6e007",
+    "su-31669f392ef92b0a09730150",
+    "su-968663939b00f40990cc9a13",
+    "su-fa1913077146986c39ea38e3",
+    "su-74fe8829ca48bfef85750257",
+    "su-bc16d234790709eeb0d797cf"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "数据采集与管理",
+      "heading_path": [
+        "数据采集与管理"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1238"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31010,
+      "source_ref": "body.p1238",
+      "source_span_ids": [
+        "body.p1238"
+      ],
+      "structure_unit_id": "su-0064ebeb47b8f2cbccbb58dc",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "数据质量保证",
+      "heading_path": [
+        "数据采集与管理",
+        "数据质量保证"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1239"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31020,
+      "source_ref": "body.p1239",
+      "source_span_ids": [
+        "body.p1239"
+      ],
+      "structure_unit_id": "su-9b871a5ca4969ff1c9063841",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "申办者将负责本研究的数据管理，包括数据的质量检查。将通过使用eCRFs，由研究中心负责将数据手动输入电子数据采集系统（Electronic data capture，EDC）。如果数据不一致，申办者将要求研究中心澄清数据，研究中心将在 EDC 系统中解决数据质疑。研究实施方案所需的EDC系统之外的其他数据，如中心实验室的数据将直接发送给申办者，根据申办者的标准程序处理和加工这些数据的电子传输。",
+      "heading_path": [
+        "数据采集与管理",
+        "数据质量保证"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1240"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31030,
+      "source_ref": "body.p1240",
+      "source_span_ids": [
+        "body.p1240"
+      ],
+      "structure_unit_id": "su-2409cd24ca9f082fa789552a",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "电子病例报告表（eCRF）",
+      "heading_path": [
+        "数据采集与管理",
+        "电子病例报告表（eCRF）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1241"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31040,
+      "source_ref": "body.p1241",
+      "source_span_ids": [
+        "body.p1241"
+      ],
+      "structure_unit_id": "su-89501971f78337044a6bf70e",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "数据管理将在经验证的EDC系统中进行。通过使用申办者指定的EDC系统完成eCRFs。研究中心将接受培训并获得相应的eCRF填写手册。eCRFs将以电子方式提交给申办者，并按申办者的指示处理。所有eCRFs应由研究中心经过培训的指定工作人员完成。eCRFs应由研究者或指定人员审查并以电子方式签名和注明日期。",
+      "heading_path": [
+        "数据采集与管理",
+        "电子病例报告表（eCRF）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1242"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31050,
+      "source_ref": "body.p1242",
+      "source_span_ids": [
+        "body.p1242"
+      ],
+      "structure_unit_id": "su-addcbd5e6aece04c56c6e007",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "源数据/源文件",
+      "heading_path": [
+        "数据采集与管理",
+        "源数据/源文件"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1243"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31060,
+      "source_ref": "body.p1243",
+      "source_span_ids": [
+        "body.p1243"
+      ],
+      "structure_unit_id": "su-31669f392ef92b0a09730150",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "源文件是指临床试验中产生的原始医学记录、医疗文件和数据，例如医院病历、医学图像、实验室记录、仪器自动记录的数据、临床试验的相关备忘录、发药记录、药房保存的处方、参与者临床试验日记等，可包括复制或抄录的核证副本。源数据是指临床试验中的原始记录或其复印件（核证副本）上记载的所有信息。",
+      "heading_path": [
+        "数据采集与管理",
+        "源数据/源文件"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1244"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31070,
+      "source_ref": "body.p1244",
+      "source_span_ids": [
+        "body.p1244"
+      ],
+      "structure_unit_id": "su-968663939b00f40990cc9a13",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "在研究开始前，将在研究监查计划中明确定义研究生成的源文件类型，这包括任何直接输入 eCRFs 的按方案要求采集的数据（即，之前没有此数据的书面或电子记录），此类数据应视为源数据。",
+      "heading_path": [
+        "数据采集与管理",
+        "源数据/源文件"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1245"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31080,
+      "source_ref": "body.p1245",
+      "source_span_ids": [
+        "body.p1245"
+      ],
+      "structure_unit_id": "su-fa1913077146986c39ea38e3",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "无论数据为书面手写还是以电子方式录入，研究者负责确保源数据准确、清晰、具有同期性、为原始数据且可归因溯源。在常规临床试验活动中，如果通过计算机系统（和/或任何其他类型的电子设备）创建（第一次录入）、修改、维护、归档、检索或通过电子方式传输源数据，此类系统必须符合所有适用的管辖电子记录和/或电子签名的使用的法律和法规。此类系统可能包括但不限于：电子医疗/健康档案、不良事件跟踪/报告、方案要求的评价，和/或药物计数记录。采用通过此类系统获得的书面记录来取代电子格式进行规定的活动时，此类书面记录应有经核证的副本。经核证的副本由已验证的原始信息的副本组成，有研究人员的签字及签字日期，具有和原件相同的所有属性。如果修改了计算机系统中的原始数据，在系统上应保留可查看的审核跟踪，显示原始数据及变更原因、进行更改的人员姓名，以及更改的日期。",
+      "heading_path": [
+        "数据采集与管理",
+        "源数据/源文件"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1246"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31090,
+      "source_ref": "body.p1246",
+      "source_span_ids": [
+        "body.p1246"
+      ],
+      "structure_unit_id": "su-74fe8829ca48bfef85750257",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "用于验证eCRFs输入数据正确性和完整性的源文件不得被清除或销毁，且必须按照第9.4节中描述的记录保存要求保存。为方便于源数据验证，研究者和机构必须允许申办者因为研究相关的监查、申办者稽查和 机构审查委员会/伦理委员会（Institutional Review Board/Ethics Committee，IRB/EC）审查而直接访问源文件和报告（如得到法律允许，也可以复制）。研究中心还必须允许监管当局对源数据/源文件进行检查。",
+      "heading_path": [
+        "数据采集与管理",
+        "源数据/源文件"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1247"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31100,
+      "source_ref": "body.p1247",
+      "source_span_ids": [
+        "body.p1247"
+      ],
+      "structure_unit_id": "su-bc16d234790709eeb0d797cf",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [
+    "su-0064ebeb47b8f2cbccbb58dc",
+    "su-9b871a5ca4969ff1c9063841",
+    "su-89501971f78337044a6bf70e",
+    "su-31669f392ef92b0a09730150"
+  ],
+  "study_phase": "phase_ii"
+}

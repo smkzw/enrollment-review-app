@@ -1,0 +1,34 @@
+[
+  {
+    "excerpt": "Finlay AY, Khan GK. Dermatology Life Quality Index (DLQI)--a simple practical measure for routine clinical use. Clin Exp Dermatol. 1994;19:210–6.",
+    "heading_path": [
+      "参考文献"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d042355fa4845796808fa256",
+    "package_ordinal": 113,
+    "role": "owned",
+    "source_ref": "body.p1307",
+    "source_span_ids": [
+      "body.p1307"
+    ],
+    "structure_unit_id": "su-22abacd010232ba13f5db046",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "国家药品监督管理局.药品注册管理办法.2020.",
+    "heading_path": [
+      "参考文献"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d042355fa4845796808fa256",
+    "package_ordinal": 113,
+    "role": "owned",
+    "source_ref": "body.p1308",
+    "source_span_ids": [
+      "body.p1308"
+    ],
+    "structure_unit_id": "su-37efce23e3c3cb955928c590",
+    "unit_kind": "list_item"
+  }
+]

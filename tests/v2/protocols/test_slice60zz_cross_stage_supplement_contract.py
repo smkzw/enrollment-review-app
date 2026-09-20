@@ -39,6 +39,9 @@ from app.protocols.supplementary_relation_contract import (
 from tests.v2.protocols.test_slice58c_control_deconstructor import (
     _batch as _deconstructor_batch,
     _candidate as _deconstructor_candidate,
+    _evidence_policy,
+    _evaluation,
+    _timed_evaluation,
     _wire,
 )
 from tests.v2.protocols.test_slice58c_protocol_control_gate import (
@@ -258,6 +261,9 @@ def _cross_stage_wire_candidate(
                         atoms=[
                             ProtocolControlAgentWireObligationAtom(
                                 kind=ControlObligationKind.VERIFY_RESULT_VALIDITY,
+                                evaluation=_timed_evaluation(
+                                    "年龄至少18岁", "span:01", "年龄至少18岁"
+                                ),
                                 statement="年龄至少18岁",
                                 time_constraint={
                                     "anchor_type": "first_dose_date",
@@ -317,6 +323,11 @@ def test_wire_hydration_accepts_cross_stage_validity_supplement() -> None:
                 description="核对首次给药前28天内病毒学结果",
                 due_stage=ReviewStage.BASELINE,
                 required_source_types=["实验室报告"],
+                workflow_stage_ids=["stage:baseline:1"],
+                source_policy=_evidence_policy("span:01", "年龄至少18岁"),
+                atom_refs=[
+                    {"layer": "obligation", "group_index": 0, "atom_index": 0}
+                ],
             )
         ],
     )
@@ -354,6 +365,13 @@ def test_syn_reject_01_full_candidate_rejects_early_future_anchor_decision() -> 
                 description="筛选期核对结果有效期",
                 due_stage=ReviewStage.SCREENING,
                 required_source_types=["实验室报告"],
+                workflow_stage_ids=["stage:screening:one"],
+                source_policy=_evidence_policy(
+                    "span:01", "首次给药前28天内的结果有效"
+                ),
+                atom_refs=[
+                    {"layer": "obligation", "group_index": 0, "atom_index": 0}
+                ],
             )
         ],
     )
@@ -366,6 +384,11 @@ def test_syn_reject_01_full_candidate_rejects_early_future_anchor_decision() -> 
                         atoms=[
                             ProtocolControlAgentWireObligationAtom(
                                 kind=ControlObligationKind.VERIFY_RESULT_VALIDITY,
+                                evaluation=_timed_evaluation(
+                                    "首次给药前28天内的结果有效",
+                                    "span:01",
+                                    "首次给药前28天内的结果有效",
+                                ),
                                 statement="首次给药前28天内的结果有效",
                                 time_constraint={
                                     "anchor_type": "first_dose_date",
@@ -424,6 +447,13 @@ def test_syn_reject_05_full_candidate_cannot_mix_execution_and_later_validity() 
                 description="核对首次给药前28天内病毒学结果",
                 due_stage=ReviewStage.BASELINE,
                 required_source_types=["实验室报告"],
+                workflow_stage_ids=["stage:baseline:1"],
+                source_policy=_evidence_policy(
+                    "span:01", "筛选期应完成病毒学检查"
+                ),
+                atom_refs=[
+                    {"layer": "obligation", "group_index": 0, "atom_index": 0}
+                ],
             )
         ],
     )
@@ -436,6 +466,11 @@ def test_syn_reject_05_full_candidate_cannot_mix_execution_and_later_validity() 
                         atoms=[
                             ProtocolControlAgentWireObligationAtom(
                                 kind=ControlObligationKind.COMPLETE_OR_VERIFY,
+                                evaluation=_evaluation(
+                                    "筛选期应完成病毒学检查",
+                                    "span:01",
+                                    "筛选期应完成病毒学检查",
+                                ),
                                 statement="筛选期应完成病毒学检查",
                                 time_constraint=None,
                                 prospective_period=None,
@@ -445,6 +480,11 @@ def test_syn_reject_05_full_candidate_cannot_mix_execution_and_later_validity() 
                             ),
                             ProtocolControlAgentWireObligationAtom(
                                 kind=ControlObligationKind.VERIFY_RESULT_VALIDITY,
+                                evaluation=_timed_evaluation(
+                                    "首次给药前28天内的结果有效",
+                                    "span:01",
+                                    "首次给药前28天内的结果有效",
+                                ),
                                 statement="首次给药前28天内的结果有效",
                                 time_constraint={
                                     "anchor_type": "first_dose_date",

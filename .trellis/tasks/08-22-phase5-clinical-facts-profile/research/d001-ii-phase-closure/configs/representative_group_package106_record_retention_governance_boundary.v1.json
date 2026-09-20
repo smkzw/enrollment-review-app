@@ -1,0 +1,242 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-package106-record-retention-governance-boundary",
+  "task_id": "phase5-slice61cs-20260830",
+  "worker": "codex-parent",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/coverage_manifest.json",
+  "study_phase": "phase_ii",
+  "expected_package_ordinal": 106,
+  "expected_package_id": "pap-2bfe896140d41556d48a5132",
+  "owned_source_refs": [
+    "body.p1248",
+    "body.p1249",
+    "body.p1250"
+  ],
+  "attached_source_refs": [
+    "body.p1247"
+  ],
+  "required_candidate_source_refs": [],
+  "forbidden_candidate_source_refs": [
+    "body.p1247",
+    "body.p1248",
+    "body.p1249",
+    "body.p1250"
+  ],
+  "pre_enrollment_source_refs": [],
+  "structural_only_source_refs": [
+    "body.p1248"
+  ],
+  "attached_structural_only_source_refs": [],
+  "expected_disposition_by_source_ref": {
+    "body.p1249": "non_enrollment_execution",
+    "body.p1250": "non_enrollment_execution"
+  },
+  "expected_workflow_stage_ids_by_source_ref": {},
+  "owned_procedure_semantic_families_by_source_ref": {},
+  "owned_required_action_kinds_by_source_ref": {},
+  "candidate_forbidden_markers_by_source_ref": {
+    "body.p1247": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "源文件未保存不得入组",
+      "不能直接访问源文件不得入组",
+      "监管检查未通过不得入组",
+      "eCRF验证资料缺失即入排不通过"
+    ],
+    "body.p1248": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "记录/文件的保存决定受试者资格"
+    ],
+    "body.p1249": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "保存期限不足不得入组",
+      "保存期不满足不得入组",
+      "两个期限任选其一",
+      "使用较早期限结束保存义务",
+      "任一锚点未知仍可结束保存",
+      "研究文件未保存不得入组",
+      "保存场所和条件不足不得入组",
+      "保存治理决定受试者资格",
+      "研究中心或申办者未保存不得入组"
+    ],
+    "body.p1250": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "未经申办者书面许可不得入组",
+      "研究文件转移未获书面许可不得入组",
+      "保管人变更未获书面许可不得入组",
+      "研究文件销毁未获书面许可不得入组",
+      "口头同意即可转移文件",
+      "一般知会即可销毁研究文件",
+      "研究者书面许可即可销毁研究文件",
+      "书面许可决定受试者资格"
+    ]
+  },
+  "candidate_required_markers_by_source_ref": {},
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "先逐条读取并判断第106包原文，再确认研究文件保存治理不产生受试者候选：p1248仅为记录/文件的保存章节标题；p1249规定GCP/法律法规下的研究文件保存、两个独立事件锚点各至少5年且以较长时间为准、日后访问与数据溯源，以及研究中心/申办者保存责任和申办者/研究者/临床试验机构确认保存场所与条件；p1250规定研究文件转移、保管人变更和销毁均须申办者书面许可。这些是研究级记录保全、访问和许可治理，不是单例受试者人群、入排条件、阈值或筛选/基线/D1给药前动作，因此required candidates保持为空；不得以other_control_candidate强挂到受试者工作流。body.p1247属于Package 105，只读作为第9.4节交叉引用，不能转移保存期限或许可语义的所有权。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "第106包位于Ⅱ期数据采集与管理章节的记录/文件保存小节。p1249-p1250的保存期限、访问/溯源、场所条件、责任主体与申办者书面许可均约束研究文件治理和未来证据可访问性；p1247的第9.4节引用仅由Package 105只读附加以闭合交叉语境。保存治理不是单例受试者入排资格，不定义受试者人群、单例入排阈值、筛选/基线/D1给药前义务或访视程序；p1251起的伦理/知情同意内容属于Package 107，不进入本包。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    },
+    {
+      "workflow_stage_id": "flow-d1-pre-dose",
+      "review_stage": "baseline",
+      "display_name": "D1给药前",
+      "visit_instance": "D1给药前"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [],
+    "required_procedures": []
+  },
+  "ids": {
+    "manifest_id": "manifest:slice61cs-package106-record-retention-governance-boundary",
+    "catalog_id": "catalog:slice61cs-package106-record-retention-governance-boundary"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p1247": [
+      "Package 105的p1247仅作为第9.4节记录保存引用的只读交叉来源；源文件保全、申办方/IRB/EC/监管直接访问属于研究证据治理，不生成受试者候选",
+      "p1247不得转移Package 106所有权，不得把第9.4节引用改写为保存期限、许可或单例入排条件"
+    ],
+    "body.p1248": [
+      "记录/文件的保存标题仅提供章节结构，不独立生成候选、流程节点、官方规则或受试者控制点"
+    ],
+    "body.p1249": [
+      "保存义务按两个独立事件锚点分别计算至少5年并取较长者：试验药物被批准上市日期+至少5年与临床试验结束日期+至少5年；不能把两个期限误作任选其一",
+      "研究中心和申办者负责保存研究必备文件；申办者、研究者和临床试验机构确认均有保存场所和条件，责任主体不得合并、遗漏或互换",
+      "合理保存以便日后访问和数据溯源是研究文件可访问性/证据治理边界；任一锚点未知时不得用另一个较早期限声称保存义务结束",
+      "保存期限、访问溯源或场所条件缺口不能改写为某名受试者资料缺失、筛选/基线不通过、不得入组或发布控制点"
+    ],
+    "body.p1250": [
+      "研究文件转移、保管人的变更和研究文件销毁均属于研究文件保管治理动作，每一项都必须得到申办者的书面许可",
+      "不得把申办者书面许可弱化为口头同意、一般知会，或替换为研究者/伦理委员会/监管机构许可",
+      "转移、保管人变更或销毁许可状态不能改写为单例受试者筛选、基线、D1给药前或入排控制"
+    ]
+  },
+  "exception_semantics_by_source_ref": {
+    "body.p1247": {
+      "semantic_role": "package105_source_preservation_read_only_cross_reference",
+      "base_rule": "用于验证eCRFs输入数据正确性和完整性的源文件不得被清除或销毁，且必须按照第9.4节中描述的记录保存要求保存。为方便于源数据验证，研究者和机构必须允许申办者因为研究相关的监查、申办者稽查和 机构审查委员会/伦理委员会（Institutional Review Board/Ethics Committee，IRB/EC）审查而直接访问源文件和报告（如得到法律允许，也可以复制）。研究中心还必须允许监管当局对源数据/源文件进行检查。",
+      "exception_rule": "p1247由Package 105拥有；本包仅只读引用其第9.4节交叉语境，不吸收p1248-p1250的保存期限、场所责任或申办者书面许可，也不生成受试者资格或入排结论。",
+      "preserve_keywords": [
+        "源文件不得被清除或销毁",
+        "第9.4节中描述的记录保存要求",
+        "直接访问源文件和报告",
+        "监管当局对源数据/源文件进行检查"
+      ],
+      "forbidden_inversion": "不得把Package 105的源文件保全/访问义务改写为Package 106所有权、保存期限、书面许可或单例受试者不得入组条件。"
+    },
+    "body.p1248": {
+      "semantic_role": "record_retention_section_heading",
+      "base_rule": "记录/文件的保存。",
+      "exception_rule": "这是章节标题，仅建立p1249-p1250的结构归属，不形成研究文件保存动作、受试者资料要求或入排控制。",
+      "preserve_keywords": [
+        "记录/文件的保存"
+      ],
+      "forbidden_inversion": "不得把章节标题改写为记录保存决定受试者资格、筛选必做、基线必做或发布控制点。"
+    },
+    "body.p1249": {
+      "semantic_role": "clinical_trial_file_retention_and_storage_conditions",
+      "base_rule": "临床研究文件需按照GCP等相关法律法规的要求进行保存和管理。研究中心和申办者应保存研究必备文件至试验药物被批准上市后至少5年或至临床试验结束后至少5年（以较长时间为准）。研究文件应合理保存，以便日后访问或数据溯源。申办者、研究者和临床试验机构应当确认均有保存临床试验必备文件的场所和条件。",
+      "exception_rule": "保存截止是两个独立锚点各加至少五年的最大值：max(试验药物获批上市日期+至少5年, 临床试验结束日期+至少5年)。任一锚点未知时不得凭另一个较早锚点声称保存义务已经结束；研究文件保存、访问/溯源、场所与责任主体均是研究治理，不是单例受试者资格。",
+      "preserve_keywords": [
+        "GCP等相关法律法规",
+        "研究中心和申办者",
+        "研究必备文件",
+        "试验药物被批准上市后至少5年",
+        "临床试验结束后至少5年",
+        "（以较长时间为准）",
+        "日后访问或数据溯源",
+        "申办者、研究者和临床试验机构",
+        "保存场所和条件"
+      ],
+      "forbidden_inversion": "不得把两个保存期限取较长者、任一锚点未知、访问/溯源或场所条件改写为某名受试者的筛选/基线/D1给药前条件、资料缺失、不得入组、排除标准、入排不通过或发布控制点。"
+    },
+    "body.p1250": {
+      "semantic_role": "sponsor_written_permission_for_file_custody_changes",
+      "base_rule": "研究文件的转移、保管人的变更、研究文件的销毁等，必须得到申办者的书面许可。",
+      "exception_rule": "研究文件转移、保管人变更和销毁每一项都要求申办者书面许可；不得弱化为口头同意、一般知会，或替换为研究者、伦理委员会或监管机构许可；该许可治理不构成受试者资格或入排条件。",
+      "preserve_keywords": [
+        "研究文件的转移",
+        "保管人的变更",
+        "研究文件的销毁",
+        "申办者的书面许可"
+      ],
+      "forbidden_inversion": "不得把转移、保管人变更、销毁或申办者书面许可改写为筛选必做、基线必查、不得入组、排除标准、入排不通过或受试者资格。"
+    }
+  },
+  "later_package_boundary": {
+    "read_only": true,
+    "note": "Package 105拥有body.p1238-p1247；body.p1247在本包只能作为第9.4节的只读交叉引用，不能迁移所有权或吸收保存期限、场所责任和书面许可。Package 106严格拥有body.p1248-p1250。Package 107从body.p1251开始拥有伦理与知情同意内容，p1251及其后内容不得吸入本包。body.p537、body.p1210、body.p1223和body.p1237#atom-100-160为无所有权只读上下文，不能进入本包附加来源、候选、workflow binding、官方规则或required procedure。",
+    "expected_owners_by_span": {
+      "body.p1224": 103,
+      "body.p1235": 103,
+      "body.p1236": 104,
+      "body.p1237#atom-0-15": 104,
+      "body.p1237#atom-15-100": 104,
+      "body.p1237#atom-160-208": 104,
+      "body.p1238": 105,
+      "body.p1247": 105,
+      "body.p1248": 106,
+      "body.p1249": 106,
+      "body.p1250": 106,
+      "body.p1251": 107
+    },
+    "unowned_context_source_refs": [
+      "body.p537",
+      "body.p1210",
+      "body.p1223",
+      "body.p1237#atom-100-160"
+    ]
+  },
+  "notes": [
+    "模型外闭包：3个Package 106 owned来源，1个Package 105只读附加来源；p1248-p1250按原始顺序完整恢复，p1247只为第9.4节交叉引用。",
+    "候选判定不是预设零：先区分章节标题、研究文件保存期限/访问/溯源/场所责任和书面许可的研究治理对象与责任主体，再确认required_candidate_source_refs为空；不得以other_control_candidate绕过受试者层级边界。",
+    "保存截止必须保留两个事件锚点各至少5年并取较长者；未知任一锚点时不得用另一个较早锚点结束义务。p1249的研究中心/申办者保存责任与申办者/研究者/机构场所条件确认责任不得合并或交换。p1250的转移、保管人变更、销毁均须申办者书面许可。",
+    "记录保存、访问/溯源、场所条件和许可治理可能影响后续证据QC与可访问性，但不得自动变成某名受试者资料缺失、入排失败或控制点。",
+    "claims_complete=false；本配置不调用临床语义模型、不发布控制点、不进入受试者、OCR、Patient Profile或浏览器流程，不宣称D001全量或parent clinical acceptance完成。"
+  ]
+}

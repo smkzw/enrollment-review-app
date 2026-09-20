@@ -1,0 +1,21 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_height_weight.v8.json",
+  "group_id": "d001-ii-height-weight-v9",
+  "task_id": "phase5-slice60zl-20260828",
+  "artifact_dir_name": "phase5-slice60zl-d001-height-weight-replay-recording-closure-20260828",
+  "runner": {
+    "max_transport_retries": 1,
+    "max_schema_repairs": 6,
+    "timeout_seconds": 7200.0
+  },
+  "ids": {
+    "manifest_id": "manifest:slice60zl-height-weight",
+    "catalog_id": "catalog:slice60zl-height-weight"
+  },
+  "notes": [
+    "v8最后一轮已正确处理标题、动作和节点范围，唯一剩余问题是把体重记录精度写成一般完成动作。",
+    "v9只增加记录单位及精度的定向修订说明，并将同会话结构修订上限从5次调整为6次。",
+    "该修订不改变首轮提示、来源范围、模型身份或确定性验收标准。"
+  ]
+}

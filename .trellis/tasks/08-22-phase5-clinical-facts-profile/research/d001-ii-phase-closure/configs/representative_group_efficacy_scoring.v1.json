@@ -1,0 +1,310 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_viral_tb.v1.json",
+  "group_id": "d001-ii-efficacy-scoring",
+  "task_id": "phase5-slice61bk-20260829",
+  "worker": "codex-parent",
+  "artifact_dir_name": "phase5-slice61bk-d001-efficacy-scoring-20260829",
+  "owned_source_refs": [
+    "body.p819",
+    "body.p820",
+    "body.p821",
+    "body.p822",
+    "body.p823",
+    "body.p824",
+    "body.p825",
+    "body.p826",
+    "body.p827"
+  ],
+  "attached_source_refs": [
+    "body.t5.r22",
+    "body.t5.r23",
+    "body.t5.r24",
+    "body.t5.r25",
+    "body.p316",
+    "body.p633",
+    "body.p634",
+    "body.p635",
+    "body.p636",
+    "body.p885"
+  ],
+  "required_candidate_source_refs": [
+    "body.p821",
+    "body.p823",
+    "body.p825",
+    "body.p827"
+  ],
+  "forbidden_candidate_source_refs": [
+    "body.p819",
+    "body.p820",
+    "body.p822",
+    "body.p824",
+    "body.p826"
+  ],
+  "pre_enrollment_source_refs": [
+    "body.p821",
+    "body.p823",
+    "body.p825",
+    "body.p827"
+  ],
+  "structural_only_source_refs": [
+    "body.p819",
+    "body.p820",
+    "body.p822",
+    "body.p824",
+    "body.p826"
+  ],
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "只处置疗效评价专章四个指标的评分方法学；IN-04官方阈值、Ⅱ期流程表疗效行和D1给药前基线取值均作为只读权威边界，不重复发布。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "评分方法与IN-04阈值、Ⅱ期流程表疗效行均属于Ⅱ期筛选、基线和D1给药前审核；治疗期及以后访视的疗效结局不由本组发布。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    },
+    {
+      "workflow_stage_id": "flow-d1-pre-dose",
+      "review_stage": "baseline",
+      "display_name": "D1给药前",
+      "visit_instance": "D1给药前"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [
+      {
+        "catalog_item_id": "pcm-row-60a9e564dea57508635a69e8",
+        "official_code": "IN-04",
+        "label": "银屑病严重程度评分与体表面积",
+        "position": 3,
+        "source_span_ids": [
+          "span-338d599c9415eacfef3a9e6318d446f1",
+          "span-a0fba80e691dc5da40936864a532ef71",
+          "span-b84426277f77479652ce573f743c5828",
+          "span-f523b13921987a5b1a3987b620467a37"
+        ]
+      }
+    ],
+    "required_procedures": [
+      {
+        "catalog_item_id": "procedure:c4ab0ec230c36f41a03465d6c3699b09",
+        "label": "PASI评分",
+        "visit_instance": "筛选访视",
+        "review_stage": "screening",
+        "position": 33,
+        "source_span_ids": [
+          "slice61bl-d001-v2-snapshot::body.t5.r22.c0.p0"
+        ],
+        "source_excerpts": [
+          "PASI评分"
+        ]
+      },
+      {
+        "catalog_item_id": "procedure:3e3078867072096a127973a83ae085db",
+        "label": "PASI评分",
+        "visit_instance": "基线访视",
+        "review_stage": "baseline",
+        "position": 34,
+        "source_span_ids": [
+          "slice61bl-d001-v2-snapshot::body.t5.r22.c0.p0"
+        ],
+        "source_excerpts": [
+          "PASI评分"
+        ]
+      },
+      {
+        "catalog_item_id": "procedure:a93e077befe64c1b5e34423e1c30cf24",
+        "label": "PASI评分",
+        "visit_instance": "D1给药前",
+        "review_stage": "baseline",
+        "position": 35,
+        "source_span_ids": [
+          "slice61bl-d001-v2-snapshot::body.t5.r22.c0.p0"
+        ],
+        "source_excerpts": [
+          "PASI评分"
+        ]
+      },
+      {
+        "catalog_item_id": "procedure:5b658d40ff62fdd47f1807313a7f60c6",
+        "label": "PGA评分",
+        "visit_instance": "筛选访视",
+        "review_stage": "screening",
+        "position": 36,
+        "source_span_ids": [
+          "slice61bl-d001-v2-snapshot::body.t5.r23.c0.p0"
+        ],
+        "source_excerpts": [
+          "PGA评分"
+        ]
+      },
+      {
+        "catalog_item_id": "procedure:6ae9e85901fcd28781e80bdcf53d81b7",
+        "label": "PGA评分",
+        "visit_instance": "基线访视",
+        "review_stage": "baseline",
+        "position": 37,
+        "source_span_ids": [
+          "slice61bl-d001-v2-snapshot::body.t5.r23.c0.p0"
+        ],
+        "source_excerpts": [
+          "PGA评分"
+        ]
+      },
+      {
+        "catalog_item_id": "procedure:c198be277b3d0024d14d4054ce8b7eaf",
+        "label": "PGA评分",
+        "visit_instance": "D1给药前",
+        "review_stage": "baseline",
+        "position": 38,
+        "source_span_ids": [
+          "slice61bl-d001-v2-snapshot::body.t5.r23.c0.p0"
+        ],
+        "source_excerpts": [
+          "PGA评分"
+        ]
+      },
+      {
+        "catalog_item_id": "procedure:631d6a669a70c8cfb27883d62adb1263",
+        "label": "BSA评分",
+        "visit_instance": "筛选访视",
+        "review_stage": "screening",
+        "position": 39,
+        "source_span_ids": [
+          "slice61bl-d001-v2-snapshot::body.t5.r24.c0.p0"
+        ],
+        "source_excerpts": [
+          "BSA评分"
+        ]
+      },
+      {
+        "catalog_item_id": "procedure:a381746da2d4988688ea98230edad80c",
+        "label": "BSA评分",
+        "visit_instance": "基线访视",
+        "review_stage": "baseline",
+        "position": 40,
+        "source_span_ids": [
+          "slice61bl-d001-v2-snapshot::body.t5.r24.c0.p0"
+        ],
+        "source_excerpts": [
+          "BSA评分"
+        ]
+      },
+      {
+        "catalog_item_id": "procedure:39c02ed8bac2ce26251b40e35dfc4f55",
+        "label": "BSA评分",
+        "visit_instance": "D1给药前",
+        "review_stage": "baseline",
+        "position": 41,
+        "source_span_ids": [
+          "slice61bl-d001-v2-snapshot::body.t5.r24.c0.p0"
+        ],
+        "source_excerpts": [
+          "BSA评分"
+        ]
+      },
+      {
+        "catalog_item_id": "procedure:faa0ff5256b87d5edfe8b14d18efabba",
+        "label": "DLQI评分",
+        "visit_instance": "D1给药前",
+        "review_stage": "baseline",
+        "position": 42,
+        "source_span_ids": [
+          "slice61bl-d001-v2-snapshot::body.t5.r25.c0.p0"
+        ],
+        "source_excerpts": [
+          "DLQI评分"
+        ]
+      },
+      {
+        "catalog_item_id": "pcm-row-f706d9b42eab4823b232df04",
+        "label": "入排标准审核",
+        "visit_instance": "D1给药前",
+        "review_stage": "baseline",
+        "position": 57,
+        "source_span_ids": [
+          "span-95152191c44012a3e06ff88e1605acc5"
+        ]
+      }
+    ]
+  },
+  "ids": {
+    "manifest_id": "manifest:slice61bk-efficacy-scoring",
+    "catalog_id": "catalog:slice61bk-efficacy-scoring"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p821": [
+      "PASI综合皮损严重程度（红斑、厚度、鳞屑）及皮损面积，0-72分，评分细则见附录4",
+      "不得把PASI 0-72的方法学范围改写为入排阈值或基线合格线"
+    ],
+    "body.p823": [
+      "PGA根据红斑、鳞屑和斑块厚度整体评估，0-4分，评分细则见附录5",
+      "不得把PGA 0-4的方法学范围改写为入排阈值；IN-04的PGA≥3为只读官方阈值"
+    ],
+    "body.p825": [
+      "BSA以单手掌及手指屈侧面积为体表面积1%，0%-100%，评分细则见疗效评价SOP",
+      "不得把BSA 0%-100%的方法学范围改写为入排阈值；IN-04的BSA≥10%为只读官方阈值"
+    ],
+    "body.p827": [
+      "DLQI为10个问题的问卷，评估上1周生活质量影响，0-30分，评分细则见附录6",
+      "DLQI不得被设为入排阈值或筛选/基线流程必做项；其首个流程评估节点为D1给药前"
+    ],
+    "body.t5.r22": [
+      "PASI流程行筛选X、基线（X）、治疗期及以后各X，不得重复发布流程必做项"
+    ],
+    "body.t5.r23": [
+      "PGA流程行筛选X、基线（X）、治疗期及以后各X，不得重复发布流程必做项"
+    ],
+    "body.t5.r24": [
+      "BSA流程行筛选X、基线（X）、治疗期及以后各X，不得重复发布流程必做项"
+    ],
+    "body.t5.r25": [
+      "DLQI流程行筛选期和基线列无标记，首个X出现在D1；不得据此虚构DLQI筛选或基线评估义务"
+    ],
+    "body.p633": [
+      "IN-04只读官方阈值：筛选和基线时研究者评估需同时满足PASI≥12、PGA≥3、BSA≥10%",
+      "不得改写阈值方向或数值，不得把DLQI加入IN-04"
+    ],
+    "body.p634": [
+      "PASI≥12分仅为IN-04入选阈值，不是评分方法学，不得重复发布"
+    ],
+    "body.p635": [
+      "PGA≥3分仅为IN-04入选阈值，不是评分方法学，不得重复发布"
+    ],
+    "body.p636": [
+      "BSA≥10%仅为IN-04入选阈值，不是评分方法学，不得重复发布"
+    ],
+    "body.p316": [
+      "访视合并与基线取值规则只读：≤7天可合并、＞7天需D1前7天内基线访视；疗效指标以D1给药前结果作为基线值",
+      "D1给药前基线取值不得改写为筛选访视取值"
+    ],
+    "body.p885": [
+      "基线访视注只读：四个疗效指标以D1给药前结果作为基线值，基线需再次审查入选和排除标准",
+      "不得把D1给药前基线取值并入筛选或基线访视节点"
+    ]
+  },
+  "notes": [
+    "原始DOCX产品链直接提取，用户无需预处理方案文本。",
+    "本组只处置评分方法学（PASI/PGA/BSA/DLQI四个指标的构成、范围与细则指引），不发布入排阈值和流程必做项。",
+    "IN-04为三项合取官方阈值（PASI≥12、PGA≥3、BSA≥10%），DLQI不是入排指标，不得新增DLQI阈值。",
+    "流程表PASI/PGA/BSA行覆盖筛选、基线（X）和治疗期各访视，DLQI行筛选期与基线列无标记、首个节点为D1给药前。",
+    "四个疗效指标的基线值均为D1给药前结果；基线访视需再次审查入选和排除标准后方可随机分组。",
+    "治疗期及以后访视的疗效结局（PASI 75、PGA-TS等）属于统计分析章节，不进入本组。",
+    "本切片为来源闭包切片：不调用临床语义模型，不并入131包正式目录，claims_complete=false。"
+  ]
+}

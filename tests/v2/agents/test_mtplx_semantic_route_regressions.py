@@ -118,22 +118,29 @@ def _assert_strict_json_schema(kwargs: dict[str, object]) -> None:
 def _patch_mtplx_constants(monkeypatch, module) -> None:
     monkeypatch.setattr(module, "MTPLX_BASE_URL", MTPLX_BASE_URL, raising=False)
     monkeypatch.setattr(module, "MTPLX_API_KEY", "", raising=False)
+    # 测试环境不装配属主清单：把部署指纹桩为固定值，仅验证传输形态。
+    import app.llm.mtplx_model_lifecycle as _lifecycle
+    monkeypatch.setattr(_lifecycle, "mtplx_deployment_fingerprint",
+                        lambda *args, **kwargs: None)
+    monkeypatch.setattr(_lifecycle, "mtplx_deployment_identity",
+                        lambda *args, **kwargs: {"lifecycle": "test-stub/v1"})
 
 
 def test_default_routes_keep_glm_normalizer_separate_from_mtplx_and_omlx() -> None:
     values = _config_probe()
     assert values["MTPLX_BASE_URL"] == MTPLX_DEFAULT_BASE_URL
     assert values["MTPLX_MODEL"] == MTPLX_MODEL
-    assert values["MTPLX_REASONING_EFFORT"] == "medium"
-    for name in (
-        "DECONSTRUCT_BACKEND",
-        "PHASE_APPLICABILITY_BACKEND",
-        "REVIEW_BACKEND",
-    ):
-        assert values[name] == "mtplx"
-    for prefix in ("DECONSTRUCT", "PHASE_APPLICABILITY", "REVIEW"):
-        assert values[f"{prefix}_MODEL"] == MTPLX_MODEL
-        assert values[f"{prefix}_REASONING_EFFORT"] == "medium"
+    assert values["MTPLX_REASONING_EFFORT"] == "xhigh"
+    # 方案语义与阶段适用性默认跟随 zhipu-coding-plan GLM；独立评审仍走 MTPLX。
+    assert values["DECONSTRUCT_BACKEND"] == "zhipu-coding-plan"
+    assert values["DECONSTRUCT_MODEL"] == "glm-5.3-flash"
+    assert values["DECONSTRUCT_REASONING_EFFORT"] == "high"
+    assert values["PHASE_APPLICABILITY_BACKEND"] == "zhipu-coding-plan"
+    assert values["PHASE_APPLICABILITY_MODEL"] == "glm-5.3-flash"
+    assert values["PHASE_APPLICABILITY_REASONING_EFFORT"] == "high"
+    assert values["REVIEW_BACKEND"] == "mtplx"
+    assert values["REVIEW_MODEL"] == MTPLX_MODEL
+    assert values["REVIEW_REASONING_EFFORT"] == "xhigh"
     assert values["EVIDENCE_NORMALIZER_PROVIDER"] == "zhipu-coding-plan"
     assert values["EVIDENCE_NORMALIZER_MODEL"] == "glm-5.3-flash"
     assert values["EVIDENCE_NORMALIZER_REASONING_EFFORT"] == "high"
@@ -160,9 +167,13 @@ def test_protocol_transport_uses_only_explicit_mtplx_and_strict_wire(monkeypatch
     kwargs = transport._completion_kwargs([{"role": "user", "content": "probe"}])
     assert kwargs["model"] == MTPLX_MODEL
     assert kwargs["reasoning_effort"] == "medium"
-    assert kwargs["max_tokens"] == protocol_transport.MTPLX_PROTOCOL_BATCH_MAX_TOKENS
-    _assert_strict_json_schema(kwargs)
+    # env 继承预算 65536 在平台上限内原样生效，不被静默压缩到旧上限。
+    assert kwargs["max_tokens"] == protocol_transport.DECONSTRUCT_MAX_TOKENS
+    assert kwargs["max_tokens"] <= protocol_transport.MTPLX_PROTOCOL_BATCH_MAX_TOKENS
+    # MTPLX 属语法不兼容后端：线级 json_object + 宿主严格校验 + 合同入提示词。
+    assert kwargs["response_format"] == {"type": "json_object"}
     assert kwargs["extra_body"] == {"generation_mode": "ar"}
+    assert "temperature" not in kwargs
 
 
 def test_phase_transport_preserves_mtplx_identity_without_remote_or_omlx_fallback(

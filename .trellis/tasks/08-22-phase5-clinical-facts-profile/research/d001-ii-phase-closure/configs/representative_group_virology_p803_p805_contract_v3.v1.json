@@ -1,0 +1,17 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_virology_p803_p805_contract_v2.v1.json",
+  "group_id": "d001-ii-virology-p803-p805-contract-v3",
+  "task_id": "phase5-slice61ac-virology-conditional-exemption-20260828",
+  "worker": "codex-parent",
+  "artifact_dir_name": "phase5-slice61ac-virology-conditional-exemption-20260828",
+  "runner": {
+    "max_transport_retries": 0,
+    "max_schema_repairs": 4,
+    "timeout_seconds": 7200.0
+  },
+  "notes": [
+    "候选重分区授权与有条件豁免绑定门禁修复后的唯一次 MTPLX medium 验证。",
+    "仅处置 body.p803-p805；流程第14项与 EX-22 只读携带；不覆盖历史失败工件，不直接发布控制点。"
+  ]
+}

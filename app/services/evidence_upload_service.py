@@ -51,6 +51,7 @@ from app.domain.contracts.evidence_ingestion import (
 )
 from app.domain.contracts.evidence_upload import (
     EVIDENCE_PROCESSING_JOB_TYPE,
+    DIRECT_VISION_PREPARATION,
     PROCESSING_HINT_BY_STATUS,
     EvidenceUploadCommit,
     EvidenceUploadConfirmInput,
@@ -1074,6 +1075,11 @@ class EvidenceUploadService:
                 "subject_id": command.subject_id,
                 "review_episode_id": command.review_episode_id,
                 "upload_mode": command.upload_mode.value,
+                "ocr_inheritance_contract": "confirmed-ocr/v1",
+                "preparation_policy": DIRECT_VISION_PREPARATION,
+                "inherited_processing_revision_id": EpisodeRepository(session).get(
+                    command.review_episode_id
+                ).active_evidence_processing_revision_id,
             },
             steps=[
                 StepSpec(

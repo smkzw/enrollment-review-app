@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "policy": "beijing-day-night-v1",
+  "timezone": "Asia/Shanghai",
+  "day_start": "08:00",
+  "night_start": "22:00",
+  "packet_period": "night",
+  "packet_evaluated_at": "2026-08-29T22:04:29.154715+08:00",
+  "variants": {
+    "day": {
+      "agent": "pi",
+      "provider": "cms-router",
+      "model": "minimax-m3",
+      "effort": "xhigh",
+      "default_provider": "cms-router",
+      "default_model": "minimax-m3",
+      "default_effort": "xhigh",
+      "escalate_provider": "cms-router",
+      "escalate_model": "minimax-m3",
+      "escalate_effort": "xhigh",
+      "primary": {
+        "agent": "pi",
+        "provider": "cms-router",
+        "model": "minimax-m3",
+        "effort": "xhigh"
+      },
+      "fallbacks": [
+        {
+          "agent": "pi",
+          "provider": "opencode-go",
+          "model": "muse-spark-1.2-contributor",
+          "effort": "xhigh"
+        },
+        {
+          "agent": "pi",
+          "provider": "openai-codex",
+          "model": "gpt-5.6-luna",
+          "effort": "max"
+        }
+      ],
+      "execution_route": "Complex/logic/evidence/artifact-heavy object: Pi/cms-router/minimax-m3 xhigh -> Pi/google-antigravity/gemini-3.7-flash high -> Pi/OpenCode Go/Muse xhigh -> Pi/openai-codex/gpt-5.6-luna max",
+      "route_contract_frozen": true,
+      "deduplicated_against_execution": [
+        {
+          "provider": "cursor",
+          "model": "auto"
+        },
+        {
+          "provider": "google-antigravity",
+          "model": "gemini-3.7-flash"
+        }
+      ]
+    },
+    "night": {
+      "agent": "codebuddy",
+      "provider": "codebuddy-cli",
+      "model": "deepseek-v4-flash",
+      "effort": "max",
+      "default_provider": "codebuddy-cli",
+      "default_model": "deepseek-v4-flash",
+      "default_effort": "max",
+      "escalate_provider": "codebuddy-cli",
+      "escalate_model": "deepseek-v4-flash",
+      "escalate_effort": "max",
+      "primary": {
+        "agent": "codebuddy",
+        "provider": "codebuddy-cli",
+        "model": "deepseek-v4-flash",
+        "effort": "max"
+      },
+      "fallbacks": [
+        {
+          "agent": "codebuddy",
+          "provider": "codebuddy-cli",
+          "model": "glm-5.3-flash",
+          "effort": "max"
+        },
+        {
+          "agent": "grok",
+          "provider": "grok-build",
+          "model": "grok-4.6",
+          "effort": "medium"
+        },
+        {
+          "agent": "pi",
+          "provider": "cursor",
+          "model": "cursor-grok-4.6",
+          "effort": "medium"
+        },
+        {
+          "agent": "pi",
+          "provider": "openai-codex",
+          "model": "gpt-5.6-luna",
+          "effort": "max"
+        }
+      ],
+      "execution_route": "Complex/logic/evidence/artifact-heavy object: CodeBuddy/deepseek-v4-flash max -> CodeBuddy/glm-5.3-flash max -> Grok Build/grok-4.6 medium -> Pi/Cursor/cursor-grok-4.6 medium -> Pi/openai-codex/gpt-5.6-luna max",
+      "route_contract_frozen": true,
+      "deduplicated_against_execution": [
+        {
+          "provider": "cursor",
+          "model": "auto"
+        },
+        {
+          "provider": "google-antigravity",
+          "model": "gemini-3.7-flash"
+        }
+      ]
+    }
+  }
+}

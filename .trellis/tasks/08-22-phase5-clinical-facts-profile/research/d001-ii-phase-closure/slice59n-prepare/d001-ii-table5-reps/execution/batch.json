@@ -1,0 +1,256 @@
+{
+  "batch_id": "pcb-9b9d50642383976b5ae7774e",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [],
+  "context_structure_unit_ids": [],
+  "context_units": [],
+  "coverage_manifest_id": "manifest:slice59n-table5-reps",
+  "known_official_targets": [],
+  "known_procedure_targets": [],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "基线期",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "baseline-1",
+      "visit_window": null,
+      "workflow_stage_id": "stage:baseline:1"
+    }
+  ],
+  "owned_source_span_ids": [
+    "body.t10.r1.c0.p0",
+    "body.t10.r1.c1.p0",
+    "body.t10.r3.c0.p0",
+    "body.t10.r3.c1.p0",
+    "body.t10.r4.c0.p0",
+    "body.t10.r4.c1.p0",
+    "body.t10.r7.c0.p0",
+    "body.t10.r7.c1.p0"
+  ],
+  "owned_structure_unit_ids": [
+    "su-9b9ebfbdf97e46d2a5c052f9",
+    "su-baee6d67a377ab4f63ee3255",
+    "su-2f4e18342b9e9c245052e468",
+    "su-23e55b26ae4ca12e5340a800"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "首次给药前6个月至试验结束 | 靶向IL-12、IL-17和/或IL-23的生物制剂",
+      "heading_path": [
+        "研究治疗",
+        "合并用药/治疗",
+        "禁止的合并用药/治疗",
+        "表 5 禁止的合并用药/治疗"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t10.r1.c0.p0",
+        "body.t10.r1.c1.p0"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 24921,
+      "source_ref": "body.t10.r1",
+      "source_span_ids": [
+        "body.t10.r1.c0.p0",
+        "body.t10.r1.c1.p0"
+      ],
+      "structure_unit_id": "su-9b9ebfbdf97e46d2a5c052f9",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "时间"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            1,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ],
+        "row_headers": [
+          "首次给药前6个月至试验结束"
+        ],
+        "row_index": 1,
+        "table_path": [
+          1,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    },
+    {
+      "excerpt": "首次给药前24个月至试验结束，若经过药物清除剂进行洗脱可缩短至首次给药前6个月 | 来氟米特",
+      "heading_path": [
+        "研究治疗",
+        "合并用药/治疗",
+        "禁止的合并用药/治疗",
+        "表 5 禁止的合并用药/治疗"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t10.r3.c0.p0",
+        "body.t10.r3.c1.p0"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 24961,
+      "source_ref": "body.t10.r3",
+      "source_span_ids": [
+        "body.t10.r3.c0.p0",
+        "body.t10.r3.c1.p0"
+      ],
+      "structure_unit_id": "su-baee6d67a377ab4f63ee3255",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "时间"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            3,
+            0
+          ],
+          [
+            3,
+            1
+          ]
+        ],
+        "row_headers": [
+          "首次给药前24个月至试验结束，若经过药物清除剂进行洗脱可缩短至首次给药前6个月"
+        ],
+        "row_index": 3,
+        "table_path": [
+          3,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    },
+    {
+      "excerpt": "首次给药前3个月或5个半衰期（以时间较长者为准）至试验结束 | 除靶向IL-12、IL-17和/或IL-23外的其他生物制剂",
+      "heading_path": [
+        "研究治疗",
+        "合并用药/治疗",
+        "禁止的合并用药/治疗",
+        "表 5 禁止的合并用药/治疗"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t10.r4.c0.p0",
+        "body.t10.r4.c1.p0"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 24981,
+      "source_ref": "body.t10.r4",
+      "source_span_ids": [
+        "body.t10.r4.c0.p0",
+        "body.t10.r4.c1.p0"
+      ],
+      "structure_unit_id": "su-2f4e18342b9e9c245052e468",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "时间"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            4,
+            0
+          ],
+          [
+            4,
+            1
+          ]
+        ],
+        "row_headers": [
+          "首次给药前3个月或5个半衰期（以时间较长者为准）至试验结束"
+        ],
+        "row_index": 4,
+        "table_path": [
+          4,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    },
+    {
+      "excerpt": "首次给药前4周至试验结束 | 影响银屑病病情的非生物制剂系统治疗，包括但不限于 JAKs抑制剂、糖皮质激素、维A酸类、环孢素、甲氨蝶呤、黄芪、雷公藤、苦参、复方甘草酸铵、硫唑嘌呤、吗替麦考酚酯、中成药及传统中草药（对于无明确临床证据可能改善银屑病病情的中成药或传统中草药，禁用时间可缩短至给药前2周至试验结束）、抗疟药、干扰素或锂制剂等",
+      "heading_path": [
+        "研究治疗",
+        "合并用药/治疗",
+        "禁止的合并用药/治疗",
+        "表 5 禁止的合并用药/治疗"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t10.r7.c0.p0",
+        "body.t10.r7.c1.p0"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25041,
+      "source_ref": "body.t10.r7",
+      "source_span_ids": [
+        "body.t10.r7.c0.p0",
+        "body.t10.r7.c1.p0"
+      ],
+      "structure_unit_id": "su-23e55b26ae4ca12e5340a800",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "时间"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            7,
+            0
+          ],
+          [
+            7,
+            1
+          ]
+        ],
+        "row_headers": [
+          "首次给药前4周至试验结束"
+        ],
+        "row_index": 7,
+        "table_path": [
+          7,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    }
+  ],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "study_phase": "phase_ii"
+}

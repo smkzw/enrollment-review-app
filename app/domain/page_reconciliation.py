@@ -64,6 +64,8 @@ def reconcile_page_reviews(
         )
 
     main_records = [by_lane[PageReviewLane.MAIN_A], by_lane[PageReviewLane.MAIN_B]]
+    if main_records[0].reading_view != main_records[1].reading_view:
+        raise PageReconciliationError("两次独立判读使用的阅读视图不一致，不能合并核对")
     facts_by_key: dict[str, list[PageReviewRecord]] = defaultdict(list)
     facts_by_field: dict[str, list[tuple[str, PageReviewRecord]]] = defaultdict(list)
     unassociated_fact_keys: set[str] = set()
@@ -155,7 +157,15 @@ def reconcile_page_reviews(
         lanes -= {record.lane for item, record in observations
                   if item.context is None or not normalize_text(item.context.target_text)}
         if len(lanes) >= 2:
-            accepted_handwriting.append(next(item for item, record in observations if record.lane in lanes))
+            # 胜者必须与传入顺序无关：同一内容键两读道各有一票时按读道优先级
+            # 取 main-A；否则从存储的排序 page_review_ids 重算会选到另一读道，
+            # 破坏对账内容的可复现性。
+            lane_priority = {PageReviewLane.MAIN_A: 0, PageReviewLane.MAIN_B: 1}
+            accepted_item, _winner = min(
+                ((item, record) for item, record in observations if record.lane in lanes),
+                key=lambda pair: lane_priority.get(pair[1].lane, 9),
+            )
+            accepted_handwriting.append(accepted_item)
         else:
             handwriting_conflicts.append(
                 _conflict(

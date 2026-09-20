@@ -1,0 +1,18 @@
+{
+  "attached_count": 0,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-31b54711bd984ea2abe99e94",
+  "group_id": "d001-ii-package107-informed-consent-governance-control-boundary",
+  "lookup_counts": {
+    "frozen_plan_owned": 9
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package107-informed-consent-governance-control-boundary",
+  "owned_count": 9,
+  "prompt_char_count": 31985,
+  "prompt_sha256": "4fa3ab20e8aa0a4f780644aa73613102b3edfa855fe6b34f1384887993f35d57",
+  "task_id": "phase5-slice61ct-20260830",
+  "unit_count": 9,
+  "worker": "codex-parent"
+}

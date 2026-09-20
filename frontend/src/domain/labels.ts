@@ -84,7 +84,7 @@ export const gapTypeLabel: Record<GapType, string> = {
   result_fields_missing: "结果字段缺失",
   date_or_anchor_missing: "日期或时间锚点缺失",
   professional_judgment: "待研究者判断",
-  observation_unverified: "待研究者判断",
+  observation_unverified: "资料内容尚待核实",
   source_conflict: "来源存在冲突",
   interpretation_conflict: "解释材料与方案不一致",
   ocr_or_parse_risk: "文字或数值需要核对",
@@ -107,8 +107,8 @@ export const blockingLevelBadge: Record<BlockingLevel, string> = {
 
 export const actionTargetLabel: Record<ActionTarget, string> = {
   investigator: "研究者方",
-  crc: "CRC",
-  cra: "CRA",
+  crc: "研究协调员",
+  cra: "临床监查员",
   sponsor_medical_or_project: "申办方医学或项目组",
 };
 

@@ -1,0 +1,191 @@
+{
+  "attached_source_refs": [
+    "body.p1171",
+    "body.p1172",
+    "body.p1173",
+    "body.p1174",
+    "body.p1175",
+    "body.p1176",
+    "body.p1177",
+    "body.p1178",
+    "body.p1179"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package100-statistical-hypothesis-phase-boundary",
+  "notes": [
+    "模型外闭包：3个拥有来源，9个只读来源，0个候选。",
+    "p1173-p1177从旧计划的待判定目标移除，是期别识别修正，不是语义删除。",
+    "claims_complete=false；本配置不调用模型、不发布控制点。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1168",
+    "body.p1169",
+    "body.p1170"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "统计学考虑章节标题，仅提供结构归属，不独立形成控制点": "pending_codex"
+      },
+      "frozen_excerpt": "统计学考虑",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1168",
+      "structure_unit_id": "su-b1a4eb846e1760d328d8ab85"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "仅说明Ⅱ期和Ⅲ期的统计分析方法将在各自 SAP 中细化，并分别在各期数据库锁定前获批定稿": "pending_codex",
+        "数据库锁定前是统计文件定稿时限，不得改写为受试者随机、给药或入组前义务": "pending_codex"
+      },
+      "frozen_excerpt": "针对Ⅱ期和Ⅲ期研究的数据统计分析方法将在单独的统计分析计划（Statistical Analysis Plan，SAP）中进一步细化，统计分析计划将分别在Ⅱ期和Ⅲ期研究数据库锁定前由申办者批准并定稿。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1169",
+      "structure_unit_id": "su-ec6767bdab8071493c210381"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "统计假设子节标题，仅提供结构归属，不独立形成检验假设或受试者级规则": "pending_codex"
+      },
+      "frozen_excerpt": "统计假设",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1170",
+      "structure_unit_id": "su-33ca58c3b59dcc4ebe724760"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅱ期为探索性研究，不做检验假设；只读证明Ⅱ期分支，不发射候选": "pending_codex"
+      },
+      "frozen_excerpt": "Ⅱ期为探索性研究，不做检验假设。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1171",
+      "structure_unit_id": "su-dc858ea1af9d50e93e2de816"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅲ期主要估计目标与假设检验引导段，只读用于识别后续段落为Ⅲ期": "pending_codex"
+      },
+      "frozen_excerpt": "Ⅲ期研究主要目的为证明对于主要估计目标，第16周，达到银屑病面积和严重程度指数较基线至少改善75%的参与者比例（PASI 75应答），达到PGA评分为0或1的参与者比例（PGA-TS），CMS-D001片均优于安慰剂。针对上述主要估计目标的均采取如下的假设检验：设定CMS-D001片的PASI 75应答率为π_11、安慰剂的应答比例为π_10；CMS-D001片的PGA-TS应答比例为π_21，安慰剂的应答比例为π_20；",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1172",
+      "structure_unit_id": "su-92cda4f134367875bbf58f21"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅲ期假设引导语，继承p1172的Ⅲ期语境，只读": "pending_codex"
+      },
+      "frozen_excerpt": "假设如下：",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1173",
+      "structure_unit_id": "su-83a2eb74b16a38f168df6652"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅲ期原假设公式，只读，不得进入Ⅱ期控制": "pending_codex"
+      },
+      "frozen_excerpt": "H_0：ℼ_11- ℼ_10 ≤0 或 ℼ_21- ℼ_20 ≤0",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1174",
+      "structure_unit_id": "su-305d69254d4de9a0a65868df"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅲ期备择假设公式，只读，不得进入Ⅱ期控制": "pending_codex"
+      },
+      "frozen_excerpt": "H_1：ℼ_11- ℼ_10> 0且ℼ_21- ℼ_20> 0；",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1175",
+      "structure_unit_id": "su-1c35528c71c583261cd826b3"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅲ期单侧Alpha水平，只读，不得进入Ⅱ期控制": "pending_codex"
+      },
+      "frozen_excerpt": "Alpha = 0.025（单侧）",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1176",
+      "structure_unit_id": "su-1383eec65f1476b8fa6413aa"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅲ期多重性校正标题，继承Ⅲ期语境，只读": "pending_codex"
+      },
+      "frozen_excerpt": "多重性校正",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1177",
+      "structure_unit_id": "su-5b58c2c24b7f16354a0ab16c"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅲ期多重性说明，只读，不得进入Ⅱ期控制": "pending_codex"
+      },
+      "frozen_excerpt": "Ⅲ期研究设定两个主要终点，根据上述的假设检验，针对每个主要终点，试验组均需优于安慰剂组才可以拒绝原假设，故不涉及alpha的分配。在研究中整体alpha水平仍然维持在单侧alpha=0.025的水平上。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1178",
+      "structure_unit_id": "su-bb2574438f9d2ba364e404e3"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "样本量计算标题归第101包；本包只读使用它关闭统计假设分支，不吸收后续样本量与分析集内容": "pending_codex"
+      },
+      "frozen_excerpt": "样本量计算",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1179",
+      "structure_unit_id": "su-16e9bca649de0099da16794e"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61cm-20260830",
+  "worker": "codex-parent"
+}

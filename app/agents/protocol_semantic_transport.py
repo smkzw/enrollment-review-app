@@ -55,6 +55,10 @@ _DEEPSEEK_BACKENDS = frozenset({"deepseek"})
 _MTPLX_BACKENDS = frozenset({"mtplx", "mtplx-api"})
 _ZHIPU_BACKENDS = frozenset({"zhipu-coding-plan", "glm"})
 _MLX_SERVE_BACKENDS = frozenset({"mlx-serve"})
+# 现场实测（2026-09-18，Flash-Next/xgrammar）：MTPLX 的语法引擎无法编译方案
+# wire 合同——number/深层嵌套 items 会被判 unsatisfiable 或生成含 look-ahead
+# 的正则后被自身拒绝。对这类后端改为“合同入提示词”，响应仍走宿主严格校验。
+_GRAMMAR_INCOMPATIBLE_BACKENDS = frozenset({"mtplx"})
 _LOCAL_STRUCTURED_BACKENDS = frozenset(
     {"omlx", *_MTPLX_BACKENDS, *_MLX_SERVE_BACKENDS}
 )
@@ -80,6 +84,9 @@ logger = logging.getLogger(__name__)
 # the segment runner recovers them with a fresh transport at most once.
 TRANSPORT_TRANSIENT_MAX_ATTEMPTS = 3
 TRANSPORT_TRANSIENT_RETRY_BACKOFF_SECONDS = 2.0
+# One length-finish retry may raise the output budget once, but the shared
+# reasoning+content budget never exceeds this ceiling (R3 design §6.1).
+PROTOCOL_LENGTH_RETRY_MAX_TOKENS = 131072
 _TRANSPORT_TIMEOUT_ERRORS: tuple[type[Exception], ...] = (
     APITimeoutError,
     httpx.TimeoutException,
@@ -91,6 +98,17 @@ _TRANSIENT_RETRYABLE_ERRORS: tuple[type[Exception], ...] = (
     APIConnectionError,
     httpx.TransportError,
 )
+
+
+def _quota_exhausted(error: Exception, backend: str) -> bool:
+    if backend not in _ZHIPU_BACKENDS or not isinstance(error, RateLimitError):
+        return False
+    body = error.body
+    if not isinstance(body, Mapping):
+        return False
+    detail = body.get("error", body)
+    # https://docs.bigmodel.cn/cn/api/api-code: quota windows, not rate throttling.
+    return isinstance(detail, Mapping) and str(detail.get("code")) in {"1308", "1310"}
 
 
 def _with_v1_suffix(base_url: str) -> str:
@@ -148,8 +166,9 @@ class DeepSeekProtocolAgentTransport:
         model: str | None = None,
         reasoning_effort: str | None = None,
         max_tokens: int | None = None,
-        provider_defaults: bool = False,
+        provider_defaults: bool = True,
         compact_wire: bool | None = None,
+        bounded_batch_context: bool | None = None,
     ) -> None:
         # Preserve the historical class behavior for direct callers that pass a
         # DeepSeek model but omit the newly introduced backend selector.  The
@@ -187,7 +206,10 @@ class DeepSeekProtocolAgentTransport:
         # ``provider_defaults`` only removes the product-side sampling overrides
         # (temperature) so the platform's own default
         # sampling applies.  Prompts and the strict output schema are never
-        # changed by this flag, and the default keeps the legacy behavior.
+        # changed by this flag.  New direct calls default to the provider
+        # sampling defaults (R3 design §6.1: 不传 temperature); an explicit
+        # ``provider_defaults=False`` keeps the historical product-side
+        # overrides for frozen legacy identities.
         self._provider_defaults = bool(provider_defaults)
         if compact_wire is not None and (
             type(compact_wire) is not bool
@@ -242,10 +264,29 @@ class DeepSeekProtocolAgentTransport:
             if selected_backend in _MLX_SERVE_BACKENDS
             else OMLX_PROTOCOL_BATCH_MAX_TOKENS
         )
-        self._max_tokens = (
-            min(selected_max_tokens, local_cap)
+        if (
+            selected_backend in _LOCAL_STRUCTURED_BACKENDS
+            and selected_max_tokens > local_cap
+        ):
+            # An explicitly requested budget above the configured platform cap
+            # must fail before any request; never silently min() shrink it.
+            cap_env = (
+                "MTPLX_PROTOCOL_BATCH_MAX_TOKENS"
+                if selected_backend in _MTPLX_BACKENDS
+                else "MLX_SERVE_PROTOCOL_BATCH_MAX_TOKENS"
+                if selected_backend in _MLX_SERVE_BACKENDS
+                else "OMLX_PROTOCOL_BATCH_MAX_TOKENS"
+            )
+            raise ValueError(
+                f"显式请求的方案解构输出预算 {selected_max_tokens} tokens 超过"
+                f"平台批次上限 {cap_env}={local_cap}；请调高上限或降低请求，"
+                "不会静默压缩显式请求。"
+            )
+        self._max_tokens = selected_max_tokens
+        self._output_budget_limit = (
+            min(local_cap, PROTOCOL_LENGTH_RETRY_MAX_TOKENS)
             if selected_backend in _LOCAL_STRUCTURED_BACKENDS
-            else selected_max_tokens
+            else PROTOCOL_LENGTH_RETRY_MAX_TOKENS
         )
         if self._max_tokens < 8192:
             raise ValueError("方案解构批次输出上限不能低于 8192 tokens")
@@ -309,6 +350,7 @@ class DeepSeekProtocolAgentTransport:
             )
         self._histories: dict[str, list[dict[str, str]]] = {}
         self._output_scope: dict[str, Any] = {}
+        self._bounded_batch_context = bounded_batch_context
 
     def configure_output_scope(
         self,
@@ -345,6 +387,19 @@ class DeepSeekProtocolAgentTransport:
             "reasoning_effort": self._reasoning_effort,
             "request": kwargs,
         }
+        from app.llm.mtplx_model_lifecycle import mtplx_deployment_identity
+
+        deployment = mtplx_deployment_identity(
+            self._backend, str(getattr(self._client, "base_url", "")),
+            self._model, self._reasoning_effort,
+        )
+        if deployment:
+            payload["deployment"] = deployment
+        if self._bounded_batch_context is not None:
+            payload["batch_context_policy"] = {
+                "version": "explicit-batch-context/v1",
+                "bounded": self._bounded_batch_context,
+            }
         return hashlib.sha256(
             json.dumps(
                 payload,
@@ -361,6 +416,8 @@ class DeepSeekProtocolAgentTransport:
 
     @property
     def supports_bounded_batch_context(self) -> bool:
+        if self._bounded_batch_context is not None:
+            return self._bounded_batch_context
         return self._backend in _LOCAL_STRUCTURED_BACKENDS
 
     @property
@@ -374,16 +431,20 @@ class DeepSeekProtocolAgentTransport:
         messages: list[dict[str, str]],
         *,
         output_kind: ProtocolOutputKind = "semantic_candidate",
+        max_tokens: int | None = None,
     ) -> dict[str, Any]:
         if output_kind not in {"semantic_candidate", "semantic_rule_repair"}:
             raise ValueError(f"未知的方案解构输出类型：{output_kind}")
         kwargs: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
-            "max_tokens": self._max_tokens,
+            "max_tokens": self._max_tokens if max_tokens is None else max_tokens,
             "response_format": {"type": "json_object"},
         }
-        if self._backend in _LOCAL_STRUCTURED_BACKENDS:
+        if (
+            self._backend in _LOCAL_STRUCTURED_BACKENDS
+            and self._backend not in _GRAMMAR_INCOMPATIBLE_BACKENDS
+        ):
             kwargs["response_format"] = protocol_output_response_format(
                 output_kind,
                 compact=self.uses_compact_wire_contract,
@@ -410,7 +471,8 @@ class DeepSeekProtocolAgentTransport:
             glm_thinking = _map_glm_reasoning_effort(self._reasoning_effort)
             kwargs["reasoning_effort"] = glm_thinking["reasoning_effort"]
             kwargs["extra_body"] = glm_thinking["extra_body"]
-            kwargs["temperature"] = 0.1
+            if not self._provider_defaults:
+                kwargs["temperature"] = 0.1
         elif self._backend in {*_MLX_SERVE_BACKENDS, "omlx"}:
             # oMLX and mlx-serve send the requested reasoning effort verbatim
             # (including xhigh) instead of silently dropping it; an effort that
@@ -419,15 +481,56 @@ class DeepSeekProtocolAgentTransport:
                 kwargs["reasoning_effort"] = self._reasoning_effort_requested
             if not self._provider_defaults:
                 kwargs["temperature"] = 0.0
-        else:
+        elif not self._provider_defaults:
             kwargs["temperature"] = 0.1
         return kwargs
+
+    def _accumulate_stream(self, stream: Any) -> Any:
+        """把流式响应重组为下游已知的非流式对象（content/finish_reason/usage）。
+
+        全模型统一 streaming（2026-09-18 用户指令）：本地/远端路由器对长生成
+        的 per-request 空闲超时不再掐断深度思考；usage 依赖
+        stream_options.include_usage，不支持的服务端自动降级重试。
+        """
+        from types import SimpleNamespace
+
+        content_parts: list[str] = []
+        reasoning_parts: list[str] = []
+        finish_reason: str | None = None
+        usage: Any = None
+        for chunk in stream:
+            if getattr(chunk, "usage", None) is not None:
+                usage = chunk.usage
+            choices = getattr(chunk, "choices", None) or []
+            if not choices:
+                continue
+            choice = choices[0]
+            if getattr(choice, "finish_reason", None):
+                finish_reason = choice.finish_reason
+            delta = getattr(choice, "delta", None)
+            if delta is None:
+                continue
+            piece = getattr(delta, "content", None)
+            if piece:
+                content_parts.append(piece)
+            reasoning = getattr(delta, "reasoning_content", None)
+            if reasoning:
+                reasoning_parts.append(reasoning)
+        message = SimpleNamespace(
+            content="".join(content_parts),
+            reasoning_content="".join(reasoning_parts),
+        )
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=message, finish_reason=finish_reason or "未提供")],
+            usage=usage,
+        )
 
     def _send_completion(
         self,
         request_messages: list[dict[str, str]],
         *,
         output_kind: ProtocolOutputKind,
+        max_tokens: int | None = None,
     ) -> Any:
         """Send one HTTP completion with bounded transient-error retries.
 
@@ -436,14 +539,36 @@ class DeepSeekProtocolAgentTransport:
         transient 5xx/429/connection failures are retried; timeouts and any
         other failure surface immediately through the existing boundary.
         """
-        kwargs = self._completion_kwargs(request_messages, output_kind=output_kind)
+        kwargs = self._completion_kwargs(
+            request_messages,
+            output_kind=output_kind,
+            max_tokens=max_tokens,
+        )
         last_exc: Exception | None = None
         for attempt in range(1, TRANSPORT_TRANSIENT_MAX_ATTEMPTS + 1):
             try:
-                return self._client.chat.completions.create(**kwargs)
+                from app.llm.mtplx_model_lifecycle import sync_mtplx_model_session
+
+                with sync_mtplx_model_session(
+                    self._backend, str(getattr(self._client, "base_url", "")),
+                    self._model, self._reasoning_effort,
+                ):
+                    kwargs["stream"] = True
+                    kwargs.setdefault("stream_options", {"include_usage": True})
+                    try:
+                        stream = self._client.chat.completions.create(**kwargs)
+                        return self._accumulate_stream(stream)
+                    except Exception as stream_opt_exc:
+                        if "stream_options" not in str(stream_opt_exc):
+                            raise
+                        kwargs.pop("stream_options", None)
+                        stream = self._client.chat.completions.create(**kwargs)
+                        return self._accumulate_stream(stream)
             except _TRANSPORT_TIMEOUT_ERRORS:
                 raise
             except _TRANSIENT_RETRYABLE_ERRORS as exc:
+                if _quota_exhausted(exc, self._backend):
+                    raise
                 last_exc = exc
                 if attempt >= TRANSPORT_TRANSIENT_MAX_ATTEMPTS:
                     break
@@ -469,10 +594,14 @@ class DeepSeekProtocolAgentTransport:
         diagnostics: list[str] = []
         length_attempts = 0
         malformed_attempts = 0
+        # One logical request carries one shared reasoning+content budget; a
+        # single length-finish retry may raise it once, capped, never silently.
+        request_budget = self._max_tokens
         for attempt in range(2):
             response = self._send_completion(
                 request_messages,
                 output_kind=output_kind,
+                max_tokens=request_budget,
             )
             choice = response.choices[0]
             message = choice.message
@@ -480,16 +609,32 @@ class DeepSeekProtocolAgentTransport:
             reasoning_chars = len(getattr(message, "reasoning_content", "") or "")
             finish_reason = getattr(choice, "finish_reason", None) or "未提供"
             if finish_reason == "length":
-                if local_early_length(self._backend, getattr(response, "usage", None), self._max_tokens):
+                if local_early_length(self._backend, getattr(response, "usage", None), request_budget):
                     raise RuntimeError(
                         "方案解构模型在额度用尽前停止，结果不完整；不扩大额度或重复原请求，需核查运行原因"
                     )
                 length_attempts += 1
                 diagnostics.append(
-                    f"第{attempt + 1}次结束原因=length，输出已被长度上限截断，"
+                    f"第{attempt + 1}次结束原因=length（请求预算{request_budget} tokens），"
+                    f"输出已被长度上限截断，"
                     f"正文长度={len(text) if isinstance(text, str) else 0}"
                 )
                 if attempt == 0:
+                    retry_budget = min(
+                        request_budget * 2,
+                        PROTOCOL_LENGTH_RETRY_MAX_TOKENS,
+                    )
+                    if retry_budget <= request_budget:
+                        break
+                    if retry_budget > self._output_budget_limit:
+                        diagnostics.append("扩大后的输出额度超过本地服务上限，未发送重试")
+                        break
+                    if retry_budget > request_budget:
+                        diagnostics.append(
+                            f"第2次请求预算提升至{retry_budget} tokens"
+                            "（思考与正文共享额度，最多一次）"
+                        )
+                    request_budget = retry_budget
                     request_messages = [
                         *request_messages,
                         {
@@ -580,6 +725,56 @@ class DeepSeekProtocolAgentTransport:
             "方案解构模型连续2次返回空正文（" + "；".join(diagnostics) + "）"
         )
 
+    def _wire_contract_prompt(self, prompt: str, output_kind: ProtocolOutputKind) -> str:
+        """语法约束不可用的后端：把 wire 合同 JSON 并入提示词，替代 response_format。
+
+        嵌入版做瘦身（去 $defs、两三层后只留类型形状）：完整合同会显著改变
+        prefill 长度形态，实测触发 Flash-Next qsa_prefill Metal kernel 的
+        JIT 编译缺陷（服务端 500）；字段级约束由提示词散文合同与宿主严格
+        校验共同保证。
+        """
+
+        if (
+            self._backend not in _GRAMMAR_INCOMPATIBLE_BACKENDS
+            or not self.uses_compact_wire_contract
+        ):
+            return prompt
+        schema = protocol_output_response_format(
+            output_kind,
+            compact=True,
+            **self._output_scope,
+        )["json_schema"]["schema"]
+
+        def slim(node: Any, depth: int) -> Any:
+            if isinstance(node, list):
+                return [slim(item, depth) for item in node]
+            if not isinstance(node, dict):
+                return node
+            if "$ref" in node:
+                return {"type": "object"}
+            if depth >= 3:
+                shallow: dict[str, Any] = {}
+                if "type" in node:
+                    shallow["type"] = node["type"]
+                if "enum" in node:
+                    shallow["enum"] = node["enum"]
+                return shallow
+            out: dict[str, Any] = {}
+            for key, value in node.items():
+                if key in {"title", "default", "$defs"}:
+                    continue
+                out[key] = slim(value, depth + 1)
+            return out
+
+        contract_json = json.dumps(slim(schema, 0), ensure_ascii=False)
+        return (
+            prompt
+            + "\n\n【输出 JSON 合同（本服务语法约束不可用，以下合同取代服务端携带）】"
+            + "你的整段响应必须是一个符合该 JSON Schema 的 JSON 对象；"
+            + "宿主会按完整合同逐字段严格校验，任何多余或缺失字段都会被拒绝：\n"
+            + contract_json
+        )
+
     def start(
         self,
         *,
@@ -587,7 +782,7 @@ class DeepSeekProtocolAgentTransport:
         output_kind: ProtocolOutputKind = "semantic_candidate",
     ) -> ProtocolAgentResponse:
         session_id = f"protocol-chat-{uuid4().hex}"
-        history = [{"role": "user", "content": prompt}]
+        history = [{"role": "user", "content": self._wire_contract_prompt(prompt, output_kind)}]
         self._histories[session_id] = history
         try:
             text = self._complete(history, output_kind=output_kind)
@@ -598,7 +793,11 @@ class DeepSeekProtocolAgentTransport:
                 error_code="TRANSPORT_TIMEOUT",
             ) from exc
         except Exception as exc:
-            raise ProtocolAgentCallError(session_id, str(exc)) from exc
+            raise ProtocolAgentCallError(
+                session_id, str(exc),
+                error_code="QUOTA_EXHAUSTED" if _quota_exhausted(exc, self._backend)
+                else "SEMANTIC_CALL_FAILED",
+            ) from exc
         history.append({"role": "assistant", "content": text})
         self._histories[session_id] = history
         return ProtocolAgentResponse(session_id=session_id, text=text)
@@ -612,7 +811,10 @@ class DeepSeekProtocolAgentTransport:
     ) -> ProtocolAgentResponse:
         if session_id not in self._histories:
             raise ValueError("找不到原方案解构会话，不能脱离上下文继续修正")
-        history = [*self._histories[session_id], {"role": "user", "content": prompt}]
+        history = [
+            *self._histories[session_id],
+            {"role": "user", "content": self._wire_contract_prompt(prompt, output_kind)},
+        ]
         self._histories[session_id] = history
         try:
             text = self._complete(history, output_kind=output_kind)
@@ -623,7 +825,11 @@ class DeepSeekProtocolAgentTransport:
                 error_code="TRANSPORT_TIMEOUT",
             ) from exc
         except Exception as exc:
-            raise ProtocolAgentCallError(session_id, str(exc)) from exc
+            raise ProtocolAgentCallError(
+                session_id, str(exc),
+                error_code="QUOTA_EXHAUSTED" if _quota_exhausted(exc, self._backend)
+                else "SEMANTIC_CALL_FAILED",
+            ) from exc
         history.append({"role": "assistant", "content": text})
         self._histories[session_id] = history
         return ProtocolAgentResponse(session_id=session_id, text=text)

@@ -103,17 +103,17 @@ def _glm_key_probe(overrides: dict[str, str]) -> str:
     return output.strip()
 
 
-def test_deconstruction_defaults_are_independent_from_legacy_review_defaults():
+def test_deconstruction_defaults_use_pinned_glm_route_and_new_budgets():
     values = _config_probe()
 
     assert values == [
         "mtplx-flash-next-optimized-speed",
         "mtplx",
-        "mtplx-flash-next-optimized-speed",
-        "mtplx",
-        "medium",
-        "8192",
-        "16384",
+        "glm-5.3-flash",
+        "zhipu-coding-plan",
+        "high",
+        "131072",
+        "131072",
     ]
 
 
@@ -135,8 +135,8 @@ def test_explicit_deconstruction_environment_overrides_are_preserved():
         "explicit-protocol-model",
         "omlx",
         "high",
-        "8192",
-        "16384",
+        "131072",
+        "131072",
     ]
 
 
@@ -197,10 +197,11 @@ def test_omlx_transport_uses_local_endpoint_and_does_not_require_deepseek_key(
     assert _FakeHTTPClient.calls == [{"trust_env": False}]
     kwargs = transport._completion_kwargs([{"role": "user", "content": "方案"}])
     assert kwargs["model"] == "Qwen3.8-27B-oQ8e-fp16-mtp"
-    assert transport_module.OMLX_PROTOCOL_BATCH_MAX_TOKENS == 8192
-    assert kwargs["max_tokens"] == transport_module.OMLX_PROTOCOL_BATCH_MAX_TOKENS
-    assert kwargs["max_tokens"] < 60000
-    assert kwargs["temperature"] == 0.0
+    assert transport_module.OMLX_PROTOCOL_BATCH_MAX_TOKENS == 131072
+    # env 继承默认预算 65536 在上限内原样生效，不被静默压低也不抬高。
+    assert kwargs["max_tokens"] == 65536
+    # 新直连默认保留供应商采样默认：不发送 temperature。
+    assert "temperature" not in kwargs
     assert kwargs["response_format"]["type"] == "json_schema"
     assert kwargs["response_format"]["json_schema"]["name"] == (
         "protocol_semantic_batch_wire_candidate"
@@ -228,19 +229,231 @@ def test_omlx_transport_uses_local_endpoint_and_does_not_require_deepseek_key(
     assert "extra_body" not in kwargs
 
 
-def test_mtplx_transport_has_its_own_quality_output_budget() -> None:
+def test_explicit_legacy_provider_defaults_false_keeps_product_sampling_override(
+    monkeypatch,
+):
+    _FakeOpenAI.calls.clear()
+    monkeypatch.setattr(transport_module, "OpenAI", _FakeOpenAI)
+    monkeypatch.setattr(transport_module, "OMLX_BASE_URL", "http://127.0.0.1:8001/v1/")
+    monkeypatch.setattr(transport_module, "OMLX_API_KEY", "")
+    monkeypatch.setattr(transport_module, "DEEPSEEK_API_KEY", "")
+
+    legacy = transport_module.DeepSeekProtocolAgentTransport(
+        client=object(),
+        backend="omlx",
+        model="Qwen3.8-27B-oQ8e-fp16-mtp",
+        provider_defaults=False,
+    )
+    glm_legacy = transport_module.DeepSeekProtocolAgentTransport(
+        client=object(),
+        backend="zhipu-coding-plan",
+        model="glm-5.3-flash",
+        reasoning_effort="high",
+        api_key="test-glm-key",
+        provider_defaults=False,
+    )
+
+    # 显式 provider_defaults=False 保留历史产品侧采样覆盖（历史身份兼容）。
+    assert legacy._completion_kwargs([{"role": "user", "content": "方案"}])[
+        "temperature"
+    ] == 0.0
+    assert glm_legacy._completion_kwargs([{"role": "user", "content": "方案"}])[
+        "temperature"
+    ] == 0.1
+    assert glm_legacy._completion_kwargs([{"role": "user", "content": "方案"}])[
+        "extra_body"
+    ]["thinking"]["type"] == "enabled"
+
+
+def test_glm_direct_call_honors_provider_defaults_flag():
+    def build(provider_defaults: bool):
+        return transport_module.DeepSeekProtocolAgentTransport(
+            client=object(),
+            backend="zhipu-coding-plan",
+            model="glm-5.3-flash",
+            reasoning_effort="high",
+            api_key="test-glm-key",
+            provider_defaults=provider_defaults,
+        )
+
+    default_kwargs = build(True)._completion_kwargs(
+        [{"role": "user", "content": "方案"}]
+    )
+    assert "temperature" not in default_kwargs
+    assert default_kwargs["reasoning_effort"] == "high"
+    assert default_kwargs["extra_body"] == {
+        "thinking": {"type": "enabled", "clear_thinking": False}
+    }
+    assert default_kwargs["response_format"] == {"type": "json_object"}
+
+
+def test_mtplx_explicit_budget_within_cap_is_kept_and_ar_retained() -> None:
     transport = transport_module.DeepSeekProtocolAgentTransport(
         client=object(),
         backend="mtplx",
-        model="mtplx-qwen38-27b-optimized-quality",
+        model="mtplx-flash-next-optimized-speed",
         max_tokens=60000,
     )
 
     kwargs = transport._completion_kwargs([{"role": "user", "content": "方案"}])
 
-    assert kwargs["max_tokens"] == transport_module.MTPLX_PROTOCOL_BATCH_MAX_TOKENS
-    assert kwargs["max_tokens"] > transport_module.OMLX_PROTOCOL_BATCH_MAX_TOKENS
+    # 显式 60000 在平台上限 131072 内：原样生效，不静默 min() 压缩。
+    assert transport._max_tokens == 60000
+    assert kwargs["max_tokens"] == 60000
+    # MTPLX 严格 JSON 的 AR 兼容措施与采样开关无关，必须始终保留。
     assert kwargs["extra_body"] == {"generation_mode": "ar"}
+    assert "temperature" not in kwargs
+    provider_default_off = transport_module.DeepSeekProtocolAgentTransport(
+        client=object(),
+        backend="mtplx",
+        model="mtplx-flash-next-optimized-speed",
+        max_tokens=60000,
+        provider_defaults=False,
+    )
+    assert provider_default_off._completion_kwargs(
+        [{"role": "user", "content": "方案"}]
+    )["extra_body"] == {"generation_mode": "ar"}
+
+
+def test_explicit_budget_above_platform_cap_fails_instead_of_silent_shrink():
+    with pytest.raises(ValueError, match="OMLX_PROTOCOL_BATCH_MAX_TOKENS"):
+        transport_module.DeepSeekProtocolAgentTransport(
+            client=object(),
+            backend="omlx",
+            model="local-model",
+            max_tokens=transport_module.OMLX_PROTOCOL_BATCH_MAX_TOKENS + 1,
+        )
+    with pytest.raises(ValueError, match="MTPLX_PROTOCOL_BATCH_MAX_TOKENS"):
+        transport_module.DeepSeekProtocolAgentTransport(
+            client=object(),
+            backend="mtplx",
+            model="mtplx-flash-next-optimized-speed",
+            max_tokens=transport_module.MTPLX_PROTOCOL_BATCH_MAX_TOKENS + 1,
+        )
+
+
+def test_env_inherited_budget_above_platform_cap_is_rejected(
+    monkeypatch,
+):
+    # 新请求的环境配置也不能绕过额度检查。
+    monkeypatch.setattr(transport_module, "DECONSTRUCT_MAX_TOKENS", 200000)
+    with pytest.raises(ValueError, match="平台批次上限"):
+        transport_module.DeepSeekProtocolAgentTransport(
+            client=object(), backend="omlx", model="local-model",
+        )
+
+
+class _LengthThenStopCompletions:
+    def __init__(self, finish_reasons):
+        self.finish_reasons = iter(finish_reasons)
+        self.calls: list[dict[str, object]] = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        finish_reason = next(self.finish_reasons)
+        return SimpleNamespace(
+            usage=None,
+            choices=[
+                SimpleNamespace(
+                    finish_reason=finish_reason,
+                    message=SimpleNamespace(
+                        content='{"partial":true' if finish_reason == "length" else '{"ok":1}',
+                        reasoning_content="",
+                    ),
+                )
+            ],
+        )
+
+
+def test_length_retry_raises_budget_once_capped_at_131072():
+    client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=_LengthThenStopCompletions(["length", "stop"])
+        )
+    )
+    transport = transport_module.DeepSeekProtocolAgentTransport(
+        client=client,
+        backend="zhipu-coding-plan",
+        model="glm-5.3-flash",
+        reasoning_effort="high",
+        api_key="test-glm-key",
+        max_tokens=65536,
+    )
+
+    response = transport.start(prompt="首轮完整输入")
+
+    assert response.text == '{"ok":1}'
+    budgets = [call["max_tokens"] for call in client.chat.completions.calls]
+    # length 只重试一次：65536 → 131072（思考+正文共享额度）。
+    assert budgets == [65536, 131072]
+
+
+def test_length_retry_budget_cap_does_not_double_above_131072():
+    client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=_LengthThenStopCompletions(["length", "stop"])
+        )
+    )
+    transport = transport_module.DeepSeekProtocolAgentTransport(
+        client=client,
+        backend="zhipu-coding-plan",
+        model="glm-5.3-flash",
+        reasoning_effort="high",
+        api_key="test-glm-key",
+        max_tokens=70000,
+    )
+
+    transport.start(prompt="首轮完整输入")
+
+    budgets = [call["max_tokens"] for call in client.chat.completions.calls]
+    # 70000*2 > 131072：重试预算封顶 131072，不静默抬高也不无限翻倍。
+    assert budgets == [70000, 131072]
+
+
+def test_two_length_finishes_fail_after_single_budget_retry():
+    client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=_LengthThenStopCompletions(["length", "length"])
+        )
+    )
+    transport = transport_module.DeepSeekProtocolAgentTransport(
+        client=client,
+        backend="zhipu-coding-plan",
+        model="glm-5.3-flash",
+        reasoning_effort="high",
+        api_key="test-glm-key",
+        max_tokens=65536,
+    )
+
+    with pytest.raises(RuntimeError, match="连续2次未返回完整JSON"):
+        transport.start(prompt="首轮完整输入")
+
+    assert len(client.chat.completions.calls) == 2
+
+
+def test_cache_identity_separates_sampling_flag_and_budget():
+    def build(**overrides):
+        options: dict = {
+            "client": object(),
+            "backend": "zhipu-coding-plan",
+            "model": "glm-5.3-flash",
+            "reasoning_effort": "high",
+            "api_key": "test-glm-key",
+        }
+        options.update(overrides)
+        return transport_module.DeepSeekProtocolAgentTransport(**options)
+
+    baseline = build().semantic_cache_identity(output_kind="semantic_candidate")
+    legacy_sampling = build(provider_defaults=False).semantic_cache_identity(
+        output_kind="semantic_candidate"
+    )
+    larger_budget = build(max_tokens=131072).semantic_cache_identity(
+        output_kind="semantic_candidate"
+    )
+
+    # 缓存身份哈希实际请求参数：采样开关与输出预算变化都必须分离身份。
+    assert legacy_sampling != baseline
+    assert larger_budget != baseline
 
 
 def test_omlx_wire_schema_is_small_flat_and_kind_specific():

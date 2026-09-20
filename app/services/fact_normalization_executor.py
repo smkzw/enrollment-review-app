@@ -68,7 +68,10 @@ from app.domain.publication import canonical_hash
 from app.services.fact_expectation_gaps import (
     EXPECTATION_INPUT_INCOMPLETE_CODE as _EXPECTATION_INPUT_INCOMPLETE_CODE,
 )
-from app.services.fact_expectation_gaps import expectation_gap_signals
+from app.services.fact_expectation_gaps import (
+    _prior_unreconfirmed_signals,
+    expectation_gap_signals,
+)
 from app.services.fact_normalization_source_adapter import (
     FactPlanningSourceError,
     build_doc_version_to_logical_map,
@@ -118,6 +121,7 @@ from app.storage.repositories import (
     PROMPT_VERSION_CONFIG,
     AppendRepository,
     EpisodeRepository,
+    InvalidReferenceError,
     list_expectation_templates,
 )
 from app.workflow.errors import StepFailure
@@ -1288,6 +1292,12 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                         fact_candidates=facts,
                         gate_results=transactional_results,
                     )
+                    # A new batch is not proof that an earlier concrete issue was resolved.
+                    gap_signals.extend(_prior_unreconfirmed_signals(
+                        session,
+                        authority=publication.authority,
+                        concrete_signals=gap_signals,
+                    ))
                     expectations = EvidenceExpectationProjectionService().project(
                         session,
                         authority=publication.authority,
@@ -1328,6 +1338,7 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                     FactRuleIndexError,
                     FactAuthorityError,
                     PatientProfileProjectionError,
+                    InvalidReferenceError,
                 ) as exc:
                     raise StepFailure(
                         retryable=False,

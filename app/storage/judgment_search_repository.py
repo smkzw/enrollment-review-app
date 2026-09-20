@@ -2,13 +2,14 @@
 
 持久化合同与列镜像遵循 ``page_review_repository`` 的既有约定：正文以
 ``payload_json``（规范化 JSON + 哈希）为准，镜像列仅供直接查询。摘要身份
-由权威元组 + 合同正文内容寻址派生（合同本身不含身份字段）：同权威同内容
-幂等去重，重跑产生新内容即新行，旧行按不可变历史保留。
+由任务 + 权威元组 + 合同正文内容寻址派生：同任务同内容幂等去重，
+不同任务即使内容相同也保留各自回执，旧行按不可变历史保留。
 """
 
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -34,7 +35,24 @@ from app.storage.models import ReviewEpisodeRecord, SubjectRecord
 from app.storage.evidence_models import EvidenceSnapshotV2Record
 from app.storage.ocr_models import EvidenceProcessingRevisionRecord
 
-__all__ = ["JudgmentSearchSummaryRepository"]
+__all__ = ["JudgmentSearchSummaryEntry", "JudgmentSearchSummaryRepository"]
+
+
+@dataclass(frozen=True)
+class JudgmentSearchSummaryEntry:
+    """Existing storage provenance, not proof of clinical absence or applicability."""
+
+    summary_id: str
+    job_id: str
+    payload_sha256: str
+    summary: JudgmentSearchCoverageSummary
+
+
+def _summary_identity(authority, payload, *, job_id: str | None = None) -> str:
+    identity = {"authority": authority.model_dump(mode="json"), "summary": payload}
+    if job_id is not None:
+        identity.update(identity_version=2, job_id=job_id)
+    return "judgment-search-summary:" + canonical_hash(identity)[:32]
 
 
 class JudgmentSearchSummaryRepository:
@@ -45,12 +63,13 @@ class JudgmentSearchSummaryRepository:
         self, summary: JudgmentSearchCoverageSummary, *, authority: FactAuthority,
         job_id: str, created_at,
     ) -> JudgmentSearchCoverageSummary:
+        # Frozen models can still be copied without validation by internal callers.
+        summary = JudgmentSearchCoverageSummary.model_validate(summary.model_dump())
         self._verify_scope(authority=authority)
         payload_json, payload_sha256 = encode_contract(summary)
-        summary_id = "judgment-search-summary:" + canonical_hash({
-            "authority": authority.model_dump(mode="json"),
-            "summary": json.loads(payload_json),
-        })[:32]
+        summary_id = _summary_identity(
+            authority, json.loads(payload_json), job_id=job_id
+        )
         row = self.session.get(JudgmentSearchSummaryORM, summary_id)
         if row is not None:
             if row.payload_sha256 != payload_sha256:
@@ -80,15 +99,64 @@ class JudgmentSearchSummaryRepository:
         row = _get_required(self.session, JudgmentSearchSummaryORM, summary_id, "判断检索摘要")
         return self._decode(row)
 
+    def get_entry(
+        self, summary_id: str, *, authority: FactAuthority,
+    ) -> JudgmentSearchSummaryEntry:
+        """Read a pinned historical identity; never replace it with a newer search.
+
+        This checks stored scope and content, not the originating job's receipts.
+        Formal consumption must separately rebuild those receipts and target scope.
+        """
+        row = _get_required(self.session, JudgmentSearchSummaryORM, summary_id, "判断检索摘要")
+        summary = self._decode(row)
+        payload = json.loads(row.payload_json)
+        if row.summary_id not in {
+            _summary_identity(authority, payload),
+            _summary_identity(authority, payload, job_id=row.job_id),
+        }:
+            raise ScopeViolationError("指定的判断检索摘要不属于本次审核资料与规则版本")
+        if (
+            row.subject_id,
+            row.review_episode_id,
+            row.evidence_snapshot_id,
+            row.evidence_processing_revision_id,
+            row.rule_set_id,
+            row.rule_set_revision,
+        ) != (
+            authority.subject_id,
+            authority.review_episode_id,
+            authority.evidence_snapshot_v2_id,
+            authority.complete_processing_revision_id,
+            authority.rule_set_id,
+            authority.rule_set_revision,
+        ):
+            raise InvalidReferenceError("判断检索摘要的作用域列与指定历史身份不一致")
+        return JudgmentSearchSummaryEntry(
+            summary_id=row.summary_id,
+            job_id=row.job_id,
+            payload_sha256=row.payload_sha256,
+            summary=summary,
+        )
+
     def latest_for_authority(
-        self, authority: FactAuthority,
+        self, authority: FactAuthority, *, job_id: str | None = None,
     ) -> dict[str, JudgmentSearchCoverageSummary]:
+        return {
+            requirement_id: entry.summary
+            for requirement_id, entry in self.latest_entries_for_authority(
+                authority, job_id=job_id
+            ).items()
+        }
+
+    def latest_entries_for_authority(
+        self, authority: FactAuthority, *, job_id: str | None = None,
+    ) -> dict[str, JudgmentSearchSummaryEntry]:
         """当前权威元组下每条要求的最新检索摘要（供缺口推导与界面读取）。
 
         同一要求多次检索（如受控重跑）时按 ``created_at``、``summary_id``
         确定性取最新；不同权威（新资料版本/新规则修订）的摘要不混入。
         """
-        rows = self.session.scalars(
+        statement = (
             select(JudgmentSearchSummaryORM)
             .where(
                 JudgmentSearchSummaryORM.review_episode_id == authority.review_episode_id,
@@ -102,10 +170,26 @@ class JudgmentSearchSummaryRepository:
                 JudgmentSearchSummaryORM.created_at,
                 JudgmentSearchSummaryORM.summary_id,
             )
-        ).all()
-        latest: dict[str, JudgmentSearchCoverageSummary] = {}
+        )
+        if job_id is not None:
+            statement = statement.where(JudgmentSearchSummaryORM.job_id == job_id)
+        rows = self.session.scalars(statement).all()
+        latest: dict[str, JudgmentSearchSummaryEntry] = {}
         for row in rows:  # 排序后同 requirement 的最后一行即最新
-            latest[row.requirement_id] = self._decode(row)
+            summary = self._decode(row)
+            # Existing IDs bind the full authority, including fields absent from SQL columns.
+            payload = json.loads(row.payload_json)
+            if row.summary_id not in {
+                _summary_identity(authority, payload),
+                _summary_identity(authority, payload, job_id=row.job_id),
+            }:
+                continue
+            latest[row.requirement_id] = JudgmentSearchSummaryEntry(
+                summary_id=row.summary_id,
+                job_id=row.job_id,
+                payload_sha256=row.payload_sha256,
+                summary=summary,
+            )
         return latest
 
     def _decode(self, row: JudgmentSearchSummaryORM) -> JudgmentSearchCoverageSummary:

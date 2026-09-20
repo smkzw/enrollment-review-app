@@ -1,8 +1,7 @@
 """研究者书面判断检索的持久任务规划（复用既有 JobService/JobRunner 模式）。
 
-目标组按与 ``fact_expectation_gaps`` 回退循环一致的适用性规则从服务端当前
-权威推导：到期阶段不晚于当前审核节点、同阶段必须同审核节点、资料要求需要
-研究者书面判断（``investigator_assessment``）。显式传入 requirement_ids 时
+目标组从服务端当前权威推导：到期阶段不晚于当前审核节点、同阶段必须同
+审核节点，已发布资料要求明确指定研究者书面判断来源。显式传入 requirement_ids 时
 逐条校验，不支持项（流程必做目录来源）直接拒绝；推导模式下不支持项跳过并
 保留原回退缺口，不伪造检索范围。
 
@@ -26,6 +25,7 @@ from app.llm.judgment_search_reader import (
     JUDGMENT_SEARCH_PROMPT_VERSION,
 )
 from app.llm.page_review_harness import PageReaderRoute
+from app.llm.page_reader_capabilities import shared_reader_parallelism
 from app.projections.evidence_expectations import stage_rank
 from app.services.evidence_app_errors import AppNotFoundError, EvidenceAppError
 from app.services.fact_normalization_command_service import authority_from_active_episode
@@ -38,7 +38,6 @@ from app.services.page_review_job_service import route_identity
 from app.storage.codecs import verify_payload_sha256
 from app.storage.repositories import (
     EpisodeRepository,
-    get_evidence_requirement,
     list_expectation_templates,
 )
 from app.workflow.errors import InvalidJobDefinitionError, JobNotFoundError
@@ -82,7 +81,7 @@ def judgment_search_steps(page_count: int) -> list[StepSpec]:
 def select_judgment_search_requirements(
     session: Session, authority: FactAuthority,
 ) -> list[str]:
-    """推导当前权威下需要书面判断检索的 requirement（与缺口回退循环同规则）。"""
+    """只检索已发布资料要求明确指定的书面判断，不扩散组件专业评估标记。"""
     episode = EpisodeRepository(session).get(authority.review_episode_id)
     templates = list_expectation_templates(
         session, authority.rule_set_id, authority.rule_set_revision
@@ -153,9 +152,8 @@ def plan_judgment_search_payload(
     return {
         "contract": JUDGMENT_SEARCH_JOB_CONTRACT,
         "execution_control": {
-            "max_parallel_steps": sum(
-                routes[lane].max_concurrency
-                for lane in (PageReviewLane.MAIN_A, PageReviewLane.MAIN_B)
+            "max_parallel_steps": shared_reader_parallelism(
+                [routes[lane] for lane in (PageReviewLane.MAIN_A, PageReviewLane.MAIN_B)]
             ),
             "parallelizable_step_ids": read_step_ids,
         },

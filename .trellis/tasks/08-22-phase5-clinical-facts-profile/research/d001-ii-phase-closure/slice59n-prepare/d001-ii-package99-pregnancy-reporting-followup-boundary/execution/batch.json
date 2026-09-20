@@ -1,0 +1,427 @@
+{
+  "batch_id": "pcb-76ee6df8dc5121848ce00b9c",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [
+    "body.p986",
+    "body.p996"
+  ],
+  "context_structure_unit_ids": [
+    "su-25c54cb8c26bb63bc2ee981a",
+    "su-f5cd3f88b671362f6f8f4dc4"
+  ],
+  "context_units": [
+    {
+      "excerpt": "不良事件（AE）指临床试验参与者在接受试验用药品之后出现的所有不良医学事件，可以表现为症状体征、疾病和/或有临床意义的实验室检查异常，但不一定与试验用药品有因果关系。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "不良事件（AE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p986"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27520,
+      "source_ref": "body.p986",
+      "source_span_ids": [
+        "body.p986"
+      ],
+      "structure_unit_id": "su-25c54cb8c26bb63bc2ee981a",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "严重不良事件，指参与者接受试验用药品后出现死亡、危及生命、永久或者严重的残疾或者功能丧失、参与者需要住院治疗或者延长住院时间，以及先天性异常或者出生缺陷等不良医学事件。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "术语定义",
+        "严重不良事件（SAE）"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p996"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 27620,
+      "source_ref": "body.p996",
+      "source_span_ids": [
+        "body.p996"
+      ],
+      "structure_unit_id": "su-f5cd3f88b671362f6f8f4dc4",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "coverage_manifest_id": "manifest:slice61ck-package99-pregnancy-reporting-followup-boundary",
+  "known_official_targets": [],
+  "known_procedure_targets": [],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "D1给药前",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "D1给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {},
+  "owned_required_action_kinds_by_structure_unit_id": {
+    "su-9be1df387e9b5f7c66654baa": [
+      "preserve_exemption_condition"
+    ],
+    "su-d41ad06aef84ddc9d8706cce": [
+      "communicate_with_participant"
+    ]
+  },
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.p1158",
+    "body.p1159",
+    "body.p1160",
+    "body.p1161",
+    "body.p1162",
+    "body.p1163",
+    "body.p1164",
+    "body.p1165",
+    "body.p1166",
+    "body.p1167"
+  ],
+  "owned_structure_unit_ids": [
+    "su-e2468c662da1c67cd81673ab",
+    "su-fc4dc7f5f5c1347412d6e6aa",
+    "su-6c5dae7949c2e2a80f4ff809",
+    "su-9be1df387e9b5f7c66654baa",
+    "su-9f65151ba2e1b482fc150c1d",
+    "su-448b44f51b041652ba03f4a2",
+    "su-a76f2c60fa7700da4526db2d",
+    "su-d41ad06aef84ddc9d8706cce",
+    "su-48c9cf6fe5bd8950993ea4ff",
+    "su-2dea247d4e68c2539276cec6"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "妊娠",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "妊娠"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1158"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30210,
+      "source_ref": "body.p1158",
+      "source_span_ids": [
+        "body.p1158"
+      ],
+      "structure_unit_id": "su-e2468c662da1c67cd81673ab",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "妊娠事件的报告要求",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "妊娠",
+        "妊娠事件的报告要求"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1159"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30220,
+      "source_ref": "body.p1159",
+      "source_span_ids": [
+        "body.p1159"
+      ],
+      "structure_unit_id": "su-fc4dc7f5f5c1347412d6e6aa",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "若女性参与者或男性参与者的女性伴侣在研究期间或CMS-D001片末次给药后3个月内怀孕或怀疑可能妊娠（如停经或经期推迟），应立即告知研究者，研究者必须尽快进行检查确认，确认发生妊娠的，研究者应在确认后24小时填写《妊娠事件报告表》，签名并签署日期，而后立即书面报告给申办者或其指定人员（即，获知事件后不超过24小时）。同时，研究者根据中心伦理的要求进行上报。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "妊娠",
+        "妊娠事件的报告要求"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1160"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30230,
+      "source_ref": "body.p1160",
+      "source_span_ids": [
+        "body.p1160"
+      ],
+      "structure_unit_id": "su-6c5dae7949c2e2a80f4ff809",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "女性参与者在CMS-D001片首次给药之后的研究期间发生妊娠后，应立即停用研究药物，并及时进行记录、报告及随访。男性参与者的女性伴侣发生妊娠后，不要求男性参与者停用试验用药品，但需要对其女性伴侣按照女性参与者发生妊娠的处理方式进行记录、报告及随访。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "妊娠",
+        "妊娠事件的报告要求"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1161"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30240,
+      "source_ref": "body.p1161",
+      "source_span_ids": [
+        "body.p1161"
+      ],
+      "structure_unit_id": "su-9be1df387e9b5f7c66654baa",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "单纯的妊娠事件本身不属于不良事件，不应记录在eCRF不良事件上，但如果发生妊娠相关并发症或妊娠的结果符合不良事件定义，则还需按照不良事件进行管理，例如自然流产、因医学及健康原因导致的人工流产、死胎、新生儿严重不良事件（不限于新生儿死亡、先天性异常或者出生缺陷）等。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "妊娠",
+        "妊娠事件的报告要求"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1162"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30250,
+      "source_ref": "body.p1162",
+      "source_span_ids": [
+        "body.p1162"
+      ],
+      "structure_unit_id": "su-9f65151ba2e1b482fc150c1d",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "妊娠参与者在妊娠期间经历的SAE，要求以《SAE报告表》的方式立即报告（即，获知事件后不超过24小时）。没有妊娠相关并发症的选择性流产不视为不良事件。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "妊娠",
+        "妊娠事件的报告要求"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1163"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30260,
+      "source_ref": "body.p1163",
+      "source_span_ids": [
+        "body.p1163"
+      ],
+      "structure_unit_id": "su-448b44f51b041652ba03f4a2",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "妊娠事件的随访",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "妊娠",
+        "妊娠事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1164"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30270,
+      "source_ref": "body.p1164",
+      "source_span_ids": [
+        "body.p1164"
+      ],
+      "structure_unit_id": "su-a76f2c60fa7700da4526db2d",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "研究者应该根据用药情况，严谨地与参与者交流，告知她/他试验用药品对于孕妇及胎儿可能的影响和风险，并由参与者及其伴侣自行决定是否终止妊娠或继续妊娠。如果参与者或其伴侣决定继续妊娠，则要求对每例妊娠跟踪随访，直到获得妊娠结局。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "妊娠",
+        "妊娠事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1165"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30280,
+      "source_ref": "body.p1165",
+      "source_span_ids": [
+        "body.p1165"
+      ],
+      "structure_unit_id": "su-d41ad06aef84ddc9d8706cce",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "所有妊娠的过程，包括围产期和新生儿结局，无论参与者是否已停止参与研究，将随访至结局，包括自发或自愿终止妊娠、分娩细节，以及是否存在任何出生缺陷、先天性异常或孕产妇和/或新生儿并发症，直至健康婴儿的第一次访视或法规规定的时间（或任何原因的终止妊娠后下一次正常月经结束），以较晚者为准。对出生结果的随访将根据个案情况进行处理（例如对早产儿进行随访，以确定是否存在发育迟缓）。妊娠随访信息应记录在同一表格上，并应包括对试验用药品与任何妊娠结果可能因果关系的评估。新生儿经历的SAE事件要求以SAE报告表的方式立即报告（即，获知事件后不超过24小时）。在终止妊娠的情况下，应明确终止的原因，如果临床可能，应通过肉眼检查评估终止妊娠时胎儿的结构完整性，除非术前检查显示先天性异常并已报告结果。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "妊娠",
+        "妊娠事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1166"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30290,
+      "source_ref": "body.p1166",
+      "source_span_ids": [
+        "body.p1166"
+      ],
+      "structure_unit_id": "su-48c9cf6fe5bd8950993ea4ff",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "当妊娠过程和结局信息有更新时，研究者应填写并立即向申办者提交试验妊娠报告表。",
+      "heading_path": [
+        "研究评估和程序",
+        "安全性评估",
+        "妊娠",
+        "妊娠事件的随访"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1167"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30300,
+      "source_ref": "body.p1167",
+      "source_span_ids": [
+        "body.p1167"
+      ],
+      "structure_unit_id": "su-2dea247d4e68c2539276cec6",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [
+    "su-e2468c662da1c67cd81673ab",
+    "su-fc4dc7f5f5c1347412d6e6aa",
+    "su-a76f2c60fa7700da4526db2d"
+  ],
+  "study_phase": "phase_ii"
+}

@@ -79,6 +79,8 @@ export interface JudgmentSearchCandidateView {
 }
 
 export interface JudgmentSearchIncompletePageView {
+  sourceDocumentVersionId: string;
+  pageArtifactId: string;
   pageNumber: number;
   reasons: ReadonlyArray<string>;
 }

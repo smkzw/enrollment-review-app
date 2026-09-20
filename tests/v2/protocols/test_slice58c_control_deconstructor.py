@@ -131,6 +131,7 @@ def _condition(
 ) -> ProtocolControlAgentWireConditionAtom:
     return ProtocolControlAgentWireConditionAtom(
         statement=statement,
+        evaluation=_evaluation(statement, span_id, excerpt),
         source_span_ids=[span_id],
         source_excerpts=[excerpt],
         time_constraint=None,
@@ -138,9 +139,51 @@ def _condition(
     )
 
 
+def _evaluation(statement: str, span_id: str, excerpt: str) -> dict:
+    # Adapter fixtures exercise wire/source integrity, not clinical acceptance.
+    return {
+        "determination_mode": "semantic",
+        "proposition": statement,
+        "time_purpose": "not_applicable",
+        "repeat_scheme": None,
+        "observation_policy": {
+            "mode": "unresolved",
+            "scope": "样例未说明采用哪次记录",
+            "source_span_ids": [span_id],
+            "source_excerpts": [excerpt],
+        },
+        "source_span_ids": [span_id],
+        "source_excerpts": [excerpt],
+    }
+
+
+def _evidence_policy(span_id: str, excerpt: str) -> dict:
+    return {
+        "requires_contemporaneous_objective_source": None,
+        "allows_screening_record_transcription": None,
+        "result_validity_status": "not_specified",
+        "result_validity_constraint": None,
+        "source_span_ids": [span_id],
+        "source_excerpts": [excerpt],
+    }
+
+
+def _timed_evaluation(statement: str, span_id: str, excerpt: str) -> dict:
+    return {**_evaluation(statement, span_id, excerpt),
+            "time_purpose": "unresolved", "time_operand_attribute": "date_range"}
+
+
+def _replace_atom_source(atom: dict, span_id: str, excerpt: str) -> None:
+    """Keep the wire internally valid so tests reach the external source check."""
+    atom["source_span_ids"] = [span_id]
+    atom["source_excerpts"] = [excerpt]
+    atom["evaluation"] = _evaluation(atom["statement"], span_id, excerpt)
+
+
 def _candidate() -> ProtocolControlAgentWireCandidate:
     return ProtocolControlAgentWireCandidate(
         title="年龄资料控制",
+        repeat_trigger_conditions=[],
         applicable_population="拟入组受试者",
         applicability_expression=ProtocolControlAgentWireConditionDnf(
             groups=[
@@ -157,6 +200,21 @@ def _candidate() -> ProtocolControlAgentWireCandidate:
                         ProtocolControlAgentWireObligationAtom(
                             kind=ControlObligationKind.REACH_CONDITION,
                             statement="年龄达到18岁",
+                            evaluation={
+                                **_evaluation("年龄达到18岁", "span:01", "年龄至少18岁"),
+                                "determination_mode": "deterministic",
+                                "operation": "value_comparison",
+                                "operand_attribute": "value",
+                                "predicate": {
+                                    "predicate_id": "age-threshold",
+                                    "subject": "受试者",
+                                    "attribute": "年龄",
+                                    "comparator": "gte",
+                                    "value": 18,
+                                    "unit": "岁",
+                                    "source_clause": "年龄至少18岁",
+                                },
+                            },
                             time_constraint=None,
                             prospective_period=None,
                             source_span_ids=["span:01"],
@@ -188,6 +246,16 @@ def _candidate() -> ProtocolControlAgentWireCandidate:
                 description="核对年龄资料",
                 due_stage=ReviewStage.SCREENING,
                 required_source_types=["原始资料"],
+                workflow_stage_ids=["stage:screening:one"],
+                source_policy={
+                    "requires_contemporaneous_objective_source": None,
+                    "allows_screening_record_transcription": None,
+                    "result_validity_status": "not_specified",
+                    "result_validity_constraint": None,
+                    "source_span_ids": ["span:01"],
+                    "source_excerpts": ["年龄至少18岁"],
+                },
+                atom_refs=[{"layer": "obligation", "group_index": 0, "atom_index": 0}],
             )
         ],
         source_structure_unit_ids=["su-01"],
@@ -597,6 +665,7 @@ def test_repair_prompt_preserves_curved_quotes_and_strict_validation_rejects_alt
 
     valid_candidate = ProtocolControlAgentWireCandidate(
         title="心电图计算控制",
+        repeat_trigger_conditions=[],
         applicable_population="拟入组受试者",
         applicability_expression=None,
         trigger_expression=None,
@@ -607,6 +676,7 @@ def test_repair_prompt_preserves_curved_quotes_and_strict_validation_rejects_alt
                         ProtocolControlAgentWireObligationAtom(
                             kind=ControlObligationKind.COMPLETE_OR_VERIFY,
                             statement="应用Fridericia’s公式计算心率校正计算QTcF",
+                            evaluation=_evaluation("核对计算方法", "span:ecg-01", "并应用Fridericia’s公式计算心率校正计算QTcF。"),
                             time_constraint=None,
                             prospective_period=None,
                             source_span_ids=["span:ecg-01"],
@@ -632,6 +702,9 @@ def test_repair_prompt_preserves_curved_quotes_and_strict_validation_rejects_alt
                 description="心电图核对",
                 due_stage=ReviewStage.SCREENING,
                 required_source_types=["原始资料"],
+                workflow_stage_ids=["flow-screening"],
+                source_policy=_evidence_policy("span:ecg-01", "并应用Fridericia’s公式计算心率校正计算QTcF。"),
+                atom_refs=[{"layer": "obligation", "group_index": 0, "atom_index": 0}],
             )
         ],
         source_structure_unit_ids=["su-ecg-01"],
@@ -656,6 +729,7 @@ def test_repair_prompt_preserves_curved_quotes_and_strict_validation_rejects_alt
     assert len(hydrated.candidates) == 1
     altered_candidate = ProtocolControlAgentWireCandidate(
         title="心电图计算控制",
+        repeat_trigger_conditions=[],
         applicable_population="拟入组受试者",
         applicability_expression=None,
         trigger_expression=None,
@@ -666,6 +740,7 @@ def test_repair_prompt_preserves_curved_quotes_and_strict_validation_rejects_alt
                         ProtocolControlAgentWireObligationAtom(
                             kind=ControlObligationKind.COMPLETE_OR_VERIFY,
                             statement="应用Fridericia's公式计算心率校正计算QTcF",
+                            evaluation=_evaluation("核对计算方法", "span:ecg-01", "并应用Fridericia's公式计算心率校正计算QTcF。"),
                             time_constraint=None,
                             prospective_period=None,
                             source_span_ids=["span:ecg-01"],
@@ -691,6 +766,9 @@ def test_repair_prompt_preserves_curved_quotes_and_strict_validation_rejects_alt
                 description="心电图核对",
                 due_stage=ReviewStage.SCREENING,
                 required_source_types=["原始资料"],
+                workflow_stage_ids=["flow-screening"],
+                source_policy=_evidence_policy("span:ecg-01", "并应用Fridericia's公式计算心率校正计算QTcF。"),
+                atom_refs=[{"layer": "obligation", "group_index": 0, "atom_index": 0}],
             )
         ],
         source_structure_unit_ids=["su-ecg-01"],
@@ -723,6 +801,7 @@ def test_repair_prompt_preserves_curved_quotes_and_strict_validation_rejects_alt
     # Non-quote differences remain strict and must still fail.
     non_quote_candidate = ProtocolControlAgentWireCandidate(
         title="心电图计算控制",
+        repeat_trigger_conditions=[],
         applicable_population="拟入组受试者",
         applicability_expression=None,
         trigger_expression=None,
@@ -733,6 +812,7 @@ def test_repair_prompt_preserves_curved_quotes_and_strict_validation_rejects_alt
                         ProtocolControlAgentWireObligationAtom(
                             kind=ControlObligationKind.COMPLETE_OR_VERIFY,
                             statement="应用Fridericia公式计算心率校正计算QTcF",
+                            evaluation=_evaluation("核对计算方法", "span:ecg-01", "并应用FridericiaX公式计算心率校正计算QTcF。"),
                             time_constraint=None,
                             prospective_period=None,
                             source_span_ids=["span:ecg-01"],
@@ -758,6 +838,9 @@ def test_repair_prompt_preserves_curved_quotes_and_strict_validation_rejects_alt
                 description="心电图核对",
                 due_stage=ReviewStage.SCREENING,
                 required_source_types=["原始资料"],
+                workflow_stage_ids=["flow-screening"],
+                source_policy=_evidence_policy("span:ecg-01", "并应用FridericiaX公式计算心率校正计算QTcF。"),
+                atom_refs=[{"layer": "obligation", "group_index": 0, "atom_index": 0}],
             )
         ],
         source_structure_unit_ids=["su-ecg-01"],
@@ -851,6 +934,8 @@ def test_partial_batch_context_overlap_and_candidate_source_escape_are_rejected(
     escaped["obligation_expression"]["groups"][0]["atoms"][0]["source_excerpts"] = ["只读上下文"]
     escaped["exception_expression"]["groups"][0]["atoms"][0]["source_span_ids"] = ["span:03"]
     escaped["exception_expression"]["groups"][0]["atoms"][0]["source_excerpts"] = ["只读上下文"]
+    for layer in ("applicability", "obligation", "exception"):
+        _replace_atom_source(escaped[f"{layer}_expression"]["groups"][0]["atoms"][0], "span:03", "只读上下文")
     escaped_wire = {
         **_wire().model_dump(mode="json"),
         "dispositions": [
@@ -879,6 +964,8 @@ def test_partial_batch_context_overlap_and_candidate_source_escape_are_rejected(
     borrowed["exception_expression"]["groups"][0]["atoms"][0]["source_excerpts"] = [
         "筛选时记录末次用药日期"
     ]
+    for layer in ("applicability", "obligation", "exception"):
+        _replace_atom_source(borrowed[f"{layer}_expression"]["groups"][0]["atoms"][0], "span:02", "筛选时记录末次用药日期")
     borrowed_candidate = ProtocolControlAgentWireCandidate.model_validate(borrowed)
     borrowed_wire = _wire(candidate=borrowed_candidate)
     with pytest.raises(
@@ -892,6 +979,7 @@ def test_fabricated_excerpt_empty_group_and_unknown_target_are_rejected() -> Non
     batch = _batch()
     fabricated = _candidate().model_dump(mode="json")
     fabricated["obligation_expression"]["groups"][0]["atoms"][0]["source_excerpts"] = ["模型编造的年龄"]
+    _replace_atom_source(fabricated["obligation_expression"]["groups"][0]["atoms"][0], "span:01", "模型编造的年龄")
     payload = {
         **_wire().model_dump(mode="json"),
         "dispositions": [
@@ -1005,6 +1093,7 @@ def test_candidate_excerpt_must_match_candidate_owned_unit_when_span_is_shared()
         atom = borrowed[expression_key]["groups"][0]["atoms"][0]
         atom["source_span_ids"] = ["span:shared"]
         atom["source_excerpts"] = ["另一 owned 单元原文"]
+        _replace_atom_source(atom, "span:shared", "另一 owned 单元原文")
     borrowed_candidate = ProtocolControlAgentWireCandidate.model_validate(borrowed)
     with pytest.raises(ProtocolControlAgentWireValidationError, match="FABRICATED_EXCERPT"):
         hydrate_protocol_control_agent_output(_wire(candidate=borrowed_candidate), shared_batch)
@@ -1082,6 +1171,7 @@ def test_temporal_obligation_kinds_keep_visit_validity_and_baseline_scope_separa
             "upper_bound_days": 7,
         },
     )
+    atom["evaluation"] = _timed_evaluation(atom["statement"], "span:01", "年龄至少18岁")
     with pytest.raises(ValidationError, match="带时间约束"):
         ProtocolControlAgentWireCandidate.model_validate(payload)
 
@@ -1095,6 +1185,7 @@ def test_temporal_obligation_kinds_keep_visit_validity_and_baseline_scope_separa
     ProtocolControlAgentWireCandidate.model_validate(payload)
 
     atom["time_constraint"] = None
+    atom["evaluation"]["time_operand_attribute"] = None
     with pytest.raises(ValidationError, match="节点前完成义务"):
         ProtocolControlAgentWireCandidate.model_validate(payload)
 
@@ -1102,6 +1193,7 @@ def test_temporal_obligation_kinds_keep_visit_validity_and_baseline_scope_separa
         "anchor_type": "screening_date",
         "direction": "after",
     }
+    atom["evaluation"]["time_operand_attribute"] = "date_range"
     with pytest.raises(ValidationError, match="方向必须为 before"):
         ProtocolControlAgentWireCandidate.model_validate(payload)
 
@@ -1109,6 +1201,7 @@ def test_temporal_obligation_kinds_keep_visit_validity_and_baseline_scope_separa
         kind=ControlObligationKind.SCHEDULE_OR_VERIFY_VISIT.value,
         time_constraint=None,
     )
+    atom["evaluation"]["time_operand_attribute"] = None
     payload["cross_source_relations"] = [
         {
             "kind": CrossSourceRelationKind.FURTHER_EXPLANATION.value,
@@ -1171,6 +1264,7 @@ def test_temporal_obligation_kinds_keep_visit_validity_and_baseline_scope_separa
 def test_result_validity_requires_exact_procedure_target() -> None:
     payload = _candidate().model_dump(mode="json")
     atom = payload["obligation_expression"]["groups"][0]["atoms"][0]
+    atom["evaluation"] = _timed_evaluation(atom["statement"], "span:01", "年龄至少18岁")
     atom.update(
         kind=ControlObligationKind.VERIFY_RESULT_VALIDITY.value,
         time_constraint={
@@ -1214,7 +1308,7 @@ def test_prompt_explains_non_official_supplement_and_read_only_context() -> None
     assert "补充" in prompt and "重复表述" in prompt
     assert "不会因此成为新的 IN/EX" in prompt
     assert "非控制理由" in prompt
-    assert "context_units 仅作只读上下文" in prompt
+    assert "context_units仅作只读上下文，不能处置、不能转移所有权" in prompt
     assert "stage:screening:one" in prompt and "screening-2" in prompt
     assert "不得发明、改写或新建节点身份" in prompt
     assert "affected_workflow_stage_id" in prompt
@@ -1555,6 +1649,9 @@ def test_obligation_source_repair_preserves_sibling_atoms_and_candidate_fields()
         update={
             "kind": ControlObligationKind.MUST_RECORD,
             "statement": "记录末次用药日期",
+            "evaluation": first_atom.evaluation.__class__.model_validate(
+                _evaluation("记录末次用药日期", "span:02", "筛选时记录末次用药日期")
+            ),
             "source_span_ids": ["span:02"],
             "source_excerpts": ["筛选时记录末次用药日期"],
         }
@@ -1690,6 +1787,7 @@ def test_hydration_derives_trigger_branch_scope_for_conditional_shortening() -> 
 
     candidate = ProtocolControlAgentWireCandidate(
         title="既往用药洗脱控制",
+        repeat_trigger_conditions=[],
         applicable_population="拟入组受试者",
         applicability_expression=None,
         trigger_expression=ProtocolControlAgentWireConditionDnf(
@@ -1709,6 +1807,7 @@ def test_hydration_derives_trigger_branch_scope_for_conditional_shortening() -> 
                         ProtocolControlAgentWireObligationAtom(
                             kind=ControlObligationKind.PROHIBIT_MEDICATION_OR_TREATMENT_EXPOSURE,
                             statement="首次给药前24个月不得暴露",
+                            evaluation=_timed_evaluation("首次给药前24个月不得暴露", "span:01", "年龄至少18岁"),
                             time_constraint=TimeConstraint(
                                 anchor_type="first_dose_date",
                                 direction="before",
@@ -1727,6 +1826,7 @@ def test_hydration_derives_trigger_branch_scope_for_conditional_shortening() -> 
                         ProtocolControlAgentWireObligationAtom(
                             kind=ControlObligationKind.PROHIBIT_MEDICATION_OR_TREATMENT_EXPOSURE,
                             statement="首次给药前6个月不得暴露",
+                            evaluation=_timed_evaluation("首次给药前6个月不得暴露", "span:01", "年龄至少18岁"),
                             time_constraint=TimeConstraint(
                                 anchor_type="first_dose_date",
                                 direction="before",
@@ -1748,6 +1848,7 @@ def test_hydration_derives_trigger_branch_scope_for_conditional_shortening() -> 
                     atoms=[
                         ProtocolControlAgentWireConditionAtom(
                             statement="经药物清除剂进行洗脱可缩短",
+                            evaluation=_evaluation("经药物清除剂进行洗脱可缩短", "span:01", "年龄至少18岁"),
                             source_span_ids=["span:01"],
                             source_excerpts=["年龄至少18岁"],
                             time_constraint=None,
@@ -1773,6 +1874,9 @@ def test_hydration_derives_trigger_branch_scope_for_conditional_shortening() -> 
                 description="核对用药资料",
                 due_stage=ReviewStage.SCREENING,
                 required_source_types=["原始资料"],
+                workflow_stage_ids=["stage:screening:one"],
+                source_policy=_evidence_policy("span:01", "年龄至少18岁"),
+                atom_refs=[{"layer": "obligation", "group_index": 0, "atom_index": 0}],
             )
         ],
         source_structure_unit_ids=["su-01"],
@@ -1809,6 +1913,8 @@ def test_hydration_derives_trigger_branch_scope_for_conditional_shortening() -> 
     assert alt_group.atoms[0].time_constraint.lower_bound.value == 6
 
     timed_condition = candidate.model_dump(mode="json")
+    timed_atom = timed_condition["exception_expression"]["groups"][0]["atoms"][0]
+    timed_atom["evaluation"] = _timed_evaluation(timed_atom["statement"], "span:01", "年龄至少18岁")
     timed_condition["exception_expression"]["groups"][0]["atoms"][0][
         "time_constraint"
     ] = {

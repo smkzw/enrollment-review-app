@@ -13,6 +13,7 @@ from typing import Any, Literal, Protocol
 
 from pydantic import Field, ValidationError
 from app.agents.protocol_generation_schema import predicate_generation_schema
+from app.agents.protocol_source_scope import constrain_source_schema, source_references
 
 from app.domain.contracts.agent_io import (
     EvidenceRequirementDraft,
@@ -107,7 +108,7 @@ ProtocolOutputKind = Literal["semantic_candidate", "semantic_rule_repair"]
 
 
 class ProtocolWireError(ValueError):
-    """Stable, machine-readable rejection for the dnf-v1 wire contract."""
+    """Stable, machine-readable rejection for the current wire contract."""
 
     def __init__(self, code: str, message: str):
         self.code = code
@@ -127,6 +128,10 @@ DNF_WIRE_MAX_ATOMS_PER_EXPRESSION = 512
 DNF_WIRE_MAX_COMPONENTS_PER_RULE = 32
 DNF_WIRE_MAX_REQUIREMENTS_PER_COMPONENT = 64
 
+# 当前生产 wire 合同版本。字段契约或解析口径变化时提升：旧版本响应不能再被
+# 当作当前生产方法读取（历史草稿仍按各自保存的内容原样读取）。
+DNF_WIRE_VERSION = "dnf-v18"
+
 # Compact semantic batches are sized from the actual prompt, not from protocol
 # names or clinical content. Oversized multi-block parents may use the separate
 # conservative planner below; ambiguous or single-block parents stay whole.
@@ -142,6 +147,8 @@ DNF_WIRE_ERROR_CODES = {
     "missing_unit": "DNF_WIRE_MISSING_UNIT",
     "shape_mismatch": "DNF_WIRE_SHAPE_MISMATCH",
     "categorical_unit": "DNF_WIRE_CATEGORICAL_UNIT",
+    "missing_semantic_proposition": "DNF_WIRE_MISSING_SEMANTIC_PROPOSITION",
+    "proposition_shape": "DNF_WIRE_PROPOSITION_SHAPE",
 }
 
 
@@ -242,6 +249,19 @@ def _sha256(text: str) -> str:
 
 
 _SYSTEM_CONTRACT = (
+    "每项资料要求必须显式填写allows_screening_record_transcription和"
+    "requires_contemporaneous_objective_source，不省略、不依赖默认值；"
+    "按方案说明可接受的资料来源。无法确认来源政策时保留未解决项，不猜测。"
+    "required_source_types只填写方案明确要求的资料类型，不把常用核对方式升级为必备文件；"
+    "方案未限定文件类型时该列表为空，不能自行要求某种证件或证明。"
+    "每个原子条件须用observation_policy说明观察范围、single/any/all/unresolved及逐字来源。"
+    "只有方案明确以最近或最早一次结果为准时，single下提供selection的criterion=latest/earliest、"
+    "ordering_attribute=date_range；不默认取最新、不挑有利值。条件性复查的触发、时限或替代关系"
+    "不能由该排序表示时用unresolved保留完整原文，不以复查次数证明许可。"
+    "观察政策来源须属于本组件来源，其摘录须同时保留在该原子source_locator中。"
+    "selection还须明确window_order：within_window表示先限定时间范围再取一次，"
+    "before_window_check表示先按先后选择再核时间有效性，not_applicable仅用于无时间限制，"
+    "无法根据方案明确区分时为unresolved；不得默认退回采用更旧的有效记录。该顺序须引用方案依据。"
     "你正在解构一份已确认期别的研究方案。只处理本次输入中的研究期别；"
     "不要解释或比较另一研究期别。官方父规则目录和基线及以前必做项目录均已冻结，"
     "不得增加、删除、合并或调换成员。复杂条款可拆成子组件，但父规则官方编号和数量"
@@ -257,7 +277,9 @@ _SYSTEM_CONTRACT = (
     "中文顿号、逗号和普通并列列举只表示原文术语清单，不自动构成 ALL 或 ANY；只有冻结原文"
     "直接出现‘或/任一/之一/任何一项/至少一项’等替代连接语时，才可把列举项拆成多个替代分支。"
     "同一禁止或要求类别中的清单应保留为一个完整谓词及其逐字来源，不得自行补写‘或’。"
-    "不能改写成普通触发条件。只引用 allowed_source_span_ids。"
+    "不能改写成普通触发条件。source_span_ids 必须逐字复制 allowed_source_span_ids 中的完整值，"
+    "即来源材料的 source_span_id；source_ref 只是原文位置，不是来源编号，不得用它替代，"
+    "也不得省略编号前缀或自行缩写。"
     "你只输出本次响应合同指定的规则字段及其语义组件、资料要求。每个子组件内的"
     "source_span_ids 只填直接支撑该子组件的来源，source_excerpts 中的每一项都必须是"
     "该子组件来源里逐字存在的连续片段；若子组件语义由不连续的上位限定语、并列分支和结尾"
@@ -274,8 +296,31 @@ _SYSTEM_CONTRACT = (
     "并用 occurrence_window 保存频率周期；若它是较宽条件括号内某一子类的定义或示例，"
     "occurrence_window.minimum_count 与 duration 只能附着于该子类的谓词，不能附着于"
     "上位宽泛条件。保留上位条件原有范围及全部示例，不能把示例的频次变成上位条件的必要条件。不得把"
-    "频率定义误报为回溯锚点不明。若原文以‘N周≥N天’或‘每周至少N天’定义发生天数，"
+    "频率定义一律当成回溯锚点不明。若原文以‘N周≥N天’或‘每周至少N天’定义发生天数，"
     "数值谓词保留天数阈值和‘天/日’单位，并用 occurrence_window.duration 保留观察周期。"
+    "每个 occurrence_window 还须填写 scope（occurrence-scope/v4）：kind 区分 anchored_lookback"
+    "（明确日期前的一段期间）、calendar_period（明确日历期间）、anchored_period（明确日期起算的期间）、"
+    "any_consecutive（连续滑动期间）及 unresolved；quantifier 按原文区分 single、every、any 或 unresolved。"
+    "原文明说回溯时长但未命名日期时用unanchored_lookback、quantifier=single、anchor_type=null；"
+    "应用时按已批准的当前筛选/基线节点政策分别回溯，不把该政策写成方案命名锚点。"
+    "只有 anchored_lookback/anchored_period 填 anchor_type，其他类型填 null。不得把‘每月’机械等同"
+    "日历月，也不得把‘任何连续期间’固定到筛选日；原文不能确定时保留 unresolved 和具体 unresolved_reason。"
+    "scope.source_excerpts 须是本条件 source_clause/source_clauses 内的逐字依据；已明确时 unresolved_reason 为 null。"
+    "scope.start_inclusive/end_inclusive分别保留统计期间起止当天是否计入，按原文填写true/false；"
+    "未说明且不能从方案定义确定时填null，不把所有期间默认成闭区间。"
+    "多个期间须另填occurrence_window.horizon：explicit_dates为明示起止日期，anchor_span为明示的"
+    "两个节点，relative_window为原文明确的相对统计范围；明确不限期间才用unbounded，不能确定用"
+    "unresolved并说明原因。所有依据须属于本条件原文，不从外层时间筛选自动复制统计范围。"
+    "single时horizon为null。多个期间的scope.boundary_periods按原文为full_only/include_partial/"
+    "unresolved；任一和每一均须核对首尾不完整周期，不按比例折算阈值。日历周起始星期明确时填"
+    "calendar_week_start，否则null；其他周期为null。duration保留周期长度，不另造日历单位。"
+    "每30天不等于任意连续30天，周期对齐未明不得擅改为滑动窗。"
+    "连续或锚定期间另以scope.duration_basis区分calendar_span（连续日历天组成完整周期，"
+    "如4周覆盖28个日历日，两端均计入）与boundary_offset（原文从边界日期偏移时长，再按原文"
+    "开闭界限决定包含日期）；不能确定用unresolved，其他期间填null。不得靠强制半开边界修补"
+    "连续天数，也不能把4周日历周期算成29天。"
+    "计数期间与事实筛选的外层时间范围不可互相替代；频次与复查或观察选择的先后关系尚无结构表达时，"
+    "保留原文并列入 unresolved_items，不得擅选优先级。"
     "频次定义只绑定其直接限定的事件或示例分支，不得套到同一父条款的其他兄弟病史。"
     "开放列举的上位类别必须保留独立判断路径，列举的子类不能取代上位类别。"
     "若输出使用DNF，上位条件应有自己的group，不与示例的限制合取；属于充分触发条件的"
@@ -327,19 +372,31 @@ _SYSTEM_CONTRACT = (
     "exception_expression 只能作为子组件字段，不得放入 expression 内；逻辑操作符只用 all/any/not。"
     "资料要求的 due_stage 必须依据当前条款逐字可见的审核时点或冻结流程确定，不得为了"
     "‘再次确认’而把每个条件惯性复制到筛选、导入和基线；原文只要求一个节点时只建立一个"
-    "资料要求。若某阶段没有必做项目录条目但条款明确写有该阶段，仍保留该 due_stage，系统会"
+    "资料要求。只读required_procedure_catalog提供方案既有流程上下文，不要求重新生成其中的项目；"
+    "其来源不自动成为本条条件的来源，不得加入组件source_span_ids或扩展本批允许来源。"
+    "若某阶段没有必做项目录条目但条款明确写有该阶段，仍保留该 due_stage，系统会"
     "确定性建立审核节点。若回溯条件以 baseline_date、randomization_date、first_dose_date "
     "或 study_drug_administration_date 为锚点，且方向为 before 或 on，必须至少建立一项 "
     "due_stage=baseline 的资料要求，用于基线、随机或首次给药前的最终复核；可以同时建立 "
     "screening 资料要求用于提前关注，但筛选期核对不能替代基线最终复核。"
     "包含‘随机前N时间内或计划在研究期间’的并列条款必须拆成各自完整"
     "分支：回溯分支使用 time_constraint，未来计划分支使用 prospective_period。"
-    "资料要求 description 只描述需要核对的资料或需要完成的评估，不得预设审核结果；"
+    "资料要求可用可选字段 predicate_refs 声明它用于核实本组件哪些原子条件：role 为 trigger、exception 或 repeat_trigger；前两者对应 expression/exception_expression，repeat_trigger 必须同时给出旁置条件的 condition_id；group_index 与 atom_index 均为所引用表达式数组中的零基序位；同一 group 内 atom 顺序为 existence_atoms、scalar_atoms、set_atoms 依次排列。有明确原文依据时填写且不得重复或跨组件引用；没有把握时省略该字段，系统保留未归属，不得按 fact_type 或“组件内只有一条资料要求”猜测归属。一项资料可引用多个原子。流程必做项目资料要求不使用该字段。资料要求 description 只描述需要核对的资料或需要完成的评估，不得预设审核结果；"
     "不要写‘确认不存在’‘确认无异常’‘确认符合’‘确认不触发’等结论性措辞。"
+    "requires_professional_judgment 表示原子条件本身需要专业人员评估，不表示每条资料要求"
+    "都需要另一份研究者声明；医生诊断、医生评分记录本身可以承载该专业评估。仅在方案要求"
+    "研究者对特定对象作出判断时，才在对应资料要求的 required_source_types 中列出"
+    "investigator_assessment，并明确判断对象、适用节点和可接受记录。不得将该来源类型扩散到"
+    "同组件内只需客观检查或一般病史的其他资料要求；不得仅因审核需要临床理解而设专业判断标记。"
     "若原文允许使用‘N天/周/月/年内的某项检查结果’，这是资料时效而不是"
     "临床事件回溯：必须为该项检查在原文指定的每个 due_stage 分别建立资料要求，"
     "并用 source_validity_window 保留原文时长和 day/week/month/year 单位；不得把它写成"
     "谓词 time_constraint，也不得用同组件的其他检查资料代替。"
+    "半衰期倍数与半衰期时长必须分开：half_life_multiplier保留方案倍数；"
+    "half_life_evidence仅在本条件所引正式方案原文明示单一半衰期时长及适用对象时填写，"
+    "保留source_span_id、连续source_excerpt、其中逐字applies_to_quote及duration_quote；"
+    "不得用记忆、药名、其他人群、范围端点、均值推算或倍数本身代替时长。"
+    "没有明确时长时half_life_evidence=null，仍保留半衰期倍数要求，不能删除该时间条件。"
     "JSON 实例不得复制 Schema 的 $defs、properties "
     "等定义字段；ALL/ANY 必须至少"
     "包含两个子表达式，只有一个子表达式时直接输出该子表达式。"
@@ -372,7 +429,14 @@ _INTERPRETATION_ANCHOR_CONTRACT = (
 
 
 _COMPACT_WIRE_COMPONENT_CONTRACT = (
-    "compact wire 只能使用 wire_version='dnf-v1' 的无引用 DNF。每个 expression 都是非空的"
+    "每个atom须显式提供repeat_scheme，无复查采用要求填null；有要求时保留逐字来源、适用范围、"
+    "许可/必做/禁止/研究者决定、触发条件、次数、期限及结果采用方式。来源未说明与尚未核实须区分。"
+    "复查关系不是日期排序；不得默认一次、无限次、最后一次或有利结果。明确最后一次才用use_last_repeat，"
+    "只说以复查为准而未规定多次采用时用use_single_repeat；无法结构化的限制保留原文并标unresolved。"
+    "原文没有规定结果采用方式时result_use填not_specified，存在相关措辞但未能核清才填unresolved。"
+    "time_limit分别保留初查/前次检查/方案节点作为参照、方向、数值单位和开闭边界；不把月年换成固定天数。"
+    "触发条件不在这里判真，需引用完整原文；研究者许可不由检查日期、签名或次数证明。"
+    f"compact wire 只能使用 wire_version='{DNF_WIRE_VERSION}' 的无引用 DNF。每个 expression 都是非空的"
     "alternative group 数组；一个 group 表示其中所有条件必须共同满足，多个 group 表示完整的"
     "替代路径。每个 group 必须同时携带 existence_atoms、scalar_atoms、set_atoms 三个数组；"
     "每个 atom 都必须带 negated。scalar_atoms 只承载数值标量 value（不得填字符串或布尔值），"
@@ -391,6 +455,37 @@ _COMPACT_WIRE_COMPONENT_CONTRACT = (
     "顿号、逗号和普通并列列举本身不是独立触发依据，不能仅据标点建立多个 group，"
     "也不得自行补写‘或’。禁止把‘且’条件反向拆成替代路径。exception_expression 是独立的 DNF，"
     "不能把例外混入触发表达式；原文没有例外时必须填 null，绝不能输出三类 atom 都为空的 group。"
+    "复查许可的触发条件单列 repeat_trigger_conditions，每项 condition_id 是本组件内的局部引用名，"
+    "expression 沿用完整 DNF；由对应 repeat_scheme.trigger_condition_id 引用。不同复查要求的条件"
+    "分别保留。明确要求研究者许可时，以permission_condition_id引用同一附加条件数组中的另一完整许可命题，"
+    "不得与trigger_condition_id共用编号；investigator_discretion必须提供该引用。许可命题保留决定者、"
+    "所针对检查及原文限定时间，核对明确同意或决定复查的书面内容，不能改写成签名或普通病情判断。"
+    "许可条件中要求研究者作出同意或决定的原子须requires_professional_judgment=true，"
+    "按书面判断的值表示，不改成普通semantic_proposition；同条件内其他数值或事实原子不因此改为专业判断。"
+    "其他许可若原文没有额外批准要求，permission_condition_id填null；两类条件的作用范围均依原文，"
+    "不得从time_limit.reference推断触发对象。不同复查要求"
+    "的每个附加条件另列evidence_roles，按零起算group_index与atom_index逐原子引用（原子顺序为"
+    "existence_atoms、scalar_atoms、set_atoms）；evidence_role.role按原文区分initial_observation、"
+    "preceding_observation、target_observation、external_context或unresolved，source_excerpts保留支持该取证范围的逐字原文。"
+    "研究者许可针对本次复查时使用target_observation，仅用于许可条件；须由原文明确检查对象，"
+    "不因许可日期接近而推断适用，不把单次许可扩展到其他复查。初查值、前次复查值与外部用药背景"
+    "须分开标明，不把整棵混合条件树套同一范围；"
+    "未明使用unresolved，不以本次复查结果证明自身触发。"
+    "不能合并成一棵共同触发树，不能混入入排 expression 或 exception_expression；附加条件自身的"
+    "repeat_scheme 必须为 null。没有附加条件时填空数组。复查次数明确时 count_scope 按原文区分"
+    "每次初查或当前节点；不能明确归属则 unresolved，不默认整个病史范围。合并结果时 result_combine"
+    "保留原文的 sum/mean/minimum/maximum/all/any，其他或未明方式填 unresolved；不默认取平均或最佳值。"
+    "no_repeat_result_use独立说明未提供复查记录时的原文结果政策：retain_initial（原文明示可采用初查）、"
+    "no_result（原文明示须有复查才可采用结果）、unresolved（没有明确规定或无法确定）。"
+    "若原文明示触发条件不成立时可采用初查，使用retain_initial_when_trigger_false；"
+    "必须已有完整trigger_condition_id，不以缺记录或未核实代替条件不成立。"
+    "不能仅因复查为optional或未见记录就推断retain_initial；这一字段不证明复查未发生或资料齐全。"
+    "合并结果同时在result_population中明确initial_and_repeats（初查及复查）或repeats_only（仅复查），"
+    "其他范围或原文无法明确则unresolved；非合并方式填null，不默认纳入初查或漏掉初查。"
+    "复查规格使用repeat-scheme/v4。multi_initial_result仅在原文涉及多组初查的结果采用顺序时填写："
+    "per_initial_then_all或per_initial_then_any表示每组先按复查规则采用结果，再要求各组全部或任一满足，"
+    "source_excerpts保留对应逐字依据；原文涉及但顺序不明用unresolved，未涉及填null。"
+    "不得从observation_policy、记录数量、日期或有利结果推断这一顺序，也不把不同初查的复查混成一组。"
     "只有 atom 自身 source_locator 的逐字片段中，否定词直接统辖该 atom 所指对象时，"
     "才允许使用 negated=true、ne 或 not_in：negated=true 要求‘无/没有/否认/未见/未使用/"
     "未接受/不存在’等否定词与该对象以 source_term/attribute 逐字命名的名称直接相连；"
@@ -400,6 +495,29 @@ _COMPACT_WIRE_COMPONENT_CONTRACT = (
     "不得自行发明单位、时间窗、否定范围或替代路径；只保留原文"
     "明确支持的语义。时间约束、频次窗口和未来计划窗直接作为 atom 字段传递；不要输出正式"
     "表达式包装或系统身份字段。provider 不生成节点引用、根引用或正式 predicate 身份，系统会在后续阶段装配。"
+    "每个 atom 都必须显式给出 semantic_proposition：没有命题时填 null，不得省略该字段；"
+    "scalar_atoms 和 set_atoms 只能填 null。只有条件本身是非确定性的语义命题、且原文没有"
+    "可计算的数值、分类或日期比较时，才填写它的非空文字；不得用它代替本可结构化的阈值、"
+    "分类值、时间窗或频次，也不得把已可计算的确定性条件改写成命题。"
+    "semantic_proposition 只保留方案原文原方向的含义及其限定条件：不得反转原文语义，"
+    "不得补充原文没有的人群、期间、否定或例外限定，也不得把原文的‘且/或’关系改写进该"
+    "文字；它不参与数值、日期、频次和单位的计算，这些判断仍分别使用 scalar_atoms、"
+    "set_atoms、time_constraint、occurrence_window 和 prospective_* 字段。"
+    "semantic_proposition 只用于比较方式为 exists 且不携带 value、unit 的条件；不得与 "
+    "requires_professional_judgment 混用（研究者判断仍按其专属字段表达），也不得与 "
+    "occurrence_window 混用（频次必须结构化）。原文写的是计划、意愿或将来安排时，如实"
+    "保留为对未来安排的陈述，不能写成已经履行、已经发生或已经具备；原文写的是已发生"
+    "事实时，也不能改写成计划；未来安排仍须按上文要求用 prospective_period 或 "
+    "prospective_window 同时保留原文期间和时长。该字段只声明‘这里有一个需要按方案"
+    "来源核实含义的命题’，不表示命题已被核实，也不能用它替代原文未命名的回溯锚点、"
+    "观察采用范围待核实或研究者专业判断的既有处理。"
+    "资料要求的 predicate_refs 是允许的局部位置引用，不是系统身份：role 指 trigger、exception 或 repeat_trigger。"
+    "repeat_trigger 必须同时填写其旁置条件的 condition_id，其他角色不得填写 condition_id；"
+    "复查条件的资料归属须独立核实，不得继承原入排条件的来源要求。"
+    "group_index 从零计数，atom_index 按该组 existence_atoms、scalar_atoms、set_atoms 合并顺序从零计数。"
+    "仅在有来源依据时填写；无法确认归属时省略，不猜配。填写 predicate_refs 时同时明确"
+    "allows_screening_record_transcription 和 requires_contemporaneous_objective_source，"
+    "不得省略后依赖默认值；来源政策无法确定时保留未解决项，不猜测允许何种来源。"
     f"单个 expression 最多 {DNF_WIRE_MAX_GROUPS} 个 group，每个 group 最多 "
     f"{DNF_WIRE_MAX_ATOMS_PER_GROUP} 个 atom，单个 expression 总计最多 "
     f"{DNF_WIRE_MAX_ATOMS_PER_EXPRESSION} 个 atom；超过即拒绝，不能截断或静默合并。"
@@ -421,18 +539,37 @@ def protocol_prompt_template_sha256(prompt_template: str) -> str:
     )
 
 
-def _compact_schema() -> str:
+def _semantic_generation_schema(
+    model, allowed_source_span_ids: Sequence[str] = ()
+) -> dict[str, object]:
+    """Require explicit source policy in new output, retaining legacy read defaults."""
+    schema = model.model_json_schema()
+    requirement = schema["$defs"]["SemanticEvidenceRequirement"]
+    for field in (
+        "allows_screening_record_transcription",
+        "requires_contemporaneous_objective_source",
+    ):
+        if field not in requirement["required"]:
+            requirement["required"].append(field)
+        requirement["properties"][field].pop("default", None)
+    return constrain_source_schema(schema, allowed_source_span_ids)
+
+
+def _compact_schema(allowed_source_span_ids: Sequence[str] = ()) -> str:
+    schema = _semantic_generation_schema(
+        ProtocolSemanticDeconstructionCandidate, allowed_source_span_ids
+    )
     return json.dumps(
-        ProtocolSemanticDeconstructionCandidate.model_json_schema(),
+        schema,
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
     )
 
 
-def _compact_repair_schema() -> str:
+def _compact_repair_schema(allowed_source_span_ids: Sequence[str] = ()) -> str:
     return json.dumps(
-        ProtocolSemanticRuleRepair.model_json_schema(),
+        _semantic_generation_schema(ProtocolSemanticRuleRepair, allowed_source_span_ids),
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -490,6 +627,19 @@ def _wire_time_constraint_schema() -> dict[str, object]:
                 "type": ["number", "null"],
                 "exclusiveMinimum": 0,
             },
+            "half_life_evidence": {
+                "type": ["object", "null"],
+                "additionalProperties": False,
+                "properties": {
+                    "value": {"type": "string", "pattern": r"^\d+(?:\.\d+)?$"},
+                    "unit": {"type": "string", "enum": ["minute", "hour", "day", "week"]},
+                    "source_span_id": {"type": "string", "minLength": 1},
+                    "source_excerpt": {"type": "string", "minLength": 1},
+                    "applies_to_quote": {"type": "string", "minLength": 1},
+                    "duration_quote": {"type": "string", "minLength": 1},
+                },
+                "required": ["value", "unit", "source_span_id", "source_excerpt", "applies_to_quote", "duration_quote"],
+            },
             "combined_window_selection": {
                 "type": ["string", "null"],
                 "enum": ["longer_of_calendar_and_half_life", None],
@@ -504,10 +654,70 @@ def _wire_time_constraint_schema() -> dict[str, object]:
     }
 
 
-def _wire_scalar_value_schema() -> dict[str, object]:
-    """The compact scalar shape is reserved for numeric measurements."""
+_WIRE_NUMERIC_STRING_PATTERN = r"^[+-]?[0-9]+(\.[0-9]+)?$"
 
-    return {"type": "number"}
+
+def _coerce_wire_number(value: Any) -> Any:
+    """把 wire 层的数字字符串还原为数值标量；非数字字符串原样返回交由校验拒绝。"""
+
+    if isinstance(value, str):
+        text = value.strip()
+        if re.fullmatch(r"[+-]?[0-9]+(?:\.[0-9]+)?", text):
+            if "." in text:
+                return float(text)
+            return int(text)
+    return value
+
+
+def _make_wire_schema_grammar_safe(schema: dict[str, object]) -> dict[str, object]:
+    """就地移除本地语法引擎不支持的 ``type:"number"`` 节点。
+
+    MTPLX（xgrammar 系）在编译 JSON Schema 的 number 类型时生成含
+    look-ahead 的正则并被自身拒绝；number 一律改写为无前瞻数字字符串
+    模式，解析端负责还原（pydantic 契约模型为 lax 模式，可自动 coerce）。
+    """
+
+    def walk(node: object) -> object:
+        if isinstance(node, list):
+            return [walk(item) for item in node]
+        if not isinstance(node, dict):
+            return node
+        declared = node.get("type")
+        if declared == "number":
+            return {"type": "string", "pattern": _WIRE_NUMERIC_STRING_PATTERN}
+        if isinstance(declared, list) and "number" in declared:
+            branches: list[dict[str, object]] = []
+            for member in declared:
+                if member == "number":
+                    branches.append(
+                        {"type": "string", "pattern": _WIRE_NUMERIC_STRING_PATTERN}
+                    )
+                elif member == "null":
+                    branches.append({"type": "null"})
+                else:
+                    branches.append({"type": member})
+            return {"anyOf": branches}
+        return {
+            key: walk(value)
+            for key, value in node.items()
+            if key not in {"title", "default"}
+        }
+
+    walked = walk(schema)
+    assert isinstance(walked, dict)
+    return walked
+
+
+def _wire_scalar_value_schema() -> dict[str, object]:
+    """The compact scalar shape is reserved for numeric measurements.
+
+    数值以无前瞻数字字符串约束表达：MTPLX/xgrammar 语法引擎在把
+    ``type:"number"`` 编译为正则时会生成含 look-ahead 的模式并被自身
+    拒绝；字符串数字模式无前瞻且可跨本地语法引擎移植。解析端
+    :func:`_coerce_wire_number` 把该形式还原为数值标量。
+    """
+
+    return {"type": "string", "pattern": _WIRE_NUMERIC_STRING_PATTERN}
 
 
 def _wire_categorical_value_schema() -> dict[str, object]:
@@ -518,6 +728,24 @@ def _wire_categorical_value_schema() -> dict[str, object]:
         "minLength": 1,
         "pattern": r"^[\s\S]*\S[\s\S]*$",
         "description": "原文中可独立核对的完整分类词项，不得截成单字",
+    }
+
+
+def _wire_semantic_proposition_schema() -> dict[str, object]:
+    """必填可空命题字段：null 表示本条件不含非确定性语义命题。
+
+    该字段只承载需要按方案来源核实含义的命题，不承载数值、分类或日期比较；
+    因此 schema 不接受空字符串，也不提供数值类型。
+    """
+
+    return {
+        "type": ["string", "null"],
+        "minLength": 1,
+        "pattern": r"^[\s\S]*\S[\s\S]*$",
+        "description": (
+            "原文非确定性语义命题的显式声明；无命题时必须显式填 null，"
+            "scalar_atoms/set_atoms 只能填 null"
+        ),
     }
 
 
@@ -555,6 +783,62 @@ def _bounded_array(
     return schema
 
 
+def _wire_observation_policy_schema():
+    from app.domain.contracts.observation_selection import ObservationOrdering, ObservationPolicy
+    schema = ObservationPolicy.model_json_schema()
+    definitions = schema.pop("$defs", {})
+    definitions["ObservationOrdering"] = ObservationOrdering.provider_json_schema()
+    selection = schema["properties"]["selection"]
+    selection["anyOf"] = [definitions[item["$ref"].rsplit("/", 1)[-1]]
+                          if "$ref" in item else item for item in selection["anyOf"]]
+    return schema
+
+
+def _wire_repeat_scheme_schema():
+    from app.domain.contracts.repeat_scheme import RepeatScheme
+    schema = RepeatScheme.model_json_schema()
+    schema["properties"]["version"] = {"type": "string", "const": "repeat-scheme/v4"}
+    return {"anyOf": [_inline_required_contract_schema(schema), {"type": "null"}]}
+
+
+def _wire_occurrence_scope_schema():
+    from app.domain.contracts.occurrence_scope import OccurrenceScope
+    schema = OccurrenceScope.model_json_schema()
+    schema["properties"]["version"] = {"type": "string", "const": "occurrence-scope/v4"}
+    return _inline_required_contract_schema(schema)
+
+
+def _wire_frequency_horizon_schema():
+    from app.domain.contracts.rules import FrequencyHorizon
+    return {"anyOf": [_inline_required_contract_schema(FrequencyHorizon.model_json_schema()), {"type": "null"}]}
+
+
+def _inline_required_contract_schema(schema):
+    definitions = schema.pop("$defs", {})
+
+    def inline(node):
+        if isinstance(node, list):
+            return [inline(item) for item in node]
+        if not isinstance(node, dict):
+            return node
+        if "$ref" in node:
+            name = node["$ref"].rsplit("/", 1)[-1]
+            node = {**definitions[name], **{key: value for key, value in node.items() if key != "$ref"}}
+        result = {key: inline(value) for key, value in node.items() if key not in {"title", "default"}}
+        if result.get("type") == "object":
+            result["required"] = list(result.get("properties", {}))
+        return result
+
+    return inline(schema)
+
+
+def _wire_repeat_evidence_roles_schema():
+    from app.domain.contracts.repeat_scheme import RepeatEvidenceRoleReference
+    return {"type": "array", "items": _inline_required_contract_schema(
+        RepeatEvidenceRoleReference.model_json_schema()
+    )}
+
+
 def _wire_atom_common_properties(
     *,
     unit_schema: dict[str, object],
@@ -578,8 +862,10 @@ def _wire_atom_common_properties(
                     "type": ["integer", "null"],
                     "minimum": 1,
                 },
+                "scope": _wire_occurrence_scope_schema(),
+                "horizon": _wire_frequency_horizon_schema(),
             },
-            "required": ["duration"],
+            "required": ["duration", "scope", "horizon"],
         },
         "prospective_window": {
             "type": ["object", "null"],
@@ -609,6 +895,9 @@ def _wire_atom_common_properties(
             "required": ["period"],
         },
         "time_constraint": {"$ref": "#/$defs/wire_time_constraint"},
+        "semantic_proposition": _wire_semantic_proposition_schema(),
+        "repeat_scheme": _wire_repeat_scheme_schema(),
+        "observation_policy": _wire_observation_policy_schema(),
         "negated": {"type": "boolean"},
     }
 
@@ -625,6 +914,9 @@ def _wire_atom_schema(
         "source_locator",
         "requires_professional_judgment",
         "negated",
+        "observation_policy",
+        "semantic_proposition",
+        "repeat_scheme",
     ]
     if shape in {"scalar", "set"}:
         properties["comparator"] = {
@@ -721,11 +1013,34 @@ def _wire_evidence_requirement_schema() -> dict[str, object]:
             },
             "source_validity_window": _wire_time_quantity_schema(),
             "description": {"type": "string", "minLength": 1},
+            # Optional explicit links to atoms in this component's DNF.
+            # Omitted legacy outputs stay unattributed; never infer by fact_type.
+            "predicate_refs": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "role": {
+                            "type": "string",
+                            "enum": ["trigger", "exception", "repeat_trigger"],
+                        },
+                        "condition_id": {"type": "string", "minLength": 1},
+                        "evidence_roles": _wire_repeat_evidence_roles_schema(),
+                        "group_index": {"type": "integer", "minimum": 0},
+                        "atom_index": {"type": "integer", "minimum": 0},
+                    },
+                    "required": ["role", "group_index", "atom_index"],
+                },
+            },
         },
         "required": [
             "fact_type",
             "due_stage",
             "description",
+            "allows_screening_record_transcription",
+            "requires_contemporaneous_objective_source",
         ],
     }
 
@@ -757,6 +1072,20 @@ def _wire_component_schema(
                 "maxItems": group_limit,
                 "items": {"$ref": "#/$defs/wire_dnf_group"},
             },
+            "repeat_trigger_conditions": {
+                "type": "array",
+                "items": {
+                    "type": "object", "additionalProperties": False,
+                    "properties": {
+                        "condition_id": {"type": "string", "minLength": 1},
+                        "expression": {
+                            "type": "array", "minItems": 1, "maxItems": group_limit,
+                            "items": {"$ref": "#/$defs/wire_dnf_group"},
+                        },
+                    },
+                    "required": ["condition_id", "expression", "evidence_roles"],
+                },
+            },
             "evidence_requirements": {
                 "type": "array",
                 "minItems": 1,
@@ -773,6 +1102,7 @@ def _wire_component_schema(
         "required": [
             "title",
             "expression",
+            "repeat_trigger_conditions",
             "evidence_requirements",
             "source_span_ids",
             "source_excerpts",
@@ -865,7 +1195,7 @@ def _omlx_wire_schema(
             "created_by_agent_call_id",
         ]
         properties = {
-            "wire_version": {"const": "dnf-v1"},
+            "wire_version": {"const": DNF_WIRE_VERSION},
             "candidate_id": {"type": "string", "minLength": 1},
             "batch_id": {"type": "string", "minLength": 1},
             rules_key: {
@@ -912,7 +1242,7 @@ def _omlx_wire_schema(
             "replacement_unresolved_items",
         ]
         properties = {
-            "wire_version": {"const": "dnf-v1"},
+            "wire_version": {"const": DNF_WIRE_VERSION},
             "candidate_id": {"type": "string", "minLength": 1},
             "batch_id": {"type": "string", "minLength": 1},
             rules_key: {
@@ -987,6 +1317,8 @@ def protocol_output_response_format(
             atom_limit=atom_limit,
             requirement_limit=requirement_limit,
         )
+        constrain_source_schema(schema, allowed_source_span_ids)
+        schema = _make_wire_schema_grammar_safe(schema)
         schema_name = (
             "protocol_semantic_batch_wire_candidate"
             if output_kind == "semantic_candidate"
@@ -1002,10 +1334,12 @@ def protocol_output_response_format(
         }
     if output_kind == "semantic_candidate":
         schema_name = "protocol_semantic_deconstruction_candidate"
-        schema = ProtocolSemanticDeconstructionCandidate.model_json_schema()
+        schema = _semantic_generation_schema(
+            ProtocolSemanticDeconstructionCandidate, allowed_source_span_ids
+        )
     elif output_kind == "semantic_rule_repair":
         schema_name = "protocol_semantic_rule_repair"
-        schema = ProtocolSemanticRuleRepair.model_json_schema()
+        schema = _semantic_generation_schema(ProtocolSemanticRuleRepair, allowed_source_span_ids)
     else:  # pragma: no cover - guarded by the Literal contract and callers
         raise ValueError(f"未知的方案解构输出类型：{output_kind}")
     # The semantic gate already requires atomic provenance. Enforce its presence
@@ -1188,6 +1522,13 @@ def _batch_prompt_payload(
         "candidate_id": candidate_id,
         "created_by_agent_call_id": agent_call_id,
         "allowed_source_span_ids": list(selected_span_ids),
+        "required_procedure_catalog": [
+            item.model_dump(mode="json")
+            for item in sorted(
+                source_input.required_procedure_catalog.items,
+                key=lambda item: item.position,
+            )
+        ],
         "parent_rule_catalog": [
             item.model_copy(
                 update={
@@ -1271,7 +1612,7 @@ def build_protocol_deconstruction_prompt(
             )
     compact_instruction = (
         (
-            "\n本次使用服务端携带的 wire_version='dnf-v1' 严格 JSON 合同；它只承载本批语义，"
+            f"\n本次使用服务端携带的 wire_version={DNF_WIRE_VERSION!r} 严格 JSON 合同；它只承载本批语义，"
             + _COMPACT_WIRE_COMPONENT_CONTRACT
             + "expression 和 exception_expression（无例外时为 null）必须是非空 group 数组；"
             "每个 group 必须同时提供 existence_atoms、scalar_atoms、set_atoms 数组。"
@@ -1282,7 +1623,9 @@ def build_protocol_deconstruction_prompt(
         if compact
         else ""
     )
-    schema_suffix = "" if compact else f"输出结构：{_compact_schema()}"
+    schema_suffix = "" if compact else (
+        f"输出结构：{_compact_schema(payload['allowed_source_span_ids'])}"
+    )
     return (
         f"{prompt_template.strip()}\n\n"
         f"{_SYSTEM_CONTRACT}\n\n"
@@ -1331,7 +1674,7 @@ def _next_batch_prompt(
             f"继续返回冻结目录的第 {batch_number}/{batch_total} 批语义结果。"
             f"candidate_id 必须继续使用 {candidate_id!r}；proposed_rules 必须且只能"
             f"按顺序返回 {list(rule_codes)}。不得重复前批，不得提前返回后批，不得省略本批父规则。"
-            "输出 wire_version='dnf-v1' 的完整 JSON 对象，不要附加说明。"
+            f"输出 wire_version={DNF_WIRE_VERSION!r} 的完整 JSON 对象，不要附加说明。"
             + _COMPACT_WIRE_COMPONENT_CONTRACT
         )
     return (
@@ -1351,6 +1694,7 @@ def _batch_schema_repair_prompt(
     batch_id: str | None,
     problem: str,
     compact: bool = False,
+    allowed_source_span_ids: Sequence[str] = (),
 ) -> str:
     identity = (
         f"candidate_id 必须继续使用 {candidate_id!r}；" if candidate_id else ""
@@ -1368,13 +1712,13 @@ def _batch_schema_repair_prompt(
     )
     schema_suffix = (
         (
-            "本次响应格式由服务端携带的 wire_version='dnf-v1' 严格 JSON 合同定义；"
+            f"本次响应格式由服务端携带的 wire_version={DNF_WIRE_VERSION!r} 严格 JSON 合同定义；"
             + _COMPACT_WIRE_COMPONENT_CONTRACT
             + "expression 和 exception_expression 必须使用非空 group 数组；每个 group 同时提供三类 atom 数组。"
             "每个 atom 的 source_locator 只能包含 source_clause 或 source_clauses 其中一个字段；不要附加解释。"
         )
         if compact
-        else "输出结构：" + _compact_schema()
+        else "输出结构：" + _compact_schema(allowed_source_span_ids)
     )
     return (
         "本批输出无法按冻结目录合并。"
@@ -1440,11 +1784,14 @@ def _repair_prompt(
                 + "expression 和 exception_expression 必须使用非空 group 数组；每个 group 同时提供三类 atom 数组；每个 atom 的 source_locator 只能包含 source_clause 或 source_clauses 其中一个字段，不要附加解释。"
             )
             if compact
-            else "\n局部修正输出结构：" + _compact_repair_schema()
+            else "\n局部修正输出结构：" + _compact_repair_schema(
+                _batch_source_span_ids(source_input, replacement_rule_codes)
+                if source_input is not None else ()
+            )
         )
     elif compact:
         schema_suffix = (
-            "\n本次响应格式由服务端携带的 wire_version='dnf-v1' 严格 JSON 合同定义；"
+            f"\n本次响应格式由服务端携带的 wire_version={DNF_WIRE_VERSION!r} 严格 JSON 合同定义；"
             + _COMPACT_WIRE_COMPONENT_CONTRACT
             + "expression 和 exception_expression 必须使用非空 group 数组；每个 group 同时提供三类 atom 数组；每个 atom 的 source_locator 只能包含 source_clause 或 source_clauses 其中一个字段，不要附加解释。"
         )
@@ -1621,6 +1968,7 @@ def _wire_time_constraint(value: Any) -> dict[str, object] | None:
         "lower_bound",
         "upper_bound",
         "half_life_multiplier",
+        "half_life_evidence",
         "combined_window_selection",
         "allow_partial_date",
     }
@@ -1633,7 +1981,10 @@ def _wire_time_constraint(value: Any) -> dict[str, object] | None:
     upper_bound = _wire_time_quantity(value.get("upper_bound"))
     lower_bound_days = value.get("lower_bound_days")
     upper_bound_days = value.get("upper_bound_days")
-    half_life_multiplier = value.get("half_life_multiplier")
+    half_life_multiplier = _coerce_wire_number(value.get("half_life_multiplier"))
+    half_life_evidence = value.get("half_life_evidence")
+    if half_life_evidence is not None and not isinstance(half_life_evidence, Mapping):
+        raise ValueError("wire 半衰期依据必须是对象或 null")
     combined_window_selection = value.get("combined_window_selection")
     allow_partial_date = value.get("allow_partial_date")
     if (
@@ -1644,6 +1995,7 @@ def _wire_time_constraint(value: Any) -> dict[str, object] | None:
         and lower_bound is None
         and upper_bound is None
         and half_life_multiplier is None
+        and half_life_evidence is None
         and combined_window_selection is None
         and (allow_partial_date is None or allow_partial_date is False)
     ):
@@ -1683,6 +2035,7 @@ def _wire_time_constraint(value: Any) -> dict[str, object] | None:
         "lower_bound": lower_bound,
         "upper_bound": upper_bound,
         "half_life_multiplier": half_life_multiplier,
+        "half_life_evidence": half_life_evidence,
         "combined_window_selection": combined_window_selection,
         "allow_partial_date": allow_partial_date,
     }
@@ -1693,12 +2046,12 @@ def _wire_occurrence_window(value: Any) -> dict[str, object] | None:
         return None
     if not isinstance(value, Mapping):
         raise ValueError("wire occurrence_window 必须是对象或 null")
-    unknown_keys = set(value) - {"duration", "minimum_count"}
+    unknown_keys = set(value) - {"duration", "minimum_count", "scope", "horizon"}
     if unknown_keys:
         raise ValueError(f"wire occurrence_window 含未知字段：{sorted(unknown_keys)}")
     duration = _wire_time_quantity(value.get("duration"))
     minimum_count = value.get("minimum_count")
-    if duration is None and minimum_count is None:
+    if duration is None and minimum_count is None and value.get("scope") is None and value.get("horizon") is None:
         return None
     if duration is None:
         raise ValueError("wire occurrence_window 的 duration 必须是完整时间数量")
@@ -1708,7 +2061,14 @@ def _wire_occurrence_window(value: Any) -> dict[str, object] | None:
         or minimum_count <= 0
     ):
         raise ValueError("wire occurrence_window 的 minimum_count 必须是正整数")
-    return {"duration": duration, "minimum_count": minimum_count}
+    result = {"duration": duration, "minimum_count": minimum_count}
+    if value.get("scope") is not None:
+        from app.domain.contracts.occurrence_scope import OccurrenceScope
+        result["scope"] = OccurrenceScope.model_validate(value["scope"]).model_dump(mode="json")
+    if value.get("horizon") is not None:
+        from app.domain.contracts.rules import FrequencyHorizon
+        result["horizon"] = FrequencyHorizon.model_validate(value["horizon"]).model_dump(mode="json")
+    return result
 
 
 def _wire_prospective_window(value: Any) -> dict[str, object] | None:
@@ -1747,16 +2107,17 @@ def _wire_prospective_period(value: Any) -> dict[str, object] | None:
 
 
 def _wire_numeric_scalar_value(value: Any) -> int | float:
+    coerced = _coerce_wire_number(value)
     if (
-        isinstance(value, bool)
-        or not isinstance(value, (int, float))
-        or not math.isfinite(value)
+        isinstance(coerced, bool)
+        or not isinstance(coerced, (int, float))
+        or not math.isfinite(coerced)
     ):
         _raise_wire_error(
             DNF_WIRE_ERROR_CODES["shape_mismatch"],
             "wire scalar atom 的 value 必须是有限数值标量；字符串或布尔分类值必须放入 set_atoms.values",
         )
-    return value
+    return coerced
 
 
 def _wire_categorical_value(value: Any) -> str:
@@ -1791,7 +2152,10 @@ def _wire_atom(
         "prospective_period",
         "time_constraint",
         "negated",
+        "semantic_proposition",
     }
+    common_keys.add("observation_policy")
+    common_keys.add("repeat_scheme")
     shape_keys = {
         "scalar": {"comparator", "value"},
         "set": {"comparator", "values"},
@@ -1806,7 +2170,17 @@ def _wire_atom(
         "source_locator",
         "requires_professional_judgment",
         "negated",
+        "observation_policy",
+        "repeat_scheme",
     } - set(value)
+    if "semantic_proposition" not in value:
+        # 新生产合同把命题字段列为必填可空：缺失即视为旧方法或残缺输出，
+        # 不能默认补 null 后继续读取。
+        _raise_wire_error(
+            DNF_WIRE_ERROR_CODES["missing_semantic_proposition"],
+            f"wire {shape} atom 缺少 semantic_proposition；"
+            "每个 atom 都必须显式给出命题或 null，不得省略字段",
+        )
     if shape in {"scalar", "set"}:
         missing |= (
             {"comparator", "unit", "value" if shape == "scalar" else "values"}
@@ -1902,7 +2276,34 @@ def _wire_atom(
                 "wire scalar atom 必须用 source_term 逐字填写原文指标名",
             )
 
-    return {
+    occurrence_window = _wire_occurrence_window(value.get("occurrence_window"))
+    raw_proposition = value["semantic_proposition"]
+    if raw_proposition is not None:
+        if not isinstance(raw_proposition, str) or not raw_proposition.strip():
+            _raise_wire_error(
+                DNF_WIRE_ERROR_CODES["proposition_shape"],
+                f"wire {shape} atom 的 semantic_proposition 必须是非空字符串或 null",
+            )
+        if shape != "existence" or unit is not None:
+            _raise_wire_error(
+                DNF_WIRE_ERROR_CODES["proposition_shape"],
+                "wire semantic_proposition 只用于不携带 value、unit 的非确定性条件；"
+                "数值和分类判断仍须使用 scalar_atoms/set_atoms",
+            )
+        if professional:
+            _raise_wire_error(
+                DNF_WIRE_ERROR_CODES["proposition_shape"],
+                "wire semantic_proposition 不得与 requires_professional_judgment 混用；"
+                "研究者判断仍按其专属字段表达",
+            )
+        if occurrence_window is not None:
+            _raise_wire_error(
+                DNF_WIRE_ERROR_CODES["proposition_shape"],
+                "wire semantic_proposition 不得与 occurrence_window 混用；"
+                "频次必须结构化保存",
+            )
+
+    result = {
         "subject": value["subject"],
         "attribute": value["attribute"],
         "source_term": value.get("source_term"),
@@ -1913,19 +2314,119 @@ def _wire_atom(
         "unit": unit,
         "applicable_population": value.get("applicable_population"),
         "requires_professional_judgment": professional,
-        "occurrence_window": _wire_occurrence_window(
-            value.get("occurrence_window")
-        ),
+        "occurrence_window": occurrence_window,
         "prospective_window": _wire_prospective_window(
             value.get("prospective_window")
         ),
         "prospective_period": _wire_prospective_period(
             value.get("prospective_period")
         ),
+        "semantic_proposition": raw_proposition,
         "unit_match_policy": "exact_canonical_label",
         "time_constraint": _wire_time_constraint(value.get("time_constraint")),
         "negated": value["negated"],
     }
+    from app.domain.contracts.observation_selection import ObservationPolicy
+    observation_clauses = (
+        list(source_clauses) if source_clauses
+        else ([source_clause] if source_clause else [])
+    )
+    policy_payload = dict(value["observation_policy"])
+    if observation_clauses:
+        raw_excerpts = list(policy_payload.get("source_excerpts") or [])
+        raw_span_ids = list(policy_payload.get("source_span_ids") or [])
+        if len(raw_span_ids) == 1 and len(raw_excerpts) > 1:
+            merged = _merge_wire_observation_fragments(raw_excerpts, observation_clauses)
+            if len(merged) == 1:
+                policy_payload["source_excerpts"] = merged
+                raw_excerpts = merged
+        anchored_excerpts = _anchor_wire_source_excerpts(
+            raw_excerpts, observation_clauses
+        )
+        if anchored_excerpts != raw_excerpts:
+            policy_payload["source_excerpts"] = anchored_excerpts
+    policy = ObservationPolicy.model_validate(policy_payload)
+    result["observation_policy"] = policy.model_dump(mode="json")
+    if value["repeat_scheme"] is not None:
+        from app.domain.contracts.repeat_scheme import RepeatScheme
+        scheme = RepeatScheme.model_validate(value["repeat_scheme"])
+        if observation_clauses:
+            anchored_repeat = _anchor_wire_source_excerpts(
+                list(scheme.source_excerpts), observation_clauses
+            )
+            if anchored_repeat != list(scheme.source_excerpts):
+                scheme = scheme.model_copy(update={"source_excerpts": anchored_repeat})
+        scheme.require_current_extraction()
+        result["repeat_scheme"] = scheme.model_dump(mode="json")
+    return result
+
+
+def _anchor_wire_source_excerpts(
+    excerpts: list[str],
+    clauses: Sequence[str],
+) -> list[str]:
+    """宿主侧观察/复查摘录锚定：整句超引时确定性回收到条件自身原文片段。
+
+    实测模型（方案语义远端/本地各档）常把观察依据写成覆盖整个来源句的
+    引文，而原子条件的逐字原文只是其中一个片段；这属于可由宿主无损回收
+    的引文范围偏差，不应要求模型重做整批。仅处理三种确定性情情形：
+    逐字命中、引号规范化命中、以及摘录唯一包含一个条件片段的超集情形；
+    其余差异保持原样，由严格门禁拒绝。
+    """
+    if not clauses:
+        return list(excerpts)
+    anchored: list[str] = []
+    for excerpt in excerpts:
+        if any(excerpt in clause for clause in clauses):
+            anchored.append(excerpt)
+            continue
+        recovered = _recover_exact_excerpt(excerpt, clauses)
+        if any(recovered in clause for clause in clauses):
+            anchored.append(recovered)
+            continue
+        contained = [clause for clause in clauses if clause in excerpt]
+        if contained:
+            # 超集可能覆盖多个条件片段；取唯一最长的片段作为最具体锚点，
+            # 长度并列时保持歧义不猜。
+            longest = max(len(clause) for clause in contained)
+            longest_clauses = [
+                clause for clause in contained if len(clause) == longest
+            ]
+            if len(longest_clauses) == 1:
+                anchored.append(longest_clauses[0])
+                continue
+        anchored.append(excerpt)
+    return anchored
+
+
+def _merge_wire_observation_fragments(
+    excerpts: list[str],
+    clauses: Sequence[str],
+) -> list[str]:
+    """把"单来源多片段"的观察摘录按原文顺序并回一个逐字摘录。
+
+    实测模型会把同一来源的观察依据拆成多个片段（模仿 source_clauses 的
+    多片段形态），而观察政策合同要求来源与摘录逐项对应。仅当全部片段能
+    在同一个条件原文片段中按给定顺序找到时，用首片段起点到末片段终点的
+    原文子串并回单一摘录；任何缺失/乱序/跨片段情形都保持原样交给门禁。
+    """
+    if len(excerpts) <= 1:
+        return list(excerpts)
+    for clause in clauses:
+        positions: list[int] = []
+        cursor = 0
+        ok = True
+        for excerpt in excerpts:
+            start = clause.find(excerpt, cursor)
+            if start < 0:
+                ok = False
+                break
+            positions.append(start)
+            cursor = start + len(excerpt)
+        if ok:
+            merged = clause[positions[0]:cursor]
+            return [merged]
+    return list(excerpts)
 
 
 def _canonical_wire_value(value: object) -> object:
@@ -2037,7 +2538,7 @@ def _wire_dnf_expression(
     identity_prefix: str,
     label: str,
     source_text: str,
-) -> dict[str, object]:
+) -> tuple[dict[str, object], list[list[str]]]:
     if not isinstance(value, list) or not value:
         raise ValueError(f"wire {label} 必须是非空 alternative group 数组")
     if len(value) > DNF_WIRE_MAX_GROUPS:
@@ -2046,6 +2547,7 @@ def _wire_dnf_expression(
             f"wire {label} 的 group 数量超过上限 {DNF_WIRE_MAX_GROUPS}",
         )
     groups: list[dict[str, object]] = []
+    group_predicate_ids: list[list[str]] = []
     group_identity_keys: set[str] = set()
     expression_atom_count = 0
     group_keys = {"existence_atoms", "scalar_atoms", "set_atoms"}
@@ -2131,11 +2633,72 @@ def _wire_dnf_expression(
             if len(children) == 1
             else {"kind": "logical", "operator": "all", "children": children}
         )
-    return (
+        group_predicate_ids.append(
+            [atom["predicate_id"] for atom in hydrated_atoms]
+        )
+    expression = (
         groups[0]
         if len(groups) == 1
         else {"kind": "logical", "operator": "any", "children": groups}
     )
+    return expression, group_predicate_ids
+
+
+
+def _resolve_wire_predicate_refs(
+    value: Any,
+    *,
+    trigger_groups: list[list[str]],
+    exception_groups: list[list[str]] | None,
+    repeat_groups: Mapping[str, list[list[str]]] | None = None,
+) -> list[str]:
+    """Map optional DNF position refs to system predicate_ids; never invent links."""
+
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError("wire predicate_refs 必须是数组或省略")
+    if not value:
+        raise ValueError("wire predicate_refs 若提供则不得为空")
+    resolved: list[str] = []
+    seen: set[tuple[str, str | None, int, int]] = set()
+    for index, item in enumerate(value, start=1):
+        if not isinstance(item, Mapping):
+            raise ValueError(f"wire predicate_refs 第 {index} 项必须是对象")
+        unknown = set(item) - {"role", "group_index", "atom_index", "condition_id"}
+        if unknown:
+            raise ValueError(
+                f"wire predicate_refs 第 {index} 项含未知字段：{sorted(unknown)}"
+            )
+        role = item.get("role")
+        group_index = item.get("group_index")
+        atom_index = item.get("atom_index")
+        if role not in {"trigger", "exception", "repeat_trigger"}:
+            raise ValueError(f"wire predicate_refs 第 {index} 项 role 无效")
+        condition_id = item.get("condition_id")
+        if role == "repeat_trigger":
+            if not isinstance(condition_id, str) or condition_id not in (repeat_groups or {}):
+                raise ValueError("资料要求须明确引用本组件已有的复查触发条件")
+        elif "condition_id" in item:
+            raise ValueError("只有复查触发条件引用可携带 condition_id")
+        if not isinstance(group_index, int) or isinstance(group_index, bool) or group_index < 0:
+            raise ValueError(f"wire predicate_refs 第 {index} 项 group_index 无效")
+        if not isinstance(atom_index, int) or isinstance(atom_index, bool) or atom_index < 0:
+            raise ValueError(f"wire predicate_refs 第 {index} 项 atom_index 无效")
+        key = (role, condition_id, group_index, atom_index)
+        if key in seen:
+            raise ValueError("wire predicate_refs 不得重复")
+        seen.add(key)
+        groups = ((repeat_groups or {})[condition_id] if role == "repeat_trigger"
+                  else trigger_groups if role == "trigger" else exception_groups)
+        if groups is None:
+            raise ValueError("资料要求引用了不存在的例外表达式")
+        if group_index >= len(groups):
+            raise ValueError("资料要求引用了不存在的条件组")
+        if atom_index >= len(groups[group_index]):
+            raise ValueError("资料要求引用了不存在的原子条件")
+        resolved.append(groups[group_index][atom_index])
+    return resolved
 
 
 def _wire_semantic_rule(value: Any) -> dict[str, object]:
@@ -2166,6 +2729,7 @@ def _wire_semantic_rule(value: Any) -> dict[str, object]:
             "title",
             "expression",
             "exception_expression",
+            "repeat_trigger_conditions",
             "evidence_requirements",
             "source_span_ids",
             "source_excerpts",
@@ -2187,7 +2751,7 @@ def _wire_semantic_rule(value: Any) -> dict[str, object]:
         ):
             raise ValueError("wire semantic component 的 source_excerpts 必须是非空字符串数组")
         source_text = "\n".join(source_excerpts)
-        expression = _wire_dnf_expression(
+        expression, trigger_groups = _wire_dnf_expression(
             component.get("expression"),
             identity_prefix=(
                 f"{value.get('official_code', 'unknown')}:c{component_index}:trigger"
@@ -2196,10 +2760,11 @@ def _wire_semantic_rule(value: Any) -> dict[str, object]:
             source_text=source_text,
         )
         exception_payload = component.get("exception_expression")
-        exception_expression = (
-            None
-            if exception_payload is None
-            else _wire_dnf_expression(
+        if exception_payload is None:
+            exception_expression = None
+            exception_groups = None
+        else:
+            exception_expression, exception_groups = _wire_dnf_expression(
                 exception_payload,
                 identity_prefix=(
                     f"{value.get('official_code', 'unknown')}:c{component_index}:exception"
@@ -2207,8 +2772,64 @@ def _wire_semantic_rule(value: Any) -> dict[str, object]:
                 label="exception_expression",
                 source_text=source_text,
             )
-        )
         requirements = component.get("evidence_requirements")
+        ancillary = component.get("repeat_trigger_conditions", [])
+        if not isinstance(ancillary, list):
+            raise ValueError("复查触发条件须单独列出，不能混入入排条件")
+        repeat_conditions = []
+        repeat_groups = {}
+        for index, condition in enumerate(ancillary):
+            if not isinstance(condition, Mapping) or set(condition) != {"condition_id", "expression", "evidence_roles"}:
+                raise ValueError("复查触发条件须保留自己的身份与完整条件关系")
+            condition_id = condition["condition_id"]
+            if not isinstance(condition_id, str) or not condition_id.strip() or condition_id in repeat_groups:
+                raise ValueError("复查触发条件身份须非空且不得重复")
+            repeat_expression, condition_groups = _wire_dnf_expression(
+                condition["expression"],
+                identity_prefix=f"{value.get('official_code', 'unknown')}:c{component_index}:repeat:{index}",
+                label="repeat_trigger_conditions", source_text=source_text,
+            )
+            from app.domain.contracts.repeat_scheme import RepeatEvidenceRoleReference, resolve_repeat_evidence_roles
+            if not isinstance(condition["evidence_roles"], list):
+                raise ValueError("复查取证范围须逐项列出")
+            roles = resolve_repeat_evidence_roles(
+                [RepeatEvidenceRoleReference.model_validate(item) for item in condition["evidence_roles"]],
+                condition_groups, require_complete=True,
+            )
+            repeat_conditions.append({"condition_id": condition["condition_id"], "expression": repeat_expression,
+                                      "predicate_evidence_roles": {key: role.model_dump(mode="json")
+                                                                   for key, role in roles.items()}})
+            repeat_groups[condition_id] = condition_groups
+        def verify_policy_sources(node):
+            if node is None:
+                return
+            if node["kind"] == "logical":
+                for child in node["children"]:
+                    verify_policy_sources(child)
+                return
+            policy = node["predicate"].get("observation_policy")
+            scheme = node["predicate"].get("repeat_scheme")
+            if scheme is not None and scheme["permission"] == "investigator_discretion":
+                permission = next((item["expression"] for item in repeat_conditions
+                                   if item["condition_id"] == scheme["permission_condition_id"]), None)
+                def contains_judgment(expression):
+                    if expression is None:
+                        return False
+                    if expression["kind"] == "predicate":
+                        return expression["predicate"]["requires_professional_judgment"]
+                    return any(contains_judgment(child) for child in expression["children"])
+                if not contains_judgment(permission):
+                    raise ValueError("研究者复查许可须保留明确的书面判断条件，不能用普通命题或签名代替")
+            if policy is not None and (
+                not set(policy["source_span_ids"]) <= set(source_span_ids)
+                or any(not any(text in excerpt for excerpt in source_excerpts)
+                       for text in policy["source_excerpts"])
+            ):
+                raise ValueError("观察选择来源不属于本组件原文")
+        verify_policy_sources(expression)
+        verify_policy_sources(exception_expression)
+        for condition in repeat_conditions:
+            verify_policy_sources(condition["expression"])
         if not isinstance(requirements, list) or not requirements:
             raise ValueError("wire evidence_requirements 不能为空")
         if len(requirements) > DNF_WIRE_MAX_REQUIREMENTS_PER_COMPONENT:
@@ -2218,33 +2839,62 @@ def _wire_semantic_rule(value: Any) -> dict[str, object]:
                 f"{DNF_WIRE_MAX_REQUIREMENTS_PER_COMPONENT}",
             )
         hydrated_requirements: list[dict[str, object]] = []
+        allowed_requirement_keys = {
+            "fact_type",
+            "required_source_types",
+            "allows_screening_record_transcription",
+            "requires_contemporaneous_objective_source",
+            "due_stage",
+            "source_validity_window",
+            "description",
+            "predicate_refs",
+        }
         for requirement in requirements:
             if not isinstance(requirement, Mapping):
                 raise ValueError("wire evidence requirement 必须是对象")
-            hydrated_requirements.append(
-                {
-                    "fact_type": requirement.get("fact_type"),
-                    "required_source_types": requirement.get(
-                        "required_source_types", []
-                    ),
-                    "allows_screening_record_transcription": requirement.get(
-                        "allows_screening_record_transcription", True
-                    ),
-                    "requires_contemporaneous_objective_source": requirement.get(
-                        "requires_contemporaneous_objective_source", False
-                    ),
-                    "due_stage": requirement.get("due_stage"),
-                    "source_validity_window": _wire_time_quantity(
-                        requirement.get("source_validity_window")
-                    ),
-                    "description": requirement.get("description"),
-                }
+            unknown_requirement_keys = set(requirement) - allowed_requirement_keys
+            if unknown_requirement_keys:
+                raise ValueError(
+                    "wire evidence requirement 含未知字段："
+                    f"{sorted(unknown_requirement_keys)}"
+                )
+            if not {
+                "allows_screening_record_transcription",
+                "requires_contemporaneous_objective_source",
+            }.issubset(requirement):
+                raise ValueError("资料要求须明确来源政策，不得省略")
+            predicate_ids = _resolve_wire_predicate_refs(
+                requirement.get("predicate_refs"),
+                trigger_groups=trigger_groups,
+                exception_groups=exception_groups,
+                repeat_groups=repeat_groups,
             )
+            hydrated = {
+                "fact_type": requirement.get("fact_type"),
+                "required_source_types": requirement.get(
+                    "required_source_types", []
+                ),
+                "allows_screening_record_transcription": requirement[
+                    "allows_screening_record_transcription"
+                ],
+                "requires_contemporaneous_objective_source": requirement[
+                    "requires_contemporaneous_objective_source"
+                ],
+                "due_stage": requirement.get("due_stage"),
+                "source_validity_window": _wire_time_quantity(
+                    requirement.get("source_validity_window")
+                ),
+                "description": requirement.get("description"),
+            }
+            if predicate_ids:
+                hydrated["predicate_ids"] = predicate_ids
+            hydrated_requirements.append(hydrated)
         hydrated_components.append(
             {
                 "title": component.get("title"),
                 "expression": expression,
                 "exception_expression": exception_expression,
+                "repeat_trigger_conditions": repeat_conditions,
                 "evidence_requirements": hydrated_requirements,
                 "source_span_ids": source_span_ids,
                 "source_excerpts": source_excerpts,
@@ -2296,8 +2946,10 @@ def _parse_wire_semantic_candidate(
     missing_keys = required_keys - set(payload)
     if missing_keys:
         raise ValueError(f"wire semantic candidate 缺少字段：{sorted(missing_keys)}")
-    if payload.get("wire_version") != "dnf-v1":
-        raise ValueError("wire semantic candidate 的 wire_version 必须是 dnf-v1")
+    if payload.get("wire_version") != DNF_WIRE_VERSION:
+        raise ValueError(
+            f"wire semantic candidate 的 wire_version 必须是 {DNF_WIRE_VERSION}"
+        )
     batch_id = payload.get("batch_id")
     if not isinstance(batch_id, str) or not batch_id:
         raise ValueError("wire semantic candidate 缺少 batch_id")
@@ -2352,8 +3004,10 @@ def _parse_wire_semantic_repair(
     missing_keys = required_keys - set(payload)
     if missing_keys:
         raise ValueError(f"wire semantic repair 缺少字段：{sorted(missing_keys)}")
-    if payload.get("wire_version") != "dnf-v1":
-        raise ValueError("wire semantic repair 的 wire_version 必须是 dnf-v1")
+    if payload.get("wire_version") != DNF_WIRE_VERSION:
+        raise ValueError(
+            f"wire semantic repair 的 wire_version 必须是 {DNF_WIRE_VERSION}"
+        )
     batch_id = payload.get("batch_id")
     if not isinstance(batch_id, str) or not batch_id:
         raise ValueError("wire semantic repair 缺少 batch_id")
@@ -2561,7 +3215,9 @@ def _hydrate_semantic_candidate(
                 else None
             )
             excerpt_sources = ["\n".join(source_excerpts)]
-            for root in (expression, exception_expression):
+            repeat_conditions = [item.model_copy(deep=True) for item in semantic_component.repeat_trigger_conditions]
+            predicate_id_remap: dict[str, str] = {}
+            for root in (expression, exception_expression, *(item.expression for item in repeat_conditions)):
                 if root is None:
                     continue
                 for predicate_index, predicate in enumerate(
@@ -2582,6 +3238,7 @@ def _hydrate_semantic_candidate(
                             suffix += 1
                         predicate.predicate_id = candidate_id
                     used_predicate_ids.add(predicate.predicate_id)
+                    predicate_id_remap[original_predicate_id] = predicate.predicate_id
                     if predicate.source_clause:
                         fragments = _recover_exact_fragments(
                             predicate.source_clause, excerpt_sources
@@ -2599,6 +3256,10 @@ def _hydrate_semantic_candidate(
                                 clause, excerpt_sources
                             )
                         ]
+            for condition in repeat_conditions:
+                condition.predicate_evidence_roles = {
+                    predicate_id_remap[key]: role for key, role in condition.predicate_evidence_roles.items()
+                }
             evidence_requirements = [
                 EvidenceRequirement(
                     requirement_id=f"requirement:{component_id}:{index + 1:02d}",
@@ -2618,6 +3279,10 @@ def _hydrate_semantic_candidate(
                         fact_type=requirement.fact_type,
                         due_stage=requirement.due_stage,
                     ),
+                    predicate_ids=[
+                        predicate_id_remap[predicate_id]
+                        for predicate_id in requirement.predicate_ids
+                    ],
                 )
                 for index, requirement in enumerate(
                     semantic_component.evidence_requirements
@@ -2634,6 +3299,7 @@ def _hydrate_semantic_candidate(
                 title=semantic_component.title,
                 expression=expression,
                 exception_expression=exception_expression,
+                repeat_trigger_conditions=repeat_conditions,
                 evidence_requirements=evidence_requirements,
             )
             components.append(component)
@@ -2812,6 +3478,42 @@ def _hydrate_semantic_candidate(
     )
 
 
+def hydrate_semantic_preview(
+    source_input: ProtocolDeconstructionInput,
+    candidate: ProtocolSemanticDeconstructionCandidate,
+) -> tuple[ProtocolDeconstructionDraft, list[str]]:
+    """生成期间的只读预览水合：只覆盖已验证批次，未覆盖父规则单列待生成。
+
+    通过把冻结目录缩减到已覆盖项来复用完整水合逻辑（同一 wire/ID/来源映射），
+    不建立第二套草稿权威；返回的草稿对象只用于工作台只读投影，
+    不会被保存为草稿 revision，也不能进入完整性检查或发布。
+    """
+    covered = {
+        rule.official_code for rule in candidate.proposed_rules
+    }
+    full_catalog = source_input.parent_rule_catalog
+    reduced_items = [
+        item for item in full_catalog.items if item.official_code in covered
+    ]
+    pending = [
+        item.official_code
+        for item in sorted(full_catalog.items, key=lambda value: value.position)
+        if item.official_code is not None and item.official_code not in covered
+    ]
+    if len(reduced_items) == len(full_catalog.items):
+        return _hydrate_semantic_candidate(source_input, candidate), []
+    if not reduced_items:
+        raise ValueError("预览候选没有覆盖任何冻结父规则")
+    reduced_input = source_input.model_copy(
+        update={
+            "parent_rule_catalog": full_catalog.model_copy(
+                update={"items": reduced_items}
+            )
+        }
+    )
+    return _hydrate_semantic_candidate(reduced_input, candidate), pending
+
+
 def semantic_candidate_from_draft(
     draft: ProtocolDeconstructionDraft,
 ) -> ProtocolSemanticDeconstructionCandidate:
@@ -2839,6 +3541,7 @@ def semantic_candidate_from_draft(
                         if component.exception_expression is not None
                         else None
                     ),
+                    repeat_trigger_conditions=[item.model_copy(deep=True) for item in component.repeat_trigger_conditions],
                     evidence_requirements=[
                         SemanticEvidenceRequirement(
                             fact_type=requirement.fact_type,
@@ -2852,6 +3555,7 @@ def semantic_candidate_from_draft(
                             due_stage=requirement.due_stage,
                             source_validity_window=requirement.source_validity_window,
                             description=requirement.description,
+                            predicate_ids=list(requirement.predicate_ids),
                         )
                         for requirement in component.evidence_requirements
                     ],
@@ -2899,13 +3603,15 @@ def revise_protocol_draft_from_feedback(
     compact = _uses_compact_wire_contract(transport)
     repair_batch_id = _repair_batch_id([target_rule_code])
     output_contract = (
-        "本次响应格式由服务端携带的 wire_version='dnf-v1' 严格 JSON 合同定义；只返回 replacement_rules，"
+        f"本次响应格式由服务端携带的 wire_version={DNF_WIRE_VERSION!r} 严格 JSON 合同定义；只返回 replacement_rules，"
         f"batch_id 必须为 {repair_batch_id}；"
         + _COMPACT_WIRE_COMPONENT_CONTRACT
         + "expression 和 exception_expression 必须使用非空 group 数组；每个 group 同时提供三类 atom 数组；"
         "每个 atom 的 source_locator 只能包含 source_clause 或 source_clauses 其中一个字段；不要附加解释。"
         if compact
-        else "输出结构：" + _compact_repair_schema()
+        else "输出结构：" + _compact_repair_schema(
+            _batch_source_span_ids(source_input, [target_rule_code])
+        )
     )
     compact_source_context = (
         json.dumps(
@@ -2953,6 +3659,7 @@ def revise_protocol_draft_from_feedback(
         f"冻结的方案输入：{compact_source_context}\n\n"
         f"{output_contract}"
     )
+    _configure_transport_output_scope(transport, source_input, [target_rule_code])
     response = transport.start(
         prompt=prompt,
         output_kind="semantic_rule_repair",
@@ -2972,7 +3679,7 @@ def revise_protocol_draft_from_feedback(
                 expected_codes=[target_rule_code],
                 expected_candidate_id=current.candidate_id,
                 expected_batch_id=repair_batch_id if compact else None,
-                source_input=source_input if compact else None,
+                source_input=source_input,
             )
             revised = _apply_semantic_repair(
                 current,
@@ -2999,13 +3706,15 @@ def revise_protocol_draft_from_feedback(
                     "上一响应无法作为指定父规则的局部修订读取。"
                     f"问题：{str(exc)[:12000]}。请只返回符合下列结构的 JSON："
                     + (
-                        "服务端携带的 wire_version='dnf-v1' 严格 JSON 合同；batch_id 必须为 "
+                        f"服务端携带的 wire_version={DNF_WIRE_VERSION!r} 严格 JSON 合同；batch_id 必须为 "
                         f"{repair_batch_id}；"
                         + _COMPACT_WIRE_COMPONENT_CONTRACT
                         + "expression 和 exception_expression 必须使用非空 group 数组；每个 group 同时提供三类 atom 数组；"
                         "每个 atom 的 source_locator 只能包含 source_clause 或 source_clauses 其中一个字段；不要附加解释。"
                         if compact
-                        else _compact_repair_schema()
+                        else _compact_repair_schema(
+                            _batch_source_span_ids(source_input, [target_rule_code])
+                        )
                     )
                 ),
                 output_kind="semantic_rule_repair",
@@ -3103,6 +3812,16 @@ def _validate_batch_source_closure(
             "本批来源片段不属于选定父规则来源闭包（跨批次、流程来源或无归属）："
             f"{sorted(invalid_source_ids)}"
         )
+    for rule in rules:
+        for component in rule.components:
+            outside_component = set(source_references(
+                component.model_dump(mode="json")
+            )) - set(component.source_span_ids)
+            if outside_component:
+                raise ValueError(
+                    "观察、复查或其他嵌套来源不属于本组件声明的原文："
+                    f"{sorted(outside_component)}"
+                )
     foreign_codes = {
         code
         for item in (*warning_items, *unresolved_items)
@@ -3571,6 +4290,29 @@ def _format_issue(message: str) -> ProtocolGateIssue:
     )
 
 
+def _call_issue(error: ProtocolAgentCallError) -> ProtocolGateIssue:
+    timeout = error.error_code == "TRANSPORT_TIMEOUT"
+    quota = error.error_code == "QUOTA_EXHAUSTED"
+    base = (
+        "模型服务可用额度已耗尽，需等待恢复或调整已授权的接入。" if quota
+        else "等待模型返回超时。" if timeout
+        else "模型调用未完成。"
+    )
+    detail = str(error).strip()
+    problem = base if not detail or detail == base else f"{base}服务返回：{detail[:800]}"
+    return ProtocolGateIssue(
+        issue_code=("AGENT_CALL_QUOTA_EXHAUSTED" if quota else
+                    "AGENT_CALL_TRANSPORT_TIMEOUT" if timeout else "AGENT_CALL_FAILED"),
+        check_name="tree_integrity",
+        level="阻止发布",
+        problem=problem,
+        impact="本次未取得完整方案解构结果，不能进入方案审阅。",
+        next_action="保留本次资料与调用记录，检查模型服务后再从有效记录恢复；不要按输出格式错误反复修改。",
+        affected_refs=["protocol_draft"],
+        repair_scope=["model_service"],
+    )
+
+
 def _uses_compact_wire_contract(transport: ProtocolAgentTransport) -> bool:
     return bool(getattr(transport, "uses_compact_wire_contract", False))
 
@@ -3596,7 +4338,7 @@ def _compact_transport_history(
         return
     compactor = getattr(transport, "compact_session_history", None)
     if not callable(compactor):
-        raise ValueError("oMLX 批次 transport 缺少有界会话压缩能力")
+        raise ValueError("当前模型连接未提供有界会话整理能力")
     compactor(session_id=session_id, context=context)
 
 
@@ -3609,9 +4351,7 @@ def _configure_transport_output_scope(
 ) -> None:
     """Bound provider output by the frozen size of the current rule batch."""
     configure = getattr(transport, "configure_output_scope", None)
-    if not callable(configure) or not getattr(
-        transport, "supports_bounded_batch_context", _uses_compact_wire_contract(transport)
-    ):
+    if not callable(configure):
         return
     selected_codes = set(rule_codes)
     selected = [
@@ -3940,6 +4680,7 @@ def _collect_parent_segment(
                         batch_id=segment.segment_id,
                         problem=str(exc),
                         compact=compact,
+                        allowed_source_span_ids=segment.source_span_ids,
                     )
                     + "\n本分段每个产生义务的规则组件都必须在 source_span_ids 中引用至少一个"
                     + "正文来源标识；不得只引用父级限定语。正文来源标识："
@@ -4046,6 +4787,12 @@ def _try_collect_parent_segments(
         )
         return merged
     except Exception as exc:
+        if (
+            isinstance(exc, ProtocolParentSegmentError)
+            and exc.error_code == "QUOTA_EXHAUSTED"
+            and isinstance(exc.__cause__, ProtocolAgentCallError)
+        ):
+            raise exc.__cause__
         logger.warning(
             "protocol parent segmentation fell back to whole parent: %s",
             exc,
@@ -4062,6 +4809,8 @@ def _collect_initial_semantic_response(
     batch_size: int,
     batch_cache: ProtocolSemanticBatchCache | None = None,
     transport_factory: Callable[[], ProtocolAgentTransport] | None = None,
+    batch_progress: Callable[[int, int, ProtocolSemanticDeconstructionCandidate], None]
+    | None = None,
 ) -> tuple[ProtocolAgentResponse, str | None]:
     compact = _uses_compact_wire_contract(transport)
     segmentation_supported = _supports_parent_rule_segmentation(transport)
@@ -4157,6 +4906,8 @@ def _collect_initial_semantic_response(
             prompt=first_prompt,
             batch_id=f"1/{len(batches)}",
             rule_codes=batches[0],
+            source_input=source_input,
+            prompt_template=prompt_template,
         )
     )
     first_cached_text = (
@@ -4237,9 +4988,14 @@ def _collect_initial_semantic_response(
                             batch_id=batch_id,
                             problem=problem,
                             compact=compact,
+                            allowed_source_span_ids=_batch_source_span_ids(
+                                source_input, rule_codes
+                            ),
                         ),
                         output_kind="semantic_candidate",
                     )
+                except ProtocolAgentCallError:
+                    raise
                 except Exception as exc:
                     return response, (
                         f"第 {batch_index}/{len(batches)} 批结构修复调用未完成：{exc}"
@@ -4261,6 +5017,23 @@ def _collect_initial_semantic_response(
         if agent_call_id is None:
             agent_call_id = batch_candidate.created_by_agent_call_id
         collected.append(batch_candidate)
+        if batch_progress is not None:
+            # 逐批进度只做宿主侧持久化/预览；上报失败不回滚已验证批次，
+            # 也不得中断生成（证据仍在批缓存与最终草稿中）。
+            try:
+                batch_progress(
+                    batch_index,
+                    len(batches),
+                    _merge_semantic_batches(list(collected)),
+                )
+            except Exception:  # noqa: BLE001 - 进度上报不得破坏生成本体
+                logger.warning(
+                    "方案语义批次 %s/%s 的进度上报失败，生成继续。",
+                    batch_index,
+                    len(batches),
+                    exc_info=True,
+                )
+                batch_progress = None
         if batch_index == len(batches):
             break
         next_rule_codes = batches[batch_index]
@@ -4281,6 +5054,8 @@ def _collect_initial_semantic_response(
                 prompt=next_prompt,
                 batch_id=f"{batch_index + 1}/{len(batches)}",
                 rule_codes=next_rule_codes,
+                source_input=source_input,
+                prompt_template=prompt_template,
             )
         )
         cached_text = (
@@ -4341,6 +5116,8 @@ def _collect_initial_semantic_response(
                     prompt=next_prompt,
                     output_kind="semantic_candidate",
                 )
+        except ProtocolAgentCallError:
+            raise
         except Exception as exc:
             return response, (
                 f"第 {batch_index + 1}/{len(batches)} 批调用未完成：{exc}"
@@ -4410,6 +5187,8 @@ class ProtocolDeconstructorRunner:
         interpretation_conflicts: Sequence[InterpretationConflict] = (),
         batch_cache: ProtocolSemanticBatchCache | None = None,
         transport_factory: Callable[[], ProtocolAgentTransport] | None = None,
+        batch_progress: Callable[[int, int, ProtocolSemanticDeconstructionCandidate], None]
+        | None = None,
     ) -> ProtocolDeconstructionRunResult:
         if prompt_version.node != AgentNode.PROTOCOL_DECONSTRUCTOR:
             raise ValueError("提示词版本不属于方案解构节点")
@@ -4426,10 +5205,14 @@ class ProtocolDeconstructorRunner:
                 batch_size=self.INITIAL_RULE_BATCH_SIZE,
                 batch_cache=batch_cache,
                 transport_factory=transport_factory,
+                batch_progress=batch_progress,
             )
         except Exception as exc:
             session_id = getattr(exc, "session_id", "protocol-call-unavailable")
-            issue = _format_issue(f"方案解构调用未完成：{exc}")
+            issue = (
+                _call_issue(exc) if isinstance(exc, ProtocolAgentCallError)
+                else _format_issue(f"方案解构调用未完成：{exc}")
+            )
             return ProtocolDeconstructionRunResult(
                 status="需要核对",
                 same_session_id=session_id,
@@ -4511,7 +5294,7 @@ class ProtocolDeconstructorRunner:
                         expected_codes=replacement_rule_codes,
                         expected_candidate_id=current_candidate.candidate_id,
                         expected_batch_id=repair_batch_id,
-                        source_input=source_input if compact else None,
+                        source_input=source_input,
                     )
                     candidate_for_attempt = _apply_semantic_repair(
                         current_candidate,
@@ -4737,7 +5520,10 @@ class ProtocolDeconstructorRunner:
                         session_id=getattr(exc, "session_id", session_id),
                         raw_output_sha256=_sha256(str(exc)),
                         outcome="会话异常",
-                        issues=[_format_issue(f"定向修正调用未完成：{exc}")],
+                        issues=[
+                            _call_issue(exc) if isinstance(exc, ProtocolAgentCallError)
+                            else _format_issue(f"定向修正调用未完成：{exc}")
+                        ],
                     )
                 )
                 break

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
 
 from .agents import AgentCallContract, CriticRun, GateResult, ModelConfigContract, PromptVersion
 from .common import ContractModel, VersionedModel
@@ -20,8 +20,11 @@ from .rules import (
     Rule,
     RuleComponent,
     RuleExpression,
+    RepeatTriggerCondition,
+    validate_repeat_trigger_conditions,
     TimeQuantity,
     WorkflowStage,
+    iter_atomic_predicates,
 )
 from .protocol_ingestion import FrozenProtocolCatalog
 from .protocol_metadata import (
@@ -117,15 +120,73 @@ class SemanticEvidenceRequirement(ContractModel):
     due_stage: ReviewStage
     source_validity_window: TimeQuantity | None = None
     description: str = Field(min_length=1)
+    predicate_ids: list[str] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def serialize_semantic_requirement(self, handler):
+        data = handler(self)
+        if not self.predicate_ids:
+            data.pop("predicate_ids", None)
+        return data
+
+    @model_validator(mode="after")
+    def validate_predicate_ids(self) -> "SemanticEvidenceRequirement":
+        if self.predicate_ids:
+            if not {"allows_screening_record_transcription",
+                    "requires_contemporaneous_objective_source"}.issubset(self.model_fields_set):
+                raise ValueError(
+                    "明确关联条件时须显式填写 allows_screening_record_transcription 与 "
+                    "requires_contemporaneous_objective_source；required_source_types "
+                    "不能替代这两个字段，不能沿用默认值"
+                )
+            if any(not item.strip() for item in self.predicate_ids):
+                raise ValueError("语义资料要求的谓词引用不得为空字符串")
+            if len(self.predicate_ids) != len(set(self.predicate_ids)):
+                raise ValueError("语义资料要求的谓词引用不得重复")
+        return self
 
 
 class SemanticRuleComponent(ContractModel):
     title: str = Field(min_length=1)
     expression: RuleExpression
     exception_expression: RuleExpression | None = None
+    repeat_trigger_conditions: list[RepeatTriggerCondition] = Field(default_factory=list)
     evidence_requirements: list[SemanticEvidenceRequirement] = Field(min_length=1)
     source_span_ids: list[str] = Field(min_length=1)
     source_excerpts: list[str] = Field(min_length=1)
+
+    @model_serializer(mode="wrap")
+    def preserve_old_repeat_conditions(self, handler):
+        value = handler(self)
+        if not self.repeat_trigger_conditions:
+            value.pop("repeat_trigger_conditions", None)
+        return value
+
+    @model_validator(mode="after")
+    def validate_requirement_predicate_membership(self) -> "SemanticRuleComponent":
+        validate_repeat_trigger_conditions(self.expression, self.exception_expression, self.repeat_trigger_conditions)
+        predicate_ids = [
+            predicate.predicate_id
+            for expression in (self.expression, self.exception_expression,
+                               *(item.expression for item in self.repeat_trigger_conditions))
+            if expression is not None
+            for predicate in iter_atomic_predicates(expression)
+        ]
+        component_predicate_ids = set(predicate_ids)
+        if (any(item.predicate_ids for item in self.evidence_requirements)
+                and len(predicate_ids) != len(component_predicate_ids)):
+            raise ValueError("资料要求所引用的条件编号必须在本组件内唯一")
+        for requirement in self.evidence_requirements:
+            if not requirement.predicate_ids:
+                continue
+            unknown = [
+                predicate_id
+                for predicate_id in requirement.predicate_ids
+                if predicate_id not in component_predicate_ids
+            ]
+            if unknown:
+                raise ValueError("语义资料要求引用了本组件不存在的谓词")
+        return self
 
 
 class SemanticRule(ContractModel):

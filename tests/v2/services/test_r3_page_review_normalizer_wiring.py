@@ -20,6 +20,7 @@ from app.services.fact_normalization_source_adapter import build_evidence_normal
 from app.storage.ocr_models import PageArtifactRecord
 from app.storage.page_review_repository import PageReviewRepository
 from app.llm.page_review_harness import PAGE_REVIEW_PROMPT_VERSION, require_page_reader_routes
+from app.llm.page_review_transport_options import page_transport_contract
 from app.domain.page_reconciliation import reconcile_page_reviews
 from app.services.page_review_job_service import page_review_execution_versions, main_reader_identity
 from tests.v2.services.test_fact_normalization_persistence import NOW, _seed_chain
@@ -34,6 +35,8 @@ def _persist_page_review(session, chain: dict[str, object], *, pack=None, accept
     records = []
     reader_routes = routes if routes is not None else require_page_reader_routes(require_credentials=False)
     for lane in (PageReviewLane.MAIN_A, PageReviewLane.MAIN_B):
+        transport = page_transport_contract(reader_routes[lane].provider)
+        prompt_version = PAGE_REVIEW_PROMPT_VERSION + (f":{transport}" if transport else "")
         records.append(
             PageReviewRecord(
                 page_review_id=f"{chain['subject_id']}-{lane.value}",
@@ -49,7 +52,7 @@ def _persist_page_review(session, chain: dict[str, object], *, pack=None, accept
                 reasoning_effort=reader_routes[lane].reasoning_effort,
                 endpoint_base_url=reader_routes[lane].base_url,
                 fallback_used=False,
-                prompt_version=PAGE_REVIEW_PROMPT_VERSION if pack else "page-review-r3/v1",
+                prompt_version=prompt_version if pack else "page-review-r3/v1",
                 response_sha256=("a" if lane == PageReviewLane.MAIN_A else "b")
                 * 64,
                 has_eligibility_value=True,

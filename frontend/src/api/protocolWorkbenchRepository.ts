@@ -10,6 +10,7 @@ import type {
   DraftComparisonView,
   DraftRevisionView,
   FeedbackInput,
+  GenerationPreviewView,
   IdentityReviewView,
   IntegrityView,
   ManualEditInput,
@@ -33,6 +34,8 @@ export interface ProtocolWorkbenchRequestOptions {
   signal?: AbortSignal;
   /** 重新解构：上传目标正式项目编号（非空时进入重新解构路径）。 */
   projectId?: string;
+  /** 用户正在审阅的补充要求版本；仅用于发布，不能用最新结果替代。 */
+  controlPublication?: { jobId: string; checkpointId: string };
 }
 
 export interface ProtocolWorkbenchRepository {
@@ -87,6 +90,11 @@ export interface ProtocolWorkbenchRepository {
     jobId: string,
     options?: ProtocolWorkbenchRequestOptions,
   ): Promise<SourcesView>;
+  /** 生成期间逐批只读预览（不可发布；正式草稿仍以 getDraft 为准）。 */
+  getGenerationPreview(
+    jobId: string,
+    options?: ProtocolWorkbenchRequestOptions,
+  ): Promise<GenerationPreviewView>;
   saveDraft(
     jobId: string,
     expectedRevisionId: string,

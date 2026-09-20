@@ -1,0 +1,187 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-package101-analysis-set-boundary",
+  "task_id": "phase5-slice61cn-20260830",
+  "worker": "codex-parent",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/coverage_manifest.json",
+  "study_phase": "phase_ii",
+  "owned_source_refs": [
+    "body.p1179",
+    "body.p1186",
+    "body.p1187",
+    "body.p1188",
+    "body.p1189",
+    "body.p1190",
+    "body.p1191",
+    "body.p1192",
+    "body.p1193",
+    "body.p1194",
+    "body.p1195",
+    "body.p1196"
+  ],
+  "attached_source_refs": [
+    "body.p1180",
+    "body.p1181",
+    "body.p1182",
+    "body.p1183",
+    "body.p1184",
+    "body.p1185"
+  ],
+  "required_candidate_source_refs": [],
+  "forbidden_candidate_source_refs": [
+    "body.p1179",
+    "body.p1180",
+    "body.p1181",
+    "body.p1182",
+    "body.p1183",
+    "body.p1184",
+    "body.p1185",
+    "body.p1186",
+    "body.p1187",
+    "body.p1188",
+    "body.p1189",
+    "body.p1190",
+    "body.p1191",
+    "body.p1192",
+    "body.p1193",
+    "body.p1194",
+    "body.p1195",
+    "body.p1196"
+  ],
+  "pre_enrollment_source_refs": [],
+  "structural_only_source_refs": [
+    "body.p1179",
+    "body.p1186",
+    "body.p1187",
+    "body.p1193",
+    "body.p1194"
+  ],
+  "expected_disposition_by_source_ref": {
+    "body.p1188": "administrative_statistical_background",
+    "body.p1189": "administrative_statistical_background",
+    "body.p1190": "administrative_statistical_background",
+    "body.p1191": "administrative_statistical_background",
+    "body.p1192": "administrative_statistical_background",
+    "body.p1195": "administrative_statistical_background",
+    "body.p1196": "administrative_statistical_background"
+  },
+  "expected_workflow_stage_ids_by_source_ref": {},
+  "candidate_forbidden_markers_by_source_ref": {
+    "body.p1179": ["筛选必做", "基线必做", "证据不足", "不得入组", "排除标准", "发布控制点"],
+    "body.p1186": ["筛选必做", "基线必做", "证据不足", "不得入组", "排除标准", "发布控制点"],
+    "body.p1187": ["筛选必做", "基线必做", "证据不足", "不得入组", "排除标准", "发布控制点"],
+    "body.p1188": ["筛选必做", "基线必做", "证据不足", "不得入组", "排除标准", "发布控制点"],
+    "body.p1189": ["筛选必做", "基线必做", "证据不足", "不得入组", "排除标准", "发布控制点"],
+    "body.p1190": ["筛选必做", "基线必做", "证据不足", "不得入组", "排除标准", "发布控制点"],
+    "body.p1191": ["筛选必做", "基线必做", "证据不足", "不得入组", "排除标准", "发布控制点"],
+    "body.p1192": ["筛选必做", "基线必做", "证据不足", "不得入组", "排除标准", "发布控制点"],
+    "body.p1193": ["筛选必做", "基线必做", "证据不足", "不得入组", "排除标准", "发布控制点"],
+    "body.p1194": ["筛选必做", "基线必做", "证据不足", "不得入组", "排除标准", "发布控制点"],
+    "body.p1195": ["筛选必做", "基线必做", "证据不足", "不得入组", "排除标准", "发布控制点"],
+    "body.p1196": ["筛选必做", "基线必做", "证据不足", "不得入组", "排除标准", "发布控制点"]
+  },
+  "candidate_required_markers_by_source_ref": {},
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "第101包拥有样本量标题、分析集定义和一般统计方法。Ⅱ期与Ⅲ期样本量正文只读闭合期别分支；分析集条件均描述随机、给药或给药后数据形成后的统计归属，不是受试者预筛、筛选、基线或D1资格要求。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "第101包的统计章节适用于Ⅱ期研究设计和后续统计分析，但不形成受试者级入排控制。Ⅲ期样本量正文仅作为只读对侧期别上下文；盲态审核、锁库、揭盲、统计软件和编码方法均为统计或数据管理背景。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    },
+    {
+      "workflow_stage_id": "flow-d1-pre-dose",
+      "review_stage": "baseline",
+      "display_name": "D1给药前",
+      "visit_instance": "D1给药前"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [],
+    "required_procedures": []
+  },
+  "ids": {
+    "manifest_id": "manifest:slice61cn-package101-analysis-set-boundary",
+    "catalog_id": "catalog:slice61cn-package101-analysis-set-boundary"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p1179": ["样本量计算标题，仅提供结构归属，不独立形成控制点"],
+    "body.p1180": ["Ⅱ期样本量分支标签，只读，不独立形成控制点"],
+    "body.p1181": ["Ⅱ期剂量探索、1:1:1和约120例为研究总体设计，不是个例入排条件", "第12周PASI 75疗效终点不得与基线PASI入选阈值混同"],
+    "body.p1182": ["Ⅲ期样本量分支标签，只读，不得进入Ⅱ期控制"],
+    "body.p1183": ["Ⅲ期PASI 75效能与样本量假设只读，不得倒灌Ⅱ期或个例审核"],
+    "body.p1184": ["Ⅲ期PGA-TS效能与样本量假设只读，不得与基线PGA入选阈值混同"],
+    "body.p1185": ["Ⅲ期20%脱落、最多420例和2:2:1分配为总体设计，不是个例资格条件"],
+    "body.p1186": ["统计分析集定义标题，仅提供结构归属"],
+    "body.p1187": ["统计分析数据集引导语，仅提供结构归属"],
+    "body.p1188": ["ITT是随机化后的统计分析人群；基线仅指分析领域，不是基线访视必做或缺口"],
+    "body.p1189": ["安全性分析集条件为随机、给药和给药后安全性数据形成后的分析归属，不得前置为入组条件"],
+    "body.p1190": ["PK浓度集为随机和给药后的分析集，不得生成随机前采样或筛选必做"],
+    "body.p1191": ["药效学分析集为随机和给药后的分析集，不得生成基线PD必做"],
+    "body.p1192": ["剔除分析集不等于排除受试者；盲态审核后且锁库揭盲前是统计数据管理时序"],
+    "body.p1193": ["统计分析标题，仅提供结构归属"],
+    "body.p1194": ["一般方法标题，仅提供结构归属"],
+    "body.p1195": ["SAS和WinNonlin版本是统计软件要求，不是受试者级义务"],
+    "body.p1196": ["MedDRA和WHO Drug用于统计编码汇总，不新增病史筛查、用药禁限或入组证据要求"]
+  },
+  "exception_semantics_by_source_ref": {
+    "body.p1188": {
+      "semantic_role": "post_randomization_itt_statistical_population",
+      "base_rule": "ITT包括所有随机化参与者，并按随机分配治疗组分析，用于人口学、基线和有效性分析。",
+      "exception_rule": "基线在此表示分析内容，不表示基线访视动作或入组前证据要求。",
+      "preserve_keywords": ["随机化", "随机分配", "人口学", "基线", "有效性"],
+      "forbidden_inversion": "不得把分析领域中的基线改写为基线必做、基线缺失、随机前复核或不得入组。"
+    },
+    "body.p1189": {
+      "semantic_role": "post_randomization_safety_analysis_population",
+      "base_rule": "安全性分析集包括随机化、至少一次给药且具有用药后安全性评价数据的参与者，并按实际治疗分析。",
+      "exception_rule": "这些条件只决定统计分析集归属，不决定筛选、基线、随机或给药资格。",
+      "preserve_keywords": ["随机化", "至少接受一次", "用药后安全性评价", "实际治疗"],
+      "forbidden_inversion": "不得把给药后分析集条件前置成入组、随机或D1给药前义务。"
+    },
+    "body.p1192": {
+      "semantic_role": "blinded_analysis_set_determination_timing",
+      "base_rule": "分析集划分和剔除名单在盲态数据审核后、数据库锁库和揭盲之前确定。",
+      "exception_rule": "剔除指统计分析集剔除，不是排除受试者、退出试验或筛选失败。",
+      "preserve_keywords": ["盲态数据审核后", "分析数据集的划分", "剔除各分析数据集", "数据库锁库和揭盲之前"],
+      "forbidden_inversion": "不得改写为随机前、给药前、入组前资格复核或缺少分析集结论不得入组。"
+    }
+  },
+  "later_package_boundary": {
+    "read_only": true,
+    "note": "body.p1180-p1185只读闭合Ⅱ/Ⅲ期样本量分支。第100包body.p1168-p1178、第102包body.p1197-p1205以及更后统计正文均不得进入本包；p1198-p1199虽在冻结包广义上下文中出现，也不进入本次准备提示。",
+    "expected_owners_by_span": {
+      "body.p1168": 100,
+      "body.p1170": 100,
+      "body.p1179": 101,
+      "body.p1186": 101,
+      "body.p1196": 101,
+      "body.p1197": 102,
+      "body.p1200": 102,
+      "body.p1205": 102
+    }
+  },
+  "notes": [
+    "模型外闭包：12个拥有来源，6个只读来源，0个候选。",
+    "零候选表示不发射受试者级控制，不表示删除样本量、分析集或统计方法事实。",
+    "claims_complete=false；本配置不调用模型、不发布控制点。"
+  ]
+}

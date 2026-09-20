@@ -1,0 +1,56 @@
+[
+  {
+    "excerpt": "胸部CT平扫^16 | X",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表",
+      "表 1 Ⅱ期临床研究阶段流程表"
+    ],
+    "lookup": "coverage_manifest",
+    "package_id": null,
+    "package_ordinal": null,
+    "role": "attached",
+    "source_ref": "body.t5.r20",
+    "source_span_ids": [
+      "body.t5.r20.c0.p0",
+      "body.t5.r20.c1.p0"
+    ],
+    "structure_unit_id": "su-4274c0ae866969c7d7cfb13f",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "胸部CT平扫：如参与者能出示知情同意书签署日之前1个月内的胸部CT检查结果并满足评估要求，则视其检测结果有效，研究中心可酌情决定是否再对其进行复测。",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-2c0c955824200ee34e8960dc",
+    "package_ordinal": 31,
+    "role": "attached",
+    "source_ref": "body.p330",
+    "source_span_ids": [
+      "body.p330"
+    ],
+    "structure_unit_id": "su-bd410c1cf76b173598f7d0e2",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "在筛选期进行胸部CT平扫，可接受知情同意书签署日之前1个月内的胸部CT检查结果并满足评估要求，则视其检查结果有效，研究中心可酌情决定是否再对其进行复测。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "胸部CT平扫"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d8e63f799c505ee413900482",
+    "package_ordinal": 69,
+    "role": "owned",
+    "source_ref": "body.p797",
+    "source_span_ids": [
+      "body.p797"
+    ],
+    "structure_unit_id": "su-ed233a4976226ee841f9bb55",
+    "unit_kind": "paragraph"
+  }
+]

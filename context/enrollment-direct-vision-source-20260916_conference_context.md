@@ -1,0 +1,67 @@
+# Conference Context: enrollment-direct-vision-source-20260916
+
+Created: 2026-09-16 14:00:23 CST
+Objective: 独立只读审阅当前源码中原件双VLM去OCR前置依赖的最小修改。重点检查 evidence_upload_service新任务preparation_policy、evidence_processing_executor跳过外部OCR但保留图像和native text、fact_normalization_source_adapter与job_service仅在include_visual_sources且绑定coverage时允许无OCR页。追踪真实消费者、原件归属/哈希/视觉locator/历史任务恢复，指出会使新上传流程不能继续或错误采信的缺陷。也审阅mtplx_owned_server仅进程驱动尚未正式接线的取消/所有权问题。禁止写应用/原临床库/原件，禁止启动模型或调用推理，禁止递归派发，不新增测试或全面跑套件；仅源码与必要只读命令，报告file:line和确证路径，不以编译通过代表临床验收。
+Task type: `C03`
+Risk: `high`
+Conference mode: `serial`
+
+## Codex Main Venue
+
+- Chair: Codex.
+- Duties: understand the real task, decompose, define sources of truth, route work, protect boundaries, verify final artifacts, own visual/browser/PPT/PDF checks, own production writes, and deliver to the user.
+
+## Conference Panel Assignment
+
+- Ordinary tasks remain Codex-direct. Chinese labels or Chinese sentence work uses its declared execution route and does not start a conference.
+  - This packet uses one Codex-led conference object (`evidence_single_object`) with no sub-venue chair. Its effective `CST` route chain is `grok/grok-build/grok-4.6:high -> pi/cursor/cursor-grok-4.6:high -> pi/openai-codex/gpt-5.6-sol:medium`; the packet branch is recorded at creation and filtered against the actual execution route nodes recorded below. Before a new session, the runner rechecks the Beijing period; an already-started session is never rerouted.
+- Every conference role starts with one bounded same-session pass. Codex reviews its quality and may dispatch zero or more targeted follow-up prompts through the same session. A new session is a routing failure unless a primary role failed before a resumable session existed and the documented fallback was activated.
+
+## Execution-Conference Model Deduplication
+
+- Linked execution task: `enrollment-direct-vision-source-20260916`
+- Execution evidence status: `no linked execution packet`
+- Excluded route identities: none
+- If an execution packet exists but runner evidence is missing or unreadable, initialization fails closed. The complete agent/provider/model boundary is retained, and effort differences do not bypass deduplication.
+
+## Source Of Truth
+
+- TODO: Add authoritative local files, extracts, datasets, screenshots, URLs, or user-provided materials.
+- Do not add production paths unless the user explicitly authorized reading them for this task.
+
+## Scope
+
+- In scope: TODO
+- Out of scope: TODO
+
+## Success Criteria
+
+- Each selected primary route returns an auditable output or an explicit health/fallback reason.
+- The prompt uses the correct Agent identity, provider/model, effort, tools-enabled policy, and same-session continuation policy.
+- The runner records session, usage/tool observations, fallback decisions, and failure reasons without `--max-turns 1`.
+- No production path is read or modified; Codex retains final acceptance.
+
+## Conference Pass Rule
+
+This packet uses one serial Codex-led conference object. Each declared role receives one complete prompt and may use multiple internal tool turns. Codex decides whether a same-session follow-up is needed after reviewing the result; follow-ups do not create a new conference or change the route identity.
+
+## Timeout Policy
+
+- Participant soft wait: 60 minutes.
+- Large-task participant wait: 120 minutes.
+- Chair hard wait: 120 minutes.
+- Failure rule: Do not fail a model for slow response alone; fail only on terminal error, provider exhaustion/rate limit after controlled retry, empty/truncated retry output, or no useful progress after the high-budget same-session recovery loop. A catalog/auth/transport health preflight timeout or malformed response is diagnostic and must still allow one live route attempt; explicit user routes also proceed when the catalog is stale or incomplete, while a genuinely missing CLI or native transport boundary may block. If a resumable session exists after a step/size boundary, continue it before fallback; repeated identical output/tool evidence triggers the no-progress breaker.
+- Pass/turn boundary: one conference prompt is one conference pass. The
+  `--max-turns` value controls internal Agent tool-calling turns and is never
+  set to 1 for substantive conference execution; generated participant and
+  chair commands use the route budgets recorded by the guard.
+
+## Risk Boundaries
+
+- External Agents are advisory; Codex remains final authority.
+- Codex owns visual/browser/PPT/PDF/rendered checks, live authority checks, final clinical/regulatory conclusions, and production writes.
+- Do not mark a slow model failed solely due to latency.
+
+## Loop Log
+
+- 2026-09-16 14:00:23 CST: Conference initialized by `hermes_workflow_guard.py init-conference`.

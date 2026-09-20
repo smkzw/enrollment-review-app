@@ -1,0 +1,18 @@
+Continue the same execution session. Owner now authorizes implementation, expanding writable paths ONLY to:
+app/services/fact_correction_service.py
+app/services/fact_normalization_executor.py
+app/services/fact_expectation_gaps.py (new focused module)
+tests/v2/services/test_fact_correction_gap_reprojection.py
+
+Use apply_patch; if unavailable report exact limitation rather than claiming compliance. No real data, services, model/network calls, installation or other edits. Read adjacent source/tests as needed. Preserve other worktree changes.
+
+First fix test A's source setup: actually persist an unresolved item on its source run and derive initial signals from that record, not merely inject a projection output. Its current test proves empty-signal behavior but not a source replay fix. Preserve the two reproduction findings in the runner report; remove xfail only after desired tests really pass.
+
+Implementation decisions:
+1. Extract the existing _expectation_gap_signals logic unchanged into the focused shared module; leave an imported compatibility alias in fact_normalization_executor so existing tests/callers keep working. Avoid circular imports and giant service growth.
+2. Replace correction's gap_signals=[] with same-authority reconstruction. Select source runs from current non-superseded published facts/events/exposures plus correction target; trace correction lineage via immutable correction records and old snapshots to original run IDs. Check authority and reject cycles/malformed lineage. Do not select all historical runs, use model-name/prefix guesses, or infer resolution because a fact was superseded.
+3. Reuse persisted unresolved items and candidate/gate records from selected runs through shared signal derivation, plus due-template fallback (judgment requirements observation_unverified; others record_incomplete). Existing source risk remains unless an explicit disposition proves resolution. The present correction contract has no such resolution mechanism; do not invent one or silently clear risk.
+4. Some previous expectation risks may have no discoverable original-run linkage. Do NOT turn that absence into complete coverage or blindly reassert the previous clinical gap as truth. Preserve a non-default observation_unverified for the affected template explaining prior unresolved status cannot yet be source-reconfirmed. Bind this conservative state to the existing same-authority latest expectation, not other episodes/old authorities. Ensure fallback-only gaps do not unnecessarily downgrade genuine complete coverage when there never was a concrete prior risk; inspect available fields and explain ambiguity conservatively.
+5. Local/node correction scope and transactional rollback protections stay unchanged. Old source rows, expectation revisions, corrections and profiles are never rewritten. Manual correction still appends its fact/profile and new expectations.
+
+Tests: the two actual seeded integration regressions pass, plus multi-step correction lineage, unrelated historical-run exclusion, and unrelated authority exclusion; at least test the selected-run resolver with missing lineage/cycle defenses if applicable. Ensure no unbounded recursion. Use existing fixture APIs, not database bypass. Allowed pytest: new file; tests/v2/services/test_fact_correction_job.py; smallest relevant fact-normalization persistence/gap tests if needed. Report actual runs and limitations. No final clinical acceptance. If a correct source selection cannot be implemented with existing contracts, return exact blocker and partial coherent fix rather than weakening provenance.

@@ -71,26 +71,38 @@ export function SubjectsCatalogPage() {
   const projectParam = params.get("project");
   const selectedProject =
     projectList.find((project) => project.projectId === projectParam) ??
-    (projectList.length === 1 ? projectList[0] : null);
+    (projectParam === null && projectList.length === 1 ? projectList[0] : null);
 
   const subjects = useLoad(
-    (signal) => getCatalogRepository().listSubjects(selectedProject?.projectId ?? "", signal),
+    async (signal) => ({
+      projectId: selectedProject?.projectId ?? "",
+      items: await getCatalogRepository().listSubjects(selectedProject?.projectId ?? "", signal),
+    }),
     [selectedProject?.projectId],
     { enabled: selectedProject !== null },
   );
-  const subjectList = subjects.state.status === "success" ? subjects.state.data : [];
+  const subjectsCurrent = subjects.state.status === "success" &&
+    subjects.state.data.projectId === selectedProject?.projectId;
+  const subjectList = subjects.state.status === "success" && subjectsCurrent
+    ? subjects.state.data.items : [];
   const subjectParam = params.get("subject");
   const selectedSubject =
     subjectList.find((subject) => subject.subjectId === subjectParam) ??
-    subjectList[0] ??
+    (subjectParam === null ? subjectList[0] : null) ??
     null;
 
   const episodes = useLoad(
-    (signal) => getCatalogRepository().listEpisodes(selectedSubject?.subjectId ?? "", signal),
+    async (signal) => ({
+      subjectId: selectedSubject?.subjectId ?? "",
+      items: await getCatalogRepository().listEpisodes(selectedSubject?.subjectId ?? "", signal),
+    }),
     [selectedSubject?.subjectId],
     { enabled: selectedSubject !== null },
   );
-  const episodeList = episodes.state.status === "success" ? episodes.state.data : [];
+  const episodesCurrent = episodes.state.status === "success" &&
+    episodes.state.data.subjectId === selectedSubject?.subjectId;
+  const episodeList = episodes.state.status === "success" && episodesCurrent
+    ? episodes.state.data.items : [];
 
   // 新增受试者弹窗状态。
   const [createOpen, setCreateOpen] = useState(false);
@@ -220,11 +232,15 @@ export function SubjectsCatalogPage() {
         </section>
       )}
 
-      {selectedProject !== null && subjects.state.status === "loading" && <LoadingState />}
+      {projectParam !== null && selectedProject === null && projectList.length > 0 && (
+        <EmptyState message="找不到所选项目，请重新选择。" />
+      )}
+      {selectedProject !== null && (subjects.state.status === "loading" ||
+        subjects.state.status === "success" && !subjectsCurrent) && <LoadingState />}
       {subjects.state.status === "error" && (
         <ErrorState message={subjects.state.message} onRetry={subjects.retry} />
       )}
-      {selectedProject !== null && subjects.state.status === "success" && subjectList.length === 0 && (
+      {selectedProject !== null && subjectsCurrent && subjectList.length === 0 && (
         <EmptyState message="这个项目还没有受试者。" hint="点击上方“新增受试者”登记后，可在这里按审核节点上传资料。" />
       )}
 
@@ -272,11 +288,15 @@ export function SubjectsCatalogPage() {
                 </div>
               )}
             </header>
-            {selectedSubject !== null && episodes.state.status === "loading" && <LoadingState />}
+            {subjectParam !== null && selectedSubject === null && subjectsCurrent && (
+              <EmptyState message="找不到所选受试者，请从左侧重新选择。" />
+            )}
+            {selectedSubject !== null && (episodes.state.status === "loading" ||
+              episodes.state.status === "success" && !episodesCurrent) && <LoadingState />}
             {episodes.state.status === "error" && (
               <ErrorState message={episodes.state.message} onRetry={episodes.retry} />
             )}
-            {episodes.state.status === "success" && episodeList.length === 0 && (
+            {selectedSubject !== null && episodesCurrent && episodeList.length === 0 && (
               <EmptyState message="尚未建立审核节点。" hint="请先确认方案解构中的审核节点。" />
             )}
             <div className="catalog-episode-list">

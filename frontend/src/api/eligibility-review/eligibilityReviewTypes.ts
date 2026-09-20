@@ -13,6 +13,7 @@ export type EligibilityDecisionWire =
   | "exclusion_triggered"
   | "exclusion_not_triggered"
   | "professional_judgment"
+  | "indeterminate"
   | "conflict"
   | "not_due"
   | "not_applicable";
@@ -23,15 +24,20 @@ export type EligibilityDeterminationModeWire =
   | "investigator_judgment";
 
 export interface EligibilityFactRefWire {
+  excerpt: string | null;
+  source_document_version_id: string | null;
+  page_artifact_id: string | null;
   fact_id: string;
   locator_id: string | null;
   page_number: number | null;
 }
 
 export interface EligibilityClauseWire {
+  rule_component_id: string;
   rule_code: string;
   rule_kind: EligibilityRuleKindWire;
   text_summary: string;
+  source_text?: string | null;
   parent_rule_code: string | null;
   decision: EligibilityDecisionWire;
   decision_label: string;
@@ -42,6 +48,7 @@ export interface EligibilityClauseWire {
 }
 
 export interface EligibilityReviewWire {
+  unassigned_conflicts?: { conflict_group_id: string; member_kind: "event" | "exposure"; member_ids: string[] }[];
   subject_id: string;
   review_episode_id: string;
   rule_set_id: string;

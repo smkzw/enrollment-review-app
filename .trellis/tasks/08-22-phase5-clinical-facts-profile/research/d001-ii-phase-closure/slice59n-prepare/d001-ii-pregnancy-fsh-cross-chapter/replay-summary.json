@@ -1,0 +1,20 @@
+{
+  "attached_count": 5,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-aa49746318c86366e09cf887",
+  "group_id": "d001-ii-pregnancy-fsh-cross-chapter",
+  "lookup_counts": {
+    "coverage_manifest": 1,
+    "frozen_plan_context": 2,
+    "frozen_plan_owned": 6
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-pregnancy-fsh-cross-chapter",
+  "owned_count": 4,
+  "prompt_char_count": 26973,
+  "prompt_sha256": "f41a085d8af2458e96f5ab4db3d9dccfd5144963343764b3c001afcfcc6ef37b",
+  "task_id": "phase5-slice59n-20260827",
+  "unit_count": 9,
+  "worker": "worker_02"
+}

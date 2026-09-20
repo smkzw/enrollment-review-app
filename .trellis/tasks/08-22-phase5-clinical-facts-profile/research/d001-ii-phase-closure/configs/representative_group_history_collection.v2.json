@@ -1,0 +1,28 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_history_collection.v1.json",
+  "group_id": "d001-ii-history-treatment-collection-v2",
+  "task_id": "phase5-slice60p-20260828",
+  "artifact_dir_name": "phase5-slice60p-d001-history-treatment-collection-replay-source-closure-20260828",
+  "attached_source_refs": [
+    "body.t5.r7",
+    "body.t5.r8",
+    "body.p316",
+    "body.p318",
+    "body.p319",
+    "body.p339",
+    "body.p632",
+    "body.p857",
+    "body.p870",
+    "body.p1023"
+  ],
+  "ids": {
+    "manifest_id": "manifest:slice60p-history-treatment-reps",
+    "catalog_id": "catalog:slice60p-history-treatment-reps"
+  },
+  "notes": [
+    "v1首轮工件保持不可变；父级拒绝其将p858视为无基线节点、将p871笼统视为治疗后执行。",
+    "v2补入紧邻的基线访视和W0（D1）访视标题行，恢复原方案列表的真实层级上下文。",
+    "人工检查清单仍只用于父级事后验收，不进入Agent修订提示。"
+  ]
+}

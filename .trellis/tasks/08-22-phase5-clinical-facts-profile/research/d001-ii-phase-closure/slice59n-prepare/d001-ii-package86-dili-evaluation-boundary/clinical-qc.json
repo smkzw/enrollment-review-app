@@ -1,0 +1,314 @@
+{
+  "attached_source_refs": [
+    "body.p1060",
+    "body.p1061",
+    "body.p1062",
+    "body.p1063",
+    "body.p1064",
+    "body.p1065",
+    "body.p1066",
+    "body.p996",
+    "body.p997",
+    "body.p1022",
+    "body.p1024",
+    "body.p340"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package86-dili-evaluation-boundary",
+  "notes": [
+    "本切片为模型外来源闭包切片：不调用临床语义模型，不并入131包正式目录，不运行受试者审核，claims_complete=false。",
+    "第86包七个拥有单元全部为治疗后DILI评估/调查/潜在与确诊分层/报告流程（body.p1067-p1073）：p1067（DILI简要介绍标题）为结构单元，仅提供归属不独立形成控制点（structural_only_source_refs）；p1068-p1073六个语义单元保持post_treatment_execution处置。required_candidate_source_refs显式为空，任何候选发射都构成越界。",
+    "48小时返院评估与24小时报告必须严格区分：p1070的48 h是获知异常结果后尽快返院评估的示例时间边界（含实验室检查、详细病史、身体评估三部分），不是申办者报告期限；p1072的24小时是潜在DILI（Hy's law）病例获知事件后立即报告申办者的时限，同时提交报告说明。",
+    "潜在与确诊必须严格区分：p1072的合取触发链（尚未发现其他原因 且 重复检查证实符合上述两个AST/ALT和总胆红素升高标准）只产生'潜在DILI（Hy's law）病例并报告为SAE'；p1073只有在收到所有合理调查结果并排除其他病因后才成为确诊；排除其他病因是潜在转确诊的条件，不是p1068-p1072早期评估、复查或潜在报告的前置条件。",
+    "p1072的'上述两个标准'在当前正文边界内没有唯一指向两个具体source_ref；p1060-p1066作为完整基线分层语境只读装入，用于避免缺失前接上下文，不得据此宣称已确定唯一绑定、擅自挑选某两个子条款或把前包分支扁平化为任一满足。",
+    "调查层次必须保留：p1071疑似病例重复检测AST、ALT和总胆红素；其他实验室检查'应包括'原文列举项目；单独凝血/抗凝血样本、病毒性肝炎、影像及对乙酰氨基酚相关检测受'需要时/必要时'限定；详细相关信息收集不得缩成单一饮酒史；GGT是调查指标，不得混入第85包ALT/AST与ALP的比值判断。",
+    "只读闭包（12）：第85包'上述两个AST/ALT和总胆红素升高标准'（p1060-p1066，7个）按p1072明确交叉引用提供必要前接标准；第78包SAE定义与严重性总纲（p996/p997）；第80包AE收集期与全量记录义务（p1022/p1024）；流程锚点D1给药后AE记录开始（p340）。全部只读，不改变所有权与候选发射权。",
+    "第85包防吞并：严重肝损伤指征（p1055-p1058）与p1059 SAE记录/立即报告总纲不进入本包提示，本包不重新拥有严重肝损伤阈值或通用SAE记录义务；仅p1060-p1066按p1072交叉引用只读附加。",
+    "第87包防吞并：死亡（p1074起）、药物过量/给药错误（p1077-p1082）、AE评估（p1083起）及后续因果关系共同判断（第90包）、SAE报告时限与流程（第92-99包）均归各自后续包，本包不提前吞并或处置。",
+    "官方入排与流程矩阵不含任何以body.p1067-p1073为锚点的行，也不含不良事件/TEAE/SAE控制行；本包不合成任何IN/EX官方规则。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1067",
+    "body.p1068",
+    "body.p1069",
+    "body.p1070",
+    "body.p1071",
+    "body.p1072",
+    "body.p1073"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅱ期流程表注记：不良事件于D1启动给药后开始记录，直至末次安全性随访或者退出研究为止，只读": "pending_codex",
+        "只读：AE（含DILI潜在/确诊流程）始于D1给药后；不构成筛选/基线入排门槛": "pending_codex"
+      },
+      "frozen_excerpt": "不良事件于D1启动给药后开始记录，直至末次安全性随访或者退出研究为止（以先发生时间为准）。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p340",
+      "structure_unit_id": "su-d4ba75eb21a2e2944b6aa434"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：p1072'报告为SAE'需要SAE定义语境；SAE严重性判定归第78-79包，本包不得改写SAE判定": "pending_codex",
+        "第78包拥有：SAE定义（死亡、危及生命、永久或严重残疾、住院、先天异常等），只读": "pending_codex"
+      },
+      "frozen_excerpt": "严重不良事件，指参与者接受试验用药品后出现死亡、危及生命、永久或者严重的残疾或者功能丧失、参与者需要住院治疗或者延长住院时间，以及先天性异常或者出生缺陷等不良医学事件。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p996",
+      "structure_unit_id": "su-f5cd3f88b671362f6f8f4dc4"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：p1072'报告为SAE'按SAE定义语境理解；p1072合取触发链与SAE OR总纲是不同规则，不得互相替换": "pending_codex",
+        "第78包拥有：SAE是符合下列标准任何一项的不良事件（OR总纲），只读": "pending_codex"
+      },
+      "frozen_excerpt": "严重不良事件（Serious Adverse Event，SAE）是指符合下列标准任何一项的不良事件：",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p997",
+      "structure_unit_id": "su-40348e74c63d71c5b6319be0"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：DILI评估与潜在/确诊流程属于治疗期AE/SAE收集与报告规范，适用于该收集期窗口": "pending_codex",
+        "第80包拥有：AE收集期（首次服用试验用药品后至最后一次安全性随访或者退出研究），只读": "pending_codex"
+      },
+      "frozen_excerpt": "本试验中，不良事件收集期应从参与者首次服用试验用药品后至最后一次安全性随访或者退出研究为止（以先发生时间为准）。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1022",
+      "structure_unit_id": "su-5c30706befa51335bc524ec6"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：全量记录义务归第80包；p1072规定DILI潜在病例如何报告为SAE，不得从p1024反推出额外触发条件": "pending_codex",
+        "第80包拥有：首次服药至末次访视期间所有AE均需记录在eCRF，只读": "pending_codex"
+      },
+      "frozen_excerpt": "从首次服用试验用药品至末次访视期间发生的所有AE均需记录在eCRF中。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1024",
+      "structure_unit_id": "su-125f9fa39aa720039d48020e"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：仅按p1072'上述两个AST/ALT和总胆红素升高标准'交叉引用提供必要前接标准；所有权仍归第85包，不得重新处置或改变候选发射权": "pending_codex",
+        "第85包拥有：（1）对于AST/ALT和总胆红素基线值在正常范围的参与者，在研究治疗后出现以下情况之一，只读": "pending_codex"
+      },
+      "frozen_excerpt": "（1）对于AST/ALT和总胆红素基线值在正常范围的参与者，在研究治疗后出现以下情况之一：",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1060",
+      "structure_unit_id": "su-2103fedaa53d174bbfc319bb"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：仅提供'上述两个AST/ALT和总胆红素升高标准'前接语境；不得被本包重新拥有或改写": "pending_codex",
+        "第85包拥有：ALT或AST> 3×ULN合并总胆红素> 2×ULN，只读": "pending_codex"
+      },
+      "frozen_excerpt": "ALT或AST> 3×ULN合并总胆红素> 2×ULN",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1061",
+      "structure_unit_id": "su-dd44e1d701e681be55e7d09e"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：仅提供'上述两个AST/ALT和总胆红素升高标准'前接语境；GGT不得混入本比值，比值判断归第85包": "pending_codex",
+        "第85包拥有：ALT或AST高值与ALP高值的比值≥5，只读": "pending_codex"
+      },
+      "frozen_excerpt": "ALT或AST高值与ALP高值的比值≥5",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1062",
+      "structure_unit_id": "su-c09bfdeeaa3aa0d054e402ed"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：仅按p1072'上述两个AST/ALT和总胆红素升高标准'交叉引用提供必要前接标准；所有权仍归第85包": "pending_codex",
+        "第85包拥有：（2）对于AST/ALT和总胆红素基线值> ULN的参与者，在研究治疗后出现以下情况之一，只读": "pending_codex"
+      },
+      "frozen_excerpt": "（2）对于AST/ALT和总胆红素基线值> ULN的参与者，在研究治疗后出现以下情况之一：",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1063",
+      "structure_unit_id": "su-5fdfa7db4052c6e15e1c8852"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：仅提供'上述两个AST/ALT和总胆红素升高标准'前接语境；'以较小者为准'语义归第85包，本包不得改写": "pending_codex",
+        "第85包拥有：AST/ALT基线值超出正常范围：ALT或AST> 2×基线值且> 3×ULN，或> 8×ULN（以较小者为准），只读": "pending_codex"
+      },
+      "frozen_excerpt": "AST/ALT基线值超出正常范围：研究治疗后出现ALT或AST> 2×基线值且> 3×ULN，或> 8×ULN（以较小者为准）",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1064",
+      "structure_unit_id": "su-4bc0cf6389e5ad922bc1870a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：仅提供'上述两个AST/ALT和总胆红素升高标准'前接语境；增量阈值语义归第85包，本包不得改写": "pending_codex",
+        "第85包拥有：总胆红素基线值超出正常范围：总胆红素较基线升高至少1×ULN或总胆红素> 3×ULN（以较小者为准），只读": "pending_codex"
+      },
+      "frozen_excerpt": "总胆红素基线值超出正常范围：研究治疗后出现总胆红素较基线升高至少1×ULN或总胆红素> 3×ULN（以较小者为准）",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1065",
+      "structure_unit_id": "su-721f43f3b802d190647da536"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "只读：仅提供'上述两个AST/ALT和总胆红素升高标准'前接语境；GGT不得混入本比值，比值判断归第85包": "pending_codex",
+        "第85包拥有：ALT或AST高值与ALP高值的比值≥5，只读": "pending_codex"
+      },
+      "frozen_excerpt": "ALT或AST高值与ALP高值的比值≥5",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1066",
+      "structure_unit_id": "su-98836ea9ef5e96c06db4ac0e"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "第86包拥有：药物性肝损伤（Drug-Induced Liver Injury，DILI）的简要介绍": "pending_codex",
+        "结构标题，仅标识DILI简要介绍章节归属，不独立形成控制点；与第85包严重肝损伤标题（body.p1055）结构平行但不得互换": "pending_codex"
+      },
+      "frozen_excerpt": "药物性肝损伤（Drug-Induced Liver Injury，DILI）的简要介绍",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1067",
+      "structure_unit_id": "su-7add5d6b1a654eba22b165a4"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把'多数/通常/极少数'改写为'全部/所有'；不得删除'极少数情况下AST/ALT已下降仍视为潜在DILI'分支；不得把'尚未排除其他原因'解释为无需采取行动；不得把本条改写为筛选/基线必做、证据缺口或入排不通过门槛": "pending_codex",
+        "多数病例中AST和/或ALT升高可早于总胆红素升高；总胆红素升高时AST和/或ALT通常仍高于3×ULN，且两类数值出现在同一样本中；少数情况下总胆红素升高时AST/ALT已下降，仍可视为潜在DILI；潜在病例在排除其他可能病因之前仍是重要医学事件": "pending_codex",
+        "第86包拥有：DILI医学背景与风险分层": "pending_codex"
+      },
+      "frozen_excerpt": "药物性肝损伤是指由各类化学药品、生物制品、传统中药及其代谢产物乃至辅料等所诱发的肝脏损伤。在大多数药物性肝损伤病例中，AST和/或ALT的升高会早于总胆红素升高（> 2×ULN）几天或几周，后者升高通常发生在AST和/或ALT仍然高于3×ULN时（即，在同一样本中AST和/或ALT与总胆红素值均表现升高）。在极少数情况下，当检测到总胆红素升高时，AST/ALT值可能已经下降。这种事件仍然被认为是潜在的药物性肝损伤。潜在的药物性肝损伤病例（甚至在所有其他可能的肝损伤原因被排除之前），应该始终被视为重要的医学事件。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1068",
+      "structure_unit_id": "su-f5590a7af4e287ab1254e38c"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把共同审查改写成已确诊或仅由系统自行判定；不得把'与申办者一起审查'删去或弱化为可选；不得把本条改写为筛选/基线必做、证据缺口或入排不通过门槛": "pending_codex",
+        "第86包拥有：AST和/或ALT和总胆红素的上升根据临床判断单独评估，不确定是否潜在Hy's定律病例时与申办者一起审查": "pending_codex",
+        "评估对象是AST和/或ALT与总胆红素的上升，按临床判断单独评估；不确定是否为潜在Hy's定律病例时与申办者共同审查；共同审查不是已确诊，也不是仅由系统自行判定": "pending_codex"
+      },
+      "frozen_excerpt": "AST和/或ALT和总胆红素的上升应根据临床判断单独评估，任何不确定是否为潜在的Hy's定律病例，均应与申办者一起审查。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1069",
+      "structure_unit_id": "su-371946ff94063642851f5aa7"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "48小时是获知异常结果后尽快返院评估的示例时间边界，不是申办者报告期限；返院评估同时包括实验室检查、详细病史和身体评估三部分": "pending_codex",
+        "不得把48小时改成申办者报告期限或24小时报告时限；不得把评估三部分（实验室检查、详细病史、身体评估）弱化为任选一项；不得把'尽快（如...48 h内）'改成'必须48小时内完成报告'；不得把本条改写为筛选/基线必做、证据缺口或入排不通过门槛": "pending_codex",
+        "第86包拥有：参与者应尽快（如，获知异常结果后的48 h内）返回研究中心进行评估，评估应包括实验室检查、详细的病史和身体评估": "pending_codex"
+      },
+      "frozen_excerpt": "参与者应尽快（如，获知异常结果后的48 h内）返回研究中心进行评估，评估应包括实验室检查、详细的病史和身体评估。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1070",
+      "structure_unit_id": "su-294730b1ea4d214d794c4890"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把'应包括'列举项目删减或缩水；不得把'需要时/必要时'限定项目升格为所有病例无条件必做；不得把详细相关信息收集缩成单一饮酒史；不得把GGT混入第85包ALT/AST与ALP的比值判断；不得把本条改写为筛选/基线必做、证据缺口或入排不通过门槛": "pending_codex",
+        "第86包拥有：疑似病例重复检测AST、ALT和总胆红素；其他实验室检查应包括白蛋白、肌酸激酶（CK）、直接和间接胆红素、GGT、凝血酶原时间（PT）/国际标准化比值（INR）、总胆汁酸和碱性磷酸酶；需要时各抽取单独凝血和抗凝血样本；收集详细相关信息；必要时检查病毒性肝炎感染和肝脏影像或对乙酰氨基酚/扑热息痛及蛋白加合物": "pending_codex",
+        "调查层次必须保留：疑似病例重复检测AST、ALT和总胆红素；其他实验室检查'应包括'原文列举项目；单独凝血/抗凝血样本、病毒性肝炎、影像及对乙酰氨基酚相关检测受'需要时/必要时'限定；详细相关信息收集不得缩成单一饮酒史；GGT是调查指标，不得混入第85包ALT/AST与ALP的比值判断": "pending_codex"
+      },
+      "frozen_excerpt": "除了对疑似Hy's定律病例重复检测AST、ALT和总胆红素外，其他实验室检查应包括白蛋白、肌酸激酶（CK）、直接和间接胆红素、谷氨酰转移酶（GGT）、凝血酶原时间（PT）/国际标准化比值（INR）、总胆汁酸和碱性磷酸酶。需要时，还应考虑各抽取一管单独的凝血和抗凝血样本用于进一步的检查以确定病因。此外，应收集详细的相关信息，如酒精、对乙酰氨基酚/扑热息痛（单方或复方产品）、娱乐性毒品、补充剂（草药）的使用和消费，家族史、性史、旅行史、与黄疸患者接触史、手术、输血、肝脏或过敏性疾病史以及可能的化学物质职业暴露。必要时，进一步检查急性甲型、乙型、丙型、丁型和戊型肝炎感染和肝脏影像（如，胆道），或收集血清样本以检测对乙酰氨基酚/扑热息痛和/或蛋白加合物的水平。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1071",
+      "structure_unit_id": "su-a63d1a1957a0cf96f1590894"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "'上述两个标准'在当前正文边界内没有唯一指向两个具体source_ref；p1060-p1066仅作为完整基线分层语境只读装入，不代表已经确定唯一绑定，不得擅自挑选某两个子条款或把前包分支扁平化为任一满足": "pending_codex",
+        "不得把任一单独异常、一次检查、完成全部病因排除或48小时返院任一项替代完整触发链；不得把合取链弱化为任一条件即触发；不得把'报告为SAE'删除；不得把24小时改为48小时或其他时限或'尽快报告'；不得删除'同时提交报告说明'；不得把潜在病例直接写成确诊；不得把本条改写为筛选/基线必做、证据缺口或入排不通过门槛": "pending_codex",
+        "潜在病例触发是合取链：尚未发现其他原因 且 重复检查证实符合上述两个AST/ALT和总胆红素升高标准 才视为潜在DILI（Hy's law）并报告为SAE；随后立即报告申办者，24小时是潜在DILI（Hy's law）病例获知事件后立即报告申办者的时限，同时提交报告说明": "pending_codex",
+        "第86包拥有：尚未发现其他原因且重复检查证实符合上述两个AST/ALT和总胆红素升高标准时视为潜在DILI（Hy's定律）病例并报告为SAE；立即报告申办者（获知事件后不超过24小时），同时提交报告说明": "pending_codex"
+      },
+      "frozen_excerpt": "如果尚未发现导致肝功能检查异常的其他原因，重复检查证实符合上述两个AST/ALT和总胆红素升高标准的病例，应视为潜在的药物性肝损伤（Hy's定律）病例，并报告为SAE。应立即将此病例报告给申办者（即，在获知事件后不超过24小时），同时提交给申办者了解事件的报告说明。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1072",
+      "structure_unit_id": "su-375806ced405ea0b7e3ee3ef"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把排除其他病因前置于p1068-p1072早期评估、复查或潜在病例报告；不得把'所有合理的调查结果'删成部分调查或'任一调查'；不得把'排除其他病因'删除或弱化；不得把本条改写为筛选/基线必做、证据缺口或入排不通过门槛": "pending_codex",
+        "潜在转确诊条件：收到所有合理调查结果并排除其他病因；排除其他病因是'潜在转确诊'的条件，不是p1068-p1072早期评估、复查或潜在病例报告的前置条件": "pending_codex",
+        "第86包拥有：潜在DILI（Hy's定律）病例只有在收到所有合理的调查结果并排除其他病因后才成为确诊病例": "pending_codex"
+      },
+      "frozen_excerpt": "一个潜在的药物性肝损伤（Hy's定律）病例只有在收到所有合理的调查结果并排除了其他病因后才会成为确诊病例。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1073",
+      "structure_unit_id": "su-51cb79f46b2c5ec6c4ba3598"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61bx-20260830",
+  "worker": "codebuddy-worker_02"
+}

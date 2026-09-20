@@ -1,0 +1,18 @@
+{
+  "attached_count": 8,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-6c6a2131d99af0f11af2bf8a",
+  "group_id": "d001-ii-package90-ae-causality-assessment-boundary",
+  "lookup_counts": {
+    "frozen_plan_owned": 19
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package90-ae-causality-assessment-boundary",
+  "owned_count": 11,
+  "prompt_char_count": 39306,
+  "prompt_sha256": "98b4804b6309a3bb31add74759ee200fe58b38780411f3df656eedc4a714d85f",
+  "task_id": "phase5-slice61cb-20260830",
+  "unit_count": 19,
+  "worker": "codebuddy-worker_02"
+}

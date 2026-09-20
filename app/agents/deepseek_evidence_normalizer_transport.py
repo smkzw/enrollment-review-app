@@ -90,6 +90,9 @@ def _map_glm_normalizer_reasoning_effort(effort: str) -> dict[str, Any]:
 GLM_STREAM_INACTIVITY_LIMIT_SECONDS = 600.0
 GLM_STREAM_TOTAL_LIMIT_SECONDS = 1200.0
 
+# length 结束原因只重试一次，思考+正文共享预算最多抬升到该上限（R3 §6.1）。
+EVIDENCE_NORMALIZER_LENGTH_RETRY_MAX_TOKENS = 131072
+
 
 def _new_glm_stream_state() -> dict[str, Any]:
     return {
@@ -102,7 +105,12 @@ def _new_glm_stream_state() -> dict[str, Any]:
     }
 
 
-def _absorb_glm_stream_chunk(chunk: Any, state: dict[str, Any]) -> None:
+def _absorb_glm_stream_chunk(
+    chunk: Any,
+    state: dict[str, Any],
+    *,
+    allow_model_identity_change: bool = False,
+) -> None:
     """累加单个 OpenAI SDK 流式块：思考/正文/usage 分离并记录实际模型身份。"""
     if chunk is None:
         return
@@ -111,7 +119,14 @@ def _absorb_glm_stream_chunk(chunk: Any, state: dict[str, Any]) -> None:
     model = getattr(chunk, "model", None)
     if model:
         if state["response_model"] and state["response_model"] != model:
-            raise RuntimeError("GLM 流式响应模型身份发生变化")
+            if not allow_model_identity_change:
+                raise RuntimeError("GLM 流式响应模型身份发生变化")
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "网关在流中切换上游模型：%s -> %s（按网关多路上游记录，继续采信）",
+                state["response_model"], model,
+            )
         state["response_model"] = model
     chunk_id = getattr(chunk, "id", None)
     if chunk_id:
@@ -142,12 +157,17 @@ def _assemble_glm_stream(
     clock: Callable[[], float] = monotonic,
     inactivity_limit: float = GLM_STREAM_INACTIVITY_LIMIT_SECONDS,
     total_limit: float = GLM_STREAM_TOTAL_LIMIT_SECONDS,
+    allow_model_identity_change: bool = False,
 ) -> None:
     """严格组装 GLM 流式块；任何不完整都抛错，绝不返回部分结果。
 
     截止时间粒度（如实说明）：不活动与总时长上限都只能在“块与块之间”检查；
     同步迭代器在单个块上最多阻塞到客户端读超时（600s），因此实际总时长最多
     可能超出 total_limit 一个不活动窗口，块内挂起由客户端读超时兜底。
+
+    ``allow_model_identity_change`` 供网关路由（cms-router 等）使用：网关
+    会在流中途把请求切换到另一个上游，模型字段随之变化；此时记录最终身份
+    并继续，不视为致命错误（2026-09-19 实测 deepseek 网关流）。
     """
     started = clock()
     last_activity = started
@@ -161,7 +181,9 @@ def _assemble_glm_stream(
             raise RuntimeError(
                 f"GLM 流式响应总时长超过 {total_limit:g}s 上限，拒绝继续等待"
             )
-        _absorb_glm_stream_chunk(chunk, state)
+        _absorb_glm_stream_chunk(
+            chunk, state, allow_model_identity_change=allow_model_identity_change,
+        )
         last_activity = now
     if state["finish"] is None:
         raise RuntimeError("GLM 流式响应缺少 finish_reason，拒绝采信部分结果")
@@ -332,7 +354,13 @@ class DeepSeekEvidenceNormalizerTransport:
                    "max_tokens": kwargs["max_tokens"],
                    "reasoning_effort": kwargs.get("reasoning_effort")}
         try:
-            result = self._client.chat.completions.create(**kwargs)
+            from app.llm.mtplx_model_lifecycle import sync_mtplx_model_session
+
+            with sync_mtplx_model_session(
+                self._backend, str(getattr(self._client, "base_url", "")),
+                self._model, self._reasoning_effort,
+            ):
+                result = self._client.chat.completions.create(**kwargs)
             choice = result.choices[0] if result.choices else None
             usage = getattr(result, "usage", None)
             receipt.update(response_model=getattr(result, "model", None),
@@ -349,8 +377,12 @@ class DeepSeekEvidenceNormalizerTransport:
             if self._receipt_callback is not None:
                 self._receipt_callback(receipt)
 
-    def _request_stream(self, kwargs):
-        """流式执行一次 GLM 请求：逐块观测，失败小票保留部分输出诊断。"""
+    def _request_stream(self, kwargs, *, strict_model_check: bool = True):
+        """流式执行一次 GLM 请求：逐块观测，失败小票保留部分输出诊断。
+
+        ``strict_model_check`` 供经网关路由的请求放宽：路由器会回填上游真实
+        模型名（如 cms-deepseek-flash → deepseek-flash），身份仍记录在小票。
+        """
         started = monotonic()
         receipt = {"mode": "stream",
                    "started_at": datetime.now(timezone.utc).isoformat(),
@@ -361,8 +393,10 @@ class DeepSeekEvidenceNormalizerTransport:
         stream = None
         try:
             stream = self._client.chat.completions.create(**kwargs)
-            _assemble_glm_stream(stream, state)
-            if str(state["response_model"] or "").lower() != self._model.lower():
+            _assemble_glm_stream(
+                stream, state, allow_model_identity_change=not strict_model_check,
+            )
+            if strict_model_check and str(state["response_model"] or "").lower() != self._model.lower():
                 raise RuntimeError("GLM 实际响应模型与请求模型不一致")
             content = "".join(state["content_parts"])
             thought = "".join(state["thought_parts"])
@@ -381,6 +415,12 @@ class DeepSeekEvidenceNormalizerTransport:
                 )],
             )
         except Exception as exc:
+            # 小票不得携带请求细节：错误消息只进服务日志，小票仅记类型。
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "规范化流式调用失败（%s）：%.300s", type(exc).__name__, str(exc),
+            )
             receipt.update(
                 error_type=type(exc).__name__,
                 status_code=getattr(exc, "status_code", None),
@@ -400,15 +440,19 @@ class DeepSeekEvidenceNormalizerTransport:
                 self._receipt_callback(receipt)
 
     def _streaming_completion(self, kwargs):
-        """GLM 流式补全：length 重试一次翻倍预算；仅接受 finish_reason=stop。"""
+        """GLM 流式补全：length 重试一次并抬升预算（上限 131072）；仅接受 stop。"""
         stream_kwargs = dict(kwargs)
         stream_kwargs["stream"] = True
         stream_kwargs["stream_options"] = {"include_usage": True}
         completion = self._request_stream(stream_kwargs)
         if completion.choices and completion.choices[0].finish_reason == "length":
             retry_kwargs = dict(stream_kwargs)
-            retry_kwargs["max_tokens"] = int(kwargs["max_tokens"]) * 2
-            completion = self._request_stream(retry_kwargs)
+            retry_kwargs["max_tokens"] = min(
+                int(kwargs["max_tokens"]) * 2,
+                EVIDENCE_NORMALIZER_LENGTH_RETRY_MAX_TOKENS,
+            )
+            if retry_kwargs["max_tokens"] > kwargs["max_tokens"]:
+                completion = self._request_stream(retry_kwargs)
         finish = completion.choices[0].finish_reason if completion.choices else None
         if finish != "stop":
             raise RuntimeError(
@@ -422,12 +466,29 @@ class DeepSeekEvidenceNormalizerTransport:
         try:
             if self._backend in ZHIPU_EVIDENCE_NORMALIZER_BACKENDS:
                 completion = self._streaming_completion(kwargs)
+            elif self._backend in {"deepseek", "deepseek-api"}:
+                # 云端网关（cms-router）对长生成有短超时，非流式会在首字前被
+                # 504 截断；与 GLM 道一致统一流式累积（2026-09-19 用户指令）。
+                completion = self._request_stream(
+                    {**kwargs, "stream": True,
+                     "stream_options": {"include_usage": True}},
+                    strict_model_check=False,
+                )
             else:
                 completion = self._request(kwargs)
                 if completion.choices and completion.choices[0].finish_reason == "length":
                     retry_kwargs = dict(kwargs)
-                    retry_kwargs["max_tokens"] = int(kwargs["max_tokens"]) * 2
-                    completion = self._request(retry_kwargs)
+                    retry_kwargs["max_tokens"] = min(
+                        int(kwargs["max_tokens"]) * 2,
+                        EVIDENCE_NORMALIZER_LENGTH_RETRY_MAX_TOKENS,
+                    )
+                    if retry_kwargs["max_tokens"] > kwargs["max_tokens"]:
+                        completion = self._request(retry_kwargs)
+                finish = completion.choices[0].finish_reason if completion.choices else None
+                if finish != "stop":
+                    raise RuntimeError(
+                        f"模型响应未完整结束（finish_reason={finish!r}），拒绝采信部分结果"
+                    )
         except Exception as exc:  # noqa: BLE001
             raise EvidenceNormalizerAgentCallError(session_id="", message=str(exc)) from exc
         if not completion.choices or not completion.choices[0].message or completion.choices[0].message.content is None:
@@ -511,6 +572,14 @@ def evidence_normalizer_transport_from_model_config(
             response_format={"type": "json_object"},
         )
     if provider in {"mtplx", "mtplx-api"}:
+        from app.llm.mtplx_model_lifecycle import mtplx_deployment_fingerprint
+
+        deployment = mtplx_deployment_fingerprint(
+            provider, _with_v1_suffix(MTPLX_BASE_URL), model_config.model,
+            model_config.reasoning_effort,
+        )
+        if model_config.parameters.get("mtplx_deployment_sha256") != deployment:
+            raise ValueError("本次整理的模型加载配置已改变，请新建整理任务，历史结果仍保留")
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
             receipt_callback=receipt_callback,

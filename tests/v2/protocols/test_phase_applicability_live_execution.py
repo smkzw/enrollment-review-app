@@ -186,8 +186,8 @@ def test_real_transport_uses_phase_schema_and_restorable_same_session_history():
     second = transport.continue_session(session_id=first.session_id, prompt="定向修复")
     calls = client.chat.completions.calls
     assert calls[0]["model"] == "phase-model"
-    assert calls[0]["max_tokens"] == 8192
-    assert calls[0]["temperature"] == 0.0
+    assert calls[0]["max_tokens"] == 60000
+    assert "temperature" not in calls[0]
     assert calls[0]["response_format"]["json_schema"]["name"] == (
         "phase_applicability_agent_wire_v2"
     )
@@ -228,8 +228,65 @@ def test_mtplx_phase_transport_uses_quality_output_budget() -> None:
         max_tokens=60000,
     )
 
-    assert transport.max_tokens == MTPLX_PROTOCOL_BATCH_MAX_TOKENS
-    assert transport.max_tokens > OMLX_PROTOCOL_BATCH_MAX_TOKENS
+    assert transport.max_tokens == 60000
+
+
+def test_phase_glm_uses_product_credentials_and_exact_endpoint(monkeypatch):
+    import app.agents.phase_applicability_transport as module
+
+    options = {}
+    client = _FakeClient(['{}'])
+    monkeypatch.setenv("DECONSTRUCT_GLM_BASE_URL", "https://example.test/api/coding/paas/v4")
+    monkeypatch.setenv("DECONSTRUCT_GLM_API_KEY", "test-product-key")
+    monkeypatch.setattr(module, "OpenAI", lambda **kwargs: options.update(kwargs) or client)
+    transport = OpenAICompatiblePhaseApplicabilityAgentTransport(
+        backend="zhipu-coding-plan", model="glm-5.3-flash",
+        reasoning_effort="high", max_tokens=65536,
+    )
+    transport.start(prompt="冻结输入")
+    assert options["base_url"] == "https://example.test/api/coding/paas/v4"
+    assert options["api_key"] == "test-product-key"
+    assert client.chat.completions.calls[0]["reasoning_effort"] == "high"
+    assert "temperature" not in client.chat.completions.calls[0]
+
+
+def test_phase_local_output_limit_is_not_silently_clamped(monkeypatch):
+    import app.agents.phase_applicability_transport as module
+
+    monkeypatch.setattr(module, "MTPLX_PROTOCOL_BATCH_MAX_TOKENS", 16384)
+    with pytest.raises(ValueError, match="不能静默降低"):
+        OpenAICompatiblePhaseApplicabilityAgentTransport(
+            client=_FakeClient([]), backend="mtplx", model="any-compatible-model",
+            reasoning_effort="xhigh", max_tokens=65536,
+        )
+
+
+def test_phase_glm_does_not_downgrade_unsupported_effort():
+    with pytest.raises(ValueError, match="推理强度"):
+        OpenAICompatiblePhaseApplicabilityAgentTransport(
+            client=_FakeClient([]), backend="zhipu-coding-plan", model="glm-5.3-flash",
+            reasoning_effort="xhigh", max_tokens=65536,
+        )
+
+
+@pytest.mark.parametrize("budget,expected", [(65536, [65536, 131072]), (131072, [131072])])
+def test_phase_length_retry_increases_budget_or_stops(budget, expected):
+    calls = []
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(choices=[SimpleNamespace(
+            finish_reason="length", message=SimpleNamespace(content='{"partial":'),
+        )])
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    transport = OpenAICompatiblePhaseApplicabilityAgentTransport(
+        client=client, backend="zhipu-coding-plan", model="glm-5.3-flash",
+        reasoning_effort="high", max_tokens=budget,
+    )
+    with pytest.raises(RuntimeError, match="长度上限"):
+        transport.start(prompt="冻结输入")
+    assert [call["max_tokens"] for call in calls] == expected
 
 
 def test_execution_persists_complete_manifest_plan_and_resumes_only_failed_batches(

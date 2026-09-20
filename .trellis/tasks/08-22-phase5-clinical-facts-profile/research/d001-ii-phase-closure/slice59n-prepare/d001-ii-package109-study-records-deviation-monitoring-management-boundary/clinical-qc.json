@@ -1,0 +1,191 @@
+{
+  "attached_source_refs": [],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package109-study-records-deviation-monitoring-management-boundary",
+  "notes": [
+    "模型外闭包：Package 109恰好拥有body.p1270-p1280共11个来源；无attached；37项context_units保持只读且不升格。",
+    "四类语义必须分开：章节/小节标题仅结构（p1270/p1271/p1274/p1277/p1279）；研究文件与档案/稽查跟踪治理（p1272-p1273）；方案偏离记录通报及严重偏离后在研退出处置（p1275-p1276）；现场监查检查与管理/IWRS/样品保存/EDC基础设施用途（p1278/p1280）。",
+    "候选判定不是预设零：逐项判断后确认本包无独立参加研究前受试者动作；required_candidate_source_refs为空且有逐项原文依据。不得把研究文件、偏离记录、监查检查、研究管理或IWRS用途误成单例资格，也不得丢失任何真实前置控制。",
+    "“所有要求必须严格执行”保留为执行治理语义，不得生成泛化入排控制；“必要时，参与者需退出研究”是严重偏离评估后的在研处置，不得倒置为筛选/基线排除；IWRS“筛查和随机分组”是管理能力描述，不等于本段新建资格动作。",
+    "Package 108止于p1269；Package 110从p1281起；claims_complete=false；本配置不调用临床语义模型、不发布控制点、不进入受试者、OCR、Patient Profile或浏览器流程。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1270",
+    "body.p1271",
+    "body.p1272",
+    "body.p1273",
+    "body.p1274",
+    "body.p1275",
+    "body.p1276",
+    "body.p1277",
+    "body.p1278",
+    "body.p1279",
+    "body.p1280"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "研究文件、监查和管理标题仅提供章节结构，不独立生成候选、流程节点、官方规则或受试者控制点": "pending_codex"
+      },
+      "frozen_excerpt": "研究文件、监查和管理",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1270",
+      "structure_unit_id": "su-1d3df33ea3d261e12474b01f"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "研究文件标题仅提供小节结构，不独立生成候选或受试者控制点": "pending_codex"
+      },
+      "frozen_excerpt": "研究文件",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1271",
+      "structure_unit_id": "su-2474180756190e10d5c30df7"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "研究文件保存与稽查跟踪治理不得误成单例筛选、基线或入排资格": "pending_codex",
+        "研究结束时研究者可获得该中心参与者数据，包括含有所有数据变更完整记录的稽查跟踪数据": "pending_codex",
+        "研究者必须保存足够且准确的记录以完整记录研究执行过程，包括但不限于方案、方案修正案、知情同意书和IRB/EC与政府批准文件": "pending_codex"
+      },
+      "frozen_excerpt": "研究者必须保存足够且准确的记录，以便完整记录研究的执行过程，包括但不限于方案、方案修正案、知情同意书和IRB/EC与政府批准文件。此外，在研究结束时，研究者可以获得该中心的参与者数据，包括含有所有数据变更完整记录的稽查跟踪数据。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1272",
+      "structure_unit_id": "su-3908af6fdec8534b36ed207a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "档案建立、审核与保存治理不得误成单例资格": "pending_codex",
+        "研究开始时研究中心、分析检测单位、申办者三方均应各自建立研究文件档案管理": "pending_codex",
+        "研究结束时监查员必须审核确认各方文件，并妥善保存在各自临床研究档案卷宗内": "pending_codex"
+      },
+      "frozen_excerpt": "研究开始时，研究中心、分析检测单位、申办者三方均应各自建立研究文件的档案管理。研究结束时，监查员必须审核确认各研究中心、分析检测单位、申办者各自的文件，这些文件必须被妥善的保存在各自的临床研究档案卷宗内。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1273",
+      "structure_unit_id": "su-76d089e04fe2391d60f75717"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "方案偏离标题仅提供小节结构，不独立生成候选或受试者控制点": "pending_codex"
+      },
+      "frozen_excerpt": "方案偏离",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1274",
+      "structure_unit_id": "su-a2cc70a977b5bfd5c4aa99c3"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "“所有要求必须严格执行”不得脱离具体要求生成泛化单例入排控制；偏离识别/记录/签字/通报/统计总结是研究执行治理，不是筛选/基线资格": "pending_codex",
+        "临床监查员发现偏离时填写偏离方案记录，详细记录时间、过程、原因、处理措施等适用项，由研究者签字，并通报伦理委员会及申办者；统计总结中分析偏离对数据和结论的影响": "pending_codex",
+        "研究方案中规定的所有要求必须严格执行；有意或无意偏离试验方案和GCP原则均可归类为偏离方案": "pending_codex"
+      },
+      "frozen_excerpt": "研究方案中规定的所有要求，必须严格执行。任何有意或无意偏离试验方案和GCP原则的行为，均可归类为偏离方案。临床监查员在监查过程中，如果发现偏离方案时应填写偏离方案记录，详细记录事件发生的时间、过程、原因、相应的处理措施等适用项，由研究者签字，并通报伦理委员会及申办者。在数据统计和总结报告中，研究者对发生的方案偏离对最终数据和结论的影响进行分析和报告。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1275",
+      "structure_unit_id": "su-ac2dd3d0da9edcf360065d0a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "“必要时，参与者需退出研究”是严重偏离发生并评估后的在研处置，不是筛选/基线排除标准，也不得凭“退出”二字倒置成参加研究前控制": "pending_codex",
+        "当发生严重方案偏离时应进行评估；必要时参与者需退出研究": "pending_codex",
+        "所有方案偏离必须记录在源文件中，并按伦理委员会规定递交审查；研究者须知悉并遵行伦理委员会相关规定": "pending_codex"
+      },
+      "frozen_excerpt": "所有方案偏离情况必须记录在源文件中。所有方案偏离必须按照伦理委员会规定递交以供审查。研究者有责任知悉并遵行伦理委员会相关规定。当发生严重方案偏离时，应进行评估。必要时，参与者需退出研究。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1276",
+      "structure_unit_id": "su-4d3c44d679efa6ca3ba77ddd"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "现场监查/检查标题仅提供小节结构，不独立生成候选或受试者控制点": "pending_codex"
+      },
+      "frozen_excerpt": "现场监查/检查",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1277",
+      "structure_unit_id": "su-ed070d71913fa907125ce547"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "现场监查/检查与设施记录访问治理不得误成单例资格": "pending_codex",
+        "研究中心访视将由申办者或授权代表进行研究数据、参与者病历和eCRFs的监查": "pending_codex",
+        "研究者将允许国家和地方卫生当局、申办者监查员、代表和合作者，以及IRB/EC检查与本研究相关的设施和记录": "pending_codex"
+      },
+      "frozen_excerpt": "研究中心访视将由申办者或授权的代表进行研究数据、参与者病历和eCRFs的监查。研究者将允许国家和地方卫生当局、申办者监查员、代表和合作者，以及IRB/EC检查与本研究相关的设施和记录。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1278",
+      "structure_unit_id": "su-66c3ad07a87c52a0c15a183c"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "管理结构标题仅提供小节结构，不独立生成候选或受试者控制点": "pending_codex"
+      },
+      "frozen_excerpt": "管理结构",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1279",
+      "structure_unit_id": "su-4864eb2b59443c09eac01bf9"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "可使用IWRS进行参与者筛查和随机分组，以及研究药物申请和运输的管理；这是管理能力与基础设施用途，不等于本段新建筛选、随机或给药资格动作": "pending_codex",
+        "申办者或其代理人将执行项目管理、研究管理、监查、供应商管理和统计编程": "pending_codex",
+        "研究中心负责生物样品运输至申办者或其指定分析单位之前的保存；数据使用eCRFs通过EDC系统记录或以电子方式转发": "pending_codex",
+        "项目管理、IWRS用途、样品保存与EDC记录描述不得误成单例入排资格或发布控制点": "pending_codex"
+      },
+      "frozen_excerpt": "申办者或其代理人将执行项目管理、研究管理、监查、供应商管理和统计编程。可使用IWRS进行参与者筛查和随机分组，以及研究药物申请和运输的管理。研究中心将负责生物样品在运输至申办者或其指定分析单位之前的保存。数据将使用eCRFs通过EDC系统记录，或以电子方式转发给申办者（例如，药代动力学数据）。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1280",
+      "structure_unit_id": "su-40a5b0eeb082392125738cb6"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61cv-20260830",
+  "worker": "codex-parent"
+}

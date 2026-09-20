@@ -229,12 +229,9 @@ def active_entity_ids_after_corrections(
 ) -> dict[str, set[str]]:
     """当前权威下应进入新投影的实体 ID（排除修订目标后的链头，并要求引用闭合）。"""
     superseded = superseded_entity_ids(session, authority)
-    facts = [
-        item
-        for item in ClinicalFactV2Repository(session).list_for_authority(authority)
-        if item.fact_id not in superseded
-    ]
-    fact_heads = _chain_heads(facts, "stable_identity", "fact_id")
+    from app.storage.active_facts import current_fact_heads
+
+    fact_heads = current_fact_heads(session, authority)
     fact_ids = {item.fact_id for item in fact_heads}
     events = [
         item
@@ -252,11 +249,10 @@ def active_entity_ids_after_corrections(
     ]
     exposure_heads = _chain_heads(exposures, "stable_identity", "exposure_id")
     exposure_ids = {item.exposure_id for item in exposure_heads}
+    from app.storage.active_conflicts import current_conflict_heads
     conflicts = [
         item
-        for item in ClinicalConflictGroupV2Repository(session).list_for_authority(
-            authority
-        )
+        for item in current_conflict_heads(session, authority)
         if item.conflict_group_id not in superseded
         and (
             (item.member_kind == "fact" and set(item.fact_ids) <= fact_ids)
@@ -1499,9 +1495,8 @@ def _recompute_conflict_groups(
     scope: FactCorrectionImpactScope,
     replacement_map: dict[str, str],
 ) -> list[ConflictCorrectionOutcome]:
-    groups = ClinicalConflictGroupV2Repository(session).list_for_authority(
-        prepared.authority
-    )
+    from app.storage.active_conflicts import current_conflict_heads
+    groups = current_conflict_heads(session, prepared.authority)
     already_superseded = FactCorrectionCommitRepository(session).superseded_conflict_ids(
         prepared.authority
     )

@@ -1,0 +1,34 @@
+{
+  "schema_version": "phase5/protocol-replay-checkpoint/v1",
+  "recorded_at": "2026-08-29T00:00:00+00:00",
+  "config_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/checkpoints/p803-p805-model-free-replay-config.v1.json",
+  "expected_pack_fingerprint": "d83e103226bcf7a2583d0f3571a70845ff10f570ff37255532aed0d66e9ec16a",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "snapshot_id": "snp-e3e8befcbf4a63c89665aad9",
+  "manifest_id": "su-8f734878638f87bf9ed0a23f",
+  "batch_id": "pcb-b29b96bc4f027b4340ab9773",
+  "prompt_sha256": "35d5d5fb9f62ecc752869960b75fa94d48cf578e8da7a8a3e5b5730c303c13a5",
+  "toolchain": {
+    "python_version": "3.12.13",
+    "pydantic_version": "2.13.3",
+    "parser_name": "docx-ooxml",
+    "parser_version": "1.4.0"
+  },
+  "unit_counts": {
+    "blocks": 3581,
+    "manifest_units": 1848,
+    "owned_units": 3,
+    "context_units": 7
+  },
+  "model_invoked": false,
+  "clinical_acceptance": false,
+  "notes": [
+    "两次从同一原始 DOCX 向不同临时目录构建，整包指纹一致。",
+    "本检查点只证明产品确定性链可重现，不接受 v8 临床结果，也不授权模型重放。",
+    "2026-08-29 因通用义务强度合同新增建议与尽力遵循语气后，按同一原始 DOCX 和同一冻结范围重新计算提示词及整包指纹；方案、结构单元、批次身份和单元计数均未变化。",
+    "2026-08-29 因只读上下文不得充当已发布目标、筛选及给药前操作控制不得按治疗后事项丢弃的通用合同修订，再次按同一原始 DOCX 和同一冻结范围重算；仅提示词及整包指纹变化。",
+    "2026-08-29 因用户可见指引、最低证据、义务动作和关系强度的通用保真约束更新，再次按同一原始 DOCX 和同一冻结范围重算；方案、结构单元、批次身份和单元计数均未变化。",
+    "2026-08-30 因评分方法学、规则依据与个例证据、患者自评工具专业判断及原子级权威引用溯源的通用合同更新，在两个独立临时目录重建并得到一致指纹；方案、结构单元、批次、清单、快照身份和单元计数均未变化。",
+    "2026-08-30 修正显式期别引导段的结构继承后，p1172-p1178 正确归属 III 期；两次独立临时目录重建得到相同整包指纹。p803-p805 的提示词、目标、只读上下文、批次身份和单元计数均未变化。"
+  ]
+}

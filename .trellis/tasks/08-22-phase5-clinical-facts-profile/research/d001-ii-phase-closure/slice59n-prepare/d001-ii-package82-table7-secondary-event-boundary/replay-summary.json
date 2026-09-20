@@ -1,0 +1,19 @@
+{
+  "attached_count": 23,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-a870f295925101ada20d1f1a",
+  "group_id": "d001-ii-package82-table7-secondary-event-boundary",
+  "lookup_counts": {
+    "frozen_plan_context": 2,
+    "frozen_plan_owned": 26
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package82-table7-secondary-event-boundary",
+  "owned_count": 5,
+  "prompt_char_count": 42315,
+  "prompt_sha256": "4f9e69ef8acae49aebf0baab4884414c7e68476f0bc7b65815b68be2c9733696",
+  "task_id": "phase5-slice61bt-20260830",
+  "unit_count": 28,
+  "worker": "codebuddy-worker_02"
+}

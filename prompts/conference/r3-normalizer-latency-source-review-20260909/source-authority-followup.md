@@ -1,0 +1,13 @@
+Continue the same read-only C03 session, GLM-5.3:max. All prior no-write/no-network/no-model-call/no-database/no-env boundaries remain. Do not start another agent. Return a concise evidence-based engineering plan, not clinical acceptance.
+
+New finding to challenge your recommendation A: current design explicitly calls OCR a sidecar (design lines 89,329-332) and permits page_excerpt/page_only when character localization is unavailable (151-158). Rejecting every dual-read source solely because its excerpt differs from OCR may accidentally make OCR the semantic authority and permanently suppress legitimate visual findings, especially handwriting. Do not assume all non-literal excerpts are invalid medical evidence.
+
+Runtime retry ended at3/15. The former joined-excerpt group now records one preserved registration ID and17 explicit unresolved items, including all3 previously blocked lab findings; none became formal facts. Next group fails on a chest X-ray impression excerpt not exactly matching a text locator. Owner has NOT established whether OCR or VLM is wrong. No more identical model retries are running.
+
+Read additionally app/domain/contracts/evidence_locator.py, enums.py, facts.py, app/domain/gates/fact_evidence_closure.py, app/storage/fact_authority.py, app/services/fact_normalization_source_adapter.py and direct app/tests dependencies. Current LocatorSourceLayer only native_text/raw_ocr/effective_text; accepted VLM source_observation_refs persist on candidates, but the legacy source gate relies on OCR locators inside immutable CompleteEvidenceProcessingRevision. Never recommend mutating that revision or marking model bbox as authenticated OCR coordinates.
+
+Determine the minimal correct R3 bridge for source-backed page excerpts: can existing contracts safely represent immutable accepted PageReviewRecord/coverage/image-hash source provenance and downgraded page-only precision without OCR literal equality? If not, identify exact additive entities/fields, ownership verification, publication/replay/frontend consumers, compatibility requirements and decisive negative tests. Distinguish this from loosening truth/dual-agreement requirements. Original images, old facts and revisions cannot be overwritten. A textual OCR mismatch must be visible as locator uncertainty, not silently ignored or falsely called absent source.
+
+Also correct any overstatement in first report: first-error-only plus2 repairs increases failure risk but does not prove mathematical impossibility if a model fixes similar unreported errors itself. Keep empirical findings separate from inference.
+
+Output: justified verdict on A as temporary vs final, bounded minimal implementation sequence, scope risks and tests. No implementation.

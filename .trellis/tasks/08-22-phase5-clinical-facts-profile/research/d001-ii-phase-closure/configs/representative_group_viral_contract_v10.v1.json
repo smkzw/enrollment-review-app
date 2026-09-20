@@ -1,0 +1,11 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_viral.v1.json",
+  "artifact_dir_name": "phase5-slice59n-d001-viral-control-replay-contract-v10-20260828",
+  "runner": {
+    "max_schema_repairs": 5
+  },
+  "notes": [
+    "验证直接完成类操作与后续有效性按决定阶段拆分，并阻止合取组重复原子。"
+  ]
+}

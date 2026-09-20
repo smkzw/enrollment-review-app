@@ -3,7 +3,7 @@
  * 1080P至4K桌面三列联动，共享 component URL 选择状态。
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { DraftRevisionView, IntegrityView, ProtocolSessionView, SourcesView } from "../../api/protocolWorkbenchTypes";
 import { updateParams } from "../../app/router";
 import { mapProtocolDraftRules, mapProtocolSourceLocators } from "../../domain/protocolMappers";
@@ -26,6 +26,8 @@ interface ProtocolDraftWorkbenchProps {
   onPublish: () => void;
   saving: boolean;
   publishing: boolean;
+  publicationBlocked?: boolean;
+  supplementaryRequirements?: ReactNode;
   saveError?: string;
   /** 界面试用：示例草稿保存状态（仅 stub 演示任务注入） */
   uatDraftSaved?: boolean;
@@ -43,6 +45,8 @@ export function ProtocolDraftWorkbench({
   onPublish,
   saving,
   publishing,
+  publicationBlocked = false,
+  supplementaryRequirements,
   saveError,
   uatDraftSaved,
   onUatReset,
@@ -129,7 +133,7 @@ export function ProtocolDraftWorkbench({
           <button
             type="button"
             className="button button--primary"
-            disabled={saving || publishing || !integrity.publishable}
+            disabled={saving || publishing || !integrity.publishable || publicationBlocked}
             title={integrity.publishable ? "发布正式项目与规则版本" : "请先处理完整性检查中的问题"}
             onClick={onPublish}
           >
@@ -161,6 +165,7 @@ export function ProtocolDraftWorkbench({
         )}
       </section>
 
+      {supplementaryRequirements}
       <div className="protocol-draft-tabs" role="tablist" aria-label="草稿工作区切换">
         {tabs.map((item) => (
           <button

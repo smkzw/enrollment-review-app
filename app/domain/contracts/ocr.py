@@ -23,7 +23,7 @@ from __future__ import annotations
 from datetime import datetime
 from hashlib import sha256
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
 
 from .common import ContractModel, VersionedModel
 from .enums import (
@@ -144,15 +144,22 @@ class OCRProfile(VersionedModel):
     request_params_sha256: str | None = Field(default=None, pattern=_SHA256)
     layout_parser_version: str | None = None
     coordinate_transform_version: str = Field(min_length=1)
+    attempt_namespace: str | None = Field(default=None, min_length=1)
     created_at: datetime
+
+    @model_serializer(mode="wrap")
+    def serialize_profile(self, handler):
+        payload = handler(self)
+        if self.attempt_namespace is None:
+            payload.pop("attempt_namespace", None)
+        return payload
 
     @model_validator(mode="after")
     def validate_profile_identity(self) -> OCRProfile:
         _require_utc(self.created_at, "OCRProfile.created_at")
         from app.domain.publication import canonical_hash
 
-        expected = canonical_hash(
-            {
+        payload = {
                 "profile": "ocr_profile/v1",
                 "extraction_route": self.extraction_route.value,
                 "provider": self.provider,
@@ -165,7 +172,11 @@ class OCRProfile(VersionedModel):
                 "layout_parser_version": self.layout_parser_version,
                 "coordinate_transform_version": self.coordinate_transform_version,
             }
-        )
+        if self.attempt_namespace is not None:
+            if not self.attempt_namespace.strip() or self.extraction_route != ExtractionRoute.VISION_OCR:
+                raise ValueError("重新识别尝试仅适用于视觉转录")
+            payload["attempt_namespace"] = self.attempt_namespace
+        expected = canonical_hash(payload)
         if self.profile_sha256 != expected:
             raise ValueError("OCRProfile 指纹与识别身份字段不一致")
         return self

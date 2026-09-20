@@ -30,6 +30,7 @@ from app.services.patient_profile_service import (
     PatientProfileProjectionError,
     PatientProfileService,
 )
+from app.services.fact_publication_service import FactPublicationError, FactPublicationService
 from app.storage.codecs import decode_contract, encode_contract
 from app.storage.evidence_expectation_repository import EvidenceExpectationV2Repository
 from app.storage.fact_repositories import (
@@ -43,7 +44,7 @@ from app.storage.facts_models import (
 )
 from app.storage.models import JobRecord, ReviewEpisodeRecord, WorkflowStageRecord
 from app.storage.patient_profile_repository import PatientProfileRevisionRepository
-from app.storage.repositories import EpisodeRepository
+from app.storage.repositories import EpisodeRepository, InvalidReferenceError
 from app.workflow.errors import StepFailure
 from app.workflow.jobstore import JobStore
 from app.workflow.runner import JobRunner, PreparedStepResult, StepContext
@@ -250,6 +251,46 @@ def test_failed_transport_retains_bound_receipt(
         )
 
 
+@pytest.mark.parametrize("fallback_only", [False, True])
+def test_new_normalization_batch_preserves_unresolved_prior_issue(
+    session_factory, fallback_only
+):
+    from app.domain.contracts.enums import GapType
+    from app.domain.contracts.evidence_expectations_v2 import CoverageGapSignal
+    from app.services.evidence_expectation_projection_service import (
+        EvidenceExpectationProjectionService,
+    )
+
+    chain, template = _prepare(
+        session_factory, prefix="fn-prior-issue", requirement_id="prior-issue"
+    )
+    with session_factory() as session, session.begin():
+        EvidenceExpectationProjectionService().project(
+            session,
+            authority=chain["authority"],
+            gap_signals=[CoverageGapSignal(
+                kind=GapType.OBSERVATION_UNVERIFIED,
+                detail="该项资料的检查时间尚未核实",
+                applies_to_template_id=template.template_id,
+                fallback_only=fallback_only,
+            )],
+        )
+
+    _, created = _run(session_factory, chain, template.requirement_id)
+    with session_factory() as session:
+        assert JobStore(session).job_status(created.job_id).state == "completed"
+        latest = EvidenceExpectationV2Repository(session).latest_by_template(
+            chain["episode_id"], template.template_id
+        )
+        assert latest.status == (
+            ExpectationStatus.OBSERVED if fallback_only
+            else ExpectationStatus.OBSERVED_WEAK
+        )
+        assert latest.gap_type == (
+            None if fallback_only else GapType.OBSERVATION_UNVERIFIED
+        )
+
+
 def test_finalize_generates_immutable_succeeded_profile(session_factory):
     chain, template = _prepare(
         session_factory, prefix="fn-profile-ok", requirement_id="alt-profile-ok"
@@ -441,7 +482,8 @@ def test_finalize_stale_authority_rejects_without_profile(session_factory):
         )
 
 
-def test_finalize_rolls_back_when_profile_projection_fails(session_factory, monkeypatch):
+@pytest.mark.parametrize("failure", [PatientProfileProjectionError, InvalidReferenceError, FactPublicationError])
+def test_finalize_rolls_back_when_profile_projection_fails(session_factory, monkeypatch, failure):
     chain, template = _prepare(
         session_factory, prefix="fn-profile-fail", requirement_id="alt-profile-fail"
     )
@@ -456,9 +498,20 @@ def test_finalize_rolls_back_when_profile_projection_fails(session_factory, monk
         exclude_conflict_group_ids=None,
         run_id=None,
     ):
-        raise PatientProfileProjectionError("forced profile projection failure")
+        raise failure("forced profile projection failure")
 
-    monkeypatch.setattr(PatientProfileService, "generate", boom)
+    if failure is FactPublicationError:
+        original_publish = FactPublicationService.publish
+
+        def publish_then_fail(self, session, run_id):
+            published = original_publish(self, session, run_id)
+            assert published.fact_ids
+            assert ClinicalFactV2Repository(session).get(published.fact_ids[0])
+            raise FactPublicationError("injected failure after publication writes")
+
+        monkeypatch.setattr(FactPublicationService, "publish", publish_then_fail)
+    else:
+        monkeypatch.setattr(PatientProfileService, "generate", boom)
 
     service = FactNormalizationJobService(session_factory)
     created = _create_job_from_source(service, chain)

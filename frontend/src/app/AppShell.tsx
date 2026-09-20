@@ -1,6 +1,6 @@
 /**
  * 全局壳：响应式 Grid 布局（侧栏 + 顶栏 + 主工作区），无登录直达（合同 §3.1）。
- * 主工作区为容器查询上下文，页面级无横向滚动；窄屏侧栏收起为抽屉（SideNav 负责）。
+ * 主工作区面向宽屏桌面；沿用页面级容器布局。
  * 路由解析：已实现页面懒加载渲染；正式模式的旧入口会先回到方案工作台。
  * 未知路径显示“未找到这个页面”。
  */
@@ -11,6 +11,8 @@ import { findRoute, isImplemented } from "./routes";
 import { SideNav } from "../components/shell/SideNav";
 import { TopBar } from "../components/shell/TopBar";
 import { LoadingState } from "../components/shell/Feedback";
+import { ApplicationModeNotice } from "../components/shell/ApplicationModeNotice";
+import { ApplicationModeProvider, BROWSE_ROUTES, useApplicationMode } from "./applicationMode";
 
 
 function NotFound() {
@@ -36,6 +38,8 @@ function RouteRedirect({ to }: { to: string }) {
 
 function CurrentPage() {
   const { path } = useHashRoute();
+  const { canModify } = useApplicationMode();
+  if (!canModify && !BROWSE_ROUTES.has(path)) return <RouteRedirect to="/reports" />;
   const route = findRoute(path);
   if (route === undefined) {
     return <NotFound />;
@@ -55,7 +59,12 @@ function CurrentPage() {
 }
 
 export function AppShell() {
+  return <ApplicationModeProvider><ApplicationShellBody /></ApplicationModeProvider>;
+}
+
+function ApplicationShellBody() {
   const { path } = useHashRoute();
+  const { canModify } = useApplicationMode();
   const route = findRoute(path);
   const positionLabel = route?.label ?? "未知页面";
 
@@ -68,10 +77,11 @@ export function AppShell() {
       <div className="app-shell__main">
         <TopBar
           positionLabel={positionLabel}
-          showProjectCreation={path === "/board"}
-          showProjectContext={!new Set(["/projects/new", "/protocols"]).has(path)}
+          showProjectCreation={canModify && path === "/board"}
+          showProjectContext={canModify && !new Set(["/projects/new", "/protocols"]).has(path)}
         />
         <main id="main-content" tabIndex={-1} className="app-shell__content">
+          <ApplicationModeNotice />
           <CurrentPage />
         </main>
       </div>

@@ -1,0 +1,40 @@
+{
+  "attached_source_refs": [
+    "body.p1225"
+  ],
+  "claims_complete": false,
+  "config_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/configs/representative_group_package103_safety_pk_exposure_statistical_boundary.v1.json",
+  "config_sha256": "6cb0901a4e96001561a141d574832dcb145f3fffd5e00678474659d4fd9ddab5",
+  "control_batch_id": "pcb-f9432d781641041b01749957",
+  "control_plan_id": "pcp-60000245445ea4595e35bd46",
+  "coverage_manifest_id": "manifest:slice61cp-package103-safety-pk-exposure-statistical-boundary",
+  "coverage_manifest_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/coverage_manifest.json",
+  "coverage_manifest_sha256": "affd0c907b47855914b72f09aa9f86e801a7a735b60ede923dcb991601a9aa75",
+  "created_at": "2026-08-30T14:35:21.330095+00:00",
+  "frozen_plan_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/frozen_phase_plan.json",
+  "frozen_plan_sha256": "92c7d179428216cfd4c9a47f2636bc7d7cfa8311025100d72dcb299e2f977fa4",
+  "group_id": "d001-ii-package103-safety-pk-exposure-statistical-boundary",
+  "mode": "dry_run_prepare",
+  "owned_source_refs": [
+    "body.p1224",
+    "body.p1226",
+    "body.p1227",
+    "body.p1228",
+    "body.p1229",
+    "body.p1230",
+    "body.p1231",
+    "body.p1232",
+    "body.p1233",
+    "body.p1234",
+    "body.p1235"
+  ],
+  "parent_phase_qc_path": null,
+  "parent_phase_qc_sha256": null,
+  "prompt_char_count": 32853,
+  "prompt_sha256": "e3ac8b38cb87e421e6e5dc02248a4fe6df18e72cec8d4da06100ab4971e222a7",
+  "prompt_template_sha256": "88335a5f2c79ea12bec07eac832496529ead1b05fe359542873e5d54748c5650",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "replay_mode": "product_protocol_control_agent_runner_mtplx",
+  "task_id": "phase5-slice61cp-20260830",
+  "worker": "codex-parent"
+}

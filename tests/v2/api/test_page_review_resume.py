@@ -226,7 +226,10 @@ def test_resume_refuses_changed_main_reader_identity(client, monkeypatch):
     runtime = _prepare_runtime(client, monkeypatch)
     _, url, job_id = _cancelled_queued_job(client, monkeypatch, "resume-main-reader")
     routes = dict(runtime._routes)
-    routes[PageReviewLane.MAIN_A] = replace(routes[PageReviewLane.MAIN_A], reasoning_effort="high")
+    original_route = routes[PageReviewLane.MAIN_A]
+    routes[PageReviewLane.MAIN_A] = replace(original_route,
+        reasoning_effort="xhigh" if original_route.reasoning_effort == "high" else "high")
+    assert routes[PageReviewLane.MAIN_A].reasoning_effort != original_route.reasoning_effort
     monkeypatch.setattr(runtime, "_routes", routes)
     refused = _resume(client, url, job_id)
     assert refused.status_code == 409, refused.text

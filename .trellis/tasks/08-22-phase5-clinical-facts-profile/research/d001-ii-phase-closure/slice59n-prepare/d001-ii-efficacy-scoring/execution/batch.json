@@ -1,0 +1,1119 @@
+{
+  "batch_id": "pcb-828b895e214c32cd45f1a18f",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [
+    "body.p316",
+    "body.p633",
+    "body.p634",
+    "body.p635",
+    "body.p636",
+    "body.p885",
+    "body.t5.r22.c0.p0",
+    "body.t5.r22.c1.p0",
+    "body.t5.r22.c2.p0",
+    "body.t5.r22.c3.p0",
+    "body.t5.r22.c4.p0",
+    "body.t5.r22.c5.p0",
+    "body.t5.r22.c6.p0",
+    "body.t5.r22.c7.p0",
+    "body.t5.r22.c8.p0",
+    "body.t5.r22.c9.p0",
+    "body.t5.r23.c0.p0",
+    "body.t5.r23.c1.p0",
+    "body.t5.r23.c2.p0",
+    "body.t5.r23.c3.p0",
+    "body.t5.r23.c4.p0",
+    "body.t5.r23.c5.p0",
+    "body.t5.r23.c6.p0",
+    "body.t5.r23.c7.p0",
+    "body.t5.r23.c8.p0",
+    "body.t5.r23.c9.p0",
+    "body.t5.r24.c0.p0",
+    "body.t5.r24.c1.p0",
+    "body.t5.r24.c2.p0",
+    "body.t5.r24.c3.p0",
+    "body.t5.r24.c4.p0",
+    "body.t5.r24.c5.p0",
+    "body.t5.r24.c6.p0",
+    "body.t5.r24.c7.p0",
+    "body.t5.r24.c8.p0",
+    "body.t5.r24.c9.p0",
+    "body.t5.r25.c0.p0",
+    "body.t5.r25.c3.p0",
+    "body.t5.r25.c5.p0",
+    "body.t5.r25.c6.p0",
+    "body.t5.r25.c7.p0",
+    "body.t5.r25.c8.p0",
+    "body.t5.r25.c9.p0"
+  ],
+  "context_structure_unit_ids": [
+    "su-94ab8f405752d11f31627e12",
+    "su-d70cabaf2c7d65e06abecf14",
+    "su-9bfd6c174ac65b84df527afc",
+    "su-ffd0f604f2ce0067f904f0f0",
+    "su-97caf64d089af9677d378f82",
+    "su-8c449f970af6ae7203786a13",
+    "su-63628185e0e3535a6544cc78",
+    "su-32ec48553dd1ff1b962ff70a",
+    "su-79143962cf3999a590a1ed1f",
+    "su-8c8a34eb18d0139b009c191d"
+  ],
+  "context_units": [
+    {
+      "excerpt": "PASI评分 | X | （X） | X | X | X | X | X | X | X",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表",
+        "表 1 Ⅱ期临床研究阶段流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t5.r22.c0.p0",
+        "body.t5.r22.c1.p0",
+        "body.t5.r22.c2.p0",
+        "body.t5.r22.c3.p0",
+        "body.t5.r22.c4.p0",
+        "body.t5.r22.c5.p0",
+        "body.t5.r22.c6.p0",
+        "body.t5.r22.c7.p0",
+        "body.t5.r22.c8.p0",
+        "body.t5.r22.c9.p0"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 11511,
+      "source_ref": "body.t5.r22",
+      "source_span_ids": [
+        "body.t5.r22.c0.p0",
+        "body.t5.r22.c1.p0",
+        "body.t5.r22.c2.p0",
+        "body.t5.r22.c3.p0",
+        "body.t5.r22.c4.p0",
+        "body.t5.r22.c5.p0",
+        "body.t5.r22.c6.p0",
+        "body.t5.r22.c7.p0",
+        "body.t5.r22.c8.p0",
+        "body.t5.r22.c9.p0"
+      ],
+      "structure_unit_id": "su-94ab8f405752d11f31627e12",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "项目"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            22,
+            0
+          ],
+          [
+            22,
+            1
+          ],
+          [
+            22,
+            2
+          ],
+          [
+            22,
+            3
+          ],
+          [
+            22,
+            4
+          ],
+          [
+            22,
+            5
+          ],
+          [
+            22,
+            6
+          ],
+          [
+            22,
+            7
+          ],
+          [
+            22,
+            8
+          ],
+          [
+            22,
+            9
+          ]
+        ],
+        "row_headers": [
+          "PASI评分"
+        ],
+        "row_index": 22,
+        "table_path": [
+          22,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    },
+    {
+      "excerpt": "PGA评分 | X | （X） | X | X | X | X | X | X | X",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表",
+        "表 1 Ⅱ期临床研究阶段流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t5.r23.c0.p0",
+        "body.t5.r23.c1.p0",
+        "body.t5.r23.c2.p0",
+        "body.t5.r23.c3.p0",
+        "body.t5.r23.c4.p0",
+        "body.t5.r23.c5.p0",
+        "body.t5.r23.c6.p0",
+        "body.t5.r23.c7.p0",
+        "body.t5.r23.c8.p0",
+        "body.t5.r23.c9.p0"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 11611,
+      "source_ref": "body.t5.r23",
+      "source_span_ids": [
+        "body.t5.r23.c0.p0",
+        "body.t5.r23.c1.p0",
+        "body.t5.r23.c2.p0",
+        "body.t5.r23.c3.p0",
+        "body.t5.r23.c4.p0",
+        "body.t5.r23.c5.p0",
+        "body.t5.r23.c6.p0",
+        "body.t5.r23.c7.p0",
+        "body.t5.r23.c8.p0",
+        "body.t5.r23.c9.p0"
+      ],
+      "structure_unit_id": "su-d70cabaf2c7d65e06abecf14",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "项目"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            23,
+            0
+          ],
+          [
+            23,
+            1
+          ],
+          [
+            23,
+            2
+          ],
+          [
+            23,
+            3
+          ],
+          [
+            23,
+            4
+          ],
+          [
+            23,
+            5
+          ],
+          [
+            23,
+            6
+          ],
+          [
+            23,
+            7
+          ],
+          [
+            23,
+            8
+          ],
+          [
+            23,
+            9
+          ]
+        ],
+        "row_headers": [
+          "PGA评分"
+        ],
+        "row_index": 23,
+        "table_path": [
+          23,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    },
+    {
+      "excerpt": "BSA评分 | X | （X） | X | X | X | X | X | X | X",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表",
+        "表 1 Ⅱ期临床研究阶段流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t5.r24.c0.p0",
+        "body.t5.r24.c1.p0",
+        "body.t5.r24.c2.p0",
+        "body.t5.r24.c3.p0",
+        "body.t5.r24.c4.p0",
+        "body.t5.r24.c5.p0",
+        "body.t5.r24.c6.p0",
+        "body.t5.r24.c7.p0",
+        "body.t5.r24.c8.p0",
+        "body.t5.r24.c9.p0"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 11711,
+      "source_ref": "body.t5.r24",
+      "source_span_ids": [
+        "body.t5.r24.c0.p0",
+        "body.t5.r24.c1.p0",
+        "body.t5.r24.c2.p0",
+        "body.t5.r24.c3.p0",
+        "body.t5.r24.c4.p0",
+        "body.t5.r24.c5.p0",
+        "body.t5.r24.c6.p0",
+        "body.t5.r24.c7.p0",
+        "body.t5.r24.c8.p0",
+        "body.t5.r24.c9.p0"
+      ],
+      "structure_unit_id": "su-9bfd6c174ac65b84df527afc",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "项目"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            24,
+            0
+          ],
+          [
+            24,
+            1
+          ],
+          [
+            24,
+            2
+          ],
+          [
+            24,
+            3
+          ],
+          [
+            24,
+            4
+          ],
+          [
+            24,
+            5
+          ],
+          [
+            24,
+            6
+          ],
+          [
+            24,
+            7
+          ],
+          [
+            24,
+            8
+          ],
+          [
+            24,
+            9
+          ]
+        ],
+        "row_headers": [
+          "BSA评分"
+        ],
+        "row_index": 24,
+        "table_path": [
+          24,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    },
+    {
+      "excerpt": "DLQI评分 | X | X | X | X | X | X",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表",
+        "表 1 Ⅱ期临床研究阶段流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t5.r25.c0.p0",
+        "body.t5.r25.c3.p0",
+        "body.t5.r25.c5.p0",
+        "body.t5.r25.c6.p0",
+        "body.t5.r25.c7.p0",
+        "body.t5.r25.c8.p0",
+        "body.t5.r25.c9.p0"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 11811,
+      "source_ref": "body.t5.r25",
+      "source_span_ids": [
+        "body.t5.r25.c0.p0",
+        "body.t5.r25.c3.p0",
+        "body.t5.r25.c5.p0",
+        "body.t5.r25.c6.p0",
+        "body.t5.r25.c7.p0",
+        "body.t5.r25.c8.p0",
+        "body.t5.r25.c9.p0"
+      ],
+      "structure_unit_id": "su-ffd0f604f2ce0067f904f0f0",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "项目"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            25,
+            0
+          ],
+          [
+            25,
+            3
+          ],
+          [
+            25,
+            5
+          ],
+          [
+            25,
+            6
+          ],
+          [
+            25,
+            7
+          ],
+          [
+            25,
+            8
+          ],
+          [
+            25,
+            9
+          ]
+        ],
+        "row_headers": [
+          "DLQI评分"
+        ],
+        "row_index": 25,
+        "table_path": [
+          25,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    },
+    {
+      "excerpt": "如果筛选访视和D1访视间隔≤7天，则筛选和基线访视可合并进行，两次访视中相同的评估事项可只进行一次。如果筛选访视和D1访视间隔＞7天，则需在D1天前7天内进行基线访视。以给药前最近一次评估结果作为基线值。生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值。",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p316"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 13070,
+      "source_ref": "body.p316",
+      "source_span_ids": [
+        "body.p316"
+      ],
+      "structure_unit_id": "su-97caf64d089af9677d378f82",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "筛选和基线时研究者评估斑块状银屑病病情满足以下要求：",
+      "heading_path": [
+        "研究人群",
+        "入选标准"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p633"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 23200,
+      "source_ref": "body.p633",
+      "source_span_ids": [
+        "body.p633"
+      ],
+      "structure_unit_id": "su-8c449f970af6ae7203786a13",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "银屑病面积与严重程度指数（PASI）评分≥12分；",
+      "heading_path": [
+        "研究人群",
+        "入选标准"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p634"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 23210,
+      "source_ref": "body.p634",
+      "source_span_ids": [
+        "body.p634"
+      ],
+      "structure_unit_id": "su-63628185e0e3535a6544cc78",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "医生整体评价（PGA）评分≥3分；",
+      "heading_path": [
+        "研究人群",
+        "入选标准"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p635"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 23220,
+      "source_ref": "body.p635",
+      "source_span_ids": [
+        "body.p635"
+      ],
+      "structure_unit_id": "su-32ec48553dd1ff1b962ff70a",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "受累的体表面积（BSA）≥10%；",
+      "heading_path": [
+        "研究人群",
+        "入选标准"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p636"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 23230,
+      "source_ref": "body.p636",
+      "source_span_ids": [
+        "body.p636"
+      ],
+      "structure_unit_id": "su-79143962cf3999a590a1ed1f",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "注：生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值，基线需再次审查入选和排除标准，对符合入选排除标准的参与者可进行随机分组，同时需要记录合并用药及不良事件。",
+      "heading_path": [
+        "研究评估和程序",
+        "访视安排",
+        "Ⅱ期临床研究阶段",
+        "治疗期"
+      ],
+      "is_footnote_or_note": true,
+      "member_source_refs": [
+        "body.p885"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 26510,
+      "source_ref": "body.p885",
+      "source_span_ids": [
+        "body.p885"
+      ],
+      "structure_unit_id": "su-8c8a34eb18d0139b009c191d",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "footnote_or_annotation"
+    }
+  ],
+  "coverage_manifest_id": "manifest:slice61bk-efficacy-scoring",
+  "known_official_targets": [
+    {
+      "catalog_item_id": "pcm-row-60a9e564dea57508635a69e8",
+      "label": "银屑病严重程度评分与体表面积",
+      "official_code": "IN-04",
+      "position": 3,
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "筛选和基线时研究者评估斑块状银屑病病情满足以下要求：",
+        "受累的体表面积（BSA）≥10%；",
+        "银屑病面积与严重程度指数（PASI）评分≥12分；",
+        "医生整体评价（PGA）评分≥3分；"
+      ],
+      "source_span_ids": [
+        "span-338d599c9415eacfef3a9e6318d446f1",
+        "span-a0fba80e691dc5da40936864a532ef71",
+        "span-b84426277f77479652ce573f743c5828",
+        "span-f523b13921987a5b1a3987b620467a37"
+      ]
+    }
+  ],
+  "known_procedure_targets": [
+    {
+      "catalog_item_id": "procedure:c4ab0ec230c36f41a03465d6c3699b09",
+      "covered_action_kinds": [],
+      "label": "PASI评分",
+      "position": 33,
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "semantic_family": null,
+      "source_excerpts": [
+        "PASI评分"
+      ],
+      "source_span_ids": [
+        "slice61bl-d001-v2-snapshot::body.t5.r22.c0.p0"
+      ],
+      "visit_instance": "筛选访视"
+    },
+    {
+      "catalog_item_id": "procedure:3e3078867072096a127973a83ae085db",
+      "covered_action_kinds": [],
+      "label": "PASI评分",
+      "position": 34,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "semantic_family": null,
+      "source_excerpts": [
+        "PASI评分"
+      ],
+      "source_span_ids": [
+        "slice61bl-d001-v2-snapshot::body.t5.r22.c0.p0"
+      ],
+      "visit_instance": "基线访视"
+    },
+    {
+      "catalog_item_id": "procedure:a93e077befe64c1b5e34423e1c30cf24",
+      "covered_action_kinds": [],
+      "label": "PASI评分",
+      "position": 35,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "semantic_family": null,
+      "source_excerpts": [
+        "PASI评分"
+      ],
+      "source_span_ids": [
+        "slice61bl-d001-v2-snapshot::body.t5.r22.c0.p0"
+      ],
+      "visit_instance": "D1给药前"
+    },
+    {
+      "catalog_item_id": "procedure:5b658d40ff62fdd47f1807313a7f60c6",
+      "covered_action_kinds": [],
+      "label": "PGA评分",
+      "position": 36,
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "semantic_family": null,
+      "source_excerpts": [
+        "PGA评分"
+      ],
+      "source_span_ids": [
+        "slice61bl-d001-v2-snapshot::body.t5.r23.c0.p0"
+      ],
+      "visit_instance": "筛选访视"
+    },
+    {
+      "catalog_item_id": "procedure:6ae9e85901fcd28781e80bdcf53d81b7",
+      "covered_action_kinds": [],
+      "label": "PGA评分",
+      "position": 37,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "semantic_family": null,
+      "source_excerpts": [
+        "PGA评分"
+      ],
+      "source_span_ids": [
+        "slice61bl-d001-v2-snapshot::body.t5.r23.c0.p0"
+      ],
+      "visit_instance": "基线访视"
+    },
+    {
+      "catalog_item_id": "procedure:c198be277b3d0024d14d4054ce8b7eaf",
+      "covered_action_kinds": [],
+      "label": "PGA评分",
+      "position": 38,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "semantic_family": null,
+      "source_excerpts": [
+        "PGA评分"
+      ],
+      "source_span_ids": [
+        "slice61bl-d001-v2-snapshot::body.t5.r23.c0.p0"
+      ],
+      "visit_instance": "D1给药前"
+    },
+    {
+      "catalog_item_id": "procedure:631d6a669a70c8cfb27883d62adb1263",
+      "covered_action_kinds": [],
+      "label": "BSA评分",
+      "position": 39,
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "semantic_family": null,
+      "source_excerpts": [
+        "BSA评分"
+      ],
+      "source_span_ids": [
+        "slice61bl-d001-v2-snapshot::body.t5.r24.c0.p0"
+      ],
+      "visit_instance": "筛选访视"
+    },
+    {
+      "catalog_item_id": "procedure:a381746da2d4988688ea98230edad80c",
+      "covered_action_kinds": [],
+      "label": "BSA评分",
+      "position": 40,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "semantic_family": null,
+      "source_excerpts": [
+        "BSA评分"
+      ],
+      "source_span_ids": [
+        "slice61bl-d001-v2-snapshot::body.t5.r24.c0.p0"
+      ],
+      "visit_instance": "基线访视"
+    },
+    {
+      "catalog_item_id": "procedure:39c02ed8bac2ce26251b40e35dfc4f55",
+      "covered_action_kinds": [],
+      "label": "BSA评分",
+      "position": 41,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "semantic_family": null,
+      "source_excerpts": [
+        "BSA评分"
+      ],
+      "source_span_ids": [
+        "slice61bl-d001-v2-snapshot::body.t5.r24.c0.p0"
+      ],
+      "visit_instance": "D1给药前"
+    },
+    {
+      "catalog_item_id": "procedure:faa0ff5256b87d5edfe8b14d18efabba",
+      "covered_action_kinds": [],
+      "label": "DLQI评分",
+      "position": 42,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "semantic_family": null,
+      "source_excerpts": [
+        "DLQI评分"
+      ],
+      "source_span_ids": [
+        "slice61bl-d001-v2-snapshot::body.t5.r25.c0.p0"
+      ],
+      "visit_instance": "D1给药前"
+    },
+    {
+      "catalog_item_id": "pcm-row-f706d9b42eab4823b232df04",
+      "covered_action_kinds": [],
+      "label": "入排标准审核",
+      "position": 57,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "semantic_family": null,
+      "source_excerpts": [
+        "注：生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值，基线需再次审查入选和排除标准，对符合入选排除标准的参与者可进行随机分组，同时需要记录合并用药及不良事件。"
+      ],
+      "source_span_ids": [
+        "span-95152191c44012a3e06ff88e1605acc5"
+      ],
+      "visit_instance": "D1给药前"
+    }
+  ],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "D1给药前",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "D1给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {},
+  "owned_required_action_kinds_by_structure_unit_id": {},
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.p819",
+    "body.p820",
+    "body.p821",
+    "body.p822",
+    "body.p823",
+    "body.p824",
+    "body.p825",
+    "body.p826",
+    "body.p827"
+  ],
+  "owned_structure_unit_ids": [
+    "su-5b68363eeee710dce3e66c03",
+    "su-4b8b1f21ec3afc8b3f90fede",
+    "su-f17962eb229797524736e432",
+    "su-4a56866bbf64df4acb399ba8",
+    "su-5433d768c6df4a1c7531ee50",
+    "su-2500e2723112e896345c33ab",
+    "su-baddf307128adae6b6fc9908",
+    "su-c984573a961144b7ecb4f8df",
+    "su-e57454fe5ea551f89bf26390"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "疗效评价",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "疗效评价"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p819"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25850,
+      "source_ref": "body.p819",
+      "source_span_ids": [
+        "body.p819"
+      ],
+      "structure_unit_id": "su-5b68363eeee710dce3e66c03",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "银屑病面积和严重程度指数（PASI）",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "疗效评价"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p820"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25860,
+      "source_ref": "body.p820",
+      "source_span_ids": [
+        "body.p820"
+      ],
+      "structure_unit_id": "su-4b8b1f21ec3afc8b3f90fede",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "PASI评分是综合皮损严重程度（包括红斑、厚度、鳞屑）及皮损面积对银屑病严重程度进行定量评价^[9]。PASI评分在0-72分之间，分数越高表示程度越严重。评分细则见附录4。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "疗效评价"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p821"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25870,
+      "source_ref": "body.p821",
+      "source_span_ids": [
+        "body.p821"
+      ],
+      "structure_unit_id": "su-f17962eb229797524736e432",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "医生整体评估（PGA）",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "疗效评价"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p822"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25880,
+      "source_ref": "body.p822",
+      "source_span_ids": [
+        "body.p822"
+      ],
+      "structure_unit_id": "su-4a56866bbf64df4acb399ba8",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "PGA是根据患者红斑、鳞屑和斑块厚度整体情况进行评分^[10]。PGA评分在0-4分之间，分数越高表示程度越严重。评分细则见附录5。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "疗效评价"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p823"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25890,
+      "source_ref": "body.p823",
+      "source_span_ids": [
+        "body.p823"
+      ],
+      "structure_unit_id": "su-5433d768c6df4a1c7531ee50",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "受累的体表面积（BSA）",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "疗效评价"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p824"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25900,
+      "source_ref": "body.p824",
+      "source_span_ids": [
+        "body.p824"
+      ],
+      "structure_unit_id": "su-2500e2723112e896345c33ab",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "BSA是将患者单个手掌及手指屈侧面积定义为人体表面积的1%^[11]，评估患者全身皮损总和达到多少个手掌面积，记为BSA。参与者BSA评分在0%-100%之间，分数越大表示皮损面积越大。评分细则见“疗效评价SOP”文件。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "疗效评价"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p825"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25910,
+      "source_ref": "body.p825",
+      "source_span_ids": [
+        "body.p825"
+      ],
+      "structure_unit_id": "su-baddf307128adae6b6fc9908",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "皮肤病学生活质量指数（DLQI）",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "疗效评价"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p826"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25920,
+      "source_ref": "body.p826",
+      "source_span_ids": [
+        "body.p826"
+      ],
+      "structure_unit_id": "su-c984573a961144b7ecb4f8df",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "DLQI是一份包含10个问题的问卷，用于评估上1周内患者主观感受因疾病对生活质量所造成的影响^[12]。DLQI评分在0-30分之间，分数越高表示生活质量受损越严重。DLQI评分细则见附录6。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "疗效评价"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p827"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25930,
+      "source_ref": "body.p827",
+      "source_span_ids": [
+        "body.p827"
+      ],
+      "structure_unit_id": "su-e57454fe5ea551f89bf26390",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [
+    "su-f17962eb229797524736e432",
+    "su-5433d768c6df4a1c7531ee50",
+    "su-baddf307128adae6b6fc9908",
+    "su-e57454fe5ea551f89bf26390"
+  ],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [
+    "su-5b68363eeee710dce3e66c03",
+    "su-4b8b1f21ec3afc8b3f90fede",
+    "su-4a56866bbf64df4acb399ba8",
+    "su-2500e2723112e896345c33ab",
+    "su-c984573a961144b7ecb4f8df"
+  ],
+  "study_phase": "phase_ii"
+}

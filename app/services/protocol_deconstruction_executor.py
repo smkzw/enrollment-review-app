@@ -42,7 +42,14 @@ from app.agents.protocol_semantic_model_router import (
 from app.config import DECONSTRUCT_BACKEND, DECONSTRUCT_ROUTE_MODE, DEEPSEEK_API_KEY
 from app.domain.contracts.agents import PromptVersion
 from app.domain.contracts.agent_io import ProtocolDeconstructionInput
-from app.domain.contracts.enums import AgentNode, ExtractionStatus, PhaseScope, RenderStatus, StudyPhase
+from app.domain.contracts.enums import (
+    AgentNode,
+    ExtractionStatus,
+    JobEventType,
+    PhaseScope,
+    RenderStatus,
+    StudyPhase,
+)
 from app.domain.contracts.protocol_ingestion import (
     ProtocolExtractionSnapshot,
     ProtocolSourceArtifact,
@@ -190,6 +197,61 @@ class _ProtocolSemanticBatchFileCache(ProtocolSemanticBatchCache):
         )
 
 
+SEMANTIC_PREVIEW_CONTRACT = "protocol-semantic-preview/v1"
+
+
+def _semantic_preview_path(data_paths: DataPaths, job_id: str) -> Path:
+    return data_paths.blobs_dir / "protocol-semantic-preview" / job_id / "partial-candidate.json"
+
+
+def _persist_semantic_batch_progress(
+    config: ProtocolDeconstructionExecutorConfig,
+    job_id: str,
+    batch_index: int,
+    batch_total: int,
+    candidate: Any,
+) -> None:
+    """逐批持久化已验证语义候选：预览文件 + 任务进度事件（只读投影，非正式草稿）。
+
+    与批缓存不同，这里保存的是“截至本批的合并候选”，供工作台在生成期间
+    只读预览；发布权威仍只来自完整运行结束后的不可变草稿 revision。
+    """
+    candidate_payload = candidate.model_dump(mode="json")
+    rule_codes = [rule.official_code for rule in candidate.proposed_rules]
+    record = {
+        "contract": SEMANTIC_PREVIEW_CONTRACT,
+        "job_id": job_id,
+        "batch_index": batch_index,
+        "batch_total": batch_total,
+        "updated_at": config.now().isoformat(),
+        "rule_codes": rule_codes,
+        "rule_count": len(rule_codes),
+        "unresolved_count": len(candidate.unresolved_items),
+        "candidate": candidate_payload,
+    }
+    path = _semantic_preview_path(config.data_paths, job_id)
+    config.data_paths.boundary.atomic_write_bytes(
+        path,
+        json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8"),
+    )
+    with config.session_factory() as session, session.begin():
+        store = JobStore(session, now=config.now)
+        store.append_event(
+            store.make_event(
+                job_id=job_id,
+                event_type=JobEventType.SEMANTIC_BATCH_PROGRESS,
+                step_id=STEP_GENERATE,
+                progress_completed=batch_index,
+                progress_total=batch_total,
+                payload={
+                    "进度说明": f"已生成语义批次 {batch_index}/{batch_total}（{len(rule_codes)} 条父规则已有候选）",
+                    "规则编号": rule_codes,
+                    "未决数": len(candidate.unresolved_items),
+                },
+            )
+        )
+
+
 def create_protocol_deconstruction_executor(
     config: ProtocolDeconstructionExecutorConfig,
 ) -> StepExecutor:
@@ -208,6 +270,12 @@ def create_protocol_deconstruction_executor(
             STEP_INTEGRITY: lambda ctx: _handle_integrity(ctx, config),
         }
         try:
+            from app.llm.mtplx_model_lifecycle import MtplxOwnershipError, require_local_deployment_job
+
+            try:
+                require_local_deployment_job(context.job_payload)
+            except MtplxOwnershipError as exc:
+                raise StepFailure(retryable=False, error_code="MODEL_DEPLOYMENT_CHANGED", detail=str(exc)) from exc
             handler = handlers.get(context.step_id)
             if handler is None:
                 raise StepFailure(
@@ -619,6 +687,7 @@ def _run_semantic_generation_with_routing(
     config: ProtocolDeconstructionExecutorConfig,
     package: ProtocolDeconstructionInputPackage,
     prompt_version: PromptVersion,
+    batch_progress: Callable[[int, int, Any], None] | None = None,
 ) -> tuple[ProtocolDeconstructionRunResult, dict[str, Any]]:
     """Run whole-attempt graded fallback with an auditable candidate ledger."""
 
@@ -636,6 +705,7 @@ def _run_semantic_generation_with_routing(
             source_spans=package.source_spans,
             batch_cache=batch_cache,
             transport_factory=config.transport_factory,
+            batch_progress=batch_progress,
         )
         backend = getattr(transport, "_backend", "injected")
         model = getattr(transport, "_model", "injected")
@@ -675,6 +745,7 @@ def _run_semantic_generation_with_routing(
             source_spans=package.source_spans,
             batch_cache=batch_cache,
             transport_factory=lambda: _resolve_transport(config),
+            batch_progress=batch_progress,
         )
         outcome, error_class, session_id = summarize_run_result_for_route(result)
         candidate = select_protocol_semantic_route_candidates(
@@ -769,6 +840,7 @@ def _run_semantic_generation_with_routing(
                 transport_factory=lambda candidate=candidate: build_transport_for_candidate(
                     candidate
                 ),
+                batch_progress=batch_progress,
             )
         except ProtocolAgentCallError as exc:
             error_code = getattr(exc, "error_code", "SEMANTIC_CALL_FAILED")
@@ -1035,6 +1107,11 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
             template_sha256=protocol_prompt_template_sha256(config.prompt_template),
             schema_version_id="protocol-deconstruction-draft/v1",
         )
+        batch_progress: Callable[[int, int, Any], None] = (
+            lambda batch_index, batch_total, candidate: _persist_semantic_batch_progress(
+                config, context.job_id, batch_index, batch_total, candidate
+            )
+        )
         if config.draft_response_builder is not None:
             draft_json = config.draft_response_builder(package)
             transport = _FakeSingleResponseTransport(draft_json)
@@ -1050,6 +1127,7 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
                         config.data_paths,
                         context.job_id,
                     ),
+                    batch_progress=batch_progress,
                 )
             except ProtocolAgentCallError as exc:
                 error_code = getattr(exc, "error_code", "SEMANTIC_CALL_FAILED")
@@ -1065,6 +1143,7 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
                     config=config,
                     package=package,
                     prompt_version=prompt_version,
+                    batch_progress=batch_progress,
                 )
             except ProtocolAgentCallError as exc:
                 error_code = getattr(exc, "error_code", "SEMANTIC_CALL_FAILED")

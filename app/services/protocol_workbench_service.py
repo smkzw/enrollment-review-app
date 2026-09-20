@@ -8,6 +8,7 @@ HTTP 层只做协议转换；本服务复用持久 Job、Slice 1–4 领域服�
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import re
 import uuid
@@ -18,10 +19,12 @@ from typing import Any, Callable, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
+from app.llm.mtplx_model_lifecycle import local_deployment_job_fields
 
 from app.domain.contracts.agent_io import (
     ProtocolDeconstructionDraft,
     ProtocolDeconstructionInput,
+    ProtocolSemanticDeconstructionCandidate,
 )
 from app.domain.contracts.common import DateValue
 from app.domain.contracts.enums import DatePrecision, MetadataResolutionStatus, StudyPhase
@@ -544,6 +547,7 @@ class ProtocolWorkbenchService:
         # 抢到租约，也能从持久任务输入恢复 register_file 步骤。
         payload = {
             "session_kind": "first_deconstruction",
+            **local_deployment_job_fields(),
             "file_name": display_name,
             "sha256": artifact.sha256,
             "mime_type": artifact.mime_type,
@@ -662,6 +666,7 @@ class ProtocolWorkbenchService:
         target_version = target_project.protocol_version
         payload = {
             "session_kind": "re_deconstruction",
+            **local_deployment_job_fields(),
             "file_name": display_name,
             "sha256": artifact.sha256,
             "mime_type": artifact.mime_type,
@@ -863,6 +868,7 @@ class ProtocolWorkbenchService:
         payload = {
             "session_kind": "re_deconstruction",
             "re_deconstruction_origin": "formal_feedback",
+            **local_deployment_job_fields(),
             "file_name": file_name,
             "source_artifact_id": source_context.get("source_artifact_id"),
             "actor": actor,
@@ -1100,6 +1106,61 @@ class ProtocolWorkbenchService:
             revision=revision,
             diff=diff_payload,
         )
+
+    def get_generation_preview(self, job_id: str) -> dict[str, Any]:
+        """生成期间的逐批只读预览：来自已验证批次的合并候选，非正式草稿。
+
+        只有当任务尚未产生正式草稿 revision、且冻结输入与逐批预览文件都存在时
+        才返回内容；任何解析失败都返回不可用状态，而不是把残缺内容当作预览。
+        """
+        from app.agents.protocol_deconstructor import hydrate_semantic_preview
+        from app.services.protocol_deconstruction_executor import (
+            SEMANTIC_PREVIEW_CONTRACT,
+            _semantic_preview_path,
+        )
+
+        merged = self._merged_payload(job_id)
+        self._require_protocol_job(job_id)
+        unavailable = lambda reason, detail=None: {  # noqa: E731
+            "job_id": job_id,
+            "available": False,
+            "reason": reason,
+            "detail": detail,
+        }
+        if merged.get("draft_revision_id"):
+            return unavailable("final_draft_ready", "本轮生成已完成，请查看正式草稿。")
+        source_input_payload = merged.get("source_input")
+        if not isinstance(source_input_payload, dict):
+            return unavailable("not_started", "解构输入尚未冻结，还没有可预览的内容。")
+        path = _semantic_preview_path(self.data_paths, job_id)
+        if not path.is_file() or path.is_symlink():
+            return unavailable(
+                "no_batch_ready", "首批语义候选尚未生成完成，请稍候。"
+            )
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+            if record.get("contract") != SEMANTIC_PREVIEW_CONTRACT:
+                return unavailable("unreadable", "预览记录版本不匹配，已停止显示。")
+            candidate = ProtocolSemanticDeconstructionCandidate.model_validate(
+                record.get("candidate")
+            )
+            source_input = ProtocolDeconstructionInput.model_validate(
+                source_input_payload
+            )
+            draft, pending_codes = hydrate_semantic_preview(source_input, candidate)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            return unavailable("unreadable", f"预览内容暂时无法读取：{exc}")
+        return {
+            "job_id": job_id,
+            "available": True,
+            "preview_only": True,
+            "batch_index": int(record.get("batch_index", 0)),
+            "batch_total": int(record.get("batch_total", 0)),
+            "updated_at": str(record.get("updated_at", "")),
+            "pending_codes": pending_codes,
+            "unresolved_count": len(candidate.unresolved_items),
+            "content": draft.model_dump(mode="json"),
+        }
 
     def get_draft_comparison(self, job_id: str) -> DraftComparisonView:
         """当前正式草稿与新草稿的并列比较（重新解构）。
@@ -2093,6 +2154,8 @@ class ProtocolWorkbenchService:
         *,
         idempotency_key: str,
         actor: str,
+        control_job_id: str | None = None,
+        control_checkpoint_id: str | None = None,
     ) -> PublicationView:
         merged = self._merged_payload(job_id)
         self._require_protocol_job(job_id)
@@ -2119,6 +2182,8 @@ class ProtocolWorkbenchService:
                     source_spans=spans,
                     actor=actor,
                     published_at=self.now(),
+                    control_job_id=control_job_id,
+                    control_checkpoint_id=control_checkpoint_id,
                 )
             )
         except PublicationGateError as exc:
@@ -2176,6 +2241,8 @@ class ProtocolWorkbenchService:
         *,
         idempotency_key: str,
         actor: str,
+        control_job_id: str | None = None,
+        control_checkpoint_id: str | None = None,
     ) -> PublicationView:
         """同谱系同期别发布编排：复用既有原子发布事务，把新草稿作为目标项目的
         新的不可变规则版本写入。目标项目在创建任务时已持久保存；谱系与期别一致
@@ -2223,6 +2290,8 @@ class ProtocolWorkbenchService:
                     published_at=self.now(),
                     project_id=target_project_id,
                     protocol_version_id=new_version_id,
+                    control_job_id=control_job_id,
+                    control_checkpoint_id=control_checkpoint_id,
                     expected_rule_set_revision=merged.get(
                         "target_rule_set_revision"
                     ),

@@ -39,6 +39,7 @@ const ANCHOR_LABELS: Record<string, string> = {
   study_completion_date: "研究完成日期",
   event_date: "相关事件日期",
   current_review_date: "本次审核日期",
+  review_node_date: "当前审核节点日期",
 };
 
 const DIRECTION_LABELS: Record<string, string> = {

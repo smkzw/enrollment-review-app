@@ -5,13 +5,17 @@ This adapter is deliberately separate from
 uses a different strict response Schema and must never be silently reused for
 protocol-control candidate drafts.
 
-The product path defaults to MTPLX with medium reasoning, temperature 0, the
-configured MTPLX batch output budget, and
+The product path follows the configured control route (currently the GLM
+Coding Plan profile) with the configured reasoning effort, the provider's own
+sampling defaults (no ``temperature`` is sent unless an explicit value is
+configured), the configured control output budget, and
 :func:`protocol_control_agent_response_format`.  Repair calls keep one
 immutable local message history keyed by session_id; there is no provider-side
 session and no silent semantic-model fallback.  In-call length/empty-body
 retries stay ephemeral: ``history()`` exposes only logical user prompts and
-final complete JSON so ``restore_history()`` can resume the same session.
+final complete JSON so ``restore_history()`` can resume the same session.  A
+length finish may raise the shared reasoning+content budget once, capped at
+``PROTOCOL_CONTROL_LENGTH_RETRY_MAX_TOKENS``.
 
 Before the first semantic request the transport positively matches the
 configured model against the model ids the service actually reports via
@@ -41,6 +45,8 @@ from app.agents.protocol_control_deconstructor import (
     protocol_control_agent_response_format,
 )
 from app.config import (
+    DECONSTRUCT_GLM_API_KEY,
+    DECONSTRUCT_GLM_BASE_URL,
     DEEPSEEK_API_KEY,
     DEEPSEEK_BASE_URL,
     MTPLX_API_KEY,
@@ -62,6 +68,9 @@ __all__ = [
     "OpenAICompatibleProtocolControlAgentTransport",
     "OpenAICompatibleProtocolControlTransport",
     "PROTOCOL_CONTROL_BACKEND",
+    "PROTOCOL_CONTROL_GLM_API_KEY",
+    "PROTOCOL_CONTROL_GLM_BASE_URL",
+    "PROTOCOL_CONTROL_LENGTH_RETRY_MAX_TOKENS",
     "PROTOCOL_CONTROL_MAX_TOKENS",
     "PROTOCOL_CONTROL_MODEL",
     "PROTOCOL_CONTROL_REASONING_EFFORT",
@@ -82,13 +91,36 @@ __all__ = [
 CONTROL_RESPONSE_FORMAT_NAME = "protocol_control_agent_wire_v1"
 _LOCAL_BACKENDS = frozenset({"omlx", "local-omlx", "mtplx", "mtplx-api"})
 _MTPLX_BACKENDS = frozenset({"mtplx", "mtplx-api"})
+_ZHIPU_BACKENDS = frozenset({"zhipu-coding-plan", "glm"})
 _SUPPORTED_BACKENDS = frozenset(
-    {"mtplx", "mtplx-api", "omlx", "local-omlx", "deepseek", "deepseek-api"}
+    {
+        "mtplx",
+        "mtplx-api",
+        "omlx",
+        "local-omlx",
+        "deepseek",
+        "deepseek-api",
+        *_ZHIPU_BACKENDS,
+    }
 )
 _DEFAULT_TIMEOUT_SECONDS = 600.0
 _DEFAULT_MAX_TOKENS = 8192
+# A single length-finish retry may raise the shared reasoning+content budget
+# once, up to this ceiling (R3 design §6.1); it is never raised silently twice.
+PROTOCOL_CONTROL_LENGTH_RETRY_MAX_TOKENS = 131072
 _SUPPORTED_REASONING_EFFORTS = frozenset(
     {"", "default", "auto", "low", "medium", "high", "xhigh", "max"}
+)
+_SUPPORTED_GLM_CONTROL_REASONING_EFFORTS = frozenset({"low", "high", "max"})
+
+# The GLM control route reuses the approved Coding Plan endpoint and the same
+# BigModel credential chain as protocol-semantic deconstruction; a dedicated
+# PROTOCOL_CONTROL_GLM_* override stays available and wins when configured.
+PROTOCOL_CONTROL_GLM_BASE_URL = os.getenv(
+    "PROTOCOL_CONTROL_GLM_BASE_URL", DECONSTRUCT_GLM_BASE_URL
+).strip()
+PROTOCOL_CONTROL_GLM_API_KEY = (
+    os.getenv("PROTOCOL_CONTROL_GLM_API_KEY", "").strip() or DECONSTRUCT_GLM_API_KEY
 )
 
 
@@ -97,6 +129,37 @@ def _with_v1_suffix(base_url: str) -> str:
     if not normalized:
         raise ValueError("协议控制模型服务 base_url 不能为空")
     return normalized if normalized.endswith("/v1") else normalized + "/v1"
+
+
+def _normalize_zhipu_coding_plan_base_url(base_url: str) -> str:
+    """Keep Coding Plan ``.../paas/v4`` paths; do not append a stray ``/v1``."""
+
+    normalized = base_url.strip().rstrip("/")
+    if not normalized:
+        raise ValueError("GLM 协议控制模型服务地址不能为空")
+    if normalized.endswith("/v1") and "/paas/v4" in normalized:
+        normalized = normalized[: -len("/v1")].rstrip("/")
+    return normalized
+
+
+def _map_glm_control_reasoning_effort(effort: str) -> str:
+    """Resolve the control effort onto GLM's low/high/max vocabulary.
+
+    An unsupported configured effort fails here instead of silently mapping
+    down; an unset value resolves to the configured control default.
+    """
+
+    selected = str(effort or "").strip().lower()
+    if selected in {"", "default", "auto"}:
+        selected = str(PROTOCOL_CONTROL_REASONING_EFFORT or "").strip().lower()
+    if selected in {"", "default", "auto"}:
+        selected = "high"
+    if selected not in _SUPPORTED_GLM_CONTROL_REASONING_EFFORTS:
+        raise ValueError(
+            "GLM 协议控制推理强度仅支持 low/high/max，"
+            f"当前值={selected or '空值'}"
+        )
+    return selected
 
 
 def _configured_value(name: str, fallback: str) -> str:
@@ -282,6 +345,10 @@ class OpenAICompatibleProtocolControlAgentTransport:
         ).strip().lower()
         if selected_effort not in _SUPPORTED_REASONING_EFFORTS:
             raise ValueError("reasoning_effort 不是受支持的推理强度")
+        if selected_backend in _ZHIPU_BACKENDS:
+            # Fail before any request on an effort GLM does not support
+            # (e.g. xhigh); never silently map it down.
+            selected_effort = _map_glm_control_reasoning_effort(selected_effort)
         selected_max_tokens = (
             max_tokens if max_tokens is not None else PROTOCOL_CONTROL_MAX_TOKENS
         )
@@ -293,7 +360,14 @@ class OpenAICompatibleProtocolControlAgentTransport:
                 if selected_backend in _MTPLX_BACKENDS
                 else OMLX_PROTOCOL_BATCH_MAX_TOKENS
             )
-            selected_max_tokens = min(selected_max_tokens, local_cap)
+            if selected_max_tokens > local_cap:
+                # An explicitly requested budget above the configured platform
+                # cap fails before any request; never silently min() shrink it.
+                raise ValueError(
+                    f"显式请求的协议控制输出预算 {selected_max_tokens} tokens 超过"
+                    f"平台批次上限 {local_cap}；请调高上限或降低请求，"
+                    "不会静默压缩显式请求。"
+                )
             if selected_max_tokens < _DEFAULT_MAX_TOKENS:
                 raise ValueError("本地协议控制批次输出上限不能低于 8192 tokens")
         if timeout <= 0:
@@ -329,6 +403,11 @@ class OpenAICompatibleProtocolControlAgentTransport:
         )
 
         self._backend = selected_backend
+        self._output_budget_limit = (
+            min(local_cap, PROTOCOL_CONTROL_LENGTH_RETRY_MAX_TOKENS)
+            if selected_backend in _LOCAL_BACKENDS
+            else PROTOCOL_CONTROL_LENGTH_RETRY_MAX_TOKENS
+        )
         self._provider = (provider or selected_backend).strip()
         self._model = selected_model
         self._reasoning_effort = selected_effort
@@ -364,6 +443,10 @@ class OpenAICompatibleProtocolControlAgentTransport:
                 selected_base_url = _configured_value(
                     "DEEPSEEK_BASE_URL", DEEPSEEK_BASE_URL
                 )
+            elif selected_backend in _ZHIPU_BACKENDS:
+                selected_base_url = _configured_value(
+                    "PROTOCOL_CONTROL_GLM_BASE_URL", PROTOCOL_CONTROL_GLM_BASE_URL
+                )
             else:
                 selected_base_url = os.getenv("PROTOCOL_CONTROL_BASE_URL", "")
         selected_api_key = api_key
@@ -380,6 +463,10 @@ class OpenAICompatibleProtocolControlAgentTransport:
                 selected_api_key = _configured_value(
                     "DEEPSEEK_API_KEY", DEEPSEEK_API_KEY
                 )
+            elif selected_backend in _ZHIPU_BACKENDS:
+                selected_api_key = _configured_value(
+                    "PROTOCOL_CONTROL_GLM_API_KEY", PROTOCOL_CONTROL_GLM_API_KEY
+                )
             else:
                 selected_api_key = os.getenv("PROTOCOL_CONTROL_API_KEY", "")
         if is_local:
@@ -392,13 +479,18 @@ class OpenAICompatibleProtocolControlAgentTransport:
             raise ValueError("远程协议控制模型服务尚未配置 api_key")
 
         client_options: dict[str, Any] = {
-            "base_url": _with_v1_suffix(selected_base_url),
+            "base_url": (
+                _normalize_zhipu_coding_plan_base_url(selected_base_url)
+                if selected_backend in _ZHIPU_BACKENDS
+                else _with_v1_suffix(selected_base_url)
+            ),
             "api_key": selected_api_key,
             "timeout": timeout,
             "max_retries": max_retries,
         }
-        if is_local:
-            # Local inference must never inherit a system HTTP proxy.
+        if is_local or selected_backend in _ZHIPU_BACKENDS:
+            # Local inference and BigModel Coding Plan calls must never inherit
+            # a system HTTP proxy (same rule as Independent VLM / semantic GLM).
             client_options["http_client"] = (
                 _http_client_factory or httpx.Client
             )(trust_env=False)
@@ -431,7 +523,7 @@ class OpenAICompatibleProtocolControlAgentTransport:
         return self._base_url
 
     @property
-    def temperature(self) -> float:
+    def temperature(self) -> float | None:
         return self._effective_temperature()
 
     @property
@@ -468,11 +560,10 @@ class OpenAICompatibleProtocolControlAgentTransport:
     def uses_control_response_format(self) -> bool:
         return True
 
-    def _effective_temperature(self) -> float:
-        if self._temperature is not None:
-            return self._temperature
-        # Product contract: protocol-control calls use temperature 0.
-        return 0.0
+    def _effective_temperature(self) -> float | None:
+        # Provider sampling defaults apply unless an explicit temperature is
+        # configured; an explicit 0.0 is honored as a real request value.
+        return self._temperature
 
     def _assert_identity_probe_availability(self) -> None:
         if (
@@ -516,6 +607,15 @@ class OpenAICompatibleProtocolControlAgentTransport:
         return ids
 
     def verify_model_identity(self, *, force: bool = False) -> str:
+        from app.llm.mtplx_model_lifecycle import sync_mtplx_model_session
+
+        with sync_mtplx_model_session(
+            self._backend, str(getattr(self._client, "base_url", "")),
+            self._model, self._reasoning_effort,
+        ):
+            return self._verify_model_identity(force=force)
+
+    def _verify_model_identity(self, *, force: bool = False) -> str:
         """Positively match the configured model against the served models.
 
         The matched served id is cached per transport; ``force=True`` re-probes
@@ -552,24 +652,67 @@ class OpenAICompatibleProtocolControlAgentTransport:
     def _ensure_model_identity_verified(self) -> None:
         if not self._model_identity_check or self._model_identity_verified is not None:
             return
-        self.verify_model_identity(force=True)
+        self._verify_model_identity(force=True)
 
     def _completion_kwargs(
         self,
         messages: list[dict[str, str]],
+        *,
+        max_tokens: int | None = None,
     ) -> dict[str, Any]:
         kwargs: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
-            "max_tokens": self._max_tokens,
+            "max_tokens": self._max_tokens if max_tokens is None else max_tokens,
             "response_format": self._response_format,
-            "temperature": self._effective_temperature(),
         }
+        if self._temperature is not None:
+            kwargs["temperature"] = self._temperature
         if self._reasoning_effort not in {"", "default", "auto"}:
             kwargs["reasoning_effort"] = self._reasoning_effort
         if self._backend in _MTPLX_BACKENDS:
             kwargs["extra_body"] = {"generation_mode": "ar"}
+        elif self._backend in _ZHIPU_BACKENDS:
+            kwargs["extra_body"] = {
+                "thinking": {"type": "enabled", "clear_thinking": False}
+            }
         return kwargs
+
+    @staticmethod
+    @staticmethod
+    def _stream_completion(client: Any, kwargs: dict[str, Any]) -> Any:
+        """全模型统一 streaming（2026-09-19 用户指令）：云路由器对非流式长生成
+        有队列等待上限（OmniRoute 504）；流式按块保活即不受限。重组为下游
+        已知的非流式响应对象；stream_options 不被支持时自动降级重试。"""
+        from types import SimpleNamespace
+
+        kwargs = dict(kwargs)
+        kwargs["stream"] = True
+        kwargs.setdefault("stream_options", {"include_usage": True})
+        try:
+            stream = client.chat.completions.create(**kwargs)
+        except Exception as exc:
+            if "stream_options" not in str(exc):
+                raise
+            kwargs.pop("stream_options", None)
+            stream = client.chat.completions.create(**kwargs)
+        content_parts: list[str] = []
+        finish_reason: str | None = None
+        for chunk in stream:
+            choices = getattr(chunk, "choices", None) or []
+            if not choices:
+                continue
+            choice = choices[0]
+            if getattr(choice, "finish_reason", None):
+                finish_reason = choice.finish_reason
+            delta = getattr(choice, "delta", None)
+            piece = getattr(delta, "content", None) if delta is not None else None
+            if piece:
+                content_parts.append(piece)
+        message = SimpleNamespace(content="".join(content_parts))
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=message, finish_reason=finish_reason or "未提供")]
+        )
 
     @staticmethod
     def _message_text(completion: Any) -> str:
@@ -583,6 +726,15 @@ class OpenAICompatibleProtocolControlAgentTransport:
         return text.strip()
 
     def _complete(self, messages: list[dict[str, str]]) -> str:
+        from app.llm.mtplx_model_lifecycle import sync_mtplx_model_session
+
+        with sync_mtplx_model_session(
+            self._backend, str(getattr(self._client, "base_url", "")),
+            self._model, self._reasoning_effort,
+        ):
+            return self._complete_owned(messages)
+
+    def _complete_owned(self, messages: list[dict[str, str]]) -> str:
         """Run one logical completion, with ephemeral in-call retries.
 
         Length/empty-body repair turns are used only for the live request and
@@ -596,10 +748,14 @@ class OpenAICompatibleProtocolControlAgentTransport:
         self._ensure_model_identity_verified()
         request_messages = [dict(message) for message in messages]
         diagnostics: list[str] = []
+        # One shared reasoning+content budget per logical request; a length
+        # finish may raise it once, capped, and never a second time.
+        request_budget = self._max_tokens
         for attempt in range(2):
             try:
-                completion = self._client.chat.completions.create(
-                    **self._completion_kwargs(request_messages)
+                completion = self._stream_completion(
+                    self._client,
+                    self._completion_kwargs(request_messages, max_tokens=request_budget),
                 )
             except (APITimeoutError, httpx.TimeoutException, TimeoutError) as exc:
                 raise _ProtocolControlRequestTimeout(
@@ -614,8 +770,24 @@ class OpenAICompatibleProtocolControlAgentTransport:
                 getattr(choices[0], "finish_reason", None) if choices else None
             )
             if finish_reason == "length":
-                diagnostics.append(f"第{attempt + 1}次输出达到长度上限")
+                diagnostics.append(
+                    f"第{attempt + 1}次输出达到长度上限（请求预算{request_budget} tokens）"
+                )
                 if attempt == 0:
+                    retry_budget = min(
+                        request_budget * 2,
+                        PROTOCOL_CONTROL_LENGTH_RETRY_MAX_TOKENS,
+                    )
+                    if retry_budget <= request_budget:
+                        break
+                    if retry_budget > self._output_budget_limit:
+                        diagnostics.append("扩大后的输出额度超过本地服务上限，未发送重试")
+                        break
+                    if retry_budget > request_budget:
+                        diagnostics.append(
+                            f"第2次请求预算提升至{retry_budget} tokens（最多一次）"
+                        )
+                    request_budget = retry_budget
                     partial = ""
                     message = getattr(choices[0], "message", None) if choices else None
                     content = getattr(message, "content", None)

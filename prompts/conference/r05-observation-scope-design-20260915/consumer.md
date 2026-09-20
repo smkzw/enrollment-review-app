@@ -1,0 +1,11 @@
+同会话定向源码续审。仍只读，不改文件/测试/模型/库/浏览器，不派发。返回完整报告，由runner保存。
+
+所有者已实现S4：qualified_proposition_evidence.py未决配对携带原fact/locator，qualified_binding_selection.py保存未选关系的原位置；control_calculation_experiment.py新增PropositionPairGap，核身份/事实/位置、配对不与已选关系重叠、保留实际疑问，只有原结论UNKNOWN时合并原因；control_review_outcome.py将对应义务的疑问原件位置带到报告，但不写used_fact_ids。版本consumer/v3、selection-consumer/v9、experiment/v9、evaluator/v13。请核这些完整函数及相邻消费，找来源错位或丢信息。允许同fact不同pair一条已核实一条未核实，这是合法场景；不接受你的“fact_id不能重叠”建议。
+
+S1暂未采用：旧scope_correspondence只核与观察范围的对应，不足以区分原文谈及范围中的一个事件还是对整个范围作总结，不能解释为新式完整性证明，更不能压过其他未决记录。
+拟用下一最小段（尚未实现）请挑战：在现有proposition_evidence同一次双读中新增assertion_extent=individual|entire_declared_scope|unresolved，entire须原文明确穷尽该scope的命题、逐字scope_quote且两路一致；不是档案是否齐全。无范围/部分/未定关系禁止entire。旧记录不补字段、版本升级使旧批准不继承。聚合仍保留原单向见证；反方向只在：非确定性any/all，有整范围明确陈述，两路源资格和日期均合格，没有该identity任何未决配对/UNKNOWN/来源冲突，所有合格内容配对均在核实关系中，无方向矛盾，才可据原文陈述给出相应结果。否则保留具体疑问，不把页面齐全作为证据。不新增模型请求或任务。
+请说明：这个extent字段是否足够定义其与relation的量词含义，是否仍存在“对任一事件的否定”被错当“所有事件均不存在”的歧义；建议更准确字段/条件，给最小修订，不要通过无期限保持UNKNOWN替代实现。
+
+S2有限观察集合采用逐成员原子方案，但不能强制所有any/all都转ALL；仅原文确为有限AND枚举时拆相应成员，原有OR与例外分支保留。S3最近/复查需区别最近实际发生日期、报告日期和原文明确复查取代；不把latest当所有复查。暂不在本段实施。
+
+本次没有新采信授权，最终统一评测及用户采用仍须完成；只提出可构建但未启用的方法。报告区分S4已改源码、S1设计建议，不宣称已实现S1或临床验收。输出文件路径由runner控制。

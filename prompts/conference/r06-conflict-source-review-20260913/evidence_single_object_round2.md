@@ -1,0 +1,12 @@
+This is targeted continuation round2 in the same read-only session. No source edits, model calls, DB/original access, delegation or internet.
+
+Owner decisions: remove eligibility identity remap; explicit missing references reject the projection. Preserve source vs clinical-correction lineage as different relationships. Preserve a genuinely new third-value dispute as a separate group, never drop an old member or adjudicate. Event/exposure-to-clause assessment remains a declared separate open issue, not claimed complete by this patch.
+
+Read the changed app/services/eligibility_review_projection.py, fact_publication_service.py ordering and _publish_conflicts, source_conflict_successors.py service/storage, and tests/v2/services/test_fact_publication_service.py. Both-sides reread now uses a source successor before detecting current roots; identical member sets are not duplicated. Replacement forks rejected; set no-op rejected. Three revisions for facts/events/exposures tested, original gate/locators/member parent links pinned. Eligibility stale reference tests inverted to reject, not removed.
+
+New tests/v2/services/test_source_conflict_corrections.py executes actual FactCorrectionJobService/JobRunner between source additions, verifies correction supersedes the source head, then source growth from correction root, no ancestor resurrection and old-run replay. It passed1 test. Relevant193 then209 tests passed at their prior snapshots; these are engineering checks, not clinical acceptance. Legacy conflict payload decode covered. Review remaining concrete defects or consumer inconsistency, especially same-member root skipping provenance, source/correction history and replay. Distinguish demonstrated errors from missing tests. Do not reread all earlier files without a dependency reason. Return bounded findings and whether the narrow source-only path is supportable; R06 and whole clinical acceptance remain open.
+
+Do not restart the task or open a new session. Codex has requested this continuation because the previous output needs additional quality work. Challenge your previous answer against every requirement, source boundary, edge case, and likely user/reviewer objection. Identify concrete omissions or contradictions and propose corrections.
+
+Return the complete updated Markdown output for your role. Keep evidence, inference,
+recommendation, and uncertainty separate. Codex remains the final authority.

@@ -42,6 +42,7 @@ from app.domain.contracts.protocol_metadata import (
     ProtocolIdentityDecision,
     StudyPhaseSelection,
 )
+from app.domain.contracts.occurrence_scope import OccurrenceScope
 from app.domain.contracts.rules import (
     AtomicExpression,
     AtomicPredicate,
@@ -3373,3 +3374,123 @@ def test_parent_mapping_duplicate_source_is_rejected():
         issue.issue_code == "PARENT_MAPPING_SOURCE_MISMATCH"
         for issue in _issues(result, "parent_catalog")
     )
+
+
+def _outdoor_frequency_expression() -> AtomicExpression:
+    """EX-04 反例形态：频次分母（1周≥4天）只出现在逐字来源与结构化窗口中。"""
+
+    return AtomicExpression(
+        predicate=AtomicPredicate(
+            predicate_id="predicate-outdoor-frequency",
+            subject="受试者",
+            attribute="无任何白天户外活动的天数",
+            source_term="1周内无任何白天户外活动的天数",
+            source_clause="定义为1周≥4天受试者无任何白天户外活动",
+            comparator=Comparator.GTE,
+            value=4,
+            unit="天",
+            occurrence_window=OccurrenceWindow(
+                duration=TimeQuantity(value=1, unit=TimeUnit.WEEK),
+                minimum_count=4,
+            ),
+        ),
+    )
+
+
+def test_frequency_denominator_in_clause_is_not_unanchored_lookback():
+    """EX-04 反例（2026-09-18 会商）：“1周≥4天”的频次分母不得同时触发
+    FREQUENCY_SOURCE_FORM_UNVERIFIED 与 TIME_ANCHOR_UNRESOLVED 双重误报；
+    结构化 occurrence_window 与逐字来源闭合时频次即视为已核对。"""
+    source_input, draft, source_spans = _fixture()
+    draft.proposed_rules[1].components[0].expression.children[0] = (
+        _outdoor_frequency_expression()
+    )
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=source_spans
+    )
+    codes = {
+        issue.issue_code
+        for check in result.checks
+        for issue in check.issues
+    }
+    assert "FREQUENCY_SOURCE_FORM_UNVERIFIED" not in codes
+    assert "TIME_ANCHOR_UNRESOLVED" not in codes
+    assert "FREQUENCY_WINDOW_NOT_STRUCTURED" not in codes
+
+
+def test_true_unanchored_lookback_still_blocks():
+    """EX-07x 形态：无命名锚点的“6个月内”既往回溯仍必须阻塞发布。"""
+    source_input, draft, source_spans = _fixture()
+    draft.proposed_rules[1].components[0].expression.children[0] = AtomicExpression(
+        predicate=AtomicPredicate(
+            predicate_id="predicate-helminth",
+            subject="受试者",
+            attribute="6个月内存在或疑似蠕虫感染",
+            source_term="6个月内存在或疑似蠕虫感染",
+            source_clause="6个月内存在或疑似蠕虫感染",
+            comparator=Comparator.EXISTS,
+            value=None,
+            unit=None,
+        ),
+    )
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=source_spans
+    )
+    codes = {
+        issue.issue_code
+        for check in result.checks
+        for issue in check.issues
+    }
+    assert "TIME_ANCHOR_UNRESOLVED" in codes
+
+
+def test_scoped_frequency_atom_needs_no_observation_policy():
+    """反例（2026-09-18 会商）：带scope频次窗口的原子按合同禁止携带
+    observation_policy（rules.py:363），其采用范围由频次结构自身表达；
+    门禁不得把此类原子的缺省policy记为观察来源缺失（EX-04 反例）。"""
+    source_input, draft, source_spans = _fixture()
+    draft.proposed_rules[1].components[0].expression.children[0] = AtomicExpression(
+        predicate=AtomicPredicate(
+            predicate_id="predicate-week-outdoor",
+            subject="受试者",
+            attribute="无任何白天户外活动的天数",
+            source_term="无任何白天户外活动的天数",
+            source_clause="1周≥4天无任何白天户外活动",
+            comparator=Comparator.GTE,
+            value=4,
+            unit="天",
+            occurrence_window=OccurrenceWindow(
+                duration=TimeQuantity(value=1, unit=TimeUnit.WEEK),
+                minimum_count=4,
+                scope=OccurrenceScope.model_validate({
+                    "version": "occurrence-scope/v4",
+                    "kind": "calendar_period",
+                    "quantifier": "every",
+                    "anchor_type": None,
+                    "source_excerpts": ["1周≥4天"],
+                    "unresolved_reason": None,
+                    "start_inclusive": None,
+                    "end_inclusive": None,
+                    "boundary_periods": None,
+                    "calendar_week_start": None,
+                    "duration_basis": None,
+                }),
+            ),
+        ),
+    )
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=source_spans
+    )
+    codes = {
+        issue.issue_code
+        for check in result.checks
+        for issue in check.issues
+    }
+    flagged = {
+        ref
+        for check in result.checks
+        for issue in check.issues
+        if issue.issue_code == "OBSERVATION_POLICY_SOURCE_UNVERIFIED"
+        for ref in issue.affected_refs
+    }
+    assert "predicate-week-outdoor" not in flagged

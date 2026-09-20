@@ -2586,6 +2586,9 @@ def _time_constraint_text(constraint: TimeConstraint) -> str:
         parts.append(f"{label}{_time_quantity(constraint.upper_bound)}")
     if constraint.half_life_multiplier is not None:
         parts.append(f"半衰期倍数={constraint.half_life_multiplier}")
+        if constraint.half_life_evidence is not None:
+            evidence = constraint.half_life_evidence
+            parts.append(f"半衰期依据：{evidence.applies_to_quote}，{evidence.duration_quote}；原文：{evidence.source_excerpt}")
     parts.append(f"允许部分日期={'是' if constraint.allow_partial_date else '否'}")
     return "；".join(parts)
 

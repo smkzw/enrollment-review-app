@@ -64,12 +64,14 @@ class EvidenceSidecarPreparationService:
         base_processing_revision_id: str,
         *,
         scanner_rule_version: str = OCR_RISK_RULE_VERSION,
+        inheritance_payload: dict | None = None,
     ) -> None:
         with self.session_factory() as session, session.begin():
             self.prepare_in_session(
                 session,
                 base_processing_revision_id,
                 scanner_rule_version=scanner_rule_version,
+                inheritance_payload=inheritance_payload,
             )
 
     def prepare_in_session(
@@ -78,10 +80,17 @@ class EvidenceSidecarPreparationService:
         base_processing_revision_id: str,
         *,
         scanner_rule_version: str = OCR_RISK_RULE_VERSION,
+        inheritance_payload: dict | None = None,
     ) -> None:
         base = EvidenceProcessingRevisionRepository(session).get(
             base_processing_revision_id
         )
+        if inheritance_payload is None:
+            from app.services.confirmed_ocr_inheritance import stored_inheritance
+
+            inheritance_payload = stored_inheritance(session, base)
+        elif inheritance_payload.get("contract") == "evidence-reprocess/v1":
+            inheritance_payload = {"ocr_inheritance_contract": "confirmed-ocr/v1", "inherited_processing_revision_id": None}
         scans = []
         risk_service = EvidenceRiskScanService(self.session_factory)
         for entry in base.manifest:
@@ -94,26 +103,28 @@ class EvidenceSidecarPreparationService:
             )
             scans.append((entry, scan))
 
-        self._carry_forward_unchanged_sidecars(session, base, scans)
+        self._carry_forward_unchanged_sidecars(session, base, scans, inheritance_payload)
         self._create_risk_locators(session, scans)
         self._create_source_line_locators(session, base)
 
-    def _carry_forward_unchanged_sidecars(self, session, base, scans) -> None:
+    def _carry_forward_unchanged_sidecars(self, session, base, scans, inheritance_payload=None) -> None:
         snapshot = EvidenceSnapshotRepository(session).get(base.evidence_snapshot_id)
-        if snapshot.upload_mode != UploadMode.INCREMENTAL or snapshot.prior_snapshot_id is None:
-            return
-
         episode = EpisodeRepository(session).get(base.review_episode_id)
-        prior_revision_id = episode.active_evidence_processing_revision_id
-        if (
-            episode.active_evidence_snapshot_id != snapshot.prior_snapshot_id
-            or prior_revision_id is None
-        ):
-            return
+        if inheritance_payload is not None and "ocr_inheritance_contract" in inheritance_payload:
+            from app.services.confirmed_ocr_inheritance import confirmed_revision, load_confirmed_pages
 
-        prior = CompleteEvidenceProcessingRevisionRepository(
-            session, self.artifact_store
-        ).get(prior_revision_id)
+            load_confirmed_pages(session, snapshot, inheritance_payload)
+            prior_revision_id = inheritance_payload["inherited_processing_revision_id"]
+            if prior_revision_id is None:
+                return
+            prior = confirmed_revision(session, snapshot, prior_revision_id)
+        else:
+            if snapshot.upload_mode != UploadMode.INCREMENTAL or snapshot.prior_snapshot_id is None:
+                return
+            prior_revision_id = episode.active_evidence_processing_revision_id
+            if episode.active_evidence_snapshot_id != snapshot.prior_snapshot_id or prior_revision_id is None:
+                return
+            prior = CompleteEvidenceProcessingRevisionRepository(session, self.artifact_store).get(prior_revision_id)
         current_ocr_pages = {
             entry.ocr_page_id for entry in base.manifest if entry.ocr_page_id is not None
         }

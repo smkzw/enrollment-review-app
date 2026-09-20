@@ -1,0 +1,109 @@
+[
+  {
+    "excerpt": "期中分析将在Ⅱ期约50%参与者完成第12周访视后进行，在有效性和安全性评估的基础上，对Ⅱ期研究数据进行评估。数据将由独立统计科学组（Statistical Sciences Group，SSG）分析。分析结果将由独立数据监查委员会（Independent Data Monitoring Committee，IDMC）进行审查。IDMC基于期中分析结果（包括主要疗效终点、关键安全性事件等），建议Ⅲ期研究的剂量；可能基于安全性和或有效性原因而建议某剂量组不再入选新的参与者。最终决定将取决于申办方。",
+    "heading_path": [
+      "研究设计",
+      "总体设计"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-c6e0be4e3dcf2a9667e49506",
+    "package_ordinal": 45,
+    "role": "attached",
+    "source_ref": "body.p537",
+    "source_span_ids": [
+      "body.p537"
+    ],
+    "structure_unit_id": "su-b15c1936995c6ef048ab64fc",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "期中分析",
+    "heading_path": [
+      "统计学考虑",
+      "统计分析",
+      "期中分析"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-03856594c8db16e170f5a4db",
+    "package_ordinal": 104,
+    "role": "owned",
+    "source_ref": "body.p1236",
+    "source_span_ids": [
+      "body.p1236"
+    ],
+    "structure_unit_id": "su-100ada1f8cee126deaf2aaa0",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "本研究包含一个预设的期中分析。",
+    "heading_path": [
+      "统计学考虑",
+      "统计分析",
+      "期中分析"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-03856594c8db16e170f5a4db",
+    "package_ordinal": 104,
+    "role": "owned",
+    "source_ref": "body.p1237#atom-0-15",
+    "source_span_ids": [
+      "body.p1237"
+    ],
+    "structure_unit_id": "su-4445874e1017109760f43067",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "该分析的主要目的是基于累积的II期研究的有效性和安全性数据，由独立数据监查委员会（IDMC）向申办方提供正式建议：包括能否继续进行Ⅲ期临床研究，以及推荐Ⅲ期研究的剂量等。",
+    "heading_path": [
+      "统计学考虑",
+      "统计分析",
+      "期中分析"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-03856594c8db16e170f5a4db",
+    "package_ordinal": 104,
+    "role": "owned",
+    "source_ref": "body.p1237#atom-15-100",
+    "source_span_ids": [
+      "body.p1237"
+    ],
+    "structure_unit_id": "su-b79645182d8e0f091f50ee4b",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "期中分析将在II期的50%参与者完成第12周访视的主要疗效评估后启动，将由独立的统计团队进行分析并将结果提交给IDMC。",
+    "heading_path": [
+      "统计学考虑",
+      "统计分析",
+      "期中分析"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-fb5d1edc8f1ed99baf4a4a8a",
+    "package_ordinal": 100,
+    "role": "attached",
+    "source_ref": "body.p1237#atom-100-160",
+    "source_span_ids": [
+      "body.p1237"
+    ],
+    "structure_unit_id": "su-25675e8b43f094c9114e7d35",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "IDMC将综合评估所有疗效和安全性证据来形成建议。期中分析的具体细节可见独立的期中统计分析计划。",
+    "heading_path": [
+      "统计学考虑",
+      "统计分析",
+      "期中分析"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-03856594c8db16e170f5a4db",
+    "package_ordinal": 104,
+    "role": "owned",
+    "source_ref": "body.p1237#atom-160-208",
+    "source_span_ids": [
+      "body.p1237"
+    ],
+    "structure_unit_id": "su-9d7db783c0feb9e1977f02ab",
+    "unit_kind": "paragraph"
+  }
+]

@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import (
     ConfigDict,
     Field,
+    StrictInt,
     ValidationInfo,
     field_validator,
     model_serializer,
@@ -17,6 +18,7 @@ from pydantic import (
 from .common import ContractModel, VersionedModel
 from .enums import StableEnum
 from .evidence import BoundingBox
+from .reading_view import ReadingViewBinding
 
 _SHA256 = r"^[0-9a-f]{64}$"
 PAGE_REVIEW_CONTRACT_VERSION = "page-review/v6"
@@ -242,6 +244,7 @@ class PageReviewRecord(VersionedModel):
     source_document_version_id: str = Field(min_length=1)
     page_number: int = Field(ge=1)
     page_image_sha256: str = Field(pattern=_SHA256)
+    reading_view: ReadingViewBinding | None = Field(default=None, exclude_if=lambda value: value is None)
     clause_pack_id: str = Field(pattern=r"^clause-pack:[0-9a-f]{32}$")
     clause_pack_sha256: str = Field(pattern=_SHA256)
     lane: PageReviewLane
@@ -288,6 +291,19 @@ class PageReviewRecord(VersionedModel):
 
     @model_validator(mode="after")
     def validate_lane_scope(self) -> "PageReviewRecord":
+        if self.reading_view is not None and (
+            self.reading_view.source_page_artifact_id != self.page_artifact_id
+            or self.reading_view.source_image_sha256 != self.page_image_sha256
+        ):
+            raise ValueError("阅读视图与判读记录的原始页面不一致")
+        if self.reading_view is not None:
+            for observation in (*self.facts, *self.handwriting, *self.clause_signals):
+                box = observation.region.bbox
+                if box is not None and (
+                    box.x1 > self.reading_view.source_width
+                    or box.y1 > self.reading_view.source_height
+                ):
+                    raise ValueError("判读记录中的摘录位置超出原始页面")
         # Main-reader defaults are enforced by route construction, not historical receipts.
         if not self.has_eligibility_value and (
             self.facts or self.clause_signals or self.handwriting
@@ -437,6 +453,7 @@ class SubjectPageCoverage(VersionedModel):
     execution_versions: dict[str, str] = Field(default_factory=dict, exclude_if=lambda value: not value)
     main_reader_identity_sha256: str | None = Field(default=None, pattern=_SHA256, exclude_if=lambda value: value is None)
     predecessor_coverage_id: str | None = Field(default=None, min_length=1, exclude_if=lambda value: value is None)
+    reading_rotations: dict[str, StrictInt] = Field(default_factory=dict, exclude_if=lambda value: not value)
     coverage_id: str = Field(min_length=1)
     subject_id: str = Field(min_length=1)
     review_episode_id: str = Field(min_length=1)
@@ -450,6 +467,9 @@ class SubjectPageCoverage(VersionedModel):
     @model_validator(mode="after")
     def validate_page_closure(self) -> "SubjectPageCoverage":
         expected = self.expected_page_artifact_ids
+        if (set(self.reading_rotations) - set(expected)
+                or any(angle not in (90, 180, 270) for angle in self.reading_rotations.values())):
+            raise ValueError("阅读方向必须对应覆盖范围内页面且为直角旋转")
         actual = [item.page_artifact_id for item in self.entries]
         if len(expected) != len(set(expected)):
             raise ValueError("预期页清单不得重复")

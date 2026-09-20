@@ -1,9 +1,10 @@
 """Independent adversarial coverage for Phase 5 graded runtime routing.
 
 These cases do not call live providers and do not restore any prior job.
-They attack default order, whole-attempt fallback isolation, short-task
-MTPLX preference, and project-specific hardcoding in the shared routing
-and fresh-run identity sources.
+They attack the single-GLM default route, whole-attempt fallback isolation
+on explicitly declared multi-candidate chains, explicit short-route specs,
+and project-specific hardcoding in the shared routing and fresh-run identity
+sources.
 """
 
 from __future__ import annotations
@@ -147,17 +148,34 @@ def _patch_graded_defaults(monkeypatch) -> None:
     monkeypatch.setattr(router, "DECONSTRUCT_GLM_PROVIDER", "zhipu-coding-plan")
     monkeypatch.setattr(router, "DECONSTRUCT_GLM_MODEL", "glm-5.3-flash")
     monkeypatch.setattr(router, "DECONSTRUCT_GLM_REASONING_EFFORT", "high")
-    monkeypatch.setattr(router, "MTPLX_MODEL", "mtplx-qwen38-27b-optimized-quality")
-    monkeypatch.setattr(router, "MTPLX_REASONING_EFFORT", "medium")
-    monkeypatch.setattr(router, "DECONSTRUCT_FALLBACK_DEEPSEEK_MODEL", "deepseek-v4-flash")
-    monkeypatch.setattr(
-        router, "DECONSTRUCT_FALLBACK_DEEPSEEK_REASONING_EFFORT", "high"
-    )
     monkeypatch.setattr(executor_module, "DECONSTRUCT_ROUTE_MODE", "graded")
 
 
 def _complex_candidates() -> list[ProtocolSemanticRouteCandidate]:
     return select_protocol_semantic_route_candidates(GRADE_COMPLEX)
+
+
+# 显式声明的多候选链（等价于显式路由规格）：默认链不再自动包含第三模型，
+# 但整次尝试隔离、修复预算与审计语义必须继续覆盖显式多候选场景。
+def _declared_complex_candidates() -> list[ProtocolSemanticRouteCandidate]:
+    return [
+        ProtocolSemanticRouteCandidate(
+            "zhipu-coding-plan", "glm-5.3-flash", "high"
+        ),
+        ProtocolSemanticRouteCandidate(
+            "mtplx", "mtplx-qwen38-27b-optimized-quality", "medium"
+        ),
+        ProtocolSemanticRouteCandidate("deepseek", "deepseek-v4-flash", "high"),
+    ]
+
+
+def _declared_short_candidates() -> list[ProtocolSemanticRouteCandidate]:
+    return [
+        ProtocolSemanticRouteCandidate(
+            "mtplx", "mtplx-qwen38-27b-optimized-quality", "medium"
+        ),
+        ProtocolSemanticRouteCandidate("deepseek", "deepseek-v4-flash", "high"),
+    ]
 
 
 def _run_routed(
@@ -198,7 +216,7 @@ def _run_routed(
     )
 
 
-def test_complex_default_chain_is_glm_high_then_mtplx_medium_then_deepseek_high(
+def test_complex_default_chain_is_single_glm_high_candidate(
     monkeypatch,
 ):
     _patch_graded_defaults(monkeypatch)
@@ -209,19 +227,11 @@ def test_complex_default_chain_is_glm_high_then_mtplx_medium_then_deepseek_high(
     )
     identities = [item.identity for item in _complex_candidates()]
     assert decision.grade == GRADE_COMPLEX
-    assert identities == [
-        "zhipu-coding-plan:glm-5.3-flash:high",
-        "mtplx:mtplx-qwen38-27b-optimized-quality:medium",
-        "deepseek:deepseek-v4-flash:high",
-    ]
-    assert identities[0].startswith("zhipu-coding-plan:glm-5.3-flash")
-    assert "high" in identities[0]
-    assert identities[1].startswith("mtplx:")
-    assert identities[1].endswith(":medium")
-    assert identities[2] == "deepseek:deepseek-v4-flash:high"
+    # 默认复杂路由只声明 GLM high：无隐式 MTPLX/DeepSeek 第三模型回退。
+    assert identities == ["zhipu-coding-plan:glm-5.3-flash:high"]
 
 
-def test_short_prompt_chain_prefers_mtplx_medium_then_deepseek_and_omits_glm(
+def test_short_prompt_default_chain_is_same_single_glm_candidate(
     monkeypatch,
 ):
     _patch_graded_defaults(monkeypatch)
@@ -232,14 +242,10 @@ def test_short_prompt_chain_prefers_mtplx_medium_then_deepseek_and_omits_glm(
         short_prompt_max_input_tokens=4096,
     )
     candidates = select_protocol_semantic_route_candidates(decision.grade)
-    identities = [item.identity for item in candidates]
     assert decision.grade == GRADE_SHORT
-    assert identities == [
-        "mtplx:mtplx-qwen38-27b-optimized-quality:medium",
-        "deepseek:deepseek-v4-flash:high",
+    assert [item.identity for item in candidates] == [
+        "zhipu-coding-plan:glm-5.3-flash:high",
     ]
-    assert all(not item.identity.startswith("zhipu-coding-plan") for item in candidates)
-    assert all(item.backend != "glm" for item in candidates)
 
 
 def test_complex_exhausted_fallback_keeps_whole_attempt_isolation(
@@ -254,7 +260,7 @@ def test_complex_exhausted_fallback_keeps_whole_attempt_isolation(
         short_prompt_max_input_tokens=4096,
         reasons=("parent_rule_count_gt_1", "batch_total_gt_1"),
     )
-    candidates = _complex_candidates()
+    candidates = _declared_complex_candidates()
     transport_ids: list[int] = []
     session_ids: list[str] = []
     merged_seen: list[list[str]] = []
@@ -351,6 +357,8 @@ def test_complex_glm_failure_falls_back_to_mtplx_then_deepseek_accepts(
         short_prompt_max_input_tokens=4096,
         reasons=("parent_rule_count_gt_1", "batch_total_gt_1"),
     )
+    # 显式声明的多候选链仍然支持整次尝试顺序回退。
+    candidates = _declared_complex_candidates()
 
     class _GlmThenMtplxFail:
         def __init__(self, gate=None, max_semantic_repairs=None):
@@ -368,7 +376,7 @@ def test_complex_glm_failure_falls_back_to_mtplx_then_deepseek_accepts(
         data_paths,
         job_id="job-adv-glm-mtplx-fail",
         decision=decision,
-        candidates=_complex_candidates(),
+        candidates=candidates,
         runner_factory=_GlmThenMtplxFail,
     )
     assert [item["outcome"] for item in audit["attempts"]] == [
@@ -394,7 +402,8 @@ def test_short_task_mtplx_failure_falls_back_to_deepseek_without_glm(
         short_prompt_max_input_tokens=4096,
         reasons=("all_short_gates_passed",),
     )
-    candidates = select_protocol_semantic_route_candidates(GRADE_SHORT)
+    # 显式声明短提示链（等价于 DECONSTRUCT_ROUTE_SHORT 覆盖）。
+    candidates = _declared_short_candidates()
 
     class _ShortFallback:
         def __init__(self, gate=None, max_semantic_repairs=None):
@@ -424,11 +433,11 @@ def test_short_task_mtplx_failure_falls_back_to_deepseek_without_glm(
 
 def test_repair_budget_keeps_glm_unlimited_and_bounds_fallbacks(monkeypatch):
     _patch_graded_defaults(monkeypatch)
-    glm, mtplx, deepseek = _complex_candidates()
+    glm, mtplx, deepseek = _declared_complex_candidates()
     assert semantic_repair_limit_for_candidate(glm, GRADE_COMPLEX) is None
     assert semantic_repair_limit_for_candidate(mtplx, GRADE_COMPLEX) == 0
     assert semantic_repair_limit_for_candidate(deepseek, GRADE_COMPLEX) == 1
-    short_mtplx, short_deepseek = select_protocol_semantic_route_candidates(GRADE_SHORT)
+    short_mtplx, short_deepseek = _declared_short_candidates()
     assert semantic_repair_limit_for_candidate(short_mtplx, GRADE_SHORT) == 1
     assert semantic_repair_limit_for_candidate(short_deepseek, GRADE_SHORT) == 1
 
@@ -454,29 +463,22 @@ def test_fresh_runtime_module_stays_study_agnostic():
         assert token not in source
 
 
-def test_live_unpatched_defaults_keep_glm_first_and_short_omits_glm():
+def test_live_unpatched_defaults_pin_single_glm_high_identity():
     """Attack live module defaults, not only monkeypatched constants."""
 
-    assert router.DECONSTRUCT_ROUTE_MODE == "graded"
-    assert router.DECONSTRUCT_ROUTE_COMPLEX.strip() == ""
-    assert router.DECONSTRUCT_ROUTE_SHORT.strip() == ""
+    # 当前生产默认：pinned 单一 GLM high 身份，两个级别都解析到同一候选，
+    # 没有隐式第三模型。
+    assert router.DECONSTRUCT_ROUTE_MODE == "pinned"
+    expected = (
+        f"{router.DECONSTRUCT_BACKEND}:{router.DECONSTRUCT_MODEL}:"
+        f"{router.DECONSTRUCT_REASONING_EFFORT}"
+    )
     complex_ids = [
         item.identity for item in select_protocol_semantic_route_candidates(GRADE_COMPLEX)
     ]
     short_ids = [
         item.identity for item in select_protocol_semantic_route_candidates(GRADE_SHORT)
     ]
-    assert "glm-5.3-flash" in complex_ids[0]
-    assert complex_ids[0].endswith(":high")
-    assert complex_ids[1].startswith("mtplx:")
-    assert complex_ids[1].endswith(":medium")
-    assert "deepseek-v4-flash" in complex_ids[2]
-    assert complex_ids[2].endswith(":high")
-    assert complex_ids == [
-        f"{router.DECONSTRUCT_GLM_PROVIDER}:{router.DECONSTRUCT_GLM_MODEL}:{router.DECONSTRUCT_GLM_REASONING_EFFORT}",
-        f"mtplx:{router.MTPLX_MODEL}:{router.MTPLX_REASONING_EFFORT}",
-        f"deepseek:{router.DECONSTRUCT_FALLBACK_DEEPSEEK_MODEL}:{router.DECONSTRUCT_FALLBACK_DEEPSEEK_REASONING_EFFORT}",
-    ]
-    assert short_ids == complex_ids[1:]
-    assert all(not item.startswith("zhipu-coding-plan") for item in short_ids)
-    assert all(not item.startswith("glm:") for item in short_ids)
+    assert complex_ids == [expected]
+    assert short_ids == [expected]
+    assert expected == "zhipu-coding-plan:glm-5.3-flash:high"

@@ -26,8 +26,9 @@ def test_frozen_readers_match_explicit_configuration(budget, changed):
                                         "PAGE_REVIEW_MAIN_B_PROVIDER": "mtplx",
                                         "PAGE_REVIEW_MAIN_B_MODEL": "mtplx-flash-next-optimized-speed",
                                         "PAGE_REVIEW_MAIN_B_BASE_URL": "http://127.0.0.1:8002/v1",
-                                        "PAGE_REVIEW_MAX_TOKENS": str(budget)})
+                                        "PAGE_REVIEW_MAX_TOKENS": "65536"})
     payload = {"routes": {lane.value: route_identity(route) for lane, route in routes.items()}}
+    payload["routes"]["main-B"]["max_tokens"] = budget
     if changed:
         payload["routes"]["main-B"]["model"] = "unexpected-model"
     if budget < 65536 or changed:

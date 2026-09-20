@@ -1,0 +1,9 @@
+# 复查与日期选择相容性：源码复核
+
+同批准evidence_single_object只读角色；不得修改任何文件，不运行测试、应用导入、对象构造、模型、服务、DB、浏览器或递归派发。完整回复由runner保存。
+
+上一轮F1已修：直接采用初查（含零复查退回初查）均要求initial_scope_complete is True；零复查保留全scope和图检查。F2单列repeat_result_required_not_supplied。F4未采纳，旧代码的非retain_initial零复查分支原本是repeat_result_missing，且正式计算/发布有独立版本隔离；不能凭同为resolution/v1就推断旧错误已存在。
+
+本轮实际源码：app/services/ordered_observation_selection.py把已完成候选范围核实后的日期计算提取为select_qualified_observation_dates，原入口仍原资格/范围检查再调用。新app/services/repeat_observation_ordering.py由app/services/repeat_atom_calculation.py调用：仅处理复查政策已选唯一组且非数值合并的情况，全本次范围核实、每个候选值与日期资格及冲突检查、同一采集组所有日期一致后，原事实min ID仅代表日期排序，不选其结果值，组内所有结果仍计算。共享日期选择严格区间、原窗口先后，所得组须与复查政策选组相等；不同则UNKNOWN，不找有利替代。算术中移除原policy.selection一概UNKNOWN的保护，替代为上述真实合并核对；无原文排序则无变化。排序审计只读入repeat_review_presentation，结果计算v29/发布v11。多组聚合与排序、条件性缺席仍未实现，不声称完整。
+
+请完整读以上五文件及必要相邻定义，重点找直接可达异常、遗漏时间/来源保护、把同次多记录当多次或只取一值、排序失败仍采信、原入口重构行为变化。核对ClinicalFactV2(date_range)与计算Fact(effective_date)没有错用；冲突集合从计算context传入。新代码仅编译，非运行验收，不建议阶段测试。给确证缺陷及最小修正，别重复假设性历史错误或把未实现范围当本轮声称完成。

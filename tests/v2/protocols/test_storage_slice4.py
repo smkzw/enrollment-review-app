@@ -85,7 +85,7 @@ def _procedure_requirements() -> list[EvidenceRequirement]:
     ]
 
 
-def _seed_template_context(session):
+def _seed_template_context(session, source_validity_window=None):
     """建立一份可发布 RuleSet、其审核节点和确定性模板。"""
     from app.projections.evidence_expectation_templates import (
         project_evidence_expectation_templates,
@@ -94,6 +94,7 @@ def _seed_template_context(session):
 
     _seed_document_version(session)
     rule_set = _rule_set()
+    rule_set.rules[0].components[0].evidence_requirements[0].source_validity_window = source_validity_window
     procedure = _procedure_requirements()
     save_rule_set(session, rule_set, procedure_requirements=procedure)
     stages = [

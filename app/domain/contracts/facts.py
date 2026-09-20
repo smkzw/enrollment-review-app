@@ -375,6 +375,7 @@ class ClinicalFactV2(Phase5Model):
     """
 
     fact_id: str = Field(min_length=1)
+    inherited_from_fact_id: str | None = Field(default=None, min_length=1)
     run_id: str = Field(min_length=1)
     gate_id: str = Field(min_length=1)
     source_candidate_ids: list[str] = Field(default_factory=list)
@@ -443,6 +444,7 @@ class ClinicalEventV2(Phase5Model):
     """
 
     event_id: str = Field(min_length=1)
+    source_revision_of: str | None = Field(default=None, min_length=1)
     run_id: str = Field(min_length=1)
     gate_id: str = Field(min_length=1)
     source_candidate_ids: list[str] = Field(default_factory=list)
@@ -497,6 +499,7 @@ class MedicationExposureV2(Phase5Model):
     """
 
     exposure_id: str = Field(min_length=1)
+    source_revision_of: str | None = Field(default=None, min_length=1)
     run_id: str = Field(min_length=1)
     gate_id: str = Field(min_length=1)
     source_candidate_ids: list[str] = Field(default_factory=list)
@@ -574,6 +577,8 @@ class ClinicalConflictGroupV2(Phase5Model):
     """
 
     conflict_group_id: str = Field(min_length=1)
+    source_revision_of: str | None = Field(default=None, min_length=1)
+    revision: int = Field(default=1, ge=1)
     run_id: str = Field(min_length=1)
     gate_id: str = Field(min_length=1)
     authority: FactAuthority
@@ -588,6 +593,10 @@ class ClinicalConflictGroupV2(Phase5Model):
     @model_validator(mode="after")
     def validate_conflict(self) -> "ClinicalConflictGroupV2":
         _require_utc(self.created_at, "created_at")
+        if self.source_revision_of == self.conflict_group_id:
+            raise ValueError("冲突来源修订不能引用自身")
+        if self.source_revision_of is None and self.revision != 1:
+            raise ValueError("冲突来源修订须明确上一版本")
         member_lists = {
             "fact": self.fact_ids,
             "event": self.event_ids,

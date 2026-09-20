@@ -1,0 +1,347 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-package102-enrollment-baseline-statistical-boundary",
+  "task_id": "phase5-slice61co-20260830",
+  "worker": "codex-parent",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/coverage_manifest.json",
+  "study_phase": "phase_ii",
+  "owned_source_refs": [
+    "body.p1197",
+    "body.p1200",
+    "body.p1201",
+    "body.p1202",
+    "body.p1203",
+    "body.p1204",
+    "body.p1205"
+  ],
+  "attached_source_refs": [
+    "body.p1198",
+    "body.p1199",
+    "body.p1206",
+    "body.p1207",
+    "body.p1208",
+    "body.p1209"
+  ],
+  "required_candidate_source_refs": [],
+  "forbidden_candidate_source_refs": [
+    "body.p1197",
+    "body.p1198",
+    "body.p1199",
+    "body.p1200",
+    "body.p1201",
+    "body.p1202",
+    "body.p1203",
+    "body.p1204",
+    "body.p1205",
+    "body.p1206",
+    "body.p1207",
+    "body.p1208",
+    "body.p1209"
+  ],
+  "pre_enrollment_source_refs": [],
+  "structural_only_source_refs": [
+    "body.p1197",
+    "body.p1200",
+    "body.p1202",
+    "body.p1205"
+  ],
+  "attached_structural_only_source_refs": [
+    "body.p1206",
+    "body.p1207"
+  ],
+  "expected_disposition_by_source_ref": {
+    "body.p1201": "administrative_statistical_background",
+    "body.p1203": "administrative_statistical_background",
+    "body.p1204": "administrative_statistical_background"
+  },
+  "expected_workflow_stage_ids_by_source_ref": {},
+  "candidate_forbidden_markers_by_source_ref": {
+    "body.p1197": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点"
+    ],
+    "body.p1198": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点"
+    ],
+    "body.p1199": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点"
+    ],
+    "body.p1200": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点"
+    ],
+    "body.p1201": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "入排不通过",
+      "发布控制点"
+    ],
+    "body.p1202": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点"
+    ],
+    "body.p1203": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点"
+    ],
+    "body.p1204": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点"
+    ],
+    "body.p1205": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点"
+    ],
+    "body.p1206": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点"
+    ],
+    "body.p1207": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点"
+    ],
+    "body.p1208": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点"
+    ],
+    "body.p1209": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点"
+    ]
+  },
+  "candidate_required_markers_by_source_ref": {},
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "第102包覆盖参与者入组、人口统计与基线、合并治疗和Ⅱ期疗效统计章节。所有来源都只表达事后统计汇总、统计编码、统计分支或疗效分析方法；Ⅱ期/Ⅲ期参与者入组统计保持期别隔离，任何来源均不形成受试者预筛、筛选、基线、随机或D1给药前控制点。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "第102包属于D001Ⅱ期统计章节。p1198仅作为Ⅱ期参与者统计语境，p1199只读隔离Ⅲ期基础期、扩展期和完成试验描述；p1206-p1209只读保留Ⅱ期疗效分析分支。参与者入组是总体入选、完成、提前结束和分析集分布的事后统计，基线是ITT统计描述域，WHO Drug与MedDRA SOC/PT是合并治疗编码汇总，均不构成入排资格、流程必做或证据缺口。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    },
+    {
+      "workflow_stage_id": "flow-d1-pre-dose",
+      "review_stage": "baseline",
+      "display_name": "D1给药前",
+      "visit_instance": "D1给药前"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [],
+    "required_procedures": []
+  },
+  "ids": {
+    "manifest_id": "manifest:slice61co-package102-enrollment-baseline-statistical-boundary",
+    "catalog_id": "catalog:slice61co-package102-enrollment-baseline-statistical-boundary"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p1197": [
+      "参与者入组分析标题仅提供统计章节结构；总体入选、完成、提前结束和分析集分布是事后统计总结，不是新的入组标准、筛选动作或入组决策入口"
+    ],
+    "body.p1198": [
+      "Ⅱ期总体入选、完成、提前结束和分析集纳入/剔除是统计总结；分析集纳入/剔除不得改写成单例资格判定"
+    ],
+    "body.p1199": [
+      "Ⅲ期基础期、扩展期和完成试验统计仅作只读期别上下文，不得进入Ⅱ期控制或被解释为Ⅱ期义务"
+    ],
+    "body.p1200": [
+      "人口统计学和基线特征分析标题仅提供统计结构归属，不独立形成基线访视、资料完整性或入排控制点"
+    ],
+    "body.p1201": [
+      "ITT集上的按组别及总体描述性统计是统计分析域；基线特性不是基线访视项目、基线资料要求或缺口判定依据"
+    ],
+    "body.p1202": [
+      "药物治疗与非药物治疗分析标题仅提供统计结构归属，不独立形成合并用药禁限规则"
+    ],
+    "body.p1203": [
+      "WHO Drug仅用于合并用药参与者例数和百分比的分类汇总；编码缺失不得转成用药禁限、证据不足或不得入组"
+    ],
+    "body.p1204": [
+      "MedDRA SOC/PT仅用于合并治疗参与者例数和百分比的分类汇总；编码分类不得转成病史筛查或入排规则"
+    ],
+    "body.p1205": [
+      "疗效分析标题仅提供统计分支结构归属，不独立形成筛选、基线、随机或给药前义务"
+    ],
+    "body.p1206": [
+      "Ⅱ期临床研究阶段仅标识疗效统计期别，不形成受试者级流程控制"
+    ],
+    "body.p1207": [
+      "主要疗效指标分析标题仅提供统计分支归属，不把疗效终点变成基线或入组阈值"
+    ],
+    "body.p1208": [
+      "第12周PASI-75、CMH检验、置信区间和多重填补属于Ⅱ期疗效统计方法，不产生筛选、基线、随机或D1给药前义务"
+    ],
+    "body.p1209": [
+      "LOCF、NRI等是主要疗效指标缺失的敏感性分析方法，不是资料缺口判定、入排规则或给药前控制"
+    ]
+  },
+  "exception_semantics_by_source_ref": {
+    "body.p1197": {
+      "semantic_role": "participant_enrollment_statistical_summary",
+      "base_rule": "参与者入组分析汇总总体入选、完成、提前结束和各分析集分布。",
+      "exception_rule": "“入组”仅表示参与者流程结果的事后统计维度，不表示新的入组标准、筛选动作、资格决定或发布控制点。",
+      "preserve_keywords": ["总体入选", "完成", "提前结束", "分析集", "统计总结"],
+      "forbidden_inversion": "不得把统计计数、分析集纳入/剔除或提前结束清单改写为单例入排控制、筛选失败或不得入组。"
+    },
+    "body.p1198": {
+      "semantic_role": "phase_ii_enrollment_statistical_summary",
+      "base_rule": "Ⅱ期参与者入选、完成、提前结束和分析集分布以统计列表和例数总结。",
+      "exception_rule": "分析集纳入/剔除仅属于统计人群描述，不替代受试者级入排标准；Ⅱ期语境必须与Ⅲ期p1199分离。",
+      "preserve_keywords": ["Ⅱ期临床阶段", "总体入选", "完成", "提前结束", "各分析集"],
+      "forbidden_inversion": "不得把Ⅱ期统计汇总改写为筛选动作、基线资料要求、随机前检查或个例入组判断。"
+    },
+    "body.p1199": {
+      "semantic_role": "phase_iii_enrollment_statistical_context",
+      "base_rule": "Ⅲ期统计包含总体入选、完成16周基础期、扩展期治疗及完成试验的参与者例数和分析集分布。",
+      "exception_rule": "p1199仅用于期别隔离和只读语境，Ⅲ期基础期/扩展期信息不得进入Ⅱ期控制。",
+      "preserve_keywords": ["Ⅲ期临床阶段", "完成16周基础期治疗", "扩展期治疗", "完成试验"],
+      "forbidden_inversion": "不得把Ⅲ期统计阶段、例数或分析集分布变成Ⅱ期筛选、基线、随机或给药前义务。"
+    },
+    "body.p1201": {
+      "semantic_role": "itt_baseline_descriptive_statistics",
+      "base_rule": "基于ITT集，以描述性统计按组别及总体总结人口统计学和基线特性。",
+      "exception_rule": "此处“基线”是统计描述域，不表示基线访视动作、基线资料完整性要求或证据缺口。",
+      "preserve_keywords": ["ITT集", "描述性统计", "按组别及总体", "人口统计学", "基线特性"],
+      "forbidden_inversion": "不得把ITT统计描述前置为筛选、随机或D1给药前必做，也不得把基线缺失直接判为不得入组。"
+    },
+    "body.p1203": {
+      "semantic_role": "who_drug_concomitant_medication_summary",
+      "base_rule": "根据WHO Drug分类统计合并用药参与者例数和百分比。",
+      "exception_rule": "WHO Drug是统计编码和汇总维度，不是合并用药禁限、用药清单完整性或受试者资格来源。",
+      "preserve_keywords": ["WHO Drug", "合并用药", "例数", "百分比"],
+      "forbidden_inversion": "不得把WHO Drug编码缺失、未分类或统计结果改写为证据不足、禁止合并用药或不得入组。"
+    },
+    "body.p1204": {
+      "semantic_role": "meddra_concomitant_treatment_coding_summary",
+      "base_rule": "根据MedDRA SOC/PT分类统计合并治疗参与者例数和百分比。",
+      "exception_rule": "MedDRA SOC/PT仅是合并治疗的统计分类，不是病史筛查、治疗禁限或单例入排规则。",
+      "preserve_keywords": ["MedDRA", "系统器官分类", "SOC", "首选术语", "PT", "合并治疗"],
+      "forbidden_inversion": "不得把MedDRA分类缺失、SOC/PT结果或合并治疗统计改写为入排失败、证据缺口或发布控制点。"
+    },
+    "body.p1208": {
+      "semantic_role": "phase_ii_efficacy_statistical_method",
+      "base_rule": "Ⅱ期主要疗效指标PASI-75在第12周采用CMH检验、置信区间和多重填补进行统计分析。",
+      "exception_rule": "疗效终点及缺失处理属于随机后分析方法，不产生D1给药前、基线或筛选义务；疗效终点不得替代入选阈值。",
+      "preserve_keywords": ["第12周", "PASI-75", "CMH检验", "置信区间", "多重填补"],
+      "forbidden_inversion": "不得把未达到PASI-75、缺失填补方法或CMH统计结果改写为不得入组、不得随机或给药前资料要求。"
+    },
+    "body.p1209": {
+      "semantic_role": "phase_ii_efficacy_missing_data_sensitivity_analysis",
+      "base_rule": "主要疗效指标缺失采用LOCF、NRI等方法进行敏感性分析。",
+      "exception_rule": "LOCF/NRI是疗效缺失数据的统计敏感性方法，不是入排资格、基线缺口或D1给药前控制。",
+      "preserve_keywords": ["主要疗效指标", "缺失", "LOCF", "NRI", "敏感性分析"],
+      "forbidden_inversion": "不得把疗效数据缺失、LOCF/NRI选择或敏感性分析结果改写为受试者证据不足或不得入组。"
+    }
+  },
+  "later_package_boundary": {
+    "read_only": true,
+    "note": "第101包body.p1179、body.p1186-p1196保持所有权；p1198/p1199及p1206-p1209仅为本包的只读统计语境。p1210-p1223在当前冻结计划中属于无拥有权的后续Ⅱ/Ⅲ期疗效统计语境，Package 103实际从body.p1224开始拥有安全性分析来源；本包均不得提前吸收。",
+    "expected_owners_by_span": {
+      "body.p1186": 101,
+      "body.p1196": 101,
+      "body.p1197": 102,
+      "body.p1205": 102,
+      "body.p1224": 103
+    }
+  },
+  "notes": [
+    "模型外闭包：7个拥有来源，6个只读来源，13个来源均禁止候选；required candidates、workflow bindings、official rules和required procedures均为零。",
+    "p1197的“入组”、p1201的“基线”、p1203/p1204的合并用药与治疗编码均保留统计语义，不向单例入排控制反向推理。",
+    "p1198与p1199保持Ⅱ/Ⅲ期隔离；p1206-p1209仅用于Ⅱ期疗效统计上下文，不形成随机前或D1给药前义务。",
+    "claims_complete=false；本配置不调用临床语义模型、不发布控制点、不宣称D001全量或受试者/Patient Profile验收完成。"
+  ]
+}

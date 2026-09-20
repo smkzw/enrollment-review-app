@@ -1,0 +1,198 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-package113-reference-tail-evidence-authority-boundary",
+  "task_id": "phase5-slice61cz-20260830",
+  "worker": "codex-parent",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/coverage_manifest.json",
+  "study_phase": "phase_ii",
+  "expected_package_ordinal": 113,
+  "expected_package_id": "pap-d042355fa4845796808fa256",
+  "owned_source_refs": [
+    "body.p1307",
+    "body.p1308"
+  ],
+  "attached_source_refs": [],
+  "required_candidate_source_refs": [],
+  "forbidden_candidate_source_refs": [
+    "body.p1307",
+    "body.p1308"
+  ],
+  "pre_enrollment_source_refs": [],
+  "structural_only_source_refs": [],
+  "attached_structural_only_source_refs": [],
+  "expected_disposition_by_source_ref": {
+    "body.p1307": "non_enrollment_execution",
+    "body.p1308": "non_enrollment_execution"
+  },
+  "expected_workflow_stage_ids_by_source_ref": {},
+  "owned_visit_instances_by_source_ref": {},
+  "owned_procedure_semantic_families_by_source_ref": {},
+  "owned_required_action_kinds_by_source_ref": {},
+  "owned_required_procedure_target_ids_by_source_ref": {},
+  "candidate_forbidden_markers_by_source_ref": {
+    "body.p1307": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "DLQI题录反向生成评分算法",
+      "DLQI题录反向生成切点阈值",
+      "Dermatology Life Quality Index题录误作受试者资格",
+      "生活质量指数题录误作入排控制",
+      "参考文献题录改写为方案执行条款"
+    ],
+    "body.p1308": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "药品注册管理办法题录反向生成注册程序",
+      "药品注册管理办法题录误作受试者资格",
+      "NMPA注册办法题录误作申办方执行流程",
+      "注册管理办法题录误作入排监管控制",
+      "参考文献题录改写为方案执行条款"
+    ]
+  },
+  "candidate_required_markers_by_source_ref": {},
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "先逐条读取第113包body.p1307-p1308原文并区分参考文献尾部题录与方案正文权威：p1307为Finlay/Khan DLQI论文题录，p1308为国家药品监督管理局《药品注册管理办法》题录；语义说明必须明确“参考文献题录、非方案执行条款”，处置使用既有non_enrollment_execution，不新增领域枚举。不得从DLQI题录反向生成评分算法、切点阈值或受试者资格；不得从药品注册管理办法题录反向生成注册程序、申办方/研究中心执行流程或监管入排控制；方案正文仍是执行权威。逐项判断后确认这两项均不是单例筛选、基线或入排资格；required candidates为空，不得以other_control_candidate强挂受试者工作流，也不得丢失任何真实前置控制。Package 112止于body.p1306；body.p1309为无主空白分隔；Package 114从body.p1310（附录）起不得吸入。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "第113包位于Ⅱ期“参考文献”章节尾部。body.p1307是DLQI文献题录，body.p1308是药品注册管理办法题录，均属于支持性证据索引而非方案执行条款。题录中出现的Dermatology Life Quality Index、DLQI、药品注册管理办法或NMPA名称不得反向生成受试者阈值、评分算法、注册程序或执行流程；方案正文仍是执行权威。这些对象不是单例受试者人群、入排条件、频率或筛选/基线/D1给药前动作。Package 112止于p1306；body.p1309为无主空白分隔；Package 114从p1310起不得吸入。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    },
+    {
+      "workflow_stage_id": "flow-d1-pre-dose",
+      "review_stage": "baseline",
+      "display_name": "D1给药前",
+      "visit_instance": "D1给药前"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [],
+    "required_procedures": []
+  },
+  "ids": {
+    "manifest_id": "manifest:slice61cz-package113-reference-tail-evidence-authority-boundary",
+    "catalog_id": "catalog:slice61cz-package113-reference-tail-evidence-authority-boundary"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p1307": [
+      "Finlay/Khan DLQI文献仅为参考文献题录",
+      "非方案执行条款；方案正文仍是执行权威",
+      "不得反向生成DLQI评分算法、切点或受试者资格"
+    ],
+    "body.p1308": [
+      "药品注册管理办法仅为参考文献题录",
+      "非方案执行条款；方案正文仍是执行权威",
+      "不得反向生成注册程序、申办方流程或监管入排控制"
+    ]
+  },
+  "exception_semantics_by_source_ref": {
+    "body.p1307": {
+      "semantic_role": "bibliographic_citation_dlqi_not_protocol_clause",
+      "base_rule": "Finlay AY, Khan GK. Dermatology Life Quality Index (DLQI)--a simple practical measure for routine clinical use. Clin Exp Dermatol. 1994;19:210–6.",
+      "exception_rule": "该行是Finlay/Khan Dermatology Life Quality Index (DLQI)论文的参考文献题录，属于支持性文献证据索引，不是方案执行条款；不得把DLQI题录反向生成为评分算法、切点阈值、问卷执行程序或受试者资格。方案正文仍是执行权威。",
+      "preserve_keywords": [
+        "Dermatology Life Quality Index",
+        "DLQI",
+        "Finlay AY",
+        "参考文献题录",
+        "非方案执行条款"
+      ],
+      "forbidden_inversion": "不得把DLQI题录改写为评分算法、切点阈值、筛选必做、不得入组、排除标准、入排不通过或发布控制点。"
+    },
+    "body.p1308": {
+      "semantic_role": "bibliographic_citation_drug_registration_regulation_not_protocol_clause",
+      "base_rule": "国家药品监督管理局.药品注册管理办法.2020.",
+      "exception_rule": "该行是国家药品监督管理局《药品注册管理办法》（2020）的参考文献题录，属于支持性法规文献索引，不是方案执行条款；不得把注册办法题录反向生成为药品注册程序、申办方/研究中心执行流程、监管申报步骤或受试者入排资格。方案正文仍是执行权威。",
+      "preserve_keywords": [
+        "药品注册管理办法",
+        "国家药品监督管理局",
+        "2020",
+        "参考文献题录",
+        "非方案执行条款"
+      ],
+      "forbidden_inversion": "不得把药品注册管理办法题录改写为注册程序、申办方执行流程、监管入排控制、筛选必做、不得入组、排除标准或发布控制点。"
+    }
+  },
+  "later_package_boundary": {
+    "read_only": true,
+    "note": "Package 112严格拥有body.p1295-p1306并止于body.p1306；Package 113严格且仅拥有body.p1307-p1308。原始结构中body.p1309空白分隔全局无主且不在冻结覆盖单元中，不得吸入本包。Package 114从body.p1310（附录）起，不得吸入。冻结计划中的38项context_units仅只读（含前向只读的body.p1306），未经Codex另行授权不得升格为attached_source_refs。必须保留方案正文为执行权威；不得从DLQI或药品注册管理办法题录反向虚构评分算法、阈值、注册程序或执行流程。",
+    "excluded_unowned_structure_refs": [
+      "body.p1309"
+    ],
+    "expected_owners_by_span": {
+      "body.p1306": 112,
+      "body.p1307": 113,
+      "body.p1308": 113,
+      "body.p1310": 114,
+      "body.p515": 45,
+      "body.p575": 46,
+      "body.p584": 47,
+      "body.p594": 48,
+      "body.p618": 50,
+      "body.p838": 75
+    },
+    "unowned_context_source_refs": [
+      "body.t5.r0",
+      "body.t6.r0",
+      "body.p446",
+      "body.p455",
+      "body.p465",
+      "body.p483",
+      "body.p502",
+      "body.t7.r0",
+      "body.p839",
+      "body.p840",
+      "body.p869",
+      "body.p903",
+      "body.p915",
+      "body.p931",
+      "body.p935",
+      "body.p936",
+      "body.p938",
+      "body.p972",
+      "body.p976",
+      "body.p978",
+      "body.p1206",
+      "body.p1207",
+      "body.p1210",
+      "body.p1214",
+      "body.p1216",
+      "body.p1221"
+    ]
+  },
+  "notes": [
+    "模型外闭包：Package 113恰好拥有body.p1307-p1308共2个来源；无attached；无structural-only；38项context_units保持只读且不升格。",
+    "两类权威必须分开：参考文献尾部题录非方案执行条款（p1307 DLQI、p1308药品注册管理办法，使用既有non_enrollment_execution，不新增领域枚举）；方案正文仍是执行权威。",
+    "候选判定不是预设零：逐项判断后确认本包无独立参加研究前受试者动作；required_candidate_source_refs为空且有逐项原文依据。不得把题录中的DLQI/Dermatology Life Quality Index或药品注册管理办法反向生成阈值、算法、注册程序或执行流程，也不得丢失任何真实前置控制。",
+    "方案正文权威必须保留：执行控制以方案正文为准；参考文献题录仅为支持性证据索引。",
+    "Package 112止于p1306；p1309无主空白分隔不吸收；Package 114从p1310起；claims_complete=false；本配置不调用临床语义模型、不发布控制点、不进入受试者、OCR、Patient Profile或浏览器流程。"
+  ]
+}

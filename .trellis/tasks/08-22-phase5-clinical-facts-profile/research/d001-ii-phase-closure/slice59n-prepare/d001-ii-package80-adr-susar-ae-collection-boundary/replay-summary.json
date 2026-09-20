@@ -1,0 +1,19 @@
+{
+  "attached_count": 35,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-c4b0f6bab33eb0e6d9fb4452",
+  "group_id": "d001-ii-package80-adr-susar-ae-collection-boundary",
+  "lookup_counts": {
+    "frozen_plan_context": 4,
+    "frozen_plan_owned": 43
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package80-adr-susar-ae-collection-boundary",
+  "owned_count": 12,
+  "prompt_char_count": 49402,
+  "prompt_sha256": "eb27e3e890ed1b8c30106b598b393f4c4e30819cd64719df6064780e805a2dae",
+  "task_id": "phase5-slice61br-20260830",
+  "unit_count": 47,
+  "worker": "codebuddy-worker_02"
+}

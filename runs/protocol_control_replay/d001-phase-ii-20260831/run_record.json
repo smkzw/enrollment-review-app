@@ -1,0 +1,271 @@
+{
+  "run_id": "resume-20260831T005050-9effd70b",
+  "claims_complete": false,
+  "runner": "scripts/run_protocol_control_smoke.py",
+  "started_at": "2026-08-31T00:50:50.953667",
+  "fixture": {
+    "source": "persisted_frozen_snapshot",
+    "path": null,
+    "sha256": "3946ea2c9780d0399b60245eafc4ab85087328a5da158b9d0938f8858302343d"
+  },
+  "model_identity": {
+    "verified_before_run": true,
+    "discovery": {
+      "stage": "discovery",
+      "transport_class": "app.agents.protocol_control_discovery_transport.OpenAICompatibleProtocolControlDiscoveryAgentTransport",
+      "configured_model": "mtplx-qwen38-27b-optimized-quality",
+      "verified_model": "mtplx-qwen38-27b-optimized-quality",
+      "provider": "mtplx",
+      "backend": "mtplx",
+      "reasoning_effort": "medium",
+      "max_tokens": 16384,
+      "base_url": "http://127.0.0.1:8002/v1",
+      "temperature": 0.0,
+      "timeout": 600.0,
+      "max_retries": 0,
+      "response_format_sha256": "1fd978990a4a5492682a4ede9ac321a61c038694b1d712cf537b55645519f706"
+    },
+    "deep": {
+      "stage": "deep",
+      "transport_class": "app.agents.protocol_control_agent_transport.OpenAICompatibleProtocolControlAgentTransport",
+      "configured_model": "mtplx-qwen38-27b-optimized-quality",
+      "verified_model": "mtplx-qwen38-27b-optimized-quality",
+      "provider": "mtplx",
+      "backend": "mtplx",
+      "reasoning_effort": "medium",
+      "max_tokens": 16384,
+      "base_url": "http://127.0.0.1:8002/v1",
+      "temperature": 0.0,
+      "timeout": 600.0,
+      "max_retries": 0,
+      "response_format_sha256": "e1da464e843204931ac4976a8fa56002e7d4e8619260a922a37fe0e5e4e2065c"
+    }
+  },
+  "source_chain": {
+    "job_id": "384a7b3b802d46009e039c81ea7f7cc0",
+    "final_state": "failed_final",
+    "stopped_after": "freeze_deconstruction_input",
+    "stop_error_code": "SMOKE_SOURCE_STOP_AFTER_FREEZE",
+    "snapshot_id": "384a7b3b802d46009e039c81ea7f7cc0-snapshot",
+    "content_sha256": "3946ea2c9780d0399b60245eafc4ab85087328a5da158b9d0938f8858302343d",
+    "block_count": 3581,
+    "protocol_code": "D001-02-002",
+    "selected_phase": "phase_ii",
+    "resumed_from_persisted_checkpoint": true,
+    "source_file_read": false
+  },
+  "control_execution": {
+    "job_id": "3259ab5f070447c3938ff2de5f45c9cd",
+    "final_state": "failed_final",
+    "deep_step_ids": [],
+    "non_deep_structure_unit_ids": [],
+    "discovery": {
+      "batch_count": 10,
+      "distribution": {
+        "candidate": 34,
+        "non_control": 401,
+        "uncertain": 45
+      },
+      "batches": [
+        {
+          "step_id": "discovery_0001",
+          "discovery_batch_id": "pcd-59bce31157fd9b3f03b867dd",
+          "decision_count": 48,
+          "distribution": {
+            "non_control": 48
+          },
+          "attempt_count": 1,
+          "schema_repair_count": 0,
+          "transport_retry_count": 0
+        },
+        {
+          "step_id": "discovery_0002",
+          "discovery_batch_id": "pcd-f80bafdb5f391a5c45f5be0a",
+          "decision_count": 48,
+          "distribution": {
+            "non_control": 48
+          },
+          "attempt_count": 1,
+          "schema_repair_count": 0,
+          "transport_retry_count": 0
+        },
+        {
+          "step_id": "discovery_0003",
+          "discovery_batch_id": "pcd-f02c8f3242e8e5297dd5177b",
+          "decision_count": 48,
+          "distribution": {
+            "candidate": 24,
+            "non_control": 24
+          },
+          "attempt_count": 1,
+          "schema_repair_count": 0,
+          "transport_retry_count": 0
+        },
+        {
+          "step_id": "discovery_0004",
+          "discovery_batch_id": "pcd-fd38132f9bd187517f74ab6e",
+          "decision_count": 48,
+          "distribution": {
+            "candidate": 2,
+            "non_control": 4,
+            "uncertain": 42
+          },
+          "attempt_count": 1,
+          "schema_repair_count": 0,
+          "transport_retry_count": 0
+        },
+        {
+          "step_id": "discovery_0005",
+          "discovery_batch_id": "pcd-5bd04f01a91af31c5df6db43",
+          "decision_count": 48,
+          "distribution": {
+            "non_control": 45,
+            "uncertain": 3
+          },
+          "attempt_count": 1,
+          "schema_repair_count": 0,
+          "transport_retry_count": 0
+        },
+        {
+          "step_id": "discovery_0006",
+          "discovery_batch_id": "pcd-57ce36f78f9d031a135ef258",
+          "decision_count": 48,
+          "distribution": {
+            "non_control": 48
+          },
+          "attempt_count": 1,
+          "schema_repair_count": 0,
+          "transport_retry_count": 0
+        },
+        {
+          "step_id": "discovery_0007",
+          "discovery_batch_id": "pcd-40623b43dbb7a9f776b0af39",
+          "decision_count": 48,
+          "distribution": {
+            "non_control": 48
+          },
+          "attempt_count": 1,
+          "schema_repair_count": 0,
+          "transport_retry_count": 0
+        },
+        {
+          "step_id": "discovery_0008",
+          "discovery_batch_id": "pcd-d0fa708b7b6bd3237b2b08e9",
+          "decision_count": 48,
+          "distribution": {
+            "non_control": 48
+          },
+          "attempt_count": 1,
+          "schema_repair_count": 0,
+          "transport_retry_count": 0
+        },
+        {
+          "step_id": "discovery_0009",
+          "discovery_batch_id": "pcd-a3ee950f543949cb9c7f1f11",
+          "decision_count": 48,
+          "distribution": {
+            "candidate": 3,
+            "non_control": 45
+          },
+          "attempt_count": 1,
+          "schema_repair_count": 0,
+          "transport_retry_count": 0
+        },
+        {
+          "step_id": "discovery_0010",
+          "discovery_batch_id": "pcd-6af1024c44843aa6642d1cac",
+          "decision_count": 48,
+          "distribution": {
+            "candidate": 5,
+            "non_control": 43
+          },
+          "attempt_count": 1,
+          "schema_repair_count": 0,
+          "transport_retry_count": 0
+        }
+      ],
+      "attempt_count": 10,
+      "schema_repair_count": 0,
+      "transport_retry_count": 0
+    },
+    "deep": {
+      "batch_count": 0,
+      "batches": [],
+      "candidate_count_total": 0,
+      "owned_structure_unit_count": 0,
+      "attempt_count": 10,
+      "schema_repair_count": 0,
+      "transport_retry_count": 0
+    },
+    "result_kind": null,
+    "formal_catalog_status": null,
+    "gate_accepted": null,
+    "gate_version": null,
+    "candidate_ids_count": 0,
+    "failure": {
+      "step_id": "deterministic_closure",
+      "error_code": "DEPENDENCY_FAILED",
+      "detail": null
+    },
+    "latency_seconds": {
+      "control_execution": 3100.024
+    }
+  },
+  "semantic_acceptance": {
+    "mode": "external_observation_only",
+    "incremental_candidate_required": false,
+    "passed": false,
+    "failure_codes": [
+      "CONTROL_JOB_NOT_COMPLETED",
+      "CANDIDATE_PACKAGE_RESULT_INVALID",
+      "FORMAL_CATALOG_BOUNDARY_INVALID",
+      "CANDIDATE_GATE_NOT_ACCEPTED"
+    ]
+  },
+  "resume": {
+    "requested_job_id": "3259ab5f070447c3938ff2de5f45c9cd",
+    "runner_claimed": true,
+    "recovery": {
+      "recovered_jobs": [
+        "3259ab5f070447c3938ff2de5f45c9cd"
+      ],
+      "cancelled_jobs": [],
+      "requeued_jobs": [
+        "3259ab5f070447c3938ff2de5f45c9cd"
+      ],
+      "failed_final_jobs": []
+    },
+    "completed_step_ids_before": [
+      "discovery_0001",
+      "discovery_0002",
+      "discovery_0003",
+      "discovery_0004",
+      "discovery_0005"
+    ],
+    "before_state": "running",
+    "before_progress": {
+      "completed": 5,
+      "total": 40
+    }
+  },
+  "boundaries": {
+    "formal_catalog_materialized": false,
+    "source_snapshot_bypassed": false,
+    "fixture_is_synthetic_only": false,
+    "read_only_protocol_replay": true,
+    "real_protocol_content_used": null,
+    "real_clinical_content_used": false,
+    "source_protocol_unchanged": null
+  },
+  "notes": [
+    "恢复路径只读取既有 SQLite 任务、冻结来源载荷和检查点；未重新读取原始方案文件。",
+    "核验发现传输实际模型身份：配置模型 mtplx-qwen38-27b-optimized-quality，服务 http://127.0.0.1:8002/v1",
+    "核验深析传输实际模型身份：配置模型 mtplx-qwen38-27b-optimized-quality，服务 http://127.0.0.1:8002/v1",
+    "中断租约已按持久检查点恢复；仅未完成步骤重新进入队列。"
+  ],
+  "finished_at": "2026-08-31T01:42:31.334771",
+  "latency_seconds": {
+    "total": 3100.381
+  },
+  "run_record_path": "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile/runs/protocol_control_replay/d001-phase-ii-20260831/run_record.json"
+}

@@ -87,6 +87,11 @@ def test_build_transport_keeps_mlx_serve_identity_and_flag(monkeypatch):
     monkeypatch.setattr(
         transport_module, "MLX_SERVE_MODEL", "hub/qwen3-xhigh-test"
     )
+    # 显式预算 131072 必须在产品传输的本地批次上限内原样生效；超限将显式
+    # 拒绝而不是静默 min() 压缩。
+    monkeypatch.setattr(
+        transport_module, "MLX_SERVE_PROTOCOL_BATCH_MAX_TOKENS", 131072
+    )
     transport = comparison.build_transport(
         "mlx-serve",
         reasoning_effort="xhigh",
@@ -157,6 +162,10 @@ def test_prepare_then_execute_persists_provider_defaults(
 ) -> None:
     # 横评要求输出预算 >= 65536；本地上限由操作者显式调高，缺省不放宽。
     monkeypatch.setattr(comparison, "MLX_SERVE_PROTOCOL_BATCH_MAX_TOKENS", 131072)
+    # 产品传输读取自身模块常量作为显式预算校验上限，同样需要显式调高。
+    monkeypatch.setattr(
+        transport_module, "MLX_SERVE_PROTOCOL_BATCH_MAX_TOKENS", 131072
+    )
     run_dir = tmp_path / "run"
     _prepare(run_dir, protocol_docx)
 

@@ -3,9 +3,11 @@ from __future__ import annotations
 from typing import Literal
 from datetime import datetime
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import ConfigDict, Field, model_serializer, model_validator
 
 from .common import ContractModel, DateValue, ScalarValue, VersionedModel
+from .rules import TimeQuantity, TimeConstraint
+from .control_evidence_origin import ControlEvidenceOrigin
 from .enums import (
     ExpectationStatus,
     FactPolarity,
@@ -142,8 +144,8 @@ class EvidenceExpectationTemplate(VersionedModel):
     状态；``template_id`` 与 ``projection_sha256`` 均由稳定身份字段计算，
     同一 RuleSet revision 的同一 requirement 永远得到同一模板。
     模板覆盖 EvidenceRequirement 下游执行所需的全部字段：fact_type、
-    due_stage、required_source_types、允许筛选记录转录、要求同期客观来源
-    与描述文本。Phase 4/5 创建 ReviewEpisode 时再由此模板投影具体受试者期望。
+    due_stage、required_source_types、允许筛选记录转录、要求同期客观来源、
+    来源有效期与描述文本。Phase 4/5 创建 ReviewEpisode 时再由此模板投影具体受试者期望。
     """
 
     template_id: str = Field(min_length=1)
@@ -155,19 +157,53 @@ class EvidenceExpectationTemplate(VersionedModel):
     workflow_stage_id: str = Field(min_length=1)
     fact_type: str = Field(min_length=1)
     required_source_types: list[str] = Field(default_factory=list)
-    requires_contemporaneous_objective_source: bool = False
-    allows_screening_record_transcription: bool = True
+    requires_contemporaneous_objective_source: bool | None = False
+    allows_screening_record_transcription: bool | None = True
+    source_validity_window: TimeQuantity | None = None
+    control_origin: ControlEvidenceOrigin | None = None
+    control_validity_status: Literal["specified", "not_specified", "unknown"] | None = None
+    control_validity_constraint: TimeConstraint | None = None
     description: str = Field(min_length=1)
     projection_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     created_at: datetime
+
+    @model_serializer(mode="wrap")
+    def serialize_validity(self, handler):
+        """Preserve legacy payload hashes, not only the inner projection hash."""
+        data = handler(self)
+        if self.source_validity_window is None:
+            data.pop("source_validity_window", None)
+        for name in ("control_origin", "control_validity_status", "control_validity_constraint"):
+            if getattr(self, name) is None:
+                data.pop(name, None)
+        return data
 
     @model_validator(mode="after")
     def validate_template_identity(self) -> "EvidenceExpectationTemplate":
         from app.domain.publication import canonical_hash
 
+        if self.control_origin is not None:
+            if self.control_origin.workflow_stage_id != self.workflow_stage_id:
+                raise ValueError("补充资料模板的审核访视与来源不一致")
+            if self.control_validity_status is None or self.source_validity_window is not None:
+                raise ValueError("补充资料模板须保留独立有效期状态")
+            if (self.control_validity_status == "specified") != (self.control_validity_constraint is not None):
+                raise ValueError("补充资料模板的有效期状态与时间约束不一致")
+        elif (
+            self.control_validity_status is not None
+            or self.control_validity_constraint is not None
+            or self.requires_contemporaneous_objective_source is None
+            or self.allows_screening_record_transcription is None
+        ):
+            raise ValueError("补充资料模板状态缺少对应控制来源")
         expected_projection = canonical_hash(
             {
-                "projection": "evidence_expectation_template/v1",
+                **expectation_validity_projection_fields(
+                    self.source_validity_window,
+                    control_origin=self.control_origin,
+                    control_validity_status=self.control_validity_status,
+                    control_validity_constraint=self.control_validity_constraint,
+                ),
                 "rule_set_id": self.rule_set_id,
                 "rule_set_revision": self.rule_set_revision,
                 "requirement_id": self.requirement_id,
@@ -200,6 +236,32 @@ class EvidenceExpectationTemplate(VersionedModel):
         if self.template_id != expected_id:
             raise ValueError("EvidenceExpectationTemplate 模板 ID 与稳定身份不一致")
         return self
+
+
+def expectation_validity_projection_fields(
+    window: TimeQuantity | None,
+    *,
+    control_origin: ControlEvidenceOrigin | None = None,
+    control_validity_status: str | None = None,
+    control_validity_constraint: TimeConstraint | None = None,
+) -> dict:
+    """Keep legacy hashes exact; bind explicit source validity in the v2 payload."""
+    if control_origin is not None:
+        return {
+            "projection": "evidence_expectation_template/v3",
+            "control_origin": control_origin.model_dump(mode="json"),
+            "control_validity_status": control_validity_status,
+            "control_validity_constraint": (
+                control_validity_constraint.model_dump(mode="json")
+                if control_validity_constraint is not None else None
+            ),
+        }
+    if window is None:
+        return {"projection": "evidence_expectation_template/v1"}
+    return {
+        "projection": "evidence_expectation_template/v2",
+        "source_validity_window": window.model_dump(mode="json"),
+    }
 
 
 class ClinicalFact(VersionedModel):

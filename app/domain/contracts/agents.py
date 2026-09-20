@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
 
 from .common import ContractModel, VersionedModel
 from .enums import (
@@ -33,6 +33,7 @@ class ModelConfigContract(VersionedModel):
 
 
 class AgentCallContract(VersionedModel):
+    schema_version: Literal["fixture/v1", "review/v2"] = "fixture/v1"
     agent_call_id: str = Field(min_length=1)
     node: AgentNode
     output_kind: AgentOutputKind
@@ -64,15 +65,36 @@ class AgentCallContract(VersionedModel):
     review_episode_id: str | None = None
     review_run_id: str | None = None
     evidence_snapshot_id: str | None = None
+    evidence_snapshot_v2_id: str | None = Field(default=None, min_length=1)
+    complete_processing_revision_id: str | None = Field(default=None, min_length=1)
     source_ids: list[str] = Field(default_factory=list)
     input_tokens: int | None = Field(default=None, ge=0)
     output_tokens: int | None = Field(default=None, ge=0)
     estimated_cost: float | None = Field(default=None, ge=0)
     gate_result_ids: list[str] = Field(min_length=1)
 
+    @model_serializer(mode="wrap")
+    def serialize_evidence_lineage(self, handler):
+        payload = handler(self)
+        if self.schema_version == "fixture/v1":
+            payload.pop("evidence_snapshot_v2_id", None)
+            payload.pop("complete_processing_revision_id", None)
+        return payload
+
     @model_validator(mode="after")
     def validate_node_scope(self) -> "AgentCallContract":
         from app.domain.publication import canonical_hash
+
+        if self.schema_version == "review/v2":
+            if (
+                self.node == AgentNode.PROTOCOL_DECONSTRUCTOR
+                or self.evidence_snapshot_id is not None
+                or not self.evidence_snapshot_v2_id
+                or not self.complete_processing_revision_id
+            ):
+                raise ValueError("新版受试者调用必须绑定新版资料及完整处理修订")
+        elif self.evidence_snapshot_v2_id or self.complete_processing_revision_id:
+            raise ValueError("旧版调用不得混用新版资料身份")
 
         if any(
             len(value) != 64 or any(char not in "0123456789abcdef" for char in value)
@@ -107,7 +129,7 @@ class AgentCallContract(VersionedModel):
                 self.rule_set_revision,
                 self.review_episode_id,
                 self.review_run_id,
-                self.evidence_snapshot_id,
+                self.evidence_snapshot_id or self.evidence_snapshot_v2_id,
                 self.source_ids,
             ]
         ):

@@ -5,6 +5,7 @@ from app.storage.page_review_repository import PageReviewRepository
 from app.services.evidence_app_errors import EvidenceAppError, AppNotFoundError
 from app.workflow.errors import JobNotFoundError
 from app.workflow.jobstore import JobStore
+from app.llm.page_review_transport_options import page_transport_contract
 
 
 class PageRereadNotReady(EvidenceAppError):
@@ -15,6 +16,11 @@ class PageRereadNotReady(EvidenceAppError):
 
 
 def plan_page_reread(session, predecessor_job_id, payload, *, single_length_recovery=False):
+    if single_length_recovery:
+        raise PageRereadNotReady(
+            "当前判读已包含一次增加输出额度的重试，不能再用旧版较低额度补读；"
+            "请先核查未读完的资料与失败原因"
+        )
     store = JobStore(session)
     try:
         previous = store.get_job(predecessor_job_id)
@@ -29,7 +35,11 @@ def plan_page_reread(session, predecessor_job_id, payload, *, single_length_reco
     # Legacy jobs were serial; adding scheduling does not change reading semantics.
     if "execution_control" not in comparable and "execution_control" in payload:
         comparable["execution_control"] = payload["execution_control"]
-    if previous.job_type != "r3_page_review" or comparable != payload:
+    old_rotations = comparable.pop("reading_rotations", {})
+    new_rotations = payload.get("reading_rotations", {})
+    changed_pages = {page_id for page_id in old_rotations.keys() | new_rotations.keys()
+                     if old_rotations.get(page_id) != new_rotations.get(page_id)}
+    if previous.job_type != "r3_page_review" or comparable != {k: v for k, v in payload.items() if k != "reading_rotations"}:
         raise PageRereadNotReady("前次判读与当前资料、条款或处理配置不一致，不能局部重读")
 
     def receipt(step_id):
@@ -48,12 +58,16 @@ def plan_page_reread(session, predecessor_job_id, payload, *, single_length_reco
                 "expected_page_artifact_ids": [page["page_artifact_id"] for page in payload["pages"]]}
     if any(getattr(coverage, field) != value for field, value in expected.items()):
         raise PageRereadNotReady("前次判读的覆盖记录与当前资料不一致")
-    if not any(entry.lane_failures for entry in coverage.entries):
+    if coverage.reading_rotations != old_rotations:
+        raise PageRereadNotReady("前次判读的阅读方向与处理记录不一致")
+    if not changed_pages and not any(entry.lane_failures for entry in coverage.entries):
         raise PageRereadNotReady("前次判读没有读取失败的页面，无需重读")
     reusable = {}
     for index, entry in enumerate(coverage.entries):
         if entry.page_artifact_id != payload["pages"][index]["page_artifact_id"]:
             raise PageRereadNotReady("前次判读页面顺序与当前资料不一致")
+        if entry.page_artifact_id in changed_pages:
+            continue
         for lane in ("main-A", "main-B"):
             step = f"read:{index}:{lane}"
             value = receipt(step)
@@ -61,10 +75,16 @@ def plan_page_reread(session, predecessor_job_id, payload, *, single_length_reco
                 # Read through the repository to verify persisted content before reuse.
                 record = PageReviewRepository(session).get_review(value["page_review_id"])
                 page = payload["pages"][index]
+                expected_rotation = payload.get("reading_rotations", {}).get(page["page_artifact_id"])
+                actual_rotation = record.reading_view.clockwise_degrees if record.reading_view else None
+                if expected_rotation != actual_rotation:
+                    raise PageRereadNotReady("前次判读使用的阅读方向与当前任务不一致")
+                transport = page_transport_contract(record.provider)
+                expected_prompt = payload["main_prompt_version"] + (":" + transport if transport else "")
                 binding = {**page, "clause_pack_id": payload["clause_pack"]["clause_pack_id"],
                            "clause_pack_sha256": payload["clause_pack"]["clause_pack_sha256"],
                            "contract_version": payload["page_review_contract_version"],
-                           "prompt_version": payload["main_prompt_version"]}
+                           "prompt_version": expected_prompt}
                 if record.lane.value != lane or any(getattr(record, key) != val for key, val in binding.items()):
                     raise PageRereadNotReady("已完成的主读记录与当前资料不一致，不能复用")
                 reusable[step] = value
@@ -73,11 +93,4 @@ def plan_page_reread(session, predecessor_job_id, payload, *, single_length_reco
     recovery = {"predecessor_job_id": predecessor_job_id,
             "predecessor_coverage_id": coverage.coverage_id,
             "reusable_receipts": reusable}
-    if single_length_recovery:
-        missing = [f"read:{index}:{lane}" for index in range(len(payload["pages"]))
-                   for lane in ("main-A", "main-B") if f"read:{index}:{lane}" not in reusable]
-        if len(missing) != 1 or receipt(missing[0]).get("lane_failure", {}).get("failure_kind") != "length":
-            raise PageRereadNotReady("额外补读仅适用于一个因输出截断而失败的读道")
-        recovery["length_override"] = {"step_id": missing[0], "max_tokens": 48000,
-                                       "budget_scope": "combined_generation", "retry_length": False}
     return recovery

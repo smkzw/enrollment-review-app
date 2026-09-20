@@ -66,6 +66,25 @@ const resultPayload = {
 };
 
 describe("判断检索 HTTP client", () => {
+  it("不同原件的同一页码保留独立来源身份", () => {
+    const payload = {
+      ...resultPayload,
+      results: [{ ...resultPayload.results[0], incomplete_pages: [
+        { source_document_version_id: "doc-a", page_artifact_id: "page-a", page_number: 1, reasons: ["尚未读完"] },
+        { source_document_version_id: "doc-b", page_artifact_id: "page-b", page_number: 1, reasons: ["内容不清"] },
+      ] }],
+    };
+    expect(decodeJudgmentSearchResults(payload).results[0]?.incompletePages).toEqual([
+      { sourceDocumentVersionId: "doc-a", pageArtifactId: "page-a", pageNumber: 1, reasons: ["尚未读完"] },
+      { sourceDocumentVersionId: "doc-b", pageArtifactId: "page-b", pageNumber: 1, reasons: ["内容不清"] },
+    ]);
+    const missingIdentity = {
+      ...payload,
+      results: [{ ...payload.results[0], incomplete_pages: [{ page_number: 1, reasons: [] }] }],
+    };
+    expect(() => decodeJudgmentSearchResults(missingIdentity)).toThrow(JudgmentSearchDecodeError);
+  });
+
   it("四个端点使用正确路径、方法和严格视图", async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(response({ job_id: "job-1", state: "queued", state_label: "等待处理", created: true }))

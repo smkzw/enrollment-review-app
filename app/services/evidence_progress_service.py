@@ -28,6 +28,7 @@ from app.storage.evidence_repositories import (
 from app.storage.ocr_repositories import (
     OcrPageRepository,
     OcrRunRepository,
+    OCRProfileRepository,
     PageArtifactRepository,
 )
 from app.storage.repositories import RepositoryError
@@ -195,6 +196,10 @@ def _candidate_snapshot(session: Session, job_id: str) -> EvidenceSnapshot | Non
 def _effective_page_rollup(session: Session, version_id: str) -> _PageRollup:
     """按缓存键选一页的有效状态，旧失败/处理中行不与成功重试重复计数。"""
     pages = OcrPageRepository(session).list_by_source_document_version(version_id)
+    profiles = {page.ocr_profile_sha256 for page in pages}
+    original_profiles = {fingerprint for fingerprint in profiles
+        if OCRProfileRepository(session).get_by_fingerprint(fingerprint).attempt_namespace is None}
+    pages = [page for page in pages if page.ocr_profile_sha256 in original_profiles]
     by_cache_key: dict[str, list[Any]] = {}
     for page in pages:
         by_cache_key.setdefault(page.cache_key, []).append(page)
@@ -260,6 +265,10 @@ def build_progress(
     """按候选快照、不可变页行和持久事件投影证据处理进度。"""
     store = JobStore(session)
     status = store.job_status(job_id)
+    job = store.get_job(job_id)
+    payload = verify_payload_sha256(job.payload_json, job.payload_sha256)
+    reprocessing = job.job_type == "evidence_reprocess"
+    job_local_progress = reprocessing or payload.get("ocr_inheritance_contract") == "confirmed-ocr/v1"
     progress_events: list[Any] = [
         row.event
         for row in store.list_event_rows(job_id)
@@ -290,7 +299,8 @@ def build_progress(
     for member in members:
         version = SourceDocumentRepository(session).get(member.source_document_version_id)
         run = latest_run_by_doc.get(version.source_document_version_id)
-        rollup = _effective_page_rollup(session, version.source_document_version_id)
+        # Earlier attempts share source versions, but are not this job's progress.
+        rollup = _PageRollup() if job_local_progress else _effective_page_rollup(session, version.source_document_version_id)
         event = event_by_id.get(version.source_document_version_id)
         if event is None:
             event = event_by_name.get(version.file_name)
@@ -299,7 +309,7 @@ def build_progress(
         )
         page_total = max(
             int(version.page_count or 0),
-            len(artifacts),
+            0 if job_local_progress else len(artifacts),
             event.page_total if event is not None else 0,
             run.page_total if run is not None else 0,
             rollup.succeeded + rollup.failed + rollup.processing,
@@ -322,7 +332,7 @@ def build_progress(
         )
         # 只有每份候选资料都已有原生文字页且没有视觉运行，才能使用“直接读取”
         # 说明。视觉运行、尚未开始的资料或混合路线都必须保留全资料说明。
-        all_direct_text = all_direct_text and bool(page_rows) and run is None
+        all_direct_text = all_direct_text and bool(page_rows) and run is None and not job_local_progress
         file_status = _status_for_file(
             page_total=page_total,
             page_succeeded=page_succeeded,

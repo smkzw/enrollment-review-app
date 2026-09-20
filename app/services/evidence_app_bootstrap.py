@@ -8,5 +8,6 @@ from __future__ import annotations
 
 from app.storage.config import DataPaths, resolve_data_paths
 from app.storage.migrate import upgrade_or_fail
+from app.storage.read_only import open_read_only
 
-__all__ = ["DataPaths", "resolve_data_paths", "upgrade_or_fail"]
+__all__ = ["DataPaths", "resolve_data_paths", "upgrade_or_fail", "open_read_only"]

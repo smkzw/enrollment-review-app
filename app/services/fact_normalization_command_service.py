@@ -213,6 +213,18 @@ def _runtime_model(
         "reasoning_effort": normalized_effort,
         "parameters": parameters,
     }
+    if normalized_provider in {"mtplx", "mtplx-api"}:
+        from app.config import MTPLX_BASE_URL
+        from app.llm.mtplx_model_lifecycle import mtplx_deployment_fingerprint
+
+        base_url = MTPLX_BASE_URL.rstrip("/")
+        if not base_url.endswith("/v1"):
+            base_url += "/v1"
+        deployment = mtplx_deployment_fingerprint(
+            normalized_provider, base_url, normalized_model, normalized_effort,
+        )
+        if deployment is not None:
+            parameters["mtplx_deployment_sha256"] = deployment
     return ModelConfigContract(
         model_config_id=(
             "evidence-normalizer/model/"

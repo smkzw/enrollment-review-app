@@ -1,0 +1,93 @@
+{
+  "policy": "execution-used-provider-model-nodes-are-excluded-from-conference",
+  "linked_execution_task_id": "phase5-slice61ao-replay-harness-budget-contract-20260829",
+  "linked": true,
+  "execution_evidence": [
+    "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile/logs/execution/phase5-slice61ao-replay-harness-budget-contract-20260829/worker_01_primary_429_stdout.txt",
+    "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile/logs/execution/phase5-slice61ao-replay-harness-budget-contract-20260829/worker_01_stdout.txt",
+    "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile/logs/execution/phase5-slice61ao-replay-harness-budget-contract-20260829/worker_02_stdout.txt",
+    "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile/logs/execution/phase5-slice61ao-replay-harness-budget-contract-20260829/worker_03_stdout.txt"
+  ],
+  "excluded_route_nodes": [
+    {
+      "agent": "codebuddy",
+      "provider": "codebuddy-cli",
+      "model": "glm-5.3-flash",
+      "source": "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile/logs/execution/phase5-slice61ao-replay-harness-budget-contract-20260829/worker_01_primary_429_stdout.txt",
+      "reason": "effective execution route"
+    },
+    {
+      "agent": "pi",
+      "provider": "mtplx",
+      "model": "mtplx-qwen38-27b-optimized-quality",
+      "source": "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile/logs/execution/phase5-slice61ao-replay-harness-budget-contract-20260829/worker_01_stdout.txt",
+      "reason": "effective execution route"
+    }
+  ],
+  "effective_conference_roles": {
+    "general_single_object": {
+      "agent": "codebuddy",
+      "provider": "codebuddy-cli",
+      "model": "deepseek-v4-flash",
+      "effort": "max",
+      "default_provider": "codebuddy-cli",
+      "default_model": "deepseek-v4-flash",
+      "default_effort": "max",
+      "escalate_provider": "codebuddy-cli",
+      "escalate_model": "deepseek-v4-flash",
+      "escalate_effort": "max",
+      "primary": {
+        "agent": "codebuddy",
+        "provider": "codebuddy-cli",
+        "model": "deepseek-v4-flash",
+        "effort": "max"
+      },
+      "fallbacks": [
+        {
+          "agent": "grok",
+          "provider": "grok-build",
+          "model": "grok-4.6",
+          "effort": "medium"
+        },
+        {
+          "agent": "pi",
+          "provider": "cursor",
+          "model": "cursor-grok-4.6",
+          "effort": "medium"
+        },
+        {
+          "agent": "pi",
+          "provider": "openai-codex",
+          "model": "gpt-5.6-luna",
+          "effort": "max"
+        }
+      ],
+      "execution_route": "Complex/logic/evidence/artifact-heavy object: CodeBuddy/deepseek-v4-flash max -> CodeBuddy/glm-5.3-flash max -> Grok Build/grok-4.6 medium -> Pi/Cursor/cursor-grok-4.6 medium -> Pi/openai-codex/gpt-5.6-luna max",
+      "role": "single complex-task conference object; Codex chairs directly with no sub-venue chair",
+      "schedule": {
+        "policy": "beijing-day-night-v1",
+        "timezone": "Asia/Shanghai",
+        "period": "night",
+        "evaluated_at": "2026-08-29T03:35:15.099494+08:00"
+      },
+      "route_contract_frozen": true,
+      "deduplicated_against_execution": [
+        {
+          "provider": "codebuddy-cli",
+          "model": "glm-5.3-flash"
+        },
+        {
+          "provider": "mtplx",
+          "model": "mtplx-qwen38-27b-optimized-quality"
+        }
+      ]
+    }
+  },
+  "schedule": {
+    "policy": "beijing-day-night-v1",
+    "timezone": "Asia/Shanghai",
+    "period": "night",
+    "evaluated_at": "2026-08-29T03:35:15.099494+08:00"
+  },
+  "generated_at": "2026-08-29 03:35:15 CST"
+}

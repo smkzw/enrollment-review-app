@@ -1,0 +1,18 @@
+{
+  "attached_count": 2,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-76ee6df8dc5121848ce00b9c",
+  "group_id": "d001-ii-package99-pregnancy-reporting-followup-boundary",
+  "lookup_counts": {
+    "frozen_plan_owned": 12
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package99-pregnancy-reporting-followup-boundary",
+  "owned_count": 10,
+  "prompt_char_count": 33074,
+  "prompt_sha256": "fd0fbf1d3801f0c7853993f480ac2c77081ac4e6ebd8fb7a026c5b4419303166",
+  "task_id": "phase5-slice61ck-20260830",
+  "unit_count": 12,
+  "worker": "cursor-worker_01"
+}

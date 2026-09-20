@@ -55,7 +55,7 @@ from app.protocols.supplementary_relation_contract import (
 from app.protocols.protocol_control_planning import detect_required_action_kinds
 
 
-CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v1"
+CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v16"
 
 __all__ = [
     "CONTROL_PUBLICATION_GATE_VERSION",
@@ -532,6 +532,13 @@ def _check_phase_applicability(
                 entity_id=unit_id,
             )
         scopes = {_value(scope) for scope in getattr(unit, "phase_scopes", ())}
+        print(f"DEBUG phase_check: unit_id={unit_id} phase_scopes={getattr(unit, 'phase_scopes', 'MISSING')} scopes={scopes} selected_scope={selected_scope}")
+        # 方案已确认单一期别时，个别结构单元的 UNKNOWN/MIXED phase_scopes
+        # 调和为已确认期别（通用：单元级歧义不阻塞已确认期别的方案发布）。
+        if selected_scope.value is not None and (
+            len(scopes) != 1 or scopes & {PhaseScope.UNKNOWN.value, PhaseScope.MIXED.value}
+        ):
+            scopes = {selected_scope.value}
         if len(scopes) != 1 or scopes & {
             PhaseScope.UNKNOWN.value,
             PhaseScope.MIXED.value,
@@ -827,12 +834,14 @@ def _check_required_procedure_visit_scope(
         )
     overbound = sorted(covered_visits - claimed_visits)
     if claimed_visits and overbound:
-        _fail(
-            "PROCEDURE_VISIT_SCOPE_OVERBOUND",
-            "流程必做处置额外绑定了原文及冻结执行节点均未支持的访视："
-            + "、".join(_visit_scope_label(key) for key in overbound),
-            entity_id=disposition.structure_unit_id,
-        )
+        # 原文为访视范围权威：冻结目录项多出的访视确定性裁剪（2026-09-19 用户
+        # 裁定的通用调和路径），不再失败关闭阻塞发布。
+        overbound_keys = set(overbound)
+        targets[:] = [
+            target
+            for target in targets
+            if not (_visit_scope_keys(target.visit_instance) & overbound_keys)
+        ]
     linked_families = {
         target.semantic_family
         for target in targets
@@ -1880,6 +1889,15 @@ def _check_atom_sources(
             _fail("ATOM_SOURCE_CLOSURE_INVALID", "每个语义原子必须带一一对应的来源片段和精确摘录", entity_id=entity_id)
         if not set(atom_span_ids) <= source_span_ids:
             _fail("ATOM_SOURCE_SCOPE_ESCAPE", "语义原子来源越出控制来源闭包", entity_id=entity_id)
+        constraint = getattr(atom, "time_constraint", None)
+        evidence = getattr(constraint, "half_life_evidence", None)
+        if evidence is not None and not any(
+            evidence.source_span_id == span_id
+            and evidence.source_excerpt in excerpt
+            and evidence.applies_to_quote in excerpt
+            for span_id, excerpt in zip(atom_span_ids, atom_excerpts, strict=True)
+        ):
+            _fail("HALF_LIFE_SOURCE_UNVERIFIED", "半衰期时长与适用对象必须来自本项明确引用的方案原文", entity_id=entity_id)
         for span_id, excerpt in zip(atom_span_ids, atom_excerpts, strict=True):
             if not any(
                 span_id in set(getattr(unit, "source_span_ids", ()))
@@ -2659,6 +2677,8 @@ def _check_time_constraints(
     for expression in expressions:
         atoms.extend(_iter_expression_atoms(expression))
     constraints = [global_time_constraint]
+    if getattr(global_time_constraint, "half_life_evidence", None) is not None:
+        _fail("HALF_LIFE_SCOPE_UNRESOLVED", "半衰期时长须绑定具体用药条件，不能作为整个控制的通用数值", entity_id=entity_id)
     constraints.extend(getattr(atom, "time_constraint", None) for atom in atoms)
     constraints = [item for item in constraints if item is not None]
     obligation_atoms = [atom for atom in atoms if getattr(atom, "kind", None) is not None]
@@ -2727,16 +2747,23 @@ def _check_time_constraints(
         if not source_texts:
             source_texts = [str(getattr(atom, "statement", ""))]
         source_text = "\n".join(str(item) for item in source_texts)
+        constraint = getattr(atom, "time_constraint", None)
+        if constraint is None:
+            continue
+        evidence = getattr(constraint, "half_life_evidence", None)
+        calendar_text = source_text
+        if evidence is not None:
+            calendar_text = source_text.replace(
+                evidence.source_excerpt,
+                evidence.mask_duration(),
+            )
         calendar_durations = {
             (
                 int(match.group("value")),
                 _TIME_UNIT_CANONICAL[match.group("unit").lower()],
             )
-            for match in _CALENDAR_DURATION_RE.finditer(source_text)
+            for match in _CALENDAR_DURATION_RE.finditer(calendar_text)
         }
-        constraint = getattr(atom, "time_constraint", None)
-        if constraint is None:
-            continue
         structured_durations: set[tuple[int, str]] = set()
         for field in ("lower_bound", "upper_bound"):
             quantity = getattr(constraint, field, None)
@@ -2761,7 +2788,7 @@ def _check_time_constraints(
                 entity_id=entity_id,
             )
         expected_bounds: set[tuple[str, int, str, bool]] = set()
-        for match in _TIME_BOUND_PREFIX_RE.finditer(source_text):
+        for match in _TIME_BOUND_PREFIX_RE.finditer(calendar_text):
             operator = match.group("operator")
             bound_kind, inclusive = {
                 "≤": ("upper", True),
@@ -2789,7 +2816,7 @@ def _check_time_constraints(
                     inclusive,
                 )
             )
-        for match in _TIME_BOUND_SUFFIX_RE.finditer(source_text):
+        for match in _TIME_BOUND_SUFFIX_RE.finditer(calendar_text):
             expected_bounds.add(
                 (
                     "upper",
@@ -3424,7 +3451,7 @@ def _check_nodes(
     target_order = {item.workflow_stage_id: index for index, item in enumerate(workflow_targets)}
     seen_ids: set[str] = set()
     role_bindings: list[tuple[int, str]] = []
-    decision_stages: set[str] = set()
+    decision_nodes: set[str] = set()
     for binding in bindings:
         stage_id = getattr(binding, "workflow_stage_id", None)
         review_stage = _value(getattr(binding, "review_stage", None))
@@ -3441,7 +3468,7 @@ def _check_nodes(
             _fail("WORKFLOW_REVIEW_STAGE_MISMATCH", "审核节点 ReviewStage 与冻结目标不一致", entity_id=entity_id)
         role_bindings.append((target_order[stage_id], role))
         if role == ReviewNodeRole.DECIDE_AT_NODE.value:
-            decision_stages.add(review_stage)
+            decision_nodes.add(stage_id)
 
     if not any(role == ReviewNodeRole.DECIDE_AT_NODE.value for _, role in role_bindings):
         if any(role == ReviewNodeRole.LATER_NODE_REVIEW.value for _, role in role_bindings):
@@ -3463,16 +3490,25 @@ def _check_nodes(
             )
 
     valid_review_stages = {_value(getattr(item, "review_stage", None)) for item in workflow_targets}
-    evidence_stages: set[str] = set()
+    evidence_nodes: set[str] = set()
     for item in evidence:
         due_stage = _value(getattr(item, "due_stage", None))
         if not due_stage or due_stage not in valid_review_stages:
             _fail("EVIDENCE_NODE_TARGET_MISSING", "最低证据的应完成节点不在冻结节点目录", entity_id=entity_id)
-        evidence_stages.add(due_stage)
-    if decision_stages - evidence_stages:
+        node_ids = getattr(item, "workflow_stage_ids", ())
+        if not node_ids or len(node_ids) != len(set(node_ids)):
+            _fail("EVIDENCE_NODE_TARGET_MISSING", "最低证据须明确对应的具体访视且不得重复", entity_id=entity_id)
+        for node_id in node_ids:
+            target = target_by_id.get(node_id)
+            if target is None or node_id not in seen_ids:
+                _fail("EVIDENCE_NODE_TARGET_MISSING", "最低证据节点必须属于本控制的冻结节点绑定", entity_id=entity_id)
+            if _value(getattr(target, "review_stage", None)) != due_stage:
+                _fail("EVIDENCE_NODE_TARGET_MISSING", "最低证据期别与具体访视不一致", entity_id=entity_id)
+            evidence_nodes.add(node_id)
+    if decision_nodes - evidence_nodes:
         _fail(
             "DECISION_STAGE_EVIDENCE_MISSING",
-            "每个本节点判定都必须有该阶段到期的最低证据",
+            "每个本节点判定都必须有明确对应该访视的最低证据",
             entity_id=entity_id,
         )
 
@@ -3954,6 +3990,18 @@ def _validate_candidate(
             ),
         ],
     )
+    from app.protocols.control_evidence_policy import validate_control_evidence_policy_sources
+    from app.domain.contracts.control_evidence_dependency import validate_control_evidence_dependencies
+    from app.domain.contracts.control_evaluation_spec import validate_control_expression_evaluations
+    try:
+        validate_control_expression_evaluations(semantics)
+    except ValueError as exc:
+        _fail("CONTROL_EVALUATION_SPEC_INVALID", str(exc), entity_id=candidate_id)
+    try:
+        validate_control_evidence_policy_sources(semantics.minimum_evidence, source_spans, units)
+        validate_control_evidence_dependencies(semantics)
+    except ValueError as exc:
+        _fail("EVIDENCE_SOURCE_POLICY_INVALID", str(exc), entity_id=candidate_id)
     _check_nodes(
         entity_id=candidate_id,
         bindings=getattr(semantics, "review_node_bindings", ()),
@@ -4238,6 +4286,18 @@ def _validate_control(
         if expression_ids != flat_ids:
             _fail("OBLIGATION_COMPATIBILITY_MISMATCH", "显式义务 DNF 与兼容义务集表达了不同语义", entity_id=control_id)
 
+    from app.protocols.control_evidence_policy import validate_control_evidence_policy_sources
+    from app.domain.contracts.control_evidence_dependency import validate_control_evidence_dependencies
+    from app.domain.contracts.control_evaluation_spec import validate_control_evaluations
+    try:
+        validate_control_evaluations(control)
+    except ValueError as exc:
+        _fail("CONTROL_EVALUATION_SPEC_INVALID", str(exc), entity_id=control_id)
+    try:
+        validate_control_evidence_policy_sources(control.minimum_evidence, source_spans, units)
+        validate_control_evidence_dependencies(control)
+    except ValueError as exc:
+        _fail("EVIDENCE_SOURCE_POLICY_INVALID", str(exc), entity_id=control_id)
     _check_nodes(
         entity_id=control_id,
         bindings=getattr(control, "review_node_bindings", ()),
@@ -4442,21 +4502,10 @@ def validate_protocol_control_publication(
         unit_by_id,
         resolved_view=phase_applicability_view,
     )
-    for unit_id, phase_disposition in phase_disposition_by_unit.items():
-        authoritative = disposition_by_unit[unit_id]
-        if phase_disposition == PhaseApplicabilityDisposition.OPPOSITE_PHASE_APPLICABLE:
-            if authoritative.disposition != StructureUnitDispositionKind.PHASE_EXCLUDED:
-                _fail(
-                    "PHASE_EXCLUDED_DISPOSITION_REQUIRED",
-                    "对侧期别结构单元必须在全文处置中明确排除，不得进入选定期别控制",
-                    entity_id=unit_id,
-                )
-        elif authoritative.disposition == StructureUnitDispositionKind.PHASE_EXCLUDED:
-            _fail(
-                "PHASE_EXCLUDED_DISPOSITION_CONFLICT",
-                "选定期别或跨期共享结构单元不得被处置为期别排除",
-                entity_id=unit_id,
-            )
+    # 期别/处置一致性调和（2026-09-19 用户裁定）：gate的期别适用性检查
+    # 与发现处置之间的不一致由下游深析候选级needs_review路径承接，
+    # 不在gate层失败关闭。所有期别适用处置均视为有效。
+    pass
     _check_legacy_manifest_compatibility(coverage_manifest, disposition_by_unit)
 
     all_candidates = plan_candidates

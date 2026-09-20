@@ -1,0 +1,492 @@
+[
+  {
+    "excerpt": "PK采血^20 | X | X | X | X | X",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表",
+      "表 1 Ⅱ期临床研究阶段流程表"
+    ],
+    "lookup": "coverage_manifest",
+    "package_id": null,
+    "package_ordinal": null,
+    "role": "attached",
+    "source_ref": "body.t5.r29",
+    "source_span_ids": [
+      "body.t5.r29.c0.p0",
+      "body.t5.r29.c4.p0",
+      "body.t5.r29.c5.p0",
+      "body.t5.r29.c6.p0",
+      "body.t5.r29.c7.p0",
+      "body.t5.r29.c9.p0"
+    ],
+    "structure_unit_id": "su-7140b017c213e4843d66fee5",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "IL-17A采血^21 | X | X | X | X | X | X | X",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表",
+      "表 1 Ⅱ期临床研究阶段流程表"
+    ],
+    "lookup": "coverage_manifest",
+    "package_id": null,
+    "package_ordinal": null,
+    "role": "attached",
+    "source_ref": "body.t5.r30",
+    "source_span_ids": [
+      "body.t5.r30.c0.p0",
+      "body.t5.r30.c3.p0",
+      "body.t5.r30.c4.p0",
+      "body.t5.r30.c5.p0",
+      "body.t5.r30.c6.p0",
+      "body.t5.r30.c7.p0",
+      "body.t5.r30.c8.p0",
+      "body.t5.r30.c9.p0"
+    ],
+    "structure_unit_id": "su-4270cafb5ee7da5b21f3bc3a",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "合并治疗^25 | X",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表",
+      "表 1 Ⅱ期临床研究阶段流程表"
+    ],
+    "lookup": "coverage_manifest",
+    "package_id": null,
+    "package_ordinal": null,
+    "role": "attached",
+    "source_ref": "body.t5.r37",
+    "source_span_ids": [
+      "body.t5.r37.c0.p0",
+      "body.t5.r37.c1.p0"
+    ],
+    "structure_unit_id": "su-440520e50ad8f4f7039d44ce",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "不良事件^26 | X",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表",
+      "表 1 Ⅱ期临床研究阶段流程表"
+    ],
+    "lookup": "coverage_manifest",
+    "package_id": null,
+    "package_ordinal": null,
+    "role": "attached",
+    "source_ref": "body.t5.r38",
+    "source_span_ids": [
+      "body.t5.r38.c0.p0",
+      "body.t5.r38.c3.p0"
+    ],
+    "structure_unit_id": "su-81e57895179c1184dbba88c3",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "合并治疗为合并药物/非药物治疗，包括参与者自签署ICF开始至研究结束使用的任何药物、治疗，应详细记录在eCRF中，并注明用药/治疗原因、给药/治疗方法及起止时间等。",
+    "heading_path": [
+      "研究治疗",
+      "合并用药/治疗"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-997b2a852e20583f5a2fdc6a",
+    "package_ordinal": 63,
+    "role": "attached",
+    "source_ref": "body.p749",
+    "source_span_ids": [
+      "body.p749"
+    ],
+    "structure_unit_id": "su-08603dae47c0c697c7eb084f",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "PK/IL-17A血样采集",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "PK/IL-17A血样采集"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-9519680f4eac0c124ea342b6",
+    "package_ordinal": 75,
+    "role": "owned",
+    "source_ref": "body.p828",
+    "source_span_ids": [
+      "body.p828"
+    ],
+    "structure_unit_id": "su-1bceb30de7b641c46c9763bc",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "Ⅱ期临床研究阶段，所有参与者在W2、W4在给药前1 h内和给药后2 h（±30 min）进行PK血样采集；W8、W12在给药前1 h内进行PK血样采集。所有参与者在W0、W2、W4、W8、W12访视给药前1 h内以及W16、提前退出访视进行IL-17A血样采集。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "PK/IL-17A血样采集"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "attached",
+    "source_ref": "body.p829",
+    "source_span_ids": [
+      "body.p829"
+    ],
+    "structure_unit_id": "su-ae9a674940c20ffcf99fc355",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "Ⅲ期临床研究阶段，所有参与者在W2、W4、W8、W12、W16、W20、W28、W36、W44、W52访视给药前1 h内进行PK血样采集；所有参与者在W0、W2、W4、W8、W12、W16、W20、W28、W36、W44、W52访视给药前1 h内以及提前退出访视进行IL-17A血样采集.",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "PK/IL-17A血样采集"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "attached",
+    "source_ref": "body.p830",
+    "source_span_ids": [
+      "body.p830"
+    ],
+    "structure_unit_id": "su-b37f1f8b0df8b2f25ea93ac6",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "对于访视时PK/IL-17A采血点，可以与实验室检查同时采集，只要准确记录采样时间，给药时间及给药量即可。每次静脉采样后，记录血样采集的准确时间（精确到分秒），以及实际用药时间和剂量，这些信息必须准确地记录在原始病历和/或eCRF中。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "PK/IL-17A血样采集"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-9519680f4eac0c124ea342b6",
+    "package_ordinal": 75,
+    "role": "owned",
+    "source_ref": "body.p831",
+    "source_span_ids": [
+      "body.p831"
+    ],
+    "structure_unit_id": "su-9c9e248a15d9f00168137081",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "为配合研究中心在操作上的可行性及灵活性，如果由于特殊情况，参与者在到达研究中心前已经服用了试验用药品，依然可以采集PK/IL-17A血样，只需准确记录实际服药时间、剂量和采血时间。当发生SAE或≥3级治疗期出现的不良事件（TEAE）或提前退出时，如果条件允许，研究者可以选择采集一份计划外PK样本，用于量-效分析。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "PK/IL-17A血样采集"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-9519680f4eac0c124ea342b6",
+    "package_ordinal": 75,
+    "role": "owned",
+    "source_ref": "body.p832",
+    "source_span_ids": [
+      "body.p832"
+    ],
+    "structure_unit_id": "su-1738c9e30433abce30e4b1ac",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "对于采集和运输的样本，申办者将在开始研究前向研究中心提供详细的采集、处理、储存和运输说明以及联系信息。细节请参见《中心实验室手册》。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "PK/IL-17A血样采集"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-9519680f4eac0c124ea342b6",
+    "package_ordinal": 75,
+    "role": "owned",
+    "source_ref": "body.p833",
+    "source_span_ids": [
+      "body.p833"
+    ],
+    "structure_unit_id": "su-53f21fa8aeb839ad780efb23",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "记录不良事件",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "记录不良事件"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-9519680f4eac0c124ea342b6",
+    "package_ordinal": 75,
+    "role": "owned",
+    "source_ref": "body.p834",
+    "source_span_ids": [
+      "body.p834"
+    ],
+    "structure_unit_id": "su-644ca62e859fa39fbe62d62e",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "整个研究过程要严密监测参与者的不良事件，直至研究者确认不良事件消退、返回至基线等级或更好、稳定，或参与者失访或撤回同意。不良事件的收集详见“7.3.3.不良事件的收集和记录”。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "记录不良事件"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-9519680f4eac0c124ea342b6",
+    "package_ordinal": 75,
+    "role": "owned",
+    "source_ref": "body.p835",
+    "source_span_ids": [
+      "body.p835"
+    ],
+    "structure_unit_id": "su-5a0bc3bdc6232946cd2522d4",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "记录合并用药",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "记录合并用药"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-9519680f4eac0c124ea342b6",
+    "package_ordinal": 75,
+    "role": "owned",
+    "source_ref": "body.p836",
+    "source_span_ids": [
+      "body.p836"
+    ],
+    "structure_unit_id": "su-9c438f48bbcc8b4eaeaa213a",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "自签署ICF开始至研究结束，合并治疗的收集包括治疗的开始/结束日期、剂量、治疗频率、给药途径或治疗方法和适应症，并记录在eCRF合并治疗页中。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "记录合并用药"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-9519680f4eac0c124ea342b6",
+    "package_ordinal": 75,
+    "role": "owned",
+    "source_ref": "body.p837",
+    "source_span_ids": [
+      "body.p837"
+    ],
+    "structure_unit_id": "su-d8ba67ecc2780abf47c5f710",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "访视安排",
+    "heading_path": [
+      "研究评估和程序",
+      "访视安排"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-9519680f4eac0c124ea342b6",
+    "package_ordinal": 75,
+    "role": "owned",
+    "source_ref": "body.p838",
+    "source_span_ids": [
+      "body.p838"
+    ],
+    "structure_unit_id": "su-d9ced8240959f948af10cafb",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "记录合并治疗",
+    "heading_path": [
+      "研究评估和程序",
+      "访视安排",
+      "Ⅱ期临床研究阶段",
+      "筛选期"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "attached",
+    "source_ref": "body.p855",
+    "source_span_ids": [
+      "body.p855"
+    ],
+    "structure_unit_id": "su-6dd2a27f094eff1bc9ed3a07",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "记录合并治疗",
+    "heading_path": [
+      "研究评估和程序",
+      "访视安排",
+      "Ⅱ期临床研究阶段",
+      "筛选期"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "attached",
+    "source_ref": "body.p866",
+    "source_span_ids": [
+      "body.p866"
+    ],
+    "structure_unit_id": "su-c083fe2e8c30652c68227ed7",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "IL-17A采血",
+    "heading_path": [
+      "研究评估和程序",
+      "访视安排",
+      "Ⅱ期临床研究阶段",
+      "治疗期"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "attached",
+    "source_ref": "body.p875",
+    "source_span_ids": [
+      "body.p875"
+    ],
+    "structure_unit_id": "su-4bf766c67a24c14b9edc345e",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "记录不良事件",
+    "heading_path": [
+      "研究评估和程序",
+      "访视安排",
+      "Ⅱ期临床研究阶段",
+      "治疗期"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "attached",
+    "source_ref": "body.p883",
+    "source_span_ids": [
+      "body.p883"
+    ],
+    "structure_unit_id": "su-8e7af34b05dd79dd550feee9",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "记录合并治疗",
+    "heading_path": [
+      "研究评估和程序",
+      "访视安排",
+      "Ⅱ期临床研究阶段",
+      "治疗期"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "attached",
+    "source_ref": "body.p884",
+    "source_span_ids": [
+      "body.p884"
+    ],
+    "structure_unit_id": "su-4603e1007b6aceba84bc26cf",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "注：生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值，基线需再次审查入选和排除标准，对符合入选排除标准的参与者可进行随机分组，同时需要记录合并用药及不良事件。",
+    "heading_path": [
+      "研究评估和程序",
+      "访视安排",
+      "Ⅱ期临床研究阶段",
+      "治疗期"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "attached",
+    "source_ref": "body.p885",
+    "source_span_ids": [
+      "body.p885"
+    ],
+    "structure_unit_id": "su-8c8a34eb18d0139b009c191d",
+    "unit_kind": "footnote_or_annotation"
+  },
+  {
+    "excerpt": "计划外访视/检查",
+    "heading_path": [
+      "研究评估和程序",
+      "访视安排",
+      "Ⅱ期临床研究阶段",
+      "计划外访视/检查"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-9a0cdbafc055b3f2de09c289",
+    "package_ordinal": 1,
+    "role": "attached",
+    "source_ref": "body.p931",
+    "source_span_ids": [
+      "body.p931"
+    ],
+    "structure_unit_id": "su-794f886dd4fe3792c4b80232",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "研究者可以根据参与者的情况安排计划外的访视或检查，尤其当参与者出现不良事件时。计划外访视及该访视进行的计划外检查将记录在原始资料上，并且同时记录进行该计划外访视（或检查）的原因。",
+    "heading_path": [
+      "研究评估和程序",
+      "访视安排",
+      "Ⅱ期临床研究阶段",
+      "计划外访视/检查"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-d70f048b5f788a471c9c049b",
+    "package_ordinal": 13,
+    "role": "attached",
+    "source_ref": "body.p932",
+    "source_span_ids": [
+      "body.p932"
+    ],
+    "structure_unit_id": "su-2a6d63197d83e008f1e1a38b",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "记录不良事件",
+    "heading_path": [
+      "研究评估和程序",
+      "访视安排",
+      "Ⅱ期临床研究阶段",
+      "计划外访视/检查"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-d70f048b5f788a471c9c049b",
+    "package_ordinal": 13,
+    "role": "attached",
+    "source_ref": "body.p933",
+    "source_span_ids": [
+      "body.p933"
+    ],
+    "structure_unit_id": "su-b20c350b6c0491c7d0d2d004",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "记录合并治疗",
+    "heading_path": [
+      "研究评估和程序",
+      "访视安排",
+      "Ⅱ期临床研究阶段",
+      "计划外访视/检查"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-d70f048b5f788a471c9c049b",
+    "package_ordinal": 13,
+    "role": "attached",
+    "source_ref": "body.p934",
+    "source_span_ids": [
+      "body.p934"
+    ],
+    "structure_unit_id": "su-53e1a4584618ce6bb1ecc582",
+    "unit_kind": "list_item"
+  }
+]

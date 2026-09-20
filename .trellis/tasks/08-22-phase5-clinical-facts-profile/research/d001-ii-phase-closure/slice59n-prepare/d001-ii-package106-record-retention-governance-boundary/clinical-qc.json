@@ -1,0 +1,94 @@
+{
+  "attached_source_refs": [
+    "body.p1247"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package106-record-retention-governance-boundary",
+  "notes": [
+    "模型外闭包：3个Package 106 owned来源，1个Package 105只读附加来源；p1248-p1250按原始顺序完整恢复，p1247只为第9.4节交叉引用。",
+    "候选判定不是预设零：先区分章节标题、研究文件保存期限/访问/溯源/场所责任和书面许可的研究治理对象与责任主体，再确认required_candidate_source_refs为空；不得以other_control_candidate绕过受试者层级边界。",
+    "保存截止必须保留两个事件锚点各至少5年并取较长者；未知任一锚点时不得用另一个较早锚点结束义务。p1249的研究中心/申办者保存责任与申办者/研究者/机构场所条件确认责任不得合并或交换。p1250的转移、保管人变更、销毁均须申办者书面许可。",
+    "记录保存、访问/溯源、场所条件和许可治理可能影响后续证据QC与可访问性，但不得自动变成某名受试者资料缺失、入排失败或控制点。",
+    "claims_complete=false；本配置不调用临床语义模型、不发布控制点、不进入受试者、OCR、Patient Profile或浏览器流程，不宣称D001全量或parent clinical acceptance完成。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1248",
+    "body.p1249",
+    "body.p1250"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Package 105的p1247仅作为第9.4节记录保存引用的只读交叉来源；源文件保全、申办方/IRB/EC/监管直接访问属于研究证据治理，不生成受试者候选": "pending_codex",
+        "p1247不得转移Package 106所有权，不得把第9.4节引用改写为保存期限、许可或单例入排条件": "pending_codex"
+      },
+      "frozen_excerpt": "用于验证eCRFs输入数据正确性和完整性的源文件不得被清除或销毁，且必须按照第9.4节中描述的记录保存要求保存。为方便于源数据验证，研究者和机构必须允许申办者因为研究相关的监查、申办者稽查和 机构审查委员会/伦理委员会（Institutional Review Board/Ethics Committee，IRB/EC）审查而直接访问源文件和报告（如得到法律允许，也可以复制）。研究中心还必须允许监管当局对源数据/源文件进行检查。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1247",
+      "structure_unit_id": "su-bc16d234790709eeb0d797cf"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "记录/文件的保存标题仅提供章节结构，不独立生成候选、流程节点、官方规则或受试者控制点": "pending_codex"
+      },
+      "frozen_excerpt": "记录/文件的保存",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1248",
+      "structure_unit_id": "su-3bea7a3f1b0a3fa198b14eaf"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "保存义务按两个独立事件锚点分别计算至少5年并取较长者：试验药物被批准上市日期+至少5年与临床试验结束日期+至少5年；不能把两个期限误作任选其一": "pending_codex",
+        "保存期限、访问溯源或场所条件缺口不能改写为某名受试者资料缺失、筛选/基线不通过、不得入组或发布控制点": "pending_codex",
+        "合理保存以便日后访问和数据溯源是研究文件可访问性/证据治理边界；任一锚点未知时不得用另一个较早期限声称保存义务结束": "pending_codex",
+        "研究中心和申办者负责保存研究必备文件；申办者、研究者和临床试验机构确认均有保存场所和条件，责任主体不得合并、遗漏或互换": "pending_codex"
+      },
+      "frozen_excerpt": "临床研究文件需按照GCP等相关法律法规的要求进行保存和管理。研究中心和申办者应保存研究必备文件至试验药物被批准上市后至少5年或至临床试验结束后至少5年（以较长时间为准）。研究文件应合理保存，以便日后访问或数据溯源。申办者、研究者和临床试验机构应当确认均有保存临床试验必备文件的场所和条件。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1249",
+      "structure_unit_id": "su-ff08a701df6f28b7ac543dd7"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得把申办者书面许可弱化为口头同意、一般知会，或替换为研究者/伦理委员会/监管机构许可": "pending_codex",
+        "研究文件转移、保管人的变更和研究文件销毁均属于研究文件保管治理动作，每一项都必须得到申办者的书面许可": "pending_codex",
+        "转移、保管人变更或销毁许可状态不能改写为单例受试者筛选、基线、D1给药前或入排控制": "pending_codex"
+      },
+      "frozen_excerpt": "研究文件的转移、保管人的变更、研究文件的销毁等，必须得到申办者的书面许可。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1250",
+      "structure_unit_id": "su-9b4a8c64e74545f1e46fd9fe"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61cs-20260830",
+  "worker": "codex-parent"
+}

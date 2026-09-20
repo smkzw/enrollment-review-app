@@ -10,6 +10,7 @@ import {
   implementedRoutes,
 } from "../../app/routes";
 import { RouteLink } from "../../app/router";
+import { BROWSE_ROUTES, useApplicationMode } from "../../app/applicationMode";
 import {
   ActionsIcon,
   BoardIcon,
@@ -55,7 +56,8 @@ interface NavListProps {
 }
 
 function NavList({ currentPath }: NavListProps) {
-  const routes = implementedRoutes();
+  const { canModify } = useApplicationMode();
+  const routes = implementedRoutes().filter((route) => canModify || BROWSE_ROUTES.has(route.path));
   return (
     <ul className="side-nav__list">
       {NAV_GROUPS.map((group) => {

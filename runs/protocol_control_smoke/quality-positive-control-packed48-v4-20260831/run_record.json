@@ -1,0 +1,239 @@
+{
+  "run_id": "smoke-20260830T211822-38a4d472",
+  "claims_complete": false,
+  "runner": "scripts/run_protocol_control_smoke.py",
+  "started_at": "2026-08-30T21:18:22.772976",
+  "fixture": {
+    "source": "bundled_synthetic",
+    "path": "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile/runs/protocol_control_smoke/quality-positive-control-packed48-v4-20260831/synthetic_protocol.docx",
+    "sha256": "1ee166a52d06e9f65ccdf2bcc7f0d4041481a362e9d196af388d9b5bd40b06e3"
+  },
+  "model_identity": {
+    "verified_before_run": true,
+    "discovery": {
+      "stage": "discovery",
+      "transport_class": "app.agents.protocol_control_discovery_transport.OpenAICompatibleProtocolControlDiscoveryAgentTransport",
+      "configured_model": "mtplx-qwen38-27b-optimized-quality",
+      "verified_model": "mtplx-qwen38-27b-optimized-quality",
+      "provider": "mtplx",
+      "backend": "mtplx",
+      "reasoning_effort": "medium",
+      "max_tokens": 16384,
+      "base_url": "http://127.0.0.1:8003/v1",
+      "temperature": 0.0,
+      "timeout": 600.0,
+      "max_retries": 0,
+      "response_format_sha256": "1fd978990a4a5492682a4ede9ac321a61c038694b1d712cf537b55645519f706"
+    },
+    "deep": {
+      "stage": "deep",
+      "transport_class": "app.agents.protocol_control_agent_transport.OpenAICompatibleProtocolControlAgentTransport",
+      "configured_model": "mtplx-qwen38-27b-optimized-quality",
+      "verified_model": "mtplx-qwen38-27b-optimized-quality",
+      "provider": "mtplx",
+      "backend": "mtplx",
+      "reasoning_effort": "medium",
+      "max_tokens": 16384,
+      "base_url": "http://127.0.0.1:8003/v1",
+      "temperature": 0.0,
+      "timeout": 600.0,
+      "max_retries": 0,
+      "response_format_sha256": "e1da464e843204931ac4976a8fa56002e7d4e8619260a922a37fe0e5e4e2065c"
+    }
+  },
+  "source_chain": {
+    "job_id": "ed888cd901dd4bcd95599af1c0ddb3fd",
+    "final_state": "failed_final",
+    "stopped_after": "freeze_deconstruction_input",
+    "stop_error_code": "SMOKE_SOURCE_STOP_AFTER_FREEZE",
+    "snapshot_id": "ed888cd901dd4bcd95599af1c0ddb3fd-snapshot",
+    "content_sha256": "eb9082dbe149dba4839ce79c6bea967aa2881715d136b7ebe3265544ae6b9229",
+    "block_count": 47,
+    "protocol_code": "SYN-SMOKE-001",
+    "selected_phase": "phase_ii",
+    "source_chain_started_at": "2026-08-30T21:18:23.323680",
+    "source_chain_finished_at": "2026-08-30T21:18:25.732480"
+  },
+  "control_execution": {
+    "job_id": "0ddbc51c758646e78ab40620b662a24a",
+    "final_state": "completed",
+    "deep_step_ids": [
+      {
+        "batch_id": "pcb-4a9dcb3c74c1fffd542a9a39",
+        "step_id": "deep_0001"
+      },
+      {
+        "batch_id": "pcb-a567c9b04a93f037e462058f",
+        "step_id": "deep_0002"
+      },
+      {
+        "batch_id": "pcb-c7fc25b0cc751e3290460275",
+        "step_id": "deep_0003"
+      },
+      {
+        "batch_id": "pcb-d85f1016813de145adea0ea4",
+        "step_id": "deep_0004"
+      },
+      {
+        "batch_id": "pcb-266b74fb0cd9c67d28bbb088",
+        "step_id": "deep_0005"
+      }
+    ],
+    "non_deep_structure_unit_ids": [
+      "su-63192fbf4b2c9cc7128b4247",
+      "su-f17fd1509c78f31fb3e150fb",
+      "su-49da37e9e2d09cc107db3551",
+      "su-2a387b9d8f574fa09497f6b5",
+      "su-09071ca8a5632f8d11b5c633",
+      "su-e7d40a8d11a43f3555770c48",
+      "su-355cfad3bb1fe62eed2484c8",
+      "su-82c4ea311005c3d20c826370",
+      "su-cbd82c60aa956d6fb574510f",
+      "su-d0feb3346e979b6d5598979f",
+      "su-a9188f99e666a04d86bab8ce",
+      "su-b26eba0184d9d62d00cd11c1",
+      "su-39044a307a50efbc43ee2569",
+      "su-c0d9e16c3e240a579e9c831e",
+      "su-c0c825946ac55deaab968492",
+      "su-c4ef7f8ca0e5be9aaf3b3015",
+      "su-6259958961049e5424969283",
+      "su-008a41bd86ebffb707a609dc",
+      "su-cb699f6d596d7978a3df3ab7",
+      "su-a296439abc0f616354af29f6",
+      "su-18af9101dd57ff40baf7aaf6",
+      "su-c3c7e9e659fb3391c6337655",
+      "su-b2aa6b0527fd3f0648b49882",
+      "su-b58a4c67ba3709d350430a6d",
+      "su-1367c528f043f455aa332db6",
+      "su-d8c5113d14755ae1909fc7fb"
+    ],
+    "discovery": {
+      "batch_count": 1,
+      "distribution": {
+        "candidate": 7,
+        "context_only": 1,
+        "non_control": 25,
+        "uncertain": 1
+      },
+      "batches": [
+        {
+          "step_id": "discovery_0001",
+          "discovery_batch_id": "pcd-d03bcc0deefc16f224c81141",
+          "decision_count": 34,
+          "distribution": {
+            "candidate": 7,
+            "context_only": 1,
+            "non_control": 25,
+            "uncertain": 1
+          },
+          "attempt_count": 2,
+          "schema_repair_count": 1,
+          "transport_retry_count": 0
+        }
+      ],
+      "attempt_count": 8,
+      "schema_repair_count": 2,
+      "transport_retry_count": 0
+    },
+    "deep": {
+      "batch_count": 5,
+      "batches": [
+        {
+          "step_id": "deep_0001",
+          "batch_id": "pcb-4a9dcb3c74c1fffd542a9a39",
+          "owned_structure_unit_ids": [
+            "su-cad0b3ad30fb9ad789930cb2"
+          ],
+          "candidate_count": 0,
+          "attempt_count": 2,
+          "schema_repair_count": 1,
+          "transport_retry_count": 0
+        },
+        {
+          "step_id": "deep_0002",
+          "batch_id": "pcb-a567c9b04a93f037e462058f",
+          "owned_structure_unit_ids": [
+            "su-902db8986904e9e6fdbf0511",
+            "su-6a0fe92f024ebc80d7a7106e"
+          ],
+          "candidate_count": 0,
+          "attempt_count": 1,
+          "schema_repair_count": 0,
+          "transport_retry_count": 0
+        },
+        {
+          "step_id": "deep_0003",
+          "batch_id": "pcb-c7fc25b0cc751e3290460275",
+          "owned_structure_unit_ids": [
+            "su-2866aa13ec86e4e9182c0d84",
+            "su-d97c3f8193332f4ad69df4d1"
+          ],
+          "candidate_count": 0,
+          "attempt_count": 1,
+          "schema_repair_count": 0,
+          "transport_retry_count": 0
+        },
+        {
+          "step_id": "deep_0004",
+          "batch_id": "pcb-d85f1016813de145adea0ea4",
+          "owned_structure_unit_ids": [
+            "su-b0b991636a8defe346be10b0",
+            "su-2bb2ae08b76289216f84e6a8"
+          ],
+          "candidate_count": 0,
+          "attempt_count": 1,
+          "schema_repair_count": 0,
+          "transport_retry_count": 0
+        },
+        {
+          "step_id": "deep_0005",
+          "batch_id": "pcb-266b74fb0cd9c67d28bbb088",
+          "owned_structure_unit_ids": [
+            "su-8d3c395290d7ec7ed9a49d00"
+          ],
+          "candidate_count": 1,
+          "attempt_count": 1,
+          "schema_repair_count": 0,
+          "transport_retry_count": 0
+        }
+      ],
+      "candidate_count_total": 1,
+      "owned_structure_unit_count": 8,
+      "attempt_count": 8,
+      "schema_repair_count": 2,
+      "transport_retry_count": 0
+    },
+    "result_kind": "hydrated_candidate_control_package",
+    "formal_catalog_status": "not_materialized",
+    "gate_version": "phase5/control-publication-gate/v1",
+    "candidate_ids_count": 1,
+    "failure": null,
+    "latency_seconds": {
+      "control_execution": 1192.32
+    }
+  },
+  "semantic_acceptance": {
+    "mode": "bundled_positive_control",
+    "incremental_candidate_required": true,
+    "passed": true,
+    "failure_codes": []
+  },
+  "boundaries": {
+    "formal_catalog_materialized": false,
+    "source_snapshot_bypassed": false,
+    "fixture_is_synthetic_only": true,
+    "real_clinical_content_used": false
+  },
+  "notes": [
+    "核验发现传输实际模型身份：配置模型 mtplx-qwen38-27b-optimized-quality，服务 http://127.0.0.1:8003/v1",
+    "核验深析传输实际模型身份：配置模型 mtplx-qwen38-27b-optimized-quality，服务 http://127.0.0.1:8003/v1",
+    "开始真实生产来源链（登记->提取->渲染->识别->确认->冻结）。",
+    "控制任务已建立：0ddbc51c758646e78ab40620b662a24a（来源快照 ed888cd901dd4bcd95599af1c0ddb3fd-snapshot）。",
+    "控制任务完成：结果为水合候选控制点包，正式目录保持未物化。"
+  ],
+  "finished_at": "2026-08-30T21:38:18.068387",
+  "latency_seconds": {
+    "total": 1195.295
+  },
+  "run_record_path": "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile/runs/protocol_control_smoke/quality-positive-control-packed48-v4-20260831/run_record.json"
+}

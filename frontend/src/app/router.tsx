@@ -16,8 +16,8 @@ export interface RouteLocation {
   params: URLSearchParams;
 }
 
-export function defaultPathForMode(interfaceTrial: boolean): string {
-  return interfaceTrial ? "/today" : "/protocols";
+export function defaultPathForMode(_interfaceTrial: boolean): string {
+  return "/today";
 }
 
 /** 空地址与导航注册使用同一正式/试用模式边界。 */

@@ -1,0 +1,20 @@
+{
+  "attached_count": 11,
+  "batching_mode": "single_batch_with_known_targets",
+  "context_structure_unit_ids": [
+    "su-40348e74c63d71c5b6319be0",
+    "su-b0f87a9a0d490bd216d0c969",
+    "su-c793fa7c755ac66919c14e7b",
+    "su-7558abeb46e72593ce9f912c",
+    "su-6a05a5335e4ea77b18bc6980",
+    "su-a43976bf1f0f5616eef0f8f3",
+    "su-ff87596f185809977f360493",
+    "su-ac0301376c37d8b831a3e4e5",
+    "su-877730c146d38d5244004250",
+    "su-092a2c63a4b74f16a8175d26",
+    "su-f358febe8073d0027587ed4c"
+  ],
+  "owned_count": 3,
+  "prompt_char_count": 34957,
+  "prompt_sha256": "6c2c34cf51295bbfb6f305ee6eb21a10eefc3902152b69fad568754bd7f9456c"
+}

@@ -9,7 +9,8 @@
 - DOCX / legacy DOC 通过可注入的 ``DocConverter``（生产路径为 LibreOffice 无头
   转换）先转 PDF 再分页；转换不可用/失败同样是显式失败页；
 - ``PageInput.input_sha256`` 是**稳定的渲染/解码输入身份**：真实 PDF / 图片 /
-  TXT 为来源内容哈希；DOCX/DOC 为 ``源内容哈希 + 媒体类别 + 转换器版本`` 的
+  历史 TXT 为来源内容哈希；新 TXT 绑定源哈希、分页版本、字符范围与页文字；
+  DOCX/DOC 为 ``源内容哈希 + 媒体类别 + 转换器版本`` 的
   派生哈希（不是转换产物 PDF 的字节哈希，避免 LibreOffice 元数据噪声破坏
   同内容同配置的页身份与 OCR 缓存复用，见 P4-R03）。
 
@@ -29,9 +30,10 @@ from PIL import Image
 from app.domain.contracts.enums import PageArtifactStatus
 from app.domain.publication import canonical_hash
 from app.evidence.text import TextDecodeError, decode_text_bytes
+from app.evidence.render import RenderError, paginate_text_content
 
 #: 分页/解码身份版本：任一决定页数或页身份的解码行为变化必须提升该版本。
-PAGING_VERSION = "slice4.3/paging/v1"
+PAGING_VERSION = "slice4.3/paging/v2"
 
 _TIFF_MAGICS = (b"II*\x00", b"MM\x00*")
 #: OLE 复合文档魔数（legacy .doc）；缺失即非有效 .doc。
@@ -103,7 +105,8 @@ def derived_doc_input_sha256(
 class PageInput:
     """一页的确定性输入身份。
 
-    ``render_source`` 是渲染/解码该页的字节输入：PDF 页/图片/文本页为原文件字节，
+    ``render_source`` 是渲染/解码该页的字节输入：PDF 页/图片为原文件字节，
+    新 TXT 为该页原文的 UTF-8 字节，original_frame 保存解码后字符范围；
     DOCX/DOC 转换后的页为转换得到的 PDF 字节（与来源字节不同）。
     ``input_sha256`` 是**稳定渲染/解码输入身份**（真实格式为来源内容哈希，
     DOCX/DOC 为派生哈希），不是转换产物字节哈希。整文件失败页
@@ -245,10 +248,10 @@ def _page_image(content: bytes, *, source_sha256: str) -> tuple[PageInput, ...]:
     )
 
 
-def _page_text(content: bytes, *, source_sha256: str) -> tuple[PageInput, ...]:
-    """TXT：按固定解码顺序解码为单个逻辑文本页。"""
+def _page_text(content: bytes, *, source_sha256: str, paging_version: str) -> tuple[PageInput, ...]:
+    """TXT：按显示宽度分页，保存解码后原文的字符范围。"""
     try:
-        decode_text_bytes(content)
+        decoded = decode_text_bytes(content)
     except TextDecodeError as exc:
         # 稳定中文领域措辞，不泄露内部解码错误细节；细节只作内部诊断。
         return (
@@ -259,11 +262,29 @@ def _page_text(content: bytes, *, source_sha256: str) -> tuple[PageInput, ...]:
                 technical_detail=f"{type(exc).__name__}: {exc}",
             ),
         )
-    return _success_pages(
-        media_kind="text",
-        count=1,
-        render_source=content,
-        input_sha256=source_sha256,
+    if paging_version == "slice4.3/paging/v1":
+        return _success_pages(
+            media_kind="text", count=1, render_source=content, input_sha256=source_sha256,
+        )
+    try:
+        chunks = paginate_text_content(decoded.text)
+    except (RenderError, OSError) as exc:
+        return (_failed_page(
+            1, "text", "文本排版暂不可用，尚未生成完整页面",
+            technical_detail=f"{type(exc).__name__}: {exc}",
+        ),)
+    return tuple(
+        PageInput(
+            page_number=index, media_kind="text",
+            original_frame=f"text-chars-{start}-{end}",
+            render_source=chunk.encode("utf-8"),
+            input_sha256=canonical_hash({
+                "source_sha256": source_sha256, "paging_version": paging_version,
+                "start": start, "end": end, "text": chunk,
+            }),
+            status=PageArtifactStatus.SUCCEEDED, failure_reason=None,
+        )
+        for index, (start, end, chunk) in enumerate(chunks, 1)
     )
 
 
@@ -331,6 +352,7 @@ def page_source_document(
     media_kind: str,
     source_sha256: str | None = None,
     doc_converter: DocConverter | None = None,
+    paging_version: str = PAGING_VERSION,
 ) -> PagePlan:
     """把来源文件切成真实有序页清单；未知类别或空内容产出显式失败页。
 
@@ -338,6 +360,8 @@ def page_source_document(
     ``docx``/``doc``；``image`` 会按魔数进一步区分多帧 TIFF。整文件失败时返回
     单条显式失败页（页数未知不得伪装成功占位）。
     """
+    if paging_version not in {"slice4.3/paging/v1", PAGING_VERSION}:
+        raise PagingError("不支持的资料分页版本")
     digest = source_sha256 or content_sha256(content)
     if media_kind not in SUPPORTED_MEDIA_KINDS:
         return PagePlan(
@@ -362,7 +386,7 @@ def page_source_document(
     elif media_kind == "image":
         pages = _page_image(content, source_sha256=digest)
     elif media_kind == "text":
-        pages = _page_text(content, source_sha256=digest)
+        pages = _page_text(content, source_sha256=digest, paging_version=paging_version)
     else:  # docx | doc
         pages = _page_doc_like(
             content,

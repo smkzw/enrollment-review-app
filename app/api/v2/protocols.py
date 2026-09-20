@@ -18,6 +18,7 @@ from app.api.v2.protocol_schemas import (
     DraftComparisonResponse,
     DraftComparisonSideResponse,
     FeedbackRequest,
+    GenerationPreviewResponse,
     IdentityDecisionDTO,
     IdentityReviewResponse,
     MetadataCandidateDTO,
@@ -480,6 +481,24 @@ def get_draft(job_id: str, request: Request) -> DraftRevisionResponse:
     return _draft_dto(_service(request).get_draft_detail(job_id))
 
 
+@router.get("/{job_id}/draft/generation-preview", response_model=GenerationPreviewResponse)
+def get_generation_preview(job_id: str, request: Request) -> GenerationPreviewResponse:
+    preview = _service(request).get_generation_preview(job_id)
+    return GenerationPreviewResponse(
+        job_id=preview["job_id"],
+        available=preview["available"],
+        reason=preview.get("reason"),
+        detail=preview.get("detail"),
+        preview_only=True,
+        batch_index=preview.get("batch_index", 0),
+        batch_total=preview.get("batch_total", 0),
+        updated_at=preview.get("updated_at"),
+        pending_codes=preview.get("pending_codes", []),
+        unresolved_count=preview.get("unresolved_count", 0),
+        content=preview.get("content", {}),
+    )
+
+
 @router.get("/{job_id}/draft/comparison", response_model=DraftComparisonResponse)
 def get_draft_comparison(job_id: str, request: Request) -> DraftComparisonResponse:
     view = _service(request).get_draft_comparison(job_id)
@@ -591,12 +610,16 @@ def publish_deconstruction(
             job_id,
             idempotency_key=body.idempotency_key,
             actor=body.actor,
+            control_job_id=body.control_job_id,
+            control_checkpoint_id=body.control_checkpoint_id,
         )
     else:
         result = service.publish_first_project(
             job_id,
             idempotency_key=body.idempotency_key,
             actor=body.actor,
+            control_job_id=body.control_job_id,
+            control_checkpoint_id=body.control_checkpoint_id,
         )
     return PublishResponse(
         job_id=result.job_id,

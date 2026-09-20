@@ -42,6 +42,7 @@ def _routes(**_kwargs):
             "INDEPENDENT_VLM_API_KEY": "a",
             "CMS_SMK_API_KEY": "b",
             "PAGE_REVIEW_MAIN_B_PROVIDER": "cms-smk",
+            "PAGE_REVIEW_MAIN_B_REASONING_EFFORT": "high",
             "PAGE_REVIEW_MAIN_B_MODEL": "MiniMax-M3",
             "PAGE_REVIEW_MAIN_B_BASE_URL": "https://new-api.mediportal.com.cn/v1",
             "PAGE_REVIEW_CLOUD_CONCURRENCY": "2",

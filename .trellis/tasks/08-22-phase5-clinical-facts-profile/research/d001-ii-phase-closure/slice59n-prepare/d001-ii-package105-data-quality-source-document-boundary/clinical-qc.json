@@ -1,0 +1,178 @@
+{
+  "attached_source_refs": [],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package105-data-quality-source-document-boundary",
+  "notes": [
+    "模型外闭包：Package 105的10个owned来源按原始顺序逐项恢复；4个章节标题只作结构来源，6个语义来源先依据原文判断为研究执行、来源定义或证据质量/访问治理，均不生成受试者候选；本包无attached来源。",
+    "候选判定不是预设零：p1240、p1242、p1245-p1247中的‘负责/必须/应’先按责任主体和对象区分为申办方、研究中心、研究者、机构或证据记录系统义务；p1244按来源定义处置为supporting_or_supplement；没有受试者人群、入排条件、阈值或筛选/基线动作后，才确认required candidates为空。",
+    "证据接受边界保留：源文件类型、源数据定义、准确清晰同期原始可归因、电子记录/签名、核证副本、审核跟踪、保存和直接访问可影响后续证据QC与溯源提示，但不得自动变成受试者资料缺口、入排失败或控制点。",
+    "body.p1245不生成或保留collect_data受试者动作元数据，仅保留研究启动期的来源分类边界说明。",
+    "body.p1236及body.p1237的Package 104研究级期中分析内容、body.p1248-p1250的Package 106记录保存内容和body.p537/body.p1210/body.p1223/body.p1237#atom-100-160无所有权上下文均不进入本包提示。",
+    "claims_complete=false；本配置不调用临床语义模型、不发布控制点、不进入受试者、OCR、Patient Profile或浏览器流程，不宣称D001全量或parent clinical acceptance完成。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1238",
+    "body.p1239",
+    "body.p1240",
+    "body.p1241",
+    "body.p1242",
+    "body.p1243",
+    "body.p1244",
+    "body.p1245",
+    "body.p1246",
+    "body.p1247"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "数据采集与管理标题仅提供章节结构，不独立生成候选、流程节点、官方规则或受试者控制点": "pending_codex"
+      },
+      "frozen_excerpt": "数据采集与管理",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1238",
+      "structure_unit_id": "su-0064ebeb47b8f2cbccbb58dc"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "数据质量保证标题仅提供章节结构；数据质量治理不等于受试者筛选、基线或入排标准": "pending_codex"
+      },
+      "frozen_excerpt": "数据质量保证",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1239",
+      "structure_unit_id": "su-9b871a5ca4969ff1c9063841"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "数据质疑未解决、EDC不一致或中心实验室数据传输路径不能改写为某名受试者不得入组、证据不足或发布控制点": "pending_codex",
+        "申办者数据管理和质量检查、研究中心eCRF手动录入、数据不一致的质疑澄清/EDC解决以及中心实验室数据电子传输是研究级数据管理执行": "pending_codex",
+        "该来源处置为non_enrollment_execution，不绑定筛选、基线、D1给药前工作流": "pending_codex"
+      },
+      "frozen_excerpt": "申办者将负责本研究的数据管理，包括数据的质量检查。将通过使用eCRFs，由研究中心负责将数据手动输入电子数据采集系统（Electronic data capture，EDC）。如果数据不一致，申办者将要求研究中心澄清数据，研究中心将在 EDC 系统中解决数据质疑。研究实施方案所需的EDC系统之外的其他数据，如中心实验室的数据将直接发送给申办者，根据申办者的标准程序处理和加工这些数据的电子传输。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1240",
+      "structure_unit_id": "su-2409cd24ca9f082fa789552a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "电子病例报告表标题仅提供章节结构，不独立生成eCRF检查候选或受试者资格控制": "pending_codex"
+      },
+      "frozen_excerpt": "电子病例报告表（eCRF）",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1241",
+      "structure_unit_id": "su-89501971f78337044a6bf70e"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "eCRF提交、培训工作人员完成、研究者/指定人员审查、电子签名和注明日期是记录流程义务，不是受试者入排条件": "pending_codex",
+        "经验证EDC、申办者指定系统、研究中心培训和eCRF填写手册是研究执行及数据完整性治理": "pending_codex",
+        "该来源处置为non_enrollment_execution；不得因eCRF未签名、未注明日期或培训/EDC状态把研究执行缺口升格为单例入排失败": "pending_codex"
+      },
+      "frozen_excerpt": "数据管理将在经验证的EDC系统中进行。通过使用申办者指定的EDC系统完成eCRFs。研究中心将接受培训并获得相应的eCRF填写手册。eCRFs将以电子方式提交给申办者，并按申办者的指示处理。所有eCRFs应由研究中心经过培训的指定工作人员完成。eCRFs应由研究者或指定人员审查并以电子方式签名和注明日期。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1242",
+      "structure_unit_id": "su-addcbd5e6aece04c56c6e007"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "源数据/源文件标题仅提供章节结构，不独立生成来源证据候选或入排控制": "pending_codex"
+      },
+      "frozen_excerpt": "源数据/源文件",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1243",
+      "structure_unit_id": "su-31669f392ef92b0a09730150"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "来源类型定义可支持后续证据溯源/QC，但不规定某名受试者必须提供哪类资料、资料缺失即不得入组或某类来源自动被接受": "pending_codex",
+        "源文件和源数据定义及医院病历、医学图像、实验室记录、仪器记录、备忘录、发药记录、药房处方、参与者日记、核证副本等例子建立证据来源词汇": "pending_codex",
+        "该来源处置为supporting_or_supplement，不绑定受试者工作流": "pending_codex"
+      },
+      "frozen_excerpt": "源文件是指临床试验中产生的原始医学记录、医疗文件和数据，例如医院病历、医学图像、实验室记录、仪器自动记录的数据、临床试验的相关备忘录、发药记录、药房保存的处方、参与者临床试验日记等，可包括复制或抄录的核证副本。源数据是指临床试验中的原始记录或其复印件（核证副本）上记载的所有信息。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1244",
+      "structure_unit_id": "su-968663939b00f40990cc9a13"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "按方案要求直接输入eCRFs且此前没有书面或电子记录的数据被视为源数据，是来源分类规则，不是入组前证据门槛": "pending_codex",
+        "研究开始前在研究监查计划中定义研究生成的源文件类型，是研究启动/监查治理义务": "pending_codex",
+        "该来源仅定义研究启动期的源文件分类和直接录入eCRF数据的来源属性，不生成受试者资料采集动作或入排控制": "pending_codex"
+      },
+      "frozen_excerpt": "在研究开始前，将在研究监查计划中明确定义研究生成的源文件类型，这包括任何直接输入 eCRFs 的按方案要求采集的数据（即，之前没有此数据的书面或电子记录），此类数据应视为源数据。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1245",
+      "structure_unit_id": "su-fa1913077146986c39ea38e3"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "研究者确保源数据准确、清晰、同期、原始、可归因，电子记录/签名合规，书面替代电子格式时提供核证副本，以及保留原始值/变更原因/人员/日期的审核跟踪，均为数据完整性与证据QC义务": "pending_codex",
+        "该来源处置为non_enrollment_execution；不得把ALCOA-like属性、电子签名、核证副本或审核跟踪缺失变成入排结论": "pending_codex",
+        "这些质量属性影响来源可信度和审计溯源边界，但不能自动生成受试者资格、筛选失败、基线缺口或D1给药前控制点": "pending_codex"
+      },
+      "frozen_excerpt": "无论数据为书面手写还是以电子方式录入，研究者负责确保源数据准确、清晰、具有同期性、为原始数据且可归因溯源。在常规临床试验活动中，如果通过计算机系统（和/或任何其他类型的电子设备）创建（第一次录入）、修改、维护、归档、检索或通过电子方式传输源数据，此类系统必须符合所有适用的管辖电子记录和/或电子签名的使用的法律和法规。此类系统可能包括但不限于：电子医疗/健康档案、不良事件跟踪/报告、方案要求的评价，和/或药物计数记录。采用通过此类系统获得的书面记录来取代电子格式进行规定的活动时，此类书面记录应有经核证的副本。经核证的副本由已验证的原始信息的副本组成，有研究人员的签字及签字日期，具有和原件相同的所有属性。如果修改了计算机系统中的原始数据，在系统上应保留可查看的审核跟踪，显示原始数据及变更原因、进行更改的人员姓名，以及更改的日期。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1246",
+      "structure_unit_id": "su-74fe8829ca48bfef85750257"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "保存与直接访问义务可形成未来证据QC/溯源边界，但不得把来源未保存、暂不可访问或监管检查要求改写为受试者不得入组或资料缺口的入排结论": "pending_codex",
+        "用于验证eCRF正确性/完整性的源文件不得清除或销毁，并要求按第9.4节保存；申办方监查/稽查、IRB/EC审查及监管检查的直接访问是研究证据保存和访问治理": "pending_codex",
+        "第9.4节记录保存细节属于Package 106 p1248-p1250，不因p1247引用而迁移到本包": "pending_codex"
+      },
+      "frozen_excerpt": "用于验证eCRFs输入数据正确性和完整性的源文件不得被清除或销毁，且必须按照第9.4节中描述的记录保存要求保存。为方便于源数据验证，研究者和机构必须允许申办者因为研究相关的监查、申办者稽查和 机构审查委员会/伦理委员会（Institutional Review Board/Ethics Committee，IRB/EC）审查而直接访问源文件和报告（如得到法律允许，也可以复制）。研究中心还必须允许监管当局对源数据/源文件进行检查。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1247",
+      "structure_unit_id": "su-bc16d234790709eeb0d797cf"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61cr-20260830",
+  "worker": "codex-parent"
+}

@@ -1,0 +1,416 @@
+[
+  {
+    "excerpt": "不良事件因果关系判断",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件因果关系判断"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-969cb2554a2487b656fbbb20",
+    "package_ordinal": 90,
+    "role": "owned",
+    "source_ref": "body.p1087",
+    "source_span_ids": [
+      "body.p1087"
+    ],
+    "structure_unit_id": "su-ad693c949dc5c0af171ceb98",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "根据药物与不良事件相关性判断标准，按照五分法将不良事件与试验用药品相关性判定结果分为：肯定有关、很可能有关、可能有关、可能无关、无关。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件因果关系判断"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-969cb2554a2487b656fbbb20",
+    "package_ordinal": 90,
+    "role": "owned",
+    "source_ref": "body.p1088",
+    "source_span_ids": [
+      "body.p1088"
+    ],
+    "structure_unit_id": "su-5aaf226dcc02b5a3e08dd903",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "研究者需根据五个评价要点进行临床试验个例不良事件与试验用药品相关性综合评价，并提供相关性判定依据。五个评价要点概括如下：",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件因果关系判断"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-969cb2554a2487b656fbbb20",
+    "package_ordinal": 90,
+    "role": "owned",
+    "source_ref": "body.p1089",
+    "source_span_ids": [
+      "body.p1089"
+    ],
+    "structure_unit_id": "su-3ae4a77dfe3156fb16aedc95",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "时间相关性：试验用药品和不良事件出现的有无合理的时间关系；",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件因果关系判断"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-969cb2554a2487b656fbbb20",
+    "package_ordinal": 90,
+    "role": "owned",
+    "source_ref": "body.p1090",
+    "source_span_ids": [
+      "body.p1090"
+    ],
+    "structure_unit_id": "su-1ce73e621477ea9e5887b43f",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "是否已知：不良事件是否符合该药物已知的作用机制、特性或已知的不良反应；",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件因果关系判断"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-969cb2554a2487b656fbbb20",
+    "package_ordinal": 90,
+    "role": "owned",
+    "source_ref": "body.p1091",
+    "source_span_ids": [
+      "body.p1091"
+    ],
+    "structure_unit_id": "su-c9d399e18f22ea63d650c96b",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "去激发结果：参与者在停药或减量后，可疑的不良事件是否减轻、好转或消失；",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件因果关系判断"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-969cb2554a2487b656fbbb20",
+    "package_ordinal": 90,
+    "role": "owned",
+    "source_ref": "body.p1092",
+    "source_span_ids": [
+      "body.p1092"
+    ],
+    "structure_unit_id": "su-3b951bc99a3a77fb80c95b25",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "再激发结果：参与者在再次给药后，已经消除的同样、同性质的不良事件再次出现；",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件因果关系判断"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-969cb2554a2487b656fbbb20",
+    "package_ordinal": 90,
+    "role": "owned",
+    "source_ref": "body.p1093",
+    "source_span_ids": [
+      "body.p1093"
+    ],
+    "structure_unit_id": "su-e0d364e47a938d1d1d590ac7",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "其他合理解释：不良事件是否可用参与者疾病进展（包括伴随疾病）、合并用药的作用、其他治疗措施或干扰因素等的影响来解释。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件因果关系判断"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-969cb2554a2487b656fbbb20",
+    "package_ordinal": 90,
+    "role": "owned",
+    "source_ref": "body.p1094",
+    "source_span_ids": [
+      "body.p1094"
+    ],
+    "structure_unit_id": "su-69755d89787064f448a79042",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "不良事件与试验用药品相关性判定结果分类及判定依据可参照表7进行。统计分析时，将“肯定有关”、“很可能有关”、“可能有关”视为与试验用药品相关。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件因果关系判断"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-969cb2554a2487b656fbbb20",
+    "package_ordinal": 90,
+    "role": "owned",
+    "source_ref": "body.p1095",
+    "source_span_ids": [
+      "body.p1095"
+    ],
+    "structure_unit_id": "su-ddd04748eeae501561b21462",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "严重不良事件（SAE）与试验用药品的因果关系由研究者和申办者双方共同判断。当双方意见不一致时，对研究者或/和申办者任意一方判断与试验用药品相关的严重不良事件，均属报告范围。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件因果关系判断"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-969cb2554a2487b656fbbb20",
+    "package_ordinal": 90,
+    "role": "owned",
+    "source_ref": "body.p1096",
+    "source_span_ids": [
+      "body.p1096"
+    ],
+    "structure_unit_id": "su-d41dd8a6ab4c85237c0b2e49",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "表 9 不良事件与试验用药品因果关系评价",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件因果关系判断"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-969cb2554a2487b656fbbb20",
+    "package_ordinal": 90,
+    "role": "owned",
+    "source_ref": "body.p1097",
+    "source_span_ids": [
+      "body.p1097"
+    ],
+    "structure_unit_id": "su-a6447a08863cae689b733633",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "判定依据 | 相关 | 不相关",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件因果关系判断",
+      "表 9 不良事件与试验用药品因果关系评价"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-87e89271165354d285b2faa1",
+    "package_ordinal": 91,
+    "role": "attached",
+    "source_ref": "body.t14.r0",
+    "source_span_ids": [
+      "body.t14.r0.c0.p0",
+      "body.t14.r0.c1.p0",
+      "body.t14.r0.c7.p0"
+    ],
+    "structure_unit_id": "su-afd0ba9f4ceee6a0e4313fdc",
+    "unit_kind": "table_header"
+  },
+  {
+    "excerpt": "肯定有关 | 很可能有关 | 可能有关 | 可能无关 | 无关",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件因果关系判断",
+      "表 9 不良事件与试验用药品因果关系评价"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-87e89271165354d285b2faa1",
+    "package_ordinal": 91,
+    "role": "attached",
+    "source_ref": "body.t14.r1",
+    "source_span_ids": [
+      "body.t14.r1.c1.p0",
+      "body.t14.r1.c2.p0",
+      "body.t14.r1.c3.p0",
+      "body.t14.r1.c7.p0",
+      "body.t14.r1.c9.p0"
+    ],
+    "structure_unit_id": "su-e590057de5c4225f15b7024d",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "是否有合理的时间关系 | + | + | + | ± | -",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件因果关系判断",
+      "表 9 不良事件与试验用药品因果关系评价"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-87e89271165354d285b2faa1",
+    "package_ordinal": 91,
+    "role": "attached",
+    "source_ref": "body.t14.r2",
+    "source_span_ids": [
+      "body.t14.r2.c0.p0",
+      "body.t14.r2.c1.p0",
+      "body.t14.r2.c2.p0",
+      "body.t14.r2.c3.p0",
+      "body.t14.r2.c7.p0",
+      "body.t14.r2.c9.p0"
+    ],
+    "structure_unit_id": "su-52e7b02e497756ea60fd42c1",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "是否符合已知的作用机制、特性或已知的不良反应 | + | + | + | - | + | - | -",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件因果关系判断",
+      "表 9 不良事件与试验用药品因果关系评价"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-87e89271165354d285b2faa1",
+    "package_ordinal": 91,
+    "role": "attached",
+    "source_ref": "body.t14.r3",
+    "source_span_ids": [
+      "body.t14.r3.c0.p0",
+      "body.t14.r3.c1.p0",
+      "body.t14.r3.c2.p0",
+      "body.t14.r3.c3.p0",
+      "body.t14.r3.c5.p0",
+      "body.t14.r3.c7.p0",
+      "body.t14.r3.c8.p0",
+      "body.t14.r3.c9.p0"
+    ],
+    "structure_unit_id": "su-d5a725f26cde701cc2273061",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "去激发结果 | + | + | + | -/? | + | -/? | -/? | -/?",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件因果关系判断",
+      "表 9 不良事件与试验用药品因果关系评价"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-87e89271165354d285b2faa1",
+    "package_ordinal": 91,
+    "role": "attached",
+    "source_ref": "body.t14.r4",
+    "source_span_ids": [
+      "body.t14.r4.c0.p0",
+      "body.t14.r4.c1.p0",
+      "body.t14.r4.c2.p0",
+      "body.t14.r4.c3.p0",
+      "body.t14.r4.c4.p0",
+      "body.t14.r4.c5.p0",
+      "body.t14.r4.c6.p0",
+      "body.t14.r4.c7.p0",
+      "body.t14.r4.c9.p0"
+    ],
+    "structure_unit_id": "su-0eddfbce01c4de6fda5fc63e",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "再激发结果 | + | -/? | -/? | -/? | -/?",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件因果关系判断",
+      "表 9 不良事件与试验用药品因果关系评价"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-87e89271165354d285b2faa1",
+    "package_ordinal": 91,
+    "role": "attached",
+    "source_ref": "body.t14.r5",
+    "source_span_ids": [
+      "body.t14.r5.c0.p0",
+      "body.t14.r5.c1.p0",
+      "body.t14.r5.c2.p0",
+      "body.t14.r5.c3.p0",
+      "body.t14.r5.c7.p0",
+      "body.t14.r5.c9.p0"
+    ],
+    "structure_unit_id": "su-bf57639a93e8121fadc2abe9",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "是否可用其他合理的原因解释 | - | - | + | - | - | - | ++ | + | +",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件因果关系判断",
+      "表 9 不良事件与试验用药品因果关系评价"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-87e89271165354d285b2faa1",
+    "package_ordinal": 91,
+    "role": "attached",
+    "source_ref": "body.t14.r6",
+    "source_span_ids": [
+      "body.t14.r6.c0.p0",
+      "body.t14.r6.c1.p0",
+      "body.t14.r6.c2.p0",
+      "body.t14.r6.c3.p0",
+      "body.t14.r6.c4.p0",
+      "body.t14.r6.c5.p0",
+      "body.t14.r6.c6.p0",
+      "body.t14.r6.c7.p0",
+      "body.t14.r6.c8.p0",
+      "body.t14.r6.c9.p0"
+    ],
+    "structure_unit_id": "su-f90a974a28e4b2f090cd7c1a",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "注： | “+”表示肯定，或阳性结果； | “-”表示否定，或阴性结果，或暂未获得结果的情况； | “±”表示时间关系不能排除； | “++”表示可用其他“更加”合理的原因解释； | “-/?”表示去激发/再激发结果为阴性，或尚未进行去激发/再激发，或不适用去激发/再激发。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件因果关系判断",
+      "表 9 不良事件与试验用药品因果关系评价"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-87e89271165354d285b2faa1",
+    "package_ordinal": 91,
+    "role": "attached",
+    "source_ref": "body.t14.r7",
+    "source_span_ids": [
+      "body.t14.r7.c0.p0",
+      "body.t14.r7.c0.p1",
+      "body.t14.r7.c0.p2",
+      "body.t14.r7.c0.p3",
+      "body.t14.r7.c0.p4",
+      "body.t14.r7.c0.p5"
+    ],
+    "structure_unit_id": "su-829a78ccf20c0b48cfe08f69",
+    "unit_kind": "table_note"
+  }
+]

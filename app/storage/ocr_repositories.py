@@ -237,6 +237,13 @@ class OCRProfileRepository:
         record = self.session.get(OCRProfileRecord, ocr_profile_id)
         return self._decode(record) if record is not None else None
 
+    def get_by_fingerprint(self, fingerprint: str) -> OCRProfile:
+        record = self.session.scalar(select(OCRProfileRecord).where(
+            OCRProfileRecord.profile_sha256 == fingerprint))
+        if record is None:
+            raise InvalidReferenceError("识别配置记录缺失")
+        return self._decode(record)
+
     def _verify_same_profile(self, existing: OCRProfile, incoming: OCRProfile) -> None:
         """同指纹必须完全同身份字段；漂移拒绝，绝不静默复用。"""
         if (
@@ -251,6 +258,7 @@ class OCRProfileRepository:
             or existing.request_params_sha256 != incoming.request_params_sha256
             or existing.layout_parser_version != incoming.layout_parser_version
             or existing.coordinate_transform_version != incoming.coordinate_transform_version
+            or existing.attempt_namespace != incoming.attempt_namespace
         ):
             raise OcrIdentityError(
                 f"OCRProfile 指纹 {incoming.profile_sha256} 已存在但身份字段不一致，"

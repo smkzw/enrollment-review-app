@@ -1,0 +1,216 @@
+{
+  "attached_source_refs": [],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package115-contraception-method-authority-boundary",
+  "notes": [
+    "模型外闭包：Package115恰好拥有body.p1322-p1333共12个来源；无attached来源；structural-only为p1323小节标题；p1321（Package114）与p1334（Package116）仅只读语境且不升格。",
+    "时间锚点必须分离：p1324筛选时血妊娠试验阴性；p1325/IN-06签署知情同意书之日开始至末次给药后至少3个月；妊娠/FSH控制的筛选/基线/首次给药前检测锚点。不得混淆或合并。",
+    "方法组逻辑必须保留：p1327下p1328/p1329/p1330为并列OR，不得压平为AND，p1330保留双侧；p1332男用/女用避孕套为OR但不得同时使用；无杀精剂避孕套在p1333为不可接受，不得与p1332串线。",
+    "模态必须保留：p1324必须开始、p1325必须同意为强制模态；p1332末次给药结束后妊娠检查为建议、月经延迟者为强烈建议，不得升级为必做程序；禁欲可靠性为专业评估，定期禁欲/性交中断不得等同于持续禁欲。",
+    "p1322-p1324与p1327-p1333的适用定义、方法组与证据模态按supporting_or_supplement背景支持既有IN-06与妊娠/FSH控制，不因防重复发布降为与入排无关；候选数不预声明，required candidates为空是逐项防重复判断的结果。",
+    "p1325/p1326增量已在slice60m代表组验收发布（parent-clinical-acceptance.json），本包forbidden_candidate_source_refs防重复发布；IN-06已覆盖的持续避孕义务不得以新候选重复。",
+    "Package114止于p1321不回写；Package116自p1334起不吸收、不attached、不处置、不发布。claims_complete=false；不调用临床语义模型、不发布新控制点、不进入受试者、OCR、Patient Profile或浏览器流程。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1322",
+    "body.p1323",
+    "body.p1324",
+    "body.p1325",
+    "body.p1326",
+    "body.p1327",
+    "body.p1328",
+    "body.p1329",
+    "body.p1330",
+    "body.p1331",
+    "body.p1332",
+    "body.p1333"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得改写为入排排除或必须避孕": "pending_codex",
+        "绝经临床诊断定义完整（连续停经12个月+排除妊娠+排除其他导致闭经的医疗原因）": "pending_codex",
+        "闭合Package114绝经后女性分支但所有权仍归Package115": "pending_codex"
+      },
+      "frozen_excerpt": "女性连续停经12个月，并排除妊娠及其他可能导致闭经的医疗原因后，即可临床诊断为绝经。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1322",
+      "structure_unit_id": "su-fb4a937e370e44796477cece"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得决定受试者资格或入排结论": "pending_codex",
+        "小节结构标题": "pending_codex"
+      },
+      "frozen_excerpt": "2.有生育能力女性参与者的避孕规定与方法",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1323",
+      "structure_unit_id": "su-30096ccdcfdf10789b8955cd"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "必须模态不得降为建议": "pending_codex",
+        "筛选时血妊娠试验阴性后必须开始避孕": "pending_codex",
+        "筛选阴性锚点与ICF日期锚点保持不同": "pending_codex"
+      },
+      "frozen_excerpt": "在筛选时血妊娠试验阴性后，必须开始采取适当的避孕措施。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1324",
+      "structure_unit_id": "su-12b24f84f1d0173189edec48"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "ICF日期起点至末次给药后3个月区间保留": "pending_codex",
+        "IN-06已覆盖的持续避孕义务不重复发布": "pending_codex",
+        "方法讨论选择知晓保留（已验收增量）": "pending_codex",
+        "禁止使用激素类避孕保留（已验收增量）": "pending_codex"
+      },
+      "frozen_excerpt": "从签署知情同意书之日开始至研究药物末次给药后3个月为止，期间参与者必须同意持续和正确地使用一种高效或可接受的避孕方法进行避孕（禁止使用激素类避孕）。研究者或指定人员应与参与者讨论，确认参与者已从允许的避孕方法中选择了最适合其避孕的方法（下述），并确认参与者已知晓研究期间需持续并正确地使用该方法。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1325",
+      "structure_unit_id": "su-0fc7e4b9ffc537f57a06734f"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "停用或已知/怀疑怀孕立即电话联系保留": "pending_codex",
+        "未来条件不得伪造成当前触发": "pending_codex",
+        "未计划访视不得扩散到所有节点": "pending_codex",
+        "至少1种选定方法同意保留": "pending_codex",
+        "计划访视点全节点告知并记录对话与同意（已验收增量）": "pending_codex"
+      },
+      "frozen_excerpt": "在研究流程中计划的访视点，研究者或指定人员将告知参与者需要持续使用高效或可接受的避孕方法，并在参与者病历中记录与之的对话和参与者的同意（参与者需要确认她同意将持续并正确使用至少1种选定的避孕方法）。此外，还应告知参与者，如果她已停用所选的避孕方法，或，已知或怀疑怀孕，需立即打电话给研究者或指定人员。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1326",
+      "structure_unit_id": "su-7c5a7c2202481e22139d530c"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "包括列表为并列OR，不得压平为AND": "pending_codex",
+        "高效方法定义：持续正确使用时年失败率低于1%": "pending_codex"
+      },
+      "frozen_excerpt": "高效的避孕方法是指持续和正确地使用时，年失败率低于1%的避孕方法。包括：",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1327",
+      "structure_unit_id": "su-39d01d2bcb498f26d354352e"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得要求同时满足其他方法": "pending_codex",
+        "高效方法OR选项：正确放置含铜IUD": "pending_codex"
+      },
+      "frozen_excerpt": "正确放置含铜的宫内节育器（Intrauterine-device，IUD）",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1328",
+      "structure_unit_id": "su-0ea69d52c932304fefa35125"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得要求同时满足其他方法": "pending_codex",
+        "高效方法OR选项：男性伴侣绝育": "pending_codex"
+      },
+      "frozen_excerpt": "男性伴侣绝育",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1329",
+      "structure_unit_id": "su-6a42ae623296276f77cc1f61"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "三种术式为OR且保留双侧，不得压平为AND或降为单侧": "pending_codex",
+        "高效方法OR选项：双侧输卵管结扎/切除/闭塞术": "pending_codex"
+      },
+      "frozen_excerpt": "双侧输卵管结扎/双侧输卵管切除术/双侧输卵管闭塞术",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1330",
+      "structure_unit_id": "su-450f8320acce2144827296d2"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "可靠性按研究持续时间与首选和平常生活方式专业评估": "pending_codex",
+        "定期禁欲/性交中断不等同持续禁欲": "pending_codex",
+        "禁欲定义为完全和持续避免所有异性性交": "pending_codex"
+      },
+      "frozen_excerpt": "禁欲。禁欲定义为完全和持续地避免所有的异性性交。禁欲的可靠性需要根据研究的持续时间以及参与者的首选和平常的生活方式进行评估",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1331",
+      "structure_unit_id": "su-d8a1920d625cabeaa715bbb1"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "可接受方法：含杀精剂男用或女用避孕套": "pending_codex",
+        "建议模态不得升级为必做程序": "pending_codex",
+        "末次给药结束后每隔一个月经周期妊娠检查为建议，月经延迟者强烈建议": "pending_codex",
+        "男用与女用不得同时使用（摩擦失效风险）": "pending_codex"
+      },
+      "frozen_excerpt": "可接受的避孕方法：含杀精剂的男用避孕套或女用避孕套。男用避孕套和女用避孕套不能同时使用（存在因摩擦失效的风险）。采用可接受的避孕方法时，建议参与者在末次给药结束后每隔一个月经周期进行妊娠检查。对于月经延迟者，强烈建议进行妊娠检查以确认是否怀孕，此建议也适用于月经周期较长或不规律的参与者。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1332",
+      "structure_unit_id": "su-5c4374ca5df2617662082913"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不可接受与可接受条件不得串线": "pending_codex",
+        "不可接受方法清单完整（定期禁欲、无杀精剂避孕套、杀精海绵、性交中断）": "pending_codex",
+        "禁欲可靠性评估不与不可接受方法混淆": "pending_codex"
+      },
+      "frozen_excerpt": "不可接受的避孕方法：评价参与者的避孕首选，以及跟日常生活方式相关的禁欲的可靠性。定期禁欲（如推算日历法、排卵期法、症状体温避孕法或排卵后安全期避孕法）、男性或女性用避孕套（无杀精剂）、杀精海绵等，以及性交中断（或体外射精）都是本研究不可接受的避孕方法。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1333",
+      "structure_unit_id": "su-d9d34ee8408840bbff8f6b69"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61db-20260830",
+  "worker": "worker_02"
+}

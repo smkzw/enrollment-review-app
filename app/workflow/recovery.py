@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Callable
 
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.storage.codecs import utc_now
 from app.workflow.jobstore import JobStore
@@ -34,18 +35,19 @@ def recover_expired_jobs(
     session_factory: sessionmaker[Session],
     *,
     now: Callable[[], datetime] = utc_now,
+    job_scope: ColumnElement[bool] | None = None,
 ) -> RecoveryReport:
     """扫描并恢复所有过期租约任务；无过期租约时为空操作。"""
     report = RecoveryReport()
     with session_factory() as session:
         with session.begin():
-            store = JobStore(session, now=now)
+            store = JobStore(session, now=now, job_scope=job_scope)
             report.recovered_jobs = store.mark_expired_running()
             report.cancelled_jobs = store.cancel_expired_cancel_requests()
     for job_id in report.recovered_jobs:
         with session_factory() as session:
             with session.begin():
-                store = JobStore(session, now=now)
+                store = JobStore(session, now=now, job_scope=job_scope)
                 final_state = store.requeue_recovering(job_id)
                 if final_state == "failed_final":
                     report.failed_final_jobs.append(job_id)
@@ -58,6 +60,7 @@ def run_startup_recovery(
     session_factory: sessionmaker[Session],
     *,
     now: Callable[[], datetime] = utc_now,
+    job_scope: ColumnElement[bool] | None = None,
 ) -> RecoveryReport:
     """V2 写服务启动入口调用：识别过期租约并恢复，保证不存在永久 processing。"""
-    return recover_expired_jobs(session_factory, now=now)
+    return recover_expired_jobs(session_factory, now=now, job_scope=job_scope)

@@ -1,0 +1,38 @@
+{
+  "attached_source_refs": [
+    "body.t5.r18",
+    "body.p328",
+    "body.p685",
+    "body.p686",
+    "body.p687",
+    "body.p688",
+    "body.p689"
+  ],
+  "claims_complete": false,
+  "config_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/configs/representative_group_virology_p803_p805_contract_v4.v1.json",
+  "config_sha256": "ea355f42423731917db824573403b4fa6018c1e5d7f5c8f7bebe69da1a5ba397",
+  "control_batch_id": "pcb-4a2eb60d7b26174b4faa7c5b",
+  "control_plan_id": "pcp-0658c11a1a2002ff6dbba133",
+  "coverage_manifest_id": "manifest:slice59n-viral-reps",
+  "coverage_manifest_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/coverage_manifest.json",
+  "coverage_manifest_sha256": "89c7f00a8ed2d7eda666fb62538b1941b10c59f4375b8c4491436f66ea0b51e6",
+  "created_at": "2026-08-28T11:39:38.588344+00:00",
+  "frozen_plan_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/frozen_phase_plan.json",
+  "frozen_plan_sha256": "f0aa7e4bccad782ad5472c1f446f079e26343f694ad3ddca401bfbef89f38250",
+  "group_id": "d001-ii-virology-p803-p805-contract-v4",
+  "mode": "dry_run_prepare",
+  "owned_source_refs": [
+    "body.p803",
+    "body.p804",
+    "body.p805"
+  ],
+  "parent_phase_qc_path": null,
+  "parent_phase_qc_sha256": null,
+  "prompt_char_count": 30910,
+  "prompt_sha256": "aad0904270c0eac4b6bb5a8de9f718956a7e5df398bea957c7ce52355dc15e83",
+  "prompt_template_sha256": "4f6f8a011d18972e0f164d146e634a4f9c8bcaa8cfe81adc0677c43bbc3a34f3",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "replay_mode": "product_protocol_control_agent_runner_mtplx",
+  "task_id": "phase5-slice61ad-virology-waiver-evidence-20260828",
+  "worker": "codex-parent"
+}

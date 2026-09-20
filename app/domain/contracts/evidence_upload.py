@@ -59,6 +59,7 @@ __all__ = [
 
 #: 确认后创建的初始持久任务类型（OCR/处理在后台 worker 执行，不在确认调用内）。
 EVIDENCE_PROCESSING_JOB_TYPE = "evidence_processing"
+DIRECT_VISION_PREPARATION = "original-page-images/v1"
 
 _SHA256 = r"^[0-9a-f]{64}$"
 

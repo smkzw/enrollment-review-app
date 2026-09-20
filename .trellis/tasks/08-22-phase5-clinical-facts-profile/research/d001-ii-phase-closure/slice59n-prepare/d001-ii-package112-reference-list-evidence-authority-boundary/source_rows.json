@@ -1,0 +1,194 @@
+[
+  {
+    "excerpt": "参考文献",
+    "heading_path": [
+      "参考文献"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-fa6b2b871b90b62bbfe81775",
+    "package_ordinal": 112,
+    "role": "owned",
+    "source_ref": "body.p1295",
+    "source_span_ids": [
+      "body.p1295"
+    ],
+    "structure_unit_id": "su-26d914047d29578e097cdf6c",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "中华医学会皮肤性病学分会银屑病专业委员会. 中国银屑病诊疗指南（2023版）[J]. 中华皮肤科杂志, 2023,56(7):573-625.",
+    "heading_path": [
+      "参考文献"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-fa6b2b871b90b62bbfe81775",
+    "package_ordinal": 112,
+    "role": "owned",
+    "source_ref": "body.p1296",
+    "source_span_ids": [
+      "body.p1296"
+    ],
+    "structure_unit_id": "su-a4010e85bdd682dfe1a1cad9",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "黄丹,陈崑.银屑病相关流行病学调查进展[J].诊断学理论与实践,2021,20(01):48-52.",
+    "heading_path": [
+      "参考文献"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-fa6b2b871b90b62bbfe81775",
+    "package_ordinal": 112,
+    "role": "owned",
+    "source_ref": "body.p1297",
+    "source_span_ids": [
+      "body.p1297"
+    ],
+    "structure_unit_id": "su-a3df49d7b4a625b94bec2965",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "李慧贤,胡丽,郑焱,等.基于全球疾病负担(GBD)大数据的中国银屑病流行病学负担分析[J].中国皮肤性病学杂志,2021,35(04):386-392.",
+    "heading_path": [
+      "参考文献"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-fa6b2b871b90b62bbfe81775",
+    "package_ordinal": 112,
+    "role": "owned",
+    "source_ref": "body.p1298",
+    "source_span_ids": [
+      "body.p1298"
+    ],
+    "structure_unit_id": "su-bd9722972cf3d9ea9548497a",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "Griffiths CEM, Armstrong AW, Gudjonsson JE, et al. Psoriasis. The Lancet. 2021;397:1301–15.",
+    "heading_path": [
+      "参考文献"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-fa6b2b871b90b62bbfe81775",
+    "package_ordinal": 112,
+    "role": "owned",
+    "source_ref": "body.p1299",
+    "source_span_ids": [
+      "body.p1299"
+    ],
+    "structure_unit_id": "su-11d958ae625456cbf0b39873",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "Armstrong AW, Read C. Pathophysiology, Clinical Presentation, and Treatment of Psoriasis: A Review. JAMA. 2020;323:1945–60.",
+    "heading_path": [
+      "参考文献"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-fa6b2b871b90b62bbfe81775",
+    "package_ordinal": 112,
+    "role": "owned",
+    "source_ref": "body.p1300",
+    "source_span_ids": [
+      "body.p1300"
+    ],
+    "structure_unit_id": "su-17f26c68b700c79efac66fdf",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "Xin P, Xu X, Deng C, et al. The role of JAK/STAT signaling pathway and its inhibitors in diseases. Int Immunopharmacol. 2020 Mar;80:106210.",
+    "heading_path": [
+      "参考文献"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-fa6b2b871b90b62bbfe81775",
+    "package_ordinal": 112,
+    "role": "owned",
+    "source_ref": "body.p1301",
+    "source_span_ids": [
+      "body.p1301"
+    ],
+    "structure_unit_id": "su-13fd924febd87d13779f5fd4",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "Krueger JG, McInnes IB, Blauvelt A. Tyrosine kinase 2 and Janus kinase‒signal transducer and activator of transcription signaling and inhibition in plaque psoriasis. J Am Acad Dermatol. 2022;86:148–57.",
+    "heading_path": [
+      "参考文献"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-fa6b2b871b90b62bbfe81775",
+    "package_ordinal": 112,
+    "role": "owned",
+    "source_ref": "body.p1302",
+    "source_span_ids": [
+      "body.p1302"
+    ],
+    "structure_unit_id": "su-a5b3e2ab044bf7ba937ed3c7",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "Deucravacitinib. FDA Multi-Discipline Review. 2022.",
+    "heading_path": [
+      "参考文献"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-fa6b2b871b90b62bbfe81775",
+    "package_ordinal": 112,
+    "role": "owned",
+    "source_ref": "body.p1303",
+    "source_span_ids": [
+      "body.p1303"
+    ],
+    "structure_unit_id": "su-5b0e11423fee24e9254b5c8f",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "Feldman SR, Krueger GG. Psoriasis assessment tools in clinical trials. Ann Rheum Dis. 2005;64 Suppl 2:ii65-8; discussion ii69-73.",
+    "heading_path": [
+      "参考文献"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-fa6b2b871b90b62bbfe81775",
+    "package_ordinal": 112,
+    "role": "owned",
+    "source_ref": "body.p1304",
+    "source_span_ids": [
+      "body.p1304"
+    ],
+    "structure_unit_id": "su-c1ee98b152405239320575e9",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "Bożek A, Reich A. The reliability of three psoriasis assessment tools: Psoriasis area and severity index, body surface area and physician global assessment. Adv Clin Exp Med. 2017;26:851–6.",
+    "heading_path": [
+      "参考文献"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-fa6b2b871b90b62bbfe81775",
+    "package_ordinal": 112,
+    "role": "owned",
+    "source_ref": "body.p1305",
+    "source_span_ids": [
+      "body.p1305"
+    ],
+    "structure_unit_id": "su-9b690a6ae52c33ffa397f9a3",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "Thomas CL, Finlay AY. The “handprint” approximates to 1% of the total body surface area whereas the “palm minus the fingers” does not. Br J Dermatol. 2007;157:1080–1.",
+    "heading_path": [
+      "参考文献"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-fa6b2b871b90b62bbfe81775",
+    "package_ordinal": 112,
+    "role": "owned",
+    "source_ref": "body.p1306",
+    "source_span_ids": [
+      "body.p1306"
+    ],
+    "structure_unit_id": "su-2a86c798e2ce7adce426c896",
+    "unit_kind": "list_item"
+  }
+]

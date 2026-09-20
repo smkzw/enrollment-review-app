@@ -10,18 +10,20 @@ ClausePack 与同一完整原提示，仅追加一条带校验错误与上一回
 from __future__ import annotations
 
 import json
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
 from pydantic import ValidationError
 
 from app.domain.contracts.clause_pack import ClausePack
+from app.projections.clause_pack import clause_determination_modes
 from app.domain.contracts.page_review import ObservationContext, PageReviewPayload
 from app.domain.contracts.page_review_focus import PageReviewFocus
 from app.domain.page_normalization import fact_normalization_key, handwriting_normalization_key
 from app.domain.publication import canonical_hash
 
-PAGE_REVIEW_FORMAT_REPAIR_VERSION = "page-review-format-repair/v1"
+PAGE_REVIEW_FORMAT_REPAIR_VERSION = "page-review-format-repair/v2"
 
 _FORMAT_REPAIR_REQUIREMENTS = (
     "上一回答未通过本系统的格式校验，仅作不可信参考：不得原样复制，也不得把它转发给任何其他模型。",
@@ -65,6 +67,7 @@ def evaluate_page_review_response(
     *,
     clause_pack: ClausePack,
     review_focus: PageReviewFocus | None,
+    image_size: tuple[int, int] | None = None,
 ) -> PageResponseEvaluation:
     """Validate one completed response against the strict page contract."""
     # Deferred import: the harness owns extract_json_object and imports this module.
@@ -131,7 +134,19 @@ def evaluate_page_review_response(
             errors=_format_errors(exc),
         ) from exc
 
-    known_clauses = {item.clause_id for item in clause_pack.clauses}
+    if image_size is not None:
+        width, height = image_size
+        for items in (payload.facts, payload.handwriting, payload.clause_signals):
+            for item in items:
+                region = item.region
+                if region is not None and region.bbox is not None:
+                    if region.bbox.x1 > width or region.bbox.y1 > height:
+                        raise PageResponseFormatError(
+                            "资料标注超出实际页面范围，不能据此定位原件",
+                            failure_kind="schema", repairable=False,
+                            errors=["region.bbox 超出当前图像像素范围"],
+                        )
+    known_clauses = set(clause_determination_modes(clause_pack))
     if review_focus is not None and review_focus.handwriting_review and not review_focus.targets and payload.facts:
         raise PageResponseFormatError(
             "本次仅核对手写批注，不应新增普通事实",
@@ -157,6 +172,34 @@ def evaluate_page_review_response(
     return PageResponseEvaluation(
         raw=raw, payload=payload, response_sha256=canonical_hash(raw)
     )
+
+
+def valid_observation_fingerprints(text, *, clause_pack, review_focus, image_size=None):
+    """Retain individually valid observations, including multiplicity and context."""
+    from app.llm.page_review_harness import PageReviewHarnessError, extract_json_object
+
+    try:
+        raw = extract_json_object(text)
+    except PageReviewHarnessError:
+        return Counter()
+    fingerprints = Counter()
+    for kind in ("facts", "handwriting"):
+        items = raw.get(kind)
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            single = {"has_eligibility_value": True, "facts": [], "handwriting": [], "clause_signals": []}
+            single[kind] = [item]
+            try:
+                evaluated = evaluate_page_review_response(json.dumps(single, ensure_ascii=False),
+                    clause_pack=clause_pack, review_focus=review_focus, image_size=image_size)
+            except PageResponseFormatError:
+                continue
+            observation = getattr(evaluated.payload, kind)[0].model_dump(mode="json")
+            # Renumbering is formatting; content, location and temporal identity are not.
+            observation.pop("observation_id")
+            fingerprints[(kind, canonical_hash(observation))] += 1
+    return fingerprints
 
 
 def build_format_repair_messages(

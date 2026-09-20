@@ -9,6 +9,7 @@ from typing import Awaitable, Callable, Mapping, Sequence
 from sqlalchemy.orm import Session
 
 from app.domain.contracts.clause_pack import ClausePack
+from app.projections.clause_pack import clause_determination_modes
 from app.domain.contracts.page_review import (
     PAGE_REVIEW_CONTRACT_VERSION,
     PageCoverageEntry,
@@ -20,6 +21,7 @@ from app.domain.contracts.page_review import (
     SubjectPageCoverage,
 )
 from app.domain.page_reconciliation import reconcile_page_reviews
+from app.domain.page_source_association import PageAssociationSource
 from app.domain.publication import canonical_hash
 from app.llm.page_review_harness import (
     Completion,
@@ -55,8 +57,15 @@ async def review_page(
     clause_pack: ClausePack,
     *,
     completion: Completion = direct_completion,
+    association_source: PageAssociationSource | None = None,
 ) -> PageExecutionResult:
-    """Run independent main reads; the optional reader never substitutes a main lane."""
+    """Run exactly two independent main reads using the caller's frozen source."""
+    if association_source is not None:
+        association_source = PageAssociationSource.model_validate(association_source.model_dump())
+        if (association_source.source_document_version_id, association_source.page_number) != (
+            page_input.source_document_version_id, page_input.page_number,
+        ):
+            raise ValueError("用于核对的原文不属于本次资料页，未发起模型读取")
     main_lanes = (PageReviewLane.MAIN_A, PageReviewLane.MAIN_B)
     main_results = await asyncio.gather(
         *(
@@ -89,7 +98,9 @@ async def review_page(
             ),
         )
 
-    return await reconcile_completed_reads(page_input, clause_pack, records)
+    return await reconcile_completed_reads(
+        page_input, clause_pack, records, association_source=association_source,
+    )
 
 
 async def reconcile_completed_reads(
@@ -97,7 +108,7 @@ async def reconcile_completed_reads(
     clause_pack: ClausePack,
     records: Sequence[PageReviewRecord],
     *,
-    association_source=None,
+    association_source: PageAssociationSource | None = None,
 ) -> PageExecutionResult:
     """Finish persisted main reads without calling either main model again."""
     if {record.lane for record in records} != {PageReviewLane.MAIN_A, PageReviewLane.MAIN_B} or len(records) != 2:
@@ -127,7 +138,7 @@ async def reconcile_completed_reads(
             ),
         )
 
-    modes = {item.clause_id: item.determination_mode for item in clause_pack.clauses}
+    modes = clause_determination_modes(clause_pack)
     reconciliation = reconcile_page_reviews(
         records,
         determination_modes=modes,
@@ -153,6 +164,7 @@ async def review_pages(
     clause_pack: ClausePack,
     *,
     completion: Completion = direct_completion,
+    association_sources: Mapping[str, PageAssociationSource] | None = None,
 ) -> list[PageExecutionResult]:
     """Review pages concurrently while honoring each product route's own cap."""
     semaphores = {
@@ -171,7 +183,8 @@ async def review_pages(
     return list(
         await asyncio.gather(
             *(
-                review_page(routes, page, clause_pack, completion=limited)
+                review_page(routes, page, clause_pack, completion=limited,
+                            association_source=(association_sources or {}).get(page.page_artifact_id))
                 for page in pages
             )
         )

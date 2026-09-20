@@ -1,0 +1,570 @@
+{
+  "batch_id": "pcb-6edd2d693aff138b9c55b1ec",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [
+    "body.p1180",
+    "body.p1181",
+    "body.p1182",
+    "body.p1183",
+    "body.p1184",
+    "body.p1185"
+  ],
+  "context_structure_unit_ids": [
+    "su-0cb401ac2481a4e59b260d73",
+    "su-78de15bbdcbf785954946591",
+    "su-8589eeb8962e296bc5a62c0d",
+    "su-e0176c3d0c6457699f9b153e",
+    "su-81580ef4a41882213150a500",
+    "su-f7c429d6a6a424dcf626473c"
+  ],
+  "context_units": [
+    {
+      "excerpt": "Ⅱ期临床阶段",
+      "heading_path": [
+        "统计学考虑",
+        "样本量计算"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1180"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30430,
+      "source_ref": "body.p1180",
+      "source_span_ids": [
+        "body.p1180"
+      ],
+      "structure_unit_id": "su-0cb401ac2481a4e59b260d73",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "Ⅱ期临床阶段的主要终点是第12周达到PASI 75应答的参与者比例。本阶段研究的主要目的为剂量探索，样本量的估算不做正式的假设检验。2个剂量组与安慰剂组，随机比例为1:1:1，预计每组纳入40例，合计约120例参与者参与本次Ⅱ期临床试验。",
+      "heading_path": [
+        "统计学考虑",
+        "样本量计算"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1181"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30440,
+      "source_ref": "body.p1181",
+      "source_span_ids": [
+        "body.p1181"
+      ],
+      "structure_unit_id": "su-78de15bbdcbf785954946591",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "Ⅲ期临床阶段",
+      "heading_path": [
+        "统计学考虑",
+        "样本量计算"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1182"
+      ],
+      "phase_scopes": [
+        "phase_iii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30450,
+      "source_ref": "body.p1182",
+      "source_span_ids": [
+        "body.p1182"
+      ],
+      "structure_unit_id": "su-8589eeb8962e296bc5a62c0d",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "本研究为随机、双盲、安慰剂对照评价CMS-D001片治疗中度至重度斑块状银屑病的疗效，采用优效设计，即试验组第16周达到PASI 75应答的参与者比例优于安慰剂组。国外同类药物Deucravacitinib两项Ⅲ期临床试验结果的meta分析显示，试验组第16周时PASI 75应答率55.2% [51.8%; 58.5%]，安慰剂组为10.7% [7.8%; 13.9%]，试验组与安慰剂组第16周时PASI 75应答率差值为44.5% [40.0%; 49.0%]，假定本研究药物的疗效与国外同类药物相似，保守估计安慰剂组应答率为13.9%，两组差异为40.0%，单侧检验显著性水平α=0.025，按照2:1比例随机分配至试验组与安慰剂组，两组合计201例参与者完成第16周评估，有99%的把握度检验出试验组PASI 75应答率显著优于安慰剂组。",
+      "heading_path": [
+        "统计学考虑",
+        "样本量计算"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1183"
+      ],
+      "phase_scopes": [
+        "phase_iii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30460,
+      "source_ref": "body.p1183",
+      "source_span_ids": [
+        "body.p1183"
+      ],
+      "structure_unit_id": "su-e0176c3d0c6457699f9b153e",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "同时，根据Deucravacitinib两项Ⅲ期临床试验结果的meta分析显示，试验组第16周时PGA-TS应答率51.3% [47.9%; 54.6%]，安慰剂组为8.1% [5.8%; 11.1%]，试验组与安慰剂组第16周时PGA-TS应答率差值为43.2% [38.9%; 47.4%]，保守假定安慰剂组第16周PGA-TS应答率为11.1%，试验组与安慰剂组的差异为47.4%，上述201例参与者同样可提供99%的把握度在单侧alpha=0.025的水平上检验出两组的差异。",
+      "heading_path": [
+        "统计学考虑",
+        "样本量计算"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1184"
+      ],
+      "phase_scopes": [
+        "phase_iii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30470,
+      "source_ref": "body.p1184",
+      "source_span_ids": [
+        "body.p1184"
+      ],
+      "structure_unit_id": "su-81580ef4a41882213150a500",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "本次Ⅲ期临床试验计划按照Ⅱ期临床试验设置2个剂量组（或基于Ⅱ期研究结果确定的推荐剂量组）和1个安慰剂组，考虑20%的脱落，计划最多入组420例参与者，按照2:2:1的比例分配至试验组或安慰剂组（其中每个试验组不计转组治疗例数时最多168例，安慰剂组最多84例），可同时满足疗效与安全性分析需求。",
+      "heading_path": [
+        "统计学考虑",
+        "样本量计算"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1185"
+      ],
+      "phase_scopes": [
+        "phase_iii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30480,
+      "source_ref": "body.p1185",
+      "source_span_ids": [
+        "body.p1185"
+      ],
+      "structure_unit_id": "su-f7c429d6a6a424dcf626473c",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "coverage_manifest_id": "manifest:slice61cn-package101-analysis-set-boundary",
+  "known_official_targets": [],
+  "known_procedure_targets": [],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "D1给药前",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "D1给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {},
+  "owned_required_action_kinds_by_structure_unit_id": {},
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.p1179",
+    "body.p1186",
+    "body.p1187",
+    "body.p1188",
+    "body.p1189",
+    "body.p1190",
+    "body.p1191",
+    "body.p1192",
+    "body.p1193",
+    "body.p1194",
+    "body.p1195",
+    "body.p1196"
+  ],
+  "owned_structure_unit_ids": [
+    "su-16e9bca649de0099da16794e",
+    "su-b91cca43f28eb5e7de89c8ee",
+    "su-96f6344776707b251b659b03",
+    "su-34f8c812d5115db1bd307c69",
+    "su-c3d5f54bbd68ec4a2435350c",
+    "su-fe1c5343f4ff47900723e35c",
+    "su-b5acdb8bc815cff05ed9bf0a",
+    "su-f8d9e239afd831f053e4d300",
+    "su-b4b794299c377bfd953db9c8",
+    "su-99b545411660322636f37b91",
+    "su-fd0d6e64090a07d1ce5965ee",
+    "su-2e4249d27de85ce4f7d1beef"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "样本量计算",
+      "heading_path": [
+        "统计学考虑",
+        "样本量计算"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1179"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30420,
+      "source_ref": "body.p1179",
+      "source_span_ids": [
+        "body.p1179"
+      ],
+      "structure_unit_id": "su-16e9bca649de0099da16794e",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "统计分析集的定义",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析集的定义"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1186"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30490,
+      "source_ref": "body.p1186",
+      "source_span_ids": [
+        "body.p1186"
+      ],
+      "structure_unit_id": "su-b91cca43f28eb5e7de89c8ee",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "统计分析数据集：",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析集的定义"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1187"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30500,
+      "source_ref": "body.p1187",
+      "source_span_ids": [
+        "body.p1187"
+      ],
+      "structure_unit_id": "su-96f6344776707b251b659b03",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "ITT集（Intention-to-Treat，ITT）：包括所有经随机化分组后的参与者。参与者将根据随机分配的治疗组进行分析。ITT集将作为人口学、基线及有效性指标的主要分析集。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析集的定义"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1188"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30510,
+      "source_ref": "body.p1188",
+      "source_span_ids": [
+        "body.p1188"
+      ],
+      "structure_unit_id": "su-34f8c812d5115db1bd307c69",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "安全性分析集（Safety Set，SS）：包括所有经随机化分组且至少接受一次试验用药品且具有用药后安全性评价数据的参与者。安全性人群将主要用于药物暴露和其他安全性数据的分析，将基于接受的实际治疗进行分析。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析集的定义"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1189"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30520,
+      "source_ref": "body.p1189",
+      "source_span_ids": [
+        "body.p1189"
+      ],
+      "structure_unit_id": "su-c3d5f54bbd68ec4a2435350c",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "药代动力学浓度集（Pharmacokinetics Concentration Set，PKCS）：包括所有经随机化分组且至少接受一次CMS-D001片，且至少有1个给药后CMS-D001及其主要代谢产物（如适用）有效血浆浓度数据的所有参与者。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析集的定义"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1190"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30530,
+      "source_ref": "body.p1190",
+      "source_span_ids": [
+        "body.p1190"
+      ],
+      "structure_unit_id": "su-fe1c5343f4ff47900723e35c",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "药效学分析集（Pharmacodynamic Set，PDS）：所有随机化后至少接受1次试验用药品，且至少有1个给药后有效PD数据的参与者。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析集的定义"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1191"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30540,
+      "source_ref": "body.p1191",
+      "source_span_ids": [
+        "body.p1191"
+      ],
+      "structure_unit_id": "su-b5acdb8bc815cff05ed9bf0a",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "Ⅱ期临床阶段和Ⅲ期基础研究阶段各个分析数据集的划分及剔除各分析数据集的参与者名单均在盲态数据审核后，在数据库锁库和揭盲之前确定。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析集的定义"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1192"
+      ],
+      "phase_scopes": [
+        "mixed"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30550,
+      "source_ref": "body.p1192",
+      "source_span_ids": [
+        "body.p1192"
+      ],
+      "structure_unit_id": "su-f8d9e239afd831f053e4d300",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "统计分析",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1193"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30560,
+      "source_ref": "body.p1193",
+      "source_span_ids": [
+        "body.p1193"
+      ],
+      "structure_unit_id": "su-b4b794299c377bfd953db9c8",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "一般方法",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "一般方法"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1194"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30570,
+      "source_ref": "body.p1194",
+      "source_span_ids": [
+        "body.p1194"
+      ],
+      "structure_unit_id": "su-99b545411660322636f37b91",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "所有疗效及安全性统计分析使用SAS9.4（或以上版本）软件完成。PK参数的统计分析将采用WinNonlin软件（8.1或以上版本）完成。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "一般方法"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1195"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30580,
+      "source_ref": "body.p1195",
+      "source_span_ids": [
+        "body.p1195"
+      ],
+      "structure_unit_id": "su-fd0d6e64090a07d1ce5965ee",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "对连续型变量，描述性统计量包括观测数、均数、中位数、标准差、最大值和最小值。对分类变量，描述性统计量将包括参与者例数和百分比。所有疾病史和不良事件均采用最新版监管活动医学词典（Medical Dictionary for Regulatory Activities，MedDRA）进行编码，并按照MedDRA编码中的系统器官分类（System Organ Class，SOC）和首选语（Preferred Terms，PT）进行相应的汇总分析。所有合并药物的治疗将使用最新版本世界卫生组织药物词典（World Health Organization Drug Dictionaries，WHO Drug）进行编码。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "一般方法"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1196"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30590,
+      "source_ref": "body.p1196",
+      "source_span_ids": [
+        "body.p1196"
+      ],
+      "structure_unit_id": "su-2e4249d27de85ce4f7d1beef",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [
+    "su-16e9bca649de0099da16794e",
+    "su-b91cca43f28eb5e7de89c8ee",
+    "su-96f6344776707b251b659b03",
+    "su-b4b794299c377bfd953db9c8",
+    "su-99b545411660322636f37b91"
+  ],
+  "study_phase": "phase_ii"
+}

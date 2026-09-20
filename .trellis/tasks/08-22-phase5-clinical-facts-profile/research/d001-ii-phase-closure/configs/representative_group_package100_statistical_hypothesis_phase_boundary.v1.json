@@ -1,0 +1,152 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-package100-statistical-hypothesis-phase-boundary",
+  "task_id": "phase5-slice61cm-20260830",
+  "worker": "codex-parent",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/coverage_manifest.json",
+  "study_phase": "phase_ii",
+  "owned_source_refs": [
+    "body.p1168",
+    "body.p1169",
+    "body.p1170"
+  ],
+  "attached_source_refs": [
+    "body.p1171",
+    "body.p1172",
+    "body.p1173",
+    "body.p1174",
+    "body.p1175",
+    "body.p1176",
+    "body.p1177",
+    "body.p1178",
+    "body.p1179"
+  ],
+  "required_candidate_source_refs": [],
+  "forbidden_candidate_source_refs": [
+    "body.p1168",
+    "body.p1169",
+    "body.p1170",
+    "body.p1171",
+    "body.p1172",
+    "body.p1173",
+    "body.p1174",
+    "body.p1175",
+    "body.p1176",
+    "body.p1177",
+    "body.p1178",
+    "body.p1179"
+  ],
+  "pre_enrollment_source_refs": [],
+  "structural_only_source_refs": [
+    "body.p1168",
+    "body.p1170"
+  ],
+  "expected_disposition_by_source_ref": {
+    "body.p1169": "administrative_statistical_background"
+  },
+  "expected_workflow_stage_ids_by_source_ref": {},
+  "candidate_forbidden_markers_by_source_ref": {
+    "body.p1168": ["筛选必做", "基线必做", "证据不足", "不得入组", "排除标准", "发布控制点"],
+    "body.p1169": ["筛选必做", "基线必做", "证据不足", "不得入组", "排除标准", "发布控制点"],
+    "body.p1170": ["筛选必做", "基线必做", "证据不足", "不得入组", "排除标准", "发布控制点"]
+  },
+  "candidate_required_markers_by_source_ref": {},
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "第100包只拥有统计学章节入口、Ⅱ/Ⅲ期统计分析计划定稿说明和统计假设标题。三项均不形成受试者预筛、筛选或基线入排控制点；Ⅱ期不设检验假设、Ⅲ期假设正文和样本量计算标题只读进入以闭合期别分支，禁止跨期或跨包发射候选。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "统计学考虑章节同时说明Ⅱ期与Ⅲ期 SAP 管理，并在统计假设子节中明确Ⅱ期不做检验假设。Ⅲ期假设正文只用于证明其不属于Ⅱ期；样本量计算标题仅关闭前述分支。所有来源均为统计背景或结构上下文，不构成入排资格、流程必做或证据缺口。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    },
+    {
+      "workflow_stage_id": "flow-d1-pre-dose",
+      "review_stage": "baseline",
+      "display_name": "D1给药前",
+      "visit_instance": "D1给药前"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [],
+    "required_procedures": []
+  },
+  "ids": {
+    "manifest_id": "manifest:slice61cm-package100-statistical-hypothesis-phase-boundary",
+    "catalog_id": "catalog:slice61cm-package100-statistical-hypothesis-phase-boundary"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p1168": [
+      "统计学考虑章节标题，仅提供结构归属，不独立形成控制点"
+    ],
+    "body.p1169": [
+      "仅说明Ⅱ期和Ⅲ期的统计分析方法将在各自 SAP 中细化，并分别在各期数据库锁定前获批定稿",
+      "数据库锁定前是统计文件定稿时限，不得改写为受试者随机、给药或入组前义务"
+    ],
+    "body.p1170": [
+      "统计假设子节标题，仅提供结构归属，不独立形成检验假设或受试者级规则"
+    ],
+    "body.p1171": [
+      "Ⅱ期为探索性研究，不做检验假设；只读证明Ⅱ期分支，不发射候选"
+    ],
+    "body.p1172": [
+      "Ⅲ期主要估计目标与假设检验引导段，只读用于识别后续段落为Ⅲ期"
+    ],
+    "body.p1173": ["Ⅲ期假设引导语，继承p1172的Ⅲ期语境，只读"],
+    "body.p1174": ["Ⅲ期原假设公式，只读，不得进入Ⅱ期控制"],
+    "body.p1175": ["Ⅲ期备择假设公式，只读，不得进入Ⅱ期控制"],
+    "body.p1176": ["Ⅲ期单侧Alpha水平，只读，不得进入Ⅱ期控制"],
+    "body.p1177": ["Ⅲ期多重性校正标题，继承Ⅲ期语境，只读"],
+    "body.p1178": ["Ⅲ期多重性说明，只读，不得进入Ⅱ期控制"],
+    "body.p1179": [
+      "样本量计算标题归第101包；本包只读使用它关闭统计假设分支，不吸收后续样本量与分析集内容"
+    ]
+  },
+  "exception_semantics_by_source_ref": {
+    "body.p1169": {
+      "semantic_role": "cross_phase_sap_approval_statistical_background",
+      "base_rule": "Ⅱ期和Ⅲ期统计分析方法在单独的SAP中细化，各自在对应期数据库锁定前由申办者批准并定稿。",
+      "exception_rule": "该时限约束统计分析计划文件，不约束受试者筛选、基线、随机或给药；不得把数据库锁定前弱化或替换成入组前。",
+      "preserve_keywords": ["Ⅱ期", "Ⅲ期", "统计分析计划", "SAP", "数据库锁定前", "申办者批准并定稿"],
+      "forbidden_inversion": "不得把统计文件管理背景改成入排条件、受试者证据缺口、研究者个例判断或D1给药前必做事项。"
+    }
+  },
+  "later_package_boundary": {
+    "read_only": true,
+    "note": "body.p1171-p1178只读闭合Ⅱ期无检验假设与Ⅲ期假设分支；body.p1179只作为关闭边界且所有权仍归第101包。第99包body.p1158-p1167以及第101包body.p1186-p1196、第102包body.p1197/body.p1200-p1205均不得进入本包。",
+    "expected_owners_by_span": {
+      "body.p1158": 99,
+      "body.p1167": 99,
+      "body.p1168": 100,
+      "body.p1169": 100,
+      "body.p1170": 100,
+      "body.p1179": 101,
+      "body.p1186": 101,
+      "body.p1196": 101,
+      "body.p1197": 102,
+      "body.p1205": 102
+    }
+  },
+  "notes": [
+    "模型外闭包：3个拥有来源，9个只读来源，0个候选。",
+    "p1173-p1177从旧计划的待判定目标移除，是期别识别修正，不是语义删除。",
+    "claims_complete=false；本配置不调用模型、不发布控制点。"
+  ]
+}

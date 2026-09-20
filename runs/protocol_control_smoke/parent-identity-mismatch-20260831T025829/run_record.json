@@ -1,0 +1,34 @@
+{
+  "run_id": "smoke-20260830T185830-54cff7b6",
+  "claims_complete": false,
+  "runner": "scripts/run_protocol_control_smoke.py",
+  "started_at": "2026-08-30T18:58:30.144612",
+  "fixture": null,
+  "model_identity": {
+    "verified_before_run": false,
+    "failure_class": "model_identity_mismatch",
+    "reason": "mismatch",
+    "configured_model": "mtplx-qwen38-27b-optimized-quality",
+    "served_model_ids": [
+      "pocketaihub-qwen3.8-27b-abliterated-mtplx-optimized-speed"
+    ],
+    "diagnostic": "协议控制模型身份不一致，已拒绝执行语义请求：配置模型为 mtplx-qwen38-27b-optimized-quality，服务实际报告的模型为 pocketaihub-qwen3.8-27b-abliterated-mtplx-optimized-speed。请更正本地模型服务实际加载的模型或配置后再试，不得静默替换语义模型。"
+  },
+  "source_chain": null,
+  "control_execution": null,
+  "boundaries": {
+    "formal_catalog_materialized": false,
+    "source_snapshot_bypassed": false,
+    "fixture_is_synthetic_only": true,
+    "real_clinical_content_used": false
+  },
+  "notes": [
+    "核验发现传输实际模型身份：配置模型 mtplx-qwen38-27b-optimized-quality，服务 http://127.0.0.1:8002/v1",
+    "实际模型身份未通过正向匹配，已按边界失效关闭；未执行任何语义请求。"
+  ],
+  "finished_at": "2026-08-30T18:58:30.291532",
+  "latency_seconds": {
+    "total": 0.147
+  },
+  "run_record_path": "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile/runs/protocol_control_smoke/parent-identity-mismatch-20260831T025829/run_record.json"
+}

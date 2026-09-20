@@ -1,0 +1,107 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-height-weight-v1",
+  "task_id": "phase5-slice60zd-20260828",
+  "worker": "codex-parent",
+  "artifact_dir_name": "phase5-slice60zd-d001-height-weight-replay-20260828",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/coverage_manifest.json",
+  "parent_phase_qc_path": null,
+  "study_phase": "phase_ii",
+  "owned_source_refs": [
+    "body.p774", "body.p775", "body.p776", "body.p777", "body.p778",
+    "body.p779", "body.p780", "body.p781", "body.p782", "body.p783"
+  ],
+  "attached_source_refs": ["body.t5.r9", "body.p320", "body.p845"],
+  "required_candidate_source_refs": [
+    "body.p777", "body.p778", "body.p779", "body.p780", "body.p782", "body.p783"
+  ],
+  "forbidden_candidate_source_refs": ["body.p774", "body.p776", "body.p781"],
+  "candidate_forbidden_markers_by_source_ref": {},
+  "pre_enrollment_source_refs": [
+    "body.p775", "body.p777", "body.p778", "body.p779", "body.p780", "body.p782", "body.p783"
+  ],
+  "owned_visit_instances_by_source_ref": {
+    "body.p775": "筛选访视",
+    "body.p777": "筛选访视",
+    "body.p778": "筛选访视",
+    "body.p779": "筛选访视",
+    "body.p780": "筛选访视"
+  },
+  "owned_procedure_semantic_families_by_source_ref": {
+    "body.p775": ["anthropometry"]
+  },
+  "owned_required_action_kinds_by_source_ref": {
+    "body.p775": ["perform_height_measurement", "perform_weight_measurement"],
+    "body.p777": ["prepare_participant"],
+    "body.p778": ["perform_height_measurement"],
+    "body.p779": ["prepare_participant"],
+    "body.p780": ["perform_height_measurement", "record_with_precision"],
+    "body.p782": ["perform_weight_measurement", "prepare_participant"],
+    "body.p783": ["record_with_precision"]
+  },
+  "unit_lookup": ["frozen_plan_owned", "frozen_plan_context", "coverage_manifest"],
+  "batching": {
+    "mode": "single_batch_with_attachments",
+    "reason": "只处置身高体重章节；流程表、摘要脚注及筛选访视安排仅作为只读权威上下文。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "当前冻结来源为Ⅱ期方案中筛选及基线前后均需遵循的身高体重测量规程。"
+  },
+  "workflow_stages": [
+    {"workflow_stage_id": "flow-screening", "review_stage": "screening", "display_name": "筛选访视", "visit_instance": "筛选访视"},
+    {"workflow_stage_id": "flow-baseline", "review_stage": "baseline", "display_name": "基线访视", "visit_instance": "基线访视"}
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/d001-ii-control-matrix-closed.json",
+    "official_rules": [],
+    "required_procedures": [
+      {
+        "catalog_item_id": "procedure:d001-height-weight-screening",
+        "label": "筛选访视测量身高及体重",
+        "visit_instance": "筛选访视",
+        "review_stage": "screening",
+        "position": 41,
+        "semantic_family": "anthropometry",
+        "covered_action_kinds": ["perform_height_measurement", "perform_weight_measurement"],
+        "source_span_ids": [
+          "body.p320", "body.t5.r9.c0.p0", "body.t5.r9.c1.p0", "body.t5.r9.c2.p0",
+          "body.t5.r9.c5.p0", "body.t5.r9.c6.p0", "body.t5.r9.c7.p0", "body.t5.r9.c8.p0", "body.t5.r9.c9.p0"
+        ]
+      },
+      {
+        "catalog_item_id": "procedure:d001-weight-baseline",
+        "label": "基线访视测量体重",
+        "visit_instance": "基线访视",
+        "review_stage": "baseline",
+        "position": 42,
+        "semantic_family": "anthropometry",
+        "covered_action_kinds": ["perform_weight_measurement"],
+        "source_span_ids": ["body.p320"]
+      }
+    ]
+  },
+  "runner": {"max_transport_retries": 1, "max_schema_repairs": 3, "timeout_seconds": 7200.0},
+  "ids": {
+    "manifest_id": "manifest:slice60zd-height-weight",
+    "catalog_id": "catalog:slice60zd-height-weight"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p777": ["身高测量前脱鞋并摘除头饰"],
+    "body.p778": ["校准设备或靠墙替代路径及相应体位完整保留"],
+    "body.p779": ["向前平视且不得仰头"],
+    "body.p780": ["吸气站直、测量臂操作、cm及整数精度完整保留"],
+    "body.p782": ["校准秤、统一方法、排空膀胱、着装限制及脱鞋完整保留"],
+    "body.p783": ["kg及小数点后1位完整保留"]
+  },
+  "notes": [
+    "活动来源为131包冻结计划papl-40b1237a22e538a278b4fd5e，第68包拥有body.p774至body.p783。",
+    "流程目录只覆盖执行并记录身高体重，不覆盖受试者准备、测量方法、替代路径和记录精度。",
+    "章节增量必须作为补充方案控制关联既有流程目标，不得重复生成筛选期执行动作。",
+    "人工临床检查清单与候选来源期望只用于模型输出后的父级验收，不进入Agent首轮提示。"
+  ]
+}

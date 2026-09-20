@@ -1303,6 +1303,27 @@ def test_revision_page_image_rejects_entry_outside_frozen_manifest(client) -> No
     _assert_envelope(response.json(), code="NOT_FOUND", status=404)
 
 
+def test_complete_page_image_rechecks_source_after_success(client) -> None:
+    """单次读取的记录复用不能把上一次成功当成下一次的来源证明。"""
+    from app.storage.evidence_locator_models import OCRRiskScanRecord
+
+    _seed_ready_complete(client)
+    url = f"/api/v2/evidence-processing-revisions/{COMPLETE1}/pages/e1/image"
+    first = client.get(url)
+    assert first.status_code == 200
+    with client.app.state.session_factory() as session, session.begin():
+        record = session.get(OCRRiskScanRecord, "scan-1")
+        original = record.payload_json
+        record.payload_json = '{"drift":true}'
+    assert client.get(url).status_code == 500
+    with client.app.state.session_factory() as session, session.begin():
+        session.get(OCRRiskScanRecord, "scan-1").payload_json = original
+    restored = client.get(url)
+    assert restored.status_code == 200
+    assert restored.content == first.content
+    assert restored.headers["etag"] == first.headers["etag"]
+
+
 # ---------------------------------------------------------------- 激活 / 回滚
 
 

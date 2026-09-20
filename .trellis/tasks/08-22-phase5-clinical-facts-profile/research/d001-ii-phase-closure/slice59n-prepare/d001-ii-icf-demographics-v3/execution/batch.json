@@ -1,0 +1,466 @@
+{
+  "batch_id": "pcb-85187da2b42efbd45cb8ded6",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [
+    "body.p315",
+    "body.p317",
+    "body.p630",
+    "body.p631",
+    "body.p767",
+    "body.p769",
+    "body.t5.r5.c0.p0",
+    "body.t5.r5.c1.p0",
+    "body.t5.r6.c0.p0",
+    "body.t5.r6.c1.p0"
+  ],
+  "context_structure_unit_ids": [
+    "su-4b166a9e42dfc8a3727f77e1",
+    "su-9b01197961da9751e30cb972",
+    "su-800fd5fa2814682b74b23c69",
+    "su-05e54f6b1892ae79ea2c9fe0",
+    "su-7cecc83523216d739b7cef1e",
+    "su-6d2b5812ae0013752842efc3",
+    "su-d47f4ab5043b8998d0041401",
+    "su-16f8c3846c2367f40b062fae"
+  ],
+  "context_units": [
+    {
+      "excerpt": "签署知情同意书^1 | X",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表",
+        "表 1 Ⅱ期临床研究阶段流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t5.r5.c0.p0",
+        "body.t5.r5.c1.p0"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 9811,
+      "source_ref": "body.t5.r5",
+      "source_span_ids": [
+        "body.t5.r5.c0.p0",
+        "body.t5.r5.c1.p0"
+      ],
+      "structure_unit_id": "su-4b166a9e42dfc8a3727f77e1",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "项目"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            5,
+            0
+          ],
+          [
+            5,
+            1
+          ]
+        ],
+        "row_headers": [
+          "签署知情同意书^1"
+        ],
+        "row_index": 5,
+        "table_path": [
+          5,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    },
+    {
+      "excerpt": "采集人口学资料^3 | X",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表",
+        "表 1 Ⅱ期临床研究阶段流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t5.r6.c0.p0",
+        "body.t5.r6.c1.p0"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 9911,
+      "source_ref": "body.t5.r6",
+      "source_span_ids": [
+        "body.t5.r6.c0.p0",
+        "body.t5.r6.c1.p0"
+      ],
+      "structure_unit_id": "su-9b01197961da9751e30cb972",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "项目"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            6,
+            0
+          ],
+          [
+            6,
+            1
+          ]
+        ],
+        "row_headers": [
+          "采集人口学资料^3"
+        ],
+        "row_index": 6,
+        "table_path": [
+          6,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    },
+    {
+      "excerpt": "开始任何试验流程之前签署知情同意书。",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p315"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 13060,
+      "source_ref": "body.p315",
+      "source_span_ids": [
+        "body.p315"
+      ],
+      "structure_unit_id": "su-800fd5fa2814682b74b23c69",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "人口学资料：包括出生日期、性别、民族、年龄等信息。",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p317"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 13080,
+      "source_ref": "body.p317",
+      "source_span_ids": [
+        "body.p317"
+      ],
+      "structure_unit_id": "su-05e54f6b1892ae79ea2c9fe0",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "自愿签署知情同意书（Informed Consent Form，ICF），能够和研究者进行良好的沟通，并且理解和遵守本研究的各项要求和限制条件；",
+      "heading_path": [
+        "研究人群",
+        "入选标准"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p630"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 23170,
+      "source_ref": "body.p630",
+      "source_span_ids": [
+        "body.p630"
+      ],
+      "structure_unit_id": "su-7cecc83523216d739b7cef1e",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "签署ICF时年龄≥18周岁且≤75周岁，性别不限；",
+      "heading_path": [
+        "研究人群",
+        "入选标准"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p631"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 23180,
+      "source_ref": "body.p631",
+      "source_span_ids": [
+        "body.p631"
+      ],
+      "structure_unit_id": "su-6d2b5812ae0013752842efc3",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "签署知情同意书",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "签署知情同意书"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p767"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25240,
+      "source_ref": "body.p767",
+      "source_span_ids": [
+        "body.p767"
+      ],
+      "structure_unit_id": "su-d47f4ab5043b8998d0041401",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "采集人口学资料",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "采集人口学资料"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p769"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25260,
+      "source_ref": "body.p769",
+      "source_span_ids": [
+        "body.p769"
+      ],
+      "structure_unit_id": "su-16f8c3846c2367f40b062fae",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "coverage_manifest_id": "manifest:slice60za-icf-demographics",
+  "known_official_targets": [
+    {
+      "catalog_item_id": "pcm-row-5636e5cd4d58852a8620a6e2",
+      "label": "知情同意、沟通与遵从能力",
+      "official_code": "IN-01",
+      "position": 1,
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "自愿签署知情同意书（Informed Consent Form，ICF），能够和研究者进行良好的沟通，并且理解和遵守本研究的各项要求和限制条件；"
+      ],
+      "source_span_ids": [
+        "span-d17aa2eddcff6171d34f7977a1d36ad1"
+      ]
+    },
+    {
+      "catalog_item_id": "pcm-row-a8ec5d65b27db9afc70682d8",
+      "label": "签署知情同意时年龄范围",
+      "official_code": "IN-02",
+      "position": 2,
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "签署ICF时年龄≥18周岁且≤75周岁，性别不限；"
+      ],
+      "source_span_ids": [
+        "span-db4562ed2d4bcfdc5af302a1246ed935"
+      ]
+    }
+  ],
+  "known_procedure_targets": [
+    {
+      "catalog_item_id": "procedure:d001-icf-screening",
+      "covered_action_kinds": [
+        "obtain_signature"
+      ],
+      "label": "筛选前签署知情同意书",
+      "position": 37,
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "semantic_family": "informed_consent",
+      "source_excerpts": [
+        "签署知情同意书^1 | X",
+        "签署知情同意书^1 | X",
+        "开始任何试验流程之前签署知情同意书。"
+      ],
+      "source_span_ids": [
+        "span-256a4cdd18240eba234318556286eec1",
+        "span-413463d039fc6db079a2b7aa84dc65a7",
+        "span-96728348c04be6cf0d9812e3e5f4fa3e"
+      ],
+      "visit_instance": "筛选访视"
+    },
+    {
+      "catalog_item_id": "procedure:d001-demographics-screening",
+      "covered_action_kinds": [
+        "collect_data"
+      ],
+      "label": "筛选访视采集人口学资料",
+      "position": 38,
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "semantic_family": "demographics",
+      "source_excerpts": [
+        "采集人口学资料^3 | X",
+        "采集人口学资料^3 | X",
+        "人口学资料：包括出生日期、性别、民族、年龄等信息。"
+      ],
+      "source_span_ids": [
+        "span-3ef1d50a4d1e02de59263a9e2738fa2c",
+        "span-7eae629b2bbdb070b807541676f2c8a8",
+        "span-93aa61df9bc1ade127778271638c611c"
+      ],
+      "visit_instance": "筛选访视"
+    }
+  ],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {
+    "su-a9a2b3350561d48442cf1cba": [
+      "demographics"
+    ]
+  },
+  "owned_required_action_kinds_by_structure_unit_id": {
+    "su-a9a2b3350561d48442cf1cba": [
+      "collect_data"
+    ],
+    "su-dce8b05405461354d06760c5": [
+      "explain_information",
+      "obtain_signature"
+    ]
+  },
+  "owned_source_span_ids": [
+    "body.p768",
+    "body.p770"
+  ],
+  "owned_structure_unit_ids": [
+    "su-dce8b05405461354d06760c5",
+    "su-a9a2b3350561d48442cf1cba"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "研究者在筛选前向参与者解释所有的研究程序等信息，获得参与者自愿签署的ICF。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "签署知情同意书"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p768"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25250,
+      "source_ref": "body.p768",
+      "source_span_ids": [
+        "body.p768"
+      ],
+      "structure_unit_id": "su-dce8b05405461354d06760c5",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "在筛选期获取参与者的人口学资料，包括出生日期、性别、民族、年龄等信息。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "采集人口学资料"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p770"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25270,
+      "source_ref": "body.p770",
+      "source_span_ids": [
+        "body.p770"
+      ],
+      "structure_unit_id": "su-a9a2b3350561d48442cf1cba",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {
+    "su-a9a2b3350561d48442cf1cba": "筛选访视"
+  },
+  "pre_enrollment_structure_unit_ids": [
+    "su-dce8b05405461354d06760c5",
+    "su-a9a2b3350561d48442cf1cba"
+  ],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "study_phase": "phase_ii"
+}

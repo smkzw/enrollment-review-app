@@ -1,0 +1,82 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_viral_tb.v1.json",
+  "group_id": "d001-ii-contraception-documentation",
+  "task_id": "phase5-slice60i-20260828",
+  "artifact_dir_name": "phase5-slice60i-d001-contraception-documentation-replay-20260828",
+  "owned_source_refs": [
+    "body.p1325",
+    "body.p1326"
+  ],
+  "attached_source_refs": [
+    "body.p638"
+  ],
+  "required_candidate_source_refs": [],
+  "forbidden_candidate_source_refs": [],
+  "candidate_forbidden_markers_by_source_ref": {},
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "只处置附录中的避孕方法讨论、持续使用告知和病历记录要求；IN-06作为只读权威目标，模型输出前不预设必须生成候选。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [
+      {
+        "catalog_item_id": "pcm-row-0555ca044760e4df3ef7e3c3",
+        "official_code": "IN-06",
+        "label": "生育计划限制与避孕义务",
+        "position": 6,
+        "source_span_ids": [
+          "span-29b8e3bdc286a06cba1455474402c004"
+        ]
+      }
+    ],
+    "required_procedures": []
+  },
+  "runner": {
+    "max_transport_retries": 1,
+    "max_schema_repairs": 4,
+    "timeout_seconds": 7200.0
+  },
+  "ids": {
+    "manifest_id": "manifest:slice60i-contraception-documentation",
+    "catalog_id": "catalog:slice60i-contraception-documentation"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p1325": [
+      "icf_to_last_dose_plus_three_months_retained",
+      "method_selection_discussion_and_understanding_retained",
+      "hormonal_contraception_prohibition_not_lost"
+    ],
+    "body.p1326": [
+      "planned_visit_counselling_and_medical_record_requirement_retained",
+      "participant_agreement_retained",
+      "stop_method_or_suspected_pregnancy_contact_instruction_retained",
+      "prebaseline_scope_not_expanded_to_unbound_treatment_visits"
+    ],
+    "body.p638": [
+      "in06_covered_obligation_not_duplicated"
+    ]
+  },
+  "notes": [
+    "原始DOCX产品链直接提取，用户无需预处理方案文本。",
+    "本组不向Agent披露父级是否预期新增候选；父级在模型输出完成后盲态核对。",
+    "IN-06已覆盖避孕方法和持续期限，附录中真正未覆盖的沟通、确认、记录或联系方式要求应单独比较。",
+    "研究期间持续要求可以保留完整原文，但当前入排节点只能绑定实际冻结的筛选或基线节点。"
+  ]
+}

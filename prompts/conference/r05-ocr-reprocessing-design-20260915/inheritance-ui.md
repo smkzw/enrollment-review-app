@@ -1,0 +1,11 @@
+# C03 same-session follow-up: confirmed OCR inheritance and UI
+
+Continue your existing read-only source review. Do not edit source, run tests, start services, call product models, read clinical files, or delegate. Write only the runner-named report. User defers runtime/browser/testing until full product completion. Report concrete file:line defects, source verdict and remaining uncertainty, not clinical acceptance.
+
+Review the current worktree files: app/services/confirmed_ocr_inheritance.py, evidence_upload_service.py, evidence_processing_executor.py, evidence_sidecar_preparation.py, evidence_reprocessing.py, evidence_progress_service.py; frontend/src/api/evidence/reprocessing.ts, components/evidence-workspace/OcrReprocessingPanel.tsx and affected EvidencePage.tsx definitions. Inspect adjacent consumers as needed, not the whole dirty tree.
+
+Prior P0 next-upload reverting OCR: owner rejected copying newly accepted text into old cache identities. Upload now freezes prior complete revision in job payload after stale-base validation, reads exact unchanged source+artifact OCR identity, skips inference runs for inherited pages, and freezes sidecar inheritance rather than later active-pointer selection. stored_inheritance resolves producing-job checkpoints for later candidate preparation. Reprocessing never auto-activates or mutates original snapshot state. DB-busy precheck is retryable; manual retry rejects changed active source. Progress for new jobs uses own events/runs instead of old OCR pages. UI stores idempotency before request, reconnects exact job, opens exact new revision for explicit build/activation; inspect candidate/version scope interaction and failure recovery.
+
+Critically inspect the above directly; description is not evidence. Particularly check immutable identity, hashes/source/version/frame, reprocess same-base pure-text case, correction carry, get_last_checkpoint provenance, stale UI/write state and uncertainty after POST/unmount/localStorage failure. Do not suggest global old-cache mutation or silently discarding invalid references. No task-specific medicine changes.
+
+Return P0/P1/P2 with minimal fixes, or source PASS with explicit no-runtime limitation. Keep scope bounded.

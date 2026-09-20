@@ -1,0 +1,16 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_icf_demographics.v3.json",
+  "group_id": "d001-ii-icf-demographics-v4",
+  "task_id": "phase5-slice60zb-20260828",
+  "artifact_dir_name": "phase5-slice60zb-d001-icf-demographics-replay-before-anchor-20260828",
+  "ids": {
+    "manifest_id": "manifest:slice60zb-icf-demographics",
+    "catalog_id": "catalog:slice60zb-icf-demographics"
+  },
+  "notes": [
+    "v3真实结果保留为不可变诊断证据；动作门禁已阻断语义压缩，但旧义务类型无法表达在命名节点前完成一般动作。",
+    "v4新增通用complete_before_anchor义务，仅允许保留原文命名锚点且direction=before。",
+    "该义务不表示访视安排或结果有效期，不改变已有时间窗、访视和结果有效性门禁。"
+  ]
+}

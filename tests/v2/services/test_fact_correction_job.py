@@ -1248,6 +1248,12 @@ def test_fact_correction_cascades_event_conflict_successor_uses_current_member_g
         assert outcome.successor_conflict_group_id in conflict_ids
         assert old_conflict_id not in conflict_ids
 
+        from app.services.eligibility_review_projection import EligibilityReviewProjectionService
+        review = EligibilityReviewProjectionService().project(session, chain["episode_id"])
+        assert [(item.conflict_group_id, item.member_ids) for item in review.unassigned_conflicts] == [
+            (successor.conflict_group_id, tuple(successor.event_ids))
+        ]
+
 
 def test_fact_correction_cascades_exposure_conflict_successor_uses_current_member_gate(
     session_factory,
@@ -1330,6 +1336,13 @@ def test_fact_correction_cascades_exposure_conflict_successor_uses_current_membe
             if item.kind == ProfileItemKind.CONFLICT
         }
         assert outcome.successor_conflict_group_id in conflict_ids
+
+
+        from app.services.eligibility_review_projection import EligibilityReviewProjectionService
+        review = EligibilityReviewProjectionService().project(session, chain["episode_id"])
+        assert [(item.conflict_group_id, item.member_ids) for item in review.unassigned_conflicts] == [
+            (successor.conflict_group_id, tuple(successor.exposure_ids))
+        ]
 
 
 def test_event_conflict_remains_when_only_duration_matches(session_factory):

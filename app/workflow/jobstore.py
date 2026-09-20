@@ -21,6 +21,7 @@ from uuid import uuid4
 
 from sqlalchemy import exists, func, or_, select, update
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.domain.contracts.enums import JobEventType
 from app.domain.contracts.jobs import JobEvent
@@ -144,12 +145,17 @@ class JobStore:
         now: Now = utc_now,
         lease_ttl: timedelta = DEFAULT_LEASE_TTL,
         backoff: Callable[[int], timedelta] = backoff_delay,
+        job_scope: ColumnElement[bool] | None = None,
     ) -> None:
         self.session = session
         self.repo = JobRepository(session)
         self.now = now
         self.lease_ttl = lease_ttl
         self.backoff = backoff
+        self.job_scope = job_scope
+
+    def _scope_conditions(self):
+        return () if self.job_scope is None else (self.job_scope,)
 
     # ------------------------------------------------------------------ 创建
 
@@ -415,6 +421,7 @@ class JobStore:
         now = self.now()
         for _ in range(3):
             conditions = [
+                *self._scope_conditions(),
                 JobRecord.state.in_(CLAIMABLE_JOB_STATES),
                 or_(
                     JobRecord.lease_expires_at.is_(None),
@@ -438,6 +445,7 @@ class JobStore:
                 update(JobRecord)
                 .where(
                     JobRecord.job_id == candidate_id,
+                    *self._scope_conditions(),
                     JobRecord.state.in_(CLAIMABLE_JOB_STATES),
                     or_(
                         JobRecord.lease_expires_at.is_(None),
@@ -513,7 +521,7 @@ class JobStore:
         return _rowcount(result) == 1
 
     def release_deferred(self, lease: JobLease) -> None:
-        """无当前可运行步骤（依赖未满足或退避未到期）：退还租约回到 queued。"""
+        """持久步骤边界退还租约；依赖等待、退避或执行器停止，不消耗尝试。"""
         now = self.now()
         has_deferred_retry = any(
             step_is_deferred(step.state, step.retry_not_before, now)
@@ -1315,6 +1323,7 @@ class JobStore:
             .where(
                 JobRecord.state == "failed_retryable",
                 JobRecord.lease_owner.is_(None),
+                *self._scope_conditions(),
                 JobRecord.job_id.in_(due),
                 JobRecord.job_id.not_in(blocked),
             )
@@ -1338,6 +1347,7 @@ class JobStore:
             .where(
                 JobRecord.state == "running",
                 JobRecord.lease_expires_at.is_not(None),
+                *self._scope_conditions(),
                 JobRecord.lease_expires_at < now,
             )
             .values(
@@ -1361,6 +1371,7 @@ class JobStore:
             .where(
                 JobRecord.state == "cancel_requested",
                 JobRecord.lease_expires_at.is_not(None),
+                *self._scope_conditions(),
                 JobRecord.lease_expires_at < now,
             )
             .values(

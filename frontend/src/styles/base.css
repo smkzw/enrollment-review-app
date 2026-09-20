@@ -8,6 +8,7 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  color-scheme: light;
 }
 
 body {
@@ -21,6 +22,7 @@ body {
     sans-serif;
   font-size: var(--font-size-base);
   line-height: var(--line-height-body);
+  letter-spacing: 0;
   color: var(--color-ink);
   background: var(--color-canvas);
   /* 页面级禁止横向滚动（§3.2） */
@@ -90,7 +92,7 @@ blockquote a:not(.button):not(.icon-button),
   cursor: pointer;
 }
 
-.icon-button:hover {
+.icon-button:hover:not(:disabled):not([aria-disabled="true"]) {
   background: var(--color-muted-bg);
   color: var(--color-ink);
 }
@@ -98,14 +100,6 @@ blockquote a:not(.button):not(.icon-button),
 .icon-button:disabled {
   cursor: default;
   opacity: 0.45;
-}
-
-.button:disabled {
-  border-color: var(--color-line);
-  background: var(--color-muted-bg);
-  color: var(--color-muted);
-  cursor: not-allowed;
-  opacity: 1;
 }
 
 /* 主操作按钮（明确命令才使用） */
@@ -121,11 +115,15 @@ blockquote a:not(.button):not(.icon-button),
   color: var(--color-ink);
   cursor: pointer;
   white-space: nowrap;
+  box-shadow: var(--shadow-control);
+  transition: background-color var(--motion-control), border-color var(--motion-control),
+    color var(--motion-control), box-shadow var(--motion-control);
 }
 
-.button:hover {
+.button:hover:not(:disabled):not([aria-disabled="true"]) {
   border-color: var(--color-brand-dark);
   color: var(--color-brand-dark);
+  box-shadow: var(--shadow-control-hover);
 }
 
 .button--primary {
@@ -134,10 +132,10 @@ blockquote a:not(.button):not(.icon-button),
   color: var(--color-ink);
 }
 
-.button--primary:hover {
-  background: var(--color-brand-dark);
+.button--primary:hover:not(:disabled):not([aria-disabled="true"]) {
+  background: var(--color-brand-secondary);
   border-color: var(--color-brand-dark);
-  color: #fff;
+  color: var(--color-ink);
   text-decoration: none;
 }
 
@@ -145,6 +143,32 @@ blockquote a:not(.button):not(.icon-button),
   border-color: transparent;
   background: transparent;
   color: var(--color-blue);
+  box-shadow: none;
+}
+
+.button:active:not(:disabled):not([aria-disabled="true"]) {
+  box-shadow: inset 0 1px 3px rgb(31 41 51 / 16%);
+}
+
+.button:disabled,
+.button[aria-disabled="true"] {
+  border-color: var(--color-line);
+  background: var(--color-muted-bg);
+  color: var(--color-muted);
+  cursor: not-allowed;
+  opacity: 1;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 .skip-link {

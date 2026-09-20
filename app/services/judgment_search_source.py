@@ -46,8 +46,11 @@
   ``get_evidence_requirement`` 结果，规范化行与包围载荷的自洽漂移一律拒绝。
   (c) 只验证选中路径，不声称覆盖整棵规则树；任一不符即拒绝，绝无
   description-only 降级。
-- 支持边界：当前只支持**子规则来源** requirement。流程必做项目目录来源
-  （``rule_component_id=None``）的已发布原生原文不在规则集与方案来源记录行内
+- 补充控制使用独立 ``control-v1`` 目标，核验完整已发布来源与资料政策，保留
+  所选控制的四层表达式和原子摘录；不伪造父规则，不据检索结果推断适用性。
+  节点归属来自已验证 control_origin，不改历史流程的 due_requirement_ids。
+- 支持边界：支持**子规则及补充控制来源** requirement。流程必做项目目录来源
+  的已发布原生原文不在规则集与方案来源记录行内
   （``ProtocolSourceRecord`` 仅含定位与哈希，无逐字文本），其精确解析属方案
   文档读取链路——本函数对其显式抛有界不支持错误，**绝不虚构父组件**，
   也绝不以 description 顶替原文。
@@ -252,8 +255,12 @@ def prepare_judgment_search_target(
     )
     # 模板↔已发布 requirement 语义全量一致：逐字复用 save_expectation_templates
     # 写边界的同一语义合同（due_stage/fact_type/required_source_types 集合语义/
-    # 两个来源标志/description），此处只读重核；分歧绝不从 target 中悄悄省略。
+    # 来源标志/description/控制来源及完整有效期），此处只读重核。
     expected_semantics = {
+        "control_origin": published.control_origin,
+        "control_validity_status": published.control_validity_status,
+        "control_validity_constraint": published.control_validity_constraint,
+        "source_validity_window": published.source_validity_window,
         "due_stage": published.due_stage,
         "fact_type": published.fact_type,
         "required_source_types": sorted(set(published.required_source_types)),
@@ -266,6 +273,10 @@ def prepare_judgment_search_target(
         "description": published.description,
     }
     actual_semantics = {
+        "control_origin": template.control_origin,
+        "control_validity_status": template.control_validity_status,
+        "control_validity_constraint": template.control_validity_constraint,
+        "source_validity_window": template.source_validity_window,
         "due_stage": template.due_stage,
         "fact_type": template.fact_type,
         "required_source_types": sorted(set(template.required_source_types)),
@@ -282,7 +293,7 @@ def prepare_judgment_search_target(
             f"requirement {requirement_id} 的冻结期望模板与已发布要求语义不一致，"
             "拒绝以模板顶替发布内容"
         )
-    if published.rule_component_id is None:
+    if published.rule_component_id is None and published.control_origin is None:
         # 流程必做来源在进入规则工作流核对前即显式拒绝：其原生原文不在规则集与
         # 方案来源记录行内，任何工作流核对都无法替代逐字原文解析。
         raise JudgmentSearchSourceError(
@@ -321,11 +332,52 @@ def prepare_judgment_search_target(
             f"审核节点 {template.workflow_stage_id} 行存在但合同无法解码，拒绝准备目标"
         )
     if (
-        requirement_id not in stage_contract.due_requirement_ids
+        (published.control_origin is None
+         and requirement_id not in stage_contract.due_requirement_ids)
         or stage_contract.stage != template.due_stage
     ):
         raise JudgmentSearchSourceError(
             f"requirement {requirement_id} 未在所引审核节点按期到期，拒绝准备目标"
+        )
+
+    if published.control_origin is not None:
+        from app.storage.control_catalog_repository import ControlCatalogPublicationRepository
+
+        origin = published.control_origin
+        publication = ControlCatalogPublicationRepository(session).get(origin.publication_id)
+        # get_evidence_requirement already checks the complete derived requirement
+        # against this publication; retain the selected control, never invent a rule.
+        if (
+            publication.project_id != authority.project_id
+            or publication.protocol_version_id != authority.protocol_version_id
+            or publication.rule_set_id != authority.rule_set_id
+            or publication.rule_set_revision != authority.rule_set_revision
+            or origin.workflow_stage_id != template.workflow_stage_id
+        ):
+            raise JudgmentSearchSourceError("补充要求的发布修订或审核节点不一致")
+        controls = [item for item in publication.catalog.controls
+                    if item.protocol_control_id == origin.protocol_control_id]
+        if len(controls) != 1:
+            raise JudgmentSearchSourceError("补充要求不能对应到唯一的已发布控制")
+        target = {
+            "identity": "judgment_search_target/control-v1",
+            "publication_id": publication.publication_id,
+            "rule_set": {
+                "rule_set_id": rule_set.rule_set_id,
+                "revision": rule_set.revision,
+                "protocol_version_id": rule_set.protocol_version_id,
+                "study_phase": rule_set.study_phase.value,
+            },
+            "template": template.model_dump(mode="json"),
+            "control": controls[0].model_dump(mode="json"),
+            "requirement": published.model_dump(mode="json"),
+            "search_scope_note": (
+                "仅检索与本条资料要求相关的研究者书面判断。保留控制的适用、触发和例外"
+                "条件作为理解背景，检索结果不证明这些条件成立，也不产生入排结论。"
+            ),
+        }
+        return scope, json.dumps(
+            target, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         )
 
     component = get_rule_component(

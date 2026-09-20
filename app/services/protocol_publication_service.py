@@ -58,6 +58,7 @@ from app.domain.gates.integrity import (
     build_service_command_event,
 )
 from app.domain.publication import canonical_hash
+from app.services.protocol_integrity_payload import protocol_integrity_payload
 from app.projections.evidence_expectation_templates import (
     project_evidence_expectation_templates,
 )
@@ -76,6 +77,7 @@ from app.storage.repositories import (
     GATE_RESULT_CONFIG,
     INTEGRITY_MANIFEST_CONFIG,
     NotFoundError,
+    RepositoryError,
     PROTOCOL_DOC_CONFIG,
     ProjectRepository,
     ProtocolDraftRevisionRepository,
@@ -139,6 +141,8 @@ class ProtocolPublicationRequest:
     project_id: str | None = None
     protocol_version_id: str | None = None
     expected_rule_set_revision: int | None = None
+    control_job_id: str | None = None
+    control_checkpoint_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -375,6 +379,24 @@ class ProtocolPublicationService:
         # 发布工件中的审核节点 ID 按 (rule_set, revision) 命名空间化，
         # 同一草稿在重新发布时不会与旧 revision 的节点行冲突。
         published_stages = self._published_workflow_stages(draft, rule_set)
+        control_publication = None
+        if request.control_job_id is not None:
+            from app.services.protocol_control_catalog_publication import prepare_control_catalog_publication
+
+            try:
+                control_publication = prepare_control_catalog_publication(
+                    session, source_job_id=request.control_job_id,
+                    source_checkpoint_id=request.control_checkpoint_id,
+                    source_input=request.source_input, source_spans=request.source_spans,
+                    draft=draft, rule_set=rule_set, published_stages=published_stages,
+                    project_id=target_project.project_id if target_project is not None else draft.project_id,
+                    created_at=self._published_at(request),
+                )
+            except (RepositoryError, ValueError, KeyError, TypeError) as exc:
+                import sys, traceback; print(f'CONTROL_PUB_ERROR: {type(exc).__name__}: {exc}', file=sys.stderr); traceback.print_exc(file=sys.stderr)
+                raise PublicationLineageError(
+                    "control_publication_rejected", "补充审核要求与当前方案版本尚未核对一致，请返回方案整理查看。本次未发布。",
+                ) from exc
         authority, source_records = self._build_authority_chain(
             session,
             draft,
@@ -440,6 +462,20 @@ class ProtocolPublicationService:
             workflow_stages=published_stages,
         )
 
+        if control_publication is not None:
+            from app.services.protocol_control_catalog_publication import save_control_catalog_publication
+
+            try:
+                save_control_catalog_publication(
+                    session, control_publication,
+                    workflow_stages=published_stages,
+                    procedure_requirements=procedure_requirements,
+                )
+            except (RepositoryError, ValueError) as exc:
+                raise PublicationLineageError(
+                    "control_publication_rejected", "补充审核要求的保存依据不完整，本次方案未发布。请返回方案整理查看。",
+                ) from exc
+
         result = ProtocolPublicationResult(
             project_id=target_project.project_id
             if target_project is not None
@@ -478,8 +514,18 @@ class ProtocolPublicationService:
     # ------------------------------------------------------------------ 组装
 
     def _request_hash(self, request: ProtocolPublicationRequest) -> str:
+        if (request.control_job_id is None) != (request.control_checkpoint_id is None):
+            raise PublicationLineageError(
+                "control_publication_reference_incomplete",
+                "补充审核要求必须同时指定完整任务和保存记录。",
+            )
+        control_refs = {} if request.control_job_id is None else {
+            "control_job_id": request.control_job_id,
+            "control_checkpoint_id": request.control_checkpoint_id,
+        }
         return request_hash(
             {
+                **control_refs,
                 "draft_revision_id": request.draft_revision_id,
                 "project_id": request.project_id,
                 "protocol_version_id": request.protocol_version_id,
@@ -856,18 +902,12 @@ class ProtocolPublicationService:
         authority_confirmation: ProtocolAuthorityConfirmation,
         authority_gate_result: GateResult,
     ) -> GateResult:
-        payload = {
-            "rule_set": rule_set.model_dump(mode="json"),
-            "workflow_stages": [item.model_dump(mode="json") for item in workflow_stages],
-            "protocol_version": {
-                "protocol_version_id": rule_set.protocol_version_id,
-                "rule_set_revision": rule_set.revision,
-            },
-            "manifest": manifest.model_dump(mode="json"),
-            "authority_record": authority_record.model_dump(mode="json"),
-            "authority_confirmation": authority_confirmation.model_dump(mode="json"),
-            "authority_gate_result": authority_gate_result.model_dump(mode="json"),
-        }
+        payload = protocol_integrity_payload(
+            rule_set, workflow_stages=workflow_stages, manifest=manifest,
+            authority_record=authority_record,
+            authority_confirmation=authority_confirmation,
+            authority_gate_result=authority_gate_result,
+        )
         return GateResult(
             gate_result_id=f"gate:integrity:{uuid.uuid4().hex}",
             gate_name="protocol-integrity-gate",

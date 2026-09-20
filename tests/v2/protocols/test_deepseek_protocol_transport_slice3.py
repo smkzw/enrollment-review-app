@@ -133,7 +133,12 @@ def test_parent_segmentation_capability_is_independent_from_compact_wire():
 
 
 @pytest.mark.parametrize("backend", ["omlx", "mtplx", "mlx-serve"])
-def test_local_formal_contract_is_explicit_and_keeps_route(backend):
+def test_local_formal_contract_is_explicit_and_keeps_route(backend, monkeypatch):
+    from app.agents import protocol_semantic_transport as _transport_module
+
+    monkeypatch.setattr(
+        _transport_module, "MLX_SERVE_PROTOCOL_BATCH_MAX_TOKENS", 131072
+    )
     options = dict(client=object(), backend=backend, model="test-local-model",
                    reasoning_effort="medium", max_tokens=131072,
                    provider_defaults=True)
@@ -172,10 +177,12 @@ def test_formal_schema_bounds_batch_count_and_codes(kind, field):
 
 
 @pytest.mark.parametrize("backend", ["omlx", "mtplx", "mlx-serve"])
-def test_formal_local_batches_do_not_accumulate_history(backend):
+def test_formal_local_batches_do_not_accumulate_history(backend, monkeypatch):
     from app.agents.protocol_deconstructor import _compact_transport_history
+    from app.agents import protocol_semantic_transport
+    monkeypatch.setattr(protocol_semantic_transport, "MLX_SERVE_PROTOCOL_BATCH_MAX_TOKENS", 65536)
     transport = DeepSeekProtocolAgentTransport(client=object(), backend=backend,
-        model="test", compact_wire=False)
+        model="test", compact_wire=False, max_tokens=65536)
     transport.restore_history(session_id="test", messages=[
         {"role": "user", "content": "previous source"},
         {"role": "assistant", "content": "previous output"},
@@ -196,21 +203,22 @@ def test_formal_omlx_schema_uses_same_compatibility_projection():
 
 
 def test_formal_batch_repair_does_not_request_dnf_wire():
-    from app.agents.protocol_deconstructor import _batch_schema_repair_prompt, _compact_schema
+    from app.agents.protocol_deconstructor import DNF_WIRE_VERSION, _batch_schema_repair_prompt, _compact_schema
     options = dict(candidate_id="candidate-1", agent_call_id="call-1",
                    batch_id="batch-1", problem="invalid structure")
     formal = _batch_schema_repair_prompt(["IN-01"], compact=False, **options)
     compact = _batch_schema_repair_prompt(["IN-01"], compact=True, **options)
     assert formal.endswith("输出结构：" + _compact_schema())
-    assert "wire_version='dnf-v1'" not in formal
-    assert "wire_version='dnf-v1'" in compact
+    assert "wire_version=" not in formal
+    assert f"wire_version='{DNF_WIRE_VERSION}'" in compact
 
 
 def test_formal_local_semantic_repair_restores_frozen_source(monkeypatch):
     from types import SimpleNamespace
     from app.agents import protocol_deconstructor as module
+    from tests.v2.protocols.test_deconstruction_gate_slice3 import _fixture
     captured = []
-    source = object()
+    source, _, _ = _fixture()
     def payload(source_input, rule_codes, **kwargs):
         captured.append((source_input, list(rule_codes)))
         return {"original_source": "frozen source excerpt"}

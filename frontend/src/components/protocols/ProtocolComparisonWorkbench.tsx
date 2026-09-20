@@ -4,7 +4,7 @@
  * 例外/证据要求/应完成阶段）；保存/取消不改变正式版本，发布在同一项目追加新的不可变规则版本。
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { RouteLink } from "../../app/router";
 import type {
   DraftComparisonView,
@@ -42,6 +42,8 @@ interface ProtocolComparisonWorkbenchProps {
   onOpenManualEdit: () => void;
   onCancel: () => void;
   onPublish: () => void;
+  publicationBlocked?: boolean;
+  supplementaryRequirements?: ReactNode;
   actionError?: string;
 }
 
@@ -57,6 +59,8 @@ export function ProtocolComparisonWorkbench({
   onOpenManualEdit,
   onCancel,
   onPublish,
+  publicationBlocked = false,
+  supplementaryRequirements,
   actionError,
 }: ProtocolComparisonWorkbenchProps) {
   const baselineRules = useMemo(
@@ -192,7 +196,7 @@ export function ProtocolComparisonWorkbench({
           <button
             type="button"
             className="button button--primary"
-            disabled={feedbackBusy || saving || !integrity.publishable}
+            disabled={feedbackBusy || saving || !integrity.publishable || publicationBlocked}
             onClick={onPublish}
             title={integrity.publishable ? "发布为新的正式规则版本" : "请先处理完整性检查中的问题"}
           >
@@ -209,6 +213,7 @@ export function ProtocolComparisonWorkbench({
         </p>
       )}
 
+      {supplementaryRequirements}
       <section className="protocol-comparison__toolbar" aria-label="差异范围筛选">
         <div className="protocol-comparison__filters">
           <button
@@ -245,7 +250,7 @@ export function ProtocolComparisonWorkbench({
 
       <section className="protocol-comparison__review-strip" aria-label="发布检查与方案依据">
         <div className={`protocol-comparison__integrity${integrity.publishable ? " protocol-comparison__integrity--ready" : " protocol-comparison__integrity--blocked"}`}>
-          <strong>{integrity.publishable ? "可以发布" : "暂不能发布"}</strong>
+          <strong>{integrity.publishable && !publicationBlocked ? "可以发布" : "暂不能发布"}</strong>
           <span>{integrity.summary}</span>
           {!integrity.publishable && integrity.issues.length > 0 && (
             <ul>

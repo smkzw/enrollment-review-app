@@ -1,0 +1,135 @@
+[
+  {
+    "excerpt": "可疑且非预期严重不良反应（Suspected Unexpected Serious Adverse Reaction，SUSAR）指临床表现的性质和严重程度超出了试验药物《研究者手册》、已上市药品的说明书或者产品特性摘要等已有资料信息的可疑并且非预期的严重不良反应。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "可疑且非预期严重不良反应（SUSAR）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-bb9bf95c9cd13f15e3b737f3",
+    "package_ordinal": 80,
+    "role": "attached",
+    "source_ref": "body.p1018",
+    "source_span_ids": [
+      "body.p1018"
+    ],
+    "structure_unit_id": "su-3a466b9df7a0012b972a2b3d",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "非预期不良反应指不良反应的性质、严重程度、后果或频率，不同于试验药物当前相关资料（如《研究者手册》等文件）所描述的预期风险。《研究者手册》作为主要文件提供用以判断某不良反应是否预期或非预期的安全性参考信息。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "可疑且非预期严重不良反应（SUSAR）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-bb9bf95c9cd13f15e3b737f3",
+    "package_ordinal": 80,
+    "role": "attached",
+    "source_ref": "body.p1019",
+    "source_span_ids": [
+      "body.p1019"
+    ],
+    "structure_unit_id": "su-0230c1ca32146e5682365991",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "以下情况一般不作为快速报告内容：",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "申办者的报告要求"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d6a9d76caa3d4d5bd85c672e",
+    "package_ordinal": 95,
+    "role": "attached",
+    "source_ref": "body.p1133",
+    "source_span_ids": [
+      "body.p1133"
+    ],
+    "structure_unit_id": "su-98140a88b2bec06fa03040e6",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "非严重不良事件；",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "申办者的报告要求"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d6a9d76caa3d4d5bd85c672e",
+    "package_ordinal": 95,
+    "role": "attached",
+    "source_ref": "body.p1134",
+    "source_span_ids": [
+      "body.p1134"
+    ],
+    "structure_unit_id": "su-e90c66dfbc7f1ca0e2bf3a15",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "严重不良事件与试验用药品无关；",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "申办者的报告要求"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d6a9d76caa3d4d5bd85c672e",
+    "package_ordinal": 95,
+    "role": "attached",
+    "source_ref": "body.p1135",
+    "source_span_ids": [
+      "body.p1135"
+    ],
+    "structure_unit_id": "su-3805178b03c7b8cacabd6f96",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "严重但属预期的不良反应；",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "申办者的报告要求"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-8dd6a669bdee4e77cc1f0b63",
+    "package_ordinal": 96,
+    "role": "owned",
+    "source_ref": "body.p1136",
+    "source_span_ids": [
+      "body.p1136"
+    ],
+    "structure_unit_id": "su-b67409702cdd94eca252289a",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "当以严重不良事件为主要疗效终点时，不建议申请人以个例安全性报告形式向国家药品审评机构报告。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "申办者的报告要求"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-8dd6a669bdee4e77cc1f0b63",
+    "package_ordinal": 96,
+    "role": "owned",
+    "source_ref": "body.p1137",
+    "source_span_ids": [
+      "body.p1137"
+    ],
+    "structure_unit_id": "su-9aefc1fcee2ad36efca4fd7b",
+    "unit_kind": "list_item"
+  }
+]

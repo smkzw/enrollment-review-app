@@ -52,4 +52,9 @@
   --sidebar-width: 232px;
   --topbar-height: 52px;
   --focus-ring: 2px solid var(--color-blue);
+
+  /* 控件层次：原件与正文不随悬停位移。 */
+  --shadow-control: 0 1px 2px rgb(31 41 51 / 8%), inset 0 1px 0 rgb(255 255 255 / 65%);
+  --shadow-control-hover: 0 2px 5px rgb(31 41 51 / 12%);
+  --motion-control: 140ms ease-out;
 }

@@ -32,3 +32,10 @@ venv/
 
 # macOS
 .DS_Store
+
+# 历史运行工件：重型二进制不入库；仅保留MTPLX装卸日志与后端运行日志（白名单）
+artifacts/*
+!artifacts/mtplx-owned-runtime-20260918/
+!artifacts/mtplx-owned-runtime-20260919/
+!artifacts/logs/
+!artifacts/logs/*.log

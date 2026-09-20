@@ -1,0 +1,32 @@
+{
+  "attached_count": 23,
+  "batching_mode": "single_batch_with_known_targets",
+  "context_structure_unit_ids": [
+    "su-d4ba75eb21a2e2944b6aa434",
+    "su-5a0bc3bdc6232946cd2522d4",
+    "su-8c8a34eb18d0139b009c191d",
+    "su-25c54cb8c26bb63bc2ee981a",
+    "su-a81269fb1e97dc5bf5083168",
+    "su-f5cd3f88b671362f6f8f4dc4",
+    "su-40348e74c63d71c5b6319be0",
+    "su-5c30706befa51335bc524ec6",
+    "su-125f9fa39aa720039d48020e",
+    "su-371620980d69d405b05cb0a5",
+    "su-4ca9c91ca62f0cfb3a0538b9",
+    "su-6858787f7953e40643fcee9c",
+    "su-012f4dd8714bf9f41f65cc21",
+    "su-ec9665a579ca5059795942ad",
+    "su-fdf7c88809b27f5dacca9a14",
+    "su-e2e655a16acd1d1ae8a5f58f",
+    "su-054822360d7b6e66e4ee3391",
+    "su-48b20235b83c20bf9eff2a5c",
+    "su-177c9bb78f3bef944dbfe948",
+    "su-e6c56e6fb918d828bd028ea4",
+    "su-99eb892351dbc751558dc6d9",
+    "su-c3f02731d98876982dbe697a",
+    "su-7688dabcfc8b660fba74ff57"
+  ],
+  "owned_count": 5,
+  "prompt_char_count": 42315,
+  "prompt_sha256": "4f9e69ef8acae49aebf0baab4884414c7e68476f0bc7b65815b68be2c9733696"
+}

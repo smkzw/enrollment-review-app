@@ -53,6 +53,7 @@ from app.domain.contracts.facts import (
 )
 from app.domain.publication import canonical_hash, evidence_snapshot_collection_hash, evidence_processing_manifest_hash
 from app.storage.codecs import encode_contract
+from app.storage.fact_authority import FactLocatorReferenceError
 from app.storage.db import Base  # noqa
 from app.storage.fact_repositories import (
     ClinicalConflictGroupV2Repository,
@@ -63,6 +64,7 @@ from app.storage.fact_repositories import (
     FactNormalizationCandidateRepository,
     FactNormalizationRunRepository,
     MedicationExposureV2Repository,
+    Phase5RepositoryError,
 )
 from app.storage.facts_models import (
     ClinicalConflictGroupV2Record,
@@ -412,6 +414,7 @@ def _seed_chain(
     prefix: str,
     *,
     fact_gate_outcome: GateOutcome = GateOutcome.ACCEPTED,
+    supported_requirement_ids=None,
 ) -> dict[str, str]:
     chain = seed_valid_fact_chain(session, prefix, create_run=True)
     run_id = chain["run_id"]
@@ -432,7 +435,7 @@ def _seed_chain(
             run_id=run_id,
             call_id=call_id,
             fact_type="vital_sign",
-            supported_requirement_ids=["req-z"],
+            supported_requirement_ids=supported_requirement_ids or ["req-z"],
             polarity=FactPolarity.AFFIRMED,
             asserted_object="血压",
             raw_value="120/80",
@@ -616,11 +619,65 @@ def test_same_fact_semantics_with_different_profile_lanes_are_rejected(session):
     ).scalars().all() == []
 
 
-def test_later_run_cannot_move_same_fact_to_another_profile_lane(session):
+@pytest.mark.parametrize("same_lane", [
+    False,
+    True,
+])
+@pytest.mark.parametrize("has_dependent_event", [False, True])
+def test_later_run_preserves_fact_identity_and_sources(session, same_lane, has_dependent_event):
     prefix = "pub-cross-run-lane-conflict"
-    chain = _seed_chain(session, prefix)
+    chain = _seed_chain(
+        session, prefix,
+        supported_requirement_ids=["slice54-req-z"] if has_dependent_event else None,
+    )
+    if has_dependent_event:
+        event = ClinicalEventCandidateV2(
+            candidate_id=f"{prefix}-event", run_id=chain["run_id"], call_id=chain["call_id"],
+            event_type="diagnosis", start_range=_date_range(), end_range=None,
+            duration_status=DurationStatus.ONGOING, record_time=NOW,
+            fact_candidate_ids=[chain["fact_candidate_id"]], locator_ids=[chain["locator_id"]],
+            candidate_source_semantics="objective_result", model_uncertainty=0.02,
+            created_at=NOW,
+        )
+        FactNormalizationCandidateRepository(session).create(chain["call_id"], event)
+        FactGateResultRepository(session).create(FactGateResult(
+            gate_result_id=f"{prefix}-event-gate", run_id=chain["run_id"],
+            call_id=chain["call_id"], candidate_id=event.candidate_id,
+            gate=FactGate.TRANSACTIONAL_PUBLISH, outcome=GateOutcome.ACCEPTED,
+            reasons=[], created_at=NOW,
+        ))
+        exposure = MedicationExposureCandidateV2(
+            candidate_id=f"{prefix}-exposure", run_id=chain["run_id"], call_id=chain["call_id"],
+            medication_name="测试药物", dose="一片", frequency="每日一次",
+            start_range=_date_range(), end_range=None,
+            duration_status=DurationStatus.ONGOING, record_time=NOW,
+            fact_candidate_ids=[chain["fact_candidate_id"]], locator_ids=[chain["locator_id"]],
+            candidate_source_semantics="objective_result", model_uncertainty=0.02, created_at=NOW,
+        )
+        FactNormalizationCandidateRepository(session).create(chain["call_id"], exposure)
+        FactGateResultRepository(session).create(FactGateResult(
+            gate_result_id=f"{prefix}-exposure-gate", run_id=chain["run_id"],
+            call_id=chain["call_id"], candidate_id=exposure.candidate_id,
+            gate=FactGate.TRANSACTIONAL_PUBLISH, outcome=GateOutcome.ACCEPTED,
+            reasons=[], created_at=NOW,
+        ))
     first = FactPublicationService().publish(session, chain["run_id"])
     assert len(first.fact_ids) == 1
+    if has_dependent_event:
+        from tests.v2.projections.test_evidence_expectations import _template
+        from app.domain.contracts.enums import ExpectationStatus, ReviewStage
+        from app.domain.contracts.evidence_expectations_v2 import EvidenceExpectationV2
+        from app.storage.evidence_expectation_repository import EvidenceExpectationV2Repository
+        template = _template(
+            session, chain, requirement_id="req-z", fact_type="vital_sign",
+            due_stage=ReviewStage.SCREENING,
+        )
+        old_expectation = EvidenceExpectationV2Repository(session).project(EvidenceExpectationV2(
+            expectation_id=f"{prefix}-expectation", authority=_authority(chain),
+            template_id=template.template_id, status=ExpectationStatus.OBSERVED,
+            revision=1, locator_ids=[chain["locator_id"]], coverage_fact_ids=first.fact_ids,
+            source_coverage="complete", input_gap_signals=[], created_at=NOW,
+        ))
 
     run_id = f"{prefix}-run-2"
     call_id = f"{prefix}-call-2"
@@ -663,7 +720,10 @@ def test_later_run_cannot_move_same_fact_to_another_profile_lane(session):
             run_id=run_id,
             call_id=call_id,
             fact_type="vital_sign",
-            profile_lane=ProfileLane.TEST_EXAM_SCORE,
+            profile_lane=(
+                ProfileLane.EVIDENCE_QUALITY if same_lane
+                else ProfileLane.TEST_EXAM_SCORE
+            ),
             polarity=FactPolarity.AFFIRMED,
             asserted_object="血压",
             raw_value="120/80",
@@ -695,6 +755,220 @@ def test_later_run_cannot_move_same_fact_to_another_profile_lane(session):
             created_at=NOW,
         )
     )
+
+    if same_lane:
+        if has_dependent_event:
+            old_event = ClinicalEventV2Repository(session).get(first.event_ids[0])
+            old_exposure = MedicationExposureV2Repository(session).get(first.exposure_ids[0])
+        published = FactPublicationService().publish(session, run_id)
+        original = ClinicalFactV2Repository(session).get(first.fact_ids[0])
+        current = ClinicalFactV2Repository(session).get(published.fact_ids[0])
+        assert current.stable_identity == original.stable_identity
+        assert current.revision == original.revision + 1
+        assert set(original.locator_ids) <= set(current.locator_ids)
+        assert set(original.supported_requirement_ids) <= set(current.supported_requirement_ids)
+        assert set(original.source_candidate_ids) <= set(current.source_candidate_ids)
+        assert set(original.gate_ids) <= set(current.gate_ids)
+        assert current.inherited_from_fact_id == original.fact_id
+        assert FactPublicationService().publish(session, run_id).is_replay
+        if has_dependent_event:
+            successor = ClinicalEventV2Repository(session).get(published.event_ids[0])
+            assert successor.source_revision_of == old_event.event_id
+            assert successor.fact_ids == published.fact_ids
+            assert successor.locator_ids == old_event.locator_ids
+            assert successor.source_candidate_ids == old_event.source_candidate_ids
+            assert ClinicalEventV2Repository(session).get(old_event.event_id) == old_event
+            successor_exposure = MedicationExposureV2Repository(session).get(published.exposure_ids[0])
+            assert successor_exposure.source_revision_of == old_exposure.exposure_id
+            assert successor_exposure.fact_ids == published.fact_ids
+            assert successor_exposure.dose == old_exposure.dose
+            assert successor_exposure.source_candidate_ids == old_exposure.source_candidate_ids
+            assert MedicationExposureV2Repository(session).get(old_exposure.exposure_id) == old_exposure
+            expectation2 = EvidenceExpectationV2Repository(session).latest_by_template(
+                chain["review_episode_id"], template.template_id
+            )
+            assert expectation2.source_revision_of == old_expectation.expectation_id
+            assert expectation2.coverage_fact_ids == published.fact_ids
+            assert expectation2.locator_ids == current.locator_ids
+            assert expectation2.status == old_expectation.status
+            with pytest.raises(Phase5RepositoryError, match="不得改变"):
+                ClinicalEventV2Repository(session).create(
+                    successor.model_copy(update={"event_type": "changed-event"})
+                )
+            with pytest.raises(Phase5RepositoryError, match="不得改变"):
+                MedicationExposureV2Repository(session).create(
+                    successor_exposure.model_copy(update={"dose": "两片"})
+                )
+            with pytest.raises(Phase5RepositoryError, match="不得改变"):
+                EvidenceExpectationV2Repository(session).project(
+                    expectation2.model_copy(update={"input_gap_signals": None})
+                )
+            from app.storage.source_reference_successors import source_successor_origin_run
+            for changes in (
+                {"dose": "两片"}, {"source_candidate_ids": []},
+                {"fact_ids": []}, {"fact_ids": old_exposure.fact_ids},
+                {"locator_ids": [chain["locator_id_2"]]},
+            ):
+                with pytest.raises(Phase5RepositoryError):
+                    source_successor_origin_run(
+                        session, successor_exposure.model_copy(update=changes),
+                        MedicationExposureV2Repository(session), id_field="exposure_id",
+                    )
+        repository = ClinicalFactV2Repository(session)
+        for changes in (
+            {"inherited_from_fact_id": None},
+            {"inherited_from_fact_id": current.fact_id},
+            {"revision": current.revision + 1},
+            {"authority": current.authority.model_copy(update={"subject_id": "other"})},
+            {"gate_id": original.gate_id},
+            {"source_candidate_ids": [candidate_id]},
+            {"gate_ids": [f"{prefix}-gate-2"]},
+            {"locator_ids": [chain["locator_id_2"]]},
+        ):
+            with pytest.raises((Phase5RepositoryError, FactLocatorReferenceError)):
+                repository._publication_candidates(current.model_copy(update=changes))
+        from unittest.mock import patch
+        with patch(
+            "app.storage.fact_correction_repository.FactCorrectionRepository.superseded_entity_ids",
+            return_value={original.fact_id},
+        ):
+            with pytest.raises(Phase5RepositoryError, match="未经更正"):
+                repository._publication_candidates(current)
+        assert repository.get(original.fact_id) == original
+        run3_id = f"{prefix}-run-3"
+        scope3 = _sha("third-input-scope")
+        run2 = FactNormalizationRunRepository(session).get(run_id)
+        FactNormalizationRunRepository(session).create_or_reuse(run2.model_copy(update={
+            "run_id": run3_id,
+            "input_scope_sha256": scope3,
+            "idempotency_key": fact_run_idempotency_key(
+                authority=authority, prompt_version_id=chain["prompt_version_id"],
+                model_config_id=chain["model_config_id"], input_scope_sha256=scope3,
+            ),
+        }))
+        call3_id = f"{prefix}-call-3"
+        FactNormalizationCallRepository(session).create(
+            FactNormalizationCallRepository(session).get(call_id).model_copy(update={
+                "run_id": run3_id, "call_id": call3_id,
+                "input_sha256": _sha("third-call-input"),
+            })
+        )
+        candidate3_id = f"{prefix}-cand-3"
+        FactNormalizationCandidateRepository(session).create(
+            call3_id,
+            FactNormalizationCandidateRepository(session).get(candidate_id).model_copy(update={
+                "candidate_id": candidate3_id, "call_id": call3_id, "run_id": run3_id,
+            }),
+        )
+        FactGateResultRepository(session).create(
+            FactGateResultRepository(session).get(f"{prefix}-gate-2").model_copy(update={
+                "gate_result_id": f"{prefix}-gate-3", "call_id": call3_id,
+                "run_id": run3_id, "candidate_id": candidate3_id,
+            })
+        )
+        third = FactPublicationService().publish(session, run3_id)
+        latest = repository.get(third.fact_ids[0])
+        assert latest.inherited_from_fact_id == current.fact_id
+        assert latest.revision == 3
+        assert set(latest.source_candidate_ids) == set(current.source_candidate_ids) | {candidate3_id}
+        assert latest.locator_ids == current.locator_ids
+        replay3 = FactPublicationService().publish(session, run3_id)
+        assert replay3.is_replay
+        if has_dependent_event:
+            event3 = ClinicalEventV2Repository(session).get(third.event_ids[0])
+            exposure3 = MedicationExposureV2Repository(session).get(third.exposure_ids[0])
+            assert event3.source_revision_of == successor.event_id
+            assert exposure3.source_revision_of == successor_exposure.exposure_id
+            assert event3.fact_ids == exposure3.fact_ids == third.fact_ids
+            assert replay3.event_ids == third.event_ids
+            assert replay3.exposure_ids == third.exposure_ids
+            assert event3.locator_ids == old_event.locator_ids
+            assert exposure3.locator_ids == old_exposure.locator_ids
+            expectation3 = EvidenceExpectationV2Repository(session).latest_by_template(
+                chain["review_episode_id"], template.template_id
+            )
+            assert expectation3.source_revision_of == expectation2.expectation_id
+            assert expectation3.coverage_fact_ids == third.fact_ids
+            # Exercise repository entry points, not only the source-link helper.
+            for entity, dependent_repository, id_field in (
+                (event3, ClinicalEventV2Repository(session), "event_id"),
+                (exposure3, MedicationExposureV2Repository(session), "exposure_id"),
+            ):
+                for index, changes in enumerate((
+                    {"fact_ids": [latest.fact_id, latest.fact_id]},
+                    {"fact_ids": sorted([current.fact_id, latest.fact_id])},
+                    {"source_revision_of": getattr(old_event if id_field == "event_id" else old_exposure, id_field), "revision": 2},
+                )):
+                    with pytest.raises(Phase5RepositoryError):
+                        dependent_repository.create(entity.model_copy(update={
+                            id_field: f"{prefix}-{id_field}-invalid-{index}", **changes,
+                        }))
+            for index, changes in enumerate((
+                {"source_revision_of": old_expectation.expectation_id, "revision": 2},
+                {"locator_ids": [chain["locator_id_2"]]},
+                {"coverage_fact_ids": sorted([current.fact_id, latest.fact_id])},
+            )):
+                with pytest.raises(Phase5RepositoryError):
+                    EvidenceExpectationV2Repository(session).project(expectation3.model_copy(update={
+                        "expectation_id": f"{prefix}-expectation-invalid-{index}", **changes,
+                    }))
+            from app.services.patient_profile_service import PatientProfileService
+            from app.domain.contracts.patient_profile_v2 import profile_items
+            profile = PatientProfileService().generate(session, authority=authority)
+            assert profile.status.value == "succeeded"
+            assert {item.source_id for item in profile_items(profile)} == {
+                latest.fact_id, event3.event_id, exposure3.exposure_id, expectation3.expectation_id,
+            }
+        assert repository.get(original.fact_id) == original
+        assert repository.get(current.fact_id) == current
+        from tests.v2.storage.test_fact_correction_repository import _correction_for_facts
+        from app.storage.fact_correction_repository import FactCorrectionRepository
+        for suffix, value in (("corrected", "130/80"), ("old-value", "120/80")):
+            followup_run = f"{prefix}-{suffix}-run"
+            followup_call = f"{prefix}-{suffix}-call"
+            followup_candidate = f"{prefix}-{suffix}-candidate"
+            scope = _sha(suffix)
+            FactNormalizationRunRepository(session).create_or_reuse(run2.model_copy(update={
+                "run_id": followup_run, "input_scope_sha256": scope,
+                "idempotency_key": fact_run_idempotency_key(
+                    authority=authority, prompt_version_id=chain["prompt_version_id"],
+                    model_config_id=chain["model_config_id"], input_scope_sha256=scope,
+                ),
+            }))
+            FactNormalizationCallRepository(session).create(
+                FactNormalizationCallRepository(session).get(call_id).model_copy(update={
+                    "run_id": followup_run, "call_id": followup_call,
+                    "input_sha256": _sha(followup_call),
+                })
+            )
+            FactNormalizationCandidateRepository(session).create(
+                followup_call,
+                FactNormalizationCandidateRepository(session).get(candidate_id).model_copy(update={
+                    "candidate_id": followup_candidate, "call_id": followup_call,
+                    "run_id": followup_run, "canonical_value": value, "raw_value": value,
+                }),
+            )
+            FactGateResultRepository(session).create(
+                FactGateResultRepository(session).get(f"{prefix}-gate-2").model_copy(update={
+                    "gate_result_id": f"{prefix}-{suffix}-gate", "call_id": followup_call,
+                    "run_id": followup_run, "candidate_id": followup_candidate,
+                })
+            )
+            if suffix == "corrected":
+                correction_result = FactPublicationService().publish(session, followup_run)
+                corrected = repository.get(correction_result.fact_ids[0])
+                correction = _correction_for_facts(
+                    latest, corrected, [chain["locator_id_2"]]
+                )
+                FactCorrectionRepository(session).create(correction)
+                replay = FactPublicationService().publish(session, run3_id)
+                assert replay.is_replay and replay.fact_ids == third.fact_ids
+                assert repository.get(latest.fact_id) == latest
+            else:
+                with pytest.raises(FactPublicationError, match="最新版本已经更正"):
+                    FactPublicationService().publish(session, followup_run)
+                assert len(repository.list_by_episode(chain["review_episode_id"])) == 4
+        return
 
     with pytest.raises(FactPublicationError, match="主题归属冲突"):
         FactPublicationService().publish(session, run_id)
@@ -930,6 +1204,233 @@ def test_serial_fact_change_publishes_without_conflict_group(session):
 
     assert len(result.fact_ids) == 2
     assert result.conflict_group_ids == []
+
+
+@pytest.mark.parametrize("missing_successor", [False, True])
+@pytest.mark.parametrize("both_sides", [False, True])
+def test_source_append_with_unreconciled_conflict_rolls_back(session, monkeypatch, missing_successor, both_sides):
+    chain = _seed_chain(session, "pub-source-conflict")
+    candidates = FactNormalizationCandidateRepository(session)
+    gates = FactGateResultRepository(session)
+    original_candidate = candidates.get(chain["fact_candidate_id"])
+    other = original_candidate.model_copy(update={
+        "candidate_id": "pub-source-conflict-other",
+        "raw_value": "130/80", "canonical_value": "130/80",
+    })
+    candidates.create(chain["call_id"], other)
+    gates.create(gates.get(chain["gate_id"]).model_copy(update={
+        "gate_result_id": "pub-source-conflict-other-gate", "candidate_id": other.candidate_id,
+    }))
+    first = FactPublicationService().publish(session, chain["run_id"])
+    assert len(first.conflict_group_ids) == 1
+    run = FactNormalizationRunRepository(session).get(chain["run_id"])
+    scope = _sha("conflict-followup")
+    run_id, call_id = "pub-source-conflict-next-run", "pub-source-conflict-next-call"
+    FactNormalizationRunRepository(session).create_or_reuse(run.model_copy(update={
+        "run_id": run_id, "input_scope_sha256": scope,
+        "idempotency_key": fact_run_idempotency_key(
+            authority=run.authority, prompt_version_id=run.prompt_version_id,
+            model_config_id=run.model_config_id, input_scope_sha256=scope,
+        ),
+    }))
+    FactNormalizationCallRepository(session).create(
+        FactNormalizationCallRepository(session).get(chain["call_id"]).model_copy(update={
+            "call_id": call_id, "run_id": run_id, "input_sha256": _sha(call_id),
+        })
+    )
+    followup = original_candidate.model_copy(update={
+        "candidate_id": "pub-source-conflict-next-candidate", "run_id": run_id, "call_id": call_id,
+    })
+    candidates.create(call_id, followup)
+    gates.create(gates.get(chain["gate_id"]).model_copy(update={
+        "gate_result_id": "pub-source-conflict-next-gate",
+        "run_id": run_id, "call_id": call_id, "candidate_id": followup.candidate_id,
+    }))
+    if both_sides:
+        other_followup = other.model_copy(update={
+            "candidate_id": "pub-source-conflict-next-other", "run_id": run_id, "call_id": call_id,
+        })
+        candidates.create(call_id, other_followup)
+        gates.create(gates.get(chain["gate_id"]).model_copy(update={
+            "gate_result_id": "pub-source-conflict-next-other-gate",
+            "run_id": run_id, "call_id": call_id, "candidate_id": other_followup.candidate_id,
+        }))
+    if not missing_successor:
+        from app.storage.active_conflicts import current_conflict_heads
+        from app.services.patient_profile_service import PatientProfileService
+        published = FactPublicationService().publish(session, run_id)
+        assert len(published.conflict_group_ids) == 1
+        repository = ClinicalConflictGroupV2Repository(session)
+        previous = repository.get(first.conflict_group_ids[0])
+        successor = repository.get(published.conflict_group_ids[0])
+        assert successor.source_revision_of == previous.conflict_group_id
+        assert successor.resolution_revision == previous.resolution_revision == 0
+        assert successor.revision == 2
+        assert len(successor.fact_ids) == len(previous.fact_ids) == 2
+        assert successor.gate_id == previous.gate_id
+        assert set(successor.fact_ids) == (
+            set(published.fact_ids) | (set(previous.fact_ids) - {
+                ClinicalFactV2Repository(session).get(item).inherited_from_fact_id
+                for item in published.fact_ids
+            })
+        )
+        assert set(successor.locator_ids) == {
+            locator for item in successor.fact_ids
+            for locator in ClinicalFactV2Repository(session).get(item).locator_ids
+        }
+        assert current_conflict_heads(session, run.authority) == [successor]
+        assert repository.get(previous.conflict_group_id) == previous
+        assert {item.conflict_group_id for item in repository.list_for_authority(run.authority)} == {
+            previous.conflict_group_id, successor.conflict_group_id,
+        }
+        for index, changes in enumerate((
+            {"fact_ids": successor.fact_ids[:1]},
+            {"fact_ids": [successor.fact_ids[0], successor.fact_ids[0]]},
+            {"fact_ids": previous.fact_ids},
+            {"event_ids": ["unrelated-event"]},
+            {"resolution_revision": 1},
+            {"revision": 3},
+        )):
+            with pytest.raises(Phase5RepositoryError):
+                repository.create(successor.model_copy(update={
+                    "conflict_group_id": f"invalid-source-conflict-{index}", **changes,
+                }))
+        from app.storage.active_conflicts import source_conflict_heads
+        from app.storage.repositories import InvalidReferenceError
+        with pytest.raises(InvalidReferenceError, match="分叉"):
+            source_conflict_heads([previous, successor, successor.model_copy(update={
+                "conflict_group_id": "conflict-branch",
+            })])
+        assert FactPublicationService().publish(session, run_id).conflict_group_ids == published.conflict_group_ids
+        assert PatientProfileService().generate(session, authority=run.authority).status.value == "succeeded"
+        third_run, third_call = "pub-source-conflict-third-run", "pub-source-conflict-third-call"
+        scope3 = _sha(third_run)
+        FactNormalizationRunRepository(session).create_or_reuse(run.model_copy(update={
+            "run_id": third_run, "input_scope_sha256": scope3,
+            "idempotency_key": fact_run_idempotency_key(
+                authority=run.authority, prompt_version_id=run.prompt_version_id,
+                model_config_id=run.model_config_id, input_scope_sha256=scope3,
+            ),
+        }))
+        FactNormalizationCallRepository(session).create(
+            FactNormalizationCallRepository(session).get(chain["call_id"]).model_copy(update={
+                "call_id": third_call, "run_id": third_run, "input_sha256": _sha(third_call),
+            })
+        )
+        for index, source in enumerate([original_candidate, other] if both_sides else [original_candidate]):
+            third_candidate = source.model_copy(update={
+                "candidate_id": f"pub-source-conflict-third-{index}", "run_id": third_run, "call_id": third_call,
+            })
+            candidates.create(third_call, third_candidate)
+            gates.create(gates.get(chain["gate_id"]).model_copy(update={
+                "gate_result_id": f"pub-source-conflict-third-gate-{index}",
+                "run_id": third_run, "call_id": third_call, "candidate_id": third_candidate.candidate_id,
+            }))
+        third = FactPublicationService().publish(session, third_run)
+        assert len(third.conflict_group_ids) == 1
+        third_group = repository.get(third.conflict_group_ids[0])
+        assert third_group.source_revision_of == successor.conflict_group_id
+        assert third_group.revision == 3
+        assert third_group.gate_id == previous.gate_id
+        assert current_conflict_heads(session, run.authority) == [third_group]
+        assert repository.get(previous.conflict_group_id) == previous
+        assert repository.get(successor.conflict_group_id) == successor
+        assert FactPublicationService().publish(session, third_run).conflict_group_ids == third.conflict_group_ids
+        assert PatientProfileService().generate(session, authority=run.authority).status.value == "succeeded"
+        return
+    monkeypatch.setattr(
+        "app.services.source_conflict_successors.append_source_conflict_successors",
+        lambda *args, **kwargs: [],
+    )
+    with pytest.raises(FactPublicationError, match="尚未与既有病史"):
+        with session.begin_nested():
+            FactPublicationService().publish(session, run_id)
+    assert sorted(
+        item.fact_id for item in ClinicalFactV2Repository(session).list_by_episode(
+            chain["review_episode_id"]
+        )
+    ) == first.fact_ids
+    assert sorted(
+        item.conflict_group_id for item in ClinicalConflictGroupV2Repository(session).list_by_episode(
+            chain["review_episode_id"]
+        )
+    ) == first.conflict_group_ids
+
+
+@pytest.mark.parametrize("member_kind", ["event", "exposure"])
+def test_dependent_conflict_source_growth_preserves_both_members(session, member_kind):
+    from app.storage.active_conflicts import current_conflict_heads
+    from app.services.patient_profile_service import PatientProfileService
+
+    prefix = f"pub-{member_kind}-source-conflict"
+    chain = _seed_chain(session, prefix)
+    candidates = FactNormalizationCandidateRepository(session)
+    gates = FactGateResultRepository(session)
+    for index in range(2):
+        common = dict(
+            candidate_id=f"{prefix}-member-{index}", run_id=chain["run_id"], call_id=chain["call_id"],
+            start_range=_date_range(), end_range=None, record_time=NOW,
+            duration_status=DurationStatus.ONGOING,
+            fact_candidate_ids=[chain["fact_candidate_id"]], locator_ids=[chain["locator_id"]],
+            candidate_source_semantics="objective_result", model_uncertainty=0.02, created_at=NOW,
+        )
+        if member_kind == "event":
+            common["duration_status"] = DurationStatus.ONGOING if index == 0 else DurationStatus.UNKNOWN
+            member = ClinicalEventCandidateV2(**common, event_type="diagnosis")
+        else:
+            member = MedicationExposureCandidateV2(**common, medication_name="测试药物", dose="一片" if index == 0 else "两片")
+        candidates.create(chain["call_id"], member)
+        gates.create(gates.get(chain["gate_id"]).model_copy(update={
+            "gate_result_id": f"{prefix}-member-gate-{index}", "candidate_id": member.candidate_id,
+        }))
+    first = FactPublicationService().publish(session, chain["run_id"])
+    assert len(first.conflict_group_ids) == 1
+    conflict_repository = ClinicalConflictGroupV2Repository(session)
+    original = conflict_repository.get(first.conflict_group_ids[0])
+    previous = original
+    run = FactNormalizationRunRepository(session).get(chain["run_id"])
+    member_repository = ClinicalEventV2Repository(session) if member_kind == "event" else MedicationExposureV2Repository(session)
+    field = "event_ids" if member_kind == "event" else "exposure_ids"
+    for revision in (2, 3):
+        run_id, call_id = f"{prefix}-run-{revision}", f"{prefix}-call-{revision}"
+        scope = _sha(run_id)
+        FactNormalizationRunRepository(session).create_or_reuse(run.model_copy(update={
+            "run_id": run_id, "input_scope_sha256": scope,
+            "idempotency_key": fact_run_idempotency_key(
+                authority=run.authority, prompt_version_id=run.prompt_version_id,
+                model_config_id=run.model_config_id, input_scope_sha256=scope,
+            ),
+        }))
+        FactNormalizationCallRepository(session).create(
+            FactNormalizationCallRepository(session).get(chain["call_id"]).model_copy(update={
+                "call_id": call_id, "run_id": run_id, "input_sha256": _sha(call_id),
+            })
+        )
+        candidate = candidates.get(chain["fact_candidate_id"]).model_copy(update={
+            "candidate_id": f"{prefix}-fact-{revision}", "run_id": run_id, "call_id": call_id,
+        })
+        candidates.create(call_id, candidate)
+        gates.create(gates.get(chain["gate_id"]).model_copy(update={
+            "gate_result_id": f"{prefix}-gate-{revision}", "run_id": run_id,
+            "call_id": call_id, "candidate_id": candidate.candidate_id,
+        }))
+        published = FactPublicationService().publish(session, run_id)
+        assert len(published.conflict_group_ids) == 1
+        successor = conflict_repository.get(published.conflict_group_ids[0])
+        assert successor.source_revision_of == previous.conflict_group_id
+        assert successor.revision == revision
+        assert successor.gate_id == original.gate_id
+        assert successor.resolution_revision == 0
+        members = [member_repository.get(item) for item in getattr(successor, field)]
+        assert len(members) == 2
+        assert {member.source_revision_of for member in members} == set(getattr(previous, field))
+        assert set(successor.locator_ids) == {locator for member in members for locator in member.locator_ids}
+        assert current_conflict_heads(session, run.authority) == [successor]
+        assert PatientProfileService().generate(session, authority=run.authority).status.value == "succeeded"
+        assert FactPublicationService().publish(session, run_id).conflict_group_ids == published.conflict_group_ids
+        assert conflict_repository.get(previous.conflict_group_id) == previous
+        previous = successor
+    assert conflict_repository.get(original.conflict_group_id) == original
 
 
 def test_rollback_on_later_entity_failure(session):

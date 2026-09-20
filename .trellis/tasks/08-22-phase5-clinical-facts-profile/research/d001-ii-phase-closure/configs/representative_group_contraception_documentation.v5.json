@@ -1,0 +1,12 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_contraception_documentation.v4.json",
+  "task_id": "phase5-slice60m-20260828",
+  "artifact_dir_name": "phase5-slice60m-d001-contraception-documentation-replay-planned-visit-closure-20260828",
+  "notes": [
+    "原始DOCX产品链直接提取，用户无需预处理方案文本。",
+    "计划访视的量词作用域必须映射到冻结目录中的每个访视节点，并在各节点分别判定，不得压缩为单一筛选节点。",
+    "每个决定阶段必须具备同阶段到期的最低证据；不得删除节点来绕过证据闭包。",
+    "父级临床验收继续核对body.p1325、body.p1326、IN-06去重、完整时间区间及筛选和基线节点，不以技术门绿色替代临床接受。"
+  ]
+}

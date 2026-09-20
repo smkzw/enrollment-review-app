@@ -1,0 +1,115 @@
+[
+  {
+    "excerpt": "可疑且非预期严重不良反应（Suspected Unexpected Serious Adverse Reaction，SUSAR）指临床表现的性质和严重程度超出了试验药物《研究者手册》、已上市药品的说明书或者产品特性摘要等已有资料信息的可疑并且非预期的严重不良反应。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "可疑且非预期严重不良反应（SUSAR）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-bb9bf95c9cd13f15e3b737f3",
+    "package_ordinal": 80,
+    "role": "attached",
+    "source_ref": "body.p1018",
+    "source_span_ids": [
+      "body.p1018"
+    ],
+    "structure_unit_id": "su-3a466b9df7a0012b972a2b3d",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "非预期不良反应指不良反应的性质、严重程度、后果或频率，不同于试验药物当前相关资料（如《研究者手册》等文件）所描述的预期风险。《研究者手册》作为主要文件提供用以判断某不良反应是否预期或非预期的安全性参考信息。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "术语定义",
+      "可疑且非预期严重不良反应（SUSAR）"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-bb9bf95c9cd13f15e3b737f3",
+    "package_ordinal": 80,
+    "role": "attached",
+    "source_ref": "body.p1019",
+    "source_span_ids": [
+      "body.p1019"
+    ],
+    "structure_unit_id": "su-0230c1ca32146e5682365991",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "不良事件预期性评估",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件预期性评估"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-c6c57a2734d51175bf06d031",
+    "package_ordinal": 92,
+    "role": "owned",
+    "source_ref": "body.p1098",
+    "source_span_ids": [
+      "body.p1098"
+    ],
+    "structure_unit_id": "su-1fd4a8ad830dcd959f819bce",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "本研究中，评估CMS-D001片不良事件预期性见CMS-D001片的《研究者手册》。",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的评估",
+      "不良事件预期性评估"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-c6c57a2734d51175bf06d031",
+    "package_ordinal": 92,
+    "role": "owned",
+    "source_ref": "body.p1099",
+    "source_span_ids": [
+      "body.p1099"
+    ],
+    "structure_unit_id": "su-6b57b80847dd2f055eb7fe82",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "不良事件的报告",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-c6c57a2734d51175bf06d031",
+    "package_ordinal": 92,
+    "role": "owned",
+    "source_ref": "body.p1100",
+    "source_span_ids": [
+      "body.p1100"
+    ],
+    "structure_unit_id": "su-c4b6d9bf33b41fee0f94b87b",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "研究者向申办者报告不良事件等信息的要求与途径",
+    "heading_path": [
+      "研究评估和程序",
+      "安全性评估",
+      "不良事件的报告",
+      "研究者向申办者报告不良事件等信息的要求与途径"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-c6c57a2734d51175bf06d031",
+    "package_ordinal": 92,
+    "role": "owned",
+    "source_ref": "body.p1101",
+    "source_span_ids": [
+      "body.p1101"
+    ],
+    "structure_unit_id": "su-854ccdfa2809a63a120228a1",
+    "unit_kind": "paragraph"
+  }
+]

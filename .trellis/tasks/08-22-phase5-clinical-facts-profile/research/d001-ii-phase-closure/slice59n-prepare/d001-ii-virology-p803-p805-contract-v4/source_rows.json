@@ -1,0 +1,177 @@
+[
+  {
+    "excerpt": "病毒学检查^14 | X",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表",
+      "表 1 Ⅱ期临床研究阶段流程表"
+    ],
+    "lookup": "coverage_manifest",
+    "package_id": null,
+    "package_ordinal": null,
+    "role": "attached",
+    "source_ref": "body.t5.r18",
+    "source_span_ids": [
+      "body.t5.r18.c0.p0",
+      "body.t5.r18.c1.p0"
+    ],
+    "structure_unit_id": "su-27352d72565145d5dc63879c",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "病毒学检查：乙型肝炎表面抗原（HBsAg）、乙型肝炎核心抗体（HBcAb）、丙型肝炎抗体（HCVAb）、人体免疫缺陷病毒抗体（HIVAb）、梅毒特异性抗体检查。如乙肝表面抗原阴性但乙肝核心抗体阳性，则进行乙肝病毒DNA定量检测。若丙型肝炎（HCV）抗体阳性，则进行HCV-RNA定量检测。若梅毒特异性抗体检查阳性，则进行梅毒非特异性抗体检查，并由研究者判断为是否为过去曾感染梅毒但已治愈的参与者。",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-2c0c955824200ee34e8960dc",
+    "package_ordinal": 31,
+    "role": "attached",
+    "source_ref": "body.p328",
+    "source_span_ids": [
+      "body.p328"
+    ],
+    "structure_unit_id": "su-675d39c739a00ec657ccb2f3",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "筛选访视时存在下列任一感染者：",
+    "heading_path": [
+      "研究人群",
+      "排除标准"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-5706f5359cfe69ab990e29e8",
+    "package_ordinal": 55,
+    "role": "attached",
+    "source_ref": "body.p685",
+    "source_span_ids": [
+      "body.p685"
+    ],
+    "structure_unit_id": "su-169a15a60d88383bfbfa9c70",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "乙型肝炎：表面抗原（Hepatitis B surface antigen，HBsAg）阳性，或核心抗体（Hepatitis B surface antibody，HBcAb）阳性且乙型肝炎病毒脱氧核糖核酸（Hepatitis B virus Deoxyribonucleic acid，HBV-DNA）拷贝数阳性（定义为超过研究中心检测值正常范围上限）；",
+    "heading_path": [
+      "研究人群",
+      "排除标准"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-5706f5359cfe69ab990e29e8",
+    "package_ordinal": 55,
+    "role": "attached",
+    "source_ref": "body.p686",
+    "source_span_ids": [
+      "body.p686"
+    ],
+    "structure_unit_id": "su-b8f50ce08241665176f77a21",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "丙型肝炎（Hepatitis C Virus，HCV）抗体阳性，且HCV-RNA拷贝数阳性（定义为超过研究中心检测值正常范围上限）；",
+    "heading_path": [
+      "研究人群",
+      "排除标准"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-0c3ec9c9a142752490de8a8f",
+    "package_ordinal": 56,
+    "role": "attached",
+    "source_ref": "body.p687",
+    "source_span_ids": [
+      "body.p687"
+    ],
+    "structure_unit_id": "su-102f71e86c67873ccd9f9a9c",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "人类免疫缺陷病毒抗体（Hepatitis C Virus Ribonucleic Acid，HIV Ab）阳性；",
+    "heading_path": [
+      "研究人群",
+      "排除标准"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-0c3ec9c9a142752490de8a8f",
+    "package_ordinal": 56,
+    "role": "attached",
+    "source_ref": "body.p688",
+    "source_span_ids": [
+      "body.p688"
+    ],
+    "structure_unit_id": "su-469f864a66ee28e601ac4c20",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "梅毒特异性抗体试验阳性（梅毒非特异性抗体结果为阴性，并经研究者判断为过去曾感染梅毒但已治愈的参与者除外）；",
+    "heading_path": [
+      "研究人群",
+      "排除标准"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-0c3ec9c9a142752490de8a8f",
+    "package_ordinal": 56,
+    "role": "attached",
+    "source_ref": "body.p689",
+    "source_span_ids": [
+      "body.p689"
+    ],
+    "structure_unit_id": "su-c0e12e883b5656b758cdf785",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "病毒学检查",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "病毒学检查"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-3a57e1ae15a1a44c3ea68a1e",
+    "package_ordinal": 72,
+    "role": "owned",
+    "source_ref": "body.p803",
+    "source_span_ids": [
+      "body.p803"
+    ],
+    "structure_unit_id": "su-b67affac91182c7f62884569",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "将根据标准实验室程序进行包括乙肝表面抗原、乙肝表面抗体、乙肝e抗原、乙肝e抗体、乙肝核心抗体、丙型肝炎病毒抗体、人类免疫缺陷病毒抗体、梅毒特异性抗体检查。可接受在首次给药前28天内的结果，筛选期/基线期无需再次检查。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "病毒学检查"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-3a57e1ae15a1a44c3ea68a1e",
+    "package_ordinal": 72,
+    "role": "owned",
+    "source_ref": "body.p804",
+    "source_span_ids": [
+      "body.p804"
+    ],
+    "structure_unit_id": "su-86389bb90acd044a0835089c",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "乙型肝炎表面抗原阴性且乙型肝炎核心抗体阳性的参与者，需要进行HBV-DNA检测；丙型肝炎病毒抗体阳性的参与者，需要进行HCV-RNA检测。若梅毒特异性抗体检查阳性，则进行梅毒非特异性抗体检查。可接受在首次给药前28天内的结果，无需再次检查。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "病毒学检查"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-3a57e1ae15a1a44c3ea68a1e",
+    "package_ordinal": 72,
+    "role": "owned",
+    "source_ref": "body.p805",
+    "source_span_ids": [
+      "body.p805"
+    ],
+    "structure_unit_id": "su-3de4633dd1cb5721547f0bb2",
+    "unit_kind": "paragraph"
+  }
+]

@@ -445,6 +445,16 @@ def assert_protocol_integrity(
         gate_result_id=protocol_version.authority_gate_result_id,
         created_at=authority_gate_result.created_at,
     )
+    # The product publisher namespaces the same immutable confirmation by record;
+    # legacy fixtures used the version alone. No other receipt field may differ.
+    product_key = (
+        f"protocol-authority:{protocol_version.protocol_version_id}:"
+        f"{authority_record.authority_record_id}"
+    )
+    if authority_gate_result.idempotency_key == product_key:
+        expected_authority_gate = expected_authority_gate.model_copy(
+            update={"idempotency_key": product_key}
+        )
     if authority_gate_result.model_dump(mode="json") != expected_authority_gate.model_dump(mode="json"):
         raise ProtocolIntegrityError("正式方案权威记录未通过独立人工验收 Gate")
     actual_rules = [item.model_dump(mode="json") for item in rule_set.rules]

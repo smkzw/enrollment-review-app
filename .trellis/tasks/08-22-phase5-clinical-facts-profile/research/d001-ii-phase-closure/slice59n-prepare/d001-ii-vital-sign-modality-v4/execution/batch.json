@@ -1,0 +1,393 @@
+{
+  "batch_id": "pcb-1b500118704447959f5e1565",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [
+    "body.p321",
+    "body.p684",
+    "body.p885",
+    "body.t5.r10.c0.p0",
+    "body.t5.r10.c1.p0",
+    "body.t5.r10.c2.p0",
+    "body.t5.r10.c3.p0",
+    "body.t5.r10.c4.p0",
+    "body.t5.r10.c5.p0",
+    "body.t5.r10.c6.p0",
+    "body.t5.r10.c7.p0",
+    "body.t5.r10.c8.p0",
+    "body.t5.r10.c9.p0"
+  ],
+  "context_structure_unit_ids": [
+    "su-5dc2754ed81c0a3fa56130e7",
+    "su-c6037f4e2da80e8557599e29",
+    "su-5c242dd0b4f85ea199512c80",
+    "su-8c8a34eb18d0139b009c191d"
+  ],
+  "context_units": [
+    {
+      "excerpt": "生命体征^7 | X | （X） | X | X | X | X | X | X | X",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表",
+        "表 1 Ⅱ期临床研究阶段流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t5.r10.c0.p0",
+        "body.t5.r10.c1.p0",
+        "body.t5.r10.c2.p0",
+        "body.t5.r10.c3.p0",
+        "body.t5.r10.c4.p0",
+        "body.t5.r10.c5.p0",
+        "body.t5.r10.c6.p0",
+        "body.t5.r10.c7.p0",
+        "body.t5.r10.c8.p0",
+        "body.t5.r10.c9.p0"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 10311,
+      "source_ref": "body.t5.r10",
+      "source_span_ids": [
+        "body.t5.r10.c0.p0",
+        "body.t5.r10.c1.p0",
+        "body.t5.r10.c2.p0",
+        "body.t5.r10.c3.p0",
+        "body.t5.r10.c4.p0",
+        "body.t5.r10.c5.p0",
+        "body.t5.r10.c6.p0",
+        "body.t5.r10.c7.p0",
+        "body.t5.r10.c8.p0",
+        "body.t5.r10.c9.p0"
+      ],
+      "structure_unit_id": "su-5dc2754ed81c0a3fa56130e7",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "项目"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            10,
+            0
+          ],
+          [
+            10,
+            1
+          ],
+          [
+            10,
+            2
+          ],
+          [
+            10,
+            3
+          ],
+          [
+            10,
+            4
+          ],
+          [
+            10,
+            5
+          ],
+          [
+            10,
+            6
+          ],
+          [
+            10,
+            7
+          ],
+          [
+            10,
+            8
+          ],
+          [
+            10,
+            9
+          ]
+        ],
+        "row_headers": [
+          "生命体征^7"
+        ],
+        "row_index": 10,
+        "table_path": [
+          10,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    },
+    {
+      "excerpt": "生命体征：筛选期、D1/D15/D29/D57/D85（当天用药前）、D113或提前退出时进行测量。测量前建议静息至少5分钟后，进行体温、血压（坐位）、脉博（坐位）、呼吸频率测量，如有异常，根据研究者判断，可重复测量。",
+      "heading_path": [
+        "方案摘要",
+        "研究流程表"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p321"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 13120,
+      "source_ref": "body.p321",
+      "source_span_ids": [
+        "body.p321"
+      ],
+      "structure_unit_id": "su-c6037f4e2da80e8557599e29",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "筛选或基线时，生命体征、体格检查、12-导联心电图、胸部CT（可接受1个月内的CT检查结果）异常且有临床意义，经研究者评估如果参与研究将可能对参与者构成不可接受的风险；",
+      "heading_path": [
+        "研究人群",
+        "排除标准"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p684"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 23710,
+      "source_ref": "body.p684",
+      "source_span_ids": [
+        "body.p684"
+      ],
+      "structure_unit_id": "su-5c242dd0b4f85ea199512c80",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "注：生命体征、疗效指标（PASI、PGA、BSA、DLQI）、皮损照片以D1给药前结果作为基线值，基线需再次审查入选和排除标准，对符合入选排除标准的参与者可进行随机分组，同时需要记录合并用药及不良事件。",
+      "heading_path": [
+        "研究评估和程序",
+        "访视安排",
+        "Ⅱ期临床研究阶段",
+        "治疗期"
+      ],
+      "is_footnote_or_note": true,
+      "member_source_refs": [
+        "body.p885"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 26510,
+      "source_ref": "body.p885",
+      "source_span_ids": [
+        "body.p885"
+      ],
+      "structure_unit_id": "su-8c8a34eb18d0139b009c191d",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "footnote_or_annotation"
+    }
+  ],
+  "coverage_manifest_id": "manifest:slice61ay-vital-sign-modality",
+  "known_official_targets": [
+    {
+      "catalog_item_id": "pcm-row-dd9da8fd97941b8b7d8753e2",
+      "label": "检查异常、临床意义与不可接受风险",
+      "official_code": "EX-21",
+      "position": 27,
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "筛选或基线时，生命体征、体格检查、12-导联心电图、胸部CT（可接受1个月内的CT检查结果）异常且有临床意义，经研究者评估如果参与研究将可能对参与者构成不可接受的风险；"
+      ],
+      "source_span_ids": [
+        "span-b8dc988a09b4247d8fe2e581a5d983ad"
+      ]
+    }
+  ],
+  "known_procedure_targets": [
+    {
+      "catalog_item_id": "pcm-row-aee90bcadab30a320c395d48",
+      "covered_action_kinds": [],
+      "label": "生命体征",
+      "position": 42,
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "semantic_family": null,
+      "source_excerpts": [
+        "生命体征^7 | X | （X） | X | X | X | X | X | X | X",
+        "生命体征^7 | X | （X） | X | X | X | X | X | X | X",
+        "生命体征^7 | X | （X） | X | X | X | X | X | X | X",
+        "生命体征^7 | X | （X） | X | X | X | X | X | X | X",
+        "生命体征^7 | X | （X） | X | X | X | X | X | X | X",
+        "生命体征^7 | X | （X） | X | X | X | X | X | X | X",
+        "生命体征^7 | X | （X） | X | X | X | X | X | X | X",
+        "生命体征^7 | X | （X） | X | X | X | X | X | X | X",
+        "生命体征^7 | X | （X） | X | X | X | X | X | X | X",
+        "生命体征^7 | X | （X） | X | X | X | X | X | X | X"
+      ],
+      "source_span_ids": [
+        "span-230f55c814800dae97a30be099d1e467",
+        "span-4b6860e28d3847e76698b5c815beb897",
+        "span-6b71f1dc163007fd8652a8bdbb80afa9",
+        "span-6e778c09071b86e56cd0b6759ab866f2",
+        "span-81d2346d801661a14b1255b48aad2db9",
+        "span-956cf919169e99845fee4c6a8aed73df",
+        "span-9ff3e5073388218f935d161176af0e5d",
+        "span-bf2694c46897202b4460d13756e384e3",
+        "span-db3a1ba26536ca62595d120992d1212b",
+        "span-e516fab67c0b6f23d50b7eab0ec95930"
+      ],
+      "visit_instance": "筛选访视"
+    }
+  ],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {},
+  "owned_required_action_kinds_by_structure_unit_id": {
+    "su-3edde2080d78436042ca1f50": [
+      "prepare_participant"
+    ],
+    "su-7a42e55b3912ac26c66747a5": [
+      "sequence_before_related_procedure"
+    ]
+  },
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.p784",
+    "body.p785",
+    "body.p786"
+  ],
+  "owned_structure_unit_ids": [
+    "su-391ac4874f8f0692ccbc3442",
+    "su-3edde2080d78436042ca1f50",
+    "su-7a42e55b3912ac26c66747a5"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "生命体征检查",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "生命体征检查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p784"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25410,
+      "source_ref": "body.p784",
+      "source_span_ids": [
+        "body.p784"
+      ],
+      "structure_unit_id": "su-391ac4874f8f0692ccbc3442",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "生命体征检查包括坐位血压（收缩压和舒张压）（mmHg）、坐位脉博（次/分）、体温（℃）、呼吸频率（次/分）。测量前，建议参与者至少休息5分钟。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "生命体征检查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p785"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25420,
+      "source_ref": "body.p785",
+      "source_span_ids": [
+        "body.p785"
+      ],
+      "structure_unit_id": "su-3edde2080d78436042ca1f50",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "如果生命体征的检查与PK采样时间一致，尽量在PK样本采集之前完成生命体征检查，最大限度地提高血样采集的准确性。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "生命体征检查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p786"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25430,
+      "source_ref": "body.p786",
+      "source_span_ids": [
+        "body.p786"
+      ],
+      "structure_unit_id": "su-7a42e55b3912ac26c66747a5",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [
+    "su-3edde2080d78436042ca1f50"
+  ],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [
+    "su-391ac4874f8f0692ccbc3442"
+  ],
+  "study_phase": "phase_ii"
+}

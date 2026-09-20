@@ -23,10 +23,10 @@ def build_profile_fingerprint(
     request_params_sha256: str | None,
     layout_parser_version: str | None,
     coordinate_transform_version: str,
+    attempt_namespace: str | None = None,
 ) -> str:
     """按识别身份字段计算 OCRProfile 稳定指纹（与合同校验一致）。"""
-    return canonical_hash(
-        {
+    payload = {
             "profile": "ocr_profile/v1",
             "extraction_route": extraction_route,
             "provider": provider,
@@ -39,7 +39,12 @@ def build_profile_fingerprint(
             "layout_parser_version": layout_parser_version,
             "coordinate_transform_version": coordinate_transform_version,
         }
-    )
+    # Omitted for historical identities; a new attempt isolates both cache levels.
+    if attempt_namespace is not None:
+        if not attempt_namespace.strip():
+            raise ValueError("识别尝试编号不能为空")
+        payload["attempt_namespace"] = attempt_namespace
+    return canonical_hash(payload)
 
 
 def build_ocr_cache_key(

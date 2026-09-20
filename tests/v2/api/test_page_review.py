@@ -225,7 +225,10 @@ def test_controlled_reread_reuses_successful_lane_and_preserves_failed_history(c
         from dataclasses import replace
         from app.domain.contracts.page_review import PageReviewLane
         routes = dict(runtime._routes)
-        routes[PageReviewLane.MAIN_A] = replace(routes[PageReviewLane.MAIN_A], reasoning_effort="high")
+        original_route = routes[PageReviewLane.MAIN_A]
+        routes[PageReviewLane.MAIN_A] = replace(original_route,
+            reasoning_effort="xhigh" if original_route.reasoning_effort == "high" else "high")
+        assert routes[PageReviewLane.MAIN_A].reasoning_effort != original_route.reasoning_effort
         changed_route.setattr(runtime, "_routes", routes)
         rejected = client.post(url, json={"predecessor_job_id": original})
         assert rejected.status_code == 409

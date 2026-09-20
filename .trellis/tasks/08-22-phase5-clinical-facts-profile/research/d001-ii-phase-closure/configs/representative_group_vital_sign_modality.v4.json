@@ -1,0 +1,18 @@
+{
+  "extends": "representative_group_vital_sign_modality.v3.json",
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-vital-sign-modality-v4",
+  "task_id": "phase5-slice61ay-20260829",
+  "worker": "codex-parent",
+  "artifact_dir_name": "phase5-slice61ay-d001-vital-sign-guidance-fidelity-20260829",
+  "ids": {
+    "manifest_id": "manifest:slice61ay-vital-sign-modality",
+    "catalog_id": "catalog:slice61ay-vital-sign-modality"
+  },
+  "notes": [
+    "原始文档链直接提取，用户无需预处理方案文本。",
+    "本组验证动作保留、发生阶段与用户可见审核指引分别保真。",
+    "审核指引不得把参与者实际静息替换为研究者告知动作。",
+    "治疗期PK同点顺序保留为治疗期执行，不进入筛选或基线控制。"
+  ]
+}

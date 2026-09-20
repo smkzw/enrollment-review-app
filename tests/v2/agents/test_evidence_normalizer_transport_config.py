@@ -184,6 +184,9 @@ def test_factory_omits_temperature_when_frozen_config_uses_vendor_default(monkey
         parameters={"max_tokens": 4321},
     )
 
+    import app.llm.mtplx_model_lifecycle as _lifecycle
+    monkeypatch.setattr(_lifecycle, "mtplx_deployment_fingerprint",
+                        lambda *args, **kwargs: None)
     transport = transport_module.evidence_normalizer_transport_from_model_config(
         config
     )
@@ -198,6 +201,9 @@ def test_mtplx_factory_uses_json_object_so_mtp_remains_available(monkeypatch):
     monkeypatch.setattr(transport_module, "MTPLX_BASE_URL", "http://127.0.0.1:8002")
     monkeypatch.setattr(transport_module, "MTPLX_API_KEY", "")
 
+    import app.llm.mtplx_model_lifecycle as _lifecycle
+    monkeypatch.setattr(_lifecycle, "mtplx_deployment_fingerprint",
+                        lambda *args, **kwargs: None)
     transport = transport_module.evidence_normalizer_transport_from_model_config(
         _config(provider="mtplx", model="mtplx-flash-next-optimized-speed")
     )
@@ -321,6 +327,40 @@ def test_length_finish_reason_retries_once_with_double_output_budget():
 
     assert response.text == '{"complete":true}'
     assert [call["max_tokens"] for call in calls] == [100, 200]
+
+
+def test_length_retry_budget_is_capped_at_131072():
+    """length 只重试一次，思考+正文共享预算封顶 131072，不静默翻倍。"""
+
+    calls = []
+    streams = iter(
+        [
+            _FakeStream([_stream_chunk(content='{"partial":', finish="length")]),
+            _FakeStream([_stream_chunk(
+                content='{"complete":true}', finish="stop")]),
+        ]
+    )
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        return next(streams)
+
+    transport = transport_module.DeepSeekEvidenceNormalizerTransport(
+        backend="zhipu-coding-plan",
+        api_key="glm-key",
+        base_url=_BIGMODEL_CODING_PLAN_URL,
+        model="glm-5.3-flash",
+        reasoning_effort="low",
+        max_tokens=100000,
+        response_format={"type": "json_object"},
+        client=_glm_stream_client(create),
+    )
+
+    response = transport.start(prompt="请输出完整 JSON")
+
+    assert response.text == '{"complete":true}'
+    # 100000*2 > 131072：重试请求封顶 131072。
+    assert [call["max_tokens"] for call in calls] == [100000, 131072]
 
 
 # ---------------------------------------------------------------------------
@@ -691,6 +731,9 @@ def test_schema_enforcement_capability_is_true_only_for_json_schema_transports(m
 
     monkeypatch.setattr(transport_module, "MTPLX_API_KEY", "")
     monkeypatch.setattr(transport_module, "MTPLX_BASE_URL", "http://127.0.0.1:8002")
+    import app.llm.mtplx_model_lifecycle as _lifecycle
+    monkeypatch.setattr(_lifecycle, "mtplx_deployment_fingerprint",
+                        lambda *args, **kwargs: None)
     mtplx = transport_module.evidence_normalizer_transport_from_model_config(
         _config(provider="mtplx", model="mtplx-flash-next-optimized-speed")
     )

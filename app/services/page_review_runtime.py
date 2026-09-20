@@ -43,11 +43,16 @@ class PageReviewRuntime:
         self._executor = None
         self._targeted_executor = None
         self._judgment_search_executor = None
+        self._prepared_review_executors = {}
 
     def main_reader_identity(self):
         # No network/model initialization while selecting an existing result.
+        return main_reader_identity(self.configured_review_routes())
+
+    def configured_review_routes(self):
+        """Read configured identities without preflight or executor initialization."""
         try:
-            return main_reader_identity(self._routes or require_page_reader_routes(require_credentials=False))
+            return self._routes or require_page_reader_routes(require_credentials=False)
         except PageReviewConfigError as exc:
             raise PageReviewUnavailable() from exc
 
@@ -60,6 +65,20 @@ class PageReviewRuntime:
                 except Exception as exc:
                     raise PageReviewUnavailable() from exc
                 admission = PageReviewAdmission(routes)
+                from app.services.predicate_binding_job import PredicateBindingJobExecutor
+                from app.services.control_binding_job import ControlBindingJobExecutor
+                from app.services.binding_qualification import BindingQualificationJobExecutor
+                from app.services.judgment_content_job import JudgmentContentJobExecutor
+                from app.services.proposition_evidence_job import PropositionEvidenceJobExecutor
+                from app.services.observation_relation_job import ObservationRelationJobExecutor
+                from app.services.frequency_evidence_job import FrequencyEvidenceJobExecutor
+                self._prepared_review_executors = {
+                    executor.job_type: executor(self.session_factory, self.artifact_store, routes,
+                                                completion=admission)
+                    for executor in (PredicateBindingJobExecutor, ControlBindingJobExecutor,
+                                     BindingQualificationJobExecutor, JudgmentContentJobExecutor,
+                                     PropositionEvidenceJobExecutor, ObservationRelationJobExecutor, FrequencyEvidenceJobExecutor)
+                }
                 self._targeted_executor = TargetedPageReviewExecutor(
                     self.session_factory, self.artifact_store, routes, completion=admission)
                 self._executor = PageReviewJobExecutor(
@@ -74,16 +93,55 @@ class PageReviewRuntime:
         return self._executor
 
     @app_error_boundary
-    def enqueue(self, *, subject_id, review_episode_id, predecessor_job_id=None, single_length_recovery=False):
+    def enqueue(self, *, subject_id, review_episode_id, predecessor_job_id=None, single_length_recovery=False,
+                reading_rotations=None):
         self._prepare()
         return self.jobs.enqueue(subject_id=subject_id, review_episode_id=review_episode_id,
                                  routes=self._routes, predecessor_job_id=predecessor_job_id,
-                                 single_length_recovery=single_length_recovery)
+                                 single_length_recovery=single_length_recovery,
+                                 reading_rotations=reading_rotations)
 
     @app_error_boundary
     def enqueue_targeted(self, **kwargs):
         self._prepare()
         return enqueue_targeted_review(self.session_factory, routes=self._routes, **kwargs)
+
+    @app_error_boundary
+    def enqueue_review_workflow(self, *, subject_id, review_episode_id, context_id):
+        from app.services.prepared_review_intake import require_prepared_review_intent
+        from app.services.prepared_review_workflow import enqueue_review_workflow
+        require_prepared_review_intent(
+            self.session_factory, subject_id=subject_id, review_episode_id=review_episode_id,
+            context_id=context_id, kind="predicate_candidates",
+        )
+        self._prepare()
+        return enqueue_review_workflow(
+            self.session_factory, self._routes, subject_id=subject_id,
+            review_episode_id=review_episode_id, context_id=context_id,
+        )
+
+    def prepared_review_routes(self):
+        self._prepare()
+        return self._routes
+
+    @app_error_boundary
+    def retry_review_workflow(self, **kwargs):
+        from app.services.prepared_review_workflow import change_review_workflow, require_workflow_scope
+        with self.session_factory() as session:
+            require_workflow_scope(session, **kwargs)
+        self._prepare()
+        return change_review_workflow(self.session_factory, **kwargs, operation="retry", routes=self._routes)
+
+    @app_error_boundary
+    def enqueue_prepared_review(self, **kwargs):
+        from app.services.prepared_review_intake import (
+            enqueue_prepared_review_task, require_prepared_review_intent,
+        )
+        require_prepared_review_intent(self.session_factory, **kwargs)
+        self._prepare()
+        return enqueue_prepared_review_task(
+            self.session_factory, self.artifact_store, self._routes, **kwargs,
+        )
 
     @app_error_boundary
     def enqueue_judgment_search(self, *, subject_id, review_episode_id, requirement_ids=None):
@@ -118,6 +176,8 @@ class PageReviewRuntime:
 
     def __call__(self, context):
         executor = self._prepare()
+        if context.job_type in self._prepared_review_executors:
+            return self._prepared_review_executors[context.job_type](context)
         if context.job_type == TARGETED_REVIEW_JOB_TYPE:
             return self._targeted_executor(context)
         if context.job_type == JUDGMENT_SEARCH_JOB_TYPE:

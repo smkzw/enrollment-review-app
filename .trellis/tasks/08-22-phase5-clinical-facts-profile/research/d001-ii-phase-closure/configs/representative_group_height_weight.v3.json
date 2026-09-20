@@ -1,0 +1,16 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_height_weight.v2.json",
+  "group_id": "d001-ii-height-weight-v3",
+  "task_id": "phase5-slice60zf-20260828",
+  "artifact_dir_name": "phase5-slice60zf-d001-height-weight-replay-disposition-closure-20260828",
+  "ids": {
+    "manifest_id": "manifest:slice60zf-height-weight",
+    "catalog_id": "catalog:slice60zf-height-weight"
+  },
+  "notes": [
+    "v2真实失败结果保留为不可变诊断证据；正式发布通过但模型将全部方法和精度要求降为普通说明。",
+    "v3使用共享REQUIRED_ACTION_DISCARDED门禁闭合所有冻结动作的处置去向：流程目录完整覆盖或进入补充控制候选。",
+    "该门禁不读取D001条款、页码或理由关键词，只使用批次中不进入Agent首轮提示的动作集合。"
+  ]
+}

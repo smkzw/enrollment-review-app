@@ -1,0 +1,18 @@
+{
+  "attached_count": 1,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-c81d2b1e882a15e04dbc63f4",
+  "group_id": "d001-ii-package114-fertility-definition-evidence-boundary",
+  "lookup_counts": {
+    "frozen_plan_owned": 13
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package114-fertility-definition-evidence-boundary",
+  "owned_count": 12,
+  "prompt_char_count": 34048,
+  "prompt_sha256": "dbee48a3978d3da0d7f4e6f48011c2196c06002f41b45166cd0852e264775950",
+  "task_id": "phase5-slice61da-20260830",
+  "unit_count": 13,
+  "worker": "codex-parent"
+}

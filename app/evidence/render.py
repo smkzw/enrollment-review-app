@@ -16,20 +16,24 @@ from __future__ import annotations
 import io
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import fitz
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-from app.evidence.paging import PageInput
 from app.evidence.text import decode_text_bytes
+
+if TYPE_CHECKING:
+    from app.evidence.paging import PageInput
 
 #: 渲染器身份版本：任一渲染行为（DPI/编码/字体）变化必须提升该版本，
 #: 否则同一输入会产生不同页图却复用同一渲染器身份。
-RENDERER_VERSION = "slice4.3/render/v1"
+RENDERER_VERSION = "slice4.3/render/v4"
 
 #: 固定渲染 DPI（PDF 与页图均按此换算）。
 RENDER_DPI = 150
-_PIXELS_PER_POINT = RENDER_DPI / 72.0
+_PDF_DPI_BY_VERSION = {"slice4.3/render/v1": 150, "slice4.3/render/v2": 300,
+                       "slice4.3/render/v3": 150, "slice4.3/render/v4": 150}
 
 #: 文本页画布（A4 @ 150 DPI，像素）。
 _TEXT_PAGE_WIDTH = 1240
@@ -51,6 +55,10 @@ _CJK_FONT_CANDIDATES = (
 
 class RenderError(ValueError):
     """页图渲染确定性错误。"""
+
+
+class TextPageOverflowError(RenderError):
+    """文本不能完整呈现在当前页图中。"""
 
 
 @dataclass(frozen=True)
@@ -80,8 +88,10 @@ def _render_pdf_page(
     try:
         with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
             page = doc[page_number - 1]
+            # Historical identities must reproduce their original 150-DPI pixels.
+            scale = _PDF_DPI_BY_VERSION.get(renderer_version, 150) / 72.0
             pix = page.get_pixmap(  # type: ignore[attr-defined] - fitz stub 未覆盖 get_pixmap
-                matrix=fitz.Matrix(_PIXELS_PER_POINT, _PIXELS_PER_POINT), alpha=False
+                matrix=fitz.Matrix(scale, scale), alpha=False
             )
             image_bytes = pix.tobytes("png")
             return RenderedPage(
@@ -109,7 +119,12 @@ def _render_pillow_page(
                     raise RenderError(f"未知 TIFF 帧标识：{original_frame!r}")
                 frame_index = int(original_frame.split("-", 1)[1]) - 1
                 source.seek(frame_index)
-            rgb = source.convert("RGB")
+            # Apply recorded capture orientation, never infer it from aspect ratio.
+            # Historical renderer identities retain their original pixels.
+            oriented = ImageOps.exif_transpose(source) if renderer_version in {
+                "slice4.3/render/v3", "slice4.3/render/v4"
+            } else source
+            rgb = oriented.convert("RGB")
             buffer = io.BytesIO()
             rgb.save(buffer, format="PNG")
             return RenderedPage(
@@ -164,8 +179,15 @@ def _render_text_page(content: bytes, renderer_version: str) -> RenderedPage:
             f"文本页渲染失败：无法加载 CJK 字体 {font_path}: {exc}"
         ) from exc
     usable_width = _TEXT_PAGE_WIDTH - 2 * _TEXT_MARGIN
+    lines = _wrap_lines(decoded.text, width=usable_width, font=font)
+    capacity = (_TEXT_PAGE_HEIGHT - 2 * _TEXT_MARGIN - _TEXT_FONT_SIZE) // _TEXT_LINE_HEIGHT + 1
+    if renderer_version == "slice4.3/render/v4" and len(lines) > capacity:
+        raise TextPageOverflowError(
+            "文本内容超过单页显示范围，尚未生成完整页面；原文件已保留，"
+            "本文件不能按已完整读取处理"
+        )
     y = _TEXT_MARGIN
-    for line in _wrap_lines(decoded.text, width=usable_width, font=font):
+    for line in lines:
         if y + _TEXT_FONT_SIZE > _TEXT_PAGE_HEIGHT - _TEXT_MARGIN:
             break
         draw.text((_TEXT_MARGIN, y), line, fill="black", font=font)
@@ -178,6 +200,32 @@ def _render_text_page(content: bytes, renderer_version: str) -> RenderedPage:
         height=_TEXT_PAGE_HEIGHT,
         renderer_version=renderer_version,
     )
+
+
+def paginate_text_content(text: str) -> tuple[tuple[int, int, str], ...]:
+    """Split by the actual rendering layout while preserving every source character."""
+    font = ImageFont.truetype(str(_resolve_cjk_font()), _TEXT_FONT_SIZE)
+    width = _TEXT_PAGE_WIDTH - 2 * _TEXT_MARGIN
+    capacity = (_TEXT_PAGE_HEIGHT - 2 * _TEXT_MARGIN - _TEXT_FONT_SIZE) // _TEXT_LINE_HEIGHT + 1
+    # A retained terminal newline creates a final blank display line.
+    per_page = capacity - 1
+    units: list[str] = []
+    raw_lines = text.split("\n")
+    for index, raw in enumerate(raw_lines):
+        wrapped = _wrap_lines(raw, width=width, font=font)
+        if index < len(raw_lines) - 1:
+            wrapped[-1] += "\n"
+        units.extend(wrapped)
+    pages: list[tuple[int, int, str]] = []
+    start = 0
+    for index in range(0, len(units), per_page):
+        chunk = "".join(units[index:index + per_page])
+        if not chunk and pages:
+            continue
+        end = start + len(chunk)
+        pages.append((start, end, chunk))
+        start = end
+    return tuple(pages)
 
 
 def render_page_image(page_input: PageInput, *, renderer_version: str = RENDERER_VERSION) -> RenderedPage:

@@ -32,7 +32,7 @@ import threading
 from collections.abc import Callable, Iterator
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, as_completed, wait
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
@@ -63,7 +63,7 @@ from app.domain.contracts.evidence_processing import (
     OCRAttempt,
     OCRRun,
 )
-from app.domain.contracts.evidence_upload import EVIDENCE_PROCESSING_JOB_TYPE
+from app.domain.contracts.evidence_upload import EVIDENCE_PROCESSING_JOB_TYPE, DIRECT_VISION_PREPARATION
 from app.domain.contracts.ocr import (
     OCRPage,
     OCRProfile,
@@ -209,6 +209,9 @@ class EvidenceProcessingExecutorConfig:
     cancel_check_every: int = 1
     #: 门禁脚本缺失是否视为可重试失败（测试可注入覆盖）。
     gate_unavailable_retryable: bool = True
+    manage_snapshot_status: bool = True
+    confirmed_pages: Any = field(default_factory=dict)
+    direct_vision_preparation: bool = False
 
 
 class _CancelBoundary(Exception):
@@ -317,6 +320,11 @@ def _execute(
 ) -> dict[str, Any]:
     job_id = context.job_id
     payload = context.job_payload
+    preparation_policy = payload.get("preparation_policy")
+    if preparation_policy not in (None, DIRECT_VISION_PREPARATION):
+        raise StepFailure(retryable=False, error_code="EVIDENCE_PREPARATION_POLICY_INVALID",
+                          detail="本次资料处理方式无法核对，未开始处理。")
+    config = replace(config, direct_vision_preparation=preparation_policy == DIRECT_VISION_PREPARATION)
 
     with config.session_factory() as session:
         snapshot = _snapshot_from_payload(session, payload)
@@ -325,7 +333,19 @@ def _execute(
             version = SourceDocumentRepository(session).get(member.source_document_version_id)
             member_versions.append((member, version))
 
-    _start_or_resume_snapshot(config, snapshot.evidence_snapshot_id)
+    if config.manage_snapshot_status:
+        _start_or_resume_snapshot(config, snapshot.evidence_snapshot_id)
+
+    from app.services.confirmed_ocr_inheritance import load_confirmed_pages
+    from app.services.evidence_app_errors import is_database_busy_error
+
+    try:
+        with config.session_factory() as session:
+            config = replace(config, confirmed_pages=load_confirmed_pages(session, snapshot, payload))
+    except Exception as exc:
+        busy = is_database_busy_error(exc)
+        raise StepFailure(retryable=busy, error_code="EVIDENCE_INHERITANCE_BUSY" if busy else "EVIDENCE_INHERITANCE_INVALID",
+            detail="资料正在保存，稍后将重新核对。" if busy else "上一确认资料暂时无法核对，本次处理已停止，原资料与报告未改变。") from exc
 
     artifact_store = ArtifactStore(config.data_paths)
     plans: list[tuple[Any, SourceDocumentVersion, PagePlan | None]] = []
@@ -385,6 +405,7 @@ def _execute(
         )
 
     try:
+        print(f"DEBUG OCR EXEC: plans={len(plans)}, adapter={type(adapter).__name__}, gate={type(gate).__name__}", flush=True)
         file_results = _process_files(
             config=config,
             job_id=job_id,
@@ -394,6 +415,7 @@ def _execute(
             artifact_store=artifact_store,
             on_page_progress=observe_page,
         )
+        print(f"DEBUG OCR EXEC: _process_files done, results={[(r.page_total, r.page_succeeded, r.page_failed) for r in file_results]}", flush=True)
         # 最后一页之后也属于安全边界；否则单页/末页取消只能在 JobRunner
         # 下一轮看到，执行器可能已经冻结不可激活修订。
         _maybe_cancel(config, job_id)
@@ -429,30 +451,31 @@ def _execute(
 
         EvidenceSidecarPreparationService(
             config.session_factory, artifact_store
-        ).prepare(revision_id)
+        ).prepare(revision_id, inheritance_payload=payload)
     except Exception as exc:
         raise StepFailure(
             retryable=True,
             error_code="EVIDENCE_SIDECAR_PREPARATION_FAILED",
             detail="识别结果已保存，但风险提示与原文定位尚未准备完成，系统将继续处理。",
         ) from exc
-    # 冻结后仅幂等入队独立视觉后处理任务：不等待 VLM、不续 OCR 页租约、不改 OCR。
-    try:
-        from app.services.selective_vision_postprocess_job_service import (
-            enqueue_selective_vision_postprocess_for_revision,
-        )
+    # 新图像路径由两个完整主读负责；仅历史文字路径保留旧后处理。
+    if not config.direct_vision_preparation:
+        try:
+            from app.services.selective_vision_postprocess_job_service import (
+                enqueue_selective_vision_postprocess_for_revision,
+            )
 
-        enqueue_selective_vision_postprocess_for_revision(
-            config.session_factory,
-            revision_id,
-            trigger="evidence_processing_freeze",
-        )
-    except Exception as exc:
-        raise StepFailure(
-            retryable=True,
-            error_code="SELECTIVE_VISION_ENQUEUE_FAILED",
-            detail="识别结果已保存，但选择性视觉后处理尚未入队，系统将继续处理。",
-        ) from exc
+            enqueue_selective_vision_postprocess_for_revision(
+                config.session_factory,
+                revision_id,
+                trigger="evidence_processing_freeze",
+            )
+        except Exception as exc:
+            raise StepFailure(
+                retryable=True,
+                error_code="SELECTIVE_VISION_ENQUEUE_FAILED",
+                detail="识别结果已保存，但选择性视觉后处理尚未入队，系统将继续处理。",
+            ) from exc
     _transition_snapshot_if_processing(
         config,
         snapshot.evidence_snapshot_id,
@@ -503,7 +526,7 @@ def _transition_snapshot_if_processing(
     reason: str,
 ) -> None:
     """只从处理中追加一次状态事件；重复故障提交不覆盖既有历史。"""
-    if not snapshot_id:
+    if not config.manage_snapshot_status or not snapshot_id:
         return
     with config.session_factory() as session, session.begin():
         repo = EvidenceSnapshotRepository(session)
@@ -713,6 +736,7 @@ def _prepare_file(
         if (not page_input.expects_failure)
         and route == ExtractionRoute.VISION_OCR
         and artifact.status != PageArtifactStatus.FAILED
+        and (version.source_document_version_id, artifact.page_artifact_id) not in config.confirmed_pages
     ]
 
     ocr_run_id: str | None = None
@@ -748,7 +772,10 @@ def _process_prepared_page(
     ocr_page: OCRPage | None = None
     retryable = False
     deferred = False
-    if (
+    inherited = config.confirmed_pages.get((prepared.version.source_document_version_id, artifact.page_artifact_id))
+    if inherited is not None and not page_input.expects_failure and artifact.status != PageArtifactStatus.FAILED:
+        ocr_page = inherited
+    elif (
         not page_input.expects_failure
         and route == ExtractionRoute.VISION_OCR
         and prepared.ocr_run_id is not None
@@ -1375,6 +1402,7 @@ def _process_visual_page(
     # 的 worker 才写 PROCESSING 页行并调用模型。PageLeaseBusyError 竞争者不写
     # PROCESSING 页、不调用模型；prepare 工件本身可以作为共享的不可变检查点保留。
     with config.session_factory() as session, session.begin():
+        print(f"DEBUG OCR: adapter.prepare called, source_sha256={source_sha256[:16]}, page_number={page_number}", flush=True)
         prepared = adapter.prepare(
             session=session,
             artifact_store=artifact_store,
@@ -1421,11 +1449,13 @@ def _process_visual_page(
                     detail="识别通道尚未配置，本次识别未开始，请稍后重试。",
                 )
             try:
+                print("DEBUG OCR: calling _run_prepared_segments", flush=True)
                 result, gate_lease = _run_prepared_segments(
                     config=config,
                     gate=gate,
                     prepared=prepared,
                 )
+                print("DEBUG OCR: _run_prepared_segments returned", flush=True)
             except SegmentInferenceError as exc:
                 cause = exc.cause
                 if isinstance(cause, OmlxLeaseLostError):
@@ -1991,11 +2021,14 @@ def recover_evidence_ocr_runs(
         # 尚未执行之间。每次启动都扫描证据任务终态，消除这个短窗口中的 PROCESSING。
         terminal_jobs = session.execute(
             select(JobRecord.job_id, JobRecord.state).where(
-                JobRecord.job_type == EVIDENCE_PROCESSING_JOB_TYPE,
+                JobRecord.job_type.in_((EVIDENCE_PROCESSING_JOB_TYPE, "evidence_reprocess")),
                 JobRecord.state.in_(("cancelled", "failed_final")),
             )
         ).all()
         for job_id, state in terminal_jobs:
+            repo.recover_running_for_job(job_id,
+                status=OcrRunStatus.CANCELLED if state == "cancelled" else OcrRunStatus.FAILED,
+                completed_at=now())
             if state == "cancelled":
                 _recover_terminal_snapshot(
                     session,
@@ -2101,6 +2134,8 @@ def _freeze_revision(
         entries=[(e[0], e[1], e[2], e[3], e[4], e[5]) for e in raw_entries]
     )
     revision_id = f"epr-{snapshot.evidence_snapshot_id[:24]}-{manifest_sha256[:16]}"
+    if config.direct_vision_preparation:
+        revision_id += "-images-v1"
     revision = EvidenceProcessingRevision(
         evidence_processing_revision_id=revision_id,
         evidence_snapshot_id=snapshot.evidence_snapshot_id,
@@ -2124,6 +2159,7 @@ def _freeze_revision(
         manifest_sha256=manifest_sha256,
         status=ProcessingRevisionStatus.READY,
         is_activatable=False,
+        preparation_policy=(DIRECT_VISION_PREPARATION if config.direct_vision_preparation else "legacy-text/v1"),
         created_at=_now_utc(),
         created_by="evidence-processing",
     )

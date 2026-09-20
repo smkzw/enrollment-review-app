@@ -1,0 +1,19 @@
+{
+  "attached_count": 27,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-821fc691f490f0481092bbb5",
+  "group_id": "d001-ii-package83-persistent-recurrent-lab-ae-boundary",
+  "lookup_counts": {
+    "frozen_plan_context": 2,
+    "frozen_plan_owned": 35
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package83-persistent-recurrent-lab-ae-boundary",
+  "owned_count": 10,
+  "prompt_char_count": 46736,
+  "prompt_sha256": "0d38f2805eb72502b504352f8884890388726b91856a92420f553f5f60766409",
+  "task_id": "phase5-slice61bu-20260830",
+  "unit_count": 37,
+  "worker": "codebuddy-worker_02"
+}

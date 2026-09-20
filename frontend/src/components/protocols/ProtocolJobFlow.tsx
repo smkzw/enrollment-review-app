@@ -3,7 +3,7 @@
  * 重新解构在等待审阅时切换到并列差异工作台，并提供基于反馈修订、保存、取消与发布。
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getProtocolWorkbenchRepository,
   ProtocolWorkbenchApiError,
@@ -12,6 +12,7 @@ import {
 } from "../../api/protocolWorkbenchRepository";
 import type {
   ConfirmIdentityInput,
+  GenerationPreviewView,
   PublishResultView,
 } from "../../api/protocolWorkbenchTypes";
 import { navigate, RouteLink, updateParams } from "../../app/router";
@@ -36,6 +37,8 @@ import { ProtocolPublishResult } from "./ProtocolPublishResult";
 import { ProtocolPublishedSummary } from "./ProtocolPublishedSummary";
 import { ProtocolRecoveryBanner } from "./ProtocolRecoveryBanner";
 import { patchComponentSemantics } from "../../domain/protocolManualEdit";
+import { useProtocolControls } from "./useProtocolControls";
+import { ProtocolControlPanel } from "./ProtocolControlPanel";
 
 interface ProtocolJobFlowProps {
   jobId: string;
@@ -76,6 +79,12 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
   const sessionData = sessionStatus === "success" ? session.state.data : null;
   const jobState = sessionData?.state ?? null;
   const isRedo = sessionData?.sessionKind === "re_deconstruction";
+  const controls = useProtocolControls(jobId, repo.kind === "http" && publishResult === null &&
+    (sessionData?.awaitingUser === "review" || sessionData?.awaitingUser === "publish"));
+  const controlPublication = controls.state.status === "ready"
+    ? { jobId: controls.state.data.jobId, checkpointId: controls.state.data.checkpointId }
+    : undefined;
+  const publicationBlocked = repo.kind === "http" && controlPublication === undefined;
 
   const identity = useLoad(
     (signal) => repo.getIdentityReview(jobId, { signal }),
@@ -93,7 +102,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
       return { draft, integrity, sources };
     },
     [jobId, repo],
-    { enabled: sessionData?.awaitingUser === "review" && !isRedo },
+    { enabled: (sessionData?.awaitingUser === "review" || sessionData?.awaitingUser === "publish") && !isRedo },
   );
 
   const comparison = useLoad(
@@ -146,6 +155,38 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
     const timer = window.setTimeout(session.retry, 1200);
     return () => window.clearTimeout(timer);
   }, [jobState, session.retry, sessionStatus]);
+
+  // 生成期间轮询逐批只读预览；预览只用于尽早阅读，正式草稿仍以 getDraft 为准。
+  const [generationPreview, setGenerationPreview] = useState<GenerationPreviewView | null>(null);
+  const previewTimer = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (
+      sessionStatus !== "success" ||
+      !["queued", "running", "recovering"].includes(jobState ?? "")
+    ) {
+      window.clearTimeout(previewTimer.current);
+      return;
+    }
+    let stopped = false;
+    const controller = new AbortController();
+    const poll = async () => {
+      try {
+        const preview = await repo.getGenerationPreview(jobId, { signal: controller.signal });
+        if (!stopped) setGenerationPreview(preview);
+      } catch {
+        // 预览读取失败不阻断状态轮询；下一轮重新尝试。
+      }
+      if (!stopped) {
+        previewTimer.current = window.setTimeout(() => { void poll(); }, 4000);
+      }
+    };
+    void poll();
+    return () => {
+      stopped = true;
+      controller.abort();
+      window.clearTimeout(previewTimer.current);
+    };
+  }, [jobId, jobState, repo, sessionStatus]);
 
   useEffect(() => {
     if (sessionData?.state === "completed") clearRememberedProtocolJob();
@@ -311,10 +352,14 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
   }, [comparison, draftBundle, isRedo, jobId, repo]);
 
   const handlePublish = useCallback(async () => {
+    if (publicationBlocked) {
+      setPublishError("补充审核要求尚未整理完成，请完成核对后再发布。");
+      return;
+    }
     setPublishBusy(true);
     setPublishError(null);
     try {
-      const result = await repo.publish(jobId, `publish-${Date.now()}`);
+      const result = await repo.publish(jobId, `publish-${Date.now()}`, { controlPublication });
       setPublishOpen(false);
       setPublishResult(result);
     } catch (error) {
@@ -328,7 +373,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
     } finally {
       setPublishBusy(false);
     }
-  }, [jobId, repo]);
+  }, [jobId, repo, publicationBlocked, controlPublication]);
 
   const handleResetTrial = useCallback(() => {
     resetDraftSaved();
@@ -450,6 +495,8 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
           integrity={redoReview.state.data.integrity}
           sources={redoReview.state.data.sources}
           saving={saveBusy}
+          publicationBlocked={publicationBlocked || publishBusy}
+          supplementaryRequirements={repo.kind === "http" ? <ProtocolControlPanel controls={controls} /> : undefined}
           feedbackBusy={feedbackBusy}
           onSaveDraft={handleSaveDraft}
           onOpenFeedback={() => {
@@ -503,6 +550,8 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
         <ProtocolConfirmPublishDialog
           open={publishOpen}
           busy={publishBusy}
+          blocked={publicationBlocked}
+          errorMessage={publishError ?? undefined}
           sessionLabel={`目标项目：${currentSession.targetProjectName ?? "—"} · 当前正式版本 ${currentSession.targetOfficialVersion ?? "—"}`}
           onClose={() => {
             if (publishBusy) return;
@@ -535,6 +584,8 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
             setPublishOpen(true);
           }}
           saving={saveBusy}
+          publicationBlocked={publicationBlocked}
+          supplementaryRequirements={repo.kind === "http" ? <ProtocolControlPanel controls={controls} /> : undefined}
           publishing={publishBusy}
           saveError={saveError ?? publishError ?? undefined}
           uatDraftSaved={isStubDemo ? draftSaved : undefined}
@@ -555,6 +606,8 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
         <ProtocolConfirmPublishDialog
           open={publishOpen}
           busy={publishBusy}
+          blocked={publicationBlocked}
+          errorMessage={publishError ?? undefined}
           isRedo={false}
           sessionLabel={`${currentSession.protocolCode ?? draft.protocolCode} · ${currentSession.selectedPhaseLabel ?? draft.studyPhaseLabel} · ${currentSession.officialVersion ?? "待核对版本"}`}
           onClose={() => {
@@ -567,5 +620,5 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
     );
   }
 
-  return <ProtocolJobProgress session={currentSession} onRefresh={session.retry} />;
+  return <ProtocolJobProgress session={currentSession} preview={generationPreview} onRefresh={session.retry} />;
 }

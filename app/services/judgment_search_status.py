@@ -41,6 +41,13 @@ def _requirement_label(target_text: str | None) -> str:
     except ValueError:
         text = " ".join(target_text.split())
         return text if len(text) <= 40 else text[:39] + "…"
+    if isinstance(data, dict) and data.get("identity") == "judgment_search_target/control-v1":
+        control = data.get("control")
+        title = control.get("title") if isinstance(control, dict) else None
+        if isinstance(title, str) and title.strip():
+            title = " ".join(title.split())
+            return "方案补充要求：" + (title if len(title) <= 50 else title[:49] + "…")
+        return "方案补充要求的研究者书面判断"
     rule = data.get("rule", {}) if isinstance(data, dict) else {}
     component = data.get("component", {}) if isinstance(data, dict) else {}
     code = str(rule.get("official_code") or component.get("display_code") or "").strip()
@@ -90,7 +97,9 @@ def judgment_search_job_status(session_factory: sessionmaker[Session], *, subjec
         ]
         completed_reads = sum(1 for _, state in read_steps if state == "completed")
         authority = FactAuthority.model_validate(frozen["authority"])
-        summaries = JudgmentSearchSummaryRepository(session).latest_for_authority(authority)
+        summaries = JudgmentSearchSummaryRepository(session).latest_for_authority(
+            authority, job_id=job_id
+        )
         requirement_results = [
             {
                 "requirement_id": item["requirement_id"],
@@ -122,7 +131,9 @@ def judgment_search_job_results(session_factory: sessionmaker[Session], *, subje
         job, frozen = _load_job(session, session_factory, subject_id=subject_id,
                                 review_episode_id=review_episode_id, job_id=job_id)
         authority = FactAuthority.model_validate(frozen["authority"])
-        summaries = JudgmentSearchSummaryRepository(session).latest_for_authority(authority)
+        summaries = JudgmentSearchSummaryRepository(session).latest_for_authority(
+            authority, job_id=job_id
+        )
         results = []
         for item in frozen.get("requirements", []):
             requirement_id = item["requirement_id"]
@@ -167,7 +178,7 @@ def judgment_search_job_results(session_factory: sessionmaker[Session], *, subje
 
 
 def _incomplete_pages(summary: JudgmentSearchCoverageSummary) -> list[dict]:
-    pages: dict[int, dict] = {}
+    pages: dict[tuple[str, str, int], dict] = {}
 
     # 面向用户的原生中文：复用模块级 _LANE_LABELS/_CHANNEL_LABELS，
     # 不在函数内重复定义（避免将来只改其一导致内部枚举泄漏给用户）。
@@ -177,16 +188,22 @@ def _incomplete_pages(summary: JudgmentSearchCoverageSummary) -> list[dict]:
     def channel(value: str) -> str:
         return _CHANNEL_LABELS.get(value, value)
 
-    def mark(page_number: int, reason: str) -> None:
-        pages.setdefault(page_number, {"page_number": page_number, "reasons": []})
-        pages[page_number]["reasons"].append(reason)
+    def mark(gap, reason: str) -> None:
+        key = (gap.source_document_version_id, gap.page_artifact_id, gap.page_number)
+        pages.setdefault(key, {
+            "source_document_version_id": gap.source_document_version_id,
+            "page_artifact_id": gap.page_artifact_id,
+            "page_number": gap.page_number,
+            "reasons": [],
+        })
+        pages[key]["reasons"].append(reason)
 
     for gap in summary.pages_without_lane_result:
-        mark(gap.page_number, f"{lane(gap.lane.value)}未完成该页检索")
+        mark(gap, f"{lane(gap.lane.value)}未完成该页检索")
     for gap in summary.unreadable_channels:
-        mark(gap.page_number, f"{lane(gap.lane.value)}的{channel(gap.channel.value)}未能读取")
+        mark(gap, f"{lane(gap.lane.value)}的{channel(gap.channel.value)}未能读取")
     for gap in summary.ambiguous_channels:
-        mark(gap.page_number, f"{lane(gap.lane.value)}的{channel(gap.channel.value)}存在歧义")
+        mark(gap, f"{lane(gap.lane.value)}的{channel(gap.channel.value)}存在歧义")
     return [pages[number] for number in sorted(pages)]
 
 

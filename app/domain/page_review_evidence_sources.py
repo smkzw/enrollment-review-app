@@ -440,11 +440,13 @@ def _pair_accepted_facts(
                 in_b[0], PageReviewLane.MAIN_B, lane_a, PageReviewLane.MAIN_A
             )
         holder_index = 0 if holder_lane == PageReviewLane.MAIN_A else 1
+        # 伙伴只承担视觉来源绑定：对账可能只采信跨键配对的单侧键（另一侧
+        # 因同身份重复被列为歧义），因此不要求伙伴键本身已被采信，只要求
+        # 未被消费且来源关联唯一命中。
         candidates = [
             pair[1 - holder_index] for pair in association_pairs
             if pair[holder_index] == holder
-            and (item := pair[1 - holder_index]).normalization_key in accepted_keys
-            and item.normalization_key not in consumed_keys
+            and (item := pair[1 - holder_index]).normalization_key not in consumed_keys
             and (partner_lane, item.observation_id) not in consumed_obs
         ]
         if not candidates:

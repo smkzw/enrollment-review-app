@@ -1,0 +1,204 @@
+{
+  "attached_source_refs": [
+    "body.p1198",
+    "body.p1199",
+    "body.p1206",
+    "body.p1207",
+    "body.p1208",
+    "body.p1209"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package102-enrollment-baseline-statistical-boundary",
+  "notes": [
+    "模型外闭包：7个拥有来源，6个只读来源，13个来源均禁止候选；required candidates、workflow bindings、official rules和required procedures均为零。",
+    "p1197的“入组”、p1201的“基线”、p1203/p1204的合并用药与治疗编码均保留统计语义，不向单例入排控制反向推理。",
+    "p1198与p1199保持Ⅱ/Ⅲ期隔离；p1206-p1209仅用于Ⅱ期疗效统计上下文，不形成随机前或D1给药前义务。",
+    "claims_complete=false；本配置不调用临床语义模型、不发布控制点、不宣称D001全量或受试者/Patient Profile验收完成。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1197",
+    "body.p1200",
+    "body.p1201",
+    "body.p1202",
+    "body.p1203",
+    "body.p1204",
+    "body.p1205"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "参与者入组分析标题仅提供统计章节结构；总体入选、完成、提前结束和分析集分布是事后统计总结，不是新的入组标准、筛选动作或入组决策入口": "pending_codex"
+      },
+      "frozen_excerpt": "参与者入组分析",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1197",
+      "structure_unit_id": "su-68aa4b2c1ab5edd47f362535"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅱ期总体入选、完成、提前结束和分析集纳入/剔除是统计总结；分析集纳入/剔除不得改写成单例资格判定": "pending_codex"
+      },
+      "frozen_excerpt": "Ⅱ期临床阶段，列出总体入选及完成参与者例数，对各分析集的纳入和剔除情况进行总结。提供提前结束试验的参与者清单，对各分析集的参与者分布进行详细列表。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1198",
+      "structure_unit_id": "su-32fd0f455b0bd776fc598b59"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅲ期基础期、扩展期和完成试验统计仅作只读期别上下文，不得进入Ⅱ期控制或被解释为Ⅱ期义务": "pending_codex"
+      },
+      "frozen_excerpt": "Ⅲ期临床阶段，列出总体入选、完成16周基础期治疗、扩展期治疗以及完成试验的参与者例数，对各分析集的纳入和剔除情况进行总结。提供提前结束试验的参与者清单，对各分析集的参与者分布进行详细列表。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1199",
+      "structure_unit_id": "su-b0ce365cdbfceab1aa44fa96"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "人口统计学和基线特征分析标题仅提供统计结构归属，不独立形成基线访视、资料完整性或入排控制点": "pending_codex"
+      },
+      "frozen_excerpt": "人口统计学和基线特征分析",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1200",
+      "structure_unit_id": "su-01be15f15941c1f467f99117"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "ITT集上的按组别及总体描述性统计是统计分析域；基线特性不是基线访视项目、基线资料要求或缺口判定依据": "pending_codex"
+      },
+      "frozen_excerpt": "将基于ITT集，采用描述性统计方法来总结按组别及总体的参与者人口统计学特征和基线特性。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1201",
+      "structure_unit_id": "su-8f1031a63b30f3a7e14a955a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "药物治疗与非药物治疗分析标题仅提供统计结构归属，不独立形成合并用药禁限规则": "pending_codex"
+      },
+      "frozen_excerpt": "药物治疗与非药物治疗分析",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1202",
+      "structure_unit_id": "su-9c8b013993ae776f7f8dc4b7"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "WHO Drug仅用于合并用药参与者例数和百分比的分类汇总；编码缺失不得转成用药禁限、证据不足或不得入组": "pending_codex"
+      },
+      "frozen_excerpt": "根据WHO Drug分类统计合并用药的参与者例数和百分比；",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1203",
+      "structure_unit_id": "su-5142d2c6161c2593bcdee76a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "MedDRA SOC/PT仅用于合并治疗参与者例数和百分比的分类汇总；编码分类不得转成病史筛查或入排规则": "pending_codex"
+      },
+      "frozen_excerpt": "根据MedDRA编码的系统器官分类（SOC）和首选术语（PT）分类统计合并治疗的参与者例数与百分比。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1204",
+      "structure_unit_id": "su-2a0e3803fabfe3dd0ed49732"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "疗效分析标题仅提供统计分支结构归属，不独立形成筛选、基线、随机或给药前义务": "pending_codex"
+      },
+      "frozen_excerpt": "疗效分析",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1205",
+      "structure_unit_id": "su-a34910314dc30700e4870936"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "Ⅱ期临床研究阶段仅标识疗效统计期别，不形成受试者级流程控制": "pending_codex"
+      },
+      "frozen_excerpt": "Ⅱ期临床研究阶段",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1206",
+      "structure_unit_id": "su-b4abfa7c46b218f7acde0996"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "主要疗效指标分析标题仅提供统计分支归属，不把疗效终点变成基线或入组阈值": "pending_codex"
+      },
+      "frozen_excerpt": "主要疗效指标分析",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1207",
+      "structure_unit_id": "su-ce3c60a390ac2e4d3a48dff4"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "第12周PASI-75、CMH检验、置信区间和多重填补属于Ⅱ期疗效统计方法，不产生筛选、基线、随机或D1给药前义务": "pending_codex"
+      },
+      "frozen_excerpt": "主要疗效指标为第12周，银屑病面积和严重程度指数较基线改善至少75%（PASI-75）的参与者比例。将采用CMH检验比较各剂量组与安慰剂组间PASI-75应答率的差异及其95%的置信区间。主要疗效指标的缺失，将采用多重填补。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1208",
+      "structure_unit_id": "su-1be194815474be01733b25a2"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "LOCF、NRI等是主要疗效指标缺失的敏感性分析方法，不是资料缺口判定、入排规则或给药前控制": "pending_codex"
+      },
+      "frozen_excerpt": "针对主要疗效指标的缺失还将采用末次观察结转（Last Observational Carried Forward，LOCF）、无应答填补（Non-Response Imputation，NRI）法等进行敏感性分析。",
+      "lookup": "frozen_plan_context",
+      "role": "attached",
+      "source_ref": "body.p1209",
+      "structure_unit_id": "su-15bbbc5411c7a00315b6abb4"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61co-20260830",
+  "worker": "codex-parent"
+}

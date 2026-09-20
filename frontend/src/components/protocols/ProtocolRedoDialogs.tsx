@@ -171,6 +171,8 @@ export function ProtocolFeedbackDialog({
 interface ProtocolConfirmPublishDialogProps {
   open: boolean;
   busy: boolean;
+  blocked?: boolean;
+  errorMessage?: string;
   sessionLabel: string;
   isRedo?: boolean;
   onClose: () => void;
@@ -180,6 +182,8 @@ interface ProtocolConfirmPublishDialogProps {
 export function ProtocolConfirmPublishDialog({
   open,
   busy,
+  blocked = false,
+  errorMessage,
   sessionLabel,
   isRedo = true,
   onClose,
@@ -215,6 +219,8 @@ export function ProtocolConfirmPublishDialog({
         onClick={(event) => event.stopPropagation()}
       >
         <h2 id={titleId}>确认发布新规则版本</h2>
+        {errorMessage && <p role="alert">{errorMessage}</p>}
+        {blocked && <p role="status">补充审核要求尚未整理完成，暂不能发布。</p>}
         <p className="confirmation-dialog__note">{sessionLabel}</p>
         <p className="confirmation-dialog__note">
           {isRedo
@@ -233,7 +239,7 @@ export function ProtocolConfirmPublishDialog({
           <button
             type="button"
             className="button button--primary"
-            disabled={busy}
+            disabled={busy || blocked}
             onClick={onConfirm}
           >
             {busy ? "正在发布…" : "确认发布"}

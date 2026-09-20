@@ -112,6 +112,7 @@ from app.storage.ocr_models import (
 from app.storage.ocr_repositories import (
     EvidenceProcessingRevisionRepository,
     OcrPageRepository,
+    PageArtifactRepository,
 )
 from app.storage.repositories import (
     DuplicateRecordError,
@@ -2716,7 +2717,9 @@ class CompleteEvidenceProcessingRevisionRepository:
     def _verify_terminal_successful_pages(
         self, revision: CompleteEvidenceProcessingRevision
     ) -> None:
-        """每页必须是终态成功页产物 + 终态成功 OCR 页（无失败/降级/非终态）。"""
+        """原件页必须完整；仅显式图像准备修订允许没有辅助文字层。"""
+        base = EvidenceProcessingRevisionRepository(self.session).get(revision.base_processing_revision_id)
+        image_only = base.preparation_policy == "original-page-images/v1"
         for entry in revision.manifest:
             artifact = self.session.get(PageArtifactRecord, entry.page_artifact_id)
             if artifact is None:
@@ -2736,6 +2739,11 @@ class CompleteEvidenceProcessingRevisionRepository:
                     f"页清单条目 {entry.entry_id} 与页产物归属/页码不一致"
                 )
             if entry.ocr_page_id is None:
+                if image_only:
+                    page = PageArtifactRepository(self.session).get(entry.page_artifact_id)
+                    if not page.page_image_sha256:
+                        raise RevisionClosureError("原件页缺少图像，不能开始资料判读")
+                    continue
                 raise RevisionClosureError(
                     f"页清单条目 {entry.entry_id} 缺少 OCR 页引用"
                 )

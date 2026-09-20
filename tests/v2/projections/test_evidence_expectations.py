@@ -486,6 +486,7 @@ def _template(
     allows_screening_record_transcription: bool = True,
     required_source_types: tuple[str, ...] = (),
     description: str = "资料核对要求",
+    source_validity_window=None,
 ) -> EvidenceExpectationTemplate:
     """种子模板记录（要求 FK 行 + 模板行）并返回合法合同。"""
     requirement_id = f"slice54-{requirement_id}"
@@ -501,6 +502,7 @@ def _template(
         ),
         due_stage=due_stage,
         description=description,
+        source_validity_window=source_validity_window,
     )
     requirement_row = _add(session, EvidenceRequirementRecord(
         rule_set_id=ids["rule_set_id"], rule_set_revision=1,
@@ -512,6 +514,7 @@ def _template(
     _bind_payload(requirement_row, requirement)
     template_id = template_identity(ids["rule_set_id"], 1, requirement_id)
     projection_sha256 = template_projection_sha256(
+        source_validity_window=source_validity_window,
         rule_set_id=ids["rule_set_id"], revision=1,
         requirement_id=requirement_id, due_stage=due_stage,
         study_phase=StudyPhase.PHASE_III,
@@ -526,6 +529,7 @@ def _template(
         description=description,
     )
     template = EvidenceExpectationTemplate(
+        source_validity_window=source_validity_window,
         template_id=template_id,
         rule_set_id=ids["rule_set_id"],
         rule_set_revision=1,
@@ -556,6 +560,55 @@ def _template(
     ))
     _bind_payload(template_row, template)
     return template
+
+
+@pytest.mark.parametrize("age,expected_gap", [
+    (7, None), (8, GapType.RECORD_INCOMPLETE),
+    (-1, GapType.RECORD_INCOMPLETE), (None, GapType.DATE_OR_ANCHOR_MISSING),
+])
+def test_report_freshness_controls_coverage_not_clinical_judgment(chain, session, age, expected_gap):
+    from datetime import timedelta
+    from app.domain.contracts.rules import TimeQuantity, TimeUnit
+    from app.domain.contracts.common import DateValue
+    from app.domain.contracts.enums import DatePrecision
+
+    template = _template(
+        session, chain, requirement_id="fresh-report", fact_type="lab_report",
+        due_stage=ReviewStage.SCREENING,
+        source_validity_window=TimeQuantity(value=7, unit=TimeUnit.DAY),
+    )
+    fact = _publish_fact(
+        session, chain, fact_id="fresh-fact", gate_id="fresh-gate", candidate_id="fresh-candidate",
+        fact_type="lab_report", source_strength=SourceStrength.CONTEMPORANEOUS_OBJECTIVE,
+        asserted_object="检查结果", value="3", unit="mmol/L", locator_ids=[chain["locator_id"]],
+    )
+    anchor = None if age is None else DateValue(
+        value=fact.date_range.upper_bound + timedelta(days=age), precision=DatePrecision.DAY,
+    )
+    projected = project_expectation(
+        template=template, authority=_authority(chain), current_stage=ReviewStage.SCREENING,
+        observations=[CoverageObservation(fact=fact, source_types=["lab_report"])],
+        validity_anchor=anchor,
+    )
+    assert projected.gap_type == expected_gap
+    assert projected.status == (ExpectationStatus.OBSERVED if expected_gap is None else ExpectationStatus.ABSENT)
+    assert projected.coverage_fact_ids == ([fact.fact_id] if expected_gap is None else [])
+    from app.storage.repositories import EpisodeRepository
+    from app.domain.contracts.enums import AnchorType
+    episode = EpisodeRepository(session).get(chain["review_episode_id"])
+    dates = {} if anchor is None else {AnchorType.SCREENING_DATE: anchor}
+    episode = episode.model_copy(update={"anchor_dates": dates})
+    row = session.get(ReviewEpisodeRecord, chain["review_episode_id"])
+    row.anchor_dates_json = {key.value: value.model_dump(mode="json") for key, value in dates.items()}
+    _bind_payload(row, episode)
+    session.flush()
+    saved = EvidenceExpectationProjectionService().project(
+        session, authority=_authority(chain), gap_signals=[], created_at=NOW,
+    )
+    result = next(item for item in saved if item.template_id == template.template_id)
+    assert (result.status, result.gap_type, result.coverage_fact_ids) == (
+        projected.status, projected.gap_type, projected.coverage_fact_ids,
+    )
 
 
 def _seed_unbound_ruleset(session) -> str:
@@ -1711,7 +1764,8 @@ def test_contract_rejects_input_signal_bound_to_other_template(chain, session):
         )
 
 
-def test_legacy_payload_without_input_signals_decodes_unrewritten(chain, session):
+@pytest.mark.parametrize("missing_field", ["input_gap_signals", "source_revision_of"])
+def test_legacy_payload_without_input_signals_decodes_unrewritten(chain, session, missing_field):
     """历史 payload 缺少新字段时按 None（来源未知）解码，读取绝不改写旧行。"""
     t = _template(
         session, chain, requirement_id="prov-legacy",
@@ -1729,24 +1783,25 @@ def test_legacy_payload_without_input_signals_decodes_unrewritten(chain, session
         _project(chain, t, observations=(fact,), revision=1, gap_signals=[])
     )
     row = session.get(EvidenceExpectationV2Record, persisted.expectation_id)
-    assert "input_gap_signals" in json.loads(row.payload_json)
+    assert missing_field in json.loads(row.payload_json)
     # 模拟升级前的历史行：剥离新字段并用正式编码回写哈希。
     from app.storage.codecs import encode_value
 
     legacy_payload = persisted.model_dump(mode="json")
-    legacy_payload.pop("input_gap_signals")
+    legacy_payload.pop(missing_field)
     legacy_json, legacy_sha = encode_value(legacy_payload)
-    assert "input_gap_signals" not in json.loads(legacy_json)
+    assert missing_field not in json.loads(legacy_json)
     row.payload_json = legacy_json
     row.payload_sha256 = legacy_sha
     session.flush()
     session.expire_all()
 
     decoded = repository.get(persisted.expectation_id)
-    assert decoded.input_gap_signals is None
+    assert getattr(decoded, missing_field) is None
     assert decoded.status == persisted.status
     row_after = session.get(EvidenceExpectationV2Record, persisted.expectation_id)
     assert row_after.payload_sha256 == legacy_sha
+    assert row_after.payload_json == legacy_json
 
 
 def test_same_visible_status_different_input_provenance_appends_revision(chain, session):

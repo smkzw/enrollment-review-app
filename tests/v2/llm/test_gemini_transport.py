@@ -43,11 +43,13 @@ def _gemini_env(**extra) -> dict:
     return {
         "INDEPENDENT_VLM_API_KEY": "main-a-key",
         "PAGE_REVIEW_MAIN_B_PROVIDER": "google-antigravity",
+        "PAGE_REVIEW_MAIN_B_MODEL": "gemini-3.7-flash",
+        "PAGE_REVIEW_MAIN_B_REASONING_EFFORT": "high",
         "GEMINI_ACCESS_TOKEN": "gem-token",
         "GEMINI_PROJECT_ID": "proj-1",
         "PAGE_REVIEW_MAIN_B_BASE_URL": GEMINI_ENDPOINT,
         "PAGE_REVIEW_CLOUD_CONCURRENCY": "2",
-        "PAGE_REVIEW_MAX_TOKENS": "12000",
+        "PAGE_REVIEW_MAX_TOKENS": "65536",
         **extra,
     }
 
@@ -319,7 +321,7 @@ def test_truncated_stream_maps_to_length_and_budget_doubles(monkeypatch) -> None
 
     _install_stream(monkeypatch, responder)
     record = asyncio.run(read_page(_gemini_route(), _page_input(), _clause_pack()))
-    assert budgets == [12000, 24000]
+    assert budgets == [65536, 131072]
     assert record.finish_reason == "stop"
     assert record.fallback_used is False
 
@@ -428,12 +430,13 @@ def _gemenv_http() -> dict:
 def test_default_main_b_identity_reads_without_credentials(monkeypatch) -> None:
     monkeypatch.setattr(harness, "PAGE_REVIEW_MAIN_B_PROVIDER", "google-antigravity")
     monkeypatch.setattr(harness, "PAGE_REVIEW_MAIN_B_MODEL", "gemini-3.7-flash")
+    monkeypatch.setattr(harness, "PAGE_REVIEW_MAIN_B_REASONING_EFFORT", "high")
     monkeypatch.setattr(harness, "PAGE_REVIEW_MAIN_B_BASE_URL", GEMINI_ENDPOINT)
     monkeypatch.setattr(harness, "GEMINI_ACCESS_TOKEN", "")
     monkeypatch.setattr(harness, "GEMINI_PROJECT_ID", "")
     monkeypatch.setattr(harness, "PAGE_REVIEW_MAIN_A_API_KEY", "")
     routes = require_page_reader_routes(
-        {"PAGE_REVIEW_CLOUD_CONCURRENCY": "2", "PAGE_REVIEW_MAX_TOKENS": "12000"},
+        {"PAGE_REVIEW_CLOUD_CONCURRENCY": "2", "PAGE_REVIEW_MAX_TOKENS": "65536"},
         require_credentials=False,
     )
     assert len(main_reader_identity(routes)) == 64
@@ -441,7 +444,7 @@ def test_default_main_b_identity_reads_without_credentials(monkeypatch) -> None:
     assert routes[PageReviewLane.MAIN_B].model == "gemini-3.7-flash"
     with pytest.raises(PageReviewConfigError, match="缺少逐页判读凭据"):
         require_page_reader_routes(
-            {"PAGE_REVIEW_CLOUD_CONCURRENCY": "2", "PAGE_REVIEW_MAX_TOKENS": "12000"}
+            {"PAGE_REVIEW_CLOUD_CONCURRENCY": "2", "PAGE_REVIEW_MAX_TOKENS": "65536"}
         )
 
 
@@ -511,5 +514,5 @@ def test_historical_local_provider_identity_still_resolvable() -> None:
         "PAGE_REVIEW_MAIN_B_BASE_URL": "http://127.0.0.1:8002/v1",
     })
     assert routes[PageReviewLane.MAIN_B].provider == "mtplx"
-    assert routes[PageReviewLane.MAIN_B].reasoning_effort == "high"
+    assert routes[PageReviewLane.MAIN_B].reasoning_effort == "xhigh"
     assert routes[PageReviewLane.MAIN_B].project_id == ""

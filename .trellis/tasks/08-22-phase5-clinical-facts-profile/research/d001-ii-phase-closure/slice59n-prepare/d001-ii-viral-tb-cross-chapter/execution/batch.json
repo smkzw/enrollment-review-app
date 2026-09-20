@@ -1,0 +1,470 @@
+{
+  "batch_id": "pcb-741f03112f25c49500da007b",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [],
+  "context_structure_unit_ids": [],
+  "context_units": [],
+  "coverage_manifest_id": "manifest:slice59n-viral-tb-reps",
+  "known_official_targets": [
+    {
+      "catalog_item_id": "pcm-row-761a05dceb59800d35de15eb",
+      "label": "结核感染筛查及预防治疗风险",
+      "official_code": "EX-09",
+      "position": 15,
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "γ-干扰素释放试验结果显示潜伏性结核感染证据，定义为：筛选时γ-干扰素释放试验检测呈阳性或连续两次γ-干扰素释放试验结果不确定，且无临床症状。除非有记录表明参与者已经完成充分的结核潜伏感染的治疗，或者在首次给药前至少4周开始预防性治疗，并且同意完成后续预防性治疗疗程，预防措施的整个疗程不必在首次给药前完成。",
+        "在筛选期间，研究者判断存在活动性结核病的体征或症状；",
+        "不允许使用利福平或利福喷丁进行结核预防。",
+        "符合以下任一项结核筛查标准：",
+        "有活动性结核感染的现病史或既往病史；",
+        "胸部CT提示当前或既往活动性结核感染；"
+      ],
+      "source_span_ids": [
+        "span-19e8610e18ab91904f94eeb0295a90b9",
+        "span-2b6db1412472805ddd31a8595940dd4e",
+        "span-8268c906ae0d5a62201932240f3ce54b",
+        "span-de40e66cf4537055654ddb605e2100e3",
+        "span-de8a9b3139ae2f1a89349543a31642ed",
+        "span-e55345e2ccdd449e1986b83cf9b50701"
+      ]
+    },
+    {
+      "catalog_item_id": "pcm-row-759cd0638a6a427a10a3bceb",
+      "label": "乙肝、丙肝、HIV及梅毒感染筛查",
+      "official_code": "EX-22",
+      "position": 28,
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "梅毒特异性抗体试验阳性（梅毒非特异性抗体结果为阴性，并经研究者判断为过去曾感染梅毒但已治愈的参与者除外）；",
+        "人类免疫缺陷病毒抗体（Hepatitis C Virus Ribonucleic Acid，HIV Ab）阳性；",
+        "丙型肝炎（Hepatitis C Virus，HCV）抗体阳性，且HCV-RNA拷贝数阳性（定义为超过研究中心检测值正常范围上限）；",
+        "乙型肝炎：表面抗原（Hepatitis B surface antigen，HBsAg）阳性，或核心抗体（Hepatitis B surface antibody，HBcAb）阳性且乙型肝炎病毒脱氧核糖核酸（Hepatitis B virus Deoxyribonucleic acid，HBV-DNA）拷贝数阳性（定义为超过研究中心检测值正常范围上限）；",
+        "筛选访视时存在下列任一感染者："
+      ],
+      "source_span_ids": [
+        "span-5f5d0986b69d1f617cc18deeda05e9ee",
+        "span-6599014fccd0daa2c6a77da3b03001af",
+        "span-8f24d0acc9d39811c6fcbfaad01f7903",
+        "span-bd8cefa0f20536359005270bca4c1850",
+        "span-e945e18722fe7a6b21c22815fdbea783"
+      ]
+    }
+  ],
+  "known_procedure_targets": [
+    {
+      "catalog_item_id": "pcm-row-2a4db6b98190f7f0c22da3b3",
+      "label": "病毒学检查",
+      "position": 50,
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "病毒学检查：乙型肝炎表面抗原（HBsAg）、乙型肝炎核心抗体（HBcAb）、丙型肝炎抗体（HCVAb）、人体免疫缺陷病毒抗体（HIVAb）、梅毒特异性抗体检查。如乙肝表面抗原阴性但乙肝核心抗体阳性，则进行乙肝病毒DNA定量检测。若丙型肝炎（HCV）抗体阳性，则进行HCV-RNA定量检测。若梅毒特异性抗体检查阳性，则进行梅毒非特异性抗体检查，并由研究者判断为是否为过去曾感染梅毒但已治愈的参与者。",
+        "病毒学检查^14 | X",
+        "病毒学检查^14 | X"
+      ],
+      "source_span_ids": [
+        "span-08bee5e666e8f0ae3c7cc0437d7c4aa1",
+        "span-53ec4e9bb6ae525aa997ce9e0bffbb30",
+        "span-f300202c24ed5467ad851795abb9b475"
+      ],
+      "visit_instance": "筛选访视"
+    },
+    {
+      "catalog_item_id": "pcm-row-e190c160c55279c0aaf5f5a2",
+      "label": "结核检测",
+      "position": 51,
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "结核检测^15 | X",
+        "结核检测^15 | X",
+        "结核检测：筛选期进行γ干扰素释放试验（即QFT或T-SPOT试验）。"
+      ],
+      "source_span_ids": [
+        "span-3d5f1e52d0bfa96d4dc8677b9a63892f",
+        "span-9157bdc7ebe0976aeab45940ca2e491d",
+        "span-bc91034d48ed3caa604f5903ff46dd81"
+      ],
+      "visit_instance": "筛选访视"
+    }
+  ],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线及随机前复核",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线及随机前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    }
+  ],
+  "owned_source_span_ids": [
+    "body.p802",
+    "body.p803",
+    "body.p804",
+    "body.p805",
+    "body.p806",
+    "body.p807",
+    "body.p808",
+    "body.p809",
+    "body.p810",
+    "body.p811",
+    "body.p812",
+    "body.p813"
+  ],
+  "owned_structure_unit_ids": [
+    "su-6b20196a3cc48412f22fbace",
+    "su-b67affac91182c7f62884569",
+    "su-86389bb90acd044a0835089c",
+    "su-3de4633dd1cb5721547f0bb2",
+    "su-038b2b277113e42b60b36f72",
+    "su-7f53927513e2fea7b60619c3",
+    "su-df28162a093632765e150d0a",
+    "su-46e60f29a998dc32549efb92",
+    "su-4bf2b42795a5d8578ec4644f",
+    "su-c07db5fdf0c3f1acc7545649",
+    "su-9b53b022c1020197079693ea",
+    "su-0d7e3607dad6cd383ba337ca"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "②根据新出现的安全性数据，经研究者和申办者同意，可能需要进行其他检测。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "实验室检查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p802"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25680,
+      "source_ref": "body.p802",
+      "source_span_ids": [
+        "body.p802"
+      ],
+      "structure_unit_id": "su-6b20196a3cc48412f22fbace",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "病毒学检查",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "病毒学检查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p803"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25690,
+      "source_ref": "body.p803",
+      "source_span_ids": [
+        "body.p803"
+      ],
+      "structure_unit_id": "su-b67affac91182c7f62884569",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "将根据标准实验室程序进行包括乙肝表面抗原、乙肝表面抗体、乙肝e抗原、乙肝e抗体、乙肝核心抗体、丙型肝炎病毒抗体、人类免疫缺陷病毒抗体、梅毒特异性抗体检查。可接受在首次给药前28天内的结果，筛选期/基线期无需再次检查。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "病毒学检查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p804"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25700,
+      "source_ref": "body.p804",
+      "source_span_ids": [
+        "body.p804"
+      ],
+      "structure_unit_id": "su-86389bb90acd044a0835089c",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "乙型肝炎表面抗原阴性且乙型肝炎核心抗体阳性的参与者，需要进行HBV-DNA检测；丙型肝炎病毒抗体阳性的参与者，需要进行HCV-RNA检测。若梅毒特异性抗体检查阳性，则进行梅毒非特异性抗体检查。可接受在首次给药前28天内的结果，无需再次检查。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "病毒学检查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p805"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25710,
+      "source_ref": "body.p805",
+      "source_span_ids": [
+        "body.p805"
+      ],
+      "structure_unit_id": "su-3de4633dd1cb5721547f0bb2",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "结核筛查",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "结核筛查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p806"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25720,
+      "source_ref": "body.p806",
+      "source_span_ids": [
+        "body.p806"
+      ],
+      "structure_unit_id": "su-038b2b277113e42b60b36f72",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "如果γ-干扰素释放试验为阳性，则必须通过胸部CT进一步评估以确认结核状态（活动性或潜伏性）。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "结核筛查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p807"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25730,
+      "source_ref": "body.p807",
+      "source_span_ids": [
+        "body.p807"
+      ],
+      "structure_unit_id": "su-7f53927513e2fea7b60619c3",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "−有活动性结核证据的参与者不得被随机分组；",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "结核筛查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p808"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25740,
+      "source_ref": "body.p808",
+      "source_span_ids": [
+        "body.p808"
+      ],
+      "structure_unit_id": "su-df28162a093632765e150d0a",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "−有潜伏性结核证据的参与者不得被随机分组，除非在随机分组前已完成至少4周的适当治疗疗程。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "结核筛查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p809"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25750,
+      "source_ref": "body.p809",
+      "source_span_ids": [
+        "body.p809"
+      ],
+      "structure_unit_id": "su-46e60f29a998dc32549efb92",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "注：",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "结核筛查"
+      ],
+      "is_footnote_or_note": true,
+      "member_source_refs": [
+        "body.p810"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25760,
+      "source_ref": "body.p810",
+      "source_span_ids": [
+        "body.p810"
+      ],
+      "structure_unit_id": "su-4bf2b42795a5d8578ec4644f",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "footnote_or_annotation"
+    },
+    {
+      "excerpt": "在筛选时，如果参与者有潜伏性结核感染的证据，必须在首次给药前至少4周开始预防性治疗，并且同意完成后续预防性治疗疗程；预防措施的整个疗程不必在首次给药前完成。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "结核筛查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p811"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25770,
+      "source_ref": "body.p811",
+      "source_span_ids": [
+        "body.p811"
+      ],
+      "structure_unit_id": "su-c07db5fdf0c3f1acc7545649",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "不允许使用利福平或利福喷丁进行结核预防。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "结核筛查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p812"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25780,
+      "source_ref": "body.p812",
+      "source_span_ids": [
+        "body.p812"
+      ],
+      "structure_unit_id": "su-9b53b022c1020197079693ea",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "如结核检测结果为不确定者，可进行1次复测。",
+      "heading_path": [
+        "研究评估和程序",
+        "研究期间的检查和评估",
+        "结核筛查"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p813"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 25790,
+      "source_ref": "body.p813",
+      "source_span_ids": [
+        "body.p813"
+      ],
+      "structure_unit_id": "su-0d7e3607dad6cd383ba337ca",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    }
+  ],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "study_phase": "phase_ii"
+}

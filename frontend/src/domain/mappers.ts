@@ -225,6 +225,7 @@ const anchorLabel: Record<TimeConstraintWire["anchor_type"], string> = {
   last_dose_date: "末次给药",
   study_completion_date: "研究完成",
   event_date: "事件发生",
+  review_node_date: "当前审核节点日期",
 };
 
 function formatDayRange(

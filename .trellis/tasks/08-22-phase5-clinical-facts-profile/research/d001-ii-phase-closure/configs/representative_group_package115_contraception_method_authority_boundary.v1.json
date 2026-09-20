@@ -1,0 +1,635 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-package115-contraception-method-authority-boundary",
+  "task_id": "phase5-slice61db-20260830",
+  "worker": "worker_02",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/coverage_manifest.json",
+  "study_phase": "phase_ii",
+  "expected_package_ordinal": 115,
+  "expected_package_id": "pap-9fb70d121e089bc533c21255",
+  "owned_source_refs": [
+    "body.p1322",
+    "body.p1323",
+    "body.p1324",
+    "body.p1325",
+    "body.p1326",
+    "body.p1327",
+    "body.p1328",
+    "body.p1329",
+    "body.p1330",
+    "body.p1331",
+    "body.p1332",
+    "body.p1333"
+  ],
+  "attached_source_refs": [],
+  "required_candidate_source_refs": [],
+  "forbidden_candidate_source_refs": [
+    "body.p1322",
+    "body.p1323",
+    "body.p1324",
+    "body.p1325",
+    "body.p1326",
+    "body.p1327",
+    "body.p1328",
+    "body.p1329",
+    "body.p1330",
+    "body.p1331",
+    "body.p1332",
+    "body.p1333"
+  ],
+  "pre_enrollment_source_refs": [],
+  "structural_only_source_refs": [
+    "body.p1323"
+  ],
+  "attached_structural_only_source_refs": [],
+  "expected_disposition_by_source_ref": {
+    "body.p1322": "supporting_or_supplement",
+    "body.p1324": "supporting_or_supplement",
+    "body.p1325": "supporting_or_supplement",
+    "body.p1326": "supporting_or_supplement",
+    "body.p1327": "supporting_or_supplement",
+    "body.p1328": "supporting_or_supplement",
+    "body.p1329": "supporting_or_supplement",
+    "body.p1330": "supporting_or_supplement",
+    "body.p1331": "supporting_or_supplement",
+    "body.p1332": "supporting_or_supplement",
+    "body.p1333": "supporting_or_supplement"
+  },
+  "expected_workflow_stage_ids_by_source_ref": {},
+  "owned_visit_instances_by_source_ref": {},
+  "owned_procedure_semantic_families_by_source_ref": {},
+  "owned_required_action_kinds_by_source_ref": {},
+  "owned_required_procedure_target_ids_by_source_ref": {},
+  "candidate_forbidden_markers_by_source_ref": {
+    "body.p1322": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "绝经定义断裂或停经时长改写",
+      "吸收body.p1321所有权并发布候选",
+      "绝经诊断改写为入排排除标准",
+      "绝经后女性误作必须避孕",
+      "停经12个月与其他定义倒置"
+    ],
+    "body.p1323": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "避孕规定与方法标题决定受试者资格",
+      "标题误作避孕方法清单",
+      "标题改写为入排结论"
+    ],
+    "body.p1324": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "筛选阴性锚点与ICF锚点混淆",
+      "血妊娠试验阴性改作基线触发",
+      "必须开始改为建议",
+      "避孕起始时点误作入排排除",
+      "把筛选阴性触发改写为IN-06已覆盖分支重复发布"
+    ],
+    "body.p1325": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "持续和正确地使用一种高效或可接受的避孕方法",
+      "自签署知情同意书至末次给药后至少3个月的持续避孕义务重复发布",
+      "末次给药后3个月尾段锚点附到知情同意日期",
+      "时间区间起点语义丢失",
+      "禁止使用激素类避孕增量重复发布",
+      "方法讨论选择与知晓增量重复发布"
+    ],
+    "body.p1326": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "计划访视量词压缩为单一筛选节点",
+      "计划访视节点缩减或删除",
+      "未来条件伪造成当前触发",
+      "未计划访视扩散到所有节点",
+      "病历记录与同意增量重复发布"
+    ],
+    "body.p1327": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "年失败率阈值改写",
+      "高效方法定义改写为入排排除",
+      "高效方法列表压平为AND",
+      "仅含禁欲或单一方法",
+      "高效或可接受类别串线"
+    ],
+    "body.p1328": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "高效方法OR分支压平为AND",
+      "IUD必须同时满足绝育或输卵管手术",
+      "仅保留单一方法选项",
+      "IUD条件丢失"
+    ],
+    "body.p1329": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "高效方法OR分支压平为AND",
+      "男性伴侣绝育必须同时满足其他方法",
+      "仅保留单一方法选项"
+    ],
+    "body.p1330": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "高效方法OR分支压平为AND",
+      "三种输卵管手术方式压平为AND",
+      "双侧条件丢失",
+      "单侧输卵管手术即可",
+      "仅保留单一方法选项"
+    ],
+    "body.p1331": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "定期禁欲或性交中断视为与持续禁欲等效",
+      "禁欲可靠性评估丢失",
+      "禁欲可靠性评估改为固定判定",
+      "禁欲无评估即自动接受",
+      "禁欲定义改写为入排排除",
+      "禁欲定义改写为任意性行为禁绝"
+    ],
+    "body.p1332": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "男用避孕套和女用避孕套可同时使用",
+      "避孕套同时使用摩擦失效风险丢失",
+      "建议改为必须",
+      "强烈建议改为强制",
+      "妊娠检查升级为必做程序",
+      "每隔一个月经周期改作每周期必查",
+      "无杀精剂避孕套误作可接受",
+      "可接受与不可接受避孕套条件串线",
+      "末次给药结束后检查锚点丢失",
+      "月经延迟者建议丢失"
+    ],
+    "body.p1333": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "不可接受方法误作可接受方法",
+      "无杀精剂避孕套误作可接受",
+      "杀精海绵误作可接受",
+      "性交中断误作可接受",
+      "定期禁欲误作可接受",
+      "可接受与不可接受清单串线",
+      "禁欲可靠性评估与不可接受方法混淆"
+    ]
+  },
+  "candidate_required_markers_by_source_ref": {},
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "Package115严格拥有body.p1322-p1333共12个来源，位于附录1避孕的规定与方法中“2.有生育能力女性参与者的避孕规定与方法”段。模型外闭包先逐条区分语义层：p1323为小节结构标题（structural-only）；p1322绝经临床诊断定义闭合Package114的“绝经后女性”分支（p1321仅只读语境，所有权归Package114）；p1324“筛选时血妊娠试验阴性后必须开始”与p1325“签署知情同意书之日开始至末次给药后3个月”是两个不同时间锚点，不得混淆；p1325/p1326的禁止激素类避孕、方法讨论选择知晓、计划访视告知病历记录同意及条件性联系增量已由slice60m代表组验收发布，本包不得重复发布（forbidden_candidate_source_refs），仅复用其语义；p1327高效方法定义及其p1328/p1329/p1330并列OR方法选项必须保留任一项语义，不得压平为AND，p1330必须保留双侧；p1331禁欲定义及可靠性专业评估（研究的持续时间+首选和平常的生活方式）不得丢失；p1332可接受方法中男用/女用避孕套为OR但不得同时使用，末次给药结束后妊娠检查为建议/强烈建议而非必做程序；p1333不可接受方法与可接受条件不得串线。required candidates为空是防重复发布结论的逐项判断结果，不表示本包与入排无关：p1322-p1324与p1327-p1333为IN-06与妊娠/FSH控制的适用定义、方法组和证据模态支持。body.p1334起为Package116所有，仅只读语境，不得attached、处置或发布；不得回写Package114所有权。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "Package115位于Ⅱ期附录1避孕的规定与方法的“2.有生育能力女性参与者的避孕规定与方法”段。p1323仅为小节结构标题；p1322定义绝经临床诊断（连续停经12个月并排除妊娠及其他导致闭经的医疗原因），是IN-06及妊娠/FSH控制中“已绝经女性”分支（筛选FSH>40 IU/L）的适用定义支持；p1324给出筛选时血妊娠试验阴性后的避孕起始触发，与p1325的知情同意书日期起点及IN-06的ICF日期起点/末次给药后至少3个月为不同时间锚点，必须保留各自锚点语义；p1325/p1326的增量控制已在slice60m代表组验收（禁止激素类避孕、方法讨论选择知晓、计划访视告知病历记录同意、停用或怀疑怀孕立即联系），本包复用不重复发布；p1327-p1330高效方法定义及并列OR方法选项、p1331禁欲定义与可靠性专业评估、p1332可接受方法与建议性妊娠检查、p1333不可接受方法清单构成既有控制的适用定义与证据模态，不是新的独立筛选或基线动作。body.p1334起为Package116所有，只读语境不吸收。不调用临床语义模型，不发布新控制点，claims_complete=false。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    },
+    {
+      "workflow_stage_id": "flow-d1-pre-dose",
+      "review_stage": "baseline",
+      "display_name": "首次给药前复核",
+      "visit_instance": "首次给药前"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [
+      {
+        "catalog_item_id": "pcm-row-0555ca044760e4df3ef7e3c3",
+        "official_code": "IN-06",
+        "label": "生育计划限制与避孕义务",
+        "position": 6,
+        "source_span_ids": [
+          "span-29b8e3bdc286a06cba1455474402c004"
+        ]
+      }
+    ],
+    "required_procedures": [
+      {
+        "catalog_item_id": "pcm-row-18127a0dc9921364671ebb8c",
+        "label": "妊娠试验或卵泡刺激素（FSH）",
+        "visit_instance": "首次给药前",
+        "review_stage": "baseline",
+        "position": 48,
+        "source_span_ids": [
+          "span-15fa32ffb40385e4ab88ccf86b66462a",
+          "span-4ada40f46f347bdfd0dc32ff5aafd113",
+          "span-546f6512be56b354fe72bb2554734420",
+          "span-761bc18ae94f687575b4a90c1b141961",
+          "span-848273a89ac24be70490ba4b3fae89cc",
+          "span-a3581afb0d23910af48bf735f1adb67c",
+          "span-b92c9e967d4c2dcc2de1db4578476140",
+          "span-c6da936da3e233fa8e34b72fbf7c3430",
+          "span-e4fa1e71068426c0b58edeec51627061",
+          "span-fb63df5558004a5c2bb1aaef18fce384",
+          "span-fe29450e1c931ac5ed89315e91a82e33"
+        ]
+      }
+    ]
+  },
+  "ids": {
+    "manifest_id": "manifest:slice61db-package115-contraception-method-authority-boundary",
+    "catalog_id": "catalog:slice61db-package115-contraception-method-authority-boundary"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p1322": [
+      "绝经临床诊断定义完整（连续停经12个月+排除妊娠+排除其他导致闭经的医疗原因）",
+      "闭合Package114绝经后女性分支但所有权仍归Package115",
+      "不得改写为入排排除或必须避孕"
+    ],
+    "body.p1323": [
+      "小节结构标题",
+      "不得决定受试者资格或入排结论"
+    ],
+    "body.p1324": [
+      "筛选时血妊娠试验阴性后必须开始避孕",
+      "筛选阴性锚点与ICF日期锚点保持不同",
+      "必须模态不得降为建议"
+    ],
+    "body.p1325": [
+      "ICF日期起点至末次给药后3个月区间保留",
+      "禁止使用激素类避孕保留（已验收增量）",
+      "方法讨论选择知晓保留（已验收增量）",
+      "IN-06已覆盖的持续避孕义务不重复发布"
+    ],
+    "body.p1326": [
+      "计划访视点全节点告知并记录对话与同意（已验收增量）",
+      "至少1种选定方法同意保留",
+      "停用或已知/怀疑怀孕立即电话联系保留",
+      "未来条件不得伪造成当前触发",
+      "未计划访视不得扩散到所有节点"
+    ],
+    "body.p1327": [
+      "高效方法定义：持续正确使用时年失败率低于1%",
+      "包括列表为并列OR，不得压平为AND"
+    ],
+    "body.p1328": [
+      "高效方法OR选项：正确放置含铜IUD",
+      "不得要求同时满足其他方法"
+    ],
+    "body.p1329": [
+      "高效方法OR选项：男性伴侣绝育",
+      "不得要求同时满足其他方法"
+    ],
+    "body.p1330": [
+      "高效方法OR选项：双侧输卵管结扎/切除/闭塞术",
+      "三种术式为OR且保留双侧，不得压平为AND或降为单侧"
+    ],
+    "body.p1331": [
+      "禁欲定义为完全和持续避免所有异性性交",
+      "可靠性按研究持续时间与首选和平常生活方式专业评估",
+      "定期禁欲/性交中断不等同持续禁欲"
+    ],
+    "body.p1332": [
+      "可接受方法：含杀精剂男用或女用避孕套",
+      "男用与女用不得同时使用（摩擦失效风险）",
+      "末次给药结束后每隔一个月经周期妊娠检查为建议，月经延迟者强烈建议",
+      "建议模态不得升级为必做程序"
+    ],
+    "body.p1333": [
+      "不可接受方法清单完整（定期禁欲、无杀精剂避孕套、杀精海绵、性交中断）",
+      "不可接受与可接受条件不得串线",
+      "禁欲可靠性评估不与不可接受方法混淆"
+    ]
+  },
+  "exception_semantics_by_source_ref": {
+    "body.p1322": {
+      "semantic_role": "menopause_clinical_diagnosis_definition",
+      "base_rule": "女性连续停经12个月，并排除妊娠及其他可能导致闭经的医疗原因后，即可临床诊断为绝经。",
+      "exception_rule": "该句给出绝经的临床诊断定义：连续停经12个月，并排除妊娠及其他可能导致闭经的医疗原因。它是Package114“绝经后女性”（p1321）分支的完整定义来源，也是妊娠/FSH控制“已绝经女性筛选FSH>40 IU/L”分支的适用定义支持。所有权归Package115；不得改写停经时长、不得丢失排除条件、不得把定义改写为入排排除或必须避孕，也不得吸收Package114的p1321所有权。",
+      "preserve_keywords": [
+        "连续停经12个月",
+        "排除妊娠",
+        "可能导致闭经的医疗原因",
+        "临床诊断为绝经"
+      ],
+      "forbidden_inversion": "不得把绝经定义改写为排除标准、必须避孕或发布控制点；不得倒置或吸收Package114所有权。"
+    },
+    "body.p1323": {
+      "semantic_role": "appendix_contraception_section_heading_2",
+      "base_rule": "2.有生育能力女性参与者的避孕规定与方法",
+      "exception_rule": "该行是附录1避孕的规定与方法中的小节标题，仅结构来源，不构成受试者资格、入排排除或避孕执行条款。",
+      "preserve_keywords": [
+        "有生育能力女性参与者的避孕规定与方法",
+        "结构标题"
+      ],
+      "forbidden_inversion": "不得把标题改写为避孕方法清单、避孕起始义务、筛选必做或入排结论。"
+    },
+    "body.p1324": {
+      "semantic_role": "screening_negative_contraception_start_trigger",
+      "base_rule": "在筛选时血妊娠试验阴性后，必须开始采取适当的避孕措施。",
+      "exception_rule": "该句是避孕起始触发：以筛选时血妊娠试验阴性为锚点，必须开始采取适当的避孕措施。它与p1325的“签署知情同意书之日开始”及IN-06的ICF日期起点/末次给药后至少3个月是不同时间锚点，必须保留各自锚点，不得混淆或合并；必须模态不得降为建议。IN-06已覆盖的持续避孕义务分支不得重复发布。",
+      "preserve_keywords": [
+        "筛选时",
+        "血妊娠试验阴性",
+        "必须开始",
+        "适当的避孕措施"
+      ],
+      "forbidden_inversion": "不得把筛选阴性锚点与ICF锚点混淆，不得把必须改为建议，不得改写为入排排除。"
+    },
+    "body.p1325": {
+      "semantic_role": "icf_start_duration_prohibition_discussion_increments",
+      "base_rule": "从签署知情同意书之日开始至研究药物末次给药后3个月为止，期间参与者必须同意持续和正确地使用一种高效或可接受的避孕方法进行避孕（禁止使用激素类避孕）。研究者或指定人员应与参与者讨论，确认参与者已从允许的避孕方法中选择了最适合其避孕的方法（下述），并确认参与者已知晓研究期间需持续并正确地使用该方法。",
+      "exception_rule": "该句给出以签署知情同意书之日为起点的持续避孕区间（至末次给药后3个月），以及禁止激素类避孕和方法讨论/选择/知晓确认。持续避孕义务本身由IN-06覆盖（ICF日期起点+末次给药后至少3个月），禁止激素类避孕与讨论选择知晓增量已在slice60m代表组验收发布；本包复用其语义，不得重复发布候选。尾段时长不得错误附到知情同意日期。",
+      "preserve_keywords": [
+        "签署知情同意书之日开始",
+        "末次给药后3个月",
+        "禁止使用激素类避孕",
+        "讨论",
+        "选择",
+        "知晓"
+      ],
+      "forbidden_inversion": "不得把IN-06已覆盖的持续避孕义务或已验收增量重复发布为候选；不得混淆ICF起点与筛选阴性锚点。"
+    },
+    "body.p1326": {
+      "semantic_role": "planned_visit_counselling_record_conditional_contact_increments",
+      "base_rule": "在研究流程中计划的访视点，研究者或指定人员将告知参与者需要持续使用高效或可接受的避孕方法，并在参与者病历中记录与之的对话和参与者的同意（参与者需要确认她同意将持续并正确使用至少1种选定的避孕方法）。此外，还应告知参与者，如果她已停用所选的避孕方法，或，已知或怀疑怀孕，需立即打电话给研究者或指定人员。",
+      "exception_rule": "该句是计划访视点的告知、病历记录对话与同意、以及停用方法或已知/怀疑怀孕时立即电话联系的条件指令。量词“计划的访视点”必须映射到冻结目录中每个访视节点（筛选、基线）分别判定，不得压缩为单一筛选节点，也不得扩散到未计划访视；未来条件不得伪造成当前触发。该增量已在slice60m代表组验收发布，本包复用其语义，不得重复发布候选。",
+      "preserve_keywords": [
+        "计划的访视点",
+        "病历中记录",
+        "对话",
+        "同意",
+        "至少1种",
+        "立即打电话",
+        "停用",
+        "怀孕"
+      ],
+      "forbidden_inversion": "不得缩减计划访视节点、把未来条件伪造为当前触发或重复发布已验收增量。"
+    },
+    "body.p1327": {
+      "semantic_role": "high_efficiency_method_definition",
+      "base_rule": "高效的避孕方法是指持续和正确地使用时，年失败率低于1%的避孕方法。包括：",
+      "exception_rule": "该句定义高效避孕方法：持续和正确地使用时年失败率低于1%，并引出下列并列OR方法选项（p1328含铜IUD、p1329男性伴侣绝育、p1330双侧输卵管结扎/切除/闭塞术）。定义是IN-06“采用高效避孕方法”分支的适用语义，不得把方法选项压平为AND，不得改写阈值或类别。",
+      "preserve_keywords": [
+        "年失败率低于1%",
+        "持续和正确地使用",
+        "高效",
+        "包括"
+      ],
+      "logic_tree": {
+        "operator": "OR",
+        "parent": "body.p1327",
+        "children": [
+          "body.p1328",
+          "body.p1329",
+          "body.p1330"
+        ]
+      },
+      "forbidden_inversion": "不得把高效方法OR列表压平为AND，不得丢失任一方法选项，不得把高效/可接受类别串线。"
+    },
+    "body.p1328": {
+      "semantic_role": "high_efficiency_method_or_branch_copper_iud",
+      "base_rule": "正确放置含铜的宫内节育器（Intrauterine-device，IUD）",
+      "exception_rule": "这是p1327下高效方法并列OR选项之一：正确放置含铜的宫内节育器（IUD）。单独选择该选项即可满足高效方法，不得要求同时满足绝育或输卵管手术。",
+      "preserve_keywords": [
+        "正确放置含铜的宫内节育器",
+        "IUD",
+        "并列OR"
+      ],
+      "forbidden_inversion": "不得把OR压平为AND，不得要求IUD与其他方法同时满足，不得丢失该选项。"
+    },
+    "body.p1329": {
+      "semantic_role": "high_efficiency_method_or_branch_male_sterilization",
+      "base_rule": "男性伴侣绝育",
+      "exception_rule": "这是p1327下高效方法并列OR选项之一：男性伴侣绝育。单独选择该选项即可满足高效方法，不得要求同时满足其他方法。",
+      "preserve_keywords": [
+        "男性伴侣绝育",
+        "并列OR"
+      ],
+      "forbidden_inversion": "不得把OR压平为AND，不得要求与其他方法同时满足，不得丢失该选项。"
+    },
+    "body.p1330": {
+      "semantic_role": "high_efficiency_method_or_branch_bilateral_tubal",
+      "base_rule": "双侧输卵管结扎/双侧输卵管切除术/双侧输卵管闭塞术",
+      "exception_rule": "这是p1327下高效方法并列OR选项之一：双侧输卵管结扎/双侧输卵管切除术/双侧输卵管闭塞术。三种术式为OR选择，必须保留“双侧”；不得要求三种术式同时满足，也不得降为单侧。",
+      "preserve_keywords": [
+        "双侧",
+        "输卵管结扎",
+        "输卵管切除",
+        "输卵管闭塞",
+        "并列OR"
+      ],
+      "forbidden_inversion": "不得把三种术式压平为AND，不得丢失双侧条件，不得降为单侧。"
+    },
+    "body.p1331": {
+      "semantic_role": "abstinence_definition_and_reliability_professional_assessment",
+      "base_rule": "禁欲。禁欲定义为完全和持续地避免所有的异性性交。禁欲的可靠性需要根据研究的持续时间以及参与者的首选和平常的生活方式进行评估",
+      "exception_rule": "该句定义禁欲为完全和持续地避免所有异性性交，并要求按研究的持续时间以及参与者的首选和平常的生活方式对可靠性进行专业评估。定期禁欲（推算日历法等）或性交中断（体外射精）不等同于持续禁欲，不得等效替代；可靠性评估是专业判断，不得丢失或改为固定判定。",
+      "preserve_keywords": [
+        "完全和持续地避免所有的异性性交",
+        "可靠性",
+        "研究的持续时间",
+        "首选和平常的生活方式",
+        "评估"
+      ],
+      "forbidden_inversion": "不得把定期禁欲/性交中断等同于持续禁欲，不得丢失可靠性专业评估，不得改写为入排排除。"
+    },
+    "body.p1332": {
+      "semantic_role": "acceptable_methods_condoms_or_exclusive_and_pregnancy_check_recommendation",
+      "base_rule": "可接受的避孕方法：含杀精剂的男用避孕套或女用避孕套。男用避孕套和女用避孕套不能同时使用（存在因摩擦失效的风险）。采用可接受的避孕方法时，建议参与者在末次给药结束后每隔一个月经周期进行妊娠检查。对于月经延迟者，强烈建议进行妊娠检查以确认是否怀孕，此建议也适用于月经周期较长或不规律的参与者。",
+      "exception_rule": "该句定义可接受的避孕方法：含杀精剂的男用避孕套或女用避孕套，二者为OR选择但不能同时使用（摩擦失效风险）；并给出末次给药结束后每隔一个月经周期妊娠检查的建议，月经延迟者及周期较长或不规律者为强烈建议。建议/强烈建议模态不得升级为必做程序；含杀精剂条件不得丢失，不得与p1333无杀精剂避孕套的不可接受条件串线。",
+      "preserve_keywords": [
+        "含杀精剂",
+        "男用避孕套",
+        "女用避孕套",
+        "不能同时使用",
+        "摩擦失效",
+        "每隔一个月经周期",
+        "建议",
+        "强烈建议",
+        "末次给药结束后"
+      ],
+      "logic_tree": {
+        "operator": "OR",
+        "parent": "body.p1332",
+        "children_choices": [
+          "含杀精剂的男用避孕套",
+          "女用避孕套"
+        ],
+        "mutual_exclusion": "男用避孕套和女用避孕套不能同时使用（存在因摩擦失效的风险）"
+      },
+      "forbidden_inversion": "不得允许两套同时使用，不得把建议/强烈建议升级为必做，不得丢失含杀精剂条件或与不可接受条件串线。"
+    },
+    "body.p1333": {
+      "semantic_role": "unacceptable_methods_list",
+      "base_rule": "不可接受的避孕方法：评价参与者的避孕首选，以及跟日常生活方式相关的禁欲的可靠性。定期禁欲（如推算日历法、排卵期法、症状体温避孕法或排卵后安全期避孕法）、男性或女性用避孕套（无杀精剂）、杀精海绵等，以及性交中断（或体外射精）都是本研究不可接受的避孕方法。",
+      "exception_rule": "该句列出本研究不可接受的避孕方法：定期禁欲（推算日历法、排卵期法、症状体温避孕法、排卵后安全期避孕法）、无杀精剂的男性或女性用避孕套、杀精海绵、性交中断（体外射精）。不可接受清单不得与p1332可接受条件串线；禁欲可靠性评估（p1331）不得与不可接受方法混淆。",
+      "preserve_keywords": [
+        "定期禁欲",
+        "推算日历法",
+        "排卵期法",
+        "症状体温避孕法",
+        "排卵后安全期避孕法",
+        "男性或女性用避孕套（无杀精剂）",
+        "杀精海绵",
+        "性交中断",
+        "体外射精",
+        "不可接受"
+      ],
+      "forbidden_inversion": "不得把不可接受方法误作可接受，不得丢失无杀精剂条件，不得与可接受清单串线。"
+    }
+  },
+  "later_package_boundary": {
+    "read_only": true,
+    "note": "Package114严格拥有body.p1310-p1321并止于body.p1321；Package115严格且仅拥有body.p1322-p1333，为附录1避孕的规定与方法中“2.有生育能力女性参与者的避孕规定与方法”段全部内容；Package116（pap-1a482edf71b15f7aba00234a）自body.p1334起。body.p1321与body.p1334出现在Package115冻结context_units中，分别作为Package114“绝经后女性”分支与Package116病史/月经史/最近性行为询问的只读语境，不得attached、处置或发布；body.p1334尤其不得被Package115吸收（context明确指出body.p1334是Package116-owned context only）。p1325/p1326增量已在slice60m代表组验收，本包forbidden_candidate_source_refs防止重复发布。其余37项context_units（共39项，含p1321/p1334）继续只读且不升格。必须保留p1324筛选阴性锚点与p1325/IN-06的ICF日期锚点差异、高效方法OR、避孕套互斥、建议模态与禁欲可靠性评估；不调用临床语义模型，不发布新控制点，claims_complete=false。",
+    "excluded_unowned_structure_refs": [],
+    "forbidden_next_package_refs": [
+      "body.p1334",
+      "body.p1335",
+      "body.p1336",
+      "body.p1337",
+      "body.p1338",
+      "body.p1339",
+      "body.p1340",
+      "body.p1341",
+      "body.p1343",
+      "body.p1344",
+      "body.p1345",
+      "body.p1346"
+    ],
+    "expected_owners_by_span": {
+      "body.p1307": 113,
+      "body.p1308": 113,
+      "body.p1321": 114,
+      "body.p1322": 115,
+      "body.p1323": 115,
+      "body.p1324": 115,
+      "body.p1325": 115,
+      "body.p1326": 115,
+      "body.p1327": 115,
+      "body.p1328": 115,
+      "body.p1329": 115,
+      "body.p1330": 115,
+      "body.p1331": 115,
+      "body.p1332": 115,
+      "body.p1333": 115,
+      "body.p1334": 116,
+      "body.p1335": 116,
+      "body.p515": 45,
+      "body.p516": 45,
+      "body.p567": 45,
+      "body.p575": 46,
+      "body.p581": 46,
+      "body.p583": 46,
+      "body.p584": 47,
+      "body.p594": 48,
+      "body.p618": 50,
+      "body.p623": 50,
+      "body.p838": 75
+    },
+    "unowned_context_source_refs": [
+      "body.t5.r0",
+      "body.t6.r0",
+      "body.p446",
+      "body.p455",
+      "body.p465",
+      "body.p483",
+      "body.p502",
+      "body.t7.r0",
+      "body.p839",
+      "body.p840",
+      "body.p869",
+      "body.p903",
+      "body.p915",
+      "body.p931",
+      "body.p935",
+      "body.p936",
+      "body.p938",
+      "body.p972",
+      "body.p976",
+      "body.p978",
+      "body.p1206",
+      "body.p1207",
+      "body.p1210",
+      "body.p1214",
+      "body.p1216",
+      "body.p1221"
+    ]
+  },
+  "notes": [
+    "模型外闭包：Package115恰好拥有body.p1322-p1333共12个来源；无attached来源；structural-only为p1323小节标题；p1321（Package114）与p1334（Package116）仅只读语境且不升格。",
+    "时间锚点必须分离：p1324筛选时血妊娠试验阴性；p1325/IN-06签署知情同意书之日开始至末次给药后至少3个月；妊娠/FSH控制的筛选/基线/首次给药前检测锚点。不得混淆或合并。",
+    "方法组逻辑必须保留：p1327下p1328/p1329/p1330为并列OR，不得压平为AND，p1330保留双侧；p1332男用/女用避孕套为OR但不得同时使用；无杀精剂避孕套在p1333为不可接受，不得与p1332串线。",
+    "模态必须保留：p1324必须开始、p1325必须同意为强制模态；p1332末次给药结束后妊娠检查为建议、月经延迟者为强烈建议，不得升级为必做程序；禁欲可靠性为专业评估，定期禁欲/性交中断不得等同于持续禁欲。",
+    "p1322-p1324与p1327-p1333的适用定义、方法组与证据模态按supporting_or_supplement背景支持既有IN-06与妊娠/FSH控制，不因防重复发布降为与入排无关；候选数不预声明，required candidates为空是逐项防重复判断的结果。",
+    "p1325/p1326增量已在slice60m代表组验收发布（parent-clinical-acceptance.json），本包forbidden_candidate_source_refs防重复发布；IN-06已覆盖的持续避孕义务不得以新候选重复。",
+    "Package114止于p1321不回写；Package116自p1334起不吸收、不attached、不处置、不发布。claims_complete=false；不调用临床语义模型、不发布新控制点、不进入受试者、OCR、Patient Profile或浏览器流程。"
+  ]
+}

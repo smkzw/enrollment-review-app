@@ -404,6 +404,20 @@ class JudgmentSearchCoverageSummary(JudgmentSearchModel):
     unreadable_channels: tuple[JudgmentSearchChannelGap, ...] = ()
     ambiguous_channels: tuple[JudgmentSearchChannelGap, ...] = ()
 
+    @model_validator(mode="after")
+    def validate_summary_consistency(self) -> "JudgmentSearchCoverageSummary":
+        if (
+            self.status
+            == JudgmentSearchCoverageStatus.ALL_SUPPLIED_PAGES_SEARCHED_WITHOUT_CANDIDATE
+            and (
+                self.found_candidates or self.missing_lanes
+                or self.pages_without_lane_result or self.unreadable_channels
+                or self.ambiguous_channels
+            )
+        ):
+            raise ValueError("未见候选的汇总状态与保留的候选或未完成记录不一致")
+        return self
+
 
 __all__ = [
     "JUDGMENT_SEARCH_CONTRACT_VERSION",

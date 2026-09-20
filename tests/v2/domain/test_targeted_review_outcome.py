@@ -15,6 +15,10 @@ def agreement():
     {"outcome_kind": "accepted"}, {"round_number": 3},
     {"agreed_candidate_targets": []}, {"requires_user_review": True},
     {"read_failures": [{"lane": "main-B", "failure_kind": "schema"}]},
+    {"agreed_candidate_rounds": {"检查项目": 2}},
+    {"agreed_candidate_rounds": {"另一个项目": 1}},
+    {"agreed_candidate_targets": ["检查项目", "检查项目"]},
+    {"pending_targets": ["检查项目"]},
 ])
 def test_auxiliary_outcome_rejects_acceptance_and_clinical_findings(patch):
     with pytest.raises(ValidationError):

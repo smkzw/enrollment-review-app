@@ -18,6 +18,7 @@ class TargetedReviewOutcome(BaseModel):
     clinical_findings_allowed: Literal[False] = False
     cue_kind: Literal["blind", "prior_excerpts_visible"]
     agreed_candidate_targets: list[str] = Field(default_factory=list)
+    agreed_candidate_rounds: dict[str, Literal[1, 2]] = Field(default_factory=dict)
     pending_targets: list[str] = Field(default_factory=list)
     handwriting_candidate_agreement: bool = False
     handwriting_pending: bool = False
@@ -26,6 +27,14 @@ class TargetedReviewOutcome(BaseModel):
 
     @model_validator(mode="after")
     def check_outcome(self):
+        if (set(self.agreed_candidate_targets) & set(self.pending_targets)
+                or len(set(self.agreed_candidate_targets)) != len(self.agreed_candidate_targets)
+                or len(set(self.pending_targets)) != len(self.pending_targets)):
+            raise ValueError("复核项目不得重复或同时一致和待核实")
+        if self.agreed_candidate_rounds and (
+                set(self.agreed_candidate_rounds) != set(self.agreed_candidate_targets)
+                or any(number > self.round_number for number in self.agreed_candidate_rounds.values())):
+            raise ValueError("一致候选必须对应已经完成的复核轮次")
         if self.handwriting_candidate_agreement and self.handwriting_pending:
             raise ValueError("手写复核不能同时一致和待核实")
         pending = bool(self.pending_targets) or self.handwriting_pending

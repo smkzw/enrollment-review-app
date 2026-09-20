@@ -1,0 +1,8 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_viral.v1.json",
+  "artifact_dir_name": "phase5-slice59n-d001-viral-control-replay-contract-v3-20260828",
+  "notes": [
+    "验证无条件必做检查只进入义务层，不再伪装为触发条件。"
+  ]
+}

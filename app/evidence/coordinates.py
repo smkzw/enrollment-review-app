@@ -10,7 +10,8 @@ from app.domain.contracts.enums import CoordinateSpace
 from app.domain.contracts.evidence import BoundingBox
 from app.domain.contracts.ocr import CoordinateFrame
 
-COORDINATE_TRANSFORM_VERSION = "slice4.0/v1"
+# v2 binds PageArtifact dimensions to rendered pixels; native sidecars keep PDF points.
+COORDINATE_TRANSFORM_VERSION = "slice4.0/v2"
 
 
 class CoordinateError(ValueError):

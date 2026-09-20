@@ -1,0 +1,20 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_history_collection.v5.json",
+  "group_id": "d001-ii-history-treatment-collection-v6",
+  "task_id": "phase5-slice60t-20260828",
+  "artifact_dir_name": "phase5-slice60t-d001-history-treatment-collection-replay-exact-visit-20260828",
+  "owned_visit_instances_by_source_ref": {
+    "body.p858": "基线访视",
+    "body.p871": "D1首次给药前"
+  },
+  "ids": {
+    "manifest_id": "manifest:slice60t-history-treatment-reps",
+    "catalog_id": "catalog:slice60t-history-treatment-reps"
+  },
+  "notes": [
+    "v5技术绿色结果保持不可变；父级拒绝其把筛选或基线收集要求扩展到D1，并把基线复核同时绑定D1。",
+    "v6冻结p858在基线访视执行、p871在D1首次给药前执行；‘自筛选/上次访视以来’仅是回顾区间起点。",
+    "实际执行访视归属是通用结构合同，不包含D001特异医学答案；人工检查清单不进入Agent修订提示。"
+  ]
+}

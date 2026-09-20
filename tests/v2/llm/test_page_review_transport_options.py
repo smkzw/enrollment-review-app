@@ -9,7 +9,7 @@ from app.llm.page_review_transport_options import page_completion_options
 
 
 @pytest.mark.parametrize("provider", ["omlx", "mtplx", "mlx-serve", "zhipu-coding-plan"])
-def test_native_constraints_are_omlx_only_and_preserve_prompt(provider):
+def test_native_constraints_are_adapter_specific_and_preserve_prompt(provider):
     schema = {"type": "object", "required": ["facts"], "additionalProperties": False,
               "properties": {"facts": {"type": "array", "items": {
                   "type": "string", "minLength": 1, "pattern": r"\S"}}}}
@@ -19,6 +19,11 @@ def test_native_constraints_are_omlx_only_and_preserve_prompt(provider):
     before = deepcopy(messages)
     options = page_completion_options(provider, messages, 131072)
     assert messages == before
+    if provider == "mtplx":
+        assert options["response_format"]["json_schema"]["schema"] == schema
+        assert options["extra_body"] == {"generation_mode": "mtp"}
+        assert "temperature" not in options
+        return
     if provider != "omlx":
         assert options == {}
         return
@@ -31,6 +36,24 @@ def test_native_constraints_are_omlx_only_and_preserve_prompt(provider):
 
 def test_no_page_schema_does_not_change_other_requests():
     assert page_completion_options("omlx", [{"role": "user", "content": "hello"}], 128) == {}
+
+
+def test_mtplx_conditional_decoding_subset_does_not_remove_product_checks():
+    from app.domain.contracts.page_review import ClauseEvidenceSignal
+    from pydantic import ValidationError
+    schema = ClauseEvidenceSignal.model_json_schema()
+    schema["properties"]["if"] = {"type": "string"}
+    messages = [{"role": "user", "content": [{"type": "text", "text": json.dumps({"output_schema": schema})}]}]
+    original = deepcopy(messages)
+    options = page_completion_options("mtplx", messages, 65536)
+    assert options["extra_body"] == {"generation_mode": "ar"}
+    decoded = options["response_format"]["json_schema"]["schema"]
+    assert not {"if", "then", "else"}.intersection(decoded)
+    assert decoded["properties"]["if"] == {"type": "string"}
+    assert decoded["required"] == schema["required"]
+    assert messages == original
+    with pytest.raises(ValidationError, match="必须携带原文摘录"):
+        ClauseEvidenceSignal(clause_id="arbitrary-clause", signal="mentions")
 
 
 def test_repair_keeps_original_schema_and_current_budget():

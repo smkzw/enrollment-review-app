@@ -872,6 +872,36 @@ def test_prepare_rejects_template_requirement_mismatch(session_factory):
             prepare_judgment_search_target(session, chain["authority"], _REQUIREMENT)
 
 
+def test_prepare_rejects_different_source_validity_window(session_factory):
+    from app.domain.contracts.rules import TimeQuantity, TimeUnit
+    from app.projections.evidence_expectation_templates import template_projection_sha256
+    from app.storage.models import EvidenceExpectationTemplateRecord
+
+    with session_factory() as session:
+        chain = _prepare(session, "jss-window-drift")
+        template = next(t for t in list_expectation_templates(
+            session, chain["rule_set_id"], 1
+        ) if t.requirement_id == _REQUIREMENT)
+        changed = template.model_copy(update={
+            "source_validity_window": TimeQuantity(value=7, unit=TimeUnit.DAY),
+        })
+        fields = changed.model_dump()
+        fields["revision"] = fields.pop("rule_set_revision")
+        for key in ("schema_version", "template_id", "projection_sha256", "created_at"):
+            fields.pop(key, None)
+        # Pass typed fields to the same hash helper used by the product projection.
+        fields["due_stage"] = changed.due_stage
+        fields["study_phase"] = changed.study_phase
+        fields["source_validity_window"] = changed.source_validity_window
+        changed = changed.model_copy(update={"projection_sha256": template_projection_sha256(**fields)})
+        row = session.get(EvidenceExpectationTemplateRecord, template.template_id)
+        row.payload_json, row.payload_sha256 = encode_contract(changed)
+        row.projection_sha256 = changed.projection_sha256
+        session.flush()
+        with pytest.raises(JudgmentSearchSourceError, match="不一致"):
+            prepare_judgment_search_target(session, chain["authority"], _REQUIREMENT)
+
+
 def test_prepare_rejects_unknown_requirement_and_stale_authority(session_factory):
     with session_factory() as session:
         chain = _prepare(session, "jss-target5")

@@ -1,0 +1,431 @@
+{
+  "batch_id": "pcb-0476a25d8f5387dbae0f719f",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [],
+  "context_structure_unit_ids": [],
+  "context_units": [],
+  "coverage_manifest_id": "manifest:slice61db-package115-contraception-method-authority-boundary",
+  "known_official_targets": [
+    {
+      "catalog_item_id": "pcm-row-0555ca044760e4df3ef7e3c3",
+      "label": "生育计划限制与避孕义务",
+      "official_code": "IN-06",
+      "position": 6,
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "有生育能力的参与者自签署知情同意书至研究末次给药后至少3个月无怀孕或捐精计划，必须遵守避孕的相关规定，采取高效或可接受的避孕方法避孕（见附录1）。"
+      ],
+      "source_span_ids": [
+        "span-29b8e3bdc286a06cba1455474402c004"
+      ]
+    }
+  ],
+  "known_procedure_targets": [
+    {
+      "catalog_item_id": "pcm-row-18127a0dc9921364671ebb8c",
+      "covered_action_kinds": [],
+      "label": "妊娠试验或卵泡刺激素（FSH）",
+      "position": 48,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "semantic_family": null,
+      "source_excerpts": [
+        "妊娠试验或卵泡刺激素（FSH）^13 | X | （X） | X | X | X | X | X | X | X",
+        "妊娠试验或卵泡刺激素（FSH）^13 | X | （X） | X | X | X | X | X | X | X",
+        "妊娠试验或卵泡刺激素（FSH）^13 | X | （X） | X | X | X | X | X | X | X",
+        "妊娠试验或卵泡刺激素（FSH）^13 | X | （X） | X | X | X | X | X | X | X",
+        "妊娠试验或卵泡刺激素（FSH）^13 | X | （X） | X | X | X | X | X | X | X",
+        "妊娠试验或卵泡刺激素（FSH）：对有生育能力的女性（育龄女性）在筛选、基线和计划的时间点进行血/尿β-HCG检测，其中筛选、基线、W12(D85)、W16(113)或退出访视必须为血妊娠试验，筛选和/或基线检测结果需均为阴性，需要在访视当天用药前完成；对已绝经女性（一年及以上无月经且无其他医学原因）或永久性绝育（如双侧输卵管结扎、子宫切除或双侧输卵管切除等）的女性参与者视为不具有生育能力，无需进行妊娠试验，其中，对已绝经女性需在筛选时进行血清FSH检测，其结果应大于40 IU/L。若研究过程中出现停经也需进行额外的血清β-HCG检测。注意：对所有参与者，在每个访视做好避孕宣教：在试验期间及给药后3个月内严格遵循附录1避孕要求，且参与者或其伴侣在发现意外怀孕时及时联系研究者。",
+        "妊娠试验或卵泡刺激素（FSH）^13 | X | （X） | X | X | X | X | X | X | X",
+        "妊娠试验或卵泡刺激素（FSH）^13 | X | （X） | X | X | X | X | X | X | X",
+        "血/尿妊娠试验（有生育能力的女性）",
+        "妊娠试验或卵泡刺激素（FSH）^13 | X | （X） | X | X | X | X | X | X | X",
+        "妊娠试验或卵泡刺激素（FSH）^13 | X | （X） | X | X | X | X | X | X | X"
+      ],
+      "source_span_ids": [
+        "span-15fa32ffb40385e4ab88ccf86b66462a",
+        "span-4ada40f46f347bdfd0dc32ff5aafd113",
+        "span-546f6512be56b354fe72bb2554734420",
+        "span-761bc18ae94f687575b4a90c1b141961",
+        "span-848273a89ac24be70490ba4b3fae89cc",
+        "span-a3581afb0d23910af48bf735f1adb67c",
+        "span-b92c9e967d4c2dcc2de1db4578476140",
+        "span-c6da936da3e233fa8e34b72fbf7c3430",
+        "span-e4fa1e71068426c0b58edeec51627061",
+        "span-fb63df5558004a5c2bb1aaef18fce384",
+        "span-fe29450e1c931ac5ed89315e91a82e33"
+      ],
+      "visit_instance": "首次给药前"
+    }
+  ],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "首次给药前复核",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "首次给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {},
+  "owned_required_action_kinds_by_structure_unit_id": {},
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.p1322",
+    "body.p1323",
+    "body.p1324",
+    "body.p1325",
+    "body.p1326",
+    "body.p1327",
+    "body.p1328",
+    "body.p1329",
+    "body.p1330",
+    "body.p1331",
+    "body.p1332",
+    "body.p1333"
+  ],
+  "owned_structure_unit_ids": [
+    "su-fb4a937e370e44796477cece",
+    "su-30096ccdcfdf10789b8955cd",
+    "su-12b24f84f1d0173189edec48",
+    "su-0fc7e4b9ffc537f57a06734f",
+    "su-7c5a7c2202481e22139d530c",
+    "su-39d01d2bcb498f26d354352e",
+    "su-0ea69d52c932304fefa35125",
+    "su-6a42ae623296276f77cc1f61",
+    "su-450f8320acce2144827296d2",
+    "su-d8a1920d625cabeaa715bbb1",
+    "su-5c4374ca5df2617662082913",
+    "su-d9d34ee8408840bbff8f6b69"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "女性连续停经12个月，并排除妊娠及其他可能导致闭经的医疗原因后，即可临床诊断为绝经。",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1322"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32180,
+      "source_ref": "body.p1322",
+      "source_span_ids": [
+        "body.p1322"
+      ],
+      "structure_unit_id": "su-fb4a937e370e44796477cece",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "2.有生育能力女性参与者的避孕规定与方法",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1323"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32190,
+      "source_ref": "body.p1323",
+      "source_span_ids": [
+        "body.p1323"
+      ],
+      "structure_unit_id": "su-30096ccdcfdf10789b8955cd",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "在筛选时血妊娠试验阴性后，必须开始采取适当的避孕措施。",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1324"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32200,
+      "source_ref": "body.p1324",
+      "source_span_ids": [
+        "body.p1324"
+      ],
+      "structure_unit_id": "su-12b24f84f1d0173189edec48",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "从签署知情同意书之日开始至研究药物末次给药后3个月为止，期间参与者必须同意持续和正确地使用一种高效或可接受的避孕方法进行避孕（禁止使用激素类避孕）。研究者或指定人员应与参与者讨论，确认参与者已从允许的避孕方法中选择了最适合其避孕的方法（下述），并确认参与者已知晓研究期间需持续并正确地使用该方法。",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1325"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32210,
+      "source_ref": "body.p1325",
+      "source_span_ids": [
+        "body.p1325"
+      ],
+      "structure_unit_id": "su-0fc7e4b9ffc537f57a06734f",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "在研究流程中计划的访视点，研究者或指定人员将告知参与者需要持续使用高效或可接受的避孕方法，并在参与者病历中记录与之的对话和参与者的同意（参与者需要确认她同意将持续并正确使用至少1种选定的避孕方法）。此外，还应告知参与者，如果她已停用所选的避孕方法，或，已知或怀疑怀孕，需立即打电话给研究者或指定人员。",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1326"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32220,
+      "source_ref": "body.p1326",
+      "source_span_ids": [
+        "body.p1326"
+      ],
+      "structure_unit_id": "su-7c5a7c2202481e22139d530c",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "高效的避孕方法是指持续和正确地使用时，年失败率低于1%的避孕方法。包括：",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1327"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32230,
+      "source_ref": "body.p1327",
+      "source_span_ids": [
+        "body.p1327"
+      ],
+      "structure_unit_id": "su-39d01d2bcb498f26d354352e",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "正确放置含铜的宫内节育器（Intrauterine-device，IUD）",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1328"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32240,
+      "source_ref": "body.p1328",
+      "source_span_ids": [
+        "body.p1328"
+      ],
+      "structure_unit_id": "su-0ea69d52c932304fefa35125",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "男性伴侣绝育",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1329"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32250,
+      "source_ref": "body.p1329",
+      "source_span_ids": [
+        "body.p1329"
+      ],
+      "structure_unit_id": "su-6a42ae623296276f77cc1f61",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "双侧输卵管结扎/双侧输卵管切除术/双侧输卵管闭塞术",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1330"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32260,
+      "source_ref": "body.p1330",
+      "source_span_ids": [
+        "body.p1330"
+      ],
+      "structure_unit_id": "su-450f8320acce2144827296d2",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "禁欲。禁欲定义为完全和持续地避免所有的异性性交。禁欲的可靠性需要根据研究的持续时间以及参与者的首选和平常的生活方式进行评估",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1331"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32270,
+      "source_ref": "body.p1331",
+      "source_span_ids": [
+        "body.p1331"
+      ],
+      "structure_unit_id": "su-d8a1920d625cabeaa715bbb1",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "可接受的避孕方法：含杀精剂的男用避孕套或女用避孕套。男用避孕套和女用避孕套不能同时使用（存在因摩擦失效的风险）。采用可接受的避孕方法时，建议参与者在末次给药结束后每隔一个月经周期进行妊娠检查。对于月经延迟者，强烈建议进行妊娠检查以确认是否怀孕，此建议也适用于月经周期较长或不规律的参与者。",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1332"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32280,
+      "source_ref": "body.p1332",
+      "source_span_ids": [
+        "body.p1332"
+      ],
+      "structure_unit_id": "su-5c4374ca5df2617662082913",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "不可接受的避孕方法：评价参与者的避孕首选，以及跟日常生活方式相关的禁欲的可靠性。定期禁欲（如推算日历法、排卵期法、症状体温避孕法或排卵后安全期避孕法）、男性或女性用避孕套（无杀精剂）、杀精海绵等，以及性交中断（或体外射精）都是本研究不可接受的避孕方法。",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1333"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32290,
+      "source_ref": "body.p1333",
+      "source_span_ids": [
+        "body.p1333"
+      ],
+      "structure_unit_id": "su-d9d34ee8408840bbff8f6b69",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [
+    "su-30096ccdcfdf10789b8955cd"
+  ],
+  "study_phase": "phase_ii"
+}

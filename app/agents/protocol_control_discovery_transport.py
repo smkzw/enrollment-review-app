@@ -22,6 +22,8 @@ from app.agents.protocol_control_agent_transport import (
     OpenAICompatibleProtocolControlAgentTransport,
     ProtocolControlAgentCallError,
     ProtocolControlModelIdentityError,
+    PROTOCOL_CONTROL_GLM_API_KEY,
+    PROTOCOL_CONTROL_GLM_BASE_URL,
 )
 from app.agents.protocol_control_deconstructor import (
     CONTROL_DISCOVERY_RESPONSE_FORMAT_NAME,
@@ -93,6 +95,7 @@ PROTOCOL_CONTROL_DISCOVERY_MAX_TOKENS = int(
 
 _LOCAL_BACKENDS = frozenset({"omlx", "local-omlx", "mtplx", "mtplx-api"})
 _MTPLX_BACKENDS = frozenset({"mtplx", "mtplx-api"})
+_ZHIPU_BACKENDS = frozenset({"zhipu-coding-plan", "glm"})
 
 
 def _connection_defaults(
@@ -110,6 +113,11 @@ def _connection_defaults(
             base_url = os.getenv("OMLX_BASE_URL", OMLX_BASE_URL)
         elif backend in {"deepseek", "deepseek-api"}:
             base_url = os.getenv("DEEPSEEK_BASE_URL", DEEPSEEK_BASE_URL)
+        elif backend in _ZHIPU_BACKENDS:
+            base_url = os.getenv(
+                "PROTOCOL_CONTROL_DISCOVERY_GLM_BASE_URL",
+                PROTOCOL_CONTROL_GLM_BASE_URL,
+            )
         else:
             base_url = os.getenv("PROTOCOL_CONTROL_DISCOVERY_BASE_URL", "")
     if api_key is None:
@@ -119,6 +127,11 @@ def _connection_defaults(
             api_key = os.getenv("OMLX_API_KEY", OMLX_API_KEY)
         elif backend in {"deepseek", "deepseek-api"}:
             api_key = os.getenv("DEEPSEEK_API_KEY", DEEPSEEK_API_KEY)
+        elif backend in _ZHIPU_BACKENDS:
+            api_key = os.getenv(
+                "PROTOCOL_CONTROL_DISCOVERY_GLM_API_KEY",
+                PROTOCOL_CONTROL_GLM_API_KEY,
+            )
         else:
             api_key = os.getenv("PROTOCOL_CONTROL_DISCOVERY_API_KEY", "")
     return base_url, api_key
@@ -163,7 +176,7 @@ class OpenAICompatibleProtocolControlDiscoveryAgentTransport(
         max_tokens: int | None = None,
         temperature: float | None = None,
         response_format: Mapping[str, Any] | None = None,
-        timeout: float = 600.0,
+        timeout: float = float(__import__("os").getenv("PROTOCOL_CONTROL_REQUEST_TIMEOUT", "1800")),
         max_retries: int = 0,
     ) -> None:
         selected_response_format = (
@@ -197,7 +210,14 @@ class OpenAICompatibleProtocolControlDiscoveryAgentTransport(
                 if selected_backend in _MTPLX_BACKENDS
                 else OMLX_PROTOCOL_BATCH_MAX_TOKENS
             )
-            selected_max_tokens = min(selected_max_tokens, local_cap)
+            if selected_max_tokens > local_cap:
+                # Explicit requests above the platform cap fail closed; the
+                # transport never silently shrinks an explicit budget.
+                raise ValueError(
+                    f"显式请求的发现输出预算 {selected_max_tokens} tokens 超过"
+                    f"平台批次上限 {local_cap}；请调高上限或降低请求，"
+                    "不会静默压缩显式请求。"
+                )
 
         # The shared implementation owns only connection setup, history and
         # bounded transport retries.  This call supplies the discovery Schema

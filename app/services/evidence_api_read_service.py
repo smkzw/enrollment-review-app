@@ -78,6 +78,7 @@ from app.storage.repositories import (
     SubjectRepository,
     get_project_row,
 )
+from app.storage.read_retention import retain_read_records
 
 __all__ = [
     "EvidenceApiReadService",
@@ -623,7 +624,7 @@ class EvidenceApiReadService:
     @app_error_boundary
     def page_image(self, revision_id: str, entry_id: str) -> PageImageView:
         """按冻结修订页清单读取页图，拒绝跨修订猜测或追随后来产物。"""
-        with self.session_factory() as session:
+        with self.session_factory() as session, retain_read_records(session):
             try:
                 revision = self._load_complete(session, revision_id)
                 manifest = revision.manifest

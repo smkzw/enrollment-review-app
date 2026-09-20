@@ -1,0 +1,18 @@
+{
+  "attached_count": 2,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-518181797054bde7ea6a4fbe",
+  "group_id": "d001-ii-package92-ae-expectedness-report-heading-boundary",
+  "lookup_counts": {
+    "frozen_plan_owned": 6
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package92-ae-expectedness-report-heading-boundary",
+  "owned_count": 4,
+  "prompt_char_count": 29681,
+  "prompt_sha256": "cb9dffbb1bd50feb5d8151d4b34035ea95035608c0fc25f40aed7e19c8c7f427",
+  "task_id": "phase5-slice61cd-20260830",
+  "unit_count": 6,
+  "worker": "codebuddy-worker_01"
+}

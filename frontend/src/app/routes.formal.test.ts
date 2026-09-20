@@ -5,21 +5,27 @@ beforeEach(() => {
 });
 
 describe("正式模式路由", () => {
-  it("把旧入口指向方案工作台，并按正式顺序提供导航", async () => {
+  it("开放正式工作入口，仅将旧新建地址指向方案工作台", async () => {
     vi.doMock("./runtimeMode", () => ({
       isInterfaceTrialMode: () => false,
     }));
     const { APP_ROUTES, implementedRoutes } = await import("./routes");
     const navigation = implementedRoutes().map((route) => route.path);
     expect(navigation).toEqual([
+      "/today",
+      "/board",
       "/protocols",
       "/subjects",
       "/workbench",
+      "/actions",
       "/reports",
       "/tasks",
       "/help",
     ]);
-    for (const path of ["/today", "/board", "/actions", "/projects/new", "/projects-new"]) {
+    for (const path of ["/today", "/board", "/actions"]) {
+      expect(APP_ROUTES.find((route) => route.path === path)?.component).not.toBeNull();
+    }
+    for (const path of ["/projects/new", "/projects-new"]) {
       const route = APP_ROUTES.find((candidate) => candidate.path === path);
       expect(route?.component).toBeNull();
       expect(route?.redirectTo).toBe("/protocols");

@@ -1,0 +1,8 @@
+Continue the same C03 source review. Read-only adviser: no source edits, imports, tests, app/model/database/network calls or delegation. User deferred staged tests until complete construction.
+
+Review the current product code, not just this description:
+app/services/proposition_evidence_job.py, proposition_evidence_receipts.py, proposition_evidence_input.py, proposition_evidence_comparison.py; app/llm/proposition_evidence.py; shared judgment_content_job.py and judgment_content_receipts.py; registration in page_review_runtime.py, review_runtime_ownership.py and prepared_review_intake.py.
+
+The new job reuses the existing cancellation, receipt recording, request reconstruction and batching via narrow override hooks. Existing written-content defaults and payload identity must remain unchanged. New source-relation jobs have distinct contract/purpose/prompt/input and ownership. They are registered for explicit intake, not yet part of the automatic workflow or approved clinical calculation. Empty input stores coverage without a model call or absence assertion. No current job/database/model was started; only compilation has run.
+
+Find concrete regressions or holes in frozen source, exact original-answer reconstruction, bounded retry, source identity, cancellation, two-lane independence and old-path compatibility. Then give a minimal next integration recommendation for a method-approved pair-local relation consumer without confusing one excerpt with complete observation coverage or final eligibility. Do not advise an additional framework/queue. <=65 lines with priority and exact source references. Do not claim clinical acceptance or repeat old fallback history as this invocation's route.

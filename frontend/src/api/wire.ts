@@ -313,7 +313,8 @@ export type AnchorTypeWire =
   | "study_drug_administration_date"
   | "last_dose_date"
   | "study_completion_date"
-  | "event_date";
+  | "event_date"
+  | "review_node_date";
 
 export type TimeDirectionWire = "before" | "after" | "on";
 

@@ -81,6 +81,40 @@ def _published_requirement(requirement_id, rule_component_id, fact_type):
     )
 
 
+def test_incremental_run_rebuild_preserves_other_current_authority_facts(
+    chain, session, monkeypatch
+):
+    """补读只新增事实，不能凭run不同将既有同范围事实索引删除。"""
+    old = _publish_fact(
+        session, chain, fact_id="prior-observation",
+        fact_type="vital_sign", asserted_object="血压", value="120/80",
+    )
+    current = _publish_fact(
+        session, chain, fact_id="new-observation",
+        fact_type="vital_sign", asserted_object="血压",
+        value="130/85",
+    ).model_copy(update={"run_id": "new-read-run"})
+    monkeypatch.setattr(
+        ClinicalFactV2Repository, "list_by_episode", lambda *_: [old, current]
+    )
+    repository = FactRuleLinkV2Repository(session)
+    observed = {}
+
+    def rebuild(facts, *, scope_label, stale_fact_ids):
+        observed["active"] = {fact.fact_id for fact in facts}
+        observed["stale"] = stale_fact_ids
+        return []
+
+    monkeypatch.setattr(repository, "_rebuild_facts", rebuild)
+    repository.rebuild_for_authority(
+        old.authority, run_id=current.run_id
+    )
+    assert observed == {
+        "active": {old.fact_id, current.fact_id},
+        "stale": set(),
+    }
+
+
 def _publish_fact(
     session,
     chain,

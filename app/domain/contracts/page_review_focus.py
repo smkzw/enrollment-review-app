@@ -13,6 +13,7 @@ class PageReviewFocus(BaseModel):
     review_episode_id: str = Field(min_length=1)
     round_number: Literal[1, 2]
     targets: tuple[str, ...] = ()
+    time_review_targets: tuple[str, ...] = ()
     handwriting_review: bool = False
     previous_round_review_ids: tuple[str, ...] = ()
     candidate_excerpts: tuple[str, ...] = ()
@@ -32,6 +33,9 @@ class PageReviewFocus(BaseModel):
             raise ValueError("复核项目与候选摘录不得为空")
         if len(set(self.targets)) != len(self.targets):
             raise ValueError("复核项目不得重复")
+        if (len(set(self.time_review_targets)) != len(self.time_review_targets)
+                or not set(self.time_review_targets).issubset(self.targets)):
+            raise ValueError("日期归属复核项目须唯一且属于本次复核范围")
         if self.round_number == 1 and (self.previous_round_review_ids or self.candidate_excerpts):
             raise ValueError("首轮复核不得预先展示候选答案")
         if self.round_number == 2 and (

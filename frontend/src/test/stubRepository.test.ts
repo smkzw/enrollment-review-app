@@ -92,7 +92,7 @@ describe("stub 仓储：今日工作、行动与任务", () => {
       expect(action.stateLabel).toBe("待处理");
       expect(action.blockingLevel).not.toBe("none");
       expect(action.targetPartyLabel).toMatch(
-        /^(研究者方|CRC|CRA|申办方医学或项目组)$/,
+        /^(研究者方|研究协调员|临床监查员|申办方医学或项目组)$/,
       );
       expect(action.gapLabel.length).toBeGreaterThan(0);
     }

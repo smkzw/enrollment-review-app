@@ -1,0 +1,31 @@
+{
+  "attached_source_refs": [
+    "body.p638"
+  ],
+  "claims_complete": false,
+  "config_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/configs/representative_group_contraception_documentation.v5.json",
+  "config_sha256": "4348597caa6bf41cc7c03f5d13d3ee5726a382073041c8ee742d68d4d3e50ced",
+  "control_batch_id": "pcb-45d969b431b7c4d8a7cbeee2",
+  "control_plan_id": "pcp-81cf4977df6b22be90c8f093",
+  "coverage_manifest_id": "manifest:slice60i-contraception-documentation",
+  "coverage_manifest_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/coverage_manifest.json",
+  "coverage_manifest_sha256": "89c7f00a8ed2d7eda666fb62538b1941b10c59f4375b8c4491436f66ea0b51e6",
+  "created_at": "2026-08-28T00:16:41.756104+00:00",
+  "frozen_plan_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/frozen_phase_plan.json",
+  "frozen_plan_sha256": "f0aa7e4bccad782ad5472c1f446f079e26343f694ad3ddca401bfbef89f38250",
+  "group_id": "d001-ii-contraception-documentation",
+  "mode": "dry_run_prepare",
+  "owned_source_refs": [
+    "body.p1325",
+    "body.p1326"
+  ],
+  "parent_phase_qc_path": null,
+  "parent_phase_qc_sha256": null,
+  "prompt_char_count": 23156,
+  "prompt_sha256": "3a34ffba33017a56dc9346f1b0dfb0f5b16ae3b77c0a4c71fb1d892a82f6ba72",
+  "prompt_template_sha256": "be52cba15ea26dda2f46b56cc12e0690715f1378f08eb88a270f209e62157cd9",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "replay_mode": "product_protocol_control_agent_runner_mtplx",
+  "task_id": "phase5-slice60m-20260828",
+  "worker": "worker_02"
+}

@@ -39,10 +39,10 @@ from app.domain.contracts.patient_profile_v2 import (
 from app.domain.contracts.review import ReviewEpisode
 from app.projections.patient_profile import project_patient_profile
 from app.storage.evidence_expectation_repository import EvidenceExpectationV2Repository
+from app.storage.active_facts import current_fact_heads
 from app.storage.fact_repositories import (
     ClinicalConflictGroupV2Repository,
     ClinicalEventV2Repository,
-    ClinicalFactV2Repository,
     MedicationExposureV2Repository,
 )
 from app.storage.patient_profile_repository import PatientProfileRevisionRepository
@@ -106,14 +106,15 @@ class PatientProfileService:
         - 只读同一权威元组的已发布事实/事件/暴露/冲突/期望（链头合并）；
         - 泳道归属只来自已发布 ``profile_lane`` 字段，绝不另行分类；
         - 同内容重生成幂等返回最新行；内容/权威变化追加链头 +1。
+        - run_id仅兼容触发批次信息，不能缩小当前档案的已发布内容范围。
         """
         episode = EpisodeRepository(session).get(authority.review_episode_id)
         self._require_episode_scope(authority, episode)
 
-        facts = self._published_facts(session, authority, run_id=run_id)
-        events = self._published_events(session, authority, run_id=run_id)
-        exposures = self._published_exposures(session, authority, run_id=run_id)
-        conflicts = self._published_conflicts(session, authority, run_id=run_id)
+        facts = self._published_facts(session, authority)
+        events = self._published_events(session, authority)
+        exposures = self._published_exposures(session, authority)
+        conflicts = self._published_conflicts(session, authority)
         if exclude_conflict_group_ids:
             conflicts = [
                 group
@@ -330,21 +331,12 @@ class PatientProfileService:
                 )
 
     def _published_facts(
-        self, session: Session, authority: FactAuthority, *, run_id: str | None = None
+        self, session: Session, authority: FactAuthority
     ) -> list[Any]:
-        repository = ClinicalFactV2Repository(session)
-        superseded = _superseded_ids(session, authority)
-        bound = [
-            fact
-            for fact in repository.list_by_episode(authority.review_episode_id)
-            if fact.authority == authority
-            and fact.fact_id not in superseded
-            and (run_id is None or fact.run_id == run_id)
-        ]
-        return _chain_heads(bound, "stable_identity")
+        return current_fact_heads(session, authority)
 
     def _published_events(
-        self, session: Session, authority: FactAuthority, *, run_id: str | None = None
+        self, session: Session, authority: FactAuthority
     ) -> list[Any]:
         repository = ClinicalEventV2Repository(session)
         superseded = _superseded_ids(session, authority)
@@ -352,13 +344,14 @@ class PatientProfileService:
             event
             for event in repository.list_by_episode(authority.review_episode_id)
             if event.authority == authority
-            and event.event_id not in superseded
-            and (run_id is None or event.run_id == run_id)
         ]
-        return _chain_heads(bound, "stable_identity")
+        return [
+            event for event in _chain_heads(bound, "stable_identity")
+            if event.event_id not in superseded
+        ]
 
     def _published_exposures(
-        self, session: Session, authority: FactAuthority, *, run_id: str | None = None
+        self, session: Session, authority: FactAuthority
     ) -> list[Any]:
         repository = MedicationExposureV2Repository(session)
         superseded = _superseded_ids(session, authority)
@@ -366,30 +359,17 @@ class PatientProfileService:
             exposure
             for exposure in repository.list_by_episode(authority.review_episode_id)
             if exposure.authority == authority
-            and exposure.exposure_id not in superseded
-            and (run_id is None or exposure.run_id == run_id)
         ]
-        return _chain_heads(bound, "stable_identity")
+        return [
+            exposure for exposure in _chain_heads(bound, "stable_identity")
+            if exposure.exposure_id not in superseded
+        ]
 
     def _published_conflicts(
-        self, session: Session, authority: FactAuthority, *, run_id: str | None = None
+        self, session: Session, authority: FactAuthority
     ) -> list[Any]:
-        from app.storage.fact_correction_commit_repository import (
-            FactCorrectionCommitRepository,
-        )
-
-        repository = ClinicalConflictGroupV2Repository(session)
-        superseded = FactCorrectionCommitRepository(session).superseded_conflict_ids(
-            authority
-        )
-        bound = [
-            group
-            for group in repository.list_by_episode(authority.review_episode_id)
-            if group.authority == authority
-            and group.conflict_group_id not in superseded
-            and (run_id is None or group.run_id == run_id)
-        ]
-        return sorted(bound, key=lambda group: group.conflict_group_id)
+        from app.storage.active_conflicts import current_conflict_heads
+        return current_conflict_heads(session, authority)
 
     def _latest_expectations(
         self, session: Session, authority: FactAuthority

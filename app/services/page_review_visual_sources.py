@@ -7,7 +7,8 @@ from app.domain.contracts.page_review import PageDisposition
 from app.domain.contracts.rules import RuleSet
 from app.domain.page_reconciliation import reconcile_page_reviews
 from app.domain.page_review_evidence_sources import materialize_page_visual_evidence_sources
-from app.projections.clause_pack import project_clause_pack
+from app.projections.clause_pack import clause_determination_modes
+from app.services.published_clause_pack import project_published_clause_pack
 from app.services.page_association_sources import page_association_sources
 from app.storage.codecs import decode_contract
 from app.storage.evidence_locator_repositories import CompleteEvidenceProcessingRevisionRepository
@@ -67,11 +68,11 @@ def _rebuild_visual_sources(session: Session, authority: FactAuthority, coverage
     row = session.get(RuleSetRecord, (authority.rule_set_id, authority.rule_set_revision))
     if row is None:
         raise ValueError("视觉来源所依据的审核要求不存在")
-    pack = project_clause_pack(decode_contract(RuleSet, row.payload_json, row.payload_sha256))
+    pack = project_published_clause_pack(session, decode_contract(RuleSet, row.payload_json, row.payload_sha256))
     if coverage.clause_pack_sha256 != pack.clause_pack_sha256:
         raise ValueError("视觉来源与本次审核要求版本不一致")
     associations = page_association_sources(session, revision)
-    modes = {clause.clause_id: clause.determination_mode for clause in pack.clauses}
+    modes = clause_determination_modes(pack)
     results = []
     for entry in coverage.entries:
         if page_ids is not None and entry.page_artifact_id not in page_ids:

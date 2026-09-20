@@ -259,7 +259,7 @@ def expectation_gap_signals(
                 # 双读完整且本次提交的全部供给页均未检索到候选：报告限定范围的
                 # 专业判断缺口；不宣称研究者从未判断，也不要求用户二次确认。
                 signals.append(CoverageGapSignal(
-                    fallback_only=True,
+                    fallback_only=False,
                     kind=GapType.PROFESSIONAL_JUDGMENT,
                     detail=(
                         "本次提交的资料中未见与该项要求对应的研究者书面判断，"
@@ -465,6 +465,8 @@ def _prior_unreconfirmed_signals(
     for template in templates:
         if stage_rank(template.due_stage) > stage_rank(episode.stage):
             continue
+        if template.due_stage == episode.stage and template.workflow_stage_id != episode.workflow_stage_id:
+            continue
         prior = repository.latest_by_template(
             authority.review_episode_id, template.template_id
         )
@@ -537,16 +539,14 @@ def reconstruct_reprojection_gap_signals(
     run_ids = select_reprojection_source_runs(
         session, authority=authority, target_kind=target_kind, target_id=target_id
     )
-    corrections = FactCorrectionRepository(session).list_by_authority(authority)
-    superseded = {item.target_id for item in corrections}
+    from app.storage.active_facts import current_fact_heads
     # 覆盖判定契约：``SourceStrength.UNVERIFIABLE`` 的事实既非完整也非较弱覆盖
     # （app/projections/evidence_expectations.py::_coverage_verdict 判为 none），
     # 因此也不得进入「当前已接受资料要求」去压制被拒候选的具体风险信号。
     accepted_requirements: set[str] = {
         requirement_id
-        for fact in ClinicalFactV2Repository(session).list_for_authority(authority)
-        if fact.fact_id not in superseded
-        and fact.source_strength != SourceStrength.UNVERIFIABLE
+        for fact in current_fact_heads(session, authority)
+        if fact.source_strength != SourceStrength.UNVERIFIABLE
         for requirement_id in fact.supported_requirement_ids
     }
     unresolved_items: list[PersistedEvidenceNormalizerUnresolvedItem] = []

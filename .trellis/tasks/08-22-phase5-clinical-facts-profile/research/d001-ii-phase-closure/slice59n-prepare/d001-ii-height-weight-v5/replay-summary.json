@@ -1,0 +1,20 @@
+{
+  "attached_count": 3,
+  "batching_mode": "single_batch_with_attachments",
+  "claims_complete": false,
+  "control_batch_id": "pcb-32b910f62a36b4a2c7f27038",
+  "group_id": "d001-ii-height-weight-v5",
+  "lookup_counts": {
+    "coverage_manifest": 1,
+    "frozen_plan_context": 2,
+    "frozen_plan_owned": 10
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-height-weight-v5",
+  "owned_count": 10,
+  "prompt_char_count": 31832,
+  "prompt_sha256": "5a94a6885a311145b473dadd4779d6e2b4282297c07e4ab202e18300c5035765",
+  "task_id": "phase5-slice60zh-20260828",
+  "unit_count": 13,
+  "worker": "codex-parent"
+}

@@ -6,7 +6,9 @@ from app.domain.contracts.rules import RuleSet
 from app.domain.contracts.page_review import PAGE_REVIEW_CONTRACT_VERSION
 from app.domain.page_reconciliation import reconcile_page_reviews
 from app.llm.page_review_harness import PAGE_REVIEW_PROMPT_VERSION
-from app.projections.clause_pack import project_clause_pack
+from app.llm.page_review_transport_options import page_transport_contract
+from app.projections.clause_pack import clause_determination_modes
+from app.services.published_clause_pack import project_published_clause_pack
 from app.services.evidence_app_errors import EvidenceAppError
 from app.storage.codecs import decode_contract
 from app.storage.models import RuleSetRecord
@@ -26,7 +28,7 @@ def select_normalizer_coverage(session, authority, *, main_reader_identity_sha25
     row = session.get(RuleSetRecord, (authority.rule_set_id, authority.rule_set_revision))
     if row is None:
         raise PageCoverageNotReady()
-    pack = project_clause_pack(decode_contract(RuleSet, row.payload_json, row.payload_sha256))
+    pack = project_published_clause_pack(session, decode_contract(RuleSet, row.payload_json, row.payload_sha256))
     ids = session.scalars(select(SubjectPageCoverageORM.coverage_id).where(
         SubjectPageCoverageORM.subject_id == authority.subject_id,
         SubjectPageCoverageORM.review_episode_id == authority.review_episode_id,
@@ -74,10 +76,12 @@ def select_normalizer_coverage(session, authority, *, main_reader_identity_sha25
         reconciliation = repository.get_reconciliation(entry.reconciliation_id)
         records = [repository.get_review(key) for key in reconciliation.page_review_ids]
         for record in records:
-            if record.contract_version != PAGE_REVIEW_CONTRACT_VERSION or record.prompt_version != PAGE_REVIEW_PROMPT_VERSION:
+            transport = page_transport_contract(record.provider)
+            expected_prompt = PAGE_REVIEW_PROMPT_VERSION + (":" + transport if transport else "")
+            if record.contract_version != PAGE_REVIEW_CONTRACT_VERSION or record.prompt_version != expected_prompt:
                 raise PageCoverageNotReady("现有判读采用旧处理方式，请重新判读当前资料；历史记录仍保留。")
         expected = reconcile_page_reviews(
-            records, determination_modes={clause.clause_id: clause.determination_mode for clause in pack.clauses},
+            records, determination_modes=clause_determination_modes(pack),
             association_source=sources.get(entry.page_artifact_id),
         )
         if expected.reconciliation_id != reconciliation.reconciliation_id:

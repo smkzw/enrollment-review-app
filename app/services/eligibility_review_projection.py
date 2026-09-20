@@ -16,12 +16,14 @@ from app.domain.contracts.common import DateValue
 from app.domain.contracts.enums import (
     ComponentDecision,
     DatePrecision,
+    ExpectationStatus,
     GapType,
     TruthValue,
 )
-from app.domain.contracts.evidence import ClinicalFact, ConflictGroup, EvidenceExpectation
+from app.domain.contracts.evidence import ClinicalFact, ConflictGroup
 from app.domain.contracts.evidence_expectations_v2 import EvidenceExpectationV2
 from app.domain.contracts.facts import (
+    ClinicalConflictGroupV2,
     ClinicalFactV2,
     FactAuthority,
     PartialDateRange,
@@ -34,21 +36,17 @@ from app.domain.contracts.rules import iter_atomic_predicates
 from app.domain.expression import (
     ComponentEvaluation,
     EvaluationContext,
-    evaluate_component,
 )
 from app.domain.gates.assessment import (
-    derive_component_decision,
-    derive_gate_gap_types,
+    RequirementGapState,
 )
 from app.projections.clause_pack import project_clause_pack
 from app.services.fact_normalization_command_service import authority_from_active_episode
+from app.services.component_review import calculate_component_review
 from app.storage.evidence_expectation_repository import EvidenceExpectationV2Repository
 from app.storage.evidence_locator_repositories import EvidenceLocatorRepository
-from app.storage.fact_repositories import (
-    ClinicalConflictGroupV2Repository,
-    ClinicalFactV2Repository,
-)
 from app.storage.fact_rule_link_repository import FactRuleLinkV2Repository
+from app.storage.active_facts import current_fact_heads
 from app.storage.judgment_search_repository import JudgmentSearchSummaryRepository
 from app.storage.repositories import (
     EpisodeRepository,
@@ -74,9 +72,9 @@ _GAP_PRIORITY: tuple[GapType, ...] = (
     GapType.SOURCE_CONFLICT,
     GapType.INTERPRETATION_CONFLICT,
     GapType.PROFESSIONAL_JUDGMENT,
+    GapType.REFERENCED_FILE_MISSING,
     GapType.OBSERVATION_UNVERIFIED,
     GapType.RECORD_INCOMPLETE,
-    GapType.REFERENCED_FILE_MISSING,
     GapType.REQUIRED_PROCEDURE_NOT_DONE,
     GapType.RESULT_FIELDS_MISSING,
     GapType.DATE_OR_ANCHOR_MISSING,
@@ -125,13 +123,18 @@ class EligibilityFactRef:
     fact_id: str
     locator_id: str
     page_number: int
+    source_document_version_id: str
+    page_artifact_id: str
+    excerpt: str | None
 
 
 @dataclass(frozen=True)
 class EligibilityClauseProjection:
+    rule_component_id: str
     rule_code: str
     rule_kind: str
     text_summary: str
+    source_text: str
     parent_rule_code: str | None
     decision: str
     decision_label: str
@@ -139,6 +142,13 @@ class EligibilityClauseProjection:
     fact_refs: tuple[EligibilityFactRef, ...]
     gap_type: str | None
     determination_mode: str
+
+
+@dataclass(frozen=True)
+class EligibilityUnassignedConflict:
+    conflict_group_id: str
+    member_kind: str
+    member_ids: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -150,6 +160,7 @@ class EligibilityReviewProjection:
     evidence_snapshot_v2_id: str
     complete_processing_revision_id: str
     clauses: tuple[EligibilityClauseProjection, ...]
+    unassigned_conflicts: tuple[EligibilityUnassignedConflict, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -244,9 +255,7 @@ def _primary_gap(gaps: set[GapType]) -> GapType | None:
 
 
 def _decision_for_wire(decision: ComponentDecision) -> ComponentDecision:
-    """内部 indeterminate 不能越过 API 边界；统一表示为无法判定。"""
-    if decision == ComponentDecision.INDETERMINATE:
-        return ComponentDecision.PROFESSIONAL_JUDGMENT
+    """保留资料缺口与研究者判断缺口的领域区别。"""
     return decision
 
 
@@ -255,22 +264,18 @@ def _decision_for_wire(decision: ComponentDecision) -> ComponentDecision:
 def _expectation_views(
     expectations: Iterable[EvidenceExpectationV2],
     templates_by_id: Mapping[str, Any],
-) -> list[EvidenceExpectation]:
-    views: list[EvidenceExpectation] = []
+) -> list[RequirementGapState]:
+    views: list[RequirementGapState] = []
     for expectation in expectations:
         template = templates_by_id.get(expectation.template_id)
         if template is None:
-            continue
+            raise EligibilityReviewProjectionError("资料要求的来源模板不存在，不能生成审核结果")
         # derive_gate_gap_types keys expectations by EvidenceRequirement ID. The V2
         # template's requirement_id is the canonical key, not expectation_id.
         views.append(
-            EvidenceExpectation.model_construct(
-                schema_version="fixture/v1",
-                expectation_id=expectation.expectation_id,
+            RequirementGapState(
                 requirement_id=template.requirement_id,
-                review_episode_id=expectation.authority.review_episode_id,
                 status=expectation.status,
-                evidence_span_ids=list(expectation.locator_ids),
                 gap_type=expectation.gap_type,
             )
         )
@@ -278,88 +283,43 @@ def _expectation_views(
 
 
 def _phase3_conflict_groups(
-    session: Session,
+    session: Session | None,
     authority: FactAuthority,
     facts: list[ClinicalFactV2],
     *,
     clauses: Iterable[ClausePackClause],
+    current_groups: list[ClinicalConflictGroupV2] | None = None,
+    frozen_links_by_fact: Mapping[str, list[Any]] | None = None,
 ) -> tuple[list[ConflictGroup], dict[str, str]]:
     """反推 V2 冲突组影响的 RuleComponent，并建立事实冲突标记。"""
-    groups = ClinicalConflictGroupV2Repository(session).list_for_authority(authority)
+    from app.storage.active_conflicts import current_conflict_heads
+    if session is None and (current_groups is None or frozen_links_by_fact is None):
+        raise EligibilityReviewProjectionError("冻结审核缺少争议或事实索引")
+    groups = current_conflict_heads(session, authority) if current_groups is None else current_groups
     if not groups:
         return [], {}
 
-    # 只读当前事实链头；已被事实修订替代的冲突组由 correction commit 过滤，
-    # 同时避免旧事实 revision 重新把旧冲突带入本次求值。
-    try:
-        from app.storage.fact_correction_commit_repository import (
-            FactCorrectionCommitRepository,
-        )
-
-        superseded_groups = FactCorrectionCommitRepository(session).superseded_conflict_ids(
-            authority
-        )
-    except ImportError:  # pragma: no cover - 兼容旧数据库初始化顺序
-        superseded_groups = set()
-    groups = [
-        group
-        for group in groups
-        if group.conflict_group_id not in superseded_groups
-        and group.member_kind == "fact"
-    ]
+    groups = [group for group in groups if group.member_kind == "fact"]
     if not groups:
         return [], {}
 
     active_fact_ids = {fact.fact_id for fact in facts}
-    head_by_stable_identity = {
-        fact.stable_identity: fact.fact_id for fact in facts
-    }
-    # 历史冲突组可能引用已被链头折叠的旧 revision 成员。按 stable_identity
-    # 把旧成员解析到其当前链头：冲突语义随链转移（旧成员在当前世界即其链头），
-    # 既不静默丢弃未解决冲突，也不把旧 revision 事实并入求值集合。
-    from sqlalchemy import select as _select
-
-    from app.storage.facts_models import ClinicalFactV2Record as _FactRecord
-
-    all_rows = session.execute(
-        _select(_FactRecord.fact_id, _FactRecord.stable_identity).where(
-            _FactRecord.review_episode_id == authority.review_episode_id
-        )
-    ).all()
-    head_of_fact: dict[str, str] = {}
-    for row_fact_id, row_stable_identity in all_rows:
-        head_id = head_by_stable_identity.get(row_stable_identity)
-        if head_id is not None:
-            head_of_fact[row_fact_id] = head_id
-
     live_groups = []
     resolved_members: list[tuple[str, list[str]]] = []
     for group in groups:
         member_set = set(group.fact_ids)
-        if not member_set:
-            continue
-        if member_set <= active_fact_ids:
-            live_groups.append(group)
-            resolved_members.append((group.conflict_group_id, sorted(member_set)))
-            continue
-        resolved = sorted(
-            {
-                head_of_fact.get(fact_id, fact_id)
-                for fact_id in member_set
-            }
-            & active_fact_ids
-        )
-        if len(resolved) < 2:
-            # 解析后不足两方：冲突描述的内容已整体被修订链取代，不再参与。
-            continue
+        if not member_set <= active_fact_ids:
+            raise EligibilityReviewProjectionError(
+                "争议资料与当前病史尚未完整衔接，不能生成审核结果"
+            )
         live_groups.append(group)
-        resolved_members.append((group.conflict_group_id, resolved))
+        resolved_members.append((group.conflict_group_id, sorted(member_set)))
     if not live_groups:
         return [], {}
     member_ids = sorted(
         {fact_id for _, members in resolved_members for fact_id in members}
     )
-    links_by_fact = FactRuleLinkV2Repository(session).list_for_facts(
+    links_by_fact = frozen_links_by_fact if frozen_links_by_fact is not None else FactRuleLinkV2Repository(session).list_for_facts(
         member_ids, facts=facts
     )
     known_component_ids = {
@@ -379,6 +339,10 @@ def _phase3_conflict_groups(
                 and link.target_id in known_component_ids
             }
         )
+        for fact_id in head_members:
+            # A missing clause index must not make a disputed fact undisputed.
+            # Only predicates actually using that fact encounter this marker.
+            conflict_group_by_fact.setdefault(fact_id, group.conflict_group_id)
         # 冲突可能属于不在当前 ClausePack 中的实体；这种冲突不应阻断无关条款。
         if not affected_component_ids:
             continue
@@ -391,9 +355,6 @@ def _phase3_conflict_groups(
                 resolution_evidence_span_ids=[],
             )
         )
-        for fact_id in head_members:
-            # 一个 Phase 3 fact 只能携带一个冲突组标记；按冲突组 ID 稳定取最先者。
-            conflict_group_by_fact.setdefault(fact_id, group.conflict_group_id)
     return phase3_groups, conflict_group_by_fact
 
 
@@ -424,32 +385,55 @@ def _latest_expectations(
     return sorted(by_template.values(), key=lambda item: (item.revision, item.template_id))
 
 
-def _requires_investigator_judgment(
-    component: ClausePackClause, requirement: Any
-) -> bool:
-    """判断摘要既可由资料类型声明，也可由条款结构声明。"""
-    if component.determination_mode.value == "investigator_judgment":
-        return True
+def _requires_investigator_judgment(requirement: Any) -> bool:
+    """专业诊断或评分不等于本条资料要求另需研究者书面判断。"""
     return "investigator_assessment" in {
         source.strip().casefold() for source in requirement.required_source_types
     }
 
 
-def _summary_gaps(
+def _summary_gap_requirements(
     component: ClausePackClause,
+    **kwargs,
+) -> dict[str, GapType]:
+    return requirement_summary_gaps(component.evidence_requirements, **kwargs)
+
+
+def requirement_summary_gaps(
+    requirements,
     *,
     episode_stage: Any,
     summaries: Mapping[str, JudgmentSearchCoverageSummary],
     templates_by_requirement: Mapping[str, Any],
-) -> set[GapType]:
-    """把判断检索摘要的结构化状态转换成当前组件缺口。"""
+    expectations: Iterable[RequirementGapState] = (),
+    workflow_stage_id: str | None = None,
+) -> dict[str, GapType]:
+    """Keep each search gap bound to the requirement actually searched."""
     from app.domain.policies import STAGE_RANK
 
-    gaps: set[GapType] = set()
-    for requirement in component.evidence_requirements:
+    expectations = tuple(expectations)
+    missing_file_requirements = {
+        item.requirement_id for item in expectations
+        if item.gap_type == GapType.REFERENCED_FILE_MISSING
+    }
+    observed_requirements = {
+        item.requirement_id for item in expectations
+        if item.status == ExpectationStatus.OBSERVED
+    }
+    gaps: dict[str, GapType] = {}
+    for requirement in requirements:
         if STAGE_RANK[requirement.due_stage] > STAGE_RANK[episode_stage]:
             continue
+        # Supplied-page absence cannot override an explicitly missing source.
+        if requirement.requirement_id in missing_file_requirements:
+            continue
         template = templates_by_requirement.get(requirement.requirement_id)
+        if (
+            template is not None
+            and template.due_stage == episode_stage
+            and template.workflow_stage_id != workflow_stage_id
+        ):
+            continue
         required_source_types = {
             item.strip().casefold() for item in (
                 template.required_source_types
@@ -458,24 +442,34 @@ def _summary_gaps(
             )
         }
         if not (
-            _requires_investigator_judgment(component, requirement)
+            _requires_investigator_judgment(requirement)
             or "investigator_assessment" in required_source_types
         ):
             continue
         summary = summaries.get(requirement.requirement_id)
         if summary is None:
-            gaps.add(GapType.PROFESSIONAL_JUDGMENT)
+            gaps[requirement.requirement_id] = GapType.OBSERVATION_UNVERIFIED
         elif summary.status == JudgmentSearchCoverageStatus.CANDIDATES_PRESENT:
-            gaps.add(GapType.OBSERVATION_UNVERIFIED)
+            gaps[requirement.requirement_id] = GapType.OBSERVATION_UNVERIFIED
         elif summary.status in {
             JudgmentSearchCoverageStatus.COVERAGE_INCOMPLETE,
         }:
-            gaps.add(GapType.OBSERVATION_UNVERIFIED)
+            gaps[requirement.requirement_id] = GapType.OBSERVATION_UNVERIFIED
         elif summary.status == (
             JudgmentSearchCoverageStatus.ALL_SUPPLIED_PAGES_SEARCHED_WITHOUT_CANDIDATE
         ):
-            gaps.add(GapType.PROFESSIONAL_JUDGMENT)
+            # A contradictory coverage record is not proof of absence or applicability.
+            gaps[requirement.requirement_id] = (
+                GapType.OBSERVATION_UNVERIFIED
+                if requirement.requirement_id in observed_requirements
+                else GapType.PROFESSIONAL_JUDGMENT
+            )
     return gaps
+
+
+def _summary_gaps(component: ClausePackClause, **kwargs) -> set[GapType]:
+    """Compatibility projection for consumers that need only the gap set."""
+    return set(_summary_gap_requirements(component, **kwargs).values())
 
 
 def _fact_refs(
@@ -490,12 +484,12 @@ def _fact_refs(
         for locator_id in fact.locator_ids
     ]
     locators = EvidenceLocatorRepository(session).get_many(locator_ids)
-    page_by_locator = {item.locator_id: item.page_number for item in locators}
+    locator_by_id = {item.locator_id: item for item in locators}
     refs: list[EligibilityFactRef] = []
     for fact in selected:
         for locator_id in fact.locator_ids:
-            page_number = page_by_locator.get(locator_id)
-            if page_number is None:
+            locator = locator_by_id.get(locator_id)
+            if locator is None:
                 raise EligibilityReviewProjectionError(
                     f"事实 {fact.fact_id} 的定位 {locator_id} 缺少页码，拒绝生成原件导航"
                 )
@@ -503,7 +497,10 @@ def _fact_refs(
                 EligibilityFactRef(
                     fact_id=fact.fact_id,
                     locator_id=locator_id,
-                    page_number=page_number,
+                    page_number=locator.page_number,
+                    source_document_version_id=locator.source_document_version_id,
+                    page_artifact_id=locator.page_artifact_id,
+                    excerpt=locator.excerpt,
                 )
             )
     return tuple(refs)
@@ -525,10 +522,11 @@ def _reason(
     decision: ComponentDecision,
     gap: GapType | None,
     summaries: Mapping[str, JudgmentSearchCoverageSummary],
+    judgment_gaps: Mapping[str, GapType] | None = None,
 ) -> str:
     """生成一句话中文原因，未知结论必须说明具体缺口。"""
     if decision == ComponentDecision.NOT_DUE:
-        return "该条款对应的资料要求属于后续审核节点，目前尚未到期。"
+        return "该条款不在本次节点到期，需在方案规定的对应节点核对。"
     if decision == ComponentDecision.NOT_APPLICABLE:
         return "该条款当前不适用于本审核节点。"
     if decision == ComponentDecision.CONFLICT or gap in {
@@ -578,25 +576,29 @@ def _reason(
         judgment_requirements = [
             item
             for item in clause.evidence_requirements
-            if _requires_investigator_judgment(clause, item)
+            if _requires_investigator_judgment(item)
         ]
         if gap == GapType.PROFESSIONAL_JUDGMENT:
-            missing_summary = next(
-                (
-                    item
-                    for item in judgment_requirements
-                    if item.requirement_id not in summaries
-                ),
-                None,
-            )
-            if missing_summary is not None:
+            missing_ids = {
+                key for key, value in (judgment_gaps or {}).items()
+                if value == GapType.PROFESSIONAL_JUDGMENT
+            }
+            if not missing_ids:
                 return (
-                    "本次提交的资料中未见该条款对应的研究者书面判断，且尚无完整的"
-                    "判断检索摘要，因此无法判定。"
+                    "本次提交的资料尚未完成该条款所需研究者书面判断的核对，"
+                    "目前无法判定；请先核对现有原件，不能据此认定缺少研究者判断。"
                 )
-            return "本次提交的资料中未见可用于确认该条款的研究者专业判断，因此无法判定。"
+            message = "本次已核对的资料中未见本条所需的研究者书面判断，因此无法判定；需补充对应记录。"
+            if GapType.OBSERVATION_UNVERIFIED in (judgment_gaps or {}).values():
+                message += "本条另有资料尚未核实，需分别核对。"
+            return message
         if gap == GapType.OBSERVATION_UNVERIFIED:
-            return "本次提交的资料中发现疑似相关记录，但尚未完成原件核实，因此无法判定。"
+            if any(item.requirement_id not in summaries for item in judgment_requirements):
+                return (
+                    "本次提交的资料尚未完成该条款所需研究者书面判断的核对，"
+                    "目前无法判定；请先核对现有原件，不能据此认定缺少研究者判断。"
+                )
+            return "该条款所需资料尚未完成核实，目前无法判定；需先核对本次提交的原件。"
         if gap == GapType.DATE_OR_ANCHOR_MISSING:
             return "本次提交的资料中事实日期或审核节点锚点缺失，因此无法判定。"
         # 按缺口类型生成完整通顺的中文句子（第三方测试 B1/B2：名词填空
@@ -643,6 +645,18 @@ def _reason(
     return "本次提交的资料不足以形成明确判定，因此无法判定。"
 
 
+def _component_candidate_types(clause: ClausePackClause) -> dict[str, list[str]]:
+    """Scope legacy vocabulary to a component; this is not semantic verification."""
+    fact_types = sorted({requirement.fact_type for requirement in clause.evidence_requirements})
+    expressions = [clause.expression]
+    if clause.exception_expression is not None:
+        expressions.append(clause.exception_expression)
+    return {
+        f"{predicate.subject}.{predicate.attribute}": list(fact_types)
+        for expression in expressions for predicate in iter_atomic_predicates(expression)
+    } if fact_types else {}
+
+
 class EligibilityReviewProjectionService:
     """装配当前审核节点入排条款读取投影；本服务不持有写入状态。"""
 
@@ -654,27 +668,32 @@ class EligibilityReviewProjectionService:
         rule_set = get_rule_set(session, authority.rule_set_id, authority.rule_set_revision)
         clause_pack = project_clause_pack(rule_set)
 
-        fact_repository = ClinicalFactV2Repository(session)
-        raw_facts = [
-            fact
-            for fact in fact_repository.list_for_authority(authority)
-            if fact.authority == authority
-        ]
-        try:
-            from app.storage.fact_correction_repository import FactCorrectionRepository
-
-            superseded_fact_ids = FactCorrectionRepository(session).superseded_entity_ids(
-                authority
-            )
-        except ImportError:  # pragma: no cover - compatibility with pre-correction DB
-            superseded_fact_ids = set()
-        raw_facts = [
-            fact for fact in raw_facts if fact.fact_id not in superseded_fact_ids
-        ]
-        facts = fold_fact_chain_heads(raw_facts)
+        facts = current_fact_heads(session, authority)
         clauses = tuple(clause_pack.clauses)
+        from app.storage.active_conflicts import current_conflict_heads
+        from app.services.patient_profile_service import PatientProfileService, PatientProfileProjectionError
+
+        conflict_heads = current_conflict_heads(session, authority)
+        unassigned_groups = [group for group in conflict_heads if group.member_kind != "fact"]
+        if unassigned_groups:
+            profile = PatientProfileService()
+            event_ids = {item for group in unassigned_groups for item in group.event_ids}
+            exposure_ids = {item for group in unassigned_groups for item in group.exposure_ids}
+            try:
+                # Reuse Profile selection and closure, without generating or persisting it.
+                profile._validate_referential_closure(
+                    facts=facts,
+                    events=[item for item in profile._published_events(session, authority) if item.event_id in event_ids],
+                    exposures=[item for item in profile._published_exposures(session, authority) if item.exposure_id in exposure_ids],
+                    conflicts=unassigned_groups,
+                    expectations=[],
+                )
+            except PatientProfileProjectionError as exc:
+                raise EligibilityReviewProjectionError(
+                    "争议资料与当前病史尚未完整衔接，不能生成审核结果"
+                ) from exc
         phase3_conflicts, conflict_group_by_fact = _phase3_conflict_groups(
-            session, authority, facts, clauses=clauses
+            session, authority, facts, clauses=clauses, current_groups=conflict_heads
         )
         phase3_facts = adapt_clinical_facts_v2(
             facts, conflict_group_by_fact=conflict_group_by_fact
@@ -683,36 +702,6 @@ class EligibilityReviewProjectionService:
         templates = list_expectation_templates(
             session, authority.rule_set_id, authority.rule_set_revision
         )
-        # 词汇表桥接（C 方案）：expectation 模板的 fact_type 是发布事实使用的
-        # 中文临床类型名；把「组件谓词键 → 该组件资料要求允许的事实类型集合」
-        # 注入求值上下文，打通两套词表。无模板覆盖的谓词保持严格匹配。
-        predicate_fact_type_aliases: dict[str, list[str]] = {}
-        for clause in clause_pack.clauses:
-            requirement_fact_types = [
-                requirement.fact_type for requirement in clause.evidence_requirements
-            ]
-            if not requirement_fact_types:
-                continue
-            for predicate in iter_atomic_predicates(clause.expression):
-                predicate_fact_type_aliases.setdefault(
-                    f"{predicate.subject}.{predicate.attribute}",
-                    [],
-                ).extend(
-                    fact_type
-                    for fact_type in requirement_fact_types
-                    if fact_type not in predicate_fact_type_aliases.get(
-                        f"{predicate.subject}.{predicate.attribute}", []
-                    )
-                )
-            if clause.exception_expression is not None:
-                for predicate in iter_atomic_predicates(clause.exception_expression):
-                    key = f"{predicate.subject}.{predicate.attribute}"
-                    predicate_fact_type_aliases.setdefault(key, []).extend(
-                        fact_type
-                        for fact_type in requirement_fact_types
-                        if fact_type not in predicate_fact_type_aliases.get(key, [])
-                    )
-
         context = EvaluationContext(
             project_id=authority.project_id,
             subject_id=authority.subject_id,
@@ -721,7 +710,6 @@ class EligibilityReviewProjectionService:
             accepted_fact_ids=[fact.fact_id for fact in phase3_facts],
             facts=phase3_facts,
             anchor_dates=dict(episode.anchor_dates),
-            predicate_fact_type_aliases=predicate_fact_type_aliases,
         )
         templates_by_id = {template.template_id: template for template in templates}
         templates_by_requirement = {
@@ -735,40 +723,42 @@ class EligibilityReviewProjectionService:
         output: list[EligibilityClauseProjection] = []
         for clause in clauses:
             component = clause_to_rule_component(clause)
-            evaluation = evaluate_component(component, context)
-            gaps = derive_gate_gap_types(
+            judgment_gaps = _summary_gap_requirements(
+                clause,
+                episode_stage=episode.stage,
+                summaries=summaries,
+                templates_by_requirement=templates_by_requirement,
+                expectations=expectation_views,
+                workflow_stage_id=episode.workflow_stage_id,
+            )
+            component_context = context.model_copy(update={
+                "predicate_fact_type_aliases": _component_candidate_types(clause)})
+            result = calculate_component_review(
                 component=component,
-                evaluation=evaluation,
+                rule_kind=clause.kind,
+                context=component_context,
                 episode_stage=episode.stage,
                 expectations=expectation_views,
-                conflict_groups=phase3_conflicts,
+                conflicts=phase3_conflicts,
+                workflow_stage_id=episode.workflow_stage_id,
+                requirement_workflow_stage_ids={
+                    item.requirement_id: item.workflow_stage_id for item in templates
+                } if episode.workflow_stage_id is not None else None,
+                source_gaps=frozenset(judgment_gaps.values()),
             )
-            gaps.update(
-                _summary_gaps(
-                    clause,
-                    episode_stage=episode.stage,
-                    summaries=summaries,
-                    templates_by_requirement=templates_by_requirement,
-                )
-            )
-            if evaluation.trigger.truth == TruthValue.UNKNOWN and not gaps:
-                gaps.add(GapType.RECORD_INCOMPLETE)
-            decision = _decision_for_wire(
-                derive_component_decision(
-                    rule_kind=clause.kind,
-                    evaluation=evaluation,
-                    gaps=gaps,
-                )
-            )
-            # derive_component_decision can return a definitive value even when a weak
-            # source gap is present; preserve that determination while exposing the gap.
+            evaluation = result.evaluation
+            gaps = set(result.gaps)
+            decision = _decision_for_wire(result.decision)
+            # Only nonblocking provenance reminders may accompany a definite result.
             gap = _primary_gap(gaps)
             used_fact_ids = _used_fact_ids(evaluation)
             output.append(
                 EligibilityClauseProjection(
+                    rule_component_id=clause.rule_component_id,
                     rule_code=clause.official_code,
                     rule_kind=clause.kind.value,
                     text_summary=clause.title,
+                    source_text=clause.source_text,
                     parent_rule_code=(
                         None
                         if clause.display_code == clause.official_code
@@ -781,6 +771,7 @@ class EligibilityReviewProjectionService:
                         decision=decision,
                         gap=gap,
                         summaries=summaries,
+                        judgment_gaps=judgment_gaps,
                     ),
                     fact_refs=_fact_refs(session, used_fact_ids, facts_by_id),
                     gap_type=gap.value if gap is not None else None,
@@ -796,6 +787,14 @@ class EligibilityReviewProjectionService:
             evidence_snapshot_v2_id=authority.evidence_snapshot_v2_id,
             complete_processing_revision_id=authority.complete_processing_revision_id,
             clauses=tuple(output),
+            unassigned_conflicts=tuple(
+                EligibilityUnassignedConflict(
+                    conflict_group_id=group.conflict_group_id,
+                    member_kind=group.member_kind,
+                    member_ids=tuple(group.event_ids or group.exposure_ids),
+                )
+                for group in unassigned_groups
+            ),
         )
 
 
@@ -810,5 +809,6 @@ def clause_to_rule_component(clause: ClausePackClause):
         title=clause.title,
         expression=clause.expression,
         exception_expression=clause.exception_expression,
+        repeat_trigger_conditions=list(clause.repeat_trigger_conditions),
         evidence_requirements=clause.evidence_requirements,
     )

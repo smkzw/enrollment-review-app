@@ -32,6 +32,10 @@ from typing import Literal, Protocol
 from pydantic import Field, ValidationError, model_validator
 
 from app.domain.contracts.common import ContractModel
+from app.domain.contracts.repeat_scheme import RepeatEvidenceRoleReference, resolve_repeat_evidence_roles
+from app.domain.contracts.control_evaluation_spec import (
+    ControlAtomEvaluationSpec, validate_control_atom_evaluation,
+)
 from app.protocols.supplementary_relation_contract import (
     is_cross_stage_subsequent_control_supplement,
     procedure_execution_workflow_stage_id,
@@ -40,6 +44,8 @@ from app.domain.contracts.protocol_controls import (
     ControlConditionAtomDraft,
     ControlConditionDnfDraft,
     ControlConditionGroupDraft,
+    ControlRepeatTriggerDraft,
+    validate_control_repeat_conditions,
     ControlCrossSourceRelationDraft,
     ControlMinimumEvidenceDraft,
     ControlObligationAtomDraft,
@@ -71,43 +77,19 @@ from app.domain.contracts.protocol_controls import (
 )
 from app.domain.contracts.enums import ReviewStage, StudyPhase
 from app.domain.contracts.rules import ProspectivePeriod, TimeConstraint
+from app.domain.contracts.control_evidence_policy import ControlEvidenceSourcePolicy
+from app.domain.contracts.control_evidence_dependency import ControlEvidenceAtomReference
 
 
-# Minimal quote glyph equivalence for control excerpts: curved ↔ straight.
-# Only typographic quote variants are normalized; words/digits/units/comparators/
-# general punctuation/whitespace remain strict.
-_CONTROL_QUOTE_TRANSLATION = str.maketrans({
-    "‘": "'",
-    "’": "'",
-    "“": '"',
-    "”": '"',
-})
+from .control_excerpt_restoration import (
+    control_quote_normalize as _control_quote_normalize,
+    recover_control_excerpt as _recover_control_excerpt,
+    restore_source_fields,
+)
 
-def _control_quote_normalize(text: str) -> str:
-    return text.translate(_CONTROL_QUOTE_TRANSLATION)
-
-def _recover_control_excerpt(excerpt: str, sources: Sequence[str]) -> str:
-    """Restore excerpt only when quote-normalized unique contiguous match exists."""
-    for source in sources:
-        if excerpt in source:
-            return excerpt
-    normalized_excerpt = _control_quote_normalize(excerpt)
-    matches: list[tuple[str, int, int]] = []
-    for source in sources:
-        normalized_source = _control_quote_normalize(source)
-        start = normalized_source.find(normalized_excerpt)
-        while start >= 0:
-            end = start + len(normalized_excerpt)
-            matches.append((source, start, end))
-            start = normalized_source.find(normalized_excerpt, start + 1)
-    if len(matches) != 1:
-        return excerpt
-    source, start, end = matches[0]
-    return source[start:end]
-
-CONTROL_AGENT_WIRE_VERSION = "phase5/control-agent-wire/v1"
+CONTROL_AGENT_WIRE_VERSION = "phase5/control-agent-wire/v23"
 CONTROL_AGENT_INPUT_VERSION = "phase5/control-agent-input/v1"
-CONTROL_AGENT_PROMPT_VERSION = "phase5/control-agent-prompt/v1.6"
+CONTROL_AGENT_PROMPT_VERSION = "phase5/control-agent-prompt/v2.21"
 CONTROL_DISCOVERY_INPUT_VERSION = "phase5/control-discovery-input/v1"
 CONTROL_DISCOVERY_PROMPT_VERSION = "phase5/control-discovery-prompt/v1"
 CONTROL_DISCOVERY_WIRE_VERSION = "phase5/control-discovery-wire/v1"
@@ -455,6 +437,7 @@ class ProtocolControlAgentWireConditionAtom(_WireModel):
     """One inline condition atom; identity is intentionally absent."""
 
     statement: str = Field(min_length=1)
+    evaluation: ControlAtomEvaluationSpec
     source_span_ids: list[str] = Field(min_length=1)
     source_excerpts: list[str] = Field(min_length=1)
     time_constraint: TimeConstraint | None = Field(...)
@@ -462,6 +445,11 @@ class ProtocolControlAgentWireConditionAtom(_WireModel):
 
     @model_validator(mode="after")
     def validate_sources(self) -> "ProtocolControlAgentWireConditionAtom":
+        if self.evaluation.version != "control-atom-evaluation/v4" or "repeat_scheme" not in self.evaluation.model_fields_set:
+            raise ValueError("当前解构须显式说明复查要求；没有要求填null，不沿用旧规格")
+        if self.evaluation.repeat_scheme is not None:
+            self.evaluation.repeat_scheme.require_current_extraction()
+        validate_control_atom_evaluation(self, require_explicit=True)
         _validate_parallel_sources(
             self.source_span_ids,
             self.source_excerpts,
@@ -523,6 +511,7 @@ class ProtocolControlAgentWireObligationAtom(_WireModel):
     """One typed obligation atom with direct source evidence."""
 
     kind: ControlObligationKind
+    evaluation: ControlAtomEvaluationSpec
     statement: str = Field(min_length=1)
     time_constraint: TimeConstraint | None = Field(...)
     prospective_period: ProspectivePeriod | None = Field(...)
@@ -534,6 +523,11 @@ class ProtocolControlAgentWireObligationAtom(_WireModel):
 
     @model_validator(mode="after")
     def validate_sources(self) -> "ProtocolControlAgentWireObligationAtom":
+        if self.evaluation.version != "control-atom-evaluation/v4" or "repeat_scheme" not in self.evaluation.model_fields_set:
+            raise ValueError("当前解构须显式说明复查要求；没有要求填null，不沿用旧规格")
+        if self.evaluation.repeat_scheme is not None:
+            self.evaluation.repeat_scheme.require_current_extraction()
+        validate_control_atom_evaluation(self, require_explicit=True)
         if self.modality == ControlObligationModality.BEST_EFFORT and self.kind in (
             ControlObligationKind.PROHIBIT_EVENT,
             ControlObligationKind.PROHIBIT_MEDICATION_OR_TREATMENT_EXPOSURE,
@@ -625,11 +619,16 @@ class ProtocolControlAgentWireEvidence(_WireModel):
     description: str = Field(min_length=1)
     due_stage: ReviewStage
     required_source_types: list[str] = Field(...)
+    workflow_stage_ids: list[str] = Field(min_length=1)
+    source_policy: ControlEvidenceSourcePolicy
+    atom_refs: list[ControlEvidenceAtomReference] = Field(min_length=1)
 
     @model_validator(mode="after")
     def validate_source_types(self) -> "ProtocolControlAgentWireEvidence":
         if any(not value.strip() for value in self.required_source_types):
             raise ValueError("最低证据资料类型不得包含空字符串")
+        if any(not value.strip() for value in self.workflow_stage_ids) or len(self.workflow_stage_ids) != len(set(self.workflow_stage_ids)):
+            raise ValueError("最低证据节点身份不得为空或重复")
         return self
 
 
@@ -668,6 +667,20 @@ class ProtocolControlAgentWireRelation(_WireModel):
         return self
 
 
+class ProtocolControlAgentWireRepeatTrigger(_WireModel):
+    condition_id: str = Field(min_length=1)
+    expression: ProtocolControlAgentWireConditionDnf
+    evidence_roles: list[RepeatEvidenceRoleReference] = Field(...)
+
+    @model_validator(mode="after")
+    def require_complete_evidence_roles(self):
+        resolve_repeat_evidence_roles(self.evidence_roles, [
+            [f"{i}:{j}" for j, _ in enumerate(group.atoms)]
+            for i, group in enumerate(self.expression.groups)
+        ], require_complete=True)
+        return self
+
+
 class ProtocolControlAgentWireCandidate(_WireModel):
     """Inline candidate semantics without candidate/control identities."""
 
@@ -677,6 +690,7 @@ class ProtocolControlAgentWireCandidate(_WireModel):
     trigger_expression: ProtocolControlAgentWireConditionDnf | None = Field(...)
     obligation_expression: ProtocolControlAgentWireObligationDnf = Field(...)
     exception_expression: ProtocolControlAgentWireExceptionDnf | None = Field(...)
+    repeat_trigger_conditions: list[ProtocolControlAgentWireRepeatTrigger] = Field(...)
     review_node_bindings: list[ProtocolControlAgentWireNode] = Field(min_length=1)
     minimum_evidence: list[ProtocolControlAgentWireEvidence] = Field(min_length=1)
     source_structure_unit_ids: list[str] = Field(min_length=1)
@@ -685,6 +699,18 @@ class ProtocolControlAgentWireCandidate(_WireModel):
 
     @model_validator(mode="after")
     def validate_scope(self) -> "ProtocolControlAgentWireCandidate":
+        validate_control_repeat_conditions(self)
+        conditions = {item.condition_id: item for item in self.repeat_trigger_conditions}
+        for expression in (self.applicability_expression, self.trigger_expression,
+                           self.obligation_expression, self.exception_expression):
+            for group in expression.groups if expression is not None else ():
+                for atom in group.atoms:
+                    scheme = atom.evaluation.repeat_scheme if atom.evaluation is not None else None
+                    if scheme is not None and scheme.permission == "investigator_discretion":
+                        permission = conditions[scheme.permission_condition_id]
+                        if not any(item.requires_professional_judgment for branch in permission.expression.groups
+                                   for item in branch.atoms):
+                            raise ValueError("研究者复查许可须保留书面判断条件，不得改成普通语义或签名条件")
         _require_sorted_unique(self.source_structure_unit_ids, "候选 source_structure_unit_ids")
         _require_sorted_unique(self.source_span_ids, "候选 source_span_ids")
         node_keys = [
@@ -852,7 +878,15 @@ _FORBIDDEN_PROVIDER_KEYS = frozenset(
 def _find_forbidden_provider_key(value: object, path: str = "") -> tuple[str, str] | None:
     if isinstance(value, Mapping):
         for key, child in value.items():
-            if key in _FORBIDDEN_PROVIDER_KEYS:
+            # This schema-local comparison label is not a published atom ID.
+            local_predicate = key == "predicate_id" and re.fullmatch(
+                r"candidate_drafts\[\d+\]\."
+                r"(?:(?:applicability|trigger|obligation|exception)_expression|"
+                r"repeat_trigger_conditions\[\d+\]\.expression)"
+                r"\.groups\[\d+\]\.atoms\[\d+\]\.evaluation\.predicate",
+                path,
+            ) is not None
+            if key in _FORBIDDEN_PROVIDER_KEYS and not local_predicate:
                 return key, f"{path}.{key}" if path else key
             found = _find_forbidden_provider_key(child, f"{path}.{key}" if path else key)
             if found is not None:
@@ -863,6 +897,49 @@ def _find_forbidden_provider_key(value: object, path: str = "") -> tuple[str, st
             if found is not None:
                 return found
     return None
+
+
+def _strip_invalid_evaluation_specs(payload: dict) -> None:
+    """宿主侧 evaluation 预清洗：模型输出的 evaluation 规格如无法通过合同
+    校验则确定性剥离（合同允许省略该字段，原子转由专业判断路径承接）。
+    只做字段级剥离，不修改 obligation_expression 或来源锚。"""
+
+    def _walk(node: object) -> None:
+        if isinstance(node, dict):
+            spans = node.get("source_span_ids") or []
+            excerpts = node.get("source_excerpts") or []
+            minimal = {
+                "version": "control-atom-evaluation/v4",
+                "determination_mode": "investigator_judgment",
+                "proposition": str(node.get("attribute") or node.get("source_term") or "待人工核实的控制条件"),
+                "time_purpose": "unresolved",
+                "source_span_ids": spans[:1] if spans else [],
+                "source_excerpts": excerpts[:1] if excerpts else [],
+            }
+            evaluation = node.get("evaluation")
+            if isinstance(evaluation, dict):
+                try:
+                    from app.domain.contracts.control_evaluation_spec import (
+                        ControlAtomEvaluationSpec,
+                    )
+
+                    ControlAtomEvaluationSpec.model_validate(evaluation)
+                except Exception:
+                    node["evaluation"] = minimal
+            elif "evaluation" not in node and                     (node.get("comparator") or node.get("source_clause") or node.get("source_clauses")):
+                # 模型漏填 evaluation 的原子：补最小人审规格
+                node["evaluation"] = minimal
+            for value in node.values():
+                _walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                _walk(item)
+
+    candidates = payload.get("candidate_drafts")
+    if isinstance(candidates, list):
+        for candidate in candidates:
+            if isinstance(candidate, dict):
+                _walk(candidate)
 
 
 def parse_protocol_control_agent_wire(text: str) -> ProtocolControlAgentWire:
@@ -895,6 +972,7 @@ def parse_protocol_control_agent_wire(text: str) -> ProtocolControlAgentWire:
             "PROVIDER_ID_FORBIDDEN",
             f"provider 不得生成系统身份字段 {path}（{key}）",
         )
+    _strip_invalid_evaluation_specs(payload)
     try:
         return ProtocolControlAgentWire.model_validate(payload)
     except ValidationError as exc:
@@ -1139,6 +1217,13 @@ def protocol_control_agent_json_schema() -> dict[str, object]:
     """Return the strict schema used in the prompt/provider response format."""
 
     schema = deepcopy(ProtocolControlAgentWire.model_json_schema())
+    from app.domain.contracts.observation_selection import ObservationOrdering
+    if "ObservationOrdering" in schema.get("$defs", {}):
+        schema["$defs"]["ObservationOrdering"] = ObservationOrdering.provider_json_schema()
+    if "RepeatScheme" in schema.get("$defs", {}):
+        schema["$defs"]["RepeatScheme"]["properties"]["version"] = {
+            "type": "string", "const": "repeat-scheme/v4",
+        }
 
     def normalize_provider_schema(value: object) -> None:
         if isinstance(value, list):
@@ -1206,8 +1291,87 @@ _DISCOVERY_SYSTEM_CONTRACT = (
 )
 
 _CONTROL_AGENT_SYSTEM_CONTRACT = (
-    "你是其他方案控制候选语义解构助手，不是官方 IN/EX 解构助手。你只处理本次输入中"
-    "owned_units 的结构单元；context_units 仅作只读上下文，不能处置、不能转移所有权。"
+    "你是其他方案控制候选语义解构助手，不是官方 IN/EX 解构助手。"
+    "每个条件和义务原子都须填写evaluation：proposition明确本原子成立的含义，不是最终入排结论；"
+    "按原文区分deterministic、semantic和investigator_judgment，不按义务kind自动选择。"
+    "确定性值比较用value_comparison和predicate，比较必须直接表达本原子成立，不依靠后续按禁令名称取反；"
+    "predicate_id仅为本规格内局部标识，不是控制或事实身份。日期约束计算用time_constraint，"
+    "并明确使用date_range还是record_time，不能把记录日期冒充事件日期。"
+    "evaluation.version使用control-atom-evaluation/v4。值比较、语义或研究者判断如附有时间条件，"
+    "须另用time_operand_attribute声明核对时间的日期属性，后续代码独立核算时间，不由语义关系代替。"
+    "单独时间计算只用operand_attribute，没有附加时间条件时time_operand_attribute为null。"
+    "time_purpose区分事件筛选范围、临床间隔条件和来源有效期；不能区分时保留unresolved，"
+    "没有时间约束才写not_applicable；带时间约束的新义务必须区分访视安排或结果有效期，"
+    "不得使用泛化的完成/核对。每个原子的来源定位只能用source_clause与source_clauses之一，"
+    "不得同时填两类。求值规格必须说明观察选择规则（一次、任一次或全部记录），"
+    "原文不足时明确标unverified；确定性求值必须声明computation方式，"
+    "semantic与investigator_judgment模式不得夹带任何computation字段。语义或研究者判断模式operation和predicate均为null。"
+    "语义任务不能确定所需事实属性时operand_attribute为null，不为填字段虚构操作数。"
+    "未找到记录不等于事件未发生；不要用任意占位值加ne比较器表示无病史，也不要反向解释exists。"
+    "source_span_ids和source_excerpts必须逐项取自本原子的原文；比较的阈值、单位和方向均须有原文依据。"
+    "有发生次数或发生天数期间时，用predicate.occurrence_window保存duration/minimum_count及scope，"
+    "scope.version=occurrence-scope/v4，kind区分anchored_lookback、calendar_period、anchored_period、"
+    "any_consecutive、unresolved，quantifier按原文为single/every/any/unresolved；仅锚定型填anchor_type。"
+    "明确回溯时长但未命名锚点用unanchored_lookback、single、anchor_type=null，实际由当前"
+    "筛选/基线应用政策分别回溯，不把应用政策伪装为方案原文命名日期。"
+    "source_excerpts保留本条件逐字依据，不把每月默认成日历月；不明确时填写unresolved及具体原因。"
+    "scope.start_inclusive/end_inclusive按原文保留统计期间是否含起止当天，未能从方案确定填null，"
+    "不得默认两个端点均包含。"
+    "多个期间另填occurrence_window.horizon，原文起止日期用explicit_dates、命名节点对用anchor_span、"
+    "明示相对统计范围用relative_window；原文明示不限期间才用unbounded，不明用unresolved并保留"
+    "疑问及逐字依据。single的horizon为null，不从外层时间筛选自动借用。scope.boundary_periods"
+    "按原文为full_only/include_partial/unresolved，任一或每一期间均须核对，不按比例折算阈值。"
+    "日历周起始星期仅明确时写calendar_week_start，否则null，非周周期也为null。周期长度沿用"
+    "duration；每30天不等于任意连续30天，未明对齐不能改成滑动。"
+    "连续或锚定期间以scope.duration_basis保留calendar_span（日历跨度如4周为28个日历日、"
+    "两端均计入）或boundary_offset（从边界偏移时长，再依原文开闭决定计入）；未明用unresolved，"
+    "其他期间为null。不得把4周日历跨度算成29天或强行半开以掩盖未明定义。"
+    "频次期间已声明时evaluation.observation_policy和repeat_scheme均为null，不把计数简化为观察选择；"
+    "其与复查的先后规则尚无结构表达时保留完整原文并报告未决。其他求值模式须observation_policy，"
+    "保存原文限定的观察范围scope、逐字来源和mode："
+    "single是明确的一项观察，any是该范围任一次满足，all是该范围每一次均满足。"
+    "不能依据病例恰好只有一项或多项来反推方案规则。任一模式如原文明示采用最近或最早一次，"
+    "在single政策下提供selection：criterion为latest/earliest，ordering_attribute为date_range。"
+    "日期选择不证明内容或研究者判断适用，仍须逐原文核实。条件性复查触发/授权/独立时限/替代或聚合尚不能表示时，"
+    "用unresolved并在scope保留完整要求；不以次数证明复查许可，不简化为any/all。"
+    "观察政策只写在evaluation.observation_policy，内层predicate.observation_policy省略或null。"
+    "复查采用要求只写在evaluation.repeat_scheme，内层predicate.repeat_scheme填null；没有该要求也显式填null。"
+    "复查方案使用repeat-scheme/v4；multi_initial_result仅在原文明示多组初查的结果采用顺序时填写："
+    "per_initial_then_all或per_initial_then_any表示每组先按复查规则采用结果，再要求各组全部或任一满足；"
+    "保留对应source_excerpts。原文未涉及填null，涉及但先后顺序不明填unresolved。"
+    "不得从已有observation_policy、记录数量、日期或有利结果推断这种顺序。"
+    "条件性复查通过trigger_condition_id引用本候选repeat_trigger_conditions"
+    "中的局部condition_id，每项expression保留完整条件DNF；没有时填空数组。该条件不属于四层控制逻辑，"
+    "明确要求研究者许可时，用permission_condition_id引用该数组中的另一完整许可命题，不能与触发条件"
+    "共用编号；investigator_discretion必须提供此引用。许可保留决定者、检查对象、原文限定时间，"
+    "要求明确同意或决定复查的书面内容，而不是签名或普通病情判断。原文无额外批准要求时填null。"
+    "其中研究者作出同意或决定的原子须requires_professional_judgment=true，"
+    "evaluation.determination_mode=investigator_judgment，保留具体许可命题；其他事实子条件维持其原类型。"
+    "触发条件的作用范围不得从time_limit.reference推断。附加条件"
+    "逐原子填写evidence_roles，以零起算group_index/atom_index引用expression.groups中的atoms；"
+    "evidence_role.role按原文填写initial_observation、preceding_observation、target_observation、external_context或unresolved，"
+    "source_excerpts保留支持取证范围的逐字原文；许可针对本次复查时使用target_observation，仅用于许可条件，"
+    "须明确检查对象，不因日期接近推断适用，不将单次许可扩展到其他复查。初查/前次检验与外部用药背景分别标明。"
+    "原文未明填unresolved，不把混合条件树套同一检查范围，不用本次复查结果证明自身触发。附加条件"
+    "不能激活、豁免或替代入排分支，其原子evaluation.repeat_scheme必须为null。明确次数同时声明"
+    "count_scope为per_initial_acquisition/per_current_episode/unresolved；合并结果同时声明"
+    "result_combine为sum/mean/minimum/maximum/all/any/unresolved，同时声明result_population："
+    "initial_and_repeats包含初查及复查、repeats_only仅复查；原文未明或是其他范围用unresolved，"
+    "不猜范围或默认取最佳值。非combine的result_population填null。"
+    "no_repeat_result_use独立按原文填写retain_initial（明示可采用初查）、no_result（明示必须有复查才可采用）"
+    "或unresolved（无明确规定/无法确定）；不能因optional或未见记录推断退回初查，也不证明复查未发生或资料齐全。"
+    "原文明示触发条件不成立可用初查时用retain_initial_when_trigger_false，必须引用完整trigger_condition_id；"
+    "未核实和缺记录不表示条件不成立。"
+    "保留逐字来源、许可/必做/禁止/研究者决定、触发条件、次数、期限和结果采用方式；未规定与未核实须区分。"
+    "不能以日期先后推断复查关系，不能默认一次、无限次或最后/最有利结果；明确最后一次才用use_last_repeat，"
+    "仅明确以复查为准用use_single_repeat，尚不能表达的限制保留原文并标unresolved。"
+    "原文未规定结果采用方式时result_use为not_specified；有相关措辞但未核清为unresolved。"
+    "期限明确初查/前次检查/方案节点参照及开闭边界，月年不换成固定天数；条件与研究者许可不在解构时判真。"
+    "selection须明确window_order：within_window先限时间范围再选记录，before_window_check先选记录再核时间，"
+    "not_applicable仅在无时间约束时使用；原文不能确定顺序则unresolved，不默认改选更旧的有效记录。"
+    "这些模式表达本原子proposition，不按入选、排除或义务类别自动交换量词。"
+    "资料存在、签名存在、行动已办结均不证明履约；不得为强行确定性计算改写或简化要求。"
+    "你只处理本次输入中owned_units的结构单元；context_units仅作只读上下文，不能处置、不能转移所有权。"
     "只读上下文可以帮助解释术语、访视和重复关系，但它本身不是已发布目标；只有输入中明确列出的"
     "known_official_targets、known_procedure_targets 或 known_workflow_stage_targets，且当前处置或候选"
     "建立了相应链接时，才能据此判定某项内容已被覆盖。只读上下文出现相似或重复表述，不能单独作为"
@@ -1320,6 +1484,10 @@ _CONTROL_AGENT_SYSTEM_CONTRACT = (
     "通用访视安排必须关联 known_workflow_stage_targets 中的 workflow_stage，不得把通用时间窗分别挂到"
     "各个 required_procedure。通用基线值选取原则关联 workflow_stage；只针对一个明确检查项的"
     "特例才关联该 required_procedure。一个候选不得同时混合通用原则和具体检查项特例。"
+    "half_life_evidence只承载本原子正式方案原文明示的单一半衰期时长与适用对象，"
+    "source_span_id/source_excerpt须属于本原子来源；duration_quote逐字保留数值单位，"
+    "applies_to_quote逐字保留适用对象。不得凭记忆、药名、其他人群或范围端点补值；"
+    "原文只规定倍数但未给时长时该字段为null，仍保留倍数要求。"
     "日历时长、半衰期倍数和 prospective_period 都必须在该原子自己的 source_excerpts 中"
     "逐字找到直接支持；需要同时引用时间单元和项目单元时，按一一对应规则同时列出。"
     "条件只缩短起始窗口、不改变持续终点时，替代义务仍必须保留原持续期间，"
@@ -1360,7 +1528,10 @@ _CONTROL_AGENT_SYSTEM_CONTRACT = (
     "‘按附录/SOP执行’的规则要求。requires_professional_judgment 仅在该原子本身需要研究者、医生或其他"
     "专业人员作判断时设为 true；患者自填/自评问卷、机械计分、范围核对或资料是否存在的核对不得仅因"
     "需要审核就设为 true，也不得为纯患者自填/自评工具额外要求研究者评估记录。医生评分、研究者临床判断"
-    "等原文明示或工具固有的专业评估保持 true。义务陈述若保留‘见附录’、‘按SOP’、‘按手册’等权威引用，"
+    "等原文明示或工具固有的专业评估保持 true。该布尔不表示需另写研究者声明；诊断或评分记录"
+    "本身可承载专业评估。仅在方案要求研究者对特定对象作判断时，才为对应 minimum_evidence"
+    "指定 investigator_assessment，并明确对象、节点及可接受记录；不得扩散到同组件内客观检查"
+    "或一般病史的其他最低证据。义务陈述若保留‘见附录’、‘按SOP’、‘按手册’等权威引用，"
     "该义务自己的 source_excerpts 必须同时包含直接支持该引用的连续原文；不得只引用方法描述却在陈述中补写引用。"
     "原文要求在计划访视、各计划访视或计划的访视点执行告知、核对或记录时，候选义务和直接摘录必须"
     "保留该访视作用域；审核节点只能选择当前 known_workflow_stage_targets 中实际冻结的节点，"
@@ -1372,7 +1543,20 @@ _CONTROL_AGENT_SYSTEM_CONTRACT = (
     "筛选完成与后续有效性判定。如果冻结官方规则或流程必做目标已完整覆盖检查或操作本身，新候选只保留未被覆盖的"
     "时间有效性、条件后果或其他增量要求，通过关系关联原目标，不得重复造一条‘必须检查’。每个本节点判定"
     "必须至少有一项 due_stage 与该 review_stage 一致的最低证据。最低证据必须"
-    "说明 fact_type、description 和 due_stage。跨来源关系只能"
+    "说明 fact_type、description、due_stage 和 workflow_stage_ids。workflow_stage_ids须逐一选择本候选已绑定的"
+    "冻结节点，期别与due_stage一致，表示在哪些具体访视核对此项证据，不能仅凭同属一个阶段概括所有访视。"
+    "核对节点不等于资料生成日期：既往记录可以支持后续判断，病史回溯窗口不等于检查结果有效期。"
+    "每项证据的source_policy分别说明是否要求同期客观原件、是否允许筛选病历转述；"
+    "原文未能明确支持真或假时填null，不凭资料类型、疾病或常识补值。"
+    "result_validity_status为specified时保留原文完整有效期约束；明确未另规定时为not_specified，"
+    "尚无法确定时为unknown，两者的result_validity_constraint均为null，不把未规定说成无限有效。"
+    "source_policy须携带与该证据要求有关且一一对应的source_span_ids和逐字source_excerpts；"
+    "每项最低证据还须用atom_refs说明它用于核实哪个原子：layer从applicability、trigger、"
+    "obligation、exception或repeat_trigger选择；repeat_trigger须同时提供condition_id，"
+    "定位本候选旁置复查条件，其他层不得提供condition_id；group_index及atom_index均为相应表达式中的零基序位。"
+    "一项资料可对应多个原子，但不能只因资料类型相同而关联。核实适用人群、触发和例外的"
+    "资料也须明确关联，不能等到条件已成立才去收集用于确定条件的资料；此关联不表示条件成立。"
+    "不得把病史事件回溯期、禁药洗脱期抄作报告有效期。跨来源关系只能"
     "从输入的 known_official_targets、known_procedure_targets 或 known_workflow_stage_targets 中选择目标，"
     "不得发明目标。"
     "补充流程必做目标时，affected_workflow_stage_id 表示本条增量首次构成可发布入排判定的冻结节点。"
@@ -1411,7 +1595,8 @@ _CONTROL_AGENT_SYSTEM_CONTRACT = (
     "official_eligibility 或 required_procedure 单元不得同时作为候选来源。"
     "所有要求排序的 ID 列表必须按完整 ID 字典序排列且不得重复。"
     "provider 不得输出 batch_id、candidate/control/atom/evidence/relation/node 稳定 ID、"
-    "predicate_id、候选位置索引或任何额外字段；系统会在水合时注入身份。只输出完整 JSON，"
+    "候选位置索引或任何额外字段；系统会在水合时注入身份。仅evaluation.predicate内的predicate_id"
+    "是比较规格必需的局部标识，可按Schema提供，不代表正式条款或事实身份。只输出完整 JSON，"
     "不得输出 Markdown、日志、说明或发布结论。"
     "一个 owned 单元的全部语义若由多个访视级流程目标共同覆盖，必须处置为 required_procedure，"
     "并在 linked_procedure_catalog_item_ids 中完整列出每个目标；不得只保留最早或最后一个访视。"
@@ -1940,7 +2125,7 @@ def _validate_exact_atom_sources(
     candidate: ProtocolControlAgentWireCandidate,
     *,
     batch: ProtocolControlDispositionBatch,
-) -> None:
+) -> ProtocolControlAgentWireCandidate:
     source_texts = _candidate_source_texts(
         batch,
         candidate.source_structure_unit_ids,
@@ -1954,32 +2139,16 @@ def _validate_exact_atom_sources(
     # characters (words, digits, units, comparators, general punctuation, whitespace)
     # remain strict. Restoration succeeds only when the normalized excerpt occurs
     # exactly once within the authorized source texts for its specific span_id.
-    def _restore_atom(atom) -> None:
-        restored: list[str] = []
-        for span_id, excerpt in zip(atom.source_span_ids, atom.source_excerpts):
-            sources = source_texts.get(span_id, ())
-            restored.append(_recover_control_excerpt(excerpt, sources))
-        if restored != list(atom.source_excerpts):
-            # Mutate the wire atom in place so subsequent strict check and domain
-            # hydration see the authentic source glyphs. Raw output hash remains
-            # the original straight-quote text for audit.
-            atom.source_excerpts = restored
+    candidate = ProtocolControlAgentWireCandidate.model_validate(
+        restore_source_fields(candidate.model_dump(mode="json"), source_texts)
+    )
 
     expressions = (
         ("applicability", candidate.applicability_expression),
         ("trigger", candidate.trigger_expression),
         ("exception", candidate.exception_expression),
+        *(("repeat_trigger", item.expression) for item in candidate.repeat_trigger_conditions),
     )
-    for layer, expression in expressions:
-        if expression is None:
-            continue
-        atoms = [atom for group in expression.groups for atom in group.atoms]
-        for atom in atoms:
-            _restore_atom(atom)
-    for group in candidate.obligation_expression.groups:
-        for atom in group.atoms:
-            _restore_atom(atom)
-
     # Strict verbatim check after deterministic restoration.
     for layer, expression in expressions:
         if expression is None:
@@ -2015,6 +2184,9 @@ def _validate_exact_atom_sources(
                         f"obligation 原子 {atom_index} 的摘录不是来源 {span_id} 的连续原文",
                         structure_unit_ids=candidate.source_structure_unit_ids,
                     )
+
+
+    return candidate
 
 
 def _validate_known_targets(
@@ -2315,6 +2487,8 @@ def validate_protocol_control_agent_wire(
                 structure_unit_ids=candidate.source_structure_unit_ids,
                 candidate_indexes=[candidate_index],
             )
+        candidate = _validate_exact_atom_sources(candidate, batch=batch)
+        wire.candidate_drafts[candidate_index] = candidate
         fingerprint = _stable_json(candidate.model_dump(mode="json"))
         if fingerprint in fingerprints:
             raise ProtocolControlAgentWireValidationError(
@@ -2340,7 +2514,6 @@ def validate_protocol_control_agent_wire(
             batch=batch,
             candidate_index=candidate_index,
         )
-        _validate_exact_atom_sources(candidate, batch=batch)
         _validate_known_targets(candidate, batch=batch)
         _validate_temporal_obligation_scope(candidate)
 
@@ -2379,6 +2552,7 @@ def _condition_dnf_to_domain(
                 atoms=[
                     ControlConditionAtomDraft(
                         statement=atom.statement,
+                        evaluation=atom.evaluation,
                         source_span_ids=list(atom.source_span_ids),
                         source_excerpts=list(atom.source_excerpts),
                         time_constraint=atom.time_constraint,
@@ -2406,6 +2580,7 @@ def _obligation_dnf_to_domain(
                 atoms=[
                     ControlObligationAtomDraft(
                         kind=atom.kind,
+                        evaluation=atom.evaluation,
                         statement=atom.statement,
                         time_constraint=atom.time_constraint,
                         prospective_period=atom.prospective_period,
@@ -2441,6 +2616,10 @@ def _candidate_to_domain(
             candidate.exception_expression,
             allow_exception_scopes=True,
         ),
+        repeat_trigger_conditions=[ControlRepeatTriggerDraft(
+            condition_id=item.condition_id, expression=_condition_dnf_to_domain(item.expression),
+            evidence_roles=list(item.evidence_roles),
+        ) for item in candidate.repeat_trigger_conditions],
         review_node_bindings=[
             ReviewNodeBinding(
                 workflow_stage_id=item.workflow_stage_id,
@@ -2456,6 +2635,9 @@ def _candidate_to_domain(
                 description=item.description,
                 due_stage=item.due_stage,
                 required_source_types=list(item.required_source_types),
+                workflow_stage_ids=list(item.workflow_stage_ids),
+                source_policy=item.source_policy,
+                atom_refs=list(item.atom_refs),
             )
             for item in candidate.minimum_evidence
         ],

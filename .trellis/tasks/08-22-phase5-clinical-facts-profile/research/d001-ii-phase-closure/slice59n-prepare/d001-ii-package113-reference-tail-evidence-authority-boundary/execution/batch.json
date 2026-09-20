@@ -1,0 +1,108 @@
+{
+  "batch_id": "pcb-cfce086c808a2b7b74a280c4",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [],
+  "context_structure_unit_ids": [],
+  "context_units": [],
+  "coverage_manifest_id": "manifest:slice61cz-package113-reference-tail-evidence-authority-boundary",
+  "known_official_targets": [],
+  "known_procedure_targets": [],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "D1给药前",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "D1给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {},
+  "owned_required_action_kinds_by_structure_unit_id": {},
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.p1307",
+    "body.p1308"
+  ],
+  "owned_structure_unit_ids": [
+    "su-22abacd010232ba13f5db046",
+    "su-37efce23e3c3cb955928c590"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "Finlay AY, Khan GK. Dermatology Life Quality Index (DLQI)--a simple practical measure for routine clinical use. Clin Exp Dermatol. 1994;19:210–6.",
+      "heading_path": [
+        "参考文献"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1307"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32030,
+      "source_ref": "body.p1307",
+      "source_span_ids": [
+        "body.p1307"
+      ],
+      "structure_unit_id": "su-22abacd010232ba13f5db046",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "国家药品监督管理局.药品注册管理办法.2020.",
+      "heading_path": [
+        "参考文献"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1308"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32040,
+      "source_ref": "body.p1308",
+      "source_span_ids": [
+        "body.p1308"
+      ],
+      "structure_unit_id": "su-37efce23e3c3cb955928c590",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [],
+  "study_phase": "phase_ii"
+}

@@ -22,10 +22,12 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import event
+from sqlalchemy import and_, event
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.storage.codecs import utc_now, verify_payload_sha256
+from app.storage.models import JobRecord
 from app.workflow.errors import (
     LeaseLostError,
     ProcessDeath,
@@ -100,11 +102,15 @@ class JobRunner:
         on_cancelled: Callable[[str], None] | None = None,
         on_failed: Callable[[str], None] | None = None,
         max_parallel_steps: int = 1,
+        job_scope: ColumnElement[bool] | None = None,
+        on_maintenance: Callable[["JobRunner"], None] | None = None,
     ) -> None:
         if isinstance(max_parallel_steps, bool) or max_parallel_steps < 1:
             raise ValueError("max_parallel_steps 必须是 >= 1 的整数")
         self.session_factory = session_factory
         self.executors = dict(executors)
+        registered_scope = JobRecord.job_type.in_(tuple(self.executors))
+        self.job_scope = registered_scope if job_scope is None else and_(registered_scope, job_scope)
         self.worker_id = worker_id
         self.poll_interval = poll_interval
         self.now = now
@@ -114,6 +120,7 @@ class JobRunner:
         self.on_cancelled = on_cancelled
         self.on_failed = on_failed
         self.max_parallel_steps = max_parallel_steps
+        self.on_maintenance = on_maintenance
         self._stop_event = threading.Event()
 
     def _store(self, session: Session) -> JobStore:
@@ -122,6 +129,7 @@ class JobRunner:
             now=self.now,
             lease_ttl=self.lease_ttl,
             backoff=self.backoff,
+            job_scope=self.job_scope,
         )
 
     def request_stop(self) -> None:
@@ -146,11 +154,20 @@ class JobRunner:
     def _maintenance(self) -> None:
         with self.session_factory() as session, session.begin():
             self._store(session).requeue_due_retries()
-        report = recover_expired_jobs(self.session_factory, now=self.now)
+        report = recover_expired_jobs(self.session_factory, now=self.now, job_scope=self.job_scope)
         for job_id in report.cancelled_jobs:
             self._notify_cancelled(job_id)
         for job_id in report.failed_final_jobs:
             self._notify_failed(job_id)
+        if self.on_maintenance is not None:
+            try:
+                self.on_maintenance(self)
+            except Exception:
+                logger.exception("任务衔接维护未完成，其他已排队任务仍可执行")
+
+    def lease_heartbeat(self, lease: JobLease):
+        """Share the existing lease guard with bounded maintenance continuations."""
+        return self._lease_heartbeat(lease)
 
     # -------------------------------------------------------------- 单任务
 
@@ -302,6 +319,11 @@ class JobRunner:
                             store.release_deferred(lease)
                             return
                     else:
+                        if self._stop_event.is_set():
+                            # The preceding step/wave has already committed.
+                            # Return the remaining work without consuming an attempt.
+                            store.release_deferred(lease)
+                            return
                         if step.waiting_user_kind is not None:
                             store.enter_user_wait(
                                 lease,

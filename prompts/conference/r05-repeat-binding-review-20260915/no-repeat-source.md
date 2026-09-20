@@ -1,0 +1,9 @@
+# 无复查记录时的来源政策：只读审阅
+
+同批准evidence_single_object角色、路由、会话；禁止文件修改、运行测试、应用导入、对象构造、服务/数据库/浏览器/产品模型调用或再派发。仅读实际源码，runner保存回复。
+
+本轮仅新增app/domain/contracts/repeat_scheme.py的可空no_repeat_result_use（retain_initial/no_result/unresolved）。历史None省略、不改变历史hash；新提取必须非空，原文未明用unresolved。两族现wire12及17/prompt2.14声明须原文，不因optional/无记录推定可用初查。app/domain/repeat_result_selection.py在无repeat时先查本次scope_complete及该政策；未知不回退，明确no_result保留缺口，仅明确retain_initial经原初查/图检查采用初查。已有复查时不受此字段影响。冻结计算v28/发布v10、前端原因中文已更新。未签发方法授权，无运行验收。
+
+请读取上述文件完整相关定义、app/services/repeat_result_resolution.py以及app/services/repeat_atom_calculation.py相邻消费者，核对是否遗漏恒阻断、绕过来源或旧hash污染。没有复查不等于未曾复查，已知缺文件义务不在本函数清除。当前尚不支持“依初查触发条件不成立才采用初查”的条件性缺席政策，不要将unresolved说成功能全齐；明确要求的规则不得硬编码具体医学实体。
+
+给确定性缺陷与最小修改，区别当前新增与剩余功能；不重复上一轮AN1，当前组每个fact均调用fact_result，独立日期事实缺value会使组未知，不是已采用日期佐证。源码可证明通过的边界简写，未执行验证明确说明。

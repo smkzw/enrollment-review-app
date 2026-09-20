@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
+from dataclasses import dataclass
+from collections.abc import Mapping
 
 from app.domain.contracts.agents import AgentCallContract, GateResult
 from app.domain.contracts.common import ContractModel
@@ -36,6 +38,15 @@ from .scope import require_registered_review_scope
 
 class AssessmentGateError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class RequirementGapState:
+    """Validated input projection for gap calculation, not publication evidence."""
+
+    requirement_id: str
+    status: ExpectationStatus
+    gap_type: GapType | None
 
 
 class AssessmentPublication(ContractModel):
@@ -193,10 +204,40 @@ STAGE_RANK = {
 
 
 REASON_GAPS = {
+    "occurrence_scope_unverified": GapType.OBSERVATION_UNVERIFIED,
+    "prospective_scope_unverified": GapType.OBSERVATION_UNVERIFIED,
+    "repeat_relation_unverified": GapType.OBSERVATION_UNVERIFIED,
+    "semantic_evidence_unverified": GapType.OBSERVATION_UNVERIFIED,
+    "selected_observation_missing": GapType.OBSERVATION_UNVERIFIED,
+    "observation_scope_completeness_unverified": GapType.OBSERVATION_UNVERIFIED,
+    "observation_scope_partially_covered": GapType.OBSERVATION_UNVERIFIED,
+    "universal_statement_not_forward_witness": GapType.OBSERVATION_UNVERIFIED,
+    "proposition_relation_conflict": GapType.OBSERVATION_UNVERIFIED,
+    "proposition_disagreement": GapType.OBSERVATION_UNVERIFIED,
+    "proposition_undetermined": GapType.OBSERVATION_UNVERIFIED,
+    "proposition_unresolved": GapType.OBSERVATION_UNVERIFIED,
+    "proposition_scope_policy_mismatch": GapType.OBSERVATION_UNVERIFIED,
+    "prospective_statement_period_unverified": GapType.OBSERVATION_UNVERIFIED,
+    "prospective_requirement_unverified": GapType.OBSERVATION_UNVERIFIED,
+    "future_conduct_not_established": GapType.OBSERVATION_UNVERIFIED,
+    "single_observation_relations_incomplete": GapType.OBSERVATION_UNVERIFIED,
+    "declared_time_operand_not_qualified": GapType.OBSERVATION_UNVERIFIED,
+    "identity_selection_unresolved": GapType.OBSERVATION_UNVERIFIED,
+    "no_usable_qualified_pair": GapType.OBSERVATION_UNVERIFIED,
+    "identity_absent_from_qualification": GapType.OBSERVATION_UNVERIFIED,
+    "no_candidate_pairs_in_completed_job": GapType.OBSERVATION_UNVERIFIED,
+    "written_content_unverified": GapType.OBSERVATION_UNVERIFIED,
+    "multiple_usable_pairs_without_selection_policy": GapType.OBSERVATION_UNVERIFIED,
+    "event_date_not_qualified_for_selected_value": GapType.OBSERVATION_UNVERIFIED,
+    "observation_unverified": GapType.OBSERVATION_UNVERIFIED,
+    "observation_selection_unverified": GapType.OBSERVATION_UNVERIFIED,
+    "observation_out_of_window": GapType.OBSERVATION_UNVERIFIED,
     "source_conflict": GapType.SOURCE_CONFLICT,
     "professional_judgment_missing": GapType.PROFESSIONAL_JUDGMENT,
+    "professional_judgment_unverified": GapType.OBSERVATION_UNVERIFIED,
     "date_or_anchor_missing": GapType.DATE_OR_ANCHOR_MISSING,
-    "half_life_missing": GapType.DATE_OR_ANCHOR_MISSING,
+    "half_life_missing": GapType.OBSERVATION_UNVERIFIED,
+    "half_life_time_precision_insufficient": GapType.DATE_OR_ANCHOR_MISSING,
     "unit_mismatch": GapType.OCR_OR_PARSE_RISK,
     "fact_polarity_unknown": GapType.OCR_OR_PARSE_RISK,
     "ambiguous_partial_date": GapType.DATE_OR_ANCHOR_MISSING,
@@ -210,12 +251,30 @@ def derive_gate_gap_types(
     component: RuleComponent,
     evaluation: ComponentEvaluation,
     episode_stage: ReviewStage,
-    expectations: list[EvidenceExpectation],
+    expectations: list[EvidenceExpectation] | list[RequirementGapState],
     conflict_groups: list[ConflictGroup],
+    workflow_stage_id: str | None = None,
+    requirement_workflow_stage_ids: Mapping[str, str] | None = None,
+    source_gaps: frozenset[GapType] = frozenset(),
+    requirement_gap_overrides: Mapping[str, GapType] | None = None,
+    verified_judgment_requirement_ids: frozenset[str] = frozenset(),
 ) -> set[GapType]:
     component_requirement_ids = {
         requirement.requirement_id for requirement in component.evidence_requirements
     }
+    overrides = requirement_gap_overrides or {}
+    if (not verified_judgment_requirement_ids <= component_requirement_ids
+            or verified_judgment_requirement_ids & set(overrides)):
+        raise AssessmentGateError("已核实的书面判断必须对应本条要求且不能同时声明未核实")
+    if (not set(overrides) <= component_requirement_ids
+            or any(value not in {GapType.PROFESSIONAL_JUDGMENT, GapType.OBSERVATION_UNVERIFIED}
+                   for value in overrides.values())):
+        raise AssessmentGateError("书面判断核实状态必须对应本条资料要求")
+    if requirement_workflow_stage_ids is not None and (
+        workflow_stage_id is None
+        or not component_requirement_ids <= set(requirement_workflow_stage_ids)
+    ):
+        raise AssessmentGateError("审核节点或资料要求的到期节点不完整")
     relevant_expectations = [
         expectation
         for expectation in expectations
@@ -228,21 +287,36 @@ def derive_gate_gap_types(
     if len(expectation_by_requirement) != len(relevant_expectations):
         raise AssessmentGateError("同一组件的 EvidenceExpectation requirement_id 必须唯一")
 
-    gaps: set[GapType] = set()
+    gaps: set[GapType] = set(source_gaps)
     future_requirements = 0
     due_requirements = 0
     for requirement in component.evidence_requirements:
-        if STAGE_RANK[requirement.due_stage] > STAGE_RANK[episode_stage]:
+        other_node = (
+            requirement_workflow_stage_ids is not None
+            and requirement.due_stage == episode_stage
+            and requirement_workflow_stage_ids.get(requirement.requirement_id)
+            != workflow_stage_id
+        )
+        if STAGE_RANK[requirement.due_stage] > STAGE_RANK[episode_stage] or other_node:
             future_requirements += 1
             continue
         due_requirements += 1
+        override = overrides.get(requirement.requirement_id)
+        if override is not None:
+            gaps.add(override)
         expectation = expectation_by_requirement.get(requirement.requirement_id)
         if expectation is None:
-            gaps.add(GapType.RECORD_INCOMPLETE)
+            if override is None:
+                gaps.add(GapType.RECORD_INCOMPLETE)
             continue
         if expectation.status == ExpectationStatus.NOT_DUE:
             raise AssessmentGateError("已到期 EvidenceRequirement 不能保持 not_due")
-        if expectation.gap_type is not None:
+        if expectation.gap_type is not None and not (
+            (override is not None or requirement.requirement_id in verified_judgment_requirement_ids)
+            and expectation.gap_type in {
+                GapType.PROFESSIONAL_JUDGMENT, GapType.OBSERVATION_UNVERIFIED,
+            }
+        ):
             gaps.add(expectation.gap_type)
 
     if future_requirements and not due_requirements:
@@ -306,6 +380,19 @@ def derive_component_decision(
         return ComponentDecision.NOT_DUE
     trigger = evaluation.trigger.truth
     if trigger == TruthValue.UNKNOWN:
+        return _decision_for_unknown(gaps)
+    blocking_gaps = gaps - {GapType.PROVENANCE_FOLLOWUP}
+    documented_procedure_failure = (
+        rule_kind == RuleKind.REQUIRED_PROCEDURE
+        and trigger == TruthValue.FALSE
+        and bool(blocking_gaps)
+        and blocking_gaps <= {
+            GapType.REQUIRED_PROCEDURE_NOT_DONE,
+            GapType.RESULT_FIELDS_MISSING,
+            GapType.RECORD_INCOMPLETE,
+        }
+    )
+    if blocking_gaps and not documented_procedure_failure:
         return _decision_for_unknown(gaps)
     if rule_kind == RuleKind.INCLUSION:
         return (
@@ -387,7 +474,11 @@ def validate_assessment_candidate(
             or set(observation.reason_codes) != set(result.reason_codes)
             or observation.observed_value != result.observed_value
             or observation.observed_unit != result.observed_unit
-            or set(observation.evidence_span_ids) != set(result.evidence_span_ids)
+            or set(
+                observation.locator_ids
+                if observation.schema_version == "review/v2"
+                else observation.evidence_span_ids
+            ) != set(result.evidence_span_ids)
         ):
             raise AssessmentGateError(
                 "AssessmentCandidate 谓词观察必须与确定性 Evaluator 结果一致"

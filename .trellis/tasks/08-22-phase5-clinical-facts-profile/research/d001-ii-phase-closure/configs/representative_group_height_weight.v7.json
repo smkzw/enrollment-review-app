@@ -1,0 +1,16 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_height_weight.v6.json",
+  "group_id": "d001-ii-height-weight-v7",
+  "task_id": "phase5-slice60zj-20260828",
+  "artifact_dir_name": "phase5-slice60zj-d001-height-weight-replay-frozen-target-precedence-20260828",
+  "ids": {
+    "manifest_id": "manifest:slice60zj-height-weight",
+    "catalog_id": "catalog:slice60zj-height-weight"
+  },
+  "notes": [
+    "v6最后一轮已正确拆分身高与体重候选，但旧关键词访视门无法把‘其余访视点’解析为冻结目录中的基线访视，形成误拒。",
+    "v7在存在结构化来源-流程目标映射时以冻结映射为范围权威；仅在映射缺失时继续使用原文关键词保守检查。",
+    "不放宽目标集合：链接目标仍必须与每个来源单元的冻结目标集合精确一致。"
+  ]
+}

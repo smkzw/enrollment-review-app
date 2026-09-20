@@ -202,17 +202,6 @@ class FactPublicationService:
             item.target_id
             for item in FactCorrectionRepository(session).list_by_authority(authority)
         }
-        existing_facts = [
-            item for item in existing_facts if item.fact_id not in superseded_entity_ids
-        ]
-        existing_events = [
-            item for item in existing_events if item.event_id not in superseded_entity_ids
-        ]
-        existing_exposures = [
-            item
-            for item in existing_exposures
-            if item.exposure_id not in superseded_entity_ids
-        ]
         candidates = FactNormalizationCandidateRepository(session).list_by_run(run_id)
         gate_results = FactGateResultRepository(session).list_by_run(run_id)
         final_gates = [
@@ -231,6 +220,7 @@ class FactPublicationService:
             if gate_by_candidate[candidate.candidate_id].outcome == GateOutcome.ACCEPTED
         ]
         replay = self._replay_if_published(
+            session,
             run_id,
             authority,
             accepted,
@@ -242,6 +232,13 @@ class FactPublicationService:
         if replay is not None:
             validator.validate(authority)
             return replay
+        existing_events = [
+            item for item in existing_events if item.event_id not in superseded_entity_ids
+        ]
+        existing_exposures = [
+            item for item in existing_exposures
+            if item.exposure_id not in superseded_entity_ids
+        ]
         fact_candidates = [
             item for item in accepted if isinstance(item, ClinicalFactCandidateV2)
         ]
@@ -289,22 +286,49 @@ class FactPublicationService:
             created_at=created_at,
             repository=exposure_repository,
         )
-        published_conflicts = self._publish_conflicts(
-            authority=authority,
-            run_id=run_id,
-            fact_candidates=fact_candidates,
-            event_candidates=event_candidates,
-            exposure_candidates=exposure_candidates,
-            candidate_to_fact=candidate_to_fact,
-            candidate_to_event=candidate_to_event,
-            candidate_to_exposure=candidate_to_exposure,
-            facts=published_facts,
-            events=published_events,
-            exposures=published_exposures,
-            gate_by_candidate=gate_by_candidate,
-            created_at=created_at,
-            repository=conflict_repository,
-        )
+        published_conflicts = []
+        has_inherited_sources = any(fact.inherited_from_fact_id is not None for fact in published_facts)
+        if has_inherited_sources:
+            from app.services.source_reference_successors import append_source_reference_successors
+            successor_events, successor_exposures = append_source_reference_successors(
+                session, authority=authority, run_id=run_id,
+                facts=published_facts, created_at=created_at,
+            )
+            published_events.extend(successor_events)
+            published_exposures.extend(successor_exposures)
+            from app.services.source_conflict_successors import append_source_conflict_successors
+            published_conflicts.extend(append_source_conflict_successors(
+                session, authority=authority, run_id=run_id, facts=published_facts,
+                events=successor_events, exposures=successor_exposures, created_at=created_at,
+            ))
+        published_conflicts.extend(self._publish_conflicts(
+            authority=authority, run_id=run_id, fact_candidates=fact_candidates,
+            event_candidates=event_candidates, exposure_candidates=exposure_candidates,
+            candidate_to_fact=candidate_to_fact, candidate_to_event=candidate_to_event,
+            candidate_to_exposure=candidate_to_exposure, facts=published_facts,
+            events=published_events, exposures=published_exposures,
+            gate_by_candidate=gate_by_candidate, created_at=created_at,
+            repository=conflict_repository, source_successors=published_conflicts,
+        ))
+        if has_inherited_sources:
+            # Reject any dependent reference that could not be explicitly rebuilt.
+            from app.services.patient_profile_service import (
+                PatientProfileProjectionError,
+                PatientProfileService,
+            )
+            profile = PatientProfileService()
+            try:
+                profile._validate_referential_closure(
+                    facts=profile._published_facts(session, authority),
+                    events=profile._published_events(session, authority),
+                    exposures=profile._published_exposures(session, authority),
+                    conflicts=profile._published_conflicts(session, authority),
+                    expectations=profile._latest_expectations(session, authority),
+                )
+            except PatientProfileProjectionError as exc:
+                raise FactPublicationError(
+                    "新增来源尚未与既有病史、用药及审核记录衔接，拒绝发布"
+                ) from exc
         validator.validate(authority)
         return FactPublicationResult(
             run_id=run_id,
@@ -319,7 +343,7 @@ class FactPublicationService:
 
     @staticmethod
     def _replay_if_published(
-        run_id, authority, accepted_candidates, facts, events, exposures, conflicts
+        session, run_id, authority, accepted_candidates, facts, events, exposures, conflicts
     ):
         run_facts = [item for item in facts if item.run_id == run_id]
         run_events = [item for item in events if item.run_id == run_id]
@@ -330,8 +354,18 @@ class FactPublicationService:
         published_candidate_ids = {
             candidate_id
             for entity in (*run_facts, *run_events, *run_exposures)
+            if getattr(entity, "source_revision_of", None) is None
             for candidate_id in entity.source_candidate_ids
         }
+        inherited_candidate_ids = {
+            candidate_id
+            for fact in run_facts
+            if fact.inherited_from_fact_id is not None
+            for candidate_id in ClinicalFactV2Repository(session).get(
+                fact.inherited_from_fact_id
+            ).source_candidate_ids
+        }
+        published_candidate_ids -= inherited_candidate_ids
         accepted_candidate_ids = {
             candidate.candidate_id for candidate in accepted_candidates
         }
@@ -404,13 +438,30 @@ class FactPublicationService:
         published: list[ClinicalFactV2] = []
         candidate_to_fact: dict[str, str] = {}
         for stable_identity, group in groups.items():
-            representative = group[0]
             candidate_ids, gate_ids = self._publication_ids(group, gates)
+            primary_gate_id = gate_ids[0]
+            prior = max(
+                (item for item in existing if item.stable_identity == stable_identity),
+                key=lambda item: item.revision,
+                default=None,
+            )
+            if prior is not None:
+                if prior.fact_id in FactCorrectionRepository(session).superseded_entity_ids(authority):
+                    raise FactPublicationError("该事实最新版本已经更正，不能从旧版本恢复来源")
+                inherited = [
+                    FactNormalizationCandidateRepository(session).get(item)
+                    for item in prior.source_candidate_ids
+                ]
+                group = sorted(group + inherited, key=lambda item: item.candidate_id)
+                candidate_ids = sorted(set(candidate_ids) | set(prior.source_candidate_ids))
+                gate_ids = sorted(set(gate_ids) | set(prior.gate_ids))
+            representative = group[0]
             fact_revision = _next_revision(existing, stable_identity)
             fact = ClinicalFactV2(
                 fact_id=_entity_id(run_id, "fact", stable_identity, fact_revision),
+                inherited_from_fact_id=prior.fact_id if prior is not None else None,
                 run_id=run_id,
-                gate_id=gate_ids[0],
+                gate_id=primary_gate_id,
                 source_candidate_ids=candidate_ids,
                 gate_ids=gate_ids,
                 authority=authority,
@@ -611,7 +662,7 @@ class FactPublicationService:
     def _publish_conflicts(
         *, authority, run_id, fact_candidates, event_candidates, exposure_candidates,
         candidate_to_fact, candidate_to_event, candidate_to_exposure,
-        facts, events, exposures, gate_by_candidate, created_at, repository
+        facts, events, exposures, gate_by_candidate, created_at, repository, source_successors=()
     ):
         semantic_conflicts = detect_semantic_conflicts(
             authority=authority,
@@ -630,6 +681,12 @@ class FactPublicationService:
             "exposure": {item.exposure_id: item for item in exposures},
         }
         published = []
+        preserved_members = {
+            (group.member_kind, tuple(getattr(group, {
+                "fact": "fact_ids", "event": "event_ids", "exposure": "exposure_ids",
+            }[group.member_kind])))
+            for group in source_successors
+        }
         for conflict in semantic_conflicts:
             member_ids = sorted(
                 {mappings[conflict.semantic_type][candidate_id]
@@ -639,6 +696,8 @@ class FactPublicationService:
                 raise FactPublicationError(
                     f"冲突 {conflict.semantic_key} 发布后不足两个不同成员"
                 )
+            if (conflict.semantic_type, tuple(member_ids)) in preserved_members:
+                continue
             locator_ids = sorted(
                 {
                     locator_id

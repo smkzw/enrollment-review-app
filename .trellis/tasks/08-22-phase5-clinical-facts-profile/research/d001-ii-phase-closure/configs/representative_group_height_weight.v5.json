@@ -1,0 +1,31 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_height_weight.v4.json",
+  "group_id": "d001-ii-height-weight-v5",
+  "task_id": "phase5-slice60zh-20260828",
+  "artifact_dir_name": "phase5-slice60zh-d001-height-weight-replay-target-scope-closure-20260828",
+  "owned_required_procedure_target_ids_by_source_ref": {
+    "body.p775": ["procedure:d001-height-weight-screening"],
+    "body.p777": ["procedure:d001-height-weight-screening"],
+    "body.p778": ["procedure:d001-height-weight-screening"],
+    "body.p779": ["procedure:d001-height-weight-screening"],
+    "body.p780": ["procedure:d001-height-weight-screening"],
+    "body.p782": [
+      "procedure:d001-height-weight-screening",
+      "procedure:d001-weight-baseline"
+    ],
+    "body.p783": [
+      "procedure:d001-height-weight-screening",
+      "procedure:d001-weight-baseline"
+    ]
+  },
+  "ids": {
+    "manifest_id": "manifest:slice60zh-height-weight",
+    "catalog_id": "catalog:slice60zh-height-weight"
+  },
+  "notes": [
+    "v4真实结果保留为来源闭包完整但节点作用域越界的反例：单一候选把筛选期身高动作扩散到基线。",
+    "v5冻结每个动作来源允许关联的流程目标集合；该期望只进入确定性门禁，不进入Agent首轮输入。",
+    "身高方法仅关联筛选身高体重目标；体重方法同时关联筛选身高体重和基线体重目标。"
+  ]
+}

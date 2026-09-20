@@ -1,0 +1,335 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-package105-data-quality-source-document-boundary",
+  "task_id": "phase5-slice61cr-20260830",
+  "worker": "codex-parent",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/coverage_manifest.json",
+  "study_phase": "phase_ii",
+  "expected_package_ordinal": 105,
+  "expected_package_id": "pap-b8d5cdfbc6ac4c373c6576b3",
+  "owned_source_refs": [
+    "body.p1238",
+    "body.p1239",
+    "body.p1240",
+    "body.p1241",
+    "body.p1242",
+    "body.p1243",
+    "body.p1244",
+    "body.p1245",
+    "body.p1246",
+    "body.p1247"
+  ],
+  "attached_source_refs": [],
+  "required_candidate_source_refs": [],
+  "forbidden_candidate_source_refs": [
+    "body.p1238",
+    "body.p1239",
+    "body.p1240",
+    "body.p1241",
+    "body.p1242",
+    "body.p1243",
+    "body.p1244",
+    "body.p1245",
+    "body.p1246",
+    "body.p1247"
+  ],
+  "pre_enrollment_source_refs": [],
+  "structural_only_source_refs": [
+    "body.p1238",
+    "body.p1239",
+    "body.p1241",
+    "body.p1243"
+  ],
+  "attached_structural_only_source_refs": [],
+  "expected_disposition_by_source_ref": {
+    "body.p1240": "non_enrollment_execution",
+    "body.p1242": "non_enrollment_execution",
+    "body.p1244": "supporting_or_supplement",
+    "body.p1245": "non_enrollment_execution",
+    "body.p1246": "non_enrollment_execution",
+    "body.p1247": "non_enrollment_execution"
+  },
+  "expected_workflow_stage_ids_by_source_ref": {},
+  "owned_procedure_semantic_families_by_source_ref": {},
+  "owned_required_action_kinds_by_source_ref": {},
+  "candidate_forbidden_markers_by_source_ref": {
+    "body.p1238": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "数据采集与管理决定受试者资格"
+    ],
+    "body.p1239": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "数据质量不合格不得入组",
+      "数据质量缺口导致入排不通过"
+    ],
+    "body.p1240": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "EDC数据不一致不得入组",
+      "数据质疑未解决不得入组",
+      "中心实验室数据未传输不得入组"
+    ],
+    "body.p1241": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "eCRF决定受试者资格"
+    ],
+    "body.p1242": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "培训未完成不得入组",
+      "eCRF未完成不得入组",
+      "研究者未电子签名不得入组",
+      "eCRF未注明日期不得入组",
+      "验证EDC未通过不得入组"
+    ],
+    "body.p1243": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "源数据定义决定受试者资格"
+    ],
+    "body.p1244": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "源文件缺失不得入组",
+      "核证副本不合格不得入组",
+      "病历或实验室记录缺失不得入组"
+    ],
+    "body.p1245": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "监查计划未定义源文件不得入组",
+      "直接录入eCRF的数据没有原始记录不得入组",
+      "源数据认定决定受试者资格"
+    ],
+    "body.p1246": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "源数据不符合准确清晰同期原始可归因不得入组",
+      "电子签名不合规不得入组",
+      "审核跟踪缺失不得入组",
+      "核证副本缺失不得入组"
+    ],
+    "body.p1247": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "源文件未保存不得入组",
+      "不能直接访问源文件不得入组",
+      "监管检查未通过不得入组",
+      "eCRF验证资料缺失即入排不通过"
+    ]
+  },
+  "candidate_required_markers_by_source_ref": {},
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "先逐条读取并判断第105包原文，再确定候选处置：p1240和p1242规定申办方、研究中心及研究者的数据管理、经验证EDC、培训、eCRF完成/审查/电子签名和数据质疑处理；p1244-p1247规定源数据/源文件定义、监查计划中的源类型、准确清晰同期原始可归因、电子记录/签名合规、核证副本、审核跟踪、保存与直接访问。这些是研究执行或证据来源/QC治理义务，不表达受试者人群、入排条件、阈值或筛选/基线动作，因此源文审阅后确认当前包无受试者控制候选；不得以other_control_candidate强挂到受试者工作流。p1238、p1239、p1241、p1243仅作章节结构标题；p1248-p1250属于Package 106且不附加、不转移所有权。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "第105包属于Ⅱ期研究的数据采集与管理章节。p1240和p1242的申办方/研究中心/研究者数据管理及eCRF操作属于非入组研究执行；p1244-p1247的源数据定义、证据来源类型、数据质量属性、核证副本、审核跟踪、保存和直接访问属于证据来源与数据治理边界。它们可以约束研究记录和证据QC，但不是单例受试者入排资格、筛选/基线/D1给药前义务，也不能把资料可接受性缺口自动改写为入排失败。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    },
+    {
+      "workflow_stage_id": "flow-d1-pre-dose",
+      "review_stage": "baseline",
+      "display_name": "D1给药前",
+      "visit_instance": "D1给药前"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [],
+    "required_procedures": []
+  },
+  "ids": {
+    "manifest_id": "manifest:slice61cr-package105-data-quality-source-document-boundary",
+    "catalog_id": "catalog:slice61cr-package105-data-quality-source-document-boundary"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p1238": [
+      "数据采集与管理标题仅提供章节结构，不独立生成候选、流程节点、官方规则或受试者控制点"
+    ],
+    "body.p1239": [
+      "数据质量保证标题仅提供章节结构；数据质量治理不等于受试者筛选、基线或入排标准"
+    ],
+    "body.p1240": [
+      "申办者数据管理和质量检查、研究中心eCRF手动录入、数据不一致的质疑澄清/EDC解决以及中心实验室数据电子传输是研究级数据管理执行",
+      "数据质疑未解决、EDC不一致或中心实验室数据传输路径不能改写为某名受试者不得入组、证据不足或发布控制点",
+      "该来源处置为non_enrollment_execution，不绑定筛选、基线、D1给药前工作流"
+    ],
+    "body.p1241": [
+      "电子病例报告表标题仅提供章节结构，不独立生成eCRF检查候选或受试者资格控制"
+    ],
+    "body.p1242": [
+      "经验证EDC、申办者指定系统、研究中心培训和eCRF填写手册是研究执行及数据完整性治理",
+      "eCRF提交、培训工作人员完成、研究者/指定人员审查、电子签名和注明日期是记录流程义务，不是受试者入排条件",
+      "该来源处置为non_enrollment_execution；不得因eCRF未签名、未注明日期或培训/EDC状态把研究执行缺口升格为单例入排失败"
+    ],
+    "body.p1243": [
+      "源数据/源文件标题仅提供章节结构，不独立生成来源证据候选或入排控制"
+    ],
+    "body.p1244": [
+      "源文件和源数据定义及医院病历、医学图像、实验室记录、仪器记录、备忘录、发药记录、药房处方、参与者日记、核证副本等例子建立证据来源词汇",
+      "来源类型定义可支持后续证据溯源/QC，但不规定某名受试者必须提供哪类资料、资料缺失即不得入组或某类来源自动被接受",
+      "该来源处置为supporting_or_supplement，不绑定受试者工作流"
+    ],
+    "body.p1245": [
+      "研究开始前在研究监查计划中定义研究生成的源文件类型，是研究启动/监查治理义务",
+      "按方案要求直接输入eCRFs且此前没有书面或电子记录的数据被视为源数据，是来源分类规则，不是入组前证据门槛",
+      "该来源仅定义研究启动期的源文件分类和直接录入eCRF数据的来源属性，不生成受试者资料采集动作或入排控制"
+    ],
+    "body.p1246": [
+      "研究者确保源数据准确、清晰、同期、原始、可归因，电子记录/签名合规，书面替代电子格式时提供核证副本，以及保留原始值/变更原因/人员/日期的审核跟踪，均为数据完整性与证据QC义务",
+      "这些质量属性影响来源可信度和审计溯源边界，但不能自动生成受试者资格、筛选失败、基线缺口或D1给药前控制点",
+      "该来源处置为non_enrollment_execution；不得把ALCOA-like属性、电子签名、核证副本或审核跟踪缺失变成入排结论"
+    ],
+    "body.p1247": [
+      "用于验证eCRF正确性/完整性的源文件不得清除或销毁，并要求按第9.4节保存；申办方监查/稽查、IRB/EC审查及监管检查的直接访问是研究证据保存和访问治理",
+      "保存与直接访问义务可形成未来证据QC/溯源边界，但不得把来源未保存、暂不可访问或监管检查要求改写为受试者不得入组或资料缺口的入排结论",
+      "第9.4节记录保存细节属于Package 106 p1248-p1250，不因p1247引用而迁移到本包"
+    ]
+  },
+  "exception_semantics_by_source_ref": {
+    "body.p1240": {
+      "semantic_role": "sponsor_site_data_management_and_query_resolution",
+      "base_rule": "申办者负责数据管理和质量检查，研究中心通过eCRF手动输入EDC；数据不一致时申办者要求澄清并在EDC中解决质疑，中心实验室等EDC外数据直接发送申办者按标准程序处理和加工电子传输。",
+      "exception_rule": "主体是申办方、研究中心和中心实验室的数据管理/传输责任，作用于研究数据流程而非受试者资格；不得把数据质疑、传输或质量检查状态变成筛选、基线、D1给药前或入排控制。",
+      "preserve_keywords": ["申办者", "数据管理", "数据的质量检查", "eCRFs", "研究中心", "EDC", "数据不一致", "澄清数据", "数据质疑", "中心实验室", "电子传输"],
+      "forbidden_inversion": "不得把申办方/研究中心的数据治理责任改写为单例受试者必须完成的数据条件、证据不足、不得入组或发布控制点。"
+    },
+    "body.p1242": {
+      "semantic_role": "validated_edc_training_ecrf_completion_review_signature",
+      "base_rule": "数据管理在经验证EDC中进行；使用指定EDC完成eCRFs；研究中心接受培训并取得填写手册；eCRFs电子提交并按申办方指示处理；培训指定工作人员完成；研究者或指定人员审查并电子签名和注明日期。",
+      "exception_rule": "这些是研究中心和研究者的系统、培训、填写、审查、签名及日期记录流程；即使某项执行或记录尚未完成，也不能反向构成某名受试者的入排条件或资料缺口结论。",
+      "preserve_keywords": ["经验证的EDC系统", "申办者指定的EDC系统", "研究中心将接受培训", "eCRF填写手册", "电子方式提交", "培训的指定工作人员", "审查", "电子方式签名", "注明日期"],
+      "forbidden_inversion": "不得把EDC验证、培训完成、eCRF提交、审查、电子签名或日期状态改写为筛选必做、基线必做、不得入组、排除标准或入排不通过。"
+    },
+    "body.p1244": {
+      "semantic_role": "source_data_source_document_definition_and_examples",
+      "base_rule": "源文件是临床试验中产生的原始医学记录、医疗文件和数据及列举的病历、图像、实验室记录、仪器数据、备忘录、发药记录、处方、参与者日记等，也可包括核证副本；源数据是原始记录或核证副本上记载的所有信息。",
+      "exception_rule": "这是来源类别和定义的证据溯源词汇，不是按受试者、访视或入排节点规定资料清单；例示来源不自动成为必需来源，核证副本定义也不自动成为资格门槛。",
+      "preserve_keywords": ["源文件", "原始医学记录", "医疗文件和数据", "医学图像", "实验室记录", "发药记录", "参与者临床试验日记", "核证副本", "源数据", "所有信息"],
+      "forbidden_inversion": "不得把来源定义、例示来源、参与者日记或核证副本改写为某名受试者必须提供的筛选材料、证据不足或不得入组条件。"
+    },
+    "body.p1245": {
+      "semantic_role": "prospective_source_type_definition_and_direct_ecrf_source_data",
+      "base_rule": "研究开始前在研究监查计划中定义研究生成的源文件类型；按方案要求采集且直接输入eCRFs、此前没有书面或电子记录的数据视为源数据。",
+      "exception_rule": "研究监查计划的前瞻性来源分类和直接eCRF输入数据的源数据认定是研究启动/数据治理规则；本条不生成受试者资料采集动作，不能从此前没有记录倒置出证据缺口或排除。",
+      "preserve_keywords": ["研究开始前", "研究监查计划", "明确定义", "研究生成的源文件类型", "直接输入 eCRFs", "按方案要求采集", "之前没有此数据的书面或电子记录", "视为源数据"],
+      "forbidden_inversion": "不得把监查计划来源分类、直接eCRF输入或此前无记录改写为筛选必做、基线必查、资料缺失、不得入组或入排不通过。"
+    },
+    "body.p1246": {
+      "semantic_role": "source_data_quality_certified_copy_and_audit_trail",
+      "base_rule": "研究者负责源数据准确、清晰、同期、原始、可归因；电子源数据系统符合法律法规；书面记录替代电子格式时具有签字和日期的核证副本；计算机原始数据修改时保留显示原始数据、变更原因、更改人员和日期的审核跟踪。",
+      "exception_rule": "准确性、清晰性、同期性、原始性、可归因性、电子记录/签名合规、核证副本和审核跟踪属于证据完整性、来源可信度和稽查溯源治理；它们不定义受试者人群、入排阈值或筛选/基线动作。",
+      "preserve_keywords": ["准确", "清晰", "同期性", "原始数据", "可归因溯源", "电子记录", "电子签名", "核证的副本", "相同的所有属性", "审核跟踪", "变更原因", "更改的人员姓名", "更改的日期"],
+      "forbidden_inversion": "不得把数据质量属性、系统合规、核证副本或审核跟踪缺失改写为受试者资料不足、筛选失败、不得入组或发布控制点。"
+    },
+    "body.p1247": {
+      "semantic_role": "source_preservation_and_direct_access_governance",
+      "base_rule": "验证eCRF输入数据正确性和完整性的源文件不得清除或销毁并按第9.4节保存；研究者和机构应允许申办方监查、申办方稽查、IRB/EC审查时直接访问源文件/报告，并允许监管当局检查源数据/源文件。",
+      "exception_rule": "保存、监查/稽查/伦理审查/监管检查直接访问属于研究机构和申办方的证据保全与访问义务；第9.4节的记录保存期限由Package 106拥有来源承接，不迁移所有权；任何访问或保存状态不得成为单例入排结论。",
+      "preserve_keywords": ["验证eCRFs输入数据正确性和完整性", "不得被清除或销毁", "第9.4节", "研究相关的监查", "申办者稽查", "IRB/EC审查", "直接访问源文件和报告", "监管当局", "检查"],
+      "forbidden_inversion": "不得把源文件保存、直接访问、申办方/IRB/EC/监管检查要求改写为某名受试者的筛选条件、证据不足、不得入组或入排不通过。"
+    }
+  },
+  "later_package_boundary": {
+    "read_only": true,
+    "note": "Package 103拥有body.p1224、body.p1226-p1235；Package 104拥有body.p1236和body.p1237的三个原子，body.p1237#atom-100-160仍无所有权；Package 105只拥有body.p1238-p1247；Package 106从body.p1248开始拥有body.p1248-p1250。body.p537、body.p1210、body.p1223和body.p1237#atom-100-160为无所有权上下文，不能因数据治理或期中分析语义相关而进入本包。Package 104来源、Package 106记录保存细节和所有无主上下文均不进入本次prompt。",
+    "expected_owners_by_span": {
+      "body.p1224": 103,
+      "body.p1235": 103,
+      "body.p1236": 104,
+      "body.p1237#atom-0-15": 104,
+      "body.p1237#atom-15-100": 104,
+      "body.p1237#atom-160-208": 104,
+      "body.p1238": 105,
+      "body.p1247": 105,
+      "body.p1248": 106,
+      "body.p1249": 106,
+      "body.p1250": 106
+    },
+    "unowned_context_source_refs": [
+      "body.p537",
+      "body.p1210",
+      "body.p1223",
+      "body.p1237#atom-100-160"
+    ]
+  },
+  "notes": [
+    "模型外闭包：Package 105的10个owned来源按原始顺序逐项恢复；4个章节标题只作结构来源，6个语义来源先依据原文判断为研究执行、来源定义或证据质量/访问治理，均不生成受试者候选；本包无attached来源。",
+    "候选判定不是预设零：p1240、p1242、p1245-p1247中的‘负责/必须/应’先按责任主体和对象区分为申办方、研究中心、研究者、机构或证据记录系统义务；p1244按来源定义处置为supporting_or_supplement；没有受试者人群、入排条件、阈值或筛选/基线动作后，才确认required candidates为空。",
+    "证据接受边界保留：源文件类型、源数据定义、准确清晰同期原始可归因、电子记录/签名、核证副本、审核跟踪、保存和直接访问可影响后续证据QC与溯源提示，但不得自动变成受试者资料缺口、入排失败或控制点。",
+    "body.p1245不生成或保留collect_data受试者动作元数据，仅保留研究启动期的来源分类边界说明。",
+    "body.p1236及body.p1237的Package 104研究级期中分析内容、body.p1248-p1250的Package 106记录保存内容和body.p537/body.p1210/body.p1223/body.p1237#atom-100-160无所有权上下文均不进入本包提示。",
+    "claims_complete=false；本配置不调用临床语义模型、不发布控制点、不进入受试者、OCR、Patient Profile或浏览器流程，不宣称D001全量或parent clinical acceptance完成。"
+  ]
+}

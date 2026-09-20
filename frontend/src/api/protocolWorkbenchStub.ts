@@ -26,6 +26,7 @@ import type {
   DraftComparisonView,
   DraftRevisionView,
   FeedbackInput,
+  GenerationPreviewView,
   IdentityReviewView,
   IntegrityView,
   ManualEditInput,
@@ -409,6 +410,27 @@ export function createProtocolWorkbenchStub(): ProtocolWorkbenchRepository {
       rejectIfAborted(options?.signal);
       await delay();
       return { ...sourcesFixture, jobId };
+    },
+
+    async getGenerationPreview(
+      jobId: string,
+      options?: ProtocolWorkbenchRequestOptions,
+    ): Promise<GenerationPreviewView> {
+      rejectIfAborted(options?.signal);
+      await delay();
+      return {
+        jobId,
+        available: false,
+        reason: "not_started",
+        detail: "演示任务不提供生成期间预览。",
+        previewOnly: true,
+        batchIndex: 0,
+        batchTotal: 0,
+        updatedAt: null,
+        pendingCodes: [],
+        unresolvedCount: 0,
+        content: {},
+      };
     },
 
     async saveDraft(

@@ -1,0 +1,206 @@
+{
+  "attached_source_refs": [],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package93-ae-reportable-events-followup-boundary",
+  "notes": [
+    "本切片为模型外来源闭包切片：不调用临床语义模型，不并入131包正式目录，不运行受试者审核，claims_complete=false。",
+    "第93包十一个拥有单元（body.p1102-p1112）：p1102'应报告的事件类型'仅作结构；p1103为死亡/SAE/妊娠三类事件的共同引导句；p1104'死亡事件'、p1105'严重不良事件'、p1106'妊娠事件'为三类并列应报告类型；p1107为新重要信息随访的共同引导句；p1108'新的体征或症状，或诊断改变'、p1109'重要的新诊断检查结果'、p1110'基于新信息的因果关系变化'、p1111'事件结果的变化，包括恢复'、p1112'关于事件临床过程的其他描述信息'为五类新重要信息。全部保持post_treatment_execution处置（p1102为structural_only）。required_candidate_source_refs显式为空，任何候选发射都构成越界。",
+    "建立两组核心结构关系：p1103→p1104-p1106（首次事件报告义务）与p1107→p1108-p1112（新重要信息随访义务）。首次事件报告计时锚点为获知事件，时限为24小时（含）内，无论与试验用药品关系如何；新重要信息随访计时锚点为获知新信息，要求为立即并在获知新信息后24小时内向申办者报告。两类义务触发条件、计时锚点和列表严格分离，不得压缩为一个笼统规则。",
+    "三类应报告事件（死亡、SAE、妊娠）并列独立，不得漏项、不得合并为单一SAE；妊娠事件本身即为应报告事件，不得附加必须发生AE、必须构成SAE或必须与药物相关的先决条件。",
+    "24小时时限仅适用于死亡、SAE、妊娠三类事件及这些事件的新重要信息，不得泛化为所有AE、TEAE、实验室异常或全域常规资料均须24小时报告。",
+    "p1111'包括恢复'必须显式保留：事件结果变化包含恢复，不得改写为只有恶化才报告或恢复无需报告。原文'包括'及p1112'其他描述信息'保留开放性，不得改成封闭穷尽清单，亦不得凭常识增列额外项目。",
+    "本包保持零附加来源（attached_source_refs=[]），不向提示词注入第94包内容；第94包拥有安全信息资料要求、SAE报告表、书面报告、申办者指定联系人、伦理/监管接收方、治疗措施、死亡资料（尸检/最终医学报告）及附录7报告途径（body.p1113-p1123），仅保留所有权元数据以防吞并。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1102",
+    "body.p1103",
+    "body.p1104",
+    "body.p1105",
+    "body.p1106",
+    "body.p1107",
+    "body.p1108",
+    "body.p1109",
+    "body.p1110",
+    "body.p1111",
+    "body.p1112"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "具体应报告事件与时限由下属段落拥有，标题不替代具体规则": "pending_codex",
+        "标题只闭合'不良事件的报告'下的'应报告的事件类型'章节层级，不独立形成控制点；不得把标题本身解释为评价规则或独立报告义务": "pending_codex",
+        "第93包拥有：应报告的事件类型（结构标题），仅作结构": "pending_codex"
+      },
+      "frozen_excerpt": "应报告的事件类型",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1102",
+      "structure_unit_id": "su-dbeb8cab9a2507dcc96e1bf9"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "24小时（含）为法定报告时限边界，不得弱化为无序报告或擅自缩短/延长时限": "pending_codex",
+        "作为p1104-p1106（死亡、SAE、妊娠）三类事件的共同引导句，范围严格限定在此三类事件，不得泛化为所有AE、TEAE、实验室异常或任何常规安全性信息均须24小时报告": "pending_codex",
+        "因果无关性（无论关系如何）同时作用于死亡、SAE、妊娠，不得附加因果关系前提": "pending_codex",
+        "报告主体为研究者，接收方为申办者，计时锚点为研究者获知事件，时限为获知后24小时（含）内，因果关系限定为无论与试验用药品关系如何": "pending_codex",
+        "第93包拥有：以下是研究者必须在获知后24小时（含）内向申办者报告的事件类型，无论事件与试验用药品的关系如何：": "pending_codex"
+      },
+      "frozen_excerpt": "以下是研究者必须在获知后24小时（含）内向申办者报告的事件类型，无论事件与试验用药品的关系如何：",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1103",
+      "structure_unit_id": "su-9885c453d8356d0ca4e91fb5"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "作为独立并列应报告事件类型，不得漏项、不得被合并或湮灭在单一SAE中": "pending_codex",
+        "第93包拥有：死亡事件（并列应报告事件类型之一）": "pending_codex",
+        "适用p1103引导规则：研究者获知后24小时（含）内向申办者报告，无论与试验用药品关系如何": "pending_codex"
+      },
+      "frozen_excerpt": "死亡事件",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1104",
+      "structure_unit_id": "su-84df72afb742beeb8f47b4b9"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "作为独立并列应报告事件类型，不得与死亡或妊娠合并": "pending_codex",
+        "第93包拥有：严重不良事件（并列应报告事件类型之二）": "pending_codex",
+        "适用p1103引导规则：研究者获知后24小时（含）内向申办者报告，无论与试验用药品关系如何": "pending_codex"
+      },
+      "frozen_excerpt": "严重不良事件",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1105",
+      "structure_unit_id": "su-126276b0cc57955e9212a055"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "作为独立并列应报告事件类型，妊娠事件本身即为应报告事件，不得附加必须发生AE、必须构成SAE或必须与试验用药品相关的先决条件": "pending_codex",
+        "第93包拥有：妊娠事件（并列应报告事件类型之三）": "pending_codex",
+        "适用p1103引导规则：研究者获知后24小时（含）内向申办者报告，无论与试验用药品关系如何": "pending_codex"
+      },
+      "frozen_excerpt": "妊娠事件",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1106",
+      "structure_unit_id": "su-27b411319ef4c56cc38cee23"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "'这些事件'回指p1104-p1106（死亡、SAE、妊娠三类事件），仅当这三类事件出现新的重要信息时触发本条随访报告义务": "pending_codex",
+        "作为p1108-p1112五类新重要信息的共同引导句，不得泛化为所有不良事件或全域常规资料随访；不得删除'立即'或弱化为无序随访，也不得把'立即'篡改为瞬时完成而否定24小时法定缓冲": "pending_codex",
+        "报告主体为研究者，接收方为申办者，报告要求为'立即'且明确'在获知信息后24小时内'；计时锚点为获知新信息，不得混同于首次事件获知锚点": "pending_codex",
+        "第93包拥有：研究者必须立即向申办者报告这些事件的新的重要信息（在获知信息后24小时内），包括：": "pending_codex",
+        "首次事件报告与新重要信息随访是两个相关但独立的报告义务，不得压缩为一个笼统规则": "pending_codex"
+      },
+      "frozen_excerpt": "研究者必须立即向申办者报告这些事件的新的重要信息（在获知信息后24小时内），包括：",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1107",
+      "structure_unit_id": "su-437d5b150cc22348e71e340a"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "保留'新的体征或症状，或诊断改变'的完整语义，不得漏并": "pending_codex",
+        "第93包拥有：新的体征或症状，或诊断改变（新重要信息类型之一）": "pending_codex",
+        "适用p1107随访规则：死亡、SAE、妊娠事件出现新的体征或症状、或诊断改变时，研究者必须立即（获知信息后24小时内）向申办者报告": "pending_codex"
+      },
+      "frozen_excerpt": "新的体征或症状，或诊断改变",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1108",
+      "structure_unit_id": "su-049a5285ef6c19fdef039c00"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "保留'重要的新诊断检查结果'，不得泛化为常规日常检验单，也不得漏项": "pending_codex",
+        "第93包拥有：重要的新诊断检查结果（新重要信息类型之二）": "pending_codex",
+        "适用p1107随访规则：死亡、SAE、妊娠事件出现重要的新诊断检查结果时，研究者必须立即（获知信息后24小时内）向申办者报告": "pending_codex"
+      },
+      "frozen_excerpt": "重要的新诊断检查结果",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1109",
+      "structure_unit_id": "su-56b4d2122a537d750b29a3c0"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "因果关系变化（包括升级或降级）构成新重要信息，必须保留": "pending_codex",
+        "第93包拥有：基于新信息的因果关系变化（新重要信息类型之三）": "pending_codex",
+        "适用p1107随访规则：死亡、SAE、妊娠事件基于新信息导致因果关系发生变化时，研究者必须立即（获知信息后24小时内）向申办者报告": "pending_codex"
+      },
+      "frozen_excerpt": "基于新信息的因果关系变化",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1110",
+      "structure_unit_id": "su-4b84e150cc7fced2a1322ec8"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "必须显式保留'包括恢复'：事件转归/结果变化包含恢复，不得改写为只有恶化才报告或恢复无需报告": "pending_codex",
+        "第93包拥有：事件结果的变化，包括恢复（新重要信息类型之四）": "pending_codex",
+        "适用p1107随访规则：死亡、SAE、妊娠事件结果发生变化时，研究者必须立即（获知信息后24小时内）向申办者报告": "pending_codex"
+      },
+      "frozen_excerpt": "事件结果的变化，包括恢复",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1111",
+      "structure_unit_id": "su-1847ee1b8b80e59fbf93deb9"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "作为开放性兜底描述信息项（结合引导句'包括'），不得私自改成封闭穷尽清单，也不得凭常识增列额外具体条目": "pending_codex",
+        "第93包拥有：关于事件临床过程的其他描述信息（新重要信息类型之五）": "pending_codex",
+        "适用p1107随访规则：死亡、SAE、妊娠事件关于事件临床过程的其他描述信息，研究者必须立即（获知信息后24小时内）向申办者报告": "pending_codex"
+      },
+      "frozen_excerpt": "关于事件临床过程的其他描述信息",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1112",
+      "structure_unit_id": "su-a6c0b36dfffc4a65710677df"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61ce-20260830",
+  "worker": "codebuddy-worker_01"
+}

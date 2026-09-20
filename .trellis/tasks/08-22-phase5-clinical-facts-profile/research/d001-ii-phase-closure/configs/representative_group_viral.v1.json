@@ -1,0 +1,67 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_viral_tb.v1.json",
+  "group_id": "d001-ii-viral-cross-chapter",
+  "artifact_dir_name": "phase5-slice59n-d001-viral-control-replay-20260827",
+  "owned_source_refs": [
+    "body.p802",
+    "body.p803",
+    "body.p804",
+    "body.p805"
+  ],
+  "attached_source_refs": [
+    "body.t5.r18",
+    "body.p328",
+    "body.p685",
+    "body.p686",
+    "body.p687",
+    "body.p688",
+    "body.p689"
+  ],
+  "required_candidate_source_refs": [
+    "body.p804",
+    "body.p805"
+  ],
+  "batching": {
+    "reason": "病毒学评估段落为唯一处置对象；EX-22和流程必做14作为携带原文的只读权威目标。"
+  },
+  "known_targets": {
+    "official_rules": [
+      {
+        "catalog_item_id": "pcm-row-759cd0638a6a427a10a3bceb",
+        "official_code": "EX-22",
+        "label": "乙肝、丙肝、HIV及梅毒感染筛查",
+        "position": 28,
+        "source_span_ids": [
+          "span-5f5d0986b69d1f617cc18deeda05e9ee",
+          "span-6599014fccd0daa2c6a77da3b03001af",
+          "span-8f24d0acc9d39811c6fcbfaad01f7903",
+          "span-bd8cefa0f20536359005270bca4c1850",
+          "span-e945e18722fe7a6b21c22815fdbea783"
+        ]
+      }
+    ],
+    "required_procedures": [
+      {
+        "catalog_item_id": "pcm-row-2a4db6b98190f7f0c22da3b3",
+        "label": "病毒学检查",
+        "visit_instance": "筛选访视",
+        "review_stage": "screening",
+        "position": 50,
+        "source_span_ids": [
+          "span-08bee5e666e8f0ae3c7cc0437d7c4aa1",
+          "span-53ec4e9bb6ae525aa997ce9e0bffbb30",
+          "span-f300202c24ed5467ad851795abb9b475"
+        ]
+      }
+    ]
+  },
+  "ids": {
+    "manifest_id": "manifest:slice59n-viral-reps",
+    "catalog_id": "catalog:slice59n-viral-reps"
+  },
+  "notes": [
+    "病毒学评估与官方EX-22、流程必做14跨章节闭合。",
+    "只读目标来自原始DOCX自动结构化产物，不以人工预处理文本替代。"
+  ]
+}

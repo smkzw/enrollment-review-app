@@ -1,0 +1,20 @@
+{
+  "attached_count": 7,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-d14c9b713d0a87d87f57a28a",
+  "group_id": "d001-ii-viral-cross-chapter",
+  "lookup_counts": {
+    "coverage_manifest": 1,
+    "frozen_plan_context": 1,
+    "frozen_plan_owned": 9
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-viral-cross-chapter",
+  "owned_count": 4,
+  "prompt_char_count": 20396,
+  "prompt_sha256": "dbd19c54a979c622e6be010d20e7e41b2e5e04131a81990d9d523f4baa960257",
+  "task_id": "phase5-slice59n-20260827",
+  "unit_count": 11,
+  "worker": "worker_02"
+}

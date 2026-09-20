@@ -61,7 +61,7 @@ CHECK_NAMES = (
 
 # 完整性检查结果会写入持久任务检查点。任何会改变问题判定语义的
 # 修改都必须提升此版本，避免旧检查结果在升级后继续冒充当前结论。
-DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/2026-09-02.2"
+DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/2026-09-18.3"
 
 
 class ProtocolGateIssue(VersionedModel):
@@ -1028,7 +1028,7 @@ def _time_bound_matches_source(value: int, unit: TimeUnit, text: str) -> bool:
 
 
 def _source_frequency_specs(text: str) -> set[tuple[int, TimeUnit, int, str]]:
-    """Extract explicit rolling frequency definitions from exact source text."""
+    """Recognize numeric frequency shapes, never infer their period semantics."""
 
     unit_by_marker = {
         "天": TimeUnit.DAY,
@@ -1051,9 +1051,9 @@ def _source_frequency_specs(text: str) -> set[tuple[int, TimeUnit, int, str]]:
         r"(?P<count>\d+)\s*(?:天|日)"
     )
     every_period_day_pattern = re.compile(
-        r"每\s*(?P<duration_unit>周|星期|个月|月|年)"
+        r"每\s*(?P<duration>\d+)?\s*(?P<duration_unit>天|日|周|星期|个月|月|年)"
         r"[^，。；]{0,12}?(?:≥|大于或等于|不低于|至少)\s*"
-        r"(?P<count>\d+)\s*(?:天|日)"
+        r"(?P<count>\d+)\s*(?P<count_unit>天|日|次)"
     )
     for match in history_pattern.finditer(text):
         specs.add(
@@ -1076,10 +1076,10 @@ def _source_frequency_specs(text: str) -> set[tuple[int, TimeUnit, int, str]]:
     for match in every_period_day_pattern.finditer(text):
         specs.add(
             (
-                1,
+                int(match.group("duration") or "1"),
                 unit_by_marker[match.group("duration_unit")],
                 int(match.group("count")),
-                "天",
+                "次" if match.group("count_unit") == "次" else "天",
             )
         )
     return specs
@@ -1107,15 +1107,25 @@ def _predicate_preserves_frequency(
     ]
     binding = _normalized(predicate.source_term or predicate.attribute)
     binding_without_possession = re.sub(r"^有", "", binding)
+    # 语义身份可能带频次分母前缀（如“1周内无任何白天户外活动的天数”），而逐字
+    # 子句只写“定义为1周≥4天…”；剥离前导周期短语与尾部“的/天数”后再核对绑定词
+    # （EX-04 反例，2026-09-18 会商）。
+    binding_without_leading_period = re.sub(
+        r"^\d+\s*(?:个?天|个?日|周|星期|个月|月|年)内", "", binding
+    )
+
+    def _strip_binding_suffix(text: str) -> str:
+        return re.sub(
+            r"(?:发生次数|发作次数|复发次数|既往史|现病史|病史|的?天数|的)$", "", text
+        )
+
     binding_terms = {
         binding,
-        re.sub(r"(?:发生次数|发作次数|复发次数|既往史|现病史|病史|天数)$", "", binding),
+        _strip_binding_suffix(binding),
         binding_without_possession,
-        re.sub(
-            r"(?:发生次数|发作次数|复发次数|既往史|现病史|病史|天数)$",
-            "",
-            binding_without_possession,
-        ),
+        _strip_binding_suffix(binding_without_possession),
+        binding_without_leading_period,
+        _strip_binding_suffix(binding_without_leading_period),
     }
     binding_terms.discard("")
     if not any(
@@ -2140,6 +2150,22 @@ class ProtocolDeconstructionGate:
                         )
                     )
                     predicate_frequency_specs = _source_frequency_specs(predicate_text)
+                    if not predicate_frequency_specs and predicate.occurrence_window is not None:
+                        # 语义身份常省略频次分母（如“无任何白天户外活动的天数”，而
+                        # “1周≥4天”留在逐字来源里）。结构化 occurrence_window 已保存时，
+                        # 用完整逐字来源重新识别频次形态，并仍以
+                        # _predicate_preserves_frequency 严格核对绑定词、周期与次数；
+                        # 不匹配保持为空 → 维持 fail-closed，且该 duration 不再被
+                        # 误判为无锚回溯（EX-04 反例，2026-09-18 会商）。
+                        clause_frequency_specs = _source_frequency_specs(
+                            "\n".join(predicate.exact_source_clauses)
+                        )
+                        if clause_frequency_specs:
+                            predicate_frequency_specs = {
+                                spec
+                                for spec in clause_frequency_specs
+                                if _predicate_preserves_frequency(predicate, spec)
+                            }
                     is_frequency_definition = bool(predicate_frequency_specs)
                     source_validity_windows = _source_validity_windows(predicate_text)
                     predicate_validity_specs = _source_validity_specs(predicate_text)
@@ -2259,6 +2285,22 @@ class ProtocolDeconstructionGate:
                                     action="请为该项检查在原文指定的每个审核节点分别建立资料要求，并逐项保留可接受的检查结果时效；不得用同一条规则中的其他检查代替。",
                                 )
                             )
+                    if occurrence_window is not None and occurrence_window.scope is None:
+                        issues.append(_issue(
+                            "temporal_semantics", "FREQUENCY_SCOPE_NOT_DECLARED",
+                            f"{component.display_code} 的计数期间尚未明确区分。",
+                            [predicate.predicate_id],
+                            action="按方案逐字声明 occurrence_window.scope；不能确定期间划分或量词时保留 unresolved 和具体疑问，不得默认滚动或日历期间。",
+                        ))
+                    if (occurrence_window is not None and occurrence_window.scope is not None
+                            and occurrence_window.scope.quantifier in {"any", "every"}
+                            and occurrence_window.horizon is None):
+                        issues.append(_issue(
+                            "temporal_semantics", "FREQUENCY_HORIZON_NOT_DECLARED",
+                            f"{component.display_code} 的多个计数期间覆盖范围尚未声明。",
+                            [predicate.predicate_id],
+                            action="按方案保留统计范围及逐字依据；未明范围填写unresolved，不得借用上传资料起止日或擅设不限期间。",
+                        ))
                     if is_frequency_definition:
                         frequency_valid = all(
                             _predicate_preserves_frequency(predicate, spec)
@@ -2278,9 +2320,10 @@ class ProtocolDeconstructionGate:
                         issues.append(
                             _issue(
                                 "temporal_semantics",
-                                "FREQUENCY_WINDOW_NOT_IN_SOURCE",
-                                f"{component.display_code} 为非频率条件添加了发生周期。",
-                                [predicate.predicate_id],
+                                    "FREQUENCY_SOURCE_FORM_UNVERIFIED",
+                                    f"{component.display_code} 的发生周期尚未通过原文对应核对。",
+                                    [predicate.predicate_id],
+                                    action="保留完整频次原文并核对周期、量词及次数或天数；当前形式识别未匹配不等于原文没有该要求，不得为通过检查而删除频次限制。",
                             )
                         )
                     future_anchors = {
@@ -3311,6 +3354,9 @@ class ProtocolDeconstructionGate:
                 )
             )
         invalid_clauses = []
+        invalid_observation_policies = []
+        invalid_repeat_sources = []
+        invalid_half_life_sources = []
         for rule in draft.proposed_rules:
             for component in rule.components:
                 component_draft = next(
@@ -3323,18 +3369,88 @@ class ProtocolDeconstructionGate:
                     None,
                 )
                 if component_draft is None or not component_draft.source_excerpts:
+                    invalid_repeat_sources.extend(
+                        predicate.predicate_id
+                        for root in (component.expression, component.exception_expression) if root is not None
+                        for predicate in iter_atomic_predicates(root) if predicate.repeat_scheme is not None
+                    )
+                    if any(node.time_constraint is not None and node.time_constraint.half_life_evidence is not None
+                           for root in (component.expression, component.exception_expression) if root is not None
+                           for node in _walk_expression_tree(root) if node.kind == "predicate"):
+                        invalid_half_life_sources.append(component.rule_component_id)
                     continue
                 component_text = "\n".join(component_draft.source_excerpts)
                 expressions = [component.expression]
                 if component.exception_expression is not None:
                     expressions.append(component.exception_expression)
                 for expression in expressions:
+                    for node in _walk_expression_tree(expression):
+                        if node.kind != "predicate":
+                            continue
+                        evidence = node.time_constraint.half_life_evidence if node.time_constraint else None
+                        if evidence is not None and (
+                            evidence.source_span_id not in component_draft.source_refs
+                            or evidence.source_span_id not in allowed & formal_ids
+                            or evidence.source_excerpt not in materials.get(evidence.source_span_id, "")
+                            or not any(evidence.source_excerpt in excerpt for excerpt in component_draft.source_excerpts)
+                            or not any(evidence.applies_to_quote in clause for clause in node.predicate.exact_source_clauses)
+                        ):
+                            invalid_half_life_sources.append(node.predicate.predicate_id)
                     for predicate in iter_atomic_predicates(expression):
+                        policy = predicate.observation_policy
+                        repeat = predicate.repeat_scheme
+                        if repeat is not None and any(
+                            span not in component_draft.source_refs or span not in allowed & formal_ids
+                            or excerpt not in materials.get(span, "")
+                            or not any(excerpt in clause for clause in predicate.exact_source_clauses)
+                            for span, excerpt in zip(repeat.source_span_ids, repeat.source_excerpts, strict=True)
+                        ):
+                            invalid_repeat_sources.append(predicate.predicate_id)
+                        scoped_frequency_atom = (
+                            predicate.occurrence_window is not None
+                            and predicate.occurrence_window.scope is not None
+                        )
+                        # 带scope频次窗口的原子按合同（rules.py）禁止再携带
+                        # observation_policy：其“采用范围”由频次结构自身表达
+                        # （如“1周≥4天”的每周期计数），采用方式由组件外层条件
+                        # 或用户确认的读法承接。此类原子缺省policy不算缺失。
+                        if policy is None:
+                            if not scoped_frequency_atom:
+                                invalid_observation_policies.append(predicate.predicate_id)
+                        elif (policy.selection is not None and policy.selection.window_order is None) or any(
+                            span_id not in component_draft.source_refs
+                            or excerpt not in materials.get(span_id, "")
+                            for span_id, excerpt in zip(
+                                policy.source_span_ids, policy.source_excerpts,
+                            )
+                        ):
+                            invalid_observation_policies.append(predicate.predicate_id)
                         clauses = predicate.exact_source_clauses
                         if not clauses or any(
                             clause not in component_text for clause in clauses
                         ):
                             invalid_clauses.append(predicate.predicate_id)
+        if invalid_repeat_sources:
+            issues.append(_issue(
+                "source_coverage", "REPEAT_SCHEME_SOURCE_UNVERIFIED",
+                "部分复查要求尚未对应到本条条件的方案原文。",
+                sorted(set(invalid_repeat_sources)),
+                action="核对复查许可、条件、次数、期限及结果采用方式的逐字来源；不得从病例检查顺序补推方案要求。",
+            ))
+        if invalid_half_life_sources:
+            issues.append(_issue(
+                "source_coverage", "HALF_LIFE_SOURCE_UNVERIFIED",
+                "部分洗脱要求的半衰期数值缺少与本项适用对象一致的正式原文依据。",
+                sorted(set(invalid_half_life_sources)),
+                action="核对本项所引方案原文、适用对象及数值单位；没有明确时长时保留倍数要求，不填写推测数值。",
+            ))
+        if invalid_observation_policies:
+            issues.append(_issue(
+                "source_coverage", "OBSERVATION_POLICY_SOURCE_UNVERIFIED",
+                "部分条件尚未说明检查结果的采用范围，或所引原文与来源不符。",
+                sorted(set(invalid_observation_policies)),
+                action="请逐项说明采用一次、任一次或全部记录，并将依据逐段对应到所引方案原文；方案未明确的选择方式须保留为待核实。",
+            ))
         if invalid_clauses:
             issues.append(
                 _issue(
@@ -3343,6 +3459,61 @@ class ProtocolDeconstructionGate:
                     "部分原子条件没有绑定所属子规则中可逐字核对的原文子句。",
                     sorted(set(invalid_clauses)),
                     action="请逐字绑定直接支撑当前原子条件的原文；连续子句使用 source_clause。不连续的共同前缀、当前分支和共同尾句必须用 source_clauses 分段保存，例如‘随机前12周/4周’的4周分支应分别保存‘随机前’与‘4周’，不得拼成原文不存在的‘随机前4周’。",
+                )
+            )
+        # 来源摘录检查不证明命题语义；其含义仍须经单独核实。
+        # 有逐字摘录的组件已由 PREDICATE_CLAUSE_NOT_IN_SOURCE 覆盖，此处只补该
+        # 检查看不到的情形，不重复报告同一缺陷。
+        unclosed_proposition_predicates: list[str] = []
+        for rule in draft.proposed_rules:
+            for component in rule.components:
+                component_draft = next(
+                    (
+                        item
+                        for item in draft.component_drafts
+                        if item.proposed_component.rule_component_id
+                        == component.rule_component_id
+                    ),
+                    None,
+                )
+                expressions = [component.expression]
+                if component.exception_expression is not None:
+                    expressions.append(component.exception_expression)
+                propositional_atoms = [
+                    predicate
+                    for expression in expressions
+                    for predicate in iter_atomic_predicates(expression)
+                    if predicate.semantic_proposition is not None
+                ]
+                if not propositional_atoms:
+                    continue
+                if component_draft is not None and component_draft.source_excerpts:
+                    continue
+                mapped_texts = [
+                    materials.get(ref, "")
+                    for ref in (
+                        component_draft.source_refs
+                        if component_draft is not None
+                        else ()
+                    )
+                ]
+                unclosed_proposition_predicates.extend(
+                    predicate.predicate_id
+                    for predicate in propositional_atoms
+                    if not predicate.exact_source_clauses
+                    or any(
+                        not any(clause in text for text in mapped_texts)
+                        for clause in predicate.exact_source_clauses
+                    )
+                )
+        if unclosed_proposition_predicates:
+            issues.append(
+                _issue(
+                    "source_coverage",
+                    "SEMANTIC_PROPOSITION_SOURCE_NOT_CLOSED",
+                    "部分条件缺少可逐字核对的方案原文依据。",
+                    sorted(set(unclosed_proposition_predicates)),
+                    action="请核对本项条件对应的方案原文，不以摘要、改写或其他条款的内容代替。",
                 )
             )
         fragmented_categories = []

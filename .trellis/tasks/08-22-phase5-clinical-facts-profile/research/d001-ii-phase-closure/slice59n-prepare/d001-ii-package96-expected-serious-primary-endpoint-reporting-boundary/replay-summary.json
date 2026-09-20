@@ -1,0 +1,18 @@
+{
+  "attached_count": 5,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-3dab4691b54f3459827308b4",
+  "group_id": "d001-ii-package96-expected-serious-primary-endpoint-reporting-boundary",
+  "lookup_counts": {
+    "frozen_plan_owned": 7
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-package96-expected-serious-primary-endpoint-reporting-boundary",
+  "owned_count": 2,
+  "prompt_char_count": 30141,
+  "prompt_sha256": "285e0b2a40f43f5e16e6716f40dc93c428d97416807cd0a6846e73a3afd7da99",
+  "task_id": "phase5-slice61ch-20260830",
+  "unit_count": 7,
+  "worker": "cursor-worker_01"
+}

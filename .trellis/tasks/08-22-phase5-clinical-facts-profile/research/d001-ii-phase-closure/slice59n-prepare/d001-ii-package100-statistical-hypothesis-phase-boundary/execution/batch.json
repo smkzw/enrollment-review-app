@@ -1,0 +1,396 @@
+{
+  "batch_id": "pcb-b141ba3c143059ffcd2d93ea",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [
+    "body.p1171",
+    "body.p1172",
+    "body.p1173",
+    "body.p1174",
+    "body.p1175",
+    "body.p1176",
+    "body.p1177",
+    "body.p1178",
+    "body.p1179"
+  ],
+  "context_structure_unit_ids": [
+    "su-dc858ea1af9d50e93e2de816",
+    "su-92cda4f134367875bbf58f21",
+    "su-83a2eb74b16a38f168df6652",
+    "su-305d69254d4de9a0a65868df",
+    "su-1c35528c71c583261cd826b3",
+    "su-1383eec65f1476b8fa6413aa",
+    "su-5b58c2c24b7f16354a0ab16c",
+    "su-bb2574438f9d2ba364e404e3",
+    "su-16e9bca649de0099da16794e"
+  ],
+  "context_units": [
+    {
+      "excerpt": "Ⅱ期为探索性研究，不做检验假设。",
+      "heading_path": [
+        "统计学考虑",
+        "统计假设"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1171"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30340,
+      "source_ref": "body.p1171",
+      "source_span_ids": [
+        "body.p1171"
+      ],
+      "structure_unit_id": "su-dc858ea1af9d50e93e2de816",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "Ⅲ期研究主要目的为证明对于主要估计目标，第16周，达到银屑病面积和严重程度指数较基线至少改善75%的参与者比例（PASI 75应答），达到PGA评分为0或1的参与者比例（PGA-TS），CMS-D001片均优于安慰剂。针对上述主要估计目标的均采取如下的假设检验：设定CMS-D001片的PASI 75应答率为π_11、安慰剂的应答比例为π_10；CMS-D001片的PGA-TS应答比例为π_21，安慰剂的应答比例为π_20；",
+      "heading_path": [
+        "统计学考虑",
+        "统计假设"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1172"
+      ],
+      "phase_scopes": [
+        "phase_iii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30350,
+      "source_ref": "body.p1172",
+      "source_span_ids": [
+        "body.p1172"
+      ],
+      "structure_unit_id": "su-92cda4f134367875bbf58f21",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "假设如下：",
+      "heading_path": [
+        "统计学考虑",
+        "统计假设"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1173"
+      ],
+      "phase_scopes": [
+        "phase_iii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30360,
+      "source_ref": "body.p1173",
+      "source_span_ids": [
+        "body.p1173"
+      ],
+      "structure_unit_id": "su-83a2eb74b16a38f168df6652",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "H_0：ℼ_11- ℼ_10 ≤0 或 ℼ_21- ℼ_20 ≤0",
+      "heading_path": [
+        "统计学考虑",
+        "统计假设"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1174"
+      ],
+      "phase_scopes": [
+        "phase_iii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30370,
+      "source_ref": "body.p1174",
+      "source_span_ids": [
+        "body.p1174"
+      ],
+      "structure_unit_id": "su-305d69254d4de9a0a65868df",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "H_1：ℼ_11- ℼ_10> 0且ℼ_21- ℼ_20> 0；",
+      "heading_path": [
+        "统计学考虑",
+        "统计假设"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1175"
+      ],
+      "phase_scopes": [
+        "phase_iii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30380,
+      "source_ref": "body.p1175",
+      "source_span_ids": [
+        "body.p1175"
+      ],
+      "structure_unit_id": "su-1c35528c71c583261cd826b3",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "Alpha = 0.025（单侧）",
+      "heading_path": [
+        "统计学考虑",
+        "统计假设"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1176"
+      ],
+      "phase_scopes": [
+        "phase_iii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30390,
+      "source_ref": "body.p1176",
+      "source_span_ids": [
+        "body.p1176"
+      ],
+      "structure_unit_id": "su-1383eec65f1476b8fa6413aa",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "多重性校正",
+      "heading_path": [
+        "统计学考虑",
+        "统计假设",
+        "多重性校正"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1177"
+      ],
+      "phase_scopes": [
+        "phase_iii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30400,
+      "source_ref": "body.p1177",
+      "source_span_ids": [
+        "body.p1177"
+      ],
+      "structure_unit_id": "su-5b58c2c24b7f16354a0ab16c",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "Ⅲ期研究设定两个主要终点，根据上述的假设检验，针对每个主要终点，试验组均需优于安慰剂组才可以拒绝原假设，故不涉及alpha的分配。在研究中整体alpha水平仍然维持在单侧alpha=0.025的水平上。",
+      "heading_path": [
+        "统计学考虑",
+        "统计假设",
+        "多重性校正"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1178"
+      ],
+      "phase_scopes": [
+        "phase_iii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30410,
+      "source_ref": "body.p1178",
+      "source_span_ids": [
+        "body.p1178"
+      ],
+      "structure_unit_id": "su-bb2574438f9d2ba364e404e3",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "样本量计算",
+      "heading_path": [
+        "统计学考虑",
+        "样本量计算"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1179"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30420,
+      "source_ref": "body.p1179",
+      "source_span_ids": [
+        "body.p1179"
+      ],
+      "structure_unit_id": "su-16e9bca649de0099da16794e",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "coverage_manifest_id": "manifest:slice61cm-package100-statistical-hypothesis-phase-boundary",
+  "known_official_targets": [],
+  "known_procedure_targets": [],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "D1给药前",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "D1给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {},
+  "owned_required_action_kinds_by_structure_unit_id": {},
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.p1168",
+    "body.p1169",
+    "body.p1170"
+  ],
+  "owned_structure_unit_ids": [
+    "su-b1a4eb846e1760d328d8ab85",
+    "su-ec6767bdab8071493c210381",
+    "su-33ca58c3b59dcc4ebe724760"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "统计学考虑",
+      "heading_path": [
+        "统计学考虑"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1168"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30310,
+      "source_ref": "body.p1168",
+      "source_span_ids": [
+        "body.p1168"
+      ],
+      "structure_unit_id": "su-b1a4eb846e1760d328d8ab85",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "针对Ⅱ期和Ⅲ期研究的数据统计分析方法将在单独的统计分析计划（Statistical Analysis Plan，SAP）中进一步细化，统计分析计划将分别在Ⅱ期和Ⅲ期研究数据库锁定前由申办者批准并定稿。",
+      "heading_path": [
+        "统计学考虑"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1169"
+      ],
+      "phase_scopes": [
+        "mixed"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30320,
+      "source_ref": "body.p1169",
+      "source_span_ids": [
+        "body.p1169"
+      ],
+      "structure_unit_id": "su-ec6767bdab8071493c210381",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "统计假设",
+      "heading_path": [
+        "统计学考虑",
+        "统计假设"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1170"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30330,
+      "source_ref": "body.p1170",
+      "source_span_ids": [
+        "body.p1170"
+      ],
+      "structure_unit_id": "su-33ca58c3b59dcc4ebe724760",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [
+    "su-b1a4eb846e1760d328d8ab85",
+    "su-33ca58c3b59dcc4ebe724760"
+  ],
+  "study_phase": "phase_ii"
+}

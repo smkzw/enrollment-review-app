@@ -1,0 +1,410 @@
+{
+  "batch_id": "pcb-f9432d781641041b01749957",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [
+    "body.p1225"
+  ],
+  "context_structure_unit_ids": [
+    "su-ea5183042e51c003a1bb56d2"
+  ],
+  "context_units": [
+    {
+      "excerpt": "不良事件（AE）采用MedDRA（28.0版本或届时最高版本）进行编码，依据系统器官分类（SOC）和首选语（PT）进行汇总，Ⅲ期临床阶段将分别对各组16周基础期和整个研究期的AE进行汇总。主要报告发生治疗期出现的不良事件（TEAE）（即在治疗过程中出现的事件，在治疗前并未出现或相对于治疗前发生恶化的事件）的参与者例数、例次和发生率，并按照不良事件类型、与研究药物的因果关系及严重程度汇总TEAE并列表。对于与研究药物相关的TEAE、导致永久停用研究药物的TEAE、导致退出试验的TEAE、导致中断治疗（暂停给药）的TEAE、严重不良事件、死亡事件进行单独汇总并列表。对治疗前（即签署知情同意后，接受试验用药品前以及接受试验用药品后未发生严重程度加重的不良医学事件）发生的不良医学事件以清单形式列出。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "安全性分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1225"
+      ],
+      "phase_scopes": [
+        "phase_iii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30880,
+      "source_ref": "body.p1225",
+      "source_span_ids": [
+        "body.p1225"
+      ],
+      "structure_unit_id": "su-ea5183042e51c003a1bb56d2",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "coverage_manifest_id": "manifest:slice61cp-package103-safety-pk-exposure-statistical-boundary",
+  "known_official_targets": [],
+  "known_procedure_targets": [],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "D1给药前",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "D1给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {},
+  "owned_required_action_kinds_by_structure_unit_id": {},
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.p1224",
+    "body.p1226",
+    "body.p1227",
+    "body.p1228",
+    "body.p1229",
+    "body.p1230",
+    "body.p1231",
+    "body.p1232",
+    "body.p1233",
+    "body.p1234",
+    "body.p1235"
+  ],
+  "owned_structure_unit_ids": [
+    "su-f0c049a52a17bb04c2678aaa",
+    "su-9b15d9260c296212cb45b6ba",
+    "su-9471f1cf4b0c3c90fb7acced",
+    "su-22233ad4faaa63fde78c241a",
+    "su-44d285efe3644d182df46fc7",
+    "su-c65ca0704622be6c77eb68ec",
+    "su-ce3995c1532608db1e1780b6",
+    "su-b4b73bf4822e4834677fbaed",
+    "su-70bee489846ac0a1d8402eaa",
+    "su-2215e90b929724adc1afbcda",
+    "su-e18e6f31a176a1a1d304310c"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "安全性分析",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "安全性分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1224"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30870,
+      "source_ref": "body.p1224",
+      "source_span_ids": [
+        "body.p1224"
+      ],
+      "structure_unit_id": "su-f0c049a52a17bb04c2678aaa",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "按照组别对在计划的评价时间点的参与者血常规和血生化等实验室检查、生命体征的结果进行统计汇总，描述指标检查结果相对于基线的变化情况，主要关注治疗前正常而治疗后异常的发生情况，以及治疗前异常但在治疗后异常加重的参与者，需列表描述上述两种情况。以交叉表的形式，分别列出各组别例数和百分比。将按照参与者对所有异常检查结果进行列表。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "安全性分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1226"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30890,
+      "source_ref": "body.p1226",
+      "source_span_ids": [
+        "body.p1226"
+      ],
+      "structure_unit_id": "su-9b15d9260c296212cb45b6ba",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "按照组别对受试者的体格检查数据进行列表，以交叉表的形式，分别描述例数和百分比，并对异常结果进行汇总。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "安全性分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1227"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30900,
+      "source_ref": "body.p1227",
+      "source_span_ids": [
+        "body.p1227"
+      ],
+      "structure_unit_id": "su-9471f1cf4b0c3c90fb7acced",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "列出所有具有生育能力的女性的血妊娠检查结果。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "安全性分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1228"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30910,
+      "source_ref": "body.p1228",
+      "source_span_ids": [
+        "body.p1228"
+      ],
+      "structure_unit_id": "su-22233ad4faaa63fde78c241a",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "按照组别对合并用药及治疗进行汇总并列表。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "安全性分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1229"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30920,
+      "source_ref": "body.p1229",
+      "source_span_ids": [
+        "body.p1229"
+      ],
+      "structure_unit_id": "su-44d285efe3644d182df46fc7",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "药代动力学分析",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "药代动力学分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1230"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30930,
+      "source_ref": "body.p1230",
+      "source_span_ids": [
+        "body.p1230"
+      ],
+      "structure_unit_id": "su-c65ca0704622be6c77eb68ec",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "本研究将基于PKCS，按照剂量组对各计划PK采样时间的CMS-D001及其主要代谢产物（如适用）血药浓度（血浆C_trough或C_max）进行列表和描述性统计汇总，包括例数、算术均值、标准差、变异系数、几何均值、几何变异系数、中位数、最大值和最小值等。还将按实际PK采样时间，绘制个体血药浓度-时间曲线图（线性和半对数）；按计划PK采样时间，绘制各剂量组的平均血药浓度-时间曲线图（线性和半对数）。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "药代动力学分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1231"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30940,
+      "source_ref": "body.p1231",
+      "source_span_ids": [
+        "body.p1231"
+      ],
+      "structure_unit_id": "su-ce3995c1532608db1e1780b6",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "群体药代动力学分析",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "群体药代动力学分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1232"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30950,
+      "source_ref": "body.p1232",
+      "source_span_ids": [
+        "body.p1232"
+      ],
+      "structure_unit_id": "su-b4b73bf4822e4834677fbaed",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "在本研究中获得的所有CMS-D001及其主要代谢产物（如适用）的血药浓度数据将与前期已完成研究的数据合并，用于PopPK分析（使用非线性混合效应模型[NONMEM]），建立PopPK模型以表征CMS-D001及其主要代谢产物（如适用）的PK特征。这些分析将另行准备定量药理分析计划及报告。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "群体药代动力学分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1233"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30960,
+      "source_ref": "body.p1233",
+      "source_span_ids": [
+        "body.p1233"
+      ],
+      "structure_unit_id": "su-70bee489846ac0a1d8402eaa",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "暴露-效应分析",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "暴露-效应分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1234"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30970,
+      "source_ref": "body.p1234",
+      "source_span_ids": [
+        "body.p1234"
+      ],
+      "structure_unit_id": "su-2215e90b929724adc1afbcda",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "如数据允许，根据建立的最终PopPK模型参数估计值，估算个体暴露参数，用于进一步的暴露-效应分析，包括暴露/疗效、暴露/安全性的相关性探索。这些分析将另行准备定量药理分析计划及报告。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "暴露-效应分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1235"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30980,
+      "source_ref": "body.p1235",
+      "source_span_ids": [
+        "body.p1235"
+      ],
+      "structure_unit_id": "su-e18e6f31a176a1a1d304310c",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [
+    "su-f0c049a52a17bb04c2678aaa",
+    "su-c65ca0704622be6c77eb68ec",
+    "su-b4b73bf4822e4834677fbaed",
+    "su-2215e90b929724adc1afbcda"
+  ],
+  "study_phase": "phase_ii"
+}

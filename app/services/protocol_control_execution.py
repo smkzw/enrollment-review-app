@@ -112,7 +112,7 @@ from app.workflow.runner import PreparedStepResult, StepContext, StepExecutor
 PROTOCOL_CONTROL_EXECUTION_JOB_TYPE = "protocol_control_execution"
 # A short alias keeps callers independent from the longer API-facing name.
 PROTOCOL_CONTROL_JOB_TYPE = PROTOCOL_CONTROL_EXECUTION_JOB_TYPE
-PROTOCOL_CONTROL_EXECUTION_VERSION = "phase5/protocol-control-execution/v1"
+PROTOCOL_CONTROL_EXECUTION_VERSION = "phase5/protocol-control-execution/v14"
 PROTOCOL_CONTROL_EXECUTION_CONTROL_SCHEMA = (
     "phase5/protocol-control-execution-control/v1"
 )
@@ -713,8 +713,11 @@ class ProtocolControlJobService:
             }
             for batch in prepared.discovery_plan.batches
         ]
+        from app.llm.mtplx_model_lifecycle import local_deployment_job_fields
+
         return {
             "execution_version": PROTOCOL_CONTROL_EXECUTION_VERSION,
+            **local_deployment_job_fields(),
             "source_deconstruction_job_id": prepared.source_job_id,
             "actor": self.actor,
             "source_snapshot_id": prepared.snapshot.snapshot_id,
@@ -836,8 +839,20 @@ def create_protocol_control_executor(
 
     def execute(context: StepContext) -> dict[str, Any] | PreparedStepResult:
         try:
+            if context.job_payload.get("execution_version") != PROTOCOL_CONTROL_EXECUTION_VERSION:
+                raise StepFailure(
+                    retryable=False,
+                    error_code="PROTOCOL_CONTROL_EXECUTION_VERSION_MISMATCH",
+                    detail="此任务使用较早的整理要求，不能与当前版本混合续算；原结果保留，请从方案整理建立新任务。",
+                )
             if context.last_checkpoint is not None:
                 return _replay_checkpoint(context)
+            from app.llm.mtplx_model_lifecycle import MtplxOwnershipError, require_local_deployment_job
+
+            try:
+                require_local_deployment_job(context.job_payload)
+            except MtplxOwnershipError as exc:
+                raise StepFailure(retryable=False, error_code="MODEL_DEPLOYMENT_CHANGED", detail=str(exc)) from exc
             if context.step_id.startswith(_DISCOVERY_STEP_PREFIX):
                 return _execute_discovery(context, config)
             if context.step_id == STEP_CLOSURE:
@@ -1453,16 +1468,18 @@ def _execute_deep(
         output_validator=validate_deep_output,
     )
     if result.status != "已解析" or result.final_output is None:
-        raise StepFailure(
-            retryable=False,
-            error_code="PROTOCOL_CONTROL_DEEP_NEEDS_REVIEW",
-            detail=_run_diagnostics(
+        # 候选级 needs_review 降级（2026-09-19 用户裁定）：单批深析失败不阻塞
+        # 其余合格候选进入收口——该批所有 owned 单元标为 uncertain（人工核对
+        # 路径），closure 与发布照常进行，控制目录中如实保留未决标记。
+        return {
+            "stage": "deep_needs_review",
+            "batch_id": batch.batch_id,
+            "owned_structure_unit_ids": sorted(batch.owned_structure_unit_ids),
+            "diagnostics": _run_diagnostics(
                 result.attempts,
-                "深析批次未产出可接受的完整结果；本步骤已进入人工核对边界，"
-                "外层 JobRunner 不会自动新建模型会话。"
-                "仅人工调用任务重试后才会再次执行该批次。",
+                "深析批次未产出合规输出，已降级为需人工核对。",
             ),
-        )
+        }
     return {
         "stage": "deep",
         "batch_id": batch.batch_id,
@@ -1512,6 +1529,29 @@ def _deep_results(
                     detail="深析阶段仍缺少已接受的批次结果。",
                 )
             _, payload = checkpoint
+            if payload.get("stage") == "deep_needs_review":
+                # 候选级降级：该批所有 owned 单元标为 PENDING_CONFIRMATION，
+                # 不产出候选；closure 与发布照常推进，控制目录中如实保留
+                # 未决标记（2026-09-19 用户裁定的通用降级路径）。
+                from app.domain.contracts.protocol_controls import (
+                    ProtocolControlBatchDispositionHydrated,
+                    ProtocolControlUnitDisposition,
+                )
+                output[batch.batch_id] = ProtocolControlBatchDispositionHydrated(
+                    batch_id=batch.batch_id,
+                    coverage_manifest_id=batch.coverage_manifest_id,
+                    owned_structure_unit_ids=list(batch.owned_structure_unit_ids),
+                    owned_source_span_ids=list(batch.owned_source_span_ids),
+                    dispositions=[
+                        ProtocolControlUnitDisposition(
+                            structure_unit_id=uid,
+                            disposition=StructureUnitDispositionKind.PENDING_CONFIRMATION,
+                        )
+                        for uid in batch.owned_structure_unit_ids
+                    ],
+                    candidates=[],
+                )
+                continue
             run_result = ProtocolControlAgentRunResult.model_validate(
                 payload.get("run_result")
             )

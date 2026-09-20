@@ -29,6 +29,7 @@ class TargetedPageReviewExecutor:
     def __call__(self, context):
         payload = context.job_payload
         if (payload.get("version") != TARGETED_REVIEW_VERSION
+                or payload.get("execution_versions") != page_review_execution_versions()
                 or payload.get("base_prompt_version") != PAGE_REVIEW_PROMPT_VERSION
                 or payload.get("targeted_prompt_version") != TARGETED_REVIEW_PROMPT_VERSION
                 or payload.get("routes") != {lane.value: route_identity(r) for lane, r in self.routes.items()}):
@@ -60,12 +61,23 @@ class TargetedPageReviewExecutor:
                 ids = tuple(receipt(f"read:1:{lane.value}")["page_review_id"] for lane in MAIN_LANES)
                 records = [PageReviewRecord.model_validate(receipt(f"read:1:{lane.value}")["auxiliary_review"])
                            for lane in MAIN_LANES]
+                # Missing observations remain blind; do not teach the other reader an answer.
+                shared_fields = set.intersection(*(
+                    {normalize_field_name(f.field_name) for f in record.facts}
+                    for record in records))
+                # Excerpts may span other rows: a mixed missing/conflict round stays blind.
+                show_candidates = (set(previous["pending_targets"]).issubset(shared_fields)
+                                   and (not previous.get("handwriting_pending")
+                                        or all(record.handwriting for record in records)))
                 excerpts = tuple(f.region.excerpt for record in records for f in record.facts
-                                 if normalize_field_name(f.field_name) in previous["pending_targets"])
-                if previous.get("handwriting_pending"):
+                                 if show_candidates
+                                 and normalize_field_name(f.field_name) in previous["pending_targets"])
+                if previous.get("handwriting_pending") and show_candidates:
                     excerpts += pending_handwriting_excerpts(records)
                 focus = PageReviewFocus(**{**focus.model_dump(), "round_number": 2,
                     "targets": tuple(previous["pending_targets"]),
+                    "time_review_targets": tuple(target for target in focus.time_review_targets
+                                                 if target in previous["pending_targets"]),
                     "handwriting_review": previous.get("handwriting_pending", False),
                     "previous_round_review_ids": ids, "candidate_excerpts": excerpts})
             if parts[0] == "compare":
@@ -76,10 +88,21 @@ class TargetedPageReviewExecutor:
                               "candidate_auto_accept": False, "read_failures": failures}
                 else:
                     records = [PageReviewRecord.model_validate(r["auxiliary_review"]) for r in receipts]
-                    result = compare_targeted_reads(records, focus.targets)
+                    result = compare_targeted_reads(records, focus.targets,
+                                                    required_time_targets=focus.time_review_targets)
                 if focus.handwriting_review:
                     agreed = not failures and compare_handwriting_reads(records)
                     result.update(handwriting_candidate_agreement=agreed, handwriting_pending=not agreed)
+                result["agreed_candidate_rounds"] = {
+                    target: number for target in result["agreed_candidate_targets"]}
+                if number == 2:
+                    # Retain whole same-round comparisons, never pair reads across rounds.
+                    result["agreed_candidate_targets"] = sorted(
+                        set(previous["agreed_candidate_targets"]) | set(result["agreed_candidate_targets"]))
+                    result["agreed_candidate_rounds"] = {
+                        **previous["agreed_candidate_rounds"], **result["agreed_candidate_rounds"]}
+                    if previous.get("handwriting_candidate_agreement"):
+                        result["handwriting_candidate_agreement"] = True
                 pending = bool(result["pending_targets"]) or result.get("handwriting_pending", False)
                 kind = ("conflict_preserved_read_failed" if failures else
                         "candidate_agreement_unaccepted" if not pending else
@@ -91,6 +114,7 @@ class TargetedPageReviewExecutor:
 
         # Reuse the ordinary reader's receipts, truncation retry and atomic persistence.
         read_payload = {**page_review_execution_versions(), "authority": payload["authority"],
+                        "reading_rotations": payload["reading_rotations"],
                         "clause_pack": payload["clause_pack"], "routes": payload["routes"],
                         "pages": [payload["page"]], "review_context": payload["review_context"]}
         read_context = replace(context, job_payload=read_payload)

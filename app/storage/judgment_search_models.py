@@ -12,8 +12,8 @@ from app.storage.evidence_models import PAYLOAD_SHA_LEN, EvidenceAppendedRecordM
 class JudgmentSearchSummaryORM(EvidenceAppendedRecordMixin, Base):
     """每条要求在当前权威元组下的检索覆盖摘要（追加写，最新行即当前结论）。
 
-    ``summary_id`` 内容寻址：同一权威、同一范围、同一回执集合得到同一身份；
-    检索重跑产生新行，旧行按不可变历史保留。列镜像便于按权威元组直接查询，
+    新 ``summary_id`` 内容寻址包含任务、完整权威与摘要；旧身份仍保留可读。
+    不同任务即使摘要相同也产生新行。列镜像便于按权威元组直接查询，
     正文合同仍以 ``payload_json`` 为准。
     """
 

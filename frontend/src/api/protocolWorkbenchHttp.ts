@@ -14,6 +14,7 @@ import {
   encodeManualEdit,
   normalizeDraftComparison,
   normalizeDraftRevision,
+  normalizeGenerationPreview,
   normalizeIdentityReview,
   normalizeIntegrity,
   normalizeOfficialProjectList,
@@ -32,6 +33,7 @@ import type {
   DraftComparisonView,
   DraftRevisionView,
   FeedbackInput,
+  GenerationPreviewView,
   IdentityReviewView,
   IntegrityView,
   ManualEditInput,
@@ -304,6 +306,17 @@ export function createProtocolWorkbenchHttp(
       );
     },
 
+    getGenerationPreview(
+      jobId: string,
+      options?: ProtocolWorkbenchRequestOptions,
+    ): Promise<GenerationPreviewView> {
+      return request(
+        `/${encodeURIComponent(jobId)}/draft/generation-preview`,
+        { method: "GET", signal: options?.signal },
+        normalizeGenerationPreview,
+      );
+    },
+
     saveDraft(
       jobId: string,
       expectedRevisionId: string,
@@ -331,7 +344,12 @@ export function createProtocolWorkbenchHttp(
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idempotency_key: idempotencyKey, actor: "用户" }),
+          body: JSON.stringify({ idempotency_key: idempotencyKey, actor: "用户",
+            ...(options?.controlPublication ? {
+              control_job_id: options.controlPublication.jobId,
+              control_checkpoint_id: options.controlPublication.checkpointId,
+            } : {}),
+          }),
           signal: options?.signal,
         },
         normalizePublishResult,

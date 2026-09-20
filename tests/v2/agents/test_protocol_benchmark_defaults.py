@@ -7,8 +7,9 @@
 - oMLX / mlx-serve 按请求原样传递 reasoning_effort（含 xhigh），空值或
   default/auto 不发送；GLM 后端仍只接受 low/high/max；
 - ``provider_defaults`` 可选开关：仅去掉产品侧 temperature，保留 MTPLX
-  generation_mode=ar 兼容措施，提示词与严格输出 Schema 不变；缺省关闭，
-  与历史行为完全一致；
+  generation_mode=ar 兼容措施，提示词与严格输出 Schema 不变；新直连缺省
+  开启（不传 temperature，遵循供应商采样默认）；显式
+  ``provider_defaults=False`` 保留历史产品侧覆盖；
 - ``provider_defaults`` 改变语义缓存身份，避免跨采样设置复用缓存。
 """
 
@@ -28,6 +29,9 @@ USER_MESSAGE = [{"role": "user", "content": "横评离线回归提示"}]
 
 
 def test_local_early_length_does_not_repeat_request(monkeypatch):
+    monkeypatch.setattr(
+        transport_module, "MLX_SERVE_PROTOCOL_BATCH_MAX_TOKENS", 131072
+    )
     transport = _build("mlx-serve", model="test-model", max_tokens=12000)
     response = SimpleNamespace(
         usage=SimpleNamespace(completion_tokens=100),
@@ -42,7 +46,9 @@ def test_local_early_length_does_not_repeat_request(monkeypatch):
 
 
 def _build(backend: str, **kwargs) -> DeepSeekProtocolAgentTransport:
-    base: dict = {"client": object(), "backend": backend}
+    # Wire-format replay fixtures specify their historical budget explicitly;
+    # they do not exercise new production deployment defaults.
+    base: dict = {"client": object(), "backend": backend, "max_tokens": 8192}
     base.update(kwargs)
     return DeepSeekProtocolAgentTransport(**base)
 
@@ -57,6 +63,10 @@ def test_mlx_serve_backend_uses_explicit_url_model_and_local_wire_contract(
     monkeypatch.setattr(transport_module, "MLX_SERVE_BASE_URL", "http://127.0.0.1:11234")
     monkeypatch.setattr(transport_module, "MLX_SERVE_API_KEY", "")
     monkeypatch.setattr(transport_module, "MLX_SERVE_MODEL", "hub/qwen3-xhigh-test")
+    # 显式 131072 请求必须在上限内原样生效，超限会显式拒绝而非静默压缩。
+    monkeypatch.setattr(
+        transport_module, "MLX_SERVE_PROTOCOL_BATCH_MAX_TOKENS", 131072
+    )
     # 不注入 client：验证真实 OpenAI 客户端构造（仅构造，不联网）。
     transport = DeepSeekProtocolAgentTransport(
         backend="mlx-serve",
@@ -66,9 +76,7 @@ def test_mlx_serve_backend_uses_explicit_url_model_and_local_wire_contract(
 
     assert transport._backend == "mlx-serve"
     assert transport._model == "hub/qwen3-xhigh-test"
-    assert transport._max_tokens == min(
-        131072, transport_module.MLX_SERVE_PROTOCOL_BATCH_MAX_TOKENS
-    )
+    assert transport._max_tokens == 131072
     assert transport.uses_compact_wire_contract is True
     assert transport.supports_parent_rule_segmentation is True
     # 本地服务：显式 /v1 端点 + 占位密钥 + 不继承系统代理。
@@ -133,24 +141,36 @@ def test_glm_backend_still_rejects_xhigh():
         )
 
 
-def test_default_off_keeps_legacy_sampling_overrides(monkeypatch):
+def test_default_keeps_provider_sampling_and_explicit_false_keeps_legacy(
+    monkeypatch,
+):
     monkeypatch.setattr(transport_module, "MLX_SERVE_MODEL", "hub/qwen3-xhigh-test")
 
     omlx = _kwargs(_build("omlx", model="omlx-model"))
     mlx = _kwargs(_build("mlx-serve", model="hub/qwen3-xhigh-test"))
     mtplx = _kwargs(_build("mtplx", model="mtplx-model"))
 
-    assert omlx["temperature"] == 0.0
+    # 新直连缺省 provider_defaults=True：不发送 temperature。
+    assert "temperature" not in omlx
     assert "extra_body" not in omlx
-    assert mlx["temperature"] == 0.0
+    assert "temperature" not in mlx
     assert "extra_body" not in mlx
-    assert mtplx["temperature"] == 0.0
+    assert "temperature" not in mtplx
     assert mtplx["extra_body"] == {"generation_mode": "ar"}
     # 严格输出 Schema 与提示词在默认路径下保持不变。
     for kwargs in (omlx, mlx, mtplx):
         assert kwargs["response_format"]["type"] == "json_schema"
         assert kwargs["response_format"]["json_schema"]["strict"] is True
         assert kwargs["messages"] == USER_MESSAGE
+
+    legacy_omlx = _kwargs(_build("omlx", model="omlx-model", provider_defaults=False))
+    legacy_mtplx = _kwargs(
+        _build("mtplx", model="mtplx-model", provider_defaults=False)
+    )
+    # 显式 provider_defaults=False 保留历史产品侧采样覆盖。
+    assert legacy_omlx["temperature"] == 0.0
+    assert legacy_mtplx["temperature"] == 0.0
+    assert legacy_mtplx["extra_body"] == {"generation_mode": "ar"}
 
 
 def test_provider_defaults_true_removes_local_sampling_but_keeps_schema(monkeypatch):
@@ -179,23 +199,34 @@ def test_provider_defaults_true_removes_local_sampling_but_keeps_schema(monkeypa
     assert mtplx["extra_body"] == {"generation_mode": "ar"}
 
 
-def test_provider_defaults_does_not_touch_remote_backends():
-    zhipu = _kwargs(
+def test_glm_branch_honors_provider_defaults_flag():
+    default_sampling = _kwargs(
         _build(
             "zhipu-coding-plan",
             model="glm-5.3-flash",
             reasoning_effort="high",
             api_key="test-key",
-            provider_defaults=True,
         )
     )
-    assert zhipu["temperature"] == 0.1
-    assert zhipu["extra_body"]["thinking"]["type"] == "enabled"
+    assert "temperature" not in default_sampling
+    assert default_sampling["extra_body"]["thinking"]["type"] == "enabled"
+
+    legacy = _kwargs(
+        _build(
+            "zhipu-coding-plan",
+            model="glm-5.3-flash",
+            reasoning_effort="high",
+            api_key="test-key",
+            provider_defaults=False,
+        )
+    )
+    assert legacy["temperature"] == 0.1
+    assert legacy["extra_body"]["thinking"]["type"] == "enabled"
 
 
 def test_provider_defaults_changes_semantic_cache_identity(monkeypatch):
     monkeypatch.setattr(transport_module, "MLX_SERVE_MODEL", "hub/qwen3-xhigh-test")
-    legacy = _build("mtplx", model="mtplx-model")
+    legacy = _build("mtplx", model="mtplx-model", provider_defaults=False)
     platform = _build("mtplx", model="mtplx-model", provider_defaults=True)
 
     assert (

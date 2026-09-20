@@ -1,0 +1,78 @@
+{
+  "policy": "execution-used-provider-model-nodes-are-excluded-from-conference",
+  "linked_execution_task_id": "r3-targeted-durable-review-20260906",
+  "linked": false,
+  "execution_evidence": [],
+  "excluded_route_nodes": [],
+  "effective_conference_roles": {
+    "general_single_object": {
+      "agent": "pi",
+      "provider": "cursor",
+      "model": "default",
+      "effort": "",
+      "default_provider": "cursor",
+      "default_model": "default",
+      "default_effort": "",
+      "escalate_provider": "cursor",
+      "escalate_model": "default",
+      "escalate_effort": "",
+      "primary": {
+        "agent": "pi",
+        "provider": "cursor",
+        "model": "default",
+        "effort": ""
+      },
+      "fallbacks": [
+        {
+          "agent": "pi",
+          "provider": "cms-router",
+          "model": "cms-model",
+          "effort": "high",
+          "dynamic_model": true
+        },
+        {
+          "agent": "codex-subagent",
+          "provider": "codex",
+          "model": "gpt-6-astra",
+          "effort": "low"
+        }
+      ],
+      "execution_route": "pi/cursor/default -> pi/cms-router/cms-model:high -> codex-subagent/codex/gpt-6-astra:low",
+      "node_id": "C01",
+      "role": "独立代码设计审阅",
+      "fallback_only": true,
+      "no_manager": true,
+      "tools_enabled": true,
+      "skills_enabled": false,
+      "schedule": {
+        "policy": "beijing-daily-peak-off-peak-v3",
+        "timezone": "Asia/Shanghai",
+        "period": "peak",
+        "period_label": "高峰",
+        "peak_start": "12:00",
+        "peak_end": "19:00",
+        "days": "all",
+        "evaluated_at": "2026-09-06T18:46:33.939294+08:00"
+      },
+      "schedule_constraints": {
+        "policy": "beijing-provider-window-v1",
+        "evaluated_at": "2026-09-06T18:46:33.939294+08:00",
+        "cms_router_minimax_blocked": false,
+        "explicit_route": false,
+        "events": [],
+        "route_rewritten": false
+      }
+    }
+  },
+  "schedule": {
+    "policy": "beijing-daily-peak-off-peak-v3",
+    "timezone": "Asia/Shanghai",
+    "period": "peak",
+    "period_label": "高峰",
+    "peak_start": "12:00",
+    "peak_end": "19:00",
+    "days": "all",
+    "evaluated_at": "2026-09-06T18:46:33.939294+08:00"
+  },
+  "generated_at": "2026-09-06 18:46:33 CST"
+}

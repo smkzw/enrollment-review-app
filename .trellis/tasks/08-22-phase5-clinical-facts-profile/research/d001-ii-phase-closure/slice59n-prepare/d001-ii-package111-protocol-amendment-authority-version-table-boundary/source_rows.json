@@ -1,0 +1,72 @@
+[
+  {
+    "excerpt": "方案修订",
+    "heading_path": [
+      "方案修订"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-214ce50fd89fb1998521c4c3",
+    "package_ordinal": 111,
+    "role": "owned",
+    "source_ref": "body.p1291",
+    "source_span_ids": [
+      "body.p1291"
+    ],
+    "structure_unit_id": "su-38ba3b1276716704c4aa66af",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "方案任何的必须的改变，都需以方案修订形式进行，并需在获得申办者、主要研究者签字同意后提交伦理委员会审批或备案。",
+    "heading_path": [
+      "方案修订"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-214ce50fd89fb1998521c4c3",
+    "package_ordinal": 111,
+    "role": "owned",
+    "source_ref": "body.p1292",
+    "source_span_ids": [
+      "body.p1292"
+    ],
+    "structure_unit_id": "su-675a94e90db6ed0e3db57b1d",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "版本 | 日期 | 变更说明 | 简要理由",
+    "heading_path": [
+      "方案修订"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-214ce50fd89fb1998521c4c3",
+    "package_ordinal": 111,
+    "role": "owned",
+    "source_ref": "body.t15.r0",
+    "source_span_ids": [
+      "body.t15.r0.c0.p0",
+      "body.t15.r0.c1.p0",
+      "body.t15.r0.c2.p0",
+      "body.t15.r0.c3.p0"
+    ],
+    "structure_unit_id": "su-fce5fbc8c96b381e90f1f026",
+    "unit_kind": "table_header"
+  },
+  {
+    "excerpt": "V1.0 | 2025年12月10日 | NA | NA",
+    "heading_path": [
+      "方案修订"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-214ce50fd89fb1998521c4c3",
+    "package_ordinal": 111,
+    "role": "owned",
+    "source_ref": "body.t15.r1",
+    "source_span_ids": [
+      "body.t15.r1.c0.p0",
+      "body.t15.r1.c1.p0",
+      "body.t15.r1.c2.p0",
+      "body.t15.r1.c3.p0"
+    ],
+    "structure_unit_id": "su-355fb1e6a11bbf4e8f05dbce",
+    "unit_kind": "table_row"
+  }
+]

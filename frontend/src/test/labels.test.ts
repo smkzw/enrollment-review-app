@@ -120,7 +120,8 @@ describe("中文标签：合同词核对", () => {
     expect(gapTypeLabel.result_fields_missing).toBe("结果字段缺失");
     expect(gapTypeLabel.date_or_anchor_missing).toBe("日期或时间锚点缺失");
     expect(gapTypeLabel.professional_judgment).toBe("待研究者判断");
-    expect(gapTypeLabel.observation_unverified).toBe("待研究者判断");
+    expect(gapTypeLabel.observation_unverified).toBe("资料内容尚待核实");
+    expect(gapTypeLabel.observation_unverified).not.toBe(gapTypeLabel.professional_judgment);
     expect(gapTypeLabel.source_conflict).toBe("来源存在冲突");
     expect(gapTypeLabel.interpretation_conflict).toBe("解释材料与方案不一致");
     expect(gapTypeLabel.ocr_or_parse_risk).toBe("文字或数值需要核对");
@@ -146,10 +147,10 @@ describe("中文标签：合同词核对", () => {
     expect(taskStateLabel.stale).toBe("资料发生变化，当前结果需要重新核对");
   });
 
-  it("责任方只用合同允许的中文（研究者方/CRC/CRA/申办方医学或项目组）", () => {
+  it("责任方使用完整中文名称", () => {
     expect(actionTargetLabel.investigator).toBe("研究者方");
-    expect(actionTargetLabel.crc).toBe("CRC");
-    expect(actionTargetLabel.cra).toBe("CRA");
+    expect(actionTargetLabel.crc).toBe("研究协调员");
+    expect(actionTargetLabel.cra).toBe("临床监查员");
     expect(actionTargetLabel.sponsor_medical_or_project).toBe("申办方医学或项目组");
   });
 
@@ -302,12 +303,8 @@ describe("中文标签：穷尽与卫生", () => {
         expect(label.trim().length, `${name}.${key} 非空`).toBeGreaterThan(0);
       }
       const values = entries.map(([, label]) => label);
-      // observation_unverified 与 professional_judgment 都表示需研究者判断，
-      // 按前端契约使用同一中文标签，允许这一组有意别名。
-      const expectedUniqueCount =
-        name === "gapTypeLabel" ? values.length - 1 : values.length;
       expect(new Set(values).size, `${name} 无意外重复标签`).toBe(
-        expectedUniqueCount,
+        values.length,
       );
     }
   });

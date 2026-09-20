@@ -1,0 +1,822 @@
+{
+  "claims_complete_input": false,
+  "claims_complete_output": false,
+  "clinical_acceptance_note": "映射器不替代人工期别、关系和临床语义验收；未决项必须保持阻断。",
+  "coverage_manifest_id": "d001-ii-phase-closure-20260825-slice58e-manifest",
+  "full_claims_complete_allowed": false,
+  "manifest_claims_full_coverage": false,
+  "manifest_disposition_count": 0,
+  "manual_clinical_acceptance_required": true,
+  "mapping": {
+    "heading_rebinding_count": 43,
+    "source_identity_replacement_count": 47,
+    "source_ref_canonicalization_count": 0,
+    "source_span_replacement_count": 47
+  },
+  "matrix_id": "protocol-cross-section-controls-d001-ii-362443131f0d384c",
+  "phase_closure": {
+    "accepted": false,
+    "issue_count": 46,
+    "issues": [
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-b948dbdee46d97e0f95d26c2",
+        "structure_unit_ids": [
+          "su-256df82ad8f103fea4136561",
+          "su-2dbc802620185870b1b1acd5"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-b948dbdee46d97e0f95d26c2",
+        "structure_unit_ids": [
+          "su-256df82ad8f103fea4136561",
+          "su-2dbc802620185870b1b1acd5"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-3119d7d22146270a175963af",
+        "structure_unit_ids": [
+          "su-f082f00b4ee093ce794e2b47",
+          "su-b1030761a3662323f1d308c9",
+          "su-dce893c13dfad1aebfe16f46",
+          "su-616027f162d776475a2882a4",
+          "su-d0b1c7d16e60b250b133e792"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-3119d7d22146270a175963af",
+        "structure_unit_ids": [
+          "su-f082f00b4ee093ce794e2b47",
+          "su-b1030761a3662323f1d308c9",
+          "su-dce893c13dfad1aebfe16f46",
+          "su-616027f162d776475a2882a4",
+          "su-d0b1c7d16e60b250b133e792"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-7d1c9444e9f8a7b3cd39c01a",
+        "structure_unit_ids": [
+          "su-bc603cfe2fa2cb7ad4d26623"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-7d1c9444e9f8a7b3cd39c01a",
+        "structure_unit_ids": [
+          "su-bc603cfe2fa2cb7ad4d26623"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-4e995e86397e193d2dce8e33",
+        "structure_unit_ids": [
+          "su-74aba9c698c886a1b2b1b6c6"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-4e995e86397e193d2dce8e33",
+        "structure_unit_ids": [
+          "su-74aba9c698c886a1b2b1b6c6"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-ad33c204e3ae9155b97120f9",
+        "structure_unit_ids": [
+          "su-184be475f9a138762a4ae397"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-ad33c204e3ae9155b97120f9",
+        "structure_unit_ids": [
+          "su-184be475f9a138762a4ae397"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-5af94ca09930bcbf5f1f38d1",
+        "structure_unit_ids": [
+          "su-b04fd15fba3f660d163bbd32"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-5af94ca09930bcbf5f1f38d1",
+        "structure_unit_ids": [
+          "su-b04fd15fba3f660d163bbd32"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-dfa9f5c81faea39a17440a0e",
+        "structure_unit_ids": [
+          "su-6cac7f360883d212807d6643"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-dfa9f5c81faea39a17440a0e",
+        "structure_unit_ids": [
+          "su-6cac7f360883d212807d6643"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-d266123ce78cb5de1e2f42db",
+        "structure_unit_ids": [
+          "su-a81e48c4e5acc6af46028f1c"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-d266123ce78cb5de1e2f42db",
+        "structure_unit_ids": [
+          "su-a81e48c4e5acc6af46028f1c"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-cafec6b69d20a566a4d5e9cf",
+        "structure_unit_ids": [
+          "su-cdabd77985e360528548e52f"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-cafec6b69d20a566a4d5e9cf",
+        "structure_unit_ids": [
+          "su-cdabd77985e360528548e52f"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-9376521d329dd61ca2ecd343",
+        "structure_unit_ids": [
+          "su-128f8e8db83a0a1a05ca766c"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-9376521d329dd61ca2ecd343",
+        "structure_unit_ids": [
+          "su-128f8e8db83a0a1a05ca766c"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-0db8bb81233e45fc31cec21a",
+        "structure_unit_ids": [
+          "su-0169fa2ac8ec34b55bb84046"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-0db8bb81233e45fc31cec21a",
+        "structure_unit_ids": [
+          "su-0169fa2ac8ec34b55bb84046"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-cb7131312f21880cb008e8e7",
+        "structure_unit_ids": [
+          "su-ffe84af13f283b2155231ca7"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-cb7131312f21880cb008e8e7",
+        "structure_unit_ids": [
+          "su-ffe84af13f283b2155231ca7"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-7df48e08d6cbf2488b8e40ff",
+        "structure_unit_ids": [
+          "su-b8e4de54e40eb452f668a250"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-7df48e08d6cbf2488b8e40ff",
+        "structure_unit_ids": [
+          "su-b8e4de54e40eb452f668a250"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-3ed0351f1951b1b4f5b52cf8",
+        "structure_unit_ids": [
+          "su-d7b9da3ea4a0ddd3a8c3a1a0"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-3ed0351f1951b1b4f5b52cf8",
+        "structure_unit_ids": [
+          "su-d7b9da3ea4a0ddd3a8c3a1a0"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-8d0f127d22d363addcb0781c",
+        "structure_unit_ids": [
+          "su-13c6fe5fe481eb9e6c9cd65c"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-8d0f127d22d363addcb0781c",
+        "structure_unit_ids": [
+          "su-13c6fe5fe481eb9e6c9cd65c"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "phase_ii"
+        ],
+        "row_id": "pcm-row-c6eb8bbf8636dc83110216e6",
+        "structure_unit_ids": [
+          "su-14cbbde23a2e420ac91ec1ca"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-c35a617e6adc7f908a459aed",
+        "structure_unit_ids": [
+          "su-d700e515c8c34d7b81871783"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-c35a617e6adc7f908a459aed",
+        "structure_unit_ids": [
+          "su-d700e515c8c34d7b81871783"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-5d5b0cd902abf8f8638dbfda",
+        "structure_unit_ids": [
+          "su-df77de015c0b691952b64f42",
+          "su-fbc5888c0bd416ad0595ac98"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-5d5b0cd902abf8f8638dbfda",
+        "structure_unit_ids": [
+          "su-df77de015c0b691952b64f42",
+          "su-fbc5888c0bd416ad0595ac98"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-9d354161857be03abcee62fb",
+        "structure_unit_ids": [
+          "su-d52c8cb89627867c2173eabb",
+          "su-47932ea92023e5c6b8731dba",
+          "su-d9a7dfbd4851850d7f3a476d"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-9d354161857be03abcee62fb",
+        "structure_unit_ids": [
+          "su-d52c8cb89627867c2173eabb",
+          "su-47932ea92023e5c6b8731dba",
+          "su-d9a7dfbd4851850d7f3a476d"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-0ba796fe56df11cb02a04440",
+        "structure_unit_ids": [
+          "su-3510ce403535486833aa1d1f",
+          "su-32c5de82f3beb470949acd0a",
+          "su-8877f38f3edd3c2f6797e56e"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-0ba796fe56df11cb02a04440",
+        "structure_unit_ids": [
+          "su-3510ce403535486833aa1d1f",
+          "su-32c5de82f3beb470949acd0a",
+          "su-8877f38f3edd3c2f6797e56e"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "mixed",
+          "unknown"
+        ],
+        "row_id": "pcm-row-b6b5156590be97880322fe9f",
+        "structure_unit_ids": [
+          "su-f92576bc405dcf2453e25994",
+          "su-1b8a4b43386389090ff962f4"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "mixed",
+          "unknown"
+        ],
+        "row_id": "pcm-row-b6b5156590be97880322fe9f",
+        "structure_unit_ids": [
+          "su-f92576bc405dcf2453e25994",
+          "su-1b8a4b43386389090ff962f4"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-14fff3c700b1f69a6003e147",
+        "structure_unit_ids": [
+          "su-c3416d49ec7b1c56000a5f39",
+          "su-26b5d2a43c56b0e5c6228017",
+          "su-e0ed718b3b2ec21c4b0fc1d8"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-14fff3c700b1f69a6003e147",
+        "structure_unit_ids": [
+          "su-c3416d49ec7b1c56000a5f39",
+          "su-26b5d2a43c56b0e5c6228017",
+          "su-e0ed718b3b2ec21c4b0fc1d8"
+        ]
+      },
+      {
+        "code": "PHASE_UNRESOLVED",
+        "phase_scopes": [
+          "phase_ii",
+          "unknown"
+        ],
+        "row_id": "pcm-row-aef6f4284f7b4552e760f0d7",
+        "structure_unit_ids": [
+          "su-7a8f217832dbc20b117402d6",
+          "su-b2af35be8bf700166fd232f4",
+          "su-b2bc895c657b8cfb27898d9e",
+          "su-67d28f3fc8cfed0f10e8e867",
+          "su-d45eb99203b17addaede9e7b",
+          "su-76c7c0d21ba4490600ed1ec9",
+          "su-7bd7f855582084756660e2b4"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "phase_ii",
+          "unknown"
+        ],
+        "row_id": "pcm-row-aef6f4284f7b4552e760f0d7",
+        "structure_unit_ids": [
+          "su-7a8f217832dbc20b117402d6",
+          "su-b2af35be8bf700166fd232f4",
+          "su-b2bc895c657b8cfb27898d9e",
+          "su-67d28f3fc8cfed0f10e8e867",
+          "su-d45eb99203b17addaede9e7b",
+          "su-76c7c0d21ba4490600ed1ec9",
+          "su-7bd7f855582084756660e2b4"
+        ]
+      },
+      {
+        "code": "PHASE_SHARED_SOURCE_MISSING",
+        "phase_scopes": [
+          "phase_ii"
+        ],
+        "row_id": "pcm-row-689838943c7e4a51c5345e67",
+        "structure_unit_ids": [
+          "su-7bd7f855582084756660e2b4"
+        ]
+      }
+    ],
+    "rows": [
+      {
+        "issues": [],
+        "phase_disposition": "selected_phase_applicable",
+        "phase_scopes": [
+          "phase_ii"
+        ],
+        "row_id": "pcm-row-f706d9b42eab4823b232df04"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-b948dbdee46d97e0f95d26c2"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-3119d7d22146270a175963af"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-7d1c9444e9f8a7b3cd39c01a"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-4e995e86397e193d2dce8e33"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-ad33c204e3ae9155b97120f9"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-5af94ca09930bcbf5f1f38d1"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-dfa9f5c81faea39a17440a0e"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-d266123ce78cb5de1e2f42db"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-cafec6b69d20a566a4d5e9cf"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-9376521d329dd61ca2ecd343"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-0db8bb81233e45fc31cec21a"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-cb7131312f21880cb008e8e7"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-7df48e08d6cbf2488b8e40ff"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-3ed0351f1951b1b4f5b52cf8"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-8d0f127d22d363addcb0781c"
+      },
+      {
+        "issues": [
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "phase_ii"
+        ],
+        "row_id": "pcm-row-c6eb8bbf8636dc83110216e6"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-c35a617e6adc7f908a459aed"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-5d5b0cd902abf8f8638dbfda"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-9d354161857be03abcee62fb"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-0ba796fe56df11cb02a04440"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "mixed",
+          "unknown"
+        ],
+        "row_id": "pcm-row-b6b5156590be97880322fe9f"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "unknown"
+        ],
+        "row_id": "pcm-row-14fff3c700b1f69a6003e147"
+      },
+      {
+        "issues": [
+          "PHASE_UNRESOLVED",
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "phase_ii",
+          "unknown"
+        ],
+        "row_id": "pcm-row-aef6f4284f7b4552e760f0d7"
+      },
+      {
+        "issues": [
+          "PHASE_SHARED_SOURCE_MISSING"
+        ],
+        "phase_disposition": "cross_phase_shared",
+        "phase_scopes": [
+          "phase_ii"
+        ],
+        "row_id": "pcm-row-689838943c7e4a51c5345e67"
+      }
+    ]
+  },
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "relation_closure": {
+    "accepted": true,
+    "external_relation_target_count": 16,
+    "issue_count": 0,
+    "issues": [],
+    "relation_counts": {
+      "further_explanation": 4,
+      "supplementary_requirement": 27
+    },
+    "row_count": 25
+  },
+  "row_count": 25,
+  "schema_version": "phase5/control-matrix-source-closure/v1",
+  "snapshot_id": "d001-ii-phase-closure-20260825-slice58e-snapshot",
+  "source_closure": {
+    "accepted": true,
+    "anchor_count": 47,
+    "issue_count": 0,
+    "issues": [],
+    "unique_frozen_unit_count": 45
+  }
+}

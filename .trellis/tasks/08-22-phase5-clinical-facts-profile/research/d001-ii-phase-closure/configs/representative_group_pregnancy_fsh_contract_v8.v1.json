@@ -1,0 +1,93 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_pregnancy_fsh_contract_v7.v1.json",
+  "artifact_dir_name": "phase5-slice59y-d001-pregnancy-fsh-control-replay-20260828",
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选期(D-28~D-1) / 筛选 / W-4~W-1 / D-28~D-1 / -"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "筛选期(D-28~D-1) / 基线 / D≤-7 / -"
+    },
+    {
+      "workflow_stage_id": "flow-d1-pre-dose",
+      "review_stage": "baseline",
+      "display_name": "首次给药前复核",
+      "visit_instance": "治疗期 / W0 / D1 / -"
+    }
+  ],
+  "known_targets": {
+    "required_procedures": [
+      {
+        "catalog_item_id": "procedure:d001-t5-r16-screening",
+        "label": "妊娠试验或卵泡刺激素（FSH）",
+        "visit_instance": "筛选期(D-28~D-1) / 筛选 / W-4~W-1 / D-28~D-1 / -",
+        "review_stage": "screening",
+        "position": 48,
+        "source_span_ids": [
+          "span-15fa32ffb40385e4ab88ccf86b66462a",
+          "span-4ada40f46f347bdfd0dc32ff5aafd113",
+          "span-546f6512be56b354fe72bb2554734420",
+          "span-761bc18ae94f687575b4a90c1b141961",
+          "span-848273a89ac24be70490ba4b3fae89cc",
+          "span-a3581afb0d23910af48bf735f1adb67c",
+          "span-b92c9e967d4c2dcc2de1db4578476140",
+          "span-c6da936da3e233fa8e34b72fbf7c3430",
+          "span-e4fa1e71068426c0b58edeec51627061",
+          "span-fb63df5558004a5c2bb1aaef18fce384",
+          "span-fe29450e1c931ac5ed89315e91a82e33"
+        ]
+      },
+      {
+        "catalog_item_id": "procedure:d001-t5-r16-baseline",
+        "label": "妊娠试验或卵泡刺激素（FSH）",
+        "visit_instance": "筛选期(D-28~D-1) / 基线 / D≤-7 / -",
+        "review_stage": "baseline",
+        "position": 49,
+        "source_span_ids": [
+          "span-15fa32ffb40385e4ab88ccf86b66462a",
+          "span-4ada40f46f347bdfd0dc32ff5aafd113",
+          "span-546f6512be56b354fe72bb2554734420",
+          "span-761bc18ae94f687575b4a90c1b141961",
+          "span-848273a89ac24be70490ba4b3fae89cc",
+          "span-a3581afb0d23910af48bf735f1adb67c",
+          "span-b92c9e967d4c2dcc2de1db4578476140",
+          "span-c6da936da3e233fa8e34b72fbf7c3430",
+          "span-e4fa1e71068426c0b58edeec51627061",
+          "span-fb63df5558004a5c2bb1aaef18fce384",
+          "span-fe29450e1c931ac5ed89315e91a82e33"
+        ]
+      },
+      {
+        "catalog_item_id": "procedure:d001-t5-r16-d1",
+        "label": "妊娠试验或卵泡刺激素（FSH）",
+        "visit_instance": "治疗期 / W0 / D1 / -",
+        "review_stage": "baseline",
+        "position": 50,
+        "source_span_ids": [
+          "span-15fa32ffb40385e4ab88ccf86b66462a",
+          "span-4ada40f46f347bdfd0dc32ff5aafd113",
+          "span-546f6512be56b354fe72bb2554734420",
+          "span-761bc18ae94f687575b4a90c1b141961",
+          "span-848273a89ac24be70490ba4b3fae89cc",
+          "span-a3581afb0d23910af48bf735f1adb67c",
+          "span-b92c9e967d4c2dcc2de1db4578476140",
+          "span-c6da936da3e233fa8e34b72fbf7c3430",
+          "span-e4fa1e71068426c0b58edeec51627061",
+          "span-fb63df5558004a5c2bb1aaef18fce384",
+          "span-fe29450e1c931ac5ed89315e91a82e33"
+        ]
+      }
+    ]
+  },
+  "notes": [
+    "流程必做目标改用原始DOCX产品链路实际生成的访视级粒度；同一检查的筛选、基线和D1给药前身份不得聚合。",
+    "每条补充流程关系必须显式声明首次受影响的冻结审核节点，并与候选本节点判定和最低证据到期阶段一致。"
+  ]
+}

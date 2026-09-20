@@ -1,0 +1,200 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-viral-tb-cross-chapter",
+  "task_id": "phase5-slice59n-20260827",
+  "worker": "worker_02",
+  "artifact_dir_name": "phase5-slice59n-d001-viral-tb-control-replay-20260827",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/coverage_manifest.json",
+  "parent_phase_qc_path": null,
+  "study_phase": "phase_ii",
+  "owned_source_refs": [
+    "body.p802",
+    "body.p803",
+    "body.p804",
+    "body.p805",
+    "body.p806",
+    "body.p807",
+    "body.p808",
+    "body.p809",
+    "body.p810",
+    "body.p811",
+    "body.p812",
+    "body.p813"
+  ],
+  "attached_source_refs": [
+    "body.t5.r18",
+    "body.p328",
+    "body.t5.r19",
+    "body.p329",
+    "body.p649",
+    "body.p650",
+    "body.p651",
+    "body.p652",
+    "body.p653",
+    "body.p655",
+    "body.p685",
+    "body.p686",
+    "body.p687",
+    "body.p688",
+    "body.p689"
+  ],
+  "required_candidate_source_refs": [
+    "body.p804",
+    "body.p805",
+    "body.p807",
+    "body.p809",
+    "body.p813"
+  ],
+  "unit_lookup": [
+    "frozen_plan_owned",
+    "frozen_plan_context",
+    "coverage_manifest"
+  ],
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "评估章节的12个单元是本批唯一处置对象；官方EX-09/EX-22及流程必做14/15以携带原文的冻结目标作为只读权威上下文，不再并入owned处置集。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "config scaffold for viral/TB representative group; no clinical rewrite"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线及随机前复核",
+      "visit_instance": "基线及随机前"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [
+      {
+        "catalog_item_id": "pcm-row-761a05dceb59800d35de15eb",
+        "official_code": "EX-09",
+        "label": "结核感染筛查及预防治疗风险",
+        "position": 15,
+        "source_span_ids": [
+          "span-19e8610e18ab91904f94eeb0295a90b9",
+          "span-2b6db1412472805ddd31a8595940dd4e",
+          "span-8268c906ae0d5a62201932240f3ce54b",
+          "span-de40e66cf4537055654ddb605e2100e3",
+          "span-de8a9b3139ae2f1a89349543a31642ed",
+          "span-e55345e2ccdd449e1986b83cf9b50701"
+        ]
+      },
+      {
+        "catalog_item_id": "pcm-row-759cd0638a6a427a10a3bceb",
+        "official_code": "EX-22",
+        "label": "乙肝、丙肝、HIV及梅毒感染筛查",
+        "position": 28,
+        "source_span_ids": [
+          "span-5f5d0986b69d1f617cc18deeda05e9ee",
+          "span-6599014fccd0daa2c6a77da3b03001af",
+          "span-8f24d0acc9d39811c6fcbfaad01f7903",
+          "span-bd8cefa0f20536359005270bca4c1850",
+          "span-e945e18722fe7a6b21c22815fdbea783"
+        ]
+      }
+    ],
+    "required_procedures": [
+      {
+        "catalog_item_id": "pcm-row-2a4db6b98190f7f0c22da3b3",
+        "label": "病毒学检查",
+        "visit_instance": "筛选访视",
+        "review_stage": "screening",
+        "position": 50,
+        "source_span_ids": [
+          "span-08bee5e666e8f0ae3c7cc0437d7c4aa1",
+          "span-53ec4e9bb6ae525aa997ce9e0bffbb30",
+          "span-f300202c24ed5467ad851795abb9b475"
+        ]
+      },
+      {
+        "catalog_item_id": "pcm-row-e190c160c55279c0aaf5f5a2",
+        "label": "结核检测",
+        "visit_instance": "筛选访视",
+        "review_stage": "screening",
+        "position": 51,
+        "source_span_ids": [
+          "span-3d5f1e52d0bfa96d4dc8677b9a63892f",
+          "span-9157bdc7ebe0976aeab45940ca2e491d",
+          "span-bc91034d48ed3caa604f5903ff46dd81"
+        ]
+      }
+    ]
+  },
+  "runner": {
+    "max_transport_retries": 1,
+    "max_schema_repairs": 2,
+    "timeout_seconds": 7200.0
+  },
+  "ids": {
+    "manifest_id": "manifest:slice59n-viral-tb-reps",
+    "catalog_id": "catalog:slice59n-viral-tb-reps"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p804": [
+      "viral_panel_complete",
+      "first_dose_minus_28d_validity"
+    ],
+    "body.p805": [
+      "conditional_reflexives",
+      "first_dose_minus_28d_validity"
+    ],
+    "body.p807": [
+      "igra_positive_requires_ct"
+    ],
+    "body.p808": [
+      "active_tb_blocks_randomization"
+    ],
+    "body.p809": [
+      "latent_tb_randomization_gate_4w"
+    ],
+    "body.p811": [
+      "latent_prophylaxis_first_dose_4w"
+    ],
+    "body.p812": [
+      "rifampin_rifapentine_ban"
+    ],
+    "body.p813": [
+      "igra_indeterminate_retest_cap_1"
+    ],
+    "body.t5.r18": [
+      "flow14_screening_required"
+    ],
+    "body.p328": [
+      "flow14_panel_and_conditionals"
+    ],
+    "body.t5.r19": [
+      "flow15_screening_igra"
+    ],
+    "body.p329": [
+      "flow15_igra_definition"
+    ],
+    "body.p649": [
+      "ex09_source_closure"
+    ],
+    "body.p655": [
+      "ex09_rifamycin_ban"
+    ],
+    "body.p685": [
+      "ex22_source_closure"
+    ]
+  },
+  "notes": [
+    "Package 72 owned assessment text plus explicit cross-chapter attachments.",
+    "Attachments required because EX-09/22 and flow14/15 are absent from package-72 context radius.",
+    "Join key is source_ref; do not rely on historical matrix structure_unit_id."
+  ]
+}

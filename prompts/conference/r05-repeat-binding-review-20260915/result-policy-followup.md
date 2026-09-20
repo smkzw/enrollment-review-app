@@ -1,0 +1,9 @@
+# Read-only source follow-up
+
+Owner requests review only, not implementation. Work only in the supplied worktree. Do not change application/source/docs or run tests, imports, in-memory Pydantic constructions, model calls, browser actions, or clinical jobs. The runner saves your report; no other write is authorized. Do not delegate.
+
+Review the current sources independently against source-preserving, model/protocol/disease-independent repeat-result handling. Focus files: app/domain/contracts/repeat_scheme.py; app/domain/repeat_result_selection.py; RepeatScheme schema, validators and prompt in app/agents/protocol_deconstructor.py and protocol_control_deconstructor.py; corresponding protocol execution/gate version changes. Also inspect the written_content_verified_pair_ids handling in app/services/qualified_observation_relation.py and its caller in app/services/qualified_binding_selection.py.
+
+Review criteria: preserve historical serialized contracts; require explicit source-declared combine population and operation; no dates guessed for initial/preceding links, no favorable result picking, no duplicate acquisition counting. Distinguish pure selector preconditions from verified formal adoption. Neither the selector nor auxiliary calculation is yet connected to automatic result adoption; do not assume it is. Check actual code rather than this description. Identify missing semantics, consumers, or contradictory validators, with exact file:line and severity. Do not recommend a test implementation during this build-only pass; describe eventual acceptance gaps separately. Missing researcher written judgment stays unresolved, not satisfied and not an obligatory interactive user interruption.
+
+Return concise findings first, then remaining integration requirements. No clinical or full-product acceptance claim. This is a source review of a bounded increment, not a request to repeat whole-project review.

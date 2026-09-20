@@ -8,12 +8,13 @@ from __future__ import annotations
 from typing import Literal
 
 from fastapi import APIRouter, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.services.evidence_app_errors import translate_storage_error
+from app.services.evidence_app_errors import AppReviewSourceIncompleteError, translate_storage_error
 from app.services.eligibility_review_projection import (
     EligibilityReviewProjection,
     EligibilityReviewProjectionService,
+    EligibilityReviewProjectionError,
 )
 
 router = APIRouter(prefix="/api/v2", tags=["v2-eligibility-review"])
@@ -25,14 +26,19 @@ class EligibilityFactRefDTO(BaseModel):
     fact_id: str = Field(min_length=1)
     locator_id: str = Field(min_length=1)
     page_number: int = Field(ge=1)
+    source_document_version_id: str = Field(min_length=1)
+    page_artifact_id: str = Field(min_length=1)
+    excerpt: str | None
 
 
 class EligibilityClauseDTO(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    rule_component_id: str = Field(min_length=1)
     rule_code: str = Field(pattern=r"^(IN|EX|REQ)-\d{2}$")
     rule_kind: Literal["inclusion", "exclusion", "required_procedure"]
     text_summary: str = Field(min_length=1)
+    source_text: str = Field(min_length=1)
     parent_rule_code: str | None = Field(default=None, pattern=r"^(IN|EX|REQ)-\d{2}$")
     decision: Literal[
         "inclusion_met",
@@ -42,6 +48,7 @@ class EligibilityClauseDTO(BaseModel):
         "exclusion_triggered",
         "exclusion_not_triggered",
         "professional_judgment",
+        "indeterminate",
         "conflict",
         "not_due",
         "not_applicable",
@@ -55,6 +62,20 @@ class EligibilityClauseDTO(BaseModel):
     ]
 
 
+class EligibilityUnassignedConflictDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    conflict_group_id: str = Field(min_length=1)
+    member_kind: Literal["event", "exposure"]
+    member_ids: list[str] = Field(min_length=2)
+
+    @model_validator(mode="after")
+    def validate_members(self) -> "EligibilityUnassignedConflictDTO":
+        if any(not value for value in self.member_ids) or len(set(self.member_ids)) != len(self.member_ids):
+            raise ValueError("争议记录的来源成员不完整或重复")
+        return self
+
+
 class EligibilityReviewResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -65,6 +86,17 @@ class EligibilityReviewResponse(BaseModel):
     evidence_snapshot_v2_id: str = Field(min_length=1)
     complete_processing_revision_id: str = Field(min_length=1)
     clauses: list[EligibilityClauseDTO] = Field(min_length=1)
+    unassigned_conflicts: list[EligibilityUnassignedConflictDTO] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_component_identity(self) -> "EligibilityReviewResponse":
+        identities = [clause.rule_component_id for clause in self.clauses]
+        if len(identities) != len(set(identities)):
+            raise ValueError("审核结果包含重复的审核要点身份")
+        groups = [item.conflict_group_id for item in self.unassigned_conflicts]
+        if len(groups) != len(set(groups)):
+            raise ValueError("审核结果包含重复的争议记录")
+        return self
 
 
 def _read(request: Request):
@@ -76,6 +108,8 @@ def _service(request: Request) -> EligibilityReviewProjectionService:
 
 
 def _raise_translated(exc: Exception) -> None:
+    if isinstance(exc, EligibilityReviewProjectionError):
+        raise AppReviewSourceIncompleteError() from exc
     translated = translate_storage_error(exc)
     if translated is not None:
         raise translated from exc

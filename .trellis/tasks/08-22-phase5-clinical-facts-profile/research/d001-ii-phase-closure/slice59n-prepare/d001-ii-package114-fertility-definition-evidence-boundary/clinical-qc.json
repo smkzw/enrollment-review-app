@@ -1,0 +1,218 @@
+{
+  "attached_source_refs": [
+    "body.p1322"
+  ],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-package114-fertility-definition-evidence-boundary",
+  "notes": [
+    "模型外闭包：Package 114恰好拥有body.p1310-p1321共12个来源；仅attached body.p1322闭合绝经定义且所有权仍归Package115；structural-only为p1310-p1312标题三段；其余37项context_units保持只读且不升格。",
+    "五类语义必须分开：结构标题（p1310-p1312）；有生育能力时间窗定义（p1313）；不视为有生育能力父条件与并列OR（p1314+p1315/p1316/p1321）；p1316下手术史并列OR（p1317-p1319，保留双侧）；p1320并列确认方式（病历核查或医学检查或病史询问）。",
+    "父子OR不得压平为AND；不得丢失双侧条件；不得倒置月经初潮与绝经；不得臆造三种确认方式都必须执行。",
+    "候选判定不是预设零：逐项判断后确认本包没有新的独立参加研究前动作控制点；required_candidate_source_refs为空且有逐项原文依据。p1313-p1321必须作为IN-06与妊娠/FSH流程控制的支持来源，不能降为与入排无关，也不得用other_control_candidate复制既有控制点。",
+    "Package 113止于p1308；p1309无主空白分隔不吸收；Package 115拥有p1322-p1333。p1322仅attached只读理解p1321，不得改写所有权/处置/发布；p1323-p1333避孕条款不在冻结context，不得吸收。claims_complete=false；不调用临床语义模型、不发布新控制点、不进入受试者、OCR、Patient Profile或浏览器流程。",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.p1310",
+    "body.p1311",
+    "body.p1312",
+    "body.p1313",
+    "body.p1314",
+    "body.p1315",
+    "body.p1316",
+    "body.p1317",
+    "body.p1318",
+    "body.p1319",
+    "body.p1320",
+    "body.p1321"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "reject_gates": {
+    "hydrated_skipped": true,
+    "prepare_accepted": true,
+    "reason": "prepare source closure passed; hydrated reject gates require live Agent output"
+  },
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得决定受试者资格或入排结论": "pending_codex",
+        "附录为结构标题": "pending_codex"
+      },
+      "frozen_excerpt": "附录",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1310",
+      "structure_unit_id": "su-02a9295b603442428eb7ec15"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得提前吸收Package115避孕方法/时点条款": "pending_codex",
+        "附录1避孕的规定与方法为结构标题": "pending_codex"
+      },
+      "frozen_excerpt": "附录1 避孕的规定与方法",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1311",
+      "structure_unit_id": "su-94deef1b0bab78eea18a466c"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "仅结构来源，不构成入排结论": "pending_codex",
+        "有生育能力女性的定义为小节标题": "pending_codex"
+      },
+      "frozen_excerpt": "有生育能力女性的定义",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1312",
+      "structure_unit_id": "su-a3d2e42056b8ee95e69e3b63"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得倒置月经初潮与绝经": "pending_codex",
+        "不得单独改写为避孕义务或入排排除": "pending_codex",
+        "定义：月经初潮后至绝经前有生育能力": "pending_codex"
+      },
+      "frozen_excerpt": "女性在月经初潮后至绝经前被认为是有生育能力的。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1313",
+      "structure_unit_id": "su-767a53b9670153205a717a6d"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "下属分支为并列OR，不得压平为AND": "pending_codex",
+        "不视为有生育能力的父条件": "pending_codex"
+      },
+      "frozen_excerpt": "具有以下情况的女性不被视为有生育能力：",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1314",
+      "structure_unit_id": "su-12a3d44ab47dbddcd2bd0e19"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "OR分支：尚未经历月经初潮": "pending_codex",
+        "不得要求同时满足手术史或绝经后条件": "pending_codex"
+      },
+      "frozen_excerpt": "尚未经历月经初潮",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1315",
+      "structure_unit_id": "su-455cf98905c09aa97a680a50"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "OR分支：满足以下任一项的绝经前女性": "pending_codex",
+        "任一项语义必须保留，不得改为全部同时满足": "pending_codex"
+      },
+      "frozen_excerpt": "满足以下任一项的绝经前女性：",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1316",
+      "structure_unit_id": "su-50beac7c655b92a4f8cd8041"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "p1316下OR子分支：子宫切除术史": "pending_codex",
+        "不得要求同时满足输卵管/卵巢切除": "pending_codex"
+      },
+      "frozen_excerpt": "子宫切除术史",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1317",
+      "structure_unit_id": "su-22f41b216060622ca728b067"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "p1316下OR子分支：双侧输卵管切除术史": "pending_codex",
+        "必须保留双侧，不得降为单侧": "pending_codex"
+      },
+      "frozen_excerpt": "双侧输卵管切除术史",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1318",
+      "structure_unit_id": "su-01fea45fec56e35255a6a1d5"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "p1316下OR子分支：双侧卵巢切除术史": "pending_codex",
+        "必须保留双侧，不得降为单侧": "pending_codex"
+      },
+      "frozen_excerpt": "双侧卵巢切除术史",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1319",
+      "structure_unit_id": "su-bf0ff92189b3ffdf36894023"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "不得臆造三种都必须执行": "pending_codex",
+        "并列确认方式：病历核查或医学检查或病史询问": "pending_codex",
+        "确认注记支持定义，不单独构成入排排除": "pending_codex"
+      },
+      "frozen_excerpt": "注：通过参与者病历核查或医学检查或病史询问进行确认。",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1320",
+      "structure_unit_id": "su-708d2847d3892f71dace2861"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "OR分支：绝经后女性": "pending_codex",
+        "不得改写p1322所有权或吸收p1323-p1333避孕条款": "pending_codex",
+        "完整绝经诊断依赖Package115的p1322只读语境": "pending_codex"
+      },
+      "frozen_excerpt": "绝经后女性",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.p1321",
+      "structure_unit_id": "su-5dea096879f632d4303389ad"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {},
+      "frozen_excerpt": "女性连续停经12个月，并排除妊娠及其他可能导致闭经的医疗原因后，即可临床诊断为绝经。",
+      "lookup": "frozen_plan_owned",
+      "role": "attached",
+      "source_ref": "body.p1322",
+      "structure_unit_id": "su-fb4a937e370e44796477cece"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice61da-20260830",
+  "worker": "codex-parent"
+}

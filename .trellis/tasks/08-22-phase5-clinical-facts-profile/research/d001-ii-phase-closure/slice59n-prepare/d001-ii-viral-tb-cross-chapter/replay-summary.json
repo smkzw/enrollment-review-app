@@ -1,0 +1,20 @@
+{
+  "attached_count": 15,
+  "batching_mode": "single_batch_with_known_targets",
+  "claims_complete": false,
+  "control_batch_id": "pcb-741f03112f25c49500da007b",
+  "group_id": "d001-ii-viral-tb-cross-chapter",
+  "lookup_counts": {
+    "coverage_manifest": 2,
+    "frozen_plan_context": 2,
+    "frozen_plan_owned": 23
+  },
+  "mode": "dry_run_prepare",
+  "out_dir": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/slice59n-prepare/d001-ii-viral-tb-cross-chapter",
+  "owned_count": 12,
+  "prompt_char_count": 24637,
+  "prompt_sha256": "36a919f3f7e30a12a0ccca57019681d272959a19aa18efa7bd5f268e6965e122",
+  "task_id": "phase5-slice59n-20260827",
+  "unit_count": 27,
+  "worker": "worker_02"
+}

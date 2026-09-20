@@ -294,8 +294,9 @@ class PageReviewRepository:
                       "expected_page_artifact_ids", "execution_versions", "main_reader_identity_sha256")
             if any(getattr(predecessor, key) != getattr(record, key) for key in fields):
                 raise ScopeViolationError("资料重读与前次结果的来源或处理版本不一致")
-            if not any(entry.lane_failures for entry in predecessor.entries):
-                raise ScopeViolationError("资料重读的前次结果没有失败页面")
+            if (not any(entry.lane_failures for entry in predecessor.entries)
+                    and predecessor.reading_rotations == record.reading_rotations):
+                raise ScopeViolationError("资料重读既无失败页面，也无阅读方向变更")
         subject = _get_required(self.session, SubjectRecord, record.subject_id, "受试者")
         episode = _get_required(self.session, ReviewEpisodeRecord, record.review_episode_id, "审核节点")
         snapshot = _get_required(self.session, EvidenceSnapshotV2Record, record.evidence_snapshot_id, "证据快照")
@@ -325,6 +326,12 @@ class PageReviewRepository:
                 reconciliation = self.get_reconciliation(entry.reconciliation_id)
                 if reconciliation.page_artifact_id != entry.page_artifact_id or reconciliation.clause_pack_sha256 != record.clause_pack_sha256:
                     raise ScopeViolationError("页覆盖采信的对账记录不属于该页或该条款包")
+                expected_rotation = record.reading_rotations.get(entry.page_artifact_id)
+                for review_id in reconciliation.page_review_ids:
+                    review = self.get_review(review_id)
+                    actual_rotation = review.reading_view.clockwise_degrees if review.reading_view else None
+                    if actual_rotation != expected_rotation:
+                        raise ScopeViolationError("页覆盖记录与实际判读的阅读方向不一致")
 
 
 __all__ = ["PageReviewRepository"]

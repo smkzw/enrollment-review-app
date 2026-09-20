@@ -235,7 +235,7 @@ describe("行动映射", () => {
     const view = mapAction(wire!, episode);
     expect(view.gapLabel).toBe("来源待补充核实");
     expect(view.blockingLevel).toBe("none");
-    expect(view.targetPartyLabel).toBe("CRA");
+    expect(view.targetPartyLabel).toBe("临床监查员");
   });
 });
 

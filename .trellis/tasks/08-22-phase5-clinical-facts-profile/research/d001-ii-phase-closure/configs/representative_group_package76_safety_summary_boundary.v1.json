@@ -1,0 +1,264 @@
+{
+ "schema_version": "phase5/representative-group-control-replay-config/v1",
+ "group_id": "d001-ii-package76-safety-summary-boundary",
+ "task_id": "phase5-slice61bn-20260830",
+ "worker": "codebuddy-worker_02",
+ "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+ "frozen_plan_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/frozen_phase_plan.json",
+ "coverage_manifest_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/coverage_manifest.json",
+ "study_phase": "phase_ii",
+ "owned_source_refs": [
+  "body.p980",
+  "body.p981",
+  "body.p982",
+  "body.p983",
+  "body.p984"
+ ],
+ "attached_source_refs": [
+  "body.p475",
+  "body.p494",
+  "body.p531",
+  "body.p560",
+  "body.t5.r0",
+  "body.p765",
+  "body.p838",
+  "body.p985",
+  "body.p986",
+  "body.p987",
+  "body.p988",
+  "body.p989",
+  "body.p990",
+  "body.p991",
+  "body.p992",
+  "body.p993",
+  "body.p994",
+  "body.p995",
+  "body.p996",
+  "body.p997",
+  "body.p998",
+  "body.p999",
+  "body.p1000",
+  "body.p1001",
+  "body.p1002",
+  "body.p1003",
+  "body.p1004",
+  "body.p1005",
+  "body.p1006",
+  "body.p1007",
+  "body.p1008",
+  "body.p1009",
+  "body.p1010",
+  "body.p1011",
+  "body.p1012",
+  "body.p1013",
+  "body.p1014",
+  "body.p1015",
+  "body.p1016",
+  "body.p1017",
+  "body.p1018",
+  "body.p1019",
+  "body.p1020",
+  "body.p1021",
+  "body.p1022",
+  "body.p1023",
+  "body.p1024"
+ ],
+ "required_candidate_source_refs": [],
+ "forbidden_candidate_source_refs": [
+  "body.p980",
+  "body.p981",
+  "body.p982",
+  "body.p983",
+  "body.p984"
+ ],
+ "pre_enrollment_source_refs": [],
+ "structural_only_source_refs": [
+  "body.p980",
+  "body.p981",
+  "body.p984"
+ ],
+ "expected_disposition_by_source_ref": {
+  "body.p982": "administrative_statistical_background",
+  "body.p983": "administrative_statistical_background"
+ },
+ "expected_workflow_stage_ids_by_source_ref": {},
+ "candidate_forbidden_markers_by_source_ref": {
+  "body.p982": [
+   "筛选必做",
+   "筛选期必做",
+   "基线必做",
+   "基线期必做",
+   "入组前必查",
+   "证据缺口",
+   "证据不足",
+   "不得入组",
+   "不符合入选标准",
+   "排除标准",
+   "入排不通过"
+  ],
+  "body.p983": [
+   "筛选必做",
+   "筛选期必做",
+   "基线必做",
+   "基线期必做",
+   "入组前必查",
+   "证据缺口",
+   "证据不足",
+   "不得入组",
+   "不符合入选标准",
+   "排除标准",
+   "入排不通过"
+  ]
+ },
+ "candidate_required_markers_by_source_ref": {},
+ "batching": {
+  "mode": "single_batch_with_known_targets",
+  "reason": "第76包五个拥有单元全部为章节标题或安全性指标摘要（AE/TEAE/SAE发生率、常规安全性参数枚举），均不发射受试者级控制候选；已知目标显式为空，流程必做项由Ⅱ期流程表及其冻结流程目录单独发布，本批不重复发布。"
+ },
+ "phase_applicability": {
+  "disposition": "selected_phase_applicable",
+  "scope": "phase_ii",
+  "rationale": "安全性评估与安全性指标章节为Ⅱ期治疗期安全性分析终点与参数摘要，属于统计/评估背景，不构成筛选、基线或D1给药前的受试者执行义务；全部拥有单元禁止发射候选。"
+ },
+ "workflow_stages": [
+  {
+   "workflow_stage_id": "flow-screening",
+   "review_stage": "screening",
+   "display_name": "筛选访视",
+   "visit_instance": "筛选访视"
+  },
+  {
+   "workflow_stage_id": "flow-baseline",
+   "review_stage": "baseline",
+   "display_name": "基线访视",
+   "visit_instance": "基线访视"
+  },
+  {
+   "workflow_stage_id": "flow-d1-pre-dose",
+   "review_stage": "baseline",
+   "display_name": "D1给药前",
+   "visit_instance": "D1给药前"
+  }
+ ],
+ "known_targets": {
+  "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+  "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+  "official_rules": [],
+  "required_procedures": []
+ },
+ "ids": {
+  "manifest_id": "manifest:slice61bn-package76-safety-summary-boundary",
+  "catalog_id": "catalog:slice61bn-package76-safety-summary-boundary"
+ },
+ "clinical_qc_checks_by_source_ref": {
+  "body.p980": [
+   "安全性评估章节标题，仅提供结构归属，不独立形成控制点",
+   "不得把整个安全性评估章节改写为筛选/基线必做项或给药前资格门槛"
+  ],
+  "body.p981": [
+   "安全性指标章节标题，仅提供结构归属，不独立形成控制点",
+   "不得把安全性指标列表改写为筛选/基线必做、证据缺口或入排不通过条件"
+  ],
+  "body.p982": [
+   "安全性指标第一条：不良事件、治疗期出现的不良事件和严重不良事件的发生率",
+   "发生率是治疗期安全性分析终点摘要（与研究终点章节的安全性指标一致），不是筛选/基线必做检查，不形成受试者个例证据缺口，不得作为入排不通过条件"
+  ],
+  "body.p983": [
+   "安全性指标第二条：常规安全性参数，包括实验室检查、生命体征测量、12导联心电图（ECG）和体格检查等",
+   "常规安全性参数是对安全性评估参数类别的枚举摘要，具体执行时点由Ⅱ期流程表及其冻结流程目录决定；不得从本条新增筛选/基线必做节点，不得重复发布已冻结流程节点，不得形成入排不通过条件"
+  ],
+  "body.p984": [
+   "术语定义章节标题，仅提供结构归属；AE、TEAE、SAE、ADR、SUSAR定义及不良事件收集与记录细则由第77-80包拥有（body.p985-p1024）",
+   "不得把后续包的术语定义提前并入本包处置，不得改变后续包所有权"
+  ],
+  "body.p475": [
+   "研究终点章节Ⅱ期安全性指标标题",
+   "只读：证明p982/p983是分析终点/指标摘要而非流程必做项，不发射入排候选"
+  ],
+  "body.p494": [
+   "研究终点章节Ⅲ期安全性指标标题",
+   "只读：Ⅲ期对应终点摘要，防串期，不重复发布"
+  ],
+  "body.p531": [
+   "Ⅱ期总体设计：安全性评估内容包括收集不良事件、记录生命体征、进行体格检查和评估临床实验室检查和心电图检查结果",
+   "只读：安全性评估内容陈述，与p982/p983同源互证，不重复发布"
+  ],
+  "body.p560": [
+   "Ⅲ期总体设计：安全性评估内容包括收集不良事件、记录生命体征、进行体格检查和评估临床实验室检查和心电图检查结果",
+   "只读：Ⅲ期同源陈述，防串期，不重复发布"
+  ],
+  "body.t5.r0": [
+   "Ⅱ期临床研究阶段流程表表头：项目 | 筛选期(D-28~D-1) | 治疗期 | 安全性随访 | 提前退出",
+   "只读：流程表是安全性参数执行时点的权威排程，p983不得新增或改写排程"
+  ],
+  "body.p765": [
+   "除给药时长外，Ⅱ期临床研究阶段和Ⅲ期临床研究阶段评估和程序一致，具体评估时间点参见1.3研究流程表",
+   "只读：评估程序以流程表为准，不得从安全性指标摘要外推程序义务"
+  ],
+  "body.p838": [
+   "访视安排章节标题（第75包拥有，只读）",
+   "只读：访视安排章节归第75包处置，本包不重复发布"
+  ]
+ },
+ "later_package_boundary": {
+  "read_only": true,
+  "note": "body.p985-p1024为第77-80包拥有的AE/TEAE/SAE/ADR/SUSAR定义与AE收集记录边界，仅作为本包摘要解释的只读闭包；本配置不改变后续包所有权，后续包不得被本包提前吞并。",
+  "expected_owners_by_span": {
+   "body.p985": 77,
+   "body.p986": 77,
+   "body.p987": 77,
+   "body.p988": 77,
+   "body.p989": 77,
+   "body.p990": 77,
+   "body.p991": 77,
+   "body.p992": 77,
+   "body.p993": 77,
+   "body.p994": 77,
+   "body.p995": 78,
+   "body.p996": 78,
+   "body.p997": 78,
+   "body.p998": 78,
+   "body.p999": 78,
+   "body.p1000": 78,
+   "body.p1001": 78,
+   "body.p1002": 78,
+   "body.p1003": 78,
+   "body.p1004": 78,
+   "body.p1005": 78,
+   "body.p1006": 78,
+   "body.p1007": 79,
+   "body.p1008": 79,
+   "body.p1009": 79,
+   "body.p1010": 79,
+   "body.p1011": 79,
+   "body.p1012": 79,
+   "body.p1013": 79,
+   "body.p1014": 79,
+   "body.p1015": 80,
+   "body.p1016": 80,
+   "body.p1017": 80,
+   "body.p1018": 80,
+   "body.p1019": 80,
+   "body.p1020": 80,
+   "body.p1021": 80,
+   "body.p1022": 80,
+   "body.p1023": 80,
+   "body.p1024": 80
+  },
+  "semantics_by_package": {
+   "77": "AE定义及不记录为AE的除外情况（body.p985-p992）、TEAE定义（body.p993-p994）",
+   "78": "SAE定义、严重性标准及住院不作为SAE的除外列表（body.p995-p1006）",
+   "79": "SAE住院除外列表续及严重性标准（body.p1007-p1014）",
+   "80": "ADR、SUSAR定义及不良事件收集与记录边界（body.p1015-p1024）"
+  }
+ },
+ "notes": [
+  "本切片为模型外来源闭包切片：不调用临床语义模型，不并入131包正式目录，claims_complete=false。",
+  "第76包五个拥有单元全部为结构标题或安全性指标摘要/常规安全性参数枚举；required_candidate_source_refs显式为空，任何候选发射都构成越界。",
+  "p982的AE/TEAE/SAE发生率是治疗期安全性分析终点摘要，不是筛选/基线必做检查，不形成受试者个例证据缺口，不得作为入排不通过条件。",
+  "p983的常规安全性参数（实验室检查、生命体征测量、12导联心电图、体格检查）由Ⅱ期流程表及其冻结流程目录单独发布执行节点；本条不新增、不重复发布。",
+  "p984术语定义标题由第76包拥有，但定义正文（p985-p1024）全部归第77-80包；后续包所有权只读冻结，不得提前吞并。",
+  "AE与筛选前病史边界只读锚点：p988（筛选时已存在且知情同意前已存在的情况记录为病史/伴随疾病，不作为AE）与p1023（ICF后至首次给药前的临床不良医学事件记录为病史/伴随疾病，不作为AE）均属第77/80包，仅作解释闭包。",
+  "官方入排与流程矩阵不含任何以p980-p1024为锚点的行，也不含不良事件/发生率控制行；本包不合成任何IN/EX官方规则。"
+ ]
+}

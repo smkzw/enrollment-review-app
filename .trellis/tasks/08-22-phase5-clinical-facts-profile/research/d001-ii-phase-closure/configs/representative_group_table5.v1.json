@@ -1,0 +1,69 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-table5-reps",
+  "task_id": "phase5-slice59m-20260827",
+  "worker": "config-parity",
+  "artifact_dir_name": "phase5-slice59n-d001-table5-config-parity-prepare-20260827",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice59i-d001-phase-table-caption-rebaseline-20260827/coverage_manifest.json",
+  "parent_phase_qc_path": "artifacts/phase5-slice59j-d001-packages63-65-parent-qc-20260827/clinical-qc.json",
+  "study_phase": "phase_ii",
+  "owned_source_refs": [
+    "body.t10.r1",
+    "body.t10.r3",
+    "body.t10.r4",
+    "body.t10.r7"
+  ],
+  "attached_source_refs": [],
+  "unit_lookup": [
+    "frozen_plan_owned",
+    "frozen_plan_context",
+    "coverage_manifest"
+  ],
+  "batching": {
+    "mode": "planner",
+    "reason": "Table 5 representatives share one heading-path run under 表 5"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "config scaffold selected_phase_applicable; scopes stay UNKNOWN on wire units unless coverage already set"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "stage:baseline:1",
+      "review_stage": "baseline",
+      "display_name": "基线期",
+      "visit_instance": "baseline-1"
+    }
+  ],
+  "runner": {
+    "max_transport_retries": 1,
+    "max_schema_repairs": 2,
+    "timeout_seconds": 7200.0
+  },
+  "ids": {
+    "manifest_id": "manifest:slice59n-table5-reps",
+    "catalog_id": "catalog:slice59n-table5-reps"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.t10.r1": [
+      "first_dose_anchor",
+      "fixed_first_dose_window"
+    ],
+    "body.t10.r3": [
+      "clearance_24_to_6_substitute"
+    ],
+    "body.t10.r4": [
+      "longer_of_selection"
+    ],
+    "body.t10.r7": [
+      "herbal_local_exception"
+    ]
+  },
+  "notes": [
+    "Parity config for former slice59m Table 5 hardcoded representative refs.",
+    "Does not copy clinical reasoning; Agent + publication gate remain product code."
+  ]
+}

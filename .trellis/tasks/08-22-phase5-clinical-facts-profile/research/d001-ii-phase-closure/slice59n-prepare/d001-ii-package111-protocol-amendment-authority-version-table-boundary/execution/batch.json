@@ -1,0 +1,245 @@
+{
+  "batch_id": "pcb-930550f418be4ac62ff03db1",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [],
+  "context_structure_unit_ids": [],
+  "context_units": [],
+  "coverage_manifest_id": "manifest:slice61cx-package111-protocol-amendment-authority-version-table-boundary",
+  "known_official_targets": [],
+  "known_procedure_targets": [],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "D1给药前",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "D1给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {},
+  "owned_required_action_kinds_by_structure_unit_id": {},
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.p1291",
+    "body.p1292",
+    "body.t15.r0.c0.p0",
+    "body.t15.r0.c1.p0",
+    "body.t15.r0.c2.p0",
+    "body.t15.r0.c3.p0",
+    "body.t15.r1.c0.p0",
+    "body.t15.r1.c1.p0",
+    "body.t15.r1.c2.p0",
+    "body.t15.r1.c3.p0"
+  ],
+  "owned_structure_unit_ids": [
+    "su-38ba3b1276716704c4aa66af",
+    "su-675a94e90db6ed0e3db57b1d",
+    "su-fce5fbc8c96b381e90f1f026",
+    "su-355fb1e6a11bbf4e8f05dbce"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "方案修订",
+      "heading_path": [
+        "方案修订"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1291"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31540,
+      "source_ref": "body.p1291",
+      "source_span_ids": [
+        "body.p1291"
+      ],
+      "structure_unit_id": "su-38ba3b1276716704c4aa66af",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "方案任何的必须的改变，都需以方案修订形式进行，并需在获得申办者、主要研究者签字同意后提交伦理委员会审批或备案。",
+      "heading_path": [
+        "方案修订"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1292"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31550,
+      "source_ref": "body.p1292",
+      "source_span_ids": [
+        "body.p1292"
+      ],
+      "structure_unit_id": "su-675a94e90db6ed0e3db57b1d",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "版本 | 日期 | 变更说明 | 简要理由",
+      "heading_path": [
+        "方案修订"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t15.r0.c0.p0",
+        "body.t15.r0.c1.p0",
+        "body.t15.r0.c2.p0",
+        "body.t15.r0.c3.p0"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31571,
+      "source_ref": "body.t15.r0",
+      "source_span_ids": [
+        "body.t15.r0.c0.p0",
+        "body.t15.r0.c1.p0",
+        "body.t15.r0.c2.p0",
+        "body.t15.r0.c3.p0"
+      ],
+      "structure_unit_id": "su-fce5fbc8c96b381e90f1f026",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "版本"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            2
+          ],
+          [
+            0,
+            3
+          ]
+        ],
+        "row_headers": [
+          "版本"
+        ],
+        "row_index": 0,
+        "table_path": [
+          0,
+          0
+        ]
+      },
+      "unit_kind": "table_header"
+    },
+    {
+      "excerpt": "V1.0 | 2025年12月10日 | NA | NA",
+      "heading_path": [
+        "方案修订"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.t15.r1.c0.p0",
+        "body.t15.r1.c1.p0",
+        "body.t15.r1.c2.p0",
+        "body.t15.r1.c3.p0"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31611,
+      "source_ref": "body.t15.r1",
+      "source_span_ids": [
+        "body.t15.r1.c0.p0",
+        "body.t15.r1.c1.p0",
+        "body.t15.r1.c2.p0",
+        "body.t15.r1.c3.p0"
+      ],
+      "structure_unit_id": "su-355fb1e6a11bbf4e8f05dbce",
+      "study_phase": "phase_ii",
+      "table_context": {
+        "column_headers": [
+          "版本"
+        ],
+        "column_index": 0,
+        "member_cell_paths": [
+          [
+            1,
+            0
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            3
+          ]
+        ],
+        "row_headers": [
+          "V1.0"
+        ],
+        "row_index": 1,
+        "table_path": [
+          1,
+          0
+        ]
+      },
+      "unit_kind": "table_row"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [
+    "su-38ba3b1276716704c4aa66af",
+    "su-fce5fbc8c96b381e90f1f026"
+  ],
+  "study_phase": "phase_ii"
+}

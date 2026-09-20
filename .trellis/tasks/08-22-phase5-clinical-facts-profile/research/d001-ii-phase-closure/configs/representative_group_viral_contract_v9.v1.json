@@ -1,0 +1,11 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_viral.v1.json",
+  "artifact_dir_name": "phase5-slice59n-d001-viral-control-replay-contract-v9-20260828",
+  "runner": {
+    "max_schema_repairs": 5
+  },
+  "notes": [
+    "验证增量候选不得重复已覆盖操作，并保留新增共用后果所需的全部条件分支。"
+  ]
+}

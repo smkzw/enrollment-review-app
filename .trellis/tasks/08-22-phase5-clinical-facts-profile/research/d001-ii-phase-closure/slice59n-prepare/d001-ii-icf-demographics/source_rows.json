@@ -1,0 +1,180 @@
+[
+  {
+    "excerpt": "签署知情同意书^1 | X",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表",
+      "表 1 Ⅱ期临床研究阶段流程表"
+    ],
+    "lookup": "coverage_manifest",
+    "package_id": null,
+    "package_ordinal": null,
+    "role": "attached",
+    "source_ref": "body.t5.r5",
+    "source_span_ids": [
+      "body.t5.r5.c0.p0",
+      "body.t5.r5.c1.p0"
+    ],
+    "structure_unit_id": "su-4b166a9e42dfc8a3727f77e1",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "采集人口学资料^3 | X",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表",
+      "表 1 Ⅱ期临床研究阶段流程表"
+    ],
+    "lookup": "coverage_manifest",
+    "package_id": null,
+    "package_ordinal": null,
+    "role": "attached",
+    "source_ref": "body.t5.r6",
+    "source_span_ids": [
+      "body.t5.r6.c0.p0",
+      "body.t5.r6.c1.p0"
+    ],
+    "structure_unit_id": "su-9b01197961da9751e30cb972",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "开始任何试验流程之前签署知情同意书。",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-2c0c955824200ee34e8960dc",
+    "package_ordinal": 31,
+    "role": "attached",
+    "source_ref": "body.p315",
+    "source_span_ids": [
+      "body.p315"
+    ],
+    "structure_unit_id": "su-800fd5fa2814682b74b23c69",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "人口学资料：包括出生日期、性别、民族、年龄等信息。",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-2c0c955824200ee34e8960dc",
+    "package_ordinal": 31,
+    "role": "attached",
+    "source_ref": "body.p317",
+    "source_span_ids": [
+      "body.p317"
+    ],
+    "structure_unit_id": "su-05e54f6b1892ae79ea2c9fe0",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "自愿签署知情同意书（Informed Consent Form，ICF），能够和研究者进行良好的沟通，并且理解和遵守本研究的各项要求和限制条件；",
+    "heading_path": [
+      "研究人群",
+      "入选标准"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-e19e628051039b5cf8bb4f8e",
+    "package_ordinal": 51,
+    "role": "attached",
+    "source_ref": "body.p630",
+    "source_span_ids": [
+      "body.p630"
+    ],
+    "structure_unit_id": "su-7cecc83523216d739b7cef1e",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "签署ICF时年龄≥18周岁且≤75周岁，性别不限；",
+    "heading_path": [
+      "研究人群",
+      "入选标准"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-e19e628051039b5cf8bb4f8e",
+    "package_ordinal": 51,
+    "role": "attached",
+    "source_ref": "body.p631",
+    "source_span_ids": [
+      "body.p631"
+    ],
+    "structure_unit_id": "su-6d2b5812ae0013752842efc3",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "签署知情同意书",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "签署知情同意书"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "attached",
+    "source_ref": "body.p767",
+    "source_span_ids": [
+      "body.p767"
+    ],
+    "structure_unit_id": "su-d47f4ab5043b8998d0041401",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "研究者在筛选前向参与者解释所有的研究程序等信息，获得参与者自愿签署的ICF。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "签署知情同意书"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "owned",
+    "source_ref": "body.p768",
+    "source_span_ids": [
+      "body.p768"
+    ],
+    "structure_unit_id": "su-dce8b05405461354d06760c5",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "采集人口学资料",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "采集人口学资料"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "attached",
+    "source_ref": "body.p769",
+    "source_span_ids": [
+      "body.p769"
+    ],
+    "structure_unit_id": "su-16f8c3846c2367f40b062fae",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "在筛选期获取参与者的人口学资料，包括出生日期、性别、民族、年龄等信息。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "采集人口学资料"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-48c6db04c4eb5d5c0a72679f",
+    "package_ordinal": 67,
+    "role": "owned",
+    "source_ref": "body.p770",
+    "source_span_ids": [
+      "body.p770"
+    ],
+    "structure_unit_id": "su-a9a2b3350561d48442cf1cba",
+    "unit_kind": "paragraph"
+  }
+]

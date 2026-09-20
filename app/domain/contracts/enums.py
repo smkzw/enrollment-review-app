@@ -209,6 +209,7 @@ class JobEventType(StableEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     PAGE_PROGRESS = "page_progress"
+    SEMANTIC_BATCH_PROGRESS = "semantic_batch_progress"
 
 
 class AgentNode(StableEnum):

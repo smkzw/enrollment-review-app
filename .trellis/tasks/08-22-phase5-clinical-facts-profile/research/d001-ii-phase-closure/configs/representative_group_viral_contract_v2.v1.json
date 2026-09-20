@@ -1,0 +1,8 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_viral.v1.json",
+  "artifact_dir_name": "phase5-slice59n-d001-viral-control-replay-contract-v2-20260828",
+  "notes": [
+    "保留前轮拒绝证据后，验证多条件分支映射、共同结果有效窗和后续决定节点契约。"
+  ]
+}

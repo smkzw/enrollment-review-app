@@ -554,8 +554,10 @@ class TextOnlyOcrAdapter:
         layout_parser_version: str | None = None,
         coordinate_transform_version: str = COORDINATE_TRANSFORM_VERSION,
         profile_id: str | None = None,
+        attempt_namespace: str | None = None,
     ) -> None:
         self.provider = provider
+        self.attempt_namespace = attempt_namespace
         self.model_id = model_id
         self.model_revision = model_revision
         self.prompt = prompt
@@ -588,6 +590,7 @@ class TextOnlyOcrAdapter:
             request_params_sha256=self.request_params_sha256,
             layout_parser_version=self.layout_parser_version,
             coordinate_transform_version=self.coordinate_transform_version,
+            attempt_namespace=self.attempt_namespace,
         )
         self.profile_id = profile_id or f"ocr-profile-{self.profile_fingerprint[:40]}"
 
@@ -607,6 +610,19 @@ class TextOnlyOcrAdapter:
             layout_parser_version=self.layout_parser_version,
             coordinate_transform_version=self.coordinate_transform_version,
             created_at=created_at or _now_utc(),
+            attempt_namespace=self.attempt_namespace,
+        )
+
+    def for_attempt(self, namespace: str) -> TextOnlyOcrAdapter:
+        """Keep inference settings, isolate this explicit reprocessing attempt."""
+        return TextOnlyOcrAdapter(
+            provider=self.provider, model_id=self.model_id, model_revision=self.model_revision,
+            prompt=self.prompt, parser_version=self.parser_version,
+            render_params=self.render_params, request_params=self.request_params,
+            segmentation_config=self.segmentation_config,
+            layout_parser_version=self.layout_parser_version,
+            coordinate_transform_version=self.coordinate_transform_version,
+            attempt_namespace=namespace,
         )
 
     def cache_key(

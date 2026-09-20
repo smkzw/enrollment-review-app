@@ -16,6 +16,8 @@ import json
 
 import pytest
 
+from tests.v2.protocols.test_slice58c_control_deconstructor import _evaluation, _evidence_policy
+
 from app.agents.protocol_control_deconstructor import (
     CONTROL_AGENT_WIRE_VERSION,
     ProtocolControlAgentResponse,
@@ -107,6 +109,7 @@ def _wire_candidate_with_excerpt(
 ) -> ProtocolControlAgentWireCandidate:
     return ProtocolControlAgentWireCandidate(
         title="控制候选",
+        repeat_trigger_conditions=[],
         applicable_population="拟入组受试者",
         applicability_expression=None,
         trigger_expression=None,
@@ -117,6 +120,7 @@ def _wire_candidate_with_excerpt(
                         ProtocolControlAgentWireObligationAtom(
                             kind=ControlObligationKind.COMPLETE_OR_VERIFY,
                             statement="占位陈述",
+                            evaluation=_evaluation("占位陈述", span_id, excerpt),
                             time_constraint=None,
                             prospective_period=None,
                             source_span_ids=[span_id],
@@ -142,6 +146,9 @@ def _wire_candidate_with_excerpt(
                 description="核对",
                 due_stage=ReviewStage.SCREENING,
                 required_source_types=["原始资料"],
+                workflow_stage_ids=["flow-screening"],
+                source_policy=_evidence_policy(span_id, excerpt),
+                atom_refs=[{"layer": "obligation", "group_index": 0, "atom_index": 0}],
             )
         ],
         source_structure_unit_ids=[unit_id],
@@ -373,6 +380,7 @@ def test_cross_source_quote_diff_still_fails_when_span_mismatch() -> None:
     )
     candidate = ProtocolControlAgentWireCandidate(
         title="跨来源",
+        repeat_trigger_conditions=[],
         applicable_population="拟入组受试者",
         applicability_expression=None,
         trigger_expression=None,
@@ -383,6 +391,7 @@ def test_cross_source_quote_diff_still_fails_when_span_mismatch() -> None:
                         ProtocolControlAgentWireObligationAtom(
                             kind=ControlObligationKind.COMPLETE_OR_VERIFY,
                             statement="占位",
+                            evaluation=_evaluation("占位", "span:01", "他说'再见'。"),
                             time_constraint=None,
                             prospective_period=None,
                             source_span_ids=["span:01"],
@@ -408,6 +417,9 @@ def test_cross_source_quote_diff_still_fails_when_span_mismatch() -> None:
                 description="核对",
                 due_stage=ReviewStage.SCREENING,
                 required_source_types=["原始资料"],
+                workflow_stage_ids=["flow-screening"],
+                source_policy=_evidence_policy("span:01", "他说'再见'。"),
+                atom_refs=[{"layer": "obligation", "group_index": 0, "atom_index": 0}],
             )
         ],
         source_structure_unit_ids=["su-01"],
@@ -424,6 +436,43 @@ def test_cross_source_quote_diff_still_fails_when_span_mismatch() -> None:
 # ---------------------------------------------------------------------------
 # 7. Raw model hash and audit prompt retention via runner
 # ---------------------------------------------------------------------------
+
+def test_quote_restoration_rejects_candidates_that_become_identical():
+    batch = _control_batch([_unit("su-ecg-01", 1, "span:ecg-01", "记录‘甲’结果")])
+    straight = _wire_candidate_with_excerpt("记录'甲'结果")
+    curved = _wire_candidate_with_excerpt("记录‘甲’结果")
+    wire = _wire_for_batch(batch, straight).model_copy(update={"candidate_drafts": [straight, curved]})
+    with pytest.raises(ProtocolControlAgentWireValidationError, match="DUPLICATE_CANDIDATE"):
+        hydrate_protocol_control_agent_output(wire, batch)
+
+
+def test_atom_time_constraint_half_life_sources_are_restored_with_the_atom():
+    from app.domain.contracts.control_evaluation_spec import ControlAtomEvaluationSpec
+    from app.domain.contracts.rules import TimeConstraint
+
+    raw = "'甲'的半衰期为2天"
+    source = "‘甲’的半衰期为2天"
+    batch = _control_batch([_unit("su-ecg-01", 1, "span:ecg-01", source)])
+    candidate = _wire_candidate_with_excerpt(raw)
+    atom = candidate.obligation_expression.groups[0].atoms[0]
+    atom.kind = ControlObligationKind.PROHIBIT_MEDICATION_OR_TREATMENT_EXPOSURE
+    atom.evaluation = ControlAtomEvaluationSpec.model_validate({
+        **_evaluation("检查用药时间", "span:ecg-01", raw),
+        "time_purpose": "event_membership", "time_operand_attribute": "date_range",
+    })
+    atom.time_constraint = TimeConstraint(
+        anchor_type="first_dose_date", direction="before", half_life_multiplier=5,
+        half_life_evidence={"value": 2, "unit": "day", "source_span_id": "span:ecg-01",
+                            "source_excerpt": raw, "applies_to_quote": "'甲'", "duration_quote": "2天"},
+    )
+    output = hydrate_protocol_control_agent_output(_wire_for_batch(batch, candidate), batch)
+    restored = output.candidates[0].semantics.obligation_expression.groups[0].atoms[0]
+    assert restored.source_excerpts == [source]
+    assert restored.time_constraint.half_life_evidence.source_excerpt == source
+    assert restored.time_constraint.half_life_evidence.applies_to_quote == "‘甲’"
+    assert restored.time_constraint.half_life_multiplier == 5
+    assert atom.source_excerpts == [raw]
+
 
 def test_runner_preserves_raw_hash_and_audit_prompt_on_quote_restoration() -> None:
     curved = "12导联心电图检查前参与者至少静息10 min。记录12导联心电图诊断结果、心率、PR间期、RR间期、QRS、QT间期，并应用Fridericia’s公式计算心率校正计算QTcF。"
@@ -484,7 +533,7 @@ def test_protocol_deconstructor_whitespace_and_punctuation_not_restored() -> Non
 # 9. D001 真实重放：artifacts 中的 body.p790 弯引号在真实 batch 上可还原
 # ---------------------------------------------------------------------------
 
-def test_d001_ecg_real_replay_with_frozen_batch() -> None:
+def test_d001_historical_quotes_restore_but_old_wire_is_not_current_acceptance() -> None:
     import pathlib
 
     batch_path = pathlib.Path("artifacts/phase5-slice61as-d001-ecg-screening-20260829/execution/batch.json")
@@ -515,16 +564,9 @@ def test_d001_ecg_real_replay_with_frozen_batch() -> None:
     from app.domain.contracts.protocol_controls import ProtocolControlDispositionBatch
 
     real_batch = ProtocolControlDispositionBatch.model_validate(batch_data)
-    wire = ProtocolControlAgentWire.model_validate(json.loads(straight["text"]))
-    hydrated = hydrate_protocol_control_agent_output(wire, real_batch)
-    found_curved = False
-    for c in hydrated.candidates:
-        for g in c.semantics.obligation_expression.groups:
-            for a in g.atoms:
-                for ex in a.source_excerpts:
-                    if "Fridericia’s" in ex:
-                        found_curved = True
-    assert found_curved
+    assert json.loads(straight["text"])["wire_version"] != CONTROL_AGENT_WIRE_VERSION
+    with pytest.raises(ProtocolControlAgentWireValidationError, match="WIRE_SCHEMA_INVALID"):
+        hydrate_protocol_control_agent_output(straight["text"], real_batch)
 
     class FakeTransport:
         def __init__(self, text: str):
@@ -539,5 +581,6 @@ def test_d001_ecg_real_replay_with_frozen_batch() -> None:
     transport = FakeTransport(straight["text"])
     runner = ProtocolControlAgentRunner()
     result = runner.run(real_batch, transport)
-    assert result.status == "已解析"
+    assert result.status == "需要核对"
+    assert result.final_output is None
     assert result.attempts[0].raw_output_sha256 == straight_hash

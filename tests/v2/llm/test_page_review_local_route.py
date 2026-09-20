@@ -67,7 +67,7 @@ def test_local_route_keeps_cloud_credentials_out_and_runs_serially(monkeypatch):
     assert route.api_key == "local-product"
     assert route.max_concurrency == 1
     assert "api_key" not in route_identity(route)
-    assert routes[PageReviewLane.MAIN_A].reasoning_effort == "low"
+    assert routes[PageReviewLane.MAIN_A].reasoning_effort == "high"
 
 
 def test_local_explicit_credential_is_used():
@@ -105,4 +105,4 @@ def test_mtplx_main_reader_requires_visual_identity_and_does_not_vote_twice(monk
     resolved = asyncio.run(harness.preflight_page_reader_routes(routes))
     assert set(resolved) == {PageReviewLane.MAIN_A, PageReviewLane.MAIN_B}
     assert resolved[PageReviewLane.MAIN_B].max_concurrency == 1
-    assert resolved[PageReviewLane.MAIN_B].reasoning_effort == "high"
+    assert resolved[PageReviewLane.MAIN_B].reasoning_effort == "xhigh"

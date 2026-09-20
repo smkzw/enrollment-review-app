@@ -39,7 +39,7 @@ LAUNCHER = ROOT / "scripts" / "start_enrollment_review.command"
 SERVICE_SCRIPT = ROOT / "scripts" / "run_enrollment_review_service.sh"
 
 
-def test_service_entry_snapshot_uses_graded_glm_then_mtplx_then_deepseek(
+def test_service_entry_snapshot_uses_single_glm_high_default_chain(
     monkeypatch,
 ):
     monkeypatch.setattr(
@@ -62,24 +62,14 @@ def test_service_entry_snapshot_uses_graded_glm_then_mtplx_then_deepseek(
         "app.agents.protocol_semantic_model_router.DECONSTRUCT_GLM_REASONING_EFFORT",
         "high",
     )
-    monkeypatch.setattr(
-        "app.agents.protocol_semantic_model_router.MTPLX_MODEL",
-        "mtplx-qwen38-27b-optimized-quality",
-    )
-    monkeypatch.setattr(
-        "app.agents.protocol_semantic_model_router.MTPLX_REASONING_EFFORT",
-        "medium",
-    )
     snapshot = service_entry_semantic_route_snapshot()
     assert snapshot["route_mode"] == "graded"
+    # 默认链只声明 GLM high：无隐式 MTPLX/DeepSeek 第三模型回退。
     assert snapshot["complex_identities"] == [
         "zhipu-coding-plan:glm-5.3-flash:high",
-        "mtplx:mtplx-qwen38-27b-optimized-quality:medium",
-        "deepseek:deepseek-v4-flash:high",
     ]
     assert snapshot["short_identities"] == [
-        "mtplx:mtplx-qwen38-27b-optimized-quality:medium",
-        "deepseek:deepseek-v4-flash:high",
+        "zhipu-coding-plan:glm-5.3-flash:high",
     ]
     assert snapshot["injected_transport_bypasses_grading"] is True
 

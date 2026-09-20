@@ -85,6 +85,15 @@ class FactAuthorityValidator:
         self._validate_episode(authority)
         return self._validate_complete_revision(authority)
 
+    def validate_frozen_source(self, authority: FactAuthority) -> CompleteEvidenceProcessingRevision:
+        """Verify retained source scope without requiring today's active pointers.
+
+        This proves document/processing membership, not current clinical facts or
+        rule applicability; callers separately establish subject/episode ownership.
+        """
+        self._validate_snapshot(authority)
+        return self._validate_complete_revision(authority)
+
     def _validate_snapshot(self, authority: FactAuthority) -> None:
         snapshot = self.session.get(
             EvidenceSnapshotV2Record, authority.evidence_snapshot_v2_id
@@ -204,7 +213,7 @@ class FactAuthorityValidator:
     def validate_locators(
         self, authority: FactAuthority, locator_ids: list[str]
     ) -> None:
-        """逐个校验定位引用都在当前审核节点/活动快照/处理修订闭包内。
+        """逐个校验定位引用都在指定审核节点/冻结快照/处理修订闭包内。
 
         同一批定位共享一个视觉核验上下文：同一事务内重复的整修订核验只
         执行一次；上下文随本次调用结束而丢弃，不跨事务复用。
@@ -262,7 +271,7 @@ class FactAuthorityValidator:
         ]
         if not matching_members:
             raise FactLocatorReferenceError(
-                f"定位 {locator_id} 的资料不属于当前活动快照成员（跨快照/跨处理修订"
+                f"定位 {locator_id} 的资料不属于指定快照成员（跨快照/跨处理修订"
                 "定位引用拒绝）"
             )
         revision_member = self.session.execute(
@@ -274,7 +283,7 @@ class FactAuthorityValidator:
         ).scalar_one_or_none()
         if revision_member is None:
             raise FactLocatorReferenceError(
-                f"定位 {locator_id} 未收录于当前活动完整处理修订 "
+                f"定位 {locator_id} 未收录于指定完整处理修订 "
                 f"{authority.complete_processing_revision_id} 的定位清单，拒绝引用"
             )
         if (

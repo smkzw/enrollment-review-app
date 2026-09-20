@@ -26,6 +26,8 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from app.domain.contracts.evidence import EvidenceExpectationTemplate
+from app.domain.contracts.common import DateValue
+from app.domain.source_validity import source_validity
 from app.domain.contracts.evidence_expectations_v2 import (
     CoverageGapSignal,
     CoverageObservation,
@@ -38,6 +40,7 @@ from app.domain.contracts.enums import (
     GapType,
     ReviewStage,
     SourceStrength,
+    TruthValue,
 )
 from app.domain.contracts.facts import ClinicalFactV2, FactAuthority
 
@@ -206,12 +209,17 @@ def project_expectation(
     expectation_id: str | None = None,
     revision: int = 1,
     created_at: datetime | None = None,
+    validity_anchor: DateValue | None = None,
 ) -> EvidenceExpectationV2:
     """投影单个模板的受试者级期望（纯函数，不做持久化）。
 
     ``observations`` 为结构化已发布事实（同权威元组过滤在投影器内执行）；
     ``gap_signals`` 为结构化缺失/风险输入。缺失/风险绝不从散文推断。
     """
+    if template.control_origin is not None:
+        raise ProjectionInputError(
+            "补充控制的适用条件与完整来源有效期尚未接入，不能按无条件资料要求判定"
+        )
     if (
         template.rule_set_id != authority.rule_set_id
         or template.rule_set_revision != authority.rule_set_revision
@@ -245,6 +253,24 @@ def project_expectation(
 
     # 2/3. 覆盖观察：同权威元组 + 显式资料要求绑定的已发布事实。
     matching = _matching_observations(template, authority, observations)
+    if template.source_validity_window is not None and matching:
+        dated = [
+            (item, source_validity(item.fact.date_range, template.source_validity_window, validity_anchor))
+            for item in matching
+        ]
+        matching = [item for item, truth in dated if truth == TruthValue.TRUE]
+        if not matching:
+            uncertain = any(truth == TruthValue.UNKNOWN for _, truth in dated)
+            # Derived from frozen dates; never reinterpret an old result as a clinical failure.
+            signals = [*signals, CoverageGapSignal(
+                applies_to_template_id=template.template_id,
+                kind=GapType.DATE_OR_ANCHOR_MISSING if uncertain else GapType.RECORD_INCOMPLETE,
+                detail=(
+                    "现有检查资料或审核节点的日期不足以确认资料仍在有效期内，请核实日期。"
+                    if uncertain else
+                    "现有检查资料不在本节点允许使用的时间范围内，需要补充有效期内的检查资料。"
+                ),
+            )]
     verdicts = [
         (observation.fact, _coverage_verdict(observation, template))
         for observation in matching
@@ -405,6 +431,18 @@ def project_expectations(
                 f"模板 {template.template_id} 重复出现，拒绝重复投影"
             )
         seen.add(template.template_id)
+        if template.control_origin is not None:
+            # 补充控制的期望依赖控制适用条件与来源有效期评估，尚未接入。
+            # 控制来源模板显式跳过并留痕；其余资料期望照常投影，不因
+            # 未接入的控制期望阻断整个事实发布事务。
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "补充控制资料期望暂不投影（控制适用条件接入前不按无条件要求判定）：control=%s evidence_key=%s",
+                getattr(template.control_origin, "protocol_control_id", "?"),
+                getattr(template.control_origin, "evidence_key", "?"),
+            )
+            continue
         projected.append(
             project_expectation(
                 template=template,

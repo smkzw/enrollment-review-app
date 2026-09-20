@@ -1,0 +1,359 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "group_id": "d001-ii-package103-safety-pk-exposure-statistical-boundary",
+  "task_id": "phase5-slice61cp-20260830",
+  "worker": "codex-parent",
+  "expected_protocol_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "frozen_plan_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/frozen_phase_plan.json",
+  "coverage_manifest_path": "artifacts/phase5-slice61cm-d001-phase-context-boundary-rebaseline-20260830/coverage_manifest.json",
+  "study_phase": "phase_ii",
+  "owned_source_refs": [
+    "body.p1224",
+    "body.p1226",
+    "body.p1227",
+    "body.p1228",
+    "body.p1229",
+    "body.p1230",
+    "body.p1231",
+    "body.p1232",
+    "body.p1233",
+    "body.p1234",
+    "body.p1235"
+  ],
+  "attached_source_refs": [
+    "body.p1225"
+  ],
+  "required_candidate_source_refs": [],
+  "forbidden_candidate_source_refs": [
+    "body.p1224",
+    "body.p1225",
+    "body.p1226",
+    "body.p1227",
+    "body.p1228",
+    "body.p1229",
+    "body.p1230",
+    "body.p1231",
+    "body.p1232",
+    "body.p1233",
+    "body.p1234",
+    "body.p1235"
+  ],
+  "pre_enrollment_source_refs": [],
+  "structural_only_source_refs": [
+    "body.p1224",
+    "body.p1230",
+    "body.p1232",
+    "body.p1234"
+  ],
+  "attached_structural_only_source_refs": [],
+  "expected_disposition_by_source_ref": {
+    "body.p1226": "administrative_statistical_background",
+    "body.p1227": "administrative_statistical_background",
+    "body.p1228": "administrative_statistical_background",
+    "body.p1229": "administrative_statistical_background",
+    "body.p1231": "administrative_statistical_background",
+    "body.p1233": "administrative_statistical_background",
+    "body.p1235": "administrative_statistical_background"
+  },
+  "expected_workflow_stage_ids_by_source_ref": {},
+  "candidate_forbidden_markers_by_source_ref": {
+    "body.p1224": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点"
+    ],
+    "body.p1225": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "Ⅲ期内容进入Ⅱ期控制",
+      "TEAE结果转成入排"
+    ],
+    "body.p1226": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "实验室异常不得入组",
+      "治疗后异常不得入组",
+      "基线异常不得入组"
+    ],
+    "body.p1227": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "体格检查异常不得入组"
+    ],
+    "body.p1228": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "妊娠检查阳性不得入组",
+      "妊娠检查必须在筛选完成"
+    ],
+    "body.p1229": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "合并用药禁限",
+      "合并治疗不符合入排"
+    ],
+    "body.p1230": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点"
+    ],
+    "body.p1231": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "PK采样必做",
+      "PK缺失不得入组",
+      "血药浓度阈值"
+    ],
+    "body.p1232": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点"
+    ],
+    "body.p1233": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "PopPK模型纳入资格",
+      "NONMEM模型失败不得入组"
+    ],
+    "body.p1234": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点"
+    ],
+    "body.p1235": [
+      "筛选必做",
+      "基线必做",
+      "入组前必查",
+      "证据不足",
+      "不得入组",
+      "排除标准",
+      "入排不通过",
+      "发布控制点",
+      "暴露-效应结果不得入组",
+      "暴露/安全性相关性作为入选标准"
+    ]
+  },
+  "candidate_required_markers_by_source_ref": {},
+  "batching": {
+    "mode": "single_batch_with_known_targets",
+    "reason": "第103包覆盖Ⅱ期安全性、实验室和生命体征、体格检查、血妊娠检查、合并治疗、PK、PopPK及暴露-效应统计章节。所有拥有来源只表达治疗后安全性汇总、统计编码、计划采样数据描述、模型分析或相关性探索；这些内容不形成筛选、基线、随机或D1给药前控制点。p1225仅作为Ⅲ期AE/TEAE统计的只读期别语境，不得进入Ⅱ期控制。"
+  },
+  "phase_applicability": {
+    "disposition": "selected_phase_applicable",
+    "scope": "phase_ii",
+    "rationale": "第103包属于D001Ⅱ期统计分析章节。p1225明确属于Ⅲ期临床阶段，只读用于隔离Ⅲ期AE/TEAE汇总；p1226-p1229是安全性实验室、生命体征、体格检查、血妊娠结果和合并治疗的统计列表或汇总；p1231是PKCS血药浓度的计划/实际采样时间描述性统计；p1233是合并前期数据的PopPK模型分析；p1235是如数据允许的暴露/疗效和暴露/安全性相关性探索。上述内容均不构成Ⅱ期受试者级入排资格、基线完整性、筛选动作、随机前或D1给药前义务。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    },
+    {
+      "workflow_stage_id": "flow-d1-pre-dose",
+      "review_stage": "baseline",
+      "display_name": "D1给药前",
+      "visit_instance": "D1给药前"
+    }
+  ],
+  "known_targets": {
+    "authority": "D001 II期官方入排与基线及以前流程必做控制对照矩阵",
+    "source_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-official-flow-controls.json",
+    "official_rules": [],
+    "required_procedures": []
+  },
+  "ids": {
+    "manifest_id": "manifest:slice61cp-package103-safety-pk-exposure-statistical-boundary",
+    "catalog_id": "catalog:slice61cp-package103-safety-pk-exposure-statistical-boundary"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p1224": [
+      "安全性分析标题仅提供统计章节结构，不独立产生受试者级安全性筛选、基线或给药前控制点"
+    ],
+    "body.p1225": [
+      "p1225只读属于Ⅲ期AE/TEAE统计语境；Ⅲ期基础期和整个研究期汇总不得进入Ⅱ期控制",
+      "治疗后TEAE、严重不良事件、死亡等统计列表不是Ⅱ期受试者级入排义务"
+    ],
+    "body.p1226": [
+      "血常规、血生化、生命体征按评价时间点和治疗前后变化进行统计汇总；治疗后异常及基线变化不得改写为筛选或基线资料缺口",
+      "异常结果列表是治疗后安全性描述，不是单例资格判定或给药前必做"
+    ],
+    "body.p1227": [
+      "体格检查按组别列表、交叉表汇总例数百分比及异常结果；不形成体格检查筛选义务或异常即不得入组规则"
+    ],
+    "body.p1228": [
+      "具有生育能力女性的血妊娠检查仅作为安全性统计列表；不得倒置为本包新增的妊娠筛查、阳性判定或访视流程控制"
+    ],
+    "body.p1229": [
+      "合并用药及治疗按组别汇总并列表，仅是统计域；不独立形成合并用药禁限、病史筛查或资格决定"
+    ],
+    "body.p1230": [
+      "药代动力学分析标题仅提供统计分析结构，不产生PK采样、访视或给药前控制点"
+    ],
+    "body.p1231": [
+      "PKCS、计划/实际PK采样时间、CMS-D001浓度和曲线属于PK描述性统计输出；不得变成受试者级PK采样必做、浓度阈值或入排条件"
+    ],
+    "body.p1232": [
+      "群体药代动力学分析标题仅提供模型分析结构，不产生受试者资格、采样义务或工作流绑定"
+    ],
+    "body.p1233": [
+      "本研究与前期研究血药浓度合并并使用NONMEM建立PopPK模型，另行准备定量药理计划及报告；不得改写为模型纳入资格、缺失证据不足或给药前控制"
+    ],
+    "body.p1234": [
+      "暴露-效应分析标题仅提供定量药理分析结构，不独立形成疗效/安全性入选阈值或给药前义务"
+    ],
+    "body.p1235": [
+      "如数据允许的个体暴露参数及暴露/疗效、暴露/安全性相关性探索另行准备定量药理计划和报告；不得倒置为入排、基线或安全性控制点"
+    ]
+  },
+  "exception_semantics_by_source_ref": {
+    "body.p1225": {
+      "semantic_role": "phase_iii_safety_statistical_context",
+      "base_rule": "p1225按MedDRA SOC/PT汇总Ⅲ期AE/TEAE，并列出相关、停药、退出、暂停给药、严重不良事件和死亡事件等统计结果，同时列出治疗前医学事件。",
+      "exception_rule": "p1225仅为Ⅲ期只读期别语境；其AE/TEAE定义、例数、例次、发生率和列表不得进入Ⅱ期受试者级入排、筛选、基线或D1给药前控制。",
+      "preserve_keywords": ["Ⅲ期临床阶段", "MedDRA", "SOC", "PT", "TEAE", "治疗前", "严重不良事件", "死亡事件"],
+      "forbidden_inversion": "不得把Ⅲ期安全性汇总、TEAE发生率或治疗前事件列表改写为Ⅱ期资格规则、筛选失败或发布控制点。"
+    },
+    "body.p1226": {
+      "semantic_role": "post_treatment_laboratory_vital_signs_safety_summary",
+      "base_rule": "按组别和计划评价时间点汇总血常规、血生化、生命体征相对治疗前/基线的变化，并列表描述治疗后异常或异常加重。",
+      "exception_rule": "“基线”与“治疗前”在此是安全性变化比较的统计时间锚点，不是基线访视项目、资料完整性要求或筛选门槛。",
+      "preserve_keywords": ["血常规", "血生化", "生命体征", "治疗前", "治疗后异常", "交叉表", "例数和百分比"],
+      "forbidden_inversion": "不得把实验室/生命体征异常、治疗前后变化或异常列表改写为单例不得入组、基线缺口或D1给药前必查。"
+    },
+    "body.p1227": {
+      "semantic_role": "physical_examination_statistical_listing",
+      "base_rule": "按组别列表体格检查数据，以交叉表描述例数百分比并汇总异常结果。",
+      "exception_rule": "体格检查结果在此属于治疗后安全性统计输出，不独立形成筛选动作、访视必做或异常即排除的资格判定。",
+      "preserve_keywords": ["体格检查", "列表", "交叉表", "例数和百分比", "异常结果"],
+      "forbidden_inversion": "不得把体格检查异常汇总改写为筛选必做、证据不足、不得入组或发布控制点。"
+    },
+    "body.p1228": {
+      "semantic_role": "fertile_women_blood_pregnancy_safety_listing",
+      "base_rule": "列出所有具有生育能力女性的血妊娠检查结果。",
+      "exception_rule": "该句规定安全性统计列表范围，不新增妊娠筛查时点、阳性处置、入排规则或访视义务；妊娠资格控制若存在须来自已冻结的官方流程来源。",
+      "preserve_keywords": ["具有生育能力的女性", "血妊娠检查结果"],
+      "forbidden_inversion": "不得把血妊娠结果列表、阳性结果或结果缺失改写为本包新增的筛选控制、不得入组或给药前必查。"
+    },
+    "body.p1229": {
+      "semantic_role": "concomitant_medication_treatment_statistical_summary",
+      "base_rule": "按组别对合并用药及治疗进行汇总并列表。",
+      "exception_rule": "合并用药及治疗在此仅是统计汇总维度，不是合并用药禁限、病史筛查、证据完整性或受试者资格来源。",
+      "preserve_keywords": ["合并用药", "治疗", "按组别", "汇总", "列表"],
+      "forbidden_inversion": "不得把合并治疗统计、编码缺失或列表缺项改写为禁止用药、证据不足、入排失败或发布控制点。"
+    },
+    "body.p1231": {
+      "semantic_role": "pkcs_planned_actual_sampling_descriptive_statistics",
+      "base_rule": "基于PKCS，按剂量组和计划PK采样时间汇总CMS-D001及主要代谢产物血药浓度，并按实际/计划时间绘制浓度-时间曲线。",
+      "exception_rule": "PK采样时间、血药浓度和曲线是PK分析数据与统计展示的时间/结果维度，不形成筛选、基线、随机、D1给药前采样义务或浓度阈值。",
+      "preserve_keywords": ["PKCS", "计划PK采样时间", "实际PK采样时间", "CMS-D001", "C_trough", "C_max", "描述性统计", "浓度-时间曲线"],
+      "forbidden_inversion": "不得把PK采样缺失、血药浓度统计值或曲线结果改写为受试者级资格门槛、证据不足或给药前控制点。"
+    },
+    "body.p1233": {
+      "semantic_role": "pop_pk_modeling_with_prior_study_data",
+      "base_rule": "将本研究与前期研究血药浓度数据合并，使用NONMEM建立PopPK模型，并另行准备定量药理分析计划及报告。",
+      "exception_rule": "PopPK是研究数据与前期数据的模型分析，不是单例入排、随机/给药前资格或PK采样完整性判断；另行计划和报告不转化为本包必做程序。",
+      "preserve_keywords": ["前期已完成研究", "血药浓度数据", "合并", "PopPK分析", "NONMEM", "定量药理分析计划及报告"],
+      "forbidden_inversion": "不得把PopPK模型协变量、NONMEM收敛、模型纳入或数据合并要求改写为筛选失败、不得入组或D1给药前义务。"
+    },
+    "body.p1235": {
+      "semantic_role": "conditional_exposure_effect_exploratory_analysis",
+      "base_rule": "如数据允许，根据最终PopPK模型参数估计值估算个体暴露参数，探索暴露/疗效和暴露/安全性的相关性，并另行准备定量药理计划及报告。",
+      "exception_rule": "“如数据允许”和“相关性探索”限定为后续分析条件与探索性统计，不形成疗效/安全性入选阈值、受试者级控制或给药前资料要求。",
+      "preserve_keywords": ["如数据允许", "最终PopPK模型参数估计值", "个体暴露参数", "暴露/疗效", "暴露/安全性", "相关性探索"],
+      "forbidden_inversion": "不得把暴露参数、暴露-疗效/安全性相关性或分析结果改写为入排标准、基线缺口、不得入组或发布控制点。"
+    }
+  },
+  "later_package_boundary": {
+    "read_only": true,
+    "note": "第102包body.p1197-p1209保持所有权；body.p1210-p1223是当前冻结计划中无拥有权的后续Ⅱ/Ⅲ期疗效统计语境，不进入本包。Package 103从拥有的body.p1224开始，body.p1225仅为Ⅲ期安全性只读上下文；Package 104拥有body.p1236及body.p1237的三个原子，body.p1237#atom-100-160仍为无所有权的只读期中分析上下文，均不得提前吸收。",
+    "expected_owners_by_span": {
+      "body.p1197": 102,
+      "body.p1209": 102,
+      "body.p1224": 103,
+      "body.p1235": 103,
+      "body.p1236": 104,
+      "body.p1237#atom-0-15": 104,
+      "body.p1237#atom-15-100": 104,
+      "body.p1237#atom-160-208": 104
+    },
+    "unowned_context_source_refs": [
+      "body.p1237#atom-100-160"
+    ]
+  },
+  "notes": [
+    "模型外闭包：11个拥有来源，1个Ⅲ期只读来源，12个声明来源均禁止候选；required candidates、workflow bindings、official rules和required procedures均为零。",
+    "p1226的基线/治疗前后、p1228的血妊娠检查、p1229的合并治疗、p1231的PK采样与血药浓度、p1233的PopPK和p1235的暴露-效应均保留原始统计语义，不向单例入排控制反向推理。",
+    "p1225严格隔离Ⅲ期AE/TEAE统计；p1210-p1223无拥有权且p1236/p1237归Package 104，不进入本包准备提示。",
+    "claims_complete=false；本配置不调用临床语义模型、不发布控制点、不宣称D001全量或受试者/Patient Profile验收完成。"
+  ]
+}

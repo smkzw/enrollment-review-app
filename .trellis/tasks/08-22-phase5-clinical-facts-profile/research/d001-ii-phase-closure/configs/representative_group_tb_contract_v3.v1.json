@@ -1,0 +1,11 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_tb.v1.json",
+  "artifact_dir_name": "phase5-slice59n-d001-tb-control-replay-contract-v3-20260828",
+  "runner": {
+    "max_schema_repairs": 5
+  },
+  "notes": [
+    "按已验收的阶段拆分、条件分支和重复原子合同验证结核筛查跨章节控制。"
+  ]
+}

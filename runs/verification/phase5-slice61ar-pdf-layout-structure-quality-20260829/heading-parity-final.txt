@@ -1,0 +1,4 @@
+DOCX headings: 154
+PDF headings: 158
+DOCX headings missing from PDF: []
+PDF-only headings: ['Fridericia公式', '临床研究方案', '保密声明', '表目录']

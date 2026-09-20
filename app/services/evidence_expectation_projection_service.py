@@ -11,6 +11,7 @@ from app.domain.contracts.evidence_expectations_v2 import (
     EvidenceExpectationV2,
 )
 from app.domain.contracts.facts import FactAuthority
+from app.domain.source_validity import source_validity_anchor
 from app.projections.evidence_expectations import project_expectation
 from app.storage.evidence_locator_repositories import (
     CompleteEvidenceProcessingRevisionRepository,
@@ -18,7 +19,7 @@ from app.storage.evidence_locator_repositories import (
 )
 from app.storage.evidence_repositories import SourceDocumentMetadataRevisionRepository
 from app.storage.evidence_expectation_repository import EvidenceExpectationV2Repository
-from app.storage.fact_repositories import ClinicalFactV2Repository
+from app.storage.active_facts import current_fact_heads
 from app.storage.repositories import EpisodeRepository, list_expectation_templates
 
 
@@ -52,16 +53,10 @@ class EvidenceExpectationProjectionService:
             raise EvidenceExpectationProjectionError(
                 "资料期望所用审核节点与不可变权威元组不一致"
             )
-        excluded = exclude_fact_ids or set()
-        facts = [
-            fact
-            for fact in ClinicalFactV2Repository(session).list_by_episode(
-                authority.review_episode_id
-            )
-            if fact.authority == authority
-            and fact.fact_id not in excluded
-            and (run_id is None or fact.run_id == run_id)
-        ]
+        # run_id is the triggering batch, not the scope of current evidence.
+        facts = current_fact_heads(
+            session, authority, exclude_fact_ids=exclude_fact_ids
+        )
         observations = self._observations(session, authority, facts)
         templates = list_expectation_templates(
             session, authority.rule_set_id, authority.rule_set_revision
@@ -73,6 +68,18 @@ class EvidenceExpectationProjectionService:
         repository = EvidenceExpectationV2Repository(session)
         result = []
         for template in templates:
+            if template.control_origin is not None:
+                # 补充控制的期望依赖控制适用条件与来源有效期评估，尚未接入。
+                # 控制来源模板显式跳过并留痕；其余资料期望照常投影，不因
+                # 未接入的控制期望阻断整个事实发布事务。
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "补充控制资料期望暂不投影（控制适用条件接入前不按无条件要求判定）：control=%s evidence_key=%s",
+                    getattr(template.control_origin, "protocol_control_id", "?"),
+                    getattr(template.control_origin, "evidence_key", "?"),
+                )
+                continue
             if template.due_stage == episode.stage:
                 if episode.workflow_stage_id is None:
                     raise EvidenceExpectationProjectionError(
@@ -80,11 +87,9 @@ class EvidenceExpectationProjectionService:
                         f"的资料要求 {template.requirement_id} 是否已到期"
                     )
                 if template.workflow_stage_id != episode.workflow_stage_id:
-                    raise EvidenceExpectationProjectionError(
-                        f"资料要求 {template.requirement_id} 属于同一阶段的另一流程节点"
-                        f" {template.workflow_stage_id}，当前节点为 {episode.workflow_stage_id}，"
-                        "缺少节点先后关系时拒绝猜测到期状态"
-                    )
+                    # A sibling visit's template is outside this projection,
+                    # not missing evidence and not proof of chronological order.
+                    continue
             latest = repository.latest_by_template(
                 authority.review_episode_id, template.template_id
             )
@@ -97,6 +102,11 @@ class EvidenceExpectationProjectionService:
                 gap_signals=gap_signals,
                 revision=revision,
                 created_at=created_at,
+                validity_anchor=source_validity_anchor(
+                    due_stage=template.due_stage,
+                    current_stage=episode.stage,
+                    anchors=episode.anchor_dates,
+                ),
             )
             result.append(repository.project(expectation))
         return result

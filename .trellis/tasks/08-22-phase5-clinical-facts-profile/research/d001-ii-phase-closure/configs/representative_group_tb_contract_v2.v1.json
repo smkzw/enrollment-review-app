@@ -1,0 +1,8 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_tb.v1.json",
+  "artifact_dir_name": "phase5-slice59n-d001-tb-control-replay-contract-v2-20260828",
+  "notes": [
+    "在病毒学契约闭合后验证结核筛查跨章节控制，不覆盖既有拒绝证据。"
+  ]
+}

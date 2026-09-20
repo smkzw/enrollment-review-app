@@ -223,6 +223,25 @@ def _exposure(**overrides):
 # ------------------------------------------------------------- 不可变权威元组
 
 
+@pytest.mark.parametrize("factory, field", [
+    (_fact, "inherited_from_fact_id"),
+    (_event, "source_revision_of"),
+    (_exposure, "source_revision_of"),
+])
+def test_legacy_entity_without_inheritance_field_keeps_raw_payload_hash(factory, field):
+    import hashlib
+    import json
+    from app.storage.codecs import decode_contract
+
+    original = factory()
+    payload = original.model_dump(mode="json", exclude={field})
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    restored = decode_contract(type(original), raw, digest)
+    assert getattr(restored, field) is None
+    assert restored.model_dump(mode="json", exclude={field}) == payload
+
+
 def test_fact_authority_is_frozen_and_immutable():
     authority = _authority()
     assert authority.episode_revision == 3
@@ -634,6 +653,12 @@ def test_conflict_group_requires_at_least_two_facts_and_is_unresolved_by_default
         created_at=_UTC,
     )
     assert group.resolution_revision == 0
+    from app.storage.codecs import decode_contract, encode_value
+    legacy = group.model_dump(mode="json", exclude={"source_revision_of", "revision"})
+    raw, digest = encode_value(legacy)
+    restored = decode_contract(ClinicalConflictGroupV2, raw, digest)
+    assert restored.source_revision_of is None and restored.revision == 1
+    assert restored.model_dump(mode="json", exclude={"source_revision_of", "revision"}) == legacy
     with pytest.raises(ValidationError, match="只允许追加未解决冲突"):
         ClinicalConflictGroupV2.model_validate(
             {**group.model_dump(), "resolution_revision": 1}

@@ -1,0 +1,80 @@
+{
+  "attached_source_refs": [],
+  "claims_complete": false,
+  "gate": {
+    "accepted": false,
+    "reason": "dry-run prepare only; publication gate requires hydrated Agent output",
+    "skipped": true
+  },
+  "group_id": "d001-ii-table5-reps",
+  "notes": [
+    "Parity config for former slice59m Table 5 hardcoded representative refs.",
+    "Does not copy clinical reasoning; Agent + publication gate remain product code.",
+    "Agent wire/hydration/gate evidence only; Codex owns clinical QC.",
+    "No clinical reasoning is copied into this harness."
+  ],
+  "owned_source_refs": [
+    "body.t10.r1",
+    "body.t10.r3",
+    "body.t10.r4",
+    "body.t10.r7"
+  ],
+  "parent_clinical_acceptance": "pending_codex",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "rows": [
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "first_dose_anchor": "pending_codex",
+        "fixed_first_dose_window": "pending_codex"
+      },
+      "frozen_excerpt": "首次给药前6个月至试验结束 | 靶向IL-12、IL-17和/或IL-23的生物制剂",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.t10.r1",
+      "structure_unit_id": "su-9b9ebfbdf97e46d2a5c052f9"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "clearance_24_to_6_substitute": "pending_codex"
+      },
+      "frozen_excerpt": "首次给药前24个月至试验结束，若经过药物清除剂进行洗脱可缩短至首次给药前6个月 | 来氟米特",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.t10.r3",
+      "structure_unit_id": "su-baee6d67a377ab4f63ee3255"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "longer_of_selection": "pending_codex"
+      },
+      "frozen_excerpt": "首次给药前3个月或5个半衰期（以时间较长者为准）至试验结束 | 除靶向IL-12、IL-17和/或IL-23外的其他生物制剂",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.t10.r4",
+      "structure_unit_id": "su-2f4e18342b9e9c245052e468"
+    },
+    {
+      "agent_candidates": [],
+      "codex_accepted": null,
+      "codex_clinical_checks": {
+        "herbal_local_exception": "pending_codex"
+      },
+      "frozen_excerpt": "首次给药前4周至试验结束 | 影响银屑病病情的非生物制剂系统治疗，包括但不限于 JAKs抑制剂、糖皮质激素、维A酸类、环孢素、甲氨蝶呤、黄芪、雷公藤、苦参、复方甘草酸铵、硫唑嘌呤、吗替麦考酚酯、中成药及传统中草药（对于无明确临床证据可能改善银屑病病情的中成药或传统中草药，禁用时间可缩短至给药前2周至试验结束）、抗疟药、干扰素或锂制剂等",
+      "lookup": "frozen_plan_owned",
+      "role": "owned",
+      "source_ref": "body.t10.r7",
+      "structure_unit_id": "su-23e55b26ae4ca12e5340a800"
+    }
+  ],
+  "runner_status": "dry_run",
+  "schema_version": "phase5/representative-group-mtplx-control-replay-qc/v1",
+  "structured_control_deconstruction_accepted": false,
+  "task_id": "phase5-slice59m-20260827",
+  "worker": "config-parity"
+}

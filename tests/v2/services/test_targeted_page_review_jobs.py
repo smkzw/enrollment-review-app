@@ -54,6 +54,61 @@ def test_text_summary_difference_does_not_start_value_reread(session_factory, da
             subject_id=chain["subject_id"], review_episode_id=chain["episode_id"], routes=routes)
 
 
+@pytest.mark.parametrize("time_found", [True, False])
+def test_one_sided_missing_time_can_enter_durable_reread(session_factory, data_paths, time_found):
+    prefix = "targeted-time-gap"
+    with session_factory() as session, session.begin():
+        chain = _seed_chain(session, prefix=prefix)
+    artifacts = ArtifactStore(data_paths)
+    artifacts.put("page_image", f"{prefix}-page-input".encode())
+    routes = _routes()
+    original = PageReviewJobService(session_factory).enqueue(subject_id=chain["subject_id"],
+        review_episode_id=chain["episode_id"], routes=routes)
+
+    async def completion(route, *_args):
+        payload = json.loads(response("4.2").text)
+        payload["facts"][0]["context"]["time_text"] = (
+            "2026-01-17" if route.lane.value == "main-A" else None)
+        return PageCompletion(json.dumps(payload), "stop", {})
+
+    assert JobRunner(session_factory, {PAGE_REVIEW_JOB_TYPE: PageReviewJobExecutor(
+        session_factory, artifacts, routes, completion=completion)}).run_job(original.job_id)
+    with session_factory() as session:
+        before = JobStore(session).get_last_checkpoint(original.job_id, "coverage")
+    kwargs = dict(original_job_id=original.job_id, page_index=0, subject_id=chain["subject_id"],
+                  review_episode_id=chain["episode_id"], routes=routes)
+    job = enqueue_targeted_review(session_factory, **kwargs)
+    assert enqueue_targeted_review(session_factory, **kwargs).job_id == job.job_id
+    with session_factory() as session:
+        store = JobStore(session)
+        payload = json.loads(store.get_job(job.job_id).payload_json)
+        assert payload["focus"]["targets"]
+        assert payload["focus"]["round_number"] == 1
+        assert store.get_last_checkpoint(original.job_id, "coverage") == before
+    calls = []
+
+    async def reread(route, *_args):
+        calls.append(route.lane.value)
+        payload = json.loads(response("4.2").text)
+        payload["facts"][0]["context"]["time_text"] = "2026-01-17" if time_found else None
+        return PageCompletion(json.dumps(payload), "stop", {})
+
+    runner = JobRunner(session_factory, {TARGETED_REVIEW_JOB_TYPE: TargetedPageReviewExecutor(
+        session_factory, artifacts, routes, completion=reread)})
+    assert runner.run_job(job.job_id)
+    with session_factory() as session:
+        store = JobStore(session)
+        outcome = store.get_last_checkpoint(job.job_id, "compare:2")[1]
+        assert outcome["candidate_auto_accept"] is False
+        assert outcome["requires_user_review"] is (not time_found)
+        assert bool(outcome["pending_targets"]) is (not time_found)
+        assert store.get_last_checkpoint(original.job_id, "coverage") == before
+    assert len(calls) == (2 if time_found else 4)
+    assert enqueue_targeted_review(session_factory, **kwargs).job_id == job.job_id
+    runner.run_job(job.job_id)
+    assert len(calls) == (2 if time_found else 4)
+
+
 @pytest.mark.parametrize("resolves", [True, False, "failure"])
 @pytest.mark.parametrize("restart", [True, False])
 @pytest.mark.parametrize("handwriting", [False, True, "mixed"])

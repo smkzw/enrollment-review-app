@@ -32,6 +32,7 @@ from app.domain.contracts.fact_rule_index import (
 )
 from app.domain.contracts.facts import ClinicalFactV2
 from app.storage.fact_repositories import ClinicalFactV2Repository
+from app.storage.active_facts import current_fact_heads
 from app.storage.facts_models import FactRuleLinkV2Record
 from app.storage.models import EvidenceRequirementRecord
 from app.storage.repositories import (
@@ -320,32 +321,14 @@ class FactRuleLinkV2Repository:
 
         被人工修订替代的事实仍作为不可变历史保留，但其规则索引行在漂移校验后
         从活动索引中删除，避免后续影响范围把旧链接当成当前闭包。
+        run_id兼容已有调用，仅描述触发批次，不缩小整个权威范围的重建集合。
         """
-        from app.storage.fact_correction_repository import FactCorrectionRepository
-
         facts = [
             fact
             for fact in self._facts.list_by_episode(authority.review_episode_id)
             if fact.authority == authority
         ]
-        superseded = FactCorrectionRepository(self.session).superseded_entity_ids(
-            authority
-        )
-        remaining = [
-            fact
-            for fact in facts
-            if fact.fact_id not in superseded
-            and (run_id is None or fact.run_id == run_id)
-        ]
-        heads: dict[str, ClinicalFactV2] = {}
-        for fact in remaining:
-            current = heads.get(fact.stable_identity)
-            if current is None or fact.revision > current.revision:
-                heads[fact.stable_identity] = fact
-        active = sorted(
-            heads.values(),
-            key=lambda item: (item.revision, item.fact_id),
-        )
+        active = current_fact_heads(self.session, authority, facts=facts)
         stale_ids = {fact.fact_id for fact in facts} - {fact.fact_id for fact in active}
         return self._rebuild_facts(
             active,

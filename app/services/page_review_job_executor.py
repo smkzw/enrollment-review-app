@@ -7,7 +7,6 @@ import json
 import logging
 from time import monotonic
 from collections.abc import Mapping
-from dataclasses import replace
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -84,6 +83,8 @@ class PageReviewJobExecutor:
                           entries=[entry.model_dump(mode="json") for entry in entries])
             if recovery:
                 fields["predecessor_coverage_id"] = recovery["predecessor_coverage_id"]
+            if payload.get("reading_rotations"):
+                fields["reading_rotations"] = payload["reading_rotations"]
             coverage = SubjectPageCoverage(coverage_id="subject-page-coverage:" + canonical_hash(fields)[:32], **fields)
 
             def apply(session):
@@ -95,17 +96,37 @@ class PageReviewJobExecutor:
         index = 0 if self.review_focus is not None else int(parts[1])
         page = payload["pages"][index]
         image = self.artifact_store.read_by_sha("page_image", page["page_image_sha256"])
+        view = None
+        rotation = payload.get("reading_rotations", {}).get(page["page_artifact_id"])
+        if rotation is not None:
+            from app.evidence.reading_view import make_reading_view
+            view = make_reading_view(image, source_page_artifact_id=page["page_artifact_id"],
+                                     source_image_sha256=page["page_image_sha256"], clockwise_degrees=rotation)
+            image = view.image_bytes
+            self.artifact_store.put("reading_view_image", image)
         page_input = PageReviewInput(**page, review_context=PageReviewContext.model_validate(payload["review_context"]),
+                                    reading_view=view,
                                     page=PageVisionInput(source_ref=page["page_artifact_id"],
                                                                 page_ordinal=page["page_number"], image_bytes=image))
         attempts = []
 
         async def recorded_completion(route, messages, max_tokens):
-            request_sha256 = store_page_request(self.artifact_store, route, messages, max_tokens)
+            request_sha256 = None
             started = monotonic()
             try:
+                request_sha256 = store_page_request(self.artifact_store, route, messages, max_tokens,
+                                                   reading_view=view)
                 result = await self.completion(route, messages, max_tokens)
             except Exception as exc:
+                # Preserve causal types/errno without persisting request bodies or credentials.
+                causes = []
+                cause = exc
+                seen = set()
+                while cause is not None and id(cause) not in seen and len(causes) < 8:
+                    seen.add(id(cause))
+                    causes.append({"type": type(cause).__name__,
+                                   "errno": cause.errno if isinstance(cause, OSError) else None})
+                    cause = cause.__cause__ or (None if cause.__suppress_context__ else cause.__context__)
                 receipt = {
                     "job_id": context.job_id, "step_id": context.step_id,
                     "step_attempt": context.attempt, "request_index": len(attempts),
@@ -113,6 +134,7 @@ class PageReviewJobExecutor:
                     "model": route.model, "max_tokens": max_tokens,
                     "request_sha256": request_sha256,
                     "error_type": type(exc).__name__,
+                    "error_causes": causes,
                     "status_code": getattr(exc, "status_code", None),
                     "failure_kind": getattr(exc, "failure_kind", None),
                     "elapsed_seconds": round(monotonic() - started, 3),
@@ -125,6 +147,9 @@ class PageReviewJobExecutor:
                     "Page request failed job=%s step=%s receipt=%s",
                     context.job_id, context.step_id, artifact.sha256,
                 )
+                if request_sha256 is None:
+                    raise PageReviewHarnessError("判读输入未能完成保存与核验，请检查资料存储。",
+                                                 failure_kind="configuration") from exc
                 raise
             artifact = self.artifact_store.put("raw_response", result.text.encode("utf-8"))
             attempts.append({"lane": route.lane.value,
@@ -142,19 +167,13 @@ class PageReviewJobExecutor:
         if parts[0] == "read":
             lane = PageReviewLane(parts[2])
             route = self.routes[lane]
-            override = recovery.get("length_override", {})
-            extra_read = override.get("step_id") == context.step_id
-            if extra_read:
-                if (self.review_focus is not None or override != {
-                    "step_id": context.step_id, "max_tokens": 48000,
-                    "budget_scope": "combined_generation", "retry_length": False,
-                } or context.max_attempts != 1):
-                    raise StepFailure(retryable=False, error_code="R3_LENGTH_RECOVERY_INVALID")
-                route = replace(route, max_tokens=48000, fallback_base_url="")
+            if recovery.get("length_override"):
+                raise StepFailure(retryable=False, error_code="R3_LENGTH_RECOVERY_INVALID",
+                                  detail="旧版额外补读设置不再适用，请核查原任务；历史结果仍保留。")
             try:
                 record = asyncio.run(run_cancellable(
                     lambda: read_page(route, page_input, pack, completion=recorded_completion,
-                                     review_focus=self.review_focus, retry_length=not extra_read),
+                                     review_focus=self.review_focus),
                     self.session_factory, context.job_id))
             except PageReviewHarnessError as exc:
                 if exc.failure_kind == "endpoint" and context.attempt < context.max_attempts:

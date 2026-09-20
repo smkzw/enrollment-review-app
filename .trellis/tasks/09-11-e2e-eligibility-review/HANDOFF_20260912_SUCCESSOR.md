@@ -1,5 +1,81 @@
 # 入排审核系统 Phase 5 → 下一棒 Agent 完整交接文档
 
+### 新目标连续实施（2026-09-12，优先于下方审阅交付状态）
+
+2026-09-13累计档案后续：已去除Profile/资料期望run过滤，共享active_facts选择器，先选链头再排除校正目标，防旧值复活；索引/校正/缺口消费者统一事实选择。新增补读反例修前丢3项；更正头反例修前2fail。核心相邻145pass，最后两个校正消费者改动后另80pass，diff通过。只读真实隔离库仍拒绝完整引用闭包：516事实/46事件/22暴露/9冲突/130期望，24项事件旧事实引用对应同语义新头但旧定位未全部保留，不能自动换号。新证据及未决设计见artifacts/review-20260912/T3_CUMULATIVE_PROFILE_20260913.md，工程设计§17.5与Plan T3同步。原库未写、模型未调用、所有本轮进程终态；R06/T0–T7未完成，不是暂停。下方Profile仍按run过滤为旧进度。
+
+2026-09-13累计档案相邻修复：FactRuleLink.rebuild_for_authority不再按触发run缩小active集合并把其他批次事实索引列为stale删除。新反例首次是fixture缺gate_id，改用既有发布助手后真实复现旧事实被列stale；修复后索引/Profile37pass、规范化终结/校正52pass，diff检查通过。只改确定性的范围选择，不新增医学语义链接。Profile/资料期望仍按run过滤，R06未闭合；发现既有active_entity_ids_after_corrections会过滤悬挂引用，不能不加分析地拿来“完整合并”。Plan T3已细化。再次核实全局guard仍初始化失败，未改共享文件或绕过派发。
+
+2026-09-13后续读取优化：page_image接入独立Session内最多4096个ORM记录的短期复用，全部来源校验不变，异常也释放；63项相邻测试通过。只读隔离库单页查询15946→3985，四次原图hash一致；全24页6线程成功22.5962秒，单页Python跟踪峰值约20.46MB（非RSS/并发峰值）。详细证据见下引T2记录新增段；不宣称浏览器最终性能或临床验收。本次是确定性修复直接执行，既有会商故障未绕过。此段替代下段“尚未并入产品”的旧进度，仅有界版本接入。
+
+2026-09-13 T2真实浏览器复核与纠偏已合并记录于 `artifacts/review-20260912/T2_SOURCE_NAVIGATION_20260913.md`：切页回调接通、逐字摘录替代fact内码；真实浏览器发现并修复原件容器无高度约束、明确返回被滚动保护吞掉两项问题。最终三档实际原图进入可视区，前端573pass、后端13pass，构建通过；无坐标仍不画框，真实缩放及完整T2未验收。读取耗时另已剖析到每张图重复全修订核验，单请求约15946次execute；单Session保留ORM对象隔离试验降至3901次但尚未并入产品。模型未调用、原库未动、claims_complete=false。当前会商guard错误仍在，未绕过，R01/R07及T0–T7剩余范围保持不变；上一轮只重述泛化要求为无进展，本轮为上述实际代码/反例/浏览器证据进展。
+
+2026-09-13共用原件查看器实证修复：新增异步定位到达/同值重渲染不回拉、跨文档同页定位不得画框两项反例，修前真实2fail/6pass。查看器现以文档版本+页artifact+页码过滤已认证bbox，并以revision/entry/locator/bbox/frame组成稳定高亮身份驱动滚动；异步到达可滚动，不因重新分配等值数组回拉，保留用户主动滚动抑制。修后聚焦13pass，全量前端78文件571pass、8.22秒，构建通过；所有测试会话终态。此为组件行为验证，不是原件坐标临床验收或大屏浏览器验收。产品原库/模型服务未动。
+
+2026-09-13审核页定位接线：OriginalEvidenceViewer已有authenticated bbox能力，但审核页固定传null/[]，导致没有实际重点标注。现通过既有getOcrPage(ocrPageId,processingRevisionId)读取所选页定位，只传当前revision且locatorId/文档版本/页artifact/页码都一致的定位。已核实bbox才由既有查看器画框；无核实坐标或读取失败给中文说明/重试而不补坐标。聚焦工作台+查看器11pass，构建通过；随后补了响应processingRevisionId匹配检查。真实浏览器红框/异步定位滚动尚未验收，onSelectPage仍无操作，需继续完整导航验证，不以接线称R04完成。原件和原库未动。
+
+2026-09-13审核原件身份贯通：_fact_refs原先丢弃定位内source_document_version_id/page_artifact_id，只发页码；现由已验证locator传出完整身份，API/前端类型解码同步。原件面板按文档版本+页面身份+页码共同匹配，找不到不再把null交给查看器显示默认其他页。服务测试增加与原locator身份一致断言；前端聚焦10pass、构建通过。多文件同页码真实浏览器反例、红框定位和完整导航尚未验收；不宣称已完成R04。没有模型调用、原库写入或原件改动。
+
+2026-09-13来源树核对与前端全回归：RuleSet合同只定义Rule→RuleComponent，不定义组件之间递归父链。工作台去掉按官方编号查另一个组件的递归深度推导，按parent_rule_code是否有值显示一层归属；选择参数改名selectedComponentId，避免继续误用官方编号。此处不宣称新增了完整父规则分组展示；同号要点单层展示、独立点击测试5pass。全量前端78文件569pass，8.61秒，session37823终态；tsc/Vite通过，既有大包告警保留。仍需实际浏览器/原件验证，不以单元测试数量收口T2。未启动临床数据库或模型。
+
+2026-09-13报告相邻身份检查：ReportsPage的问题清单与表格行key均改为ruleComponentId。前后端响应分别校验组件身份唯一，允许同官方编号的不同组件，拒绝同组件重复而不去重掩盖错误。前端三文件13pass，构建通过；API补同编号合法/同身份非法反例。仍未以自动测试替代浏览器与正式报告验收，父子层级映射待处理。未动原临床库、未改变医学判定或模型路线。
+
+2026-09-13组件身份贯通：在R01绑定链规格待独立审阅期间，修复R03确定性选择缺陷。EligibilityClauseProjection/DTO/wire/view新增必填rule_component_id；工作台选中、React key和component链接使用组件身份，官方编号仅展示。失效链接不再回退第一项。新增同官方编号双组件独立点击及失效链接反例，前端三文件12pass、构建通过；后端服务10pass，API首次1fail为前轮R07文案旧断言，已同步为尚未完成/不得未见并增加组件身份断言。原件浏览器验收、父子层级仍按parent_rule_code的歧义、Reports行key/链接相邻消费者尚未全部核验，不能称R03收口。临床库未改，未调用模型；独立会商共享配置故障仍待处理。
+
+2026-09-13来源身份前端贯通：上一轮仅重述泛化约束，未形成新实现，本轮修复相邻消费方。judgmentSearchHttp严格解码原先仅允许page_number/reasons，会拒绝后端新增来源字段；现同步类型和解码，强制保留文档版本与页面身份。新增跨文件同页码及缺身份拒绝反例，HTTP与卡片测试11pass，tsc/Vite构建通过（仍有既有大包告警）。没有放宽为任意字段或猜测来源，没有修改原临床库；真实原件点击和完整R04验收仍待完成。
+
+2026-09-13判断检索来源身份：上轮消除错误缺失表述为实质进展。本轮确认JudgmentSearchCoverageSummary只有候选/完整未见/未完成三态，无已核实采信状态，不能把候选当第四态已实现。追踪相邻原件展示发现judgment_search_status._incomplete_pages仅按page_number聚合，跨文件同页码被合并；现改为source_document_version_id+page_artifact_id+page_number，返回保留两个来源身份，同页两读道原因仍聚合。新增两个文件同为第1页反例，与判断结果测试合计20pass。此为后端来源身份修复，前端导航/四态采信/临床QC仍未验收，不替代R03/R04整体闭合；未改原库或调用模型。
+
+2026-09-13 R07先消除未经证实的缺失表述：上轮混合缺口测试为实质进展，本轮未收到共享路由修复授权，未改全局配置。发现_reason在缺少任何完整判断摘要时仍称“未见研究者书面判断”，与§17.2四态相违。已改为尚未完成核对、先核对原件、不能据此认定缺少判断，并删除面向用户的“判断检索摘要”术语；两处反例断言无“未见”。首次1fail/9pass为另一旧文案断言多一个“中”，修正后重跑。此处仅文案事实边界修正，尚未改变_summary_gaps(None)及evaluator专业判断缺口合并，因此R07未完成，不能声称四态已落地。后续必须按对应要求的实际检索覆盖/候选核实状态统一状态与动作，保留完整范围确实无判断时的报告缺口；不以文案修复代替这项实现。原库未写，无模型调用。
+
+2026-09-13继续核验：上轮扩大回归及派发错误诊断为实质进展。本轮只读workflow_routes.json定位4个string候选混在list[dict]中：E03 peak[1]、E06 peak[1]、E08 off_peak[1]、C01 peak[1]，导致guard初始化即失败；C03自身结构正常，但不能绕过全局guard造packet。已异步询问用户是否授权仅格式化这4项、完全保留模型/档位/顺序，尚未改全局清单/工具、未派出模型。产品侧继续补必做未完成叠加冲突/未核实/专业判断三类反例与未来未到期反例，领域+服务35pass，diff检查通过，session75427终态。没有原库写入或临床验收；独立会商等待共享配置处理，不把局部阻塞当整体goal阻塞。
+
+2026-09-13 R02扩大回归与会商接入：上一轮完整期望正反例为实质进展；本轮test_contract_logic.py、tests/v2/domain、test_component_decision_blocking_gaps.py共687pass/5第三方弃用警告，6.30秒，session36386终态；HEAD仍4caf392。准备冻结修改独立审阅时，`python3 /Users/smkzw/.codex/tools/hermes_workflow_guard.py --help`即在初始化失败：293行_declared_label(_node["peak"])→285行n['agent']抛TypeError:string indices must be integers, not 'str'。已读266–300行确认工具假定路由节点链为list[dict]；目前未验证实际清单结构，不能猜测模型或用旧packet绕过。conference_session_runner --help成功不等于合法派发；本轮无独立模型启动、无审阅结果、未改全局治理工具。独立审阅接入待恢复；这不阻断所有产品代码工作，不将整个goal标blocked或complete。下一步继续补不适用/混合缺口反例及真实UI核对，并核实批准清单与guard兼容入口后再派审阅；原件临床QC仍未完成。
+
+2026-09-13 R02正反例闭合进展：上轮接口状态修复为实质进展。本轮补齐年龄正例的版本化流程节点、正式模板投影/仓储及EvidenceExpectationProjectionService覆盖核实；初次沿旧fixture未命名空间workflow写模板被仓储拒绝，改为与正式发布一致的rule_set:revision:stage身份并在临时测试节点绑定后，两条原断言不变通过。新增只有发布年龄事实但无资料覆盖时indeterminate+record_incomplete的反例；服务与领域两文件31pass。API三项使用命令级合成DECONSTRUCT_GLM_API_KEY、既有测试fixture禁止端点网络预检后3pass，证明此前错误是测试启动配置；没有读取真实密钥或调用模型、没有关闭产品预检。diff检查通过。所有测试已终态；原库不变，R02仍需混合缺口/不适用分支、正式assessment相邻回归、独立会商及真实UI，不能以本组通过宣布临床验收。
+
+2026-09-13 R02反例追踪纠正：上一段关于年龄缺口来自_summary_gaps的推测不成立。隔离pytest内逐函数观察证明component-in-01的summary_gaps为空、derive_gate_gap_types为RECORD_INCOMPLETE、对应期望列表为空；原fixture年龄要求仅screening_record/identity_record，不要求专业判断。真正把资料不全显示成专业判断的是_decision_for_wire将INDETERMINATE改成PROFESSIONAL_JUDGMENT。现保留原判定身份，并同步API Literal、前端类型/解码、工作台未决筛选与图标、报告未决统计；新增wire恒等与HTTP解码反例。针对性后端21pass、前端三文件10pass、生产构建通过（仍有大chunk警告）。无真实浏览器验收或独立会商，不宣布R02收口。年龄两个旧正例只有已发布事实、没有当前期望覆盖；尝试调用期望投影发现没有对应模板，空操作已撤回，不能以修改预期代替补齐正式fixture链。下一步需为已完成覆盖和未完成覆盖分别建立正式仓储正反例；API测试仍需独立注入测试预检依赖。当前所有测试终态，无产品模型调用/原库写入，claims_complete=false。
+
+2026-09-13 R02在制修复：上轮泛化合同为实质进展。本轮主线程直接建立三类规则×真假触发×三类相关缺口的18项反例，修前18fail/2pass；derive_component_decision现在让相关阻断缺口优先于确定触发，保留只有溯源提醒的明确结论，以及明确FALSE且只有必做未完成/字段缺失/记录不全缺口的必做未完成结论，20pass。这不是临床验收：扩大服务/API回归2fail/27pass/3error；两失败是年龄已知的IN-01被附加professional_judgment，定位到_summary_gaps仍按investigator_assessment来源类型/模板类型推导专业判断需求，须继续核实fixture与权威要求而非直接改断言或删除缺口。三API错误独立重跑确认是启动语义路由凭据预检，不是请求断言失败；应隔离测试依赖，不能关闭产品预检。applicable=FALSE及混合未来缺口等分支也未收口。新增测试tests/v2/test_component_decision_blocking_gaps.py；当前修改尚未独立会商，原库未写、模型未调用，claims_complete=false。测试session20136/91924均已终态，不重跑旧句柄。下一动作：从tests/v2/helpers/phase5_fact_chain.py→test_fact_normalization_persistence的权威fixture追溯IN-01判断要求，与R07需求选择统一后扩回归；不得宣布R02完成。
+
+2026-09-13泛化要求补充：直接核对当前goal及设计§6.1、恢复Plan T6，模型/业务分离已在合同内；本次补齐病例、方案、模型三个独立验证层级，禁止把同方案换病例、合成重命名或换II/III标签当作跨方案验证。留出资料用于调优后须重新分类并另留独立验证资料；每项优化说明归属和反例，新增模型不能降低临床证据标准。本次为主线程直接进行的用户要求明确化，不是独立审阅或泛化实测通过，不改变当前模型组合、临床数据或goal完成状态。
+
+2026-09-13兼容性复核：上一轮为有效期投影/存储的实质进展。本轮补充旧模板完整payload往返断言，复现1fail/5pass：虽然内层projection_sha256未变，新增空字段仍改变外层payload。已依照ReviewEpisode既有wrap serializer方式省略空source_validity_window，保留非空字段；模板与存储27pass，diff检查通过。继续追踪确认protocol_deconstructor原有提示已明确“检查结果资料时效不是事件回溯、按原文due_stage建要求、不得写入谓词time_constraint”。因此下一步应让资料期望消费已有资料时效并保留其原文节点，不能把该字段重新解释成所有time_constraint的用途标记。尚缺显式锚点/部分日期范围处理及对原始旧模板缺字段的受控升级策略，T1和六项strict-xfail仍未完成；没有模型调用或原库写入。
+
+2026-09-13 T1资料有效期传递：定位到EvidenceRequirement已有source_validity_window，但EvidenceExpectationTemplate、模板投影及落库语义校验均遗漏。新增四种日历单位反例，修改前4fail/1pass；现模板保留原有TimeQuantity，非空有效期进入v2投影哈希，空有效期保留精确v1哈希及稳定模板身份；落库对比权威要求，拒绝即使自洽重算哈希但删去有效期的模板。不覆盖旧模板、不迁移原库。新增存储往返/篡改反例后51pass（模板、存储、判断来源）；此前模板/存储/受试者期望72pass；diff检查通过。此处只修复数据传递与完整性，不代表过期证据已在临床求值中正确处理。下一项仍是有来源依据的时间用途区分、锚点与期望覆盖消费，六项过期观察strict-xfail仍未收口；不得凭新增字段宣布T1验收。泛化约束沿用当前goal：临床内容来自方案，模型兼容留在适配层，不加疾病/药物/示例专属分支。所有本轮测试已结束，未提交任何本地或临床模型调用。
+
+2026-09-13 C03已完成：实际zcode/GLM-5.3/max，881.98秒，一轮无fallback；报告及owner裁决在对应runs/reviews。时间先筛选修复验证201pass；独立审阅发现窗外资料与真实间隔条件缺乏用途区分。尝试全部窗外UNKNOWN导致9项既有间隔/日历/节点断言回退，已撤回实验，不改旧断言制造通过；新增6strict-xfail记录过期观察误判。最终201pass/6xfail，T1不验收。下一动作是有版本、保持旧hash的时间用途/证据选择合同及期望消费，不能只放宽矩阵或统一未知；宽类型alias仍待修。全部会商/测试进程已结束，无新增临床作业。
+
+2026-09-13 T1时间范围修复进入独立审阅：上轮为真实配置/调用证据实质进展；本地仍忙不抢占。新增`test_expression_temporal_candidate_scope.py`复现5fail/2pass（窗外旧值/未知极性错误污染窗口内结果，同值缺日期因顺序变更结论）。修改expression先按时间成员筛选再聚合、保留时间未知、稳定顺序及同值来源集合后，六文件201 passed。临床语义尚未采纳：all-outside FALSE、未知时间与值为FALSE的三值组合须独立挑战。启用批准C03单名只读zcode/GLM-5.3/max，任务`t1-temporal-scope-review-20260913`；无产品模型/原库调用，审阅冻结当前expression与新反例，owner负责结论整合。主线程不改审阅中的文件。
+
+2026-09-13 T0运行证据补充：上一轮为代码/测试实质进展。本轮只读配置发现产品`.env`仍指向Gemini；已仅修改第二路provider/url/model并显式加A high、B xhigh和65536额度，密钥未改、未输出。新进程`require_page_reader_routes`实际返回GLM high与MTPLX xhigh，两路65536；产品`preflight_page_reader_routes`真实/models均通过。8002由PID1249监听，返回`mtplx-flash-next-optimized-speed`、supports_vision=true、context_length=262144；输出上限和effort支持未在目录声明，因此不能当作实测通过。本地空闲检查两次报告in_flight，未提交本地推理、未重启服务；8001/11234无监听。
+
+沿用`r3_synthetic_visual_probe.py`新增`--lane`以便只测空闲路线，默认双路不变；本地提交前复用已有idle检查。GLM main-A正式产品`read_page`合成视觉/JSON实跑成功，记录在`artifacts/review-20260912/t0-glm-visual-20260913/`：请求65536/high，实际返回glm-5.3-flash/stop，输入3529、输出3760（其中reasoning3044）、缓存0、66.962秒；正文正确保留1.234567、0、mmol/L与日期，handwriting=[]。保留图、原响应、回执和PageReviewRecord；single_lane_only/clinical_acceptance=false。不是双读验收或临床证据。下一安全动作：本地忙时不抢占，推进T1既有宽类型桶与谓词证据绑定的失败反例/设计；MTPLX可用后再做同源合成验证。T0仍未完整收口，原临床库未写。
+
+2026-09-13 T0整合更新（连续实施，非暂停）：上一轮仅解释泛化要求，没有产品修改，归类为无进展；本轮接续已完成E03修改的所有者验证。修复期别语义GLM产品凭据/paas/v4地址、按配置保留effort、默认不覆盖采样、禁止本地输出预算静默压低；该环节length最多增额一次至131072，已在上限则停止。方案/控制/规范化传输亦禁止上限处重复或降低预算；非流式规范化不采信非stop的截断正文。默认GLM连接类型拼写错误不再静默替换。`.env.example`同步GLM high+MTPLX xhigh及65536初始额度；未改真实env、原库或本地服务。
+
+验证：新期别连接/预算/档位/length反例与相邻检查通过；扩大`tests/v2/agents tests/v2/protocols tests/v2/llm tests/v2/services/test_page_review_execution.py`得到1927 passed、1 failed（旧默认8192断言）、1 skipped，用时274.98秒。更新该断言后独立VLM/语义路由/期别三文件重跑60 passed、1 skipped；`git diff --check`通过。不得把分组重跑说成最后版本全库通过。真实模型检查未启用，无新增临床结论，claims_complete=false。T0剩余：重试额度还须全面核对本地物理cap；消除新环境继承旧额度的静默压低；核对真实显式env/身份/能力及最小视觉JSON调用；完成执行包整合回执，再推进T1已证实临床反例。下方旧“代码/env未改”属于审阅历史。
+
+同日后续：方案/控制/控制发现的环境继承预算不再静默压低；方案与控制的length重试若超过配置的本地cap则不发送。相关四文件回归68 passed。首次运行8个历史MLX Serve格式测试失败，原因是fixture未显式冻结额度、继承新的65536却受旧8192服务cap约束；已把纯wire回放fixture明确为历史8192，不修改其采样/Schema断言，不据此证明当前部署。上段T0待办中的这两项已完成代码修复，其余真实env/能力/最小调用及最终整合仍待做。
+
+已读取用户新goal附件，上一轮归类为实质进展（审阅证据及设计/计划修订），现在进入T0–T7实施，不再把旧paused状态当阻塞。T0由主线程直接执行：配置、冻结路由及复核消费者共享可变状态，先用确定性反例和实际请求证据验证；临床语义修复完成后再按触发条件对冻结修改进行独立会商。此次不派独立临床处理，不抢占本地服务；原库只读。
+
+T0追踪到方案/控制/整理传输与逐页读道的不同代码所有权后，细分出有独立路径和离线验收的协议传输单元，启用批准E03执行节点` t0-protocol-model-contract-20260912`（zcode/GLM-5.3-Flash/max）。所有者保留config、逐页、复核与最终整合；节点只改明确五个agents模块及相邻测试，不作产品识别。该拆分用于减少上下文与串行探索成本，不代表额外临床模型。
+
+> 2026-09-12 Codex 接回审查：本轮只读工程与证据检查、必要测试，并修订设计/Plan/goal prompt；不启动新的临床处理或修改原库。采用“主线程全链审查 + 一名 C03 独立只读会商”，因为跨层判定语义及临床完成度存在实质不确定性，独立复核可减少原实现假设的影响。冻结代码基线为 4caf392；下文原交接结论均待复核。最新用户将产品双模型统一为 GLM-5.3-Flash high 与 MTPLX Qwen3.8-Flash-Next-MTPLX-Optimized-Speed xhigh，并要求充足输出额度。该变更不改写历史回执。
+
+### 接回审阅交付（2026-09-12，本段优先）
+
+本轮报告 `ENGINEERING_REVIEW_20260912_CODEX.md` 已形成；恢复计划已重整为T0–T7；工程设计新增§6.1/§17，主设计/阶段状态/本任务PRD/PROJECT_CONTEXT同步；新目标文本为 `GOAL_PROMPT_20260912_REVIEWED.md`。当前原生goal仍paused，工具不支持编辑objective/恢复，不标伪完成来替换。这是审阅交付，不是新增暂停指令。
+
+确定性错误必须先修：宽类型桶无法证明临床谓词；缺口/结论矛盾；判断需求选择口径分裂；子条款身份丢失（EX-07点击一条选中29条）；同数字页码跨文件误定位；跨章控制候选未正式进入审核；最新Profile可能仅保留最后一次run。下方G2的同fact_id例外补丁不应照搬，研究者判断也不是永久不能有终态。原始601事实与校正后516为不同统计口径。
+
+本轮后端4632通过/3跳过；前端563通过/1超时，独立重跑10通过；构建通过。C03独立zcode/GLM-5.3/max审阅成功，无fallback，具体采纳/否决见报告。真实浏览器在只读隔离库复现问题，并完成加载后不同宽屏布局检查；不宣称全应用或临床验收。Phase5/5.5仍未完成，正式审核/行动记录当前为0。
+
+用户最新补充已进入设计：harness跨模型/任务/方案/疾病/药物泛化；当前组合仅部署配置，不能让模型适配影响医学采信。实际代码和env未改、模型未调用，T0必须兑现high/xhigh和足额预算并预检，不能拿这份文档称模型已切换。
+
+本轮产物在`artifacts/review-20260912/`，审查副本与来源hash记录在isolated-server.json。下一步先回读现场，再执行T0/T1反例和纵向修复，不重跑旧整例、不改原库、不清未提交文件；用药分项扩测已有授权、正式自动采信仍未批准。下方历史“工作区干净/已全部提交/三件需用户裁决”等不代表当前现场。
+
 写于 2026-09-12 凌晨。接收方：接手继续构建的下一个 Agent。目标：读完本文即可掌握全局、无缝继续。
 
 ---

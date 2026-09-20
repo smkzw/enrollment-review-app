@@ -1,0 +1,152 @@
+[
+  {
+    "excerpt": "12-导联心电图^17 | X | （X） | X | X | X | X | X | X",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表",
+      "表 1 Ⅱ期临床研究阶段流程表"
+    ],
+    "lookup": "coverage_manifest",
+    "package_id": null,
+    "package_ordinal": null,
+    "role": "attached",
+    "source_ref": "body.t5.r21",
+    "source_span_ids": [
+      "body.t5.r21.c0.p0",
+      "body.t5.r21.c1.p0",
+      "body.t5.r21.c2.p0",
+      "body.t5.r21.c4.p0",
+      "body.t5.r21.c5.p0",
+      "body.t5.r21.c6.p0",
+      "body.t5.r21.c7.p0",
+      "body.t5.r21.c8.p0",
+      "body.t5.r21.c9.p0"
+    ],
+    "structure_unit_id": "su-059c0a67707ffc88c28e8f2f",
+    "unit_kind": "table_row"
+  },
+  {
+    "excerpt": "12导联心电图：筛选期/D15/D29/D57/D85（当天用药前）、D113或提前退出时进行检测。参与者需要至少安静休息10min之后进行测量，记录心率、PR间期、RR间期、QRS、QT间期（包括根据Fridericia公式校正后的QT间期[QTcF]），和心电图诊断结果。",
+    "heading_path": [
+      "方案摘要",
+      "研究流程表"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-2c0c955824200ee34e8960dc",
+    "package_ordinal": 31,
+    "role": "attached",
+    "source_ref": "body.p331",
+    "source_span_ids": [
+      "body.p331"
+    ],
+    "structure_unit_id": "su-1fc39833648b9c018804b3a3",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "筛选或基线时，生命体征、体格检查、12-导联心电图、胸部CT（可接受1个月内的CT检查结果）异常且有临床意义，经研究者评估如果参与研究将可能对参与者构成不可接受的风险；",
+    "heading_path": [
+      "研究人群",
+      "排除标准"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-5706f5359cfe69ab990e29e8",
+    "package_ordinal": 55,
+    "role": "attached",
+    "source_ref": "body.p684",
+    "source_span_ids": [
+      "body.p684"
+    ],
+    "structure_unit_id": "su-5c242dd0b4f85ea199512c80",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "12导联心电图检查",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "12导联心电图检查"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d8e63f799c505ee413900482",
+    "package_ordinal": 69,
+    "role": "owned",
+    "source_ref": "body.p789",
+    "source_span_ids": [
+      "body.p789"
+    ],
+    "structure_unit_id": "su-c012b84fe7fe1a25bfd9ecbe",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "12导联心电图检查前参与者至少静息10 min。记录12导联心电图诊断结果、心率、PR间期、RR间期、QRS、QT间期，并应用Fridericia’s公式计算心率校正计算QTcF。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "12导联心电图检查"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d8e63f799c505ee413900482",
+    "package_ordinal": 69,
+    "role": "owned",
+    "source_ref": "body.p790",
+    "source_span_ids": [
+      "body.p790"
+    ],
+    "structure_unit_id": "su-0243e41eeccb20107f2720f8",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "注：",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "12导联心电图检查"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d8e63f799c505ee413900482",
+    "package_ordinal": 69,
+    "role": "owned",
+    "source_ref": "body.p792",
+    "source_span_ids": [
+      "body.p792"
+    ],
+    "structure_unit_id": "su-46f8b918f4d955d2355e6e51",
+    "unit_kind": "footnote_or_annotation"
+  },
+  {
+    "excerpt": "QT是指Q波开始至T波结束之间的间期；",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "12导联心电图检查"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d8e63f799c505ee413900482",
+    "package_ordinal": 69,
+    "role": "owned",
+    "source_ref": "body.p793",
+    "source_span_ids": [
+      "body.p793"
+    ],
+    "structure_unit_id": "su-112af01a4021cf50946c692f",
+    "unit_kind": "list_item"
+  },
+  {
+    "excerpt": "RR为标准化心率，计算方法：60除以心率（正常的窦性心律为60~100次/分）。",
+    "heading_path": [
+      "研究评估和程序",
+      "研究期间的检查和评估",
+      "12导联心电图检查"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-d8e63f799c505ee413900482",
+    "package_ordinal": 69,
+    "role": "owned",
+    "source_ref": "body.p794",
+    "source_span_ids": [
+      "body.p794"
+    ],
+    "structure_unit_id": "su-35be652589e0f7c39cff05c7",
+    "unit_kind": "list_item"
+  }
+]

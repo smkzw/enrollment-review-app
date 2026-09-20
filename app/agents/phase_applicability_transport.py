@@ -30,6 +30,8 @@ from app.agents.phase_applicability import (
 )
 from app.config import (
     DECONSTRUCT_BACKEND,
+    DECONSTRUCT_GLM_API_KEY,
+    DECONSTRUCT_GLM_BASE_URL,
     DECONSTRUCT_MAX_TOKENS,
     DECONSTRUCT_MODEL,
     DECONSTRUCT_REASONING_EFFORT,
@@ -91,7 +93,7 @@ def _with_v1_suffix(base_url: str) -> str:
     normalized = base_url.strip().rstrip("/")
     if not normalized:
         raise ValueError("模型服务 base_url 不能为空")
-    return normalized if normalized.endswith("/v1") else normalized + "/v1"
+    return normalized if normalized.endswith(("/v1", "/paas/v4")) else normalized + "/v1"
 
 
 def _configured_value(name: str, fallback: str) -> str:
@@ -150,6 +152,8 @@ class OpenAICompatiblePhaseApplicabilityAgentTransport:
         ).strip().lower()
         if selected_effort not in _SUPPORTED_REASONING_EFFORTS:
             raise ValueError("reasoning_effort 不是受支持的推理强度")
+        if selected_backend in {"glm", "zhipu-coding-plan"} and selected_effort not in {"low", "high", "max"}:
+            raise ValueError("GLM 连接不支持指定的推理强度")
         selected_max_tokens = (
             max_tokens if max_tokens is not None else PHASE_APPLICABILITY_MAX_TOKENS
         )
@@ -161,10 +165,8 @@ class OpenAICompatiblePhaseApplicabilityAgentTransport:
                 if selected_backend in {"mtplx", "mtplx-api"}
                 else OMLX_PROTOCOL_BATCH_MAX_TOKENS
             )
-            selected_max_tokens = min(
-                selected_max_tokens,
-                local_cap,
-            )
+            if selected_max_tokens > local_cap:
+                raise ValueError("期别语义输出额度超过本地服务配置上限，不能静默降低")
             if selected_max_tokens < _DEFAULT_MAX_TOKENS:
                 raise ValueError("本地期别语义批次输出上限不能低于 8192 tokens")
         if timeout <= 0:
@@ -208,6 +210,8 @@ class OpenAICompatiblePhaseApplicabilityAgentTransport:
                 selected_base_url = _configured_value(
                     "DEEPSEEK_BASE_URL", DEEPSEEK_BASE_URL
                 )
+            elif selected_backend in {"glm", "zhipu-coding-plan"}:
+                selected_base_url = _configured_value("DECONSTRUCT_GLM_BASE_URL", DECONSTRUCT_GLM_BASE_URL)
             else:
                 selected_base_url = os.getenv("PHASE_APPLICABILITY_BASE_URL", "")
         selected_api_key = api_key
@@ -225,6 +229,8 @@ class OpenAICompatiblePhaseApplicabilityAgentTransport:
                 selected_api_key = _configured_value(
                     "DEEPSEEK_API_KEY", DEEPSEEK_API_KEY
                 )
+            elif selected_backend in {"glm", "zhipu-coding-plan"}:
+                selected_api_key = _configured_value("DECONSTRUCT_GLM_API_KEY", DECONSTRUCT_GLM_API_KEY)
             else:
                 selected_api_key = os.getenv("PHASE_APPLICABILITY_API_KEY", "")
         if is_local:
@@ -274,7 +280,7 @@ class OpenAICompatiblePhaseApplicabilityAgentTransport:
         return self._base_url
 
     @property
-    def temperature(self) -> float:
+    def temperature(self) -> float | None:
         return self._effective_temperature()
 
     @property
@@ -306,10 +312,8 @@ class OpenAICompatiblePhaseApplicabilityAgentTransport:
             return phase_applicability_agent_response_format()
         return {"type": "json_object"}
 
-    def _effective_temperature(self) -> float:
-        if self._temperature is not None:
-            return self._temperature
-        return 0.0 if self._backend in _LOCAL_BACKENDS else 0.1
+    def _effective_temperature(self) -> float | None:
+        return self._temperature
 
     def _completion_kwargs(
         self,
@@ -320,8 +324,9 @@ class OpenAICompatiblePhaseApplicabilityAgentTransport:
             "messages": messages,
             "max_tokens": self._max_tokens,
             "response_format": self._effective_response_format(),
-            "temperature": self._effective_temperature(),
         }
+        if self._temperature is not None:
+            kwargs["temperature"] = self._temperature
         if self._reasoning_effort not in {"", "default", "auto"}:
             kwargs["reasoning_effort"] = self._reasoning_effort
         if self._backend in {"mtplx", "mtplx-api"}:
@@ -342,11 +347,18 @@ class OpenAICompatiblePhaseApplicabilityAgentTransport:
     def _complete(self, messages: list[dict[str, str]]) -> tuple[str, list[dict[str, str]]]:
         request_messages = [dict(message) for message in messages]
         diagnostics: list[str] = []
+        request_budget = self._max_tokens
         for attempt in range(2):
             try:
-                completion = self._client.chat.completions.create(
-                    **self._completion_kwargs(request_messages)
-                )
+                kwargs = self._completion_kwargs(request_messages)
+                kwargs["max_tokens"] = request_budget
+                from app.llm.mtplx_model_lifecycle import sync_mtplx_model_session
+
+                with sync_mtplx_model_session(
+                    self._backend, str(getattr(self._client, "base_url", "")),
+                    self._model, self._reasoning_effort,
+                ):
+                    completion = self._client.chat.completions.create(**kwargs)
             except Exception as exc:  # noqa: BLE001 - external adapter boundary
                 raise RuntimeError(f"模型请求失败：{type(exc).__name__}: {exc}") from exc
             choices = getattr(completion, "choices", None) or []
@@ -354,6 +366,13 @@ class OpenAICompatiblePhaseApplicabilityAgentTransport:
             if finish_reason == "length":
                 diagnostics.append(f"第{attempt + 1}次输出达到长度上限")
                 if attempt == 0:
+                    retry_budget = min(request_budget * 2, 131072)
+                    if self._backend in _LOCAL_BACKENDS:
+                        local_cap = MTPLX_PROTOCOL_BATCH_MAX_TOKENS if self._backend in {"mtplx", "mtplx-api"} else OMLX_PROTOCOL_BATCH_MAX_TOKENS
+                        retry_budget = min(retry_budget, local_cap)
+                    if retry_budget <= request_budget:
+                        break
+                    request_budget = retry_budget
                     partial = ""
                     message = getattr(choices[0], "message", None) if choices else None
                     content = getattr(message, "content", None)

@@ -1,0 +1,230 @@
+{
+  "batch_id": "pcb-70b9d38d0089132fcb2dafb7",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [
+    "body.p1237",
+    "body.p537"
+  ],
+  "context_structure_unit_ids": [
+    "su-b15c1936995c6ef048ab64fc",
+    "su-25675e8b43f094c9114e7d35"
+  ],
+  "context_units": [
+    {
+      "excerpt": "期中分析将在Ⅱ期约50%参与者完成第12周访视后进行，在有效性和安全性评估的基础上，对Ⅱ期研究数据进行评估。数据将由独立统计科学组（Statistical Sciences Group，SSG）分析。分析结果将由独立数据监查委员会（Independent Data Monitoring Committee，IDMC）进行审查。IDMC基于期中分析结果（包括主要疗效终点、关键安全性事件等），建议Ⅲ期研究的剂量；可能基于安全性和或有效性原因而建议某剂量组不再入选新的参与者。最终决定将取决于申办方。",
+      "heading_path": [
+        "研究设计",
+        "总体设计"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p537"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 22240,
+      "source_ref": "body.p537",
+      "source_span_ids": [
+        "body.p537"
+      ],
+      "structure_unit_id": "su-b15c1936995c6ef048ab64fc",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "期中分析将在II期的50%参与者完成第12周访视的主要疗效评估后启动，将由独立的统计团队进行分析并将结果提交给IDMC。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "期中分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1237"
+      ],
+      "phase_scopes": [
+        "phase_ii"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31002,
+      "source_ref": "body.p1237#atom-100-160",
+      "source_span_ids": [
+        "body.p1237"
+      ],
+      "structure_unit_id": "su-25675e8b43f094c9114e7d35",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "coverage_manifest_id": "manifest:slice61cq-package104-interim-analysis-governance-boundary",
+  "known_official_targets": [],
+  "known_procedure_targets": [],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "D1给药前",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "D1给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {},
+  "owned_required_action_kinds_by_structure_unit_id": {},
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.p1236",
+    "body.p1237"
+  ],
+  "owned_structure_unit_ids": [
+    "su-100ada1f8cee126deaf2aaa0",
+    "su-4445874e1017109760f43067",
+    "su-b79645182d8e0f091f50ee4b",
+    "su-9d7db783c0feb9e1977f02ab"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "期中分析",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "期中分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1236"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 30990,
+      "source_ref": "body.p1236",
+      "source_span_ids": [
+        "body.p1236"
+      ],
+      "structure_unit_id": "su-100ada1f8cee126deaf2aaa0",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "本研究包含一个预设的期中分析。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "期中分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1237"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31000,
+      "source_ref": "body.p1237#atom-0-15",
+      "source_span_ids": [
+        "body.p1237"
+      ],
+      "structure_unit_id": "su-4445874e1017109760f43067",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "该分析的主要目的是基于累积的II期研究的有效性和安全性数据，由独立数据监查委员会（IDMC）向申办方提供正式建议：包括能否继续进行Ⅲ期临床研究，以及推荐Ⅲ期研究的剂量等。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "期中分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1237"
+      ],
+      "phase_scopes": [
+        "mixed"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31001,
+      "source_ref": "body.p1237#atom-15-100",
+      "source_span_ids": [
+        "body.p1237"
+      ],
+      "structure_unit_id": "su-b79645182d8e0f091f50ee4b",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "IDMC将综合评估所有疗效和安全性证据来形成建议。期中分析的具体细节可见独立的期中统计分析计划。",
+      "heading_path": [
+        "统计学考虑",
+        "统计分析",
+        "期中分析"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1237"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 31003,
+      "source_ref": "body.p1237#atom-160-208",
+      "source_span_ids": [
+        "body.p1237"
+      ],
+      "structure_unit_id": "su-9d7db783c0feb9e1977f02ab",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [
+    "su-100ada1f8cee126deaf2aaa0"
+  ],
+  "study_phase": "phase_ii"
+}

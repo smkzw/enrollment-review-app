@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.contracts.agent_io import ProtocolDeconstructionDraft
 from app.domain.contracts.enums import DatePrecision, StudyPhase
@@ -243,6 +243,22 @@ class ManualEditRequest(_StrictModel):
     actor: str = Field(default="用户", min_length=1, max_length=128)
 
 
+class GenerationPreviewResponse(_StrictModel):
+    """生成期间的逐批只读预览；preview_only 内容不得用于发布判断。"""
+
+    job_id: str
+    available: bool
+    reason: str | None = None
+    detail: str | None = None
+    preview_only: bool = True
+    batch_index: int = 0
+    batch_total: int = 0
+    updated_at: str | None = None
+    pending_codes: list[str] = Field(default_factory=list)
+    unresolved_count: int = 0
+    content: dict[str, Any] = Field(default_factory=dict)
+
+
 class FeedbackRequest(_StrictModel):
     expected_revision_id: str = Field(min_length=1, max_length=128)
     feedback_kind: DraftFeedbackKind
@@ -298,6 +314,14 @@ class SourcesResponse(_StrictModel):
 class PublishRequest(_StrictModel):
     idempotency_key: str = Field(min_length=1, max_length=256)
     actor: str = Field(default="用户", min_length=1, max_length=128)
+    control_job_id: str | None = Field(default=None, min_length=1, max_length=128)
+    control_checkpoint_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def validate_control_references(self) -> "PublishRequest":
+        if (self.control_job_id is None) != (self.control_checkpoint_id is None):
+            raise ValueError("补充审核要求的任务和保存记录必须同时提供")
+        return self
 
 
 class PublishResponse(_StrictModel):

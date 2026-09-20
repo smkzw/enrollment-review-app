@@ -90,6 +90,48 @@ function locator(overrides: Partial<LocatorView> = {}): LocatorView {
 }
 
 describe("OriginalEvidenceViewer", () => {
+  it("明确返回原文的操作优先于刚发生的手动滚动，滚动联动本身不回拉", () => {
+    const scrollTo = vi.fn();
+    const props = {
+      revisionId: "revision-1", pages: [readyPage], documentNames: new Map<string, string>(),
+      selectedEntryId: "entry-1", selectedLocatorId: null, selectedPageLocators: [], onSelectPage: vi.fn(),
+    };
+    const { rerender } = render(<OriginalEvidenceViewer {...props} navigationKey="reference-1" />);
+    const container = screen.getByLabelText("原始资料查看区");
+    Object.defineProperty(container, "scrollTo", { configurable: true, value: scrollTo });
+    fireEvent.wheel(container);
+    fireEvent.scroll(container);
+    rerender(<OriginalEvidenceViewer {...props} navigationKey="reference-1" />);
+    expect(scrollTo).not.toHaveBeenCalled();
+    rerender(<OriginalEvidenceViewer {...props} navigationKey="reference-2" />);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+  });
+  it("定位异步到达后才滚动，同一定位无关重渲染不重复回拉", () => {
+    const props = {
+      revisionId: "revision-1", pages: [readyPage], documentNames: new Map<string, string>(),
+      selectedEntryId: "entry-1", selectedLocatorId: "locator-1", onSelectPage: vi.fn(),
+    };
+    const { rerender } = render(<OriginalEvidenceViewer {...props} selectedPageLocators={[]} />);
+    const scrollTo = vi.fn();
+    const viewer = screen.getByLabelText("原始资料查看区");
+    Object.defineProperty(viewer, "scrollTo", { configurable: true, value: scrollTo });
+    expect(scrollTo).not.toHaveBeenCalled();
+    rerender(<OriginalEvidenceViewer {...props} selectedPageLocators={[locator()]} />);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    rerender(<OriginalEvidenceViewer {...props} selectedPageLocators={[locator()]} />);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("相同页码但文件或页面身份不符的定位不能画框", () => {
+    render(<OriginalEvidenceViewer revisionId="revision-1" pages={[readyPage]}
+      documentNames={new Map()} selectedEntryId="entry-1" selectedLocatorId="locator-1"
+      selectedPageLocators={[locator({ sourceDocumentVersionId: "another-document", pageArtifactId: "another-page" })]}
+      onSelectPage={vi.fn()} />);
+    expect(screen.queryByLabelText(/^重点标注/)).not.toBeInTheDocument();
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
   it("只把已核验区域按页图比例映射为重点框", () => {
     render(
       <OriginalEvidenceViewer
@@ -131,7 +173,7 @@ describe("OriginalEvidenceViewer", () => {
     expect(image).toHaveAttribute("loading", "eager");
   });
 
-  it("对连续原件中的每个可用页面都立即加载原图", () => {
+  it("保留连续原件页位，优先加载选中页及首页，其他页延迟加载", () => {
     render(
       <OriginalEvidenceViewer
         revisionId="revision-1"
@@ -155,9 +197,8 @@ describe("OriginalEvidenceViewer", () => {
     );
 
     expect(screen.getAllByRole("img")).toHaveLength(2);
-    for (const image of screen.getAllByRole("img")) {
-      expect(image).toHaveAttribute("loading", "eager");
-    }
+    expect(screen.getByAltText("第 1 页原始资料")).toHaveAttribute("loading", "eager");
+    expect(screen.getByAltText("第 2 页原始资料")).toHaveAttribute("loading", "lazy");
   });
 
   it("只显示当前选中的真实区域，避免多个框遮挡原文", () => {
@@ -224,24 +265,34 @@ describe("OriginalEvidenceViewer", () => {
     const { rerender } = render(
       <OriginalEvidenceViewer {...props} selectedLocatorId={null} />,
     );
+    const viewer = screen.getByLabelText("原始资料查看区");
+    const scrollTo = vi.fn();
+    Object.defineProperty(viewer, "scrollTo", { configurable: true, value: scrollTo });
+    Object.defineProperty(viewer, "clientHeight", { configurable: true, value: 600 });
+    vi.spyOn(viewer, "getBoundingClientRect").mockReturnValue({ top: 100 } as DOMRect);
+    const geometry = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        return (this.classList.contains("original-evidence-page__box")
+          ? { top: 700, height: 100, left: 0, width: 100 }
+          : { top: 0, height: 0, left: 0, width: 0 }) as DOMRect;
+      });
 
     rerender(
       <OriginalEvidenceViewer {...props} selectedLocatorId="locator-1" />,
     );
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
-    expect(scrollIntoView).toHaveBeenCalledWith({
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenCalledWith({
       behavior: "smooth",
-      block: "center",
-      inline: "nearest",
+      top: 350,
     });
-
-    const viewer = screen.getByLabelText("原始资料查看区");
+    expect(scrollIntoView).not.toHaveBeenCalled();
     fireEvent.wheel(viewer);
     fireEvent.scroll(viewer);
     rerender(
       <OriginalEvidenceViewer {...props} selectedLocatorId="locator-2" />,
     );
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    geometry.mockRestore();
   });
 
   it("失败页保留连续页位并可联动选择，但不请求伪造原图", () => {

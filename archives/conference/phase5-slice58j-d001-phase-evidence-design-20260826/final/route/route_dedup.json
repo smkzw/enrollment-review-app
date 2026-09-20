@@ -1,0 +1,157 @@
+{
+  "policy": "execution-used-provider-model-nodes-are-excluded-from-conference",
+  "linked_execution_task_id": "phase5-slice58j-d001-phase-evidence-design-20260826",
+  "linked": false,
+  "execution_evidence": [],
+  "excluded_route_nodes": [],
+  "effective_conference_roles": {
+    "general_pi_qwen38": {
+      "agent": "pi",
+      "provider": "alibaba",
+      "model": "qwen3.8-max",
+      "effort": "xhigh",
+      "default_provider": "alibaba",
+      "default_model": "qwen3.8-max",
+      "default_effort": "xhigh",
+      "escalate_provider": "alibaba",
+      "escalate_model": "qwen3.8-max",
+      "escalate_effort": "xhigh",
+      "primary": {
+        "agent": "pi",
+        "provider": "alibaba",
+        "model": "qwen3.8-max",
+        "effort": "xhigh"
+      },
+      "fallbacks": [
+        {
+          "agent": "pi",
+          "provider": "opencode-go",
+          "model": "muse-spark-1.2-contributor",
+          "effort": "xhigh"
+        },
+        {
+          "agent": "kimi",
+          "provider": "kimi-code",
+          "model": "kimi-code/k3-256k",
+          "effort": "high"
+        },
+        {
+          "agent": "codex-subagent",
+          "provider": "codex",
+          "model": "gpt-5.6-luna",
+          "effort": "max"
+        }
+      ],
+      "role": "participant 1 for complex, logic-heavy, evidence-sensitive, artifact-heavy, and high-risk contradiction review",
+      "schedule_window": {
+        "start": "22:00",
+        "end": "07:00",
+        "timezone": "Asia/Shanghai"
+      },
+      "nighttime_override": {
+        "agent": "pi",
+        "provider": "alibaba",
+        "model": "qwen3.8-max",
+        "effort": "xhigh",
+        "default_provider": "alibaba",
+        "default_model": "qwen3.8-max",
+        "default_effort": "xhigh",
+        "escalate_provider": "alibaba",
+        "escalate_model": "qwen3.8-max",
+        "escalate_effort": "xhigh",
+        "primary": {
+          "agent": "pi",
+          "provider": "alibaba",
+          "model": "qwen3.8-max",
+          "effort": "xhigh"
+        },
+        "fallbacks": [
+          {
+            "agent": "pi",
+            "provider": "opencode-go",
+            "model": "muse-spark-1.2-contributor",
+            "effort": "xhigh"
+          },
+          {
+            "agent": "kimi",
+            "provider": "kimi-code",
+            "model": "kimi-code/k3-256k",
+            "effort": "high"
+          },
+          {
+            "agent": "codex-subagent",
+            "provider": "codex",
+            "model": "gpt-5.6-luna",
+            "effort": "max"
+          }
+        ]
+      },
+      "daytime_override": {
+        "agent": "pi",
+        "provider": "opencode-go",
+        "model": "muse-spark-1.2-contributor",
+        "effort": "xhigh",
+        "default_provider": "opencode-go",
+        "default_model": "muse-spark-1.2-contributor",
+        "default_effort": "xhigh",
+        "escalate_provider": "opencode-go",
+        "escalate_model": "muse-spark-1.2-contributor",
+        "escalate_effort": "xhigh",
+        "primary": {
+          "agent": "pi",
+          "provider": "opencode-go",
+          "model": "muse-spark-1.2-contributor",
+          "effort": "xhigh"
+        },
+        "fallbacks": [
+          {
+            "agent": "kimi",
+            "provider": "kimi-code",
+            "model": "kimi-code/k3-256k",
+            "effort": "high"
+          },
+          {
+            "agent": "codex-subagent",
+            "provider": "codex",
+            "model": "gpt-5.6-luna",
+            "effort": "max"
+          }
+        ]
+      }
+    },
+    "general_grok46": {
+      "agent": "cursor",
+      "provider": "cursor-cli",
+      "model": "auto",
+      "effort": "",
+      "default_provider": "cursor-cli",
+      "default_model": "auto",
+      "default_effort": "",
+      "escalate_provider": "cursor-cli",
+      "escalate_model": "auto",
+      "escalate_effort": "",
+      "primary": {
+        "agent": "cursor",
+        "provider": "cursor-cli",
+        "model": "auto",
+        "effort": ""
+      },
+      "fallbacks": [
+        {
+          "agent": "grok",
+          "provider": "grok-build",
+          "model": "grok-4.6",
+          "effort": "medium"
+        },
+        {
+          "agent": "pi",
+          "provider": "cms-router",
+          "model": "minimax-m3",
+          "effort": ""
+        }
+      ],
+      "role": "participant 2 for complex, logic-heavy, evidence-sensitive, artifact-heavy, and high-risk contradiction review; Cursor leads, Grok Build is fallback"
+    }
+  },
+  "generated_at": "2026-08-26 04:31:07"
+}

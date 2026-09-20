@@ -166,6 +166,21 @@ export interface DraftRevisionView {
   diff: ProtocolDraftDiffWire | null;
 }
 
+/** 生成期间逐批只读预览：来自已验证批次，不可发布、不可替代正式草稿。 */
+export interface GenerationPreviewView {
+  jobId: string;
+  available: boolean;
+  reason: string | null;
+  detail: string | null;
+  previewOnly: boolean;
+  batchIndex: number;
+  batchTotal: number;
+  updatedAt: string | null;
+  pendingCodes: string[];
+  unresolvedCount: number;
+  content: Record<string, unknown>;
+}
+
 export type ProtocolDiffEntityKind = "rule" | "component" | "requirement";
 
 export type ProtocolJsonValue =
@@ -206,7 +221,7 @@ export interface ProtocolTimeQuantityPayload {
 export interface ProtocolTimeEntryPayload {
   scope: "main" | "exception";
   time_constraint: null | {
-    anchor_type: "icf_date" | "screening_date" | "baseline_date" | "randomization_date" | "first_dose_date" | "study_drug_administration_date" | "last_dose_date" | "study_completion_date" | "event_date";
+    anchor_type: "icf_date" | "screening_date" | "baseline_date" | "randomization_date" | "first_dose_date" | "study_drug_administration_date" | "last_dose_date" | "study_completion_date" | "event_date" | "review_node_date";
     direction: "before" | "after" | "on";
     lower_bound_days?: number | null;
     upper_bound_days?: number | null;

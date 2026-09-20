@@ -1,6 +1,43 @@
 /* 今日工作页：区块式列表，容器查询两列排布（§3.2/§3.3）。
    页面消费 AppShell 全宽（1920 与 200% 缩放均无页面级横向滚动、无空白上限）。 */
 
+.review-today {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.review-today .today-section {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+
+.review-today .today-section__head { flex-wrap: wrap; }
+.review-today .today-section__title { flex: 1; margin: 0; }
+.review-today table { width: 100%; table-layout: fixed; }
+.review-today :is(th, td) { overflow-wrap: anywhere; }
+.review-today__actions col:nth-child(1) { width: 18%; }
+.review-today__actions col:nth-child(2) { width: 48%; }
+.review-today__actions col:nth-child(3) { width: 18%; }
+.review-today__actions col:nth-child(4) { width: 16%; }
+.review-today__recent col:nth-child(1) { width: 16%; }
+.review-today__recent col:nth-child(2) { width: 20%; }
+.review-today__recent col:nth-child(3) { width: 24%; }
+.review-today__recent col:nth-child(4) { width: 24%; }
+.review-today__recent col:nth-child(5) { width: 16%; }
+
+.review-project { display: grid; gap: var(--space-3); min-width: 0; }
+.review-project table { width: 100%; table-layout: fixed; }
+.review-project :is(th, td) { overflow-wrap: anywhere; vertical-align: top; }
+.review-project th:nth-child(1) { width: 16%; }
+.review-project th:nth-child(2) { width: 22%; }
+.review-project th:nth-child(3) { width: 44%; }
+.review-project th:nth-child(4) { width: 18%; }
+.review-project td ul { margin: 0; padding-inline-start: 1.2em; }
+.review-project td li + li { margin-top: var(--space-2); }
+
 .today-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

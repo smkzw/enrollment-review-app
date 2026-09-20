@@ -6,6 +6,7 @@ from itertools import product
 import pytest
 
 from app.agents.protocol_deconstructor import (
+    DNF_WIRE_VERSION,
     ProtocolDeconstructionAttempt,
     ProtocolDeconstructionRunResult,
     ProtocolAgentResponse,
@@ -456,6 +457,13 @@ def test_wire_optional_objects_normalize_only_when_semantically_empty():
             "subject": "受试者",
             "attribute": "既往病史",
             "source_locator": {"source_clause": "既往病史"},
+            "semantic_proposition": None,
+            "observation_policy": {
+                "mode": "unresolved", "scope": "既往病史",
+                "source_span_ids": ["history-source"],
+                "source_excerpts": ["既往病史"],
+            },
+            "repeat_scheme": None,
             "requires_professional_judgment": False,
             "negated": False,
             "occurrence_window": {
@@ -494,6 +502,13 @@ def test_wire_partial_semantic_objects_are_rejected_precisely():
                 "subject": "受试者",
                 "attribute": "病史",
                 "source_locator": {"source_clause": "病史"},
+                "semantic_proposition": None,
+                "observation_policy": {
+                    "mode": "unresolved", "scope": "病史",
+                    "source_span_ids": ["history-source"],
+                    "source_excerpts": ["病史"],
+                },
+                "repeat_scheme": None,
                 "requires_professional_judgment": False,
                 "negated": False,
                 "occurrence_window": {"duration": None, "minimum_count": 1},
@@ -506,6 +521,13 @@ def test_wire_partial_semantic_objects_are_rejected_precisely():
                 "subject": "受试者",
                 "attribute": "计划",
                 "source_locator": {"source_clause": "计划"},
+                "semantic_proposition": None,
+                "observation_policy": {
+                    "mode": "unresolved", "scope": "计划",
+                    "source_span_ids": ["plan-source"],
+                    "source_excerpts": ["计划"],
+                },
+                "repeat_scheme": None,
                 "requires_professional_judgment": False,
                 "negated": False,
                 "prospective_window": {
@@ -738,10 +760,16 @@ def test_compact_batch_prompt_omits_unrequested_source_and_full_schema_prose():
     )
 
     assert len(compact) < len(full)
-    assert "wire_version='dnf-v1'" in compact
+    assert f"wire_version={DNF_WIRE_VERSION!r}" in compact
     assert "ALT或AST≥1.5×ULN" not in compact
     assert "年龄≥18岁" in compact
-    assert "span-proc-screen" not in compact
+    payload, _ = json.JSONDecoder().raw_decode(compact.split("输入：", 1)[1])
+    assert payload["required_procedure_catalog"] == [
+        item.model_dump(mode="json")
+        for item in sorted(source_input.required_procedure_catalog.items, key=lambda item: item.position)
+    ]
+    assert payload["allowed_source_span_ids"] == ["span-in"]
+    assert [item["source_span_id"] for item in payload["source_materials"]] == ["span-in"]
     assert '"batch_id": "1/2"' in compact
 
 
@@ -756,11 +784,17 @@ def test_remote_batch_prompt_scopes_source_without_changing_full_output_contract
         scoped_source=True,
     )
 
-    assert "wire_version='dnf-v1'" not in prompt
+    assert f"wire_version={DNF_WIRE_VERSION!r}" not in prompt
     assert "输出结构：" in prompt
     assert "年龄≥18岁" in prompt
     assert "ALT或AST≥1.5×ULN" not in prompt
-    assert "span-proc-screen" not in prompt
+    payload, _ = json.JSONDecoder().raw_decode(prompt.split("输入：", 1)[1])
+    assert payload["required_procedure_catalog"] == [
+        item.model_dump(mode="json")
+        for item in sorted(source_input.required_procedure_catalog.items, key=lambda item: item.position)
+    ]
+    assert payload["allowed_source_span_ids"] == ["span-in"]
+    assert [item["source_span_id"] for item in payload["source_materials"]] == ["span-in"]
     assert '"batch_rule_codes": ["IN-01"]' in prompt
 
 

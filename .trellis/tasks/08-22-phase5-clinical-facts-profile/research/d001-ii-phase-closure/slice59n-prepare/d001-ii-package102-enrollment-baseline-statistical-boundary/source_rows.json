@@ -1,0 +1,243 @@
+[
+  {
+    "excerpt": "参与者入组分析",
+    "heading_path": [
+      "统计学考虑",
+      "统计分析",
+      "参与者入组分析"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-ad0c757625a628fce5c7ed7c",
+    "package_ordinal": 102,
+    "role": "owned",
+    "source_ref": "body.p1197",
+    "source_span_ids": [
+      "body.p1197"
+    ],
+    "structure_unit_id": "su-68aa4b2c1ab5edd47f362535",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "Ⅱ期临床阶段，列出总体入选及完成参与者例数，对各分析集的纳入和剔除情况进行总结。提供提前结束试验的参与者清单，对各分析集的参与者分布进行详细列表。",
+    "heading_path": [
+      "统计学考虑",
+      "统计分析",
+      "参与者入组分析"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-fb5d1edc8f1ed99baf4a4a8a",
+    "package_ordinal": 100,
+    "role": "attached",
+    "source_ref": "body.p1198",
+    "source_span_ids": [
+      "body.p1198"
+    ],
+    "structure_unit_id": "su-32fd0f455b0bd776fc598b59",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "Ⅲ期临床阶段，列出总体入选、完成16周基础期治疗、扩展期治疗以及完成试验的参与者例数，对各分析集的纳入和剔除情况进行总结。提供提前结束试验的参与者清单，对各分析集的参与者分布进行详细列表。",
+    "heading_path": [
+      "统计学考虑",
+      "统计分析",
+      "参与者入组分析"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-fb5d1edc8f1ed99baf4a4a8a",
+    "package_ordinal": 100,
+    "role": "attached",
+    "source_ref": "body.p1199",
+    "source_span_ids": [
+      "body.p1199"
+    ],
+    "structure_unit_id": "su-b0ce365cdbfceab1aa44fa96",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "人口统计学和基线特征分析",
+    "heading_path": [
+      "统计学考虑",
+      "统计分析",
+      "人口统计学和基线特征分析"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-ad0c757625a628fce5c7ed7c",
+    "package_ordinal": 102,
+    "role": "owned",
+    "source_ref": "body.p1200",
+    "source_span_ids": [
+      "body.p1200"
+    ],
+    "structure_unit_id": "su-01be15f15941c1f467f99117",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "将基于ITT集，采用描述性统计方法来总结按组别及总体的参与者人口统计学特征和基线特性。",
+    "heading_path": [
+      "统计学考虑",
+      "统计分析",
+      "人口统计学和基线特征分析"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-ad0c757625a628fce5c7ed7c",
+    "package_ordinal": 102,
+    "role": "owned",
+    "source_ref": "body.p1201",
+    "source_span_ids": [
+      "body.p1201"
+    ],
+    "structure_unit_id": "su-8f1031a63b30f3a7e14a955a",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "药物治疗与非药物治疗分析",
+    "heading_path": [
+      "统计学考虑",
+      "统计分析",
+      "药物治疗与非药物治疗分析"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-ad0c757625a628fce5c7ed7c",
+    "package_ordinal": 102,
+    "role": "owned",
+    "source_ref": "body.p1202",
+    "source_span_ids": [
+      "body.p1202"
+    ],
+    "structure_unit_id": "su-9c8b013993ae776f7f8dc4b7",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "根据WHO Drug分类统计合并用药的参与者例数和百分比；",
+    "heading_path": [
+      "统计学考虑",
+      "统计分析",
+      "药物治疗与非药物治疗分析"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-ad0c757625a628fce5c7ed7c",
+    "package_ordinal": 102,
+    "role": "owned",
+    "source_ref": "body.p1203",
+    "source_span_ids": [
+      "body.p1203"
+    ],
+    "structure_unit_id": "su-5142d2c6161c2593bcdee76a",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "根据MedDRA编码的系统器官分类（SOC）和首选术语（PT）分类统计合并治疗的参与者例数与百分比。",
+    "heading_path": [
+      "统计学考虑",
+      "统计分析",
+      "药物治疗与非药物治疗分析"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-ad0c757625a628fce5c7ed7c",
+    "package_ordinal": 102,
+    "role": "owned",
+    "source_ref": "body.p1204",
+    "source_span_ids": [
+      "body.p1204"
+    ],
+    "structure_unit_id": "su-2a0e3803fabfe3dd0ed49732",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "疗效分析",
+    "heading_path": [
+      "统计学考虑",
+      "统计分析",
+      "疗效分析"
+    ],
+    "lookup": "frozen_plan_owned",
+    "package_id": "pap-ad0c757625a628fce5c7ed7c",
+    "package_ordinal": 102,
+    "role": "owned",
+    "source_ref": "body.p1205",
+    "source_span_ids": [
+      "body.p1205"
+    ],
+    "structure_unit_id": "su-a34910314dc30700e4870936",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "Ⅱ期临床研究阶段",
+    "heading_path": [
+      "统计学考虑",
+      "统计分析",
+      "疗效分析",
+      "Ⅱ期临床研究阶段"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-8a2a35dfd4f2b5d156e82384",
+    "package_ordinal": 1,
+    "role": "attached",
+    "source_ref": "body.p1206",
+    "source_span_ids": [
+      "body.p1206"
+    ],
+    "structure_unit_id": "su-b4abfa7c46b218f7acde0996",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "主要疗效指标分析",
+    "heading_path": [
+      "统计学考虑",
+      "统计分析",
+      "疗效分析",
+      "Ⅱ期临床研究阶段",
+      "主要疗效指标分析"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-8a2a35dfd4f2b5d156e82384",
+    "package_ordinal": 1,
+    "role": "attached",
+    "source_ref": "body.p1207",
+    "source_span_ids": [
+      "body.p1207"
+    ],
+    "structure_unit_id": "su-ce3c60a390ac2e4d3a48dff4",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "主要疗效指标为第12周，银屑病面积和严重程度指数较基线改善至少75%（PASI-75）的参与者比例。将采用CMH检验比较各剂量组与安慰剂组间PASI-75应答率的差异及其95%的置信区间。主要疗效指标的缺失，将采用多重填补。",
+    "heading_path": [
+      "统计学考虑",
+      "统计分析",
+      "疗效分析",
+      "Ⅱ期临床研究阶段",
+      "主要疗效指标分析"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-fb5d1edc8f1ed99baf4a4a8a",
+    "package_ordinal": 100,
+    "role": "attached",
+    "source_ref": "body.p1208",
+    "source_span_ids": [
+      "body.p1208"
+    ],
+    "structure_unit_id": "su-1be194815474be01733b25a2",
+    "unit_kind": "paragraph"
+  },
+  {
+    "excerpt": "针对主要疗效指标的缺失还将采用末次观察结转（Last Observational Carried Forward，LOCF）、无应答填补（Non-Response Imputation，NRI）法等进行敏感性分析。",
+    "heading_path": [
+      "统计学考虑",
+      "统计分析",
+      "疗效分析",
+      "Ⅱ期临床研究阶段",
+      "主要疗效指标分析"
+    ],
+    "lookup": "frozen_plan_context",
+    "package_id": "pap-fb5d1edc8f1ed99baf4a4a8a",
+    "package_ordinal": 100,
+    "role": "attached",
+    "source_ref": "body.p1209",
+    "source_span_ids": [
+      "body.p1209"
+    ],
+    "structure_unit_id": "su-15bbbc5411c7a00315b6abb4",
+    "unit_kind": "paragraph"
+  }
+]

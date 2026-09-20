@@ -10,6 +10,7 @@ import type {
   DraftComparisonView,
   DraftRevisionView,
   FeedbackInput,
+  GenerationPreviewView,
   IdentityDecisionView,
   IdentityReviewView,
   IntegrityCheckView,
@@ -317,7 +318,7 @@ function normalizeTimeEntry(value: unknown, field: string): ProtocolTimeEntryPay
     timeConstraint = {
       anchor_type: requireOneOf(
         constraint.anchor_type,
-        ["icf_date", "screening_date", "baseline_date", "randomization_date", "first_dose_date", "study_drug_administration_date", "last_dose_date", "study_completion_date", "event_date"] as const,
+        ["icf_date", "screening_date", "baseline_date", "randomization_date", "first_dose_date", "study_drug_administration_date", "last_dose_date", "study_completion_date", "event_date", "review_node_date"] as const,
         `${field}.time_constraint.anchor_type`,
       ),
       direction,
@@ -817,6 +818,31 @@ export function normalizeSources(wire: unknown): SourcesView {
     selectedPhaseLabel: requireString(row.selected_phase_label, "selected_phase_label"),
     sourceSpans: requireRecord(row.source_spans, "source_spans"),
     sourceMaterials: requireRecord(row.source_materials, "source_materials"),
+  };
+}
+
+export function normalizeGenerationPreview(wire: unknown): GenerationPreviewView {
+  const row = requireRecord(wire, "generation_preview");
+  const reason = row.reason === null || row.reason === undefined ? null : requireString(row.reason, "reason");
+  const detail = row.detail === null || row.detail === undefined ? null : requireString(row.detail, "detail");
+  const updatedAt =
+    row.updated_at === null || row.updated_at === undefined
+      ? null
+      : requireString(row.updated_at, "updated_at");
+  return {
+    jobId: requireString(row.job_id, "job_id"),
+    available: row.available === true,
+    reason,
+    detail,
+    previewOnly: row.preview_only !== false,
+    batchIndex: requireNumber(row.batch_index, "batch_index"),
+    batchTotal: requireNumber(row.batch_total, "batch_total"),
+    updatedAt,
+    pendingCodes: requireArray<unknown>(row.pending_codes, "pending_codes").map((value) =>
+      requireString(value, "pending_codes[]"),
+    ),
+    unresolvedCount: requireNumber(row.unresolved_count, "unresolved_count"),
+    content: requireRecord(row.content, "content"),
   };
 }
 

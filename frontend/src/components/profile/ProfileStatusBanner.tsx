@@ -19,7 +19,7 @@ export function ProfileStatusBanner({ model }: ProfileStatusBannerProps) {
         <div>
           <p className="profile-status__title">{model.statusLabel}</p>
           <p className="profile-status__hint">
-            档案正在生成中，生成后将自动展示首屏重点与完整历时信息。
+            正在整理已核实的病史、用药和检查记录。
           </p>
         </div>
       </div>
@@ -30,7 +30,7 @@ export function ProfileStatusBanner({ model }: ProfileStatusBannerProps) {
       <div className="profile-status profile-status--failed" role="alert">
         <p className="profile-status__title">{model.statusLabel}</p>
         <p className="profile-status__hint">
-          本次生成未产出可展示的档案条目，请稍后重新生成后再查看。
+          本次档案整理未完成，不表示病史、用药或检查记录为空。原始资料仍保留。
         </p>
       </div>
     );

@@ -1,0 +1,16 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_history_collection.v6.json",
+  "group_id": "d001-ii-history-treatment-collection-v7",
+  "task_id": "phase5-slice60u-20260828",
+  "artifact_dir_name": "phase5-slice60u-d001-history-treatment-collection-replay-required-visit-20260828",
+  "ids": {
+    "manifest_id": "manifest:slice60u-history-treatment-reps",
+    "catalog_id": "catalog:slice60u-history-treatment-reps"
+  },
+  "notes": [
+    "v6技术绿色结果保持不可变；父级拒绝其把明确访视问询降级为普通补充说明以绕开精确访视闭包。",
+    "v7要求冻结执行访视映射中的单元保持流程必做处置并绑定精确节点，不得通过更换处置类型规避。",
+    "该限制来自已冻结流程身份，不向Agent注入人工目标链接答案。"
+  ]
+}

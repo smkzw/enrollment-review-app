@@ -1,0 +1,32 @@
+{
+  "schema_version": "phase5/protocol-replay-checkpoint/v2",
+  "recorded_at": "2026-08-30T00:00:00+00:00",
+  "config_path": ".trellis/tasks/08-22-phase5-clinical-facts-profile/research/d001-ii-phase-closure/checkpoints/p803-p805-model-free-replay-config.v1.json",
+  "supersedes_checkpoint": "p803-p805-model-free-replay-checkpoint.v1.json",
+  "expected_pack_fingerprint": "e842e33cbd8615ac747e35c8d6ee5c0ffd8c3840cbc413a68b908e77d73ecb77",
+  "protocol_document_sha256": "362443131f0d384c82c80f6a37396084f7d3301b51162201749c0488b0f2dd98",
+  "snapshot_id": "snp-e3e8befcbf4a63c89665aad9",
+  "manifest_id": "su-8f734878638f87bf9ed0a23f",
+  "batch_id": "pcb-b29b96bc4f027b4340ab9773",
+  "prompt_sha256": "115812e731ffd40cba7b7d21e022303b68c7777b1468b916f8e22fca57c8453d",
+  "toolchain": {
+    "python_version": "3.12.13",
+    "pydantic_version": "2.13.3",
+    "parser_name": "docx-ooxml",
+    "parser_version": "1.4.0"
+  },
+  "unit_counts": {
+    "blocks": 3581,
+    "manifest_units": 1848,
+    "owned_units": 3,
+    "context_units": 7
+  },
+  "model_invoked": false,
+  "clinical_acceptance": false,
+  "notes": [
+    "保留 v1 为不可变历史检查点；v2 对应当前 phase5/control-agent-prompt/v1.5 合同。",
+    "两次从同一原始 DOCX 向不同临时目录构建，文件集、提示词哈希与整包指纹一致。",
+    "方案哈希、结构快照、覆盖清单、批次身份和单元计数相对 v1 均未变化。",
+    "本检查点只证明产品确定性链可重现，不接受任何临床结论，也不授权模型重放。"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "status": "需要核对",
+  "session_id": "phase-applicability-chat-d595b11a1c8c4f12b6f30f748253d287",
+  "elapsed_seconds": 555.085,
+  "error_type": "PhaseApplicabilityAgentWireValidationError",
+  "error": "RATIONALE_INCOMPLETE: 共发现 5 个目标的理由质量问题：RATIONALE_INCOMPLETE: EVIDENCE_RATIONALE_RELATION_MISSING: 证据 rationale必须说明该来源为何形成支持、反对或仍待确认的证据关系；RATIONALE_INCOMPLETE: EVIDENCE_RATIONALE_RELATION_MISSING: 证据 rationale必须说明该来源为何形成支持、反对或仍待确认的证据关系；RATIONALE_INCOMPLETE: EVIDENCE_RATIONALE_RELATION_MISSING: 证据 rationale必须说明该来源为何形成支持、反对或仍待确认的证据关系；RATIONALE_INCOMPLETE: EVIDENCE_RATIONALE_RELATION_MISSING: 证据 rationale必须说明该来源为何形成支持、反对或仍待确认的证据关系；RATIONALE_INCOMPLETE: EVIDENCE_RATIONALE_RELATION_MISSING: 证据 rationale必须说明该来源为何形成支持、反对或仍待确认的证据关系"
+}

@@ -1,0 +1,463 @@
+{
+  "batch_id": "pcb-c81d2b1e882a15e04dbc63f4",
+  "batch_number": 1,
+  "batch_total": 1,
+  "context_is_read_only": true,
+  "context_source_span_ids": [
+    "body.p1322"
+  ],
+  "context_structure_unit_ids": [
+    "su-fb4a937e370e44796477cece"
+  ],
+  "context_units": [
+    {
+      "excerpt": "女性连续停经12个月，并排除妊娠及其他可能导致闭经的医疗原因后，即可临床诊断为绝经。",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1322"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32180,
+      "source_ref": "body.p1322",
+      "source_span_ids": [
+        "body.p1322"
+      ],
+      "structure_unit_id": "su-fb4a937e370e44796477cece",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    }
+  ],
+  "coverage_manifest_id": "manifest:slice61da-package114-fertility-definition-evidence-boundary",
+  "known_official_targets": [
+    {
+      "catalog_item_id": "pcm-row-0555ca044760e4df3ef7e3c3",
+      "label": "生育计划限制与避孕义务",
+      "official_code": "IN-06",
+      "position": 6,
+      "schema_version": "phase5/v1",
+      "source_excerpts": [
+        "有生育能力的参与者自签署知情同意书至研究末次给药后至少3个月无怀孕或捐精计划，必须遵守避孕的相关规定，采取高效或可接受的避孕方法避孕（见附录1）。"
+      ],
+      "source_span_ids": [
+        "span-29b8e3bdc286a06cba1455474402c004"
+      ]
+    }
+  ],
+  "known_procedure_targets": [
+    {
+      "catalog_item_id": "pcm-row-18127a0dc9921364671ebb8c",
+      "covered_action_kinds": [],
+      "label": "妊娠试验或卵泡刺激素（FSH）",
+      "position": 48,
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "semantic_family": null,
+      "source_excerpts": [
+        "妊娠试验或卵泡刺激素（FSH）^13 | X | （X） | X | X | X | X | X | X | X",
+        "妊娠试验或卵泡刺激素（FSH）^13 | X | （X） | X | X | X | X | X | X | X",
+        "妊娠试验或卵泡刺激素（FSH）^13 | X | （X） | X | X | X | X | X | X | X",
+        "妊娠试验或卵泡刺激素（FSH）^13 | X | （X） | X | X | X | X | X | X | X",
+        "妊娠试验或卵泡刺激素（FSH）^13 | X | （X） | X | X | X | X | X | X | X",
+        "妊娠试验或卵泡刺激素（FSH）：对有生育能力的女性（育龄女性）在筛选、基线和计划的时间点进行血/尿β-HCG检测，其中筛选、基线、W12(D85)、W16(113)或退出访视必须为血妊娠试验，筛选和/或基线检测结果需均为阴性，需要在访视当天用药前完成；对已绝经女性（一年及以上无月经且无其他医学原因）或永久性绝育（如双侧输卵管结扎、子宫切除或双侧输卵管切除等）的女性参与者视为不具有生育能力，无需进行妊娠试验，其中，对已绝经女性需在筛选时进行血清FSH检测，其结果应大于40 IU/L。若研究过程中出现停经也需进行额外的血清β-HCG检测。注意：对所有参与者，在每个访视做好避孕宣教：在试验期间及给药后3个月内严格遵循附录1避孕要求，且参与者或其伴侣在发现意外怀孕时及时联系研究者。",
+        "妊娠试验或卵泡刺激素（FSH）^13 | X | （X） | X | X | X | X | X | X | X",
+        "妊娠试验或卵泡刺激素（FSH）^13 | X | （X） | X | X | X | X | X | X | X",
+        "血/尿妊娠试验（有生育能力的女性）",
+        "妊娠试验或卵泡刺激素（FSH）^13 | X | （X） | X | X | X | X | X | X | X",
+        "妊娠试验或卵泡刺激素（FSH）^13 | X | （X） | X | X | X | X | X | X | X"
+      ],
+      "source_span_ids": [
+        "span-15fa32ffb40385e4ab88ccf86b66462a",
+        "span-4ada40f46f347bdfd0dc32ff5aafd113",
+        "span-546f6512be56b354fe72bb2554734420",
+        "span-761bc18ae94f687575b4a90c1b141961",
+        "span-848273a89ac24be70490ba4b3fae89cc",
+        "span-a3581afb0d23910af48bf735f1adb67c",
+        "span-b92c9e967d4c2dcc2de1db4578476140",
+        "span-c6da936da3e233fa8e34b72fbf7c3430",
+        "span-e4fa1e71068426c0b58edeec51627061",
+        "span-fb63df5558004a5c2bb1aaef18fce384",
+        "span-fe29450e1c931ac5ed89315e91a82e33"
+      ],
+      "visit_instance": "首次给药前"
+    }
+  ],
+  "known_workflow_stage_targets": [
+    {
+      "display_name": "筛选访视",
+      "review_stage": "screening",
+      "schema_version": "phase5/v1",
+      "visit_instance": "筛选访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-screening"
+    },
+    {
+      "display_name": "基线访视",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "基线访视",
+      "visit_window": null,
+      "workflow_stage_id": "flow-baseline"
+    },
+    {
+      "display_name": "首次给药前复核",
+      "review_stage": "baseline",
+      "schema_version": "phase5/v1",
+      "visit_instance": "首次给药前",
+      "visit_window": null,
+      "workflow_stage_id": "flow-d1-pre-dose"
+    }
+  ],
+  "owned_procedure_semantic_families_by_structure_unit_id": {},
+  "owned_required_action_kinds_by_structure_unit_id": {},
+  "owned_required_procedure_target_ids_by_structure_unit_id": {},
+  "owned_source_span_ids": [
+    "body.p1310",
+    "body.p1311",
+    "body.p1312",
+    "body.p1313",
+    "body.p1314",
+    "body.p1315",
+    "body.p1316",
+    "body.p1317",
+    "body.p1318",
+    "body.p1319",
+    "body.p1320",
+    "body.p1321"
+  ],
+  "owned_structure_unit_ids": [
+    "su-02a9295b603442428eb7ec15",
+    "su-94deef1b0bab78eea18a466c",
+    "su-a3d2e42056b8ee95e69e3b63",
+    "su-767a53b9670153205a717a6d",
+    "su-12a3d44ab47dbddcd2bd0e19",
+    "su-455cf98905c09aa97a680a50",
+    "su-50beac7c655b92a4f8cd8041",
+    "su-22f41b216060622ca728b067",
+    "su-01fea45fec56e35255a6a1d5",
+    "su-bf0ff92189b3ffdf36894023",
+    "su-708d2847d3892f71dace2861",
+    "su-5dea096879f632d4303389ad"
+  ],
+  "owned_units": [
+    {
+      "excerpt": "附录",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1310"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32060,
+      "source_ref": "body.p1310",
+      "source_span_ids": [
+        "body.p1310"
+      ],
+      "structure_unit_id": "su-02a9295b603442428eb7ec15",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "附录1 避孕的规定与方法",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1311"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32070,
+      "source_ref": "body.p1311",
+      "source_span_ids": [
+        "body.p1311"
+      ],
+      "structure_unit_id": "su-94deef1b0bab78eea18a466c",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "有生育能力女性的定义",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1312"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32080,
+      "source_ref": "body.p1312",
+      "source_span_ids": [
+        "body.p1312"
+      ],
+      "structure_unit_id": "su-a3d2e42056b8ee95e69e3b63",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "女性在月经初潮后至绝经前被认为是有生育能力的。",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1313"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32090,
+      "source_ref": "body.p1313",
+      "source_span_ids": [
+        "body.p1313"
+      ],
+      "structure_unit_id": "su-767a53b9670153205a717a6d",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "具有以下情况的女性不被视为有生育能力：",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1314"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32100,
+      "source_ref": "body.p1314",
+      "source_span_ids": [
+        "body.p1314"
+      ],
+      "structure_unit_id": "su-12a3d44ab47dbddcd2bd0e19",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "paragraph"
+    },
+    {
+      "excerpt": "尚未经历月经初潮",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1315"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32110,
+      "source_ref": "body.p1315",
+      "source_span_ids": [
+        "body.p1315"
+      ],
+      "structure_unit_id": "su-455cf98905c09aa97a680a50",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "满足以下任一项的绝经前女性：",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1316"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32120,
+      "source_ref": "body.p1316",
+      "source_span_ids": [
+        "body.p1316"
+      ],
+      "structure_unit_id": "su-50beac7c655b92a4f8cd8041",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "子宫切除术史",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1317"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32130,
+      "source_ref": "body.p1317",
+      "source_span_ids": [
+        "body.p1317"
+      ],
+      "structure_unit_id": "su-22f41b216060622ca728b067",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "双侧输卵管切除术史",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1318"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32140,
+      "source_ref": "body.p1318",
+      "source_span_ids": [
+        "body.p1318"
+      ],
+      "structure_unit_id": "su-01fea45fec56e35255a6a1d5",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "双侧卵巢切除术史",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1319"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32150,
+      "source_ref": "body.p1319",
+      "source_span_ids": [
+        "body.p1319"
+      ],
+      "structure_unit_id": "su-bf0ff92189b3ffdf36894023",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    },
+    {
+      "excerpt": "注：通过参与者病历核查或医学检查或病史询问进行确认。",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": true,
+      "member_source_refs": [
+        "body.p1320"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32160,
+      "source_ref": "body.p1320",
+      "source_span_ids": [
+        "body.p1320"
+      ],
+      "structure_unit_id": "su-708d2847d3892f71dace2861",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "footnote_or_annotation"
+    },
+    {
+      "excerpt": "绝经后女性",
+      "heading_path": [
+        "附录"
+      ],
+      "is_footnote_or_note": false,
+      "member_source_refs": [
+        "body.p1321"
+      ],
+      "phase_scopes": [
+        "unknown"
+      ],
+      "priority_keyword_hits": [],
+      "priority_rank": 0,
+      "schema_version": "phase5/v1",
+      "source_order": 32170,
+      "source_ref": "body.p1321",
+      "source_span_ids": [
+        "body.p1321"
+      ],
+      "structure_unit_id": "su-5dea096879f632d4303389ad",
+      "study_phase": "phase_ii",
+      "table_context": null,
+      "unit_kind": "list_item"
+    }
+  ],
+  "owned_visit_instance_by_structure_unit_id": {},
+  "pre_enrollment_structure_unit_ids": [],
+  "priority_rank": 0,
+  "protocol_version_id": "D001-02-002:v1.0:phase-ii",
+  "schema_version": "phase5/v1",
+  "structural_only_structure_unit_ids": [
+    "su-02a9295b603442428eb7ec15",
+    "su-94deef1b0bab78eea18a466c",
+    "su-a3d2e42056b8ee95e69e3b63"
+  ],
+  "study_phase": "phase_ii"
+}

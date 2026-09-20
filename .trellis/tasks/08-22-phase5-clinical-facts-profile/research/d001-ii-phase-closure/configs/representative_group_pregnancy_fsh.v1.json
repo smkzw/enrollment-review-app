@@ -1,0 +1,127 @@
+{
+  "schema_version": "phase5/representative-group-control-replay-config/v1",
+  "extends": "representative_group_viral_tb.v1.json",
+  "group_id": "d001-ii-pregnancy-fsh-cross-chapter",
+  "artifact_dir_name": "phase5-slice59p-d001-pregnancy-fsh-control-replay-20260828",
+  "owned_source_refs": [
+    "body.p815#atom-0-11",
+    "body.p815#atom-11-74",
+    "body.p815#atom-74-161",
+    "body.p816"
+  ],
+  "attached_source_refs": [
+    "body.t5.r16",
+    "body.p327",
+    "body.p638",
+    "body.p696",
+    "body.p874"
+  ],
+  "required_candidate_source_refs": [
+    "body.p816"
+  ],
+  "batching": {
+    "reason": "妊娠与FSH评估段落为唯一处置对象；IN-06、EX-29和流程妊娠/FSH要求作为携带原文的只读权威目标。"
+  },
+  "workflow_stages": [
+    {
+      "workflow_stage_id": "flow-screening",
+      "review_stage": "screening",
+      "display_name": "筛选访视",
+      "visit_instance": "筛选访视"
+    },
+    {
+      "workflow_stage_id": "flow-baseline",
+      "review_stage": "baseline",
+      "display_name": "基线访视",
+      "visit_instance": "基线访视"
+    },
+    {
+      "workflow_stage_id": "flow-d1-pre-dose",
+      "review_stage": "baseline",
+      "display_name": "首次给药前复核",
+      "visit_instance": "首次给药前"
+    }
+  ],
+  "known_targets": {
+    "official_rules": [
+      {
+        "catalog_item_id": "pcm-row-0555ca044760e4df3ef7e3c3",
+        "official_code": "IN-06",
+        "label": "生育计划限制与避孕义务",
+        "position": 6,
+        "source_span_ids": [
+          "span-29b8e3bdc286a06cba1455474402c004"
+        ]
+      },
+      {
+        "catalog_item_id": "pcm-row-d9c86cde3e7281997cf4f19c",
+        "official_code": "EX-29",
+        "label": "妊娠或哺乳状态",
+        "position": 35,
+        "source_span_ids": [
+          "span-58e21f7bb6cf63638f8f497f1c40b205"
+        ]
+      }
+    ],
+    "required_procedures": [
+      {
+        "catalog_item_id": "pcm-row-18127a0dc9921364671ebb8c",
+        "label": "妊娠试验或卵泡刺激素（FSH）",
+        "visit_instance": "首次给药前",
+        "review_stage": "baseline",
+        "position": 48,
+        "source_span_ids": [
+          "span-15fa32ffb40385e4ab88ccf86b66462a",
+          "span-4ada40f46f347bdfd0dc32ff5aafd113",
+          "span-546f6512be56b354fe72bb2554734420",
+          "span-761bc18ae94f687575b4a90c1b141961",
+          "span-848273a89ac24be70490ba4b3fae89cc",
+          "span-a3581afb0d23910af48bf735f1adb67c",
+          "span-b92c9e967d4c2dcc2de1db4578476140",
+          "span-c6da936da3e233fa8e34b72fbf7c3430",
+          "span-e4fa1e71068426c0b58edeec51627061",
+          "span-fb63df5558004a5c2bb1aaef18fce384",
+          "span-fe29450e1c931ac5ed89315e91a82e33"
+        ]
+      }
+    ]
+  },
+  "runner": {
+    "max_schema_repairs": 6
+  },
+  "ids": {
+    "manifest_id": "manifest:slice59p-pregnancy-fsh-reps",
+    "catalog_id": "catalog:slice59p-pregnancy-fsh-reps"
+  },
+  "clinical_qc_checks_by_source_ref": {
+    "body.p815#atom-11-74": [
+      "phase_ii_prebaseline_schedule_only",
+      "no_phase_iii_or_treatment_visit_pollution"
+    ],
+    "body.p815#atom-74-161": [
+      "screening_or_first_dose_positive_blocks_entry",
+      "optional_treatment_retesting_not_mandatory_eligibility"
+    ],
+    "body.p816": [
+      "postmenopausal_screening_fsh_only",
+      "non_childbearing_pregnancy_test_exception"
+    ],
+    "body.p327": [
+      "flow_summary_population_and_threshold_closure"
+    ],
+    "body.t5.r16": [
+      "phase_ii_flow_required"
+    ],
+    "body.p638": [
+      "in06_source_closure"
+    ],
+    "body.p696": [
+      "ex29_source_closure"
+    ]
+  },
+  "notes": [
+    "验证原始DOCX自动原子化后的复合妊娠段落，不要求用户预处理方案。",
+    "仅发布基线及以前的真实增量控制；Ⅱ期第12周、Ⅲ期第16/52周、提前退出和研究期间可选复测不得污染入排控制。",
+    "适用人群、筛选/基线节点、首次给药前阳性门控和绝经女性FSH阈值必须保持独立逻辑。"
+  ]
+}
