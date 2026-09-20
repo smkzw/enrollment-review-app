@@ -746,18 +746,19 @@ class EligibilityReviewProjectionService:
             )
             component_context = context.model_copy(update={
                 "predicate_fact_type_aliases": _component_candidate_types(clause)})
+            has_binding = predicate_fact_ids is not None
             result = calculate_component_review(
                 component=component,
                 rule_kind=clause.kind,
                 context=component_context,
                 episode_stage=episode.stage,
-                expectations=expectation_views,
+                expectations=[] if has_binding else expectation_views,
                 conflicts=phase3_conflicts,
                 workflow_stage_id=episode.workflow_stage_id,
                 requirement_workflow_stage_ids={
                     item.requirement_id: item.workflow_stage_id for item in templates
                 } if episode.workflow_stage_id is not None else None,
-                source_gaps=frozenset(judgment_gaps.values()),
+                source_gaps=frozenset() if has_binding else frozenset(judgment_gaps.values()),
                 predicate_fact_ids=_filter_for_component(
                     predicate_fact_ids, component),
             )
