@@ -135,7 +135,22 @@ def _evaluate_logical(operator: LogicalOperator, results: list[EvaluationResult]
 def _canonical_unit(unit: str | None) -> str | None:
     if unit is None:
         return None
-    return unit.strip().lower().replace("×", "x").replace(" ", "")
+    normalized = unit.strip().lower().replace("×", "x").replace(" ", "")
+    # 中文等价单位映射：不同写法但语义相同的单位归一化（数据驱动，可扩展）
+    _UNIT_EQUIVALENTS = {
+        "岁": "year_of_age",
+        "周岁": "year_of_age",
+        "year": "year_of_age",
+        "years": "year_of_age",
+        "月": "month",
+        "个月": "month",
+        "周": "week",
+        "周": "week",
+        "天": "day",
+        "日": "day",
+        "小时": "hour",
+    }
+    return _UNIT_EQUIVALENTS.get(normalized, normalized)
 
 
 def _compare(predicate: AtomicPredicate, observed: Any) -> TruthValue:

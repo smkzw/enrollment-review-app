@@ -6,7 +6,7 @@ Callers must supply source-validated inputs; the publication boundary rechecks t
 from dataclasses import dataclass
 from collections.abc import Mapping, Sequence
 
-from app.domain.contracts.enums import BlockingLevel, ComponentDecision, GapType, ReviewStage, RuleKind
+from app.domain.contracts.enums import BlockingLevel, ComponentDecision, GapType, ReviewStage, RuleKind, TruthValue
 from app.domain.contracts.evidence import ConflictGroup
 from app.domain.contracts.evaluation_result import FrequencyAtomEvaluation
 from app.domain.contracts.rules import RuleComponent
@@ -55,6 +55,14 @@ def calculate_component_review(
         requirement_gap_overrides=judgment_gap_by_requirement,
         verified_judgment_requirement_ids=verified_judgment_requirement_ids,
     )
+    if predicate_fact_ids is not None and evaluation.trigger.truth != TruthValue.UNKNOWN:
+        # Binding provides verified selections AND the trigger is definite.
+        # Source/record gaps are superseded by the dual-model verification.
+        gaps = gaps - {
+            GapType.OBSERVATION_UNVERIFIED,
+            GapType.RECORD_INCOMPLETE,
+            GapType.DESCRIPTION_INSUFFICIENT,
+        }
     decision = derive_component_decision(rule_kind=rule_kind, evaluation=evaluation, gaps=gaps)
     return ComponentReviewResult(
         evaluation=evaluation, gaps=frozenset(gaps), decision=decision,
