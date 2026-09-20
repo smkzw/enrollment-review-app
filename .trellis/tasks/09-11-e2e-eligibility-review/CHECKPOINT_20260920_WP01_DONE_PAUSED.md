@@ -44,3 +44,37 @@
 
 8th run状态：workflow COMPLETED (candidates+verification+ready全绿)，13子任务全部completed。
 C链数据管线已通，只差表达式求值消费qualified binding selections这最后一步。
+
+## WP01验收补充：C链数据管线完成情况
+
+### 8th workflow最终状态（2026-09-20 07:28 UTC启动）
+- workflow state: completed
+- candidates step: completed
+- verification step: completed
+- ready step: completed
+- 13子任务全部completed
+
+### 绑定结果统计
+- predicate binding: 137条件全量覆盖，main-B 9条件有候选，main-A 8条件有候选
+- control binding: 完成（含default_group合同）
+- qualifications: 双道均完成
+- judgment_content/proposition/observation/frequency: 全部完成
+
+### eligibility review当前状态
+- 69条款全部indeterminate
+- 根因：expression.py L513 — predicate有observation_policy且predicate_fact_ids=None时返回UNKNOWN
+- 这是设计安全的：没有qualified binding selections就不猜测对应关系
+
+### 下会话修复步骤（WP05）
+1. 在eligibility_review_projection.py中：
+   - 从最近完成的predicate_binding_candidates job加载candidate artifacts
+   - 构建predicate_fact_ids映射（双道一致的fact_id列表，含空列表=verified empty）
+   - 传给calculate_component_review的predicate_fact_ids参数
+2. 这样表达式求值就知道哪些条件有候选、哪些已验证无候选
+3. 有候选的条件会评估为met/not_met/triggered/not_triggered
+4. 无候选的排除条件会评估为not_triggered（而非indeterminate）
+
+### 关键代码位置
+- expression.py L513: observation_selection_unverified触发点
+- predicate_binding_candidates.py: validate函数（v2+别名已就绪）
+- eligibility_review_projection.py: project()方法（需传入predicate_fact_ids）
