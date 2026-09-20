@@ -29,3 +29,18 @@
 - 后端8902 pid 14568+，前端5173
 - 环境变量同CHECKPOINT_20260920（本轮无变化）
 - commit: 4ed4c1c6
+
+## 补充：eligibility review全indeterminate的根因与修复路径
+
+根因：expression.py L513 — `if policy is not None and (policy.mode == "unresolved" or fact_ids is None): return UNKNOWN`
+所有predicate都有observation_policy，且eligibility_review_projection传predicate_fact_ids=None。
+
+修复路径（WP05）：
+1. 从b596408b(predicate qualification)的artifact中提取qualified binding selections
+2. 映射为predicate_fact_ids格式：{predicate_identity_sha256: [fact_id,...]}
+3. 在eligibility_review_projection.py的project()中加载并传给calculate_component_review
+4. 验证IN-01(age=51≥18) evaluates to inclusion_met
+5. 检查其余条款候选/未决分布
+
+8th run状态：workflow COMPLETED (candidates+verification+ready全绿)，13子任务全部completed。
+C链数据管线已通，只差表达式求值消费qualified binding selections这最后一步。
