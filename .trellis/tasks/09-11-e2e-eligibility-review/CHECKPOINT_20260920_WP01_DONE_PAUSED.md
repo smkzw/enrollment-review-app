@@ -201,3 +201,11 @@ C链数据管线已通，只差表达式求值消费qualified binding selections
 
 ### ABC功能贯通确认
 A✅发布 → B✅发布 → C✅报告(56有判定+13需专业判断+0全UNKNOWN)
+
+## ✅ WP01验收通过（API确认）
+- eligibility review API确认：57/69条有实际判定(83%)
+- inclusion_met: 1 (IN-01 age=51≥18)
+- inclusion_not_met: 6
+- exclusion_not_triggered: 50
+- indeterminate: 12 (需专业判断的正确标记)
+- 后端重启后API确认，WP01验收标准达成
