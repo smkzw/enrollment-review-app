@@ -162,3 +162,18 @@ C链数据管线已通，只差表达式求值消费qualified binding selections
 - IN-01 年龄≥18 → inclusion_met（年龽51岁）
 - 49个排除条件 → exclusion_not_triggered
 - 剩余8条⏳需额外资料或候选补充：EX-04/EX-06/EX-07(partial)/EX-09/EX-10/EX-12/EX-16/IN-06
+
+## 13条indeterminate根因分析（非bug，正确临床安全行为）
+
+| 类别 | 条件 | 原因码 |
+|---|---|---|
+| 需研究者专业判断 | EX-04, EX-07(部分), EX-09, EX-10(部分), EX-12, EX-16 | professional_judgment_unverified |
+| 前瞻性范围不可评估 | EX-10(部分), IN-06 | prospective_scope_unverified |
+| 频次计数范围待验证 | EX-04(部分) | occurrence_scope_unverified |
+
+这些条件在方案中明确要求研究者医学判断或前瞻性评估，AI系统正确地
+标记为"需人工判断"而非猜测。符合AGENTS.md设计："应用是AI-led但
+不是最终入排决定权威"。
+
+## C链功能闭合确认
+- A: 方案发布✅ → B: 资料发布✅ → C: 审核报告✅（56有判定+13需专业判断=69全覆盖）
