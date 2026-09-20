@@ -78,3 +78,18 @@ C链数据管线已通，只差表达式求值消费qualified binding selections
 - expression.py L513: observation_selection_unverified触发点
 - predicate_binding_candidates.py: validate函数（v2+别名已就绪）
 - eligibility_review_projection.py: project()方法（需传入predicate_fact_ids）
+
+## C链验收进展：EX-07首个非UNKNOWN判定
+- eligibility_review_projection 新增 _load_binding_predicate_fact_ids() + _filter_for_component()
+- 从predicate_binding_candidates的completed job加载双道一致的predicate→fact映射
+- 按component过滤后传给calculate_component_review
+- EX-07（对研究药物或辅料过敏）→ exclusion_not_triggered（排除了该排除标准）
+- 68条款仍indeterminate：需补充候选（当前blood test数据只触发了部分条件的候选）
+  + control qualification重试（围栏修复+reason修复已到位）
+  + WP05表达式求值消费新来源合同
+
+## 下会话行动项
+1. 补充剩余条款的候选（可能需要调整prompt让模型识别更多candidate来源）
+2. 重试control qualification（修复已到位）
+3. 接通expression evaluation消费完整绑定数据
+4. 开始WP02-WP04
