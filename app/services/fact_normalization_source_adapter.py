@@ -75,36 +75,13 @@ class FactPlanningSourceError(RuntimeError):
 def _compact_locator_inputs(
     locators: list[EvidenceNormalizerLocatorInput],
 ) -> list[EvidenceNormalizerLocatorInput]:
-    """去除同一源文本内被更完整定位覆盖的行内子框。
+    """R13修复：不做文本包含推断去重，保留全部定位输入。
 
-    OCR 版面可同时产生整行、单元格、词和标点定位。模型只需要
-    能唯一回源的最大上下文框；不在文本层或源哈希之间合并。
+    同页同源的相同文本可能出现在不同位置（如两列表各含"阴性"）。
+    旧逻辑按文本包含关系去重会丢失不同出现位置。在引入几何信息
+    （bbox/偏移量）之前，不做任何基于文本的去重。
     """
-    ordered = sorted(locators, key=lambda item: item.locator_id)
-    grouped_texts: dict[tuple[LocatorSourceLayer, str], set[str]] = {}
-    for locator in ordered:
-        text = (locator.localized_text or "").strip()
-        if text:
-            grouped_texts.setdefault(
-                (locator.source_layer, locator.source_text_sha256), set()
-            ).add(text)
-
-    kept: list[EvidenceNormalizerLocatorInput] = []
-    seen: set[tuple[LocatorSourceLayer, str, str]] = set()
-    for locator in ordered:
-        text = (locator.localized_text or "").strip()
-        if not text:
-            kept.append(locator)
-            continue
-        group = (locator.source_layer, locator.source_text_sha256)
-        identity = (*group, text)
-        if identity in seen:
-            continue
-        seen.add(identity)
-        if any(text != other and text in other for other in grouped_texts[group]):
-            continue
-        kept.append(locator)
-    return kept
+    return list(locators)
 
 
 @dataclass(frozen=True)
