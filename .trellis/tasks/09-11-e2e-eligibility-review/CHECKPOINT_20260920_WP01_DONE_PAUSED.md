@@ -112,3 +112,47 @@ C链数据管线已通，只差表达式求值消费qualified binding selections
 - _component_candidate_types(): app/services/eligibility_review_projection.py L651
 - observation_policy检查: app/domain/expression.py L513
 - unit等价检查: app/domain/expression.py candidate_value_shape()
+
+## 最终状态（2026-09-20无损暂停）
+
+### ABC链完成度
+| 链 | 状态 | 详情 |
+|---|---|---|
+| A方案链 | ✅ 完成 | rule_set rev=1, blocking=0, 23规则+9控制 |
+| B资料链 | ✅ 完成 | 5份原件24页→55事实+1档案+136期望 |
+| C审核链 | ⏳ 管线通 | 绑定+资格验证+工作流全绿→表达式求值待接通 |
+
+### C链已完成步骤
+1. ✅ predicate binding candidates（137条件，双模型）
+2. ✅ control binding candidates（全目录）
+3. ✅ predicate binding qualification
+4. ✅ control binding qualification
+5. ✅ judgment content × 2
+6. ✅ proposition evidence × 2
+7. ✅ observation relation × 2
+8. ✅ frequency evidence × 2
+9. ✅ prepared review workflow（candidates+verification+ready全绿）
+
+### C链剩余步骤
+1. ❌ expression evaluation接通（predicate_fact_ids传入evaluator）
+2. ❌ qualified review publish
+3. ❌ eligibility review非全UNKNOWN
+
+### 接通expression evaluation的具体步骤
+问题：expression.py L513 — predicate_fact_ids=None时，有observation_policy的predicate返回UNKNOWN
+修复：eligibility_review_projection.py中调用calculate_component_review时传入predicate_fact_ids
+数据源：predicate_binding_candidates的completed job（8条件有候选+129条件verified empty）
+
+注意事项：
+- predicate_fact_ids的key必须是predicate_id（短名），不是predicate_identity_sha256
+- 必须按component过滤（每个component只包含自己的predicate_ids）
+- 空列表=已验证无对应事实（对排除条件→not_triggered，对入选条件→not_met）
+- _load_binding_predicate_fact_ids已实现，_filter_for_component已实现
+- 但evaluator对fact_type匹配依赖aliases，而aliases来源于evidence_requirements的fact_type
+- 实际facts的fact_type(年龄/demographics)可能不等于evidence_requirements的fact_type(demographic_age)
+- 需要在_component_candidate_types中增加predicate.attribute作为额外别名
+
+### GitHub
+- 分支: codex/phase5-clinical-facts-profile
+- 最新commit: 6f9df88e
+- 全部代码+文档+检查点已推送
