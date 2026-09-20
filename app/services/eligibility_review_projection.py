@@ -654,10 +654,15 @@ def _component_candidate_types(clause: ClausePackClause) -> dict[str, list[str]]
     expressions = [clause.expression]
     if clause.exception_expression is not None:
         expressions.append(clause.exception_expression)
-    return {
-        f"{predicate.subject}.{predicate.attribute}": list(fact_types)
-        for expression in expressions for predicate in iter_atomic_predicates(expression)
-    } if fact_types else {}
+    result = {}
+    for expression in expressions:
+        for predicate in iter_atomic_predicates(expression):
+            key = f"{predicate.subject}.{predicate.attribute}"
+            # 别名包含需求fact_type和predicate.attribute本身，
+            # 使归一化产出的fact_type（可能等于attribute）也能匹配。
+            aliases = list(set(fact_types + [predicate.attribute]))
+            result[key] = aliases
+    return result if result else {}
 
 
 class EligibilityReviewProjectionService:
@@ -724,6 +729,10 @@ class EligibilityReviewProjectionService:
         facts_by_id = {fact.fact_id: fact for fact in facts}
 
         predicate_fact_ids = _load_binding_predicate_fact_ids(session)
+        # C chain binding data is available via _load_binding_predicate_fact_ids.
+        # The expression evaluator needs predicate_fact_ids to produce definite
+        # results. Without it, predicates with observation_policy return UNKNOWN.
+        # WP05 will properly connect the qualified binding selections.
         output: list[EligibilityClauseProjection] = []
         for clause in clauses:
             component = clause_to_rule_component(clause)
