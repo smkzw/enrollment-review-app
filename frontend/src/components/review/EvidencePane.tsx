@@ -31,7 +31,7 @@ export interface EvidencePaneProps {
   paneTabIndex?: number;
 }
 
-const EXPECTATION_ORDER = ["observed", "observed_weak", "referenced_missing", "absent", "not_due"] as const;
+const EXPECTATION_ORDER = ["observed", "observed_weak", "referenced_missing", "absent", "not_due", "pending_control_applicability"] as const;
 
 export function EvidencePane({
   component,

@@ -1,0 +1,55 @@
+{
+  "baseline_commit": "60f5bb8fe67ac14d44af9ceab0801a9b2a42120b",
+  "mode": "behavioral_excerpt",
+  "source_path": "/mnt/data/enrollment_impl_v4_20260920/probes/compact_locator_extract.py",
+  "source_sha256": "8c5f80226f4b6bbbc4474a1be527247d99bae63e72a681cddd6545aa0510297e",
+  "scope": "helper only; does not establish final clinical misclassification",
+  "cases": [
+    {
+      "name": "same_text_different_occurrences",
+      "input_locator_ids": [
+        "a-row",
+        "b-row"
+      ],
+      "observed_output_ids": [
+        "a-row"
+      ],
+      "expected_occurrence_preserving_ids": [
+        "a-row",
+        "b-row"
+      ],
+      "preserves_distinct_occurrences": false
+    },
+    {
+      "name": "text_containment_is_not_geometry",
+      "input_locator_ids": [
+        "a-cell",
+        "b-unrelated-row"
+      ],
+      "observed_output_ids": [
+        "b-unrelated-row"
+      ],
+      "expected_occurrence_preserving_ids": [
+        "a-cell",
+        "b-unrelated-row"
+      ],
+      "preserves_distinct_occurrences": false
+    },
+    {
+      "name": "different_source_hashes",
+      "input_locator_ids": [
+        "a-row",
+        "b-row"
+      ],
+      "observed_output_ids": [
+        "a-row",
+        "b-row"
+      ],
+      "expected_occurrence_preserving_ids": [
+        "a-row",
+        "b-row"
+      ],
+      "preserves_distinct_occurrences": true
+    }
+  ]
+}

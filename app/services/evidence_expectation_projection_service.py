@@ -68,18 +68,6 @@ class EvidenceExpectationProjectionService:
         repository = EvidenceExpectationV2Repository(session)
         result = []
         for template in templates:
-            if template.control_origin is not None:
-                # 补充控制的期望依赖控制适用条件与来源有效期评估，尚未接入。
-                # 控制来源模板显式跳过并留痕；其余资料期望照常投影，不因
-                # 未接入的控制期望阻断整个事实发布事务。
-                import logging
-
-                logging.getLogger(__name__).warning(
-                    "补充控制资料期望暂不投影（控制适用条件接入前不按无条件要求判定）：control=%s evidence_key=%s",
-                    getattr(template.control_origin, "protocol_control_id", "?"),
-                    getattr(template.control_origin, "evidence_key", "?"),
-                )
-                continue
             if template.due_stage == episode.stage:
                 if episode.workflow_stage_id is None:
                     raise EvidenceExpectationProjectionError(

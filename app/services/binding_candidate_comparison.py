@@ -1,5 +1,5 @@
 """Compare source-validated declarations; agreement is not verified evidence."""
-from app.llm.candidate_fact_accounting import ACCOUNTING_VERSION
+from app.llm.candidate_fact_accounting import ACCOUNTING_V1, ACCOUNTING_V2
 from app.llm.predicate_binding_candidates import PredicateFactCandidate
 
 COMPARISON_VERSION = "binding-candidate-comparison/v2"
@@ -20,14 +20,42 @@ _ACCOUNTING_STATUS = {
 }
 
 
-def _accounting_rows(entry_a, entry_b) -> list[dict]:
+def _accounting_rows(entry_a, entry_b, facts_a, facts_b, universe_fact_ids) -> list[dict]:
+    """把两路的逐事实处置展开成可比对行；v1 逐条与 v2 分组同样适用。
+
+    事实的候选处置以该路候选为准（v1 记录本就与候选一致；v2 候选不进组），
+    其余事实来自 v1 considered_facts 或 v2 分组处置。两路版本必须一致：
+    混用只可能来自新旧读取错配，不允许静默合并。
+    """
     a, b = entry_a.fact_accounting, entry_b.fact_accounting
     if a is None or b is None:
         raise ValueError("回答缺少版本化逐事实考虑记录，不能当作完整枚举合并")
-    if a.accounting_version != ACCOUNTING_VERSION or b.accounting_version != ACCOUNTING_VERSION:
+    if a.accounting_version != b.accounting_version:
         raise ValueError("逐事实考虑记录版本不符，不能合并")
-    index_a = {item.fact_id: item for item in a.considered_facts}
-    index_b = {item.fact_id: item for item in b.considered_facts}
+
+    def _dispositions(accounting, candidate_fact_ids):
+        if accounting.accounting_version == ACCOUNTING_V1:
+            index = {item.fact_id: (item.disposition, item.model_dump(mode="json"))
+                     for item in accounting.considered_facts}
+        else:
+            index = {}
+            for group in accounting.grouped_dispositions:
+                dump = group.model_dump(mode="json")
+                for fact_id in group.fact_ids:
+                    index[fact_id] = (group.disposition, dump)
+            default = accounting.default_group
+            if default is not None:
+                # 默认处置适用于未被候选或分组覆盖的全部剩余事实。
+                default_dump = default.model_dump(mode="json")
+                for fact_id in universe_fact_ids:
+                    if fact_id not in index and fact_id not in candidate_fact_ids:
+                        index[fact_id] = (default.disposition, default_dump)
+        for fact_id in candidate_fact_ids:
+            index[fact_id] = ("has_candidates", None)
+        return index
+
+    index_a = _dispositions(a, facts_a)
+    index_b = _dispositions(b, facts_b)
     if set(index_a) != set(index_b):
         raise ValueError("两路逐事实考虑范围不同，不能合并")
     rows = []
@@ -35,14 +63,24 @@ def _accounting_rows(entry_a, entry_b) -> list[dict]:
         item_a, item_b = index_a[fact_id], index_b[fact_id]
         rows.append({
             "fact_id": fact_id,
-            "status": _ACCOUNTING_STATUS[(item_a.disposition, item_b.disposition)],
-            "main-A": item_a.model_dump(mode="json"),
-            "main-B": item_b.model_dump(mode="json"),
+            "status": _ACCOUNTING_STATUS[(item_a[0], item_b[0])],
+            "main-A": item_a[1],
+            "main-B": item_b[1],
         })
     return rows
 
 
-def compare_candidate_declarations(left, right, *, identity_field: str) -> list[dict]:
+def compare_candidate_declarations(left, right, *, identity_field: str,
+                                   universe_fact_ids=None) -> list[dict]:
+    if any(
+        lane.fact_accounting is not None
+        and lane.fact_accounting.accounting_version == ACCOUNTING_V2
+        and lane.fact_accounting.default_group is not None
+        and universe_fact_ids is None
+        for payload in (left, right)
+        for lane in payload.results
+    ):
+        raise ValueError("默认处置需要完整事实清单才能展开逐事实比较")
     """Preserve both explanations and compare only the same source/attribute.
 
     Callers validate each payload against its frozen input and supplied batch.
@@ -84,11 +122,17 @@ def compare_candidate_declarations(left, right, *, identity_field: str) -> list[
                 "main-A": a.model_dump(mode="json") if a else None,
                 "main-B": b.model_dump(mode="json") if b else None,
             })
+        candidate_fact_ids = [
+            {source[0] for source in index} for index in indexed
+        ]
         results.append({
             identity_field: identity, "accepted": False,
             "status": "candidates_compared" if comparisons else "no_candidates_in_supplied_input",
             "uncertainty": {"main-A": entries[0].uncertainty, "main-B": entries[1].uncertainty},
             "comparisons": comparisons,
-            "fact_accounting": _accounting_rows(entries[0], entries[1]),
+            "fact_accounting": _accounting_rows(
+                entries[0], entries[1], candidate_fact_ids[0], candidate_fact_ids[1],
+                universe_fact_ids,
+            ),
         })
     return results

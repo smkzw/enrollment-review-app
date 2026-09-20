@@ -105,6 +105,9 @@ class ExpectationStatus(StableEnum):
     REFERENCED_MISSING = "referenced_missing"
     ABSENT = "absent"
     NOT_DUE = "not_due"
+    #: 补充控制专属：适用条件与来源有效期评估尚未接入，按待判断处置，
+    #: 不作为无条件缺失，也不阻断其余资料期望。
+    PENDING_CONTROL_APPLICABILITY = "pending_control_applicability"
 
 
 class ComponentDecision(StableEnum):
@@ -136,6 +139,7 @@ class GapType(StableEnum):
     INTERPRETATION_CONFLICT = "interpretation_conflict"
     FUTURE_STAGE_NOT_DUE = "future_stage_not_due"
     PROVENANCE_FOLLOWUP = "provenance_followup"
+    CONTROL_APPLICABILITY_PENDING = "control_applicability_pending"
 
 
 class BlockingLevel(StableEnum):

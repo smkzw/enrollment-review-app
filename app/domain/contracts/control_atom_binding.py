@@ -66,6 +66,15 @@ class ControlBindingFrozenInput(ContractModel):
     evidence_input: PredicateBindingFrozenInput
     frozen_input_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
 
+    @property
+    def facts(self):
+        """共享当前事实快照；候选对应与逐事实处置都引用同一事实集合。"""
+        return self.evidence_input.facts
+
+    @property
+    def components(self):
+        return self.evidence_input.components
+
     @model_validator(mode="after")
     def validate_input(self) -> "ControlBindingFrozenInput":
         source = self.evidence_input

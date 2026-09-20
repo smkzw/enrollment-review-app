@@ -216,10 +216,6 @@ def project_expectation(
     ``observations`` 为结构化已发布事实（同权威元组过滤在投影器内执行）；
     ``gap_signals`` 为结构化缺失/风险输入。缺失/风险绝不从散文推断。
     """
-    if template.control_origin is not None:
-        raise ProjectionInputError(
-            "补充控制的适用条件与完整来源有效期尚未接入，不能按无条件资料要求判定"
-        )
     if (
         template.rule_set_id != authority.rule_set_id
         or template.rule_set_revision != authority.rule_set_revision
@@ -248,6 +244,27 @@ def project_expectation(
             gap_type=GapType.FUTURE_STAGE_NOT_DUE,
             input_gap_signals=input_provenance,
             revision=revision,
+            created_at=created_at,
+        )
+
+    # 1.5 补充控制：适用条件与来源有效期评估尚未接入，到期控制给模板级
+    # "待判断"处置并可回到规则与节点；不按无条件资料要求判定缺失，
+    # 也不仅写日志跳过（R05）。
+    if template.control_origin is not None:
+        control_id = getattr(template.control_origin, "protocol_control_id", "?")
+        evidence_key = getattr(template.control_origin, "evidence_key", "?")
+        return EvidenceExpectationV2(
+            expectation_id=expectation_id,
+            authority=authority,
+            template_id=template.template_id,
+            status=ExpectationStatus.PENDING_CONTROL_APPLICABILITY,
+            gap_type=GapType.CONTROL_APPLICABILITY_PENDING,
+            input_gap_signals=input_provenance,
+            revision=revision,
+            gap_detail=(
+                f"补充控制 {control_id}（资料要求 {evidence_key}）的适用条件与"
+                "来源有效期评估尚未接入，暂按待判断处置，不作为无条件缺失。"
+            ),
             created_at=created_at,
         )
 
@@ -431,18 +448,6 @@ def project_expectations(
                 f"模板 {template.template_id} 重复出现，拒绝重复投影"
             )
         seen.add(template.template_id)
-        if template.control_origin is not None:
-            # 补充控制的期望依赖控制适用条件与来源有效期评估，尚未接入。
-            # 控制来源模板显式跳过并留痕；其余资料期望照常投影，不因
-            # 未接入的控制期望阻断整个事实发布事务。
-            import logging
-
-            logging.getLogger(__name__).warning(
-                "补充控制资料期望暂不投影（控制适用条件接入前不按无条件要求判定）：control=%s evidence_key=%s",
-                getattr(template.control_origin, "protocol_control_id", "?"),
-                getattr(template.control_origin, "evidence_key", "?"),
-            )
-            continue
         projected.append(
             project_expectation(
                 template=template,

@@ -219,6 +219,16 @@ class EvidenceExpectationV2(ContractModel):
         _require_utc(self.created_at, "created_at")
         _require_sorted_unique(self.locator_ids, "期望定位")
         _require_sorted_unique(self.coverage_fact_ids, "期望覆盖事实")
+        if self.status == ExpectationStatus.PENDING_CONTROL_APPLICABILITY:
+            if self.gap_type != GapType.CONTROL_APPLICABILITY_PENDING:
+                raise ValueError("控制待判断必须使用 control_applicability_pending 缺口")
+            if self.coverage_fact_ids or self.locator_ids:
+                raise ValueError("控制待判断期望不能携带覆盖事实或定位")
+            if self.provenance_followup:
+                raise ValueError("控制待判断期望不能携带溯源提醒")
+            if self.source_coverage != "none":
+                raise ValueError("控制待判断期望不得声明覆盖强度")
+            return self
         if self.status == ExpectationStatus.NOT_DUE:
             if self.gap_type != GapType.FUTURE_STAGE_NOT_DUE:
                 raise ValueError("尚未到期必须使用 future_stage_not_due 缺口")

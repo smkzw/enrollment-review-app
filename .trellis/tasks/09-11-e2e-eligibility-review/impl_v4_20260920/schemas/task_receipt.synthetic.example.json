@@ -1,0 +1,49 @@
+{
+  "schema_version": "task-receipt/proposed-v1",
+  "run_id": "synthetic-run",
+  "task_id": "synthetic-task",
+  "role_id": "visual_verifier",
+  "input_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "source_artifact_ids": [
+    "synthetic-page-1"
+  ],
+  "scope_ref": "synthetic-focus-1",
+  "versions": {
+    "prompt": "example/v1",
+    "schema": "example/v1",
+    "source_policy": "example/v1",
+    "processing": "example/v1"
+  },
+  "attempt_index": 1,
+  "candidates_visible": false,
+  "model_identity": {
+    "provider": "example-provider",
+    "endpoint_id": "example-cloud-route",
+    "requested_model": "example-model",
+    "resolved_model": "example-model-v1",
+    "observed_models": [
+      "example-model-v1"
+    ],
+    "deployment_id": null,
+    "identity_status": "verified",
+    "alias_policy_version": "example-alias/v1"
+  },
+  "status": "unresolved",
+  "finish_reason": "stop",
+  "output_artifact_id": "synthetic-output-1",
+  "remaining_scope_refs": [
+    "synthetic-unreadable-region"
+  ],
+  "metrics": {
+    "input_tokens": null,
+    "output_tokens": null,
+    "output_characters": 120,
+    "queue_ms": 10,
+    "service_ms": 200,
+    "retry_ms": 0,
+    "token_accounting": "unavailable"
+  },
+  "retry_reason": null,
+  "supersedes_task_id": null,
+  "error_code": null
+}

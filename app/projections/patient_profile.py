@@ -91,6 +91,7 @@ _EXPECTATION_LABELS = {
     ExpectationStatus.REFERENCED_MISSING: "已引用未提供",
     ExpectationStatus.ABSENT: "未观察到",
     ExpectationStatus.NOT_DUE: "尚未到期",
+    ExpectationStatus.PENDING_CONTROL_APPLICABILITY: "控制待判断",
 }
 
 _CONFLICT_HIGHLIGHT_DETAIL = "同一临床对象存在不兼容来源，并列展示，系统不择优"

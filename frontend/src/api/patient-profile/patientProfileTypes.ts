@@ -74,7 +74,8 @@ export type ProfileExpectationStatusWire =
   | "observed_weak"
   | "referenced_missing"
   | "absent"
-  | "not_due";
+  | "not_due"
+  | "pending_control_applicability";
 
 /** 资料缺口类型。 */
 export type ProfileGapTypeWire =
@@ -91,7 +92,8 @@ export type ProfileGapTypeWire =
   | "ocr_or_parse_risk"
   | "interpretation_conflict"
   | "future_stage_not_due"
-  | "provenance_followup";
+  | "provenance_followup"
+  | "control_applicability_pending";
 
 /** 首屏突出原因的完整允许集（显式结构化，绝不从阈值/关键词推导）。 */
 export type ProfileHighlightReasonWire =

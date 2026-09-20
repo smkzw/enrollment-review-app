@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Proposed Source-Bound Task Receipt",
+  "description": "Candidate contract only; semantic cross-record validators are additionally required. Not a clinical assessment schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "task-receipt/proposed-v1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "role_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "input_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "source_artifact_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true,
+      "minItems": 1
+    },
+    "scope_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_policy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "processing": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "prompt",
+        "schema",
+        "source_policy",
+        "processing"
+      ]
+    },
+    "attempt_index": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "candidates_visible": {
+      "type": "boolean"
+    },
+    "model_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "endpoint_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requested_model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resolved_model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "observed_models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "deployment_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "identity_status": {
+          "enum": [
+            "verified",
+            "unverified",
+            "mismatch",
+            "not_applicable"
+          ]
+        },
+        "alias_policy_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "provider",
+        "endpoint_id",
+        "requested_model",
+        "resolved_model",
+        "observed_models",
+        "deployment_id",
+        "identity_status",
+        "alias_policy_version"
+      ]
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "partial",
+        "unresolved",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "finish_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "output_artifact_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "remaining_scope_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "input_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "output_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "output_characters": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "queue_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "service_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "retry_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "token_accounting": {
+          "enum": [
+            "reported",
+            "estimated",
+            "unavailable"
+          ]
+        }
+      },
+      "required": [
+        "input_tokens",
+        "output_tokens",
+        "output_characters",
+        "queue_ms",
+        "service_ms",
+        "retry_ms",
+        "token_accounting"
+      ]
+    },
+    "retry_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "supersedes_task_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "error_code": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "run_id",
+    "task_id",
+    "role_id",
+    "input_sha256",
+    "source_artifact_ids",
+    "scope_ref",
+    "versions",
+    "attempt_index",
+    "candidates_visible",
+    "model_identity",
+    "status",
+    "finish_reason",
+    "output_artifact_id",
+    "remaining_scope_refs",
+    "metrics",
+    "retry_reason",
+    "supersedes_task_id",
+    "error_code"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "completed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "output_artifact_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "remaining_scope_refs": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ]
+}

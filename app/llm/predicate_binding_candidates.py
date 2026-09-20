@@ -15,8 +15,16 @@ from app.domain.contracts.common import ContractModel
 from app.domain.contracts.predicate_binding import PredicateBindingFrozenInput
 from app.domain.publication import canonical_hash
 from app.llm.page_review_harness import Completion, PageCompletion, PageReaderRoute, direct_completion, _status_code
-from app.llm.page_reader_capabilities import MAX_SEMANTIC_OUTPUT_TOKENS
-from app.llm.candidate_fact_accounting import IdentityFactAccounting, validate_identity_fact_accounting
+from app.llm.page_reader_capabilities import (
+    MAX_SEMANTIC_OUTPUT_TOKENS,
+    MIN_SEMANTIC_OUTPUT_TOKENS,
+)
+from app.llm.candidate_fact_accounting import (
+    ACCOUNTING_V1,
+    ACCOUNTING_V2,
+    IdentityFactAccounting,
+    validate_identity_fact_accounting,
+)
 from app.llm.predicate_binding_batches import PredicateBindingBatch, project_binding_batch, validate_binding_batch
 
 PROMPT_VERSION = "predicate-binding-candidates/v8"
@@ -53,6 +61,66 @@ def predicate_binding_prompt_input(frozen: PredicateBindingFrozenInput) -> dict:
     }
 
 
+def build_predicate_alias_maps(frozen: PredicateBindingFrozenInput, batch=None) -> dict:
+    """包内短别名：模型引用短名，程序落盘前恢复真实身份（V4 紧凑包合同）。"""
+    if batch is None:
+        facts = list(frozen.facts)
+        locators = list(frozen.locators)
+    else:
+        facts = [item for item in frozen.facts if item.fact_id in batch.fact_ids]
+        locators = [item for item in frozen.locators if item.locator_id in batch.locator_ids]
+    predicate_ids = sorted({
+        predicate.predicate_identity_sha256
+        for component in frozen.components
+        for predicate in component.binding_predicates
+    })
+    return {
+        "fact": {item.fact_id: f"f{i + 1}" for i, item in enumerate(
+            sorted(facts, key=lambda x: x.fact_id))},
+        "locator": {item.locator_id: f"L{i + 1}" for i, item in enumerate(
+            sorted(locators, key=lambda x: x.locator_id))},
+        "predicate": {identity: f"p{index + 1:02d}" for index, identity in enumerate(predicate_ids)},
+    }
+
+
+def _combined_restore_map(maps) -> dict:
+    combined = {}
+    for namespace in maps.values():
+        combined.update({alias: real for real, alias in namespace.items()})
+    return combined
+
+
+def _combined_alias_map(maps) -> dict:
+    combined = {}
+    for namespace in maps.values():
+        combined.update(namespace)
+    return combined
+
+
+def _apply_aliases(value, maps):
+    """递归把包内真实身份替换为短别名；仅整体相等时替换，不动其他文本。"""
+    combined = _combined_alias_map(maps)
+    if isinstance(value, str):
+        return combined.get(value, value)
+    if isinstance(value, list):
+        return [_apply_aliases(item, maps) for item in value]
+    if isinstance(value, dict):
+        return {key: _apply_aliases(item, maps) for key, item in value.items()}
+    return value
+
+
+def _restore_ids(value, maps):
+    """别名回写为真实身份；与 _apply_aliases 一一对应。"""
+    combined = _combined_restore_map(maps)
+    if isinstance(value, str):
+        return combined.get(value, value)
+    if isinstance(value, list):
+        return [_restore_ids(item, maps) for item in value]
+    if isinstance(value, dict):
+        return {key: _restore_ids(item, maps) for key, item in value.items()}
+    return value
+
+
 def _table(rows: list[dict]) -> dict:
     columns = list(dict.fromkeys(key for row in rows for key in row))
     return {"columns": columns, "rows": [[row.get(key) for key in columns] for row in rows]}
@@ -87,7 +155,14 @@ class PredicateCandidateResult(ContractModel):
     def validate_status(self):
         if (self.status == "candidates") != bool(self.candidates):
             raise ValueError("候选状态与候选清单不一致")
-        if self.status == "unresolved" and not (self.uncertainty or "").strip():
+        structured = (
+            self.fact_accounting is not None
+            and (bool(self.fact_accounting.grouped_dispositions)
+                 or self.fact_accounting.default_group is not None)
+        )
+        if (self.status == "unresolved"
+                and not (self.uncertainty or "").strip() and not structured):
+            # v2 分组处置与原因码即结构化未决说明；无账目时才要求散文。
             raise ValueError("尚未对应时须说明未核实内容")
         keys = [(c.fact_id, c.fact_attribute, c.locator_id) for c in self.candidates]
         if len(keys) != len(set(keys)):
@@ -131,19 +206,26 @@ def candidate_value_shape(predicate, fact, attribute: str) -> dict:
 
 def build_predicate_binding_messages(frozen: PredicateBindingFrozenInput, *, batch: PredicateBindingBatch | None = None) -> list[dict]:
     frozen = PredicateBindingFrozenInput.model_validate(frozen.model_dump(mode="json"))
+    maps = build_predicate_alias_maps(frozen, batch)
     prompt_input = predicate_binding_prompt_input(frozen)
     if batch is not None:
         prompt_input = project_binding_batch(prompt_input, frozen, batch)
-    identities = [p.predicate_identity_sha256 for component in frozen.components
+    prompt_input = _apply_aliases(prompt_input, maps)
+    identities = [maps["predicate"][p.predicate_identity_sha256]
+                  for component in frozen.components
                   for p in component.binding_predicates]
     output_schema = PredicateCandidatePayload.model_json_schema()
     output_schema["properties"]["results"].update(minItems=len(identities), maxItems=len(identities))
     result_schema = output_schema["$defs"]["PredicateCandidateResult"]
     result_schema["properties"]["predicate_identity_sha256"]["enum"] = identities
+    # 包内使用短别名，真实身份由程序恢复；enum 已约束合法值，去掉64位哈希模式。
+    result_schema["properties"]["predicate_identity_sha256"].pop("pattern", None)
     result_schema["required"] = sorted({*result_schema.get("required", ()), "fact_accounting"})
     result_schema["properties"]["fact_accounting"] = {"$ref": "#/$defs/IdentityFactAccounting"}
     accounting_schema = output_schema["$defs"]["IdentityFactAccounting"]
-    accounting_schema["required"] = sorted({*accounting_schema.get("required", ()), "considered_facts"})
+    accounting_schema["properties"]["accounting_version"]["enum"] = [ACCOUNTING_V2]
+    accounting_schema["properties"]["considered_facts"]["maxItems"] = 0
+    accounting_schema["required"] = sorted({*accounting_schema.get("required", ()), "grouped_dispositions"})
     messages = [
         {"role": "system", "content": (
             "你负责将已发布事实与研究方案的具体审核条件进行语义对应。"
@@ -152,6 +234,9 @@ def build_predicate_binding_messages(frozen: PredicateBindingFrozenInput, *, bat
             "若有repeat_trigger条件，也须独立对应病例；它仅描述何时允许或需要复查，"
             "不构成新增入排标准，不表示已获准复查，也不决定采用哪次结果。"
             "facts和sources采用表格：columns给出列名，rows中每行按该列顺序取值，null不表示阴性。"
+            "包内所有fact_id、locator_id与predicate_identity_sha256均使用短别名"
+            "（f1、L1、p01等）；你的全部输出也只能使用这些短别名，系统会恢复真实身份，"
+            "不要自行编造或改写别名，也不要输出64位哈希。"
             "documents给出上传文件名和媒体类型，由source_document_version_id与摘录关联；"
             "文件名和媒体类型仅是来源线索，不证明作者、资料性质或医学事实，缺少时不能猜测。"
             "须按方案要求核对原始记录与说明材料的证据资格；转述、邮件或说明不能替代方案指定的原始记录。"
@@ -173,14 +258,24 @@ def build_predicate_binding_messages(frozen: PredicateBindingFrozenInput, *, bat
             "同一组件中的多个条件以及例外条件各自保留，不合并答案、不省略未对应项。"
             "它只表示当前提供的事实尚未对应，不表示检查未做、判断缺失或受试者符合条件。"
             "原文状态unverified的条件不提出可用对应，保留unresolved。"
-            "每个条件还必须返回fact_accounting逐事实考虑记录，accounting_version固定为candidate-fact-accounting/v1："
-            "对本次提供的每条事实各留一条considered_facts记录，不得按fact_type、病史、用药或检验类别跳过任何事实。"
-            "提出候选的事实记has_candidates；核对来源后确认不对应的记noncorrespondence，"
-            "须引用该事实自身的具体locator_id并说明为何不对应；"
-            "对象、时间或归属无法确定，包括原文不可读时，记uncertain并说明原因，不得为凑齐记录编造证据或定位。"
-            "考虑记录恰好覆盖本次提供的全部事实，不缺失、不多出、不重复；"
-            "它只证明每条事实被逐项考虑，不证明对应正确，也不证明受试者资料齐全。"
-            "条件原文未核实时不得记noncorrespondence，一律保留uncertain。"
+            "每个条件还必须返回fact_accounting，accounting_version固定为candidate-fact-accounting/v2，"
+            "并用grouped_dispositions分组说明未提出候选的事实，禁止使用considered_facts："
+            "提出候选的事实不进分组，由候选记录承担；其余事实按同因一组返回，每组含"
+            "disposition（noncorrespondence或uncertain）、fact_ids、reason_code、必要时共同核对过的source_locator_ids"
+            "和不超过六十字的note。"
+            "reason_code六选一：different_object对象亚型或归属不符；different_time_scope时间窗或时点不符；"
+            "different_attribute属性不同；category_match_only仅类别相关无具体对应；"
+            "value_form_mismatch值形态不符；different_source_scope来源资格或范围不符。"
+            "同组必须同因，不同原因分成多组；一组只列该原因真正适用的事实，不得为凑齐把无关事实塞进组。"
+            "当某条件下绝大多数未候选事实共享同一处置时，用default_group声明默认处置"
+            "（disposition、reason_code、必要时共同核对过的source_locator_ids和note），"
+            "grouped_dispositions只列与默认不同的事实；未列出的剩余事实全部按默认处置计，"
+            "不得再罗列它们。"
+            "候选事实加分组加默认的覆盖必须恰好等于本次提供的全部事实，不缺失、不多出、不重复；"
+            "它只证明每条事实被归入明确处置，不证明对应正确，也不证明受试者资料齐全。"
+            "noncorrespondence组必须引用该组事实共同核对过的可读原文定位；"
+            "条件原文未核实时不得记noncorrespondence，相关事实全部保留uncertain。"
+            "对象、时间或归属无法确定，包括原文不可读时，记uncertain，不得为凑齐编造证据或定位。"
             "只输出一个符合output_schema的JSON对象，无Markdown和额外文字。"
         )},
         {"role": "user", "content": [{"type": "text", "text": json.dumps({
@@ -195,6 +290,22 @@ def build_predicate_binding_messages(frozen: PredicateBindingFrozenInput, *, bat
     return messages
 
 
+def _strip_json_fences(text: str) -> str:
+    """防御性剥离模型偶发的Markdown围栏；内容仍须是完整JSON，不修复截断。"""
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return text
+    first_line_end = stripped.find("\n")
+    if first_line_end == -1:
+        return text
+    if not stripped[:first_line_end].strip().startswith("```"):
+        return text
+    body = stripped[first_line_end + 1:]
+    if body.rstrip().endswith("```"):
+        body = body.rstrip()[:-3]
+    return body.strip()
+
+
 def _unique_object(pairs):
     result = {}
     for key, value in pairs:
@@ -207,11 +318,17 @@ def _unique_object(pairs):
 def validate_predicate_candidates(
     frozen: PredicateBindingFrozenInput, raw_text: str, *, batch: PredicateBindingBatch | None = None,
 ) -> PredicateCandidatePayload:
-    """Validate references, not medical meaning or acceptance of a correspondence."""
+    """Validate references, not medical meaning or acceptance of a correspondence.
+
+    模型回包使用包内短别名；先按冻结别名表恢复真实身份，再走引用校验。
+    出现未知别名视为无效回答，不猜测映射。
+    """
     frozen = PredicateBindingFrozenInput.model_validate(frozen.model_dump(mode="json"))
     if batch is not None:
         validate_binding_batch(frozen, batch)
-    payload = PredicateCandidatePayload.model_validate(json.loads(raw_text, object_pairs_hook=_unique_object))
+    maps = build_predicate_alias_maps(frozen, batch)
+    restored = _restore_ids(json.loads(_strip_json_fences(raw_text), object_pairs_hook=_unique_object), maps)
+    payload = PredicateCandidatePayload.model_validate(restored)
     predicates = {
         p.predicate_identity_sha256: p for component in frozen.components
         for p in component.binding_predicates
@@ -296,8 +413,9 @@ async def read_predicate_candidates(
     Returned correspondences remain unverified. This function neither publishes
     facts nor changes the evaluator, and retains truncated responses on failure.
     """
-    if not 65536 <= route.max_tokens <= 131072:
-        raise PredicateCandidateReadError("对应任务输出额度须在65536至131072之间")
+    if not MIN_SEMANTIC_OUTPUT_TOKENS <= route.max_tokens <= MAX_SEMANTIC_OUTPUT_TOKENS:
+        raise PredicateCandidateReadError(
+            f"对应任务输出额度须在{MIN_SEMANTIC_OUTPUT_TOKENS}至{MAX_SEMANTIC_OUTPUT_TOKENS}之间")
     frozen = PredicateBindingFrozenInput.model_validate(frozen.model_dump(mode="json"))
     if batch is not None:
         batch = PredicateBindingBatch.model_validate(batch.model_dump(mode="json"))
@@ -323,8 +441,9 @@ async def read_candidate_payload(
     completion: Completion = direct_completion,
 ) -> tuple[_CandidatePayload, tuple[PageCompletion, ...], tuple[int, ...]]:
     """Shared direct transport policy; caller retains admission and persistence."""
-    if not 65536 <= route.max_tokens <= 131072:
-        raise PredicateCandidateReadError("对应任务输出额度须在65536至131072之间")
+    if not MIN_SEMANTIC_OUTPUT_TOKENS <= route.max_tokens <= MAX_SEMANTIC_OUTPUT_TOKENS:
+        raise PredicateCandidateReadError(
+            f"对应任务输出额度须在{MIN_SEMANTIC_OUTPUT_TOKENS}至{MAX_SEMANTIC_OUTPUT_TOKENS}之间")
     responses: list[PageCompletion] = []
     budgets: list[int] = []
     budget = route.max_tokens

@@ -66,7 +66,7 @@ export const REVIEW_HISTORY_GAP_TYPES = [
   "interpretation_conflict",
   "future_stage_not_due",
   "provenance_followup",
-] as const;
+  "control_applicability_pending",] as const;
 export type ReviewHistoryGapType = (typeof REVIEW_HISTORY_GAP_TYPES)[number];
 
 export const REVIEW_HISTORY_BLOCKING_LEVELS = ["none", "attention", "blocking"] as const;

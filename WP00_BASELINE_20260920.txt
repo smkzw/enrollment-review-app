@@ -1,0 +1,6 @@
+== WP00 基线保全记录 2026-09-20 10:12
+pwd: /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile
+toplevel: /Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile
+branch: codex/phase5-clinical-facts-profile
+HEAD: 60f5bb8fe67ac14d44af9ceab0801a9b2a42120b
+status --short 行数:        2

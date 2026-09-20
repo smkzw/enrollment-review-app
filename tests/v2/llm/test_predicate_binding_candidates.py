@@ -6,6 +6,8 @@ from types import SimpleNamespace
 import pytest
 
 from app.llm.predicate_binding_candidates import (
+    _apply_aliases,
+    build_predicate_alias_maps,
     build_predicate_binding_messages, validate_predicate_candidates,
     read_predicate_candidates, PredicateCandidateReadError,
     predicate_binding_prompt_input,
@@ -19,6 +21,22 @@ from tests.v2.services.test_predicate_binding_input import (
 )
 
 
+V2_ACCOUNTING_VERSION = "candidate-fact-accounting/v2"
+
+
+def _v2_accounting(*, candidate_fact_ids=("fact-a",), universe=("fact-a",),
+                   disposition="uncertain", reason_code="category_match_only"):
+    """v2 分组处置：候选事实不进组；未入组事实按同因一组给出处置。"""
+    grouped = [fact_id for fact_id in universe if fact_id not in candidate_fact_ids]
+    return {
+        "accounting_version": V2_ACCOUNTING_VERSION,
+        "grouped_dispositions": (
+            [{"disposition": disposition, "fact_ids": grouped, "reason_code": reason_code}]
+            if grouped else []
+        ),
+    }
+
+
 def _case(*, source="合成排除原文"):
     component = _component_contract(["first", "second"], "component-a", source_clause=source)
     frozen = _frozen_input([component], [_fact_record("fact-a", _sha("fact-a"), ["loc-a"])], [_locator_record("loc-a")])
@@ -29,6 +47,7 @@ def _case(*, source="合成排除原文"):
             "candidates": [{"fact_id": "fact-a", "fact_attribute": "value", "locator_id": "loc-a",
                             "object_correspondence": "uncertain", "attribute_correspondence": "uncertain",
                             "correspondence_explanation": "待独立语义核对"}],
+            "fact_accounting": _v2_accounting(),
         } for p in component.trigger_predicates]
     }
     return frozen, result
@@ -106,13 +125,21 @@ def test_request_schema_enumerates_each_atomic_condition_without_merging():
     import jsonschema
 
     frozen, payload = _case()
+    maps = build_predicate_alias_maps(frozen)
     data = json.loads(build_predicate_binding_messages(frozen)[1]["content"][0]["text"])
     schema = data["output_schema"]
-    expected = [p.predicate_identity_sha256 for c in frozen.components
+    expected = [maps["predicate"][p.predicate_identity_sha256] for c in frozen.components
                 for p in (*c.trigger_predicates, *c.exception_predicates)]
     assert data["required_predicate_identities"] == expected
     assert schema["properties"]["results"]["minItems"] == len(expected)
     assert schema["properties"]["results"]["maxItems"] == len(expected)
+    for result in payload["results"]:
+        result["predicate_identity_sha256"] = maps["predicate"][result["predicate_identity_sha256"]]
+        for candidate in result["candidates"]:
+            candidate["fact_id"] = maps["fact"][candidate["fact_id"]]
+            candidate["locator_id"] = maps["locator"][candidate["locator_id"]]
+        accounting = result["fact_accounting"]
+        accounting["grouped_dispositions"] = []
     jsonschema.validate(payload, schema)
     omitted = {"results": payload["results"][:-1]}
     with pytest.raises(jsonschema.ValidationError):
@@ -126,13 +153,17 @@ def test_schema_count_does_not_replace_exact_identity_validation():
     import jsonschema
 
     frozen, payload = _case()
+    maps = build_predicate_alias_maps(frozen)
     data = json.loads(build_predicate_binding_messages(frozen)[1]["content"][0]["text"])
     payload["results"][1] = payload["results"][0].copy()
+    for result in payload["results"]:
+        result["predicate_identity_sha256"] = maps["predicate"][result["predicate_identity_sha256"]]
     jsonschema.validate(payload, data["output_schema"])
     with pytest.raises(ValueError, match="完整覆盖"):
         validate_predicate_candidates(frozen, json.dumps(payload))
     payload["results"] = [dict(predicate_identity_sha256=identity, status="unresolved",
-                               candidates=[], uncertainty="本批尚未对应")
+                               candidates=[], uncertainty="本批尚未对应",
+                               fact_accounting=_v2_accounting(candidate_fact_ids=()))
                           for identity in data["required_predicate_identities"]]
     assert all(item.status == "unresolved" for item in
                validate_predicate_candidates(frozen, json.dumps(payload)).results)
@@ -167,7 +198,8 @@ def test_exception_identity_is_required_separately_and_adapter_preserves_constra
     messages = build_predicate_binding_messages(frozen)
     data = json.loads(messages[1]["content"][0]["text"])
     assert len(data["required_predicate_identities"]) == 3
-    assert exception.predicate_identity_sha256 in data["required_predicate_identities"]
+    alias_maps = build_predicate_alias_maps(frozen)
+    assert alias_maps["predicate"][exception.predicate_identity_sha256] in data["required_predicate_identities"]
     assert exception.predicate_identity_sha256 != component.trigger_predicates[1].predicate_identity_sha256
     schema = page_completion_options("mtplx", messages, 65536)["response_format"]["json_schema"]["schema"]
     assert schema["properties"]["results"]["minItems"] == 3
@@ -180,7 +212,8 @@ def test_unverified_source_requires_unresolved_not_silent_acceptance():
     with pytest.raises(ValueError, match="原文未核实"):
         validate_predicate_candidates(frozen, json.dumps(payload))
     for item in payload["results"]:
-        item.update(status="unresolved", candidates=[], uncertainty="条件原文尚未核实")
+        item.update(status="unresolved", candidates=[], uncertainty="条件原文尚未核实",
+                    fact_accounting=_v2_accounting(candidate_fact_ids=()))
     assert all(item.status == "unresolved" for item in validate_predicate_candidates(frozen, json.dumps(payload)).results)
 
 
@@ -188,7 +221,8 @@ def test_prompt_uses_frozen_input_without_a_model_specific_branch():
     frozen, _ = _case()
     messages = build_predicate_binding_messages(frozen)
     data = json.loads(messages[1]["content"][0]["text"])
-    assert data["frozen_input"] == predicate_binding_prompt_input(frozen)
+    assert data["frozen_input"] == _apply_aliases(
+        predicate_binding_prompt_input(frozen), build_predicate_alias_maps(frozen))
     assert "glm" not in messages[0]["content"].lower()
     assert "qwen" not in messages[0]["content"].lower()
 
@@ -308,3 +342,14 @@ def test_compact_prompt_preserves_clinical_values_and_exact_excerpts():
     for locator in frozen.locators:
         assert sources[locator.locator_id]["excerpt"] == locator.excerpt
     assert compact["frozen_input_sha256"] == frozen.frozen_input_sha256
+
+
+def test_markdown_fenced_json_is_stripped_before_parsing():
+    """模型偶发把完整JSON包进Markdown围栏；剥离后解析，截断仍拒绝。"""
+    frozen, payload = _case()
+    wrapped = "```json\n" + json.dumps(payload, ensure_ascii=False) + "\n```"
+    result = validate_predicate_candidates(frozen, wrapped)
+    assert len(result.results) == 2
+    truncated = "```json\n" + json.dumps(payload, ensure_ascii=False)[:50]
+    with pytest.raises(ValueError):
+        validate_predicate_candidates(frozen, truncated)

@@ -192,6 +192,47 @@ def build_binding_qualification_messages(
     ]
 
 
+def _strip_json_fences(text: str) -> str:
+    """防御性剥离模型偶发的Markdown围栏；截断/空回答仍被下游拒绝。"""
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return text
+    first_line_end = stripped.find("\n")
+    if first_line_end == -1 or not stripped[:first_line_end].strip().startswith("```"):
+        return text
+    body = stripped[first_line_end + 1:]
+    if body.rstrip().endswith("```"):
+        body = body.rstrip()[:-3]
+    return body.strip()
+
+
+def _repair_missing_unresolved_reasons(data):
+    """确定性格式修复：judgment 未通过/未核实但漏填 unresolved_reasons 时，
+    从其自有 explanation 提取首句作为原因；不改判断、不改其他字段。
+    无 explanation 可提取时保持原样交由合同报错。"""
+    if not isinstance(data, dict):
+        return data
+    results = data.get("results")
+    if not isinstance(results, list):
+        return data
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        judgment = item.get("judgment") if "judgment" in item else item
+        if not isinstance(judgment, dict):
+            continue
+        reasons = judgment.get("unresolved_reasons")
+        if reasons:
+            continue
+        explanation = judgment.get("explanation")
+        if isinstance(explanation, str) and explanation.strip():
+            head = explanation.strip().split("；", 1)[0].split(";", 1)[0].split("。", 1)[0]
+            head = head.strip().rstrip("，,")
+            if head:
+                judgment["unresolved_reasons"] = [head[:120]]
+    return data
+
+
 def validate_binding_qualification_payload(
     pairs: list[BindingQualificationPairContext],
     raw_text: str,
@@ -201,9 +242,10 @@ def validate_binding_qualification_payload(
     expected = set(batch.pair_ids)
     if {item.pair_id for item in pairs} != expected:
         raise ValueError("资格校验配对必须与分批一致")
-    payload = BindingQualificationLanePayload.model_validate(
-        json.loads(raw_text, object_pairs_hook=_unique_object),
+    parsed = _repair_missing_unresolved_reasons(
+        json.loads(_strip_json_fences(raw_text), object_pairs_hook=_unique_object),
     )
+    payload = BindingQualificationLanePayload.model_validate(parsed)
     actual = [item.pair_id for item in payload.results]
     if len(actual) != len(set(actual)) or set(actual) != expected:
         raise ValueError("资格回答必须完整覆盖本次配对且不得重复或夹带其他配对")

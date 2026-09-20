@@ -479,6 +479,7 @@ def verify_completed_candidate_comparison(
             "results": compare_candidate_declarations(
                 group[LANES[0]][0], group[LANES[1]][0],
                 identity_field=spec["identity_field"],
+                universe_fact_ids={fact.fact_id for fact in frozen.facts},
             ),
         })
     rebuilt = {

@@ -408,6 +408,7 @@ const GAP_TYPES: readonly ProfileGapTypeWire[] = [
   "interpretation_conflict",
   "future_stage_not_due",
   "provenance_followup",
+  "control_applicability_pending",
 ];
 
 const EXPECTATION_STATUSES: readonly ProfileExpectationStatusWire[] = [
@@ -416,6 +417,7 @@ const EXPECTATION_STATUSES: readonly ProfileExpectationStatusWire[] = [
   "referenced_missing",
   "absent",
   "not_due",
+  "pending_control_applicability",
 ];
 
 const SOURCE_STRENGTHS: readonly ProfileSourceStrengthWire[] = [
