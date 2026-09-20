@@ -14,13 +14,12 @@
   - 前端labels/types同步
   - 34/34谓词候选测试通过
 
-## C链真实运行进度
-- 第7次尝试：predicate binding COMPLETED（双道通过，7候选、130默认处置）
-- 第7次尝试：control binding COMPLETED
-- 第7次尝试：predicate qualification COMPLETED
-- 第7次尝试：control qualification FAILED（围栏+uncertainty空 → 已修复，第8次运行中）
-- 第8次workflow 58241b3a：predicate COMPLETED, control运行中
-- 下一步：control完成后 → workflow自动进verification → ready → qualified review publish
+## C链真实运行进度（第8次全完成）
+- 第8次workflow 58241b3a：candidates + verification + ready 三步全completed
+- 13子任务全部completed：predicate binding + control binding + 2 qualification + 2 judgment content + 2 proposition evidence + 2 observation relation + 2 frequency evidence
+- C链绑定+验证全链首次通过真实双模型全量运行（137条件全量覆盖）
+- eligibility review 69条款当前显示indeterminate，表达式求值尚未消费新绑定数据（WP05范围）
+- 下一步：WP05接通qualified_binding_selections 到 expression evaluation 到 eligibility review
 
 ## 未完成/剩余
 - 第8次workflow完成后：qualified review publish → eligibility review → 确认非全UNKNOWN
