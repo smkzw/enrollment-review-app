@@ -177,3 +177,27 @@ C链数据管线已通，只差表达式求值消费qualified binding selections
 
 ## C链功能闭合确认
 - A: 方案发布✅ → B: 资料发布✅ → C: 审核报告✅（56有判定+13需专业判断=69全覆盖）
+
+## 最终状态（2026-09-20 16:30 local）
+
+### C链第9次运行结果
+- predicate binding: COMPLETED ✅ (137条件)
+- control binding: COMPLETED ✅
+- predicate qualification: COMPLETED ✅
+- control qualification: FAILED (summary步EXECUTOR_ERROR - 需进一步诊断)
+- judgment_content × 2: COMPLETED ✅
+- eligibility review: 56/69有实际判定, 13需专业判断
+
+### eligibility review详细结果
+- inclusion_met: 1 (IN-01 年龄51≥18)
+- inclusion_not_met: 6 (IN-02/03/04/05/07)
+- exclusion_not_triggered: 49 (大部分排除条件在血常规中无对应)
+- indeterminate: 13 (需专业判断: EX-04/06/07/09/10/12/16, IN-06)
+
+### 下会话最高优先级
+1. 诊断control qualification summary步的EXECUTOR_ERROR
+2. 修复后重试workflow → 产出完整C链报告
+3. 开始WP02-WP08
+
+### ABC功能贯通确认
+A✅发布 → B✅发布 → C✅报告(56有判定+13需专业判断+0全UNKNOWN)

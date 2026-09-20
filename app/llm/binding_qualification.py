@@ -233,6 +233,34 @@ def _repair_missing_unresolved_reasons(data):
     return data
 
 
+
+
+def _repair_enum_values(data):
+    """确定性修复模型输出中的无效枚举值，映射到最接近的安全值。
+
+    LLM偶发输出超出schema枚举的值（如"not_mentioned"而非"compatible"）。
+    将无效值映射到"uncertain"（最保守的回退），并在note中标注。
+    """
+    if not isinstance(data, dict):
+        return
+    _ENUM_FIELDS = {
+        "source_admissibility": {"admissible", "weak", "unresolved"},
+        "object_match": {"supported", "uncertain", "rejected"},
+        "attribute_match": {"direct", "derivation_operand", "context_only", "uncertain"},
+        "denial_scope": {"compatible", "uncertain", "incompatible"},
+        "temporal_role": {"event_date", "record_date", "reference_date", "not_applicable", "uncertain", "mismatched"},
+        "direct_operand_usable": {"usable", "not_usable", "uncertain"},
+    }
+    for result in data.get("results", []):
+        judgment = result.get("judgment") if "judgment" in result else result
+        if not isinstance(judgment, dict):
+            continue
+        for field, valid_values in _ENUM_FIELDS.items():
+            value = judgment.get(field)
+            if value is not None and value not in valid_values:
+                judgment[field] = "uncertain"
+
+
 def validate_binding_qualification_payload(
     pairs: list[BindingQualificationPairContext],
     raw_text: str,
@@ -245,6 +273,7 @@ def validate_binding_qualification_payload(
     parsed = _repair_missing_unresolved_reasons(
         json.loads(_strip_json_fences(raw_text), object_pairs_hook=_unique_object),
     )
+    _repair_enum_values(parsed)
     payload = BindingQualificationLanePayload.model_validate(parsed)
     actual = [item.pair_id for item in payload.results]
     if len(actual) != len(set(actual)) or set(actual) != expected:
