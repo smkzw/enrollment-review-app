@@ -279,6 +279,13 @@ class EvidenceLocatorRepository:
 
     def __init__(self, session, artifact_store=None) -> None:
         self.session = session
+        if artifact_store is None:
+            # native_text 定位真实性证明必须访问内容寻址字节；未显式提供工件库
+            # 时按当前数据根惰性构建，避免漏传把"可证明"误判为"不可证明"。
+            from app.evidence.artifacts import ArtifactStore
+            from app.services.evidence_app_bootstrap import resolve_data_paths
+
+            artifact_store = ArtifactStore(resolve_data_paths())
         self.artifact_store = artifact_store
         self.proof = LocatorProofReader(artifact_store) if artifact_store is not None else None
 
