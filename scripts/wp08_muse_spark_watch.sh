@@ -52,4 +52,34 @@ PYEOF
   echo "[watch] poll $i: $STATE"
   case "$STATE" in completed|failed_final|cancelled) break;; esac
 done
-echo "[watch] done: $STATE"
+
+if [ "$STATE" != "completed" ]; then
+  echo "[watch] 页判读未完成（$STATE），不进行事实重整。"
+  exit 1
+fi
+
+# 页判读完成后：提交事实重整对齐新覆盖（新模型组合的最后一次闭环）
+NORM=$(curl -s -X POST "$BASE/api/v2/subjects/$SUB/review-episodes/$EPI/fact-normalization-jobs" \
+  -H "Content-Type: application/json" \
+  -d '{"idempotency_intent": "wp08-muse-spark-follow-norm"}' \
+  | python3 -c "import json,sys; print(json.load(sys.stdin).get('job_id',''))")
+echo "[watch] normalization job: $NORM"
+[ -z "$NORM" ] && exit 1
+for i in $(seq 1 90); do
+  sleep 45
+  NSTATE=$(.venv/bin/python - "$NORM" <<'PYEOF2' 2>/dev/null
+import os, sys
+os.environ.setdefault('ENROLLMENT_ENV_FILE', os.path.abspath('.env'))
+from app.config import load_enrollment_env_file
+load_enrollment_env_file()
+from app.services.evidence_app_bootstrap import resolve_data_paths, upgrade_or_fail
+_, e, sf = upgrade_or_fail(resolve_data_paths())
+with sf() as s:
+    from sqlalchemy import text
+    print(s.execute(text("SELECT state FROM jobs WHERE job_id=:j"), {"j": sys.argv[1]}).scalar())
+PYEOF2
+)
+  echo "[watch] norm poll $i: $NSTATE"
+  case "$NSTATE" in completed|failed_final|cancelled) break;; esac
+done
+echo "[watch] done: page_review=$STATE normalization=$NSTATE"
