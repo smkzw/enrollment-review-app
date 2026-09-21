@@ -729,10 +729,18 @@ class EligibilityReviewProjectionService:
         facts_by_id = {fact.fact_id: fact for fact in facts}
 
         predicate_fact_ids = _load_binding_predicate_fact_ids(session)
-        # C chain binding data is available via _load_binding_predicate_fact_ids.
-        # The expression evaluator needs predicate_fact_ids to produce definite
-        # results. Without it, predicates with observation_policy return UNKNOWN.
-        # WP05 will properly connect the qualified binding selections.
+        if predicate_fact_ids is not None:
+            # 只保留当前事实集中存在的fact_id，防止binding的旧fact_id泄漏
+            valid_fact_ids = set(facts_by_id.keys())
+            predicate_fact_ids = {
+                pid: [fid for fid in fids if fid in valid_fact_ids]
+                for pid, fids in predicate_fact_ids.items()
+            }
+            # 清除空列表：这些谓词由verified empty覆盖（expression.py
+            # 的verified_no_matching_fact路径不需要显式空列表）。
+            predicate_fact_ids = {
+                pid: fids for pid, fids in predicate_fact_ids.items() if fids
+            } or None
         output: list[EligibilityClauseProjection] = []
         for clause in clauses:
             component = clause_to_rule_component(clause)
