@@ -729,10 +729,19 @@ class EligibilityReviewProjectionService:
         facts_by_id = {fact.fact_id: fact for fact in facts}
 
         predicate_fact_ids = _load_binding_predicate_fact_ids(session, authority=authority)
-        # C chain binding data is available via _load_binding_predicate_fact_ids.
-        # The expression evaluator needs predicate_fact_ids to produce definite
-        # results. Without it, predicates with observation_policy return UNKNOWN.
-        # WP05 will properly connect the qualified binding selections.
+        if predicate_fact_ids is not None:
+            # 过滤：只保留当前evaluation context中accepted的fact_id，
+            # 防止binding frozen_input中的stale fact_id泄漏到求值。
+            accepted = set(context.accepted_fact_ids)
+            predicate_fact_ids = {
+                pid: [fid for fid in fids if fid in accepted]
+                for pid, fids in predicate_fact_ids.items()
+            }
+            # 清除空列表：空选择表示资格核对未确认任何事实，
+            # 留给evaluator按observation未核实处理（UNKNOWN，不冒充FALSE）。
+            predicate_fact_ids = {
+                pid: fids for pid, fids in predicate_fact_ids.items() if fids
+            } or None
         output: list[EligibilityClauseProjection] = []
         for clause in clauses:
             component = clause_to_rule_component(clause)
@@ -830,15 +839,18 @@ def clause_to_rule_component(clause: ClausePackClause):
 
 
 def _load_binding_predicate_fact_ids(session, *, authority=None):
-    """从当前审核节点的最近完成predicate binding加载predicate→fact映射。
+    """从当前审核节点的最近完成资格核对加载predicate→fact映射。
 
-    按project/subject/episode作用域过滤（ER-04修复），不做全库最新查询。
-    错误分类：无任务→None、不一致→None、损坏→None（调用方按无绑定处理）。
-    不使用blanket except静默伪装。
+    按project/subject/episode作用域过滤（ER-04修复），并消费双路资格核对
+    中structurally_valid且dual_agreement的配对（WP05完整资格消费），
+    不再直接使用未核实候选交集。映射对全部官方谓词完整（未核实为空表）。
+    无候选任务、无对应资格任务或资格重建失败→None（调用方按无绑定处理）。
     """
     from app.workflow.jobstore import JobStore
     from app.domain.contracts.predicate_binding import PredicateBindingFrozenInput
-    from app.llm.predicate_binding_candidates import PredicateCandidatePayload
+    from app.services.binding_qualification_support import (
+        verify_completed_binding_qualification,
+    )
     from app.evidence.artifacts import ArtifactStore
     from app.services.evidence_app_bootstrap import resolve_data_paths
 
@@ -870,47 +882,54 @@ def _load_binding_predicate_fact_ids(session, *, authority=None):
             if (auth.project_id == authority.project_id
                     and auth.subject_id == authority.subject_id
                     and auth.review_episode_id == authority.review_episode_id):
-                target = (job_id, payload, frozen)
+                target = (job_id, frozen)
                 break
         except Exception:
             continue
     if target is None:
         return None
 
-    binding_job_id, binding_payload, frozen = target
-    art_store = ArtifactStore(resolve_data_paths())
-    store = JobStore(session)
-    lane_payloads = {}
-    for lane in ("main-A", "main-B"):
-        cp = store.get_last_checkpoint(binding_job_id, f"read:{lane}")
-        if cp is None or cp[1].get("status") != "unverified":
-            return None
-        cand_sha = cp[1].get("candidate_sha256")
-        if not cand_sha:
-            return None
-        raw = art_store.read_by_sha("raw_response", cand_sha)
-        artifact = json.loads(raw)
-        lane_payloads[lane] = PredicateCandidatePayload.model_validate(
-            artifact.get("payload", {}))
-
-    result = {}
-    for component in frozen.components:
+    binding_job_id, frozen = target
+    qual_rows = session.execute(
+        text("SELECT job_id, payload_json FROM jobs "
+             "WHERE job_type = 'binding_qualification' AND state = 'completed' "
+             "ORDER BY created_at DESC LIMIT 5")
+    ).fetchall()
+    qualification_job_id = None
+    for row in qual_rows:
+        try:
+            payload = json.loads(row[1])
+        except Exception:
+            continue
+        if (payload.get("candidate_job_id") == binding_job_id
+                and payload.get("candidate_family") == "predicate"):
+            qualification_job_id = row[0]
+            break
+    if qualification_job_id is None:
+        return None
+    try:
+        verified = verify_completed_binding_qualification(
+            session, ArtifactStore(resolve_data_paths()), qualification_job_id)
+    except Exception:
+        return None
+    frozen_verified = verified["frozen"]
+    identity_to_predicate = {}
+    for component in frozen_verified.components:
         for pred in component.binding_predicates:
-            pid = pred.predicate_identity_sha256
-            key = pred.predicate_id
-            fact_sets = []
-            for lane in ("main-A", "main-B"):
-                lp = lane_payloads.get(lane)
-                if lp is None:
-                    continue
-                for r in lp.results:
-                    if r.predicate_identity_sha256 == pid:
-                        fact_sets.append({c.fact_id for c in r.candidates})
-            if len(fact_sets) == 2:
-                result[key] = sorted(fact_sets[0] & fact_sets[1])
-            else:
-                result[key] = []
-    return result if result else None
+            identity_to_predicate[pred.predicate_identity_sha256] = pred.predicate_id
+    result = {pred.predicate_id: []
+              for component in frozen_verified.components
+              for pred in component.binding_predicates}
+    for record in verified["summary"].pair_records:
+        if not (record.structurally_valid and record.dual_agreement):
+            continue
+        predicate_id = identity_to_predicate.get(record.identity_sha256)
+        if predicate_id is None or record.fact_id not in result[predicate_id]:
+            if predicate_id is not None:
+                result[predicate_id].append(record.fact_id)
+    if not any(result.values()):
+        return None
+    return {key: sorted(fact_ids) for key, fact_ids in result.items()}
 
 
 def _filter_for_component(global_mapping, component):

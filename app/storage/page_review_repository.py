@@ -277,7 +277,17 @@ class PageReviewRepository:
             }
             for item in entries
         ]
-        if persisted != [item.model_dump(mode="json") for item in record.entries]:
+        # source_policy_* 只存于合同正文（entries 表无镜像列），比对时须剔除，
+        # 否则所有已持久化覆盖记录都会被误判为不一致。
+        unmirrored_keys = ("source_policy_kind", "source_policy_verification")
+        if persisted != [
+            {
+                key: value
+                for key, value in item.model_dump(mode="json").items()
+                if key not in unmirrored_keys
+            }
+            for item in record.entries
+        ]:
             raise PersistedContractInvalid("页覆盖处置关联表与合同正文不一致")
         self._verify_coverage_scope(record)
         return record

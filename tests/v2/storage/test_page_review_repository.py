@@ -175,7 +175,7 @@ def test_reread_predecessor_is_source_bound_and_legacy_serialization_unchanged(s
         )
         completed = successor.model_copy(update={"coverage_id": "coverage-3", "entries": [discarded]})
         repo.save_coverage(completed)
-        with pytest.raises(ScopeViolationError, match="没有失败页面"):
+        with pytest.raises(ScopeViolationError, match="既无失败页面"):
             repo.save_coverage(completed.model_copy(update={"coverage_id": "coverage-4", "predecessor_coverage_id": "coverage-3"}))
 
 
