@@ -91,7 +91,12 @@ def main() -> int:
     episodes = r.json().get("items", [])
     if not episodes:
         raise SystemExit("受试者没有可用审核节点；请先经建档流程创建。")
-    episode_id = episodes[0]["review_episode_id"]
+    # 规模验证的证据上传到筛选节点；无筛选时退回首个节点。
+    screening = [e for e in episodes if e.get("stage") == "screening"]
+    episode_id = (
+        screening[0]["review_episode_id"] if screening
+        else episodes[0]["review_episode_id"]
+    )
     report["steps"]["review_episode_id"] = episode_id
     print("episode:", episode_id)
 
