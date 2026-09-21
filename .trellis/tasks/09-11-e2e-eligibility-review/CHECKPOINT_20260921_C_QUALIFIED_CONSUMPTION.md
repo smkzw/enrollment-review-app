@@ -209,3 +209,27 @@
 ## 配额恢复后的接手路径
 见 runs/execution/wp08-singleton-replay-20260921/REPLAY_LOG.md 末节
 （retry任务→轮询→投影重算→哈希记录→推送，共4步，无需再探路）。
+
+---
+
+# 2026-09-22 模型路由二轮调整（用户裁定）
+
+## 已生效
+- 规范化 → **ollama-cloud / deepseek-v4.1-flash (max)**：密钥取自 OMP
+  凭据库（agent.db auth_credentials 的 ollama-cloud 行，与 OMP provider
+  同源），实测对话通过；事实重整任务 68ff9156 16步全绿（重放③闭包，
+  投影哈希 f2ae0717…，69条未决）。
+- 页判读 main-A → **opencode-go / muse-spark-1.3-contributor (high)** 的
+  接入代码已实现（新 provider + 专用密钥解析，绝不回退他厂密钥），
+  **待用户在 .env 填 OPENCODE_API_KEY= 一行后重启即生效**（密钥不经过
+  任何会话——此前要求用户明文提供密钥是错误做法，已纠正）。
+- main-B = cms-router 的 cms-model（此前已生效）。
+
+## 排障记录
+- opencode.ai/zen/go 对直连有 Cloudflare 防护：无键请求能到鉴权层
+  （报 Missing API key），带无效键报 Invalid API key——说明带有效键的
+  常规请求可通；但 OMP 的浏览器 OAuth cookie（钥匙串 cookie.opencodego，
+  Fe26.2 封装）不能被应用直接复用（1010 拦截），所以应用必须用 API key。
+- 注意：OMP 默认 profile 的 auth_credentials 里没有 opencode-go 行——
+  用户所称"用 API key 配置"可能配置在 OMP 某个 profile 或 omniroute
+  后台；无论在哪，只要 key 进入 .env 的 OPENCODE_API_KEY 即可。
