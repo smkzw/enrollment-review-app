@@ -236,6 +236,7 @@ describe("中文标签：穷尽与卫生", () => {
         "ocr_or_parse_risk",
         "future_stage_not_due",
         "provenance_followup",
+        "control_applicability_pending",
       ],
       BlockingLevel: ["none", "attention", "blocking"],
       ActionTarget: [
@@ -246,7 +247,7 @@ describe("中文标签：穷尽与卫生", () => {
       ],
       ActionState: ["open", "closed_system", "closed_manual", "reopened", "superseded"],
       LocatorPrecision: ["bbox", "text_range", "page_excerpt", "page_only"],
-      ExpectationStatus: ["observed", "observed_weak", "referenced_missing", "absent", "not_due"],
+      ExpectationStatus: ["observed", "observed_weak", "referenced_missing", "absent", "not_due", "pending_control_applicability"],
       ProfileLane: [
         "study_milestone",
         "demographics",

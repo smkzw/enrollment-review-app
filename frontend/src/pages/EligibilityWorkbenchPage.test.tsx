@@ -6,9 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getEvidenceRepository, type ProcessingRevisionPageView } from "../api/evidence";
 import {
   setEligibilityReviewRepository,
+  type EligibilityClauseView,
   type EligibilityReviewView,
 } from "../api/eligibility-review";
-import { EligibilityWorkbenchPage } from "./EligibilityWorkbenchPage";
+import {
+  buildEligibilityIssueGroups,
+  EligibilityWorkbenchPage,
+} from "./EligibilityWorkbenchPage";
 
 const review: EligibilityReviewView = {
   subjectId: "subject-1",
@@ -179,13 +183,19 @@ describe("入排审核工作台", () => {
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review, clauses: [first, second] }) });
     const user = userEvent.setup();
     render(<EligibilityWorkbenchPage />);
-    const secondButton = await screen.findByRole("button", { name: /第二个审核要点/ });
+    await screen.findByRole("heading", { name: "问题队列" });
+    const clausePane = within(
+      screen.getByRole("complementary", { name: "条款列表" }),
+    )
+      .getByRole("heading", { name: "审核条款" })
+      .closest(".workbench-pane") as HTMLElement;
+    const secondButton = await within(clausePane).findByRole("button", { name: /第二个审核要点/ });
     await user.click(secondButton);
     expect(secondButton).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /第一个审核要点/ })).toHaveAttribute("aria-pressed", "false");
+    expect(within(clausePane).getByRole("button", { name: /第一个审核要点/ })).toHaveAttribute("aria-pressed", "false");
     expect(window.location.hash).toContain("component=component-b");
     expect(secondButton.style.paddingInlineStart).toBe("calc(var(--space-2) + 1 * var(--space-3))");
-    expect(screen.getByRole("button", { name: /第一个审核要点/ }).style.paddingInlineStart).toBe(secondButton.style.paddingInlineStart);
+    expect(within(clausePane).getByRole("button", { name: /第一个审核要点/ }).style.paddingInlineStart).toBe(secondButton.style.paddingInlineStart);
   });
 
   it("失效要点链接不会静默选中第一项", async () => {
@@ -222,5 +232,71 @@ describe("入排审核工作台", () => {
     window.location.hash = "#/workbench?component=IN-02";
     render(<EligibilityWorkbenchPage />);
     expect(await screen.findByRole("heading", { name: /IN-02/ })).toBeInTheDocument();
+  });
+
+  it("问题队列只聚合风险/冲突/未决条款，已满足与未到期不进入队列", async () => {
+    render(<EligibilityWorkbenchPage />);
+    await screen.findByRole("heading", { name: "问题队列" });
+    expect(screen.getByText(/1 条条款需要处理，按根因聚合为 1 类/)).toBeInTheDocument();
+    expect(screen.getByText("待研究者判断")).toBeInTheDocument();
+    expect(screen.getByText("影响 1 条")).toBeInTheDocument();
+    // 已满足/未触发/尚未到期的条款不属于问题。
+    const queue = screen.getByRole("region", { name: "问题队列" });
+    const queueText = within(queue).parentElement?.textContent ?? "";
+    expect(queueText).not.toContain("IN-02");
+    expect(queueText).not.toContain("EX-01");
+    expect(queueText).not.toContain("REQ-01");
+    expect(within(queue).getByRole("button", { name: /IN-01/ })).toBeInTheDocument();
+  });
+
+  it("点击问题队列中的条款会打开同一详情", async () => {
+    const user = userEvent.setup();
+    render(<EligibilityWorkbenchPage />);
+    await screen.findByRole("heading", { name: "问题队列" });
+    const queue = screen.getByRole("region", { name: "问题队列" });
+    await user.click(within(queue).getByRole("button", { name: /IN-01/ }));
+    expect(window.location.hash).toContain("component=IN-01");
+  });
+
+  describe("buildEligibilityIssueGroups", () => {
+    const clause = (overrides: Partial<EligibilityClauseView>): EligibilityClauseView => ({
+      ruleCode: "X-99",
+      ruleComponentId: "X-99",
+      ruleKind: "inclusion",
+      textSummary: "测试条款",
+      parentRuleCode: null,
+      decision: "indeterminate",
+      decisionLabel: "无法判定",
+      reason: "测试",
+      factRefs: [],
+      gapType: null,
+      determinationMode: "semantic",
+      ...overrides,
+    });
+
+    it("按根因聚合、按严重度排序且全量保留", () => {
+      const groups = buildEligibilityIssueGroups([
+        clause({ ruleComponentId: "a", ruleCode: "IN-10", gapType: "observation_unverified" }),
+        clause({ ruleComponentId: "b", ruleCode: "EX-05", decision: "conflict", gapType: "source_conflict" }),
+        clause({ ruleComponentId: "c", ruleCode: "IN-11", gapType: "observation_unverified" }),
+        clause({ ruleComponentId: "d", ruleCode: "IN-12", decision: "inclusion_met", gapType: null }),
+        clause({ ruleComponentId: "e", ruleCode: "IN-13", decision: "not_due", gapType: "future_stage_not_due" }),
+      ]);
+      expect(groups.map((group) => group.key)).toEqual([
+        "source_conflict",
+        "observation_unverified",
+      ]);
+      expect(groups[0]!.clauses).toHaveLength(1);
+      expect(groups[1]!.clauses.map((item) => item.ruleCode)).toEqual(["IN-10", "IN-11"]);
+    });
+
+    it("无缺口类型的未决条款回退到显式的待明确根因", () => {
+      const groups = buildEligibilityIssueGroups([
+        clause({ ruleComponentId: "f", decision: "indeterminate", gapType: null }),
+      ]);
+      expect(groups).toHaveLength(1);
+      expect(groups[0]!.key).toBe("unclassified");
+      expect(groups[0]!.label).toBe("原因待明确");
+    });
   });
 });

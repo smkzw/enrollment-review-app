@@ -1326,3 +1326,62 @@
 .eligibility-workbench .workbench-col {
   display: block;
 }
+
+/* 问题队列：风险/冲突/未决按根因聚合；全量渲染，不用 top-N 截断。 */
+.eligibility-issue-queue__summary {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+}
+
+.eligibility-issue-queue__group {
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-m);
+  margin-bottom: var(--space-2);
+  background: var(--color-surface);
+}
+
+.eligibility-issue-queue__group > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+.eligibility-issue-queue__group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.eligibility-issue-queue__group > summary::before {
+  content: "▸";
+  flex: none;
+  color: var(--color-text-muted);
+}
+
+.eligibility-issue-queue__group[open] > summary::before {
+  content: "▾";
+}
+
+.eligibility-issue-queue__group > summary strong {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.eligibility-issue-queue__count {
+  flex: none;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.eligibility-issue-queue__group > ul {
+  margin: 0;
+  padding: 0 var(--space-2) var(--space-2);
+  list-style: none;
+  display: grid;
+  gap: var(--space-1);
+}

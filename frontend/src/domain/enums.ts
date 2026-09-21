@@ -44,7 +44,8 @@ export type GapType =
   | "interpretation_conflict"
   | "ocr_or_parse_risk"
   | "future_stage_not_due"
-  | "provenance_followup";
+  | "provenance_followup"
+  | "control_applicability_pending";
 
 export type BlockingLevel = "none" | "attention" | "blocking";
 

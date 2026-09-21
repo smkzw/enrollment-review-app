@@ -18,7 +18,7 @@ import { OriginalEvidenceViewer } from "../components/evidence-workspace/Origina
 import { ErrorState, EmptyState, LoadingState } from "../components/shell/Feedback";
 import { BarrierIcon, AttentionIcon, CheckIcon, ConflictIcon, JudgmentIcon } from "../components/shell/icons";
 import { StatusBadge, type Tone } from "../components/shell/StatusBadge";
-import { formatSnapshotVersion } from "../domain/labels";
+import { formatSnapshotVersion, gapTypeLabel } from "../domain/labels";
 
 export type EligibilityDecisionFilter =
   | "all"
@@ -304,6 +304,162 @@ function EligibilityClauseList({
         <p className="eligibility-clause-list__empty">没有符合当前筛选条件的条款。</p>
       )}
     </div>
+  );
+}
+
+type IssueSeverity = "danger" | "attention" | "info";
+
+interface EligibilityIssueGroup {
+  key: string;
+  label: string;
+  severity: IssueSeverity;
+  clauses: EligibilityClauseView[];
+}
+
+const ISSUE_SEVERITY_ORDER: Record<IssueSeverity, number> = {
+  danger: 0,
+  attention: 1,
+  info: 2,
+};
+
+const FALLBACK_ISSUE_LABELS: Record<string, string> = {
+  clause_not_satisfied: "条款未满足或已触发",
+  unclassified: "原因待明确",
+};
+
+/** 队列成员：风险（已触发/未满足）、冲突、未决；已满足/未触发/未到期不算问题。 */
+function clauseIsIssue(clause: EligibilityClauseView): boolean {
+  const tone = decisionTone(clause.decision);
+  return tone === "danger" || tone === "info";
+}
+
+/** 根因键：优先投影缺口类型；未归类时按判定回退，绝不静默丢失。 */
+function clauseIssueKey(clause: EligibilityClauseView): {
+  key: string;
+  severity: IssueSeverity;
+} {
+  switch (clause.decision) {
+    case "conflict":
+    case "exclusion_triggered":
+    case "inclusion_not_met":
+    case "requirement_not_met":
+      return { key: clause.gapType ?? "clause_not_satisfied", severity: "danger" };
+    case "professional_judgment":
+      return { key: clause.gapType ?? "professional_judgment", severity: "attention" };
+    default:
+      return { key: clause.gapType ?? "unclassified", severity: "info" };
+  }
+}
+
+function issueGroupLabel(key: string): string {
+  const labels = gapTypeLabel as Record<string, string>;
+  return labels[key] ?? FALLBACK_ISSUE_LABELS[key] ?? key;
+}
+
+/** 根因聚合：同一根因的条款归入一组并计数；渲染全量，不用 top-N 截断。 */
+export function buildEligibilityIssueGroups(
+  clauses: ReadonlyArray<EligibilityClauseView>,
+): EligibilityIssueGroup[] {
+  const byKey = new Map<string, EligibilityIssueGroup>();
+  for (const clause of clauses) {
+    if (!clauseIsIssue(clause)) continue;
+    const { key, severity } = clauseIssueKey(clause);
+    let group = byKey.get(key);
+    if (!group) {
+      group = { key, label: issueGroupLabel(key), severity, clauses: [] };
+      byKey.set(key, group);
+    }
+    group.clauses.push(clause);
+  }
+  return [...byKey.values()].sort(
+    (a, b) =>
+      ISSUE_SEVERITY_ORDER[a.severity] - ISSUE_SEVERITY_ORDER[b.severity] ||
+      b.clauses.length - a.clauses.length ||
+      a.key.localeCompare(b.key),
+  );
+}
+
+const ISSUE_SEVERITY_META: Record<IssueSeverity, { tone: Tone; text: string }> = {
+  danger: { tone: "danger", text: "风险" },
+  attention: { tone: "neutral", text: "需判断" },
+  info: { tone: "info", text: "未决" },
+};
+
+interface EligibilityIssueQueueProps {
+  clauses: ReadonlyArray<EligibilityClauseView>;
+  selectedComponentId: string | null;
+  onSelect: (componentId: string) => void;
+}
+
+function EligibilityIssueQueue({
+  clauses,
+  selectedComponentId,
+  onSelect,
+}: EligibilityIssueQueueProps) {
+  const groups = useMemo(() => buildEligibilityIssueGroups(clauses), [clauses]);
+  if (groups.length === 0) {
+    return (
+      <section className="eligibility-issue-queue" aria-label="问题队列">
+        <p className="eligibility-muted">当前没有风险、冲突或未决条款。</p>
+      </section>
+    );
+  }
+  const totalIssues = groups.reduce((sum, group) => sum + group.clauses.length, 0);
+  return (
+    <section className="eligibility-issue-queue" aria-label="问题队列">
+      <p className="eligibility-issue-queue__summary">
+        {totalIssues} 条条款需要处理，按根因聚合为 {groups.length} 类。
+      </p>
+      {groups.map((group, index) => {
+        const meta = ISSUE_SEVERITY_META[group.severity];
+        return (
+          <details
+            key={group.key}
+            className="eligibility-issue-queue__group"
+            open={index === 0}
+          >
+            <summary>
+              <StatusBadge tone={meta.tone} text={meta.text} />
+              <strong>{group.label}</strong>
+              <span className="eligibility-issue-queue__count">
+                影响 {group.clauses.length} 条
+              </span>
+            </summary>
+            <ul>
+              {group.clauses.map((clause) => {
+                const selected = clause.ruleComponentId === selectedComponentId;
+                return (
+                  <li key={clause.ruleComponentId}>
+                    <button
+                      type="button"
+                      className={`eligibility-clause${selected ? " eligibility-clause--selected" : ""}`}
+                      aria-pressed={selected}
+                      onClick={() => onSelect(clause.ruleComponentId)}
+                    >
+                      <span className="eligibility-clause__identity">
+                        <strong>{clause.ruleCode}</strong>
+                        <span
+                          className="eligibility-clause__summary"
+                          title={clause.textSummary}
+                        >
+                          {clause.textSummary}
+                        </span>
+                      </span>
+                      <StatusBadge
+                        tone={decisionTone(clause.decision)}
+                        text={clause.decisionLabel}
+                        hint={clause.reason}
+                        icon={decisionIcon(clause.decision)}
+                      />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </details>
+        );
+      })}
+    </section>
   );
 }
 
@@ -713,6 +869,19 @@ export function EligibilityWorkbenchPage() {
       )}
       <div className="workbench-panes">
         <aside className="workbench-col eligibility-workbench__clauses" aria-label="条款列表">
+          <div className="workbench-pane">
+            <header className="workbench-pane__head">
+              <div>
+                <h2 className="workbench-pane__title">问题队列</h2>
+                <p className="workbench-pane__subtitle">风险、冲突与未决按根因聚合</p>
+              </div>
+            </header>
+            <EligibilityIssueQueue
+              clauses={allClauses}
+              selectedComponentId={selectedClause.ruleComponentId}
+              onSelect={(componentId) => updateParams({ component: componentId })}
+            />
+          </div>
           <div className="workbench-pane">
             <header className="workbench-pane__head">
               <div>
