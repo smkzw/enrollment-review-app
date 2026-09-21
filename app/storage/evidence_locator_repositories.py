@@ -2511,6 +2511,13 @@ class CompleteEvidenceProcessingRevisionRepository:
 
     def __init__(self, session, artifact_store=None) -> None:
         self.session = session
+        if artifact_store is None:
+            # 闭包核验必须能证明 native_text 定位真实性；未显式提供工件库时
+            # 按当前数据根惰性构建，避免各读取路径漏传导致闭合误判不完整。
+            from app.evidence.artifacts import ArtifactStore
+            from app.services.evidence_app_bootstrap import resolve_data_paths
+
+            artifact_store = ArtifactStore(resolve_data_paths())
         self.artifact_store = artifact_store
 
     @staticmethod

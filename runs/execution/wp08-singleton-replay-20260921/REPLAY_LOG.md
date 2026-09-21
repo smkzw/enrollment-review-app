@@ -1,0 +1,79 @@
+# WP08 单例端到端集成重放记录（A25/A29 退出证据）
+
+- 日期：2026-09-21
+- 对象：31001 · 审核节点 6dbf65262bc54f959aaa0a07c783ba52（baseline）
+- 基线状态：投影69条（hash fb43009f…，68未决+1满足IN-01）；活动快照
+  503c4b04…；完整修订 complete-b9bef521…（24页，清单哈希 e9c4cd48…）；
+  事实106条；期望204条；更正0；review_runs 0。
+- 方法：全部经正式HTTP API驱动（8902后端，最新代码）；每步前后用
+  scripts/wp08_capture_state.py 捕获全量状态比对（/tmp/wp08_*.json）。
+
+## 重放①：元数据更正（元数据改正不默认重OCR）
+
+- 命令：PATCH /api/v2/source-document-versions/03652a49…/metadata
+  （类型 其他资料（待确认）→其他资料；来源方 研究中心（待确认）→申办方；
+  理由：该文件为申办方提供的数据列表，非研究中心出具）
+- 结果：新修订 metadata-7855e146…（revision 2，追加写，supersedes rev 1；
+  同幂等键回放安全）。
+- **实际重算闭包：仅该文档的元数据头（1条新修订）。**
+- **未重算及理由**：处理修订/页清单不变（元数据不影响已完成的页提取与
+  事实发布）；事实106、期望204、投影哈希 fb43009f… 全部逐字节不变；
+  活动指针未动。
+- **旧件不变：修订1记录保留（追加不覆盖）；投影哈希前后一致。**
+
+## 重放②：字段更正（一次更正→影响闭包与保守失效）
+
+- 目标：demographic_age 事实 fact:4c20ed13…（51岁 → 52岁，附定位与理由）。
+- 预览：POST …/fact-corrections/preview 返回影响范围
+  scope_kind=node（"定位不属于当前冻结的完整处理修订"→节点级重算，
+  不伪称更小闭包），并列出 affected_locator/document/fact/conflict 空集明细。
+- 提交：POST …/fact-corrections → 任务 94bd83cc…（plan→apply）完成。
+- 闭包结果：新事实头 fact:132590d7…（52岁，gate fcorr-gate-c141b…）；
+  fact_corrections+1、fact_correction_commits+1（含 conflict_outcomes 与
+  patient_profile_revision_id，即档案同步修订）；期望 204→235（重算+31）。
+- 发现（真实数据问题）：IN-01 的绑定引用的是另一发布通道（demographics）
+  的同值事实 fact:5aef30e4…（51岁）——本次更正目标只覆盖 demographic_age
+  通道，投影哈希不变（仍 inclusion_met，用51岁）。
+- 追加更正②b：对 fact:5aef30e4… 同步更正为52岁 → 任务 4cb3f705… 完成。
+  结果：投影哈希 fb43009f… → 3f9df1fc…，**IN-01 由 inclusion_met 变为
+  indeterminate（gap=observation_unverified）**：被更正事实的旧绑定选择
+  在接受事实过滤后失效，条件回到未决，等待重新资格核对——
+  **陈旧绑定不盲复用、不伪造确定结论（A25/A29 设计语义实测成立）。**
+- **未重算及理由**：页清单不变（更正不新增页）；绑定/资格任务未自动重跑
+  （其冻结输入哈希将因新事实集失配，下次运行强制重建——需要云端LLM，
+  归后续验证轮）。
+- **旧件不变：两条旧事实记录保留（追加不覆盖）；元数据更正（①）的效果
+  不受影响。**
+
+## 重放③：补证上传（增量）——进行中
+
+- 生成 1 页补充说明 PDF（确定性字节）。
+- POST /evidence-upload-previews（incremental，base_revision=3）→ 预览
+  989f9e58…（首次用 base_revision=1 收到 STALE_BASE_REVISION——过期基准
+  保护实测有效）。
+- POST …/commit（preview_sha256 + 幂等键）→ commit 87e946a3…，
+  新快照 742018b5…，处理任务 9c98fa50… 已完成。
+- 新 base 修订 epr-742018b5…-e0a6eeb2…（清单哈希 e0a6eeb2… ≠ 旧 e9c4cd48…，
+  页数 25=24+1）。
+- 构建完整修订：POST /evidence-processing-revisions/build → 任务
+  0a232461…（本记录写作时运行中）。
+- 后续：激活新完整修订（回退/启用仅切换活动指针）→ 验证A29
+  （检索scope哈希随清单变化而失效）→ 比对投影按新快照重算。
+
+## 重放③续（现场发现与修复）
+
+- 构建完成修订后投影报 STALE_AUTHORITY——定位闭包核验在
+  `CompleteEvidenceProcessingRevisionRepository(self.session)`（缺工件库）下
+  对 native_text 定位抛"需要内容寻址 ArtifactStore"。
+  **真实缺陷**：既有B链资料全部为扫描页（raw_ocr定位），该路径从未被
+  native-text 页触发；补证PDF带真实文字层（首个native页）即暴露。
+- 修复：`FactAuthorityValidator` 与 `CompleteEvidenceProcessingRevisionRepository`
+  未显式传入工件库时按当前数据根惰性构建（native_text定位真实性证明不可省略，
+  只补齐依赖，不放宽门禁）。
+- 风险核对边界实测：补证页OCR产生6个blocking数值风险，未经核对时构建停在
+  waiting_user/needs_attention；逐项confirmed_as_read后候选自动继续——
+  "blocking风险未核对阻止修订激活"实测成立。
+- 本地Flash-Next（端口8002）未运行导致页判读无法提交；用
+  scripts/run_mtplx_service.sh 启动后恢复（受试者资料识别阶段=本地模型，
+  符合用户既定分工）。
+- 页判读任务 1bd41df5… 已入队（25页，主A云端+主B本地双路）。

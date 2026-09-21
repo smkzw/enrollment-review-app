@@ -68,8 +68,18 @@ class FactAuthorityValidator:
     不写入任何记录；调用方负责在事务内先校验后发布。
     """
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, artifact_store=None) -> None:
         self.session = session
+        self.artifact_store = artifact_store
+
+    def _require_artifact_store(self):
+        """native_text 定位闭包核验需要内容寻址工件库；惰性构建避免循环导入。"""
+        if self.artifact_store is None:
+            from app.evidence.artifacts import ArtifactStore
+            from app.services.evidence_app_bootstrap import resolve_data_paths
+
+            self.artifact_store = ArtifactStore(resolve_data_paths())
+        return self.artifact_store
 
     # ------------------------------------------------------------------ 权威元组
 
@@ -183,9 +193,9 @@ class FactAuthorityValidator:
                 f"完整处理修订 {authority.complete_processing_revision_id} 不存在"
             )
         try:
-            decoded = CompleteEvidenceProcessingRevisionRepository(self.session).get(
-                authority.complete_processing_revision_id
-            )
+            decoded = CompleteEvidenceProcessingRevisionRepository(
+                self.session, self._require_artifact_store(),
+            ).get(authority.complete_processing_revision_id)
         except (RepositoryError, PersistedContractInvalid) as exc:
             raise FactAuthorityError(
                 f"完整处理修订 {authority.complete_processing_revision_id} "
