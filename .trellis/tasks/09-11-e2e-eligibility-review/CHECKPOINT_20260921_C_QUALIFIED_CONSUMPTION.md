@@ -85,3 +85,35 @@
 3. 评测harness脚手架（corpus/gold split/scoring程序），gold标注与采用决定留给用户。
 4. WP06前端工作台（B1-B4）。
 - B链事实覆盖（55条）是当前条款确定性上限；更多证据文件上传→更多事实→更多definite。
+
+## 续（同日第二轮）：WP03收尾 + WP05审计 + WP06问题队列
+
+### 6. WP03 A02–A09 审计结论（4f244670）
+- 逐场景核对既有机制与测试：旋转canonical坐标（pdf_native+executor测试）、
+  重复文本降级（locator+risk测试+R13不按文本去重）、分段OCR区域隔离
+  （segmentation+分段请求合同）、手写对账主A优先（reconciliation+回归测试）、
+  标量语法保真（test_page_scalar_grammar）、数值事实必须显式单位（合同校验+
+  unitless测试）——均已实现且有测试。
+- 补齐两个薄弱钉扎（tests/v2/evidence/test_wp03_scenarios.py，7个测试）：
+  A08 低置信INFORMATIONAL不阻断+OCR提示禁补字；A09 未知/空内容→显式FAILED页
+  （缺页不静默丢弃）+record_time与date_range字段级分离（记录日期≠事件日期）。
+
+### 7. WP05控制消费审计
+- 控制资格任务（2bee93ec）23个控制原子全部no_candidates_in_supplied_input、
+  0对双路一致——上游候选为空（55条基线事实不含控制相关观察）。
+- 无可消费数据；模板级PENDING_CONTROL_APPLICABILITY处置（R05）即当前正确状态。
+  完整控制消费路径已在frozen_review_calculation（control_input/control_selections）
+  就位，等待上游证据。
+
+### 8. WP06 问题队列（c8568be6）
+- EligibilityWorkbenchPage新增问题队列：风险/冲突/未决按根因（投影gapType）
+  聚合+条款影响计数；组内全量渲染不截断；点击即复用条款详情/原件下钻。
+- 前端GapType联合类型与labels卫生测试补齐control_applicability_pending。
+- 验证：工作台12/12、全前端583/583、tsc清；ego-browser实测1080P/2K/4K
+  真实数据（68条→1根因组）渲染与下钻正常。
+
+### 下一步
+- WP06余项：issue详情增强（对象/时间/冲突各方/具体动作聚合显示）。
+- WP07：更正/补证增量复用与影响闭包。
+- WP08：30–150页规模验证与全仓剩余验收。
+- C链官方发布：等待用户gold标注与方法采用（人机边界，见上文第5节）。
