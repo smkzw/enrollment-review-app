@@ -10,7 +10,7 @@ SUB="e851520b052440abb8c6bdb01b7e6cab"
 EPI="6dbf65262bc54f959aaa0a07c783ba52"
 
 recovered=0
-for i in $(seq 1 72); do
+for i in $(seq 1 4032); do  # 4032×300s = 14天长周期守望
   RESP=$(curl -s --max-time 60 -X POST \
     -H "Authorization: Bearer $KEY" -H "x-opencode-session: $SID" \
     -H "Content-Type: application/json" \
