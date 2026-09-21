@@ -183,3 +183,7 @@ A25④旧件不变：旧修订/清单/快照/事实旧行/元数据历史全部�
   供应商侧波动，非本方配置问题）。
 - 预检通过：main-A=opencode-go muse-spark(high) + main-B=cms-model。
   下一次页判读即按新双路执行；muse-spark 恢复前其路读取会如实失败重试。
+
+- 已布置恢复守望（scripts/wp08_muse_spark_watch.sh，后台）：每5分钟探测
+  muse-spark；恢复后自动提交页判读并轮询到终态。若6小时未恢复则退出，
+  保留手工接手路径（页判读提交为空体POST即可）。
