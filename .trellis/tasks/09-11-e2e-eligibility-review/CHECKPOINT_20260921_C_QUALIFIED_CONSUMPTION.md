@@ -133,3 +133,18 @@
 - 不用top-N隐藏：✅（全量渲染+测试钉扎）
 - 1080P/2K/4K真实浏览器：✅（截图验证）
 - 保存系统审核报告无需逐条勾选：属正式ReviewRun发布路径（方法采用门后）。
+
+### 10. WP07 机制审计（本轮完成审计；集成重放归WP08真实闭环）
+- A29（新证据使"范围内未发现"失效）：机制在位——检索范围由当前完整修订
+  清单构建并冻结scope_sha256（build_judgment_search_scope）；新资料→新清单
+  →新scope哈希→旧"未发现"结果无法挂接（test_current_target_and_scope_mismatch
+  _rejected拒绝作用域不匹配；test_full_not_found_pair_binds_to_native_absence
+  _status钉扎缺席状态绑定）。失效按证据集合依赖，不依赖直接fact链接。
+- A25（补证/字段更正/元数据更正→影响闭包、旧报告不变）：追加写修订工作流
+  （evidence_revision_builder/workflow）、更正影响反向索引
+  （test_fact_correction_impact_queries：定位/事实/冲突成员/档案来源反向索引
+  +有界图加载）、review_runs不可变。机制与单测在位。
+- A15（旧双读历史可读、不改标签）：legacy读取路径有专项测试
+  （test_page_review_legacy_read）。A12已由WP02来源政策合同覆盖。
+- 剩余：端到端集成重放（三种更正各一次→给出实际重算闭包/未重算理由清单、
+  旧报告hash比对）——按WP08"先单例后规模"用真实运行完成，不以源码会商代替。
