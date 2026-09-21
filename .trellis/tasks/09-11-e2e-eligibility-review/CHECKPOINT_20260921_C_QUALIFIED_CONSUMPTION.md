@@ -1,4 +1,34 @@
-# CHECKPOINT 2026-09-21：C链资格消费接入完成（WP05核心）
+# CHECKPOINT 2026-09-21：C链资格消费接入完成（WP05核心）+ WP03/A01 + 评测证据harness
+
+## 追加（同日晚些）
+
+### 4. WP03/A01 位图正文门控（提交 9e5621ec）
+- `decide_route_detailed`新增A01混合页降级：正文是整页位图（image coverage≥0.5）
+  且文字层只挂页边（行带覆盖≤0.2）→ VISION_OCR。纯版面几何合取，无字符数启发；
+  只降级不升级——真文本页/可检索扫描PDF不受影响。
+- `NativePage`新增`large_image_coverage`（钳制位图面积占比）。
+- 真实blob扫描验证：现有纯扫描页（93-98%位图、零文字）本就走VISION_OCR，
+  文本页维持native——零既有路线变化，纯前瞻保护。
+- 新增6个场景测试（tests/v2/evidence/test_page_processor_a01.py）全过。
+
+### 5. 方法采用评测证据harness（用户接手路径已打通）
+- `app/services/binding_evaluation.py`：gold拆分校验+打分+类型化
+  `BindingEvaluationManifest`落盘（evaluation_manifest工件）。
+  方法字段直接取自verify_completed_binding_qualification重建结果，
+  与`require_evaluated_binding_method`按构造一致。
+- `scripts/build_binding_gold_split_template.py`：从真实资格任务生成137条
+  标注模板（expected/forbidden留空，参考清单仅作对照，不从模型输出派生金标）。
+- `scripts/record_review_method_adoption.py`：**用户亲自行使**采用决定的工具
+  （写入ReviewMethodApproval + review-method-adoption gate）。AI不得代跑。
+- 13个纯逻辑测试全过（tests/v2/services/test_binding_evaluation.py）。
+
+### 用户接手路径（C链最后一步）
+1. `python scripts/build_binding_gold_split_template.py --qualification-job-id d37600378dea4952935bb098c4f007d7 --out gold.json`
+2. 依据原件/方案独立标注 gold.json（expected/forbidden + annotated_by）
+3. `build_binding_evaluation_manifest(...)` 产出评测清单（manifest sha）
+4. 审阅指标后：`record_review_method_adoption.py --manifest-sha <sha> --approving-principal ... --approval-source-file ...`
+5. 配置`ENROLLMENT_REVIEW_METHOD_APPROVAL_GATE_ID=<gate_result_id>`后
+   `POST .../prepared-review-workflows/47c4ef67bf0a45ee.../publish`
 
 ## 本次完成
 
