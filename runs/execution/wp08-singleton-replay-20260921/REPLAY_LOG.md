@@ -173,3 +173,13 @@ A25④旧件不变：旧修订/清单/快照/事实旧行/元数据历史全部�
 - 页判读 main-A：待 opencode-go 凭据（OPENCODE_API_KEY 或网关后台添加）后
   切换 muse-spark-1.3-contributor(high)；当前仍为 zhipu glm-5.3-flash
   （配额09-25 20:14重置）。
+
+## main-A 路由切换（2026-09-22）
+
+- 用户提供 opencode-go API key（已直接写入 .env 的 OPENCODE_API_KEY，不进仓库）。
+- 端点要求 x-opencode-session 头（应用已实现，取 OMP install-id 作稳定会话标识）。
+- 实测：deepseek-v4.1-flash 对照调用成功（证明路由/密钥/会话头全通）；
+  muse-spark-1.3-contributor 上游当前"Endpoint is unavailable"（1.2同报，
+  供应商侧波动，非本方配置问题）。
+- 预检通过：main-A=opencode-go muse-spark(high) + main-B=cms-model。
+  下一次页判读即按新双路执行；muse-spark 恢复前其路读取会如实失败重试。
