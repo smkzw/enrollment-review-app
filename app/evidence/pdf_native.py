@@ -63,6 +63,9 @@ class NativePage:
     # 页内图像/矢量内容计数（位图 + 矩形/曲线/线段）；None 表示读取失败。
     # 供结构入口区分空白页与扫描/图形页。
     non_text_mark_count: int | None = None
+    # 页内位图图像的钳制面积和占可视页面积的比例（上限1.0）；None 表示读取失败。
+    # 供结构入口识别"正文是整页扫描图、文字层只在页边"的混合页（WP03/A01）。
+    large_image_coverage: float | None = None
 
     def chars_in_range(self, start: int, end: int) -> tuple[NativeChar, ...]:
         """返回文本区间 ``[start, end)`` 覆盖到的字符（含与该区间重叠的字符）。"""
@@ -485,6 +488,7 @@ def _extract_open_page(page, page_index: int) -> NativePage:
         )
     except Exception:
         non_text_mark_count = None
+    large_image_coverage = _large_image_coverage(page, page_width, page_height)
     return NativePage(
         page_number=page_index + 1,
         text=text,
@@ -494,7 +498,37 @@ def _extract_open_page(page, page_index: int) -> NativePage:
         page_height=page_height,
         rotation=rotation,
         non_text_mark_count=non_text_mark_count,
+        large_image_coverage=large_image_coverage,
     )
+
+
+def _large_image_coverage(page, page_width: float, page_height: float) -> float | None:
+    """位图图像钳制到可视页后的面积和占比；读取失败返回 None。
+
+    面积按单图与页面的交集逐图累加（重叠图像会高估，高估方向只会让
+    A01 判定更保守地走 VISION_OCR，不会漏正文）。
+    """
+    if page_width <= 0 or page_height <= 0:
+        return None
+    try:
+        images = list(page.images)
+    except Exception:
+        return None
+    if not images:
+        return 0.0
+    page_area = page_width * page_height
+    total = 0.0
+    for image in images:
+        try:
+            x0 = max(float(image["x0"]), 0.0)
+            x1 = min(float(image["x1"]), page_width)
+            y0 = max(float(image["y0"]), 0.0)
+            y1 = min(float(image["y1"]), page_height)
+        except (KeyError, TypeError, ValueError):
+            continue
+        if x1 > x0 and y1 > y0:
+            total += (x1 - x0) * (y1 - y0)
+    return min(total / page_area, 1.0)
 
 
 def extract_native_pages(pdf_path: str | Path | bytes) -> tuple[NativePage, ...]:

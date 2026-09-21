@@ -115,7 +115,9 @@ def decide_route_detailed(page_input: PageInput) -> tuple[ExtractionRoute | None
     - ``image``/``tiff`` -> ``VISION_OCR``；
     - ``pdf``/``docx``/``doc``（后两者转出的 PDF）-> 逐页探测文本层：
       非空 -> ``NATIVE_PDF_TEXT``（pdf）/ ``RENDERED_PDF_TEXT``（docx/doc），
-      空或探测异常 -> ``VISION_OCR``（扫描页，见设计 §7.1）。
+      空或探测异常 -> ``VISION_OCR``（扫描页，见设计 §7.1）；
+      非空但正文是整页位图、文字层只在页边（WP03/A01 混合页）->
+      ``VISION_OCR``（不把页码文字层当全文读取成功）。
     """
     if page_input.expects_failure:
         return None, page_input.technical_detail
@@ -133,11 +135,59 @@ def decide_route_detailed(page_input: PageInput) -> tuple[ExtractionRoute | None
         # 探测异常细节只作为内部诊断，用户可见降级不泄露异常。
         return ExtractionRoute.VISION_OCR, f"{type(exc).__name__}: {exc}"
     if native.text.strip():
+        if _body_is_bitmap_scan(native):
+            # WP03/A01：文字层只挂页边（页码/页眉）而正文是整页扫描图，
+            # 不能把非空native文本当全文读取成功，按扫描页走VISION_OCR。
+            return ExtractionRoute.VISION_OCR, "native_text_marginal_over_bitmap_body"
         return (
             (ExtractionRoute.NATIVE_PDF_TEXT if kind == "pdf" else ExtractionRoute.RENDERED_PDF_TEXT),
             None,
         )
     return ExtractionRoute.VISION_OCR, None
+
+
+# A01 版面几何阈值：整页位图占比达到此值视为"正文是大图"。
+_A01_IMAGE_COVERAGE_MIN = 0.5
+# A01 版面几何阈值：文字行带覆盖可视页高度低于此值视为"文字层只在页边"
+# （页码/页眉窄条）。正文文字页即便短也通常远高于此；该判定只降级不升级，
+# 无大图时永不触发，真实文本页不受影响。
+_A01_TEXT_BAND_COVERAGE_MAX = 0.2
+# 同一行字符 y 区间的聚类容差（points），与行装配的容差一致。
+_LINE_Y_TOLERANCE = 4.0
+
+
+def _body_is_bitmap_scan(page: NativePage) -> bool:
+    """A01 混合页判定：大图覆盖率与文字行带覆盖率的版面几何合取。
+
+    只有两个信号同时成立才降级 VISION_OCR：正文位置被整页位图占据，
+    且文字层只覆盖页边窄条。缺任一信号（无大图、或文字层有实质行带
+    覆盖、或图像覆盖率未知）都维持原路线，不凭字符计数猜测。
+    """
+    if page.large_image_coverage is None:
+        return False
+    if page.large_image_coverage < _A01_IMAGE_COVERAGE_MIN:
+        return False
+    return _text_band_coverage(page) <= _A01_TEXT_BAND_COVERAGE_MAX
+
+
+def _text_band_coverage(page: NativePage) -> float:
+    """字符 y 区间合并后的行带总高度占可视页高度的比例。
+
+    正文文字页的行带分布远超页边窄条；页码/页眉只覆盖一两条窄带。
+    """
+    if not page.chars or page.page_height <= 0:
+        return 0.0
+    intervals = sorted(
+        (c.y0, c.y1) for c in page.chars if c.y1 > c.y0
+    )
+    merged: list[list[float]] = []
+    for y0, y1 in intervals:
+        if merged and y0 <= merged[-1][1] + _LINE_Y_TOLERANCE:
+            merged[-1][1] = max(merged[-1][1], y1)
+        else:
+            merged.append([y0, y1])
+    covered = sum(y1 - y0 for y0, y1 in merged)
+    return min(covered / page.page_height, 1.0)
 
 
 def decide_route(page_input: PageInput) -> ExtractionRoute | None:
