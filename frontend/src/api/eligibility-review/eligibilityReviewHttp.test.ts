@@ -30,6 +30,9 @@ function reviewBody() {
         reason: "需要研究者确认。",
         fact_refs: [{ fact_id: "fact-1", excerpt: null, locator_id: null, page_number: null, source_document_version_id: null, page_artifact_id: null }],
         gap_type: "professional_judgment",
+        action_owner: "investigator",
+        action_detail: "研究者针对本条要求作出并记录明确的临床判断。",
+        action_evidence: "具名、具日期并直接关联本条要求的研究者判断。",
         determination_mode: "investigator_judgment",
       },
     ],
@@ -43,6 +46,9 @@ describe("eligibility review HTTP repository", () => {
     const decoded = await repository.getEligibilityReview("subject", "episode");
     expect(decoded.unassignedConflicts).toEqual([{ conflictGroupId: "group", memberKind: "event", memberIds: ["a", "b"] }]);
     expect(decoded.clauses[0]?.gapType).toBe("professional_judgment");
+    expect(decoded.clauses[0]?.actionOwner).toBe("investigator");
+    expect(decoded.clauses[0]?.actionDetail).toContain("临床判断");
+    expect(decoded.clauses[0]?.actionEvidence).toContain("具名");
     body.unassigned_conflicts.push({ ...body.unassigned_conflicts[0] });
     await expect(repository.getEligibilityReview("subject", "episode")).rejects.toThrow("争议记录重复");
     body.unassigned_conflicts.pop();

@@ -60,6 +60,11 @@ class EligibilityClauseDTO(BaseModel):
     determination_mode: Literal[
         "deterministic", "semantic", "investigator_judgment"
     ]
+    action_owner: Literal[
+        "investigator", "crc", "cra", "sponsor_medical_or_project"
+    ] | None = None
+    action_detail: str | None = None
+    action_evidence: str | None = None
 
 
 class EligibilityUnassignedConflictDTO(BaseModel):

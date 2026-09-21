@@ -32,7 +32,16 @@ export interface EligibilityClauseView {
   factRefs: EligibilityFactRefView[];
   gapType: string | null;
   determinationMode: EligibilityDeterminationMode;
+  actionOwner: EligibilityActionTarget | null;
+  actionDetail: string | null;
+  actionEvidence: string | null;
 }
+
+export type EligibilityActionTarget =
+  | "investigator"
+  | "crc"
+  | "cra"
+  | "sponsor_medical_or_project";
 
 export interface EligibilityReviewView {
   unassignedConflicts?: { conflictGroupId: string; memberKind: "event" | "exposure"; memberIds: string[] }[];
@@ -132,6 +141,22 @@ function enumValue<T extends string>(
   return value as T;
 }
 
+function optionalEnumValue<T extends string>(
+  value: unknown,
+  values: readonly T[],
+  path: string,
+): T | null {
+  if (value === null || value === undefined) return null;
+  return enumValue(value, values, path);
+}
+
+const ACTION_TARGETS: readonly EligibilityActionTarget[] = [
+  "investigator",
+  "crc",
+  "cra",
+  "sponsor_medical_or_project",
+];
+
 const RULE_KINDS: readonly EligibilityRuleKind[] = [
   "inclusion",
   "exclusion",
@@ -215,6 +240,13 @@ function decodeClause(value: unknown, index: number): EligibilityClauseView {
       DETERMINATION_MODES,
       `${path}.determination_mode`,
     ),
+    actionOwner: optionalEnumValue(
+      field(row, "action_owner", path),
+      ACTION_TARGETS,
+      `${path}.action_owner`,
+    ),
+    actionDetail: nullableString(field(row, "action_detail", path), `${path}.action_detail`),
+    actionEvidence: nullableString(field(row, "action_evidence", path), `${path}.action_evidence`),
   };
 }
 

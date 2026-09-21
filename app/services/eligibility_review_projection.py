@@ -145,6 +145,11 @@ class EligibilityClauseProjection:
     fact_refs: tuple[EligibilityFactRef, ...]
     gap_type: str | None
     determination_mode: str
+    # 具体动作指令（WP06）：仅在有缺口时给出责任方/请求动作/可接受证据，
+    # 与 domain.policies.ACTION_CONTENT 的注册临床合同一一对应。
+    action_owner: str | None = None
+    action_detail: str | None = None
+    action_evidence: str | None = None
 
 
 @dataclass(frozen=True)
@@ -519,6 +524,24 @@ def _used_fact_ids(evaluation: ComponentEvaluation) -> set[str]:
     return used
 
 
+def _action_directive_fields(gap: GapType | None) -> dict[str, str | None]:
+    """从注册动作合同生成责任方/动作/可接受证据的线上字段。"""
+    if gap is None:
+        return {
+            "action_owner": None,
+            "action_detail": None,
+            "action_evidence": None,
+        }
+    from app.domain.policies import ACTION_CONTENT
+
+    target, action, evidence = ACTION_CONTENT[gap]
+    return {
+        "action_owner": target.value,
+        "action_detail": action,
+        "action_evidence": evidence,
+    }
+
+
 def _reason(
     clause: ClausePackClause,
     *,
@@ -800,6 +823,7 @@ class EligibilityReviewProjectionService:
                     fact_refs=_fact_refs(session, used_fact_ids, facts_by_id),
                     gap_type=gap.value if gap is not None else None,
                     determination_mode=clause.determination_mode.value,
+                    **_action_directive_fields(gap),
                 )
             )
 

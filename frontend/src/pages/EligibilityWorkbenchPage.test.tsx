@@ -36,6 +36,9 @@ const review: EligibilityReviewView = {
       ],
       gapType: "professional_judgment",
       determinationMode: "investigator_judgment",
+      actionOwner: "investigator",
+      actionDetail: "研究者针对本条要求作出并记录明确的临床判断。",
+      actionEvidence: "具名、具日期并直接关联本条要求的研究者判断。",
     },
     {
       ruleCode: "IN-02",
@@ -49,6 +52,9 @@ const review: EligibilityReviewView = {
       factRefs: [],
       gapType: null,
       determinationMode: "deterministic",
+      actionOwner: null,
+      actionDetail: null,
+      actionEvidence: null,
     },
     {
       ruleCode: "EX-01",
@@ -62,6 +68,9 @@ const review: EligibilityReviewView = {
       factRefs: [],
       gapType: null,
       determinationMode: "semantic",
+      actionOwner: null,
+      actionDetail: null,
+      actionEvidence: null,
     },
     {
       ruleCode: "REQ-01",
@@ -75,6 +84,9 @@ const review: EligibilityReviewView = {
       factRefs: [],
       gapType: "future_stage_not_due",
       determinationMode: "deterministic",
+      actionOwner: null,
+      actionDetail: null,
+      actionEvidence: null,
     },
   ],
 };
@@ -144,6 +156,14 @@ describe("入排审核工作台", () => {
     expect(screen.queryByText("private-conflict")).not.toBeInTheDocument();
     expect(screen.getByLabelText("无法判定 1 条")).toBeInTheDocument();
   });
+  it("有缺口的条款详情显示责任方与建议动作", async () => {
+    render(<EligibilityWorkbenchPage />);
+    await screen.findByRole("heading", { name: "入排审核工作台" });
+    expect(screen.getByRole("heading", { name: "建议动作 · 研究者方" })).toBeInTheDocument();
+    expect(screen.getByText(/作出并记录明确的临床判断/)).toBeInTheDocument();
+    expect(screen.getByText(/可接受证据：具名、具日期/)).toBeInTheDocument();
+  });
+
   it("详情显示方案原文，列表保留摘要；缺原文时不冒充原文", async () => {
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
       ...review, clauses: [{ ...review.clauses[0]!, sourceText: "这是方案中的完整原文，含限定条件与例外。" }],

@@ -18,7 +18,7 @@ import { OriginalEvidenceViewer } from "../components/evidence-workspace/Origina
 import { ErrorState, EmptyState, LoadingState } from "../components/shell/Feedback";
 import { BarrierIcon, AttentionIcon, CheckIcon, ConflictIcon, JudgmentIcon } from "../components/shell/icons";
 import { StatusBadge, type Tone } from "../components/shell/StatusBadge";
-import { formatSnapshotVersion, gapTypeLabel } from "../domain/labels";
+import { actionTargetLabel, formatSnapshotVersion, gapTypeLabel } from "../domain/labels";
 
 export type EligibilityDecisionFilter =
   | "all"
@@ -485,6 +485,20 @@ function EligibilityClauseDetail({
         />
         <p>{clause.reason}</p>
       </div>
+      {clause.actionOwner !== null && clause.actionDetail !== null && (
+        <section
+          className="eligibility-detail-section"
+          aria-labelledby="eligibility-action-title"
+        >
+          <h3 id="eligibility-action-title">
+            建议动作 · {actionTargetLabel[clause.actionOwner]}
+          </h3>
+          <p>{clause.actionDetail}</p>
+          {clause.actionEvidence !== null && (
+            <p className="eligibility-muted">可接受证据：{clause.actionEvidence}</p>
+          )}
+        </section>
+      )}
       <section className="eligibility-detail-section" aria-labelledby="eligibility-original-clause-title">
         <h3 id="eligibility-original-clause-title">{clause.sourceText ? "条款原文" : "审核要点"}</h3>
         <p className="eligibility-clause-detail__text">{clause.sourceText || clause.textSummary}</p>
