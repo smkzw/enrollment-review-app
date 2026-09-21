@@ -424,12 +424,23 @@ class PageCoverageEntry(ContractModel):
     reconciliation_id: str | None = Field(default=None, min_length=1)
     discard_reason: str | None = Field(default=None, min_length=1)
     lane_failures: list[PageLaneFailure] = Field(default_factory=list)
+    #: WP02新增：来源政策标签（native_text/ocr_primary/single_visual等）。
+    #: 非None时表示该页由单来源（非双读）流程处理，reconciliation_id可为空。
+    source_policy_kind: str | None = Field(default=None)
+    source_policy_verification: str | None = Field(default=None)
 
     @model_validator(mode="after")
     def validate_disposition(self) -> "PageCoverageEntry":
+        has_verified_single_source = (
+            self.source_policy_kind is not None
+            and self.source_policy_verification in (
+                "cross_verified", "targeted_verified", "manual_confirmed",
+                "self_consistent",
+            )
+        )
         if self.disposition == PageDisposition.ACCEPTED:
-            if self.reconciliation_id is None:
-                raise ValueError("已采信页面必须绑定对账记录")
+            if self.reconciliation_id is None and not has_verified_single_source:
+                raise ValueError("已采信页面必须绑定对账记录或声明已验证来源政策")
             if self.discard_reason or self.lane_failures:
                 raise ValueError("已采信页面不得携带舍弃或失败字段")
         elif self.disposition == PageDisposition.DISCARDED_NO_ELIGIBILITY_VALUE:

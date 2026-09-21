@@ -55,14 +55,6 @@ def calculate_component_review(
         requirement_gap_overrides=judgment_gap_by_requirement,
         verified_judgment_requirement_ids=verified_judgment_requirement_ids,
     )
-    if predicate_fact_ids is not None and evaluation.trigger.truth != TruthValue.UNKNOWN:
-        # Binding provides verified selections AND the trigger is definite.
-        # Source/record gaps are superseded by the dual-model verification.
-        gaps = gaps - {
-            GapType.OBSERVATION_UNVERIFIED,
-            GapType.RECORD_INCOMPLETE,
-            GapType.DESCRIPTION_INSUFFICIENT,
-        }
     decision = derive_component_decision(rule_kind=rule_kind, evaluation=evaluation, gaps=gaps)
     return ComponentReviewResult(
         evaluation=evaluation, gaps=frozenset(gaps), decision=decision,

@@ -534,18 +534,9 @@ def _evaluate_atomic(expression: AtomicExpression, context: EvaluationContext,
     else:
         matching = [fact for fact in context.facts if fact.fact_type == fact_type]
     if not matching:
-        if fact_ids is not None and not predicate.requires_professional_judgment:
-            # 双模型绑定的verified空选择：两道一致确认无对应事实。
-            # 对排除条件返回FALSE=未触发；对入选条件返回FALSE=未满足。
-            # 不是UNKNOWN——因为绑定已验证，不是"未核实"。
-            return _result(
-                TruthValue.FALSE,
-                "verified_no_matching_fact",
-                used_fact_ids=[],
-                evidence_span_ids=[],
-                observed_value=None,
-                observed_unit=None,
-            )
+        # 空候选/无合格事实默认UNKNOWN：候选缺失是提取层状态，
+        # 不是临床命题的FALSE。仅显式否认记录（polarity=NEGATED且
+        # 有原文定位）可通过正常比较路径产生确定结果。
         reason = (
             "professional_judgment_unverified"
             if predicate.requires_professional_judgment
