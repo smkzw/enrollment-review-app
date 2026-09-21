@@ -249,9 +249,13 @@ def test_locator_compaction_keeps_maximal_context_per_source_layer():
         ]
     )
 
+    # R13修复：不做文本包含推断去重，同页同源相同文本的不同出现位置全部保留。
     assert [item.locator_id for item in compacted] == [
-        "loc-other-source",
         "loc-row",
+        "loc-name",
+        "loc-value-a",
+        "loc-value-b",
+        "loc-other-source",
     ]
 
 

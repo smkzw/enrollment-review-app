@@ -141,10 +141,13 @@ def _load_normalizer_context(
             raise FactPlanningSourceError(
                 f"逻辑文档 {logical_document_id} 的元数据修订与活动资料版本不一致"
             )
-        if metadata.is_auto_suggestion:
+        # R14修复：有据的自动建议可直接采用，不构成隐藏人工门禁。
+        # 仅当document_type为完全未知的占位值时才阻断——
+        # "其他资料（待确认）"表示系统无法识别文件类型。
+        if metadata.is_auto_suggestion and "待确认" in (metadata.document_type or ""):
             raise FactPlanningSourceError(
-                f"逻辑文档 {logical_document_id} 的资料类型和来源方仍是自动建议，"
-                "需确认后才能进入证据规范化"
+                f"逻辑文档 {logical_document_id} 的资料类型无法自动识别（仍为待确认），"
+                "需人工确认后才能进入证据规范化"
             )
         contexts[logical_document_id] = EvidenceNormalizerContextInput(
             source_document_version_id=source_document_version_id,

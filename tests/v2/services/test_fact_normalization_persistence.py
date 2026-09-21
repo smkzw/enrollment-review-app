@@ -636,7 +636,8 @@ def test_executor_uses_persisted_job_step_as_transport_retry_boundary(
     assert config.max_transport_retries == 0
 
 
-def test_job_creation_rejects_auto_suggested_metadata_before_model_call(session_factory):
+def test_auto_suggested_metadata_with_identifiable_type_is_accepted(session_factory):
+    """R14修复：有据的自动建议（document_type可识别）不再构成隐藏人工门禁。"""
     with session_factory() as session:
         chain = _seed_chain(
             session,
@@ -646,11 +647,9 @@ def test_job_creation_rejects_auto_suggested_metadata_before_model_call(session_
         session.commit()
 
     service = FactNormalizationJobService(session_factory)
-    with pytest.raises(Exception, match="自动建议"):
-        _create_job_from_source(service, chain)
-    with session_factory() as session:
-        assert session.execute(select(FactNormalizationRunRecord)).scalars().all() == []
-        assert session.execute(select(FactNormalizationCallRecord)).scalars().all() == []
+    # document_type="检验报告"可识别，自动有据采用不阻断
+    result = _create_job_from_source(service, chain)
+    assert result.job_id  # job created successfully
 
 
 def test_rebuilt_model_input_contains_frozen_document_stage_and_requirements(session_factory):
