@@ -28,6 +28,8 @@ _EFFORTS = {
     "omlx": frozenset({"low", "medium", "high", "xhigh"}),
     "mlx-serve": frozenset({"low", "medium", "high", "xhigh"}),
     "mtplx": frozenset({"low", "medium", "high", "xhigh"}),
+    # OpenCode Zen/Go（OpenAI 兼容 /chat/completions；思考档位随模型声明）。
+    "opencode-go": frozenset({"minimal", "low", "medium", "high", "xhigh"}),
 }
 
 

@@ -189,7 +189,14 @@ def require_page_reader_routes(
         if local_main_a
         else _value(env, "PAGE_REVIEW_MAIN_A_API_KEY", "")
     )
-    if not local_main_a and not main_a_key:
+    if provider == "opencode-go":
+        # OpenCode 凭据与 OMP 的 opencode-go provider 同源，只从专用环境变量
+        # 读取（用户自行填写，不经任何会话/日志转手）；绝不回退到其他供应商
+        # 的密钥，防止把 A 供应商的凭据发给 B 供应商。
+        main_a_key = _value(env, "PAGE_REVIEW_MAIN_A_API_KEY", "") or _value(
+            env, "OPENCODE_API_KEY", ""
+        )
+    elif not local_main_a and not main_a_key:
         main_a_key = _value(
             env, "INDEPENDENT_VLM_API_KEY", PAGE_REVIEW_MAIN_A_API_KEY
         )
@@ -218,7 +225,10 @@ def require_page_reader_routes(
         main_b_base_url = _value(env, "PAGE_REVIEW_MAIN_B_BASE_URL", PAGE_REVIEW_MAIN_B_BASE_URL)
     missing = []
     if not main_a_key:
-        missing.append("PAGE_REVIEW_MAIN_A_API_KEY（或 INDEPENDENT_VLM_API_KEY）")
+        if provider == "opencode-go":
+            missing.append("OPENCODE_API_KEY")
+        else:
+            missing.append("PAGE_REVIEW_MAIN_A_API_KEY（或 INDEPENDENT_VLM_API_KEY）")
     if gemini_main_b:
         if not main_b_key:
             missing.append("GEMINI_ACCESS_TOKEN（或 PAGE_REVIEW_MAIN_B_API_KEY）")
