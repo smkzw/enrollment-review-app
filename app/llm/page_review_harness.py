@@ -331,17 +331,27 @@ async def _resolve_route_model(route: PageReaderRoute, *, owned_health: Mapping 
             raise PageReviewConfigError(f"{route.lane.value} Gemini 端点必须为 HTTPS")
         return route
     headers = {"Authorization": f"Bearer {route.api_key}"}
+    listing_unavailable = False
     async with httpx.AsyncClient(trust_env=False, timeout=15) as client:
-        response = await client.get(f"{route.base_url.rstrip('/')}/models", headers=headers)
-        response.raise_for_status()
-        data = response.json().get("data", [])
+        try:
+            response = await client.get(f"{route.base_url.rstrip('/')}/models", headers=headers)
+            response.raise_for_status()
+            data = response.json().get("data", [])
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in {401, 403, 404}:
+                # 网关可能仅对对话端点放行业务密钥，模型目录另需管理凭据。
+                # 显式配置的模型身份由每次对话回执核对，不因目录不可读而拒绝启动。
+                listing_unavailable = True
+                data = []
+            else:
+                raise
     ids = [str(item.get("id", "")) for item in data if isinstance(item, Mapping)]
     external_shared_health: Mapping | None = None
-    if route.model not in ids and route.provider == "mtplx" and owned_health is None:
+    if not listing_unavailable and route.model not in ids and route.provider == "mtplx" and owned_health is None:
         # 外部共享实例（2026-09-18 用户裁定）：端口上唯一在服务的模型即
         # 无歧义目标；身份由 /health 声明的模型目录与能力绑定。
         external_shared_health = await _external_shared_mtplx_health(route.base_url)
-    if route.model not in ids and external_shared_health is None:
+    if not listing_unavailable and route.model not in ids and external_shared_health is None:
         # 网关可能以带前缀的 id 发布模型（如 /v1/xxx），同时接受裸名调用；
         # root/name 与配置名一致时视为同一模型的已发布别名。
         if not any(
@@ -374,7 +384,8 @@ async def _resolve_route_model(route: PageReaderRoute, *, owned_health: Mapping 
     model_info = _match_model_info(data)
     try:
         validate_adapter_options(route.provider, route.reasoning_effort)
-        validate_published_limits(model_info, effort=route.reasoning_effort, max_tokens=route.max_tokens)
+        if not listing_unavailable:
+            validate_published_limits(model_info, effort=route.reasoning_effort, max_tokens=route.max_tokens)
     except ValueError as exc:
         raise PageReviewConfigError(f"{route.lane.value} {exc}") from exc
     if route.provider == "mlx-serve":
