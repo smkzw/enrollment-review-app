@@ -215,3 +215,21 @@ A25④旧件不变：旧修订/清单/快照/事实旧行/元数据历史全部�
   base64 图像输入可能需要特殊格式或额外参数。
 - main-A 已切 mimo 但暂不可用于页判读 → **暂回退 main-A 到 zhipu glm-5.3-flash**
   （配额09-25 20:14重置后可用），或等待 mimo 多模态支持问题解决。
+
+### mimo-v2.6-flash 补充诊断
+- 简单文本调用 + max_tokens=65536 + reasoning_effort=high + response_format
+  json_object → 全部通过（排除模型能力/配额/参数问题）
+- 页判读请求含 base64 页图像 → 400 BadRequest（所有25页一致）
+- opencode-go 模型目录标记 mimo-v2.6-flash 为 images: yes 但实际多模态
+  请求可能需要特殊格式或额外header
+- main-B cms-model 部分页成功 → cms网关与cms-model正常
+- 结论：mimo-v2.6-flash 的 opencode-go 多模态（视觉）需要进一步调研
+  （请求格式/header/图像编码方式）
+
+### mimo-v2.6-flash 多模态验证补充
+- curl 视觉测试（100×100 PNG base64）→ 成功返回（finish=length 因max_tokens=50）
+- 结论：mimo-v2.6-flash 在 opencode-go 端点上 **多模态（图像）能力正常**
+- 页判读 400 BadRequest 的根因需进一步排查（可能为请求体中
+  65536 max_tokens + base64 图像 + 复杂临床 prompt 的组合触发了
+  端点限制，而非单一参数问题）
+- opencode-go 端点已开始限流（频繁测试后），需等待后再调试
