@@ -3,7 +3,7 @@
 set -u
 BASE="http://127.0.0.1:8902"
 SID=$(cat /Users/smkzw/.omp/install-id 2>/dev/null | tr -d '[:space:]')
-KEY="sk-3V4pIUqIGsZNIntlkphBQIXv0f54V1DNIfFMVE8QHg0nOC4cIPCSlqrRl9vCSuNo"
+KEY="${OPENCODE_API_KEY:?请先 export OPENCODE_API_KEY（已轮换的凭据从安全通道注入，不写入本文件）}"
 SUB="e851520b052440abb8c6bdb01b7e6cab"
 cd "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile"
 SUB="e851520b052440abb8c6bdb01b7e6cab"
