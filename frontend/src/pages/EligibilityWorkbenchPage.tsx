@@ -643,9 +643,10 @@ function EligibilityEvidencePanel({
           <p className="workbench-pane__subtitle">{clause.ruleCode} · {clauseKindLabel(clause.ruleKind)}</p>
         </div>
       </header>
-      {clause.factRefs.length === 0 ? (
-        <p className="eligibility-muted">当前条款没有可查看的关联事实。</p>
-      ) : (
+      {clause.factRefs.length === 0 && (
+        <p className="eligibility-muted">当前条款没有已采用事实，可浏览全部原件页核实。</p>
+      )}
+      {(
         <>
           <ul className="eligibility-evidence__refs" aria-label="关联事实原件定位">
             {clause.factRefs.map((fact, index) => (
