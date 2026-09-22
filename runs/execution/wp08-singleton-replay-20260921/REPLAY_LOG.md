@@ -233,3 +233,11 @@ A25④旧件不变：旧修订/清单/快照/事实旧行/元数据历史全部�
   65536 max_tokens + base64 图像 + 复杂临床 prompt 的组合触发了
   端点限制，而非单一参数问题）
 - opencode-go 端点已开始限流（频繁测试后），需等待后再调试
+
+### deepseek-v4.1-flash 页判读诊断结论
+- main-A (deepseek-v4.1-flash on opencode-go)：25页全部失败（400 BadRequest）
+  该模型无法处理页判读的多模态大请求。
+- main-B (cms-model)：20/25页成功，5页双路失败。
+- 系统处于需要重读状态，但 main-A 持续失败意味着重读也会失败。
+- **需要用户决策**：指定一个能处理页判读多模态请求的 main-A 模型，或
+  等待 muse-spark 恢复后切回。
