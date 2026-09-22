@@ -494,27 +494,26 @@ function EligibilityClauseDetail({
           hint={clause.reason}
           icon={decisionIcon(clause.decision)}
         />
-        <p>{clause.reason}</p>
       </div>
-      {clause.actionOwner !== null && clause.actionDetail !== null && (
-        <section
-          className="eligibility-detail-section"
-          aria-labelledby="eligibility-action-title"
-        >
-          <h3 id="eligibility-action-title">
-            建议动作 · {actionTargetLabel[clause.actionOwner]}
-          </h3>
-          <p>{clause.actionDetail}</p>
-          {clause.actionEvidence !== null && (
-            <p className="eligibility-muted">可接受证据：{clause.actionEvidence}</p>
-          )}
-        </section>
-      )}
-      <section className="eligibility-detail-section" aria-labelledby="eligibility-original-clause-title">
-        <h3 id="eligibility-original-clause-title">{clause.sourceText ? "条款原文" : "审核要点"}</h3>
-        <p className="eligibility-clause-detail__text">{clause.sourceText || clause.textSummary}</p>
-        {!clause.sourceText && <p className="eligibility-muted">本条尚未附方案原文。</p>}
-      </section>
+      <ul className="eligibility-clause-detail__bullets" aria-label="条款详情">
+        <li className="eligibility-detail-bullet">
+          <strong>判定依据</strong>
+          <span>{clause.reason}</span>
+        </li>
+        {clause.actionOwner !== null && clause.actionDetail !== null && (
+          <li className="eligibility-detail-bullet">
+            <strong>建议动作 · {actionTargetLabel[clause.actionOwner]}</strong>
+            <span>{clause.actionDetail}</span>
+            {clause.actionEvidence !== null && (
+              <span className="eligibility-muted">可接受证据：{clause.actionEvidence}</span>
+            )}
+          </li>
+        )}
+        <li className="eligibility-detail-bullet">
+          <strong>{clause.sourceText ? "条款原文" : "审核要点"}</strong>
+          <span>{clause.sourceText || clause.textSummary}</span>
+        </li>
+      </ul>
       <section className="eligibility-detail-section" aria-labelledby="eligibility-facts-title">
         <h3 id="eligibility-facts-title">关联事实</h3>
         {clause.factRefs.length === 0 ? (

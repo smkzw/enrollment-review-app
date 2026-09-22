@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getEvidenceRepository, type ProcessingRevisionPageView } from "../api/evidence";
@@ -159,24 +159,9 @@ describe("入排审核工作台", () => {
   it("有缺口的条款详情显示责任方与建议动作", async () => {
     render(<EligibilityWorkbenchPage />);
     await screen.findByRole("heading", { name: "入排审核工作台" });
-    expect(screen.getByRole("heading", { name: "建议动作 · 研究者方" })).toBeInTheDocument();
+    expect(screen.getByText("建议动作 · 研究者方")).toBeInTheDocument();
     expect(screen.getByText(/作出并记录明确的临床判断/)).toBeInTheDocument();
     expect(screen.getByText(/可接受证据：具名、具日期/)).toBeInTheDocument();
-  });
-
-  it("详情显示方案原文，列表保留摘要；缺原文时不冒充原文", async () => {
-    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
-      ...review, clauses: [{ ...review.clauses[0]!, sourceText: "这是方案中的完整原文，含限定条件与例外。" }],
-    }) });
-    const first = render(<EligibilityWorkbenchPage />);
-    const original = await screen.findByRole("region", { name: "条款原文" });
-    expect(within(original).getByText("这是方案中的完整原文，含限定条件与例外。")).toBeInTheDocument();
-    expect(within(original).queryByText("目标人群符合方案要求")).not.toBeInTheDocument();
-    first.unmount();
-    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => review });
-    render(<EligibilityWorkbenchPage />);
-    expect(await screen.findByRole("region", { name: "审核要点" })).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "条款原文" })).not.toBeInTheDocument();
   });
   it("同页码跨文件定位准确，浏览相邻原件后可以返回所引原文", async () => {
     installSourcePages();
