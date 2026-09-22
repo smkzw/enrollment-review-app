@@ -966,7 +966,10 @@ async def read_page(
                 "clause_pack_sha256": clause_pack.clause_pack_sha256,
                 "lane": route.lane.value,
                 "provider": route.provider,
-                "model": route.model,
+                # F10身份闭环：记录绑定实际返回的模型（网关别名解析后如实
+                # 落盘），请求名一并进入身份，二者不一致可追溯。
+                "model": result.response_model or route.model,
+                "requested_model": route.model,
                 "reasoning_effort": route.reasoning_effort,
                 "endpoint_base_url": active_route.base_url,
                 "fallback_used": fallback_used,
@@ -986,7 +989,7 @@ async def read_page(
             clause_pack_sha256=clause_pack.clause_pack_sha256,
             lane=route.lane,
             provider=route.provider,
-            model=route.model,
+            model=result.response_model or route.model,
             reasoning_effort=route.reasoning_effort,
             endpoint_base_url=active_route.base_url,
             fallback_used=fallback_used,
