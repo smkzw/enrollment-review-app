@@ -356,10 +356,17 @@ function issueGroupLabel(key: string): string {
   return labels[key] ?? FALLBACK_ISSUE_LABELS[key] ?? key;
 }
 
-/** 根因聚合：同一根因的条款归入一组并计数；渲染全量，不用 top-N 截断。 */
+/** 根因聚合：同一根因的条款归入一组并计数；渲染全量，不用 top-N 截断。
+ *  组严重性取成员最高档且与输入顺序无关（F08纠偏）。 */
 export function buildEligibilityIssueGroups(
   clauses: ReadonlyArray<EligibilityClauseView>,
 ): EligibilityIssueGroup[] {
+  const severities: IssueSeverity[] = ["danger", "attention", "info"];
+  const severityOf = (decision: EligibilityDecision): IssueSeverity => {
+    const tone = decisionTone(decision);
+    if (decision === "professional_judgment") return "attention";
+    return tone === "danger" ? "danger" : "info";
+  };
   const byKey = new Map<string, EligibilityIssueGroup>();
   for (const clause of clauses) {
     if (!clauseIsIssue(clause)) continue;
@@ -368,6 +375,10 @@ export function buildEligibilityIssueGroups(
     if (!group) {
       group = { key, label: issueGroupLabel(key), severity, clauses: [] };
       byKey.set(key, group);
+    } else if (
+      severities.indexOf(severity) < severities.indexOf(group.severity)
+    ) {
+      group.severity = severity;
     }
     group.clauses.push(clause);
   }
