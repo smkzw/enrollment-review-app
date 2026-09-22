@@ -863,79 +863,79 @@ def clause_to_rule_component(clause: ClausePackClause):
 
 
 def _load_binding_predicate_fact_ids(session, *, authority=None):
-    """从当前审核节点的最近完成资格核对加载predicate→fact映射。
+    """从当前审核节点的作用域内资格核对加载predicate→fact映射（F02/F03）。
 
-    按project/subject/episode作用域过滤（ER-04修复），并消费双路资格核对
-    中structurally_valid且dual_agreement的配对（WP05完整资格消费），
-    不再直接使用未核实候选交集。映射对全部官方谓词完整（未核实为空表）。
-    无候选任务、无对应资格任务或资格重建失败→None（调用方按无绑定处理）。
+    选择内核与正式发布完全一致：只接受 `pair_direct_selection_rejection_reasons`
+    为空的配对——双路一致但方向为拒绝/未决、来源不可采用、对象/属性/否认范围/
+    时间角色/操作数任一不合格、存在未消解检查的配对一律不得成为运算输入。
+    查询按完整authority元组（含episode_revision与规则/方案/快照/处理修订）
+    全量过滤后再排序，不用LIMIT截断窗口；不把异常吞并成None伪装无绑定。
     """
     from app.workflow.jobstore import JobStore
     from app.domain.contracts.predicate_binding import PredicateBindingFrozenInput
     from app.services.binding_qualification_support import (
         verify_completed_binding_qualification,
     )
+    from app.services.qualified_binding_selection import (
+        pair_direct_selection_rejection_reasons,
+    )
     from app.evidence.artifacts import ArtifactStore
     from app.services.evidence_app_bootstrap import resolve_data_paths
 
     if authority is None:
         return None
-    try:
-        rows = session.execute(
-            text("SELECT job_id, payload_json FROM jobs "
-                 "WHERE job_type = 'predicate_binding_candidates' "
-                 "AND state = 'completed' "
-                 "ORDER BY created_at DESC LIMIT 5")
-        ).fetchall()
-    except Exception:
-        return None
-    if not rows:
-        return None
 
-    # 按authority元组匹配正确的binding job
-    target = None
-    for row in rows:
-        job_id, payload_json = row[0], row[1]
+    scope_fields = (
+        "project_id", "subject_id", "review_episode_id", "episode_revision",
+        "protocol_version_id", "rule_set_id", "rule_set_revision",
+        "evidence_snapshot_v2_id", "complete_processing_revision_id",
+    )
+    scope = {field: getattr(authority, field) for field in scope_fields}
+
+    def _frozen_in_scope(frozen) -> bool:
+        auth = frozen.authority
+        return all(getattr(auth, field) == value for field, value in scope.items())
+
+    candidate_rows = session.execute(
+        text("SELECT job_id, payload_json FROM jobs "
+             "WHERE job_type = 'predicate_binding_candidates' "
+             "AND state = 'completed' "
+             "ORDER BY created_at DESC, job_id DESC")
+    ).fetchall()
+    binding_job_id = None
+    binding_frozen = None
+    for job_id, payload_json in candidate_rows:
         try:
-            payload = json.loads(payload_json)
-            frozen_data = payload.get("frozen_input")
-            if not frozen_data:
-                continue
-            frozen = PredicateBindingFrozenInput.model_validate(frozen_data)
-            auth = frozen.authority
-            if (auth.project_id == authority.project_id
-                    and auth.subject_id == authority.subject_id
-                    and auth.review_episode_id == authority.review_episode_id):
-                target = (job_id, frozen)
-                break
+            frozen = PredicateBindingFrozenInput.model_validate(
+                json.loads(payload_json)["frozen_input"])
         except Exception:
             continue
-    if target is None:
+        if _frozen_in_scope(frozen):
+            binding_job_id, binding_frozen = job_id, frozen
+            break
+    if binding_job_id is None:
         return None
 
-    binding_job_id, frozen = target
-    qual_rows = session.execute(
+    qualification_job_id = None
+    qualification_rows = session.execute(
         text("SELECT job_id, payload_json FROM jobs "
              "WHERE job_type = 'binding_qualification' AND state = 'completed' "
-             "ORDER BY created_at DESC LIMIT 5")
+             "ORDER BY created_at DESC, job_id DESC")
     ).fetchall()
-    qualification_job_id = None
-    for row in qual_rows:
+    for job_id, payload_json in qualification_rows:
         try:
-            payload = json.loads(row[1])
+            payload = json.loads(payload_json)
         except Exception:
             continue
         if (payload.get("candidate_job_id") == binding_job_id
                 and payload.get("candidate_family") == "predicate"):
-            qualification_job_id = row[0]
+            qualification_job_id = job_id
             break
     if qualification_job_id is None:
         return None
-    try:
-        verified = verify_completed_binding_qualification(
-            session, ArtifactStore(resolve_data_paths()), qualification_job_id)
-    except Exception:
-        return None
+
+    verified = verify_completed_binding_qualification(
+        session, ArtifactStore(resolve_data_paths()), qualification_job_id)
     frozen_verified = verified["frozen"]
     identity_to_predicate = {}
     for component in frozen_verified.components:
@@ -944,6 +944,20 @@ def _load_binding_predicate_fact_ids(session, *, authority=None):
     result = {pred.predicate_id: []
               for component in frozen_verified.components
               for pred in component.binding_predicates}
+    for record in verified["summary"].pair_records:
+        # 与正式发布同一语义资格内核：拒绝理由非空（含双路一致但方向为
+        # 拒绝/未决、来源/对象/属性/否认/时间/操作数不合格、未消解检查）
+        # 的配对一律不得成为运算输入。
+        if pair_direct_selection_rejection_reasons(record):
+            continue
+        predicate_id = identity_to_predicate.get(record.identity_sha256)
+        if predicate_id is None:
+            continue
+        if record.fact_id not in result[predicate_id]:
+            result[predicate_id].append(record.fact_id)
+    if not any(result.values()):
+        return None
+    return {key: sorted(fact_ids) for key, fact_ids in result.items()}
     for record in verified["summary"].pair_records:
         if not (record.structurally_valid and record.dual_agreement):
             continue
