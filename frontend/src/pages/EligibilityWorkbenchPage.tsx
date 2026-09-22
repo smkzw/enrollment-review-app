@@ -603,11 +603,14 @@ function EligibilityEvidencePanel({
     );
   }, [snapshot.state]);
   const selectedFact = clause.factRefs[selectedFactIndex] ?? clause.factRefs[0] ?? null;
-  const referencePage = selectedFact?.pageNumber === null || selectedFact === null
-    ? null
-    : pages.find((page) => page.pageNumber === selectedFact.pageNumber
-        && page.sourceDocumentVersionId === selectedFact.sourceDocumentVersionId
-        && page.pageArtifactId === selectedFact.pageArtifactId) ?? null;
+  // F09：无已采用事实时默认展示第一页供浏览，不空置面板。
+  const referencePage = selectedFact === null
+    ? (pages.length > 0 ? pages[0] : null)
+    : selectedFact.pageNumber === null
+      ? null
+      : pages.find((page) => page.pageNumber === selectedFact.pageNumber
+          && page.sourceDocumentVersionId === selectedFact.sourceDocumentVersionId
+          && page.pageArtifactId === selectedFact.pageArtifactId) ?? null;
   const sourceContext = JSON.stringify([
     review.completeProcessingRevisionId, clause.ruleComponentId,
     selectedFact?.factId, selectedFact?.locatorId, selectedFact?.sourceDocumentVersionId,
