@@ -124,11 +124,29 @@ def _condition(
 ) -> ProtocolControlAgentWireConditionAtom:
     return ProtocolControlAgentWireConditionAtom(
         statement=statement,
+        evaluation=_evaluation(statement, span_id, excerpt),
         source_span_ids=[span_id],
         source_excerpts=[excerpt],
         time_constraint=None,
         requires_professional_judgment=False,
     )
+
+
+def _evaluation(statement: str, span_id: str, excerpt: str) -> dict:
+    return {
+        "determination_mode": "semantic",
+        "proposition": statement,
+        "time_purpose": "not_applicable",
+        "repeat_scheme": None,
+        "observation_policy": {
+            "mode": "unresolved",
+            "scope": "合成样例未声明记录选择规则",
+            "source_span_ids": [span_id],
+            "source_excerpts": [excerpt],
+        },
+        "source_span_ids": [span_id],
+        "source_excerpts": [excerpt],
+    }
 
 
 def _candidate() -> ProtocolControlAgentWireCandidate:
@@ -150,6 +168,9 @@ def _candidate() -> ProtocolControlAgentWireCandidate:
                         ProtocolControlAgentWireObligationAtom(
                             kind=ControlObligationKind.REACH_CONDITION,
                             statement="年龄达到18岁",
+                            evaluation=_evaluation(
+                                "年龄达到18岁", "span:01", "年龄至少18岁"
+                            ),
                             time_constraint=None,
                             prospective_period=None,
                             source_span_ids=["span:01"],
@@ -167,6 +188,7 @@ def _candidate() -> ProtocolControlAgentWireCandidate:
                 )
             ]
         ),
+        repeat_trigger_conditions=[],
         review_node_bindings=[
             {
                 "workflow_stage_id": "stage:screening:one",
@@ -181,6 +203,18 @@ def _candidate() -> ProtocolControlAgentWireCandidate:
                 description="核对年龄资料",
                 due_stage=ReviewStage.SCREENING,
                 required_source_types=["原始资料"],
+                workflow_stage_ids=["stage:screening:one"],
+                source_policy={
+                    "requires_contemporaneous_objective_source": None,
+                    "allows_screening_record_transcription": None,
+                    "result_validity_status": "not_specified",
+                    "result_validity_constraint": None,
+                    "source_span_ids": ["span:01"],
+                    "source_excerpts": ["年龄至少18岁"],
+                },
+                atom_refs=[
+                    {"layer": "obligation", "group_index": 0, "atom_index": 0}
+                ],
             )
         ],
         source_structure_unit_ids=["su-01"],

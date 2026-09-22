@@ -1,5 +1,7 @@
 import type {
   EligibilityClauseWire,
+  EligibilityControlStatusWire,
+  EligibilityControlWire,
   EligibilityDecisionWire,
   EligibilityDeterminationModeWire,
   EligibilityFactRefWire,
@@ -37,6 +39,26 @@ export interface EligibilityClauseView {
   actionEvidence: string | null;
 }
 
+export type EligibilityControlStatus = EligibilityControlStatusWire;
+
+export interface EligibilityControlObligationView {
+  obligationId: string;
+  obligationGroupId: string;
+  statement: string;
+  status: EligibilityControlStatus;
+  statusLabel: string;
+  reason: string;
+  factRefs: EligibilityFactRefView[];
+}
+
+export interface EligibilityControlView {
+  protocolControlId: string;
+  displayLabel: string;
+  title: string;
+  sourceSpanIds: string[];
+  obligations: EligibilityControlObligationView[];
+}
+
 export type EligibilityActionTarget =
   | "investigator"
   | "crc"
@@ -52,6 +74,7 @@ export interface EligibilityReviewView {
   evidenceSnapshotV2Id: string;
   completeProcessingRevisionId: string;
   clauses: EligibilityClauseView[];
+  controls: EligibilityControlView[];
 }
 
 export class EligibilityReviewApiError extends Error {
@@ -180,9 +203,15 @@ const DETERMINATION_MODES: readonly EligibilityDeterminationMode[] = [
   "semantic",
   "investigator_judgment",
 ];
+const CONTROL_STATUSES: readonly EligibilityControlStatus[] = [
+  "fulfilled",
+  "unfulfilled",
+  "unverified",
+  "not_applicable",
+];
 
-function decodeFactRef(value: unknown, index: number): EligibilityFactRefView {
-  const path = `clauses[].fact_refs[${index}]`;
+function decodeFactRef(value: unknown, index: number, parentPath = "clauses[].fact_refs"): EligibilityFactRefView {
+  const path = `${parentPath}[${index}]`;
   const row = objectValue(value, path);
   return {
     excerpt: nullableString(field(row, "excerpt", path), `${path}.excerpt`),
@@ -233,7 +262,7 @@ function decodeClause(value: unknown, index: number): EligibilityClauseView {
       `${path}.decision_label`,
     ),
     reason: requiredString(field(row, "reason", path), `${path}.reason`),
-    factRefs: refs.map(decodeFactRef),
+    factRefs: refs.map((value, index) => decodeFactRef(value, index)),
     gapType: nullableString(field(row, "gap_type", path), `${path}.gap_type`),
     determinationMode: enumValue(
       field(row, "determination_mode", path),
@@ -250,12 +279,44 @@ function decodeClause(value: unknown, index: number): EligibilityClauseView {
   };
 }
 
+function decodeControl(value: unknown, index: number): EligibilityControlView {
+  const path = `controls[${index}]`;
+  const row = objectValue(value, path);
+  const obligations = arrayValue(field(row, "obligations", path), `${path}.obligations`)
+    .map((value, obligationIndex) => {
+      const obligationPath = `${path}.obligations[${obligationIndex}]`;
+      const obligation = objectValue(value, obligationPath);
+      const refs = arrayValue(
+        field(obligation, "fact_refs", obligationPath),
+        `${obligationPath}.fact_refs`,
+      );
+      return {
+        obligationId: requiredString(field(obligation, "obligation_id", obligationPath), `${obligationPath}.obligation_id`),
+        obligationGroupId: requiredString(field(obligation, "obligation_group_id", obligationPath), `${obligationPath}.obligation_group_id`),
+        statement: requiredString(field(obligation, "statement", obligationPath), `${obligationPath}.statement`),
+        status: enumValue(field(obligation, "status", obligationPath), CONTROL_STATUSES, `${obligationPath}.status`),
+        statusLabel: requiredString(field(obligation, "status_label", obligationPath), `${obligationPath}.status_label`),
+        reason: requiredString(field(obligation, "reason", obligationPath), `${obligationPath}.reason`),
+        factRefs: refs.map((item, refIndex) => decodeFactRef(item, refIndex, `${obligationPath}.fact_refs`)),
+      };
+    });
+  const obligationIds = obligations.map((item) => `${item.obligationGroupId}:${item.obligationId}`);
+  if (new Set(obligationIds).size !== obligationIds.length) {
+    throw new EligibilityReviewDecodeError(`${path} 包含重复的补充要求事项`);
+  }
+  return {
+    protocolControlId: requiredString(field(row, "protocol_control_id", path), `${path}.protocol_control_id`),
+    displayLabel: requiredString(field(row, "display_label", path), `${path}.display_label`),
+    title: requiredString(field(row, "title", path), `${path}.title`),
+    sourceSpanIds: arrayValue(field(row, "source_span_ids", path), `${path}.source_span_ids`)
+      .map((item) => requiredString(item, `${path}.source_span_ids[]`)),
+    obligations,
+  };
+}
+
 export function decodeEligibilityReview(value: unknown): EligibilityReviewView {
   const row = objectValue(value, "eligibility_review");
   const clauses = arrayValue(field(row, "clauses", "eligibility_review"), "clauses");
-  if (clauses.length === 0) {
-    throw new EligibilityReviewDecodeError("clauses 不能为空");
-  }
   const decodedClauses = clauses.map(decodeClause);
   if (new Set(decodedClauses.map((clause) => clause.ruleComponentId)).size !== decodedClauses.length) {
     throw new EligibilityReviewDecodeError("审核要点重复，请重新读取审核结果。");
@@ -278,6 +339,14 @@ export function decodeEligibilityReview(value: unknown): EligibilityReviewView {
   if (new Set(unassignedConflicts.map((item) => item.conflictGroupId)).size !== unassignedConflicts.length) {
     throw new EligibilityReviewDecodeError("争议记录重复，请重新读取审核结果。");
   }
+  const controls = ("controls" in row
+    ? arrayValue(row.controls, "controls") : []).map(decodeControl);
+  if (new Set(controls.map((item) => item.protocolControlId)).size !== controls.length) {
+    throw new EligibilityReviewDecodeError("补充要求重复，请重新读取审核结果。");
+  }
+  if (decodedClauses.length === 0 && controls.length === 0) {
+    throw new EligibilityReviewDecodeError("当前方案没有可审核的官方条款或补充要求");
+  }
   return {
     unassignedConflicts,
     subjectId: requiredString(field(row, "subject_id", "eligibility_review"), "subject_id"),
@@ -299,6 +368,7 @@ export function decodeEligibilityReview(value: unknown): EligibilityReviewView {
       "complete_processing_revision_id",
     ),
     clauses: decodedClauses,
+    controls,
   };
 }
 
@@ -333,5 +403,6 @@ export function decodeEligibilityReviewError(
 // Keep wire imports visible to ensure this decoder remains aligned with the API contract.
 export type {
   EligibilityClauseWire,
+  EligibilityControlWire,
   EligibilityFactRefWire,
 };

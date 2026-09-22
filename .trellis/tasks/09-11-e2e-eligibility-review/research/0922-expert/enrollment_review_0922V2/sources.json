@@ -1,0 +1,103 @@
+{
+  "round": "0922V2",
+  "baseline": "e7f34d0508c05481164cf13569f66ddf64e2e74f",
+  "previous_review": "00c46cbc05eda5ac5ce63909b47de34ee72e18ff",
+  "sources": [
+    {
+      "id": "S01",
+      "path": ".trellis/tasks/09-11-e2e-eligibility-review/HANDOFF_20260922_FINAL.md",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/e7f34d0508c05481164cf13569f66ddf64e2e74f/.trellis/tasks/09-11-e2e-eligibility-review/HANDOFF_20260922_FINAL.md",
+      "scope": "完整交接；开发者运行陈述非本轮独立临床验收"
+    },
+    {
+      "id": "S02",
+      "path": "app/services/eligibility_review_projection.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/e7f34d0508c05481164cf13569f66ddf64e2e74f/app/services/eligibility_review_projection.py",
+      "scope": "当前作用域查找、配对选择、None回退、实际求值调用"
+    },
+    {
+      "id": "S03",
+      "path": "app/services/qualified_binding_selection.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/e7f34d0508c05481164cf13569f66ddf64e2e74f/app/services/qualified_binding_selection.py",
+      "scope": "_select_facts_for_identity 与 _select_with_ordering；整条件语义"
+    },
+    {
+      "id": "S04",
+      "path": "app/domain/expression.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/e7f34d0508c05481164cf13569f66ddf64e2e74f/app/domain/expression.py",
+      "scope": "_evaluate_atomic；空选择UNKNOWN与无选择时旧类别路径"
+    },
+    {
+      "id": "S05",
+      "path": "app/llm/page_review_harness.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/e7f34d0508c05481164cf13569f66ddf64e2e74f/app/llm/page_review_harness.py",
+      "scope": "请求构造、失败分类、主记录身份"
+    },
+    {
+      "id": "S06",
+      "path": "app/llm/page_review_transport_options.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/e7f34d0508c05481164cf13569f66ddf64e2e74f/app/llm/page_review_transport_options.py",
+      "scope": "opencode-go 当前返回空 options"
+    },
+    {
+      "id": "S07",
+      "path": "scripts/build_scale_validation_set.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/e7f34d0508c05481164cf13569f66ddf64e2e74f/scripts/build_scale_validation_set.py",
+      "scope": "默认路径、作用域、媒体页数与解码"
+    },
+    {
+      "id": "S08",
+      "path": "scripts/run_scale_validation.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/e7f34d0508c05481164cf13569f66ddf64e2e74f/scripts/run_scale_validation.py",
+      "scope": "错误处理改善、剩余分母/范围/完整链问题"
+    },
+    {
+      "id": "S09",
+      "path": "scripts/wp08_muse_spark_watch.sh",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/e7f34d0508c05481164cf13569f66ddf64e2e74f/scripts/wp08_muse_spark_watch.sh",
+      "scope": "明文移除；环境读取顺序、健康判定、终态"
+    },
+    {
+      "id": "S10",
+      "path": "frontend/src/pages/EligibilityWorkbenchPage.tsx",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/e7f34d0508c05481164cf13569f66ddf64e2e74f/frontend/src/pages/EligibilityWorkbenchPage.tsx",
+      "scope": "unused变量、问题分组、成员排序、原件浏览、版本"
+    },
+    {
+      "id": "S11",
+      "path": "frontend/src/styles/workbench.css",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/e7f34d0508c05481164cf13569f66ddf64e2e74f/frontend/src/styles/workbench.css",
+      "scope": "1:1.1:1.1 列宽与无marker的分块条目"
+    },
+    {
+      "id": "S12",
+      "path": "frontend/tsconfig.app.json",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/e7f34d0508c05481164cf13569f66ddf64e2e74f/frontend/tsconfig.app.json",
+      "scope": "noUnusedLocals/noUnusedParameters=true"
+    },
+    {
+      "id": "S13",
+      "path": "frontend/package.json",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/e7f34d0508c05481164cf13569f66ddf64e2e74f/frontend/package.json",
+      "scope": "build=tsc -b && vite build；声明 TS 7.0.2"
+    },
+    {
+      "id": "S14",
+      "path": "app/services/fact_correction_service.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/e7f34d0508c05481164cf13569f66ddf64e2e74f/app/services/fact_correction_service.py",
+      "scope": "同对象+共享定位只是相关候选，尚不是同观察证明"
+    },
+    {
+      "id": "S15",
+      "path": "app/domain/contracts/predicate_binding.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/e7f34d0508c05481164cf13569f66ddf64e2e74f/app/domain/contracts/predicate_binding.py",
+      "scope": "冻结输入全局谓词ID唯一性，排除误报"
+    },
+    {
+      "id": "S16",
+      "path": "app/services/page_review_job_service.py",
+      "url": "https://github.com/smkzw/enrollment-review-app/blob/e7f34d0508c05481164cf13569f66ddf64e2e74f/app/services/page_review_job_service.py",
+      "scope": "逐页固定A/B步骤仍在正式计划器"
+    }
+  ]
+}

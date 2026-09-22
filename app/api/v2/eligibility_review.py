@@ -81,6 +81,28 @@ class EligibilityUnassignedConflictDTO(BaseModel):
         return self
 
 
+class EligibilityControlObligationDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    obligation_id: str = Field(min_length=1)
+    obligation_group_id: str = Field(min_length=1)
+    statement: str = Field(min_length=1)
+    status: Literal["fulfilled", "unfulfilled", "unverified", "not_applicable"]
+    status_label: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    fact_refs: list[EligibilityFactRefDTO] = Field(default_factory=list)
+
+
+class EligibilityControlDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    protocol_control_id: str = Field(min_length=1)
+    display_label: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    source_span_ids: list[str] = Field(min_length=1)
+    obligations: list[EligibilityControlObligationDTO] = Field(default_factory=list)
+
+
 class EligibilityReviewResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -90,17 +112,23 @@ class EligibilityReviewResponse(BaseModel):
     rule_set_revision: int = Field(ge=1)
     evidence_snapshot_v2_id: str = Field(min_length=1)
     complete_processing_revision_id: str = Field(min_length=1)
-    clauses: list[EligibilityClauseDTO] = Field(min_length=1)
+    clauses: list[EligibilityClauseDTO] = Field(default_factory=list)
+    controls: list[EligibilityControlDTO] = Field(default_factory=list)
     unassigned_conflicts: list[EligibilityUnassignedConflictDTO] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_component_identity(self) -> "EligibilityReviewResponse":
+        if not self.clauses and not self.controls:
+            raise ValueError("当前方案没有可审核的官方条款或补充要求")
         identities = [clause.rule_component_id for clause in self.clauses]
         if len(identities) != len(set(identities)):
             raise ValueError("审核结果包含重复的审核要点身份")
         groups = [item.conflict_group_id for item in self.unassigned_conflicts]
         if len(groups) != len(set(groups)):
             raise ValueError("审核结果包含重复的争议记录")
+        control_ids = [item.protocol_control_id for item in self.controls]
+        if len(control_ids) != len(set(control_ids)):
+            raise ValueError("审核结果包含重复的补充要求")
         return self
 
 
@@ -144,6 +172,8 @@ def get_eligibility_review(
 __all__ = [
     "EligibilityClauseDTO",
     "EligibilityFactRefDTO",
+    "EligibilityControlDTO",
+    "EligibilityControlObligationDTO",
     "EligibilityReviewResponse",
     "get_eligibility_review",
     "router",

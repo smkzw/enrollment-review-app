@@ -509,11 +509,13 @@ class FactNormalizationCommandService:
         registered_config: RegisteredNormalizerConfig | None = None,
         max_pages_per_call: int | None = None,
         require_page_review: bool = False,
+        require_source_readiness: bool = False,
         page_reader_identity=None,
         verified_scope_prompt: bool = False,
     ) -> None:
         self.session_factory = session_factory
         self.require_page_review = require_page_review
+        self.require_source_readiness = require_source_readiness
         self.page_reader_identity = page_reader_identity
         self.verified_scope_prompt = verified_scope_prompt
         self.prompt_template = prompt_template
@@ -557,6 +559,58 @@ class FactNormalizationCommandService:
                     session, authority,
                     main_reader_identity_sha256=(self.page_reader_identity() if self.page_reader_identity else None),
                 )
+            elif self.require_source_readiness:
+                from app.services.selective_vision_postprocess_job_service import (
+                    SelectiveVisionPostprocessJobService,
+                )
+
+                view = SelectiveVisionPostprocessJobService(
+                    self.session_factory
+                ).get_revision_task(authority.complete_processing_revision_id)
+                if not view.found:
+                    # Historical image preparations predate the selective-read
+                    # job.  They may continue only through their source-bound,
+                    # fully reconciled legacy coverage; no new upload is sent
+                    # back to the dual full-page path.
+                    try:
+                        from app.services.page_review_coverage_selection import (
+                            select_normalizer_coverage,
+                        )
+
+                        coverage_id = select_normalizer_coverage(
+                            session,
+                            authority,
+                            main_reader_identity_sha256=(
+                                self.page_reader_identity()
+                                if self.page_reader_identity
+                                else None
+                            ),
+                        )
+                    except EvidenceAppError as exc:
+                        raise AppFactNormalizationRejectedError(
+                            "当前资料的页面质量核对尚未建立，请等待资料处理完成后重试。"
+                        ) from exc
+                    view = None
+                if view is not None:
+                    if not view.plan_supported:
+                        raise AppFactNormalizationRejectedError(
+                            "当前资料使用了旧版页面质量核对方式，请重新发起核对后再整理。"
+                        )
+                    if view.state != "completed":
+                        raise AppFactNormalizationRejectedError(
+                            "页面质量核对尚未完成；正常文字页无需额外复读，系统只会继续核对存在识别风险的页面。"
+                        )
+                    eligible = view.eligible_page_count
+                    observed = view.observation_page_count
+                    closed = view.closed_page_count
+                    if eligible is None or observed is None or closed is None:
+                        raise AppFactNormalizationRejectedError(
+                            "页面质量核对结果不完整，请重新运行当前资料的核对任务。"
+                        )
+                    if closed or observed != eligible:
+                        raise AppFactNormalizationRejectedError(
+                            "仍有存在识别风险的页面未核实完成；原件和疑问已保留，本次不会整理成正式病史。"
+                        )
             selected = select_registered_evidence_normalizer_config(
                 session,
                 prompt_template=self.prompt_template,

@@ -259,7 +259,9 @@ def create_app(
             session_factory, artifact_store=artifact_store
         )
         app.state.patient_profile_service = PatientProfileService()
-        app.state.eligibility_review_projection_service = EligibilityReviewProjectionService()
+        app.state.eligibility_review_projection_service = EligibilityReviewProjectionService(
+            artifact_store,
+        )
         app.state.fact_normalization_job_service = FactNormalizationJobService(
             session_factory, lease_ttl=lease_ttl
         )
@@ -270,7 +272,8 @@ def create_app(
             session_factory,
             job_service=app.state.fact_normalization_job_service,
             registered_config=evidence_normalizer_runtime_config,
-            require_page_review=True,
+            require_page_review=False,
+            require_source_readiness=True,
             page_reader_identity=lambda: app.state.page_review_runtime.main_reader_identity(),
         )
         app.state.evidence_normalizer_runtime_config = evidence_normalizer_runtime_config

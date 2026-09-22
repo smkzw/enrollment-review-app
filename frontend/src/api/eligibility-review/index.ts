@@ -12,6 +12,8 @@ export {
   decodeEligibilityReview,
   decodeEligibilityReviewError,
   type EligibilityClauseView,
+  type EligibilityControlStatus,
+  type EligibilityControlView,
   type EligibilityDecision,
   type EligibilityDeterminationMode,
   type EligibilityFactRefView,
@@ -20,6 +22,8 @@ export {
 } from "./eligibilityReviewViewModels";
 export type {
   EligibilityClauseWire,
+  EligibilityControlStatusWire,
+  EligibilityControlWire,
   EligibilityDecisionWire,
   EligibilityDeterminationModeWire,
   EligibilityFactRefWire,

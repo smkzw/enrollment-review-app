@@ -1,6 +1,6 @@
 # 入排审核系统 V2 最终架构设计
 
-> 2026-09-17 当前执行入口：用户已采用 V3 内置方案Agent + 主OCR/局部VLM/人工真实来源路线，取消全量双VLM及所有角色统一65K要求。以 `.trellis/tasks/09-11-e2e-eligibility-review/research/ENROLLMENT_REVIEW_AGENT_RECOVERY_V3_20260917.md` 与该任务 `prd.md/design.md/implement.md` 为本轮增量；分工见 `AGENT_ASSIGNMENTS_V3_20260917.md`。下文冲突的旧路线/顺序仅作历史，非当前默认。此次只完成分工文档与Goal正文同步，未运行产品、未宣布验收；原Phase剩余范围保留，claims_complete=false。细节按实际修改章节由接手者局部更新，不重建规划。
+> 2026-09-22现行入口：`.trellis/tasks/09-11-e2e-eligibility-review/delivery_20260922/00_START_HERE.md`；当前PRD/设计/唯一进度为该任务prd.md、design.md、implement.md。延续V3内置前置方案Agent及主OCR/局部核实真实来源，取消全量双读默认。本轮核对e7f34d05/GitHub与专家0922V2后形成W0–W7、Q1–Q3实施验收包，产品缺陷尚未修复、claims_complete=false。以下历史“当前/最新/默认/已完成”须按日期理解，冲突处以本入口和现场证据为准。不要运行历史作业或照抄旧模型配置。
 
 
 **当前部署要求（2026-09-12）：** 受试者逐页对称双主读为 GLM-5.3-Flash high（zhipu-coding-plan）与 MTPLX Qwen3.8-Flash-Next-MTPLX-Optimized-Speed xhigh（公开ID `mtplx-flash-next-optimized-speed`）。两者均读取普通事实与手写，不设置第三读。新语义任务足额配置，65536起始、length最多一次131072，共享思考与正文并校验厂商物理上限。产品使用自有harness与显式凭据直连，不依赖个人OMP/Hermes运行时。当前代码仍有旧默认，实际接线/预检为下一项，不能把本文当作已启用回执。

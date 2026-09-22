@@ -78,7 +78,8 @@ export type ExpectationStatus =
   | "observed_weak"
   | "referenced_missing"
   | "absent"
-  | "not_due";
+  | "not_due"
+  | "pending_control_applicability";
 
 export type ProfileLane =
   | "study_milestone"

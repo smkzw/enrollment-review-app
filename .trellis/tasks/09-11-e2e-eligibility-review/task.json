@@ -2,7 +2,7 @@
   "id": "e2e-eligibility-review",
   "name": "e2e-eligibility-review",
   "title": "端到端入排审核：判断检索界面+入排工作台+真实全链验收",
-  "description": "",
+  "description": "0922V2工程审阅后的连续全交付计划：同源资格、内置方案、真实OCR/局部核实来源、工作台、纠错补证和集中验收",
   "status": "in_progress",
   "dev_type": null,
   "scope": null,
@@ -29,16 +29,22 @@
     "design.md",
     "implement.md",
     "GOAL_PROMPT_V3_20260917.md",
-    "AGENT_ASSIGNMENTS_V3_20260917.md"
+    "AGENT_ASSIGNMENTS_V3_20260917.md",
+    "delivery_20260922/00_START_HERE.md",
+    "delivery_20260922/07_FORK_PROMPT.md",
+    "delivery_20260922/03_PLAN.md",
+    "delivery_20260922/05_ACCEPTANCE.md"
   ],
-  "notes": "2026-09-17用户采用V3：内置前置方案Agent+主OCR/局部VLM/人工真实来源+单例当前节点报告及更正闭环，取消全量双VLM及统一65K要求。本轮仅准备分工，未派发或运行产品；见AGENT_ASSIGNMENTS_V3_20260917.md、prd/design/implement。用户将在其他会话交接A/B/C，默认同树单写者接续；当前goal文件正文已同步V3，工具仍paused。历史来源及未提交工作保留，claims_complete=false。",
+  "notes": "2026-09-22已完成本地/GitHub及专家0922V2审阅并进入连续实施。W0源码修订完成，待W1/W2后在Q1集中验证；不修改产品env或临床库，不启动旧守望任务。入口delivery_20260922/00_START_HERE.md。",
   "meta": {
-    "execution_paused_by_user": true,
-    "paused_at_date": "2026-09-16",
+    "execution_paused_by_user": false,
+    "paused_at_date": null,
     "current_checkpoint": "implement.md",
-    "current_scope": "V3 delegation preparation complete; no product implementation or worker dispatch in this turn.",
+    "current_scope": "W0-W7 continuous product implementation with Q1-Q3 concentrated verification.",
     "claims_complete": false,
-    "current_handoff": "AGENT_ASSIGNMENTS_V3_20260917.md",
+    "review_packet_status": "implementation_in_progress",
+    "runtime_goal_status_observed": "active",
+    "current_handoff": "delivery_20260922/00_START_HERE.md",
     "current_decision_source": "research/ENROLLMENT_REVIEW_AGENT_RECOVERY_V3_20260917.md"
   }
 }

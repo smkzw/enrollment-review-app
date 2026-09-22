@@ -97,6 +97,7 @@ export interface GapCountsWire {
   ocr_or_parse_risk?: number;
   future_stage_not_due?: number;
   provenance_followup?: number;
+  control_applicability_pending?: number;
 }
 
 export interface EpisodeRollupWire {

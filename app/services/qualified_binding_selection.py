@@ -398,6 +398,595 @@ class ReceiptVerifiedQualifiedBindingSelections:
         return self.material.control_selections
 
 
+@dataclass(frozen=True)
+class ReceiptVerifiedWorkDraftSelections:
+    """Receipt-verified calculation input without formal adoption authority.
+
+    This is deliberately a different runtime type from
+    :class:`ReceiptVerifiedQualifiedBindingSelections`.  It can drive the
+    read-only work draft, but the publication boundary cannot accept it.
+    Completed companion reads may support the work draft when their original
+    receipts rebuild against the same frozen input.  Formal publication still
+    requires the separate authorized selection type.
+    """
+
+    _seal: object
+    identity_outcomes: tuple[QualifiedBindingIdentityOutcome, ...]
+    predicate_fact_ids_by_component: Mapping[str, Mapping[str, Sequence[str]]] | None
+    control_selections: Mapping[str, Sequence[str]] | None
+    control_input: ControlBindingFrozenInput | None
+    predicate_frozen_input: PredicateBindingFrozenInput | None
+    qualification_job_id: str
+    candidate_family: str
+    frozen_input_sha256: str
+    review_context_id: str | None
+    review_context_sha256: str | None
+    selection_sha256: str
+    judgment_content: str | None = None
+    proposition_evidence: str | None = None
+    observation_relation: str | None = None
+    frequency_evidence: str | None = None
+    content_supported_pair_ids: tuple[str, ...] = ()
+    verified_judgment_requirement_ids: tuple[str, ...] = ()
+    proposition_relations: tuple[Mapping[str, Any], ...] = ()
+    unresolved_proposition_pairs: tuple[Mapping[str, Any], ...] = ()
+    observation_relations: tuple[Mapping[str, Any], ...] = ()
+    frequency_statements: tuple[Mapping[str, Any], ...] = ()
+    _verified_digest: str = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        if self._seal is not _SEAL:
+            raise TypeError("工作稿选择必须由回执核实工厂构造")
+        object.__setattr__(self, "_verified_digest", self._content_digest())
+
+    def _content_digest(self) -> str:
+        return canonical_hash({
+            "identity_outcomes": [item.model_dump(mode="json") for item in self.identity_outcomes],
+            "predicate_fact_ids_by_component": self.predicate_fact_ids_by_component,
+            "control_selections": self.control_selections,
+            "control_input": None if self.control_input is None else self.control_input.model_dump(mode="json"),
+            "predicate_input": None if self.predicate_frozen_input is None else self.predicate_frozen_input.model_dump(mode="json"),
+            "qualification_job_id": self.qualification_job_id,
+            "candidate_family": self.candidate_family,
+            "frozen_input_sha256": self.frozen_input_sha256,
+            "review_context_id": self.review_context_id,
+            "review_context_sha256": self.review_context_sha256,
+            "selection_sha256": self.selection_sha256,
+            "judgment_content": self.judgment_content,
+            "proposition_evidence": self.proposition_evidence,
+            "observation_relation": self.observation_relation,
+            "frequency_evidence": self.frequency_evidence,
+            "content_supported_pair_ids": self.content_supported_pair_ids,
+            "verified_judgment_requirement_ids": self.verified_judgment_requirement_ids,
+            "proposition_relations": self.proposition_relations,
+            "unresolved_proposition_pairs": self.unresolved_proposition_pairs,
+            "observation_relations": self.observation_relations,
+            "frequency_statements": self.frequency_statements,
+        })
+
+    def require_unchanged(self) -> None:
+        if self._seal is not _SEAL or self._content_digest() != self._verified_digest:
+            raise ValueError("回执核实后的工作稿资料选择已变化")
+
+    @property
+    def material(self) -> "ReceiptVerifiedWorkDraftSelections":
+        """Expose the calculator view without masquerading as formal material."""
+        return self
+
+
+def _require_work_draft_companion_scope(evidence, verified, *, pair_kind: str) -> None:
+    payload = evidence["payload"]
+    if (payload.get("candidate_job_id") != verified["payload"].get("candidate_job_id")
+            or any(payload.get(key) is None
+                   or payload.get(key) != verified["payload"].get(key)
+                   for key in ("review_context_id", "review_context_sha256",
+                               "frozen_input_sha256", "comparison_sha256"))):
+        raise InvalidJobDefinitionError("工作稿原文核对与本次资料或审核节点不一致")
+    source_pairs = {pair.pair_id: pair for pair in verified["pairs"]}
+    if pair_kind == "direct":
+        pairs = evidence["pairs"]
+    elif pair_kind == "observation":
+        pairs = [pair for group in evidence["pairs"] for pair in group.source_members]
+    elif pair_kind == "frequency":
+        pairs = [pair for group in evidence["pairs"] for pair in group.members]
+    else:  # pragma: no cover - internal programming error
+        raise AssertionError(pair_kind)
+    if any(source_pairs.get(pair.pair_id) != pair
+           or pair.candidate_family != verified["candidate_family"] for pair in pairs):
+        raise InvalidJobDefinitionError("工作稿原文核对包含本次来源范围外的资料")
+
+
+def _work_draft_validity_specs(frozen) -> dict[str, Any]:
+    if not isinstance(frozen, ControlBindingFrozenInput):
+        return {}
+    output = {}
+    for identity in project_control_atom_identities(
+        frozen.publication, include_repeat_triggers=True,
+    ):
+        spec = identity.atom.evaluation
+        if (spec is not None and (spec.determination_mode == "deterministic"
+                                 or spec.version in {"control-atom-evaluation/v2",
+                                                     "control-atom-evaluation/v3",
+                                                     "control-atom-evaluation/v4"})
+                and spec.time_purpose == "source_validity"
+                and identity.atom.time_constraint is not None
+                and spec.observation_policy is not None
+                and spec.observation_policy.mode == "single"
+                and (spec.operand_attribute if spec.operation == "time_constraint"
+                     else spec.time_operand_attribute) == "date_range"):
+            output[identity.identity_sha256] = spec
+    return output
+
+
+def build_receipt_verified_work_draft_selections(
+    session,
+    artifact_store,
+    *,
+    qualification_job_id: str,
+    judgment_content_job_id: str | None = None,
+    proposition_evidence_job_id: str | None = None,
+    observation_relation_job_id: str | None = None,
+    frequency_evidence_job_id: str | None = None,
+) -> ReceiptVerifiedWorkDraftSelections:
+    """Build conservative work-draft selections from a completed qualification.
+
+    The function shares the formal consumer's receipt verification, direct-pair
+    rejection and observation ordering.  It never reads or invents an adoption
+    authorization.  Companion reads are accepted only after their completed
+    product receipts rebuild against the same frozen source.  This is suitable
+    for preview calculation, never for publication.
+    """
+    verified = verify_completed_binding_qualification(
+        session,
+        artifact_store,
+        qualification_job_id,
+        require_candidate_route_receipts=True,
+    )
+    family = verified["candidate_family"]
+    frozen = verified["frozen"]
+    summary = verified["summary"]
+    records = list(summary.pair_records)
+    review_context = None
+    context_id = verified["payload"].get("review_context_id")
+    context_sha256 = verified["payload"].get("review_context_sha256")
+    if context_id is not None:
+        from app.storage.review_context_repository import ReviewContextV2Repository
+
+        review_context = ReviewContextV2Repository(session).get(context_id)
+        if review_context.context_sha256 != context_sha256:
+            raise InvalidJobDefinitionError("工作稿核对使用的审核资料版本已变化")
+
+    validity_specs = _work_draft_validity_specs(frozen)
+    content = None
+    supported = frozenset()
+    content_sources: set[tuple[str, str]] = set()
+    content_pair_ids: set[str] = set()
+    if judgment_content_job_id is not None:
+        from app.services.judgment_content_receipts import verify_completed_judgment_content
+
+        content = verify_completed_judgment_content(
+            session, artifact_store, judgment_content_job_id,
+        )
+        _require_work_draft_companion_scope(content, verified, pair_kind="direct")
+        expected_version = ("judgment-content-input/v1" if family == "predicate"
+                            else "judgment-content-input/control-v1")
+        if content["payload"].get("input_version") != expected_version:
+            raise InvalidJobDefinitionError("工作稿书面判断核对输入版本不适用于当前要求")
+        supported = frozenset(
+            row["pair_id"]
+            for comparison in content["summary"]["comparisons"]
+            for row in comparison["records"]
+            if row["status"] == "content_supported"
+        )
+        content_sources = {
+            (pair.identity_sha256, pair.fact_id)
+            for pair in content["pairs"]
+            if pair.pair_id in supported and pair.fact_attribute == "value"
+        }
+        content_pair_ids = {pair.pair_id for pair in content["pairs"]}
+
+    proposition_relations: list[dict] = []
+    unresolved_proposition_pairs: list[dict] = []
+    if proposition_evidence_job_id is not None:
+        from app.services.proposition_evidence_receipts import verify_completed_proposition_evidence
+        from app.services.qualified_proposition_evidence import select_qualified_relations
+
+        proposition = verify_completed_proposition_evidence(
+            session, artifact_store, proposition_evidence_job_id,
+        )
+        _require_work_draft_companion_scope(proposition, verified, pair_kind="direct")
+        proposition_relations, unresolved_proposition_pairs = select_qualified_relations(
+            proposition,
+            records,
+            source_validity_specs=validity_specs,
+            written_content_verified_pair_ids=frozenset(
+                record.pair_id for record in records
+                if record.pair_id in supported
+                or (record.fact_attribute == "date_range"
+                    and (record.identity_sha256, record.fact_id) in content_sources)
+            ),
+        )
+
+    frequency_statements: list[dict] = []
+    if frequency_evidence_job_id is not None:
+        from app.services.frequency_evidence_job import verify_completed_frequency_evidence
+        from app.services.qualified_frequency_evidence import select_qualified_frequency_sources
+
+        frequency = verify_completed_frequency_evidence(
+            session, artifact_store, frequency_evidence_job_id,
+        )
+        _require_work_draft_companion_scope(frequency, verified, pair_kind="frequency")
+        frequency_statements = select_qualified_frequency_sources(
+            frequency, records, source_validity_specs=validity_specs,
+        )
+
+    observation_relations: list[dict] = []
+    if observation_relation_job_id is not None:
+        from app.services.observation_relation_job import verify_completed_observation_relation
+        from app.services.qualified_observation_relation import select_qualified_observation_relations
+
+        observation = verify_completed_observation_relation(
+            session, artifact_store, observation_relation_job_id,
+        )
+        _require_work_draft_companion_scope(observation, verified, pair_kind="observation")
+        observation_relations = select_qualified_observation_relations(
+            observation,
+            records,
+            source_validity_specs=validity_specs,
+            frozen_facts=(frozen.facts if family == "predicate" else frozen.evidence_input.facts),
+            candidate_fact_accounting=verified["candidate_fact_accounting"],
+            written_content_verified_pair_ids=frozenset(
+                record.pair_id for record in records
+                if record.pair_id in supported
+                or (record.fact_attribute == "date_range"
+                    and (record.identity_sha256, record.fact_id) in content_sources)
+            ),
+        )
+
+    professional_identities = (
+        {
+            item.predicate_identity_sha256
+            for component in frozen.components
+            for item in component.binding_predicates
+            if item.predicate.requires_professional_judgment
+        }
+        if isinstance(frozen, PredicateBindingFrozenInput)
+        else {
+            item.identity_sha256
+            for item in project_control_atom_identities(
+                frozen.publication, include_repeat_triggers=True,
+            )
+            if item.atom.requires_professional_judgment
+        }
+    )
+
+    by_identity: dict[str, list[BindingQualificationPairRecord]] = {}
+    rejected_by_identity: dict[str, list[str]] = {}
+    for record in records:
+        content_verified = (record.pair_id in supported or (
+            record.fact_attribute == "date_range"
+            and (record.identity_sha256, record.fact_id) in content_sources
+        ))
+        reasons = pair_direct_selection_rejection_reasons(
+            record,
+            written_content_verified=content_verified,
+            source_validity_calculable=source_validity_operand_calculable(
+                record, validity_specs.get(record.identity_sha256),
+            ),
+        )
+        if (content is not None and record.fact_attribute == "value"
+                and record.identity_sha256 in professional_identities
+                and record.pair_id in content_pair_ids and not content_verified):
+            reasons = _sorted_unique([*reasons, "written_content_unverified"])
+        if reasons:
+            rejected_by_identity.setdefault(record.identity_sha256, []).extend(reasons)
+        else:
+            by_identity.setdefault(record.identity_sha256, []).append(record)
+    identity_records: dict[str, list] = {}
+    for item in summary.identity_records:
+        identity_records.setdefault(item.identity_sha256, []).append(item)
+    if observation_relations:
+        from app.services.repeat_condition_selection import build_repeat_condition_selections
+
+        build_repeat_condition_selections(
+            frozen=frozen,
+            family=family,
+            observation_relations=observation_relations,
+            records=records,
+            by_identity=by_identity,
+            identity_records=identity_records,
+            accounting=verified["candidate_fact_accounting"],
+            proposition_relations=proposition_relations,
+            proposition_pair_gaps=unresolved_proposition_pairs,
+            supported_pair_ids=supported,
+            review_context=review_context,
+        )
+
+    def finalize(identity: str, fact_ids, pair_ids, reasons, ordering):
+        rows = identity_records.get(identity) or []
+        if not rows:
+            reasons = _sorted_unique([*reasons, "identity_absent_from_qualification"])
+        elif all(item.status == "no_candidates_in_supplied_input" for item in rows):
+            reasons = _sorted_unique([
+                *reasons,
+                *(reason for item in rows for reason in (
+                    item.unresolved_reasons or ["no_candidate_pairs_in_completed_job"]
+                )),
+            ])
+        if not fact_ids and rejected_by_identity.get(identity):
+            reasons = _sorted_unique([
+                *reasons,
+                *rejected_by_identity[identity],
+                "no_usable_qualified_pair",
+            ])
+        if reasons:
+            return "unresolved", [], [], _sorted_unique(reasons), None
+        return "usable", list(fact_ids), list(pair_ids), [], ordering
+
+    outcomes: list[QualifiedBindingIdentityOutcome] = []
+    predicate_map = None
+    control_map = None
+    predicate_frozen = None
+    control_input = None
+    if family == "predicate":
+        if not isinstance(frozen, PredicateBindingFrozenInput):
+            raise InvalidJobDefinitionError("谓词资格任务冻结输入类型无效")
+        predicate_frozen = frozen
+        expected = _expected_predicate_identities(frozen)
+        predicate_map = {component.rule_component_id: {} for component in frozen.components}
+        for identity, meta in expected.items():
+            usable = by_identity.get(identity, [])
+            fact_ids, pair_ids, reasons, ordering = _select_with_ordering(
+                frozen=frozen,
+                accounting=verified["candidate_fact_accounting"],
+                review_context=review_context,
+                family=family,
+                identity=identity,
+                usable_records=usable,
+                expected_meta=meta,
+                written_content_verified=(
+                    any(item.fact_attribute == "value" for item in usable)
+                    and all(item.pair_id in supported for item in usable
+                            if item.fact_attribute == "value")
+                ),
+            )
+            predicate = meta["predicate"]
+            if predicate.semantic_proposition is not None and predicate.repeat_scheme is None:
+                ordering = None
+                relations = [item for item in proposition_relations
+                             if item["identity_sha256"] == identity]
+                fact_ids = _sorted_unique([item["fact_id"] for item in relations])
+                pair_ids = _sorted_unique([item["pair_id"] for item in relations])
+                reasons = [] if relations else ["semantic_evidence_unverified"]
+                source_pairs = {
+                    item.pair_id for item in records
+                    if item.identity_sha256 == identity
+                    and item.fact_attribute in {"value", "assertion_basis"}
+                }
+                for relation in relations:
+                    relation["scope_candidates_complete"] = source_pairs == set(pair_ids)
+                policy = predicate.observation_policy
+                if policy is None or policy.mode == "unresolved":
+                    reasons.append("observation_selection_unverified")
+                if policy is not None and policy.selection is not None:
+                    selected = _semantic_ordering(
+                        frozen=frozen,
+                        family=family,
+                        identity=identity,
+                        policy=policy,
+                        relations=relations,
+                        records=records,
+                        usable=usable,
+                        accounting=verified["candidate_fact_accounting"],
+                        review_context=review_context,
+                        constraint=meta["time_constraint"],
+                        purpose="event_membership",
+                    )
+                    fact_ids, pair_ids = list(selected.fact_ids), list(selected.pair_ids)
+                    reasons, ordering = list(selected.reasons), selected.ordering
+                elif policy is not None and policy.mode == "single" and source_pairs != set(pair_ids):
+                    reasons.append("single_observation_relations_incomplete")
+                if meta["time_constraint"] is not None:
+                    dates = [item for item in usable if item.fact_attribute == "date_range"]
+                    if not set(fact_ids) <= {item.fact_id for item in dates}:
+                        reasons.append("declared_time_operand_not_qualified")
+                    else:
+                        pair_ids = _sorted_unique([
+                            *pair_ids,
+                            *(item.pair_id for item in dates if item.fact_id in fact_ids),
+                        ])
+            if predicate.repeat_scheme is not None:
+                reasons = _sorted_unique([*reasons, "repeat_relation_unverified"])
+            status, fact_ids, pair_ids, reasons, ordering = finalize(
+                identity, fact_ids, pair_ids, reasons, ordering,
+            )
+            outcomes.append(QualifiedBindingIdentityOutcome(
+                identity_field="predicate_identity_sha256",
+                identity_sha256=identity,
+                status=status,
+                fact_ids=fact_ids,
+                usable_pair_ids=pair_ids,
+                unresolved_reasons=reasons,
+                observation_ordering=ordering,
+            ))
+            if meta["role"] != "repeat_trigger":
+                predicate_map[meta["rule_component_id"]][meta["predicate_id"]] = list(fact_ids)
+    else:
+        if not isinstance(frozen, ControlBindingFrozenInput):
+            raise InvalidJobDefinitionError("控制资格任务冻结输入类型无效")
+        control_input = frozen
+        expected = _expected_control_identities(frozen)
+        control_map = {}
+        for identity, meta in expected.items():
+            usable = by_identity.get(identity, [])
+            fact_ids, pair_ids, reasons, ordering = _select_with_ordering(
+                frozen=frozen,
+                accounting=verified["candidate_fact_accounting"],
+                review_context=review_context,
+                family=family,
+                identity=identity,
+                usable_records=usable,
+                expected_meta=meta,
+            )
+            spec = meta.atom.evaluation
+            if (spec is not None and spec.repeat_scheme is None
+                    and spec.determination_mode in {"semantic", "investigator_judgment"}):
+                relations = [item for item in proposition_relations
+                             if item["identity_sha256"] == identity]
+                fact_ids = _sorted_unique([item["fact_id"] for item in relations])
+                pair_ids = _sorted_unique([item["pair_id"] for item in relations])
+                reasons = [] if relations else ["semantic_evidence_unverified"]
+                ordering = None
+                source_pairs = {
+                    item.pair_id for item in records
+                    if item.identity_sha256 == identity
+                    and item.fact_attribute in {"value", "assertion_basis"}
+                }
+                for relation in relations:
+                    relation["scope_candidates_complete"] = source_pairs == set(pair_ids)
+                policy = spec.observation_policy
+                if policy is None or policy.mode == "unresolved":
+                    reasons.append("observation_selection_unverified")
+                if policy is not None and policy.selection is not None:
+                    selected = _semantic_ordering(
+                        frozen=frozen,
+                        family=family,
+                        identity=identity,
+                        policy=policy,
+                        relations=relations,
+                        records=records,
+                        usable=usable,
+                        accounting=verified["candidate_fact_accounting"],
+                        review_context=review_context,
+                        constraint=meta.atom.time_constraint,
+                        purpose=spec.time_purpose,
+                    )
+                    fact_ids, pair_ids = list(selected.fact_ids), list(selected.pair_ids)
+                    reasons, ordering = list(selected.reasons), selected.ordering
+                elif policy is not None and policy.mode == "single" and source_pairs != set(pair_ids):
+                    reasons.append("single_observation_relations_incomplete")
+                if meta.atom.time_constraint is not None:
+                    dates = [item for item in usable
+                             if item.fact_attribute == spec.time_operand_attribute]
+                    if (spec.version not in {"control-atom-evaluation/v2",
+                                             "control-atom-evaluation/v3",
+                                             "control-atom-evaluation/v4"}
+                            or spec.time_operand_attribute != "date_range"
+                            or not set(fact_ids) <= {item.fact_id for item in dates}):
+                        reasons = _sorted_unique([
+                            *reasons, "declared_time_operand_not_qualified",
+                        ])
+                    else:
+                        pair_ids = _sorted_unique([
+                            *pair_ids,
+                            *(item.pair_id for item in dates if item.fact_id in fact_ids),
+                        ])
+            if spec is not None and spec.repeat_scheme is not None:
+                reasons = _sorted_unique([*reasons, "repeat_relation_unverified"])
+            status, fact_ids, pair_ids, reasons, ordering = finalize(
+                identity, fact_ids, pair_ids, reasons, ordering,
+            )
+            outcomes.append(QualifiedBindingIdentityOutcome(
+                identity_field="atom_identity_sha256",
+                identity_sha256=identity,
+                status=status,
+                fact_ids=fact_ids,
+                usable_pair_ids=pair_ids,
+                unresolved_reasons=reasons,
+                observation_ordering=ordering,
+            ))
+            if meta.layer != "repeat_trigger":
+                control_map[identity] = list(fact_ids)
+
+    if proposition_relations:
+        selected_pairs = {
+            pair_id for outcome in outcomes if outcome.status == "usable"
+            for pair_id in outcome.usable_pair_ids
+        }
+        excluded_facts = {
+            (outcome.identity_sha256, item.fact_id)
+            for outcome in outcomes
+            if outcome.status == "usable" and outcome.observation_ordering is not None
+            for item in outcome.observation_ordering.not_selected
+        }
+        for relation in proposition_relations:
+            if relation["pair_id"] in selected_pairs:
+                continue
+            if (relation["identity_sha256"], relation["fact_id"]) in excluded_facts:
+                continue
+            original = next((pair for pair in verified["pairs"]
+                             if pair.pair_id == relation["pair_id"]), None)
+            if original is None:
+                raise InvalidJobDefinitionError("工作稿原文关系缺少冻结来源配对")
+            unresolved_proposition_pairs.append({
+                "pair_id": relation["pair_id"],
+                "identity_sha256": relation["identity_sha256"],
+                "fact_id": relation["fact_id"],
+                "locator_id": original.locator_id,
+                "reasons": ["identity_selection_unresolved"],
+            })
+        proposition_relations = [
+            relation for relation in proposition_relations
+            if relation["pair_id"] in selected_pairs
+        ]
+
+    verified_requirements: list[str] = []
+    if content is not None and family == "predicate":
+        from app.services.qualified_judgment_content import verified_judgment_requirements
+
+        verified_requirements = verified_judgment_requirements(
+            review_context, frozen, outcomes, content, supported,
+        )
+
+    payload = {
+        "version": "receipt-verified-work-draft-selection/v1",
+        "consumer_algorithm_version": QUALIFIED_BINDING_CONSUMER_ALGORITHM,
+        "candidate_family": family,
+        "qualification_job_id": qualification_job_id,
+        "frozen_input_sha256": verified["frozen_input_sha256"],
+        "review_context_id": context_id,
+        "review_context_sha256": context_sha256,
+        "identity_outcomes": [item.model_dump(mode="json") for item in outcomes],
+        "predicate_fact_ids_by_component": predicate_map,
+        "control_selections": control_map,
+        "judgment_content": judgment_content_job_id,
+        "proposition_evidence": proposition_evidence_job_id,
+        "observation_relation": observation_relation_job_id,
+        "frequency_evidence": frequency_evidence_job_id,
+        "content_supported_pair_ids": sorted(supported),
+        "verified_judgment_requirement_ids": verified_requirements,
+        "proposition_relations": proposition_relations,
+        "unresolved_proposition_pairs": unresolved_proposition_pairs,
+        "observation_relations": observation_relations,
+        "frequency_statements": frequency_statements,
+    }
+    selection_sha256 = canonical_hash(payload)
+    return ReceiptVerifiedWorkDraftSelections(
+        _seal=_SEAL,
+        identity_outcomes=tuple(outcomes),
+        predicate_fact_ids_by_component=predicate_map,
+        control_selections=control_map,
+        control_input=control_input,
+        predicate_frozen_input=predicate_frozen,
+        qualification_job_id=qualification_job_id,
+        candidate_family=family,
+        frozen_input_sha256=verified["frozen_input_sha256"],
+        review_context_id=context_id,
+        review_context_sha256=context_sha256,
+        selection_sha256=selection_sha256,
+        judgment_content=judgment_content_job_id,
+        proposition_evidence=proposition_evidence_job_id,
+        observation_relation=observation_relation_job_id,
+        frequency_evidence=frequency_evidence_job_id,
+        content_supported_pair_ids=tuple(sorted(supported)),
+        verified_judgment_requirement_ids=tuple(verified_requirements),
+        proposition_relations=tuple(proposition_relations),
+        unresolved_proposition_pairs=tuple(unresolved_proposition_pairs),
+        observation_relations=tuple(observation_relations),
+        frequency_statements=tuple(frequency_statements),
+    )
+
+
 def build_receipt_verified_qualified_binding_selections(
     session,
     artifact_store,
@@ -856,19 +1445,28 @@ def build_receipt_verified_qualified_binding_selections(
     )
 
 
-def assert_qualified_selections_match_review_context(
+def assert_receipt_verified_selections_match_review_context(
     *,
     frozen_review,
     rule_set,
-    selections: ReceiptVerifiedQualifiedBindingSelections,
+    selections: ReceiptVerifiedQualifiedBindingSelections | ReceiptVerifiedWorkDraftSelections,
 ) -> None:
-    """Bind sealed selections to the current frozen review authority/facts/publication."""
-    if not isinstance(selections, ReceiptVerifiedQualifiedBindingSelections):
+    """Bind formal or work-draft receipt selections to one frozen review."""
+    if not isinstance(selections, (
+        ReceiptVerifiedQualifiedBindingSelections,
+        ReceiptVerifiedWorkDraftSelections,
+    )):
         raise ValueError("回执核实选择类型无效")
     selections.require_unchanged()
-    if selections.material.review_context_id is not None and (
-        selections.material.review_context_id != frozen_review.context_id
-        or selections.material.review_context_sha256 != frozen_review.context_sha256
+    if isinstance(selections, ReceiptVerifiedQualifiedBindingSelections):
+        review_context_id = selections.material.review_context_id
+        review_context_sha256 = selections.material.review_context_sha256
+    else:
+        review_context_id = selections.review_context_id
+        review_context_sha256 = selections.review_context_sha256
+    if review_context_id is not None and (
+        review_context_id != frozen_review.context_id
+        or review_context_sha256 != frozen_review.context_sha256
     ):
         raise ValueError("核实结果属于另一份审核准备，不能改接当前审核")
     if selections.candidate_family == "predicate":
@@ -923,3 +1521,19 @@ def assert_qualified_selections_match_review_context(
     )
     if canonical_hash(expected_facts) != canonical_hash(supplied_facts):
         raise ValueError("资格选择事实集合与本次审核不一致")
+
+
+def assert_qualified_selections_match_review_context(
+    *,
+    frozen_review,
+    rule_set,
+    selections: ReceiptVerifiedQualifiedBindingSelections,
+) -> None:
+    """Formal-selection compatibility guard retained for publication callers."""
+    if not isinstance(selections, ReceiptVerifiedQualifiedBindingSelections):
+        raise ValueError("正式审核只能使用已授权的回执核实选择")
+    assert_receipt_verified_selections_match_review_context(
+        frozen_review=frozen_review,
+        rule_set=rule_set,
+        selections=selections,
+    )

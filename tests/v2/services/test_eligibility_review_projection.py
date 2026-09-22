@@ -318,17 +318,15 @@ def test_projection_without_published_fact_is_unknown_not_negative(session):
     # exclusion-not-triggered conclusion merely because no fact was published.
     assert by_code["EX-02"].decision == "indeterminate"
     assert by_code["EX-02"].gap_type == "observation_unverified"
-    assert "本次提交的资料" in by_code["EX-02"].reason
+    assert "资料尚未完成核实" in by_code["EX-02"].reason
     assert "未见" not in by_code["EX-02"].reason
 
 
 @pytest.mark.parametrize(
-    ("age", "expected_decision"),
-    [(20, "inclusion_met"), (17, "inclusion_not_met")],
+    "age",
+    [20, 17],
 )
-def test_projection_deterministically_evaluates_age_clause(
-    session, age: int, expected_decision: str
-):
+def test_projection_does_not_use_unqualified_age_fact(session, age: int):
     chain = _seed_chain(session, f"eligibility-age-{age}")
     fact = _publish_age_fact(session, chain, value=age, suffix="age")
 
@@ -377,14 +375,13 @@ def test_projection_deterministically_evaluates_age_clause(
     )
     clause = next(item for item in projection.clauses if item.rule_code == "IN-01")
 
-    assert clause.decision == expected_decision
+    assert clause.decision == "indeterminate"
     assert clause.determination_mode == "deterministic"
-    assert {item.fact_id for item in clause.fact_refs} == {fact.fact_id}
-    assert {item.locator_id for item in clause.fact_refs} == {chain["locator_id"]}
-    locator = session.get(EvidenceLocatorArtifactRecord, chain["locator_id"])
-    assert {item.source_document_version_id for item in clause.fact_refs} == {locator.source_document_version_id}
-    assert {item.page_artifact_id for item in clause.fact_refs} == {locator.page_artifact_id}
-    assert {item.excerpt for item in clause.fact_refs} == {locator.excerpt}
+    assert clause.gap_type == "observation_unverified"
+    assert clause.fact_refs == ()
+    assert fact.fact_id not in {
+        item.fact_id for item in clause.fact_refs
+    }
 
 
 def test_published_fact_without_requirement_coverage_is_not_professional_judgment(session):
@@ -393,7 +390,7 @@ def test_published_fact_without_requirement_coverage_is_not_professional_judgmen
     projection = EligibilityReviewProjectionService().project(session, chain["episode_id"])
     clause = next(item for item in projection.clauses if item.rule_code == "IN-01")
     assert clause.decision == "indeterminate"
-    assert clause.gap_type == "record_incomplete"
+    assert clause.gap_type == "observation_unverified"
 
 
 def test_withdrawn_latest_fact_does_not_restore_older_evidence(session, monkeypatch):
@@ -427,10 +424,10 @@ def test_projection_marks_future_clause_not_due_and_missing_judgment_summary(
     assert by_code["EX-02"].gap_type == "observation_unverified"
     assert "尚未完成" in by_code["EX-02"].reason
     assert "未见" not in by_code["EX-02"].reason
-    assert "不能据此认定缺少研究者判断" in by_code["EX-02"].reason
+    assert "需先核对本次提交的原件" in by_code["EX-02"].reason
     assert by_code["EX-03"].decision == "not_due"
     assert by_code["EX-03"].gap_type == "future_stage_not_due"
-    assert "尚未到期" in by_code["EX-03"].reason
+    assert "不在本次节点到期" in by_code["EX-03"].reason
 
 
 def test_projection_passes_missing_source_state_to_summary_composition(session, monkeypatch):

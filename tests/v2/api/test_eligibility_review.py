@@ -41,7 +41,7 @@ def test_eligibility_review_returns_current_read_only_wire(client):
     assert clause["decision"] == "indeterminate"
     assert clause["gap_type"] == "observation_unverified"
     assert clause["gap_type"]
-    assert "本次提交的资料" in clause["reason"]
+    assert "资料尚未完成核实" in clause["reason"]
     assert "尚未完成" in clause["reason"]
     assert "未见" not in clause["reason"]
     assert clause["rule_component_id"]

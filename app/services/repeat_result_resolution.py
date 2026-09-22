@@ -11,7 +11,10 @@ from app.domain.publication import canonical_hash
 from app.domain.repeat_acquisition_chains import decompose_repeat_chains
 from app.domain.repeat_observation_count import evaluate_repeat_count
 from app.domain.repeat_result_selection import select_repeat_result_groups
-from app.services.qualified_binding_selection import ReceiptVerifiedQualifiedBindingSelections
+from app.services.qualified_binding_selection import (
+    ReceiptVerifiedQualifiedBindingSelections,
+    ReceiptVerifiedWorkDraftSelections,
+)
 from app.services.repeat_condition_selection import iter_scoped_repeat_conditions
 
 
@@ -22,7 +25,9 @@ def resolve_repeat_result_selection(selections, condition_calculations):
     to make another result the last, single or favorable observation. Absence
     of a repeat does not imply an undocumented initial-result fallback.
     """
-    if not isinstance(selections, ReceiptVerifiedQualifiedBindingSelections):
+    if not isinstance(selections, (
+        ReceiptVerifiedQualifiedBindingSelections, ReceiptVerifiedWorkDraftSelections,
+    )):
         raise TypeError("复查结果须使用已经核实来源的资料")
     selections.require_unchanged()
     family = selections.candidate_family

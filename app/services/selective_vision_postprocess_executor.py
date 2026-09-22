@@ -128,6 +128,8 @@ def load_selective_vision_page_materials_for_revision(
         ocr_page_id = entry.ocr_page_id
         has_native_text = bool(artifact.native_text_sha256)
         native_text_char_count = 0
+        has_ocr_text = False
+        ocr_text_char_count = 0
         ocr_confidence: float | None = None
         ocr_risk_kinds: tuple[str, ...] = ()
         layout_block_count: int | None = None
@@ -148,11 +150,9 @@ def load_selective_vision_page_materials_for_revision(
         if ocr_page_id:
             ocr_page = ocr_repo.get(ocr_page_id)
             extraction_route = _profile_route(session, ocr_page.ocr_profile_sha256)
-            if not has_native_text and ocr_page.raw_text:
-                has_native_text = True
-                native_text_char_count = len(ocr_page.raw_text)
-            elif ocr_page.raw_text and native_text_char_count == 0:
-                native_text_char_count = len(ocr_page.raw_text)
+            if ocr_page.raw_text:
+                has_ocr_text = True
+                ocr_text_char_count = len(ocr_page.raw_text)
             ocr_confidence = ocr_page.quality.confidence
             layout_block_count = ocr_page.quality.layout_block_count
             ocr_risk_kinds = tuple(
@@ -177,6 +177,8 @@ def load_selective_vision_page_materials_for_revision(
                 has_page_image=has_page_image,
                 has_native_text=has_native_text,
                 native_text_char_count=native_text_char_count,
+                has_ocr_text=has_ocr_text,
+                ocr_text_char_count=ocr_text_char_count,
                 non_text_mark_count=None,
                 complex_layout_not_represented_by_native_text=complex_layout,
                 native_extraction_anomaly=native_anomaly,

@@ -1,1 +1,4 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/09-11-e2e-eligibility-review/prd.md", "reason": "当前产品需求与完整交付范围"}
+{"file": ".trellis/tasks/09-11-e2e-eligibility-review/design.md", "reason": "共享资格、真实来源、更正与发布合同"}
+{"file": ".trellis/tasks/09-11-e2e-eligibility-review/delivery_20260922/02_EXECUTION_RULES.md", "reason": "连续实施和集中验证纪律"}
+{"file": ".trellis/tasks/09-11-e2e-eligibility-review/delivery_20260922/04_WORK_PACKAGES.md", "reason": "按当前包渐进读取，不每轮加载全部历史"}

@@ -19,6 +19,7 @@ from .common import ContractModel, VersionedModel
 from .enums import StableEnum
 from .evidence import BoundingBox
 from .reading_view import ReadingViewBinding
+from .source_policy import SourcePolicyKind, VerificationStatus
 
 _SHA256 = r"^[0-9a-f]{64}$"
 PAGE_REVIEW_CONTRACT_VERSION = "page-review/v6"
@@ -426,16 +427,19 @@ class PageCoverageEntry(ContractModel):
     lane_failures: list[PageLaneFailure] = Field(default_factory=list)
     #: WP02新增：来源政策标签（native_text/ocr_primary/single_visual等）。
     #: 非None时表示该页由单来源（非双读）流程处理，reconciliation_id可为空。
-    source_policy_kind: str | None = Field(default=None)
-    source_policy_verification: str | None = Field(default=None)
+    source_policy_kind: SourcePolicyKind | None = Field(default=None)
+    source_policy_verification: VerificationStatus | None = Field(default=None)
 
     @model_validator(mode="after")
     def validate_disposition(self) -> "PageCoverageEntry":
+        if (self.source_policy_kind is None) != (self.source_policy_verification is None):
+            raise ValueError("来源方式与核实状态必须同时提供")
         has_verified_single_source = (
             self.source_policy_kind is not None
             and self.source_policy_verification in (
-                "cross_verified", "targeted_verified", "manual_confirmed",
-                "self_consistent",
+                VerificationStatus.CROSS_VERIFIED,
+                VerificationStatus.TARGETED_VERIFIED,
+                VerificationStatus.MANUAL_CONFIRMED,
             )
         )
         if self.disposition == PageDisposition.ACCEPTED:

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getEvidenceRepository, type ProcessingRevisionPageView } from "../api/evidence";
@@ -21,6 +21,7 @@ const review: EligibilityReviewView = {
   ruleSetRevision: 3,
   evidenceSnapshotV2Id: "snapshot-1",
   completeProcessingRevisionId: "processing-1",
+  controls: [],
   clauses: [
     {
       ruleCode: "IN-01",
@@ -188,12 +189,9 @@ describe("入排审核工作台", () => {
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review, clauses: [first, second] }) });
     const user = userEvent.setup();
     render(<EligibilityWorkbenchPage />);
-    await screen.findByRole("heading", { name: "问题队列" });
-    const clausePane = within(
-      screen.getByRole("complementary", { name: "条款列表" }),
-    )
-      .getByRole("heading", { name: "审核条款" })
-      .closest(".workbench-pane") as HTMLElement;
+    await screen.findByRole("heading", { name: "待处理条款" });
+    await user.click(screen.getByRole("button", { name: "全部条款" }));
+    const clausePane = screen.getByRole("complementary", { name: "条款列表" });
     const secondButton = await within(clausePane).findByRole("button", { name: /第二个审核要点/ });
     await user.click(secondButton);
     expect(secondButton).toHaveAttribute("aria-pressed", "true");
@@ -216,6 +214,7 @@ describe("入排审核工作台", () => {
     expect(screen.getByRole("combobox", { name: "选择受试者" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "选择审核节点" })).toBeInTheDocument();
     expect(screen.getByRole("status", { name: "无法判定 1 条" })).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "全部条款" }));
     expect(screen.getByRole("heading", { name: "入选标准" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "排除标准" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "流程要求" })).toBeInTheDocument();
@@ -226,6 +225,7 @@ describe("入排审核工作台", () => {
     const user = userEvent.setup();
     render(<EligibilityWorkbenchPage />);
     await screen.findByRole("heading", { name: "入排审核工作台" });
+    await user.click(screen.getByRole("button", { name: "全部条款" }));
     const filter = screen.getByRole("combobox", { name: "按判定筛选" });
     await user.selectOptions(filter, "triggered");
     expect(screen.queryByRole("button", { name: /REQ-01/ })).not.toBeInTheDocument();
@@ -241,13 +241,13 @@ describe("入排审核工作台", () => {
 
   it("问题队列只聚合风险/冲突/未决条款，已满足与未到期不进入队列", async () => {
     render(<EligibilityWorkbenchPage />);
-    await screen.findByRole("heading", { name: "问题队列" });
-    expect(screen.getByText(/1 条条款需要处理，按根因聚合为 1 类/)).toBeInTheDocument();
+    await screen.findByRole("heading", { name: "待处理条款" });
+    expect(screen.getByText(/1 条条款需要处理，按问题类型归为 1 类/)).toBeInTheDocument();
     expect(screen.getByText("待研究者判断")).toBeInTheDocument();
     expect(screen.getByText("影响 1 条")).toBeInTheDocument();
     // 已满足/未触发/尚未到期的条款不属于问题。
     const queue = screen.getByRole("region", { name: "问题队列" });
-    const queueText = within(queue).parentElement?.textContent ?? "";
+    const queueText = queue.textContent ?? "";
     expect(queueText).not.toContain("IN-02");
     expect(queueText).not.toContain("EX-01");
     expect(queueText).not.toContain("REQ-01");
@@ -257,7 +257,7 @@ describe("入排审核工作台", () => {
   it("点击问题队列中的条款会打开同一详情", async () => {
     const user = userEvent.setup();
     render(<EligibilityWorkbenchPage />);
-    await screen.findByRole("heading", { name: "问题队列" });
+    await screen.findByRole("heading", { name: "待处理条款" });
     const queue = screen.getByRole("region", { name: "问题队列" });
     await user.click(within(queue).getByRole("button", { name: /IN-01/ }));
     expect(window.location.hash).toContain("component=IN-01");
@@ -276,6 +276,9 @@ describe("入排审核工作台", () => {
       factRefs: [],
       gapType: null,
       determinationMode: "semantic",
+      actionOwner: null,
+      actionDetail: null,
+      actionEvidence: null,
       ...overrides,
     });
 

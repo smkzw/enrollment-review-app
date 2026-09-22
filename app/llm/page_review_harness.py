@@ -10,6 +10,7 @@ import io
 import json
 import os
 import re
+import uuid
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -143,6 +144,11 @@ Completion = Callable[
     [PageReaderRoute, list[dict[str, Any]], int], Awaitable[PageCompletion]
 ]
 
+# OpenCode Go uses a stable client-session header for routing.  This identity is
+# owned by the running product process, never borrowed from OMP/Hermes, and is
+# reused by initial, repair and retry calls until the product restarts.
+_PRODUCT_SESSION_ID = f"enrollment-review-{uuid.uuid4()}"
+
 
 def _page_image_bytes(page: PageVisionInput) -> bytes:
     if page.image_bytes is not None:
@@ -196,9 +202,9 @@ def require_page_reader_routes(
         main_a_key = _value(env, "PAGE_REVIEW_MAIN_A_API_KEY", "") or _value(
             env, "OPENCODE_API_KEY", ""
         )
-    elif not local_main_a and not main_a_key:
+    elif provider == "zhipu-coding-plan" and not main_a_key:
         main_a_key = _value(
-            env, "INDEPENDENT_VLM_API_KEY", PAGE_REVIEW_MAIN_A_API_KEY
+            env, "INDEPENDENT_VLM_API_KEY", ""
         )
     main_b_provider = _value(env, "PAGE_REVIEW_MAIN_B_PROVIDER", PAGE_REVIEW_MAIN_B_PROVIDER)
     local_main_b = main_b_provider in LOCAL_PAGE_PROVIDERS
@@ -219,7 +225,7 @@ def require_page_reader_routes(
                       else _value(env, "PAGE_REVIEW_MAIN_B_API_KEY", PAGE_REVIEW_MAIN_B_API_KEY))
         if local_main_b and not main_b_key:
             main_b_key = "local-product"
-        elif not main_b_key:
+        elif main_b_provider == "cms-smk" and not main_b_key:
             main_b_key = _value(env, "CMS_SMK_API_KEY", "")
         main_b_project = ""
         main_b_base_url = _value(env, "PAGE_REVIEW_MAIN_B_BASE_URL", PAGE_REVIEW_MAIN_B_BASE_URL)
@@ -227,15 +233,21 @@ def require_page_reader_routes(
     if not main_a_key:
         if provider == "opencode-go":
             missing.append("OPENCODE_API_KEY")
-        else:
+        elif provider == "zhipu-coding-plan":
             missing.append("PAGE_REVIEW_MAIN_A_API_KEY（或 INDEPENDENT_VLM_API_KEY）")
+        else:
+            missing.append("PAGE_REVIEW_MAIN_A_API_KEY")
     if gemini_main_b:
         if not main_b_key:
             missing.append("GEMINI_ACCESS_TOKEN（或 PAGE_REVIEW_MAIN_B_API_KEY）")
         if not main_b_project:
             missing.append("GEMINI_PROJECT_ID")
     elif not main_b_key:
-        missing.append("PAGE_REVIEW_MAIN_B_API_KEY（或 CMS_SMK_API_KEY）")
+        missing.append(
+            "PAGE_REVIEW_MAIN_B_API_KEY（或 CMS_SMK_API_KEY）"
+            if main_b_provider == "cms-smk"
+            else "PAGE_REVIEW_MAIN_B_API_KEY"
+        )
     if missing and require_credentials:
         raise PageReviewConfigError("缺少逐页判读凭据：" + "、".join(missing))
 
@@ -702,11 +714,18 @@ async def _direct_openai_completion(
         trust_env=False,
         timeout=httpx.Timeout(PAGE_REVIEW_TIMEOUT_SECONDS, connect=15),
     ) as http_client:
+        default_headers = None
+        if route.provider == "opencode-go":
+            default_headers = {
+                "x-opencode-session": f"{_PRODUCT_SESSION_ID}:{route.lane.value}",
+                "User-Agent": "enrollment-review-app/1",
+            }
         client = AsyncOpenAI(
             base_url=route.base_url,
             api_key=route.api_key,
             http_client=http_client,
             max_retries=0,
+            default_headers=default_headers,
         )
         kwargs: dict[str, Any] = {
             "model": route.model,

@@ -28,6 +28,10 @@ export type EligibilityDecisionFilter =
   | "not_due"
   | "not_applicable";
 
+type EligibilityListMode = "pending" | "all";
+
+const CLAUSE_PAGE_SIZES = [25, 50, 100] as const;
+
 const DECISION_FILTERS: ReadonlyArray<{
   id: EligibilityDecisionFilter;
   label: string;
@@ -213,16 +217,12 @@ function EligibilitySelection({
 interface EligibilityClauseListProps {
   clauses: ReadonlyArray<EligibilityClauseView>;
   selectedComponentId: string | null;
-  filter: EligibilityDecisionFilter;
-  onFilterChange: (filter: EligibilityDecisionFilter) => void;
   onSelect: (componentId: string) => void;
 }
 
 function EligibilityClauseList({
   clauses,
   selectedComponentId,
-  filter,
-  onFilterChange,
   onSelect,
 }: EligibilityClauseListProps) {
   const groups: ReadonlyArray<{
@@ -235,30 +235,8 @@ function EligibilityClauseList({
   ];
   return (
     <div className="eligibility-clause-list">
-      <div className="eligibility-clause-list__toolbar">
-        <label>
-          <span>按判定筛选</span>
-          <select
-            aria-label="按判定筛选"
-            value={filter}
-            onChange={(event) =>
-              onFilterChange(event.target.value as EligibilityDecisionFilter)
-            }
-          >
-            {DECISION_FILTERS.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
       {groups.map((group) => {
-        const groupClauses = clauses.filter(
-          (clause) =>
-            clause.ruleKind === group.kind &&
-            decisionMatchesFilter(clause.decision, filter),
-        );
+        const groupClauses = clauses.filter((clause) => clause.ruleKind === group.kind);
         if (groupClauses.length === 0) return null;
         return (
           <section key={group.kind} className="eligibility-clause-group" aria-labelledby={`eligibility-group-${group.kind}`}>
@@ -300,7 +278,7 @@ function EligibilityClauseList({
           </section>
         );
       })}
-      {clauses.every((clause) => !decisionMatchesFilter(clause.decision, filter)) && (
+      {clauses.length === 0 && (
         <p className="eligibility-clause-list__empty">没有符合当前筛选条件的条款。</p>
       )}
     </div>
@@ -362,11 +340,6 @@ export function buildEligibilityIssueGroups(
   clauses: ReadonlyArray<EligibilityClauseView>,
 ): EligibilityIssueGroup[] {
   const severities: IssueSeverity[] = ["danger", "attention", "info"];
-  const severityOf = (decision: EligibilityDecision): IssueSeverity => {
-    const tone = decisionTone(decision);
-    if (decision === "professional_judgment") return "attention";
-    return tone === "danger" ? "danger" : "info";
-  };
   const byKey = new Map<string, EligibilityIssueGroup>();
   for (const clause of clauses) {
     if (!clauseIsIssue(clause)) continue;
@@ -382,12 +355,30 @@ export function buildEligibilityIssueGroups(
     }
     group.clauses.push(clause);
   }
+  for (const group of byKey.values()) {
+    group.clauses.sort(compareEligibilityClauses);
+  }
   return [...byKey.values()].sort(
     (a, b) =>
       ISSUE_SEVERITY_ORDER[a.severity] - ISSUE_SEVERITY_ORDER[b.severity] ||
       b.clauses.length - a.clauses.length ||
       a.key.localeCompare(b.key),
   );
+}
+
+function compareEligibilityClauses(
+  left: EligibilityClauseView,
+  right: EligibilityClauseView,
+): number {
+  const leftSeverity = clauseIsIssue(left)
+    ? ISSUE_SEVERITY_ORDER[clauseIssueKey(left).severity]
+    : 3;
+  const rightSeverity = clauseIsIssue(right)
+    ? ISSUE_SEVERITY_ORDER[clauseIssueKey(right).severity]
+    : 3;
+  return leftSeverity - rightSeverity
+    || left.ruleCode.localeCompare(right.ruleCode, "zh-CN", { numeric: true })
+    || left.ruleComponentId.localeCompare(right.ruleComponentId);
 }
 
 const ISSUE_SEVERITY_META: Record<IssueSeverity, { tone: Tone; text: string }> = {
@@ -419,7 +410,7 @@ function EligibilityIssueQueue({
   return (
     <section className="eligibility-issue-queue" aria-label="问题队列">
       <p className="eligibility-issue-queue__summary">
-        {totalIssues} 条条款需要处理，按根因聚合为 {groups.length} 类。
+        {totalIssues} 条条款需要处理，按问题类型归为 {groups.length} 类。
       </p>
       {groups.map((group, index) => {
         const meta = ISSUE_SEVERITY_META[group.severity];
@@ -509,11 +500,19 @@ function EligibilityClauseDetail({
             )}
           </li>
         )}
-        <li className="eligibility-detail-bullet">
-          <strong>{clause.sourceText ? "条款原文" : "审核要点"}</strong>
-          <span>{clause.sourceText || clause.textSummary}</span>
-        </li>
+        {!clause.sourceText && (
+          <li className="eligibility-detail-bullet">
+            <strong>审核要点</strong>
+            <span>{clause.textSummary}</span>
+          </li>
+        )}
       </ul>
+      {clause.sourceText && (
+        <details className="eligibility-clause-detail__source">
+          <summary>查看方案原文</summary>
+          <p>{clause.sourceText}</p>
+        </details>
+      )}
       <section className="eligibility-detail-section" aria-labelledby="eligibility-facts-title">
         <h3 id="eligibility-facts-title">关联事实</h3>
         {clause.factRefs.length === 0 ? (
@@ -603,9 +602,8 @@ function EligibilityEvidencePanel({
     );
   }, [snapshot.state]);
   const selectedFact = clause.factRefs[selectedFactIndex] ?? clause.factRefs[0] ?? null;
-  // F09：无已采用事实时默认展示第一页供浏览，不空置面板。
   const referencePage = selectedFact === null
-    ? (pages.length > 0 ? pages[0] : null)
+    ? null
     : selectedFact.pageNumber === null
       ? null
       : pages.find((page) => page.pageNumber === selectedFact.pageNumber
@@ -618,7 +616,7 @@ function EligibilityEvidencePanel({
   ]);
   const selectedPage = browsedPage?.context === sourceContext
     ? pages.find((page) => page.entryId === browsedPage.entryId) ?? referencePage
-    : referencePage;
+    : referencePage ?? pages[0] ?? null;
   const isReferencePage = referencePage !== null && selectedPage?.entryId === referencePage.entryId;
   const locatorPage = useLoad(
     (signal) => selectedPage?.ocrPageId
@@ -646,6 +644,15 @@ function EligibilityEvidencePanel({
           <p className="workbench-pane__subtitle">{clause.ruleCode} · {clauseKindLabel(clause.ruleKind)}</p>
         </div>
       </header>
+      {selectedPage !== null && (
+        <div className="eligibility-evidence__state" role="status">
+          <strong>{isReferencePage ? "引用原文" : "浏览原件"}</strong>
+          <span>
+            {documentNames.get(selectedPage.sourceDocumentVersionId) ?? "原始资料"}
+            {` · 第 ${selectedPage.pageNumber} 页`}
+          </span>
+        </div>
+      )}
       {clause.factRefs.length === 0 && (
         <p className="eligibility-muted">当前条款没有已采用事实，可浏览全部原件页核实。</p>
       )}
@@ -694,7 +701,7 @@ function EligibilityEvidencePanel({
           ) : selectedPage === null ? null : (
             <>
             {!isReferencePage && referencePage !== null ? (
-              <button type="button" className="btn btn--secondary" onClick={returnToReference}>
+              <button type="button" className="button button--quiet" onClick={returnToReference}>
                 返回引用原文
               </button>
             ) : null}
@@ -728,7 +735,18 @@ export function EligibilityWorkbenchPage() {
   const subjectParam = params.get("subject");
   const episodeParam = params.get("episode");
   const componentParam = params.get("component");
-  const [filter, setFilter] = useState<EligibilityDecisionFilter>("all");
+  const viewParam = params.get("view");
+  const listMode: EligibilityListMode = viewParam === "pending" || viewParam === "all"
+    ? viewParam
+    : componentParam !== null ? "all" : "pending";
+  const filterParam = params.get("filter");
+  const filter: EligibilityDecisionFilter = DECISION_FILTERS.some((item) => item.id === filterParam)
+    ? filterParam as EligibilityDecisionFilter
+    : "all";
+  const pageSizeParam = Number(params.get("limit"));
+  const clausePageSize = CLAUSE_PAGE_SIZES.includes(pageSizeParam as typeof CLAUSE_PAGE_SIZES[number])
+    ? pageSizeParam
+    : 50;
   const [selectedFactIndex, setSelectedFactIndex] = useState(0);
 
   const projects = useLoad((signal) => getCatalogRepository().listProjects(signal), []);
@@ -827,11 +845,14 @@ export function EligibilityWorkbenchPage() {
 
   const reviewData = review.state.data;
   const allClauses = reviewData.clauses;
-  // F09：无深链时默认选中问题队列最高优先项，而不是全条款第一条。
-  const defaultClause = (() => {
-    const groups = buildEligibilityIssueGroups(allClauses);
-    return groups[0]?.clauses[0] ?? allClauses[0];
-  })();
+  const filteredClauses = [...allClauses]
+    .filter((clause) => listMode === "pending"
+      ? clauseIsIssue(clause)
+      : decisionMatchesFilter(clause.decision, filter))
+    .sort(compareEligibilityClauses);
+  const visibleClauses = filteredClauses.slice(0, clausePageSize);
+  // 显式深链优先；没有深链时，从当前可见列表按稳定优先序选择。
+  const defaultClause = visibleClauses[0] ?? allClauses[0];
   const selectedClause =
     (componentParam === null
       ? defaultClause
@@ -845,6 +866,21 @@ export function EligibilityWorkbenchPage() {
   const undeterminedCount = allClauses.filter((clause) => isUndeterminedDecision(clause.decision)).length;
   const subjectLabel = `${selectedSubject.subjectCode} · ${centerLabel(selectedSubject)}`;
   const unassignedConflictCount = reviewData.unassignedConflicts?.length ?? 0;
+  const selectClause = (componentId: string) => updateParams({ component: componentId });
+  const setListMode = (mode: EligibilityListMode) => {
+    const candidates = [...allClauses]
+      .filter((clause) => mode === "pending" ? clauseIsIssue(clause) : true)
+      .sort(compareEligibilityClauses);
+    updateParams({ view: mode, filter: mode === "pending" ? null : filter,
+      component: candidates[0]?.ruleComponentId ?? null });
+  };
+  const setDecisionFilter = (nextFilter: EligibilityDecisionFilter) => {
+    const candidates = [...allClauses]
+      .filter((clause) => decisionMatchesFilter(clause.decision, nextFilter))
+      .sort(compareEligibilityClauses);
+    updateParams({ view: "all", filter: nextFilter === "all" ? null : nextFilter,
+      component: candidates[0]?.ruleComponentId ?? null });
+  };
 
   return (
     <div className="eligibility-workbench workbench">
@@ -905,30 +941,52 @@ export function EligibilityWorkbenchPage() {
           <div className="workbench-pane">
             <header className="workbench-pane__head">
               <div>
-                <h2 className="workbench-pane__title">问题队列</h2>
-                <p className="workbench-pane__subtitle">风险、冲突与未决按根因聚合</p>
+                <h2 className="workbench-pane__title">
+                  {listMode === "pending" ? "待处理条款" : "全部条款"}
+                </h2>
+                <p className="workbench-pane__subtitle">
+                  {listMode === "pending" ? "按问题类型汇总，逐条核对" : `共 ${filteredClauses.length} 条`}
+                </p>
               </div>
             </header>
-            <EligibilityIssueQueue
-              clauses={allClauses}
-              selectedComponentId={selectedClause.ruleComponentId}
-              onSelect={(componentId) => updateParams({ component: componentId })}
-            />
-          </div>
-          <div className="workbench-pane">
-            <header className="workbench-pane__head">
-              <div>
-                <h2 className="workbench-pane__title">审核条款</h2>
-                <p className="workbench-pane__subtitle">共 {allClauses.length} 条</p>
-              </div>
-            </header>
-            <EligibilityClauseList
-              clauses={allClauses}
-              selectedComponentId={selectedClause.ruleComponentId}
-              filter={filter}
-              onFilterChange={setFilter}
-              onSelect={(componentId) => updateParams({ component: componentId })}
-            />
+            <div className="eligibility-list-mode" role="group" aria-label="选择条款范围">
+              <button type="button" aria-pressed={listMode === "pending"}
+                onClick={() => setListMode("pending")}>待处理</button>
+              <button type="button" aria-pressed={listMode === "all"}
+                onClick={() => setListMode("all")}>全部条款</button>
+            </div>
+            <div className="eligibility-clause-list__toolbar">
+              {listMode === "all" && (
+                <label>
+                  <span>按判定筛选</span>
+                  <select aria-label="按判定筛选" value={filter}
+                    onChange={(event) => setDecisionFilter(event.target.value as EligibilityDecisionFilter)}>
+                    {DECISION_FILTERS.map((item) => (
+                      <option key={item.id} value={item.id}>{item.label}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <label>
+                <span>单次显示</span>
+                <select aria-label="单次显示条款数" value={clausePageSize}
+                  onChange={(event) => updateParams({ limit: event.target.value === "50" ? null : event.target.value })}>
+                  {CLAUSE_PAGE_SIZES.map((size) => <option key={size} value={size}>{size} 条</option>)}
+                </select>
+              </label>
+            </div>
+            {listMode === "pending" ? (
+              <EligibilityIssueQueue clauses={visibleClauses}
+                selectedComponentId={selectedClause.ruleComponentId} onSelect={selectClause} />
+            ) : (
+              <EligibilityClauseList clauses={visibleClauses}
+                selectedComponentId={selectedClause.ruleComponentId} onSelect={selectClause} />
+            )}
+            {filteredClauses.length > visibleClauses.length && (
+              <p className="eligibility-clause-list__empty">
+                当前显示前 {visibleClauses.length} 条，可在上方增加显示数量。
+              </p>
+            )}
           </div>
         </aside>
         <section className="workbench-col eligibility-workbench__detail" aria-label="条款详情">
@@ -959,7 +1017,8 @@ export function EligibilityWorkbenchPage() {
         </section>
       </div>
       <footer className="eligibility-workbench__footnote">
-        规则修订：{formatSnapshotVersion(reviewData.ruleSetRevision, null)} · 资料版本：{formatSnapshotVersion(selectedEpisode.revision, null)}
+        规则修订：{formatSnapshotVersion(reviewData.ruleSetRevision, null)} · 节点修订：{formatSnapshotVersion(selectedEpisode.revision, null)}
+        {` · 资料快照：${reviewData.evidenceSnapshotV2Id.slice(0, 8)}`}
       </footer>
     </div>
   );

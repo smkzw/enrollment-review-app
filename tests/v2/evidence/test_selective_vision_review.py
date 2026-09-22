@@ -355,7 +355,7 @@ def test_eligible_page_without_page_image_does_not_pretend_reviewed():
     assert decision.skip_reason == svr.SKIP_MISSING_PAGE_IMAGE
 
 
-def test_budget_cap_stops_additional_reviews_deterministically():
+def test_call_size_limit_keeps_all_eligible_pages_for_chunking():
     pages = [
         _signals(
             source_ref=f"src.scan.p{i}",
@@ -368,10 +368,10 @@ def test_budget_cap_stops_additional_reviews_deterministically():
         for i in range(1, 5)
     ]
     plan = svr.plan_selective_vision_reviews(pages, max_pages_per_call=2)
-    assert len(plan.eligible) == 2
-    assert len(plan.skipped) == 2
-    assert all(item.skip_reason == svr.SKIP_BUDGET_EXCEEDED for item in plan.skipped)
-    assert all(item.reasons for item in plan.skipped)
+    assert len(plan.eligible) == 4
+    assert len(plan.skipped) == 0
+    assert plan.max_pages_per_call == 2
+    assert all(item.reasons for item in plan.eligible)
 
 
 def test_duplicate_page_identity_is_rejected():

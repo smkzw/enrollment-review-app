@@ -7,7 +7,10 @@ from app.domain.expression import EvaluationResult
 from app.domain.publication import canonical_hash
 from app.projections.control_atom_binding_input import project_control_atom_identities
 from app.projections.control_calculation_experiment import _evaluate_control_selection
-from app.services.qualified_binding_selection import ReceiptVerifiedQualifiedBindingSelections
+from app.services.qualified_binding_selection import (
+    ReceiptVerifiedQualifiedBindingSelections,
+    ReceiptVerifiedWorkDraftSelections,
+)
 from app.services.repeat_condition_selection import iter_scoped_repeat_conditions
 
 
@@ -31,7 +34,9 @@ class ControlRepeatTriggerCalculation:
 
 def calculate_control_repeat_triggers(selections, *, conflict_groups, context=None) -> tuple[ControlRepeatTriggerCalculation, ...]:
     """Apply the existing arithmetic to each receipt-qualified observation scope."""
-    if not isinstance(selections, ReceiptVerifiedQualifiedBindingSelections):
+    if not isinstance(selections, (
+        ReceiptVerifiedQualifiedBindingSelections, ReceiptVerifiedWorkDraftSelections,
+    )):
         raise TypeError("复查条件只能读取已核实回执的资料选择")
     selections.require_unchanged()
     frozen = selections.control_input

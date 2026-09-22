@@ -2,6 +2,10 @@
 from typing import Literal
 
 from app.services.review_runtime_ownership import OWNER
+from app.services.review_context_assembly import (
+    current_review_clinical_material_sha256,
+    frozen_review_clinical_material_sha256,
+)
 from app.storage.codecs import verify_payload_sha256
 from app.storage.fact_authority import FactAuthorityValidator
 from app.storage.repositories import ScopeViolationError
@@ -24,6 +28,11 @@ def require_prepared_review_intent(session_factory, *, subject_id, review_episod
                 or context.authority.review_episode_id != review_episode_id):
             raise ScopeViolationError("审核准备记录不属于当前受试者及节点")
         FactAuthorityValidator(session).validate(context.authority)
+        if (
+            current_review_clinical_material_sha256(session, context.authority)
+            != frozen_review_clinical_material_sha256(context)
+        ):
+            raise ScopeViolationError("当前病史已经更新，请重新准备本次审核")
         if candidate_job_id is not None:
             parent = JobStore(session).get_job(candidate_job_id)
             if parent.state != "completed":

@@ -405,7 +405,6 @@ def _execute(
         )
 
     try:
-        print(f"DEBUG OCR EXEC: plans={len(plans)}, adapter={type(adapter).__name__}, gate={type(gate).__name__}", flush=True)
         file_results = _process_files(
             config=config,
             job_id=job_id,
@@ -415,7 +414,6 @@ def _execute(
             artifact_store=artifact_store,
             on_page_progress=observe_page,
         )
-        print(f"DEBUG OCR EXEC: _process_files done, results={[(r.page_total, r.page_succeeded, r.page_failed) for r in file_results]}", flush=True)
         # 最后一页之后也属于安全边界；否则单页/末页取消只能在 JobRunner
         # 下一轮看到，执行器可能已经冻结不可激活修订。
         _maybe_cancel(config, job_id)
@@ -458,24 +456,24 @@ def _execute(
             error_code="EVIDENCE_SIDECAR_PREPARATION_FAILED",
             detail="识别结果已保存，但风险提示与原文定位尚未准备完成，系统将继续处理。",
         ) from exc
-    # 新图像路径由两个完整主读负责；仅历史文字路径保留旧后处理。
-    if not config.direct_vision_preparation:
-        try:
-            from app.services.selective_vision_postprocess_job_service import (
-                enqueue_selective_vision_postprocess_for_revision,
-            )
+    # 所有新资料都先保留文字主路径；只有页级质量信号命中的页面进入局部视觉核实。
+    # 这项后处理不覆盖 OCR，也不恢复旧的整页双模型前置流程。
+    try:
+        from app.services.selective_vision_postprocess_job_service import (
+            enqueue_selective_vision_postprocess_for_revision,
+        )
 
-            enqueue_selective_vision_postprocess_for_revision(
-                config.session_factory,
-                revision_id,
-                trigger="evidence_processing_freeze",
-            )
-        except Exception as exc:
-            raise StepFailure(
-                retryable=True,
-                error_code="SELECTIVE_VISION_ENQUEUE_FAILED",
-                detail="识别结果已保存，但选择性视觉后处理尚未入队，系统将继续处理。",
-            ) from exc
+        enqueue_selective_vision_postprocess_for_revision(
+            config.session_factory,
+            revision_id,
+            trigger="evidence_processing_freeze",
+        )
+    except Exception as exc:
+        raise StepFailure(
+            retryable=True,
+            error_code="SELECTIVE_VISION_ENQUEUE_FAILED",
+            detail="识别结果已保存，但页面质量核对尚未入队，系统将继续处理。",
+        ) from exc
     _transition_snapshot_if_processing(
         config,
         snapshot.evidence_snapshot_id,

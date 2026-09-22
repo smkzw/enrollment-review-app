@@ -1468,18 +1468,14 @@ def _execute_deep(
         output_validator=validate_deep_output,
     )
     if result.status != "已解析" or result.final_output is None:
-        # 候选级 needs_review 降级（2026-09-19 用户裁定）：单批深析失败不阻塞
-        # 其余合格候选进入收口——该批所有 owned 单元标为 uncertain（人工核对
-        # 路径），closure 与发布照常进行，控制目录中如实保留未决标记。
-        return {
-            "stage": "deep_needs_review",
-            "batch_id": batch.batch_id,
-            "owned_structure_unit_ids": sorted(batch.owned_structure_unit_ids),
-            "diagnostics": _run_diagnostics(
+        raise StepFailure(
+            retryable=False,
+            error_code="PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID",
+            detail=_run_diagnostics(
                 result.attempts,
-                "深析批次未产出合规输出，已降级为需人工核对。",
+                "深析批次在限定修复次数内未产出合规输出。",
             ),
-        }
+        )
     return {
         "stage": "deep",
         "batch_id": batch.batch_id,
@@ -1529,29 +1525,6 @@ def _deep_results(
                     detail="深析阶段仍缺少已接受的批次结果。",
                 )
             _, payload = checkpoint
-            if payload.get("stage") == "deep_needs_review":
-                # 候选级降级：该批所有 owned 单元标为 PENDING_CONFIRMATION，
-                # 不产出候选；closure 与发布照常推进，控制目录中如实保留
-                # 未决标记（2026-09-19 用户裁定的通用降级路径）。
-                from app.domain.contracts.protocol_controls import (
-                    ProtocolControlBatchDispositionHydrated,
-                    ProtocolControlUnitDisposition,
-                )
-                output[batch.batch_id] = ProtocolControlBatchDispositionHydrated(
-                    batch_id=batch.batch_id,
-                    coverage_manifest_id=batch.coverage_manifest_id,
-                    owned_structure_unit_ids=list(batch.owned_structure_unit_ids),
-                    owned_source_span_ids=list(batch.owned_source_span_ids),
-                    dispositions=[
-                        ProtocolControlUnitDisposition(
-                            structure_unit_id=uid,
-                            disposition=StructureUnitDispositionKind.PENDING_CONFIRMATION,
-                        )
-                        for uid in batch.owned_structure_unit_ids
-                    ],
-                    candidates=[],
-                )
-                continue
             run_result = ProtocolControlAgentRunResult.model_validate(
                 payload.get("run_result")
             )

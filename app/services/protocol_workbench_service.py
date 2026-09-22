@@ -2148,6 +2148,24 @@ class ProtocolWorkbenchService:
             )
         return self.get_draft_detail(job_id)
 
+    @staticmethod
+    def _require_control_publication_references(
+        *,
+        control_job_id: str | None,
+        control_checkpoint_id: str | None,
+    ) -> None:
+        if control_job_id is not None and control_checkpoint_id is not None:
+            return
+        raise ProtocolWorkbenchError(
+            "CONTROL_COVERAGE_REQUIRED",
+            title="补充审核要求尚未完成",
+            detail=(
+                "必须先完成整份方案的跨章节核对；即使未发现额外控制点，"
+                "也需要保留本次全文覆盖结果。"
+            ),
+            recovery="请等待“方案其他审核要求”完成后再发布。",
+        )
+
     def publish_first_project(
         self,
         job_id: str,
@@ -2159,6 +2177,10 @@ class ProtocolWorkbenchService:
     ) -> PublicationView:
         merged = self._merged_payload(job_id)
         self._require_protocol_job(job_id)
+        self._require_control_publication_references(
+            control_job_id=control_job_id,
+            control_checkpoint_id=control_checkpoint_id,
+        )
         integrity = self.get_integrity(job_id)
         if not integrity.publishable:
             raise ProtocolWorkbenchError(
@@ -2249,6 +2271,10 @@ class ProtocolWorkbenchService:
         由发布事务内的确定性门禁裁定（跨方案/跨期即拒绝并给出中文下一步）。"""
         merged = self._merged_payload(job_id)
         self._require_protocol_job(job_id)
+        self._require_control_publication_references(
+            control_job_id=control_job_id,
+            control_checkpoint_id=control_checkpoint_id,
+        )
         if merged.get("session_kind") != "re_deconstruction":
             raise ProtocolWorkbenchError(
                 "NOT_RE_DECONSTRUCTION_JOB",

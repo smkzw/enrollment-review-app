@@ -47,6 +47,30 @@ export interface EligibilityClauseWire {
   determination_mode: EligibilityDeterminationModeWire;
 }
 
+export type EligibilityControlStatusWire =
+  | "fulfilled"
+  | "unfulfilled"
+  | "unverified"
+  | "not_applicable";
+
+export interface EligibilityControlObligationWire {
+  obligation_id: string;
+  obligation_group_id: string;
+  statement: string;
+  status: EligibilityControlStatusWire;
+  status_label: string;
+  reason: string;
+  fact_refs: EligibilityFactRefWire[];
+}
+
+export interface EligibilityControlWire {
+  protocol_control_id: string;
+  display_label: string;
+  title: string;
+  source_span_ids: string[];
+  obligations: EligibilityControlObligationWire[];
+}
+
 export interface EligibilityReviewWire {
   unassigned_conflicts?: { conflict_group_id: string; member_kind: "event" | "exposure"; member_ids: string[] }[];
   subject_id: string;
@@ -56,4 +80,5 @@ export interface EligibilityReviewWire {
   evidence_snapshot_v2_id: string;
   complete_processing_revision_id: string;
   clauses: EligibilityClauseWire[];
+  controls?: EligibilityControlWire[];
 }

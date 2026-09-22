@@ -104,7 +104,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 EXECUTOR_PATH = REPO_ROOT / "app" / "services" / "evidence_processing_executor.py"
 IMAGE_BYTES = b"\x89PNG\r\n\x1a\nselective-vision-postfreeze"
 IMAGE_SHA = sha256(IMAGE_BYTES).hexdigest()
-RAW_TEXT = "frozen revision OCR raw text must stay immutable"
+# 视觉任务夹具模拟“已有识别尝试，但正文不足以直接采信”。仍保留一个字符，
+# 以便验证选择性视觉处理前后不会改写既有 OCR 原文或哈希。
+RAW_TEXT = "x"
 NATIVE_RAW_TEXT = "native text primary path for skip after freeze"
 
 

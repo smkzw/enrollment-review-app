@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
@@ -86,6 +86,8 @@ class SelectiveVisionObservationPageMaterial:
     has_page_image: bool = False
     has_native_text: bool = False
     native_text_char_count: int = 0
+    has_ocr_text: bool = False
+    ocr_text_char_count: int = 0
     non_text_mark_count: int | None = None
     complex_layout_not_represented_by_native_text: bool = False
     native_extraction_anomaly: bool = False
@@ -233,16 +235,56 @@ class SelectiveVisionObservationService:
                     persist_closed_failures=persist_closed_failures,
                 )
 
-        outcome = await self.review_runner(
-            prepared.plan, list(prepared.vision_inputs)
-        )
-        with self.session_factory() as session, session.begin():
-            return self.persist_postprocess_in_session(
-                session,
-                prepared,
-                outcome,
-                persist_closed_failures=persist_closed_failures,
+        observations: list[SelectiveVisionObservationRecord] = []
+        closed: list[SelectiveVisionObservationRecord] = []
+        created_ids: list[str] = []
+        reused_ids: list[str] = []
+        first_closed_error: SelectiveVisionClosedError | None = None
+        size = prepared.plan.max_pages_per_call
+        for start in range(0, len(prepared.plan.eligible), size):
+            stop = start + size
+            chunk_plan = replace(
+                prepared.plan,
+                eligible=prepared.plan.eligible[start:stop],
+                skipped=(),
             )
+            chunk_materials = prepared.eligible_materials[start:stop]
+            chunk = replace(
+                prepared,
+                materials=chunk_materials,
+                plan=chunk_plan,
+                skipped=(),
+                ocr_snapshots={
+                    page.ocr_page_id: prepared.ocr_snapshots[page.ocr_page_id]
+                    for page in chunk_materials
+                    if page.ocr_page_id in prepared.ocr_snapshots
+                },
+                eligible_materials=chunk_materials,
+                vision_inputs=prepared.vision_inputs[start:stop],
+            )
+            outcome = await self.review_runner(chunk_plan, list(chunk.vision_inputs))
+            with self.session_factory() as session, session.begin():
+                saved = self.persist_postprocess_in_session(
+                    session,
+                    chunk,
+                    outcome,
+                    persist_closed_failures=persist_closed_failures,
+                )
+            observations.extend(saved.observations)
+            closed.extend(saved.closed)
+            created_ids.extend(saved.created_observation_ids)
+            reused_ids.extend(saved.reused_observation_ids)
+            if first_closed_error is None and saved.closed_error is not None:
+                first_closed_error = saved.closed_error
+        return SelectiveVisionObservationBatchResult(
+            plan=prepared.plan,
+            observations=tuple(observations),
+            closed=tuple(closed),
+            skipped=prepared.skipped,
+            closed_error=first_closed_error,
+            created_observation_ids=tuple(created_ids),
+            reused_observation_ids=tuple(reused_ids),
+        )
 
     async def run_postprocess_in_session(
         self,
@@ -518,6 +560,8 @@ class SelectiveVisionObservationService:
             has_page_image=page.has_page_image,
             has_native_text=page.has_native_text,
             native_text_char_count=page.native_text_char_count,
+            has_ocr_text=page.has_ocr_text,
+            ocr_text_char_count=page.ocr_text_char_count,
             non_text_mark_count=page.non_text_mark_count,
             complex_layout_not_represented_by_native_text=(
                 page.complex_layout_not_represented_by_native_text

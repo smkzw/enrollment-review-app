@@ -1,0 +1,224 @@
+{
+  "round": "0922V2",
+  "baseline": "e7f34d0508c05481164cf13569f66ddf64e2e74f",
+  "mode": "offline excerpts and synthetic fixtures",
+  "credentials_used": false,
+  "original_watch_script_executed": false,
+  "clinical_db_accessed": false,
+  "whole_repository_tests_run": false,
+  "count": 18,
+  "results": [
+    {
+      "id": "P01",
+      "source": "scripts/build_scale_validation_set.py::_escape_repo_path",
+      "observed": "NameError: name 'os' is not defined",
+      "expected_after_fix": "Default output redirects without NameError",
+      "boundary": "Synthetic helper/control-flow probe; not full application acceptance"
+    },
+    {
+      "id": "P02",
+      "source": "scripts/build_scale_validation_set.py::_escape_repo_path",
+      "observed": {
+        "fallback_is_inside_repo": true
+      },
+      "expected_after_fix": "Reject SCALE_SET_DIR if it resolves inside any source worktree; validate fallback too",
+      "boundary": "Synthetic helper/control-flow probe; not full application acceptance"
+    },
+    {
+      "id": "P03",
+      "source": "scripts/build_scale_validation_set.py::main",
+      "observed": {
+        "files": 4,
+        "reported_total_pages": 2,
+        "synthetic_true_images_or_pages": 7
+      },
+      "expected_after_fix": "Count PDF pages + image pages + TIFF frames, or report unknown instead of omitting them",
+      "boundary": "Counter excerpt; synthetic TIFF has three frames; no actual clinical images processed"
+    },
+    {
+      "id": "P04",
+      "source": "eligibility_review_projection.py::_load_binding_predicate_fact_ids vs qualified_binding_selection.py::_select_facts_for_identity",
+      "observed": {
+        "loader": {
+          "p1": [
+            "f1"
+          ]
+        },
+        "full_selection_ids": [],
+        "full_selection_reasons": [
+          "no_usable_qualified_pair"
+        ]
+      },
+      "expected_after_fix": "Projection and frozen review share complete operand/date/multiplicity semantics; P07 is a positive control",
+      "boundary": "Selection-layer comparison; synthetic already pair-qualified records. Does not assert a real final clinical misdecision"
+    },
+    {
+      "id": "P05",
+      "source": "eligibility_review_projection.py::_load_binding_predicate_fact_ids vs qualified_binding_selection.py::_select_facts_for_identity",
+      "observed": {
+        "loader": {
+          "p1": [
+            "f1"
+          ]
+        },
+        "full_selection_ids": [],
+        "full_selection_reasons": [
+          "event_date_not_qualified_for_selected_value"
+        ]
+      },
+      "expected_after_fix": "Projection and frozen review share complete operand/date/multiplicity semantics; P07 is a positive control",
+      "boundary": "Selection-layer comparison; synthetic already pair-qualified records. Does not assert a real final clinical misdecision"
+    },
+    {
+      "id": "P06",
+      "source": "eligibility_review_projection.py::_load_binding_predicate_fact_ids vs qualified_binding_selection.py::_select_facts_for_identity",
+      "observed": {
+        "loader": {
+          "p1": [
+            "f1",
+            "f2"
+          ]
+        },
+        "full_selection_ids": [],
+        "full_selection_reasons": [
+          "multiple_usable_pairs_without_selection_policy"
+        ]
+      },
+      "expected_after_fix": "Projection and frozen review share complete operand/date/multiplicity semantics; P07 is a positive control",
+      "boundary": "Selection-layer comparison; synthetic already pair-qualified records. Does not assert a real final clinical misdecision"
+    },
+    {
+      "id": "P07",
+      "source": "eligibility_review_projection.py::_load_binding_predicate_fact_ids vs qualified_binding_selection.py::_select_facts_for_identity",
+      "observed": {
+        "loader": {
+          "p1": [
+            "f1"
+          ]
+        },
+        "full_selection_ids": [
+          "f1"
+        ],
+        "full_selection_reasons": []
+      },
+      "expected_after_fix": "Projection and frozen review share complete operand/date/multiplicity semantics; P07 is a positive control",
+      "boundary": "Selection-layer comparison; synthetic already pair-qualified records. Does not assert a real final clinical misdecision"
+    },
+    {
+      "id": "P08",
+      "source": "eligibility_review_projection.py all-rejected→None; expression.py::_evaluate_atomic dispatch",
+      "observed": {
+        "loader": null,
+        "facts_reaching_value_comparison": [
+          "f-rejected"
+        ]
+      },
+      "expected_after_fix": "An explicit all-rejected qualification state must not fall back to category matching",
+      "boundary": "Synthetic condition with no observation_policy. Probe stops at matching, NOT final eligibility decision"
+    },
+    {
+      "id": "P09",
+      "source": "expression.py::_evaluate_atomic dispatch",
+      "observed": {
+        "explicit_empty_result": "UNKNOWN"
+      },
+      "expected_after_fix": "Keep explicit-empty UNKNOWN behavior; do not reintroduce empty→FALSE",
+      "boundary": "Positive safety control on the dispatch excerpt"
+    },
+    {
+      "id": "P10",
+      "source": "app/llm/page_review_transport_options.py::page_completion_options",
+      "observed": {
+        "opencode_go_options": {}
+      },
+      "expected_after_fix": "Diagnose the actual application request; do not claim it sends json_object if this adapter does not",
+      "boundary": "Static guard behavior only; no actual HTTP request or provider capability assertion"
+    },
+    {
+      "id": "P11",
+      "source": "app/llm/page_review_harness.py::read_page",
+      "observed": {
+        "response_missing_recorded_model": "requested-model",
+        "response_unexpected_recorded_model": "different-model"
+      },
+      "expected_after_fix": "Keep requested/returned/canonical IDs separately; missing is missing, unapproved mismatch cannot be adopted",
+      "boundary": "Expression-level identity probe; no real model called"
+    },
+    {
+      "id": "P12",
+      "source": "app/services/fact_correction_service.py::_same_observation_siblings",
+      "observed": {
+        "same_page_age_height_marked_siblings": true
+      },
+      "expected_after_fix": "Only show as potentially-related sources until same observation/attribute/time is proven; never bulk-overwrite by this heuristic",
+      "boundary": "Heuristic excerpt; actual current change is preview-only, not a demonstrated mass correction"
+    },
+    {
+      "id": "P13",
+      "source": "scripts/wp08_muse_spark_watch.sh",
+      "observed": {
+        "finish_reason": null,
+        "detected_recovered": true
+      },
+      "expected_after_fix": "Use validated success response and nonempty capability result, not key presence",
+      "boundary": "Synthetic helper/control-flow probe; not full application acceptance"
+    },
+    {
+      "id": "P14",
+      "source": "scripts/wp08_muse_spark_watch.sh",
+      "observed": {
+        "finish_reason": "length",
+        "detected_recovered": true
+      },
+      "expected_after_fix": "Use validated success response and nonempty capability result, not key presence",
+      "boundary": "Synthetic helper/control-flow probe; not full application acceptance"
+    },
+    {
+      "id": "P15",
+      "source": "scripts/wp08_muse_spark_watch.sh final echo",
+      "observed": {
+        "normalization": "failed_final",
+        "exit_code": 0
+      },
+      "expected_after_fix": "Failure/timeout must return nonzero and structured partial-run status",
+      "boundary": "Only terminal shell lines executed; the original watcher was NOT run"
+    },
+    {
+      "id": "P16",
+      "source": "scripts/run_scale_validation.py projection checks",
+      "observed": {
+        "http_503": "rejected_http",
+        "http_200_error": "rejected_envelope",
+        "http_200_empty": {
+          "clause_count": 0,
+          "would_return_success": true
+        }
+      },
+      "expected_after_fix": "Keep error checks; additionally verify expected rule coverage, scope and actual page dispositions",
+      "boundary": "Synthetic helper/control-flow probe; not full application acceptance"
+    },
+    {
+      "id": "P17",
+      "source": "frontend/src/pages/EligibilityWorkbenchPage.tsx defaultClause",
+      "observed": {
+        "group_severity": "danger",
+        "default_selected": "low",
+        "reversed_selected": "high"
+      },
+      "expected_after_fix": "Sort individual issues within a highest-severity group; default selection must be input-order invariant",
+      "boundary": "Node executes transcribed TypeScript function with synthetic supporting types"
+    },
+    {
+      "id": "P18",
+      "source": "frontend/src/pages/EligibilityWorkbenchPage.tsx::buildEligibilityIssueGroups",
+      "observed": {
+        "exit_code": 2,
+        "diagnostic": "mnt/data/enrollment_review_0922V2/probes/ui_excerpt.ts(18,9): error TS6133: 'severityOf' is declared but its value is never read.",
+        "compiler_used": "TypeScript 5.8.3",
+        "repo_declared_compiler": "TypeScript 7.0.2"
+      },
+      "expected_after_fix": "Remove unused local or actually use it; run the real npm build with pinned dependencies",
+      "boundary": "Standalone noUnusedLocals compiler check, not full repository build; compiler version differs and is disclosed"
+    }
+  ]
+}

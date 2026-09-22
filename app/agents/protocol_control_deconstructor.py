@@ -899,49 +899,6 @@ def _find_forbidden_provider_key(value: object, path: str = "") -> tuple[str, st
     return None
 
 
-def _strip_invalid_evaluation_specs(payload: dict) -> None:
-    """宿主侧 evaluation 预清洗：模型输出的 evaluation 规格如无法通过合同
-    校验则确定性剥离（合同允许省略该字段，原子转由专业判断路径承接）。
-    只做字段级剥离，不修改 obligation_expression 或来源锚。"""
-
-    def _walk(node: object) -> None:
-        if isinstance(node, dict):
-            spans = node.get("source_span_ids") or []
-            excerpts = node.get("source_excerpts") or []
-            minimal = {
-                "version": "control-atom-evaluation/v4",
-                "determination_mode": "investigator_judgment",
-                "proposition": str(node.get("attribute") or node.get("source_term") or "待人工核实的控制条件"),
-                "time_purpose": "unresolved",
-                "source_span_ids": spans[:1] if spans else [],
-                "source_excerpts": excerpts[:1] if excerpts else [],
-            }
-            evaluation = node.get("evaluation")
-            if isinstance(evaluation, dict):
-                try:
-                    from app.domain.contracts.control_evaluation_spec import (
-                        ControlAtomEvaluationSpec,
-                    )
-
-                    ControlAtomEvaluationSpec.model_validate(evaluation)
-                except Exception:
-                    node["evaluation"] = minimal
-            elif "evaluation" not in node and                     (node.get("comparator") or node.get("source_clause") or node.get("source_clauses")):
-                # 模型漏填 evaluation 的原子：补最小人审规格
-                node["evaluation"] = minimal
-            for value in node.values():
-                _walk(value)
-        elif isinstance(node, list):
-            for item in node:
-                _walk(item)
-
-    candidates = payload.get("candidate_drafts")
-    if isinstance(candidates, list):
-        for candidate in candidates:
-            if isinstance(candidate, dict):
-                _walk(candidate)
-
-
 def parse_protocol_control_agent_wire(text: str) -> ProtocolControlAgentWire:
     """Parse only the provider wire; context-dependent checks happen later."""
 
@@ -972,7 +929,6 @@ def parse_protocol_control_agent_wire(text: str) -> ProtocolControlAgentWire:
             "PROVIDER_ID_FORBIDDEN",
             f"provider 不得生成系统身份字段 {path}（{key}）",
         )
-    _strip_invalid_evaluation_specs(payload)
     try:
         return ProtocolControlAgentWire.model_validate(payload)
     except ValidationError as exc:

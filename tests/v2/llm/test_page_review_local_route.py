@@ -33,6 +33,18 @@ def test_read_only_identity_needs_no_model_credentials(monkeypatch):
         require_page_reader_routes()
 
 
+def test_remote_provider_never_receives_another_providers_fallback_key():
+    with pytest.raises(harness.PageReviewConfigError, match="PAGE_REVIEW_MAIN_A_API_KEY"):
+        require_page_reader_routes({
+            "PAGE_REVIEW_MAIN_A_PROVIDER": "ollama-cloud",
+            "PAGE_REVIEW_MAIN_A_MODEL": "deepseek-v4.1-flash",
+            "PAGE_REVIEW_MAIN_A_BASE_URL": "https://ollama.com/v1",
+            "INDEPENDENT_VLM_API_KEY": "zhipu-only-key",
+            "PAGE_REVIEW_MAIN_B_PROVIDER": "mtplx",
+            "PAGE_REVIEW_MAIN_B_MODEL": "mtplx-flash-next-optimized-speed",
+        })
+
+
 @pytest.mark.parametrize("loaded,capabilities,valid", [(True, ["vision"], True),
                                                        (False, ["vision"], False),
                                                        (True, ["chat"], False)])

@@ -21,7 +21,9 @@ from app.services.eligibility_review_projection import (
 )
 from app.services.judgment_gap_selection import missing_judgment_predicates
 from app.services.qualified_binding_selection import (
+    ReceiptVerifiedWorkDraftSelections,
     ReceiptVerifiedQualifiedBindingSelections,
+    assert_receipt_verified_selections_match_review_context,
     assert_qualified_selections_match_review_context,
 )
 
@@ -146,6 +148,17 @@ def _qualification_inputs(value) -> tuple[ReceiptVerifiedQualifiedBindingSelecti
     return tuple(sorted(value, key=lambda item: item.candidate_family))
 
 
+def _work_draft_inputs(value) -> tuple[ReceiptVerifiedWorkDraftSelections, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, ReceiptVerifiedWorkDraftSelections):
+        return (value,)
+    if (not isinstance(value, Sequence) or isinstance(value, (str, bytes)) or not value
+            or any(not isinstance(item, ReceiptVerifiedWorkDraftSelections) for item in value)):
+        raise ValueError("工作稿资格选择须为回执已核实的官方条件或补充要求清单")
+    return tuple(sorted(value, key=lambda item: item.candidate_family))
+
+
 def calculate_frozen_review(
     frozen: ReviewContextSnapshotV2, rule_set: RuleSet,
     *,
@@ -153,6 +166,7 @@ def calculate_frozen_review(
     control_input: ControlBindingFrozenInput | None = None,
     control_selections: Mapping[str, Sequence[str]] | None = None,
     qualified_binding_selections: ReceiptVerifiedQualifiedBindingSelections | Sequence[ReceiptVerifiedQualifiedBindingSelections] | None = None,
+    work_draft_selections: ReceiptVerifiedWorkDraftSelections | Sequence[ReceiptVerifiedWorkDraftSelections] | None = None,
 ) -> FrozenReviewCalculation:
     """Calculate explicit selections without category fallback or publication.
 
@@ -178,18 +192,41 @@ def calculate_frozen_review(
     # replace the clinical requirements frozen for this review.
     pack = frozen.clause_pack
     component_ids = {clause.rule_component_id for clause in pack.clauses}
-    (
-        predicate_fact_ids_by_component,
-        control_input,
-        control_selections,
-    ) = _resolve_selection_inputs(
-        predicate_fact_ids_by_component=predicate_fact_ids_by_component,
-        control_input=control_input,
-        control_selections=control_selections,
-        qualified_binding_selections=qualified_binding_selections,
-        frozen=frozen,
-        rule_set=rule_set,
-    )
+    draft_items = _work_draft_inputs(work_draft_selections)
+    formal_items = _qualification_inputs(qualified_binding_selections)
+    if draft_items:
+        if (qualified_binding_selections is not None
+                or any(value is not None for value in (
+                    predicate_fact_ids_by_component, control_input, control_selections,
+                ))):
+            raise ValueError("工作稿选择不能夹带正式授权或手工资料选择")
+        by_family = {item.candidate_family: item for item in draft_items}
+        expected_families = {"predicate"}
+        if pack.control_publication is not None and pack.control_publication.catalog.controls:
+            expected_families.add("control")
+        if len(by_family) != len(draft_items) or set(by_family) != expected_families:
+            raise ValueError("工作稿须同时包含本次官方条款和补充要求的完整核对结果")
+        for item in draft_items:
+            assert_receipt_verified_selections_match_review_context(
+                frozen_review=frozen, rule_set=rule_set, selections=item,
+            )
+        predicate_fact_ids_by_component = by_family["predicate"].predicate_fact_ids_by_component
+        control = by_family.get("control")
+        control_input = None if control is None else control.control_input
+        control_selections = None if control is None else control.control_selections
+    else:
+        (
+            predicate_fact_ids_by_component,
+            control_input,
+            control_selections,
+        ) = _resolve_selection_inputs(
+            predicate_fact_ids_by_component=predicate_fact_ids_by_component,
+            control_input=control_input,
+            control_selections=control_selections,
+            qualified_binding_selections=qualified_binding_selections,
+            frozen=frozen,
+            rule_set=rule_set,
+        )
     if (not isinstance(predicate_fact_ids_by_component, Mapping)
             or set(predicate_fact_ids_by_component) != component_ids
             or any(not isinstance(value, Mapping)
@@ -199,7 +236,30 @@ def calculate_frozen_review(
     control_relations = ()
     control_pair_gaps = ()
     control_ordering = {}
-    for item in _qualification_inputs(qualified_binding_selections):
+    for item in draft_items:
+        if item.candidate_family == "control":
+            final_identities = set(item.control_selections or {})
+            control_ordering = {
+                outcome.identity_sha256: outcome.observation_ordering
+                for outcome in item.identity_outcomes
+                if outcome.observation_ordering is not None
+                and outcome.identity_sha256 in final_identities
+            }
+            control_unverified = {
+                outcome.identity_sha256: tuple(outcome.unresolved_reasons)
+                for outcome in item.identity_outcomes
+                if outcome.status == "unresolved"
+                and outcome.identity_sha256 in final_identities
+            }
+            control_relations = [
+                relation for relation in item.proposition_relations
+                if relation["identity_sha256"] in final_identities
+            ]
+            control_pair_gaps = [
+                gap for gap in item.unresolved_proposition_pairs
+                if gap["identity_sha256"] in final_identities
+            ]
+    for item in formal_items:
         if item.candidate_family == "control":
             final_identities = set(item.control_selections or {})
             control_ordering = {outcome.identity_sha256: outcome.observation_ordering
@@ -231,8 +291,9 @@ def calculate_frozen_review(
         accepted_fact_ids=[item.fact_id for item in adapted], facts=adapted,
         anchor_dates=dict(frozen.review_episode.anchor_dates),
     )
+    calculation_items = draft_items or formal_items
     repeat_condition_calculations = []
-    for item in _qualification_inputs(qualified_binding_selections):
+    for item in calculation_items:
         if item.candidate_family == "predicate":
             from app.services.repeat_trigger_calculation import calculate_repeat_trigger_conditions
             repeat_results = calculate_repeat_trigger_conditions(item, context)
@@ -244,20 +305,20 @@ def calculate_frozen_review(
         } for value in repeat_results)
     from app.services.repeat_result_resolution import resolve_repeat_result_selection
     repeat_result_resolutions = tuple(
-        value for item in _qualification_inputs(qualified_binding_selections)
+        value for item in calculation_items
         for value in resolve_repeat_result_selection(item, repeat_condition_calculations)
     )
     from app.services.repeat_atom_calculation import calculate_repeat_atoms
     repeat_atom_evaluations = {
         item.candidate_family: calculate_repeat_atoms(item, context, repeat_result_resolutions)
-        for item in _qualification_inputs(qualified_binding_selections)
+        for item in calculation_items
     }
     repeat_by_component = {}
     predicate_fact_ids_by_component = {
         parent: {key: list(values) for key, values in choices.items()}
         for parent, choices in predicate_fact_ids_by_component.items()
     }
-    for item in _qualification_inputs(qualified_binding_selections):
+    for item in calculation_items:
         evaluated = repeat_atom_evaluations[item.candidate_family]
         if item.candidate_family == "predicate":
             for component in item.predicate_frozen_input.components:
@@ -281,10 +342,10 @@ def calculate_frozen_review(
     from app.services.frequency_atom_calculation import calculate_frequency_atoms
     frequency_atom_evaluations = {
         item.candidate_family: calculate_frequency_atoms(item, context)
-        for item in _qualification_inputs(qualified_binding_selections)
+        for item in calculation_items
     }
     frequency_by_component = {}
-    for item in _qualification_inputs(qualified_binding_selections):
+    for item in calculation_items:
         evaluated = frequency_atom_evaluations[item.candidate_family]
         if item.candidate_family == "predicate":
             for component in item.predicate_frozen_input.components:
@@ -309,7 +370,7 @@ def calculate_frozen_review(
     summaries = {item.summary.requirement_id: item.summary for item in frozen.judgment_search_results}
     unverified_by_component = {}
     proposition_by_component = {}
-    for item in _qualification_inputs(qualified_binding_selections):
+    for item in calculation_items:
         if item.candidate_family != "predicate":
             continue
         from app.services.predicate_proposition_calculation import calculate_predicate_propositions
@@ -334,7 +395,7 @@ def calculate_frozen_review(
             )
     result = []
     verified_judgment_requirements = frozenset(
-        requirement for item in _qualification_inputs(qualified_binding_selections)
+        requirement for item in calculation_items
         for requirement in item.material.verified_judgment_requirement_ids
     )
     for clause in pack.clauses:
@@ -381,7 +442,7 @@ def calculate_frozen_review(
         },
         "controls": controls.selections_sha256 if controls is not None else None,
     }
-    if qualified_binding_selections is not None:
+    if calculation_items:
         selection_payload["repeat_condition_calculations"] = repeat_condition_calculations
         selection_payload["frequency_atom_evaluations"] = {
             family: {key: value.model_dump(mode="json") for key, value in items.items()}
@@ -393,11 +454,22 @@ def calculate_frozen_review(
             for family, items in repeat_atom_evaluations.items()
         }
         selection_payload["qualification_gap_policy_version"] = "unverified-predicate/v2"
-        selection_payload["qualified_binding_selections"] = [
-            {"family": item.candidate_family,
-             "selection_sha256": item.material.selection_sha256,
-             "frozen_input_sha256": item.material.frozen_input_sha256}
-            for item in _qualification_inputs(qualified_binding_selections)
+        if formal_items:
+            selection_payload["qualified_binding_selections"] = [
+                {"family": item.candidate_family,
+                 "selection_sha256": item.material.selection_sha256,
+                 "frozen_input_sha256": item.material.frozen_input_sha256}
+                for item in formal_items
+            ]
+    if draft_items:
+        selection_payload["work_draft_policy_version"] = "receipt-verified-work-draft/v1"
+        selection_payload["work_draft_selections"] = [
+            {
+                "family": item.candidate_family,
+                "selection_sha256": item.selection_sha256,
+                "frozen_input_sha256": item.frozen_input_sha256,
+            }
+            for item in draft_items
         ]
     return FrozenReviewCalculation(
         context_sha256=frozen.context_sha256,
@@ -409,7 +481,7 @@ def calculate_frozen_review(
         frequency_atom_evaluations=frequency_atom_evaluations,
         qualification_materials=tuple(
             item.material.model_copy(deep=True)
-            for item in _qualification_inputs(qualified_binding_selections)
+            for item in formal_items
         ),
         control_outcomes=(project_control_review_outcomes(control_input, controls, observation_ordering=control_ordering)
                           if controls is not None else ()),

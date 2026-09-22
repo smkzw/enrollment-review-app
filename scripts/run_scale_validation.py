@@ -24,6 +24,7 @@ Usage (after build_scale_validation_set.py and backend on :8902):
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import hashlib
 import json
 import sys
@@ -74,7 +75,7 @@ def _write_report(out: Path, report: dict) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project", required=True)
-    parser.add_argument("--set", dest="set_dir", default="runs/execution/wp08-scale-validation")
+    parser.add_argument("--set", dest="set_dir", required=True)
     parser.add_argument("--subject-code", required=True)
     parser.add_argument("--center-code", default="SC1")
     parser.add_argument("--center-name", default="规模验证中心")
@@ -86,15 +87,23 @@ def main() -> int:
         (Path(args.set_dir) / "manifest.json").read_text(encoding="utf-8")
     )
     expected_files = manifest["total_files"]
-    expected_pages = manifest["total_pages"]
+    expected_pages = manifest.get("known_pages", manifest.get("total_pages"))
     report: dict = {
         "set": {"files": expected_files, "pages": expected_pages},
         "steps": {},
         "metrics": {},
     }
-    out = Path(args.set_dir).parent / "report.json"
+    out = Path(args.set_dir) / "report.json"
 
     try:
+        if not manifest.get("page_inventory_complete", False):
+            raise StepFailure(
+                "资料清单",
+                "存在无法确认页数的文件，不能据此进行完整性验收",
+            )
+        if not isinstance(expected_pages, int) or expected_pages < 1:
+            raise StepFailure("资料清单", "没有可核对的已知页面")
+
         # 1. subject（只创建自己的对象；冲突即失败，不静默复用他者）
         r = requests.post(
             f"{BASE}/api/v2/projects/{args.project}/subjects",
@@ -128,22 +137,24 @@ def main() -> int:
         print("episode:", episode_id)
 
         # 3. upload（逐文件按真实媒体类型）
-        handles = []
-        for f in manifest["files"]:
-            media = ("application/pdf" if f["media_type"] == "pdf"
-                     else f"image/{f['media_type']}")
-            handles.append(("files", (f["file_name"], open(f["staged_path"], "rb"), media)))
-        r = requests.post(
-            f"{BASE}/api/v2/subjects/{subject_id}/evidence-upload-previews",
-            data={
-                "review_episode_id": episode_id,
-                "upload_mode": "full",
-                "base_revision": "1",
-                "actor": args.actor,
-            },
-            files=handles,
-            timeout=600,
-        )
+        with ExitStack() as stack:
+            handles = []
+            for entry in manifest["files"]:
+                handle = stack.enter_context(open(entry["staged_path"], "rb"))
+                handles.append(("files", (
+                    entry["upload_name"], handle, entry["media_type"],
+                )))
+            r = requests.post(
+                f"{BASE}/api/v2/subjects/{subject_id}/evidence-upload-previews",
+                data={
+                    "review_episode_id": episode_id,
+                    "upload_mode": "full",
+                    "base_revision": "1",
+                    "actor": args.actor,
+                },
+                files=handles,
+                timeout=600,
+            )
         preview = _check(r, "upload-preview")
         r = requests.post(
             f"{BASE}/api/v2/evidence-upload-previews/{preview['preview_id']}/commit",
@@ -151,7 +162,10 @@ def main() -> int:
                 "preview_sha256": preview["preview_sha256"],
                 "upload_mode": "full",
                 "base_revision": 1,
-                "idempotency_key": f"{args.actor}-scale-{manifest['total_pages']}p",
+                "idempotency_key": (
+                    f"{args.actor}-scale-"
+                    f"{hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()}"
+                ),
                 "actor": args.actor,
             },
             timeout=600,

@@ -1,6 +1,6 @@
 # Enrollment Review App Project Context
 
-> 2026-09-17 当前执行入口：用户已采用 V3 内置方案Agent + 主OCR/局部VLM/人工真实来源路线，取消全量双VLM及所有角色统一65K要求。以 `.trellis/tasks/09-11-e2e-eligibility-review/research/ENROLLMENT_REVIEW_AGENT_RECOVERY_V3_20260917.md` 与该任务 `prd.md/design.md/implement.md` 为本轮增量；分工见 `AGENT_ASSIGNMENTS_V3_20260917.md`。下文冲突的旧路线/顺序仅作历史，非当前默认。此次只完成分工文档与Goal正文同步，未运行产品、未宣布验收；原Phase剩余范围保留，claims_complete=false。细节按实际修改章节由接手者局部更新，不重建规划。
+> 2026-09-22现行入口：`.trellis/tasks/09-11-e2e-eligibility-review/delivery_20260922/00_START_HERE.md`；当前PRD/设计/唯一进度为该任务prd.md、design.md、implement.md。延续V3内置前置方案Agent及主OCR/局部核实真实来源，取消全量双读默认。本轮核对e7f34d05/GitHub与专家0922V2后形成W0–W7、Q1–Q3实施验收包，产品缺陷尚未修复、claims_complete=false。以下历史“当前/最新/默认/已完成”须按日期理解，冲突处以本入口和现场证据为准。不要运行历史作业或照抄旧模型配置。
 
 
 **2026-09-16恢复授权后最新**：用户已要求继续，并新增双本地模型不同思考档位比较及内存重叠核查；本段覆盖下方历史暂停。六次隔离真实页读均未建立可采信质量（Flash Next xhigh断流），不改正式默认档位。连续观测本次未见双自有进程共驻留，单模型长输入仍可使系统wired达约109GiB；不把此当作历史无重叠或OOM定论。MTPLX缺产品装卸清单现在拒绝调用；原生CLI实验路径保留。页读失败异常链及模型生命周期记录已补。独立源码审阅已完成，原件视觉QC仍由主场核对，不能当临床验收。
@@ -4025,3 +4025,11 @@ OCR concurrency note:
 - 31001 筛选与基线均已有活动完整证据修订，但 facts/events/exposures/profiles 仍为 0，`claims_complete=false`。旧规范化作业已合法取消，旧 502 是冻结 27B 身份与 8002 实际 Flash-Next 身份错配。
 - 本地 Flash-Next 规范化单页历史耗时约 46 分钟，不能直接全量续跑。下一安全动作是先做项目无关的输入合同压缩或采用经批准的独立语义路由，并以单页速度与临床事实质量双闸门决定是否新建全量作业。
 - `8900` 当前属于另一 Vibe-Research 服务，不是入排审核主应用；本任务专用 V2 为 `8910`。恢复依据为 `.trellis/tasks/08-22-phase5-clinical-facts-profile/CHECKPOINT_20260903_R3_RECONCILIATION_AND_CLEANUP.md`。
+
+## 2026-09-22 端到端审核 W0-W5 与 Q2 收口
+
+- 当前现行恢复入口为`.trellis/tasks/09-11-e2e-eligibility-review/CHECKPOINT_20260922_Q2_PAUSED.md`；早期全页双VLM、固定模型横评和旧Phase 5暂停点仅作历史证据，不得覆盖本轮W3“可靠文字主读 + 风险页局部视觉核实”的产品裁决。
+- W0-W5已实现并通过Q1/Q2：正式方案控制共同发布、工作稿与正式结果共享资格范围、风险页不漏页的选择性视觉链、中文宽屏审核台，以及病史更正后旧审核上下文失效。
+- Q2证据：前端生产构建通过；工作台/原件21项、后端跨层224项、病史更新失效2项通过；`git diff --check`通过。该结果是工程集中验证，不是临床验收。
+- 模型最小可用性已纠偏：OpenCode旧400是缺稳定会话头；MiMo/DeepSeek最小直连可用，Muse当次上游503；Ollama当前缺产品专用凭据。短调用不等于真实图片、长提示或临床质量可用。
+- 当前仍`claims_complete=false`。W6真实DOCX、新病例当前节点、工作稿/报告、一次更正补证尚未运行；W7第二结构、宽屏实操、性能、启停、备份恢复及Q3最终交付仍待完成。

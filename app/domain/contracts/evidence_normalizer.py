@@ -192,6 +192,7 @@ class EvidenceNormalizerPageReviewInput(ContractModel):
             item.reconciliation_id: item
             for item in self.entries
             if item.disposition == PageDisposition.ACCEPTED
+            and item.reconciliation_id is not None
         }
         reconciliations = {item.reconciliation_id: item for item in self.reconciliations}
         if set(reconciliations) != set(accepted):

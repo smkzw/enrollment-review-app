@@ -4,12 +4,17 @@ from app.domain.contracts.enums import TruthValue
 from app.domain.contracts.rules import AtomicExpression
 from app.domain.publication import canonical_hash
 from app.services.frequency_total_resolution import resolve_frequency_totals
-from app.services.qualified_binding_selection import ReceiptVerifiedQualifiedBindingSelections
+from app.services.qualified_binding_selection import (
+    ReceiptVerifiedQualifiedBindingSelections,
+    ReceiptVerifiedWorkDraftSelections,
+)
 
 
 def calculate_frequency_atoms(selections, context, *, condition_selection=None):
     """Preserve source and rule identities; this does not authorize publication."""
-    if not isinstance(selections, ReceiptVerifiedQualifiedBindingSelections):
+    if not isinstance(selections, (
+        ReceiptVerifiedQualifiedBindingSelections, ReceiptVerifiedWorkDraftSelections,
+    )):
         raise TypeError("频次计算须使用本次来源核实结果")
     selections.require_unchanged()
     scoped_outcomes = None

@@ -355,6 +355,20 @@ class _DeepTransport:
                                     {
                                         "kind": ControlObligationKind.REACH_CONDITION.value,
                                         "statement": "record source state",
+                                        "evaluation": {
+                                            "determination_mode": "semantic",
+                                            "proposition": "record source state",
+                                            "time_purpose": "not_applicable",
+                                            "repeat_scheme": None,
+                                            "observation_policy": {
+                                                "mode": "unresolved",
+                                                "scope": "synthetic fixture has no record selection rule",
+                                                "source_span_ids": span_ids,
+                                                "source_excerpts": excerpts,
+                                            },
+                                            "source_span_ids": span_ids,
+                                            "source_excerpts": excerpts,
+                                        },
                                         "time_constraint": None,
                                         "prospective_period": None,
                                         "modality": "mandatory",
@@ -369,6 +383,7 @@ class _DeepTransport:
                         ]
                     },
                     "exception_expression": None,
+                    "repeat_trigger_conditions": [],
                     "review_node_bindings": [
                         {
                             "workflow_stage_id": stage["workflow_stage_id"],
@@ -383,6 +398,22 @@ class _DeepTransport:
                             "description": "source evidence",
                             "due_stage": stage["review_stage"],
                             "required_source_types": ["source"],
+                            "workflow_stage_ids": [stage["workflow_stage_id"]],
+                            "source_policy": {
+                                "requires_contemporaneous_objective_source": None,
+                                "allows_screening_record_transcription": None,
+                                "result_validity_status": "not_specified",
+                                "result_validity_constraint": None,
+                                "source_span_ids": span_ids,
+                                "source_excerpts": excerpts,
+                            },
+                            "atom_refs": [
+                                {
+                                    "layer": "obligation",
+                                    "group_index": 0,
+                                    "atom_index": 0,
+                                }
+                            ],
                         }
                     ],
                     "source_structure_unit_ids": [unit_id],
@@ -630,7 +661,7 @@ def test_uncertain_deep_is_final_without_blind_retry(data_paths, session_factory
     assert snapshot.state == "failed_final"
     deep_step = next(step for step in snapshot.steps if step.step_id.startswith("deep_"))
     assert deep_step.state == "failed_final"
-    assert deep_step.error_code == "PROTOCOL_CONTROL_DEEP_NEEDS_REVIEW"
+    assert deep_step.error_code == "PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID"
     assert deep.start_calls == 1
     assert deep.continue_calls == 0
     assert not runner.run_job(result.job_id)

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -47,9 +47,7 @@ def prepare_control_catalog_publication(
     published_stages: Sequence[WorkflowStage], project_id: str, created_at: datetime,
 ) -> ControlCatalogPublication:
     """Read explicit completed identities; no latest selection, writes or model calls."""
-    import sys; print('PREPARE_CONTROL_CALLED', file=sys.stderr)
-    from datetime import timezone as tz
-    created_at = created_at if created_at.tzinfo else created_at.replace(tzinfo=tz.utc)
+    created_at = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
     job = session.get(JobRecord, source_job_id)
     checkpoint = session.get(JobCheckpointRecord, source_checkpoint_id)
     step = session.get(JobStepRecord, (source_job_id, STEP_GATE))
@@ -60,20 +58,79 @@ def prepare_control_catalog_publication(
     payload = verify_payload_sha256(job.payload_json, job.payload_sha256)
     result = verify_payload_sha256(checkpoint.payload_json, checkpoint.payload_sha256)
     current = JobStore(session).get_last_checkpoint(source_job_id, STEP_GATE)
-    import sys; print(f"PUBLISH_DEBUG: current_ckpt={current[0] if current else None} expected={source_checkpoint_id} match={current is not None and current[0] == source_checkpoint_id}", file=sys.stderr)
     if current is None or current[0] != source_checkpoint_id:
         raise ScopeViolationError("补充审核要求的整理结果已变化，请重新查看后发布")
-    # 一次性绕过绑定检查（source_input已确认匹配，checkpoint唯一且正确）；
-    # 完整校验将在后续版本中恢复。
-    pass
+
+    expected_source_input = source_input.model_dump(mode="json")
+    expected_source_spans = {
+        span_id: span.model_dump(mode="json")
+        for span_id, span in source_spans.items()
+    }
+    if payload.get("source_input") != expected_source_input:
+        raise ScopeViolationError("补充审核要求与当前方案解构输入不一致")
+    if payload.get("source_spans") != expected_source_spans:
+        raise ScopeViolationError("补充审核要求与当前方案原文定位不一致")
+    if (
+        draft.project_id != source_input.project_id
+        or draft.protocol_version_id != source_input.protocol_version_id
+        or draft.selected_phase != source_input.selected_phase
+        or rule_set.protocol_version_id != source_input.protocol_version_id
+        or rule_set.study_phase != source_input.selected_phase
+    ):
+        raise ScopeViolationError("补充审核要求与当前草稿、规则版本或研究期别不一致")
+
+    coverage_manifest = ProtocolSectionCoverageManifest.model_validate(
+        payload["coverage_manifest"]
+    )
+    if (
+        coverage_manifest.protocol_version_id != source_input.protocol_version_id
+        or coverage_manifest.protocol_document_sha256
+        != source_input.protocol_file_sha256
+        or coverage_manifest.study_phase != source_input.selected_phase
+        or coverage_manifest.snapshot_id != source_input.extraction_snapshot_id
+        or payload.get("source_snapshot_id") != source_input.extraction_snapshot_id
+    ):
+        raise ScopeViolationError("补充审核要求的全文覆盖清单不属于当前方案版本")
+    if (
+        result.get("stage") != "gate"
+        or result.get("gate_version") != CONTROL_PUBLICATION_GATE_VERSION
+        or result.get("accepted") is not True
+        or result.get("result_kind") != CANDIDATE_CONTROL_PACKAGE_RESULT_KIND
+        or result.get("formal_catalog_status")
+        != FORMAL_CATALOG_STATUS_NOT_MATERIALIZED
+        or result.get("coverage_manifest_id") != coverage_manifest.manifest_id
+    ):
+        raise ScopeViolationError("补充审核要求的最终核对记录不完整或版本不一致")
+
     plan = ProtocolControlBatchPlan.model_validate(result["publication_plan"])
     batches = tuple(ProtocolControlBatchDispositionHydrated.model_validate(item)
                     for item in result["batch_dispositions"])
+    expected_unit_ids = [unit.structure_unit_id for unit in coverage_manifest.units]
+    if (
+        plan.coverage_manifest_id != coverage_manifest.manifest_id
+        or plan.protocol_version_id != source_input.protocol_version_id
+        or plan.study_phase != source_input.selected_phase
+        or set(plan.expected_structure_unit_ids) != set(expected_unit_ids)
+    ):
+        raise ScopeViolationError("补充审核要求的处置计划未覆盖当前方案全部结构单元")
+    planned_batches = {batch.batch_id: batch for batch in plan.batches}
+    hydrated_batches = {batch.batch_id: batch for batch in batches}
+    if set(planned_batches) != set(hydrated_batches):
+        raise ScopeViolationError("补充审核要求的已核对批次与处置计划不一致")
+    for batch_id, hydrated in hydrated_batches.items():
+        planned = planned_batches[batch_id]
+        if (
+            hydrated.coverage_manifest_id != coverage_manifest.manifest_id
+            or hydrated.owned_structure_unit_ids
+            != planned.owned_structure_unit_ids
+            or hydrated.owned_source_span_ids != planned.owned_source_span_ids
+        ):
+            raise ScopeViolationError("补充审核要求的批次来源范围与处置计划不一致")
     candidate_ids = sorted(item.control_candidate_id for batch in batches for item in batch.candidates)
     if result.get("candidate_ids") != candidate_ids or result.get("publication_plan_id") != plan.plan_id:
         raise ScopeViolationError("补充审核要求保存的完整候选集合不一致")
     catalog = materialize_control_catalog(
-        coverage_manifest=ProtocolSectionCoverageManifest.model_validate(payload["coverage_manifest"]),
+        coverage_manifest=coverage_manifest,
         plan=plan, batch_dispositions=batches,
         rule_component_ids=[component.rule_component_id for rule in rule_set.rules for component in rule.components],
     )

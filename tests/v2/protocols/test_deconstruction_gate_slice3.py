@@ -43,6 +43,7 @@ from app.domain.contracts.protocol_metadata import (
     StudyPhaseSelection,
 )
 from app.domain.contracts.occurrence_scope import OccurrenceScope
+from app.domain.contracts.observation_selection import ObservationPolicy
 from app.domain.contracts.rules import (
     AtomicExpression,
     AtomicPredicate,
@@ -123,6 +124,7 @@ def _predicate(
     time=None,
     judgment=False,
     source_clause=None,
+    observation_policy=None,
 ):
     return AtomicExpression(
         predicate=AtomicPredicate(
@@ -135,6 +137,7 @@ def _predicate(
             value=value,
             unit=unit,
             requires_professional_judgment=judgment,
+            observation_policy=observation_policy,
         ),
         time_constraint=time,
     )
@@ -273,7 +276,17 @@ def _fixture():
         display_code="IN-01a",
         title="年龄要求",
         expression=_predicate(
-            "predicate-age", "年龄", 18, "岁", source_clause="年龄≥18岁"
+            "predicate-age",
+            "年龄",
+            18,
+            "岁",
+            source_clause="年龄≥18岁",
+            observation_policy=ObservationPolicy(
+                mode="unresolved",
+                scope="方案原文未明确多次年龄记录的采用方式",
+                source_span_ids=["span-in"],
+                source_excerpts=["年龄≥18岁"],
+            ),
         ),
         evidence_requirements=[in_req],
     )
@@ -291,6 +304,12 @@ def _fixture():
                     1.5,
                     "ULN",
                     source_clause="ALT或AST≥1.5×ULN",
+                    observation_policy=ObservationPolicy(
+                        mode="unresolved",
+                        scope="方案原文未明确多次肝功能结果的采用方式",
+                        source_span_ids=["span-ex"],
+                        source_excerpts=["ALT或AST≥1.5×ULN"],
+                    ),
                 ),
                 _predicate(
                     "predicate-ast",
@@ -298,6 +317,12 @@ def _fixture():
                     1.5,
                     "ULN",
                     source_clause="ALT或AST≥1.5×ULN",
+                    observation_policy=ObservationPolicy(
+                        mode="unresolved",
+                        scope="方案原文未明确多次肝功能结果的采用方式",
+                        source_span_ids=["span-ex"],
+                        source_excerpts=["ALT或AST≥1.5×ULN"],
+                    ),
                 ),
             ],
         ),

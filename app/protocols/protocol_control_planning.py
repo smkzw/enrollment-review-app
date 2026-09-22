@@ -813,19 +813,6 @@ def validate_protocol_control_discovery_results(
             "发现处置必须按原文顺序恰好覆盖完整清单。",
         )
 
-    for decision in decisions:
-        # 上下文引用与处置跨批一致化（2026-09-19）：non_control 处置是同管道
-        # 的权威判定，候选把它列为“阅读上下文”属跨批阅读请求残留；确定性
-        # 剔除并记录，不改变候选自身语义，也不再失败关闭阻塞整条链。
-        trimmed_context = [
-            context_id
-            for context_id in decision.required_context_structure_unit_ids
-            if decision_by_id[context_id].disposition
-            != ProtocolControlDiscoveryDisposition.NON_CONTROL
-        ]
-        if len(trimmed_context) != len(decision.required_context_structure_unit_ids):
-            decision.required_context_structure_unit_ids[:] = trimmed_context
-
     deep_ids = [
         decision.structure_unit_id
         for decision in decisions

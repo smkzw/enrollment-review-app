@@ -1,5 +1,7 @@
 # 入排审核系统 R3 接回修订实施计划
 
+> 2026-09-22现行实施：沿用09-11任务，入口`.trellis/tasks/09-11-e2e-eligibility-review/delivery_20260922/00_START_HERE.md`，prd/design/implement与W0–W7、Q1–Q3覆盖下文过期顺序/模型默认/完成状态。本文保留历史设计依据与未冲突范围，不能据旧暂停或旧测试恢复临床作业。当前claims_complete=false。
+
 > 2026-09-17 当前执行入口：用户已采用 V3 内置方案Agent + 主OCR/局部VLM/人工真实来源路线，取消全量双VLM及所有角色统一65K要求。以 `.trellis/tasks/09-11-e2e-eligibility-review/research/ENROLLMENT_REVIEW_AGENT_RECOVERY_V3_20260917.md` 与该任务 `prd.md/design.md/implement.md` 为本轮增量；分工见 `AGENT_ASSIGNMENTS_V3_20260917.md`。下文冲突的旧路线/顺序仅作历史，非当前默认。此次只完成分工文档与Goal正文同步，未运行产品、未宣布验收；原Phase剩余范围保留，claims_complete=false。细节按实际修改章节由接手者局部更新，不重建规划。
 
 

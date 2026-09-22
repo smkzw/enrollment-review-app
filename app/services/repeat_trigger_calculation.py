@@ -6,7 +6,10 @@ from app.domain.contracts.enums import TruthValue
 from app.domain.expression import EvaluationContext, EvaluationResult, _evaluate_bound_predicates, _combine_bound_expression
 from app.domain.publication import canonical_hash
 from app.services.predicate_proposition_calculation import calculate_predicate_propositions
-from app.services.qualified_binding_selection import ReceiptVerifiedQualifiedBindingSelections
+from app.services.qualified_binding_selection import (
+    ReceiptVerifiedQualifiedBindingSelections,
+    ReceiptVerifiedWorkDraftSelections,
+)
 from app.services.eligibility_review_projection import _phase3_date_value
 from app.services.repeat_condition_selection import iter_scoped_repeat_conditions
 
@@ -29,10 +32,13 @@ class RepeatTriggerCalculation:
 
 
 def calculate_repeat_trigger_conditions(
-    selections: ReceiptVerifiedQualifiedBindingSelections, context: EvaluationContext,
+    selections: ReceiptVerifiedQualifiedBindingSelections | ReceiptVerifiedWorkDraftSelections,
+    context: EvaluationContext,
 ) -> tuple[RepeatTriggerCalculation, ...]:
     """Evaluate each sealed target scope; truth alone never authorizes replacement."""
-    if not isinstance(selections, ReceiptVerifiedQualifiedBindingSelections):
+    if not isinstance(selections, (
+        ReceiptVerifiedQualifiedBindingSelections, ReceiptVerifiedWorkDraftSelections,
+    )):
         raise TypeError("复查条件只能读取已核实回执的资料选择")
     selections.require_unchanged()
     source = selections.predicate_frozen_input

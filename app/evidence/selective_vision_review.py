@@ -70,7 +70,6 @@ SKIP_BLANK_OR_NO_CONTENT = "blank_or_no_content"
 SKIP_FAILED_PAGE = "failed_page"
 SKIP_MISSING_PAGE_IMAGE = "missing_page_image"
 SKIP_NO_RISK_REASON = "no_page_risk_reason"
-SKIP_BUDGET_EXCEEDED = "budget_exceeded"
 
 _NATIVE_TEXT_ROUTES = frozenset(
     {
@@ -146,6 +145,8 @@ class PageVisionTriageSignals:
     has_page_image: bool = False
     has_native_text: bool = False
     native_text_char_count: int = 0
+    has_ocr_text: bool = False
+    ocr_text_char_count: int = 0
     non_text_mark_count: int | None = None
     complex_layout_not_represented_by_native_text: bool = False
     native_extraction_anomaly: bool = False
@@ -159,6 +160,8 @@ class PageVisionTriageSignals:
             raise ValueError("PageVisionTriageSignals.page_ordinal must be >= 1")
         if self.native_text_char_count < 0:
             raise ValueError("native_text_char_count must be >= 0")
+        if self.ocr_text_char_count < 0:
+            raise ValueError("ocr_text_char_count must be >= 0")
         if self.ocr_confidence is not None and not (
             0.0 <= float(self.ocr_confidence) <= 1.0
         ):
@@ -315,13 +318,18 @@ def assess_page_vision_eligibility(
         bool(signals.has_native_text)
         and int(signals.native_text_char_count) >= NATIVE_TEXT_SUFFICIENT_CHARS
     )
+    sufficient_ocr = (
+        bool(signals.has_ocr_text)
+        and int(signals.ocr_text_char_count) >= NATIVE_TEXT_SUFFICIENT_CHARS
+    )
+    sufficient_primary_text = sufficient_native or sufficient_ocr
     marks = signals.non_text_mark_count
 
-    if media in _IMAGE_MEDIA_KINDS:
+    if media in _IMAGE_MEDIA_KINDS and not sufficient_primary_text:
         reasons.append(VISION_REASON_SCAN_OR_IMAGE_ONLY)
-    elif route == ExtractionRoute.VISION_OCR.value:
+    elif route == ExtractionRoute.VISION_OCR.value and not sufficient_primary_text:
         reasons.append(VISION_REASON_SCAN_OR_IMAGE_ONLY)
-    elif not sufficient_native and marks is not None and marks > 0:
+    elif not sufficient_primary_text and marks is not None and marks > 0:
         reasons.append(VISION_REASON_SCAN_OR_IMAGE_ONLY)
 
     if signals.complex_layout_not_represented_by_native_text:
@@ -364,7 +372,7 @@ def assess_page_vision_eligibility(
         )
 
     if (
-        not sufficient_native
+        not sufficient_primary_text
         and marks == 0
         and media not in _IMAGE_MEDIA_KINDS
         and route != ExtractionRoute.VISION_OCR.value
@@ -376,7 +384,7 @@ def assess_page_vision_eligibility(
             skip_reason=SKIP_BLANK_OR_NO_CONTENT,
         )
 
-    if route in _NATIVE_TEXT_ROUTES and sufficient_native:
+    if sufficient_primary_text:
         return PageVisionEligibility(
             source_ref=source_ref,
             page_ordinal=page_ordinal,
@@ -399,7 +407,11 @@ def plan_selective_vision_reviews(
     ocr_confidence_threshold: float | None = None,
     max_pages_per_call: int | None = None,
 ) -> SelectiveVisionPlan:
-    """为一批页面生成选择性视觉核验计划；超出预算的合格页改为跳过。"""
+    """为一批页面生成选择性视觉核验计划。
+
+    ``max_pages_per_call`` 只限定单次调用页数；所有合格页面均保留在计划中，
+    由观察服务分批处理，避免因单次调用上限静默漏页。
+    """
     is_enabled = SELECTIVE_VISION_ENABLED if enabled is None else bool(enabled)
     threshold = (
         SELECTIVE_VISION_OCR_CONFIDENCE_THRESHOLD
@@ -432,17 +444,6 @@ def plan_selective_vision_reviews(
         identities.add(identity)
         if not decision.eligible:
             skipped.append(decision)
-            continue
-        if len(eligible) >= budget:
-            skipped.append(
-                PageVisionEligibility(
-                    source_ref=decision.source_ref,
-                    page_ordinal=decision.page_ordinal,
-                    eligible=False,
-                    reasons=decision.reasons,
-                    skip_reason=SKIP_BUDGET_EXCEEDED,
-                )
-            )
             continue
         eligible.append(decision)
 
@@ -686,7 +687,6 @@ __all__ = [
     "NATIVE_TEXT_SUFFICIENT_CHARS",
     "SELECTIVE_VISION_PLAN_VERSION",
     "SKIP_BLANK_OR_NO_CONTENT",
-    "SKIP_BUDGET_EXCEEDED",
     "SKIP_FAILED_PAGE",
     "SKIP_MISSING_PAGE_IMAGE",
     "SKIP_NATIVE_TEXT_PRIMARY",

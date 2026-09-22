@@ -532,13 +532,6 @@ def _check_phase_applicability(
                 entity_id=unit_id,
             )
         scopes = {_value(scope) for scope in getattr(unit, "phase_scopes", ())}
-        print(f"DEBUG phase_check: unit_id={unit_id} phase_scopes={getattr(unit, 'phase_scopes', 'MISSING')} scopes={scopes} selected_scope={selected_scope}")
-        # 方案已确认单一期别时，个别结构单元的 UNKNOWN/MIXED phase_scopes
-        # 调和为已确认期别（通用：单元级歧义不阻塞已确认期别的方案发布）。
-        if selected_scope.value is not None and (
-            len(scopes) != 1 or scopes & {PhaseScope.UNKNOWN.value, PhaseScope.MIXED.value}
-        ):
-            scopes = {selected_scope.value}
         if len(scopes) != 1 or scopes & {
             PhaseScope.UNKNOWN.value,
             PhaseScope.MIXED.value,
@@ -834,14 +827,12 @@ def _check_required_procedure_visit_scope(
         )
     overbound = sorted(covered_visits - claimed_visits)
     if claimed_visits and overbound:
-        # 原文为访视范围权威：冻结目录项多出的访视确定性裁剪（2026-09-19 用户
-        # 裁定的通用调和路径），不再失败关闭阻塞发布。
-        overbound_keys = set(overbound)
-        targets[:] = [
-            target
-            for target in targets
-            if not (_visit_scope_keys(target.visit_instance) & overbound_keys)
-        ]
+        _fail(
+            "PROCEDURE_VISIT_SCOPE_OVERBOUND",
+            "流程必做处置链接了原文未声明的选定期访视："
+            + "、".join(_visit_scope_label(key) for key in overbound),
+            entity_id=disposition.structure_unit_id,
+        )
     linked_families = {
         target.semantic_family
         for target in targets
@@ -4502,10 +4493,28 @@ def validate_protocol_control_publication(
         unit_by_id,
         resolved_view=phase_applicability_view,
     )
-    # 期别/处置一致性调和（2026-09-19 用户裁定）：gate的期别适用性检查
-    # 与发现处置之间的不一致由下游深析候选级needs_review路径承接，
-    # 不在gate层失败关闭。所有期别适用处置均视为有效。
-    pass
+    for unit_id, phase_disposition in phase_disposition_by_unit.items():
+        actual_disposition = disposition_by_unit[unit_id].disposition
+        if (
+            phase_disposition
+            == PhaseApplicabilityDisposition.OPPOSITE_PHASE_APPLICABLE
+            and actual_disposition != StructureUnitDispositionKind.PHASE_EXCLUDED
+        ):
+            _fail(
+                "PHASE_EXCLUDED_DISPOSITION_REQUIRED",
+                "对侧期别结构单元必须明确标记为当前期别不适用",
+                entity_id=unit_id,
+            )
+        if (
+            phase_disposition
+            != PhaseApplicabilityDisposition.OPPOSITE_PHASE_APPLICABLE
+            and actual_disposition == StructureUnitDispositionKind.PHASE_EXCLUDED
+        ):
+            _fail(
+                "PHASE_EXCLUDED_DISPOSITION_CONFLICT",
+                "当前期别或跨期共享结构单元不得标记为当前期别不适用",
+                entity_id=unit_id,
+            )
     _check_legacy_manifest_compatibility(coverage_manifest, disposition_by_unit)
 
     all_candidates = plan_candidates

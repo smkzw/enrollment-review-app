@@ -66,7 +66,7 @@ from app.protocols.deconstruction_gate import (
     ProtocolDeconstructionGate,
     ProtocolDeconstructionGateResult,
 )
-from app.storage.codecs import utc_now
+from app.storage.codecs import PersistedContractInvalid, utc_now
 from app.storage.idempotency import IdempotencyRepository, request_hash
 from app.storage.models import IdempotencyRecordRow, ProjectRecord, RuleSetRecord
 from app.storage.repositories import (
@@ -392,8 +392,13 @@ class ProtocolPublicationService:
                     project_id=target_project.project_id if target_project is not None else draft.project_id,
                     created_at=self._published_at(request),
                 )
-            except (RepositoryError, ValueError, KeyError, TypeError) as exc:
-                import sys, traceback; print(f'CONTROL_PUB_ERROR: {type(exc).__name__}: {exc}', file=sys.stderr); traceback.print_exc(file=sys.stderr)
+            except (
+                RepositoryError,
+                PersistedContractInvalid,
+                ValueError,
+                KeyError,
+                TypeError,
+            ) as exc:
                 raise PublicationLineageError(
                     "control_publication_rejected", "补充审核要求与当前方案版本尚未核对一致，请返回方案整理查看。本次未发布。",
                 ) from exc

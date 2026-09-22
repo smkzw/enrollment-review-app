@@ -20,6 +20,66 @@ from app.storage.judgment_search_repository import JudgmentSearchSummaryReposito
 from app.storage.repositories import EpisodeRepository, ProjectRepository, SubjectRepository
 
 
+def review_clinical_material_sha256(
+    *,
+    facts,
+    fact_rule_links,
+    events,
+    medication_exposures,
+    expectations,
+    conflict_groups,
+) -> str:
+    """Content identity of the mutable clinical heads frozen into a review context."""
+    return canonical_hash({
+        "identity": "review-clinical-material/v1",
+        "facts": [item.model_dump(mode="json") for item in facts],
+        "fact_rule_links": [item.model_dump(mode="json") for item in fact_rule_links],
+        "events": [item.model_dump(mode="json") for item in events],
+        "medication_exposures": [item.model_dump(mode="json") for item in medication_exposures],
+        "expectations": [item.model_dump(mode="json") for item in expectations],
+        "conflict_groups": [item.model_dump(mode="json") for item in conflict_groups],
+    })
+
+
+def current_review_clinical_material_sha256(session: Session, authority) -> str:
+    """Rebuild the current clinical-head identity without creating a new context."""
+    profile = PatientProfileService()
+    facts = tuple(sorted(profile._published_facts(session, authority), key=lambda item: item.fact_id))
+    links_by_fact = FactRuleLinkV2Repository(session).list_for_facts(
+        [item.fact_id for item in facts], facts=facts,
+    )
+    links = tuple(sorted(
+        (link for values in links_by_fact.values() for link in values),
+        key=lambda item: item.link_id,
+    ))
+    return review_clinical_material_sha256(
+        facts=facts,
+        fact_rule_links=links,
+        events=tuple(sorted(profile._published_events(session, authority), key=lambda item: item.event_id)),
+        medication_exposures=tuple(sorted(
+            profile._published_exposures(session, authority), key=lambda item: item.exposure_id,
+        )),
+        expectations=tuple(sorted(
+            profile._latest_expectations(session, authority), key=lambda item: item.template_id,
+        )),
+        conflict_groups=tuple(sorted(
+            profile._published_conflicts(session, authority), key=lambda item: item.conflict_group_id,
+        )),
+    )
+
+
+def frozen_review_clinical_material_sha256(context: ReviewContextSnapshotV2) -> str:
+    """Read the same clinical-head identity from an immutable review context."""
+    return review_clinical_material_sha256(
+        facts=context.facts,
+        fact_rule_links=context.fact_rule_links,
+        events=context.events,
+        medication_exposures=context.medication_exposures,
+        expectations=context.expectations,
+        conflict_groups=context.conflict_groups,
+    )
+
+
 def assemble_review_context(
     session: Session, artifact_store: ArtifactStore, *, review_episode_id: str,
     review_run_id: str, evaluator_version: str, created_at: datetime,

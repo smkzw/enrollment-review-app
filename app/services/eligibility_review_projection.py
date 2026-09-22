@@ -6,12 +6,10 @@
 """
 from __future__ import annotations
 
-import json
-import os
 from dataclasses import asdict, dataclass
 from typing import Any, Iterable, Mapping
 
-from sqlalchemy import text
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.domain.contracts.clause_pack import ClausePackClause
@@ -36,6 +34,7 @@ from app.domain.contracts.judgment_search import (
     JudgmentSearchCoverageSummary,
 )
 from app.domain.contracts.rules import iter_atomic_predicates
+from app.domain.publication import canonical_hash
 from app.domain.expression import (
     ComponentEvaluation,
     EvaluationContext,
@@ -43,7 +42,7 @@ from app.domain.expression import (
 from app.domain.gates.assessment import (
     RequirementGapState,
 )
-from app.projections.clause_pack import project_clause_pack
+from app.services.published_clause_pack import project_published_clause_pack
 from app.services.fact_normalization_command_service import authority_from_active_episode
 from app.services.component_review import calculate_component_review
 from app.storage.evidence_expectation_repository import EvidenceExpectationV2Repository
@@ -160,6 +159,26 @@ class EligibilityUnassignedConflict:
 
 
 @dataclass(frozen=True)
+class EligibilityControlObligationProjection:
+    obligation_id: str
+    obligation_group_id: str
+    statement: str
+    status: str
+    status_label: str
+    reason: str
+    fact_refs: tuple[EligibilityFactRef, ...]
+
+
+@dataclass(frozen=True)
+class EligibilityControlProjection:
+    protocol_control_id: str
+    display_label: str
+    title: str
+    source_span_ids: tuple[str, ...]
+    obligations: tuple[EligibilityControlObligationProjection, ...]
+
+
+@dataclass(frozen=True)
 class EligibilityReviewProjection:
     subject_id: str
     review_episode_id: str
@@ -168,6 +187,7 @@ class EligibilityReviewProjection:
     evidence_snapshot_v2_id: str
     complete_processing_revision_id: str
     clauses: tuple[EligibilityClauseProjection, ...]
+    controls: tuple[EligibilityControlProjection, ...] = ()
     unassigned_conflicts: tuple[EligibilityUnassignedConflict, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
@@ -691,13 +711,30 @@ def _component_candidate_types(clause: ClausePackClause) -> dict[str, list[str]]
 class EligibilityReviewProjectionService:
     """装配当前审核节点入排条款读取投影；本服务不持有写入状态。"""
 
+    def __init__(self, artifact_store=None) -> None:
+        self.artifact_store = artifact_store
+
     def project(
         self, session: Session, review_episode_id: str
     ) -> EligibilityReviewProjection:
         authority = authority_from_active_episode(session, review_episode_id)
         episode = EpisodeRepository(session).get(review_episode_id)
         rule_set = get_rule_set(session, authority.rule_set_id, authority.rule_set_revision)
-        clause_pack = project_clause_pack(rule_set)
+        clause_pack = project_published_clause_pack(session, rule_set)
+        if not clause_pack.clauses and (
+            clause_pack.control_publication is None
+            or not clause_pack.control_publication.catalog.controls
+        ):
+            raise EligibilityReviewProjectionError("当前方案没有可审核的官方条款或补充要求")
+
+        frozen_work_draft = self._completed_work_draft(
+            session, authority=authority, rule_set=rule_set,
+        )
+        if frozen_work_draft is not None:
+            frozen, selections = frozen_work_draft
+            return self._project_frozen_work_draft(
+                session, frozen=frozen, rule_set=rule_set, selections=selections,
+            )
 
         facts = current_fact_heads(session, authority)
         clauses = tuple(clause_pack.clauses)
@@ -751,23 +788,20 @@ class EligibilityReviewProjectionService:
         summaries = JudgmentSearchSummaryRepository(session).latest_for_authority(authority)
         facts_by_id = {fact.fact_id: fact for fact in facts}
 
-        predicate_fact_ids = _load_binding_predicate_fact_ids(session, authority=authority)
-        if predicate_fact_ids is not None:
-            # 过滤：只保留当前evaluation context中accepted的fact_id，
-            # 防止binding frozen_input中的stale fact_id泄漏到求值。
-            accepted = set(context.accepted_fact_ids)
-            predicate_fact_ids = {
-                pid: [fid for fid in fids if fid in accepted]
-                for pid, fids in predicate_fact_ids.items()
-            }
-            # 清除空列表：空选择表示资格核对未确认任何事实，
-            # 留给evaluator按observation未核实处理（UNKNOWN，不冒充FALSE）。
-            predicate_fact_ids = {
-                pid: fids for pid, fids in predicate_fact_ids.items() if fids
-            } or None
         output: list[EligibilityClauseProjection] = []
         for clause in clauses:
             component = clause_to_rule_component(clause)
+            component_predicate_ids = {
+                predicate.predicate_id
+                for expression in (component.expression, component.exception_expression)
+                if expression is not None
+                for predicate in iter_atomic_predicates(expression)
+            }
+            # Without a completed current prepared-review workflow, every
+            # predicate remains explicitly unverified.  Supplying complete empty
+            # maps prevents the evaluator's legacy fact-type fallback from
+            # turning unqualified facts into a negative or positive conclusion.
+            component_fact_ids = {key: [] for key in component_predicate_ids}
             judgment_gaps = _summary_gap_requirements(
                 clause,
                 episode_stage=episode.stage,
@@ -778,6 +812,20 @@ class EligibilityReviewProjectionService:
             )
             component_context = context.model_copy(update={
                 "predicate_fact_type_aliases": _component_candidate_types(clause)})
+            requirement_stage_ids = {
+                requirement.requirement_id: templates_by_requirement[
+                    requirement.requirement_id
+                ].workflow_stage_id
+                for requirement in component.evidence_requirements
+                if requirement.requirement_id in templates_by_requirement
+            }
+            complete_requirement_stage_ids = (
+                requirement_stage_ids
+                if episode.workflow_stage_id is not None
+                and len(requirement_stage_ids)
+                == len(component.evidence_requirements)
+                else None
+            )
             result = calculate_component_review(
                 component=component,
                 rule_kind=clause.kind,
@@ -786,12 +834,10 @@ class EligibilityReviewProjectionService:
                 expectations=expectation_views,
                 conflicts=phase3_conflicts,
                 workflow_stage_id=episode.workflow_stage_id,
-                requirement_workflow_stage_ids={
-                    item.requirement_id: item.workflow_stage_id for item in templates
-                } if episode.workflow_stage_id is not None else None,
+                requirement_workflow_stage_ids=complete_requirement_stage_ids,
                 source_gaps=frozenset(judgment_gaps.values()),
-                predicate_fact_ids=_filter_for_component(
-                    predicate_fact_ids, component),
+                predicate_fact_ids=component_fact_ids,
+                unverified_predicate_ids=frozenset(component_predicate_ids),
             )
             evaluation = result.evaluation
             gaps = set(result.gaps)
@@ -835,6 +881,7 @@ class EligibilityReviewProjectionService:
             evidence_snapshot_v2_id=authority.evidence_snapshot_v2_id,
             complete_processing_revision_id=authority.complete_processing_revision_id,
             clauses=tuple(output),
+            controls=_unverified_control_projections(clause_pack),
             unassigned_conflicts=tuple(
                 EligibilityUnassignedConflict(
                     conflict_group_id=group.conflict_group_id,
@@ -845,7 +892,240 @@ class EligibilityReviewProjectionService:
             ),
         )
 
+    def _completed_work_draft(self, session, *, authority, rule_set):
+        """Load only the newest completed product workflow for this exact scope."""
+        if self.artifact_store is None:
+            return None
+        from app.services.prepared_review_workflow import (
+            PreparedReviewContinuation,
+            require_current_review_tasks,
+        )
+        from app.services.review_context_assembly import (
+            current_review_clinical_material_sha256,
+            frozen_review_clinical_material_sha256,
+        )
+        from app.services.qualified_binding_selection import (
+            build_receipt_verified_work_draft_selections,
+        )
+        from app.services.review_runtime_ownership import WORKFLOW_JOB_TYPE
+        from app.storage.codecs import verify_payload_sha256
+        from app.storage.models import JobRecord, ReviewContextSnapshotRecord
+        from app.storage.review_context_repository import ReviewContextV2Repository
+        from app.workflow.jobstore import JobStore
 
+        context_repository = ReviewContextV2Repository(session)
+        context_ids = [
+            row.context_id
+            for row in session.scalars(select(ReviewContextSnapshotRecord).where(
+                ReviewContextSnapshotRecord.review_episode_id == authority.review_episode_id,
+            ))
+            if context_repository.get(row.context_id).authority == authority
+        ]
+        if not context_ids:
+            return None
+        rows = list(session.scalars(select(JobRecord).where(
+            JobRecord.job_type == WORKFLOW_JOB_TYPE,
+            func.json_extract(JobRecord.payload_json, "$.review_context_id").in_(context_ids),
+        ).order_by(JobRecord.created_at.desc(), JobRecord.job_id.desc())))
+        for row in rows:
+            payload = verify_payload_sha256(row.payload_json, row.payload_sha256)
+            context_id = payload.get("review_context_id")
+            if context_id not in context_ids:
+                raise EligibilityReviewProjectionError("审核工作记录与当前资料范围不一致")
+            frozen = context_repository.get(context_id)
+            require_current_review_tasks(payload)
+            if (
+                current_review_clinical_material_sha256(session, authority)
+                != frozen_review_clinical_material_sha256(frozen)
+            ):
+                return None
+            # Never borrow an older completed result while a newer exact-scope
+            # workflow is still running, failed or cancelled.
+            if row.state != "completed":
+                return None
+            if frozen.rule_set_sha256 != canonical_hash(rule_set.model_dump(mode="json")):
+                raise EligibilityReviewProjectionError("工作稿对应的方案规则版本与当前节点不一致")
+            store = JobStore(session)
+            verification = store.get_last_checkpoint(row.job_id, "verification")
+            ready = store.get_last_checkpoint(row.job_id, "ready")
+            if verification is None or ready is None:
+                raise EligibilityReviewProjectionError("工作稿标记为完成，但核对步骤记录不完整")
+            if (ready[1].get("checks_complete") is not True
+                    or ready[1].get("clinical_adoption") is not False
+                    or ready[1].get("review_context_sha256") != frozen.context_sha256
+                    or ready[1].get("children") != verification[1].get("children")):
+                raise EligibilityReviewProjectionError("工作稿完成记录与本次资料不一致")
+            if not PreparedReviewContinuation._dependencies_complete(
+                session, row.job_id, payload, verification[1], "ready",
+            ):
+                raise EligibilityReviewProjectionError("工作稿仍有未完成的资料核对步骤")
+            children = ready[1]["children"]
+            families = ["predicate"]
+            if payload.get("includes_controls"):
+                families.append("control")
+            selections = tuple(
+                build_receipt_verified_work_draft_selections(
+                    session,
+                    self.artifact_store,
+                    qualification_job_id=children[f"{family}_qualification"],
+                    judgment_content_job_id=children.get(
+                        "judgment_content" if family == "predicate"
+                        else "control_judgment_content"
+                    ),
+                    proposition_evidence_job_id=children.get(
+                        f"{family}_proposition_evidence",
+                    ),
+                    observation_relation_job_id=children.get(
+                        f"{family}_observation_relation",
+                    ),
+                    frequency_evidence_job_id=children.get(
+                        f"{family}_frequency_evidence",
+                    ),
+                )
+                for family in families
+            )
+            return frozen, selections
+        return None
+
+    def _project_frozen_work_draft(self, session, *, frozen, rule_set, selections):
+        """Render a receipt-verified work draft without granting publication."""
+        from app.services.frozen_review_calculation import calculate_frozen_review
+
+        calculation = calculate_frozen_review(
+            frozen,
+            rule_set,
+            work_draft_selections=selections,
+        )
+        clauses = {item.rule_component_id: item for item in frozen.clause_pack.clauses}
+        facts_by_id = {item.fact_id: item for item in frozen.facts}
+        summaries = {
+            item.summary.requirement_id: item.summary
+            for item in frozen.judgment_search_results
+        }
+        output = []
+        for item in calculation.components:
+            clause = clauses[item.rule_component_id]
+            result = item.result
+            gap = _primary_gap(set(result.gaps))
+            decision = _decision_for_wire(result.decision)
+            output.append(EligibilityClauseProjection(
+                rule_component_id=clause.rule_component_id,
+                rule_code=clause.official_code,
+                rule_kind=clause.kind.value,
+                text_summary=clause.title,
+                source_text=clause.source_text,
+                parent_rule_code=(None if clause.display_code == clause.official_code
+                                  else clause.official_code),
+                decision=decision.value,
+                decision_label=_DECISION_LABELS[decision],
+                reason=_reason(
+                    clause,
+                    decision=decision,
+                    gap=gap,
+                    summaries=summaries,
+                ),
+                fact_refs=_fact_refs(
+                    session, _used_fact_ids(result.evaluation), facts_by_id,
+                ),
+                gap_type=gap.value if gap is not None else None,
+                determination_mode=clause.determination_mode.value,
+                **_action_directive_fields(gap),
+            ))
+
+        controls = []
+        publication = frozen.clause_pack.control_publication
+        if publication is not None:
+            sources = {item.protocol_control_id: item for item in publication.catalog.controls}
+            status_labels = {
+                "fulfilled": "已满足",
+                "unfulfilled": "尚未满足",
+                "unverified": "无法判定",
+                "not_applicable": "本节点不适用",
+            }
+            for control in calculation.control_outcomes:
+                source = sources[control.protocol_control_id]
+                obligations = []
+                for obligation in control.obligations:
+                    reasons = list(obligation.observation_reason_codes)
+                    if obligation.status == "unverified":
+                        reason = (
+                            "本次已核对资料中缺少研究者书面判断，因此暂时无法判定。"
+                            if "professional_judgment_missing" in reasons
+                            else "相关原始资料尚未形成可核实的完整依据，因此暂时无法判定。"
+                        )
+                    elif obligation.status == "not_applicable":
+                        reason = "该补充要求在当前审核节点不适用。"
+                    elif obligation.status == "fulfilled":
+                        reason = "当前已核实资料支持该补充要求已满足。"
+                    else:
+                        reason = "当前已核实资料显示该补充要求尚未满足。"
+                    obligations.append(EligibilityControlObligationProjection(
+                        obligation_id=obligation.obligation_id,
+                        obligation_group_id=obligation.obligation_group_id,
+                        statement=obligation.statement,
+                        status=obligation.status,
+                        status_label=status_labels[obligation.status],
+                        reason=reason,
+                        fact_refs=_fact_refs(
+                            session, set(obligation.used_fact_ids), facts_by_id,
+                        ),
+                    ))
+                controls.append(EligibilityControlProjection(
+                    protocol_control_id=source.protocol_control_id,
+                    display_label=source.display_label,
+                    title=source.title,
+                    source_span_ids=tuple(source.source_span_ids),
+                    obligations=tuple(obligations),
+                ))
+
+        return EligibilityReviewProjection(
+            subject_id=frozen.authority.subject_id,
+            review_episode_id=frozen.authority.review_episode_id,
+            rule_set_id=frozen.authority.rule_set_id,
+            rule_set_revision=frozen.authority.rule_set_revision,
+            evidence_snapshot_v2_id=frozen.authority.evidence_snapshot_v2_id,
+            complete_processing_revision_id=frozen.authority.complete_processing_revision_id,
+            clauses=tuple(output),
+            controls=tuple(controls),
+        )
+
+
+def _unverified_control_projections(clause_pack) -> tuple[EligibilityControlProjection, ...]:
+    """Keep published cross-chapter requirements visible before review completes."""
+    publication = clause_pack.control_publication
+    if publication is None:
+        return ()
+    result = []
+    for control in publication.catalog.controls:
+        obligations = []
+        if control.obligation_expression is not None:
+            groups = [
+                (group.obligation_group_id, group.atoms)
+                for group in control.obligation_expression.groups
+            ]
+        else:
+            groups = [("legacy", control.obligations)]
+        for group_id, atoms in groups:
+            obligations.extend(
+                EligibilityControlObligationProjection(
+                    obligation_id=atom.obligation_id,
+                    obligation_group_id=group_id,
+                    statement=atom.statement,
+                    status="unverified",
+                    status_label="等待资料核对",
+                    reason="本次资料核对尚未完成，目前不能判断该补充要求是否满足。",
+                    fact_refs=(),
+                )
+                for atom in atoms
+            )
+        result.append(EligibilityControlProjection(
+            protocol_control_id=control.protocol_control_id,
+            display_label=control.display_label,
+            title=control.title,
+            source_span_ids=tuple(control.source_span_ids),
+            obligations=tuple(obligations),
+        ))
+    return tuple(result)
 def clause_to_rule_component(clause: ClausePackClause):
     """Rehydrate only evaluator inputs from a ClausePack clause."""
     from app.domain.contracts.rules import RuleComponent
@@ -860,128 +1140,3 @@ def clause_to_rule_component(clause: ClausePackClause):
         repeat_trigger_conditions=list(clause.repeat_trigger_conditions),
         evidence_requirements=clause.evidence_requirements,
     )
-
-
-def _load_binding_predicate_fact_ids(session, *, authority=None):
-    """从当前审核节点的作用域内资格核对加载predicate→fact映射（F02/F03）。
-
-    选择内核与正式发布完全一致：只接受 `pair_direct_selection_rejection_reasons`
-    为空的配对——双路一致但方向为拒绝/未决、来源不可采用、对象/属性/否认范围/
-    时间角色/操作数任一不合格、存在未消解检查的配对一律不得成为运算输入。
-    查询按完整authority元组（含episode_revision与规则/方案/快照/处理修订）
-    全量过滤后再排序，不用LIMIT截断窗口；不把异常吞并成None伪装无绑定。
-    """
-    from app.workflow.jobstore import JobStore
-    from app.domain.contracts.predicate_binding import PredicateBindingFrozenInput
-    from app.services.binding_qualification_support import (
-        verify_completed_binding_qualification,
-    )
-    from app.services.qualified_binding_selection import (
-        pair_direct_selection_rejection_reasons,
-    )
-    from app.evidence.artifacts import ArtifactStore
-    from app.services.evidence_app_bootstrap import resolve_data_paths
-
-    if authority is None:
-        return None
-
-    scope_fields = (
-        "project_id", "subject_id", "review_episode_id", "episode_revision",
-        "protocol_version_id", "rule_set_id", "rule_set_revision",
-        "evidence_snapshot_v2_id", "complete_processing_revision_id",
-    )
-    scope = {field: getattr(authority, field) for field in scope_fields}
-
-    def _frozen_in_scope(frozen) -> bool:
-        auth = frozen.authority
-        return all(getattr(auth, field) == value for field, value in scope.items())
-
-    candidate_rows = session.execute(
-        text("SELECT job_id, payload_json FROM jobs "
-             "WHERE job_type = 'predicate_binding_candidates' "
-             "AND state = 'completed' "
-             "ORDER BY created_at DESC, job_id DESC")
-    ).fetchall()
-    binding_job_id = None
-    binding_frozen = None
-    for job_id, payload_json in candidate_rows:
-        try:
-            frozen = PredicateBindingFrozenInput.model_validate(
-                json.loads(payload_json)["frozen_input"])
-        except Exception:
-            continue
-        if _frozen_in_scope(frozen):
-            binding_job_id, binding_frozen = job_id, frozen
-            break
-    if binding_job_id is None:
-        return None
-
-    qualification_job_id = None
-    qualification_rows = session.execute(
-        text("SELECT job_id, payload_json FROM jobs "
-             "WHERE job_type = 'binding_qualification' AND state = 'completed' "
-             "ORDER BY created_at DESC, job_id DESC")
-    ).fetchall()
-    for job_id, payload_json in qualification_rows:
-        try:
-            payload = json.loads(payload_json)
-        except Exception:
-            continue
-        if (payload.get("candidate_job_id") == binding_job_id
-                and payload.get("candidate_family") == "predicate"):
-            qualification_job_id = job_id
-            break
-    if qualification_job_id is None:
-        return None
-
-    verified = verify_completed_binding_qualification(
-        session, ArtifactStore(resolve_data_paths()), qualification_job_id)
-    frozen_verified = verified["frozen"]
-    identity_to_predicate = {}
-    for component in frozen_verified.components:
-        for pred in component.binding_predicates:
-            identity_to_predicate[pred.predicate_identity_sha256] = pred.predicate_id
-    result = {pred.predicate_id: []
-              for component in frozen_verified.components
-              for pred in component.binding_predicates}
-    for record in verified["summary"].pair_records:
-        # 与正式发布同一语义资格内核：拒绝理由非空（含双路一致但方向为
-        # 拒绝/未决、来源/对象/属性/否认/时间/操作数不合格、未消解检查）
-        # 的配对一律不得成为运算输入。
-        if pair_direct_selection_rejection_reasons(record):
-            continue
-        predicate_id = identity_to_predicate.get(record.identity_sha256)
-        if predicate_id is None:
-            continue
-        if record.fact_id not in result[predicate_id]:
-            result[predicate_id].append(record.fact_id)
-    if not any(result.values()):
-        return None
-    return {key: sorted(fact_ids) for key, fact_ids in result.items()}
-    for record in verified["summary"].pair_records:
-        if not (record.structurally_valid and record.dual_agreement):
-            continue
-        predicate_id = identity_to_predicate.get(record.identity_sha256)
-        if predicate_id is None or record.fact_id not in result[predicate_id]:
-            if predicate_id is not None:
-                result[predicate_id].append(record.fact_id)
-    if not any(result.values()):
-        return None
-    return {key: sorted(fact_ids) for key, fact_ids in result.items()}
-
-
-def _filter_for_component(global_mapping, component):
-    """Filter global mapping to only this component's predicates, or None."""
-    if global_mapping is None:
-        return None
-    from app.domain.expression import _iter_atomic_expressions
-    expressions = [component.expression]
-    if component.exception_expression is not None:
-        expressions.append(component.exception_expression)
-    expected = set()
-    for expr in expressions:
-        for atom in _iter_atomic_expressions(expr):
-            expected.add(atom.predicate.predicate_id)
-    if not expected:
-        return None
-    return {pid: global_mapping.get(pid, []) for pid in expected}

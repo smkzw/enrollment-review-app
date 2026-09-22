@@ -11,7 +11,10 @@ from app.domain.proposition_observations import scope_supported
 from app.domain.publication import canonical_hash
 from app.domain.repeat_numeric_result import calculate_repeat_numeric_result
 from app.domain.repeat_result_selection import RepeatResultSelection
-from app.services.qualified_binding_selection import ReceiptVerifiedQualifiedBindingSelections
+from app.services.qualified_binding_selection import (
+    ReceiptVerifiedQualifiedBindingSelections,
+    ReceiptVerifiedWorkDraftSelections,
+)
 
 
 def calculate_repeat_atoms(selections, context, resolutions):
@@ -21,7 +24,9 @@ def calculate_repeat_atoms(selections, context, resolutions):
     omits the already-resolved repeat policy, never any threshold or time rule;
     that view is not saved as a protocol revision or as a clinical fact.
     """
-    if not isinstance(selections, ReceiptVerifiedQualifiedBindingSelections):
+    if not isinstance(selections, (
+        ReceiptVerifiedQualifiedBindingSelections, ReceiptVerifiedWorkDraftSelections,
+    )):
         raise TypeError("复查求值须使用本次来源核实结果")
     selections.require_unchanged()
     family = selections.candidate_family
