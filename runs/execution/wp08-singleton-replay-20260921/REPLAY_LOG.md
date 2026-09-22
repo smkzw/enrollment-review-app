@@ -201,3 +201,17 @@ A25④旧件不变：旧修订/清单/快照/事实旧行/元数据历史全部�
   一致（含筛选节点选择、GET /jobs/{id} 轮询存在性确认）。配额恢复后
   可直接实跑；届时仅需用户提供真实资料文件夹路径。
 - muse-spark 03:21 直探仍不可用；守望（14天窗口）持续探测中。
+
+## mimo-v2.6-flash 页判读诊断（2026-09-22）
+
+- 提交页判读 bdcbc920（main-A=opencode-go/mimo-v2.6-flash, main-B=cms-model）
+- 结果：全部25页 main-A 返回 BadRequestError(400)，2.5-4.8秒即返回（服务端拒绝）
+- 简单文本+max_tokens=65536 测试通过 → 问题不在模型/max_tokens/reasoning_effort
+- 可能原因：页判读请求含 base64 页图像，opencode-go 端点对大体量多模态
+  请求有额外限制（请求体大小/图像格式/多模态支持）
+- main-B cms-model 部分页成功 → 网关和 cms-model 侧正常
+- 结论：mimo-v2.6-flash 在 opencode-go 上的多模态（视觉）支持需要进一步
+  调研。该模型在 opencode-go 模型目录中标记为 images: yes，但实际对
+  base64 图像输入可能需要特殊格式或额外参数。
+- main-A 已切 mimo 但暂不可用于页判读 → **暂回退 main-A 到 zhipu glm-5.3-flash**
+  （配额09-25 20:14重置后可用），或等待 mimo 多模态支持问题解决。
