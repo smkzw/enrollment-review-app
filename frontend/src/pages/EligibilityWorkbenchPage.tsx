@@ -956,7 +956,7 @@ export function EligibilityWorkbenchPage() {
         </section>
       </div>
       <footer className="eligibility-workbench__footnote">
-        资料版本：{formatSnapshotVersion(selectedEpisode.revision, null)} · 档案版本：{formatSnapshotVersion(reviewData.ruleSetRevision, null)}
+        规则修订：{formatSnapshotVersion(reviewData.ruleSetRevision, null)} · 资料版本：{formatSnapshotVersion(selectedEpisode.revision, null)}
       </footer>
     </div>
   );
