@@ -3,7 +3,9 @@
 set -u
 BASE="http://127.0.0.1:8902"
 SID=$(cat /Users/smkzw/.omp/install-id 2>/dev/null | tr -d '[:space:]')
-KEY="${OPENCODE_API_KEY:?请先 export OPENCODE_API_KEY（已轮换的凭据从安全通道注入，不写入本文件）}"
+# 从应用 .env 读取 OPENCODE_API_KEY（密钥不写入本文件）。
+KEY="$(grep '^OPENCODE_API_KEY=' .env | head -1 | cut -d= -f2- | tr -d '"' | tr -d ' ')"
+if [ -z "$KEY" ]; then echo "[watch] .env 无 OPENCODE_API_KEY，退出"; exit 1; fi
 SUB="e851520b052440abb8c6bdb01b7e6cab"
 cd "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile"
 SUB="e851520b052440abb8c6bdb01b7e6cab"
