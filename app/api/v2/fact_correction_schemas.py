@@ -78,6 +78,14 @@ class FactCorrectionImpactDTO(_StrictModel):
     affected_profile_revision_ids: list[str] = Field(default_factory=list)
 
 
+class FactCorrectionSiblingDTO(_StrictModel):
+    fact_id: str = Field(min_length=1)
+    fact_type: str = Field(min_length=1)
+    polarity: str = Field(min_length=1)
+    value: Any = None
+    unit: str | None = None
+
+
 class FactCorrectionPreviewDTO(_StrictModel):
     target_kind: str
     target_kind_label: str
@@ -86,6 +94,7 @@ class FactCorrectionPreviewDTO(_StrictModel):
     old_snapshot: dict[str, Any]
     new_snapshot: dict[str, Any]
     impact: FactCorrectionImpactDTO
+    sibling_facts: list[FactCorrectionSiblingDTO] = Field(default_factory=list)
 
 
 class FactCorrectionSubmitDTO(_StrictModel):
@@ -153,6 +162,9 @@ def preview_dto(preview: FactCorrectionPreview) -> FactCorrectionPreviewDTO:
         old_snapshot=preview.old_snapshot,
         new_snapshot=preview.new_snapshot,
         impact=impact_dto(preview.impact_scope),
+        sibling_facts=[
+            FactCorrectionSiblingDTO.model_validate(s) for s in preview.sibling_facts
+        ],
     )
 
 

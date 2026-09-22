@@ -173,6 +173,9 @@ class FactCorrectionPreview:
     new_snapshot: dict[str, Any]
     impact_scope: FactCorrectionImpactScope
     locator_ids: list[str]
+    # F04：同源兄弟事实（同一原件观察经其他发布通道派生）。更正一条通道
+    # 后其余通道仍持旧值，预览必须让医学经理一眼看到全部需要同步的通道。
+    sibling_facts: list[dict[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -476,6 +479,9 @@ def preview_fact_correction(
             scope_kind="node",
             fallback_reason=f"{NODE_RECOMPUTE_MESSAGE}：局部影响范围未包含提交引用的全部定位",
         )
+    siblings = _same_observation_siblings(
+        session, authority=authority, target_kind=target_kind, target_id=target_id,
+    )
     return FactCorrectionPreview(
         target_kind=target_kind,
         target_id=target_id,
@@ -483,7 +489,47 @@ def preview_fact_correction(
         new_snapshot=dict(json.loads(prepared.new_snapshot_json)),
         impact_scope=scope,
         locator_ids=list(prepared.locator_ids),
+        sibling_facts=siblings,
     )
+
+
+def _same_observation_siblings(
+    session: Session, *, authority: FactAuthority,
+    target_kind: str, target_id: str,
+) -> list[dict[str, Any]]:
+    """F04：同一原件观察经其他发布通道派生的活动事实（不含目标自身）。
+
+    同源判定用当前权威 + 断言对象 + 原件定位重叠，不同 fact_type 的通道
+    互为兄弟；更正一条通道后其余通道仍持旧值，预览必须可见，避免医学
+    经理逐通道试错。不做跨来源的值匹配合并。
+    """
+    from sqlalchemy import select
+    from app.storage.fact_repositories import ClinicalFactV2Repository
+    from app.storage.active_facts import current_fact_heads
+
+    facts = ClinicalFactV2Repository(session).list_by_episode(
+        authority.review_episode_id
+    )
+    target = next((f for f in facts if f.fact_id == target_id), None)
+    if target is None or target_kind != "fact":
+        return []
+    target_locators = set(target.locator_ids)
+    siblings = []
+    for fact in current_fact_heads(session, authority):
+        if fact.fact_id == target.fact_id:
+            continue
+        if fact.asserted_object != target.asserted_object:
+            continue
+        if not set(fact.locator_ids) & target_locators:
+            continue
+        siblings.append({
+            "fact_id": fact.fact_id,
+            "fact_type": fact.fact_type,
+            "polarity": fact.polarity.value,
+            "value": fact.value,
+            "unit": fact.unit,
+        })
+    return siblings
 
 
 def prepare_fact_correction(
