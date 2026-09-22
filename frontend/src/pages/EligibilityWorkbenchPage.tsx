@@ -824,9 +824,14 @@ export function EligibilityWorkbenchPage() {
 
   const reviewData = review.state.data;
   const allClauses = reviewData.clauses;
+  // F09：无深链时默认选中问题队列最高优先项，而不是全条款第一条。
+  const defaultClause = (() => {
+    const groups = buildEligibilityIssueGroups(allClauses);
+    return groups[0]?.clauses[0] ?? allClauses[0];
+  })();
   const selectedClause =
     (componentParam === null
-      ? allClauses[0]
+      ? defaultClause
       : allClauses.find((clause) => clause.ruleComponentId === componentParam));
   if (componentParam !== null && selectedClause === undefined) {
     return <ErrorState message="链接中的审核要点不存在，请重新选择。" onRetry={() => updateParams({ component: null })} />;
