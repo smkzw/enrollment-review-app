@@ -84,3 +84,24 @@
   状态/幂等/scope验证/有界重试）。守望脚本降级为纯探测记录工具，
   不再负责提交任务。恢复编排的入口由 PreparedReviewContinuation 的
   recovery 流程统一处理。
+
+## mimo-v2.6-flash 页判读 400 诊断结论
+
+页判读 bdcbc920（main-A=mimo-v2.6-flash）完成但全部25页main-A失败。
+错误类型：BadRequestError(400)，每页一致，elapsed 2-5秒（服务端快速拒绝）。
+
+排除项：
+- max_tokens=65536 → 单独测试通过
+- reasoning_effort=high → 单独测试通过
+- response_format json_object → 单独测试通过
+- 视觉（小图base64）→ 单独测试通过
+
+可能根因：页判读完整请求 = base64大图像 + 复杂临床prompt + 高max_tokens
++ response_format + reasoning_effort 的组合触发了 opencode-go 端点限制。
+opencode-go 对 mimo-v2.6-flash 的多模态大请求支持需供应商侧排查。
+
+## 当前系统状态
+- main-A（mimo）暂不可用于页判读，main-B（cms-model）正常但单路不够
+- 页判读需要重跑 → 事实重整 → 投影对齐 → 闭包推送
+- 前置条件：muse-spark 恢复 或 mimo 400 问题解决 或 用户指定其他可用的
+  main-A 模型
