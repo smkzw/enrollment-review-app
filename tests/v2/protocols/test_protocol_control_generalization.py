@@ -255,9 +255,20 @@ def test_context_can_be_deep_owned_elsewhere_but_non_control_cannot_be_required(
         "unit-002"
     ]
 
-    bad_context = _discovery_decisions(plan, context_target="unit-003")
-    with pytest.raises(ValueError, match="non_control"):
-        validate_protocol_control_discovery_results(plan, bad_context)
+    cross_batch_context = _discovery_decisions(plan, context_target="unit-003")
+    normalized = validate_protocol_control_discovery_results(
+        plan, cross_batch_context
+    )
+    assert normalized[3].disposition == (
+        ProtocolControlDiscoveryDisposition.CONTEXT_ONLY
+    )
+    normalized_plan = plan_protocol_control_deep_batches_from_discovery(
+        _manifest(),
+        plan,
+        cross_batch_context,
+        max_owned_units_per_batch=1,
+    )
+    assert normalized_plan.batches[0].context_structure_unit_ids == ["unit-003"]
 
     valid = validate_protocol_control_discovery_results(plan, decisions)
     with pytest.raises(ValueError, match="uncertain"):

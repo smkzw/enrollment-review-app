@@ -645,6 +645,57 @@ def test_comparator_keeps_accepting_plain_gap_closing():
     )
 
 
+def test_comparator_accepts_all_to_any_source_binding_refinement():
+    previous = _previous_state()
+    component = previous.proposed_rules[1].components[0]
+    revised = previous.model_copy(deep=True)
+    revised_component = revised.proposed_rules[1].components[0]
+    revised_component.expression.operator = "any"
+    previous_issues = [
+        _gate_issue(
+            "DISJUNCTION_CHANGED_TO_CONJUNCTION",
+            [component.rule_component_id],
+            check_name="boolean_logic",
+        )
+    ]
+    revised_issues = [
+        _gate_issue(
+            "DISJUNCTION_NOT_BOUND_TO_SOURCE",
+            [revised_component.rule_component_id],
+            check_name="boolean_logic",
+        )
+    ]
+
+    assert regressing_rule_codes(
+        previous, previous_issues, revised, revised_issues, ["EX-01"]
+    ) == set()
+
+
+def test_comparator_rejects_disjunction_binding_issue_on_different_component():
+    previous = _previous_state()
+    component = previous.proposed_rules[1].components[0]
+    revised = previous.model_copy(deep=True)
+    revised.proposed_rules[1].components[0].expression.operator = "any"
+    previous_issues = [
+        _gate_issue(
+            "DISJUNCTION_CHANGED_TO_CONJUNCTION",
+            [component.rule_component_id],
+            check_name="boolean_logic",
+        )
+    ]
+    revised_issues = [
+        _gate_issue(
+            "DISJUNCTION_NOT_BOUND_TO_SOURCE",
+            [revised.proposed_rules[0].components[0].rule_component_id],
+            check_name="boolean_logic",
+        )
+    ]
+
+    assert regressing_rule_codes(
+        previous, previous_issues, revised, revised_issues, ["EX-01", "IN-01"]
+    ) == {"IN-01"}
+
+
 @pytest.mark.parametrize(
     ("mode", "refs"),
     [

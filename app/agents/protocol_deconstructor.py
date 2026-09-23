@@ -1728,6 +1728,16 @@ def _batch_schema_repair_prompt(
         + f"proposed_rules 必须且只能按顺序返回 {list(rule_codes)}。"
         + f"具体问题：{problem[:12000]}。"
         + "仅修正本批 JSON 结构和列出的父规则，不要返回其他批次或说明文字。"
+        + (
+            "当问题涉及 observation_policy.source_excerpts 或 repeat_scheme.source_excerpts 时，"
+            "这些字段只能逐字复制同一原子条件 source_locator 中的 source_clause，"
+            "或 source_clauses 中某个连续片段；解释性的选择原则只写在 scope，"
+            "不得把改写、概括或跨段拼接内容填入 source_excerpts。"
+            "当问题涉及 occurrence_window 时，只能把频率周期放在带‘次’或"
+            "发生天数单位的数值条件上，或通过 minimum_count 表达括号定义的最小次数；"
+            "剂量、体积、浓度等换算或括号释义条件的 occurrence_window 必须为 null，"
+            "频率含义保留在它实际修饰的计数条件上。"
+        )
         + schema_suffix
     )
 
@@ -2345,6 +2355,12 @@ def _wire_atom(
         )
         if anchored_excerpts != raw_excerpts:
             policy_payload["source_excerpts"] = anchored_excerpts
+        span_ids, excerpts = _deduplicate_wire_source_pairs(
+            raw_span_ids, anchored_excerpts
+        )
+        if span_ids != raw_span_ids or excerpts != anchored_excerpts:
+            policy_payload["source_span_ids"] = span_ids
+            policy_payload["source_excerpts"] = excerpts
     policy = ObservationPolicy.model_validate(policy_payload)
     result["observation_policy"] = policy.model_dump(mode="json")
     if value["repeat_scheme"] is not None:
@@ -2370,8 +2386,10 @@ def _anchor_wire_source_excerpts(
     实测模型（方案语义远端/本地各档）常把观察依据写成覆盖整个来源句的
     引文，而原子条件的逐字原文只是其中一个片段；这属于可由宿主无损回收
     的引文范围偏差，不应要求模型重做整批。仅处理三种确定性情情形：
-    逐字命中、引号规范化命中、以及摘录唯一包含一个条件片段的超集情形；
-    其余差异保持原样，由严格门禁拒绝。
+    逐字命中、引号规范化命中、摘录唯一包含一个条件片段的超集，
+    以及本原子只有一段可选原文的情形。最后一种只修复引用位置：观察范围、
+    数值、时间窗和医学含义均由其他字段保留。多段原文无法唯一定位时
+    保持原样，由严格门禁拒绝。
     """
     if not clauses:
         return list(excerpts)
@@ -2395,8 +2413,34 @@ def _anchor_wire_source_excerpts(
             if len(longest_clauses) == 1:
                 anchored.append(longest_clauses[0])
                 continue
+        if len(clauses) == 1:
+            anchored.append(clauses[0])
+            continue
         anchored.append(excerpt)
     return anchored
+
+
+def _deduplicate_wire_source_pairs(
+    span_ids: list[str],
+    excerpts: list[str],
+) -> tuple[list[str], list[str]]:
+    """Collapse exact duplicate source pairs without reconciling disagreements."""
+
+    if len(span_ids) != len(excerpts):
+        return list(span_ids), list(excerpts)
+    kept_ids: list[str] = []
+    kept_excerpts: list[str] = []
+    seen: dict[str, str] = {}
+    for span_id, excerpt in zip(span_ids, excerpts, strict=True):
+        previous = seen.get(span_id)
+        if previous is None:
+            seen[span_id] = excerpt
+            kept_ids.append(span_id)
+            kept_excerpts.append(excerpt)
+            continue
+        if previous != excerpt:
+            return list(span_ids), list(excerpts)
+    return kept_ids, kept_excerpts
 
 
 def _merge_wire_observation_fragments(
@@ -3653,6 +3697,11 @@ def revise_protocol_draft_from_feedback(
         "本次是最小范围纠错，不是重写整条规则。除用户明确指出且方案原文支持修改的字段外，"
         "目标规则中现有的子项、谓词、ALL/ANY/NOT 逻辑、数值和单位、频次结构、时间限定、"
         "例外、资料要求、应完成阶段和来源片段都必须逐字段原样保留；compact wire 不得自行生成身份。"
+        "每个谓词 observation_policy.source_excerpts 的每一项都必须是该谓词自身 "
+        "source_clause/source_clauses 内的逐字子串；拆分‘或’分支时，各分支必须同时携带"
+        "支撑该分支的共享连接语逐字片段，不得只在组件级来源中引用。"
+        "每个谓词的原文定位只能二选一：单段原文写 source_clause，并保持 source_clauses=[]；"
+        "需要多段共同支撑时写 source_clauses，并保持 source_clause=null，绝不能同时填写。"
         "输出前必须把 replacement_rules 与当前目标规则逐字段比较；任何无关变化都要撤销。\n\n"
         f"用户指出的问题：{note}\n\n"
         f"当前目标规则：{target.model_dump_json()}\n\n"
@@ -3705,6 +3754,8 @@ def revise_protocol_draft_from_feedback(
                 prompt=(
                     "上一响应无法作为指定父规则的局部修订读取。"
                     f"问题：{str(exc)[:12000]}。请只返回符合下列结构的 JSON："
+                    "每个谓词只能使用 source_clause 或 source_clauses 其中一种原文定位；"
+                    "使用前者时后者必须为空数组，使用后者时前者必须为 null。"
                     + (
                         f"服务端携带的 wire_version={DNF_WIRE_VERSION!r} 严格 JSON 合同；batch_id 必须为 "
                         f"{repair_batch_id}；"
@@ -4124,6 +4175,15 @@ def regressing_rule_codes(
         revised_issues,
         selected_codes,
     )
+    boolean_refinements = _refined_disjunction_binding_fingerprints(
+        previous_draft,
+        previous_issues,
+        revised_draft,
+        revised_issues,
+        selected_codes,
+    )
+    for code, fingerprints in boolean_refinements.items():
+        refined_prints.setdefault(code, set()).update(fingerprints)
     refined_fingerprints = {
         fingerprint
         for prints in refined_prints.values()
@@ -4157,6 +4217,26 @@ def regressing_rule_codes(
     }
 
 
+def issue_reduced_for_rule(
+    previous_draft: ProtocolDeconstructionDraft,
+    previous_issues: Sequence[ProtocolGateIssue],
+    revised_draft: ProtocolDeconstructionDraft,
+    revised_issues: Sequence[ProtocolGateIssue],
+    rule_code: str,
+) -> bool:
+    """Return whether a local revision removed at least one prior gate issue."""
+
+    previous = _issue_fingerprints_by_rule(previous_draft, previous_issues).get(
+        rule_code, set()
+    )
+    if not previous:
+        return True
+    revised = _issue_fingerprints_by_rule(revised_draft, revised_issues).get(
+        rule_code, set()
+    )
+    return bool(previous - revised)
+
+
 def _issue_fingerprints_by_rule(
     draft: ProtocolDeconstructionDraft,
     issues: Sequence[ProtocolGateIssue],
@@ -4178,6 +4258,67 @@ def _issue_fingerprints_by_rule(
 # Generic gate vocabulary only; no project- or content-specific logic.
 _COVERAGE_MISSING_ISSUE_CODE = "PARENT_SOURCE_SEMANTIC_COVERAGE_MISSING"
 _TIME_ANCHOR_UNRESOLVED_ISSUE_CODE = "TIME_ANCHOR_UNRESOLVED"
+_DISJUNCTION_CHANGED_ISSUE_CODE = "DISJUNCTION_CHANGED_TO_CONJUNCTION"
+_DISJUNCTION_BINDING_ISSUE_CODE = "DISJUNCTION_NOT_BOUND_TO_SOURCE"
+
+
+def _component_operators(
+    draft: ProtocolDeconstructionDraft,
+) -> dict[str, tuple[str, str]]:
+    operators: dict[str, tuple[str, str]] = {}
+    for rule in draft.proposed_rules:
+        for component in rule.components:
+            expression = component.expression
+            if expression.kind != "logical":
+                continue
+            operators[component.rule_component_id] = (
+                rule.official_code,
+                getattr(expression.operator, "value", str(expression.operator)),
+            )
+    return operators
+
+
+def _refined_disjunction_binding_fingerprints(
+    previous_draft: ProtocolDeconstructionDraft,
+    previous_issues: Sequence[ProtocolGateIssue],
+    revised_draft: ProtocolDeconstructionDraft,
+    revised_issues: Sequence[ProtocolGateIssue],
+    selected_codes: Sequence[str],
+) -> dict[str, set[tuple[str, tuple[str, ...]]]]:
+    """Recognize ALL-to-ANY correction that exposes a narrower source-binding gap."""
+
+    selected = set(selected_codes)
+    previous_operators = _component_operators(previous_draft)
+    revised_operators = _component_operators(revised_draft)
+    changed_refs = {
+        ref
+        for issue in previous_issues
+        if issue.issue_code == _DISJUNCTION_CHANGED_ISSUE_CODE
+        for ref in issue.affected_refs
+        if previous_operators.get(ref, (None, None))[1] == "all"
+        and revised_operators.get(ref, (None, None))[1] == "any"
+        and previous_operators.get(ref, (None, None))[0] in selected
+        and revised_operators.get(ref) == (
+            previous_operators.get(ref, (None, None))[0],
+            "any",
+        )
+    }
+    refined: dict[str, set[tuple[str, tuple[str, ...]]]] = {}
+    for issue in revised_issues:
+        if issue.issue_code != _DISJUNCTION_BINDING_ISSUE_CODE:
+            continue
+        refs = tuple(sorted(issue.affected_refs))
+        if not refs or any(ref not in changed_refs for ref in refs):
+            continue
+        codes = {
+            revised_operators[ref][0]
+            for ref in refs
+            if ref in revised_operators
+        }
+        if len(codes) == 1:
+            code = next(iter(codes))
+            refined.setdefault(code, set()).add((issue.issue_code, refs))
+    return refined
 
 
 def _refined_time_anchor_fingerprints(

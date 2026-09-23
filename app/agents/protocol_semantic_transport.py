@@ -23,6 +23,8 @@ from openai import (
 
 from app.config import (
     DECONSTRUCT_BACKEND,
+    DECONSTRUCT_API_KEY,
+    DECONSTRUCT_BASE_URL,
     DECONSTRUCT_GLM_API_KEY,
     DECONSTRUCT_GLM_BASE_URL,
     DECONSTRUCT_GLM_MODEL,
@@ -39,6 +41,11 @@ from app.config import (
     MTPLX_BASE_URL,
     MTPLX_PROTOCOL_BATCH_MAX_TOKENS,
 )
+from app.llm.provider_profiles import (
+    REMOTE_OPENAI_PROVIDERS,
+    provider_default_headers,
+    resolve_openai_connection,
+)
 
 from .protocol_deconstructor import (
     ProtocolAgentCallError,
@@ -49,7 +56,18 @@ from .protocol_deconstructor import (
 
 
 SUPPORTED_PROTOCOL_DECONSTRUCTION_BACKENDS = frozenset(
-    {"deepseek", "omlx", "mtplx", "mtplx-api", "mlx-serve", "zhipu-coding-plan", "glm"}
+    {
+        "deepseek",
+        "omlx",
+        "mtplx",
+        "mtplx-api",
+        "mlx-serve",
+        "zhipu-coding-plan",
+        "glm",
+        "cms-router",
+        "cms-smk",
+        "opencode-go",
+    }
 )
 _DEEPSEEK_BACKENDS = frozenset({"deepseek"})
 _MTPLX_BACKENDS = frozenset({"mtplx", "mtplx-api"})
@@ -72,6 +90,25 @@ _SUPPORTED_GLM53_REASONING_EFFORTS = frozenset({"low", "high", "max"})
 MLX_SERVE_BASE_URL = os.getenv("MLX_SERVE_BASE_URL", "http://127.0.0.1:11234").strip()
 MLX_SERVE_API_KEY = os.getenv("MLX_SERVE_API_KEY", "")
 MLX_SERVE_MODEL = os.getenv("MLX_SERVE_MODEL", "").strip()
+
+
+def _unwrap_complete_json_fence(text: str) -> str:
+    """Remove only a complete Markdown fence around one JSON response.
+
+    Provider/model changes must not require prompt-specific parsers.  This
+    compatibility step changes no JSON bytes inside the fence and deliberately
+    rejects prose prefixes, suffixes, partial fences, and guessed repairs.
+    """
+
+    stripped = text.strip()
+    lines = stripped.splitlines()
+    if (
+        len(lines) >= 3
+        and lines[0].strip().lower() in {"```json", "```"}
+        and lines[-1].strip() == "```"
+    ):
+        return "\n".join(lines[1:-1]).strip()
+    return stripped
 MLX_SERVE_PROTOCOL_BATCH_MAX_TOKENS = int(
     os.getenv("MLX_SERVE_PROTOCOL_BATCH_MAX_TOKENS", "8192")
 )
@@ -229,7 +266,7 @@ class DeepSeekProtocolAgentTransport:
         selected_max_tokens = (
             max_tokens if max_tokens is not None else DECONSTRUCT_MAX_TOKENS
         )
-        if selected_backend in _ZHIPU_BACKENDS:
+        if selected_backend in _ZHIPU_BACKENDS or selected_model.lower().startswith("glm-"):
             # Validate against GLM vocabulary before storing.
             _map_glm_reasoning_effort(selected_reasoning_effort)
         elif selected_reasoning_effort not in {
@@ -323,6 +360,14 @@ class DeepSeekProtocolAgentTransport:
                 resolved_base_url = _normalize_zhipu_coding_plan_base_url(
                     selected_base_url
                 )
+            elif selected_backend in REMOTE_OPENAI_PROVIDERS:
+                resolved_base_url, selected_api_key = resolve_openai_connection(
+                    selected_backend,
+                    base_url=base_url or DECONSTRUCT_BASE_URL,
+                    api_key=api_key or DECONSTRUCT_API_KEY,
+                    role_base_url_env="DECONSTRUCT_BASE_URL",
+                    role_api_key_env="DECONSTRUCT_API_KEY",
+                )
             else:
                 selected_api_key = OMLX_API_KEY if api_key is None else api_key
                 selected_base_url = OMLX_BASE_URL if base_url is None else base_url
@@ -341,6 +386,12 @@ class DeepSeekProtocolAgentTransport:
                 # Match Independent VLM: do not inherit ambient HTTP_PROXY for
                 # BigModel Coding Plan calls.
                 client_options["http_client"] = httpx.Client(trust_env=False)
+            default_headers = provider_default_headers(
+                selected_backend,
+                session_id=f"enrollment-review-protocol:{uuid4().hex}",
+            )
+            if default_headers is not None:
+                client_options["default_headers"] = default_headers
             self._client = OpenAI(
                 base_url=resolved_base_url,
                 api_key=selected_api_key,
@@ -424,7 +475,14 @@ class DeepSeekProtocolAgentTransport:
     def supports_parent_rule_segmentation(self) -> bool:
         """Declare semantic segmentation separately from the wire format."""
 
-        return self._backend in {*_LOCAL_STRUCTURED_BACKENDS, *_ZHIPU_BACKENDS}
+        return self._backend in {
+            *_LOCAL_STRUCTURED_BACKENDS,
+            *_ZHIPU_BACKENDS,
+            "cms-router",
+            "cms-smk",
+            "opencode-go",
+            "deepseek",
+        }
 
     def _completion_kwargs(
         self,
@@ -459,6 +517,12 @@ class DeepSeekProtocolAgentTransport:
             if self._reasoning_effort not in {"", "default", "auto"}:
                 kwargs["reasoning_effort"] = self._reasoning_effort
             kwargs["extra_body"] = {"thinking": {"type": "enabled"}}
+        elif self._backend == "opencode-go":
+            if self._reasoning_effort not in {"", "default", "auto"}:
+                kwargs["reasoning_effort"] = self._reasoning_effort
+        elif self._backend in {"cms-router", "cms-smk"}:
+            if self._reasoning_effort not in {"", "default", "auto"}:
+                kwargs["reasoning_effort"] = self._reasoning_effort
         elif self._backend in _MTPLX_BACKENDS:
             if self._reasoning_effort not in {"", "default", "auto"}:
                 kwargs["reasoning_effort"] = self._reasoning_effort
@@ -650,8 +714,9 @@ class DeepSeekProtocolAgentTransport:
                     continue
                 continue
             if text.strip():
+                json_text = _unwrap_complete_json_fence(text)
                 try:
-                    parsed = json.loads(text)
+                    parsed = json.loads(json_text)
                 except json.JSONDecodeError as exc:
                     malformed_attempts += 1
                     diagnostics.append(
@@ -693,7 +758,7 @@ class DeepSeekProtocolAgentTransport:
                         ]
                         continue
                     continue
-                return text
+                return json_text
             diagnostics.append(
                 f"第{attempt + 1}次结束原因={finish_reason}，推理内容长度={reasoning_chars}"
             )

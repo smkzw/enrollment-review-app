@@ -22,7 +22,7 @@
 局部格式修复保留合法观察与多时点身份，不默认重发全图全规则；用户不用JSON。
 
 ## D4 模型合同与资源
-开发fork模型不替换产品模型；产品依当前明确配置及授权。requested/reported/resolved与别名依据分开，缺报身份不回填。
+开发fork模型不替换产品模型；产品依当前明确配置及授权。2026-09-22 当前产品配置为：GLM通道使用OmniRouter `cms-router` 的 `glm-5.3-flash`（high），第二独立模型使用OpenCode Go的 `deepseek-v4.1-flash`（high）；方案语义、局部视觉核实、证据整理和补充控制等角色分别配置provider/model/effort/output budget，不互相继承旧平台参数。该组合只是部署选择，harness合同不得包含模型、方案、疾病、药品或病例特异逻辑；新增OpenAI兼容供应通道只扩展传输配置和能力声明，不改临床提示、Schema、来源门禁或采信标准。requested/reported/resolved与别名依据分开，缺报身份不回填。
 供应商凭据必须同供应商端点绑定，不向新provider回退其他provider密钥。现场发现的ollama-cloud取GLM密钥不得发请求，见模型诊断记录。
 真实诊断走产品客户端，留脱敏合同和错误；先单变量/单页，再必要小批，不以HTTP400猜图太大，不从头重跑25页。
 预算按职责/能力配置，不统一下限、不无据短超时；本地串行及内存释放检查保留，OCR既有准入，不停别人任务/扩共享服务。用量缺失unknown。

@@ -25,6 +25,7 @@ _EFFORTS = {
     "zhipu-coding-plan": frozenset({"low", "high", "max"}),
     "google-antigravity": frozenset({"low", "high"}),
     "cms-smk": frozenset({"low", "medium", "high", "xhigh"}),
+    "cms-router": frozenset({"low", "medium", "high", "xhigh", "max"}),
     "omlx": frozenset({"low", "medium", "high", "xhigh"}),
     "mlx-serve": frozenset({"low", "medium", "high", "xhigh"}),
     "mtplx": frozenset({"low", "medium", "high", "xhigh"}),

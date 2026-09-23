@@ -48,6 +48,10 @@ def test_structure_and_semantic_repairs_preserve_selected_source_scope():
         [code], candidate_id="candidate", agent_call_id="call", batch_id="batch",
         problem="Invalid source identity", allowed_source_span_ids=allowed,
     )
+    assert "逐字复制同一原子条件" in structure
+    assert "解释性的选择原则只写在 scope" in structure
+    assert "剂量、体积、浓度等换算" in structure
+    assert "频率含义保留在它实际修饰的计数条件上" in structure
     semantic = _repair_prompt(
         [], attempt=1, parsed_draft_available=True,
         replacement_rule_codes=[code], source_input=source,

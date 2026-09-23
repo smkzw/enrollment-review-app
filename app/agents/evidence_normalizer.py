@@ -101,6 +101,9 @@ SUPPORTED_EVIDENCE_NORMALIZER_PROVIDERS = frozenset(
         "omlx",
         "local-omlx",
         "zhipu-coding-plan",
+        "cms-router",
+        "cms-smk",
+        "opencode-go",
     }
 )
 SUPPORTED_EVIDENCE_NORMALIZER_REASONING_EFFORTS = frozenset(

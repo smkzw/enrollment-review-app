@@ -1703,6 +1703,7 @@ class ProtocolWorkbenchService:
             try:
                 from app.agents.protocol_deconstructor import (
                     _affected_rule_codes,
+                    issue_reduced_for_rule,
                     regressing_rule_codes,
                 )
 
@@ -1798,13 +1799,21 @@ class ProtocolWorkbenchService:
                             for check in revised_gate.checks
                             for issue in check.issues
                         ]
-                        if target_rule_code not in regressing_rule_codes(
+                        regressing = target_rule_code in regressing_rule_codes(
                             current_draft,
                             previous_issues,
                             draft,
                             revised_issues,
                             [target_rule_code],
-                        ):
+                        )
+                        reduced = issue_reduced_for_rule(
+                            current_draft,
+                            previous_issues,
+                            draft,
+                            revised_issues,
+                            target_rule_code,
+                        )
+                        if not regressing and reduced:
                             break
                         target_revised_issues = [
                             issue
@@ -1814,13 +1823,18 @@ class ProtocolWorkbenchService:
                                 draft, [issue], fallback_all=False
                             )
                         ]
-                        rejection = (
-                            "候选稿产生了新的完整性问题："
-                            + "；".join(
-                                f"{issue.issue_code}：{issue.problem}"
-                                for issue in target_revised_issues
+                        if regressing:
+                            rejection = (
+                                "候选稿产生了新的完整性问题："
+                                + "；".join(
+                                    f"{issue.issue_code}：{issue.problem}"
+                                    for issue in target_revised_issues
+                                )
                             )
-                        )
+                        else:
+                            rejection = (
+                                "候选稿没有消除当前标准的任何一个既有完整性问题"
+                            )
                     if attempt + 1 >= attempt_count:
                         raise ValueError(rejection)
                     retry_guidance = (

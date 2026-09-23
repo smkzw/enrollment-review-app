@@ -22,10 +22,18 @@ from unittest.mock import Mock
 from app.agents import protocol_semantic_transport as transport_module
 from app.agents.protocol_semantic_transport import (
     DeepSeekProtocolAgentTransport,
+    _unwrap_complete_json_fence,
 )
 
 
 USER_MESSAGE = [{"role": "user", "content": "横评离线回归提示"}]
+
+
+def test_only_complete_json_fence_is_unwrapped_without_content_repair():
+    payload = '{"source_text":"原文\"A\"","value":0}'
+    assert _unwrap_complete_json_fence(f"```json\n{payload}\n```") == payload
+    assert _unwrap_complete_json_fence(f"说明\n{payload}") == f"说明\n{payload}"
+    assert _unwrap_complete_json_fence(f"```json\n{payload}") == f"```json\n{payload}"
 
 
 def test_local_early_length_does_not_repeat_request(monkeypatch):

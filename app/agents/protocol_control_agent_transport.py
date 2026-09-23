@@ -60,6 +60,12 @@ from app.config import (
     PROTOCOL_CONTROL_MODEL,
     PROTOCOL_CONTROL_REASONING_EFFORT,
 )
+from app.llm.provider_profiles import (
+    REMOTE_OPENAI_PROVIDERS,
+    provider_default_headers,
+    resolve_openai_connection,
+    resolve_structured_response_mode,
+)
 
 
 __all__ = [
@@ -100,6 +106,9 @@ _SUPPORTED_BACKENDS = frozenset(
         "local-omlx",
         "deepseek",
         "deepseek-api",
+        "cms-router",
+        "cms-smk",
+        "opencode-go",
         *_ZHIPU_BACKENDS,
     }
 )
@@ -313,6 +322,7 @@ class OpenAICompatibleProtocolControlAgentTransport:
         max_tokens: int | None = None,
         temperature: float | None = None,
         response_format: Mapping[str, Any] | None = None,
+        response_format_mode: str | None = None,
         timeout: float = _DEFAULT_TIMEOUT_SECONDS,
         max_retries: int = 0,
         model_identity_check: bool | None = None,
@@ -321,6 +331,7 @@ class OpenAICompatibleProtocolControlAgentTransport:
         _response_format_factory: Callable[[], Mapping[str, Any]] | None = None,
         _transport_label: str = "协议控制传输",
         _schema_label: str = "控制",
+        _response_format_mode_env: str = "PROTOCOL_CONTROL_RESPONSE_FORMAT_MODE",
         _client_factory: Callable[..., Any] | None = None,
         _http_client_factory: Callable[..., Any] | None = None,
     ) -> None:
@@ -345,7 +356,7 @@ class OpenAICompatibleProtocolControlAgentTransport:
         ).strip().lower()
         if selected_effort not in _SUPPORTED_REASONING_EFFORTS:
             raise ValueError("reasoning_effort 不是受支持的推理强度")
-        if selected_backend in _ZHIPU_BACKENDS:
+        if selected_backend in _ZHIPU_BACKENDS or selected_model.lower().startswith("glm-"):
             # Fail before any request on an effort GLM does not support
             # (e.g. xhigh); never silently map it down.
             selected_effort = _map_glm_control_reasoning_effort(selected_effort)
@@ -417,6 +428,11 @@ class OpenAICompatibleProtocolControlAgentTransport:
         self._max_retries = max_retries
         self._response_format_name = _response_format_name
         self._response_format = selected_response_format
+        self._response_format_mode = resolve_structured_response_mode(
+            selected_backend,
+            explicit=response_format_mode,
+            env_name=_response_format_mode_env,
+        )
         self._histories: dict[str, list[dict[str, str]]] = {}
         self._model_identity_check = selected_identity_check
         self._model_identity_probe = model_identity_probe
@@ -447,6 +463,14 @@ class OpenAICompatibleProtocolControlAgentTransport:
                 selected_base_url = _configured_value(
                     "PROTOCOL_CONTROL_GLM_BASE_URL", PROTOCOL_CONTROL_GLM_BASE_URL
                 )
+            elif selected_backend in REMOTE_OPENAI_PROVIDERS:
+                selected_base_url, _ = resolve_openai_connection(
+                    selected_backend,
+                    base_url=base_url,
+                    api_key=api_key,
+                    role_base_url_env="PROTOCOL_CONTROL_BASE_URL",
+                    role_api_key_env="PROTOCOL_CONTROL_API_KEY",
+                )
             else:
                 selected_base_url = os.getenv("PROTOCOL_CONTROL_BASE_URL", "")
         selected_api_key = api_key
@@ -466,6 +490,14 @@ class OpenAICompatibleProtocolControlAgentTransport:
             elif selected_backend in _ZHIPU_BACKENDS:
                 selected_api_key = _configured_value(
                     "PROTOCOL_CONTROL_GLM_API_KEY", PROTOCOL_CONTROL_GLM_API_KEY
+                )
+            elif selected_backend in REMOTE_OPENAI_PROVIDERS:
+                _, selected_api_key = resolve_openai_connection(
+                    selected_backend,
+                    base_url=selected_base_url,
+                    api_key=api_key,
+                    role_base_url_env="PROTOCOL_CONTROL_BASE_URL",
+                    role_api_key_env="PROTOCOL_CONTROL_API_KEY",
                 )
             else:
                 selected_api_key = os.getenv("PROTOCOL_CONTROL_API_KEY", "")
@@ -488,6 +520,12 @@ class OpenAICompatibleProtocolControlAgentTransport:
             "timeout": timeout,
             "max_retries": max_retries,
         }
+        default_headers = provider_default_headers(
+            selected_backend,
+            session_id=f"enrollment-review-protocol-control:{uuid4().hex}",
+        )
+        if default_headers is not None:
+            client_options["default_headers"] = default_headers
         if is_local or selected_backend in _ZHIPU_BACKENDS:
             # Local inference and BigModel Coding Plan calls must never inherit
             # a system HTTP proxy (same rule as Independent VLM / semantic GLM).
@@ -555,6 +593,10 @@ class OpenAICompatibleProtocolControlAgentTransport:
     @property
     def uses_structured_response_format(self) -> bool:
         return True
+
+    @property
+    def response_format_mode(self) -> str:
+        return self._response_format_mode
 
     @property
     def uses_control_response_format(self) -> bool:
@@ -664,8 +706,11 @@ class OpenAICompatibleProtocolControlAgentTransport:
             "model": self._model,
             "messages": messages,
             "max_tokens": self._max_tokens if max_tokens is None else max_tokens,
-            "response_format": self._response_format,
         }
+        if self._response_format_mode == "json_schema":
+            kwargs["response_format"] = self._response_format
+        elif self._response_format_mode == "json_object":
+            kwargs["response_format"] = {"type": "json_object"}
         if self._temperature is not None:
             kwargs["temperature"] = self._temperature
         if self._reasoning_effort not in {"", "default", "auto"}:
@@ -723,7 +768,15 @@ class OpenAICompatibleProtocolControlAgentTransport:
         text = getattr(message, "content", None) if message is not None else None
         if not isinstance(text, str) or not text.strip():
             raise ValueError("模型响应缺少可读取的 JSON 正文")
-        return text.strip()
+        stripped = text.strip()
+        lines = stripped.splitlines()
+        if (
+            len(lines) >= 3
+            and lines[0].strip().lower() in {"```json", "```"}
+            and lines[-1].strip() == "```"
+        ):
+            return "\n".join(lines[1:-1]).strip()
+        return stripped
 
     def _complete(self, messages: list[dict[str, str]]) -> str:
         from app.llm.mtplx_model_lifecycle import sync_mtplx_model_session

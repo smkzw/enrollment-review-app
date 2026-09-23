@@ -16,6 +16,7 @@ import app.config as app_config
 from app.agents.protocol_semantic_model_router import ProtocolSemanticRouteCandidate
 from app.agents.protocol_semantic_route_preflight import (
     ProtocolSemanticRoutePreflightError,
+    candidate_endpoint_url,
     preflight_protocol_semantic_routes,
     sanitize_preflight_text,
 )
@@ -31,7 +32,10 @@ SECRET = "sk-test-preflight-secret-do-not-leak-0123456789"
 
 
 @pytest.fixture(autouse=True)
-def _reset_process_route_after_test():
+def _reset_process_route_after_test(monkeypatch):
+    # Most legacy cases in this module exercise the original direct GLM route.
+    # Provider-specific cases below declare their route explicitly.
+    monkeypatch.setattr(router, "DECONSTRUCT_GLM_PROVIDER", "zhipu-coding-plan")
     router.reset_active_protocol_semantic_routes()
     yield
     router.reset_active_protocol_semantic_routes()
@@ -191,6 +195,7 @@ def test_missing_credentials_fail_closed_in_strict_mode(monkeypatch):
     monkeypatch.setattr(app_config, "DECONSTRUCT_GLM_API_KEY", "")
     monkeypatch.setattr(app_config, "INDEPENDENT_VLM_API_KEY", SECRET)
     monkeypatch.setenv("DEEPSEEK_API_KEY", "")
+    monkeypatch.setenv("DECONSTRUCT_GLM_API_KEY", "")
     # Keep a unique secret in the environment to prove redaction if raised text
     # somehow interpolates env values.
     monkeypatch.setenv("INDEPENDENT_VLM_API_KEY", SECRET)
@@ -214,6 +219,7 @@ def test_endpoint_fault_injection_does_not_touch_network(monkeypatch):
     monkeypatch.setattr(router, "DECONSTRUCT_ROUTE_COMPLEX", "")
     monkeypatch.setattr(router, "DECONSTRUCT_ROUTE_SHORT", "")
     monkeypatch.setattr(app_config, "DEEPSEEK_API_KEY", "configured-deepseek-key")
+    monkeypatch.setenv("DECONSTRUCT_GLM_API_KEY", "configured-glm-key")
     monkeypatch.setattr(app_config, "DECONSTRUCT_GLM_API_KEY", "configured-glm-key")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "configured-deepseek-key")
     monkeypatch.setenv("DECONSTRUCT_GLM_API_KEY", "configured-glm-key")
@@ -259,6 +265,7 @@ def test_create_app_preflight_failure_is_chinese_and_secret_free(
     monkeypatch.setattr(app_config, "DECONSTRUCT_GLM_API_KEY", "")
     monkeypatch.setattr(app_config, "INDEPENDENT_VLM_API_KEY", SECRET)
     monkeypatch.setenv("DEEPSEEK_API_KEY", "")
+    monkeypatch.setenv("DECONSTRUCT_GLM_API_KEY", "")
     monkeypatch.setenv("INDEPENDENT_VLM_API_KEY", SECRET)
     monkeypatch.setenv("ENROLLMENT_SEMANTIC_ROUTE_PREFLIGHT", "1")
     monkeypatch.setenv("ENROLLMENT_SEMANTIC_ROUTE_PREFLIGHT_MODE", "strict")
@@ -287,6 +294,7 @@ def test_create_app_persists_successful_preflight_audit(data_paths, monkeypatch)
     monkeypatch.setattr(router, "DECONSTRUCT_ROUTE_COMPLEX", "")
     monkeypatch.setattr(router, "DECONSTRUCT_ROUTE_SHORT", "")
     monkeypatch.setattr(app_config, "DEEPSEEK_API_KEY", "configured-deepseek-key")
+    monkeypatch.setenv("DECONSTRUCT_GLM_API_KEY", "configured-glm-key")
 
     app = create_app(
         data_paths=data_paths,
@@ -316,3 +324,58 @@ def test_candidate_availability_still_mentions_glm_key_name_only(monkeypatch):
     assert detail is not None
     assert "DECONSTRUCT_GLM_API_KEY" in detail
     assert SECRET not in detail
+
+
+@pytest.mark.parametrize(
+    ("provider", "model", "base_env", "base_url"),
+    (
+        ("cms-router", "glm-5.3-flash", "CMS_ROUTER_BASE_URL", "http://127.0.0.1:20128"),
+        ("opencode-go", "deepseek-v4.1-flash", "OPENCODE_BASE_URL", "https://models.example.test/api"),
+    ),
+)
+def test_candidate_endpoint_uses_shared_provider_profile(
+    monkeypatch,
+    provider,
+    model,
+    base_env,
+    base_url,
+):
+    monkeypatch.setenv(base_env, base_url)
+    endpoint = candidate_endpoint_url(
+        ProtocolSemanticRouteCandidate(
+            backend=provider,
+            model=model,
+            reasoning_effort="high",
+        )
+    )
+    assert endpoint == base_url + "/v1"
+
+
+def test_cms_router_preflight_uses_declared_endpoint(monkeypatch):
+    monkeypatch.setattr(router, "DECONSTRUCT_ROUTE_MODE", "graded")
+    monkeypatch.setattr(
+        router,
+        "DECONSTRUCT_ROUTE_COMPLEX",
+        "cms-router:glm-5.3-flash:high",
+    )
+    monkeypatch.setattr(
+        router,
+        "DECONSTRUCT_ROUTE_SHORT",
+        "cms-router:another-glm-alias:low",
+    )
+    monkeypatch.setenv("CMS_ROUTER_API_KEY", "configured-cms-router-key")
+    monkeypatch.setenv("CMS_ROUTER_BASE_URL", "http://127.0.0.1:20128/v1")
+
+    report = preflight_protocol_semantic_routes(
+        mode="strict",
+        probe_endpoints=True,
+        endpoint_prober=lambda url: (url == "http://127.0.0.1:20128/v1", "可达"),
+    )
+
+    assert report.blocking_errors == []
+    assert report.complex_executable_identities == [
+        "cms-router:glm-5.3-flash:high"
+    ]
+    assert report.short_executable_identities == [
+        "cms-router:another-glm-alias:low"
+    ]

@@ -150,12 +150,12 @@ OCR_MAX_CONCURRENT = int(os.getenv("OCR_MAX_CONCURRENT", "8"))
 OCR_BACKEND = os.getenv("OCR_BACKEND", "omlx")
 OCR_NATIVE_HIGH_PRECISION_REVIEW = os.getenv("OCR_NATIVE_HIGH_PRECISION_REVIEW", "1").lower() not in {"0", "false", "no"}
 
-# Review model.  Semantic review is routed to MTPLX by default; OCR is still
-# independently controlled by OCR_BACKEND and the oMLX settings above.
-REVIEW_MODEL = os.getenv("REVIEW_MODEL", MTPLX_MODEL).strip()
-REVIEW_BACKEND = os.getenv("REVIEW_BACKEND", "mtplx").strip().lower()
+# Review model. Each clinical role owns an explicit provider/model profile;
+# OCR remains independently controlled by OCR_BACKEND.
+REVIEW_MODEL = os.getenv("REVIEW_MODEL", "deepseek-v4.1-flash").strip()
+REVIEW_BACKEND = os.getenv("REVIEW_BACKEND", "opencode-go").strip().lower()
 REVIEW_REASONING_EFFORT = os.getenv(
-    "REVIEW_REASONING_EFFORT", MTPLX_REASONING_EFFORT
+    "REVIEW_REASONING_EFFORT", "high"
 ).strip().lower()
 
 # DeepSeek (remote fallback)
@@ -167,16 +167,15 @@ MINIMAX_BASE_URL = os.getenv("MINIMAX_BASE_URL", "https://mimimax.cn/v1")
 MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY", "")
 MINIMAX_MODEL = os.getenv("MINIMAX_MODEL", "MiniMax-M3")
 
-# Independent VLM (智谱 BigModel). Used only for raw DOCX/PDF page vision
+# Independent VLM. Used only for raw DOCX/PDF page vision
 # verification and source-locator fidelity checks. Semantic review / OCR /
 # protocol-control routes remain task-isolated and do not inherit this profile.
 INDEPENDENT_VLM_PROVIDER = os.getenv(
-    "INDEPENDENT_VLM_PROVIDER", "zhipu-coding-plan"
+    "INDEPENDENT_VLM_PROVIDER", "cms-router"
 ).strip().lower()
 INDEPENDENT_VLM_BASE_URL = os.getenv(
     "INDEPENDENT_VLM_BASE_URL",
-    # Product-owned direct Coding Plan endpoint; no external harness proxy.
-    "https://open.bigmodel.cn/api/coding/paas/v4",
+    "http://127.0.0.1:20128/v1",
 ).strip()
 INDEPENDENT_VLM_API_KEY = os.getenv("INDEPENDENT_VLM_API_KEY", "")
 INDEPENDENT_VLM_MODEL = os.getenv("INDEPENDENT_VLM_MODEL", "glm-5.3-flash").strip()
@@ -187,6 +186,21 @@ INDEPENDENT_VLM_MAX_TOKENS = int(os.getenv("INDEPENDENT_VLM_MAX_TOKENS", "65536"
 INDEPENDENT_VLM_TIMEOUT_SECONDS = float(
     os.getenv("INDEPENDENT_VLM_TIMEOUT_SECONDS", "900")
 )
+
+# Product-owned OpenAI-compatible provider connections. Clinical roles select
+# their provider/model independently; credentials never cross providers.
+CMS_ROUTER_BASE_URL = os.getenv(
+    "CMS_ROUTER_BASE_URL", "http://127.0.0.1:20128/v1"
+).strip()
+CMS_ROUTER_API_KEY = os.getenv("CMS_ROUTER_API_KEY", "").strip()
+CMS_SMK_BASE_URL = os.getenv(
+    "CMS_SMK_BASE_URL", "https://new-api.mediportal.com.cn/v1"
+).strip()
+CMS_SMK_API_KEY = os.getenv("CMS_SMK_API_KEY", "").strip()
+OPENCODE_BASE_URL = os.getenv(
+    "OPENCODE_BASE_URL", "https://opencode.ai/zen/go/v1"
+).strip()
+OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY", "").strip()
 
 # Optional Gemini native transport, retained for explicit deployments/history. The access
 # token and project ID are main-thread explicit env credentials: no runtime
@@ -200,8 +214,11 @@ GEMINI_BASE_URL = os.getenv(
 
 # Phase 5.5 single-stage page review. These are product-owned direct routes;
 # external agent harnesses are reviewers only and never supply runtime config.
+PAGE_REVIEW_MAIN_A_PROVIDER = os.getenv(
+    "PAGE_REVIEW_MAIN_A_PROVIDER", INDEPENDENT_VLM_PROVIDER
+).strip().lower()
 PAGE_REVIEW_MAIN_A_BASE_URL = os.getenv(
-    "PAGE_REVIEW_MAIN_A_BASE_URL", INDEPENDENT_VLM_BASE_URL
+    "PAGE_REVIEW_MAIN_A_BASE_URL", ""
 ).strip()
 PAGE_REVIEW_MAIN_A_API_KEY = os.getenv("PAGE_REVIEW_MAIN_A_API_KEY", "").strip()
 PAGE_REVIEW_MAIN_A_MODEL = os.getenv(
@@ -214,8 +231,8 @@ PAGE_REVIEW_MAIN_A_FALLBACK_BASE_URL = os.getenv(
     "PAGE_REVIEW_MAIN_A_FALLBACK_BASE_URL", ""
 ).strip()
 PAGE_REVIEW_MAIN_B_PROVIDER = os.getenv(
-    "PAGE_REVIEW_MAIN_B_PROVIDER", "mtplx"
-).strip()
+    "PAGE_REVIEW_MAIN_B_PROVIDER", "opencode-go"
+).strip().lower()
 PAGE_REVIEW_MAIN_B_BASE_URL = os.getenv(
     "PAGE_REVIEW_MAIN_B_BASE_URL",
     GEMINI_BASE_URL if PAGE_REVIEW_MAIN_B_PROVIDER == "google-antigravity"
@@ -226,15 +243,21 @@ PAGE_REVIEW_MAIN_B_API_KEY = (
     or (os.getenv("CMS_SMK_API_KEY", "").strip() if PAGE_REVIEW_MAIN_B_PROVIDER == "cms-smk" else "")
 )
 PAGE_REVIEW_MAIN_B_MODEL = os.getenv(
-    "PAGE_REVIEW_MAIN_B_MODEL", MTPLX_MODEL
+    "PAGE_REVIEW_MAIN_B_MODEL", "deepseek-v4.1-flash"
 ).strip()
 PAGE_REVIEW_MAIN_B_REASONING_EFFORT = os.getenv(
-    "PAGE_REVIEW_MAIN_B_REASONING_EFFORT", MTPLX_REASONING_EFFORT
+    "PAGE_REVIEW_MAIN_B_REASONING_EFFORT", "high"
 ).strip().lower()
 PAGE_REVIEW_MAIN_B_FALLBACK_BASE_URL = os.getenv(
     "PAGE_REVIEW_MAIN_B_FALLBACK_BASE_URL", ""
 ).strip()
 PAGE_REVIEW_MAX_TOKENS = int(os.getenv("PAGE_REVIEW_MAX_TOKENS", "65536"))
+PAGE_REVIEW_MAIN_A_MAX_TOKENS = int(
+    os.getenv("PAGE_REVIEW_MAIN_A_MAX_TOKENS", str(PAGE_REVIEW_MAX_TOKENS))
+)
+PAGE_REVIEW_MAIN_B_MAX_TOKENS = int(
+    os.getenv("PAGE_REVIEW_MAIN_B_MAX_TOKENS", str(PAGE_REVIEW_MAX_TOKENS))
+)
 PAGE_REVIEW_CLOUD_CONCURRENCY = int(
     os.getenv("PAGE_REVIEW_CLOUD_CONCURRENCY", "3")
 )
@@ -265,7 +288,7 @@ MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", str(100 * 1024 * 1024)))  # 1
 # the legacy review defaults: the two tasks have different prompts, output
 # budgets, and model availability.  Every value remains explicitly overridable
 # for isolated runs or a deliberately selected remote backend.
-DECONSTRUCT_BACKEND = os.getenv("DECONSTRUCT_BACKEND", "zhipu-coding-plan").strip().lower()
+DECONSTRUCT_BACKEND = os.getenv("DECONSTRUCT_BACKEND", "cms-router").strip().lower()
 DECONSTRUCT_MODEL = os.getenv(
     "DECONSTRUCT_MODEL", "glm-5.3-flash"
 ).strip()
@@ -273,6 +296,8 @@ DECONSTRUCT_REASONING_EFFORT = os.getenv(
     "DECONSTRUCT_REASONING_EFFORT", "high"
 ).strip().lower()
 DECONSTRUCT_MAX_TOKENS = int(os.getenv("DECONSTRUCT_MAX_TOKENS", "65536"))
+DECONSTRUCT_BASE_URL = os.getenv("DECONSTRUCT_BASE_URL", "").strip()
+DECONSTRUCT_API_KEY = os.getenv("DECONSTRUCT_API_KEY", "").strip()
 # Explicit platform limits remain separate; new defaults must not silently cap
 # an otherwise sufficient semantic budget at the historical 8K/16K values.
 OMLX_PROTOCOL_BATCH_MAX_TOKENS = int(
@@ -295,11 +320,11 @@ DECONSTRUCT_SHORT_PROMPT_MAX_INPUT_TOKENS = int(
 DECONSTRUCT_ROUTE_COMPLEX = os.getenv("DECONSTRUCT_ROUTE_COMPLEX", "").strip()
 DECONSTRUCT_ROUTE_SHORT = os.getenv("DECONSTRUCT_ROUTE_SHORT", "").strip()
 DECONSTRUCT_GLM_PROVIDER = os.getenv(
-    "DECONSTRUCT_GLM_PROVIDER", "zhipu-coding-plan"
+    "DECONSTRUCT_GLM_PROVIDER", "cms-router"
 ).strip().lower()
 DECONSTRUCT_GLM_BASE_URL = os.getenv(
     "DECONSTRUCT_GLM_BASE_URL",
-    "https://open.bigmodel.cn/api/coding/paas/v4",
+    "http://127.0.0.1:20128/v1",
 ).strip()
 DECONSTRUCT_GLM_API_KEY = (
     os.getenv("DECONSTRUCT_GLM_API_KEY", "").strip() or INDEPENDENT_VLM_API_KEY
@@ -309,7 +334,7 @@ DECONSTRUCT_GLM_REASONING_EFFORT = os.getenv(
     "DECONSTRUCT_GLM_REASONING_EFFORT", "high"
 ).strip().lower()
 DECONSTRUCT_FALLBACK_DEEPSEEK_MODEL = os.getenv(
-    "DECONSTRUCT_FALLBACK_DEEPSEEK_MODEL", "deepseek-v4-flash"
+    "DECONSTRUCT_FALLBACK_DEEPSEEK_MODEL", "deepseek-v4.1-flash"
 ).strip()
 DECONSTRUCT_FALLBACK_DEEPSEEK_REASONING_EFFORT = os.getenv(
     "DECONSTRUCT_FALLBACK_DEEPSEEK_REASONING_EFFORT", "high"
@@ -342,10 +367,10 @@ DECONSTRUCT_PARENT_SEGMENT_MAX_UNITS_PER_SEGMENT = int(
 
 # Evidence Normalizer 使用独立运行配置；不得继承方案解构配置后误选其他任务模型。
 EVIDENCE_NORMALIZER_PROVIDER = os.getenv(
-    "EVIDENCE_NORMALIZER_PROVIDER", "zhipu-coding-plan"
+    "EVIDENCE_NORMALIZER_PROVIDER", "opencode-go"
 ).strip().lower()
 EVIDENCE_NORMALIZER_MODEL = os.getenv(
-    "EVIDENCE_NORMALIZER_MODEL", "glm-5.3-flash"
+    "EVIDENCE_NORMALIZER_MODEL", "deepseek-v4.1-flash"
 ).strip()
 EVIDENCE_NORMALIZER_REASONING_EFFORT = os.getenv(
     "EVIDENCE_NORMALIZER_REASONING_EFFORT", "high"
@@ -364,10 +389,8 @@ EVIDENCE_NORMALIZER_TEMPERATURE = (
     if _evidence_normalizer_temperature
     else None
 )
-# Evidence Normalizer 默认直连 zhipu-coding-plan GLM；显式配置才可切换路由。
-# 产品运行和真实测试都不得从 Hermes、OMP 或其他 harness 读取凭据或代理请求。
-# 密钥留空时按 DECONSTRUCT_GLM_API_KEY（其自身回退 INDEPENDENT_VLM_API_KEY）
-# 复用同一 BigModel 账号凭据，单机单用户无需重复粘贴同一个密钥。
+# Legacy GLM-specific Normalizer profile remains available for saved jobs.
+# New work uses the provider-neutral EVIDENCE_NORMALIZER_* profile above.
 EVIDENCE_NORMALIZER_GLM_BASE_URL = os.getenv(
     "EVIDENCE_NORMALIZER_GLM_BASE_URL",
     "https://open.bigmodel.cn/api/coding/paas/v4",
@@ -386,10 +409,10 @@ EVIDENCE_NORMALIZER_GLM_REASONING_EFFORT = os.getenv(
 # Other-protocol control Agent uses an independent connection profile so it
 # cannot silently inherit the official IN/EX deconstruction Schema or route.
 PROTOCOL_CONTROL_BACKEND = os.getenv(
-    "PROTOCOL_CONTROL_BACKEND", "zhipu-coding-plan"
+    "PROTOCOL_CONTROL_BACKEND", "opencode-go"
 ).strip().lower()
 PROTOCOL_CONTROL_MODEL = os.getenv(
-    "PROTOCOL_CONTROL_MODEL", "glm-5.3-flash"
+    "PROTOCOL_CONTROL_MODEL", "deepseek-v4.1-flash"
 ).strip()
 PROTOCOL_CONTROL_REASONING_EFFORT = os.getenv(
     "PROTOCOL_CONTROL_REASONING_EFFORT", "high"

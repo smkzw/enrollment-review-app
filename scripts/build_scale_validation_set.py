@@ -7,7 +7,7 @@ installed decoder can actually open it. An unknown count is recorded and makes
 the set ineligible for a completeness run.
 
 Usage:
-    python scripts/build_scale_validation_set.py --dir <真实资料文件夹> \
+    python -m scripts.build_scale_validation_set --dir <真实资料文件夹> \
         [--out-root ~/wp08-scale-sets]
 """
 from __future__ import annotations

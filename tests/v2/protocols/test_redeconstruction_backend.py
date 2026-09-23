@@ -104,7 +104,13 @@ class FeedbackRegressionGate:
 
     def evaluate(self, _source_input, draft, **_kwargs):
         target = draft.proposed_rules[1].components[0]
-        issue_count = 2 if target.title == "引入无关变化" else 1
+        issue_count = (
+            2
+            if target.title == "引入无关变化"
+            else 0
+            if target.title == "按原文完成局部修订"
+            else 1
+        )
         issues = [
             ProtocolGateIssue(
                 issue_code=f"TARGET_ISSUE_{index}",
@@ -841,6 +847,55 @@ def test_default_feedback_reviser_retries_one_rejected_candidate(
     assert after.revision.revision_number == before.revision.revision_number + 1
     assert after.revision.content.proposed_rules[1].components[0].title == (
         "按原文完成局部修订"
+    )
+
+
+def test_source_error_feedback_rejects_candidate_without_issue_reduction(
+    slice4_env, data_paths
+) -> None:
+    factory, _now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+
+    def revise(_source_input, current_draft, _target_rule_code, _feedback_note):
+        revised = current_draft.model_copy(deep=True)
+        revised.proposed_rules[1].components[0].title = "改了文字但问题仍在"
+        revised.component_drafts[1].proposed_component.title = "改了文字但问题仍在"
+        return revised
+
+    service = _make_service(
+        factory,
+        data_paths,
+        gate=FeedbackRegressionGate(),
+        feedback_reviser=revise,
+    )
+    started = service.start_first_deconstruction(
+        upload_path=_write_minimal_docx(data_paths, "feedback-no-reduction.docx"),
+        original_name="feedback-no-reduction.docx",
+        idempotency_key="feedback-no-reduction-first",
+        actor="医学监查员",
+    )
+    service.seed_review_session(
+        started.job_id,
+        source_input=source_input,
+        draft=draft,
+        source_spans=spans,
+        wait_at="await_review",
+    )
+    before = service.get_draft_detail(started.job_id)
+
+    with pytest.raises(ProtocolWorkbenchError) as exc_info:
+        service.apply_feedback(
+            started.job_id,
+            expected_revision_id=before.revision.revision_id,
+            feedback_kind=DraftFeedbackKind.SOURCE_ERROR,
+            target_rule_code="EX-01",
+            feedback_note="只修复当前完整性问题。",
+            actor="医学监查员",
+        )
+
+    assert exc_info.value.code == "FEEDBACK_REVISION_FAILED"
+    assert service.get_draft_detail(started.job_id).revision.revision_id == (
+        before.revision.revision_id
     )
 
 

@@ -435,6 +435,44 @@ def test_control_transport_omits_temperature_unless_explicitly_configured() -> N
     assert build_kwargs(0.7)["temperature"] == 0.7
 
 
+def test_opencode_control_transport_uses_json_object_wire_and_keeps_strict_contract() -> None:
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=object(),
+        backend="opencode-go",
+        model="deepseek-v4.1-flash",
+        reasoning_effort="high",
+        max_tokens=65536,
+    )
+
+    kwargs = transport._completion_kwargs([{"role": "user", "content": "控制"}])
+
+    assert transport.response_format_mode == "json_object"
+    assert kwargs["response_format"] == {"type": "json_object"}
+    assert transport.response_format_sha256 == (
+        OpenAICompatibleProtocolControlAgentTransport(
+            client=object(),
+            backend="cms-router",
+            model="glm-5.3-flash",
+            max_tokens=65536,
+        ).response_format_sha256
+    )
+
+
+def test_control_response_format_mode_can_be_explicitly_overridden() -> None:
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=object(),
+        backend="cms-router",
+        model="glm-5.3-flash",
+        max_tokens=65536,
+        response_format_mode="text",
+    )
+
+    kwargs = transport._completion_kwargs([{"role": "user", "content": "控制"}])
+
+    assert transport.response_format_mode == "text"
+    assert "response_format" not in kwargs
+
+
 def test_control_length_retry_budget_capped_at_131072() -> None:
     client, completions = _client(
         [

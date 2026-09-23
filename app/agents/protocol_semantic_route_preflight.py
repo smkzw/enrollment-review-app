@@ -28,11 +28,13 @@ from app.agents.protocol_semantic_model_router import (
     select_protocol_semantic_route_candidates,
 )
 from app.config import (
-    DECONSTRUCT_GLM_BASE_URL,
-    DEEPSEEK_BASE_URL,
     ENROLLMENT_ENV_FILE_VAR,
     MTPLX_BASE_URL,
     OMLX_BASE_URL,
+)
+from app.llm.provider_profiles import (
+    REMOTE_OPENAI_PROVIDERS,
+    resolve_openai_connection,
 )
 
 PreflightMode = Literal["degrade", "strict"]
@@ -45,6 +47,9 @@ _SECRET_ENV_NAMES = (
     "MTPLX_API_KEY",
     "OMLX_API_KEY",
     "MINIMAX_API_KEY",
+    "CMS_ROUTER_API_KEY",
+    "CMS_SMK_API_KEY",
+    "OPENCODE_API_KEY",
 )
 
 
@@ -159,10 +164,17 @@ def resolve_preflight_mode(raw: str | None = None) -> PreflightMode:
 
 def candidate_endpoint_url(candidate: ProtocolSemanticRouteCandidate) -> str | None:
     backend = candidate.backend.strip().lower()
-    if backend in {"zhipu-coding-plan", "glm"}:
-        return (DECONSTRUCT_GLM_BASE_URL or "").strip() or None
-    if backend == "deepseek":
-        return (DEEPSEEK_BASE_URL or "").strip() or None
+    if backend in REMOTE_OPENAI_PROVIDERS:
+        try:
+            base_url, _ = resolve_openai_connection(
+                backend,
+                role_base_url_env="DECONSTRUCT_BASE_URL",
+                role_api_key_env="DECONSTRUCT_API_KEY",
+                require_api_key=False,
+            )
+        except ValueError:
+            return None
+        return base_url
     if backend in {"mtplx", "mtplx-api"}:
         url = (MTPLX_BASE_URL or "").strip().rstrip("/")
         return (url if url.endswith("/v1") else f"{url}/v1") if url else None

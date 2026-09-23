@@ -17,7 +17,7 @@ qualification and formal publication are prerequisite flows and are
 reported as such, not silently skipped.
 
 Usage (after build_scale_validation_set.py and backend on :8902):
-    python scripts/run_scale_validation.py \
+    python -m scripts.run_scale_validation \
         --project <project_id> --set runs/execution/wp08-scale-validation \
         --subject-code SC-SCALE-01
 """
@@ -73,7 +73,13 @@ def _write_report(out: Path, report: dict) -> None:
 
 
 def main() -> int:
+    global BASE
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--base-url",
+        default=BASE,
+        help="已启动的正式产品服务地址；默认沿用历史开发端口",
+    )
     parser.add_argument("--project", required=True)
     parser.add_argument("--set", dest="set_dir", required=True)
     parser.add_argument("--subject-code", required=True)
@@ -82,6 +88,7 @@ def main() -> int:
     parser.add_argument("--actor", default="wp08-scale")
     parser.add_argument("--upload-timeout", type=int, default=7200)
     args = parser.parse_args()
+    BASE = args.base_url.rstrip("/")
 
     manifest = json.loads(
         (Path(args.set_dir) / "manifest.json").read_text(encoding="utf-8")

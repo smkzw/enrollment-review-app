@@ -229,7 +229,7 @@ def _default_glm_candidate() -> list[ProtocolSemanticRouteCandidate]:
     """
 
     glm_backend = (DECONSTRUCT_GLM_PROVIDER or "zhipu-coding-plan").strip().lower()
-    if glm_backend not in {"zhipu-coding-plan", "glm"}:
+    if glm_backend not in {"zhipu-coding-plan", "glm", "cms-router", "cms-smk"}:
         raise ValueError("GLM 服务连接类型配置无效，不能静默替换")
     return [
         ProtocolSemanticRouteCandidate(
@@ -305,12 +305,17 @@ def candidate_availability_error(
     """Return an explicit Chinese skip reason when a candidate cannot start."""
 
     backend = candidate.backend.strip().lower()
-    if backend in {"zhipu-coding-plan", "glm"}:
-        if not (DECONSTRUCT_GLM_API_KEY or "").strip():
-            return (
-                "GLM 方案解构服务尚未配置（缺少 DECONSTRUCT_GLM_API_KEY）；"
-                "已显式跳过该候选并继续尝试下一模型。"
+    if backend in {"zhipu-coding-plan", "glm", "cms-router", "cms-smk", "opencode-go"}:
+        from app.llm.provider_profiles import resolve_openai_connection
+
+        try:
+            resolve_openai_connection(
+                backend,
+                role_base_url_env="DECONSTRUCT_BASE_URL",
+                role_api_key_env="DECONSTRUCT_API_KEY",
             )
+        except ValueError as exc:
+            return f"方案解构服务尚未配置（{exc}）；已显式跳过该候选。"
         return None
     if backend == "deepseek":
         from app.config import DEEPSEEK_API_KEY

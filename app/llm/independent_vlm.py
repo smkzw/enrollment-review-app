@@ -29,11 +29,15 @@ from app.config import (
     INDEPENDENT_VLM_REASONING_EFFORT,
     INDEPENDENT_VLM_TIMEOUT_SECONDS,
 )
+from app.llm.provider_profiles import (
+    provider_default_headers,
+    resolve_openai_connection,
+)
 
 logger = logging.getLogger(__name__)
 
 SUPPORTED_INDEPENDENT_VLM_PROVIDERS = frozenset(
-    {"zhipu-coding-plan", "bigmodel"}
+    {"zhipu-coding-plan", "bigmodel", "cms-router", "cms-smk", "opencode-go"}
 )
 # Product-owned `zhipu-coding-plan` / glm-5.3-flash Coding Plan base URL.
 CODING_PLAN_BASE_URL = "https://open.bigmodel.cn/api/coding/paas/v4"
@@ -212,10 +216,6 @@ def map_reasoning_effort_to_thinking(
     }
 
 
-def _resolve_api_key() -> str:
-    return os.getenv("INDEPENDENT_VLM_API_KEY", INDEPENDENT_VLM_API_KEY).strip()
-
-
 def require_independent_vlm_config() -> dict[str, str]:
     """Validate provider/model/key; fail closed when vision route is selected."""
     provider = os.getenv(
@@ -226,18 +226,23 @@ def require_independent_vlm_config() -> dict[str, str]:
             f"Unsupported INDEPENDENT_VLM_PROVIDER={provider!r}; "
             f"allowed={sorted(SUPPORTED_INDEPENDENT_VLM_PROVIDERS)}"
         )
-    api_key = _resolve_api_key()
-    if not api_key:
-        raise IndependentVlmConfigError(
-            "INDEPENDENT_VLM_API_KEY is not set; Independent VLM remains disabled"
-        )
     model = os.getenv("INDEPENDENT_VLM_MODEL", INDEPENDENT_VLM_MODEL).strip()
     if not model:
         raise IndependentVlmConfigError("INDEPENDENT_VLM_MODEL is empty")
-    base_url = normalize_independent_vlm_base_url(
-        os.getenv("INDEPENDENT_VLM_BASE_URL", INDEPENDENT_VLM_BASE_URL)
-        or CODING_PLAN_BASE_URL
-    )
+    explicit_base_url = os.getenv("INDEPENDENT_VLM_BASE_URL", "").strip()
+    explicit_api_key = os.getenv("INDEPENDENT_VLM_API_KEY", "").strip()
+    if provider == "bigmodel":
+        provider = "zhipu-coding-plan"
+    try:
+        base_url, api_key = resolve_openai_connection(
+            provider,
+            base_url=explicit_base_url,
+            api_key=explicit_api_key,
+            role_base_url_env="INDEPENDENT_VLM_BASE_URL",
+            role_api_key_env="INDEPENDENT_VLM_API_KEY",
+        )
+    except ValueError as exc:
+        raise IndependentVlmConfigError(str(exc)) from exc
     return {
         "provider": provider,
         "api_key": api_key,
@@ -266,6 +271,10 @@ def get_independent_vlm_client() -> AsyncOpenAI:
             api_key=cfg["api_key"],
             http_client=http_client,
             max_retries=0,
+            default_headers=provider_default_headers(
+                cfg["provider"],
+                session_id="enrollment-review-independent-vlm",
+            ),
         )
     return _client
 
@@ -353,7 +362,14 @@ def independent_vlm_completion_kwargs(
 ) -> dict[str, Any]:
     """Build request kwargs while preserving provider-default sampling."""
     cfg_model = model or os.getenv("INDEPENDENT_VLM_MODEL", INDEPENDENT_VLM_MODEL)
-    thinking = map_reasoning_effort_to_thinking(reasoning_effort)
+    provider = os.getenv("INDEPENDENT_VLM_PROVIDER", INDEPENDENT_VLM_PROVIDER).strip().lower()
+    selected_effort = str(
+        reasoning_effort
+        if reasoning_effort is not None
+        else os.getenv("INDEPENDENT_VLM_REASONING_EFFORT", INDEPENDENT_VLM_REASONING_EFFORT)
+    ).strip().lower()
+    if selected_effort in {"", "default", "auto"}:
+        selected_effort = "high"
     kwargs: dict[str, Any] = {
         "model": cfg_model,
         "messages": messages,
@@ -364,9 +380,12 @@ def independent_vlm_completion_kwargs(
                 "INDEPENDENT_VLM_MAX_TOKENS", str(INDEPENDENT_VLM_MAX_TOKENS)
             )
         ),
-        "reasoning_effort": thinking["reasoning_effort"],
-        "extra_body": thinking["extra_body"],
+        "reasoning_effort": selected_effort,
     }
+    if provider in {"zhipu-coding-plan", "bigmodel"}:
+        thinking = map_reasoning_effort_to_thinking(selected_effort)
+        kwargs["reasoning_effort"] = thinking["reasoning_effort"]
+        kwargs["extra_body"] = thinking["extra_body"]
     if temperature is not None:
         kwargs["temperature"] = temperature
     if top_p is not None:

@@ -813,6 +813,41 @@ def validate_protocol_control_discovery_results(
             "发现处置必须按原文顺序恰好覆盖完整清单。",
         )
 
+    # Discovery batches classify their owned units independently.  A unit may
+    # therefore be labelled non_control by its owner while a candidate in a
+    # different batch names that same unit as indispensable context.  The
+    # cross-batch relation is more specific: promote the referenced unit to
+    # context_only without turning it into a control or changing source text.
+    required_context_ids = {
+        context_id
+        for decision in decisions
+        if decision.disposition
+        in {
+            ProtocolControlDiscoveryDisposition.CANDIDATE,
+            ProtocolControlDiscoveryDisposition.UNCERTAIN,
+        }
+        for context_id in decision.required_context_structure_unit_ids
+    }
+    decisions = [
+        decision.model_copy(
+            update={
+                "disposition": ProtocolControlDiscoveryDisposition.CONTEXT_ONLY,
+                "rationale": (
+                    f"{decision.rationale}；该段被其他候选或待核对段落"
+                    "明确列为必要上下文，系统仅将其收录为上下文，"
+                    "不单独生成审核要求。"
+                ),
+            }
+        )
+        if (
+            decision.structure_unit_id in required_context_ids
+            and decision.disposition
+            == ProtocolControlDiscoveryDisposition.NON_CONTROL
+        )
+        else decision
+        for decision in decisions
+    ]
+
     deep_ids = [
         decision.structure_unit_id
         for decision in decisions

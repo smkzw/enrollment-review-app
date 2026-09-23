@@ -2,6 +2,8 @@
 
 > 2026-09-22现行入口：`.trellis/tasks/09-11-e2e-eligibility-review/delivery_20260922/00_START_HERE.md`；当前PRD/设计/唯一进度为该任务prd.md、design.md、implement.md。延续V3内置前置方案Agent及主OCR/局部核实真实来源，取消全量双读默认。本轮核对e7f34d05/GitHub与专家0922V2后形成W0–W7、Q1–Q3实施验收包，产品缺陷尚未修复、claims_complete=false。以下历史“当前/最新/默认/已完成”须按日期理解，冲突处以本入口和现场证据为准。不要运行历史作业或照抄旧模型配置。
 
+> 2026-09-22模型配置更新：现行独立模型为OmniRouter `cms-router/glm-5.3-flash:high`与OpenCode Go `opencode-go/deepseek-v4.1-flash:high`。二者按业务角色独立配置，不要求所有资料全页双读；资料读取仍遵循“主OCR/可靠原生文字优先，关键字段、低可信页和冲突处局部视觉核实”。当前组合只是部署选择，provider差异仅进入连接、鉴权、能力和推理参数适配，不得改写临床提示、Schema、来源验证、采信标准或加入项目特异逻辑。下方2026-09-12及更早的GLM直连/MTPLX“当前部署”表述仅为沿革。
+
 
 **当前部署要求（2026-09-12）：** 受试者逐页对称双主读为 GLM-5.3-Flash high（zhipu-coding-plan）与 MTPLX Qwen3.8-Flash-Next-MTPLX-Optimized-Speed xhigh（公开ID `mtplx-flash-next-optimized-speed`）。两者均读取普通事实与手写，不设置第三读。新语义任务足额配置，65536起始、length最多一次131072，共享思考与正文并校验厂商物理上限。产品使用自有harness与显式凭据直连，不依赖个人OMP/Hermes运行时。当前代码仍有旧默认，实际接线/预检为下一项，不能把本文当作已启用回执。
 

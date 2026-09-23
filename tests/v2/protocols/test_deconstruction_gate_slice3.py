@@ -63,6 +63,7 @@ from app.domain.contracts.rules import (
 from app.domain.publication import canonical_hash
 from app.protocols.deconstruction_gate import (
     ProtocolDeconstructionGate,
+    _predicate_binds_obligation,
     _substantive_obligation_segments,
 )
 
@@ -870,6 +871,36 @@ def test_chinese_clinical_alternatives_cannot_be_weakened_to_all():
     )
 
     assert any(
+        item.issue_code == "DISJUNCTION_CHANGED_TO_CONJUNCTION"
+        for item in _issues(result, "boolean_logic")
+    )
+
+
+def test_parent_disjunction_does_not_turn_one_component_into_internal_any():
+    source_input, draft, spans = _fixture()
+    text = "无法满足洗脱要求；或因合并疾病需要使用免疫抑制剂、糖皮质激素"
+    expression = LogicalExpression(
+        operator=LogicalOperator.ALL,
+        children=[
+            _exists_predicate(
+                "predicate-comorbidity",
+                "存在需要治疗的合并疾病",
+                "因合并疾病需要使用免疫抑制剂、糖皮质激素",
+            ),
+            _exists_predicate(
+                "predicate-treatment-need",
+                "需要使用免疫抑制剂或糖皮质激素",
+                "需要使用免疫抑制剂、糖皮质激素",
+            ),
+        ],
+    )
+    _replace_inclusion_source_and_expression(source_input, draft, text, expression)
+
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+
+    assert not any(
         item.issue_code == "DISJUNCTION_CHANGED_TO_CONJUNCTION"
         for item in _issues(result, "boolean_logic")
     )
@@ -3075,6 +3106,88 @@ def test_open_list_local_exception_requires_exclusive_component_exception():
     )
 
 
+def test_specific_open_list_item_keeps_its_local_exception_without_exclusivity():
+    source_input, draft, spans = _fixture()
+    text = "存在下列情况，包括但不限于：情况甲、手术乙（手术丙除外）"
+    component = draft.proposed_rules[1].components[0]
+    component.expression = _predicate(
+        "predicate-trigger",
+        "手术乙",
+        True,
+        "unitless",
+        source_clause="手术乙（手术丙除外）",
+    )
+    component.expression.predicate.source_clause = None
+    component.expression.predicate.source_clauses = [
+        "存在下列情况，包括但不限于：",
+        "手术乙（手术丙除外）",
+    ]
+    component.exception_expression = _predicate(
+        "predicate-exception",
+        "手术丙",
+        True,
+        "unitless",
+        source_clause="手术乙（手术丙除外）",
+    )
+    draft.component_drafts[1].proposed_component = component
+    draft.component_drafts[1].source_excerpts = [text]
+    next(
+        item
+        for item in source_input.source_materials
+        if item.source_span_id == "span-ex"
+    ).text = text
+
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+    codes = {issue.issue_code for issue in _issues(result, "boolean_logic")}
+    assert "LOCAL_EXCEPTION_MAY_WAIVE_CONCURRENT_TRIGGER" not in codes
+
+
+def test_exception_on_later_list_item_does_not_apply_to_previous_item():
+    source_input, draft, spans = _fixture()
+    text = "筛选时存在情况甲、情况乙（情况丙除外）"
+    component = draft.proposed_rules[1].components[0]
+    component.expression = _predicate(
+        "predicate-trigger",
+        "情况甲",
+        True,
+        "unitless",
+        source_clause="筛选时存在情况甲",
+    )
+    component.exception_expression = None
+    draft.component_drafts[1].proposed_component = component
+    draft.component_drafts[1].source_excerpts = [text]
+    next(
+        item
+        for item in source_input.source_materials
+        if item.source_span_id == "span-ex"
+    ).text = text
+
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+    assert not any(
+        issue.issue_code == "EXCEPTION_NOT_STRUCTURED"
+        for issue in _issues(result, "boolean_logic")
+    )
+
+
+def test_concessive_qualifier_is_covered_by_its_exact_owning_clause():
+    text = "有严重感染病史，即使感染已消退"
+    expression = _predicate(
+        "predicate-trigger",
+        "严重感染病史",
+        True,
+        "unitless",
+        source_clause=text,
+    )
+    assert _predicate_binds_obligation(
+        expression.predicate,
+        "即使感染已消退",
+    )
+
+
 def test_procedure_mapping_cannot_borrow_component_requirement():
     source_input, draft, spans = _fixture()
     draft.procedure_catalog_mappings[0].proposed_requirement_ids = ["req-in"]
@@ -3219,6 +3332,87 @@ def test_chinese_and_or_cannot_be_mutated_to_all():
     )
     assert any(
         issue.issue_code == "DISJUNCTION_CHANGED_TO_CONJUNCTION"
+        for issue in _issues(result, "boolean_logic")
+    )
+
+
+def test_or_inside_one_conjunct_does_not_turn_outer_all_into_any():
+    source_input, draft, spans = _fixture()
+    text = "家庭或工作环境中的暴露可能发生变化，研究者判断可能影响疗效评估"
+    component = draft.proposed_rules[1].components[0]
+    component.expression = LogicalExpression(
+        operator=LogicalOperator.ALL,
+        children=[
+            _predicate(
+                "predicate-exposure",
+                "家庭或工作环境中的暴露可能发生变化",
+                True,
+                "unitless",
+                source_clause="家庭或工作环境中的暴露可能发生变化",
+            ),
+            _predicate(
+                "predicate-judgment",
+                "研究者判断可能影响疗效评估",
+                True,
+                "unitless",
+                judgment=True,
+                source_clause="研究者判断可能影响疗效评估",
+            ),
+        ],
+    )
+    draft.component_drafts[1].proposed_component = component
+    draft.component_drafts[1].source_excerpts = [text]
+    next(
+        item
+        for item in source_input.source_materials
+        if item.source_span_id == "span-ex"
+    ).text = text
+
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+    assert not any(
+        issue.issue_code == "DISJUNCTION_CHANGED_TO_CONJUNCTION"
+        for issue in _issues(result, "boolean_logic")
+    )
+
+
+def test_adjacent_any_branches_can_share_the_exact_or_connector():
+    source_input, draft, spans = _fixture()
+    text = "有重要器官移植或造血干细胞移植史"
+    component = draft.proposed_rules[1].components[0]
+    component.expression = LogicalExpression(
+        operator=LogicalOperator.ANY,
+        children=[
+            _predicate(
+                "predicate-organ",
+                "重要器官移植",
+                True,
+                "unitless",
+                source_clause="有重要器官移植或",
+            ),
+            _predicate(
+                "predicate-stem-cell",
+                "造血干细胞移植史",
+                True,
+                "unitless",
+                source_clause="或造血干细胞移植史",
+            ),
+        ],
+    )
+    draft.component_drafts[1].proposed_component = component
+    draft.component_drafts[1].source_excerpts = [text]
+    next(
+        item
+        for item in source_input.source_materials
+        if item.source_span_id == "span-ex"
+    ).text = text
+
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+    assert not any(
+        issue.issue_code == "DISJUNCTION_NOT_BOUND_TO_SOURCE"
         for issue in _issues(result, "boolean_logic")
     )
 

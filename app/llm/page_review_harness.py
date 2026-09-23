@@ -21,6 +21,10 @@ from PIL import Image
 from openai import AsyncOpenAI
 
 from app.llm.generation_completion import local_early_length
+from app.llm.provider_profiles import (
+    provider_default_headers,
+    resolve_openai_connection,
+)
 
 from app.config import (
     GEMINI_ACCESS_TOKEN,
@@ -30,11 +34,14 @@ from app.config import (
     PAGE_REVIEW_MAIN_A_API_KEY,
     PAGE_REVIEW_MAIN_A_BASE_URL,
     PAGE_REVIEW_MAIN_A_FALLBACK_BASE_URL,
+    PAGE_REVIEW_MAIN_A_MAX_TOKENS,
     PAGE_REVIEW_MAIN_A_MODEL,
+    PAGE_REVIEW_MAIN_A_PROVIDER,
     PAGE_REVIEW_MAIN_A_REASONING_EFFORT,
     PAGE_REVIEW_MAIN_B_API_KEY,
     PAGE_REVIEW_MAIN_B_BASE_URL,
     PAGE_REVIEW_MAIN_B_FALLBACK_BASE_URL,
+    PAGE_REVIEW_MAIN_B_MAX_TOKENS,
     PAGE_REVIEW_MAIN_B_MODEL,
     PAGE_REVIEW_MAIN_B_PROVIDER,
     PAGE_REVIEW_MAIN_B_REASONING_EFFORT,
@@ -180,14 +187,38 @@ def require_page_reader_routes(
     if concurrency not in {2, 3}:
         raise PageReviewConfigError("云端逐页判读并发必须为 2 或 3")
     try:
-        max_tokens = int(_value(env, "PAGE_REVIEW_MAX_TOKENS", str(PAGE_REVIEW_MAX_TOKENS)))
+        shared_max_tokens = int(
+            _value(env, "PAGE_REVIEW_MAX_TOKENS", str(PAGE_REVIEW_MAX_TOKENS))
+        )
+        main_a_max_tokens = int(
+            _value(
+                env,
+                "PAGE_REVIEW_MAIN_A_MAX_TOKENS",
+                str(PAGE_REVIEW_MAIN_A_MAX_TOKENS),
+            )
+        )
+        main_b_max_tokens = int(
+            _value(
+                env,
+                "PAGE_REVIEW_MAIN_B_MAX_TOKENS",
+                str(PAGE_REVIEW_MAIN_B_MAX_TOKENS),
+            )
+        )
     except ValueError as exc:
         raise PageReviewConfigError("逐页判读输出额度必须为整数") from exc
-    if not MIN_SEMANTIC_OUTPUT_TOKENS <= max_tokens <= MAX_SEMANTIC_OUTPUT_TOKENS:
-        raise PageReviewConfigError("新逐页判读输出额度必须在 65536 至 131072 之间")
+    for lane, budget in (
+        ("共用", shared_max_tokens),
+        ("main-A", main_a_max_tokens),
+        ("main-B", main_b_max_tokens),
+    ):
+        if not MIN_SEMANTIC_OUTPUT_TOKENS <= budget <= MAX_SEMANTIC_OUTPUT_TOKENS:
+            raise PageReviewConfigError(
+                f"{lane}逐页判读输出额度必须在 {MIN_SEMANTIC_OUTPUT_TOKENS} 至 "
+                f"{MAX_SEMANTIC_OUTPUT_TOKENS} 之间"
+            )
 
     provider = _value(env, "PAGE_REVIEW_MAIN_A_PROVIDER", "") or _value(
-        env, "INDEPENDENT_VLM_PROVIDER", "zhipu-coding-plan"
+        env, "INDEPENDENT_VLM_PROVIDER", PAGE_REVIEW_MAIN_A_PROVIDER
     )
     local_main_a = provider in LOCAL_PAGE_PROVIDERS
     main_a_key = (
@@ -195,17 +226,23 @@ def require_page_reader_routes(
         if local_main_a
         else _value(env, "PAGE_REVIEW_MAIN_A_API_KEY", "")
     )
-    if provider == "opencode-go":
-        # OpenCode 凭据与 OMP 的 opencode-go provider 同源，只从专用环境变量
-        # 读取（用户自行填写，不经任何会话/日志转手）；绝不回退到其他供应商
-        # 的密钥，防止把 A 供应商的凭据发给 B 供应商。
-        main_a_key = _value(env, "PAGE_REVIEW_MAIN_A_API_KEY", "") or _value(
-            env, "OPENCODE_API_KEY", ""
-        )
-    elif provider == "zhipu-coding-plan" and not main_a_key:
-        main_a_key = _value(
-            env, "INDEPENDENT_VLM_API_KEY", ""
-        )
+    main_a_base_url = _value(
+        env, "PAGE_REVIEW_MAIN_A_BASE_URL", PAGE_REVIEW_MAIN_A_BASE_URL
+    )
+    if provider == "zhipu-coding-plan" and not main_a_key:
+        main_a_key = _value(env, "INDEPENDENT_VLM_API_KEY", "")
+    if not local_main_a and provider != "google-antigravity":
+        try:
+            main_a_base_url, main_a_key = resolve_openai_connection(
+                provider,
+                base_url=main_a_base_url,
+                api_key=main_a_key,
+                role_api_key_env="PAGE_REVIEW_MAIN_A_API_KEY",
+                environ=env,
+                require_api_key=require_credentials,
+            )
+        except ValueError:
+            main_a_key = ""
     main_b_provider = _value(env, "PAGE_REVIEW_MAIN_B_PROVIDER", PAGE_REVIEW_MAIN_B_PROVIDER)
     local_main_b = main_b_provider in LOCAL_PAGE_PROVIDERS
     gemini_main_b = main_b_provider == "google-antigravity"
@@ -225,10 +262,20 @@ def require_page_reader_routes(
                       else _value(env, "PAGE_REVIEW_MAIN_B_API_KEY", PAGE_REVIEW_MAIN_B_API_KEY))
         if local_main_b and not main_b_key:
             main_b_key = "local-product"
-        elif main_b_provider == "cms-smk" and not main_b_key:
-            main_b_key = _value(env, "CMS_SMK_API_KEY", "")
         main_b_project = ""
         main_b_base_url = _value(env, "PAGE_REVIEW_MAIN_B_BASE_URL", PAGE_REVIEW_MAIN_B_BASE_URL)
+        if not local_main_b:
+            try:
+                main_b_base_url, main_b_key = resolve_openai_connection(
+                    main_b_provider,
+                    base_url=main_b_base_url,
+                    api_key=main_b_key,
+                    role_api_key_env="PAGE_REVIEW_MAIN_B_API_KEY",
+                    environ=env,
+                    require_api_key=require_credentials,
+                )
+            except ValueError:
+                main_b_key = ""
     missing = []
     if not main_a_key:
         if provider == "opencode-go":
@@ -267,11 +314,11 @@ def require_page_reader_routes(
         PageReviewLane.MAIN_A: PageReaderRoute(
             lane=PageReviewLane.MAIN_A,
             provider=provider,
-            base_url=_value(env, "PAGE_REVIEW_MAIN_A_BASE_URL", PAGE_REVIEW_MAIN_A_BASE_URL),
+            base_url=main_a_base_url,
             api_key=main_a_key,
             model=main_a_model,
             reasoning_effort=main_a_effort,
-            max_tokens=max_tokens,
+            max_tokens=main_a_max_tokens,
             max_concurrency=1 if local_main_a else concurrency,
             fallback_base_url=_value(
                 env,
@@ -286,7 +333,7 @@ def require_page_reader_routes(
             api_key=main_b_key,
             model=main_b_model,
             reasoning_effort=main_b_effort,
-            max_tokens=max_tokens,
+            max_tokens=main_b_max_tokens,
             max_concurrency=1 if local_main_b else concurrency,
             fallback_base_url=_value(
                 env,
@@ -359,6 +406,11 @@ async def _resolve_route_model(route: PageReaderRoute, *, owned_health: Mapping 
             response = await client.get(f"{route.base_url.rstrip('/')}/models", headers=headers)
             response.raise_for_status()
             data = response.json().get("data", [])
+            if route.provider == "cms-router" and not data:
+                # cms-router currently authorizes business completions but
+                # intentionally publishes no model catalog. Each completion
+                # still preserves requested and returned model identities.
+                listing_unavailable = True
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code in {401, 403, 404}:
                 # 网关可能仅对对话端点放行业务密钥，模型目录另需管理凭据。
@@ -714,12 +766,10 @@ async def _direct_openai_completion(
         trust_env=False,
         timeout=httpx.Timeout(PAGE_REVIEW_TIMEOUT_SECONDS, connect=15),
     ) as http_client:
-        default_headers = None
-        if route.provider == "opencode-go":
-            default_headers = {
-                "x-opencode-session": f"{_PRODUCT_SESSION_ID}:{route.lane.value}",
-                "User-Agent": "enrollment-review-app/1",
-            }
+        default_headers = provider_default_headers(
+            route.provider,
+            session_id=f"{_PRODUCT_SESSION_ID}:{route.lane.value}",
+        )
         client = AsyncOpenAI(
             base_url=route.base_url,
             api_key=route.api_key,

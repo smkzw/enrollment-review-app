@@ -44,6 +44,11 @@ from app.config import (
     OMLX_BASE_URL,
     OMLX_PROTOCOL_BATCH_MAX_TOKENS,
 )
+from app.llm.provider_profiles import (
+    REMOTE_OPENAI_PROVIDERS,
+    provider_default_headers,
+    resolve_openai_connection,
+)
 
 
 __all__ = [
@@ -152,7 +157,10 @@ class OpenAICompatiblePhaseApplicabilityAgentTransport:
         ).strip().lower()
         if selected_effort not in _SUPPORTED_REASONING_EFFORTS:
             raise ValueError("reasoning_effort 不是受支持的推理强度")
-        if selected_backend in {"glm", "zhipu-coding-plan"} and selected_effort not in {"low", "high", "max"}:
+        if (
+            selected_backend in {"glm", "zhipu-coding-plan"}
+            or selected_model.lower().startswith("glm-")
+        ) and selected_effort not in {"low", "high", "max"}:
             raise ValueError("GLM 连接不支持指定的推理强度")
         selected_max_tokens = (
             max_tokens if max_tokens is not None else PHASE_APPLICABILITY_MAX_TOKENS
@@ -212,6 +220,14 @@ class OpenAICompatiblePhaseApplicabilityAgentTransport:
                 )
             elif selected_backend in {"glm", "zhipu-coding-plan"}:
                 selected_base_url = _configured_value("DECONSTRUCT_GLM_BASE_URL", DECONSTRUCT_GLM_BASE_URL)
+            elif selected_backend in REMOTE_OPENAI_PROVIDERS:
+                selected_base_url, _ = resolve_openai_connection(
+                    selected_backend,
+                    base_url=base_url,
+                    api_key=api_key,
+                    role_base_url_env="PHASE_APPLICABILITY_BASE_URL",
+                    role_api_key_env="PHASE_APPLICABILITY_API_KEY",
+                )
             else:
                 selected_base_url = os.getenv("PHASE_APPLICABILITY_BASE_URL", "")
         selected_api_key = api_key
@@ -231,6 +247,14 @@ class OpenAICompatiblePhaseApplicabilityAgentTransport:
                 )
             elif selected_backend in {"glm", "zhipu-coding-plan"}:
                 selected_api_key = _configured_value("DECONSTRUCT_GLM_API_KEY", DECONSTRUCT_GLM_API_KEY)
+            elif selected_backend in REMOTE_OPENAI_PROVIDERS:
+                _, selected_api_key = resolve_openai_connection(
+                    selected_backend,
+                    base_url=selected_base_url,
+                    api_key=api_key,
+                    role_base_url_env="PHASE_APPLICABILITY_BASE_URL",
+                    role_api_key_env="PHASE_APPLICABILITY_API_KEY",
+                )
             else:
                 selected_api_key = os.getenv("PHASE_APPLICABILITY_API_KEY", "")
         if is_local:
@@ -248,6 +272,12 @@ class OpenAICompatiblePhaseApplicabilityAgentTransport:
             "timeout": timeout,
             "max_retries": max_retries,
         }
+        default_headers = provider_default_headers(
+            selected_backend,
+            session_id=f"enrollment-review-phase:{uuid4().hex}",
+        )
+        if default_headers is not None:
+            client_options["default_headers"] = default_headers
         if is_local:
             # A local inference server must not inherit a system proxy.  The
             # caller can still inject a test or custom client explicitly.

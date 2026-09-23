@@ -2,6 +2,8 @@
 
 > 2026-09-22现行入口：`.trellis/tasks/09-11-e2e-eligibility-review/delivery_20260922/00_START_HERE.md`；当前PRD/设计/唯一进度为该任务prd.md、design.md、implement.md。延续V3内置前置方案Agent及主OCR/局部核实真实来源，取消全量双读默认。本轮核对e7f34d05/GitHub与专家0922V2后形成W0–W7、Q1–Q3实施验收包，产品缺陷尚未修复、claims_complete=false。以下历史“当前/最新/默认/已完成”须按日期理解，冲突处以本入口和现场证据为准。不要运行历史作业或照抄旧模型配置。
 
+> 2026-09-22模型配置更新：当前独立模型为OmniRouter `cms-router/glm-5.3-flash:high`与OpenCode Go `opencode-go/deepseek-v4.1-flash:high`。模型组合不改变V3“主OCR/可靠原生文字+局部核实”的读取政策，也不恢复全页强制双读。各业务角色独立配置provider/model/effort/output budget；适配器可扩展其他兼容模型，临床提示、Schema、来源门禁和采信规则不得随模型改写。下方更早的GLM直连、MTPLX或“当前不得启用DeepSeek”仅为历史沿革，不再是现行部署要求。
+
 
 **当前恢复入口（2026-09-12）：** 当前Trellis任务 `.trellis/tasks/09-11-e2e-eligibility-review`；工程设计 `docs/REARCHITECTURE_R3_ENGINEERING_DESIGN_20260905.md` §6.1/§17；实际执行排序 `plans/REARCHITECTURE_RECOVERY_IMPLEMENTATION_PLAN_20260905.md` T0–T7；审阅证据与新goal prompt在当前任务内。不要执行历史暂停段落的旧命令或把文档当已启用配置。
 

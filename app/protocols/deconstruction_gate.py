@@ -412,13 +412,29 @@ def _source_requires_investigator_judgment(text: str) -> bool:
     )
 
 
-def _localized_open_list_exception_requires_exclusivity(text: str) -> bool:
-    """Identify a local carve-out inside a non-exhaustive example list."""
+def _localized_open_list_exception_requires_exclusivity(
+    trigger_clauses: Sequence[str],
+) -> bool:
+    """Identify a carve-out inside the same broad, non-exhaustive trigger.
 
-    compact = re.sub(r"\s+", "", text)
-    return bool(
-        re.search(r"(?:包括但不限于|但不限于|例如|例如包括|如[：:])", compact)
-        and re.search(r"[（(][^）)]*(?:除外|除非|例外)[^）)]*[）)]", compact)
+    A component can cite a shared parent lead-in and a separate, specific list
+    item.  Combining those two locators would incorrectly make a local
+    exception on the specific item look like an exception to the whole list.
+    The exclusivity safeguard therefore applies only when one exact trigger
+    clause itself contains both the open-list wording and the carve-out.
+    """
+
+    return any(
+        re.search(
+            r"(?:包括但不限于|但不限于|例如|例如包括|如[：:])",
+            compact,
+        )
+        and re.search(
+            r"[（(][^）)]*(?:除外|除非|例外)[^）)]*[）)]",
+            compact,
+        )
+        for clause in trigger_clauses
+        if (compact := re.sub(r"\s+", "", clause))
     )
 
 
@@ -470,35 +486,64 @@ def _branches_have_source_disjunction(expression, source: str) -> bool:
     if expression.kind != "logical" or expression.operator == LogicalOperator.NOT:
         return False
     compact_source = re.sub(r"\s+", "", source)
+    child_clauses = [
+        [
+            _normalized(clause)
+            for predicate in iter_atomic_predicates(child)
+            for clause in predicate.exact_source_clauses
+            if _normalized(clause)
+        ]
+        for child in expression.children
+    ]
+    # Chinese source locators commonly let adjacent alternatives both own the
+    # connector ("A或" / "或B").  That overlap is stronger evidence than a
+    # separator search and must not be rejected merely because the anchors
+    # share the same character position.  Identical whole-sentence locators do
+    # not pass this check because the connector is not at a branch boundary.
+    if child_clauses and all(child_clauses):
+        connector_owned = all(
+            any(clause.endswith(("或", "和/或", "及/或")) for clause in left)
+            or any(clause.startswith(("或", "和/或", "及/或")) for clause in right)
+            for left, right in zip(child_clauses, child_clauses[1:])
+        )
+        if connector_owned:
+            return True
     branch_anchors = [
         _branch_source_anchors(child, compact_source) for child in expression.children
     ]
     if any(not anchors for anchors in branch_anchors):
         return False
     for first in branch_anchors[0]:
-        paths = [(first, first[0], first[1], [first[2]])]
+        paths = [([first], [first[2]])]
         for anchors in branch_anchors[1:]:
             next_paths = []
-            for path, start, end, terms in paths:
+            for path, terms in paths:
                 for anchor in anchors:
-                    if anchor[0] < end:
+                    if anchor[0] < path[-1][1]:
                         continue
                     next_paths.append(
-                        (anchor, start, anchor[1], [*terms, anchor[2]])
+                        ([*path, anchor], [*terms, anchor[2]])
                     )
             paths = next_paths
             if not paths:
                 break
-        for _last, start, end, terms in paths:
+        for path, terms in paths:
             if all(term in {"筛选", "筛选期", "基线", "基线期"} for term in terms):
                 continue
-            between = compact_source[start:end]
-            if re.search(r"(?:和/或|及/或|或(?!以上|等于))", between):
+            separators = [
+                compact_source[left[1] : right[0]]
+                for left, right in zip(path, path[1:])
+            ]
+            if any(
+                re.search(r"(?:和/或|及/或|或(?!以上|等于))", separator)
+                for separator in separators
+            ):
                 return True
             # 原文以“满足以下条件之一/任一”显式引导替代关系时，各分支之间的
             # 分隔可以由顿号、逗号或分号承担；分支本身仍必须逐一定名于原文。
-            if _ALTERNATIVE_LEAD_IN.search(compact_source) and re.search(
-                r"[、，；。;,\n]", between
+            if _ALTERNATIVE_LEAD_IN.search(compact_source) and any(
+                re.search(r"[、，；。;,\n]", separator)
+                for separator in separators
             ):
                 return True
     return False
@@ -634,7 +679,8 @@ def _exception_applies_to_trigger(text: str, trigger_clauses: Sequence[str]) -> 
             continue
         end = start + len(clause)
         for match in exception_matches:
-            if start <= match.start() and "或" not in text[end : match.start()]:
+            between = _normalized(text[end : match.start()])
+            if start <= match.start() and not between:
                 return True
             if match.start() <= start < match.end():
                 return True
@@ -786,6 +832,16 @@ def _predicate_binds_obligation(predicate, segment: str) -> bool:
     )
     if not locator_overlaps:
         return False
+
+    # Concessive and scope-preserving qualifiers are not independent clinical
+    # entities.  When an exact source clause contains the complete qualifier,
+    # its owning predicate already preserves that obligation.  Requiring a
+    # second invented predicate (for example one whose attribute is merely
+    # "even if ...") would damage the clinical rule rather than decompose it.
+    if normalized_segment.startswith(
+        ("即使", "即便", "无论", "不论", "包括但不限于", "但不限于")
+    ) and any(normalized_segment in clause for clause in clauses):
+        return True
 
     terms = [predicate.source_term, predicate.attribute]
     if isinstance(predicate.value, str):
@@ -1513,7 +1569,12 @@ class ProtocolDeconstructionGate:
                     token in normalized
                     for token in ("且", "并且", "同时", "均需", "全部")
                 )
-                has_or = _has_unambiguous_disjunction(text) or any(
+                predicate_source = "\n".join(
+                    clause
+                    for predicate in iter_atomic_predicates(component.expression)
+                    for clause in predicate.exact_source_clauses
+                )
+                has_or = _has_unambiguous_disjunction(predicate_source) or any(
                     _branches_have_source_disjunction(node, text)
                     for node in _walk_expression_tree(component.expression)
                     if node.kind == "logical"
@@ -1598,6 +1659,7 @@ class ProtocolDeconstructionGate:
                     and not has_and
                     and expression.kind == "logical"
                     and expression.operator == LogicalOperator.ALL
+                    and _branches_have_source_disjunction(expression, text)
                     and not any(
                         node.kind == "logical"
                         and node.operator == LogicalOperator.ANY
@@ -1662,7 +1724,9 @@ class ProtocolDeconstructionGate:
                                 )
                             )
                     if (
-                        _localized_open_list_exception_requires_exclusivity(text)
+                        _localized_open_list_exception_requires_exclusivity(
+                            trigger_clauses
+                        )
                         and not _exception_asserts_exclusivity(
                             component.exception_expression
                         )

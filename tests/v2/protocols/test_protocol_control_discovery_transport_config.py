@@ -96,6 +96,22 @@ def test_discovery_uses_discovery_schema_and_provider_sampling_defaults() -> Non
     }
 
 
+def test_discovery_opencode_uses_json_object_wire_but_keeps_discovery_schema() -> None:
+    transport = discovery_module.OpenAICompatibleProtocolControlDiscoveryAgentTransport(
+        client=object(),
+        backend="opencode-go",
+        model="deepseek-v4.1-flash",
+        reasoning_effort="high",
+        max_tokens=65536,
+    )
+
+    kwargs = transport._completion_kwargs([{"role": "user", "content": "发现"}])
+
+    assert transport.response_format_mode == "json_object"
+    assert kwargs["response_format"] == {"type": "json_object"}
+    assert transport.response_format_sha256
+
+
 def test_discovery_explicit_budget_above_cap_fails_without_silent_shrink(
     monkeypatch,
 ) -> None:

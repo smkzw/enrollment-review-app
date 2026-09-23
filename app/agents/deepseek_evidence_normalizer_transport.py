@@ -35,6 +35,11 @@ from app.config import (
     OMLX_BASE_URL,
 )
 from app.domain.contracts.agents import ModelConfigContract
+from app.llm.provider_profiles import (
+    REMOTE_OPENAI_PROVIDERS,
+    provider_default_headers,
+    resolve_openai_connection,
+)
 from .evidence_normalizer import (
     EvidenceNormalizerAgentCallError,
     EvidenceNormalizerAgentResponse,
@@ -222,6 +227,9 @@ class DeepSeekEvidenceNormalizerTransport:
             "omlx",
             "local-omlx",
             "zhipu-coding-plan",
+            "cms-router",
+            "cms-smk",
+            "opencode-go",
         }:
             raise ValueError(f"当前证据规范化任务不支持模型供应商 {selected_backend}")
         selected_reasoning_effort = (
@@ -240,12 +248,16 @@ class DeepSeekEvidenceNormalizerTransport:
             "max",
         }:
             raise ValueError("reasoning_effort 不是受支持的推理强度")
-        if selected_backend in ZHIPU_EVIDENCE_NORMALIZER_BACKENDS:
+        selected_model = (model if model is not None else EVIDENCE_NORMALIZER_MODEL).strip()
+        if (
+            selected_backend in ZHIPU_EVIDENCE_NORMALIZER_BACKENDS
+            or selected_model.lower().startswith("glm-")
+        ):
             # GLM-5.3-Flash only accepts low/high/max; ""/default/auto resolve
             # to the configured GLM default. Fail here, before any request.
             _map_glm_normalizer_reasoning_effort(selected_reasoning_effort)
         self._backend = selected_backend
-        self._model = (model if model is not None else EVIDENCE_NORMALIZER_MODEL).strip()
+        self._model = selected_model
         self._reasoning_effort = selected_reasoning_effort
         self._max_tokens = (
             max_tokens if max_tokens is not None else EVIDENCE_NORMALIZER_MAX_TOKENS
@@ -283,6 +295,15 @@ class DeepSeekEvidenceNormalizerTransport:
                         "留空时按 DECONSTRUCT_GLM_API_KEY/"
                         "INDEPENDENT_VLM_API_KEY 复用同一 BigModel 凭据）"
                     )
+            elif selected_backend in REMOTE_OPENAI_PROVIDERS:
+                resolved_base_url, selected_api_key = resolve_openai_connection(
+                    selected_backend,
+                    base_url=base_url,
+                    api_key=api_key,
+                    role_base_url_env="EVIDENCE_NORMALIZER_BASE_URL",
+                    role_api_key_env="EVIDENCE_NORMALIZER_API_KEY",
+                )
+                selected_base_url = resolved_base_url
             else:
                 selected_api_key = OMLX_API_KEY if api_key is None else api_key
                 selected_base_url = OMLX_BASE_URL if base_url is None else base_url
@@ -293,6 +314,8 @@ class DeepSeekEvidenceNormalizerTransport:
                 resolved_base_url = _normalize_zhipu_coding_plan_base_url(
                     selected_base_url
                 )
+            elif selected_backend in REMOTE_OPENAI_PROVIDERS:
+                resolved_base_url = selected_base_url
             else:
                 resolved_base_url = selected_base_url
             client_options: dict[str, Any] = {}
@@ -304,6 +327,12 @@ class DeepSeekEvidenceNormalizerTransport:
                 client_options["http_client"] = httpx.Client(trust_env=False)
                 client_options["timeout"] = 600.0
                 client_options["max_retries"] = 0
+            default_headers = provider_default_headers(
+                selected_backend,
+                session_id=f"enrollment-review-normalizer:{uuid4().hex}",
+            )
+            if default_headers is not None:
+                client_options["default_headers"] = default_headers
             self._client = OpenAI(
                 api_key=selected_api_key,
                 base_url=resolved_base_url,
@@ -632,6 +661,18 @@ def evidence_normalizer_transport_from_model_config(
             temperature=temperature,
             # BigModel Coding Plan 端点与已批准的方案语义 GLM 路由一致，
             # 使用 json_object；结构仍由本地 Pydantic/来源闭包门禁强校验。
+            response_format={"type": "json_object"},
+        )
+    if provider in REMOTE_OPENAI_PROVIDERS:
+        # Provider-specific credentials and endpoint defaults are resolved by
+        # the transport. The frozen job still owns model, effort and budget.
+        return DeepSeekEvidenceNormalizerTransport(
+            backend=provider,
+            receipt_callback=receipt_callback,
+            model=model_config.model,
+            reasoning_effort=model_config.reasoning_effort,
+            max_tokens=max_tokens,
+            temperature=temperature,
             response_format={"type": "json_object"},
         )
     raise ValueError(f"当前证据规范化任务不支持模型供应商 {model_config.provider}")

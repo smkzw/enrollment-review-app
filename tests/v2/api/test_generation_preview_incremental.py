@@ -142,16 +142,35 @@ def test_anchor_wire_source_excerpts_recovers_deterministic_superset() -> None:
     assert _anchor_wire_source_excerpts([full_sentence], [clause]) == [clause]
     # 逐字命中与引号规范化命中保持不变/恢复。
     assert _anchor_wire_source_excerpts([clause], [clause]) == [clause]
-    # 词级差异不回收；多片段超集取唯一最长的条件片段作为最具体锚点。
-    assert _anchor_wire_source_excerpts(["完全不同的文字"], [clause]) == ["完全不同的文字"]
+    # 单一可选原文时，概括性引用确定性回到本原子原文；范围和语义仍由其他字段保留。
+    assert _anchor_wire_source_excerpts(["任意一次观察均可"], [clause]) == [clause]
+    # 多片段超集取唯一最长的条件片段作为最具体锚点。
     other = "男性受试者及其伴侣同意采取有效的避孕措施"
     assert _anchor_wire_source_excerpts([full_sentence], [clause, other]) == [clause]
+    # 多段来源不能唯一定位时不猜。
+    assert _anchor_wire_source_excerpts(
+        ["任意一次观察均可"], [clause, other]
+    ) == ["任意一次观察均可"]
     # 等长并列的歧义片段：不猜，保持原样交给严格门禁。
     twin_a, twin_b = "甲条件片段等长", "乙条件片段等长"
     twin_excerpt = "总述：甲条件片段等长；乙条件片段等长。"
     assert _anchor_wire_source_excerpts(
         [twin_excerpt], [twin_a, twin_b]
     ) == [twin_excerpt]
+
+
+def test_duplicate_wire_source_pairs_only_collapse_when_identical() -> None:
+    from app.agents.protocol_deconstructor import _deduplicate_wire_source_pairs
+
+    assert _deduplicate_wire_source_pairs(
+        ["span-1", "span-1"], ["同一段原文", "同一段原文"]
+    ) == (["span-1"], ["同一段原文"])
+    assert _deduplicate_wire_source_pairs(
+        ["span-1", "span-1"], ["第一段", "第二段"]
+    ) == (["span-1", "span-1"], ["第一段", "第二段"])
+    assert _deduplicate_wire_source_pairs(
+        ["span-1"], ["第一段", "第二段"]
+    ) == (["span-1"], ["第一段", "第二段"])
 
 
 def test_generation_preview_endpoint_serves_partial_then_yields_to_final(
@@ -375,4 +394,3 @@ def test_generation_preview_yields_after_final_draft(build_app) -> None:
             assert final_preview.status_code == 200, final_preview.text
             assert final_preview.json()["available"] is False
             assert final_preview.json()["reason"] == "final_draft_ready"
-

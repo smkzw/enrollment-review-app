@@ -25,6 +25,7 @@ from app.agents.protocol_control_agent_transport import (
     PROTOCOL_CONTROL_GLM_API_KEY,
     PROTOCOL_CONTROL_GLM_BASE_URL,
 )
+from app.llm.provider_profiles import REMOTE_OPENAI_PROVIDERS, resolve_openai_connection
 from app.agents.protocol_control_deconstructor import (
     CONTROL_DISCOVERY_RESPONSE_FORMAT_NAME,
     ProtocolControlDiscoveryAgentResponse,
@@ -118,6 +119,14 @@ def _connection_defaults(
                 "PROTOCOL_CONTROL_DISCOVERY_GLM_BASE_URL",
                 PROTOCOL_CONTROL_GLM_BASE_URL,
             )
+        elif backend in REMOTE_OPENAI_PROVIDERS:
+            base_url, _ = resolve_openai_connection(
+                backend,
+                base_url=base_url,
+                api_key=api_key,
+                role_base_url_env="PROTOCOL_CONTROL_DISCOVERY_BASE_URL",
+                role_api_key_env="PROTOCOL_CONTROL_DISCOVERY_API_KEY",
+            )
         else:
             base_url = os.getenv("PROTOCOL_CONTROL_DISCOVERY_BASE_URL", "")
     if api_key is None:
@@ -131,6 +140,14 @@ def _connection_defaults(
             api_key = os.getenv(
                 "PROTOCOL_CONTROL_DISCOVERY_GLM_API_KEY",
                 PROTOCOL_CONTROL_GLM_API_KEY,
+            )
+        elif backend in REMOTE_OPENAI_PROVIDERS:
+            _, api_key = resolve_openai_connection(
+                backend,
+                base_url=base_url,
+                api_key=api_key,
+                role_base_url_env="PROTOCOL_CONTROL_DISCOVERY_BASE_URL",
+                role_api_key_env="PROTOCOL_CONTROL_DISCOVERY_API_KEY",
             )
         else:
             api_key = os.getenv("PROTOCOL_CONTROL_DISCOVERY_API_KEY", "")
@@ -176,6 +193,7 @@ class OpenAICompatibleProtocolControlDiscoveryAgentTransport(
         max_tokens: int | None = None,
         temperature: float | None = None,
         response_format: Mapping[str, Any] | None = None,
+        response_format_mode: str | None = None,
         timeout: float = float(__import__("os").getenv("PROTOCOL_CONTROL_REQUEST_TIMEOUT", "1800")),
         max_retries: int = 0,
     ) -> None:
@@ -241,11 +259,15 @@ class OpenAICompatibleProtocolControlDiscoveryAgentTransport(
             max_tokens=selected_max_tokens,
             temperature=temperature,
             response_format=selected_response_format,
+            response_format_mode=response_format_mode,
             timeout=timeout,
             max_retries=max_retries,
             _response_format_name=CONTROL_DISCOVERY_RESPONSE_FORMAT_NAME,
             _transport_label="协议控制发现传输",
             _schema_label="发现",
+            _response_format_mode_env=(
+                "PROTOCOL_CONTROL_DISCOVERY_RESPONSE_FORMAT_MODE"
+            ),
             _client_factory=OpenAI,
             _http_client_factory=httpx.Client,
         )
@@ -333,6 +355,7 @@ def protocol_control_discovery_transport_from_model_config(
         "reasoning_effort": read("reasoning_effort"),
         "max_tokens": parameters.get("max_tokens"),
         "temperature": parameters.get("temperature"),
+        "response_format_mode": parameters.get("response_format_mode"),
         "base_url": parameters.get("base_url"),
     }
     values.update(

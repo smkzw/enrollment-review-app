@@ -950,14 +950,20 @@ def _resolve_transport(config: ProtocolDeconstructionExecutorConfig) -> Any:
             error_code="SEMANTIC_PROVIDER_UNAVAILABLE",
             detail="方案语义解构服务尚未配置，暂不能生成草稿；请联系维护人员完成模型接入后重试。",
         )
-    if backend in {"zhipu-coding-plan", "glm"}:
-        from app.config import DECONSTRUCT_GLM_API_KEY
+    if backend in {"zhipu-coding-plan", "glm", "cms-router", "cms-smk", "opencode-go"}:
+        from app.llm.provider_profiles import resolve_openai_connection
 
-        if not DECONSTRUCT_GLM_API_KEY:
+        try:
+            resolve_openai_connection(
+                backend,
+                role_base_url_env="DECONSTRUCT_BASE_URL",
+                role_api_key_env="DECONSTRUCT_API_KEY",
+            )
+        except ValueError:
             raise StepFailure(
                 retryable=True,
                 error_code="SEMANTIC_PROVIDER_UNAVAILABLE",
-                detail="GLM 方案语义解构服务尚未配置（缺少 DECONSTRUCT_GLM_API_KEY），暂不能生成草稿。",
+                detail="方案语义解构服务尚未配置，暂不能生成草稿；请核对所选供应商的专用凭据。",
             )
     return OpenAICompatibleProtocolAgentTransport(backend=backend)
 
