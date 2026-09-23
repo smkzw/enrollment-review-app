@@ -2,6 +2,7 @@
 
 ## 先看这里
 
+- GitHub 交付：本轮任务相关50个文件已提交并推送至 `origin/codex/phase5-clinical-facts-profile`，提交 `de4da66f`。本地 `conference/w6-temporal-scope-review-20260923/`、同名前缀的 `context/`、`metrics/`、`plans/`、`prompts/conference/`、`reviews/`、`runs/conference/` 过程文件仍未跟踪，保留在工作树；不因 GitHub 已推送就删除。临床模型调用日志、隔离 SQLite 和本机密钥配置也仅本地保留。
 - 唯一工作树：`/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile`。暂停前分支 `codex/phase5-clinical-facts-profile`，本轮起点 `bc5d1cb815bf512c964784cda92914689ef1ce11`。接手先核 `git status`、HEAD、数据库作业终态和服务归属，不为对齐旧基线 reset/clean。
 - 当前权威入口：本任务 `delivery_20260922/00_START_HERE.md`、`02_EXECUTION_RULES.md`、`03_PLAN.md`、`prd.md`、`design.md`、`implement.md`，以及仓库 `docs/REARCHITECTURE_FINAL_DESIGN_20260812.md`、`plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md`。`HANDOFF_0923V1_RETURN.md` 记录增量审阅的早期状态，其“未授权模型调用/提交”句已被后续用户授权覆盖；不要把它当当前禁令。
 - 用户目标仍是 W0–W7 与 Q3 完整交付：内置方案 Agent 从原始 DOCX 得到官方条款和跨章要求，经有源草稿核对后共同发布；真实病例经来源化事实/Profile、当前节点工作稿/报告，再完成一次更正或补证闭环。W0–W5/Q1/Q2 的先前记录不等于本轮真实临床验收。当前 W6 未收口，W7/Q3 未做，`claims_complete=false`。
