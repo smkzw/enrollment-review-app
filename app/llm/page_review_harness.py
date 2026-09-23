@@ -22,6 +22,7 @@ from openai import AsyncOpenAI
 
 from app.llm.generation_completion import local_early_length
 from app.llm.provider_profiles import (
+    REMOTE_OPENAI_PROVIDERS,
     provider_default_headers,
     resolve_openai_connection,
 )
@@ -30,6 +31,7 @@ from app.config import (
     GEMINI_ACCESS_TOKEN,
     GEMINI_BASE_URL,
     GEMINI_PROJECT_ID,
+    INDEPENDENT_VLM_PROVIDER,
     PAGE_REVIEW_CLOUD_CONCURRENCY,
     PAGE_REVIEW_MAIN_A_API_KEY,
     PAGE_REVIEW_MAIN_A_BASE_URL,
@@ -221,6 +223,8 @@ def require_page_reader_routes(
         env, "INDEPENDENT_VLM_PROVIDER", PAGE_REVIEW_MAIN_A_PROVIDER
     )
     local_main_a = provider in LOCAL_PAGE_PROVIDERS
+    if not local_main_a and provider not in REMOTE_OPENAI_PROVIDERS and provider != "google-antigravity":
+        raise PageReviewConfigError(f"main-A 不支持模型供应商 {provider}")
     main_a_key = (
         _value(env, "PAGE_REVIEW_LOCAL_API_KEY", "") or "local-product"
         if local_main_a
@@ -229,15 +233,18 @@ def require_page_reader_routes(
     main_a_base_url = _value(
         env, "PAGE_REVIEW_MAIN_A_BASE_URL", PAGE_REVIEW_MAIN_A_BASE_URL
     )
-    if provider == "zhipu-coding-plan" and not main_a_key:
+    if not main_a_key and provider == _value(
+        env, "INDEPENDENT_VLM_PROVIDER", INDEPENDENT_VLM_PROVIDER
+    ):
         main_a_key = _value(env, "INDEPENDENT_VLM_API_KEY", "")
     if not local_main_a and provider != "google-antigravity":
         try:
+            use_provider_route = provider == "cms-router" and bool(_value(env, "CMS_ROUTER_API_KEY", ""))
             main_a_base_url, main_a_key = resolve_openai_connection(
                 provider,
-                base_url=main_a_base_url,
-                api_key=main_a_key,
-                role_api_key_env="PAGE_REVIEW_MAIN_A_API_KEY",
+                base_url=None if use_provider_route else main_a_base_url,
+                api_key=None if use_provider_route else main_a_key,
+                role_api_key_env=None if use_provider_route else "PAGE_REVIEW_MAIN_A_API_KEY",
                 environ=env,
                 require_api_key=require_credentials,
             )
@@ -245,6 +252,8 @@ def require_page_reader_routes(
             main_a_key = ""
     main_b_provider = _value(env, "PAGE_REVIEW_MAIN_B_PROVIDER", PAGE_REVIEW_MAIN_B_PROVIDER)
     local_main_b = main_b_provider in LOCAL_PAGE_PROVIDERS
+    if not local_main_b and main_b_provider not in REMOTE_OPENAI_PROVIDERS and main_b_provider != "google-antigravity":
+        raise PageReviewConfigError(f"main-B 不支持模型供应商 {main_b_provider}")
     gemini_main_b = main_b_provider == "google-antigravity"
     if gemini_main_b:
         main_b_key = (
@@ -266,11 +275,12 @@ def require_page_reader_routes(
         main_b_base_url = _value(env, "PAGE_REVIEW_MAIN_B_BASE_URL", PAGE_REVIEW_MAIN_B_BASE_URL)
         if not local_main_b:
             try:
+                use_provider_route = main_b_provider == "cms-router" and bool(_value(env, "CMS_ROUTER_API_KEY", ""))
                 main_b_base_url, main_b_key = resolve_openai_connection(
                     main_b_provider,
-                    base_url=main_b_base_url,
-                    api_key=main_b_key,
-                    role_api_key_env="PAGE_REVIEW_MAIN_B_API_KEY",
+                    base_url=None if use_provider_route else main_b_base_url,
+                    api_key=None if use_provider_route else main_b_key,
+                    role_api_key_env=None if use_provider_route else "PAGE_REVIEW_MAIN_B_API_KEY",
                     environ=env,
                     require_api_key=require_credentials,
                 )

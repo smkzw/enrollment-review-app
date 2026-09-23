@@ -90,7 +90,7 @@ from .control_excerpt_restoration import (
 
 CONTROL_AGENT_WIRE_VERSION = "phase5/control-agent-wire/v26"
 CONTROL_AGENT_INPUT_VERSION = "phase5/control-agent-input/v1"
-CONTROL_AGENT_PROMPT_VERSION = "phase5/control-agent-prompt/v2.28"
+CONTROL_AGENT_PROMPT_VERSION = "phase5/control-agent-prompt/v2.44"
 CONTROL_DISCOVERY_INPUT_VERSION = "phase5/control-discovery-input/v1"
 CONTROL_DISCOVERY_PROMPT_VERSION = "phase5/control-discovery-prompt/v3"
 CONTROL_DISCOVERY_WIRE_VERSION = "phase5/control-discovery-wire/v1"
@@ -585,9 +585,14 @@ class ProtocolControlAgentWireObligationAtom(_WireModel):
             self.kind == ControlObligationKind.COMPLETE_OR_VERIFY
             and self.time_constraint is not None
         ):
-            raise ValueError(
-                "带时间约束的新义务必须区分访视安排或结果有效期，不得使用泛化的完成/核对"
-            )
+            if (
+                self.evaluation.determination_mode != "semantic"
+                or self.evaluation.time_purpose != "interval_condition"
+            ):
+                raise ValueError(
+                    "具体操作持续期只能按带命名锚点的语义核对保存；"
+                    "不得以单次值比较证明全程完成，也不得混入访视或结果有效期"
+                )
         if self.kind == ControlObligationKind.COMPLETE_BEFORE_ANCHOR:
             if self.time_constraint is None:
                 raise ValueError("节点前完成义务必须提供命名时间锚点")
@@ -729,6 +734,18 @@ class ProtocolControlAgentWireCandidate(_WireModel):
     source_structure_unit_ids: list[str] = Field(min_length=1)
     source_span_ids: list[str] = Field(min_length=1)
     cross_source_relations: list[ProtocolControlAgentWireRelation] = Field(...)
+
+    @model_validator(mode="before")
+    @classmethod
+    def canonicalize_source_id_sets(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        normalized = dict(value)
+        for field in ("source_structure_unit_ids", "source_span_ids"):
+            ids = normalized.get(field)
+            if isinstance(ids, list) and all(isinstance(item, str) for item in ids):
+                normalized[field] = sorted(set(ids))
+        return normalized
 
     @model_validator(mode="after")
     def validate_scope(self) -> "ProtocolControlAgentWireCandidate":
@@ -1249,6 +1266,55 @@ def protocol_control_agent_response_format() -> dict[str, object]:
     }
 
 
+def protocol_control_candidate_repair_response_format() -> dict[str, object]:
+    """Ask for one candidate only; the system retains the rest of the wire."""
+
+    original = protocol_control_agent_json_schema()
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "protocol_control_candidate_repair_v1",
+            "strict": True,
+            "schema": {
+                "$defs": original["$defs"],
+                "type": "object",
+                "properties": {
+                    "candidate_draft": {
+                        "$ref": "#/$defs/ProtocolControlAgentWireCandidate"
+                    }
+                },
+                "required": ["candidate_draft"],
+                "additionalProperties": False,
+            },
+        },
+    }
+
+
+def protocol_control_candidates_repair_response_format() -> dict[str, object]:
+    """Return only the selected candidate drafts in frozen index order."""
+
+    original = protocol_control_agent_json_schema()
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "protocol_control_candidates_repair_v1",
+            "strict": True,
+            "schema": {
+                "$defs": original["$defs"],
+                "type": "object",
+                "properties": {
+                    "candidate_drafts": {
+                        "type": "array",
+                        "items": {"$ref": "#/$defs/ProtocolControlAgentWireCandidate"},
+                    }
+                },
+                "required": ["candidate_drafts"],
+                "additionalProperties": False,
+            },
+        },
+    }
+
+
 DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE = (
     "请对本次冻结的方案结构单元逐项完成其他方案控制候选审阅，并严格返回指定 JSON。"
 )
@@ -1294,14 +1360,22 @@ _CONTROL_AGENT_SYSTEM_CONTRACT = (
     "每个条件和义务原子都须填写evaluation：proposition明确本原子成立的含义，不是最终入排结论；"
     "按原文区分deterministic、semantic和investigator_judgment，不按义务kind自动选择。"
     "确定性值比较用value_comparison和predicate，比较必须直接表达本原子成立，不依靠后续按禁令名称取反；"
+    "使用value_comparison时evaluation.operand_attribute必须为value；日期属性只能用time_constraint计算，"
+    "研究者书面判断不能伪装成值比较。"
+    "每个值比较的 evaluation.predicate 必须填写 source_clause 或 source_clauses，逐字保留比较依据；"
+    "该片段还必须完整包含在同一 evaluation.source_excerpts 中，不能仅填 source_term。"
     "predicate_id仅为本规格内局部标识，不是控制或事实身份。日期约束计算用time_constraint，"
     "并明确使用date_range还是record_time，不能把记录日期冒充事件日期。"
     "evaluation.version使用control-atom-evaluation/v4。值比较、语义或研究者判断如附有时间条件，"
     "须另用time_operand_attribute声明核对时间的日期属性，后续代码独立核算时间，不由语义关系代替。"
     "单独时间计算只用operand_attribute，没有附加时间条件时time_operand_attribute为null。"
     "time_purpose区分事件筛选范围、临床间隔条件和来源有效期；不能区分时保留unresolved，"
-    "没有时间约束才写not_applicable；带时间约束的新义务必须区分访视安排或结果有效期，"
-    "不得使用泛化的完成/核对。每个原子的来源定位只能用source_clause与source_clauses之一，"
+    "没有时间约束才写not_applicable；带时间约束的新义务须区分通用访视安排、结果有效期、"
+    "以及具体治疗或操作的持续期。具体治疗/操作持续期用complete_or_verify，"
+    "evaluation.determination_mode=semantic、time_purpose=interval_condition，"
+    "原文命名锚点和期间写入time_constraint；proposition须保留动作、对象与完整持续要求，"
+    "不能凭单次记录或仅凭药名值比较证明持续期完成。"
+    "每个原子的来源定位只能用source_clause与source_clauses之一，"
     "不得同时填两类。求值规格必须说明观察选择规则（一次、任一次或全部记录），"
     "原文不足时明确标unverified；确定性求值必须声明computation方式，"
     "semantic与investigator_judgment模式不得夹带任何computation字段。语义或研究者判断模式operation和predicate均为null。"
@@ -1390,6 +1464,8 @@ _CONTROL_AGENT_SYSTEM_CONTRACT = (
     "若同一句要求同时覆盖某审核节点前和该节点后的持续期间，当前节点的候选命题和求值只包含截至该节点"
     "已经发生、能够从当前资料核实的部分；节点后的持续义务可在来源和后续说明中保留，但不得并入"
     "本节点的确定性命题、不得要求当前受试者证明未来没有发生变化。不得因此丢掉节点前已有的限制；"
+    "后续持续义务本身不构成另一个当前入排节点的补充流程关系，也不得为它单设当前真假命题或最低证据；"
+    "仅当原文另有在后续入排节点到期且可核的增量要求时，才单独建立后续节点候选和关系。"
     "若原文无法区分两个期间，保留未决边界，不把未来状态写成已满足。"
     "必须先区分义务对象是个例受试者，还是中心、研究者、申办方及研究组织。研究启动准备、人员方案培训、授权、"
     "文件归档、监查稽查或系统管理等组织层义务，若未明确约束某一受试者的资格判断、节点放行或个例证据，应按原文"
@@ -1402,9 +1478,17 @@ _CONTROL_AGENT_SYSTEM_CONTRACT = (
     "owned_visit_instance_by_structure_unit_id 是系统对已知流程必做事项冻结的实际执行访视，不是原文中"
     "‘自筛选/上次访视以来’这类回顾区间起点。映射中的单元必须处置为 required_procedure，不能降级成"
     "普通补充说明；且只能绑定该实际执行访视和原文明示的执行访视，既不能漏绑，也不能额外绑定同阶段的其他访视。"
+    "访视表中只有项目名称、脚注号和 X 勾选的单元，X 只表示该项目在对应列安排，"
+    "不能由 X 推出额外的持续期、阈值、前后时间窗或条件。先按单元格坐标核对列位，"
+    "再核对该项目是否已由同来源的冻结流程目标覆盖；已覆盖且本格无增量要求时链接已有目标，"
+    "未覆盖时说明其真实流程含义，不得凭项目名称补造控制。脚注或其他章节的独立规范内容"
+    "须在各自来源单元保留，不能因为本格只有 X 就忽略它们。"
     "其他章节可以对官方入组/排除标准作补充、重复表述或进一步解释，也可以产生新的方案控制"
     "候选，但它们不会因此成为新的 IN/EX，绝不能新建、改号、合并或重命名官方 IN/EX，"
     "也不能把流程必做目录项伪装成 IN/EX。候选与正式发布控制分离；本次只返回候选语义。"
+    "核对已知目标是否覆盖时只能依据其 source_excerpts 的实际规定；目录名称只证明有此事项，"
+    "不自动覆盖原文另写的药物、剂量、用法、持续期、时间窗或复核条件。未覆盖的受试者层面细节须保留增量候选，"
+    "不能仅因目录同名就全部降为 required_procedure；也不能将治疗持续期误写为通用访视安排。"
     "一个候选可覆盖多个 owned_units，也可在同一批次产生多个候选。适用人群、触发条件、"
     "义务和例外必须保持四个独立层次：每层 DNF 的一个 group 表示组内全部条件共同成立，"
     "多个 group 表示替代路径；不得把且改成或，不得把例外混入触发条件。义务可同时包含"
@@ -1431,6 +1515,8 @@ _CONTROL_AGENT_SYSTEM_CONTRACT = (
     "才建立 trigger_expression 并绑定后果义务。must_record 只用于原文明示必须记录、记载或形成病历记录的动作，"
     "不得把告知、说明、提醒、联系或讨论仅因需要留痕就改写成 must_record。"
     "义务完成强度区分明确必做、建议与尽力遵循三档，项目无关。modality=mandatory 表示明确必做；"
+    "同一句混有必做和建议动作时，分别建立原子并从直接来源中逐字截取各自支持片段；"
+    "必做原子的 source_excerpts 不得连带包含建议措辞，建议原子保留建议片段。"
     "原文使用‘建议’或同义措辞时必须使用 modality=recommended；原文使用‘尽可能’、‘在可获得范围内’、"
     "‘尽量’、‘尽力’或同义措辞时必须使用 modality=best_effort。资料收集的 best_effort 只能搭配"
     "must_record，不得强化为必须获得完整资料；其他非禁止类义务的 recommended 与 best_effort 保持"
@@ -1645,21 +1731,68 @@ _CONTROL_AGENT_SYSTEM_CONTRACT = (
 
 _CONTROL_REPAIR_CONTRACT = (
     "这是同一会话内的定向修复。只修复下方列出的冻结批次、结构单元和候选范围；不要替换"
-    "已经接受的批次，不要扩展到其他批次，不要删除未被指出且仍然有效的候选语义。仍须返回"
-    "本批全部 owned_units 的完整 disposition 和本批完整候选集合；provider 不得生成任何稳定 ID。"
+    "已经接受的批次，不要扩展到其他批次，不要删除未被指出且仍然有效的候选语义。"
+    "provider 不得生成任何稳定 ID。"
     "修复时必须用修正后的项替换错误项，不得在原数组后追加修正版；返回前删除完全重复的 DNF 组和候选。"
 )
 
 
 def _repair_problem_guidance(problem: str) -> str:
+    if "ENROLLMENT_PROHIBITION_UNCOVERED" in problem:
+        return (
+            "本轮重点：逐字核对所指来源片段中的阶段和禁止行为。若该要求在当前入排节点"
+            "需要核实，补齐有来源的控制候选及对应单元链接；若确由已有官方条款或流程事项覆盖，"
+            "仅按冻结目标的原文与来源作真实链接，不得凭标题相似、表格符号或疾病常识跳过。"
+            "不要为了通过校验发明阈值、时窗或临床结论。"
+        )
+    if "WIRE_SCHEMA_INVALID" in problem or "CANDIDATE_REPAIR_INVALID" in problem:
+        guidance: list[str] = []
+        if "确定性求值须声明计算方式" in problem:
+            guidance.append(
+                "逐个核对所报原子的原文含义：仅可按来源确定计算的原子用 deterministic 并填写相应 operation；"
+                "语义核对或研究者书面判断的 operation 和 predicate 均为 null。不得为通过结构校验改变临床含义。"
+            )
+        if "数值谓词必须声明单位" in problem:
+            guidance.append(
+                "数值谓词的单位按直接原文填写；原文确为无量纲数值时显式写 unitless，不能凭项目或疾病猜单位。"
+            )
+        if "求值规格须说明观察选择规则" in problem:
+            guidance.append(
+                "观察选择只依据方案原文；明示一次/任一/全部才写对应模式，原文不足则显式标未核实，"
+                "不得按已上传病例记录数推断。"
+            )
+        if "已有时间约束不能在求值规格中忽略" in problem:
+            guidance.append(
+                "若该原子确有逐字支持的时间约束，求值规格须说明该时间条件的用途和对应日期属性；"
+                "若时间词属于另一动作，应收窄本原子的摘录并删除无据时间约束，不能仅改标记绕过校验。"
+            )
+        if guidance:
+            return "本轮仅修复校验所指原子：" + "".join(guidance)
     """Add only the structural guidance needed for the reported gate failure."""
 
-    if "未给出时间约束，不能声明已确定其计算用途" in problem:
+    value_operand_error = "普通值比较不能冒充日期间隔或书面判断计算" in problem
+    missing_time_error = "未给出时间约束，不能声明已确定其计算用途" in problem
+    if value_operand_error or missing_time_error:
+        guidance = []
+        if value_operand_error:
+            guidance.append(
+                "本轮重点：仅对原文确有明确数值、单位和比较方向的原子使用 "
+                "evaluation.operation=value_comparison；其 evaluation.operand_attribute 必须为 value，"
+                "predicate 须保留原文比较条件。日期间隔和研究者书面判断不得为通过格式校验伪装成数值比较。"
+            )
+        if missing_time_error:
+            guidance.append(
+                "本轮重点：原子没有 time_constraint 时，evaluation.time_purpose 只能是 "
+                "not_applicable 或 unresolved，不得凭访视背景推造日期计算。"
+                "若原文确有明确时间限制，先在同一原子中逐字保留并结构化 time_constraint，"
+                "再说明计算用途；不得为了让规格通过而补造原文没有的时限。"
+            )
+        return "".join(guidance)
+    if "比较条件必须保留求值规格内的逐字原文" in problem:
         return (
-            "本轮重点：原子没有 time_constraint 时，evaluation.time_purpose 只能是 "
-            "not_applicable 或 unresolved，不得凭访视背景推造日期计算。"
-            "若原文确有明确时间限制，先在同一原子中逐字保留并结构化 time_constraint，"
-            "再说明计算用途；不得为了让规格通过而补造原文没有的时限。"
+            "本轮重点：值比较须在 evaluation.predicate.source_clause 或 source_clauses 中"
+            "填写实际比较依据的逐字连续片段，并确保每片段包含在同一 evaluation.source_excerpts 中。"
+            "source_term 不能代替 predicate 的逐字来源；不得为凑校验改写原文或虚构比较条件。"
         )
     if "未来计划窗只允许研究药物给药日、末次给药日或研究完成日" in problem:
         return (
@@ -1679,6 +1812,18 @@ def _repair_problem_guidance(problem: str) -> str:
         return (
             "本轮重点：所有原子引用的来源定位（source_span_ids）必须属于本批授权结构单元的来源闭包，"
             "不得引用 owned 之外或当前候选未声明的来源片段。"
+        )
+    if "MIXED_OBLIGATION_KIND_SCOPE" in problem:
+        return (
+            "本轮重点：将访视安排与结果有效期分别建候选；两项义务各自保留原文定位。"
+            "访视安排关联冻结流程节点，结果有效期只关联受影响的具体检查项；"
+            "拆分不得删除原有义务或扩大来源范围。"
+        )
+    if "PROSPECTIVE_PERIOD_HOLDER_INVALID" in problem:
+        return (
+            "本轮重点：当前节点的确定性核对原子不得自行携带 prospective_period。"
+            "若同一禁止原文还有未来持续要求，应把当前可核命题与同源 continuing_obligation 分开保存；"
+            "不能辨清时保留需要核对，不得删除当前义务或提前证明未来遵守。"
         )
     if "VISIT_SCHEDULE_" in problem:
         return (
@@ -1705,6 +1850,8 @@ def _repair_problem_guidance(problem: str) -> str:
         return (
             "本轮重点：基线值选取使用 select_baseline_value。通用原则关联 workflow_stage；"
             "具体检查项特例单独建候选并关联对应 required_procedure，不得在同一候选中混合两种范围。"
+            "须从首次请求的冻结目标原文核对项目与访视，在 cross_source_relations 中保存精确目标，"
+            "不能只在标题提及，也不能关联不受此原则影响的检查。"
         )
     if "ACTION_TARGET_SCOPE_MISMATCH" in problem:
         return (
@@ -1771,13 +1918,12 @@ def _repair_problem_guidance(problem: str) -> str:
             "本轮重点：原文明示记录单位、整数或小数位数时，必须使用独立 must_record 原子，"
             "逐字保留单位和精度；不得用 complete_or_verify 或完成测量概括记录要求。"
         )
-    if "带时间约束的新义务必须区分" in problem:
+    if "具体操作持续期只能按带命名锚点的语义核对保存" in problem:
         return (
-            "本轮重点：不要为带 time_constraint 的义务使用 complete_or_verify。先按原文辨认动作："
-            "一般动作在命名节点前完成使用 complete_before_anchor，"
-            "访视时间使用 schedule_or_verify_visit，检查结果有效窗使用 verify_result_validity，"
-            "持续达到某状态使用 reach_condition，禁止暴露使用对应 prohibit 类型。沟通、确认或记录动作"
-            "不得继承被沟通内容的持续期；若持续义务已由已知目标完整覆盖，删除重复原子。"
+            "本轮重点：具体治疗或操作的持续期可用 complete_or_verify，"
+            "但 evaluation 必须是 semantic、time_purpose=interval_condition，"
+            "同时保存原文命名的 time_constraint 和完整持续要求。"
+            "不能用一次药名值比较证明疗程完成；访视安排和结果有效期仍分别使用其专门类型。"
         )
     if "CONDITIONAL_BRANCH_MAPPING_INVALID" in problem:
         return (
@@ -1828,7 +1974,9 @@ def _repair_problem_guidance(problem: str) -> str:
             "本轮重点：跨阶段有效窗或后续锚点控制补充时，affected_workflow_stage_id 必须选择"
             "与后续锚点一致的最终判定节点（如基线/首次给药前复核），external_target_id 仍指向"
             "流程必做执行访视；screening 只能 early_attention，decide_at_node 和最低证据必须在"
-            "affected 决定节点。同阶段普通补充不得借用此路径。"
+            "affected 决定节点。同阶段普通补充不得借用此路径。若原文只是当前要求在治疗期继续维持，"
+            "未来部分只保留为同一当前禁止原子的未到期持续义务，不要为未来期间另建补充关系、"
+            "当前真假命题或最低证据；仅原文另有后续入排节点可核增量时才建立独立候选。"
         )
     if "PROCEDURE_VISIT_SCOPE_UNCOVERED" in problem:
         return (
@@ -1846,6 +1994,13 @@ def _repair_problem_guidance(problem: str) -> str:
         return (
             "本轮重点：原文仅允许或可执行的操作必须在义务陈述中保留可选语气，"
             "不得把可选操作改写成必做操作；次数上限和适用条件也必须逐字保留。"
+        )
+    if "RECOMMENDED_MODALITY_DROPPED" in problem:
+        return (
+            "本轮重点：同一来源句若同时含明确必做和建议动作，应拆为不同义务原子。"
+            "每个原子的 source_excerpts 只逐字摘录支持该原子强度的连续片段；"
+            "必做原子不能连带引用后续的建议措辞，建议原子须保留建议原文并使用 recommended。"
+            "不得把明确剂量、频次等必做要求降为建议，也不得把建议动作写成必须完成。"
         )
     if "RECOMMENDED_MODALITY_" in problem:
         return (
@@ -1915,7 +2070,8 @@ def _repair_problem_guidance(problem: str) -> str:
         )
     if "FUTURE_PROHIBITION_DECIDED_EARLY" in problem:
         return (
-            "本轮重点：当前禁止原子的 evaluation.proposition 只陈述截至决定节点可核的行为，"
+            "本轮重点：当前禁止原子的 statement 和 evaluation.proposition 均只陈述截至决定节点可核的行为，"
+            "不得在这两个当前节点字段中夹带后续期间名称或后续遵守要求；"
             "prospective_period=null；把原文支持的后续禁止另存同原子的 continuing_obligation，"
             "保留同一直接来源、期间及未到期状态，不为后续义务填写当前节点真假命题。"
             "不得删除节点前已有的禁止要求、改成研究者判断或凭空补一份未来承诺。"
@@ -1949,13 +2105,31 @@ def _repair_problem_guidance(problem: str) -> str:
         )
     if "TIME_ANCHOR_MISSING" in problem:
         return (
+            "先核对报错原子的最小逐字摘录：如果时间词只属于同一结构单元的另一动作，"
+            "应收窄该原子的摘录并保留另一动作的独立候选，不能替无时限的计算或记录动作补造锚点。"
             "本轮重点：每个时间性原子必须使用原文直接命名的锚点。混合多个时点时拆成独立分支并分别引用最小连续摘录；"
             "一般动作明确在命名节点前完成时使用 complete_before_anchor，保留该锚点且 direction=before；"
+            "具体治疗或操作须持续一段期间时使用 complete_or_verify + semantic + interval_condition，"
+            "保留命名锚点和完整持续要求；单次记录不能证明疗程完成。"
             "‘从签署知情同意起至末次给药后N天/周/月’使用 study_period，并把尾段结构化为"
             "last_dose_date、after、upper_bound=N，不得改用 icf_date 加N。"
             "比较较早事件与较晚命名锚点时，把较早事件写成相对较晚锚点的 before 时间约束；"
             "错误信息已给出具体原子编号和原句，须逐条补齐而不是只修第一个时间分支。"
             "同时逐字保存大于/小于及边界是否包含。首次给药后的研究执行事项不得为了补锚点而保留为入排候选。"
+        )
+    if "VISIT_SCHEDULE_TARGET_TOO_NARROW" in problem:
+        return (
+            "本轮重点：先核对原文的时间限制究竟约束访视安排、结果有效期，还是治疗/用药持续期。"
+            "只有通用访视时间窗才使用 schedule_or_verify_visit 并关联冻结 workflow_stage；"
+            "针对具体治疗或操作的持续期用 complete_or_verify + semantic + interval_condition，"
+            "保留命名锚点、完整期间和逐字来源；不得为凑节点改写为访视安排，"
+            "也不能因同名目录项而丢弃增量要求。"
+        )
+    if "附时间条件的核对须单独声明日期属性" in problem:
+        return (
+            "本轮重点：若值比较、语义核对或研究者判断原子确有 time_constraint，"
+            "evaluation.time_operand_attribute 必须声明该时间条件核对的日期属性；"
+            "原文不能确定日期属性时保留未解决，不得凭空指定事件日期或记录日期。"
         )
     if "TIME_CALENDAR_BOUND_UNSUPPORTED" in problem:
         return (
@@ -2042,6 +2216,7 @@ def build_protocol_control_agent_prompt(
     batch: ProtocolControlDispositionBatch | ProtocolControlAgentInput,
     *,
     prompt_template: str = DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE,
+    include_schema: bool = True,
 ) -> str:
     """Build a deterministic prompt from one planner batch or frozen input."""
 
@@ -2050,10 +2225,15 @@ def build_protocol_control_agent_prompt(
         if isinstance(batch, ProtocolControlAgentInput)
         else ProtocolControlAgentInput.from_batch(batch)
     )
+    schema_block = (
+        f"输出结构：{_stable_json(_prompt_wire_schema())}\n\n"
+        if include_schema
+        else "输出严格遵循本次请求随附的 JSON Schema；不得新增字段。\n\n"
+    )
     return (
         f"{prompt_template.strip()}\n\n"
         f"{_CONTROL_AGENT_SYSTEM_CONTRACT}\n\n"
-        f"输出结构：{_stable_json(_prompt_wire_schema())}\n\n"
+        f"{schema_block}"
         f"本次冻结输入：{_stable_json(frozen_input.model_dump(mode='json'))}\n\n"
         "按 owned_units 原文顺序逐项处理；每个 owned_unit 必须返回一条 disposition，"
         "候选可为 0 到 N。若候选不存在，必须逐单元写出非控制 disposition 和理由。只返回一个完整 JSON 对象。"
@@ -2127,6 +2307,8 @@ def build_protocol_control_repair_prompt(
     candidate_ids: Sequence[str] | None = None,
     candidate_indexes: Sequence[int] | None = None,
     obligation_source_span_ids: Sequence[str] | None = None,
+    candidate_only: bool = False,
+    candidates_only: bool = False,
 ) -> str:
     """Build a same-session repair prompt with an explicit bounded scope."""
 
@@ -2153,6 +2335,25 @@ def build_protocol_control_repair_prompt(
         }
         for target in batch.known_workflow_stage_targets
     ]
+    frozen_target_index = {
+        "official": [
+            {
+                "official_code": target.official_code,
+                "catalog_item_id": target.catalog_item_id,
+                "label": target.label,
+            }
+            for target in batch.known_official_targets
+        ],
+        "procedures": [
+            {
+                "catalog_item_id": target.catalog_item_id,
+                "label": target.label,
+                "visit_instance": target.visit_instance,
+                "review_stage": target.review_stage.value,
+            }
+            for target in batch.known_procedure_targets
+        ],
+    }
     guidance = _repair_problem_guidance(problem)
     guidance_block = f"{guidance}\n" if guidance else ""
     return (
@@ -2164,13 +2365,26 @@ def build_protocol_control_repair_prompt(
         f"{json.dumps(authorized_sources, ensure_ascii=False)}\n"
         f"冻结审核节点目录（仅可引用，不得新增）："
         f"{json.dumps(frozen_workflow_targets, ensure_ascii=False)}\n"
+        "冻结目标索引（只帮助定位；是否覆盖仍须核对首轮输入中的目标原文）："
+        f"{json.dumps(frozen_target_index, ensure_ascii=False)}\n"
         f"系统候选身份范围：{json.dumps(list(candidate_ids or []), ensure_ascii=False)}\n"
         f"义务原文定位范围："
         f"{json.dumps(list(obligation_source_span_ids or []), ensure_ascii=False)}\n"
         f"候选草稿位置（仅用于诊断，不得原样输出）："
         f"{json.dumps(list(candidate_indexes or []), ensure_ascii=False)}\n"
         f"校验问题：{problem[:12000]}\n"
-        "请在同一会话内仅返回修复后的完整 wire JSON，严格沿用首轮已给出的输出结构。"
+        + (
+            "只修复指定的一个候选；系统保留其他候选、处置及其来源。"
+            "仅返回包含 candidate_draft 的 JSON 对象，严格遵守本请求随附的单候选 JSON Schema。"
+            if candidate_only
+            else "只修复指定位置的候选，按候选草稿位置的升序返回同样数量的 candidate_drafts；"
+            "系统保留其余候选、全部处置及来源。不得补造、删除或调换候选；"
+            "仅返回包含 candidate_drafts 的 JSON 对象，严格遵守本请求随附的修订 JSON Schema。"
+            if candidates_only
+            else "仍须返回本批全部 owned_units 的完整 disposition 和本批完整候选集合。"
+            "请在同一会话内仅返回修复后的完整 wire JSON，严格遵守本请求随附的 JSON Schema；"
+            "若当前传输仅支持 JSON 对象，则沿用首轮提示中的输出结构。"
+        )
     )
 
 
@@ -3604,6 +3818,141 @@ def _candidate_ids_from_wire(
     return ids
 
 
+def _merge_candidate_repair(
+    raw_text: str,
+    baseline: ProtocolControlAgentWire | Mapping[str, Any],
+    index: int,
+) -> ProtocolControlAgentWire:
+    """Replace one draft while keeping every other model field unchanged."""
+
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise ProtocolControlAgentWireValidationError("INVALID_JSON", str(exc)) from exc
+    if not isinstance(payload, dict) or set(payload) != {"candidate_draft"}:
+        raise ProtocolControlAgentWireValidationError(
+            "CANDIDATE_REPAIR_SHAPE_INVALID", "单候选修订只接受 candidate_draft"
+        )
+    forbidden = _find_forbidden_provider_key(
+        {"candidate_drafts": [payload["candidate_draft"]]}
+    )
+    if forbidden is not None:
+        raise ProtocolControlAgentWireValidationError(
+            "PROVIDER_ID_FORBIDDEN", f"模型不得填写系统身份 {forbidden[1]}"
+        )
+    try:
+        candidate = ProtocolControlAgentWireCandidate.model_validate(
+            payload["candidate_draft"]
+        )
+        merged = (
+            baseline.model_dump(mode="json")
+            if isinstance(baseline, ProtocolControlAgentWire)
+            else deepcopy(dict(baseline))
+        )
+        if not 0 <= index < len(merged["candidate_drafts"]):
+            raise ValueError("单候选修订位置不属于原始批次")
+        if not isinstance(baseline, ProtocolControlAgentWire):
+            original = merged["candidate_drafts"][index]
+            if any(
+                candidate.model_dump(mode="json")[field] != original.get(field)
+                for field in ("source_structure_unit_ids", "source_span_ids")
+            ):
+                raise ValueError("单候选修订不得改变原始来源范围")
+        merged["candidate_drafts"][index] = candidate.model_dump(mode="json")
+        return ProtocolControlAgentWire.model_validate(merged)
+    except (ValidationError, ValueError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "CANDIDATE_REPAIR_INVALID", _validation_error_summary(exc)
+            if isinstance(exc, ValidationError) else str(exc),
+        ) from exc
+
+
+def _invalid_candidate_payload(raw_text: str) -> tuple[dict[str, Any], tuple[int, ...]] | None:
+    """Retain dispositions and valid siblings when drafts fail wire validation."""
+
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict) or set(payload) != {
+        "wire_version", "dispositions", "candidate_drafts"
+    } or payload["wire_version"] != CONTROL_AGENT_WIRE_VERSION:
+        return None
+    if _find_forbidden_provider_key(payload) is not None:
+        return None
+    dispositions = payload["dispositions"]
+    drafts = payload["candidate_drafts"]
+    if not isinstance(dispositions, list) or not dispositions or not isinstance(drafts, list):
+        return None
+    try:
+        validated = [ProtocolControlAgentWireDisposition.model_validate(item) for item in dispositions]
+    except (ValidationError, ValueError):
+        return None
+    if len({item.structure_unit_id for item in validated}) != len(validated):
+        return None
+    invalid_indexes: list[int] = []
+    for index, draft in enumerate(drafts):
+        if not isinstance(draft, dict) or any(
+            not isinstance(draft.get(field), list)
+            or not draft[field]
+            or not all(isinstance(item, str) and item.strip() for item in draft[field])
+            or draft[field] != sorted(set(draft[field]))
+            for field in ("source_structure_unit_ids", "source_span_ids")
+        ):
+            return None
+        try:
+            ProtocolControlAgentWireCandidate.model_validate(draft)
+        except (ValidationError, ValueError):
+            invalid_indexes.append(index)
+    return (payload, tuple(invalid_indexes)) if invalid_indexes else None
+
+
+def _single_invalid_candidate_payload(raw_text: str) -> tuple[dict[str, Any], int] | None:
+    result = _invalid_candidate_payload(raw_text)
+    return (result[0], result[1][0]) if result is not None and len(result[1]) == 1 else None
+
+
+def _merge_candidate_repairs(
+    raw_text: str,
+    baseline: ProtocolControlAgentWire | Mapping[str, Any],
+    indexes: Sequence[int],
+) -> ProtocolControlAgentWire:
+    try:
+        payload = json.loads(raw_text)
+        if not isinstance(payload, dict) or set(payload) != {"candidate_drafts"}:
+            raise ValueError("多候选修订只接受 candidate_drafts")
+        drafts = payload["candidate_drafts"]
+        if not isinstance(drafts, list) or len(drafts) != len(indexes):
+            raise ValueError("修订候选数量与授权位置不一致")
+        if _find_forbidden_provider_key(payload) is not None:
+            raise ValueError("修订候选不得填写系统身份")
+        merged = (
+            baseline.model_dump(mode="json")
+            if isinstance(baseline, ProtocolControlAgentWire)
+            else deepcopy(dict(baseline))
+        )
+        if list(indexes) != sorted(set(indexes)) or any(
+            index < 0 or index >= len(merged["candidate_drafts"]) for index in indexes
+        ):
+            raise ValueError("修订候选位置不属于原始批次")
+        for index, draft in zip(indexes, drafts, strict=True):
+            candidate = ProtocolControlAgentWireCandidate.model_validate(draft)
+            if not isinstance(baseline, ProtocolControlAgentWire):
+                original = merged["candidate_drafts"][index]
+                if any(
+                    candidate.model_dump(mode="json")[field] != original.get(field)
+                    for field in ("source_structure_unit_ids", "source_span_ids")
+                ):
+                    raise ValueError("多候选修订不得调换候选或改变原始来源范围")
+            merged["candidate_drafts"][index] = candidate.model_dump(mode="json")
+        return ProtocolControlAgentWire.model_validate(merged)
+    except (json.JSONDecodeError, ValidationError, ValueError, KeyError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "CANDIDATE_REPAIR_INVALID",
+            _validation_error_summary(exc) if isinstance(exc, ValidationError) else str(exc),
+        ) from exc
+
+
 class ProtocolControlAgentRunner:
     """Bounded same-session parser/repair loop for one planned batch.
 
@@ -3656,7 +4005,11 @@ class ProtocolControlAgentRunner:
         attempts: list[ProtocolControlAgentAttempt] = []
         session_id: str | None = None
         raw_text: str | None = None
-        prompt = build_protocol_control_agent_prompt(batch, prompt_template=prompt_template)
+        prompt = build_protocol_control_agent_prompt(
+            batch,
+            prompt_template=prompt_template,
+            include_schema=getattr(transport, "response_format_mode", None) != "json_schema",
+        )
         transport_failures = 0
         while True:
             try:
@@ -3698,6 +4051,8 @@ class ProtocolControlAgentRunner:
         invalid_fingerprint_counts: dict[tuple[str, str, str], int] = {}
         repair_baseline: ProtocolControlBatchDispositionHydrated | None = None
         repair_baseline_wire: ProtocolControlAgentWire | None = None
+        repair_baseline_raw: dict[str, Any] | None = None
+        candidate_repair_indexes: tuple[int, ...] = ()
         mutable_structure_unit_ids: set[str] = set()
         mutable_candidate_source_keys: set[tuple[str, ...]] = set()
         mutable_candidate_indexes: set[int] = set()
@@ -3705,6 +4060,7 @@ class ProtocolControlAgentRunner:
         mutable_obligation_source_span_ids: set[str] = set()
         allow_candidate_repartition = False
         allow_source_closure_rewrite = False
+        candidate_repair_index: int | None = None
         while True:
             wire: ProtocolControlAgentWire | None = None
             output: ProtocolControlBatchDispositionHydrated | None = None
@@ -3713,7 +4069,25 @@ class ProtocolControlAgentRunner:
                 "schema_invalid"
             )
             try:
-                wire = parse_protocol_control_agent_wire(raw_text)
+                wire = (
+                    _merge_candidate_repairs(
+                        raw_text,
+                        repair_baseline_wire or repair_baseline_raw,
+                        candidate_repair_indexes,
+                    )
+                    if candidate_repair_indexes
+                    and (repair_baseline_wire is not None or repair_baseline_raw is not None)
+                    else
+                    _merge_candidate_repair(
+                        raw_text,
+                        repair_baseline_wire or repair_baseline_raw,
+                        candidate_repair_index,
+                    )
+                    if candidate_repair_index is not None
+                    and (repair_baseline_wire is not None or repair_baseline_raw is not None)
+                    else parse_protocol_control_agent_wire(raw_text)
+                )
+                repair_baseline_raw = None
                 if repair_baseline_wire is not None:
                     wire, bounded_restore_applied = _restore_bounded_wire_repair(
                         repair_baseline_wire,
@@ -3792,8 +4166,19 @@ class ProtocolControlAgentRunner:
                     invalid_fingerprint_counts.get(invalid_fingerprint, 0) + 1
                 )
                 no_progress = invalid_fingerprint_counts[invalid_fingerprint] >= 2
-                repair_scope_unknown = False
+                repair_scope_unknown = bool(
+                    set(error.structure_unit_ids) - set(batch.owned_structure_unit_ids)
+                )
                 repair_candidate_indexes = set(error.candidate_indexes)
+                if wire is None and error.code == "WIRE_SCHEMA_INVALID" and repair_baseline_raw is None:
+                    salvage = _invalid_candidate_payload(raw_text)
+                    if salvage is not None:
+                        repair_baseline_raw, invalid_indexes = salvage
+                        repair_candidate_indexes.update(invalid_indexes)
+                elif repair_baseline_raw is not None and candidate_repair_index is not None:
+                    repair_candidate_indexes.add(candidate_repair_index)
+                elif repair_baseline_raw is not None and candidate_repair_indexes:
+                    repair_candidate_indexes.update(candidate_repair_indexes)
                 if output is not None and output_validator is not None:
                     candidate_source_by_id = {
                         candidate.control_candidate_id: tuple(
@@ -3873,7 +4258,8 @@ class ProtocolControlAgentRunner:
                         error.obligation_source_span_ids
                     ) - selected_candidate_span_ids
                     repair_scope_unknown = (
-                        bool(unknown_candidate_ids)
+                        repair_scope_unknown
+                        or bool(unknown_candidate_ids)
                         or bool(unknown_candidate_index_ids)
                         or bool(unknown_obligation_spans)
                         or bool(
@@ -3975,6 +4361,26 @@ class ProtocolControlAgentRunner:
                         attempts=attempts,
                     )
                 repairs += 1
+                candidate_only = (
+                    (repair_baseline_wire is not None or repair_baseline_raw is not None)
+                    and len(repair_candidate_indexes) == 1
+                    and not allow_candidate_repartition
+                    and not allow_source_closure_rewrite
+                    and callable(getattr(transport, "continue_candidate", None))
+                )
+                candidates_only = (
+                    (repair_baseline_wire is not None or repair_baseline_raw is not None)
+                    and len(repair_candidate_indexes) > 1
+                    and not allow_candidate_repartition
+                    and not allow_source_closure_rewrite
+                    and callable(getattr(transport, "continue_candidates", None))
+                )
+                candidate_repair_index = (
+                    next(iter(repair_candidate_indexes)) if candidate_only else None
+                )
+                candidate_repair_indexes = (
+                    tuple(sorted(repair_candidate_indexes)) if candidates_only else ()
+                )
                 repair_prompt = build_protocol_control_repair_prompt(
                     batch,
                     problem=str(error),
@@ -3984,11 +4390,22 @@ class ProtocolControlAgentRunner:
                     candidate_ids=error.candidate_ids or candidate_ids,
                     candidate_indexes=sorted(repair_candidate_indexes),
                     obligation_source_span_ids=error.obligation_source_span_ids,
+                    candidate_only=candidate_only,
+                    candidates_only=candidates_only,
                 )
                 try:
-                    response = transport.continue_session(
-                        session_id=session_id,
-                        prompt=repair_prompt,
+                    response = (
+                        transport.continue_candidate(
+                            session_id=session_id, prompt=repair_prompt
+                        )
+                        if candidate_only
+                        else transport.continue_candidates(
+                            session_id=session_id, prompt=repair_prompt
+                        )
+                        if candidates_only
+                        else transport.continue_session(
+                            session_id=session_id, prompt=repair_prompt
+                        )
                     )
                     if response.session_id != session_id:
                         raise RuntimeError("同会话修复不得更换 session_id")

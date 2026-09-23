@@ -31,6 +31,20 @@ class _FakeOpenAI:
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=lambda **_: None))
 
 
+def test_cms_normalizer_uses_provider_route_before_stale_role_route(monkeypatch):
+    _FakeOpenAI.calls.clear()
+    monkeypatch.setattr(transport_module, "OpenAI", _FakeOpenAI)
+    monkeypatch.setenv("CMS_ROUTER_BASE_URL", "http://127.0.0.1:20128/v1")
+    monkeypatch.setenv("CMS_ROUTER_API_KEY", "cms-key")
+    monkeypatch.setenv("EVIDENCE_NORMALIZER_BASE_URL", "https://old.example/v1")
+    monkeypatch.setenv("EVIDENCE_NORMALIZER_API_KEY", "old-key")
+    transport_module.DeepSeekEvidenceNormalizerTransport(
+        backend="cms-router", model="deepseek-latest-cloud",
+    )
+    assert _FakeOpenAI.calls[-1]["api_key"] == "cms-key"
+    assert _FakeOpenAI.calls[-1]["base_url"] == "http://127.0.0.1:20128/v1"
+
+
 class _FakeStream:
     def __init__(self, chunks):
         self._chunks = tuple(chunks)

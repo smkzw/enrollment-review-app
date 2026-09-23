@@ -62,7 +62,7 @@ def validate_control_time_bindings(control, *, require_explicit=False):
             "event_membership", "interval_condition", "source_validity",
         }:
             raise ValueError("对应条目尚未明确时间要求的用途")
-        sources = dict(zip(atom.source_span_ids, atom.source_excerpts, strict=True))
-        if any(span not in sources or not sources[span] or excerpt not in sources[span]
+        sources = tuple(zip(atom.source_span_ids, atom.source_excerpts, strict=True))
+        if any(not any(owner_span == span and excerpt in owner_excerpt for owner_span, owner_excerpt in sources)
                for span, excerpt in zip(binding.source_span_ids, binding.source_excerpts, strict=True)):
             raise ValueError("时间要求的对应依据必须保留在该条目的方案原文中")

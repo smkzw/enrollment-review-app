@@ -15,6 +15,8 @@ CANDIDATE_REPARTITION_GATE_CODES = frozenset(
         "ACTION_TARGET_SCOPE_MISMATCH",
         "MIXED_DECISION_STAGE_CONTROL",
         "MIXED_TRIGGER_DECISION_STAGES",
+        "BASELINE_VALUE_SCOPE_MIXED",
+        "MIXED_OBLIGATION_KIND_SCOPE",
     }
 )
 
@@ -72,17 +74,32 @@ def publication_repair_error(
     structure_unit_ids: list[str] = []
     obligation_source_span_ids: list[str] = []
     messages = [f"{issue.code}: {issue.message}" for issue in issues]
+
+    def candidate_for_entity(entity_id: str | None) -> str | None:
+        if not entity_id:
+            return None
+        if entity_id in candidate_by_id:
+            return entity_id
+        owner = entity_id.split("/", 1)[0]
+        if owner in candidate_by_id:
+            return owner
+        return control_to_candidate.get(entity_id)
+
     for issue in repair_scope_issues:
         issue_candidate_ids = list(getattr(issue, "candidate_ids", ()) or ())
         issue_structure_unit_ids = list(
             getattr(issue, "structure_unit_ids", ()) or ()
         )
+        if not issue_candidate_ids:
+            owner = candidate_for_entity(issue.entity_id)
+            if owner is not None:
+                issue_candidate_ids.append(owner)
+                if not issue_structure_unit_ids:
+                    issue_structure_unit_ids.extend(
+                        candidate_by_id[owner].frozen_structure_unit_ids
+                    )
         if gate_issue_allows_source_closure_rewrite(issue) and not issue_candidate_ids:
-            candidate_id = (
-                issue.entity_id
-                if issue.entity_id in candidate_by_id
-                else control_to_candidate.get(issue.entity_id or "")
-            )
+            candidate_id = candidate_for_entity(issue.entity_id)
             candidate = candidate_by_id.get(candidate_id or "")
             if candidate is not None:
                 issue_candidate_ids.append(candidate.control_candidate_id)
@@ -101,11 +118,7 @@ def publication_repair_error(
             candidate_ids.extend(issue_candidate_ids)
             structure_unit_ids.extend(issue_structure_unit_ids)
             continue
-        candidate_id = (
-            issue.entity_id
-            if issue.entity_id in candidate_by_id
-            else control_to_candidate.get(issue.entity_id or "")
-        )
+        candidate_id = candidate_for_entity(issue.entity_id)
         candidate = candidate_by_id.get(candidate_id or "")
         if candidate is not None:
             candidate_ids.append(candidate.control_candidate_id)

@@ -55,7 +55,7 @@ from app.protocols.supplementary_relation_contract import (
 from app.protocols.protocol_control_planning import detect_required_action_kinds
 
 
-CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v18"
+CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v22"
 
 __all__ = [
     "CONTROL_PUBLICATION_GATE_VERSION",
@@ -63,6 +63,7 @@ __all__ = [
     "ProtocolControlPublicationError",
     "ProtocolControlGateIssue",
     "ProtocolControlGateReport",
+    "check_protocol_control_batch_candidates",
     "validate_protocol_control_batch_candidates",
     "check_protocol_control_publication",
     "gate_protocol_control_publication",
@@ -126,6 +127,13 @@ _TEMPORAL_CUE_RE = re.compile(
     r"在此期间|\b(?:within|before|after|washout|half[- ]?life|until|throughout)\b|"
     r"\d+\s*(?:天|日|周|月|年|days?|weeks?|months?|years?)\s*(?:内|前|后)? )",
     re.IGNORECASE | re.VERBOSE,
+)
+_ENROLLMENT_PROHIBITION_RE = re.compile(
+    r"(?:(?:筛选|导入|基线|入组前|随机(?:化|分组)?前|首次给药前)"
+    r"[^。；;\n]{0,100}(?:不允许|不得|禁止|严禁|不应)"
+    r"|(?:不允许|不得|禁止|严禁|不应)[^。；;\n]{0,100}"
+    r"(?:筛选|导入|基线|入组前|随机(?:化|分组)?前|首次给药前))",
+    re.IGNORECASE,
 )
 _AND_CUE_RE = re.compile(
     r"(?:且|并且|同时|以及|均须|均需|both|\band\b)", re.IGNORECASE
@@ -192,7 +200,7 @@ _TIME_UNIT_CANONICAL = {
     "years": "year",
 }
 _AUTHORITY_REFERENCE_SOURCE_TYPE_RE = re.compile(
-    r"(?:研究方案|方案(?:正文|原文)?|方案附录|附录\s*\d*|评分细则|操作规范|"
+    r"(?:研究方案|方案(?:正文|原文|附录)|附录\s*\d*|评分细则|操作规范|"
     r"评估手册|评分手册|研究者手册|疗效评价\s*SOP|\bSOP\b)",
     re.IGNORECASE,
 )
@@ -245,7 +253,7 @@ _EXCEPTION_BROAD_SCOPE_CUES = (
 )
 _STRONG_CLAUSE_BOUNDARY_RE = re.compile(r"[。！？!?；;]+")
 _CONDITIONAL_SUBJECT_RE = re.compile(
-    r"(?:若|如|如果|当|凡|除非|的参与者|的患者|者\s*[,，]|\b(?:if|when|unless)\b)",
+    r"(?:若|如|如果|当|凡|除非|的参与者|的患者|\b(?:if|when|unless)\b)",
     re.IGNORECASE,
 )
 _CONDITIONAL_ACTION_RE = re.compile(
@@ -1741,6 +1749,9 @@ def _check_plan_and_batch_results(
             if item.structure_unit_id not in manifest_id_set:
                 _fail("DISPOSITION_UNIT_UNKNOWN", "批次结果引用了未知结构单元", entity_id=item.structure_unit_id)
             authoritative_by_unit[item.structure_unit_id] = item
+        uncovered = _uncovered_enrollment_prohibitions(batch, result)
+        if uncovered:
+            raise uncovered[0]
         _check_hydrated_result_links(
             result,
             known_procedure_targets=batch.known_procedure_targets,
@@ -2892,6 +2903,17 @@ def _check_time_constraints(
             expected_period = "study_period"
         elif action_scoped_period(source_text, _TREATMENT_PERIOD_CUE_RE):
             expected_period = "treatment_period"
+        evaluation = getattr(atom, "evaluation", None)
+        if (
+            expected_period is not None
+            and continuation is None
+            and _value(getattr(evaluation, "determination_mode", None)) == "deterministic"
+        ):
+            _fail(
+                "PROSPECTIVE_PERIOD_HOLDER_INVALID",
+                "当前节点的确定性核对不能承担未来持续期间；须分别保留当前事实与未到期义务的原文",
+                entity_id=entity_id,
+            )
         if expected_period is not None and period != expected_period:
             _fail(
                 "PROSPECTIVE_PERIOD_MISSING",
@@ -3473,15 +3495,32 @@ def _check_future_prohibition_not_decided_at_current_node(
             *(str(getattr(binding, "guidance", "") or "") for binding in bindings),
             *(str(getattr(item, "description", "") or "") for item in minimum_evidence),
         ):
-            if (
-                (_STUDY_PERIOD_CUE_RE.search(text) or _TREATMENT_PERIOD_CUE_RE.search(text))
-                and re.search(r"(?:证明|确认|核实|判定)[^，。；\n]{0,40}(?:已|未|均未|没有发生)", text)
-            ):
+            if _requires_future_compliance_proof(text):
                 _fail(
                     "FUTURE_PROHIBITION_DECIDED_EARLY",
                     "当前审核指引或最低证据不得要求证明后续期间已经遵守",
                     entity_id=entity_id,
                 )
+
+
+def _requires_future_compliance_proof(text: str) -> bool:
+    """Distinguish an actual proof demand from an explicit refusal to demand it."""
+
+    if not (_STUDY_PERIOD_CUE_RE.search(text) or _TREATMENT_PERIOD_CUE_RE.search(text)):
+        return False
+    for clause in _STRONG_CLAUSE_BOUNDARY_RE.split(text):
+        for segment in re.split(r"[，,、]", clause):
+            if not (_STUDY_PERIOD_CUE_RE.search(segment) or _TREATMENT_PERIOD_CUE_RE.search(segment)):
+                continue
+            for match in re.finditer(
+                r"(?:证明|确认|核实|判定)[^，,、。；\n]{0,40}(?:已|未|均未|没有发生)",
+                segment,
+            ):
+                prefix = segment[:match.start()]
+                if re.search(r"(?:不要求|无需|不必|不需|不得|不能|不应)[^，,、。；\n]{0,12}$", prefix):
+                    continue
+                return True
+    return False
 
 
 def _check_nodes(
@@ -3791,6 +3830,15 @@ def _check_temporal_obligation_relation_scope(
         _value(getattr(atom, "kind", None))
         for atom in _iter_expression_atoms(obligation_expression)
     }
+    if {
+        ControlObligationKind.SCHEDULE_OR_VERIFY_VISIT.value,
+        ControlObligationKind.VERIFY_RESULT_VALIDITY.value,
+    }.issubset(kinds):
+        _fail(
+            "MIXED_OBLIGATION_KIND_SCOPE",
+            "访视安排与结果有效期必须分别表达，并保留各自来源",
+            entity_id=entity_id,
+        )
     relation_target_kinds: set[str] = set()
     workflow_relation_ids: set[str] = set()
     for relation in relations:
@@ -4462,26 +4510,71 @@ def _check_exception_sibling_locality(
                 )
 
 
-def validate_protocol_control_batch_candidates(
+def _uncovered_enrollment_prohibitions(
     batch: ProtocolControlDispositionBatch,
     output: ProtocolControlBatchDispositionHydrated,
-) -> ProtocolControlBatchDispositionHydrated:
-    """Run candidate semantic gates while the originating model session is open.
+) -> tuple[ProtocolControlGateError, ...]:
+    """Stop explicit stage-scoped prohibitions from vanishing as no-op rows."""
 
-    This is deliberately narrower than full publication validation: it checks
-    only candidates owned by one frozen deep-analysis batch. Whole-manifest
-    disposition, phase closure, cross-batch identity, and catalog publication
-    remain the responsibility of :func:`validate_protocol_control_publication`.
+    by_unit = {item.structure_unit_id: item for item in output.dispositions}
+    target_quotes = [
+        quote
+        for target in (*batch.known_official_targets, *batch.known_procedure_targets)
+        for quote in target.source_excerpts
+        if isinstance(quote, str)
+    ]
+    issues: list[ProtocolControlGateError] = []
+    for unit in batch.owned_units:
+        disposition = by_unit.get(unit.structure_unit_id)
+        if disposition is None or disposition.linked_control_candidate_ids:
+            continue
+        if disposition.disposition == StructureUnitDispositionKind.PHASE_EXCLUDED:
+            continue
+        for clause in re.split(r"[。；;\n]", unit.excerpt):
+            if not _ENROLLMENT_PROHIBITION_RE.search(clause):
+                continue
+            quote = clause.strip()
+            normalized_quote = re.sub(r"\s+", "", quote)
+            if any(
+                normalized_quote in re.sub(r"\s+", "", target_quote)
+                for target_quote in target_quotes
+            ):
+                continue
+            issues.append(
+                ProtocolControlGateError(
+                    "ENROLLMENT_PROHIBITION_UNCOVERED",
+                    "冻结原文含当前入排阶段的禁止性要求，但本单元未形成候选，"
+                    "也没有同段逐字来源证明已由正式条款或流程事项覆盖；须按原文核对，不能仅凭目录同名省略。",
+                    entity_id=unit.structure_unit_id,
+                    structure_unit_ids=[unit.structure_unit_id],
+                    obligation_source_span_ids=unit.source_span_ids,
+                )
+            )
+            break
+    return tuple(issues)
+
+
+def check_protocol_control_batch_candidates(
+    batch: ProtocolControlDispositionBatch,
+    output: ProtocolControlBatchDispositionHydrated,
+) -> tuple[ProtocolControlGateError, ...]:
+    """Report one independent finding per candidate without changing the gate.
+
+    Batch identity and cross-candidate checks still stop at their first error.
+    Findings are diagnostic only; no candidate is accepted until every gate passes.
     """
 
-    if output.batch_id != batch.batch_id:
-        _fail("BATCH_ID_MISMATCH", "深析结果未绑定当前冻结批次")
-    if output.coverage_manifest_id != batch.coverage_manifest_id:
-        _fail("MANIFEST_ID_MISMATCH", "深析结果未绑定当前全文覆盖清单")
-    if output.owned_structure_unit_ids != batch.owned_structure_unit_ids:
-        _fail("BATCH_SCOPE_MISMATCH", "深析结果未闭合到当前批次的 owned 结构单元")
-    if output.owned_source_span_ids != batch.owned_source_span_ids:
-        _fail("BATCH_SCOPE_MISMATCH", "深析结果未闭合到当前批次的来源范围")
+    try:
+        if output.batch_id != batch.batch_id:
+            _fail("BATCH_ID_MISMATCH", "深析结果未绑定当前冻结批次")
+        if output.coverage_manifest_id != batch.coverage_manifest_id:
+            _fail("MANIFEST_ID_MISMATCH", "深析结果未绑定当前全文覆盖清单")
+        if output.owned_structure_unit_ids != batch.owned_structure_unit_ids:
+            _fail("BATCH_SCOPE_MISMATCH", "深析结果未闭合到当前批次的 owned 结构单元")
+        if output.owned_source_span_ids != batch.owned_source_span_ids:
+            _fail("BATCH_SCOPE_MISMATCH", "深析结果未闭合到当前批次的来源范围")
+    except ProtocolControlGateError as error:
+        return (error,)
 
     unit_by_id = {unit.structure_unit_id: unit for unit in batch.owned_units}
     allowed_span_ids = set(batch.owned_source_span_ids)
@@ -4493,22 +4586,44 @@ def validate_protocol_control_batch_candidates(
     procedure_ids = {
         target.catalog_item_id for target in batch.known_procedure_targets
     }
+    issues: list[ProtocolControlGateError] = []
+    issues.extend(_uncovered_enrollment_prohibitions(batch, output))
     for candidate in output.candidates:
-        _validate_candidate(
-            candidate,
+        try:
+            _validate_candidate(
+                candidate,
+                unit_by_id=unit_by_id,
+                allowed_span_ids=allowed_span_ids,
+                workflow_targets=batch.known_workflow_stage_targets,
+                procedure_targets=batch.known_procedure_targets,
+                official_codes=official_codes,
+                procedure_ids=procedure_ids,
+                candidate_ids=candidate_id_set,
+            )
+        except ProtocolControlGateError as error:
+            issues.append(error)
+    if issues:
+        return tuple(issues)
+    try:
+        _check_conditional_exemption_scope_split(
+            output.candidates,
             unit_by_id=unit_by_id,
-            allowed_span_ids=allowed_span_ids,
-            workflow_targets=batch.known_workflow_stage_targets,
-            procedure_targets=batch.known_procedure_targets,
-            official_codes=official_codes,
-            procedure_ids=procedure_ids,
-            candidate_ids=candidate_id_set,
+            candidate_scope=True,
         )
-    _check_conditional_exemption_scope_split(
-        output.candidates,
-        unit_by_id=unit_by_id,
-        candidate_scope=True,
-    )
+    except ProtocolControlGateError as error:
+        return (error,)
+    return ()
+
+
+def validate_protocol_control_batch_candidates(
+    batch: ProtocolControlDispositionBatch,
+    output: ProtocolControlBatchDispositionHydrated,
+) -> ProtocolControlBatchDispositionHydrated:
+    """Require all batch candidates to pass before full publication validation."""
+
+    issues = check_protocol_control_batch_candidates(batch, output)
+    if issues:
+        raise issues[0]
     return output
 
 

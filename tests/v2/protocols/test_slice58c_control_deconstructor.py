@@ -7,6 +7,7 @@ or write a project artifact.
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
@@ -31,6 +32,10 @@ from app.agents.protocol_control_deconstructor import (
     ProtocolControlAgentWireRelation,
     ProtocolControlAgentWireValidationError,
     _candidate_ids_from_wire,
+    _merge_candidate_repair,
+    _merge_candidate_repairs,
+    _invalid_candidate_payload,
+    _single_invalid_candidate_payload,
     build_protocol_control_agent_prompt,
     build_protocol_control_repair_prompt,
     hydrate_protocol_control_agent_output,
@@ -38,6 +43,7 @@ from app.agents.protocol_control_deconstructor import (
     parse_protocol_control_agent_wire,
     protocol_control_agent_json_schema,
     protocol_control_agent_response_format,
+    protocol_control_candidate_repair_response_format,
     validate_protocol_control_agent_wire,
 )
 from app.domain.contracts.enums import PhaseScope, ReviewStage, StudyPhase
@@ -54,6 +60,7 @@ from app.domain.contracts.protocol_controls import (
     ReviewNodeRole,
     StructureUnitDispositionKind,
 )
+from app.protocols.protocol_control_repair_errors import publication_repair_error
 
 
 def test_continuing_obligation_wire_excludes_system_schema_version() -> None:
@@ -532,10 +539,18 @@ def test_prompt_explains_parallel_sources_and_conditional_alternative_obligation
             "PROSPECTIVE_PERIOD_MISSING: 持续期间缺失",
             "若只是首次给药后的检查或随访，则删除候选",
         ),
-            (
-                "FUTURE_PROHIBITION_DECIDED_EARLY: 后续遵守不能提前证明",
-                "continuing_obligation",
-            ),
+        (
+            "FUTURE_PROHIBITION_DECIDED_EARLY: 后续遵守不能提前证明",
+            "statement 和 evaluation.proposition 均只陈述截至决定节点可核的行为",
+        ),
+        (
+            "RECOMMENDED_MODALITY_DROPPED: 建议动作被写成强制",
+            "必做原子不能连带引用后续的建议措辞",
+        ),
+        (
+            "WIRE_SCHEMA_INVALID: 比较条件必须保留求值规格内的逐字原文",
+            "source_term 不能代替 predicate 的逐字来源",
+        ),
         (
             "CONTROL_DELTA_DROPPED: 控制增量遗漏",
             "只为目标确实未覆盖的人群、条件、动作、时间、阈值或例外建立增量候选",
@@ -596,8 +611,17 @@ def test_repair_prompt_reuses_prior_schema_and_keeps_time_corrections_bounded() 
 
     assert "not_applicable 或 unresolved" in without_time
     assert "不得为了让规格通过而补造" in without_time
+    combined = build_protocol_control_repair_prompt(
+        batch,
+        problem=(
+            "普通值比较不能冒充日期间隔或书面判断计算；"
+            "未给出时间约束，不能声明已确定其计算用途"
+        ),
+    )
+    assert "operand_attribute 必须为 value" in combined
+    assert "not_applicable 或 unresolved" in combined
     assert "筛选、基线和随机日期不能放入" in future_anchor
-    assert "严格沿用首轮已给出的输出结构" in future_anchor
+    assert "严格遵守本请求随附的 JSON Schema" in future_anchor
     assert '"$defs"' not in without_time
     assert '"$defs"' not in future_anchor
 
@@ -1245,7 +1269,7 @@ def test_temporal_obligation_kinds_keep_visit_validity_and_baseline_scope_separa
         },
     )
     atom["evaluation"] = _timed_evaluation(atom["statement"], "span:01", "年龄至少18岁")
-    with pytest.raises(ValidationError, match="带时间约束"):
+    with pytest.raises(ValidationError, match="具体操作持续期"):
         ProtocolControlAgentWireCandidate.model_validate(payload)
 
     atom.update(
@@ -1332,6 +1356,44 @@ def test_temporal_obligation_kinds_keep_visit_validity_and_baseline_scope_separa
         hydrate_protocol_control_agent_output(
             _wire(candidate=mixed_baseline_scope), batch
         )
+
+
+def test_action_specific_duration_needs_semantic_interval_not_one_value_match() -> None:
+    excerpt = "自筛选日起按规定治疗持续7天"
+    evaluation = _evaluation(excerpt, "span:treatment", excerpt)
+    evaluation.update(time_purpose="interval_condition", time_operand_attribute="date_range")
+    atom = ProtocolControlAgentWireObligationAtom(
+        kind=ControlObligationKind.COMPLETE_OR_VERIFY,
+        statement=excerpt,
+        evaluation=evaluation,
+        time_constraint={"anchor_type": "screening_date", "direction": "after", "upper_bound_days": 7},
+        prospective_period=None,
+        source_span_ids=["span:treatment"],
+        source_excerpts=[excerpt],
+        requires_professional_judgment=False,
+    )
+    assert atom.evaluation.determination_mode == "semantic"
+    with pytest.raises(ValidationError, match="不得以单次值比较证明全程完成"):
+        ProtocolControlAgentWireObligationAtom.model_validate(
+            {**atom.model_dump(mode="json"), "evaluation": {
+                **atom.evaluation.model_dump(mode="json"),
+                "determination_mode": "deterministic",
+                "operation": "time_constraint",
+                "operand_attribute": "date_range",
+                "time_operand_attribute": None,
+            }}
+        )
+
+
+def test_candidate_source_identity_lists_are_canonicalized_without_changing_excerpts() -> None:
+    raw = _candidate().model_dump(mode="json")
+    original_excerpt = raw["obligation_expression"]["groups"][0]["atoms"][0]["source_excerpts"]
+    raw["source_structure_unit_ids"] = ["su-01", "su-01"]
+    raw["source_span_ids"] = ["span:02", "span:01", "span:01"]
+    parsed = ProtocolControlAgentWireCandidate.model_validate(raw)
+    assert parsed.source_structure_unit_ids == ["su-01"]
+    assert parsed.source_span_ids == ["span:01", "span:02"]
+    assert parsed.obligation_expression.groups[0].atoms[0].source_excerpts == original_excerpt
 
 
 def test_result_validity_requires_exact_procedure_target() -> None:
@@ -1434,6 +1496,24 @@ class _FakeTransport:
         return response
 
 
+def test_strict_response_format_does_not_duplicate_full_schema_in_prompt() -> None:
+    batch = _batch()
+    full_prompt = build_protocol_control_agent_prompt(batch)
+    strict_prompt = build_protocol_control_agent_prompt(batch, include_schema=False)
+    assert "输出结构：" in full_prompt
+    assert "输出结构：" not in strict_prompt
+    assert "本次冻结输入：" in strict_prompt
+    assert "严格遵循本次请求随附的 JSON Schema" in strict_prompt
+    assert len(full_prompt) - len(strict_prompt) > 10000
+
+    transport = _FakeTransport(
+        [ProtocolControlAgentResponse(session_id="session-schema", text=_wire().model_dump_json())]
+    )
+    transport.response_format_mode = "json_schema"
+    assert ProtocolControlAgentRunner().run(batch, transport).status == "已解析"
+    assert "输出结构：" not in transport.prompts[0]
+
+
 def test_same_session_repair_is_bounded_to_batch_and_cannot_replace_accepted_batch() -> None:
     batch = _batch()
     invalid = json.dumps({"wire_version": CONTROL_AGENT_WIRE_VERSION, "dispositions": []})
@@ -1495,6 +1575,31 @@ def test_same_session_repair_can_use_post_hydration_publication_feedback() -> No
     ]
     assert "PROSPECTIVE_PERIOD_UNSUPPORTED" in transport.prompts[1]
     assert "su-01" in transport.prompts[1]
+
+
+def test_repair_scope_outside_owned_batch_stops_without_follow_up() -> None:
+    batch = _batch()
+    transport = _FakeTransport(
+        [ProtocolControlAgentResponse(session_id="session-1", text=_wire().model_dump_json())]
+    )
+
+    def reject_with_unknown_source(_output) -> None:
+        raise ProtocolControlAgentWireValidationError(
+            "CANDIDATE_SOURCE_SCOPE_ESCAPE",
+            "来源编号不属于当前批次",
+            structure_unit_ids=["su-not-in-batch"],
+        )
+
+    result = ProtocolControlAgentRunner(max_schema_repairs=2).run(
+        batch,
+        transport,
+        output_validator=reject_with_unknown_source,
+    )
+
+    assert result.status == "需要核对"
+    assert len(result.attempts) == 1
+    assert "机器可读修订范围" in result.attempts[0].issues[-1]
+    assert len(transport.prompts) == 1
 
 
 def test_repeated_identical_invalid_output_stops_without_consuming_all_repairs() -> None:
@@ -1674,6 +1779,205 @@ def test_post_hydration_repairs_roll_forward_without_cross_candidate_regression(
     assert result.attempts[-1].issues == [
         "已由系统原样保留定向修订范围外的上一轮内容"
     ]
+
+
+def test_candidate_only_repair_preserves_other_candidates_and_dispositions() -> None:
+    first = _candidate()
+    second = _candidate_for_second_unit()
+    initial = _wire_with_two_candidates(first, second)
+    repaired = first.model_copy(update={"title": "年龄资料控制（已核对）"})
+    payload = json.dumps({"candidate_draft": repaired.model_dump(mode="json")})
+    merged = _merge_candidate_repair(payload, initial, 0)
+    assert merged.candidate_drafts[0].title == repaired.title
+    assert merged.candidate_drafts[1] == second
+    assert merged.dispositions == initial.dispositions
+    with pytest.raises(ProtocolControlAgentWireValidationError):
+        _merge_candidate_repair(
+            json.dumps({"candidate_draft": {**repaired.model_dump(mode="json"), "control_id": "invented"}}),
+            initial,
+            0,
+        )
+    response_format = protocol_control_candidate_repair_response_format()
+    assert response_format["json_schema"]["name"] == "protocol_control_candidate_repair_v1"
+    assert list(response_format["json_schema"]["schema"]["properties"]) == ["candidate_draft"]
+
+
+def test_repair_prompt_repeats_target_index_without_claiming_coverage() -> None:
+    prompt = build_protocol_control_repair_prompt(
+        _batch(), problem="BASELINE_VALUE_SCOPE_MISSING"
+    )
+    assert "冻结目标索引" in prompt
+    assert "是否覆盖仍须核对首轮输入中的目标原文" in prompt
+    assert _batch().known_official_targets[0].official_code in prompt
+    assert _batch().known_procedure_targets[0].catalog_item_id in prompt
+    assert "cross_source_relations" in prompt
+
+
+def test_repair_prompt_keeps_time_constraint_and_evaluation_consistent() -> None:
+    prompt = build_protocol_control_repair_prompt(
+        _batch(),
+        problem="CANDIDATE_REPAIR_INVALID: 已有时间约束不能在求值规格中忽略",
+        candidate_only=True,
+    )
+    assert "求值规格须说明该时间条件的用途" in prompt
+    assert "不能仅改标记绕过校验" in prompt
+
+
+def test_partial_repair_prompt_does_not_require_full_batch_output() -> None:
+    batch = _batch()
+    for partial in ({"candidate_only": True}, {"candidates_only": True}):
+        prompt = build_protocol_control_repair_prompt(
+            batch, problem="WIRE_SCHEMA_INVALID", candidate_indexes=[0], **partial
+        )
+        assert "系统保留" in prompt
+        assert "仍须返回本批全部 owned_units" not in prompt
+    full_prompt = build_protocol_control_repair_prompt(
+        batch, problem="WIRE_SCHEMA_INVALID"
+    )
+    assert "仍须返回本批全部 owned_units" in full_prompt
+
+
+def test_single_invalid_initial_candidate_is_repaired_without_rewriting_siblings() -> None:
+    batch = _batch()
+    first = _candidate()
+    second = _candidate_for_second_unit()
+    valid = _wire_with_two_candidates(first, second)
+    initial = valid.model_dump(mode="json")
+    del initial["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]
+    initial_text = json.dumps(initial, ensure_ascii=False)
+    assert _single_invalid_candidate_payload(initial_text) is not None
+
+    class CandidateTransport(_FakeTransport):
+        def continue_candidate(self, *, session_id: str, prompt: str):
+            self.prompts.append(prompt)
+            assert session_id == "candidate-session"
+            return ProtocolControlAgentResponse(
+                session_id=session_id,
+                text=json.dumps({"candidate_draft": first.model_dump(mode="json")}),
+            )
+
+    transport = CandidateTransport([
+        ProtocolControlAgentResponse(session_id="candidate-session", text=initial_text)
+    ])
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(batch, transport)
+
+    assert result.status == "已解析"
+    assert result.final_output is not None
+    assert len(result.attempts) == 2
+    assert result.attempts[0].error_classes == ["WIRE_SCHEMA_INVALID"]
+    assert result.final_output.candidates[1].title == second.title
+    assert "仅返回包含 candidate_draft" in transport.prompts[1]
+
+
+def test_multiple_invalid_initial_candidates_do_not_get_single_candidate_repair() -> None:
+    valid = _wire_with_two_candidates(_candidate(), _candidate_for_second_unit())
+    initial = valid.model_dump(mode="json")
+    for draft in initial["candidate_drafts"]:
+        del draft["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]
+    assert _single_invalid_candidate_payload(json.dumps(initial)) is None
+    assert _invalid_candidate_payload(json.dumps(initial))[1] == (0, 1)
+
+    class CandidateTransport(_FakeTransport):
+        def continue_candidates(self, *, session_id: str, prompt: str):
+            self.prompts.append(prompt)
+            return ProtocolControlAgentResponse(
+                session_id=session_id,
+                text=json.dumps({
+                    "candidate_drafts": [
+                        item.model_dump(mode="json") for item in valid.candidate_drafts
+                    ]
+                }),
+            )
+
+    transport = CandidateTransport([
+        ProtocolControlAgentResponse(
+            session_id="candidate-session", text=json.dumps(initial)
+        )
+    ])
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(_batch(), transport)
+    assert result.status == "已解析"
+    assert result.final_output is not None
+    assert len(result.final_output.candidates) == 2
+    assert "同样数量的 candidate_drafts" in transport.prompts[1]
+
+    with pytest.raises(ProtocolControlAgentWireValidationError, match="数量"):
+        _merge_candidate_repairs(
+            json.dumps({"candidate_drafts": [valid.candidate_drafts[0].model_dump(mode="json")]}),
+            initial, (0, 1),
+        )
+    with pytest.raises(ProtocolControlAgentWireValidationError, match="调换候选"):
+        _merge_candidate_repairs(
+            json.dumps({"candidate_drafts": [
+                valid.candidate_drafts[1].model_dump(mode="json"),
+                valid.candidate_drafts[0].model_dump(mode="json"),
+            ]}),
+            initial, (0, 1),
+        )
+
+
+def test_runner_repairs_only_the_rejected_candidate_when_transport_supports_it() -> None:
+    batch = _batch()
+    first = _candidate()
+    second = _candidate_for_second_unit()
+    initial = _wire_with_two_candidates(first, second)
+    repaired = first.model_copy(update={"title": "年龄资料控制（已核对）"})
+
+    class CandidateTransport(_FakeTransport):
+        def continue_candidate(self, *, session_id: str, prompt: str):
+            self.prompts.append(prompt)
+            assert session_id == "candidate-session"
+            return ProtocolControlAgentResponse(
+                session_id=session_id,
+                text=json.dumps({"candidate_draft": repaired.model_dump(mode="json")}),
+            )
+
+    transport = CandidateTransport(
+        [ProtocolControlAgentResponse(session_id="candidate-session", text=initial.model_dump_json())]
+    )
+    calls = 0
+
+    def reject_first_once(output):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise ProtocolControlAgentWireValidationError(
+                "CANDIDATE_REJECTED",
+                "第一个候选需要修订",
+                candidate_ids=[output.candidates[0].control_candidate_id],
+                structure_unit_ids=["su-01"],
+            )
+
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(
+        batch, transport, output_validator=reject_first_once
+    )
+    assert result.status == "已解析"
+    assert result.final_output is not None
+    assert [item.title for item in result.final_output.candidates] == [
+        repaired.title,
+        second.title,
+    ]
+    assert "仅返回包含 candidate_draft" in transport.prompts[1]
+
+
+def test_atom_level_gate_error_keeps_owning_candidate_repair_scope() -> None:
+    hydrated = hydrate_protocol_control_agent_output(_wire(candidate=_candidate()), _batch())
+    candidate = hydrated.candidates[0]
+    issue = SimpleNamespace(
+        code="TIME_ANCHOR_MISSING",
+        message="时间原子缺少命名锚点",
+        entity_id=candidate.control_candidate_id + "/atom-1",
+        candidate_ids=[],
+        structure_unit_ids=[],
+        obligation_source_span_ids=[],
+    )
+    error = publication_repair_error(
+        issues=[issue],
+        candidate_by_id={candidate.control_candidate_id: candidate},
+        control_to_candidate={},
+        default_structure_unit_ids=["su-01", "su-02"],
+    )
+    assert error.candidate_ids == (candidate.control_candidate_id,)
+    assert error.structure_unit_ids == ("su-01",)
 
 
 def test_explicit_candidate_repartition_preserves_authorized_source_union() -> None:

@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 from dataclasses import replace
 import hashlib
+import io
 import json
 
 import pytest
+from PIL import Image
 
 from app.domain.contracts.enums import Comparator, RuleKind, StudyPhase
 from app.domain.contracts.page_review import PageReviewLane
@@ -22,6 +24,7 @@ from app.llm.page_review_harness import (
     PageReviewConfigError,
     PageReviewHarnessError,
     PageReviewInput,
+    PAGE_REVIEW_PROMPT_VERSION,
     extract_json_object,
     preflight_page_reader_routes,
     read_page,
@@ -29,7 +32,10 @@ from app.llm.page_review_harness import (
 )
 from app.projections.clause_pack import project_clause_pack
 
-HASH = hashlib.sha256(b"page-image").hexdigest()
+_image_buffer = io.BytesIO()
+Image.new("RGB", (8, 8), (240, 240, 240)).save(_image_buffer, format="PNG")
+IMAGE_BYTES = _image_buffer.getvalue()
+HASH = hashlib.sha256(IMAGE_BYTES).hexdigest()
 
 
 def test_explicit_cloud_pair_efforts_are_preserved():
@@ -37,6 +43,23 @@ def test_explicit_cloud_pair_efforts_are_preserved():
     assert routes[PageReviewLane.MAIN_A].reasoning_effort == "high"
     assert routes[PageReviewLane.MAIN_B].reasoning_effort == "high"
     assert set(routes) == {PageReviewLane.MAIN_A, PageReviewLane.MAIN_B}
+
+
+def test_cms_page_routes_ignore_stale_other_provider_credentials():
+    routes = require_page_reader_routes({
+        "CMS_ROUTER_BASE_URL": "http://127.0.0.1:20128/v1",
+        "CMS_ROUTER_API_KEY": "cms-key",
+        "PAGE_REVIEW_MAIN_A_PROVIDER": "cms-router",
+        "PAGE_REVIEW_MAIN_A_BASE_URL": "https://old.example/v1",
+        "PAGE_REVIEW_MAIN_A_API_KEY": "old-a-key",
+        "PAGE_REVIEW_MAIN_A_MODEL": "glm-5.3-flash",
+        "PAGE_REVIEW_MAIN_B_PROVIDER": "cms-router",
+        "PAGE_REVIEW_MAIN_B_BASE_URL": "https://old.example/v1",
+        "PAGE_REVIEW_MAIN_B_API_KEY": "old-b-key",
+        "PAGE_REVIEW_MAIN_B_MODEL": "deepseek-latest-cloud",
+    })
+    assert {route.api_key for route in routes.values()} == {"cms-key"}
+    assert {route.base_url for route in routes.values()} == {"http://127.0.0.1:20128/v1"}
 
 
 def test_identical_response_with_different_effort_has_distinct_identity():
@@ -65,7 +88,7 @@ def test_transport_identity_uses_completion_receipt_not_provider_assumption():
     records = [asyncio.run(read_page(route, _page_input(), _clause_pack(), completion=fn))
                for fn in (requested, unspecified)]
     assert records[0].prompt_version.endswith(":omlx-schema-request-v1")
-    assert records[1].prompt_version == "page-review-r3/v13"
+    assert records[1].prompt_version == PAGE_REVIEW_PROMPT_VERSION
     assert records[0].page_review_id != records[1].page_review_id
 
 
@@ -108,7 +131,7 @@ def test_sent_schema_and_python_agree_on_signal_excerpt(signal, region):
     from app.domain.contracts.page_review import PageReviewPayload
     from app.llm.page_review_harness import build_page_review_messages
     messages = build_page_review_messages(_routes()[PageReviewLane.MAIN_A], _page_input(), _clause_pack())
-    schema = json.loads(messages[1]["content"][1]["text"])["output_schema"]
+    schema = json.loads(messages[1]["content"][0]["text"])["output_schema"]
     payload = json.loads(_main_response(has_eligibility_value=True, clause_signals=[
         {"clause_id": "component-1", "signal": signal, "region": region}]))
     valid = (signal == "none") == (region is None)
@@ -181,7 +204,7 @@ def test_direct_transport_does_not_equate_zero_reported_tokens_with_no_thinking(
 def test_changed_path_cannot_send_an_unverified_image(tmp_path):
     from app.llm.page_review_harness import build_page_review_messages
     path = tmp_path / "page.png"
-    path.write_bytes(b"page-image")
+    path.write_bytes(IMAGE_BYTES)
     page = PageReviewInput(page_artifact_id="page-1", source_document_version_id="doc-1",
                            page_number=1, page_image_sha256=HASH,
                            page=PageVisionInput(source_ref="page-1", page_ordinal=1, image_path=path))
@@ -243,7 +266,7 @@ def test_main_reads_share_frozen_context():
     page = replace(_page_input(), review_context=context)
     for lane in (PageReviewLane.MAIN_A, PageReviewLane.MAIN_B):
         messages = build_page_review_messages(_routes()[lane], page, _clause_pack())
-        payload = json.loads(messages[1]["content"][1]["text"])
+        payload = json.loads(messages[1]["content"][0]["text"])
         assert payload["review_context"] == context.model_dump(mode="json")
         assert payload["review_context"]["anchor_dates"] == {}
 
@@ -266,7 +289,7 @@ def test_diagnostic_verifies_source_and_pack_before_model_calls(tmp_path):
     from scripts.r3_page_diagnostic import load_input
 
     image = tmp_path / "page.jpg"
-    image.write_bytes(b"page-image")
+    image.write_bytes(IMAGE_BYTES)
     pack_path = tmp_path / "pack.json"
     pack_path.write_text(_clause_pack().model_dump_json(), encoding="utf-8")
     page, pack = load_input(image, HASH, 2, pack_path)
@@ -340,7 +363,7 @@ def _page_input() -> PageReviewInput:
         page=PageVisionInput(
             source_ref="page-1",
             page_ordinal=1,
-            image_bytes=b"page-image",
+            image_bytes=IMAGE_BYTES,
         ),
     )
 
@@ -465,7 +488,7 @@ def test_harness_normalizes_raw_facts_without_model_computed_keys() -> None:
     }]))
 
     async def completion(_route, _messages, _budget):
-        schema = json.loads(_messages[1]["content"][1]["text"])["output_schema"]
+        schema = json.loads(_messages[1]["content"][0]["text"])["output_schema"]
         assert "normalization_key" not in schema["$defs"]["PageFactObservation"]["properties"]
         assert "没有则为 null" in _messages[0]["content"]
         assert "日期字段本身的 time_text 为 null" in _messages[0]["content"]
@@ -478,7 +501,7 @@ def test_harness_normalizes_raw_facts_without_model_computed_keys() -> None:
     record = asyncio.run(read_page(_routes()[PageReviewLane.MAIN_A], _page_input(), _clause_pack(), completion=completion))
     assert record.facts[0].normalized_value == "1.234567"
     assert record.facts[0].normalized_unit == "mmol/l"
-    assert record.prompt_version == "page-review-r3/v13"
+    assert record.prompt_version == PAGE_REVIEW_PROMPT_VERSION
 
 
 def test_harness_rejects_clause_not_present_in_pack() -> None:

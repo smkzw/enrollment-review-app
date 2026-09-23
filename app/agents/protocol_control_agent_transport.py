@@ -45,6 +45,8 @@ from app.agents.protocol_control_deconstructor import (
     ProtocolControlAgentResponse,
     ProtocolControlAgentTransport,
     protocol_control_agent_response_format,
+    protocol_control_candidate_repair_response_format,
+    protocol_control_candidates_repair_response_format,
 )
 from app.config import (
     DECONSTRUCT_GLM_API_KEY,
@@ -584,6 +586,8 @@ class OpenAICompatibleProtocolControlAgentTransport:
 
     @property
     def model_identity_policy(self) -> str:
+        # Retain the frozen route signature: the non-clinical fallback now also
+        # handles catalogs that list generic aliases but omit this route.
         return "list_then_chat_on_empty" if self._backend == "cms-router" else "list_only"
 
     @property
@@ -652,9 +656,11 @@ class OpenAICompatibleProtocolControlAgentTransport:
                 item_id = getattr(item, "id", None)
             if isinstance(item_id, str) and item_id.strip():
                 ids.append(item_id.strip())
-        if not ids and self._backend == "cms-router":
-            # Scoped gateway keys can serve a model while exposing an empty
-            # catalog. This probe contains no protocol or subject material.
+        if self._backend == "cms-router" and not any(
+            item.lower() == self._model.lower() for item in ids
+        ):
+            # Generic gateway aliases do not prove the configured route.
+            # Probe without protocol or subject material first.
             response = self._client.chat.completions.create(
                 model=self._model,
                 messages=[{"role": "user", "content": "只回答：好"}],
@@ -663,7 +669,8 @@ class OpenAICompatibleProtocolControlAgentTransport:
             )
             reported = getattr(response, "model", None)
             if isinstance(reported, str) and reported.strip():
-                ids.append(reported.strip())
+                return [reported.strip()]
+            return []
         return ids
 
     def verify_model_identity(self, *, force: bool = False) -> str:
@@ -719,6 +726,7 @@ class OpenAICompatibleProtocolControlAgentTransport:
         messages: list[dict[str, str]],
         *,
         max_tokens: int | None = None,
+        response_format: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         kwargs: dict[str, Any] = {
             "model": self._model,
@@ -726,7 +734,7 @@ class OpenAICompatibleProtocolControlAgentTransport:
             "max_tokens": self._max_tokens if max_tokens is None else max_tokens,
         }
         if self._response_format_mode == "json_schema":
-            kwargs["response_format"] = self._response_format
+            kwargs["response_format"] = response_format or self._response_format
         elif self._response_format_mode == "json_object":
             kwargs["response_format"] = {"type": "json_object"}
         if self._temperature is not None:
@@ -796,16 +804,26 @@ class OpenAICompatibleProtocolControlAgentTransport:
             return "\n".join(lines[1:-1]).strip()
         return stripped
 
-    def _complete(self, messages: list[dict[str, str]]) -> str:
+    def _complete(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        response_format: Mapping[str, Any] | None = None,
+    ) -> str:
         from app.llm.mtplx_model_lifecycle import sync_mtplx_model_session
 
         with sync_mtplx_model_session(
             self._backend, str(getattr(self._client, "base_url", "")),
             self._model, self._reasoning_effort,
         ):
-            return self._complete_owned(messages)
+            return self._complete_owned(messages, response_format=response_format)
 
-    def _complete_owned(self, messages: list[dict[str, str]]) -> str:
+    def _complete_owned(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        response_format: Mapping[str, Any] | None = None,
+    ) -> str:
         """Run one logical completion, with ephemeral in-call retries.
 
         Length/empty-body repair turns are used only for the live request and
@@ -826,7 +844,11 @@ class OpenAICompatibleProtocolControlAgentTransport:
             try:
                 completion = self._stream_completion(
                     self._client,
-                    self._completion_kwargs(request_messages, max_tokens=request_budget),
+                    self._completion_kwargs(
+                        request_messages,
+                        max_tokens=request_budget,
+                        response_format=response_format,
+                    ),
                 )
             except (APITimeoutError, httpx.TimeoutException, TimeoutError) as exc:
                 raise _ProtocolControlRequestTimeout(
@@ -859,6 +881,10 @@ class OpenAICompatibleProtocolControlAgentTransport:
                             f"第2次请求预算提升至{retry_budget} tokens（最多一次）"
                         )
                     request_budget = retry_budget
+                    format_name = self._response_format_name
+                    effective_format = response_format or self._response_format
+                    if self._response_format_mode == "json_schema":
+                        format_name = effective_format["json_schema"]["name"]
                     partial = ""
                     message = getattr(choices[0], "message", None) if choices else None
                     content = getattr(message, "content", None)
@@ -872,7 +898,7 @@ class OpenAICompatibleProtocolControlAgentTransport:
                             "content": (
                                 "上一请求的 JSON 输出达到长度上限，正文不可用。"
                                 "请不要重复分析，立即按原冻结输入和协议控制 Schema "
-                                f"{self._response_format_name} 输出完整 JSON；"
+                                f"{format_name} 输出完整 JSON；"
                                 "不要附加解释。"
                             ),
                         },
@@ -942,6 +968,66 @@ class OpenAICompatibleProtocolControlAgentTransport:
         logical_history = [*history, {"role": "user", "content": prompt}]
         try:
             text = self._complete(logical_history)
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id,
+                str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        self._histories[session_id] = [
+            *logical_history,
+            {"role": "assistant", "content": text},
+        ]
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
+    def continue_candidate(
+        self,
+        *,
+        session_id: str,
+        prompt: str,
+    ) -> ProtocolControlAgentResponse:
+        """Repair one candidate in the same history without regenerating the batch."""
+
+        if not prompt.strip():
+            raise ValueError("单候选修订提示不能为空")
+        history = self._histories.get(session_id)
+        if history is None:
+            raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
+        response_format = protocol_control_candidate_repair_response_format()
+        logical_history = [*history, {"role": "user", "content": prompt}]
+        try:
+            text = self._complete(logical_history, response_format=response_format)
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id,
+                str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        self._histories[session_id] = [
+            *logical_history,
+            {"role": "assistant", "content": text},
+        ]
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
+    def continue_candidates(
+        self,
+        *,
+        session_id: str,
+        prompt: str,
+    ) -> ProtocolControlAgentResponse:
+        """Repair selected drafts without regenerating dispositions or siblings."""
+
+        if not prompt.strip():
+            raise ValueError("多候选修订提示不能为空")
+        history = self._histories.get(session_id)
+        if history is None:
+            raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
+        logical_history = [*history, {"role": "user", "content": prompt}]
+        try:
+            text = self._complete(
+                logical_history,
+                response_format=protocol_control_candidates_repair_response_format(),
+            )
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
             raise ProtocolControlAgentCallError(
                 session_id,

@@ -104,6 +104,28 @@ def test_mixed_trigger_decision_stages_authorizes_candidate_repartition() -> Non
     assert error.allow_candidate_repartition is True
 
 
+@pytest.mark.parametrize(
+    "code",
+    ["BASELINE_VALUE_SCOPE_MIXED", "MIXED_OBLIGATION_KIND_SCOPE"],
+)
+def test_temporal_mixed_scope_authorizes_source_preserving_repartition(code: str) -> None:
+    error = publication_repair_error(
+        issues=[SimpleNamespace(code=code, message="须分别表达", entity_id="pcc-mixed")],
+        candidate_by_id={
+            "pcc-mixed": SimpleNamespace(
+                control_candidate_id="pcc-mixed",
+                frozen_structure_unit_ids=["su-a", "su-b"],
+            )
+        },
+        control_to_candidate={},
+        default_structure_unit_ids=[],
+    )
+
+    assert error.allow_candidate_repartition is True
+    assert error.candidate_ids == ("pcc-mixed",)
+    assert error.structure_unit_ids == ("su-a", "su-b")
+
+
 def test_unrelated_gate_codes_do_not_authorize_candidate_repartition() -> None:
     error = publication_repair_error(
         issues=[
@@ -129,6 +151,8 @@ def test_unrelated_gate_codes_do_not_authorize_candidate_repartition() -> None:
 def test_candidate_repartition_gate_codes_are_gate_level_not_project_specific() -> None:
     assert "ACTION_TARGET_SCOPE_MISMATCH" in CANDIDATE_REPARTITION_GATE_CODES
     assert "MIXED_DECISION_STAGE_CONTROL" in CANDIDATE_REPARTITION_GATE_CODES
+    assert "BASELINE_VALUE_SCOPE_MIXED" in CANDIDATE_REPARTITION_GATE_CODES
+    assert "MIXED_OBLIGATION_KIND_SCOPE" in CANDIDATE_REPARTITION_GATE_CODES
     assert "CONDITIONAL_EXEMPTION_BINDING_MISSING" not in CANDIDATE_REPARTITION_GATE_CODES
     assert (
         "CONDITIONAL_EXEMPTION_BINDING_MISSING"

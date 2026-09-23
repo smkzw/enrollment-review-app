@@ -72,10 +72,14 @@ from app.protocols.protocol_control_gate import (
     CONTROL_PUBLICATION_GATE_VERSION,
     ProtocolControlGateError,
     ProtocolControlGateIssue,
-    validate_protocol_control_batch_candidates,
+    check_protocol_control_batch_candidates,
     validate_protocol_control_publication,
 )
-from app.protocols.protocol_control_repair_errors import publication_repair_error
+from app.protocols.protocol_control_repair_errors import (
+    CANDIDATE_REPARTITION_GATE_CODES,
+    SOURCE_CLOSURE_REWRITE_GATE_CODES,
+    publication_repair_error,
+)
 from app.config import (
     PROTOCOL_CONTROL_ADAPTIVE_BATCHING,
     PROTOCOL_CONTROL_DISCOVERY_ADAPTIVE_UNIT_CAP,
@@ -112,7 +116,7 @@ from app.workflow.runner import PreparedStepResult, StepContext, StepExecutor
 PROTOCOL_CONTROL_EXECUTION_JOB_TYPE = "protocol_control_execution"
 # A short alias keeps callers independent from the longer API-facing name.
 PROTOCOL_CONTROL_JOB_TYPE = PROTOCOL_CONTROL_EXECUTION_JOB_TYPE
-PROTOCOL_CONTROL_EXECUTION_VERSION = "phase5/protocol-control-execution/v27"
+PROTOCOL_CONTROL_EXECUTION_VERSION = "phase5/protocol-control-execution/v50"
 PROTOCOL_CONTROL_EXECUTION_CONTROL_SCHEMA = (
     "phase5/protocol-control-execution-control/v1"
 )
@@ -354,6 +358,7 @@ class ProtocolControlJobService:
         *,
         source_job_id: str,
         idempotency_key: str,
+        discovery_source_job_id: str | None = None,
     ) -> ProtocolControlExecutionResult:
         """Freeze the source chain and create the durable execution job atomically."""
 
@@ -378,6 +383,19 @@ class ProtocolControlJobService:
                 discovery_context_radius=self.discovery_context_radius,
             )
             payload = self._job_payload(prepared)
+            if discovery_source_job_id is not None:
+                store = JobStore(session, now=self.jobs.now)
+                try:
+                    _validated_discovery_source(
+                        store, payload, discovery_source_job_id
+                    )
+                except (JobNotFoundError, StepFailure) as exc:
+                    raise ProtocolControlExecutionError(
+                        "PROTOCOL_CONTROL_DISCOVERY_SOURCE_INVALID",
+                        "既有方案发现结果与本次原件、批次或模型线路不一致，未建立新任务。",
+                        status_code=409,
+                    ) from exc
+                payload["discovery_source_job_id"] = discovery_source_job_id
             discovery_entries = [
                 {
                     "step_id": self._discovery_step_id(batch),
@@ -1240,6 +1258,87 @@ def _discovery_batch_for_step(
     )
 
 
+def _validated_discovery_source(
+    store: JobStore,
+    current_payload: Mapping[str, Any],
+    source_job_id: str,
+    *,
+    step_id: str | None = None,
+) -> dict[str, tuple[str, dict[str, Any]]]:
+    """Reuse accepted model decisions only when their complete discovery input matches."""
+
+    source_job = store.get_job(source_job_id)
+    if source_job.job_type != PROTOCOL_CONTROL_EXECUTION_JOB_TYPE:
+        raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DISCOVERY_SOURCE_INVALID", detail="发现来源任务类型不符。")
+    source_payload = verify_payload_sha256(source_job.payload_json, source_job.payload_sha256)
+    for key in (
+        "source_deconstruction_job_id", "source_snapshot_id", "source_content_sha256",
+        "source_input", "extraction_snapshot", "phase_graph", "phase_projection",
+        "source_spans", "coverage_manifest", "discovery_plan", "discovery_step_ids",
+    ):
+        if source_payload.get(key) != current_payload.get(key):
+            raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DISCOVERY_SOURCE_INVALID", detail="发现来源与当前冻结原件或批次不一致。")
+    source_prompts = source_payload.get("prompt_templates")
+    current_prompts = current_payload.get("prompt_templates")
+    if (
+        not isinstance(source_prompts, Mapping)
+        or not isinstance(current_prompts, Mapping)
+        or source_prompts.get("discovery") != current_prompts.get("discovery")
+    ):
+        raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DISCOVERY_SOURCE_INVALID", detail="发现提示版本不一致。")
+    source_routes = source_payload.get("frozen_model_routes")
+    current_routes = current_payload.get("frozen_model_routes")
+    if (
+        not isinstance(source_routes, Mapping)
+        or not isinstance(current_routes, Mapping)
+        or not isinstance(current_routes.get("discovery"), str)
+        or source_routes.get("discovery") != current_routes.get("discovery")
+    ):
+        raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DISCOVERY_SOURCE_INVALID", detail="发现模型线路身份不一致。")
+    prompt_sha = protocol_control_discovery_prompt_template_sha256(
+        current_prompts["discovery"]
+    )
+    plan = ProtocolControlDiscoveryPlan.model_validate(current_payload["discovery_plan"])
+    mapping = current_payload["discovery_step_ids"]
+    steps = {item.step_id: item for item in store.list_steps(source_job_id)}
+    validated: dict[str, tuple[str, dict[str, Any]]] = {}
+    for entry, batch in zip(mapping, plan.batches, strict=True):
+        entry_step_id = entry["step_id"]
+        if step_id is not None and entry_step_id != step_id:
+            continue
+        if entry["discovery_batch_id"] != batch.discovery_batch_id:
+            raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DISCOVERY_SOURCE_INVALID", detail="发现批次映射不一致。")
+        source_step = steps.get(entry_step_id)
+        checkpoint = store.get_last_checkpoint(source_job_id, entry_step_id)
+        if source_step is None or source_step.state != "completed" or checkpoint is None:
+            raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DISCOVERY_SOURCE_INVALID", detail="发现来源包含未完成批次。")
+        checkpoint_id, saved = checkpoint
+        identity = saved.get("transport_identity")
+        if (
+            saved.get("stage") != "discovery"
+            or saved.get("discovery_batch_id") != batch.discovery_batch_id
+            or saved.get("prompt_template_sha256") != prompt_sha
+            or not isinstance(identity, Mapping)
+            or hashlib.sha256(
+                json.dumps(identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).hexdigest() != current_routes["discovery"]
+        ):
+            raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DISCOVERY_SOURCE_INVALID", detail="发现来源回执身份不一致。")
+        result = ProtocolControlDiscoveryAgentRunResult.model_validate(saved.get("run_result"))
+        if (
+            result.status != "已解析"
+            or result.final_output is None
+            or result.discovery_batch_id != batch.discovery_batch_id
+            or [item.structure_unit_id for item in result.final_output]
+            != batch.target_structure_unit_ids
+        ):
+            raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DISCOVERY_SOURCE_INVALID", detail="发现来源未完整覆盖原文单元。")
+        validated[entry_step_id] = checkpoint_id, saved
+    if step_id is not None and step_id not in validated:
+        raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DISCOVERY_SOURCE_INVALID", detail="当前发现批次不在来源任务中。")
+    return validated
+
+
 def _execute_discovery(
     context: StepContext,
     config: ProtocolControlExecutorConfig,
@@ -1251,6 +1350,19 @@ def _execute_discovery(
     )
     transport = _resolve_transport(config, stage="discovery")
     _require_frozen_route(context, config, transport, stage="discovery")
+    source_job_id = context.job_payload.get("discovery_source_job_id")
+    if source_job_id is not None:
+        if not isinstance(source_job_id, str) or source_job_id == context.job_id:
+            raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DISCOVERY_SOURCE_INVALID", detail="发现来源任务编号无效。")
+        with config.session_factory() as session:
+            store = JobStore(session, now=config.now)
+            checkpoint_id, saved = _validated_discovery_source(
+                store, context.job_payload, source_job_id, step_id=context.step_id
+            )[context.step_id]
+        return {
+            **saved,
+            "adopted_from": {"job_id": source_job_id, "checkpoint_id": checkpoint_id},
+        }
     result = ProtocolControlDiscoveryAgentRunner(
         max_transport_retries=max_transport_retries,
         max_schema_repairs=max_schema_repairs,
@@ -1493,28 +1605,34 @@ def _validate_deep_batch_output(
 ) -> None:
     """Use the product's scoped repair contract for a frozen deep batch."""
 
-    try:
-        validate_protocol_control_batch_candidates(batch, output)
-    except ProtocolControlGateError as error:
-        candidate_by_id = {
-            candidate.control_candidate_id: candidate
-            for candidate in output.candidates
-        }
-        raise publication_repair_error(
-            issues=[
-                ProtocolControlGateIssue(
-                    code=error.code,
-                    message=error.message,
-                    entity_id=error.entity_id,
-                    structure_unit_ids=error.structure_unit_ids,
-                    candidate_ids=error.candidate_ids,
-                    obligation_source_span_ids=error.obligation_source_span_ids,
-                )
-            ],
-            candidate_by_id=candidate_by_id,
-            control_to_candidate={},
-            default_structure_unit_ids=list(batch.owned_structure_unit_ids),
-        ) from error
+    errors = check_protocol_control_batch_candidates(batch, output)
+    if not errors:
+        return
+    structural_codes = CANDIDATE_REPARTITION_GATE_CODES | SOURCE_CLOSURE_REWRITE_GATE_CODES
+    # Structural regrouping changes candidate identities. Resolve it before
+    # independent field repairs so the granted repair scope remains exact.
+    if any(error.code in structural_codes for error in errors):
+        errors = tuple(error for error in errors if error.code in structural_codes)
+    candidate_by_id = {
+        candidate.control_candidate_id: candidate
+        for candidate in output.candidates
+    }
+    raise publication_repair_error(
+        issues=[
+            ProtocolControlGateIssue(
+                code=error.code,
+                message=error.message,
+                entity_id=error.entity_id,
+                structure_unit_ids=error.structure_unit_ids,
+                candidate_ids=error.candidate_ids,
+                obligation_source_span_ids=error.obligation_source_span_ids,
+            )
+            for error in errors
+        ],
+        candidate_by_id=candidate_by_id,
+        control_to_candidate={},
+        default_structure_unit_ids=list(batch.owned_structure_unit_ids),
+    )
 
 
 def _execute_deep(

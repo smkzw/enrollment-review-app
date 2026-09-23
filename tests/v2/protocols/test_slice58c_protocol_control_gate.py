@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -79,6 +80,7 @@ from app.protocols.phase_applicability import hydrate_phase_applicability_resolu
 from app.protocols.phase_applicability_planning import plan_phase_applicability_batches
 from app.protocols.protocol_control_gate import (
     ProtocolControlGateError,
+    check_protocol_control_batch_candidates,
     _check_conditional_branch_mapping,
     _check_minimum_evidence_modality_fidelity,
     _check_minimum_evidence_authority_boundary,
@@ -108,6 +110,94 @@ from app.protocols.protocol_control_gate import (
     check_protocol_control_publication,
     validate_protocol_control_publication,
 )
+
+
+def test_batch_candidate_diagnostics_collect_independent_first_errors(monkeypatch) -> None:
+    from app.protocols import protocol_control_gate as gate
+
+    candidates = [
+        SimpleNamespace(control_candidate_id="first"),
+        SimpleNamespace(control_candidate_id="second"),
+    ]
+    batch = SimpleNamespace(
+        batch_id="batch", coverage_manifest_id="manifest",
+        owned_structure_unit_ids=["u1", "u2"], owned_source_span_ids=["s1", "s2"],
+        owned_units=[], known_official_targets=[], known_procedure_targets=[],
+        known_workflow_stage_targets=[],
+    )
+    output = SimpleNamespace(
+        batch_id="batch", coverage_manifest_id="manifest",
+        owned_structure_unit_ids=["u1", "u2"], owned_source_span_ids=["s1", "s2"],
+        candidates=candidates, dispositions=[],
+    )
+
+    def reject(candidate, **_kwargs):
+        raise ProtocolControlGateError(
+            f"ERR_{candidate.control_candidate_id}", "来源未闭合",
+            entity_id=candidate.control_candidate_id,
+        )
+
+    monkeypatch.setattr(gate, "_validate_candidate", reject)
+    issues = check_protocol_control_batch_candidates(batch, output)
+
+    assert [issue.code for issue in issues] == ["ERR_first", "ERR_second"]
+    with pytest.raises(ProtocolControlGateError, match="ERR_first"):
+        gate.validate_protocol_control_batch_candidates(batch, output)
+
+
+@pytest.mark.parametrize(
+    ("excerpt", "expected"),
+    [
+        ("筛选期不允许调整背景用药剂量。", True),
+        ("不允许在基线前调整背景用药剂量。", True),
+        ("双盲治疗期不允许调整背景用药剂量。", False),
+        ("随机访视 X", False),
+    ],
+)
+def test_explicit_enrollment_prohibition_cannot_vanish_without_a_candidate(
+    excerpt: str, expected: bool,
+) -> None:
+    unit = SimpleNamespace(
+        structure_unit_id="unit", excerpt=excerpt, source_span_ids=["span"],
+    )
+    batch = SimpleNamespace(
+        batch_id="batch", coverage_manifest_id="manifest",
+        owned_structure_unit_ids=["unit"], owned_source_span_ids=["span"],
+        owned_units=[unit], known_official_targets=[], known_procedure_targets=[],
+        known_workflow_stage_targets=[],
+    )
+    output = SimpleNamespace(
+        batch_id="batch", coverage_manifest_id="manifest",
+        owned_structure_unit_ids=["unit"], owned_source_span_ids=["span"],
+        dispositions=[SimpleNamespace(
+            structure_unit_id="unit",
+            disposition=StructureUnitDispositionKind.SUPPORTING_OR_SUPPLEMENT,
+            linked_control_candidate_ids=[],
+        )],
+        candidates=[],
+    )
+
+    issues = check_protocol_control_batch_candidates(batch, output)
+    assert any(issue.code == "ENROLLMENT_PROHIBITION_UNCOVERED" for issue in issues) is expected
+
+
+def test_existing_exact_source_target_covers_enrollment_prohibition() -> None:
+    from app.protocols.protocol_control_gate import _uncovered_enrollment_prohibitions
+
+    excerpt = "筛选期不允许调整背景用药剂量。"
+    batch = SimpleNamespace(
+        owned_units=[SimpleNamespace(
+            structure_unit_id="unit", excerpt=excerpt, source_span_ids=["span"],
+        )],
+        known_official_targets=[SimpleNamespace(source_excerpts=[excerpt])],
+        known_procedure_targets=[],
+    )
+    output = SimpleNamespace(dispositions=[SimpleNamespace(
+        structure_unit_id="unit",
+        disposition=StructureUnitDispositionKind.OFFICIAL_ELIGIBILITY,
+        linked_control_candidate_ids=[],
+    )])
+    assert _uncovered_enrollment_prohibitions(batch, output) == ()
 
 
 def test_since_visit_reference_is_not_a_procedure_execution_visit() -> None:
@@ -1041,6 +1131,22 @@ def test_authority_reference_must_be_supported_by_same_atom_excerpt() -> None:
     )
 
 
+def test_dosing_regimen_word_is_not_an_authority_reference() -> None:
+    obligation = _explicit_obligation_dnf(
+        atoms=[
+            _obligation(
+                kind=ControlObligationKind.COMPLETE_OR_VERIFY,
+                statement="按既定给药方案接受背景治疗",
+                source_excerpts=["每日一次接受背景治疗"],
+            )
+        ]
+    )
+    _check_authority_reference_provenance(
+        entity_id="candidate-regimen",
+        obligation_expression=obligation,
+    )
+
+
 def test_recommended_preparation_cannot_be_recast_as_advice_given() -> None:
     excerpt = "测量前，建议参与者至少休息5分钟。"
     obligation = _explicit_obligation_dnf(
@@ -1378,6 +1484,22 @@ def test_single_condition_action_pair_requires_an_explicit_trigger() -> None:
             trigger_expression=None,
             obligation_expression=obligation,
         )
+
+
+def test_universal_action_after_population_description_is_not_conditional() -> None:
+    source = "计划纳入某类疾病患者，所有受试者均需签署知情同意。"
+    _check_conditional_branch_mapping(
+        entity_id="candidate:universal",
+        units=[_paragraph_unit("su-universal", "span:universal", 5, source)],
+        trigger_expression=None,
+        obligation_expression=_explicit_obligation_dnf(
+            atoms=[_obligation(
+                statement="所有受试者均需签署知情同意",
+                source_span_ids=["span:universal"],
+                source_excerpts=["所有受试者均需签署知情同意"],
+            )]
+        ),
+    )
 
 
 def test_conditional_mapping_ignores_trailing_clause_punctuation() -> None:
@@ -1810,6 +1932,26 @@ def test_future_prohibition_has_separate_source_bound_not_due_record() -> None:
             workflow_stage_id="baseline-node",
             review_stage=ReviewStage.BASELINE,
             role=ReviewNodeRole.DECIDE_AT_NODE,
+        )],
+    )
+    _check_future_prohibition_not_decided_at_current_node(
+        entity_id="candidate:explicit-no-future-proof",
+        obligation_expression=expression,
+        bindings=[ReviewNodeBinding(
+            workflow_stage_id="baseline-node",
+            review_stage=ReviewStage.BASELINE,
+            role=ReviewNodeRole.DECIDE_AT_NODE,
+            guidance="本节点不要求受试者证明双盲治疗期已经遵守禁令",
+        )],
+    )
+    _check_future_prohibition_not_decided_at_current_node(
+        entity_id="candidate:past-and-future-separated",
+        obligation_expression=expression,
+        bindings=[ReviewNodeBinding(
+            workflow_stage_id="baseline-node",
+            review_stage=ReviewStage.BASELINE,
+            role=ReviewNodeRole.DECIDE_AT_NODE,
+            guidance="本节点仅判定截至基线已发生的事实，双盲治疗期尚未到期；本节点不判定、也不要求证明双盲治疗期已经遵守",
         )],
     )
     _check_time_constraints(
@@ -3801,6 +3943,27 @@ def test_icf_to_study_end_range_directly_supports_study_period() -> None:
     )
 
 
+def test_current_deterministic_atom_cannot_carry_future_period() -> None:
+    excerpt = "治疗期间不得调整背景用药"
+    atom = SimpleNamespace(
+        kind=ControlObligationKind.PROHIBIT_MEDICATION_OR_TREATMENT_EXPOSURE,
+        source_excerpts=[excerpt],
+        statement=excerpt,
+        time_constraint=None,
+        prospective_period=ProspectivePeriod(period="treatment_period"),
+        continuing_obligation=None,
+        evaluation=SimpleNamespace(determination_mode="deterministic"),
+    )
+    with pytest.raises(ProtocolControlGateError, match="PROSPECTIVE_PERIOD_HOLDER_INVALID"):
+        _check_time_constraints(
+            entity_id="pctrl-future",
+            texts=[excerpt],
+            expressions=(),
+            flat_atoms=[atom],
+            global_time_constraint=None,
+        )
+
+
 def test_table_row_partial_source_closure_is_rejected() -> None:
     partial = _control(
         source_unit_ids=["su-table"],
@@ -4429,6 +4592,7 @@ def test_visit_schedule_cannot_propagate_a_general_window_to_one_procedure() -> 
             obligation_expression=_explicit_obligation_dnf(
                 atoms=[
                     _obligation(
+                        obligation_id="obl-visit",
                         kind=ControlObligationKind.SCHEDULE_OR_VERIFY_VISIT,
                         statement="需在首次给药前7天内进行基线访视",
                     )
@@ -4442,6 +4606,28 @@ def test_visit_schedule_cannot_propagate_a_general_window_to_one_procedure() -> 
                     role=ReviewNodeRole.DECIDE_AT_NODE,
                 )
             ],
+        )
+
+
+def test_visit_schedule_and_result_validity_require_separate_candidates() -> None:
+    with pytest.raises(ProtocolControlGateError, match="MIXED_OBLIGATION_KIND_SCOPE"):
+        _check_temporal_obligation_relation_scope(
+            entity_id="pctrl-mixed",
+            obligation_expression=_explicit_obligation_dnf(
+                atoms=[
+                    _obligation(
+                        kind=ControlObligationKind.SCHEDULE_OR_VERIFY_VISIT,
+                        statement="按访视安排完成评估",
+                    ),
+                    _obligation(
+                        obligation_id="obl-validity",
+                        kind=ControlObligationKind.VERIFY_RESULT_VALIDITY,
+                        statement="确认检查结果仍在有效期内",
+                    ),
+                ]
+            ),
+            relations=[],
+            bindings=[],
         )
 
 

@@ -110,6 +110,13 @@ class FakeCompletions:
             content, finish_reason = output
         else:
             content, finish_reason = output, "stop"
+        if kwargs.get("stream"):
+            return iter([
+                SimpleNamespace(choices=[SimpleNamespace(
+                    finish_reason=finish_reason,
+                    delta=SimpleNamespace(content=content),
+                )])
+            ])
         return SimpleNamespace(
             choices=[
                 SimpleNamespace(
@@ -578,6 +585,54 @@ def test_alternate_provider_does_not_inherit_active_role_endpoint_or_key(
     ]
 
 
+def test_candidate_repair_changes_only_response_schema_in_same_session() -> None:
+    client, completions = _client(['{"wire":1}', '{"candidate_draft":{}}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client,
+        backend="cms-router",
+        model="deepseek-latest-cloud",
+        reasoning_effort="high",
+        max_tokens=16384,
+    )
+    transport._stream_completion = lambda fake_client, kwargs: fake_client.chat.completions.create(**kwargs)
+
+    first = transport.start(prompt="冻结控制输入")
+    repaired = transport.continue_candidate(
+        session_id=first.session_id, prompt="只修一个候选"
+    )
+
+    assert repaired.session_id == first.session_id
+    assert completions.calls[0]["response_format"]["json_schema"]["name"] == CONTROL_RESPONSE_FORMAT_NAME
+    assert completions.calls[1]["response_format"]["json_schema"]["name"] == "protocol_control_candidate_repair_v1"
+    assert [item["role"] for item in completions.calls[1]["messages"]] == [
+        "user", "assistant", "user"
+    ]
+    assert len(transport.history(first.session_id)) == 4
+
+
+def test_multi_candidate_repair_uses_selected_schema_in_same_session() -> None:
+    client, completions = _client(['{"wire":1}', '{"candidate_drafts":[]}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client,
+        backend="cms-router",
+        model="deepseek-latest-cloud",
+        max_tokens=16384,
+    )
+
+    first = transport.start(prompt="冻结控制输入")
+    repaired = transport.continue_candidates(
+        session_id=first.session_id, prompt="仅修订两个候选"
+    )
+
+    assert repaired.session_id == first.session_id
+    assert completions.calls[1]["response_format"]["json_schema"]["name"] == (
+        "protocol_control_candidates_repair_v1"
+    )
+    assert [item["role"] for item in transport.history(first.session_id)] == [
+        "user", "assistant", "user", "assistant"
+    ]
+
+
 def test_same_session_history_and_restore_continue_keep_one_session_id() -> None:
     client, completions = _client(['{"first":1}', '{"second":2}', '{"third":3}'])
     transport = OpenAICompatibleProtocolControlAgentTransport(
@@ -724,6 +779,29 @@ def test_length_finish_reason_retries_once_then_succeeds_in_same_call() -> None:
     )
     assert restored_completions.calls[0]["messages"][:2] == list(
         transport.history(response.session_id)
+    )
+
+
+@pytest.mark.parametrize("mode", ["json_object", "text"])
+def test_length_retry_without_provider_json_schema_keeps_wire_contract(mode: str) -> None:
+    client, completions = _client(
+        [('{"partial":true', "length"), ('{"complete":true}', "stop")]
+    )
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client,
+        backend="cms-router",
+        model="deepseek-latest-cloud",
+        max_tokens=16384,
+        response_format_mode=mode,
+    )
+
+    response = transport.start(prompt="冻结控制输入")
+
+    assert response.text == '{"complete":true}'
+    assert [call["max_tokens"] for call in completions.calls] == [16384, 32768]
+    assert CONTROL_RESPONSE_FORMAT_NAME in completions.calls[1]["messages"][-1]["content"]
+    assert completions.calls[0].get("response_format") == (
+        {"type": "json_object"} if mode == "json_object" else None
     )
 
 

@@ -257,6 +257,28 @@ def test_official_count_numbering_and_parent_subclause_source_range():
     assert catalog.items[0].source_span_ids == ("span-body.p1", "span-body.p2")
 
 
+def test_official_catalog_uses_full_block_when_page_span_is_fragmented():
+    index, blocks, spans = _index()
+    first_span_id = index.inclusion_rules[0].source_span_ids[0]
+    source_span = next(span for span in spans if span.source_span_id == first_span_id)
+    source_block = next(block for block in blocks if block.source_ref == source_span.source_ref)
+    fragmented = tuple(
+        span.model_copy(update={"excerpt": source_block.text[:4]})
+        if span.source_span_id == first_span_id else span
+        for span in spans
+    )
+
+    catalog = freeze_official_parent_rules(
+        index,
+        StudyPhase.PHASE_III,
+        source_spans=fragmented,
+        blocks_by_ref={block.source_ref: block for block in blocks},
+        frozen_at=FROZEN_AT,
+    )
+
+    assert catalog.items[0].source_excerpts[0] == source_block.text
+
+
 def test_top_level_body_section_wins_over_reproduced_table_section():
     blocks, spans, graph = _fixture()
     table_blocks = [

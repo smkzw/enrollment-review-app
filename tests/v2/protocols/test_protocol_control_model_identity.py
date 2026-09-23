@@ -176,6 +176,34 @@ def test_cms_scoped_key_checks_nonclinical_response_identity_before_source() -> 
     assert "冻结方案原文" in str(source)
 
 
+def test_cms_unlisted_route_checks_reported_model_before_source() -> None:
+    model = "deepseek-latest-cloud"
+    client = _FakeServiceClient(
+        model_ids=("auto/best-coding", "auto/best-chat"), reported_model=model
+    )
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        backend="cms-router", model=model, max_tokens=65536,
+        _client_factory=lambda **kwargs: client,
+    )
+    transport.start(prompt="冻结方案原文")
+    assert transport.verified_model_identity == model
+    assert len(client.chat.completions.calls) == 2
+    assert "冻结方案原文" not in str(client.chat.completions.calls[0])
+
+
+def test_cms_unlisted_route_rejects_different_reported_model() -> None:
+    client = _FakeServiceClient(
+        model_ids=("auto/best-coding",), reported_model="another-model"
+    )
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        backend="cms-router", model="deepseek-latest-cloud", max_tokens=65536,
+        _client_factory=lambda **kwargs: client,
+    )
+    with pytest.raises(ProtocolControlAgentCallError, match="身份不一致"):
+        transport.start(prompt="冻结方案原文")
+    assert len(client.chat.completions.calls) == 1
+
+
 @pytest.mark.parametrize("reported_model", [None, "another-model"])
 def test_cms_scoped_key_rejects_unreported_or_wrong_identity(reported_model: str | None) -> None:
     client = _FakeServiceClient(reported_model=reported_model)

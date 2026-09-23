@@ -545,6 +545,7 @@ class ProtocolDeconstructionInputAssembler:
                 section_index,
                 selected_phase,
                 source_spans=tuple(spans_by_id.values()),
+                blocks_by_ref={block.source_ref: block for block in resolved_blocks},
                 frozen_at=effective_frozen_at,
                 frozen_by=effective_frozen_by,
             )

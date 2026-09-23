@@ -63,8 +63,8 @@ class ControlAtomEvaluationSpec(ContractModel):
             raise ValueError("时间计算须明确日期属性和约束用途")
         if len(self.source_span_ids) != len(self.source_excerpts):
             raise ValueError("求值规格原文与来源必须逐项对应")
-        if len(set(self.source_span_ids)) != len(self.source_span_ids):
-            raise ValueError("求值规格来源不得重复")
+        if len(set(zip(self.source_span_ids, self.source_excerpts))) != len(self.source_span_ids):
+            raise ValueError("求值规格来源与摘录不得成对重复")
         if any(not value.strip() for value in (*self.source_span_ids, *self.source_excerpts)):
             raise ValueError("求值规格不得使用空白原文或来源")
         if self.predicate is not None:
@@ -98,9 +98,9 @@ def validate_control_atom_evaluation(atom, *, require_explicit=False):
     spec = ControlAtomEvaluationSpec.model_validate(spec.model_dump(mode="json"))
     if spec.determination_mode == "investigator_judgment" and not atom.requires_professional_judgment:
         raise ValueError("研究者判断模式须与所在原子的判断要求一致")
-    sources = dict(zip(atom.source_span_ids, atom.source_excerpts, strict=True))
+    sources = tuple(zip(atom.source_span_ids, atom.source_excerpts, strict=True))
     if any(
-        span not in sources or not sources[span] or excerpt not in sources[span]
+        not any(owner_span == span and excerpt in owner_excerpt for owner_span, owner_excerpt in sources)
         for span, excerpt in zip(spec.source_span_ids, spec.source_excerpts, strict=True)
     ):
         raise ValueError("求值规格原文不属于所在控制原子")
@@ -117,7 +117,7 @@ def validate_control_atom_evaluation(atom, *, require_explicit=False):
             and (spec.determination_mode == "deterministic" or spec.version in {"control-atom-evaluation/v3", "control-atom-evaluation/v4"})):
         raise ValueError("求值规格须说明观察选择规则；原文不足时明确保留未核实")
     if policy is not None and any(
-        span not in sources or not sources[span] or excerpt not in sources[span]
+        not any(owner_span == span and excerpt in owner_excerpt for owner_span, owner_excerpt in sources)
         for span, excerpt in zip(policy.source_span_ids, policy.source_excerpts, strict=True)
     ):
         raise ValueError("观察选择的原文不属于所在控制原子")

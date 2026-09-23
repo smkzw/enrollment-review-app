@@ -8,6 +8,7 @@ GLM（zhipu-coding-plan）请求使用可观测流式传输：逐块累积、思
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone
 from time import monotonic
@@ -296,12 +297,18 @@ class DeepSeekEvidenceNormalizerTransport:
                         "INDEPENDENT_VLM_API_KEY 复用同一 BigModel 凭据）"
                     )
             elif selected_backend in REMOTE_OPENAI_PROVIDERS:
+                use_provider_route = (
+                    selected_backend == "cms-router"
+                    and api_key is None
+                    and base_url is None
+                    and bool(os.getenv("CMS_ROUTER_API_KEY", "").strip())
+                )
                 resolved_base_url, selected_api_key = resolve_openai_connection(
                     selected_backend,
-                    base_url=base_url,
-                    api_key=api_key,
-                    role_base_url_env="EVIDENCE_NORMALIZER_BASE_URL",
-                    role_api_key_env="EVIDENCE_NORMALIZER_API_KEY",
+                    base_url=None if use_provider_route else base_url,
+                    api_key=None if use_provider_route else api_key,
+                    role_base_url_env=None if use_provider_route else "EVIDENCE_NORMALIZER_BASE_URL",
+                    role_api_key_env=None if use_provider_route else "EVIDENCE_NORMALIZER_API_KEY",
                 )
                 selected_base_url = resolved_base_url
             else:

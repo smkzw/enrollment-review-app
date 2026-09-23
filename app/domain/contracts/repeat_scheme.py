@@ -214,7 +214,7 @@ class RepeatScheme(ContractModel):
 def validate_repeat_source(scheme, source_span_ids, source_excerpts):
     if scheme is None:
         return
-    sources = dict(zip(source_span_ids, source_excerpts, strict=True))
-    if any(span not in sources or excerpt not in sources[span]
+    sources = tuple(zip(source_span_ids, source_excerpts, strict=True))
+    if any(not any(owner_span == span and excerpt in owner_excerpt for owner_span, owner_excerpt in sources)
            for span, excerpt in zip(scheme.source_span_ids, scheme.source_excerpts, strict=True)):
         raise ValueError("复查要求不得借用其他条件或其他方案的来源")

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -14,6 +15,7 @@ from app.agents.protocol_control_deconstructor import (
     CONTROL_AGENT_WIRE_VERSION,
     CONTROL_DISCOVERY_WIRE_VERSION,
     ProtocolControlAgentResponse,
+    ProtocolControlAgentWireValidationError,
     ProtocolControlDiscoveryAgentResponse,
 )
 from app.domain.contracts.enums import ReviewStage
@@ -61,6 +63,57 @@ _SOURCE_STEP_ORDER = (
 
 def _now() -> datetime:
     return _DB_NOW
+
+
+def test_deep_repair_reports_independent_candidates_together(monkeypatch) -> None:
+    errors = (
+        ProtocolControlGateError("TIME_ANCHOR_MISSING", "缺少锚点", entity_id="first"),
+        ProtocolControlGateError("BASELINE_VALUE_SCOPE_MISSING", "缺少关系", entity_id="second"),
+    )
+    monkeypatch.setattr(
+        protocol_control_execution_module,
+        "check_protocol_control_batch_candidates",
+        lambda _batch, _output: errors,
+    )
+    batch = SimpleNamespace(owned_structure_unit_ids=["u1", "u2"])
+    output = SimpleNamespace(candidates=[
+        SimpleNamespace(control_candidate_id="first", frozen_structure_unit_ids=["u1"]),
+        SimpleNamespace(control_candidate_id="second", frozen_structure_unit_ids=["u2"]),
+    ])
+
+    with pytest.raises(ProtocolControlAgentWireValidationError) as exc:
+        protocol_control_execution_module._validate_deep_batch_output(batch, output)
+
+    assert {"TIME_ANCHOR_MISSING", "BASELINE_VALUE_SCOPE_MISSING"} <= set(
+        exc.value.error_class_codes
+    )
+    assert set(exc.value.candidate_ids) == {"first", "second"}
+    assert set(exc.value.structure_unit_ids) == {"u1", "u2"}
+
+
+def test_deep_repair_resolves_candidate_repartition_before_field_repair(monkeypatch) -> None:
+    errors = (
+        ProtocolControlGateError("TIME_ANCHOR_MISSING", "缺少锚点", entity_id="first"),
+        ProtocolControlGateError("BASELINE_VALUE_SCOPE_MIXED", "需要拆分", entity_id="second"),
+    )
+    monkeypatch.setattr(
+        protocol_control_execution_module,
+        "check_protocol_control_batch_candidates",
+        lambda _batch, _output: errors,
+    )
+    batch = SimpleNamespace(owned_structure_unit_ids=["u1", "u2"])
+    output = SimpleNamespace(candidates=[
+        SimpleNamespace(control_candidate_id="first", frozen_structure_unit_ids=["u1"]),
+        SimpleNamespace(control_candidate_id="second", frozen_structure_unit_ids=["u2"]),
+    ])
+
+    with pytest.raises(ProtocolControlAgentWireValidationError) as exc:
+        protocol_control_execution_module._validate_deep_batch_output(batch, output)
+
+    assert exc.value.allow_candidate_repartition is True
+    assert exc.value.candidate_ids == ("second",)
+    assert exc.value.structure_unit_ids == ("u2",)
+    assert "TIME_ANCHOR_MISSING" not in exc.value.error_class_codes
 
 
 @dataclass(frozen=True)
@@ -570,6 +623,60 @@ def test_service_reuses_frozen_snapshot_and_builds_candidate_package(
     assert (discovery.start_calls, deep.start_calls) == starts_before
 
 
+def test_new_job_adopts_only_completed_matching_discovery_decisions(
+    data_paths, session_factory
+) -> None:
+    seed = _seed_frozen_source(data_paths, session_factory, key="discovery-adoption")
+    discovery = _DiscoveryTransport()
+    deep = _DeepTransport(seed.source_span_excerpts)
+    route = lambda stage: protocol_control_execution_module._transport_identity_digest(
+        discovery if stage == "discovery" else deep, stage=stage
+    )
+    service = _build_service(
+        data_paths, session_factory, seed, route_identity_factory=route
+    )
+    source = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id, idempotency_key="discovery-adoption-source"
+    )
+    runner, _ = _build_runner(data_paths, session_factory, discovery, deep)
+    assert runner.run_job(source.job_id)
+    assert _job_snapshot_and_payload(session_factory, source.job_id)[0].state == "completed"
+    original_discovery_calls = discovery.start_calls
+    original_deep_calls = deep.start_calls
+
+    adopted = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id,
+        idempotency_key="discovery-adoption-target",
+        discovery_source_job_id=source.job_id,
+    )
+    assert runner.run_job(adopted.job_id)
+    snapshot, _ = _job_snapshot_and_payload(session_factory, adopted.job_id)
+    assert snapshot.state == "completed"
+    assert discovery.start_calls == original_discovery_calls
+    assert deep.start_calls > original_deep_calls
+    with session_factory() as session:
+        store = JobStore(session, now=_now)
+        adopted_checkpoint = store.get_last_checkpoint(adopted.job_id, "discovery_0001")
+        original_checkpoint = store.get_last_checkpoint(source.job_id, "discovery_0001")
+    assert adopted_checkpoint is not None and original_checkpoint is not None
+    assert adopted_checkpoint[1]["adopted_from"] == {
+        "job_id": source.job_id, "checkpoint_id": original_checkpoint[0]
+    }
+    assert adopted_checkpoint[1]["run_result"] == original_checkpoint[1]["run_result"]
+
+    with pytest.raises(protocol_control_execution_module.ProtocolControlExecutionError) as mismatch:
+        _build_service(
+            data_paths, session_factory, seed,
+            max_discovery_units_per_batch=1,
+            route_identity_factory=route,
+        ).create_from_deconstruction(
+            source_job_id=seed.source_job_id,
+            idempotency_key="discovery-adoption-wrong-plan",
+            discovery_source_job_id=source.job_id,
+        )
+    assert mismatch.value.code == "PROTOCOL_CONTROL_DISCOVERY_SOURCE_INVALID"
+
+
 def test_frozen_model_route_rejects_changed_discovery_before_call(
     data_paths, session_factory
 ) -> None:
@@ -649,7 +756,7 @@ def test_deep_publication_gate_repairs_in_the_originating_session(
     discovery = _DiscoveryTransport()
     deep = _RepairingDeepTransport(seed.source_span_excerpts)
     real_validator = (
-        protocol_control_execution_module.validate_protocol_control_batch_candidates
+        protocol_control_execution_module.check_protocol_control_batch_candidates
     )
     validator_calls = 0
 
@@ -658,18 +765,18 @@ def test_deep_publication_gate_repairs_in_the_originating_session(
         validator_calls += 1
         if validator_calls == 1:
             candidate = output.candidates[0]
-            raise ProtocolControlGateError(
+            return (ProtocolControlGateError(
                 "MIXED_DECISION_STAGE_CONTROL",
                 "当前操作与后续节点有效性必须拆分",
                 entity_id=candidate.control_candidate_id,
                 structure_unit_ids=candidate.frozen_structure_unit_ids,
                 candidate_ids=(candidate.control_candidate_id,),
-            )
+            ),)
         return real_validator(batch, output)
 
     monkeypatch.setattr(
         protocol_control_execution_module,
-        "validate_protocol_control_batch_candidates",
+        "check_protocol_control_batch_candidates",
         reject_once,
     )
     result = _build_service(

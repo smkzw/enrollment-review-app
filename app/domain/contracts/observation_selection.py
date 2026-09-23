@@ -78,7 +78,7 @@ class ObservationPolicy(ContractModel):
     @model_validator(mode="after")
     def validate_policy(self):
         if (len(self.source_span_ids) != len(self.source_excerpts)
-                or len(set(self.source_span_ids)) != len(self.source_span_ids)):
+                or len(set(zip(self.source_span_ids, self.source_excerpts))) != len(self.source_span_ids)):
             raise ValueError("观察选择的来源须逐项对应且不得重复")
         if any(not value.strip() for value in (self.scope, *self.source_span_ids, *self.source_excerpts)):
             raise ValueError("观察选择范围和原文不得为空白")

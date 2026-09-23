@@ -231,7 +231,7 @@ PAGE_REVIEW_MAIN_A_FALLBACK_BASE_URL = os.getenv(
     "PAGE_REVIEW_MAIN_A_FALLBACK_BASE_URL", ""
 ).strip()
 PAGE_REVIEW_MAIN_B_PROVIDER = os.getenv(
-    "PAGE_REVIEW_MAIN_B_PROVIDER", "opencode-go"
+    "PAGE_REVIEW_MAIN_B_PROVIDER", "cms-router"
 ).strip().lower()
 PAGE_REVIEW_MAIN_B_BASE_URL = os.getenv(
     "PAGE_REVIEW_MAIN_B_BASE_URL",
@@ -243,7 +243,7 @@ PAGE_REVIEW_MAIN_B_API_KEY = (
     or (os.getenv("CMS_SMK_API_KEY", "").strip() if PAGE_REVIEW_MAIN_B_PROVIDER == "cms-smk" else "")
 )
 PAGE_REVIEW_MAIN_B_MODEL = os.getenv(
-    "PAGE_REVIEW_MAIN_B_MODEL", "deepseek-v4.1-flash"
+    "PAGE_REVIEW_MAIN_B_MODEL", "deepseek-latest-cloud"
 ).strip()
 PAGE_REVIEW_MAIN_B_REASONING_EFFORT = os.getenv(
     "PAGE_REVIEW_MAIN_B_REASONING_EFFORT", "high"
@@ -367,10 +367,10 @@ DECONSTRUCT_PARENT_SEGMENT_MAX_UNITS_PER_SEGMENT = int(
 
 # Evidence Normalizer 使用独立运行配置；不得继承方案解构配置后误选其他任务模型。
 EVIDENCE_NORMALIZER_PROVIDER = os.getenv(
-    "EVIDENCE_NORMALIZER_PROVIDER", "opencode-go"
+    "EVIDENCE_NORMALIZER_PROVIDER", "cms-router"
 ).strip().lower()
 EVIDENCE_NORMALIZER_MODEL = os.getenv(
-    "EVIDENCE_NORMALIZER_MODEL", "deepseek-v4.1-flash"
+    "EVIDENCE_NORMALIZER_MODEL", "deepseek-latest-cloud"
 ).strip()
 EVIDENCE_NORMALIZER_REASONING_EFFORT = os.getenv(
     "EVIDENCE_NORMALIZER_REASONING_EFFORT", "high"
@@ -409,10 +409,10 @@ EVIDENCE_NORMALIZER_GLM_REASONING_EFFORT = os.getenv(
 # Other-protocol control Agent uses an independent connection profile so it
 # cannot silently inherit the official IN/EX deconstruction Schema or route.
 PROTOCOL_CONTROL_BACKEND = os.getenv(
-    "PROTOCOL_CONTROL_BACKEND", "opencode-go"
+    "PROTOCOL_CONTROL_BACKEND", "cms-router"
 ).strip().lower()
 PROTOCOL_CONTROL_MODEL = os.getenv(
-    "PROTOCOL_CONTROL_MODEL", "deepseek-v4.1-flash"
+    "PROTOCOL_CONTROL_MODEL", "deepseek-latest-cloud"
 ).strip()
 PROTOCOL_CONTROL_REASONING_EFFORT = os.getenv(
     "PROTOCOL_CONTROL_REASONING_EFFORT", "high"

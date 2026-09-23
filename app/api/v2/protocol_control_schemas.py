@@ -13,6 +13,7 @@ class StartProtocolControlExecutionRequest(_StrictModel):
 
     source_job_id: str = Field(min_length=1, max_length=128)
     idempotency_key: str = Field(min_length=1, max_length=256)
+    discovery_source_job_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class StartProtocolControlExecutionResponse(_StrictModel):

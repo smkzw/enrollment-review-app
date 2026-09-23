@@ -26,6 +26,6 @@ class ControlEvidenceSourcePolicy(ContractModel):
             raise ValueError("资料来源要求须逐项保留原文位置与摘录")
         if any(not value.strip() for value in [*self.source_span_ids, *self.source_excerpts]):
             raise ValueError("资料来源要求的原文位置与摘录不得为空")
-        if len(set(self.source_span_ids)) != len(self.source_span_ids):
-            raise ValueError("资料来源要求的原文位置不得重复")
+        if len(set(zip(self.source_span_ids, self.source_excerpts))) != len(self.source_span_ids):
+            raise ValueError("资料来源要求的原文位置与摘录不得成对重复")
         return self

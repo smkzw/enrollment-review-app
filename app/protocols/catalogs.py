@@ -40,7 +40,7 @@ from .section_index import (
 )
 
 
-CATALOG_BUILDER_VERSION = "official-parent-rules/v1"
+CATALOG_BUILDER_VERSION = "official-parent-rules/v2"
 _DEFAULT_FROZEN_AT = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _DEFAULT_FROZEN_BY = CATALOG_BUILDER_VERSION
 _OFFICIAL_CODE_RE = re.compile(r"^(?P<prefix>IN|EX)-(?P<number>[0-9]{1,3})$")
@@ -407,6 +407,7 @@ def freeze_official_parent_rules(
     source_spans: Iterable[ProtocolSourceSpan]
     | Mapping[str, ProtocolSourceSpan]
     | None = None,
+    blocks_by_ref: Mapping[str, object] | None = None,
     frozen_at: datetime | None = None,
     frozen_by: str = _DEFAULT_FROZEN_BY,
 ) -> FrozenProtocolCatalog:
@@ -452,6 +453,7 @@ def freeze_official_parent_rules(
             source_ids,
             by_id=by_id,
             by_ref=by_ref,
+            blocks_by_ref=blocks_by_ref,
         )
         items.append(
             FrozenCatalogItem(
