@@ -522,6 +522,13 @@ def _build_frozen_visual_observations(
     if frozen_scope is None:
         return ()
     try:
+        from app.services.selective_vision_postprocess_job_service import (
+            SelectiveVisionPostprocessJobService,
+        )
+
+        verified_vision_scope = SelectiveVisionPostprocessJobService(
+            sessionmaker(bind=session.get_bind())
+        ).verified_observation_scope(authority.complete_processing_revision_id)
         revision = CompleteEvidenceProcessingRevisionRepository(session).get(
             authority.complete_processing_revision_id
         )
@@ -530,6 +537,7 @@ def _build_frozen_visual_observations(
             session,
             revision=revision,
             doc_version_to_logical=doc_version_to_logical,
+            required_scope=verified_vision_scope,
         )
     except Exception as exc:
         raise StepFailure(

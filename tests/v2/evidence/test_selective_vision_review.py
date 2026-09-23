@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -203,6 +204,22 @@ def test_vision_ocr_route_without_image_media_still_enters_as_scan():
     assert decision.reasons[0] == svr.VISION_REASON_SCAN_OR_IMAGE_ONLY
 
 
+def test_eight_ocr_characters_do_not_prove_image_or_handwriting_coverage():
+    page = replace(
+        _signals(media_kind="image", extraction_route=ExtractionRoute.VISION_OCR,
+                 has_native_text=False, native_text_char_count=0),
+        has_ocr_text=True, ocr_text_char_count=8,
+    )
+    assert svr.VISION_REASON_SCAN_OR_IMAGE_ONLY in svr.assess_page_vision_eligibility(page).reasons
+
+
+def test_non_text_marks_remain_risk_even_when_native_text_exists():
+    decision = svr.assess_page_vision_eligibility(
+        _signals(non_text_mark_count=2, has_native_text=True, native_text_char_count=64)
+    )
+    assert svr.VISION_REASON_COMPLEX_VISUAL_OR_TABLE in decision.reasons
+
+
 def test_complex_visual_table_enters_vision_review():
     decision = svr.assess_page_vision_eligibility(
         _signals(
@@ -231,7 +248,7 @@ def test_infer_complex_layout_helper_is_content_neutral():
             has_native_text=True,
             native_text_char_count=64,
         )
-        is False
+        is True
     )
     assert (
         svr.infer_complex_layout_not_represented(

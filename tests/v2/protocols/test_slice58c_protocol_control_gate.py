@@ -36,6 +36,7 @@ from app.domain.contracts.protocol_controls import (
     ControlExceptionGroup,
     ControlMinimumEvidence,
     ControlObligationAtom,
+    ControlContinuingObligation,
     ControlObligationDnf,
     ControlObligationGroup,
     ControlObligationKind,
@@ -68,6 +69,7 @@ from app.domain.contracts.rules import (
     TimeUnit,
     WorkflowStage,
 )
+from app.domain.contracts.control_evaluation_spec import ControlAtomEvaluationSpec
 from app.protocols.docx_structure import extract_docx_structure
 from app.protocols.full_protocol_coverage import build_full_protocol_coverage_manifest
 from app.protocols.full_protocol_coverage import build_resolved_full_protocol_coverage_view
@@ -93,6 +95,7 @@ from app.protocols.protocol_control_gate import (
     _check_obligation_modality_and_event_anchor,
     _check_recording_precision_fidelity,
     _check_post_enrollment_procedure_classification,
+    _check_future_prohibition_not_decided_at_current_node,
     _check_planned_visit_node_closure,
     _check_routine_action_not_trigger,
     _check_required_procedure_visit_scope,
@@ -1727,6 +1730,119 @@ def test_treatment_period_check_is_not_an_eligibility_control() -> None:
             entity_id="candidate:study-period-check",
             obligation_expression=obligation,
         )
+
+
+@pytest.mark.parametrize(
+    ("source", "proposition"),
+    [
+        ("筛选期及双盲治疗期不得调整既定治疗", "筛选期及双盲治疗期均未调整既定治疗"),
+        ("签署同意后研究期间不得改变既定治疗", "研究期间未改变既定治疗"),
+    ],
+)
+def test_future_prohibition_cannot_be_certified_at_baseline(
+    source: str, proposition: str,
+) -> None:
+    atom = _obligation(
+        kind=ControlObligationKind.PROHIBIT_EVENT,
+        statement=source,
+        source_excerpts=[source],
+    ).model_copy(update={
+        "evaluation": ControlAtomEvaluationSpec(
+            determination_mode="semantic",
+            proposition=proposition,
+            time_purpose="not_applicable",
+            source_span_ids=["span:control"],
+            source_excerpts=[source],
+        ),
+    })
+    bindings = [ReviewNodeBinding(
+        workflow_stage_id="baseline-node",
+        review_stage=ReviewStage.BASELINE,
+        role=ReviewNodeRole.DECIDE_AT_NODE,
+    )]
+    with pytest.raises(ProtocolControlGateError, match="FUTURE_PROHIBITION_DECIDED_EARLY"):
+        _check_future_prohibition_not_decided_at_current_node(
+            entity_id="candidate:future-prohibition",
+            obligation_expression=_explicit_obligation_dnf(atoms=[atom]),
+            bindings=bindings,
+        )
+
+    current_only = atom.model_copy(update={
+        "evaluation": atom.evaluation.model_copy(update={
+            "proposition": "截至基线访视未调整既定治疗",
+        }),
+    })
+    with pytest.raises(ProtocolControlGateError, match="FUTURE_PROHIBITION_DECIDED_EARLY"):
+        _check_future_prohibition_not_decided_at_current_node(
+        entity_id="candidate:current-prohibition",
+        obligation_expression=_explicit_obligation_dnf(atoms=[current_only]),
+        bindings=bindings,
+        )
+
+
+def test_future_prohibition_has_separate_source_bound_not_due_record() -> None:
+    source = "筛选期及双盲治疗期不得调整既定治疗"
+    continuation = ControlContinuingObligation(
+        statement="双盲治疗期不得调整既定治疗",
+        prospective_period=ProspectivePeriod(period="treatment_period"),
+        source_span_ids=["span:control"],
+        source_excerpts=[source],
+    )
+    atom = _obligation(
+        kind=ControlObligationKind.PROHIBIT_EVENT,
+        statement="截至基线不得调整既定治疗",
+        source_excerpts=[source],
+    ).model_copy(update={
+        "evaluation": ControlAtomEvaluationSpec(
+            determination_mode="semantic",
+            proposition="截至基线访视未调整既定治疗",
+            time_purpose="not_applicable",
+            source_span_ids=["span:control"],
+            source_excerpts=[source],
+        ),
+        "continuing_obligation": continuation,
+    })
+    expression = _explicit_obligation_dnf(atoms=[atom])
+    _check_future_prohibition_not_decided_at_current_node(
+        entity_id="candidate:split-prohibition",
+        obligation_expression=expression,
+        bindings=[ReviewNodeBinding(
+            workflow_stage_id="baseline-node",
+            review_stage=ReviewStage.BASELINE,
+            role=ReviewNodeRole.DECIDE_AT_NODE,
+        )],
+    )
+    _check_time_constraints(
+        entity_id="candidate:split-prohibition",
+        texts=[source],
+        expressions=[expression],
+        flat_atoms=[],
+        global_time_constraint=None,
+    )
+    assert atom.prospective_period is None
+    assert continuation.status == "not_due_at_review_node"
+    restored = ControlObligationAtom.model_validate(atom.model_dump(mode="json"))
+    assert restored.continuing_obligation == continuation
+    assert "continuing_obligation" not in _obligation().model_dump(mode="json")
+
+    with pytest.raises(ProtocolControlGateError, match="FUTURE_PROHIBITION_DECIDED_EARLY"):
+        _check_future_prohibition_not_decided_at_current_node(
+            entity_id="candidate:future-guidance",
+            obligation_expression=expression,
+            bindings=[ReviewNodeBinding(
+                workflow_stage_id="baseline-node",
+                review_stage=ReviewStage.BASELINE,
+                role=ReviewNodeRole.DECIDE_AT_NODE,
+                guidance="确认双盲治疗期间均未调整背景治疗",
+            )],
+        )
+
+    with pytest.raises(ValueError, match="同一原子的直接来源"):
+        ControlObligationAtom.model_validate(atom.model_dump(mode="json") | {
+            "continuing_obligation": continuation.model_dump(mode="json") | {
+                "source_span_ids": ["span:other"],
+            },
+        })
 
 
 def test_study_period_obligation_is_not_assumed_to_start_after_enrollment() -> None:

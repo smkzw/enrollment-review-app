@@ -49,6 +49,7 @@ export interface EligibilityControlObligationView {
   statusLabel: string;
   reason: string;
   factRefs: EligibilityFactRefView[];
+  continuingNote?: string | null;
 }
 
 export interface EligibilityControlView {
@@ -298,6 +299,9 @@ function decodeControl(value: unknown, index: number): EligibilityControlView {
         statusLabel: requiredString(field(obligation, "status_label", obligationPath), `${obligationPath}.status_label`),
         reason: requiredString(field(obligation, "reason", obligationPath), `${obligationPath}.reason`),
         factRefs: refs.map((item, refIndex) => decodeFactRef(item, refIndex, `${obligationPath}.fact_refs`)),
+        continuingNote: obligation.continuing_note == null
+          ? null
+          : requiredString(obligation.continuing_note, `${obligationPath}.continuing_note`),
       };
     });
   const obligationIds = obligations.map((item) => `${item.obligationGroupId}:${item.obligationId}`);

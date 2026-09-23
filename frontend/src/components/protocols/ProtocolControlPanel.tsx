@@ -21,6 +21,7 @@ function Groups({ title, groups }: { title: string; groups: ControlGroupView[] }
           <p>{atom.statement}</p>
           {atom.qualifiers.length > 0 && <p className="kz-control-qualifiers">{atom.qualifiers.join("；")}</p>}
           {atom.professionalJudgment && <p className="kz-control-qualifiers">涉及专业评估，按原文要求核对</p>}
+          {atom.continuing && <p className="kz-control-qualifiers">后续持续要求（本次不判定）：{atom.continuing.period}，{atom.continuing.statement}</p>}
           <details className="kz-control-source">
             <summary>方案原文</summary>
             {atom.excerpts.map((excerpt, excerptIndex) => <blockquote key={excerptIndex}>{excerpt}</blockquote>)}

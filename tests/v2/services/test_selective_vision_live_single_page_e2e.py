@@ -517,7 +517,7 @@ def test_live_single_page_real_vision_e2e_on_coding_plan(
         assert row.page_image_sha256 == png_sha
         assert row.ocr_page_id == seeded["ocr_page_id"]
         assert row.ocr_raw_text_sha256 == seeded["raw_text_sha256"]
-        assert row.plan_version == SELECTIVE_VISION_PLAN_VERSION
+        assert row.plan_version.startswith(SELECTIVE_VISION_PLAN_VERSION + "@")
         assert row.risk_reasons == [VISION_REASON_SCAN_OR_IMAGE_ONLY]
         assert row.failure_kind is None
         assert row.observation_text, "成功观察必须携带非空正文"

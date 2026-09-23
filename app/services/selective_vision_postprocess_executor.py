@@ -3,7 +3,7 @@
 边界：
 - 不进入 OCR 页处理事务，不续 OCR 页租约，不改写 OCR 原文；
 - 远端 VLM 在 JobRunner 事务外执行；观察落库由观察服务短事务完成；
-- 失败关闭写 ``closed`` 审计后任务可成功结束（关闭是确定性结果，不是伪装成功观察）。
+- 失败关闭写 ``closed`` 审计后任务保持失败态，允许只重试未成功页面。
 """
 
 from __future__ import annotations
@@ -22,6 +22,8 @@ from app.evidence.artifacts import ArtifactStore
 from app.evidence.ocr_adapter import PAGE_IMAGE_MIME
 from app.evidence.selective_vision_review import (
     SELECTIVE_VISION_PLAN_VERSION,
+    SKIP_FAILED_PAGE,
+    SKIP_MISSING_PAGE_IMAGE,
     infer_complex_layout_not_represented,
 )
 from app.services.selective_vision_observation_service import (
@@ -33,6 +35,7 @@ from app.services.selective_vision_postprocess_job_service import (
     SELECTIVE_VISION_POSTPROCESS_JOB_TYPE,
     SELECTIVE_VISION_POSTPROCESS_STEP_ID,
 )
+from app.services.selective_vision_runtime import selective_vision_route_sha256
 from app.storage.config import DataPaths
 from app.storage.evidence_repositories import SourceDocumentRepository
 from app.storage.ocr_models import OCRProfileRecord
@@ -228,6 +231,12 @@ def create_selective_vision_postprocess_executor(
                 error_code="SELECTIVE_VISION_PLAN_VERSION_UNSUPPORTED",
                 detail="该视觉核验任务使用的规划版本与当前系统不一致，请重新创建任务。",
             )
+        if payload.get("route_sha256") != selective_vision_route_sha256():
+            raise StepFailure(
+                retryable=False,
+                error_code="SELECTIVE_VISION_ROUTE_CHANGED",
+                detail="本次视觉核验的模型配置已变化，请创建当前配置的新任务。",
+            )
 
         try:
             with config.session_factory() as session:
@@ -265,7 +274,31 @@ def create_selective_vision_postprocess_executor(
                 detail="选择性视觉后处理尚未完成，系统将从已保存进度继续。",
             ) from exc
 
-        checkpoint = {
+        eligible_ids = [
+            material.page_artifact_id for material in materials
+            if (material.source_ref, material.page_ordinal) in {
+                (item.source_ref, item.page_ordinal) for item in result.plan.eligible
+            }
+        ]
+        observed_ids = [row.page_artifact_id for row in result.observations]
+        unreadable = any(
+            item.skip_reason in {SKIP_FAILED_PAGE, SKIP_MISSING_PAGE_IMAGE}
+            for item in result.skipped
+        )
+        incomplete = (
+            result.closed_error is not None
+            or unreadable
+            or len(set(eligible_ids)) != len(eligible_ids)
+            or len(observed_ids) != len(eligible_ids)
+            or set(observed_ids) != set(eligible_ids)
+        )
+        if incomplete:
+            raise StepFailure(
+                retryable=False,
+                error_code="SELECTIVE_VISION_PAGES_UNVERIFIED",
+                detail="部分原始资料页尚未核实或无法读取；已核实页面已保留，可重试未完成的页面。",
+            )
+        return {
             "job_type": SELECTIVE_VISION_POSTPROCESS_JOB_TYPE,
             "evidence_processing_revision_id": revision_id,
             "plan_version": plan_version or result.plan.plan_version,
@@ -278,9 +311,10 @@ def create_selective_vision_postprocess_executor(
             "closed_failure_kind": (
                 result.closed_error.failure_kind if result.closed_error else None
             ),
-            "status": "closed" if result.closed_error is not None else "completed",
+            "eligible_page_artifact_ids": eligible_ids,
+            "observed_page_artifact_ids": observed_ids,
+            "status": "completed",
         }
-        return checkpoint
 
     return execute
 

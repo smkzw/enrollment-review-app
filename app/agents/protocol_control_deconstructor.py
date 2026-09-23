@@ -49,6 +49,7 @@ from app.domain.contracts.protocol_controls import (
     ControlCrossSourceRelationDraft,
     ControlMinimumEvidenceDraft,
     ControlObligationAtomDraft,
+    ControlContinuingObligation,
     ControlObligationDnfDraft,
     ControlObligationGroupDraft,
     ControlRelationTargetKind,
@@ -87,11 +88,11 @@ from .control_excerpt_restoration import (
     restore_source_fields,
 )
 
-CONTROL_AGENT_WIRE_VERSION = "phase5/control-agent-wire/v23"
+CONTROL_AGENT_WIRE_VERSION = "phase5/control-agent-wire/v26"
 CONTROL_AGENT_INPUT_VERSION = "phase5/control-agent-input/v1"
-CONTROL_AGENT_PROMPT_VERSION = "phase5/control-agent-prompt/v2.21"
+CONTROL_AGENT_PROMPT_VERSION = "phase5/control-agent-prompt/v2.28"
 CONTROL_DISCOVERY_INPUT_VERSION = "phase5/control-discovery-input/v1"
-CONTROL_DISCOVERY_PROMPT_VERSION = "phase5/control-discovery-prompt/v1"
+CONTROL_DISCOVERY_PROMPT_VERSION = "phase5/control-discovery-prompt/v3"
 CONTROL_DISCOVERY_WIRE_VERSION = "phase5/control-discovery-wire/v1"
 CONTROL_DISCOVERY_RESPONSE_FORMAT_NAME = "protocol_control_discovery_wire_v1"
 
@@ -507,6 +508,21 @@ class ProtocolControlAgentWireConditionDnf(_WireModel):
         return self
 
 
+class ProtocolControlAgentWireContinuingObligation(_WireModel):
+    statement: str = Field(min_length=1)
+    prospective_period: ProspectivePeriod
+    source_span_ids: list[str] = Field(min_length=1)
+    source_excerpts: list[str] = Field(min_length=1)
+    status: Literal["not_due_at_review_node"] = Field(...)
+
+    @model_validator(mode="after")
+    def validate_sources(self) -> "ProtocolControlAgentWireContinuingObligation":
+        _validate_parallel_sources(
+            self.source_span_ids, self.source_excerpts, label="后续持续义务"
+        )
+        return self
+
+
 class ProtocolControlAgentWireObligationAtom(_WireModel):
     """One typed obligation atom with direct source evidence."""
 
@@ -515,6 +531,7 @@ class ProtocolControlAgentWireObligationAtom(_WireModel):
     statement: str = Field(min_length=1)
     time_constraint: TimeConstraint | None = Field(...)
     prospective_period: ProspectivePeriod | None = Field(...)
+    continuing_obligation: ProtocolControlAgentWireContinuingObligation | None = None
     modality: ControlObligationModality = ControlObligationModality.MANDATORY
     temporal_scope: ControlTemporalScopeKind | None = None
     source_span_ids: list[str] = Field(min_length=1)
@@ -548,6 +565,22 @@ class ProtocolControlAgentWireObligationAtom(_WireModel):
             self.source_excerpts,
             label="义务原子",
         )
+        if self.continuing_obligation is not None:
+            ControlObligationAtomDraft(
+                kind=self.kind,
+                evaluation=self.evaluation,
+                statement=self.statement,
+                time_constraint=self.time_constraint,
+                prospective_period=self.prospective_period,
+                continuing_obligation=(ControlContinuingObligation(
+                    **self.continuing_obligation.model_dump()
+                ) if self.continuing_obligation is not None else None),
+                modality=self.modality,
+                temporal_scope=self.temporal_scope,
+                source_span_ids=self.source_span_ids,
+                source_excerpts=self.source_excerpts,
+                requires_professional_judgment=self.requires_professional_judgment,
+            )
         if (
             self.kind == ControlObligationKind.COMPLETE_OR_VERIFY
             and self.time_constraint is not None
@@ -1058,10 +1091,6 @@ def bind_protocol_control_discovery_wire(
         )
 
     available_context_ids = expected_set | set(discovery_input.context_structure_unit_ids)
-    disposition_by_target_id = {
-        decision.structure_unit_id: decision.disposition
-        for decision in wire.decisions
-    }
     for decision in wire.decisions:
         out_of_scope = [
             context_id
@@ -1075,29 +1104,36 @@ def bind_protocol_control_discovery_wire(
                 + "、".join(out_of_scope),
                 structure_unit_ids=(decision.structure_unit_id, *out_of_scope),
             )
-        conflicting_ids = [
-            context_id
-            for context_id in decision.required_context_structure_unit_ids
-            if disposition_by_target_id.get(context_id)
-            == ProtocolControlDiscoveryDisposition.NON_CONTROL
-        ]
-        if conflicting_ids:
-            raise ProtocolControlDiscoveryWireValidationError(
-                "CONTEXT_DISPOSITION_CONFLICT",
-                "已声明为所需上下文的本批次单元不得同时处置为 non_control："
-                + "、".join(conflicting_ids),
-                structure_unit_ids=(decision.structure_unit_id, *conflicting_ids),
-            )
-
     bound_decisions = wire_to_protocol_control_discovery_decisions(wire)
+    required_context_ids = {
+        context_id
+        for decision in bound_decisions
+        if decision.disposition in {
+            ProtocolControlDiscoveryDisposition.CANDIDATE,
+            ProtocolControlDiscoveryDisposition.UNCERTAIN,
+        }
+        for context_id in decision.required_context_structure_unit_ids
+    }
     return tuple(
         ProtocolControlDiscoveryDecision(
             structure_unit_id=expected_id,
-            disposition=decision.disposition,
+            disposition=(
+                ProtocolControlDiscoveryDisposition.CONTEXT_ONLY
+                if expected_id in required_context_ids
+                and decision.disposition == ProtocolControlDiscoveryDisposition.NON_CONTROL
+                else decision.disposition
+            ),
             required_context_structure_unit_ids=list(
                 decision.required_context_structure_unit_ids
             ),
-            rationale=decision.rationale,
+            rationale=(
+                decision.rationale
+                + "；原输出标为 non_control，但同批候选明确引用为必要上下文，"
+                "系统仅保留上下文，不生成独立审核要求。"
+                if expected_id in required_context_ids
+                and decision.disposition == ProtocolControlDiscoveryDisposition.NON_CONTROL
+                else decision.rationale
+            ),
         )
         for expected_id, decision in zip(
             expected_ids, bound_decisions, strict=True
@@ -1228,16 +1264,23 @@ _DISCOVERY_SYSTEM_CONTRACT = (
     "non_control 或 uncertain，并用 rationale 简要说明处置依据。candidate 表示该单元可能独立规定、补充或改变"
     "预筛、筛选、导入、基线、随机或首次给药前的适用人群、条件、动作、时间、阈值、例外、所需资料或判定方式；"
     "它既包括正式入选/排除条款，也包括流程表、检查评估、合并用药/治疗、访视安排、操作方法、附录和其他章节中"
-    "可能影响入排审核的控制要求。context_only 表示该单元本身不形成独立控制，但必须与另一 candidate 或 uncertain"
-    "单元共同阅读。non_control 仅用于能够明确证明与上述入排审核节点无关的治疗后执行、行政统计或纯背景内容；"
+    "可能影响入排审核的控制要求。候选必须由该单元自身当前有效的规范内容支持；仅指向相关章节不等于"
+    "该单元自身规定了要求。context_only 表示该单元本身不形成独立控制，但必须与另一 candidate 或 uncertain"
+    "单元共同阅读。non_control 表示该单元没有独立的当前入排审核控制内容，包括治疗后执行、行政统计、"
+    "纯背景及无需作为其他候选上下文的导航性文字；"
     "中心、研究者或申办方的研究启动准备、人员培训、授权、文件归档、监查稽查或系统管理义务，若未明确约束某一"
     "受试者的资格判断、节点放行或个例证据，应标为 non_control。‘研究启动前’或‘任何研究操作前’只说明项目或中心"
     "义务的时序，不能单独将其变成受试者入排控制。若同一 target_unit 还包含明确的受试者层面控制，应标为 candidate；"
-    "当前原文不足以区分义务对象时标为 uncertain。"
+    "当前原文不足以区分义务对象时标为 uncertain。目录标题和页码仅是定位指针：如需帮助理解另一候选"
+    "则作 context_only，否则作 non_control，不得因为所指章节可能有要求就把目录项本身标为 candidate 或"
+    "uncertain。修订记录若仅描述曾经修改或优化某项标准，而没有写出当前生效的受试者要求，也不独立产生"
+    "候选；若原文确实载有当前生效的完整要求，按其实际内容处置。摘要或背景中真正陈述了当前筛选、导入、"
+    "基线或给药前条件时仍可为 candidate，不得仅因位于摘要而排除。"
     "被其他单元声明为必要上下文时不得标为 non_control。uncertain 表示当前可见原文不足以可靠区分前三类，必须进入"
     "深度分析。候选发现必须保持高召回：不能依据关键词、优先级、章节名称、单一命中或文本长度过滤结构单元；"
-    "不能因为内容未出现在‘入选标准’或‘排除标准’章节就降低等级；证据不足时使用 uncertain，不得把不确定默认为"
-    "non_control。"
+    "不能因为内容未出现在‘入选标准’或‘排除标准’章节就降低等级；有潜在规范内容但条件、对象或适用期别"
+    "确实无法从已给来源判清时使用 uncertain，不得把临床不确定默认为 non_control；纯导航或历史叙述"
+    "缺少规范内容不是临床不确定。"
     "wire_version 必须固定为 phase5/control-discovery-wire/v1；"
     "只有 candidate 或 uncertain 可以用 required_context_structure_unit_ids 正向列出完成其深析所需的"
     "其他单元；context_only 或 non_control 的该字段必须为空，不得反向列出它服务的候选。"
@@ -1344,6 +1387,10 @@ _CONTROL_AGENT_SYSTEM_CONTRACT = (
     "筛选、导入、基线、随机或首次给药前需要关注的操作要求，即使其偏离本身不直接触发入排失败，"
     "仍属于入排审核控制点；应保留为相应强度的候选并绑定真实审核节点，不得因它不是排除条件，或"
     "同一要求也适用于治疗期访视，就处置为 post_treatment_execution、non_enrollment_execution 或普通说明。"
+    "若同一句要求同时覆盖某审核节点前和该节点后的持续期间，当前节点的候选命题和求值只包含截至该节点"
+    "已经发生、能够从当前资料核实的部分；节点后的持续义务可在来源和后续说明中保留，但不得并入"
+    "本节点的确定性命题、不得要求当前受试者证明未来没有发生变化。不得因此丢掉节点前已有的限制；"
+    "若原文无法区分两个期间，保留未决边界，不把未来状态写成已满足。"
     "必须先区分义务对象是个例受试者，还是中心、研究者、申办方及研究组织。研究启动准备、人员方案培训、授权、"
     "文件归档、监查稽查或系统管理等组织层义务，若未明确约束某一受试者的资格判断、节点放行或个例证据，应按原文"
     "处置为 non_enrollment_execution 或 administrative_statistical_background，不得建立候选。‘研究启动前’或"
@@ -1414,6 +1461,11 @@ _CONTROL_AGENT_SYSTEM_CONTRACT = (
     "控制；默认义务组、替代义务组的 applies_to_trigger_branch_indexes 与例外组的"
     "waives_trigger_branch_indexes 必须使用完全相同的分支序位。"
     "时间要求必须完整结构化：相对首次给药、随机、基线等锚点的起始窗口写入 time_constraint；"
+    "同一禁止原文若同时覆盖当前入排节点以前和其后的治疗或研究期间，禁止把整个未来期间写入当前节点的求值命题。"
+    "当前禁止原子只写截至绑定节点可核的事实，prospective_period=null；将后续禁止写入同原子的"
+    "continuing_obligation，保留相同的直接来源定位和逐字摘录、原文支持的 prospective_period，"
+    "status=not_due_at_review_node。后续记录没有当前节点的真假命题，不得据此判定已遵守或已违反。"
+    "若无法从原文和冻结节点区分当前与后续，保持待核，不得改作研究者判断或治疗后事项来绕过。"
     "原文要求义务持续至试验结束、整个研究期间或治疗期间时，还必须分别写入"
     "prospective_period=study_period 或 treatment_period。起始窗口与持续期间可以同时存在，"
     "共同表示同一义务的完整覆盖范围，不得只把持续终点留在标题、说明或摘录中。"
@@ -1437,6 +1489,8 @@ _CONTROL_AGENT_SYSTEM_CONTRACT = (
     "节点时，后者是前者的明确特例。不得把通用窗口传播到这些特例项目，也不得在最低证据或"
     "跨来源关系中声称特例项目可按较宽窗口完成。冻结流程目标若已在精确节点覆盖特例项目，"
     "新候选只保留尚未覆盖的通用规则，并通过 further_explanation 说明层级，不重复建立特例义务。"
+    "schedule_or_verify_visit 的 cross_source_relations 必须关联本候选 review_node_bindings 中相同身份的"
+    "workflow_stage；仅写审核节点而不建立关系不构成完整的访视安排。"
     "通用访视安排必须关联 known_workflow_stage_targets 中的 workflow_stage，不得把通用时间窗分别挂到"
     "各个 required_procedure。通用基线值选取原则关联 workflow_stage；只针对一个明确检查项的"
     "特例才关联该 required_procedure。一个候选不得同时混合通用原则和具体检查项特例。"
@@ -1452,6 +1506,9 @@ _CONTROL_AGENT_SYSTEM_CONTRACT = (
     "同一表格中药物或治疗类别、时间窗、条件例外不同的独立行，默认分别建立候选；只有它们"
     "共享同一触发与后果结构时才可合并。activates_obligation_group_indexes 使用完整义务组数组的"
     "从0开始序位，必须指向替代义务组本身，不能误填默认义务组或触发分支序位。"
+    "表格行的 excerpt 可能省略空格；须按 member_source_refs 中的 .r行.c列 坐标与同表表头列号对齐。"
+    "未出现的列是空单元格，不得把后面非空格的值左移到较早访视；列位或合并单元格无法核实时保留待核，"
+    "不得根据非空值个数猜测访视。"
     "每个原子必须直接给出数量"
     "完全相等、位置一一对应的"
     "source_span_ids 与 source_excerpts；同一来源定位需要提供多个摘录时，必须为每个摘录"
@@ -1597,6 +1654,20 @@ _CONTROL_REPAIR_CONTRACT = (
 def _repair_problem_guidance(problem: str) -> str:
     """Add only the structural guidance needed for the reported gate failure."""
 
+    if "未给出时间约束，不能声明已确定其计算用途" in problem:
+        return (
+            "本轮重点：原子没有 time_constraint 时，evaluation.time_purpose 只能是 "
+            "not_applicable 或 unresolved，不得凭访视背景推造日期计算。"
+            "若原文确有明确时间限制，先在同一原子中逐字保留并结构化 time_constraint，"
+            "再说明计算用途；不得为了让规格通过而补造原文没有的时限。"
+        )
+    if "未来计划窗只允许研究药物给药日、末次给药日或研究完成日" in problem:
+        return (
+            "本轮重点：prospective_window 只适用于原文明确以研究药物给药日、"
+            "末次给药日或研究完成日为锚点的未来期限。筛选、基线和随机日期不能放入"
+            "prospective_window；应按原文使用相应的命名时间约束或期间，"
+            "无法确定时保留未核实，不得替换锚点。"
+        )
     if "FABRICATED_EXCERPT" in problem:
         return (
             "本轮重点：原子摘录（source_excerpts）必须从授权结构单元的冻结原文（excerpt）中逐字复制连续文本片段，"
@@ -1612,7 +1683,16 @@ def _repair_problem_guidance(problem: str) -> str:
     if "VISIT_SCHEDULE_" in problem:
         return (
             "本轮重点：访视合并、访视间隔或访视时间窗使用 schedule_or_verify_visit，"
-            "关系目标使用已绑定的 workflow_stage；删除把同一通用时间窗分别挂到各检查项的关系。"
+            "cross_source_relations 必须包含 external_target_kind=workflow_stage，"
+            "external_target_id 必须等于本候选 review_node_bindings 中对应节点的 workflow_stage_id；"
+            "仅绑定审核节点而把 cross_source_relations 留空仍不合格。"
+            "删除把同一通用时间窗分别挂到各检查项的关系；不得为凑关系发明节点。"
+        )
+    if "确定性求值须声明计算方式，其他模式不得夹带计算方式" in problem:
+        return (
+            "本轮重点：只有能由明确操作数、比较方式及来源计算的原子才使用 deterministic，"
+            "并填写相应 computation；需要结合记录语义核实动作是否完成时使用 semantic，"
+            "且 computation、operation、predicate 均为 null。不得为通过格式校验虚构计算方式。"
         )
     if "RESULT_VALIDITY_" in problem:
         return (
@@ -1833,6 +1913,14 @@ def _repair_problem_guidance(problem: str) -> str:
             "删除该候选，并将对应 owned 单元处置为 post_treatment_execution；"
             "若同一单元另含真正的入排增量，只保留该增量候选。"
         )
+    if "FUTURE_PROHIBITION_DECIDED_EARLY" in problem:
+        return (
+            "本轮重点：当前禁止原子的 evaluation.proposition 只陈述截至决定节点可核的行为，"
+            "prospective_period=null；把原文支持的后续禁止另存同原子的 continuing_obligation，"
+            "保留同一直接来源、期间及未到期状态，不为后续义务填写当前节点真假命题。"
+            "不得删除节点前已有的禁止要求、改成研究者判断或凭空补一份未来承诺。"
+            "若当前时点与后续时段不能从原文和冻结访视区分，保留未核边界，不生成当前已满足的候选。"
+        )
     if "PRE_ENROLLMENT_PROCEDURE_MISCLASSIFIED" in problem:
         return (
             "本轮重点：该结构单元已由冻结访视顺序确认发生在入排复核、随机或首次给药边界之前，"
@@ -1924,6 +2012,19 @@ def _repair_problem_guidance(problem: str) -> str:
     return ""
 
 
+def _prompt_wire_schema() -> dict[str, Any]:
+    """Omit generated display titles, retaining every validation and clinical description."""
+
+    def without_titles(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {key: without_titles(item) for key, item in value.items() if key != "title"}
+        if isinstance(value, list):
+            return [without_titles(item) for item in value]
+        return value
+
+    return without_titles(protocol_control_agent_json_schema())
+
+
 def protocol_control_agent_prompt_template_sha256(prompt_template: str) -> str:
     payload = "\n\n".join(
         (
@@ -1931,7 +2032,7 @@ def protocol_control_agent_prompt_template_sha256(prompt_template: str) -> str:
             prompt_template.strip(),
             _CONTROL_AGENT_SYSTEM_CONTRACT,
             _CONTROL_REPAIR_CONTRACT,
-            _stable_json(protocol_control_agent_json_schema()),
+            _stable_json(_prompt_wire_schema()),
         )
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -1952,7 +2053,7 @@ def build_protocol_control_agent_prompt(
     return (
         f"{prompt_template.strip()}\n\n"
         f"{_CONTROL_AGENT_SYSTEM_CONTRACT}\n\n"
-        f"输出结构：{_stable_json(protocol_control_agent_json_schema())}\n\n"
+        f"输出结构：{_stable_json(_prompt_wire_schema())}\n\n"
         f"本次冻结输入：{_stable_json(frozen_input.model_dump(mode='json'))}\n\n"
         "按 owned_units 原文顺序逐项处理；每个 owned_unit 必须返回一条 disposition，"
         "候选可为 0 到 N。若候选不存在，必须逐单元写出非控制 disposition 和理由。只返回一个完整 JSON 对象。"
@@ -2009,9 +2110,10 @@ def build_protocol_control_discovery_repair_prompt(
         "disposition 只能是 candidate、context_only、non_control、uncertain，"
         "required_context_structure_unit_ids 只能引用当前输入可见结构单元，"
         "并按结构单元 ID 升序排列且不得重复。"
+        "沿用首次请求的输出结构，只返回包含 wire_version 和 decisions 的单个 JSON 对象；"
+        "不要回显输出结构、$defs 或额外的 JSON 对象。"
         f"\n冻结发现批次：{discovery_input.discovery_batch_id}\n"
         f"结构化问题：{problem[:12000]}\n"
-        f"输出结构：{_stable_json(protocol_control_discovery_agent_json_schema())}\n"
         f"本次发现输入：{_stable_json(discovery_input.model_dump(mode='json'))}"
     )
 
@@ -2043,6 +2145,14 @@ def build_protocol_control_repair_prompt(
         for unit in batch.owned_units
         if unit.structure_unit_id in authorized_unit_ids
     ]
+    frozen_workflow_targets = [
+        {
+            "workflow_stage_id": target.workflow_stage_id,
+            "review_stage": target.review_stage.value,
+            "display_name": target.display_name,
+        }
+        for target in batch.known_workflow_stage_targets
+    ]
     guidance = _repair_problem_guidance(problem)
     guidance_block = f"{guidance}\n" if guidance else ""
     return (
@@ -2052,14 +2162,15 @@ def build_protocol_control_repair_prompt(
         f"结构单元范围：{json.dumps(unit_ids, ensure_ascii=False)}\n"
         f"授权结构单元原文与来源定位："
         f"{json.dumps(authorized_sources, ensure_ascii=False)}\n"
+        f"冻结审核节点目录（仅可引用，不得新增）："
+        f"{json.dumps(frozen_workflow_targets, ensure_ascii=False)}\n"
         f"系统候选身份范围：{json.dumps(list(candidate_ids or []), ensure_ascii=False)}\n"
         f"义务原文定位范围："
         f"{json.dumps(list(obligation_source_span_ids or []), ensure_ascii=False)}\n"
         f"候选草稿位置（仅用于诊断，不得原样输出）："
         f"{json.dumps(list(candidate_indexes or []), ensure_ascii=False)}\n"
         f"校验问题：{problem[:12000]}\n"
-        "请在同一会话内仅返回修复后的完整 wire JSON。"
-        f"输出结构：{_stable_json(protocol_control_agent_json_schema())}"
+        "请在同一会话内仅返回修复后的完整 wire JSON，严格沿用首轮已给出的输出结构。"
     )
 
 
@@ -2540,6 +2651,9 @@ def _obligation_dnf_to_domain(
                         statement=atom.statement,
                         time_constraint=atom.time_constraint,
                         prospective_period=atom.prospective_period,
+                        continuing_obligation=(ControlContinuingObligation(
+                            **atom.continuing_obligation.model_dump()
+                        ) if atom.continuing_obligation is not None else None),
                         modality=atom.modality,
                         temporal_scope=atom.temporal_scope,
                         source_span_ids=list(atom.source_span_ids),
@@ -2963,6 +3077,7 @@ class ProtocolControlAgentAttempt(ContractModel):
     attempt: int = Field(ge=1)
     session_id: str = Field(min_length=1)
     raw_output_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    raw_output_chars: int | None = Field(default=None, ge=0)
     outcome: Literal[
         "parsed",
         "schema_invalid",
@@ -3640,6 +3755,7 @@ class ProtocolControlAgentRunner:
                         attempt=len(attempts) + 1,
                         session_id=session_id,
                         raw_output_sha256=_sha256(raw_text),
+                        raw_output_chars=len(raw_text),
                         outcome="parsed",
                         output=output,
                         issues=(
@@ -3824,6 +3940,7 @@ class ProtocolControlAgentRunner:
                         attempt=len(attempts) + 1,
                         session_id=session_id,
                         raw_output_sha256=raw_output_sha256,
+                        raw_output_chars=len(raw_text),
                         outcome=invalid_outcome,
                         issues=(
                             [

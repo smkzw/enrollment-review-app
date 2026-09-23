@@ -54,6 +54,7 @@ from app.storage.selective_vision_observation_repository import (
     SelectiveVisionObservationRepository,
 )
 from app.storage.page_review_repository import PageReviewRepository
+from app.storage.ocr_repositories import OcrPageRepository
 
 __all__ = [
     "FactPlanningSourceError",
@@ -651,6 +652,7 @@ def collect_visual_observation_attachments(
     *,
     revision: CompleteEvidenceProcessingRevision,
     doc_version_to_logical: dict[str, str],
+    required_scope: tuple[frozenset[str], frozenset[str]] | None = None,
 ) -> tuple[SelectiveVisionObservationAttachment, ...]:
     """按最小来源保真合同收集可进入冻结候选输入的成功视觉观察。
 
@@ -675,6 +677,7 @@ def collect_visual_observation_attachments(
     repository = SelectiveVisionObservationRepository(session)
     attachments: list[SelectiveVisionObservationAttachment] = []
     seen_identity: dict[str, str] = {}
+    allowed_pages, allowed_observations = required_scope if required_scope is not None else (None, None)
     for entry in sorted(revision.manifest, key=lambda e: (e.source_document_version_id, e.page_number)):
         logical = doc_version_to_logical.get(entry.source_document_version_id)
         if logical is None:
@@ -690,6 +693,8 @@ def collect_visual_observation_attachments(
         for observation in repository.list_by_page_artifact(entry.page_artifact_id):
             if observation.status is not SelectiveVisionObservationStatus.SUCCEEDED:
                 continue
+            if allowed_observations is not None and observation.observation_id not in allowed_observations:
+                continue
             if (
                 observation.source_document_version_id != entry.source_document_version_id
                 or observation.page_ordinal != entry.page_number
@@ -701,6 +706,10 @@ def collect_visual_observation_attachments(
             ):
                 # OCR 漂移/旧修订绑定：观察与其 OCR 风险提示一并排除
                 continue
+            if observation.ocr_page_id is not None and required_scope is not None:
+                current_ocr = OcrPageRepository(session).get(observation.ocr_page_id)
+                if current_ocr.raw_text_sha256 != observation.ocr_raw_text_sha256:
+                    continue
             identity = observation.observation_identity_sha256
             previous = seen_identity.get(identity)
             if previous is not None and previous != observation.observation_id:
@@ -727,6 +736,13 @@ def collect_visual_observation_attachments(
                     risk_reasons_sha256=observation.risk_reasons_sha256,
                 )
             )
+    if required_scope is not None and (
+        {item.page_artifact_id for item in attachments} != allowed_pages
+        or {item.observation_id for item in attachments} != allowed_observations
+    ):
+        raise FactPlanningSourceError(
+            "当前任务已核实的页面观察与原始资料不一致，不能整理病史。"
+        )
     attachments.sort(
         key=lambda a: (
             a.source_document_version_id,

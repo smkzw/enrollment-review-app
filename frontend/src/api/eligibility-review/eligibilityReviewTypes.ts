@@ -61,6 +61,7 @@ export interface EligibilityControlObligationWire {
   status_label: string;
   reason: string;
   fact_refs: EligibilityFactRefWire[];
+  continuing_note?: string | null;
 }
 
 export interface EligibilityControlWire {

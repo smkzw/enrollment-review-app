@@ -611,6 +611,12 @@ class FactNormalizationCommandService:
                         raise AppFactNormalizationRejectedError(
                             "仍有存在识别风险的页面未核实完成；原件和疑问已保留，本次不会整理成正式病史。"
                         )
+                    if not SelectiveVisionPostprocessJobService(
+                        self.session_factory
+                    ).coverage_page_ids_match(authority.complete_processing_revision_id):
+                        raise AppFactNormalizationRejectedError(
+                            "页面质量核对的逐页来源不完整，请重新核实当前资料。"
+                        )
             selected = select_registered_evidence_normalizer_config(
                 session,
                 prompt_template=self.prompt_template,

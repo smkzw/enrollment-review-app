@@ -303,6 +303,16 @@ class FactNormalizationJobService:
             collect_visual_observation_attachments,
             visual_observation_run_scope,
         )
+        from app.services.selective_vision_postprocess_job_service import (
+            SelectiveVisionPostprocessJobService,
+        )
+
+        verified_vision_scope = (
+            None if page_review_coverage_id is not None else
+            SelectiveVisionPostprocessJobService(self.session_factory).verified_observation_scope(
+                authority.complete_processing_revision_id
+            )
+        )
 
         with self.session_factory() as session:
             plan, source = build_fact_normalization_plan(
@@ -319,6 +329,7 @@ class FactNormalizationJobService:
                     session,
                     revision=source.revision,
                     doc_version_to_logical=source.doc_version_to_logical,
+                    required_scope=verified_vision_scope,
                 )
             )
             if page_review_coverage_id is None:

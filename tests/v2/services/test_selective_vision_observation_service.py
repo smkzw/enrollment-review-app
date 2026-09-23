@@ -7,6 +7,7 @@ Aligned to worker_02 surface:
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from hashlib import sha256
 
 
@@ -203,6 +204,132 @@ def test_explicit_postprocess_persists_succeeded_observation(session_factory):
         ocr = OcrPageRepository(session).get(seeded["ocr_page_id"])
         assert ocr.raw_text == seeded["raw_text"]
         assert ocr.raw_text_sha256 == seeded["raw_text_sha256"]
+
+
+def test_changed_model_does_not_reuse_prior_page_observation(session_factory):
+    seeded = _seed(session_factory)
+    calls: list[str] = []
+    page = _material(
+        seeded=seeded,
+        media_kind="image",
+        extraction_route=ExtractionRoute.VISION_OCR.value,
+        has_native_text=False,
+        native_text_char_count=0,
+    )
+
+    def service_for(model_id: str) -> SelectiveVisionObservationService:
+        async def runner(plan, inputs):
+            calls.append(model_id)
+            return SelectiveVisionReviewOutcome(
+                plan=plan,
+                observations=(
+                    SelectiveVisionObservation(
+                        source_refs=(inputs[0].source_ref,),
+                        page_ordinals=(inputs[0].page_ordinal,),
+                        reasons=(VISION_REASON_SCAN_OR_IMAGE_ONLY,),
+                        text=f"source_ref={inputs[0].source_ref}\n观察来自 {model_id}",
+                        model=model_id,
+                        finish_reason="stop",
+                        usage={},
+                    ),
+                ),
+            )
+
+        return SelectiveVisionObservationService(
+            session_factory, review_runner=runner, default_model_id=model_id
+        )
+
+    first = _run(service_for("model-a").run_postprocess([page]))
+    second = _run(service_for("model-b").run_postprocess([page]))
+    repeated = _run(service_for("model-b").run_postprocess([page]))
+    assert calls == ["model-a", "model-b"]
+    assert first.observations[0].model_id == "model-a"
+    assert second.observations[0].model_id == "model-b"
+    assert repeated.reused_observation_ids == (second.observations[0].observation_id,)
+
+
+def test_changed_effort_does_not_reuse_prior_page_observation(session_factory, monkeypatch):
+    seeded = _seed(session_factory)
+    page = _material(
+        seeded=seeded, media_kind="image", extraction_route=ExtractionRoute.VISION_OCR.value,
+        has_native_text=False, native_text_char_count=0,
+    )
+    calls: list[str] = []
+
+    async def runner(plan, inputs):
+        calls.append(inputs[0].source_ref)
+        return SelectiveVisionReviewOutcome(
+            plan=plan,
+            observations=(SelectiveVisionObservation(
+                source_refs=(inputs[0].source_ref,), page_ordinals=(inputs[0].page_ordinal,),
+                reasons=(VISION_REASON_SCAN_OR_IMAGE_ONLY,),
+                text=f"source_ref={inputs[0].source_ref}\n已核对",
+                model="mock-vlm", finish_reason="stop", usage={},
+            ),),
+        )
+
+    service = SelectiveVisionObservationService(
+        session_factory, review_runner=runner, default_model_id="mock-vlm"
+    )
+    first = _run(service.run_postprocess([page]))
+    monkeypatch.setenv("INDEPENDENT_VLM_REASONING_EFFORT", "low")
+    second = _run(service.run_postprocess([page]))
+    assert len(calls) == 2
+    assert first.observations[0].plan_version != second.observations[0].plan_version
+
+
+def test_missing_image_preserves_successful_sibling_and_retry_only_reads_missing(session_factory):
+    seeded = _seed(session_factory)
+    with session_factory() as session, session.begin():
+        profile = OCRProfileRepository(session).get_or_create(make_profile())
+        PageArtifactRepository(session).get_or_create(
+            make_artifact(
+                artifact_id="pa-2", version_id="doc-1", page_image=IMAGE_SHA,
+                page_input=IMAGE_SHA, page_number=2, status=PageArtifactStatus.SUCCEEDED,
+            )
+        )
+        second_ocr = OcrPageRepository(session).create(
+            make_ocr_page(
+                page_id="op-2", artifact_id="pa-2", page_number=2,
+                profile_sha=profile.profile_sha256,
+                page_input=IMAGE_SHA, raw_text=RAW_TEXT,
+            )
+        )
+    first_page = _material(
+        seeded=seeded, media_kind="image", extraction_route=ExtractionRoute.VISION_OCR.value,
+        has_native_text=False, native_text_char_count=0,
+    )
+    second_page = replace(
+        first_page, page_artifact_id="pa-2", source_ref="pa-2", page_ordinal=2,
+        ocr_page_id=second_ocr.ocr_page_id, image_bytes=None,
+    )
+    calls: list[tuple[str, ...]] = []
+
+    async def runner(plan, inputs):
+        calls.append(tuple(page.source_ref for page in inputs))
+        return SelectiveVisionReviewOutcome(
+            plan=plan,
+            observations=tuple(
+                SelectiveVisionObservation(
+                    source_refs=(page.source_ref,), page_ordinals=(page.page_ordinal,),
+                    reasons=(VISION_REASON_SCAN_OR_IMAGE_ONLY,),
+                    text=f"source_ref={page.source_ref}\n已核对", model="mock-vlm",
+                    finish_reason="stop", usage={},
+                ) for page in inputs
+            ),
+        )
+
+    service = SelectiveVisionObservationService(
+        session_factory, review_runner=runner, default_model_id="mock-vlm"
+    )
+    first = _run(service.run_postprocess([first_page, second_page]))
+    assert first.closed_error is not None
+    assert [row.page_artifact_id for row in first.observations] == ["pa-1"]
+    assert [row.page_artifact_id for row in first.closed] == ["pa-2"]
+    retried = _run(service.run_postprocess([first_page, replace(second_page, image_bytes=IMAGE_BYTES)]))
+    assert calls == [("pa-1",), ("pa-2",)]
+    assert {row.page_artifact_id for row in retried.observations} == {"pa-1", "pa-2"}
+    assert retried.closed_error is None
 
 
 def test_native_text_skip_does_not_call_model_or_write_rows(session_factory):

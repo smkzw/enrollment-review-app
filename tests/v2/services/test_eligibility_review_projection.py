@@ -24,9 +24,11 @@ from app.domain.contracts.facts import (
 )
 from app.services.eligibility_review_projection import (
     EligibilityReviewProjectionService,
+    _continuing_obligation_note,
     adapt_clinical_fact_v2,
     fold_fact_chain_heads,
 )
+from app.domain.contracts.protocol_controls import ControlContinuingObligation
 from app.storage.evidence_locator_models import EvidenceLocatorArtifactRecord
 from app.storage.fact_repositories import (
     ClinicalConflictGroupV2Repository,
@@ -39,6 +41,20 @@ from tests.v2.storage.test_fact_repositories import _seed_chain
 
 
 NOW = datetime(2026, 8, 22, 12, 0, 0, tzinfo=UTC)
+
+
+def test_future_control_is_explained_without_claiming_current_compliance() -> None:
+    continuation = ControlContinuingObligation(
+        statement="不得调整既定治疗",
+        prospective_period={"period": "treatment_period"},
+        source_span_ids=["span:control"],
+        source_excerpts=["筛选期及治疗期间不得调整既定治疗"],
+    )
+    note = _continuing_obligation_note(continuation)
+    assert note is not None
+    assert "治疗期间" in note
+    assert "本次入排审核不判定" in note
+    assert _continuing_obligation_note(None) is None
 
 
 @pytest.mark.parametrize("kind", ["event", "exposure"])

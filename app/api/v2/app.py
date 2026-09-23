@@ -119,6 +119,7 @@ from app.services.protocol_control_executor import (
     ProtocolControlExecutorConfig,
     create_protocol_control_executor,
 )
+from app.services.protocol_control_execution import protocol_control_route_identity_from_config
 from app.services.protocol_control_job_service import ProtocolControlJobService
 from app.agents.protocol_semantic_route_preflight import (
     EndpointProber,
@@ -297,6 +298,11 @@ def create_app(
             inference=omlx_http_inference(gate=evidence_ocr_gate),
             adapter=app.state.evidence_reprocess_adapter,
         )
+        protocol_control_config = ProtocolControlExecutorConfig(
+            data_paths=paths,
+            session_factory=session_factory,
+            require_frozen_routes=True,
+        )
         default_executors = {
             **{job_type: app.state.page_review_runtime for job_type in OWNED_TYPES},
             PAGE_REVIEW_JOB_TYPE: app.state.page_review_runtime,
@@ -309,10 +315,7 @@ def create_app(
                 )
             ),
             PROTOCOL_CONTROL_EXECUTION_JOB_TYPE: create_protocol_control_executor(
-                ProtocolControlExecutorConfig(
-                    data_paths=paths,
-                    session_factory=session_factory,
-                )
+                protocol_control_config
             ),
             EVIDENCE_PROCESSING_JOB_TYPE: create_evidence_processing_executor(evidence_processing_config),
             REPROCESS_JOB_TYPE: create_reprocessing_executor(evidence_processing_config),
@@ -341,6 +344,9 @@ def create_app(
             session_factory,
             data_paths=paths,
             lease_ttl=lease_ttl,
+            route_identity_factory=lambda stage: protocol_control_route_identity_from_config(
+                protocol_control_config, stage=stage
+            ),
         )
         app.state.job_executors = merged_executors
         app.state.job_cancelled_callback = project_cancelled_evidence_job

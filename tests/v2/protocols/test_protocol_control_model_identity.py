@@ -37,12 +37,23 @@ SPEED_MODEL = "pocketaihub-qwen3.8-27b-abliterated-mtplx-optimized-speed"
 
 
 class _FakeCompletions:
-    def __init__(self) -> None:
+    def __init__(self, reported_model: str | None = None) -> None:
         self.calls: list[dict[str, object]] = []
+        self.reported_model = reported_model
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
+        if kwargs.get("stream"):
+            return [
+                SimpleNamespace(
+                    choices=[SimpleNamespace(
+                        finish_reason="stop",
+                        delta=SimpleNamespace(content='{"ok":true}'),
+                    )],
+                )
+            ]
         return SimpleNamespace(
+            model=self.reported_model,
             choices=[
                 SimpleNamespace(
                     finish_reason="stop",
@@ -80,9 +91,10 @@ class _FakeServiceClient:
         *,
         model_ids: tuple[str, ...] = (),
         models_error: Exception | None = None,
+        reported_model: str | None = None,
     ) -> None:
         self.models = _FakeModels(model_ids, error=models_error)
-        self.chat = SimpleNamespace(completions=_FakeCompletions())
+        self.chat = SimpleNamespace(completions=_FakeCompletions(reported_model))
 
 
 def _factory_transport(
@@ -141,6 +153,42 @@ def test_missing_model_list_fails_closed() -> None:
         transport.start(prompt="冻结控制输入")
 
     assert client.chat.completions.calls == []
+
+
+def test_cms_scoped_key_checks_nonclinical_response_identity_before_source() -> None:
+    model = "deepseek-latest-cloud"
+    client = _FakeServiceClient(reported_model=model)
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        backend="cms-router", model=model, max_tokens=65536,
+        _client_factory=lambda **kwargs: client,
+    )
+
+    transport.start(prompt="冻结方案原文")
+
+    assert transport.verified_model_identity == model
+    assert transport.model_identity_policy == "list_then_chat_on_empty"
+    assert client.models.list_calls == 1
+    assert len(client.chat.completions.calls) == 2
+    probe, source = client.chat.completions.calls
+    assert probe["max_tokens"] == 32
+    assert probe["messages"] == [{"role": "user", "content": "只回答：好"}]
+    assert "冻结方案原文" not in str(probe)
+    assert "冻结方案原文" in str(source)
+
+
+@pytest.mark.parametrize("reported_model", [None, "another-model"])
+def test_cms_scoped_key_rejects_unreported_or_wrong_identity(reported_model: str | None) -> None:
+    client = _FakeServiceClient(reported_model=reported_model)
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        backend="cms-router", model="deepseek-latest-cloud", max_tokens=65536,
+        _client_factory=lambda **kwargs: client,
+    )
+
+    with pytest.raises(ProtocolControlAgentCallError, match="身份缺证|身份不一致"):
+        transport.start(prompt="冻结方案原文")
+
+    assert len(client.chat.completions.calls) == 1
+    assert "冻结方案原文" not in str(client.chat.completions.calls[0])
 
 
 def test_probe_failure_fails_closed_without_semantic_request() -> None:

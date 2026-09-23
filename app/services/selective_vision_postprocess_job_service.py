@@ -21,6 +21,7 @@ from app.services.evidence_app_errors import (
     app_error_boundary,
 )
 from app.services.job_service import JOB_IDEMPOTENCY_SCOPE, JobService, StepSpec
+from app.services.selective_vision_runtime import selective_vision_route_sha256
 from app.storage.codecs import utc_now, verify_payload_sha256
 from app.storage.idempotency import IdempotencyRepository
 from app.storage.ocr_repositories import EvidenceProcessingRevisionRepository
@@ -77,13 +78,14 @@ def selective_vision_postprocess_idempotency_key(
     evidence_processing_revision_id: str,
     *,
     plan_version: str = SELECTIVE_VISION_PLAN_VERSION,
+    route_sha256: str | None = None,
 ) -> str:
     revision_id = str(evidence_processing_revision_id or "").strip()
     if not revision_id:
         raise InvalidJobDefinitionError("证据处理修订标识不能为空")
     return (
         f"{SELECTIVE_VISION_POSTPROCESS_IDEMPOTENCY_PREFIX}:"
-        f"{revision_id}:{plan_version}"
+        f"{revision_id}:{plan_version}:{route_sha256 or selective_vision_route_sha256()}"
     )
 
 
@@ -147,14 +149,16 @@ class SelectiveVisionPostprocessJobService:
             raise InvalidJobDefinitionError("证据处理修订标识不能为空")
         EvidenceProcessingRevisionRepository(session).get(revision_id)
         plan = str(plan_version or "").strip() or SELECTIVE_VISION_PLAN_VERSION
+        route_sha256 = selective_vision_route_sha256()
         trigger_name = str(trigger or "").strip() or "evidence_processing_freeze"
         idempotency_key = selective_vision_postprocess_idempotency_key(
-            revision_id, plan_version=plan
+            revision_id, plan_version=plan, route_sha256=route_sha256,
         )
         payload = {
-            "contract": "selective_vision_postprocess_job/v1",
+            "contract": "selective_vision_postprocess_job/v2",
             "evidence_processing_revision_id": revision_id,
             "plan_version": plan,
+            "route_sha256": route_sha256,
             "trigger": trigger_name,
             "idempotency_key": idempotency_key,
         }
@@ -313,6 +317,7 @@ class SelectiveVisionPostprocessJobService:
                 plan_supported=(
                     str(payload.get("plan_version") or SELECTIVE_VISION_PLAN_VERSION)
                     == SELECTIVE_VISION_PLAN_VERSION
+                    and payload.get("route_sha256") == selective_vision_route_sha256()
                 ),
                 progress_completed=int(job.progress_completed),
                 progress_total=int(job.progress_total),
@@ -329,6 +334,73 @@ class SelectiveVisionPostprocessJobService:
                 created_at=job.created_at,
                 updated_at=job.updated_at,
             )
+
+    def coverage_page_ids_match(self, evidence_processing_revision_id: str) -> bool:
+        """Internal source check; raw page identities never enter the UI task view."""
+        with self.session_factory() as session:
+            revision_id = self._base_revision_id(session, evidence_processing_revision_id)
+            found = self._find_job_record(session, revision_id)
+            return found is not None and self._verified_scope_in_session(
+                session, revision_id, found[0], found[1]
+            ) is not None
+
+    def verified_observation_scope(
+        self, evidence_processing_revision_id: str
+    ) -> tuple[frozenset[str], frozenset[str]] | None:
+        """Return exact pages and observation rows accepted by the current completed job.
+
+        ``None`` means no selective task exists (legacy caller). A present but
+        unsupported/incomplete task is an error, never a legacy fallback.
+        """
+        with self.session_factory() as session:
+            revision_id = self._base_revision_id(session, evidence_processing_revision_id)
+            found = self._find_job_record(session, revision_id)
+            if found is None:
+                return None
+            scope = self._verified_scope_in_session(session, revision_id, found[0], found[1])
+            if scope is None:
+                raise AppInternalError("当前页面质量核对的来源尚未完整，不能整理病史。")
+            return scope
+
+    def _verified_scope_in_session(
+        self, session: Session, revision_id: str, job: JobRecord, payload: dict[str, Any]
+    ) -> tuple[frozenset[str], frozenset[str]] | None:
+        if (
+            job.state != "completed"
+            or payload.get("plan_version") != SELECTIVE_VISION_PLAN_VERSION
+            or payload.get("route_sha256") != selective_vision_route_sha256()
+        ):
+            return None
+        checkpoint = self._store(session).get_last_checkpoint(
+            job.job_id, SELECTIVE_VISION_POSTPROCESS_STEP_ID
+        )
+        if checkpoint is None:
+            return None
+        result = checkpoint[1]
+        expected = result.get("eligible_page_artifact_ids")
+        observed = result.get("observed_page_artifact_ids")
+        created = result.get("created_observation_ids")
+        reused = result.get("reused_observation_ids")
+        if not all(isinstance(items, list) for items in (expected, observed, created, reused)):
+            return None
+        if not all(isinstance(item, str) and item for item in expected + observed + created + reused):
+            return None
+        manifest_ids = {
+            item.page_artifact_id
+            for item in EvidenceProcessingRevisionRepository(session).get(revision_id).manifest
+        }
+        if not (
+            len(expected) == result.get("eligible_count")
+            and len(observed) == result.get("observation_count")
+            and len(created) + len(reused) == len(observed)
+            and len(set(expected)) == len(expected)
+            and len(set(created + reused)) == len(observed)
+            and set(expected) <= manifest_ids
+            and set(expected) == set(observed)
+            and result.get("closed_count") == 0
+        ):
+            return None
+        return frozenset(expected), frozenset(created + reused)
 
     @app_error_boundary
     def cancel_revision_task(
@@ -352,7 +424,7 @@ class SelectiveVisionPostprocessJobService:
     def retry_revision_task(
         self, evidence_processing_revision_id: str
     ) -> SelectiveVisionTaskActionResult:
-        """人工重试：校验任务类型/修订关联/规划版本后复用失败范围重试。"""
+        """人工重试当前失败范围；旧核验方式另建当前版本任务，保留旧历史。"""
         revision_id = str(evidence_processing_revision_id or "").strip()
         if not revision_id:
             raise AppNotFoundError("资料处理修订标识不能为空。")
@@ -362,8 +434,21 @@ class SelectiveVisionPostprocessJobService:
             if (
                 str(payload.get("plan_version") or SELECTIVE_VISION_PLAN_VERSION)
                 != SELECTIVE_VISION_PLAN_VERSION
+                or payload.get("route_sha256") != selective_vision_route_sha256()
             ):
-                raise AppSelectiveVisionPlanUnsupportedError()
+                if job.state not in TERMINAL_JOB_STATES:
+                    raise AppSelectiveVisionPlanUnsupportedError()
+                upgraded = self.enqueue_for_revision_in_session(
+                    session,
+                    base_revision_id,
+                    plan_version=SELECTIVE_VISION_PLAN_VERSION,
+                    trigger="plan_upgrade",
+                )
+                return SelectiveVisionTaskActionResult(
+                    job_id=upgraded.job_id,
+                    state=upgraded.state,
+                    changed=upgraded.created,
+                )
             outcome = self._store(session).retry_failed(job.job_id)
             return SelectiveVisionTaskActionResult(
                 job_id=job.job_id,

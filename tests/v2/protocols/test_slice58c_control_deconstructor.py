@@ -25,6 +25,7 @@ from app.agents.protocol_control_deconstructor import (
     ProtocolControlAgentWireEvidence,
     ProtocolControlAgentWireExceptionDnf,
     ProtocolControlAgentWireObligationAtom,
+    ProtocolControlAgentWireContinuingObligation,
     ProtocolControlAgentWireObligationDnf,
     ProtocolControlAgentWireObligationGroup,
     ProtocolControlAgentWireRelation,
@@ -41,6 +42,7 @@ from app.agents.protocol_control_deconstructor import (
 )
 from app.domain.contracts.enums import PhaseScope, ReviewStage, StudyPhase
 from app.domain.contracts.protocol_controls import (
+    ControlContinuingObligation,
     ControlObligationKind,
     ControlRelationTargetKind,
     CrossSourceRelationKind,
@@ -52,6 +54,20 @@ from app.domain.contracts.protocol_controls import (
     ReviewNodeRole,
     StructureUnitDispositionKind,
 )
+
+
+def test_continuing_obligation_wire_excludes_system_schema_version() -> None:
+    wire = ProtocolControlAgentWireContinuingObligation(
+        statement="治疗期间不得调整背景治疗",
+        prospective_period={"period": "treatment_period"},
+        source_span_ids=["span:control"],
+        source_excerpts=["筛选期及治疗期间不得调整背景治疗"],
+        status="not_due_at_review_node",
+    )
+    assert "schema_version" not in wire.model_dump()
+    assert "schema_version" not in wire.model_json_schema().get("properties", {})
+    saved = ControlContinuingObligation(**wire.model_dump())
+    assert saved.status == "not_due_at_review_node"
 
 
 def _unit(unit_id: str, order: int, span_id: str, excerpt: str) -> ProtocolStructureUnit:
@@ -466,6 +482,7 @@ def test_prompt_explains_parallel_sources_and_conditional_alternative_obligation
     assert "只读上下文出现相似或重复表述" in prompt
     assert "即使其偏离本身不直接触发入排失败" in prompt
     assert "同一要求也适用于治疗期访视" in prompt
+    assert "不得要求当前受试者证明未来没有发生变化" in prompt
 
 
 @pytest.mark.parametrize(
@@ -515,6 +532,10 @@ def test_prompt_explains_parallel_sources_and_conditional_alternative_obligation
             "PROSPECTIVE_PERIOD_MISSING: 持续期间缺失",
             "若只是首次给药后的检查或随访，则删除候选",
         ),
+            (
+                "FUTURE_PROHIBITION_DECIDED_EARLY: 后续遵守不能提前证明",
+                "continuing_obligation",
+            ),
         (
             "CONTROL_DELTA_DROPPED: 控制增量遗漏",
             "只为目标确实未覆盖的人群、条件、动作、时间、阈值或例外建立增量候选",
@@ -562,6 +583,25 @@ def test_repair_prompt_explains_incremental_candidate_shape(
     assert expected in prompt
 
 
+def test_repair_prompt_reuses_prior_schema_and_keeps_time_corrections_bounded() -> None:
+    batch = _batch()
+    without_time = build_protocol_control_repair_prompt(
+        batch,
+        problem="未给出时间约束，不能声明已确定其计算用途",
+    )
+    future_anchor = build_protocol_control_repair_prompt(
+        batch,
+        problem="未来计划窗只允许研究药物给药日、末次给药日或研究完成日",
+    )
+
+    assert "not_applicable 或 unresolved" in without_time
+    assert "不得为了让规格通过而补造" in without_time
+    assert "筛选、基线和随机日期不能放入" in future_anchor
+    assert "严格沿用首轮已给出的输出结构" in future_anchor
+    assert '"$defs"' not in without_time
+    assert '"$defs"' not in future_anchor
+
+
 def test_planned_visit_and_evidence_repairs_preserve_node_closure() -> None:
     planned_visit_prompt = build_protocol_control_repair_prompt(
         _batch(),
@@ -576,6 +616,39 @@ def test_planned_visit_and_evidence_repairs_preserve_node_closure() -> None:
     )
     assert "同阶段到期的最低证据" in evidence_prompt
     assert "不得删除决定节点" in evidence_prompt
+
+
+def test_repair_prompt_keeps_frozen_node_identity_and_evaluation_mode() -> None:
+    batch = _batch().model_copy(
+        update={
+            "known_workflow_stage_targets": [
+                KnownWorkflowStageTarget(
+                    workflow_stage_id="workflow-stage-generic-baseline",
+                    review_stage=ReviewStage.BASELINE,
+                    display_name="基线访视",
+                )
+            ]
+        }
+    )
+    visit_prompt = build_protocol_control_repair_prompt(
+        batch,
+        problem="VISIT_SCHEDULE_WORKFLOW_TARGET_MISSING",
+    )
+    evaluation_prompt = build_protocol_control_repair_prompt(
+        batch,
+        problem="确定性求值须声明计算方式，其他模式不得夹带计算方式",
+    )
+
+    assert "workflow-stage-generic-baseline" in visit_prompt
+    assert "cross_source_relations 留空仍不合格" in visit_prompt
+    assert "不得为通过格式校验虚构计算方式" in evaluation_prompt
+
+
+def test_deep_prompt_keeps_table_column_positions_distinct_from_nonempty_count() -> None:
+    prompt = build_protocol_control_agent_prompt(_batch())
+
+    assert "member_source_refs 中的 .r行.c列" in prompt
+    assert "不得把后面非空格的值左移" in prompt
 
 
 def test_prompt_separates_rule_authority_from_subject_evidence() -> None:
@@ -1322,6 +1395,22 @@ def test_prompt_explains_non_official_supplement_and_read_only_context() -> None
         "stage:screening:one",
         "stage:screening:two",
     ]
+
+
+def test_prompt_schema_only_omits_generated_titles() -> None:
+    prompt = build_protocol_control_agent_prompt(_batch())
+    schema_text = prompt.split("输出结构：", 1)[1].split("\n\n本次冻结输入：", 1)[0]
+    supplied = json.loads(schema_text)
+
+    def without_titles(value):
+        if isinstance(value, dict):
+            return {key: without_titles(item) for key, item in value.items() if key != "title"}
+        if isinstance(value, list):
+            return [without_titles(item) for item in value]
+        return value
+
+    assert supplied == without_titles(protocol_control_agent_json_schema())
+    assert len(schema_text) < len(json.dumps(protocol_control_agent_json_schema(), ensure_ascii=False))
 
 
 class _FakeTransport:

@@ -1026,6 +1026,32 @@
   margin-bottom: var(--space-3);
 }
 
+.eligibility-clause-list__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-line);
+  font-size: var(--font-size-small);
+  color: var(--color-muted);
+}
+
+.eligibility-clause-list__pagination button {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-s);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.eligibility-clause-list__pagination button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .eligibility-list-mode {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 
-from app.domain.contracts.enums import CatalogKind
+from app.domain.contracts.enums import CatalogKind, PhaseScope, StudyPhase
 from app.domain.contracts.protocol_controls import (
     KnownOfficialRuleTarget,
     KnownRequiredProcedureTarget,
@@ -896,6 +896,57 @@ def _deep_batch_chunks(
     return chunks
 
 
+def _route_explicit_other_phase_units(
+    coverage_manifest: ProtocolSectionCoverageManifest,
+    decisions: Sequence[ProtocolControlDiscoveryDecision],
+) -> tuple[ProtocolControlDiscoveryDecision, ...]:
+    """Keep definitely other-phase units covered without asking for deep semantics."""
+
+    excluded_scope = {
+        StudyPhase.PHASE_II: PhaseScope.PHASE_III,
+        StudyPhase.PHASE_III: PhaseScope.PHASE_II,
+    }.get(coverage_manifest.study_phase)
+    if excluded_scope is None:
+        return tuple(decisions)
+    excluded_ids = {
+        unit.structure_unit_id
+        for unit in coverage_manifest.units
+        if set(unit.phase_scopes) == {excluded_scope}
+    }
+    if not excluded_ids:
+        return tuple(decisions)
+    referenced_ids = {
+        context_id
+        for decision in decisions
+        if decision.structure_unit_id not in excluded_ids
+        for context_id in decision.required_context_structure_unit_ids
+    }
+    return tuple(
+        decision.model_copy(
+            update={
+                "disposition": (
+                    ProtocolControlDiscoveryDisposition.CONTEXT_ONLY
+                    if decision.structure_unit_id in referenced_ids
+                    else ProtocolControlDiscoveryDisposition.NON_CONTROL
+                ),
+                "required_context_structure_unit_ids": [],
+                "rationale": (
+                    f"{decision.rationale}；冻结期别标注仅适用于另一研究期，"
+                    "本期保留来源覆盖，不生成本期控制候选。"
+                ),
+            }
+        )
+        if decision.structure_unit_id in excluded_ids
+        and decision.disposition
+        in {
+            ProtocolControlDiscoveryDisposition.CANDIDATE,
+            ProtocolControlDiscoveryDisposition.UNCERTAIN,
+        }
+        else decision
+        for decision in decisions
+    )
+
+
 def plan_protocol_control_deep_batches_from_discovery(
     coverage_manifest: ProtocolSectionCoverageManifest,
     discovery_plan: ProtocolControlDiscoveryPlan,
@@ -927,9 +978,9 @@ def plan_protocol_control_deep_batches_from_discovery(
             "discovery_plan_manifest_mismatch",
             "发现计划必须绑定当前完整结构清单。",
         )
-    decisions = validate_protocol_control_discovery_results(
-        discovery_plan,
-        batch_decisions,
+    decisions = _route_explicit_other_phase_units(
+        coverage_manifest,
+        validate_protocol_control_discovery_results(discovery_plan, batch_decisions),
     )
     decision_by_id = {decision.structure_unit_id: decision for decision in decisions}
     deep_ids = list(

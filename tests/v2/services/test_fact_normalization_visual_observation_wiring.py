@@ -45,6 +45,7 @@ from app.services.fact_normalization_job_service import (
     FactNormalizationJobService,
 )
 from app.services.fact_normalization_source_adapter import (
+    FactPlanningSourceError,
     build_doc_version_to_logical_map,
     build_evidence_normalizer_input,
     build_fact_normalization_plan,
@@ -432,6 +433,22 @@ def test_multiple_observations_attach_sorted_with_stable_scope_and_new_job_key(
         assert [a.observation_id for a in selected] == [
             a.observation_id for a in attachments
         ]
+        current_only = collect_visual_observation_attachments(
+            session, revision=revision, doc_version_to_logical=doc_map,
+            required_scope=(
+                frozenset({chain["page_artifact_id"]}),
+                frozenset({first[0].observation_id}),
+            ),
+        )
+        assert [item.observation_id for item in current_only] == [first[0].observation_id]
+        with pytest.raises(FactPlanningSourceError, match="观察与原始资料不一致"):
+            collect_visual_observation_attachments(
+                session, revision=revision, doc_version_to_logical=doc_map,
+                required_scope=(
+                    frozenset({chain["page_artifact_id"]}),
+                    frozenset({"missing-current-observation"}),
+                ),
+            )
 
     with session_factory() as session:
         plan, _ = build_fact_normalization_plan(

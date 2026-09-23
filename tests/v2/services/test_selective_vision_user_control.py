@@ -358,6 +358,47 @@ def test_idempotency_key_is_revision_and_plan_scoped_and_rejects_blank():
         selective_vision_postprocess_idempotency_key("   ")
 
 
+def test_model_route_change_requires_new_task_identity(session_factory, data_paths, monkeypatch):
+    seeded = _seed_frozen_revision(
+        session_factory, data_paths, revision_id="rev-svo-route-change"
+    )
+    service = SelectiveVisionPostprocessJobService(session_factory)
+    initial = service.enqueue_for_revision(seeded["revision_id"])
+    initial_key = selective_vision_postprocess_idempotency_key(seeded["revision_id"])
+    monkeypatch.setenv("INDEPENDENT_VLM_REASONING_EFFORT", "low")
+    assert selective_vision_postprocess_idempotency_key(seeded["revision_id"]) != initial_key
+    assert service.get_revision_task(seeded["revision_id"]).plan_supported is False
+    service.cancel(initial.job_id)
+    next_task = service.retry_revision_task(seeded["revision_id"])
+    assert next_task.job_id != initial.job_id
+    assert service.get_revision_task(seeded["revision_id"]).plan_supported is True
+    assert _snap(session_factory, initial.job_id).state == "cancelled"
+
+
+def test_queued_task_rejects_changed_route_before_reading_pages(session_factory, data_paths, monkeypatch):
+    seeded = _seed_frozen_revision(
+        session_factory, data_paths, revision_id="rev-svo-route-drift"
+    )
+    service = SelectiveVisionPostprocessJobService(session_factory)
+    queued = service.enqueue_for_revision(seeded["revision_id"])
+    monkeypatch.setenv("INDEPENDENT_VLM_REASONING_EFFORT", "low")
+    assert _build_runner(session_factory, data_paths, review_runner=_success_runner()).run_once()
+    step = _snap(session_factory, queued.job_id).steps[0]
+    assert step.state == "failed_final"
+    assert step.error_code == "SELECTIVE_VISION_ROUTE_CHANGED"
+
+
+def test_invalid_vision_provider_still_allows_freeze_task_record(session_factory, data_paths, monkeypatch):
+    seeded = _seed_frozen_revision(
+        session_factory, data_paths, revision_id="rev-svo-invalid-route"
+    )
+    monkeypatch.setenv("INDEPENDENT_VLM_PROVIDER", "unconfigured-provider")
+    service = SelectiveVisionPostprocessJobService(session_factory)
+    created = service.enqueue_for_revision(seeded["revision_id"])
+    assert created.created is True
+    assert service.get_revision_task(seeded["revision_id"]).plan_supported is True
+
+
 def test_enqueue_unknown_revision_fails_closed_without_job_row(
     session_factory, data_paths
 ):
@@ -410,6 +451,9 @@ def test_retry_rejects_non_failed_states_with_state_conflict(
         session_factory, data_paths, review_runner=runner
     ).run_once()
     assert _snap(session_factory, enq.job_id).state == "completed"
+    verified_scope = service.verified_observation_scope(seeded["revision_id"])
+    assert verified_scope is not None
+    assert len(verified_scope[0]) == len(verified_scope[1]) == 1
     with pytest.raises(JobStateConflictError) as completed_error:
         service.retry(enq.job_id)
     assert completed_error.value.current_state == "completed"
@@ -1096,7 +1140,7 @@ def test_revision_keyed_cancel_and_retry_validate_before_mutating(
         assert [row.job_id for row in vision_rows] == [enq.job_id], "失败关闭不得新建视觉核验任务"
 
 
-def test_revision_retry_rejects_unsupported_plan_with_chinese_conflict(
+def test_revision_retry_versions_old_plan_without_rewriting_history(
     session_factory, data_paths
 ):
     seeded = _seed_frozen_revision(
@@ -1124,16 +1168,15 @@ def test_revision_retry_rejects_unsupported_plan_with_chinese_conflict(
     runner.run_once()
     assert _snap(session_factory, enq.job_id).state == "failed_final"
 
-    # 规划版本不支持：409 中文冲突，任务保持原样，不重新排队。
-    with pytest.raises(EvidenceAppError) as error:
-        SelectiveVisionPostprocessJobService(session_factory).retry_revision_task(
-            seeded["revision_id"]
-        )
-    assert error.value.status_code == 409
-    assert error.value.code == "VISION_PLAN_UNSUPPORTED"
-    _assert_chinese(error.value.title)
-    _assert_chinese(error.value.recovery)
+    # 旧作业保持原状；人工重试建立新版任务，不借用旧完成回执。
+    service = SelectiveVisionPostprocessJobService(session_factory)
+    upgraded = service.retry_revision_task(seeded["revision_id"])
+    assert upgraded.changed is True
+    assert upgraded.state == "queued"
+    assert upgraded.job_id != enq.job_id
     assert _snap(session_factory, enq.job_id).state == "failed_final"
+    assert service.get_revision_task(seeded["revision_id"]).job_id == upgraded.job_id
+    assert service.get_revision_task(seeded["revision_id"]).plan_supported is True
 
 
 def test_user_actions_reject_foreign_job_type_without_touching_it(

@@ -18,6 +18,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.agents import protocol_control_agent_transport as transport_module
+from app.agents import protocol_control_discovery_transport as discovery_module
 from app.agents.protocol_control_agent_transport import (
     CONTROL_RESPONSE_FORMAT_NAME,
     MTPLX_PROTOCOL_BATCH_MAX_TOKENS,
@@ -42,6 +43,9 @@ from app.agents.protocol_control_deconstructor import (
     ProtocolControlAgentWireObligationDnf,
     ProtocolControlAgentWireObligationGroup,
     protocol_control_agent_response_format,
+)
+from app.agents.protocol_control_discovery_transport import (
+    protocol_control_discovery_transport_from_model_config,
 )
 from app.agents.protocol_deconstructor import protocol_output_response_format
 from app.domain.contracts.enums import PhaseScope, ReviewStage, StudyPhase
@@ -540,6 +544,38 @@ def test_factory_preserves_frozen_model_identity_without_substitution() -> None:
     assert kwargs["response_format"]["json_schema"]["name"] == (
         CONTROL_RESPONSE_FORMAT_NAME
     )
+
+
+def test_alternate_provider_does_not_inherit_active_role_endpoint_or_key(
+    monkeypatch,
+) -> None:
+    _FakeOpenAI.calls.clear()
+    monkeypatch.setenv("PROTOCOL_CONTROL_BASE_URL", "https://active.example/v1")
+    monkeypatch.setenv("PROTOCOL_CONTROL_API_KEY", "active-only-key")
+    monkeypatch.setenv("PROTOCOL_CONTROL_DISCOVERY_BASE_URL", "https://active.example/v1")
+    monkeypatch.setenv("PROTOCOL_CONTROL_DISCOVERY_API_KEY", "active-only-key")
+    monkeypatch.setenv("CMS_ROUTER_BASE_URL", "http://127.0.0.1:20128/v1")
+    monkeypatch.setenv("CMS_ROUTER_API_KEY", "cms-only-key")
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_BACKEND", "opencode-go")
+    monkeypatch.setattr(discovery_module, "PROTOCOL_CONTROL_DISCOVERY_BACKEND", "opencode-go")
+    monkeypatch.setattr(discovery_module, "OpenAI", _FakeOpenAI)
+    frozen = {
+        "provider": "cms-router",
+        "model": "glm-5.3-flash",
+        "reasoning_effort": "high",
+        "parameters": {"max_tokens": 65536},
+    }
+
+    deep = protocol_control_transport_from_model_config(
+        frozen,
+        _client_factory=_FakeOpenAI,
+    )
+    discovery = protocol_control_discovery_transport_from_model_config(frozen)
+
+    assert deep.base_url == discovery.base_url == "http://127.0.0.1:20128/v1"
+    assert [call["api_key"] for call in _FakeOpenAI.calls] == [
+        "cms-only-key", "cms-only-key"
+    ]
 
 
 def test_same_session_history_and_restore_continue_keep_one_session_id() -> None:

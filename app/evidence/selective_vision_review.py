@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-SELECTIVE_VISION_PLAN_VERSION = "selective_vision_review/v1"
+SELECTIVE_VISION_PLAN_VERSION = "selective_vision_review/v2"
 NATIVE_TEXT_SUFFICIENT_CHARS = 8
 
 VisionRiskReason = Literal[
@@ -257,12 +257,10 @@ def infer_complex_layout_not_represented(
     layout_block_count: int | None = None,
 ) -> bool:
     """从结构元数据推断“复杂版面未被原生文本代表”（内容中立）。"""
-    sufficient = (
-        has_native_text and native_text_char_count >= NATIVE_TEXT_SUFFICIENT_CHARS
-    )
-    if has_ruled_table and not sufficient:
+    # A few extracted characters do not prove that table cells were captured.
+    if has_ruled_table:
         return True
-    if layout_block_count is not None and layout_block_count >= 8 and not sufficient:
+    if layout_block_count is not None and layout_block_count >= 8 and not has_native_text:
         return True
     return False
 
@@ -325,12 +323,16 @@ def assess_page_vision_eligibility(
     sufficient_primary_text = sufficient_native or sufficient_ocr
     marks = signals.non_text_mark_count
 
-    if media in _IMAGE_MEDIA_KINDS and not sufficient_primary_text:
+    if media in _IMAGE_MEDIA_KINDS and (
+        not sufficient_primary_text or signals.ocr_confidence is None
+    ):
         reasons.append(VISION_REASON_SCAN_OR_IMAGE_ONLY)
-    elif route == ExtractionRoute.VISION_OCR.value and not sufficient_primary_text:
+    elif route == ExtractionRoute.VISION_OCR.value and (
+        not sufficient_primary_text or signals.ocr_confidence is None
+    ):
         reasons.append(VISION_REASON_SCAN_OR_IMAGE_ONLY)
-    elif not sufficient_primary_text and marks is not None and marks > 0:
-        reasons.append(VISION_REASON_SCAN_OR_IMAGE_ONLY)
+    elif marks is not None and marks > 0:
+        reasons.append(VISION_REASON_COMPLEX_VISUAL_OR_TABLE)
 
     if signals.complex_layout_not_represented_by_native_text:
         reasons.append(VISION_REASON_COMPLEX_VISUAL_OR_TABLE)

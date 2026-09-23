@@ -1,6 +1,8 @@
 """Public start-contract checks for protocol-control execution."""
 from __future__ import annotations
 
+import hashlib
+
 from tests.v2.services.test_protocol_control_execution import _seed_frozen_source
 
 
@@ -17,6 +19,10 @@ def test_start_is_idempotent_and_hides_engineering_parameters(client):
         "source_job_id": seed.source_job_id,
         "idempotency_key": "api-control-idempotency",
     }
+    # This API test checks creation and idempotency, not live model availability.
+    client.app.state.protocol_control_job_service.route_identity_factory = (
+        lambda stage: hashlib.sha256(stage.encode("utf-8")).hexdigest()
+    )
 
     first = client.post(_ENDPOINT, json=body)
     assert first.status_code == 201

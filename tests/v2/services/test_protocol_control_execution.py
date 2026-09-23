@@ -39,7 +39,7 @@ from app.services.protocol_control_execution import (
 )
 from app.services.protocol_workbench_service import PROTOCOL_DECONSTRUCTION_JOB_TYPE
 from app.storage.codecs import verify_payload_sha256
-from app.workflow.errors import ProcessDeath
+from app.workflow.errors import ProcessDeath, StepFailure
 from app.workflow.jobstore import JobStore
 from app.workflow.recovery import recover_expired_jobs
 from app.workflow.runner import JobRunner, StepContext
@@ -223,6 +223,31 @@ def _build_runner(data_paths, session_factory, discovery, deep):
         now=_now,
         sleep=lambda _seconds: None,
     ), executor
+
+
+def test_previous_discovery_contract_cannot_replay_under_new_prompt(
+    data_paths, session_factory
+) -> None:
+    executor = create_protocol_control_executor(
+        ProtocolControlExecutorConfig(
+            data_paths=data_paths,
+            session_factory=session_factory,
+            now=_now,
+        )
+    )
+    context = StepContext(
+        job_id="previous-version",
+        job_type=PROTOCOL_CONTROL_EXECUTION_JOB_TYPE,
+        job_payload={"execution_version": "phase5/protocol-control-execution/v14"},
+        step_id="discovery_0001",
+        name="发现批次 0001",
+        attempt=1,
+        last_checkpoint_id="old-checkpoint",
+        last_checkpoint={"stage": "discovery"},
+    )
+    with pytest.raises(StepFailure) as failure:
+        executor(context)
+    assert failure.value.error_code == "PROTOCOL_CONTROL_EXECUTION_VERSION_MISMATCH"
 
 
 def _prompt_payload(prompt: str, marker: str) -> dict[str, Any]:
@@ -543,6 +568,76 @@ def test_service_reuses_frozen_snapshot_and_builds_candidate_package(
     starts_before = (discovery.start_calls, deep.start_calls)
     assert executor(replay_context) == gate
     assert (discovery.start_calls, deep.start_calls) == starts_before
+
+
+def test_frozen_model_route_rejects_changed_discovery_before_call(
+    data_paths, session_factory
+) -> None:
+    seed = _seed_frozen_source(data_paths, session_factory, key="frozen-route-changed")
+    discovery = _DiscoveryTransport()
+    deep = _DeepTransport(seed.source_span_excerpts)
+    discovery.model = "original-model"
+    service = _build_service(
+        data_paths,
+        session_factory,
+        seed,
+        route_identity_factory=lambda stage: protocol_control_execution_module._transport_identity_digest(
+            discovery if stage == "discovery" else deep, stage=stage
+        ),
+    )
+    result = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id,
+        idempotency_key="frozen-route-changed-control",
+    )
+    _, payload = _job_snapshot_and_payload(session_factory, result.job_id)
+    assert set(payload["frozen_model_routes"]) == {"discovery", "deep"}
+    assert all(len(value) == 64 for value in payload["frozen_model_routes"].values())
+
+    discovery.model = "different-model"
+    runner, _ = _build_runner(data_paths, session_factory, discovery, deep)
+    assert runner.run_job(result.job_id)
+    snapshot, _ = _job_snapshot_and_payload(session_factory, result.job_id)
+    failed = next(step for step in snapshot.steps if step.state == "failed_final")
+    assert failed.error_code == "PROTOCOL_CONTROL_ROUTE_CHANGED"
+    assert discovery.start_calls == 0
+    assert deep.start_calls == 0
+
+
+def test_frozen_model_route_rejects_changed_deep_after_discovery(
+    data_paths, session_factory
+) -> None:
+    seed = _seed_frozen_source(data_paths, session_factory, key="frozen-deep-changed")
+    deep = _DeepTransport(seed.source_span_excerpts)
+    deep.model = "original-deep-model"
+
+    class DiscoveryThenSwitch(_DiscoveryTransport):
+        def start(self, *, prompt: str) -> ProtocolControlDiscoveryAgentResponse:
+            response = super().start(prompt=prompt)
+            deep.model = "different-deep-model"
+            return response
+
+    discovery = DiscoveryThenSwitch()
+    service = _build_service(
+        data_paths,
+        session_factory,
+        seed,
+        route_identity_factory=lambda stage: protocol_control_execution_module._transport_identity_digest(
+            discovery if stage == "discovery" else deep, stage=stage
+        ),
+        max_deep_units_per_batch=256,
+    )
+    result = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id,
+        idempotency_key="frozen-deep-changed-control",
+    )
+    runner, _ = _build_runner(data_paths, session_factory, discovery, deep)
+    assert runner.run_job(result.job_id)
+    snapshot, _ = _job_snapshot_and_payload(session_factory, result.job_id)
+    failed = next(step for step in snapshot.steps if step.state == "failed_final")
+    assert failed.step_id.startswith("deep_")
+    assert failed.error_code == "PROTOCOL_CONTROL_ROUTE_CHANGED"
+    assert discovery.start_calls >= 1
+    assert deep.start_calls == 0
 
 
 def test_deep_publication_gate_repairs_in_the_originating_session(

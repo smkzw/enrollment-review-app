@@ -5,6 +5,7 @@ export interface ControlAtomView {
   excerpts: string[];
   professionalJudgment: boolean;
   qualifiers: string[];
+  continuing: { statement: string; period: string; excerpts: string[] } | null;
 }
 
 export interface ControlGroupView {
@@ -190,7 +191,18 @@ export function normalizeProtocolControlRequirements(raw: unknown): ProtocolCont
               treatment_period: "治疗期间", study_period: "研究期间",
             }, object(atom.prospective_period).period));
           }
-          return { statement: string(atom.statement), excerpts, qualifiers, professionalJudgment: atom.requires_professional_judgment };
+          let continuing: ControlAtomView["continuing"] = null;
+          if (layer === "obligation" && atom.continuing_obligation != null) {
+            const future = object(atom.continuing_obligation);
+            if (future.status !== "not_due_at_review_node") invalid();
+            continuing = {
+              statement: string(future.statement),
+              period: label({ treatment_period: "治疗期间", study_period: "研究期间" }, object(future.prospective_period).period),
+              excerpts: strings(future.source_excerpts),
+            };
+            if (!continuing.excerpts.length) invalid();
+          }
+          return { statement: string(atom.statement), excerpts, qualifiers, continuing, professionalJudgment: atom.requires_professional_judgment };
         });
         if (!atoms.length) invalid();
         return {

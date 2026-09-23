@@ -720,8 +720,10 @@ def _selective_vision_task_dto(
     """把服务投影翻译为用户可读中文；不暴露模型/日志/工程字段。"""
     can_retry = bool(
         view.found
-        and view.state in _VISION_TASK_RETRYABLE_STATES
-        and view.plan_supported
+        and (
+            (view.plan_supported and view.state in _VISION_TASK_RETRYABLE_STATES)
+            or (not view.plan_supported and view.state in TERMINAL_JOB_STATES)
+        )
     )
     can_cancel = bool(
         view.found
@@ -742,7 +744,11 @@ def _selective_vision_task_dto(
         cancel_requested=bool(view.cancel_requested),
         progress_completed=max(int(view.progress_completed), 0),
         progress_total=max(int(view.progress_total), 0),
-        recovery_action=selective_vision_recovery_action(view.state),
+        recovery_action=(
+            "核验方式已更新；可重新开始本次资料核对，原有记录会保留。"
+            if not view.plan_supported and view.found
+            else selective_vision_recovery_action(view.state)
+        ),
         can_retry=can_retry,
         can_cancel=can_cancel,
         eligible_page_count=view.eligible_page_count,

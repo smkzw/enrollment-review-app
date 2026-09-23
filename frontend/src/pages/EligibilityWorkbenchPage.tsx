@@ -9,6 +9,7 @@ import {
 import {
   getEligibilityReviewRepository,
   type EligibilityClauseView,
+  type EligibilityControlView,
   type EligibilityDecision,
   type EligibilityReviewView,
 } from "../api/eligibility-review";
@@ -32,6 +33,35 @@ type EligibilityListMode = "pending" | "all";
 
 const CLAUSE_PAGE_SIZES = [25, 50, 100] as const;
 
+type EligibilityWorkItem = EligibilityClauseView & { controlId?: string; continuingNote?: string | null };
+
+function controlWorkItems(controls: ReadonlyArray<EligibilityControlView>): EligibilityWorkItem[] {
+  return controls.flatMap((control) => control.obligations.map((obligation) => ({
+    controlId: control.protocolControlId,
+    ruleComponentId: `control:${control.protocolControlId}:${obligation.obligationId}`,
+    ruleCode: control.displayLabel,
+    ruleKind: "required_procedure" as const,
+    textSummary: control.title,
+    sourceText: obligation.statement,
+    parentRuleCode: null,
+    decision: ({
+      fulfilled: "requirement_met",
+      unfulfilled: "requirement_not_met",
+      unverified: "indeterminate",
+      not_applicable: "not_applicable",
+    } as const)[obligation.status],
+    decisionLabel: obligation.statusLabel,
+    reason: obligation.reason,
+    continuingNote: obligation.continuingNote,
+    factRefs: obligation.factRefs,
+    gapType: null,
+    determinationMode: "semantic" as const,
+    actionOwner: null,
+    actionDetail: null,
+    actionEvidence: null,
+  })));
+}
+
 const DECISION_FILTERS: ReadonlyArray<{
   id: EligibilityDecisionFilter;
   label: string;
@@ -53,6 +83,10 @@ function clauseKindLabel(kind: EligibilityClauseView["ruleKind"]): string {
     case "required_procedure":
       return "流程要求";
   }
+}
+
+function workItemKindLabel(item: EligibilityWorkItem): string {
+  return item.controlId ? "方案补充要求" : clauseKindLabel(item.ruleKind);
 }
 
 export function isUndeterminedDecision(decision: EligibilityDecision): boolean {
@@ -215,7 +249,7 @@ function EligibilitySelection({
 }
 
 interface EligibilityClauseListProps {
-  clauses: ReadonlyArray<EligibilityClauseView>;
+  clauses: ReadonlyArray<EligibilityWorkItem>;
   selectedComponentId: string | null;
   onSelect: (componentId: string) => void;
 }
@@ -226,17 +260,19 @@ function EligibilityClauseList({
   onSelect,
 }: EligibilityClauseListProps) {
   const groups: ReadonlyArray<{
-    kind: EligibilityClauseView["ruleKind"];
+    kind: string;
     title: string;
   }> = [
     { kind: "inclusion", title: "入选标准" },
     { kind: "exclusion", title: "排除标准" },
     { kind: "required_procedure", title: "流程要求" },
+    { kind: "control", title: "方案补充要求" },
   ];
   return (
     <div className="eligibility-clause-list">
       {groups.map((group) => {
-        const groupClauses = clauses.filter((clause) => clause.ruleKind === group.kind);
+        const groupClauses = clauses.filter((clause) =>
+          (clause.controlId ? "control" : clause.ruleKind) === group.kind);
         if (groupClauses.length === 0) return null;
         return (
           <section key={group.kind} className="eligibility-clause-group" aria-labelledby={`eligibility-group-${group.kind}`}>
@@ -466,7 +502,7 @@ function EligibilityIssueQueue({
 }
 
 interface EligibilityClauseDetailProps {
-  clause: EligibilityClauseView;
+  clause: EligibilityWorkItem;
   selectedFactIndex: number;
   onSelectFact: (index: number) => void;
 }
@@ -491,6 +527,10 @@ function EligibilityClauseDetail({
           <strong>判定依据</strong>
           <span>{clause.reason}</span>
         </li>
+        {clause.continuingNote && <li className="eligibility-detail-bullet">
+          <strong>后续持续要求</strong>
+          <span>{clause.continuingNote}</span>
+        </li>}
         {clause.actionOwner !== null && clause.actionDetail !== null && (
           <li className="eligibility-detail-bullet">
             <strong>建议动作 · {actionTargetLabel[clause.actionOwner]}</strong>
@@ -500,7 +540,7 @@ function EligibilityClauseDetail({
             )}
           </li>
         )}
-        {!clause.sourceText && (
+        {(!clause.sourceText || clause.controlId) && (
           <li className="eligibility-detail-bullet">
             <strong>审核要点</strong>
             <span>{clause.textSummary}</span>
@@ -539,9 +579,9 @@ function EligibilityClauseDetail({
           </ul>
         )}
       </section>
-      <p className="eligibility-clause-detail__mode">
+      {!clause.controlId && <p className="eligibility-clause-detail__mode">
         {determinationModeLabel(clause.determinationMode)}
-      </p>
+      </p>}
     </div>
   );
 }
@@ -559,7 +599,7 @@ function determinationModeLabel(mode: EligibilityClauseView["determinationMode"]
 
 interface EligibilityEvidencePanelProps {
   review: EligibilityReviewView;
-  clause: EligibilityClauseView;
+  clause: EligibilityWorkItem;
   selectedFactIndex: number;
   onSelectFact: (index: number) => void;
 }
@@ -641,7 +681,7 @@ function EligibilityEvidencePanel({
       <header className="workbench-pane__head">
         <div>
           <h2 className="workbench-pane__title">原件</h2>
-          <p className="workbench-pane__subtitle">{clause.ruleCode} · {clauseKindLabel(clause.ruleKind)}</p>
+          <p className="workbench-pane__subtitle">{clause.ruleCode} · {workItemKindLabel(clause)}</p>
         </div>
       </header>
       {selectedPage !== null && (
@@ -747,6 +787,9 @@ export function EligibilityWorkbenchPage() {
   const clausePageSize = CLAUSE_PAGE_SIZES.includes(pageSizeParam as typeof CLAUSE_PAGE_SIZES[number])
     ? pageSizeParam
     : 50;
+  const requestedPageValue = Number(params.get("page"));
+  const requestedPage = Number.isSafeInteger(requestedPageValue) && requestedPageValue >= 0
+    ? requestedPageValue : 0;
   const [selectedFactIndex, setSelectedFactIndex] = useState(0);
 
   const projects = useLoad((signal) => getCatalogRepository().listProjects(signal), []);
@@ -844,43 +887,58 @@ export function EligibilityWorkbenchPage() {
   }
 
   const reviewData = review.state.data;
-  const allClauses = reviewData.clauses;
-  const filteredClauses = [...allClauses]
-    .filter((clause) => listMode === "pending"
-      ? clauseIsIssue(clause)
-      : decisionMatchesFilter(clause.decision, filter))
-    .sort(compareEligibilityClauses);
-  const visibleClauses = filteredClauses.slice(0, clausePageSize);
-  // 显式深链优先；没有深链时，从当前可见列表按稳定优先序选择。
-  const defaultClause = visibleClauses[0] ?? allClauses[0];
-  const selectedClause =
-    (componentParam === null
-      ? defaultClause
-      : allClauses.find((clause) => clause.ruleComponentId === componentParam));
-  if (componentParam !== null && selectedClause === undefined) {
+  const allClauses: EligibilityWorkItem[] = [
+    ...reviewData.clauses, ...controlWorkItems(reviewData.controls),
+  ];
+  const requestedClause = componentParam === null
+    ? null : allClauses.find((clause) => clause.ruleComponentId === componentParam);
+  if (componentParam !== null && requestedClause === undefined) {
     return <ErrorState message="链接中的审核要点不存在，请重新选择。" onRetry={() => updateParams({ component: null })} />;
   }
-  if (selectedClause === undefined) {
-    return <EmptyState message="当前审核节点没有可展示的条款。" />;
-  }
+  const matches = (clause: EligibilityWorkItem, mode: EligibilityListMode, decisionFilter: EligibilityDecisionFilter) =>
+    mode === "pending" ? clauseIsIssue(clause) : decisionMatchesFilter(clause.decision, decisionFilter);
+  const showAllForDeepLink = requestedClause !== null && requestedClause !== undefined
+    && !matches(requestedClause, listMode, filter);
+  const activeMode = showAllForDeepLink ? "all" : listMode;
+  const activeFilter = showAllForDeepLink ? "all" : filter;
+  const filteredClauses = [...allClauses]
+    .filter((clause) => activeMode === "pending"
+      ? clauseIsIssue(clause)
+      : decisionMatchesFilter(clause.decision, activeFilter))
+    .sort(compareEligibilityClauses);
+  const pageCount = Math.max(1, Math.ceil(filteredClauses.length / clausePageSize));
+  const deepLinkIndex = requestedClause === null || requestedClause === undefined
+    ? -1 : filteredClauses.findIndex((item) => item.ruleComponentId === requestedClause.ruleComponentId);
+  const currentPage = deepLinkIndex >= 0
+    ? Math.floor(deepLinkIndex / clausePageSize)
+    : Math.min(requestedPage, pageCount - 1);
+  const visibleClauses = filteredClauses.slice(
+    currentPage * clausePageSize, (currentPage + 1) * clausePageSize,
+  );
+  const selectedClause = requestedClause ?? visibleClauses[0];
   const undeterminedCount = allClauses.filter((clause) => isUndeterminedDecision(clause.decision)).length;
   const subjectLabel = `${selectedSubject.subjectCode} · ${centerLabel(selectedSubject)}`;
   const unassignedConflictCount = reviewData.unassignedConflicts?.length ?? 0;
   const selectClause = (componentId: string) => updateParams({ component: componentId });
   const setListMode = (mode: EligibilityListMode) => {
     const candidates = [...allClauses]
-      .filter((clause) => mode === "pending" ? clauseIsIssue(clause) : true)
+      .filter((clause) => matches(clause, mode, filter))
       .sort(compareEligibilityClauses);
-    updateParams({ view: mode, filter: mode === "pending" ? null : filter,
+    updateParams({ view: mode, filter: mode === "pending" ? null : filter, page: null,
       component: candidates[0]?.ruleComponentId ?? null });
   };
   const setDecisionFilter = (nextFilter: EligibilityDecisionFilter) => {
     const candidates = [...allClauses]
       .filter((clause) => decisionMatchesFilter(clause.decision, nextFilter))
       .sort(compareEligibilityClauses);
-    updateParams({ view: "all", filter: nextFilter === "all" ? null : nextFilter,
+    updateParams({ view: "all", filter: nextFilter === "all" ? null : nextFilter, page: null,
       component: candidates[0]?.ruleComponentId ?? null });
   };
+
+  const selectPage = (page: number) => updateParams({
+    page: page === 0 ? null : String(page),
+    component: filteredClauses[page * clausePageSize]?.ruleComponentId ?? null,
+  });
 
   return (
     <div className="eligibility-workbench workbench">
@@ -905,9 +963,9 @@ export function EligibilityWorkbenchPage() {
         <span
           className="eligibility-undetermined"
           role="status"
-          aria-label={`无法判定 ${undeterminedCount} 条`}
+          aria-label={`无法判定 ${undeterminedCount} 项`}
         >
-          无法判定 {undeterminedCount} 条
+          无法判定 {undeterminedCount} 项
         </span>
         <RouteLink
           to="/subjects"
@@ -937,29 +995,29 @@ export function EligibilityWorkbenchPage() {
         </section>
       )}
       <div className="workbench-panes">
-        <aside className="workbench-col eligibility-workbench__clauses" aria-label="条款列表">
+        <aside className="workbench-col eligibility-workbench__clauses" aria-label="审核要点列表">
           <div className="workbench-pane">
             <header className="workbench-pane__head">
               <div>
                 <h2 className="workbench-pane__title">
-                  {listMode === "pending" ? "待处理条款" : "全部条款"}
+                  {activeMode === "pending" ? "待处理要点" : "全部审核要点"}
                 </h2>
                 <p className="workbench-pane__subtitle">
-                  {listMode === "pending" ? "按问题类型汇总，逐条核对" : `共 ${filteredClauses.length} 条`}
+                  {activeMode === "pending" ? "按问题类型汇总，逐项核对" : `共 ${filteredClauses.length} 项`}
                 </p>
               </div>
             </header>
             <div className="eligibility-list-mode" role="group" aria-label="选择条款范围">
-              <button type="button" aria-pressed={listMode === "pending"}
+              <button type="button" aria-pressed={activeMode === "pending"}
                 onClick={() => setListMode("pending")}>待处理</button>
-              <button type="button" aria-pressed={listMode === "all"}
+              <button type="button" aria-pressed={activeMode === "all"}
                 onClick={() => setListMode("all")}>全部条款</button>
             </div>
             <div className="eligibility-clause-list__toolbar">
-              {listMode === "all" && (
+              {activeMode === "all" && (
                 <label>
                   <span>按判定筛选</span>
-                  <select aria-label="按判定筛选" value={filter}
+                  <select aria-label="按判定筛选" value={activeFilter}
                     onChange={(event) => setDecisionFilter(event.target.value as EligibilityDecisionFilter)}>
                     {DECISION_FILTERS.map((item) => (
                       <option key={item.id} value={item.id}>{item.label}</option>
@@ -970,50 +1028,52 @@ export function EligibilityWorkbenchPage() {
               <label>
                 <span>单次显示</span>
                 <select aria-label="单次显示条款数" value={clausePageSize}
-                  onChange={(event) => updateParams({ limit: event.target.value === "50" ? null : event.target.value })}>
+                  onChange={(event) => updateParams({ limit: event.target.value === "50" ? null : event.target.value, page: null, component: null })}>
                   {CLAUSE_PAGE_SIZES.map((size) => <option key={size} value={size}>{size} 条</option>)}
                 </select>
               </label>
             </div>
-            {listMode === "pending" ? (
+            {activeMode === "pending" ? (
               <EligibilityIssueQueue clauses={visibleClauses}
-                selectedComponentId={selectedClause.ruleComponentId} onSelect={selectClause} />
+                selectedComponentId={selectedClause?.ruleComponentId ?? null} onSelect={selectClause} />
             ) : (
               <EligibilityClauseList clauses={visibleClauses}
-                selectedComponentId={selectedClause.ruleComponentId} onSelect={selectClause} />
+                selectedComponentId={selectedClause?.ruleComponentId ?? null} onSelect={selectClause} />
             )}
-            {filteredClauses.length > visibleClauses.length && (
-              <p className="eligibility-clause-list__empty">
-                当前显示前 {visibleClauses.length} 条，可在上方增加显示数量。
-              </p>
+            {pageCount > 1 && (
+              <nav className="eligibility-clause-list__pagination" aria-label="审核要点分页">
+                <button type="button" disabled={currentPage === 0} onClick={() => selectPage(currentPage - 1)}>上一页</button>
+                <span>第 {currentPage + 1} / {pageCount} 页</span>
+                <button type="button" disabled={currentPage >= pageCount - 1} onClick={() => selectPage(currentPage + 1)}>下一页</button>
+              </nav>
             )}
           </div>
         </aside>
-        <section className="workbench-col eligibility-workbench__detail" aria-label="条款详情">
+        <section className="workbench-col eligibility-workbench__detail" aria-label="审核要点详情">
           <div className="workbench-pane">
             <header className="workbench-pane__head">
               <div>
                 <h2 className="workbench-pane__title">
-                  <span className="workbench-pane__code">{selectedClause.ruleCode}</span>
-                  <span>{clauseKindLabel(selectedClause.ruleKind)}</span>
+                  <span className="workbench-pane__code">{selectedClause?.ruleCode ?? "审核要点"}</span>
+                  <span>{selectedClause ? workItemKindLabel(selectedClause) : ""}</span>
                 </h2>
-                <p className="workbench-pane__subtitle">条款详情</p>
+                <p className="workbench-pane__subtitle">审核要点详情</p>
               </div>
             </header>
-            <EligibilityClauseDetail
+            {selectedClause ? <EligibilityClauseDetail
               clause={selectedClause}
               selectedFactIndex={selectedFactIndex}
               onSelectFact={setSelectedFactIndex}
-            />
+            /> : <p className="eligibility-muted">当前筛选没有符合条件的审核要点。</p>}
           </div>
         </section>
         <section className="workbench-col eligibility-workbench__evidence">
-          <EligibilityEvidencePanel
+          {selectedClause && <EligibilityEvidencePanel
             review={reviewData}
             clause={selectedClause}
             selectedFactIndex={selectedFactIndex}
             onSelectFact={setSelectedFactIndex}
-          />
+          />}
         </section>
       </div>
       <footer className="eligibility-workbench__footnote">

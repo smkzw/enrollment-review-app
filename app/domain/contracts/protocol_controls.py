@@ -57,6 +57,7 @@ __all__ = [
     "ControlMinimumEvidenceDraft",
     "ControlObligationAtom",
     "ControlObligationAtomDraft",
+    "ControlContinuingObligation",
     "ControlObligationKind",
     "ControlObligationModality",
     "ControlTemporalScopeKind",
@@ -850,6 +851,39 @@ class ProtocolControlCandidateDisposition(Phase5ControlModel):
         return self
 
 
+class ControlContinuingObligation(Phase5ControlModel):
+    """Source-bound prohibition that is not yet due at an eligibility node."""
+
+    statement: str = Field(min_length=1)
+    prospective_period: ProspectivePeriod
+    source_span_ids: list[str] = Field(min_length=1)
+    source_excerpts: list[str] = Field(min_length=1)
+    status: Literal["not_due_at_review_node"] = "not_due_at_review_node"
+
+    @model_validator(mode="after")
+    def validate_sources(self) -> "ControlContinuingObligation":
+        _validate_atom_sources(
+            self.source_span_ids, self.source_excerpts, strict=True, label="后续持续义务"
+        )
+        return self
+
+
+def _validate_continuing_obligation(atom: object) -> None:
+    continuation = getattr(atom, "continuing_obligation", None)
+    if continuation is None:
+        return
+    if getattr(atom, "kind") not in {
+        ControlObligationKind.PROHIBIT_EVENT,
+        ControlObligationKind.PROHIBIT_MEDICATION_OR_TREATMENT_EXPOSURE,
+    }:
+        raise ValueError("后续持续义务只适用于禁止类原子")
+    if getattr(atom, "prospective_period") is not None:
+        raise ValueError("当前节点义务不得同时承担后续持续期间")
+    sources = set(zip(getattr(atom, "source_span_ids"), getattr(atom, "source_excerpts")))
+    if not set(zip(continuation.source_span_ids, continuation.source_excerpts)) <= sources:
+        raise ValueError("后续持续义务必须引用同一原子的直接来源")
+
+
 class ControlObligationAtom(Phase5ControlModel):
     """正式控制的单个类型化义务原子。"""
 
@@ -861,11 +895,14 @@ class ControlObligationAtom(Phase5ControlModel):
         value = handler(self)
         if self.evaluation is None:
             value.pop("evaluation", None)
+        if self.continuing_obligation is None:
+            value.pop("continuing_obligation", None)
         return value
     kind: ControlObligationKind
     statement: str = Field(min_length=1)
     time_constraint: TimeConstraint | None = None
     prospective_period: ProspectivePeriod | None = None
+    continuing_obligation: ControlContinuingObligation | None = None
     modality: ControlObligationModality = ControlObligationModality.MANDATORY
     temporal_scope: ControlTemporalScopeKind | None = None
     # 旧的 5.8a 构造器允许先创建没有来源的占位义务；严格的 5.8b
@@ -891,6 +928,7 @@ class ControlObligationAtom(Phase5ControlModel):
             strict=False,
             label="义务原子",
         )
+        _validate_continuing_obligation(self)
         return self
 
 
@@ -953,10 +991,13 @@ class ControlObligationAtomDraft(Phase5ControlModel):
         value = handler(self)
         if self.evaluation is None:
             value.pop("evaluation", None)
+        if self.continuing_obligation is None:
+            value.pop("continuing_obligation", None)
         return value
     statement: str = Field(min_length=1)
     time_constraint: TimeConstraint | None = None
     prospective_period: ProspectivePeriod | None = None
+    continuing_obligation: ControlContinuingObligation | None = None
     modality: ControlObligationModality = ControlObligationModality.MANDATORY
     temporal_scope: ControlTemporalScopeKind | None = None
     source_span_ids: list[str] = Field(min_length=1)
@@ -978,6 +1019,7 @@ class ControlObligationAtomDraft(Phase5ControlModel):
             strict=True,
             label="义务原子草稿",
         )
+        _validate_continuing_obligation(self)
         return self
 
 
@@ -3076,6 +3118,7 @@ def hydrate_protocol_control_candidate_semantics(
                 statement=atom.statement,
                 time_constraint=atom.time_constraint,
                 prospective_period=atom.prospective_period,
+                continuing_obligation=atom.continuing_obligation,
                 modality=atom.modality,
                 temporal_scope=atom.temporal_scope,
                 source_span_ids=list(atom.source_span_ids),

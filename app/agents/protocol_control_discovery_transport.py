@@ -361,6 +361,16 @@ def protocol_control_discovery_transport_from_model_config(
     values.update(
         {key: value for key, value in overrides.items() if value is not None}
     )
+    normalized_provider = selected_provider.strip().lower()
+    if (
+        normalized_provider in REMOTE_OPENAI_PROVIDERS
+        and normalized_provider != PROTOCOL_CONTROL_DISCOVERY_BACKEND
+    ):
+        values["base_url"], values["api_key"] = resolve_openai_connection(
+            normalized_provider,
+            base_url=values.get("base_url"),
+            api_key=values.get("api_key"),
+        )
     return OpenAICompatibleProtocolControlDiscoveryAgentTransport(
         **{key: value for key, value in values.items() if value is not None}
     )

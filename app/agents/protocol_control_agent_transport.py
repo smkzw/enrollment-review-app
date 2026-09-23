@@ -19,8 +19,10 @@ length finish may raise the shared reasoning+content budget once, capped at
 
 Before the first semantic request the transport positively matches the
 configured model against the model ids the service actually reports via
-``/v1/models`` (the same identity anchor the startup scripts use).  Missing,
-ambiguous, or mismatched identity fails closed with a Chinese diagnostic; a
+``/v1/models``. A CMS gateway that hides its catalog from a scoped key may
+instead prove its identity with one non-clinical, minimal chat response whose
+reported model must match exactly. Missing, ambiguous, or mismatched identity
+still fails closed with a Chinese diagnostic; a
 verified identity is cached per transport and can be re-checked with
 :meth:`OpenAICompatibleProtocolControlAgentTransport.verify_model_identity`.
 A ``model`` field inside an OpenAI request is never treated as proof that the
@@ -581,6 +583,10 @@ class OpenAICompatibleProtocolControlAgentTransport:
         return self._model_identity_verified
 
     @property
+    def model_identity_policy(self) -> str:
+        return "list_then_chat_on_empty" if self._backend == "cms-router" else "list_only"
+
+    @property
     def response_format_sha256(self) -> str:
         payload = json.dumps(
             self._response_format,
@@ -646,6 +652,18 @@ class OpenAICompatibleProtocolControlAgentTransport:
                 item_id = getattr(item, "id", None)
             if isinstance(item_id, str) and item_id.strip():
                 ids.append(item_id.strip())
+        if not ids and self._backend == "cms-router":
+            # Scoped gateway keys can serve a model while exposing an empty
+            # catalog. This probe contains no protocol or subject material.
+            response = self._client.chat.completions.create(
+                model=self._model,
+                messages=[{"role": "user", "content": "只回答：好"}],
+                max_tokens=32,
+                stream=False,
+            )
+            reported = getattr(response, "model", None)
+            if isinstance(reported, str) and reported.strip():
+                ids.append(reported.strip())
         return ids
 
     def verify_model_identity(self, *, force: bool = False) -> str:
@@ -1022,6 +1040,18 @@ def protocol_control_transport_from_model_config(
     values.update(
         {key: value for key, value in overrides.items() if value is not None}
     )
+    normalized_provider = selected_provider.strip().lower()
+    if (
+        normalized_provider in REMOTE_OPENAI_PROVIDERS
+        and normalized_provider != PROTOCOL_CONTROL_BACKEND
+    ):
+        # A frozen alternate provider must not inherit the active role's
+        # endpoint or credential, even when that role has explicit overrides.
+        values["base_url"], values["api_key"] = resolve_openai_connection(
+            normalized_provider,
+            base_url=values.get("base_url"),
+            api_key=values.get("api_key"),
+        )
     return OpenAICompatibleProtocolControlAgentTransport(
         **{key: value for key, value in values.items() if value is not None}
     )

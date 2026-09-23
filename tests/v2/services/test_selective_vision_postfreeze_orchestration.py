@@ -549,7 +549,7 @@ def test_job_executor_remote_failure_closes_without_mutating_ocr(
 
     with session_factory() as session:
         store = JobStore(session, now=utc_now)
-        assert store.snapshot(created.job_id).state == "completed"
+        assert store.snapshot(created.job_id).state == "failed_final"
         listed = SelectiveVisionObservationRepository(session).list_by_page_artifact(
             seeded["page_artifact_id"]
         )
@@ -559,7 +559,66 @@ def test_job_executor_remote_failure_closes_without_mutating_ocr(
         )
         assert all(row.observation_text is None for row in listed)
         assert all(row.failure_kind == "remote_error" for row in listed)
+    assert SelectiveVisionPostprocessJobService(session_factory).retry_revision_task(
+        seeded["revision_id"]
+    ).state == "queued"
+
+    async def recovered(plan: SelectiveVisionPlan, inputs):
+        page = inputs[0]
+        return SelectiveVisionReviewOutcome(
+            plan=plan,
+            observations=(SelectiveVisionObservation(
+                source_refs=(page.source_ref,),
+                page_ordinals=(page.page_ordinal,),
+                reasons=(VISION_REASON_SCAN_OR_IMAGE_ONLY,),
+                text=f"source_ref={page.source_ref}\n核对后的原文",
+                model="mock-vlm",
+                finish_reason="stop",
+            ),),
+        )
+
+    assert _build_runner(session_factory, data_paths, review_runner=recovered).run_once()
+    with session_factory() as session:
+        assert JobStore(session, now=utc_now).snapshot(created.job_id).state == "completed"
+        assert len([
+            row for row in SelectiveVisionObservationRepository(session).list_by_page_artifact(
+                seeded["page_artifact_id"]
+            ) if row.status == SelectiveVisionObservationStatus.SUCCEEDED
+        ]) == 1
+    assert SelectiveVisionPostprocessJobService(session_factory).coverage_page_ids_match(
+        seeded["revision_id"]
+    ) is True
     _assert_ocr_immutable(session_factory, seeded)
+
+
+def test_old_plan_receipt_is_not_accepted_as_current_coverage(session_factory, data_paths):
+    seeded = _seed_frozen_revision(
+        session_factory, data_paths, revision_id="rev-svo-legacy-plan"
+    )
+    service = SelectiveVisionPostprocessJobService(session_factory)
+    service.enqueue_for_revision(seeded["revision_id"], plan_version="selective_vision_review/v1")
+    view = service.get_revision_task(seeded["revision_id"])
+    assert view.plan_supported is False
+    assert service.coverage_page_ids_match(seeded["revision_id"]) is False
+
+
+def test_empty_model_observation_cannot_complete_page_coverage(session_factory, data_paths):
+    seeded = _seed_frozen_revision(
+        session_factory, data_paths, revision_id="rev-svo-empty-model-output"
+    )
+
+    async def incomplete(plan: SelectiveVisionPlan, inputs):
+        return SelectiveVisionReviewOutcome(plan=plan, observations=())
+
+    created = enqueue_selective_vision_postprocess_for_revision(
+        session_factory, seeded["revision_id"]
+    )
+    assert _build_runner(session_factory, data_paths, review_runner=incomplete).run_once()
+    with session_factory() as session:
+        assert JobStore(session, now=utc_now).snapshot(created.job_id).state == "failed_final"
+    assert SelectiveVisionPostprocessJobService(session_factory).coverage_page_ids_match(
+        seeded["revision_id"]
+    ) is False
 
 
 def test_job_executor_success_is_idempotent_across_rerun(session_factory, data_paths):

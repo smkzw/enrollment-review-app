@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -32,6 +33,7 @@ from app.domain.contracts.selective_vision_observation import (
     sanitize_observation_usage,
 )
 from app.evidence.selective_vision_review import (
+    PageVisionEligibility,
     PageVisionTriageSignals,
     SelectiveVisionClosedError,
     SelectiveVisionObservation,
@@ -46,6 +48,7 @@ from app.storage.ocr_repositories import OcrPageRepository
 from app.storage.selective_vision_observation_repository import (
     SelectiveVisionObservationRepository,
 )
+from app.services.selective_vision_runtime import selective_vision_observation_plan_identity
 
 if TYPE_CHECKING:
     from app.llm.independent_vlm import PageVisionInput
@@ -139,10 +142,10 @@ class _PreparedSelectiveVisionBatch:
     skipped: tuple[SelectiveVisionPageSkip, ...]
     ocr_snapshots: dict[str, tuple[str, str]]
     eligible_materials: tuple[SelectiveVisionObservationPageMaterial, ...]
+    eligible_items: tuple[PageVisionEligibility, ...]
     vision_inputs: tuple[Any, ...]
     early_result: SelectiveVisionObservationBatchResult | None = None
-    pending_missing_page: SelectiveVisionObservationPageMaterial | None = None
-    pending_missing_reasons: tuple[str, ...] = ()
+    pending_missing_pages: tuple[tuple[SelectiveVisionObservationPageMaterial, tuple[str, ...]], ...] = ()
 
 
 def _utcnow() -> datetime:
@@ -207,7 +210,9 @@ class SelectiveVisionObservationService:
     ) -> None:
         self.session_factory = session_factory
         self.review_runner = review_runner or run_selective_vision_review
-        self.default_model_id = (default_model_id or INDEPENDENT_VLM_MODEL).strip()
+        self.default_model_id = (
+            default_model_id or os.getenv("INDEPENDENT_VLM_MODEL", INDEPENDENT_VLM_MODEL)
+        ).strip()
 
     async def run_postprocess(
         self,
@@ -227,7 +232,7 @@ class SelectiveVisionObservationService:
             if prepared.early_result is not None:
                 return prepared.early_result
 
-        if prepared.pending_missing_page is not None:
+        if prepared.pending_missing_pages and not prepared.eligible_materials:
             with self.session_factory() as session, session.begin():
                 return self._persist_missing_page_closed(
                     session,
@@ -241,14 +246,28 @@ class SelectiveVisionObservationService:
         reused_ids: list[str] = []
         first_closed_error: SelectiveVisionClosedError | None = None
         size = prepared.plan.max_pages_per_call
-        for start in range(0, len(prepared.plan.eligible), size):
+        for start in range(0, len(prepared.eligible_items), size):
             stop = start + size
+            with self.session_factory() as session:
+                reused = [
+                    self._existing_success(session, page, item.reason_values, prepared.plan)
+                    for page, item in zip(
+                        prepared.eligible_materials[start:stop],
+                        prepared.eligible_items[start:stop],
+                        strict=True,
+                    )
+                ]
+            observations.extend(row for row in reused if row is not None)
+            reused_ids.extend(row.observation_id for row in reused if row is not None)
+            pending_indexes = [index for index, row in enumerate(reused) if row is None]
+            if not pending_indexes:
+                continue
             chunk_plan = replace(
                 prepared.plan,
-                eligible=prepared.plan.eligible[start:stop],
+                eligible=tuple(prepared.eligible_items[start + index] for index in pending_indexes),
                 skipped=(),
             )
-            chunk_materials = prepared.eligible_materials[start:stop]
+            chunk_materials = tuple(prepared.eligible_materials[start + index] for index in pending_indexes)
             chunk = replace(
                 prepared,
                 materials=chunk_materials,
@@ -260,7 +279,8 @@ class SelectiveVisionObservationService:
                     if page.ocr_page_id in prepared.ocr_snapshots
                 },
                 eligible_materials=chunk_materials,
-                vision_inputs=prepared.vision_inputs[start:stop],
+                eligible_items=tuple(prepared.eligible_items[start + index] for index in pending_indexes),
+                vision_inputs=tuple(prepared.vision_inputs[start + index] for index in pending_indexes),
             )
             outcome = await self.review_runner(chunk_plan, list(chunk.vision_inputs))
             with self.session_factory() as session, session.begin():
@@ -276,6 +296,14 @@ class SelectiveVisionObservationService:
             reused_ids.extend(saved.reused_observation_ids)
             if first_closed_error is None and saved.closed_error is not None:
                 first_closed_error = saved.closed_error
+        if prepared.pending_missing_pages:
+            with self.session_factory() as session, session.begin():
+                missing_result = self._persist_missing_page_closed(
+                    session, prepared, persist_closed_failures=persist_closed_failures,
+                )
+            closed.extend(missing_result.closed)
+            if first_closed_error is None:
+                first_closed_error = missing_result.closed_error
         return SelectiveVisionObservationBatchResult(
             plan=prepared.plan,
             observations=tuple(observations),
@@ -285,6 +313,35 @@ class SelectiveVisionObservationService:
             created_observation_ids=tuple(created_ids),
             reused_observation_ids=tuple(reused_ids),
         )
+
+    def _existing_success(
+        self,
+        session: Session,
+        page: SelectiveVisionObservationPageMaterial,
+        reasons: Sequence[str],
+        plan: SelectiveVisionPlan,
+    ) -> SelectiveVisionObservationRecord | None:
+        expected = self._base_record_kwargs(
+            session, page=page, plan=plan, reasons=reasons,
+            model_id=self.default_model_id,
+        )
+        for row in SelectiveVisionObservationRepository(session).list_by_page_artifact(
+            page.page_artifact_id
+        ):
+            if (
+                row.status == SelectiveVisionObservationStatus.SUCCEEDED
+                and row.source_ref == page.source_ref
+                and row.page_ordinal == page.page_ordinal
+                and row.page_image_sha256 == page.page_image_sha256
+                and row.ocr_page_id == page.ocr_page_id
+                and row.ocr_raw_text_sha256 == expected["ocr_raw_text_sha256"]
+                and row.model_id == self.default_model_id
+                and row.plan_version == expected["plan_version"]
+                and row.prompt_sha256 == expected["prompt_sha256"]
+                and row.risk_reasons_sha256 == expected["risk_reasons_sha256"]
+            ):
+                return row
+        return None
 
     async def run_postprocess_in_session(
         self,
@@ -308,7 +365,7 @@ class SelectiveVisionObservationService:
         )
         if prepared.early_result is not None:
             return prepared.early_result
-        if prepared.pending_missing_page is not None:
+        if prepared.pending_missing_pages and not prepared.eligible_materials:
             return self._persist_missing_page_closed(
                 session,
                 prepared,
@@ -338,6 +395,7 @@ class SelectiveVisionObservationService:
                 skipped=(),
                 ocr_snapshots={},
                 eligible_materials=(),
+                eligible_items=(),
                 vision_inputs=(),
                 early_result=SelectiveVisionObservationBatchResult(plan=empty_plan),
             )
@@ -377,6 +435,7 @@ class SelectiveVisionObservationService:
                 skipped=skipped,
                 ocr_snapshots=ocr_snapshots,
                 eligible_materials=(),
+                eligible_items=(),
                 vision_inputs=(),
                 early_result=SelectiveVisionObservationBatchResult(
                     plan=plan, skipped=skipped
@@ -388,7 +447,9 @@ class SelectiveVisionObservationService:
             for page in materials
         }
         eligible_materials: list[SelectiveVisionObservationPageMaterial] = []
+        eligible_items: list[PageVisionEligibility] = []
         vision_inputs: list[Any] = []
+        missing_pages: list[tuple[SelectiveVisionObservationPageMaterial, tuple[str, ...]]] = []
         # 延迟加载 PageVisionInput，避免证据模块冷启动拉起 VLM 传输依赖。
         from app.llm.independent_vlm import PageVisionInput as RuntimePageVisionInput
 
@@ -396,18 +457,11 @@ class SelectiveVisionObservationService:
             page = by_key[(item.source_ref, item.page_ordinal)]
             payload = _resolve_image_bytes(page)
             if payload is None:
-                return _PreparedSelectiveVisionBatch(
-                    materials=materials,
-                    plan=plan,
-                    skipped=skipped,
-                    ocr_snapshots=ocr_snapshots,
-                    eligible_materials=(),
-                    vision_inputs=(),
-                    pending_missing_page=page,
-                    pending_missing_reasons=tuple(item.reason_values),
-                )
+                missing_pages.append((page, tuple(item.reason_values)))
+                continue
             _assert_image_hash(page, payload)
             eligible_materials.append(page)
+            eligible_items.append(item)
             vision_inputs.append(
                 RuntimePageVisionInput(
                     source_ref=page.source_ref,
@@ -423,7 +477,9 @@ class SelectiveVisionObservationService:
             skipped=skipped,
             ocr_snapshots=ocr_snapshots,
             eligible_materials=tuple(eligible_materials),
+            eligible_items=tuple(eligible_items),
             vision_inputs=tuple(vision_inputs),
+            pending_missing_pages=tuple(missing_pages),
         )
 
     def persist_postprocess_in_session(
@@ -509,16 +565,15 @@ class SelectiveVisionObservationService:
         *,
         persist_closed_failures: bool,
     ) -> SelectiveVisionObservationBatchResult:
-        page = prepared.pending_missing_page
-        if page is None:
+        if not prepared.pending_missing_pages:
             raise SelectiveVisionObservationServiceError("缺图关闭缺少页面上下文")
-        closed = self._persist_closed_for_page(
-            session,
-            page=page,
-            plan=prepared.plan,
-            reasons=prepared.pending_missing_reasons,
-            failure_kind="missing_page_inputs",
-            persist=persist_closed_failures,
+        closed = tuple(
+            row
+            for page, reasons in prepared.pending_missing_pages
+            for row in self._persist_closed_for_page(
+                session, page=page, plan=prepared.plan, reasons=reasons,
+                failure_kind="missing_page_inputs", persist=persist_closed_failures,
+            )
         )
         for material in prepared.materials:
             _assert_ocr_unchanged(
@@ -637,10 +692,16 @@ class SelectiveVisionObservationService:
         )
         reasons_list = [str(item) for item in reasons]
         reasons_digest = build_risk_reasons_sha256(reasons_list)
+        ocr_raw_text_sha256 = self._ocr_raw_text_sha256(session, page)
+        observation_plan_identity = selective_vision_observation_plan_identity(
+            plan.plan_version,
+            model_id=model_id,
+            ocr_raw_text_sha256=ocr_raw_text_sha256,
+        )
         identity = build_observation_identity_sha256(
             page_artifact_id=page.page_artifact_id,
             page_image_sha256=page.page_image_sha256,
-            plan_version=plan.plan_version,
+            plan_version=observation_plan_identity,
             model_id=model_id,
             prompt_sha256=prompt_digest,
             risk_reasons_sha256=reasons_digest,
@@ -652,8 +713,8 @@ class SelectiveVisionObservationService:
             "page_ordinal": page.page_ordinal,
             "page_image_sha256": page.page_image_sha256,
             "ocr_page_id": page.ocr_page_id,
-            "ocr_raw_text_sha256": self._ocr_raw_text_sha256(session, page),
-            "plan_version": plan.plan_version,
+            "ocr_raw_text_sha256": ocr_raw_text_sha256,
+            "plan_version": observation_plan_identity,
             "risk_reasons": reasons_list,
             "risk_reasons_sha256": reasons_digest,
             "model_id": model_id,

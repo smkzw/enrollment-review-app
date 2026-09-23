@@ -55,7 +55,7 @@ from app.protocols.supplementary_relation_contract import (
 from app.protocols.protocol_control_planning import detect_required_action_kinds
 
 
-CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v16"
+CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v18"
 
 __all__ = [
     "CONTROL_PUBLICATION_GATE_VERSION",
@@ -145,7 +145,7 @@ _STUDY_PERIOD_CUE_RE = re.compile(
     re.IGNORECASE,
 )
 _TREATMENT_PERIOD_CUE_RE = re.compile(
-    r"(?:治疗期间|用药期间|给药期间|during\s+(?:the\s+)?treatment)",
+    r"(?:治疗期(?:间|内)?|用药期间|给药期间|during\s+(?:the\s+)?treatment)",
     re.IGNORECASE,
 )
 _SINCE_VISIT_REFERENCE_RE = re.compile(
@@ -2884,9 +2884,9 @@ def _check_time_constraints(
         if not source_texts:
             source_texts = [str(getattr(atom, "statement", ""))]
         source_text = "\n".join(str(item) for item in source_texts)
-        period = _value(
-            getattr(getattr(atom, "prospective_period", None), "period", None)
-        )
+        continuation = getattr(atom, "continuing_obligation", None)
+        period_holder = continuation if continuation is not None else atom
+        period = _value(getattr(getattr(period_holder, "prospective_period", None), "period", None))
         expected_period = None
         if action_scoped_period(source_text, _STUDY_PERIOD_CUE_RE):
             expected_period = "study_period"
@@ -3429,6 +3429,61 @@ def _check_post_enrollment_procedure_classification(
             )
 
 
+def _check_future_prohibition_not_decided_at_current_node(
+    *,
+    entity_id: str,
+    obligation_expression: object,
+    bindings: Sequence[object],
+    minimum_evidence: Sequence[object] = (),
+) -> None:
+    """A pre-dose decision cannot certify that a future prohibition was obeyed."""
+
+    if not any(_value(getattr(binding, "role", None)) == "decide_at_node" for binding in bindings):
+        return
+    for atom in _iter_expression_atoms(obligation_expression):
+        if _value(getattr(atom, "kind", None)) not in {
+            ControlObligationKind.PROHIBIT_EVENT.value,
+            ControlObligationKind.PROHIBIT_MEDICATION_OR_TREATMENT_EXPOSURE.value,
+        }:
+            continue
+        evaluation = getattr(atom, "evaluation", None)
+        proposition = str(getattr(evaluation, "proposition", "") or "")
+        source = " ".join(str(item or "") for item in getattr(atom, "source_excerpts", ()) or ())
+        future_in_source = bool(_STUDY_PERIOD_CUE_RE.search(source) or _TREATMENT_PERIOD_CUE_RE.search(source))
+        if not future_in_source:
+            continue
+        continuation = getattr(atom, "continuing_obligation", None)
+        if continuation is None or getattr(atom, "prospective_period", None) is not None:
+            _fail(
+                "FUTURE_PROHIBITION_DECIDED_EARLY",
+                "同时覆盖当前节点和后续期间的禁止要求，须分开保存可核事实和未到期持续义务",
+                entity_id=entity_id,
+            )
+        statement = str(getattr(atom, "statement", "") or "")
+        if any(
+            _STUDY_PERIOD_CUE_RE.search(text) or _TREATMENT_PERIOD_CUE_RE.search(text)
+            for text in (proposition, statement)
+        ):
+            _fail(
+                "FUTURE_PROHIBITION_DECIDED_EARLY",
+                "当前节点的义务与求值命题不得包含后续期间；后续义务由未到期记录承载",
+                entity_id=entity_id,
+            )
+        for text in (
+            *(str(getattr(binding, "guidance", "") or "") for binding in bindings),
+            *(str(getattr(item, "description", "") or "") for item in minimum_evidence),
+        ):
+            if (
+                (_STUDY_PERIOD_CUE_RE.search(text) or _TREATMENT_PERIOD_CUE_RE.search(text))
+                and re.search(r"(?:证明|确认|核实|判定)[^，。；\n]{0,40}(?:已|未|均未|没有发生)", text)
+            ):
+                _fail(
+                    "FUTURE_PROHIBITION_DECIDED_EARLY",
+                    "当前审核指引或最低证据不得要求证明后续期间已经遵守",
+                    entity_id=entity_id,
+                )
+
+
 def _check_nodes(
     *,
     entity_id: str,
@@ -3904,6 +3959,12 @@ def _validate_candidate(
         entity_id=candidate_id,
         obligation_expression=obligation_expression,
     )
+    _check_future_prohibition_not_decided_at_current_node(
+        entity_id=candidate_id,
+        obligation_expression=obligation_expression,
+        bindings=getattr(semantics, "review_node_bindings", ()),
+        minimum_evidence=getattr(semantics, "minimum_evidence", ()),
+    )
     _check_obligation_modality_and_event_anchor(
         entity_id=candidate_id,
         obligation_expression=obligation_expression,
@@ -4192,6 +4253,12 @@ def _validate_control(
     _check_mixed_trigger_decision_stages(
         entity_id=control_id,
         trigger_expression=getattr(control, "trigger_expression", None),
+    )
+    _check_future_prohibition_not_decided_at_current_node(
+        entity_id=control_id,
+        obligation_expression=obligation_expression,
+        bindings=getattr(control, "review_node_bindings", ()),
+        minimum_evidence=getattr(control, "minimum_evidence", ()),
     )
     _check_obligation_modality_and_event_anchor(
         entity_id=control_id,

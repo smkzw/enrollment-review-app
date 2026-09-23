@@ -1,15 +1,16 @@
-"""Independent BigModel GLM-5.3-Flash vision transport.
+"""Product-owned page vision transport for configured independent providers.
 
 This module is a shared page-vision verification plane for raw DOCX/PDF page
-inputs. The product-owned transport directly calls the ``zhipu-coding-plan``
-Coding Plan endpoint (``/api/coding/paas/v4``) using the explicit project env.
-It must not silently replace OCR backends or semantic MTPLX/DeepSeek routes,
-and it must fail closed on remote balance/auth/quota failures.
+inputs. The connection uses the explicit product environment and cannot
+silently borrow an external agent harness or another provider's credential.
+It fails closed on remote balance/auth/quota failures.
 """
 
 from __future__ import annotations
 
 import base64
+import hashlib
+import json
 import logging
 import os
 import re
@@ -164,12 +165,14 @@ class IndependentVlmChatResult:
 
 
 _client: Optional[AsyncOpenAI] = None
+_client_connection_identity: str | None = None
 
 
 def reset_independent_vlm_client() -> None:
     """Drop the cached client (tests / config reload)."""
-    global _client
+    global _client, _client_connection_identity
     _client = None
+    _client_connection_identity = None
 
 
 def normalize_independent_vlm_base_url(base_url: str) -> str:
@@ -252,16 +255,21 @@ def require_independent_vlm_config() -> dict[str, str]:
 
 
 def get_independent_vlm_client() -> AsyncOpenAI:
-    """Return a cached OpenAI-compatible client for BigModel Coding Plan v4."""
-    global _client
-    if _client is None:
-        cfg = require_independent_vlm_config()
-        timeout = float(
-            os.getenv(
-                "INDEPENDENT_VLM_TIMEOUT_SECONDS",
-                str(INDEPENDENT_VLM_TIMEOUT_SECONDS),
-            )
+    """Return the configured client; connection changes require a process restart."""
+    global _client, _client_connection_identity
+    cfg = require_independent_vlm_config()
+    timeout = float(
+        os.getenv("INDEPENDENT_VLM_TIMEOUT_SECONDS", str(INDEPENDENT_VLM_TIMEOUT_SECONDS))
+    )
+    connection_identity = hashlib.sha256(json.dumps(
+        (cfg["provider"], cfg["base_url"], cfg["api_key"], timeout),
+        ensure_ascii=True,
+    ).encode("utf-8")).hexdigest()
+    if _client is not None and _client_connection_identity != connection_identity:
+        raise IndependentVlmConfigError(
+            "视觉模型连接配置已变化，请重启当前服务后继续核验。"
         )
+    if _client is None:
         http_client = httpx.AsyncClient(
             trust_env=False,
             timeout=httpx.Timeout(timeout, connect=10.0),
@@ -276,6 +284,7 @@ def get_independent_vlm_client() -> AsyncOpenAI:
                 session_id="enrollment-review-independent-vlm",
             ),
         )
+        _client_connection_identity = connection_identity
     return _client
 
 

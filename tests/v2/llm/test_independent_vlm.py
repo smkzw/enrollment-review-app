@@ -60,15 +60,15 @@ def _config_probe(overrides: dict[str, str] | None = None) -> list[str]:
     return output.strip().split("|")
 
 
-def test_independent_vlm_defaults_use_direct_coding_plan_and_stay_isolated():
+def test_independent_vlm_defaults_use_product_route_and_stay_isolated():
     values = _config_probe()
     assert values == [
-        "zhipu-coding-plan",
-        CODING_PLAN_BASE_URL,
+        "cms-router",
+        "http://127.0.0.1:20128/v1",
         "glm-5.3-flash",
         "high",
         "65536",
-        "mtplx",
+        "opencode-go",
         "omlx",
     ]
     assert values[1] != LEGACY_PAAS_BASE_URL
@@ -111,7 +111,8 @@ def test_unsupported_reasoning_effort_fails_closed():
         vlm.map_reasoning_effort_to_thinking("medium")
 
 
-def test_completion_kwargs_keep_provider_sampling_defaults():
+def test_completion_kwargs_keep_provider_sampling_defaults(monkeypatch):
+    monkeypatch.setenv("INDEPENDENT_VLM_PROVIDER", "zhipu-coding-plan")
     kwargs = vlm.independent_vlm_completion_kwargs(
         messages=[{"role": "user", "content": "ping"}],
         model="glm-5.3-flash",
@@ -366,6 +367,7 @@ def test_independent_vlm_chat_balance_insufficient_fail_closed(monkeypatch):
 
 
 def test_independent_vlm_page_chat_enforces_source_fidelity(monkeypatch):
+    monkeypatch.setenv("INDEPENDENT_VLM_PROVIDER", "zhipu-coding-plan")
     page = vlm.PageVisionInput(
         source_ref="body.p803",
         page_ordinal=1,
@@ -435,7 +437,9 @@ def test_independent_vlm_page_chat_requires_source_ref_claim(monkeypatch):
 
 
 def test_check_independent_vlm_false_without_key(monkeypatch):
+    monkeypatch.setenv("INDEPENDENT_VLM_PROVIDER", "zhipu-coding-plan")
     monkeypatch.setenv("INDEPENDENT_VLM_API_KEY", "")
+    monkeypatch.setenv("DECONSTRUCT_GLM_API_KEY", "")
     monkeypatch.setattr(vlm, "INDEPENDENT_VLM_API_KEY", "")
     assert asyncio.run(vlm.check_independent_vlm()) is False
 
@@ -486,6 +490,21 @@ def test_adapter_does_not_import_omp_or_semantic_ocr_backends():
         "import omlx",
     ):
         assert banned_import not in text
+
+
+def test_cached_vision_connection_rejects_in_process_provider_change(monkeypatch):
+    monkeypatch.setenv("INDEPENDENT_VLM_PROVIDER", "cms-router")
+    monkeypatch.setenv("INDEPENDENT_VLM_BASE_URL", "http://127.0.0.1:20128/v1")
+    monkeypatch.setenv("INDEPENDENT_VLM_API_KEY", "synthetic-key-one")
+    vlm.reset_independent_vlm_client()
+    client = vlm.get_independent_vlm_client()
+    try:
+        monkeypatch.setenv("INDEPENDENT_VLM_API_KEY", "synthetic-key-two")
+        with pytest.raises(vlm.IndependentVlmConfigError, match="请重启"):
+            vlm.get_independent_vlm_client()
+    finally:
+        asyncio.run(client.close())
+        vlm.reset_independent_vlm_client()
 
 
 def _tiny_png_bytes() -> bytes:

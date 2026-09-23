@@ -253,6 +253,10 @@ def test_generated_discovery_and_deep_prompts_are_vocabulary_neutral() -> None:
     )
     _assert_neutral(discovery_prompt, label="发现提示词")
     _assert_neutral(discovery_repair, label="发现修复提示词")
+    assert "输出结构：" in discovery_prompt
+    assert "输出结构：" not in discovery_repair
+    assert '"$defs"' not in discovery_repair
+    assert "只返回包含 wire_version 和 decisions 的单个 JSON 对象" in discovery_repair
 
     deep_plan = plan_protocol_control_batches(
         manifest,
@@ -291,6 +295,9 @@ def test_prompts_separate_subject_controls_from_study_administration() -> None:
     assert "若未明确约束某一受试者的资格判断、节点放行或个例证据" in discovery_prompt
     assert "‘研究启动前’或‘任何研究操作前’只说明项目或中心义务的时序" in discovery_prompt
     assert "当前原文不足以区分义务对象时标为 uncertain" in discovery_prompt
+    assert "目录标题和页码仅是定位指针" in discovery_prompt
+    assert "修订记录若仅描述曾经修改或优化某项标准" in discovery_prompt
+    assert "摘要或背景中真正陈述了当前筛选、导入" in discovery_prompt
     assert "必须先区分义务对象是个例受试者" in deep_prompt
     assert "不得仅因时点或名称相似就关联" in deep_prompt
     assert "候选只能引用并表达受试者层面的真实增量" in deep_prompt

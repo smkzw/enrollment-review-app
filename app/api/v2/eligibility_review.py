@@ -91,6 +91,7 @@ class EligibilityControlObligationDTO(BaseModel):
     status_label: str = Field(min_length=1)
     reason: str = Field(min_length=1)
     fact_refs: list[EligibilityFactRefDTO] = Field(default_factory=list)
+    continuing_note: str | None = None
 
 
 class EligibilityControlDTO(BaseModel):

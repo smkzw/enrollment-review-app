@@ -109,6 +109,61 @@ def _discovery_decisions(
     return batches
 
 
+def test_explicit_other_phase_is_covered_without_deep_review() -> None:
+    manifest = _manifest(4)
+    manifest = manifest.model_copy(
+        update={
+            "units": [
+                unit.model_copy(
+                    update={
+                        "phase_scopes": (
+                            [PhaseScope.PHASE_III]
+                            if unit.structure_unit_id in {"unit-002", "unit-003"}
+                            else [PhaseScope.UNKNOWN]
+                        )
+                    }
+                )
+                for unit in manifest.units
+            ]
+        }
+    )
+    discovery = plan_protocol_control_discovery(manifest, max_units_per_batch=4)
+    decisions = _discovery_decisions(discovery)
+    decisions[0] = [
+        item.model_copy(
+            update={
+                "required_context_structure_unit_ids": ["unit-001", "unit-003"]
+            }
+        ) if item.structure_unit_id == "unit-000" else item.model_copy(
+            update={"disposition": ProtocolControlDiscoveryDisposition.CANDIDATE}
+        ) if item.structure_unit_id == "unit-003" else item
+        for item in decisions[0]
+    ]
+    plan = plan_protocol_control_deep_batches_from_discovery(
+        manifest, discovery, decisions
+    )
+
+    assert plan.deep_structure_unit_ids == ("unit-000",)
+    assert "unit-002" in plan.non_deep_structure_unit_ids
+    assert "unit-003" in plan.non_deep_structure_unit_ids
+    assert next(
+        item for item in plan.discovery_decisions
+        if item.structure_unit_id == "unit-002"
+    ).disposition == ProtocolControlDiscoveryDisposition.NON_CONTROL
+    assert next(
+        item for item in plan.discovery_decisions
+        if item.structure_unit_id == "unit-003"
+    ).disposition == ProtocolControlDiscoveryDisposition.CONTEXT_ONLY
+    assert plan.batches[0].context_structure_unit_ids == ["unit-001", "unit-003"]
+    assert next(
+        item for item in plan.discovery_decisions
+        if item.structure_unit_id == "unit-000"
+    ).disposition == ProtocolControlDiscoveryDisposition.CANDIDATE
+    assert [item.structure_unit_id for item in plan.discovery_decisions] == [
+        item.structure_unit_id for item in manifest.units
+    ]
+
+
 def test_discovery_chunks_100_units_exactly_once_and_preserves_bounded_input() -> None:
     plan = plan_protocol_control_discovery(
         _manifest(),
@@ -394,7 +449,7 @@ def test_discovery_wire_canonicalizes_set_like_context_order() -> None:
     ]
 
 
-def test_discovery_batch_binding_rejects_required_context_marked_non_control() -> None:
+def test_discovery_batch_binding_preserves_required_context_without_creating_control() -> None:
     batch = plan_protocol_control_discovery(
         _manifest(2),
         max_units_per_batch=2,
@@ -421,11 +476,12 @@ def test_discovery_batch_binding_rejects_required_context_marked_non_control() -
         )
     )
 
-    with pytest.raises(
-        ProtocolControlDiscoveryWireValidationError,
-        match="CONTEXT_DISPOSITION_CONFLICT",
-    ):
-        bind_protocol_control_discovery_wire(wire, batch)
+    decisions = bind_protocol_control_discovery_wire(wire, batch)
+
+    assert decisions[0].disposition == ProtocolControlDiscoveryDisposition.CANDIDATE
+    assert decisions[0].required_context_structure_unit_ids == ["unit-001"]
+    assert decisions[1].disposition == ProtocolControlDiscoveryDisposition.CONTEXT_ONLY
+    assert "原输出标为 non_control" in decisions[1].rationale
 
 
 def test_deep_prompt_size_does_not_follow_full_manifest_size() -> None:

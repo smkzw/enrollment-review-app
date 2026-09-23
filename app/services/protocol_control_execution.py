@@ -112,7 +112,7 @@ from app.workflow.runner import PreparedStepResult, StepContext, StepExecutor
 PROTOCOL_CONTROL_EXECUTION_JOB_TYPE = "protocol_control_execution"
 # A short alias keeps callers independent from the longer API-facing name.
 PROTOCOL_CONTROL_JOB_TYPE = PROTOCOL_CONTROL_EXECUTION_JOB_TYPE
-PROTOCOL_CONTROL_EXECUTION_VERSION = "phase5/protocol-control-execution/v14"
+PROTOCOL_CONTROL_EXECUTION_VERSION = "phase5/protocol-control-execution/v27"
 PROTOCOL_CONTROL_EXECUTION_CONTROL_SCHEMA = (
     "phase5/protocol-control-execution-control/v1"
 )
@@ -198,6 +198,7 @@ class ProtocolControlExecutorConfig:
     deep_transport_factory: Callable[[], Any] | None = None
     transport: Any | None = None
     transport_factory: Callable[[], Any] | None = None
+    require_frozen_routes: bool = False
     discovery_prompt_template: str = DEFAULT_PROTOCOL_CONTROL_DISCOVERY_PROMPT_TEMPLATE
     deep_prompt_template: str = DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE
     # Compatibility with callers that configure one prompt for a fake route.
@@ -280,6 +281,7 @@ class ProtocolControlJobService:
         discovery_max_schema_repairs: int = DEFAULT_MAX_SCHEMA_REPAIRS,
         deep_max_transport_retries: int = DEFAULT_MAX_TRANSPORT_RETRIES,
         deep_max_schema_repairs: int = DEFAULT_MAX_SCHEMA_REPAIRS,
+        route_identity_factory: Callable[[str], str] | None = None,
     ) -> None:
         if discovery_step_max_attempts < 1 or deep_step_max_attempts < 1:
             raise ValueError("协议控制步骤尝试次数必须为正整数")
@@ -343,6 +345,7 @@ class ProtocolControlJobService:
         self.discovery_max_schema_repairs = discovery_max_schema_repairs
         self.deep_max_transport_retries = deep_max_transport_retries
         self.deep_max_schema_repairs = deep_max_schema_repairs
+        self.route_identity_factory = route_identity_factory
         self.jobs = JobService(session_factory, now=now, lease_ttl=lease_ttl)
 
     @app_error_boundary
@@ -715,8 +718,34 @@ class ProtocolControlJobService:
         ]
         from app.llm.mtplx_model_lifecycle import local_deployment_job_fields
 
+        try:
+            frozen_routes = (
+                {
+                    stage: self.route_identity_factory(stage)
+                    for stage in ("discovery", "deep")
+                }
+                if self.route_identity_factory is not None
+                else None
+            )
+        except (ValueError, RuntimeError) as exc:
+            raise ProtocolControlExecutionError(
+                "PROTOCOL_CONTROL_ROUTE_UNAVAILABLE",
+                "方案分析模型配置当前不可用，任务未建立。",
+                status_code=503,
+            ) from exc
+        if frozen_routes is not None and any(
+            not isinstance(digest, str) or len(digest) != 64
+            for digest in frozen_routes.values()
+        ):
+            raise ProtocolControlExecutionError(
+                "PROTOCOL_CONTROL_ROUTE_IDENTITY_INVALID",
+                "方案分析模型配置无法冻结，任务未建立。",
+                status_code=503,
+            )
+
         return {
             "execution_version": PROTOCOL_CONTROL_EXECUTION_VERSION,
+            "frozen_model_routes": frozen_routes,
             **local_deployment_job_fields(),
             "source_deconstruction_job_id": prepared.source_job_id,
             "actor": self.actor,
@@ -1082,6 +1111,8 @@ def _transport_identity(transport: Any, *, stage: str) -> dict[str, Any]:
         "timeout",
         "max_retries",
         "response_format_sha256",
+        "response_format_mode",
+        "model_identity_policy",
     ):
         try:
             value = getattr(transport, name)
@@ -1092,6 +1123,59 @@ def _transport_identity(transport: Any, *, stage: str) -> dict[str, Any]:
         if value is None or isinstance(value, (str, int, float, bool)):
             identity[name] = value
     return identity
+
+
+def _transport_identity_digest(transport: Any, *, stage: str) -> str:
+    identity = _transport_identity(transport, stage=stage)
+    payload = json.dumps(identity, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def protocol_control_route_identity_from_config(
+    config: ProtocolControlExecutorConfig, *, stage: str
+) -> str:
+    """Resolve a route without requesting inference, then release its client."""
+
+    owns_transport = all(
+        value is None
+        for value in (
+            config.discovery_transport if stage == "discovery" else config.deep_transport,
+            config.discovery_transport_factory if stage == "discovery" else config.deep_transport_factory,
+            config.transport,
+            config.transport_factory,
+        )
+    )
+    transport = _resolve_transport(config, stage=stage)
+    try:
+        return _transport_identity_digest(transport, stage=stage)
+    finally:
+        # Injected transports/factories can be shared with an executor.
+        if owns_transport:
+            client = getattr(transport, "_client", None)
+            close = getattr(client, "close", None)
+            if callable(close):
+                close()
+
+
+def _require_frozen_route(
+    context: StepContext,
+    config: ProtocolControlExecutorConfig,
+    transport: Any,
+    *,
+    stage: str,
+) -> None:
+    routes = context.job_payload.get("frozen_model_routes")
+    if routes is None and not config.require_frozen_routes:
+        return
+    expected = routes.get(stage) if isinstance(routes, Mapping) else None
+    if not isinstance(expected, str) or expected != _transport_identity_digest(
+        transport, stage=stage
+    ):
+        raise StepFailure(
+            retryable=False,
+            error_code="PROTOCOL_CONTROL_ROUTE_CHANGED",
+            detail="方案分析任务的模型线路与建立任务时不同；原进度保留，请使用原配置或建立新任务。",
+        )
 
 
 def _resolve_transport(
@@ -1166,6 +1250,7 @@ def _execute_discovery(
         context, "discovery", config
     )
     transport = _resolve_transport(config, stage="discovery")
+    _require_frozen_route(context, config, transport, stage="discovery")
     result = ProtocolControlDiscoveryAgentRunner(
         max_transport_retries=max_transport_retries,
         max_schema_repairs=max_schema_repairs,
@@ -1304,7 +1389,9 @@ def _execute_closure(
         "stage": "closure",
         "coverage_manifest_id": coverage_manifest.manifest_id,
         "discovery_plan_id": discovery_plan.plan_id,
-        "discovery_decisions": [item.model_dump(mode="json") for item in decisions],
+        "discovery_decisions": [
+            item.model_dump(mode="json") for item in deep_plan.discovery_decisions
+        ],
         "deep_plan": deep_plan.model_dump(mode="json"),
         "publication_plan": publication_plan.model_dump(mode="json"),
         "deep_step_ids": deep_steps,
@@ -1400,6 +1487,36 @@ def _deep_batch_for_step(
     )
 
 
+def _validate_deep_batch_output(
+    batch: ProtocolControlDispositionBatch,
+    output: ProtocolControlBatchDispositionHydrated,
+) -> None:
+    """Use the product's scoped repair contract for a frozen deep batch."""
+
+    try:
+        validate_protocol_control_batch_candidates(batch, output)
+    except ProtocolControlGateError as error:
+        candidate_by_id = {
+            candidate.control_candidate_id: candidate
+            for candidate in output.candidates
+        }
+        raise publication_repair_error(
+            issues=[
+                ProtocolControlGateIssue(
+                    code=error.code,
+                    message=error.message,
+                    entity_id=error.entity_id,
+                    structure_unit_ids=error.structure_unit_ids,
+                    candidate_ids=error.candidate_ids,
+                    obligation_source_span_ids=error.obligation_source_span_ids,
+                )
+            ],
+            candidate_by_id=candidate_by_id,
+            control_to_candidate={},
+            default_structure_unit_ids=list(batch.owned_structure_unit_ids),
+        ) from error
+
+
 def _execute_deep(
     context: StepContext,
     config: ProtocolControlExecutorConfig,
@@ -1427,36 +1544,7 @@ def _execute_deep(
         context, "deep", config
     )
     transport = _resolve_transport(config, stage="deep")
-
-    def validate_deep_output(
-        output: ProtocolControlBatchDispositionHydrated,
-    ) -> None:
-        try:
-            validate_protocol_control_batch_candidates(batch, output)
-        except ProtocolControlGateError as error:
-            candidate_by_id = {
-                candidate.control_candidate_id: candidate
-                for candidate in output.candidates
-            }
-            raise publication_repair_error(
-                issues=[
-                    ProtocolControlGateIssue(
-                        code=error.code,
-                        message=error.message,
-                        entity_id=error.entity_id,
-                        structure_unit_ids=error.structure_unit_ids,
-                        candidate_ids=error.candidate_ids,
-                        obligation_source_span_ids=(
-                            error.obligation_source_span_ids
-                        ),
-                    )
-                ],
-                candidate_by_id=candidate_by_id,
-                control_to_candidate={},
-                default_structure_unit_ids=list(
-                    batch.owned_structure_unit_ids
-                ),
-            ) from error
+    _require_frozen_route(context, config, transport, stage="deep")
 
     result = ProtocolControlAgentRunner(
         max_transport_retries=max_transport_retries,
@@ -1465,7 +1553,7 @@ def _execute_deep(
         batch,
         transport,
         prompt_template=prompt_template,
-        output_validator=validate_deep_output,
+        output_validator=lambda output: _validate_deep_batch_output(batch, output),
     )
     if result.status != "已解析" or result.final_output is None:
         raise StepFailure(
@@ -1883,4 +1971,5 @@ __all__ = [
     "STEP_GATE",
     "STEP_HYDRATE",
     "create_protocol_control_executor",
+    "protocol_control_route_identity_from_config",
 ]

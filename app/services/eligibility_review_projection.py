@@ -167,6 +167,7 @@ class EligibilityControlObligationProjection:
     status_label: str
     reason: str
     fact_refs: tuple[EligibilityFactRef, ...]
+    continuing_note: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1044,8 +1045,15 @@ class EligibilityReviewProjectionService:
             }
             for control in calculation.control_outcomes:
                 source = sources[control.protocol_control_id]
+                atom_values = (
+                    [atom for group in source.obligation_expression.groups for atom in group.atoms]
+                    if source.obligation_expression is not None
+                    else source.obligations
+                )
+                source_atoms = {atom.obligation_id: atom for atom in atom_values}
                 obligations = []
                 for obligation in control.obligations:
+                    continuation = source_atoms[obligation.obligation_id].continuing_obligation
                     reasons = list(obligation.observation_reason_codes)
                     if obligation.status == "unverified":
                         reason = (
@@ -1069,6 +1077,7 @@ class EligibilityReviewProjectionService:
                         fact_refs=_fact_refs(
                             session, set(obligation.used_fact_ids), facts_by_id,
                         ),
+                        continuing_note=_continuing_obligation_note(continuation),
                     ))
                 controls.append(EligibilityControlProjection(
                     protocol_control_id=source.protocol_control_id,
@@ -1088,6 +1097,20 @@ class EligibilityReviewProjectionService:
             clauses=tuple(output),
             controls=tuple(controls),
         )
+
+
+def _continuing_obligation_note(continuation: object | None) -> str | None:
+    if continuation is None:
+        return None
+    period = getattr(getattr(continuation, "prospective_period", None), "period", None)
+    period_value = getattr(period, "value", period)
+    period_label = {
+        "treatment_period": "治疗期间",
+        "study_period": "研究期间",
+    }.get(period_value)
+    if period_label is None:
+        raise ValueError("后续持续要求的期间未获支持")
+    return f"{period_label}：{continuation.statement}。本次入排审核不判定后续期间是否已遵守。"
 
 
 def _unverified_control_projections(clause_pack) -> tuple[EligibilityControlProjection, ...]:
@@ -1115,6 +1138,7 @@ def _unverified_control_projections(clause_pack) -> tuple[EligibilityControlProj
                     status_label="等待资料核对",
                     reason="本次资料核对尚未完成，目前不能判断该补充要求是否满足。",
                     fact_refs=(),
+                    continuing_note=_continuing_obligation_note(atom.continuing_obligation),
                 )
                 for atom in atoms
             )

@@ -155,7 +155,7 @@ describe("入排审核工作台", () => {
     const currentScopeHref = screen.getByRole("link", { name: /的资料页$/ }).getAttribute("href");
     expect(href?.split("?")[1]).toBe(currentScopeHref?.split("?")[1]);
     expect(screen.queryByText("private-conflict")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("无法判定 1 条")).toBeInTheDocument();
+    expect(screen.getByLabelText("无法判定 1 项")).toBeInTheDocument();
   });
   it("有缺口的条款详情显示责任方与建议动作", async () => {
     render(<EligibilityWorkbenchPage />);
@@ -189,9 +189,9 @@ describe("入排审核工作台", () => {
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review, clauses: [first, second] }) });
     const user = userEvent.setup();
     render(<EligibilityWorkbenchPage />);
-    await screen.findByRole("heading", { name: "待处理条款" });
+    await screen.findByRole("heading", { name: "待处理要点" });
     await user.click(screen.getByRole("button", { name: "全部条款" }));
-    const clausePane = screen.getByRole("complementary", { name: "条款列表" });
+    const clausePane = screen.getByRole("complementary", { name: "审核要点列表" });
     const secondButton = await within(clausePane).findByRole("button", { name: /第二个审核要点/ });
     await user.click(secondButton);
     expect(secondButton).toHaveAttribute("aria-pressed", "true");
@@ -213,7 +213,7 @@ describe("入排审核工作台", () => {
     expect(screen.getByRole("combobox", { name: "选择项目" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "选择受试者" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "选择审核节点" })).toBeInTheDocument();
-    expect(screen.getByRole("status", { name: "无法判定 1 条" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "无法判定 1 项" })).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "全部条款" }));
     expect(screen.getByRole("heading", { name: "入选标准" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "排除标准" })).toBeInTheDocument();
@@ -241,7 +241,7 @@ describe("入排审核工作台", () => {
 
   it("问题队列只聚合风险/冲突/未决条款，已满足与未到期不进入队列", async () => {
     render(<EligibilityWorkbenchPage />);
-    await screen.findByRole("heading", { name: "待处理条款" });
+    await screen.findByRole("heading", { name: "待处理要点" });
     expect(screen.getByText(/1 条条款需要处理，按问题类型归为 1 类/)).toBeInTheDocument();
     expect(screen.getByText("待研究者判断")).toBeInTheDocument();
     expect(screen.getByText("影响 1 条")).toBeInTheDocument();
@@ -257,10 +257,92 @@ describe("入排审核工作台", () => {
   it("点击问题队列中的条款会打开同一详情", async () => {
     const user = userEvent.setup();
     render(<EligibilityWorkbenchPage />);
-    await screen.findByRole("heading", { name: "待处理条款" });
+    await screen.findByRole("heading", { name: "待处理要点" });
     const queue = screen.getByRole("region", { name: "问题队列" });
     await user.click(within(queue).getByRole("button", { name: /IN-01/ }));
     expect(window.location.hash).toContain("component=IN-01");
+  });
+
+  it("跨章节要求单列且可打开真实关联原件，不冒充入排编号", async () => {
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
+      ...review, clauses: [], controls: [{
+        protocolControlId: "control-1", displayLabel: "合并用药限制", title: "筛选期用药核对",
+        sourceSpanIds: ["span-1"], obligations: [{
+          obligationId: "obligation-1", obligationGroupId: "group-1",
+          statement: "核对合并用药原始记录", status: "unverified",
+          statusLabel: "无法判定", reason: "用药记录尚未核实", factRefs: [],
+          continuingNote: "治疗期间：不得调整背景治疗。本次入排审核不判定后续期间是否已遵守。",
+        }],
+      }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    expect((await screen.findAllByText("筛选期用药核对")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("方案补充要求").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/IN-\d/)).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "全部条款" }));
+    expect(screen.getByRole("heading", { name: "方案补充要求" })).toBeInTheDocument();
+    expect(screen.getByText("核对合并用药原始记录")).toBeInTheDocument();
+    expect(screen.getByText(/本次入排审核不判定后续期间是否已遵守/)).toBeInTheDocument();
+  });
+
+  it("官方条款已满足但补充要求未满足时仍列入待处理", async () => {
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
+      ...review,
+      clauses: [review.clauses[1]!],
+      controls: [{
+        protocolControlId: "control-2", displayLabel: "其他章节要求", title: "基线前资料核对",
+        sourceSpanIds: ["span-2"], obligations: [{
+          obligationId: "obligation-2", obligationGroupId: "group-2",
+          statement: "尚未完成必须的核对", status: "unfulfilled",
+          statusLabel: "尚未满足", reason: "缺少本节点要求的资料", factRefs: [],
+        }],
+      }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    const queue = await screen.findByRole("region", { name: "问题队列" });
+    expect(within(queue).getByRole("button", { name: /基线前资料核对/ })).toBeInTheDocument();
+    expect(within(queue).queryByText(/IN-02/)).not.toBeInTheDocument();
+    expect(screen.getByText("尚未完成必须的核对")).toBeInTheDocument();
+  });
+
+  it("101项审核要点可翻页且空筛选不显示无关详情", async () => {
+    const clauses = Array.from({ length: 101 }, (_, index) => ({
+      ...review.clauses[1]!, ruleComponentId: `item-${index + 1}`,
+      ruleCode: `IN-${index + 1}`, textSummary: `审核要点${index + 1}`,
+    }));
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
+      ...review, clauses,
+    }) });
+    const user = userEvent.setup();
+    render(<EligibilityWorkbenchPage />);
+    await screen.findByRole("heading", { name: "待处理要点" });
+    await user.click(screen.getByRole("button", { name: "全部条款" }));
+    const pane = screen.getByRole("complementary", { name: "审核要点列表" });
+    expect(within(pane).getByText("第 1 / 3 页")).toBeInTheDocument();
+    await user.click(within(pane).getByRole("button", { name: "下一页" }));
+    expect(within(pane).getByText("第 2 / 3 页")).toBeInTheDocument();
+    await user.click(within(pane).getByRole("button", { name: "下一页" }));
+    expect(within(pane).getByText("第 3 / 3 页")).toBeInTheDocument();
+    expect(within(pane).getByRole("button", { name: /审核要点101/ })).toBeInTheDocument();
+    await user.selectOptions(screen.getByRole("combobox", { name: "按判定筛选" }), "triggered");
+    expect(screen.getByText("当前筛选没有符合条件的审核要点。")).toBeInTheDocument();
+    expect(screen.queryByText("年龄处于方案范围")).not.toBeInTheDocument();
+  });
+
+  it("250项时深链定位末尾要点，分页和详情指向同一项", async () => {
+    const clauses = Array.from({ length: 250 }, (_, index) => ({
+      ...review.clauses[1]!, ruleComponentId: `item-${index + 1}`,
+      ruleCode: `IN-${index + 1}`, textSummary: `审核要点${index + 1}`,
+    }));
+    window.location.hash = "#/workbench?component=item-250";
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
+      ...review, clauses,
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    const pane = await screen.findByRole("complementary", { name: "审核要点列表" });
+    expect(within(pane).getByText("第 5 / 5 页")).toBeInTheDocument();
+    expect(within(pane).getByRole("button", { name: /审核要点250/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("heading", { name: /IN-250/ })).toBeInTheDocument();
   });
 
   describe("buildEligibilityIssueGroups", () => {
