@@ -18,6 +18,7 @@ def main():
     parser.add_argument("--frontend-dir", type=Path, default=Path(__file__).resolve().parents[1] / "frontend/dist")
     parser.add_argument("--browse-only", action="store_true")
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--port", type=int, default=0)
     args = parser.parse_args()
 
     # Load only the product env contract, before constructing any application.
@@ -27,14 +28,14 @@ def main():
     from app.services.evidence_app_bootstrap import resolve_data_paths
 
     data_dir = str(args.data_dir) if args.data_dir else os.environ.get("ENROLLMENT_V2_DATA_DIR", "")
-    if not data_dir.strip():
-        raise RuntimeError("尚未指定工作资料目录，请在产品配置中设置资料目录后重新打开。")
+    if args.port < 0 or args.port > 65535:
+        raise RuntimeError("工作台端口不正确，请检查启动配置。")
     app = create_desktop_app(
         frontend_dir=args.frontend_dir,
-        data_paths=resolve_data_paths(data_dir), browse_only=args.browse_only,
+        data_paths=resolve_data_paths(data_dir or None), browse_only=args.browse_only,
     )
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
-        listener.bind(("127.0.0.1", 0))
+        listener.bind(("127.0.0.1", args.port))
         port = listener.getsockname()[1]
         url = f"http://127.0.0.1:{port}/" + ("#/reports" if args.browse_only else "#/protocols")
         server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port))
@@ -51,7 +52,10 @@ def main():
         browser = threading.Thread(target=open_when_ready, daemon=True)
         browser.start()
         try:
-            server.run(sockets=[listener])
+            try:
+                server.run(sockets=[listener])
+            except KeyboardInterrupt:
+                pass
         finally:
             finished.set()
             browser.join(timeout=1)

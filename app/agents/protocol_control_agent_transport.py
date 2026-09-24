@@ -5,8 +5,8 @@ This adapter is deliberately separate from
 uses a different strict response Schema and must never be silently reused for
 protocol-control candidate drafts.
 
-The product path follows the configured control route (currently the GLM
-Coding Plan profile) with the configured reasoning effort, the provider's own
+The product path follows the explicitly configured control route with its
+reasoning effort, the provider's own
 sampling defaults (no ``temperature`` is sent unless an explicit value is
 configured), the configured control output budget, and
 :func:`protocol_control_agent_response_format`.  Repair calls keep one
@@ -50,10 +50,12 @@ from app.agents.protocol_control_deconstructor import (
     protocol_control_time_operand_repair_response_format,
     protocol_control_evidence_source_repair_response_format,
     protocol_control_candidate_repair_response_format,
+    protocol_control_post_treatment_repair_response_format,
     protocol_control_candidates_repair_response_format,
 )
 from app.agents.protocol_control_source_interpretation import (
     source_interpretation_response_format,
+    source_target_review_response_format,
 )
 from app.config import (
     DECONSTRUCT_GLM_API_KEY,
@@ -975,6 +977,25 @@ class OpenAICompatibleProtocolControlAgentTransport:
             ) from exc
         return ProtocolControlAgentResponse(session_id=session_id, text=text)
 
+    def start_source_target_review(self, *, prompt: str) -> ProtocolControlAgentResponse:
+        """Check only source statements not directly expressed by the first wire."""
+
+        if not prompt.strip():
+            raise ValueError("逐项来源核对提示不能为空")
+        session_id = f"protocol-control-target-{uuid4().hex}"
+        try:
+            text = self._complete(
+                [{"role": "user", "content": prompt}],
+                response_format=source_target_review_response_format(),
+            )
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id,
+                str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
     def continue_session(
         self,
         *,
@@ -1033,6 +1054,28 @@ class OpenAICompatibleProtocolControlAgentTransport:
             *logical_history,
             {"role": "assistant", "content": text},
         ]
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
+    def continue_post_treatment_repair(
+        self, *, session_id: str, prompt: str
+    ) -> ProtocolControlAgentResponse:
+        if not prompt.strip():
+            raise ValueError("治疗后事项的来源修订提示不能为空")
+        history = self._histories.get(session_id)
+        if history is None:
+            raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
+        logical_history = [*history, {"role": "user", "content": prompt}]
+        try:
+            text = self._complete(
+                [{"role": "user", "content": prompt}],
+                response_format=protocol_control_post_treatment_repair_response_format(),
+            )
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id, str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        self._histories[session_id] = [*logical_history, {"role": "assistant", "content": text}]
         return ProtocolControlAgentResponse(session_id=session_id, text=text)
 
     def continue_atom(

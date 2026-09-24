@@ -34,6 +34,7 @@ from app.agents.protocol_control_deconstructor import (
     ProtocolControlAgentWireValidationError,
     _candidate_ids_from_wire,
     _merge_candidate_repair,
+    _merge_post_treatment_scope_repair,
     _merge_candidate_repairs,
     _merge_obligation_atom_repair,
     _merge_observation_policy_repair,
@@ -55,6 +56,7 @@ from app.agents.protocol_control_deconstructor import (
     protocol_control_agent_json_schema,
     protocol_control_agent_response_format,
     protocol_control_candidate_repair_response_format,
+    protocol_control_post_treatment_repair_response_format,
     protocol_control_atom_repair_response_format,
     protocol_control_observation_repair_response_format,
     protocol_control_time_operand_repair_response_format,
@@ -64,9 +66,15 @@ from app.agents.protocol_control_deconstructor import (
 )
 from app.agents.protocol_control_source_interpretation import (
     SOURCE_INTERPRETATION_VERSION,
+    SOURCE_TARGET_REVIEW_VERSION,
     SourceInterpretation,
+    SourceStatementCoverage,
+    SourceTargetReview,
     build_source_interpretation_prompt,
+    build_source_target_review_prompt,
+    target_review_indexes,
     validate_source_interpretation,
+    validate_source_target_review,
 )
 from app.domain.contracts.enums import PhaseScope, ReviewStage, StudyPhase
 from app.domain.contracts.protocol_controls import (
@@ -81,6 +89,7 @@ from app.domain.contracts.protocol_controls import (
     ProtocolStructureUnit,
     ReviewNodeRole,
     StructureUnitDispositionKind,
+    TableCellContext,
 )
 from app.protocols.protocol_control_repair_errors import publication_repair_error
 
@@ -1572,6 +1581,57 @@ def test_source_interpretation_is_source_bound_and_not_a_rule() -> None:
         validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
 
 
+def test_shared_scope_must_precede_the_action_and_survive_target_review() -> None:
+    batch = _batch().model_copy(deep=True)
+    batch.owned_units[1].excerpt = (
+        "筛选期（D-7~D-1）：记录末次用药日期；治疗后七天核对其他资料。"
+    )
+    payload = {
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [{
+            "structure_unit_id": "su-02",
+            "quoted_text": "记录末次用药日期",
+            "scope_quote": "筛选期（D-7~D-1）",
+            "force": "required",
+            "affected_stage": "筛选期",
+            "time_words": ["筛选期（D-7~D-1）"],
+        }],
+        "units_without_statement": ["su-01"],
+    }
+    validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+    payload["statements"][0]["scope_quote"] = "治疗后七天"
+    with pytest.raises(ValueError, match="共享范围须来自陈述之前"):
+        validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+    payload["statements"][0]["scope_quote"] = "筛选期（D-7~D-1）"
+    payload["statements"][0]["time_words"] = []
+    with pytest.raises(ValueError, match="明确阶段范围不得从时间措辞中遗漏"):
+        validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+    payload["statements"][0]["affected_stage"] = None
+    payload["statements"][0]["quoted_text"] = "治疗后七天核对其他资料"
+    payload["statements"][0]["time_words"] = ["治疗后七天"]
+    validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+
+
+def test_shared_scope_can_quote_the_owned_table_row_header() -> None:
+    batch = _batch().model_copy(deep=True)
+    batch.owned_units[0].table_context = TableCellContext(
+        table_path=(1, 1), row_index=1, column_index=1,
+        member_cell_paths=[(1, 1)], row_headers=["本行适用范围"],
+    )
+    payload = {
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [{
+            "structure_unit_id": "su-01", "quoted_text": "年龄至少18岁",
+            "scope_quote": "本行适用范围", "force": "required", "time_words": [],
+        }],
+        "units_without_statement": ["su-02"],
+    }
+    validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+    payload["statements"][0]["scope_quote"] = "相邻行适用范围"
+    with pytest.raises(ValueError, match="共享范围须来自"):
+        validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+
+
 def test_repair_guidance_distinguishes_same_stage_and_cross_stage() -> None:
     same = _repair_problem_guidance(
         "PROCEDURE_AFFECTED_STAGE_MISMATCH: 补充关系的受影响审核节点与所引用流程必做访视不一致"
@@ -1611,12 +1671,14 @@ def test_real_transport_inventory_is_checked_before_full_wire() -> None:
         ProtocolControlAgentResponse(session_id="full-session", text=_wire().model_dump_json())
     ])
     result = ProtocolControlAgentRunner().run(batch, transport)
-    assert result.status == "已解析"
+    assert result.status == "需要核对"
     assert result.source_interpretation == source
     assert [item.status for item in result.source_statement_coverage] == [
         "not_located", "not_located",
     ]
     assert "已逐字定位的来源陈述" in transport.prompts[1]
+    assert result.attempts[-1].error_classes == ["SOURCE_TARGET_REVIEW_TRANSPORT_FAILED"]
+    assert result.final_output is None
 
 
 def test_invalid_source_inventory_keeps_response_session_identity() -> None:
@@ -1688,6 +1750,406 @@ def test_source_coverage_requires_direct_atom_quote_not_candidate_unit_only() ->
     blank_inventory.statements[0].quoted_text = "  \n  "
     with pytest.raises(ValueError, match="不得只有空白"):
         validate_source_interpretation(batch, blank_inventory)
+
+
+def test_source_target_review_requires_real_target_excerpts_and_matching_time() -> None:
+    batch = _batch().model_copy(deep=True)
+    batch.known_official_targets[0].source_excerpts = ["年龄至少18岁"]
+    batch.known_procedure_targets[0].source_excerpts = ["记录末次用药日期"]
+    batch.known_procedure_targets[0].visit_instance = "筛选时"
+    inventory = SourceInterpretation.model_validate({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [
+            {"structure_unit_id": "su-01", "quoted_text": "其他控制：年龄至少18岁", "force": "required", "time_words": []},
+            {"structure_unit_id": "su-02", "quoted_text": "筛选时记录末次用药日期", "force": "required", "time_words": ["筛选时"]},
+        ],
+        "units_without_statement": [],
+    })
+    coverage = [
+        SourceStatementCoverage(statement_index=index, structure_unit_id=f"su-0{index + 1}",
+                                disposition="other_control_candidate", status="candidate_linked")
+        for index in range(2)
+    ]
+    review = SourceTargetReview.model_validate({
+        "version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [
+            {"statement_index": 0, "decision": "covered_by_official", "target_id": "EX-01",
+             "source_action_excerpt": "年龄至少18岁", "target_action_excerpt": "年龄至少18岁",
+             "source_time_excerpt": None, "target_time_excerpt": None, "unresolved_aspects": []},
+            {"statement_index": 1, "decision": "covered_by_procedure", "target_id": "procedure-screening-1",
+             "source_action_excerpt": "记录末次用药日期", "target_action_excerpt": "记录末次用药日期",
+             "source_time_excerpt": "筛选时", "target_time_excerpt": "筛选时", "unresolved_aspects": []},
+        ],
+    })
+    assert target_review_indexes(inventory, coverage) == [0, 1]
+    validate_source_target_review(batch, inventory, coverage, review)
+
+    borrowed_time = review.model_copy(deep=True)
+    borrowed_time.items[1].target_time_excerpt = "基线时"
+    with pytest.raises(ValueError, match="目标时间缺少原文或访视定位"):
+        validate_source_target_review(batch, inventory, coverage, borrowed_time)
+
+    invented_target = review.model_copy(deep=True)
+    invented_target.items[0].target_id = "EX-99"
+    with pytest.raises(ValueError, match="非冻结或不唯一的目标"):
+        validate_source_target_review(batch, inventory, coverage, invented_target)
+
+    missing_statement = review.model_copy(deep=True)
+    missing_statement.items.pop()
+    with pytest.raises(ValueError, match="必须且只能覆盖"):
+        validate_source_target_review(batch, inventory, coverage, missing_statement)
+
+    partial = review.model_copy(deep=True)
+    partial.items[1].decision = "additional_requirement"
+    partial.items[1].target_time_excerpt = None
+    partial.items[1].unresolved_aspects = ["已有动作，但未核实时间是否相同"]
+    validate_source_target_review(batch, inventory, coverage, partial)
+
+    partial_without_reason = partial.model_copy(deep=True)
+    partial_without_reason.items[1].unresolved_aspects = []
+    with pytest.raises(ValueError, match="必须说明待核实"):
+        validate_source_target_review(batch, inventory, coverage, partial_without_reason)
+
+    partial_wrong_target = partial.model_copy(deep=True)
+    partial_wrong_target.items[1].target_id = "procedure-not-in-batch"
+    with pytest.raises(ValueError, match="非冻结或不唯一的目标"):
+        validate_source_target_review(batch, inventory, coverage, partial_wrong_target)
+
+    partial_invented_time = partial.model_copy(deep=True)
+    partial_invented_time.items[1].target_time_excerpt = "随机后"
+    with pytest.raises(ValueError, match="目标时间缺少原文"):
+        validate_source_target_review(batch, inventory, coverage, partial_invented_time)
+
+    linked = [item.model_copy(deep=True) for item in coverage]
+    linked[0].status = "linked_only"
+    linked[0].disposition = "official_eligibility"
+    linked[0].linked_official_code = "EX-other"
+    with pytest.raises(ValueError, match="覆盖目标与草稿链接不一致"):
+        validate_source_target_review(batch, inventory, linked, review)
+    linked[0].linked_official_code = "EX-01"
+    validate_source_target_review(batch, inventory, linked, review)
+    assert '"linked_official_code": "EX-01"' in build_source_target_review_prompt(
+        batch, inventory, linked
+    )
+
+
+def test_source_target_review_selects_unexpressed_enrollment_requirements() -> None:
+    inventory = SourceInterpretation.model_validate({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [
+            {"structure_unit_id": f"su-{index}", "quoted_text": "应核查原文",
+             "force": "required", "time_words": []}
+            for index in range(4)
+        ],
+        "units_without_statement": [],
+    })
+    coverage = [
+        SourceStatementCoverage(
+            statement_index=index,
+            structure_unit_id=f"su-{index}",
+            disposition=disposition,
+            status=status,
+        )
+        for index, (disposition, status) in enumerate([
+            ("official_eligibility", "linked_only"),
+            ("supporting_or_supplement", "not_located"),
+            ("phase_excluded", "not_located"),
+            ("other_control_candidate", "expressed"),
+        ])
+    ]
+    assert target_review_indexes(inventory, coverage) == [0, 1]
+
+
+def test_source_target_review_preserves_uncovered_statement_as_failure() -> None:
+    batch = _batch().model_copy(deep=True)
+    batch.owned_units[0].excerpt = "其他控制：年龄至少18岁；筛选前说明年龄记录来源"
+    batch.known_official_targets[0].source_excerpts = ["年龄至少18岁"]
+    inventory = SourceInterpretation.model_validate({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [
+            {"structure_unit_id": "su-01", "quoted_text": "筛选前说明年龄记录来源", "force": "required", "time_words": []},
+        ],
+        "units_without_statement": ["su-02"],
+    })
+    claim = SourceTargetReview.model_validate({
+        "version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{"statement_index": 0, "decision": "additional_requirement", "target_id": None,
+                   "source_action_excerpt": "说明年龄记录来源", "target_action_excerpt": None,
+                   "source_time_excerpt": None, "target_time_excerpt": None,
+                   "unresolved_aspects": ["未找到既有条款对应的完整要求"]}],
+    })
+
+    class ReviewingTransport(_FakeTransport):
+        def start_source_interpretation(self, *, prompt: str) -> ProtocolControlAgentResponse:
+            return ProtocolControlAgentResponse(session_id="source-1", text=inventory.model_dump_json())
+
+        def start_source_target_review(self, *, prompt: str) -> ProtocolControlAgentResponse:
+            assert "说明年龄记录来源" in prompt
+            return ProtocolControlAgentResponse(session_id="target-1", text=claim.model_dump_json())
+
+    result = ProtocolControlAgentRunner().run(
+        batch,
+        ReviewingTransport([ProtocolControlAgentResponse(session_id="wire-1", text=_wire(candidate=_candidate()).model_dump_json())]),
+    )
+    assert result.status == "需要核对"
+    assert result.final_output is None
+    assert result.source_target_review == claim
+    assert result.attempts[-1].error_classes == ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
+    assert result.attempts[-2].output is not None
+
+    batch.known_official_targets[0].source_excerpts = ["说明年龄记录来源"]
+    claim = SourceTargetReview.model_validate({
+        "version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{"statement_index": 0, "decision": "covered_by_official", "target_id": "EX-01",
+                   "source_action_excerpt": "说明年龄记录来源",
+                   "target_action_excerpt": "说明年龄记录来源",
+                   "source_time_excerpt": None, "target_time_excerpt": None,
+                   "unresolved_aspects": []}],
+    })
+    accepted = ProtocolControlAgentRunner().run(
+        batch,
+        ReviewingTransport([ProtocolControlAgentResponse(
+            session_id="wire-2", text=_wire(candidate=_candidate()).model_dump_json()
+        )]),
+    )
+    assert accepted.status == "已解析"
+    assert accepted.source_target_review == claim
+    assert accepted.final_output is not None
+
+
+def test_source_target_addition_enters_bounded_repair_without_accepting_unchanged_wire() -> None:
+    batch = _batch().model_copy(deep=True)
+    batch.owned_units[0].excerpt = "其他控制：年龄至少18岁；筛选前说明年龄记录来源"
+    inventory = SourceInterpretation.model_validate({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [{"structure_unit_id": "su-01", "quoted_text": "筛选前说明年龄记录来源",
+                        "force": "required", "time_words": []}],
+        "units_without_statement": ["su-02"],
+    })
+    review = SourceTargetReview.model_validate({
+        "version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{"statement_index": 0, "decision": "additional_requirement", "target_id": None,
+                   "source_action_excerpt": "说明年龄记录来源", "target_action_excerpt": None,
+                   "source_time_excerpt": None, "target_time_excerpt": None,
+                   "unresolved_aspects": ["现有候选未表达记录来源"]}],
+    })
+    original = _wire(candidate=_candidate()).model_dump_json()
+
+    class AdditionTransport(_FakeTransport):
+        def start_source_interpretation(self, *, prompt: str) -> ProtocolControlAgentResponse:
+            return ProtocolControlAgentResponse(session_id="source-1", text=inventory.model_dump_json())
+
+        def start_source_target_review(self, *, prompt: str) -> ProtocolControlAgentResponse:
+            return ProtocolControlAgentResponse(session_id="target-1", text=review.model_dump_json())
+
+    transport = AdditionTransport([
+        ProtocolControlAgentResponse(session_id="wire-1", text=original),
+        ProtocolControlAgentResponse(session_id="wire-1", text=original),
+    ])
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(
+        batch, transport, output_validator=lambda _output: None,
+    )
+    assert result.status == "需要核对"
+    assert result.final_output is None
+    assert result.source_target_review == review
+    assert any("SOURCE_TARGET_ADDITIONAL_REQUIREMENT" in attempt.error_classes
+               for attempt in result.attempts)
+    assert "来源限定补入" in transport.prompts[-1]
+    assert any("REPAIR_SCOPE_ESCAPE" in attempt.error_classes
+               for attempt in result.attempts)
+
+
+def test_source_target_addition_can_publish_only_after_source_bound_insert() -> None:
+    batch = _batch().model_copy(deep=True)
+    quote = "须记录年龄资料来源"
+    batch.owned_units[0].excerpt = f"其他控制：{quote}"
+    inventory = SourceInterpretation.model_validate({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [{"structure_unit_id": "su-01", "quoted_text": quote,
+                        "force": "required", "time_words": []}],
+        "units_without_statement": ["su-02"],
+    })
+    review = SourceTargetReview.model_validate({
+        "version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{"statement_index": 0, "decision": "additional_requirement", "target_id": None,
+                   "source_action_excerpt": quote, "target_action_excerpt": None,
+                   "source_time_excerpt": None, "target_time_excerpt": None,
+                   "unresolved_aspects": ["既有目标没有记录来源要求"]}],
+    })
+    candidate = _candidate().model_dump(mode="json")
+    candidate["title"] = "年龄资料来源记录"
+    candidate["applicability_expression"] = None
+    candidate["exception_expression"] = None
+    atom = candidate["obligation_expression"]["groups"][0]["atoms"][0]
+    atom["kind"] = "must_record"
+    atom["statement"] = quote
+    atom["source_excerpts"] = [quote]
+    atom["evaluation"] = _evaluation(quote, "span:01", quote)
+    candidate["minimum_evidence"][0]["description"] = quote
+    candidate["minimum_evidence"][0]["source_policy"]["source_excerpts"] = [quote]
+
+    class InsertingTransport(_FakeTransport):
+        def start_source_interpretation(self, *, prompt: str) -> ProtocolControlAgentResponse:
+            return ProtocolControlAgentResponse(session_id="source-1", text=inventory.model_dump_json())
+
+        def start_source_target_review(self, *, prompt: str) -> ProtocolControlAgentResponse:
+            return ProtocolControlAgentResponse(session_id="target-1", text=review.model_dump_json())
+
+        def continue_candidate(self, *, session_id: str, prompt: str) -> ProtocolControlAgentResponse:
+            self.prompts.append(prompt)
+            return ProtocolControlAgentResponse(
+                session_id=session_id,
+                text=json.dumps({"candidate_draft": candidate}, ensure_ascii=False),
+            )
+
+    transport = InsertingTransport([
+        ProtocolControlAgentResponse(session_id="wire-1", text=_wire().model_dump_json()),
+    ])
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(
+        batch, transport, output_validator=lambda _output: None,
+    )
+    assert result.status == "已解析", [attempt.issues for attempt in result.attempts]
+    assert result.final_output is not None
+    assert len(result.final_output.candidates) == 1
+    assert result.source_statement_coverage[0].status == "expressed"
+    assert any("SOURCE_TARGET_ADDITIONAL_REQUIREMENT" in attempt.error_classes
+               for attempt in result.attempts)
+
+
+@pytest.mark.parametrize("prior_schema_repair", [False, True])
+def test_mixed_official_source_keeps_its_link_when_new_requirement_is_added(
+    prior_schema_repair: bool,
+) -> None:
+    batch = _batch().model_copy(deep=True)
+    quote = "须记录年龄资料来源"
+    batch.owned_units[0].excerpt = f"其他控制：年龄至少18岁；{quote}"
+    batch.known_official_targets[0].source_excerpts = ["年龄至少18岁"]
+    inventory = SourceInterpretation.model_validate({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [{"structure_unit_id": "su-01", "quoted_text": quote,
+                        "force": "required", "time_words": []}],
+        "units_without_statement": ["su-02"],
+    })
+    review = SourceTargetReview.model_validate({
+        "version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{"statement_index": 0, "decision": "additional_requirement", "target_id": "EX-01",
+                   "source_action_excerpt": quote, "target_action_excerpt": "年龄至少18岁",
+                   "source_time_excerpt": None, "target_time_excerpt": None,
+                   "unresolved_aspects": ["原条款未要求记录资料来源"]}],
+    })
+    initial = _wire().model_dump(mode="json")
+    initial["dispositions"][0].update(disposition="official_eligibility", linked_official_code="EX-01")
+    revised = json.loads(json.dumps(initial))
+    revised["dispositions"][0].update(disposition="other_control_candidate", linked_official_code=None, notes=None)
+    candidate = _candidate().model_dump(mode="json")
+    candidate["title"] = "年龄资料来源记录"
+    candidate["applicability_expression"] = None
+    candidate["exception_expression"] = None
+    atom = candidate["obligation_expression"]["groups"][0]["atoms"][0]
+    atom.update(kind="must_record", statement=quote, source_excerpts=[quote],
+                evaluation=_evaluation(quote, "span:01", quote))
+    candidate["minimum_evidence"][0]["description"] = quote
+    candidate["minimum_evidence"][0]["source_policy"]["source_excerpts"] = [quote]
+    candidate["cross_source_relations"] = [{
+        "kind": "supplementary_requirement", "external_target_kind": "official_rule",
+        "external_target_id": "EX-01", "candidate_side": "left",
+        "affected_workflow_stage_id": None, "notes": None,
+    }]
+    revised["candidate_drafts"] = [candidate]
+
+    class MixedTransport(_FakeTransport):
+        def start_source_interpretation(self, *, prompt: str) -> ProtocolControlAgentResponse:
+            return ProtocolControlAgentResponse(session_id="source-1", text=inventory.model_dump_json())
+
+        def start_source_target_review(self, *, prompt: str) -> ProtocolControlAgentResponse:
+            return ProtocolControlAgentResponse(session_id="target-1", text=review.model_dump_json())
+
+    responses = []
+    if prior_schema_repair:
+        responses.append(ProtocolControlAgentResponse(
+            session_id="wire-1",
+            text=json.dumps({"wire_version": CONTROL_AGENT_WIRE_VERSION, "dispositions": []}),
+        ))
+    responses.extend([
+        ProtocolControlAgentResponse(session_id="wire-1", text=json.dumps(initial, ensure_ascii=False)),
+        ProtocolControlAgentResponse(session_id="wire-1", text=json.dumps(revised, ensure_ascii=False)),
+    ])
+    transport = MixedTransport(responses)
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(
+        batch, transport, output_validator=lambda _output: None,
+    )
+    assert result.status == "已解析"
+    assert result.final_output is not None
+    assert len(result.final_output.candidates) == 1
+    assert result.source_statement_coverage[0].status == "expressed"
+    assert result.final_output.candidates[0].semantics.cross_source_relations[0].right_target_id == "EX-01"
+    assert any("SOURCE_TARGET_ADDITIONAL_REQUIREMENT" in attempt.error_classes
+               for attempt in result.attempts)
+
+
+def test_source_insert_reuses_unchanged_validated_target_matches() -> None:
+    batch = _batch().model_copy(deep=True)
+    added_quote = "须记录年龄资料来源"
+    batch.owned_units[0].excerpt = f"其他控制：年龄至少18岁；签署知情同意；{added_quote}"
+    batch.known_official_targets[0].source_excerpts = ["签署知情同意"]
+    inventory = SourceInterpretation.model_validate({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [
+            {"structure_unit_id": "su-01", "quoted_text": "签署知情同意",
+             "force": "required", "time_words": []},
+            {"structure_unit_id": "su-01", "quoted_text": added_quote,
+             "force": "required", "time_words": []},
+        ],
+        "units_without_statement": ["su-02"],
+    })
+    review = SourceTargetReview.model_validate({
+        "version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [
+            {"statement_index": 0, "decision": "covered_by_official", "target_id": "EX-01",
+             "source_action_excerpt": "签署知情同意", "target_action_excerpt": "签署知情同意",
+             "source_time_excerpt": None, "target_time_excerpt": None, "unresolved_aspects": []},
+            {"statement_index": 1, "decision": "additional_requirement", "target_id": None,
+             "source_action_excerpt": added_quote, "target_action_excerpt": None,
+             "source_time_excerpt": None, "target_time_excerpt": None,
+             "unresolved_aspects": ["已有目标未要求记录资料来源"]},
+        ],
+    })
+    initial = _wire(candidate=_candidate()).model_dump(mode="json")
+    revised = deepcopy(initial)
+    candidate = _candidate().model_dump(mode="json")
+    candidate["title"] = "年龄资料来源记录"
+    candidate["applicability_expression"] = None
+    candidate["exception_expression"] = None
+    atom = candidate["obligation_expression"]["groups"][0]["atoms"][0]
+    atom.update(kind="must_record", statement=added_quote, source_excerpts=[added_quote],
+                evaluation=_evaluation(added_quote, "span:01", added_quote))
+    candidate["minimum_evidence"][0]["description"] = added_quote
+    candidate["minimum_evidence"][0]["source_policy"]["source_excerpts"] = [added_quote]
+    revised["candidate_drafts"].append(candidate)
+
+    class CountingTransport(_FakeTransport):
+        review_calls = 0
+
+        def start_source_interpretation(self, *, prompt: str) -> ProtocolControlAgentResponse:
+            return ProtocolControlAgentResponse(session_id="source-1", text=inventory.model_dump_json())
+
+        def start_source_target_review(self, *, prompt: str) -> ProtocolControlAgentResponse:
+            self.review_calls += 1
+            return ProtocolControlAgentResponse(session_id="target-1", text=review.model_dump_json())
+
+    transport = CountingTransport([
+        ProtocolControlAgentResponse(session_id="wire-1", text=json.dumps(initial, ensure_ascii=False)),
+        ProtocolControlAgentResponse(session_id="wire-1", text=json.dumps(revised, ensure_ascii=False)),
+    ])
+    result = ProtocolControlAgentRunner(max_schema_repairs=0).run(
+        batch, transport, output_validator=lambda _output: None,
+    )
+    assert result.status == "已解析", [attempt.issues for attempt in result.attempts]
+    assert transport.review_calls == 1
+    assert len(result.final_output.candidates) == 2
+    assert [entry.status for entry in result.source_statement_coverage] == [
+        "candidate_linked", "expressed",
+    ]
 
 
 def test_strict_response_format_does_not_duplicate_full_schema_in_prompt() -> None:
@@ -1994,6 +2456,31 @@ def test_candidate_only_repair_preserves_other_candidates_and_dispositions() -> 
     response_format = protocol_control_candidate_repair_response_format()
     assert response_format["json_schema"]["name"] == "protocol_control_candidate_repair_v1"
     assert list(response_format["json_schema"]["schema"]["properties"]) == ["candidate_draft"]
+
+
+def test_candidate_repair_retains_only_unchanged_checked_time_attribute() -> None:
+    original = _candidate().model_dump(mode="json")
+    atom = original["obligation_expression"]["groups"][0]["atoms"][0]
+    atom["evaluation"] = _timed_evaluation(atom["statement"], "span:01", "年龄至少18岁")
+    atom["time_constraint"] = {"anchor_type": "screening_date", "direction": "before"}
+    baseline = _wire(candidate=ProtocolControlAgentWireCandidate.model_validate(original))
+
+    revised = deepcopy(original)
+    revised_atom = revised["obligation_expression"]["groups"][0]["atoms"][0]
+    revised_atom["statement"] += "（已核对）"
+    revised_atom["evaluation"]["time_operand_attribute"] = None
+    merged = _merge_candidate_repair(json.dumps({"candidate_draft": revised}), baseline, 0)
+    assert merged.candidate_drafts[0].obligation_expression.groups[0].atoms[0].evaluation.time_operand_attribute == "date_range"
+
+    changed_time = deepcopy(revised)
+    changed_time["obligation_expression"]["groups"][0]["atoms"][0]["time_constraint"]["direction"] = "after"
+    with pytest.raises(ProtocolControlAgentWireValidationError, match="CANDIDATE_REPAIR_INVALID"):
+        _merge_candidate_repair(json.dumps({"candidate_draft": changed_time}), baseline, 0)
+
+    changed_source = deepcopy(revised)
+    changed_source["obligation_expression"]["groups"][0]["atoms"][0]["source_excerpts"] = ["另一条原文"]
+    with pytest.raises(ProtocolControlAgentWireValidationError, match="CANDIDATE_REPAIR_INVALID"):
+        _merge_candidate_repair(json.dumps({"candidate_draft": changed_source}), baseline, 0)
 
 
 def test_wire_stage_error_repairs_only_its_candidate_without_rewriting_batch() -> None:
@@ -2656,6 +3143,140 @@ def test_explicit_candidate_repartition_preserves_authorized_source_union() -> N
         tuple(candidate.frozen_structure_unit_ids)
         for candidate in result.final_output.candidates
     } == {("su-01",), ("su-02",)}
+
+
+@pytest.mark.parametrize("removed_disposition", [
+    StructureUnitDispositionKind.POST_TREATMENT_EXECUTION,
+    StructureUnitDispositionKind.SUPPORTING_OR_SUPPLEMENT,
+])
+def test_post_treatment_reclassification_requires_explicit_disposition(
+    removed_disposition: StructureUnitDispositionKind,
+) -> None:
+    combined = _candidate().model_copy(update={
+        "source_structure_unit_ids": ["su-01", "su-02"],
+        "source_span_ids": ["span:01", "span:02"],
+    })
+    initial_data = _wire(candidate=combined).model_dump(mode="json")
+    initial_data["dispositions"][1].update(
+        disposition=StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE.value,
+        notes=None,
+    )
+    initial = ProtocolControlAgentWire.model_validate(initial_data)
+    revised = initial.model_dump(mode="json")
+    revised["candidate_drafts"][0] = _candidate().model_dump(mode="json")
+    revised["dispositions"][1].update(
+        disposition=removed_disposition.value,
+        notes="该原文单元仅说明治疗期执行事项",
+    )
+    transport = _FakeTransport([
+        ProtocolControlAgentResponse(session_id="stage-repair", text=initial.model_dump_json()),
+        ProtocolControlAgentResponse(session_id="stage-repair", text=json.dumps(revised)),
+    ])
+    calls = 0
+
+    def reject_first(output) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise ProtocolControlAgentWireValidationError(
+                "POST_ENROLLMENT_PROCEDURE_MISCLASSIFIED",
+                "候选混入治疗期执行事项",
+                structure_unit_ids=["su-01", "su-02"],
+                candidate_ids=[output.candidates[0].control_candidate_id],
+                allow_source_closure_rewrite=True,
+                allow_post_enrollment_reclassification=True,
+            )
+
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(
+        _batch(), transport, output_validator=reject_first
+    )
+    if removed_disposition == StructureUnitDispositionKind.POST_TREATMENT_EXECUTION:
+        assert result.status == "已解析"
+        assert result.final_output is not None
+        assert result.final_output.candidates[0].frozen_structure_unit_ids == ["su-01"]
+    else:
+        assert result.status == "需要核对"
+        assert "REPAIR_SCOPE_ESCAPE" in result.attempts[-1].issues[0]
+
+
+def test_post_treatment_repair_retains_checked_atoms_and_requires_explicit_source_move() -> None:
+    batch = _batch().model_copy(update={
+        "owned_units": [
+            _batch().owned_units[0],
+            _unit("su-02", 2, "span:02", "治疗期完成另一项研究操作"),
+        ]
+    })
+    original = _candidate().model_dump(mode="json")
+    first = original["obligation_expression"]["groups"][0]["atoms"][0]
+    first["time_constraint"] = {"anchor_type": "screening_date", "direction": "before"}
+    first["evaluation"] = _timed_evaluation(first["statement"], "span:01", "年龄至少18岁")
+    later = deepcopy(first)
+    later["statement"] = "后续治疗期完成另一项研究操作"
+    _replace_atom_source(later, "span:02", "治疗期完成另一项研究操作")
+    later["time_constraint"] = None
+    original["obligation_expression"]["groups"][0]["atoms"].append(later)
+    original["source_structure_unit_ids"] = ["su-01", "su-02"]
+    original["source_span_ids"] = ["span:01", "span:02"]
+    original_candidate = ProtocolControlAgentWireCandidate.model_validate(original)
+    baseline = _wire(candidate=original_candidate).model_dump(mode="json")
+    baseline["dispositions"][1].update(
+        disposition=StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE.value, notes=None,
+    )
+    baseline_wire = ProtocolControlAgentWire.model_validate(baseline)
+    repair = {
+        "removed_atoms": [{"group_index": 0, "atom_index": 1}],
+        "removed_unit_dispositions": [{
+            **baseline["dispositions"][1],
+            "disposition": StructureUnitDispositionKind.POST_TREATMENT_EXECUTION.value,
+            "notes": "原文仅描述后续治疗期操作",
+        }],
+        "title": "年龄资料控制",
+        "review_node_bindings": original["review_node_bindings"],
+        "minimum_evidence": original["minimum_evidence"],
+        "cross_source_relations": [],
+    }
+    merged = _merge_post_treatment_scope_repair(
+        json.dumps(repair), baseline_wire, 0, batch
+    )
+    assert merged.candidate_drafts[0].obligation_expression.groups[0].atoms[0] == original_candidate.obligation_expression.groups[0].atoms[0]
+    assert merged.candidate_drafts[0].source_structure_unit_ids == ["su-01"]
+    assert merged.dispositions[1].disposition == StructureUnitDispositionKind.POST_TREATMENT_EXECUTION
+    assert protocol_control_post_treatment_repair_response_format()["json_schema"]["name"] == "protocol_control_post_treatment_repair_v1"
+
+    class NarrowTransport(_FakeTransport):
+        def continue_post_treatment_repair(self, *, session_id: str, prompt: str):
+            self.prompts.append(prompt)
+            assert "原候选原子" in prompt
+            return ProtocolControlAgentResponse(session_id=session_id, text=json.dumps(repair))
+
+    transport = NarrowTransport([
+        ProtocolControlAgentResponse(session_id="stage-repair", text=baseline_wire.model_dump_json())
+    ])
+    calls = 0
+
+    def reject_mixed_candidate(output) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise ProtocolControlAgentWireValidationError(
+                "POST_ENROLLMENT_PROCEDURE_MISCLASSIFIED",
+                "后续研究操作混入当前节点",
+                structure_unit_ids=["su-01", "su-02"],
+                candidate_ids=[output.candidates[0].control_candidate_id],
+                allow_source_closure_rewrite=True,
+                allow_post_enrollment_reclassification=True,
+            )
+
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(
+        batch, transport, output_validator=reject_mixed_candidate
+    )
+    assert result.status == "已解析", [attempt.issues for attempt in result.attempts]
+    assert result.final_output is not None
+    assert len(transport.prompts) == 2
+
+    repair["removed_unit_dispositions"][0]["disposition"] = StructureUnitDispositionKind.SUPPORTING_OR_SUPPLEMENT.value
+    with pytest.raises(ProtocolControlAgentWireValidationError, match="POST_TREATMENT_REPAIR_INVALID"):
+        _merge_post_treatment_scope_repair(json.dumps(repair), baseline_wire, 0, batch)
 
 
 def test_obligation_source_repair_preserves_sibling_atoms_and_candidate_fields() -> None:

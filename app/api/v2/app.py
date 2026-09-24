@@ -8,8 +8,8 @@
 4. 启动后台 JobRunner（可配置关闭，测试用）；
 5. 关闭时停止 runner 并释放 Engine。
 
-Phase 2 只新增独立 /api/v2 应用，不切换 legacy 默认入口；``app/main.py`` 不动。
-启动方式：``uvicorn app.api.v2.app:create_app --factory``。
+``app/main.py`` 保留为旧版兼容入口；正式桌面入口由
+``scripts/run_v2_desktop.py`` 组合 V2 API 与已校验的前端构建。
 """
 from __future__ import annotations
 
@@ -436,7 +436,10 @@ def create_app(
     app = FastAPI(title="入排审核 V2 持久任务 API", lifespan=lifespan)
     @app.get("/api/v2/application-status")
     def application_status():
-        return {"mode": "standard", "can_modify": True}
+        status = {"mode": "standard", "can_modify": True}
+        if hasattr(app.state, "desktop_root"):
+            status.update(service="enrollment-review-v2-desktop", instance_root=app.state.desktop_root)
+        return status
 
     app.include_router(jobs_router)
     app.include_router(protocol_control_router)

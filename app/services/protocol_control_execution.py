@@ -116,7 +116,7 @@ from app.workflow.runner import PreparedStepResult, StepContext, StepExecutor
 PROTOCOL_CONTROL_EXECUTION_JOB_TYPE = "protocol_control_execution"
 # A short alias keeps callers independent from the longer API-facing name.
 PROTOCOL_CONTROL_JOB_TYPE = PROTOCOL_CONTROL_EXECUTION_JOB_TYPE
-PROTOCOL_CONTROL_EXECUTION_VERSION = "phase5/protocol-control-execution/v79"
+PROTOCOL_CONTROL_EXECUTION_VERSION = "phase5/protocol-control-execution/v96"
 PROTOCOL_CONTROL_EXECUTION_CONTROL_SCHEMA = (
     "phase5/protocol-control-execution-control/v1"
 )
@@ -1688,12 +1688,24 @@ def _execute_deep(
             ),
             diagnostic_checkpoint={
                 "stage": "deep_failure_diagnostic",
-                "schema_version": "phase5/deep-failure-diagnostic/v1",
+                "schema_version": "phase5/deep-failure-diagnostic/v2",
                 "batch_id": batch.batch_id,
                 "prompt_template_sha256": protocol_control_agent_prompt_template_sha256(
                     prompt_template
                 ),
                 "transport_identity": _transport_identity(transport, stage="deep"),
+                "source_interpretation": (
+                    result.source_interpretation.model_dump(mode="json")
+                    if result.source_interpretation is not None else None
+                ),
+                "source_statement_coverage": [
+                    item.model_dump(mode="json")
+                    for item in result.source_statement_coverage
+                ],
+                "source_target_review": (
+                    result.source_target_review.model_dump(mode="json")
+                    if result.source_target_review is not None else None
+                ),
                 "attempts": [
                     {
                         "attempt": item.attempt,

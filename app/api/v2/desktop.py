@@ -16,6 +16,7 @@ def create_desktop_app(*, frontend_dir: Path, data_paths: DataPaths, browse_only
     else:
         from app.api.v2.app import create_app
         app = create_app(data_paths=data_paths)
+        app.state.desktop_root = str(Path(__file__).resolve().parents[3])
 
     # Unknown API paths must not be answered by an HTML/asset fallback.
     @app.api_route("/api/{path:path}", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])

@@ -23,7 +23,7 @@ CANDIDATE_REPARTITION_GATE_CODES = frozenset(
 # Gate codes that authorize merge/split/rewrite of every candidate sharing one
 # source-structure-unit closure while conserving the complete source union.
 SOURCE_CLOSURE_REWRITE_GATE_CODES = frozenset(
-    {"CONDITIONAL_EXEMPTION_SCOPE_SPLIT"}
+    {"CONDITIONAL_EXEMPTION_SCOPE_SPLIT", "POST_ENROLLMENT_PROCEDURE_MISCLASSIFIED"}
 )
 
 # These findings require regrouping one candidate's full expression while its
@@ -152,6 +152,10 @@ def publication_repair_error(
         error_class_codes=[issue.code for issue in issues],
         allow_candidate_repartition=allow_candidate_repartition,
         allow_source_closure_rewrite=allow_source_closure_rewrite,
+        allow_post_enrollment_reclassification=any(
+            issue.code == "POST_ENROLLMENT_PROCEDURE_MISCLASSIFIED"
+            for issue in repair_scope_issues
+        ),
         allow_source_insert=allow_source_insert,
     )
 

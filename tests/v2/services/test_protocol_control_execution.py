@@ -871,7 +871,11 @@ def test_uncertain_deep_is_final_without_blind_retry(data_paths, session_factory
     assert failure_checkpoint is not None
     saved = failure_checkpoint[1]
     assert saved["stage"] == "deep_failure_diagnostic"
+    assert saved["schema_version"] == "phase5/deep-failure-diagnostic/v2"
     assert saved["batch_id"]
+    assert saved["source_interpretation"] is None
+    assert saved["source_statement_coverage"] == []
+    assert saved["source_target_review"] is None
     assert saved["attempts"][0]["raw_output_sha256"]
     assert saved["attempts"][0]["raw_output_text"] is not None
     assert deep.start_calls == 1

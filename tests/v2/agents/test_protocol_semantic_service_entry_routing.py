@@ -64,12 +64,12 @@ def test_service_entry_snapshot_uses_single_glm_high_default_chain(
     )
     snapshot = service_entry_semantic_route_snapshot()
     assert snapshot["route_mode"] == "graded"
-    # 默认链只声明 GLM high：无隐式 MTPLX/DeepSeek 第三模型回退。
+    # 默认链只声明当前配置的 GLM high，无隐式第三模型回退。
     assert snapshot["complex_identities"] == [
-        "zhipu-coding-plan:glm-5.3-flash:high",
+        "cms-router:glm-5.3-flash:high",
     ]
     assert snapshot["short_identities"] == [
-        "zhipu-coding-plan:glm-5.3-flash:high",
+        "cms-router:glm-5.3-flash:high",
     ]
     assert snapshot["injected_transport_bypasses_grading"] is True
 
@@ -194,10 +194,10 @@ def test_feedback_revision_uses_short_route_and_fresh_transport(monkeypatch):
 
 def test_env_example_and_launcher_do_not_treat_mtplx_as_complex_primary():
     env_text = ENV_EXAMPLE.read_text(encoding="utf-8")
-    assert "DECONSTRUCT_ROUTE_MODE=graded" in env_text
+    assert "DECONSTRUCT_ROUTE_MODE=pinned" in env_text
     assert "glm-5.3-flash" in env_text
-    assert "deepseek-v4-flash" in env_text
-    assert "不要把" in env_text and "生产主路由" in env_text
+    assert "deepseek-latest-cloud" in env_text
+    assert "DECONSTRUCT_GLM_PROVIDER=cms-router" in env_text
     launcher = LAUNCHER.read_text(encoding="utf-8")
     assert "SHOULD_AUTOSTART_MTPLX" in launcher
     assert "跳过自动启动 MTPLX" in launcher
@@ -205,6 +205,8 @@ def test_env_example_and_launcher_do_not_treat_mtplx_as_complex_primary():
     service = SERVICE_SCRIPT.read_text(encoding="utf-8")
     assert "DECONSTRUCT_ROUTE_MODE" in service
     assert "DECONSTRUCT_GLM_MODEL" in service
+    assert "scripts.run_v2_desktop" in service
+    assert "app.main:app" not in service
 
 
 def test_service_entry_sources_have_no_project_specific_hardcoding():
@@ -236,5 +238,5 @@ def test_generate_path_still_uses_shared_router_snapshot_not_deconstruct_backend
     source = EXECUTOR_SOURCE.read_text(encoding="utf-8")
     assert "_run_semantic_generation_with_routing" in source
     assert "select_protocol_semantic_route_candidates" in source
-    assert snapshot["complex_identities"][0].startswith("zhipu-coding-plan:")
+    assert snapshot["complex_identities"][0].startswith("cms-router:")
     assert snapshot["short_grade"] == GRADE_SHORT

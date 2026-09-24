@@ -32,6 +32,14 @@ if [[ "$APP_DIR" == */.worktrees/* ]] && [ -z "${ENROLLMENT_ENV_FILE:-}" ]; then
   echo "【启动失败】worktree 必须通过 ENROLLMENT_ENV_FILE 显式指定环境文件。" >&2
   exit 1
 fi
+if [ -z "${ENROLLMENT_ENV_FILE:-}" ]; then
+  echo "【启动失败】缺少工作台环境文件，请联系管理员配置。" >&2
+  exit 1
+fi
+if [ ! -x "$APP_DIR/.venv/bin/python" ]; then
+  echo "【启动失败】缺少工作台运行环境，请联系管理员安装。" >&2
+  exit 1
+fi
 
 PORT_FILE="$APP_DIR/output/runtime_state/port"
 if [ -z "${PORT:-}" ] && [ -f "$PORT_FILE" ]; then
@@ -51,8 +59,9 @@ cd "$APP_DIR"
 {
   echo "----- $(date '+%Y-%m-%d %H:%M:%S') enrollment review service start -----"
   echo "pwd=$(pwd)"
-  echo "python=$(/usr/bin/python3 --version 2>&1)"
+  echo "python=$("$APP_DIR/.venv/bin/python" --version 2>&1)"
   echo "port=$PORT"
 } >> "$APP_LOG" 2>&1
 
-exec /usr/bin/python3 -m uvicorn app.main:app --host 127.0.0.1 --port "$PORT" --loop asyncio
+exec "$APP_DIR/.venv/bin/python" -m scripts.run_v2_desktop \
+  --env-file "$ENROLLMENT_ENV_FILE" --port "$PORT" --no-browser

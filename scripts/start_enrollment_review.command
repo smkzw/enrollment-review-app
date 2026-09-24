@@ -7,6 +7,7 @@ if [ -f "$SCRIPT_DIR/../app/main.py" ]; then
 else
   APP_DIR="${ENROLLMENT_REVIEW_APP_DIR:-/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app}"
 fi
+cd "$APP_DIR" || exit 1
 # Finder 双击启动时 PATH 很精简；MTPLX/oMLX 常安装在用户本地目录。
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
@@ -17,6 +18,17 @@ if [ -z "${ENROLLMENT_ENV_FILE:-}" ] && [ -f "$APP_DIR/.env" ]; then
 fi
 if [[ "$APP_DIR" == */.worktrees/* ]] && [ -z "${ENROLLMENT_ENV_FILE:-}" ]; then
   echo "【启动失败】worktree 必须通过 ENROLLMENT_ENV_FILE 显式指定环境文件。"
+  exit 1
+fi
+if [ ! -x "$APP_DIR/.venv/bin/python" ]; then
+  echo "【启动失败】缺少工作台运行环境，请联系管理员安装。"
+  exit 1
+fi
+if ! "$APP_DIR/.venv/bin/python" -c 'import sys
+from pathlib import Path
+from app.services.desktop_frontend import require_product_frontend
+require_product_frontend(Path(sys.argv[1]))' "$APP_DIR/frontend/dist"; then
+  echo "【启动失败】正式界面文件未准备好，不会打开旧版页面。"
   exit 1
 fi
 
@@ -221,8 +233,13 @@ is_mtplx_up() {
 is_enrollment_app() {
   local port="$1"
   local body
-  body="$(/usr/bin/curl --noproxy '*' -fsS --connect-timeout 2 --max-time 4 "http://127.0.0.1:$port/api/health" 2>/dev/null)" || return 1
-  [[ "$body" == *'"service":"enrollment-review-app"'* ]]
+  body="$(/usr/bin/curl --noproxy '*' -fsS --connect-timeout 2 --max-time 4 "http://127.0.0.1:$port/api/v2/application-status" 2>/dev/null)" || return 1
+  /usr/bin/python3 -c 'import json,sys
+try:
+    status=json.load(sys.stdin)
+    raise SystemExit(0 if status.get("service") == "enrollment-review-v2-desktop" and status.get("instance_root") == sys.argv[1] else 1)
+except (ValueError, AttributeError, TypeError):
+    raise SystemExit(1)' "$APP_DIR" <<< "$body"
 }
 
 port_is_free() {
@@ -531,12 +548,9 @@ echo "前端入口: $APP_URL"
 echo "oMLX OCR服务: $OMLX_URL"
 echo "MTPLX本地服务: $MTPLX_URL（模型：$MTPLX_MODEL / $MTPLX_REASONING_EFFORT）"
 if [ "$DECONSTRUCT_ROUTE_MODE" = "graded" ]; then
-  echo "方案语义路由: graded"
-  echo "  复杂任务: $DECONSTRUCT_GLM_PROVIDER/$DECONSTRUCT_GLM_MODEL:$DECONSTRUCT_GLM_REASONING_EFFORT -> mtplx/$MTPLX_MODEL:$MTPLX_REASONING_EFFORT -> deepseek/$DECONSTRUCT_FALLBACK_DEEPSEEK_MODEL:$DECONSTRUCT_FALLBACK_DEEPSEEK_REASONING_EFFORT"
-  echo "  短提示任务: mtplx/$MTPLX_MODEL:$MTPLX_REASONING_EFFORT -> deepseek/$DECONSTRUCT_FALLBACK_DEEPSEEK_MODEL:$DECONSTRUCT_FALLBACK_DEEPSEEK_REASONING_EFFORT"
-  echo "  说明: 不自动启动 MTPLX；仅在短任务或完整尝试回退时需要本地 MTPLX。"
+  echo "方案分析：按已配置的分级模型顺序运行；启动后以作业记录的实际模型为准。"
 else
-  echo "方案语义路由: pinned -> $DECONSTRUCT_BACKEND/$DECONSTRUCT_MODEL:$DECONSTRUCT_REASONING_EFFORT"
+  echo "方案分析：$DECONSTRUCT_BACKEND/$DECONSTRUCT_MODEL:$DECONSTRUCT_REASONING_EFFORT"
 fi
 echo ""
 
