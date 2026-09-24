@@ -28,6 +28,7 @@ from app.llm.provider_profiles import (
 )
 
 from app.config import (
+    CMS_ROUTER_BASE_URL,
     GEMINI_ACCESS_TOKEN,
     GEMINI_BASE_URL,
     GEMINI_PROJECT_ID,
@@ -240,6 +241,11 @@ def require_page_reader_routes(
     if not local_main_a and provider != "google-antigravity":
         try:
             use_provider_route = provider == "cms-router" and bool(_value(env, "CMS_ROUTER_API_KEY", ""))
+            if use_provider_route and (
+                _value(env, "PAGE_REVIEW_MAIN_A_BASE_URL", "") not in ("", _value(env, "CMS_ROUTER_BASE_URL", CMS_ROUTER_BASE_URL))
+                or _value(env, "PAGE_REVIEW_MAIN_A_API_KEY", "") not in ("", _value(env, "CMS_ROUTER_API_KEY", ""))
+            ):
+                raise PageReviewConfigError("主读模型地址或凭据与所选 CMS 路由冲突，请清除旧配置或统一填写")
             main_a_base_url, main_a_key = resolve_openai_connection(
                 provider,
                 base_url=None if use_provider_route else main_a_base_url,
@@ -276,6 +282,11 @@ def require_page_reader_routes(
         if not local_main_b:
             try:
                 use_provider_route = main_b_provider == "cms-router" and bool(_value(env, "CMS_ROUTER_API_KEY", ""))
+                if use_provider_route and (
+                    _value(env, "PAGE_REVIEW_MAIN_B_BASE_URL", "") not in ("", _value(env, "CMS_ROUTER_BASE_URL", CMS_ROUTER_BASE_URL))
+                    or _value(env, "PAGE_REVIEW_MAIN_B_API_KEY", "") not in ("", _value(env, "CMS_ROUTER_API_KEY", ""))
+                ):
+                    raise PageReviewConfigError("复读模型地址或凭据与所选 CMS 路由冲突，请清除旧配置或统一填写")
                 main_b_base_url, main_b_key = resolve_openai_connection(
                     main_b_provider,
                     base_url=None if use_provider_route else main_b_base_url,

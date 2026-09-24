@@ -864,6 +864,16 @@ def test_uncertain_deep_is_final_without_blind_retry(data_paths, session_factory
     deep_step = next(step for step in snapshot.steps if step.step_id.startswith("deep_"))
     assert deep_step.state == "failed_final"
     assert deep_step.error_code == "PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID"
+    with session_factory() as session:
+        failure_checkpoint = JobStore(session, now=_now).get_last_checkpoint(
+            result.job_id, deep_step.step_id
+        )
+    assert failure_checkpoint is not None
+    saved = failure_checkpoint[1]
+    assert saved["stage"] == "deep_failure_diagnostic"
+    assert saved["batch_id"]
+    assert saved["attempts"][0]["raw_output_sha256"]
+    assert saved["attempts"][0]["raw_output_text"] is not None
     assert deep.start_calls == 1
     assert deep.continue_calls == 0
     assert not runner.run_job(result.job_id)

@@ -7,6 +7,7 @@ or write a project artifact.
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
@@ -34,6 +35,16 @@ from app.agents.protocol_control_deconstructor import (
     _candidate_ids_from_wire,
     _merge_candidate_repair,
     _merge_candidate_repairs,
+    _merge_obligation_atom_repair,
+    _merge_observation_policy_repair,
+    _invalid_time_operand_paths,
+    _merge_time_operand_repair,
+    _invalid_observation_policy_paths,
+    _build_observation_policy_repair_prompt,
+    _invalid_evidence_source_policy_path,
+    _build_evidence_source_policy_repair_prompt,
+    _merge_evidence_source_policy_repair,
+    _repair_problem_guidance,
     _invalid_candidate_payload,
     _single_invalid_candidate_payload,
     build_protocol_control_agent_prompt,
@@ -44,7 +55,18 @@ from app.agents.protocol_control_deconstructor import (
     protocol_control_agent_json_schema,
     protocol_control_agent_response_format,
     protocol_control_candidate_repair_response_format,
+    protocol_control_atom_repair_response_format,
+    protocol_control_observation_repair_response_format,
+    protocol_control_time_operand_repair_response_format,
+    protocol_control_evidence_source_repair_response_format,
+    source_statement_coverage,
     validate_protocol_control_agent_wire,
+)
+from app.agents.protocol_control_source_interpretation import (
+    SOURCE_INTERPRETATION_VERSION,
+    SourceInterpretation,
+    build_source_interpretation_prompt,
+    validate_source_interpretation,
 )
 from app.domain.contracts.enums import PhaseScope, ReviewStage, StudyPhase
 from app.domain.contracts.protocol_controls import (
@@ -326,6 +348,29 @@ def test_wire_is_provider_identity_free_and_schema_is_strict() -> None:
         parse_protocol_control_agent_wire(
             json.dumps({**payload, "candidate_id": "provider-picked"}, ensure_ascii=False)
         )
+
+
+@pytest.mark.parametrize(
+    ("days", "value", "unit", "canonicalized"),
+    [(14, 14, "day", True), (14, 15, "day", False), (30, 1, "month", False)],
+)
+def test_only_identical_day_bounds_are_mechanically_collapsed(
+    days: int, value: int, unit: str, canonicalized: bool,
+) -> None:
+    from app.agents.protocol_control_deconstructor import _collapse_exact_duplicate_day_bounds
+    from app.domain.contracts.rules import TimeConstraint
+
+    payload = {"time_constraint": {
+        "anchor_type": "screening_date", "direction": "before",
+        "upper_bound_days": days, "upper_bound": {"value": value, "unit": unit},
+    }}
+    _collapse_exact_duplicate_day_bounds(payload)
+    assert ("upper_bound" not in payload["time_constraint"]) is canonicalized
+    if canonicalized:
+        assert TimeConstraint.model_validate(payload["time_constraint"]).upper_bound_days == days
+    else:
+        with pytest.raises(ValueError, match="时间窗上界不能同时使用"):
+            TimeConstraint.model_validate(payload["time_constraint"])
 
 
 def test_provider_schema_omits_unsupported_conditionals() -> None:
@@ -1242,8 +1287,9 @@ def test_supplementary_procedure_relation_uses_exact_visit_node() -> None:
     with pytest.raises(
         ProtocolControlAgentWireValidationError,
         match="PROCEDURE_AFFECTED_STAGE_MISMATCH",
-    ):
+    ) as rejected:
         hydrate_protocol_control_agent_output(_wire(candidate=candidate), batch)
+    assert rejected.value.candidate_indexes == (0,)
 
     with pytest.raises(ValidationError, match="首次受影响"):
         ProtocolControlAgentWireRelation(
@@ -1494,6 +1540,154 @@ class _FakeTransport:
         response = self.responses.pop(0)
         assert response.session_id == session_id
         return response
+
+
+def test_source_interpretation_is_source_bound_and_not_a_rule() -> None:
+    batch = _batch()
+    payload = {
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [
+            {"structure_unit_id": "su-01", "quoted_text": "年龄至少18岁", "force": "required", "time_words": []},
+            {"structure_unit_id": "su-02", "quoted_text": "筛选时记录末次用药日期", "force": "required", "time_words": ["筛选时"]},
+        ],
+        "units_without_statement": [],
+    }
+    inventory = SourceInterpretation.model_validate(payload)
+    validate_source_interpretation(batch, inventory)
+    assert '"time_words":[]' in build_source_interpretation_prompt(batch)
+    prompt_input = json.loads(build_source_interpretation_prompt(batch).split("冻结来源：", 1)[1])
+    assert [item["structure_unit_id"] for item in prompt_input["owned"]] == ["su-01", "su-02"]
+    payload["statements"][1]["quoted_text"] = "筛选前六个月内停止治疗"
+    with pytest.raises(ValueError, match="不属于冻结来源"):
+        validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+    payload["statements"][1]["quoted_text"] = "筛选时记录末次用药日期"
+    payload["statements"][1]["time_words"] = ["筛选时", "治疗后六周"]
+    with pytest.raises(ValueError, match="时间措辞不属于本条陈述"):
+        validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+    payload["statements"][1]["time_words"] = ["筛选时", "末次用药日期"]
+    validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+    payload["statements"][1]["quoted_text"] = "末次用药日期"
+    payload["statements"][1]["time_words"] = ["筛选时"]
+    with pytest.raises(ValueError, match="时间措辞不属于本条陈述"):
+        validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+
+
+def test_repair_guidance_distinguishes_same_stage_and_cross_stage() -> None:
+    same = _repair_problem_guidance(
+        "PROCEDURE_AFFECTED_STAGE_MISMATCH: 补充关系的受影响审核节点与所引用流程必做访视不一致"
+    )
+    cross = _repair_problem_guidance(
+        "PROCEDURE_AFFECTED_STAGE_MISMATCH: 跨阶段后续控制补充的受影响审核节点必须晚于流程必做执行访视"
+    )
+    assert "同阶段流程补充" in same
+    assert "后续最终判定节点" in cross
+    assert "同阶段流程补充" not in cross
+    calendar = _repair_problem_guidance(
+        "TIME_CALENDAR_BOUND_MISSING: 义务原文含明确日历时长，但结构化时间窗未保存该数值和单位"
+    )
+    assert "数值、单位" in calendar
+    assert "末次给药" not in calendar
+
+
+def test_real_transport_inventory_is_checked_before_full_wire() -> None:
+    batch = _batch()
+    source = SourceInterpretation.model_validate({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [
+            {"structure_unit_id": "su-01", "quoted_text": "年龄至少18岁", "force": "required", "time_words": []},
+            {"structure_unit_id": "su-02", "quoted_text": "筛选时记录末次用药日期", "force": "required", "time_words": ["筛选时"]},
+        ],
+        "units_without_statement": [],
+    })
+
+    class InventoryTransport(_FakeTransport):
+        def start_source_interpretation(self, *, prompt: str) -> ProtocolControlAgentResponse:
+            self.prompts.append(prompt)
+            return ProtocolControlAgentResponse(
+                session_id="source-session", text=source.model_dump_json()
+            )
+
+    transport = InventoryTransport([
+        ProtocolControlAgentResponse(session_id="full-session", text=_wire().model_dump_json())
+    ])
+    result = ProtocolControlAgentRunner().run(batch, transport)
+    assert result.status == "已解析"
+    assert result.source_interpretation == source
+    assert [item.status for item in result.source_statement_coverage] == [
+        "not_located", "not_located",
+    ]
+    assert "已逐字定位的来源陈述" in transport.prompts[1]
+
+
+def test_invalid_source_inventory_keeps_response_session_identity() -> None:
+    class InvalidInventoryTransport(_FakeTransport):
+        def start_source_interpretation(self, *, prompt: str) -> ProtocolControlAgentResponse:
+            return ProtocolControlAgentResponse(
+                session_id="source-receipt-1", text='{"statements":[]}'
+            )
+
+    result = ProtocolControlAgentRunner().run(_batch(), InvalidInventoryTransport([]))
+    assert result.status == "需要核对"
+    assert result.session_id == "source-receipt-1"
+    assert result.attempts[0].outcome == "schema_invalid"
+
+
+def test_source_coverage_requires_direct_atom_quote_not_candidate_unit_only() -> None:
+    batch = _batch()
+    inventory = SourceInterpretation.model_validate({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [
+            {"structure_unit_id": "su-01", "quoted_text": "年龄至少18岁", "force": "required", "time_words": []},
+            {"structure_unit_id": "su-02", "quoted_text": "筛选时记录末次用药日期", "force": "required", "time_words": ["筛选时"]},
+        ],
+        "units_without_statement": [],
+    })
+    wire = _wire(candidate=_candidate())
+    entries = source_statement_coverage(batch, inventory, wire)
+    assert [(item.status, item.candidate_indexes) for item in entries] == [
+        ("expressed", [0]),
+        ("not_located", []),
+    ]
+    assert entries[0].linked_candidate_indexes == [0]
+    assert "obligation" in entries[0].matched_roles
+    assert entries[0].linked_official_code is None
+    assert entries[0].linked_procedure_target_ids == []
+    assert entries[0].exact_official_excerpt_matches == []
+
+    quoted_target = batch.known_official_targets[0].model_copy(
+        update={"source_excerpts": ["年龄至少18岁"]}
+    )
+    target_batch = batch.model_copy(update={"known_official_targets": [quoted_target]})
+    target_entries = source_statement_coverage(target_batch, inventory, wire)
+    assert target_entries[0].exact_official_excerpt_matches == ["EX-01"]
+    assert target_entries[0].linked_official_code is None
+
+    trigger_only = _candidate().model_copy(deep=True)
+    trigger_only.obligation_expression.groups[0].atoms[0].source_excerpts = ["另一个要求"]
+    trigger_entries = source_statement_coverage(batch, inventory, _wire(candidate=trigger_only))
+    assert trigger_entries[0].status == "candidate_linked"
+    assert "applicability" in trigger_entries[0].matched_roles
+    assert "obligation" not in trigger_entries[0].matched_roles
+
+    wider_inventory = inventory.model_copy(deep=True)
+    wider_inventory.statements[0].quoted_text = "其他控制"
+    wider_inventory.statements[0].force = "descriptive"
+    validate_source_interpretation(batch, wider_inventory)
+    unresolved = source_statement_coverage(batch, wider_inventory, wire)
+    assert unresolved[0].status == "candidate_linked"
+    assert unresolved[0].linked_candidate_indexes == [0]
+
+    partial_inventory = inventory.model_copy(deep=True)
+    partial_inventory.statements[0].quoted_text = "其他控制：年龄至少18岁"
+    validate_source_interpretation(batch, partial_inventory)
+    partial = source_statement_coverage(batch, partial_inventory, wire)
+    assert partial[0].status == "candidate_linked"
+    assert "obligation" not in partial[0].matched_roles
+
+    blank_inventory = inventory.model_copy(deep=True)
+    blank_inventory.statements[0].quoted_text = "  \n  "
+    with pytest.raises(ValueError, match="不得只有空白"):
+        validate_source_interpretation(batch, blank_inventory)
 
 
 def test_strict_response_format_does_not_duplicate_full_schema_in_prompt() -> None:
@@ -1802,6 +1996,48 @@ def test_candidate_only_repair_preserves_other_candidates_and_dispositions() -> 
     assert list(response_format["json_schema"]["schema"]["properties"]) == ["candidate_draft"]
 
 
+def test_wire_stage_error_repairs_only_its_candidate_without_rewriting_batch() -> None:
+    batch = _batch()
+    relation = ProtocolControlAgentWireRelation(
+        kind=CrossSourceRelationKind.SUPPLEMENTARY_REQUIREMENT,
+        external_target_kind=ControlRelationTargetKind.REQUIRED_PROCEDURE,
+        external_target_id="procedure-screening-1",
+        candidate_side="left",
+        affected_workflow_stage_id="stage:screening:two",
+        notes="需核对具体访视",
+    )
+    first = _candidate()
+    invalid_first = first.model_copy(update={"cross_source_relations": [relation]})
+    valid_relation = relation.model_copy(
+        update={"affected_workflow_stage_id": "stage:screening:one"}
+    )
+    fixed_first = first.model_copy(update={"cross_source_relations": [valid_relation]})
+    second = _candidate_for_second_unit()
+    initial = _wire_with_two_candidates(invalid_first, second)
+
+    class CandidateTransport(_FakeTransport):
+        def continue_candidate(self, *, session_id: str, prompt: str):
+            self.prompts.append(prompt)
+            assert "仅返回包含 candidate_draft" in prompt
+            return ProtocolControlAgentResponse(
+                session_id=session_id,
+                text=json.dumps({"candidate_draft": fixed_first.model_dump(mode="json")}),
+            )
+
+    transport = CandidateTransport([
+        ProtocolControlAgentResponse(
+            session_id="candidate-session", text=initial.model_dump_json()
+        )
+    ])
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(batch, transport)
+    assert result.status == "已解析"
+    assert result.final_output is not None
+    assert result.final_output.candidates[1].title == second.title
+    assert result.final_output.dispositions[1].structure_unit_id == "su-02"
+    assert len(result.attempts) == 2
+    assert result.attempts[0].error_classes[0] == "PROCEDURE_AFFECTED_STAGE_MISMATCH"
+
+
 def test_repair_prompt_repeats_target_index_without_claiming_coverage() -> None:
     prompt = build_protocol_control_repair_prompt(
         _batch(), problem="BASELINE_VALUE_SCOPE_MISSING"
@@ -1867,6 +2103,289 @@ def test_single_invalid_initial_candidate_is_repaired_without_rewriting_siblings
     assert result.attempts[0].error_classes == ["WIRE_SCHEMA_INVALID"]
     assert result.final_output.candidates[1].title == second.title
     assert "仅返回包含 candidate_draft" in transport.prompts[1]
+
+
+def test_single_invalid_atom_repairs_only_that_atom() -> None:
+    batch = _batch()
+    first = _candidate()
+    second = _candidate_for_second_unit()
+    valid = _wire_with_two_candidates(first, second)
+    initial = valid.model_dump(mode="json")
+    original_atom = initial["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]
+    del original_atom["evaluation"]
+    initial_text = json.dumps(initial, ensure_ascii=False)
+    fixed_atom = first.obligation_expression.groups[0].atoms[0].model_dump(mode="json")
+
+    class AtomTransport(_FakeTransport):
+        def continue_atom(self, *, session_id: str, prompt: str):
+            self.prompts.append(prompt)
+            assert session_id == "atom-session"
+            assert "候选0／义务组0／原子0" in prompt
+            return ProtocolControlAgentResponse(
+                session_id=session_id,
+                text=json.dumps({"atom": fixed_atom}, ensure_ascii=False),
+            )
+
+    transport = AtomTransport([
+        ProtocolControlAgentResponse(session_id="atom-session", text=initial_text)
+    ])
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(batch, transport)
+    assert result.status == "已解析"
+    assert result.final_output is not None
+    assert result.final_output.candidates[1].title == second.title
+    assert result.final_output.dispositions[1].structure_unit_id == "su-02"
+    assert len(result.attempts) == 2
+    assert result.attempts[0].error_classes == ["WIRE_SCHEMA_INVALID"]
+    atom_schema = protocol_control_atom_repair_response_format()["json_schema"]
+    assert atom_schema["name"] == "protocol_control_atom_repair_v1"
+    assert list(atom_schema["schema"]["properties"]) == ["atom"]
+
+
+def test_invalid_continuing_obligation_uses_candidate_repair_not_frozen_atom_repair() -> None:
+    batch = _batch()
+    first = _candidate()
+    second = _candidate_for_second_unit()
+    initial = _wire_with_two_candidates(first, second).model_dump(mode="json")
+    atom = initial["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]
+    atom["continuing_obligation"] = {
+        "statement": "治疗期继续达到年龄条件",
+        "prospective_period": {"period": "treatment_period"},
+        "source_span_ids": ["span:01"],
+        "source_excerpts": ["年龄至少18岁"],
+        "status": "not_due_at_review_node",
+    }
+
+    class CandidateTransport(_FakeTransport):
+        def continue_atom(self, *, session_id: str, prompt: str):
+            pytest.fail("延续义务错误不能由冻结该字段的单原子修订处理")
+
+        def continue_candidate(self, *, session_id: str, prompt: str):
+            self.prompts.append(prompt)
+            assert "后续持续义务不能挂在完成、给药或记录原子上" in prompt
+            return ProtocolControlAgentResponse(
+                session_id=session_id,
+                text=json.dumps({"candidate_draft": first.model_dump(mode="json")}, ensure_ascii=False),
+            )
+
+    transport = CandidateTransport([
+        ProtocolControlAgentResponse(
+            session_id="candidate-session",
+            text=json.dumps(initial, ensure_ascii=False),
+        )
+    ])
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(batch, transport)
+    assert result.status == "已解析"
+    assert result.final_output is not None
+    assert result.final_output.candidates[1].title == second.title
+    assert [item.outcome for item in result.attempts] == ["schema_invalid", "parsed"]
+
+
+def test_atom_repair_cannot_rewrite_source_or_siblings() -> None:
+    valid = _wire_with_two_candidates(_candidate(), _candidate_for_second_unit())
+    baseline = valid.model_dump(mode="json")
+    del baseline["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]
+    original = _candidate().obligation_expression.groups[0].atoms[0].model_dump(mode="json")
+    merged = _merge_obligation_atom_repair(
+        json.dumps({"atom": original}), baseline, (0, 0, 0)
+    )
+    assert merged.dispositions == valid.dispositions
+    assert merged.candidate_drafts[1] == valid.candidate_drafts[1]
+    changed = {**original, "statement": "新增无来源的医学义务"}
+    with pytest.raises(ProtocolControlAgentWireValidationError, match="不得改变 statement"):
+        _merge_obligation_atom_repair(
+            json.dumps({"atom": changed}), baseline, (0, 0, 0)
+        )
+
+
+def test_multiple_missing_observation_policies_repair_only_requested_fields() -> None:
+    valid = _wire_with_two_candidates(_candidate(), _candidate_for_second_unit())
+    baseline = valid.model_dump(mode="json")
+    atoms = baseline["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"]
+    second = deepcopy(atoms[0])
+    second["statement"] = "核对年龄资料"
+    second["evaluation"]["proposition"] = "核对年龄资料"
+    atoms.append(second)
+    for atom in atoms:
+        atom["evaluation"]["observation_policy"] = None
+    with pytest.raises(ProtocolControlAgentWireValidationError) as exc:
+        parse_protocol_control_agent_wire(json.dumps(baseline))
+    paths = _invalid_observation_policy_paths(exc.value, baseline, 0)
+    assert paths == ((0, 0), (0, 1))
+    repair_prompt = _build_observation_policy_repair_prompt(
+        baseline, 0, paths, "观察采用说明缺失"
+    )
+    assert "年龄至少18岁" in repair_prompt
+    assert "其他控制：年龄至少18岁" not in repair_prompt
+
+    policy = {
+        "mode": "unresolved", "scope": "原文未说明采用哪次记录",
+        "source_span_ids": ["span:01"], "source_excerpts": ["年龄至少18岁"],
+    }
+    repair = {"items": [
+        {"group_index": 0, "atom_index": index, "policy": policy}
+        for index in (0, 1)
+    ]}
+    merged = _merge_observation_policy_repair(json.dumps(repair), baseline, 0, paths)
+    assert merged.candidate_drafts[1] == valid.candidate_drafts[1]
+    assert [atom.statement for atom in merged.candidate_drafts[0].obligation_expression.groups[0].atoms] == [
+        "年龄达到18岁", "核对年龄资料",
+    ]
+    schema = protocol_control_observation_repair_response_format()["json_schema"]
+    assert schema["name"] == "protocol_control_observation_repair_v1"
+    repair["items"][1]["atom_index"] = 2
+    with pytest.raises(ProtocolControlAgentWireValidationError, match="授权范围"):
+        _merge_observation_policy_repair(json.dumps(repair), baseline, 0, paths)
+
+
+def test_runner_uses_policy_only_repair_for_multiple_atoms() -> None:
+    batch = _batch()
+    candidate = _candidate().model_copy(deep=True)
+    atoms = candidate.obligation_expression.groups[0].atoms
+    second = atoms[0].model_copy(deep=True)
+    second.statement = "核对年龄资料"
+    second.evaluation = second.evaluation.model_copy(update={"proposition": "核对年龄资料"})
+    atoms.append(second)
+    initial = _wire_with_two_candidates(candidate, _candidate_for_second_unit()).model_dump(mode="json")
+    original_atoms = initial["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"]
+    for atom in original_atoms:
+        atom["evaluation"]["observation_policy"] = None
+    policy = {
+        "mode": "unresolved", "scope": "原文未说明采用哪次记录",
+        "source_span_ids": ["span:01"], "source_excerpts": ["年龄至少18岁"],
+    }
+
+    class PolicyTransport(_FakeTransport):
+        def continue_observation_policies(self, *, session_id: str, prompt: str):
+            self.prompts.append(prompt)
+            assert "核对年龄资料" in prompt
+            return ProtocolControlAgentResponse(
+                session_id=session_id,
+                text=json.dumps({"items": [
+                    {"group_index": 0, "atom_index": index, "policy": policy}
+                    for index in (0, 1)
+                ]}),
+            )
+
+    transport = PolicyTransport([
+        ProtocolControlAgentResponse(session_id="policy-session", text=json.dumps(initial))
+    ])
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(batch, transport)
+    assert result.status == "已解析"
+    assert result.final_output is not None
+    assert len(result.attempts) == 2
+
+
+def test_time_operand_repair_is_exact_and_unresolved_stays_unverified() -> None:
+    valid = _wire_with_two_candidates(_candidate(), _candidate_for_second_unit())
+    baseline = valid.model_dump(mode="json")
+    atoms = baseline["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"]
+    atoms.append(deepcopy(atoms[0]))
+    for atom in atoms:
+        atom["time_constraint"] = {"anchor_type": "screening_date", "direction": "before"}
+        atom["evaluation"]["time_purpose"] = "unresolved"
+        atom["evaluation"]["time_operand_attribute"] = None
+    with pytest.raises(ProtocolControlAgentWireValidationError) as exc:
+        parse_protocol_control_agent_wire(json.dumps(baseline))
+    paths = _invalid_time_operand_paths(exc.value, baseline, 0)
+    assert paths == ((0, 0), (0, 1))
+    repair = {"items": [
+        {"group_index": 0, "atom_index": index, "attribute": "record_time"}
+        for index in (0, 1)
+    ]}
+    merged = _merge_time_operand_repair(json.dumps(repair), baseline, 0, paths)
+    assert merged.candidate_drafts[1] == valid.candidate_drafts[1]
+    assert all(atom.evaluation.time_operand_attribute == "record_time"
+               for atom in merged.candidate_drafts[0].obligation_expression.groups[0].atoms)
+    assert protocol_control_time_operand_repair_response_format()["json_schema"]["name"] == "protocol_control_time_operand_repair_v1"
+    repair["items"][1]["attribute"] = "unresolved"
+    with pytest.raises(ProtocolControlAgentWireValidationError, match="原文不足") as unresolved:
+        _merge_time_operand_repair(json.dumps(repair), baseline, 0, paths)
+    assert unresolved.value.code == "TIME_OPERAND_UNRESOLVED"
+
+
+def test_runner_uses_bounded_time_operand_repair() -> None:
+    batch = _batch()
+    initial = _wire_with_two_candidates(_candidate(), _candidate_for_second_unit()).model_dump(mode="json")
+    atoms = initial["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"]
+    atoms.append(deepcopy(atoms[0]))
+    for atom in atoms:
+        atom["time_constraint"] = {"anchor_type": "screening_date", "direction": "before"}
+        atom["evaluation"]["time_purpose"] = "unresolved"
+        atom["evaluation"]["time_operand_attribute"] = None
+
+    class DateTransport(_FakeTransport):
+        def continue_time_operands(self, *, session_id: str, prompt: str):
+            self.prompts.append(prompt)
+            assert session_id == "date-session"
+            assert "time_operand_attribute" not in prompt or "null" in prompt
+            return ProtocolControlAgentResponse(
+                session_id=session_id,
+                text=json.dumps({"items": [
+                    {"group_index": 0, "atom_index": index, "attribute": "record_time"}
+                    for index in (0, 1)
+                ]}),
+            )
+
+    transport = DateTransport([
+        ProtocolControlAgentResponse(session_id="date-session", text=json.dumps(initial))
+    ])
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(batch, transport)
+    assert len(transport.prompts) == 2
+    assert len(result.attempts) == 2
+    assert result.attempts[0].error_classes == ["WIRE_SCHEMA_INVALID"]
+    assert result.status == "已解析"
+
+
+def test_evidence_source_repair_preserves_other_fields_and_rejects_invented_quote() -> None:
+    batch = _batch()
+    valid = _wire_with_two_candidates(_candidate(), _candidate_for_second_unit())
+    baseline = valid.model_dump(mode="json")
+    policy = baseline["candidate_drafts"][0]["minimum_evidence"][0]["source_policy"]
+    del policy["source_excerpts"]
+    with pytest.raises(ProtocolControlAgentWireValidationError) as exc:
+        parse_protocol_control_agent_wire(json.dumps(baseline))
+    path = _invalid_evidence_source_policy_path(exc.value, baseline, 0)
+    assert path == (0, 0)
+    prompt = _build_evidence_source_policy_repair_prompt(batch, baseline, path, str(exc.value))
+    assert "年龄至少18岁" in prompt
+    assert "其他控制：年龄至少18岁" in prompt
+    repaired_policy = valid.candidate_drafts[0].minimum_evidence[0].source_policy.model_dump(mode="json")
+    merged = _merge_evidence_source_policy_repair(
+        json.dumps({"policy": repaired_policy}), baseline, path, batch
+    )
+    assert merged == valid
+    assert protocol_control_evidence_source_repair_response_format()["json_schema"]["name"] == "protocol_control_evidence_source_repair_v1"
+    invented = {**repaired_policy, "source_excerpts": ["方案未写出的检查期限"]}
+    with pytest.raises(ProtocolControlAgentWireValidationError, match="不属于授权原文"):
+        _merge_evidence_source_policy_repair(
+            json.dumps({"policy": invented}), baseline, path, batch
+        )
+
+
+def test_runner_repairs_only_one_evidence_source_policy() -> None:
+    batch = _batch()
+    valid = _wire_with_two_candidates(_candidate(), _candidate_for_second_unit())
+    initial = valid.model_dump(mode="json")
+    del initial["candidate_drafts"][0]["minimum_evidence"][0]["source_policy"]["source_excerpts"]
+    policy = valid.candidate_drafts[0].minimum_evidence[0].source_policy.model_dump(mode="json")
+
+    class EvidenceTransport(_FakeTransport):
+        def continue_evidence_source_policy(self, *, session_id: str, prompt: str):
+            self.prompts.append(prompt)
+            return ProtocolControlAgentResponse(
+                session_id=session_id,
+                text=json.dumps({"policy": policy}, ensure_ascii=False),
+            )
+
+    transport = EvidenceTransport([
+        ProtocolControlAgentResponse(session_id="evidence-session", text=json.dumps(initial))
+    ])
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(batch, transport)
+    assert result.status == "已解析"
+    assert result.final_output is not None
+    assert result.final_output.candidates[1].title == valid.candidate_drafts[1].title
+    assert len(result.attempts) == 2
+    assert "仅修订这一项最低证据" in transport.prompts[1]
 
 
 def test_multiple_invalid_initial_candidates_do_not_get_single_candidate_repair() -> None:
@@ -1978,6 +2497,110 @@ def test_atom_level_gate_error_keeps_owning_candidate_repair_scope() -> None:
     )
     assert error.candidate_ids == (candidate.control_candidate_id,)
     assert error.structure_unit_ids == ("su-01",)
+
+
+def _missing_source_error():
+    return publication_repair_error(
+        issues=[SimpleNamespace(
+            code="ENROLLMENT_PROHIBITION_UNCOVERED",
+            message="来源中的要求尚未形成候选",
+            entity_id="su-01",
+            candidate_ids=[],
+            structure_unit_ids=["su-01"],
+            obligation_source_span_ids=["span:01"],
+        )],
+        candidate_by_id={},
+        control_to_candidate={},
+        default_structure_unit_ids=["su-01", "su-02"],
+    )
+
+
+def test_missing_source_can_insert_candidate_without_existing_candidate_id() -> None:
+    initial = _wire()
+    repaired = _wire(candidate=_candidate())
+    transport = _FakeTransport([
+        ProtocolControlAgentResponse(session_id="insert-1", text=initial.model_dump_json()),
+        ProtocolControlAgentResponse(session_id="insert-1", text=repaired.model_dump_json()),
+    ])
+    calls = 0
+
+    def validate(output) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise _missing_source_error()
+        assert len(output.candidates) == 1
+
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(
+        _batch(), transport, output_validator=validate
+    )
+    assert result.status == "已解析"
+    assert calls == 2
+    assert _missing_source_error().allow_source_insert is True
+    assert "来源限定补入" in transport.prompts[1]
+    assert "上一轮完整输出摘要" in transport.prompts[1]
+
+
+def test_missing_source_uses_single_candidate_response_when_transport_supports_it() -> None:
+    initial = _wire()
+
+    class InsertTransport(_FakeTransport):
+        def continue_candidate(self, *, session_id: str, prompt: str):
+            self.prompts.append(prompt)
+            assert session_id == "insert-single"
+            assert "上一轮完整输出摘要" in prompt
+            return ProtocolControlAgentResponse(
+                session_id=session_id,
+                text=json.dumps({"candidate_draft": _candidate().model_dump(mode="json")}),
+            )
+
+    transport = InsertTransport([
+        ProtocolControlAgentResponse(session_id="insert-single", text=initial.model_dump_json())
+    ])
+    calls = 0
+
+    def validate(output) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise _missing_source_error()
+        assert len(output.candidates) == 1
+        assert output.dispositions[1].disposition == StructureUnitDispositionKind.SUPPORTING_OR_SUPPLEMENT
+
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(
+        _batch(), transport, output_validator=validate
+    )
+    assert result.status == "已解析"
+    assert calls == 2
+    assert "仅返回包含 candidate_draft" in transport.prompts[1]
+
+
+@pytest.mark.parametrize("violation", ["other_disposition", "wrong_source", "changed_candidate"])
+def test_source_insert_rejects_changes_outside_authorized_scope(violation: str) -> None:
+    initial = _wire()
+    if violation == "changed_candidate":
+        initial = _wire(candidate=_candidate())
+        repaired = initial.model_dump(mode="json")
+        repaired["candidate_drafts"][0]["title"] = "未经授权改写"
+        repaired["candidate_drafts"].append(_candidate().model_dump(mode="json"))
+    elif violation == "wrong_source":
+        repaired = _wire(candidate=_candidate_for_second_unit()).model_dump(mode="json")
+    else:
+        repaired = _wire(candidate=_candidate()).model_dump(mode="json")
+        repaired["dispositions"][1]["notes"] = "未经授权改写"
+    transport = _FakeTransport([
+        ProtocolControlAgentResponse(session_id="insert-2", text=initial.model_dump_json()),
+        ProtocolControlAgentResponse(session_id="insert-2", text=json.dumps(repaired, ensure_ascii=False)),
+    ])
+
+    def validate(_output) -> None:
+        raise _missing_source_error()
+
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(
+        _batch(), transport, output_validator=validate
+    )
+    assert result.status == "需要核对"
+    assert "REPAIR_SCOPE_ESCAPE" in result.attempts[-1].issues[0]
 
 
 def test_explicit_candidate_repartition_preserves_authorized_source_union() -> None:

@@ -874,6 +874,29 @@ def _deep_batch_chunks(
         unit.structure_unit_id: unit
         for unit in (all_units or units)
     }
+    table_rows: dict[str, dict[int, list[ProtocolStructureUnit]]] = {}
+    for unit in unit_by_id.values():
+        if unit.table_context is None:
+            continue
+        prefix, marker, suffix = unit.source_ref.rpartition(".r")
+        if not marker or not suffix.isdigit():
+            continue
+        table_rows.setdefault(prefix, {}).setdefault(
+            unit.table_context.row_index, []
+        ).append(unit)
+
+    table_context_by_unit: dict[str, tuple[str, ...]] = {}
+    for table_key, rows in table_rows.items():
+        first = min(rows)
+        leading_rows = []
+        for row_index in range(first, first + 5):
+            if row_index not in rows:
+                break
+            leading_rows.extend(rows[row_index])
+        leading_ids = tuple(unit.structure_unit_id for unit in leading_rows)
+        for row_units in rows.values():
+            for unit in row_units:
+                table_context_by_unit[unit.structure_unit_id] = leading_ids
     chunks: list[
         tuple[tuple[ProtocolStructureUnit, ...], tuple[ProtocolStructureUnit, ...]]
     ] = []
@@ -884,7 +907,10 @@ def _deep_batch_chunks(
             required_context_ids = {
                 context_id
                 for owned_id in owned_ids
-                for context_id in context_ids_by_unit_id.get(owned_id, ())
+                for context_id in (
+                    *context_ids_by_unit_id.get(owned_id, ()),
+                    *table_context_by_unit.get(owned_id, ()),
+                )
             } - set(owned_ids)
             context = tuple(
                 sorted(

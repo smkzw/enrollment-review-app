@@ -1,5 +1,7 @@
 # Enrollment Review App Project Context
 
+> 2026-09-24 0924V1 实施入口：`.trellis/tasks/09-11-e2e-eligibility-review/implement.md` 文头及专家包 `enrollment_review_0924V1_35459c6.zip`。最新隔离冻结首批 v77 仍在结构/语义修订三轮后失败，未发布。现行执行身份 v79：来源清单逐条核逐字引文与时间片段，错误修订不再送进必败的冻结字段路径；仅修复合同死结，不代表复杂条款医学解构通过。W7 双击启动入口端口探测故障已修，尚未真实启动验收。正式同源官方+跨章规则、病例、补证和Q3均未验收，`claims_complete=false`。下一步仍需有源语义解释→现有结构的有限装配→双向核对；冻结诊断不能作为正式发布依据。以下旧日期段落为历史。
+
 > 2026-09-22现行入口：`.trellis/tasks/09-11-e2e-eligibility-review/delivery_20260922/00_START_HERE.md`；当前PRD/设计/唯一进度为该任务prd.md、design.md、implement.md。延续V3内置前置方案Agent及主OCR/局部核实真实来源，取消全量双读默认。本轮核对e7f34d05/GitHub与专家0922V2后形成W0–W7、Q1–Q3实施验收包，产品缺陷尚未修复、claims_complete=false。以下历史“当前/最新/默认/已完成”须按日期理解，冲突处以本入口和现场证据为准。不要运行历史作业或照抄旧模型配置。
 
 

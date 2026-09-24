@@ -55,7 +55,7 @@ from app.protocols.supplementary_relation_contract import (
 from app.protocols.protocol_control_planning import detect_required_action_kinds
 
 
-CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v22"
+CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v26"
 
 __all__ = [
     "CONTROL_PUBLICATION_GATE_VERSION",
@@ -135,6 +135,13 @@ _ENROLLMENT_PROHIBITION_RE = re.compile(
     r"(?:筛选|导入|基线|入组前|随机(?:化|分组)?前|首次给药前))",
     re.IGNORECASE,
 )
+_ENROLLMENT_STAGE_RE = re.compile(r"筛选|导入|基线|入组前|随机(?:化|分组)?前|首次给药前")
+_PROHIBITION_WORD_RE = re.compile(r"不允许|不得|禁止|严禁|不应")
+_POST_ENROLLMENT_RE = re.compile(r"随机(?:化|分组)?后|首次给药后|治疗期|给药后")
+
+
+def _normalize_prohibition_quote(value: str) -> str:
+    return re.sub(r"[。；;]+$", "", re.sub(r"\s+", "", value))
 _AND_CUE_RE = re.compile(
     r"(?:且|并且|同时|以及|均须|均需|both|\band\b)", re.IGNORECASE
 )
@@ -2862,7 +2869,24 @@ def _check_time_constraints(
                     entity_id=entity_id,
                 )
 
+    def point_visit_action(source_text: str) -> bool:
+        return bool(
+            re.fullmatch(
+                r"\s*(?:在|于)?[^。；;\n]{0,120}访视[^。；;\n]{0,80}"
+                r"(?:完成|进行|实施|接受|安排)[^。；;\n]*。?\s*",
+                source_text,
+            )
+            and not re.search(
+                r"(?:前|后|以内|至少|不超过|持续|洗脱|半衰期|"
+                r"至[^。；;\n]{0,20}结束|\d+\s*(?:天|日|周|月|年)\s*(?:内|前|后)?)",
+                source_text,
+            )
+            and not _PROHIBITION_WORD_RE.search(source_text)
+        )
+
     def action_scoped_period(source_text: str, pattern: re.Pattern[str]) -> bool:
+        if point_visit_action(source_text):
+            return False
         return any(
             not _PERIOD_CUE_AS_REPORTED_CONTENT_RE.search(
                 source_text[: match.start()].rstrip()
@@ -2871,6 +2895,10 @@ def _check_time_constraints(
         )
 
     def action_scoped_temporal_cue(source_text: str) -> bool:
+        if re.fullmatch(r"\s*(?:进行|完成|实施|接受|安排)?随机(?:化|分组)?[。；;]?\s*", source_text):
+            return False
+        if point_visit_action(source_text):
+            return False
         recall_spans = [
             (match.start(), match.end())
             for match in _MEASUREMENT_RECALL_PERIOD_RE.finditer(source_text)
@@ -4517,34 +4545,82 @@ def _uncovered_enrollment_prohibitions(
     """Stop explicit stage-scoped prohibitions from vanishing as no-op rows."""
 
     by_unit = {item.structure_unit_id: item for item in output.dispositions}
-    target_quotes = [
-        quote
-        for target in (*batch.known_official_targets, *batch.known_procedure_targets)
-        for quote in target.source_excerpts
-        if isinstance(quote, str)
-    ]
+    by_candidate = {item.control_candidate_id: item for item in getattr(output, "candidates", ())}
     issues: list[ProtocolControlGateError] = []
     for unit in batch.owned_units:
         disposition = by_unit.get(unit.structure_unit_id)
-        if disposition is None or disposition.linked_control_candidate_ids:
+        if disposition is None:
             continue
         if disposition.disposition == StructureUnitDispositionKind.PHASE_EXCLUDED:
             continue
-        for clause in re.split(r"[。；;\n]", unit.excerpt):
-            if not _ENROLLMENT_PROHIBITION_RE.search(clause):
-                continue
+        table_context = getattr(unit, "table_context", None)
+        headings = list(getattr(unit, "heading_path", ())[-2:])
+        if table_context is not None:
+            headings.extend(getattr(table_context, "row_headers", ()))
+            headings.extend(getattr(table_context, "column_headers", ()))
+        stage_in_context = bool(_ENROLLMENT_STAGE_RE.search(" ".join(headings)))
+        clauses = [
+            clause.strip()
+            for clause in re.split(r"[。；;\n]", unit.excerpt)
+            if _ENROLLMENT_PROHIBITION_RE.search(clause)
+            or (
+                stage_in_context
+                and _PROHIBITION_WORD_RE.search(clause)
+                and not _POST_ENROLLMENT_RE.search(clause)
+            )
+        ]
+        # A linked candidate does not settle a second, separately quoted
+        # requirement. Only an exact atom-level quote proves partial coverage;
+        # broader semantic coverage remains for the source review, not regex.
+        quoted_clauses: set[str] = set()
+        if disposition.linked_control_candidate_ids:
+            for candidate_id in disposition.linked_control_candidate_ids:
+                candidate = by_candidate.get(candidate_id)
+                semantics = getattr(candidate, "semantics", None)
+                if semantics is None:
+                    continue
+                for group in semantics.obligation_expression.groups:
+                    for atom in group.atoms:
+                        quoted_clauses.update(
+                            _normalize_prohibition_quote(quote)
+                            for quote in atom.source_excerpts
+                            if isinstance(quote, str)
+                        )
+        for clause in clauses:
             quote = clause.strip()
-            normalized_quote = re.sub(r"\s+", "", quote)
+            normalized_quote = _normalize_prohibition_quote(quote)
+            if normalized_quote in quoted_clauses:
+                continue
+            linked_official = getattr(disposition, "linked_official_code", None)
+            linked_procedures = set(
+                getattr(disposition, "linked_procedure_catalog_item_ids", ()) or ()
+            )
+            single_procedure = getattr(disposition, "linked_procedure_catalog_item_id", None)
+            if single_procedure:
+                linked_procedures.add(single_procedure)
+            linked_targets = (
+                target
+                for target in (*batch.known_official_targets, *batch.known_procedure_targets)
+                if (
+                    getattr(target, "official_code", None) == linked_official
+                    and linked_official is not None
+                ) or getattr(target, "catalog_item_id", None) in linked_procedures
+            )
             if any(
-                normalized_quote in re.sub(r"\s+", "", target_quote)
-                for target_quote in target_quotes
+                set(unit.source_span_ids) & set(target.source_span_ids)
+                and any(
+                    normalized_quote in _normalize_prohibition_quote(target_quote)
+                    for target_quote in target.source_excerpts
+                    if isinstance(target_quote, str)
+                )
+                for target in linked_targets
             ):
                 continue
             issues.append(
                 ProtocolControlGateError(
                     "ENROLLMENT_PROHIBITION_UNCOVERED",
-                    "冻结原文含当前入排阶段的禁止性要求，但本单元未形成候选，"
-                    "也没有同段逐字来源证明已由正式条款或流程事项覆盖；须按原文核对，不能仅凭目录同名省略。",
+                    "冻结原文含当前入排阶段的禁止性要求，但该句未获独立来源绑定的候选，"
+                    "也没有同句逐字来源证明已由正式条款或流程事项覆盖；须按原文核对，不能仅凭同段其他候选省略。",
                     entity_id=unit.structure_unit_id,
                     structure_unit_ids=[unit.structure_unit_id],
                     obligation_source_span_ids=unit.source_span_ids,

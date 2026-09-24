@@ -45,8 +45,15 @@ from app.agents.protocol_control_deconstructor import (
     ProtocolControlAgentResponse,
     ProtocolControlAgentTransport,
     protocol_control_agent_response_format,
+    protocol_control_atom_repair_response_format,
+    protocol_control_observation_repair_response_format,
+    protocol_control_time_operand_repair_response_format,
+    protocol_control_evidence_source_repair_response_format,
     protocol_control_candidate_repair_response_format,
     protocol_control_candidates_repair_response_format,
+)
+from app.agents.protocol_control_source_interpretation import (
+    source_interpretation_response_format,
 )
 from app.config import (
     DECONSTRUCT_GLM_API_KEY,
@@ -949,6 +956,25 @@ class OpenAICompatibleProtocolControlAgentTransport:
         ]
         return ProtocolControlAgentResponse(session_id=session_id, text=text)
 
+    def start_source_interpretation(self, *, prompt: str) -> ProtocolControlAgentResponse:
+        """Read frozen statements without asking for the full evaluation wire."""
+
+        if not prompt.strip():
+            raise ValueError("方案来源解释提示不能为空")
+        session_id = f"protocol-control-source-{uuid4().hex}"
+        try:
+            text = self._complete(
+                [{"role": "user", "content": prompt}],
+                response_format=source_interpretation_response_format(),
+            )
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id,
+                str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
     def continue_session(
         self,
         *,
@@ -1007,6 +1033,102 @@ class OpenAICompatibleProtocolControlAgentTransport:
             *logical_history,
             {"role": "assistant", "content": text},
         ]
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
+    def continue_atom(
+        self,
+        *,
+        session_id: str,
+        prompt: str,
+    ) -> ProtocolControlAgentResponse:
+        """Repair one obligation atom while preserving the logical session."""
+
+        if not prompt.strip():
+            raise ValueError("单义务原子修订提示不能为空")
+        history = self._histories.get(session_id)
+        if history is None:
+            raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
+        # The prompt carries the frozen atom and its source. Sending the full
+        # batch history would turn a one-atom repair into another full review.
+        repair_messages = [{"role": "user", "content": prompt}]
+        try:
+            text = self._complete(
+                repair_messages,
+                response_format=protocol_control_atom_repair_response_format(),
+            )
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id,
+                str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        # Keep the original history for a bounded candidate-level fallback.
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
+    def continue_observation_policies(
+        self, *, session_id: str, prompt: str
+    ) -> ProtocolControlAgentResponse:
+        """Repair only selected observation policies in an isolated request."""
+
+        if not prompt.strip():
+            raise ValueError("观察采用说明修订提示不能为空")
+        if session_id not in self._histories:
+            raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
+        try:
+            text = self._complete(
+                [{"role": "user", "content": prompt}],
+                response_format=protocol_control_observation_repair_response_format(),
+            )
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id,
+                str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
+    def continue_time_operands(
+        self, *, session_id: str, prompt: str
+    ) -> ProtocolControlAgentResponse:
+        """Fill only the missing date attributes in an isolated request."""
+
+        if not prompt.strip():
+            raise ValueError("日期属性修订提示不能为空")
+        if session_id not in self._histories:
+            raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
+        try:
+            text = self._complete(
+                [{"role": "user", "content": prompt}],
+                response_format=protocol_control_time_operand_repair_response_format(),
+            )
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id,
+                str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
+    def continue_evidence_source_policy(
+        self, *, session_id: str, prompt: str
+    ) -> ProtocolControlAgentResponse:
+        """Repair one evidence-source policy without resending the full batch."""
+
+        if not prompt.strip():
+            raise ValueError("资料来源要求修订提示不能为空")
+        if session_id not in self._histories:
+            raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
+        try:
+            text = self._complete(
+                [{"role": "user", "content": prompt}],
+                response_format=protocol_control_evidence_source_repair_response_format(),
+            )
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id,
+                str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
         return ProtocolControlAgentResponse(session_id=session_id, text=text)
 
     def continue_candidates(

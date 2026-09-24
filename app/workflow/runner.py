@@ -716,6 +716,7 @@ class JobRunner:
                 error_code=failure.error_code,
                 retryable=failure.retryable,
                 detail=failure.detail,
+                diagnostic_checkpoint=failure.diagnostic_checkpoint,
                 settle_job=settle_job,
             )
 

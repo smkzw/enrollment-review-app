@@ -45,6 +45,7 @@ export interface EligibilityControlObligationView {
   obligationId: string;
   obligationGroupId: string;
   statement: string;
+  sourceExcerpts: string[];
   status: EligibilityControlStatus;
   statusLabel: string;
   reason: string;
@@ -295,6 +296,9 @@ function decodeControl(value: unknown, index: number): EligibilityControlView {
         obligationId: requiredString(field(obligation, "obligation_id", obligationPath), `${obligationPath}.obligation_id`),
         obligationGroupId: requiredString(field(obligation, "obligation_group_id", obligationPath), `${obligationPath}.obligation_group_id`),
         statement: requiredString(field(obligation, "statement", obligationPath), `${obligationPath}.statement`),
+        sourceExcerpts: obligation.source_excerpts == null ? []
+          : arrayValue(obligation.source_excerpts, `${obligationPath}.source_excerpts`)
+            .map((item) => requiredString(item, `${obligationPath}.source_excerpts[]`)),
         status: enumValue(field(obligation, "status", obligationPath), CONTROL_STATUSES, `${obligationPath}.status`),
         statusLabel: requiredString(field(obligation, "status_label", obligationPath), `${obligationPath}.status_label`),
         reason: requiredString(field(obligation, "reason", obligationPath), `${obligationPath}.reason`),

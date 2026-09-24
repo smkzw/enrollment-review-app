@@ -163,6 +163,7 @@ class EligibilityControlObligationProjection:
     obligation_id: str
     obligation_group_id: str
     statement: str
+    source_excerpts: tuple[str, ...]
     status: str
     status_label: str
     reason: str
@@ -1071,6 +1072,10 @@ class EligibilityReviewProjectionService:
                         obligation_id=obligation.obligation_id,
                         obligation_group_id=obligation.obligation_group_id,
                         statement=obligation.statement,
+                        source_excerpts=tuple(
+                            text for text in source_atoms[obligation.obligation_id].source_excerpts
+                            if isinstance(text, str) and text.strip()
+                        ),
                         status=obligation.status,
                         status_label=status_labels[obligation.status],
                         reason=reason,
@@ -1134,6 +1139,10 @@ def _unverified_control_projections(clause_pack) -> tuple[EligibilityControlProj
                     obligation_id=atom.obligation_id,
                     obligation_group_id=group_id,
                     statement=atom.statement,
+                    source_excerpts=tuple(
+                        text for text in atom.source_excerpts
+                        if isinstance(text, str) and text.strip()
+                    ),
                     status="unverified",
                     status_label="等待资料核对",
                     reason="本次资料核对尚未完成，目前不能判断该补充要求是否满足。",

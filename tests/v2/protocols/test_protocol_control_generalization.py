@@ -26,6 +26,7 @@ from app.domain.contracts.protocol_controls import (
 )
 from app.protocols.protocol_control_planning import (
     DEFAULT_PROTOCOL_CONTROL_DISCOVERY_BATCH_UNITS,
+    _deep_batch_chunks,
     plan_protocol_control_deep_batches_from_discovery,
     plan_protocol_control_discovery,
     validate_protocol_control_deep_selection,
@@ -60,6 +61,77 @@ def _manifest(count: int = 100) -> ProtocolSectionCoverageManifest:
         study_phase=StudyPhase.PHASE_II,
         snapshot_id="snapshot:general",
         units=[_unit(number) for number in range(count)],
+    )
+
+
+def test_deep_table_rows_retain_read_only_leading_headers() -> None:
+    def row(table: int, index: int) -> ProtocolStructureUnit:
+        ref = f"body.t{table}.r{index}"
+        return ProtocolStructureUnit(
+            structure_unit_id=f"table-{table}-row-{index}",
+            source_ref=ref,
+            member_source_refs=[f"{ref}.c0"],
+            source_span_ids=[f"span:t{table}:r{index}"],
+            unit_kind="table_row",
+            heading_path=["访视安排"],
+            table_context={
+                "table_path": [index, 0],
+                "row_index": index,
+                "column_index": 0,
+                "row_headers": ["项目"],
+                "column_headers": ["阶段"],
+                "member_cell_paths": [[index, 0]],
+            },
+            source_order=table * 100 + index,
+            study_phase=StudyPhase.PHASE_II,
+            phase_scopes=[PhaseScope.SHARED],
+            excerpt=f"第{index}行",
+        )
+
+    first_table = [row(1, index) for index in (0, 1, 2, 3, 4, 6)]
+    other_table = [row(2, index) for index in (0, 1, 6)]
+    chunks = _deep_batch_chunks(
+        [first_table[-1]],
+        {},
+        max_owned_units_per_batch=1,
+        all_units=[*first_table, *other_table],
+    )
+    owned, context = chunks[0]
+    assert [unit.structure_unit_id for unit in owned] == ["table-1-row-6"]
+    assert [unit.structure_unit_id for unit in context] == [
+        f"table-1-row-{index}" for index in range(5)
+    ]
+
+    manifest = ProtocolSectionCoverageManifest(
+        manifest_id=_MANIFEST,
+        protocol_version_id=_PROTOCOL,
+        protocol_document_sha256="a" * 64,
+        study_phase=StudyPhase.PHASE_II,
+        snapshot_id="snapshot:table",
+        units=[*first_table, *other_table],
+    )
+    discovery = plan_protocol_control_discovery(manifest, max_units_per_batch=20)
+    decisions = [[
+        ProtocolControlDiscoveryDecision(
+            structure_unit_id=unit_id,
+            disposition=(
+                ProtocolControlDiscoveryDisposition.CANDIDATE
+                if unit_id == first_table[-1].structure_unit_id
+                else ProtocolControlDiscoveryDisposition.NON_CONTROL
+            ),
+            rationale="前五行只供同表结构理解" if unit_id != first_table[-1].structure_unit_id else "待核对访视要求",
+        )
+        for unit_id in batch.target_structure_unit_ids
+    ] for batch in discovery.batches]
+    deep = plan_protocol_control_deep_batches_from_discovery(
+        manifest, discovery, decisions, max_owned_units_per_batch=1
+    )
+    assert deep.batches[0].context_structure_unit_ids == [
+        f"table-1-row-{index}" for index in range(5)
+    ]
+    assert all(
+        unit_id not in deep.deep_structure_unit_ids
+        for unit_id in deep.batches[0].context_structure_unit_ids
     )
 
 

@@ -36,6 +36,7 @@ from app.domain.contracts.repeat_scheme import RepeatEvidenceRoleReference, reso
 from app.domain.contracts.control_evaluation_spec import (
     ControlAtomEvaluationSpec, validate_control_atom_evaluation,
 )
+from app.domain.contracts.observation_selection import ObservationPolicy
 from app.protocols.supplementary_relation_contract import (
     is_cross_stage_subsequent_control_supplement,
     procedure_execution_workflow_stage_id,
@@ -87,10 +88,18 @@ from .control_excerpt_restoration import (
     recover_control_excerpt as _recover_control_excerpt,
     restore_source_fields,
 )
+from .protocol_control_source_interpretation import (
+    SOURCE_INTERPRETATION_PROMPT_VERSION,
+    SourceInterpretation,
+    SourceStatementCoverage,
+    build_source_interpretation_prompt,
+    normalize_source_excerpt,
+    validate_source_interpretation,
+)
 
 CONTROL_AGENT_WIRE_VERSION = "phase5/control-agent-wire/v26"
 CONTROL_AGENT_INPUT_VERSION = "phase5/control-agent-input/v1"
-CONTROL_AGENT_PROMPT_VERSION = "phase5/control-agent-prompt/v2.44"
+CONTROL_AGENT_PROMPT_VERSION = "phase5/control-agent-prompt/v2.59"
 CONTROL_DISCOVERY_INPUT_VERSION = "phase5/control-discovery-input/v1"
 CONTROL_DISCOVERY_PROMPT_VERSION = "phase5/control-discovery-prompt/v3"
 CONTROL_DISCOVERY_WIRE_VERSION = "phase5/control-discovery-wire/v1"
@@ -180,6 +189,7 @@ class ProtocolControlAgentWireValidationError(ValueError):
         error_class_codes: Sequence[str] = (),
         allow_candidate_repartition: bool = False,
         allow_source_closure_rewrite: bool = False,
+        allow_source_insert: bool = False,
     ) -> None:
         self.code = code
         self.error_class_codes = tuple(
@@ -193,6 +203,7 @@ class ProtocolControlAgentWireValidationError(ValueError):
         )
         self.allow_candidate_repartition = allow_candidate_repartition
         self.allow_source_closure_rewrite = allow_source_closure_rewrite
+        self.allow_source_insert = allow_source_insert
         super().__init__(f"{code}: {message}")
 
 
@@ -606,6 +617,30 @@ class ProtocolControlAgentWireObligationAtom(_WireModel):
         return self
 
 
+class _ObservationPolicyRepairItem(_WireModel):
+    group_index: int = Field(ge=0)
+    atom_index: int = Field(ge=0)
+    policy: ObservationPolicy
+
+
+class _ObservationPolicyRepair(_WireModel):
+    items: list[_ObservationPolicyRepairItem] = Field(min_length=1)
+
+
+class _EvidenceSourcePolicyRepair(_WireModel):
+    policy: ControlEvidenceSourcePolicy
+
+
+class _TimeOperandRepairItem(_WireModel):
+    group_index: int = Field(ge=0)
+    atom_index: int = Field(ge=0)
+    attribute: Literal["date_range", "record_time", "unresolved"]
+
+
+class _TimeOperandRepair(_WireModel):
+    items: list[_TimeOperandRepairItem] = Field(min_length=1)
+
+
 class ProtocolControlAgentWireObligationGroup(_WireModel):
     """Obligation conjunction optionally paired to trigger-branch ordinals."""
 
@@ -930,10 +965,10 @@ def _find_forbidden_provider_key(value: object, path: str = "") -> tuple[str, st
         for key, child in value.items():
             # This schema-local comparison label is not a published atom ID.
             local_predicate = key == "predicate_id" and re.fullmatch(
-                r"candidate_drafts\[\d+\]\."
+                r"(?:candidate_drafts\[\d+\]\."
                 r"(?:(?:applicability|trigger|obligation|exception)_expression|"
                 r"repeat_trigger_conditions\[\d+\]\.expression)"
-                r"\.groups\[\d+\]\.atoms\[\d+\]\.evaluation\.predicate",
+                r"\.groups\[\d+\]\.atoms\[\d+\]|atom)\.evaluation\.predicate",
                 path,
             ) is not None
             if key in _FORBIDDEN_PROVIDER_KEYS and not local_predicate:
@@ -979,6 +1014,7 @@ def parse_protocol_control_agent_wire(text: str) -> ProtocolControlAgentWire:
             "PROVIDER_ID_FORBIDDEN",
             f"provider 不得生成系统身份字段 {path}（{key}）",
         )
+    _collapse_exact_duplicate_day_bounds(payload)
     try:
         return ProtocolControlAgentWire.model_validate(payload)
     except ValidationError as exc:
@@ -986,6 +1022,34 @@ def parse_protocol_control_agent_wire(text: str) -> ProtocolControlAgentWire:
             "WIRE_SCHEMA_INVALID",
             _validation_error_summary(exc),
         ) from exc
+
+
+def _collapse_exact_duplicate_day_bounds(value: object) -> None:
+    """Remove only identical day bounds expressed twice in a provider wire."""
+
+    if isinstance(value, list):
+        for child in value:
+            _collapse_exact_duplicate_day_bounds(child)
+        return
+    if not isinstance(value, dict):
+        return
+    constraint = value.get("time_constraint")
+    if isinstance(constraint, dict):
+        for prefix in ("lower", "upper"):
+            days_key = f"{prefix}_bound_days"
+            quantity_key = f"{prefix}_bound"
+            days = constraint.get(days_key)
+            quantity = constraint.get(quantity_key)
+            if (
+                type(days) is int
+                and isinstance(quantity, dict)
+                and quantity.get("unit") == "day"
+                and type(quantity.get("value")) is int
+                and quantity["value"] == days
+            ):
+                constraint.pop(quantity_key)
+    for child in value.values():
+        _collapse_exact_duplicate_day_bounds(child)
 def parse_protocol_control_discovery_agent_wire(
     text: str,
 ) -> ProtocolControlDiscoveryAgentWire:
@@ -1286,6 +1350,98 @@ def protocol_control_candidate_repair_response_format() -> dict[str, object]:
                 "required": ["candidate_draft"],
                 "additionalProperties": False,
             },
+        },
+    }
+
+
+def protocol_control_atom_repair_response_format() -> dict[str, object]:
+    """Restrict a structural repair to one obligation atom."""
+
+    original = protocol_control_agent_json_schema()
+    definitions = original["$defs"]
+    reachable: set[str] = set()
+    pending: list[str] = ["ProtocolControlAgentWireObligationAtom"]
+    while pending:
+        name = pending.pop()
+        if name in reachable:
+            continue
+        reachable.add(name)
+        definition = definitions[name]
+        stack: list[object] = [definition]
+        while stack:
+            value = stack.pop()
+            if isinstance(value, dict):
+                ref = value.get("$ref")
+                if isinstance(ref, str) and ref.startswith("#/$defs/"):
+                    pending.append(ref.removeprefix("#/$defs/"))
+                stack.extend(value.values())
+            elif isinstance(value, list):
+                stack.extend(value)
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "protocol_control_atom_repair_v1",
+            "strict": True,
+            "schema": {
+                "$defs": {name: definitions[name] for name in definitions if name in reachable},
+                "type": "object",
+                "properties": {
+                    "atom": {"$ref": "#/$defs/ProtocolControlAgentWireObligationAtom"}
+                },
+                "required": ["atom"],
+                "additionalProperties": False,
+            },
+        },
+    }
+
+
+def protocol_control_observation_repair_response_format() -> dict[str, object]:
+    """Only observation-selection policies, not rewritten obligations."""
+
+    schema = _ObservationPolicyRepair.model_json_schema()
+
+    def require_properties(value: object) -> None:
+        if isinstance(value, dict):
+            properties = value.get("properties")
+            if isinstance(properties, dict):
+                value["required"] = list(properties)
+            for child in value.values():
+                require_properties(child)
+        elif isinstance(value, list):
+            for child in value:
+                require_properties(child)
+
+    require_properties(schema)
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "protocol_control_observation_repair_v1",
+            "strict": True,
+            "schema": schema,
+        },
+    }
+
+
+def protocol_control_evidence_source_repair_response_format() -> dict[str, object]:
+    """One evidence-source policy, without the surrounding candidate."""
+
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "protocol_control_evidence_source_repair_v1",
+            "strict": True,
+            "schema": _EvidenceSourcePolicyRepair.model_json_schema(),
+        },
+    }
+
+
+def protocol_control_time_operand_repair_response_format() -> dict[str, object]:
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "protocol_control_time_operand_repair_v1",
+            "strict": True,
+            "schema": _TimeOperandRepair.model_json_schema(),
         },
     }
 
@@ -1747,6 +1903,12 @@ def _repair_problem_guidance(problem: str) -> str:
         )
     if "WIRE_SCHEMA_INVALID" in problem or "CANDIDATE_REPAIR_INVALID" in problem:
         guidance: list[str] = []
+        if "后续持续义务只适用于禁止类原子" in problem:
+            guidance.append(
+                "后续持续义务不能挂在完成、给药或记录原子上。逐项核对当前动作和未来限制的直接原文："
+                "只有原文确有独立的后续禁止要求，才在有直接来源的禁止原子中表达；"
+                "否则删除无据的后续禁止描述。不得借相邻句子补药量、日期或未来义务。"
+            )
         if "确定性求值须声明计算方式" in problem:
             guidance.append(
                 "逐个核对所报原子的原文含义：仅可按来源确定计算的原子用 deterministic 并填写相应 operation；"
@@ -1965,10 +2127,22 @@ def _repair_problem_guidance(problem: str) -> str:
             "本轮重点：按冻结访视身份选择最终判定节点。若已有首次给药前复核或随机访视专门节点，"
             "不得仅因 review_stage 相同而改绑普通基线节点。"
         )
+    if "PROCEDURE_AFFECTED_STAGE_MISMATCH" in problem:
+        if "跨阶段" in problem:
+            return (
+                "本轮重点：先核对来源是否确有后续入排节点需要核实的增量。若有，"
+                "affected_workflow_stage_id 指向该后续最终判定节点，"
+                "external_target_id 保持原流程执行访视；当前节点只作提前关注。"
+                "若原文只要求当前行为持续到治疗期，不要另建未来当前真假命题。"
+            )
+        return (
+            "本轮重点：这是同阶段流程补充，affected_workflow_stage_id 应与"
+            "external_target_id 对应流程必做项的实际执行访视一致；"
+            "同时核对本节点判定与最低证据的到期节点。不得为了凑关系改写原文时点。"
+        )
     if (
         "EARLY_DECISION_FOR_FUTURE_ANCHOR" in problem
         or "AFFECTED_STAGE_DECISION_MISSING" in problem
-        or "PROCEDURE_AFFECTED_STAGE_MISMATCH" in problem
     ):
         return (
             "本轮重点：跨阶段有效窗或后续锚点控制补充时，affected_workflow_stage_id 必须选择"
@@ -2131,11 +2305,15 @@ def _repair_problem_guidance(problem: str) -> str:
             "evaluation.time_operand_attribute 必须声明该时间条件核对的日期属性；"
             "原文不能确定日期属性时保留未解决，不得凭空指定事件日期或记录日期。"
         )
-    if "TIME_CALENDAR_BOUND_UNSUPPORTED" in problem:
+    if (
+        "TIME_CALENDAR_BOUND_UNSUPPORTED" in problem
+        or "TIME_CALENDAR_BOUND_MISSING" in problem
+    ):
         return (
-            "本轮重点：时间窗数值必须来自该原子的直接摘录并绑定它实际修饰的锚点。"
-            "‘从签署知情同意起至末次给药后N天/周/月’中的N修饰末次给药后的尾段，应使用"
-            "last_dose_date、after、upper_bound=N；不得写成 icf_date 后N，也不得凭空补0天边界。"
+            "本轮重点：逐个核对报错义务原子的直接摘录。摘录含明确日历时长时，"
+            "在该原子 time_constraint 保存原文支持的数值、单位、比较方向和实际修饰的锚点；"
+            "摘录不含该时长时，删除无依据的结构化数值，不得借用同单元其他动作或其他原子的时长。"
+            "同一义务含起点与终点时分别核对，不凭空补零天边界。"
         )
     if "TIME_BOUND_COMPARATOR_MISMATCH" in problem:
         return (
@@ -2203,6 +2381,7 @@ def protocol_control_agent_prompt_template_sha256(prompt_template: str) -> str:
     payload = "\n\n".join(
         (
             CONTROL_AGENT_PROMPT_VERSION,
+            SOURCE_INTERPRETATION_PROMPT_VERSION,
             prompt_template.strip(),
             _CONTROL_AGENT_SYSTEM_CONTRACT,
             _CONTROL_REPAIR_CONTRACT,
@@ -2217,6 +2396,7 @@ def build_protocol_control_agent_prompt(
     *,
     prompt_template: str = DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE,
     include_schema: bool = True,
+    source_interpretation: SourceInterpretation | None = None,
 ) -> str:
     """Build a deterministic prompt from one planner batch or frozen input."""
 
@@ -2235,6 +2415,18 @@ def build_protocol_control_agent_prompt(
         f"{_CONTROL_AGENT_SYSTEM_CONTRACT}\n\n"
         f"{schema_block}"
         f"本次冻结输入：{_stable_json(frozen_input.model_dump(mode='json'))}\n\n"
+        + (
+            "已逐字定位的来源陈述（仅供核对，不替代原文或结构门禁）："
+            f"{_stable_json(source_interpretation.model_dump(mode='json'))}\n\n"
+            if source_interpretation is not None else ""
+        )
+        +
+        "来源清单中的 time_words 仅是逐段原文，不是审核结论。"
+        "同句涉及本节点及后续期间时，结合冻结审核节点分别表达可核事实与未到期持续义务；"
+        "当前义务不得借用其他句子的数值时长，不能把后续禁令提前判为已遵守。"
+        "原文或节点关系不能确定时保留未核实，不按当前或将来猜定。\n\n"
+        "表格中的 X 标记须按 member_cell_paths 列位置与同表前置阶段、访视和时间行逐列核对；"
+        "不能按压缩文本中 X 的顺序推断节点。无法对应时保留未核实，不得造访视或时间窗。\n\n"
         "按 owned_units 原文顺序逐项处理；每个 owned_unit 必须返回一条 disposition，"
         "候选可为 0 到 N。若候选不存在，必须逐单元写出非控制 disposition 和理由。只返回一个完整 JSON 对象。"
     )
@@ -2309,6 +2501,9 @@ def build_protocol_control_repair_prompt(
     obligation_source_span_ids: Sequence[str] | None = None,
     candidate_only: bool = False,
     candidates_only: bool = False,
+    source_insert: bool = False,
+    source_insert_candidate_only: bool = False,
+    baseline_wire_sha256: str | None = None,
 ) -> str:
     """Build a same-session repair prompt with an explicit bounded scope."""
 
@@ -2356,9 +2551,17 @@ def build_protocol_control_repair_prompt(
     }
     guidance = _repair_problem_guidance(problem)
     guidance_block = f"{guidance}\n" if guidance else ""
+    insert_guidance = (
+        "这是遗漏要求的来源限定补入，不是改写旧候选。旧候选必须按原顺序逐字保留，"
+        "旧处置除授权结构单元外不得改变；只可在 candidate_drafts 末尾新增引用授权原文的候选。"
+        "若原文不足以支持候选，不得编造医学要求，应保持失败待核。"
+        f"上一轮完整输出摘要：{baseline_wire_sha256}。\n"
+        if source_insert else ""
+    )
     return (
         f"{_CONTROL_REPAIR_CONTRACT}\n"
         f"{guidance_block}"
+        f"{insert_guidance}"
         f"冻结批次：{batch.batch_id}\n"
         f"结构单元范围：{json.dumps(unit_ids, ensure_ascii=False)}\n"
         f"授权结构单元原文与来源定位："
@@ -2374,7 +2577,10 @@ def build_protocol_control_repair_prompt(
         f"{json.dumps(list(candidate_indexes or []), ensure_ascii=False)}\n"
         f"校验问题：{problem[:12000]}\n"
         + (
-            "只修复指定的一个候选；系统保留其他候选、处置及其来源。"
+            "只返回一个有原文支持的新增候选，系统保留原候选和范围外处置；"
+            "仅返回包含 candidate_draft 的 JSON 对象，严格遵守本请求随附的单候选 JSON Schema。"
+            if source_insert_candidate_only
+            else "只修复指定的一个候选；系统保留其他候选、处置及其来源。"
             "仅返回包含 candidate_draft 的 JSON 对象，严格遵守本请求随附的单候选 JSON Schema。"
             if candidate_only
             else "只修复指定位置的候选，按候选草稿位置的升序返回同样数量的 candidate_drafts；"
@@ -2795,7 +3001,23 @@ def validate_protocol_control_agent_wire(
             batch=batch,
             candidate_index=candidate_index,
         )
-        _validate_known_targets(candidate, batch=batch)
+        try:
+            _validate_known_targets(candidate, batch=batch)
+        except ProtocolControlAgentWireValidationError as exc:
+            if exc.candidate_indexes:
+                raise
+            raise ProtocolControlAgentWireValidationError(
+                exc.code,
+                str(exc).removeprefix(f"{exc.code}: "),
+                structure_unit_ids=exc.structure_unit_ids,
+                candidate_indexes=[candidate_index],
+                candidate_ids=exc.candidate_ids,
+                obligation_source_span_ids=exc.obligation_source_span_ids,
+                error_class_codes=exc.error_class_codes,
+                allow_candidate_repartition=exc.allow_candidate_repartition,
+                allow_source_closure_rewrite=exc.allow_source_closure_rewrite,
+                allow_source_insert=exc.allow_source_insert,
+            ) from exc
         _validate_temporal_obligation_scope(candidate)
 
     candidate_units = {
@@ -3292,6 +3514,7 @@ class ProtocolControlAgentAttempt(ContractModel):
     session_id: str = Field(min_length=1)
     raw_output_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     raw_output_chars: int | None = Field(default=None, ge=0)
+    raw_output_text: str | None = Field(default=None, exclude=True)
     outcome: Literal[
         "parsed",
         "schema_invalid",
@@ -3312,6 +3535,107 @@ class ProtocolControlAgentRunResult(ContractModel):
     session_id: str = Field(min_length=1)
     attempts: list[ProtocolControlAgentAttempt] = Field(min_length=1)
     final_output: ProtocolControlBatchDispositionHydrated | None = None
+    source_interpretation: SourceInterpretation | None = None
+    source_statement_coverage: list[SourceStatementCoverage] = Field(default_factory=list)
+
+
+def source_statement_coverage(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+    wire: ProtocolControlAgentWire,
+) -> list[SourceStatementCoverage]:
+    """Record literal source-to-output links without inferring clinical equivalence."""
+
+    unit_spans = {
+        unit.structure_unit_id: set(unit.source_span_ids)
+        for unit in batch.owned_units
+    }
+    dispositions = {item.structure_unit_id: item for item in wire.dispositions}
+    entries: list[SourceStatementCoverage] = []
+    for index, statement in enumerate(interpretation.statements):
+        linked_candidates: list[int] = []
+        unit_candidates: list[int] = []
+        matched_roles: set[str] = set()
+        for candidate_index, candidate in enumerate(wire.candidate_drafts):
+            if statement.structure_unit_id not in candidate.source_structure_unit_ids:
+                continue
+            unit_candidates.append(candidate_index)
+            expressions = (
+                ("applicability", candidate.applicability_expression),
+                ("trigger", candidate.trigger_expression),
+                ("obligation", candidate.obligation_expression),
+                ("exception", candidate.exception_expression),
+            )
+            candidate_roles: set[str] = set()
+            quote = normalize_source_excerpt(statement.quoted_text)
+            for role, expression in expressions:
+                if expression is None:
+                    continue
+                for group in expression.groups:
+                    for atom in group.atoms:
+                        if not set(atom.source_span_ids) & unit_spans[statement.structure_unit_id]:
+                            continue
+                        if any(
+                            quote in normalize_source_excerpt(excerpt)
+                            for excerpt in atom.source_excerpts
+                        ):
+                            candidate_roles.add(role)
+                        if role == "obligation" and atom.continuing_obligation is not None:
+                            continuing = atom.continuing_obligation
+                            if set(continuing.source_span_ids) & unit_spans[statement.structure_unit_id] and any(
+                                quote in normalize_source_excerpt(excerpt)
+                                for excerpt in continuing.source_excerpts
+                            ):
+                                candidate_roles.add("continuing")
+            matched_roles.update(candidate_roles)
+            if (
+                candidate_roles & {"obligation", "continuing"}
+                if statement.force in {"required", "prohibited", "recommended"}
+                else candidate_roles
+            ):
+                linked_candidates.append(candidate_index)
+        disposition = dispositions[statement.structure_unit_id]
+        quote = normalize_source_excerpt(statement.quoted_text)
+        exact_official_matches = sorted({
+            target.official_code for target in batch.known_official_targets
+            if quote and any(
+                excerpt is not None and quote in normalize_source_excerpt(excerpt)
+                for excerpt in target.source_excerpts
+            )
+        })
+        exact_procedure_matches = sorted({
+            target.catalog_item_id for target in batch.known_procedure_targets
+            if quote and any(
+                excerpt is not None and quote in normalize_source_excerpt(excerpt)
+                for excerpt in target.source_excerpts
+            )
+        })
+        status = (
+            "expressed" if linked_candidates else
+            "candidate_linked" if unit_candidates else
+            "linked_only" if disposition.disposition in {
+                StructureUnitDispositionKind.OFFICIAL_ELIGIBILITY,
+                StructureUnitDispositionKind.REQUIRED_PROCEDURE,
+            } else "not_located"
+        )
+        entries.append(SourceStatementCoverage(
+            statement_index=index,
+            structure_unit_id=statement.structure_unit_id,
+            disposition=disposition.disposition.value,
+            status=status,
+            candidate_indexes=linked_candidates,
+            linked_candidate_indexes=unit_candidates,
+            matched_roles=sorted(matched_roles),
+            linked_official_code=disposition.linked_official_code,
+            linked_procedure_target_ids=(
+                disposition.linked_procedure_catalog_item_ids
+                or ([disposition.linked_procedure_catalog_item_id]
+                    if disposition.linked_procedure_catalog_item_id else [])
+            ),
+            exact_official_excerpt_matches=exact_official_matches,
+            exact_procedure_excerpt_matches=exact_procedure_matches,
+        ))
+    return entries
 
 
 ProtocolControlAgentOutputValidator = Callable[
@@ -3424,6 +3748,7 @@ def _restore_bounded_wire_repair(
     mutable_obligation_source_span_ids: set[str] | None = None,
     allow_candidate_repartition: bool = False,
     allow_source_closure_rewrite: bool = False,
+    allow_source_insert: bool = False,
 ) -> tuple[ProtocolControlAgentWire, bool]:
     """Restore immutable wire entries before hydration and gate validation."""
 
@@ -3434,6 +3759,35 @@ def _restore_bounded_wire_repair(
     mutable_obligation_source_span_ids = (
         mutable_obligation_source_span_ids or set()
     )
+    if allow_source_insert:
+        if not mutable_structure_unit_ids or not mutable_obligation_source_span_ids:
+            raise ProtocolControlAgentWireValidationError(
+                "REPAIR_SCOPE_ESCAPE", "来源补入缺少明确的结构单元或原文定位"
+            )
+        prior = previous.candidate_drafts
+        if current.candidate_drafts[:len(prior)] != prior or len(current.candidate_drafts) <= len(prior):
+            raise ProtocolControlAgentWireValidationError(
+                "REPAIR_SCOPE_ESCAPE", "来源补入只能在旧候选后新增候选，不得改写或删除旧候选"
+            )
+        old_dispositions = {item.structure_unit_id: item for item in previous.dispositions}
+        if [item.structure_unit_id for item in current.dispositions] != [
+            item.structure_unit_id for item in previous.dispositions
+        ] or any(
+            item != old_dispositions[item.structure_unit_id]
+            for item in current.dispositions
+            if item.structure_unit_id not in mutable_structure_unit_ids
+        ):
+            raise ProtocolControlAgentWireValidationError(
+                "REPAIR_SCOPE_ESCAPE", "来源补入改动了范围外的结构单元处置"
+            )
+        for candidate in current.candidate_drafts[len(prior):]:
+            if not set(candidate.source_structure_unit_ids) <= mutable_structure_unit_ids or not (
+                set(candidate.source_span_ids) & mutable_obligation_source_span_ids
+            ) or not set(candidate.source_span_ids) <= mutable_obligation_source_span_ids:
+                raise ProtocolControlAgentWireValidationError(
+                    "REPAIR_SCOPE_ESCAPE", "新增候选没有绑定授权结构单元和原文定位"
+                )
+        return current, False
     previous_dispositions = {
         item.structure_unit_id: item for item in previous.dispositions
     }
@@ -3841,6 +4195,7 @@ def _merge_candidate_repair(
             "PROVIDER_ID_FORBIDDEN", f"模型不得填写系统身份 {forbidden[1]}"
         )
     try:
+        _collapse_exact_duplicate_day_bounds(payload["candidate_draft"])
         candidate = ProtocolControlAgentWireCandidate.model_validate(
             payload["candidate_draft"]
         )
@@ -3864,6 +4219,45 @@ def _merge_candidate_repair(
         raise ProtocolControlAgentWireValidationError(
             "CANDIDATE_REPAIR_INVALID", _validation_error_summary(exc)
             if isinstance(exc, ValidationError) else str(exc),
+        ) from exc
+
+
+def _merge_source_candidate_insert(
+    raw_text: str,
+    baseline: ProtocolControlAgentWire,
+    *,
+    authorized_unit_ids: set[str],
+) -> ProtocolControlAgentWire:
+    """Append one model-authored candidate; derive only its bookkeeping links."""
+
+    try:
+        payload = json.loads(raw_text)
+        if not isinstance(payload, dict) or set(payload) != {"candidate_draft"}:
+            raise ValueError("来源补入只接受 candidate_draft")
+        _collapse_exact_duplicate_day_bounds(payload["candidate_draft"])
+        candidate = ProtocolControlAgentWireCandidate.model_validate(payload["candidate_draft"])
+        if not set(candidate.source_structure_unit_ids) <= authorized_unit_ids:
+            raise ValueError("新增候选超出授权原文单元")
+        previous_by_unit = {item.structure_unit_id: item for item in baseline.dispositions}
+        if any(
+            previous_by_unit[unit_id].disposition not in {
+                StructureUnitDispositionKind.SUPPORTING_OR_SUPPLEMENT,
+                StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE,
+            }
+            for unit_id in candidate.source_structure_unit_ids
+        ):
+            raise ValueError("已有正式条款或流程处置不能被单候选补入覆盖")
+        updated = baseline.model_dump(mode="json")
+        updated["candidate_drafts"].append(candidate.model_dump(mode="json"))
+        for item in updated["dispositions"]:
+            if item["structure_unit_id"] in candidate.source_structure_unit_ids:
+                item["disposition"] = StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE.value
+                item["notes"] = None
+        return ProtocolControlAgentWire.model_validate(updated)
+    except (KeyError, ValidationError, ValueError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "SOURCE_INSERT_INVALID",
+            _validation_error_summary(exc) if isinstance(exc, ValidationError) else str(exc),
         ) from exc
 
 
@@ -3910,6 +4304,359 @@ def _invalid_candidate_payload(raw_text: str) -> tuple[dict[str, Any], tuple[int
 def _single_invalid_candidate_payload(raw_text: str) -> tuple[dict[str, Any], int] | None:
     result = _invalid_candidate_payload(raw_text)
     return (result[0], result[1][0]) if result is not None and len(result[1]) == 1 else None
+
+
+def _invalid_obligation_atom_path(
+    error: ProtocolControlAgentWireValidationError,
+    baseline: Mapping[str, Any],
+    candidate_index: int,
+) -> tuple[int, int, int] | None:
+    """Find one malformed atom without treating sibling errors as its repair scope."""
+
+    cause = error.__cause__
+    if not isinstance(cause, ValidationError):
+        return None
+    locations = [tuple(item["loc"]) for item in cause.errors(include_url=False)]
+    paths: set[tuple[int, int, int]] = set()
+    for location in locations:
+        if (
+            len(location) < 8
+            or location[0] != "candidate_drafts"
+            or not isinstance(location[1], int)
+            or location[2:4] != ("obligation_expression", "groups")
+            or not isinstance(location[4], int)
+            or location[5] != "atoms"
+            or not isinstance(location[6], int)
+            or location[7] not in {"evaluation", "time_constraint"}
+        ):
+            return None
+        paths.add((location[1], location[4], location[6]))
+    if len(paths) != 1:
+        return None
+    path = next(iter(paths))
+    if path[0] != candidate_index:
+        return None
+    try:
+        atom = baseline["candidate_drafts"][path[0]]["obligation_expression"]["groups"][path[1]]["atoms"][path[2]]
+    except (KeyError, IndexError, TypeError):
+        return None
+    frozen_fields = (
+        "kind", "statement", "modality", "temporal_scope", "source_span_ids",
+        "source_excerpts", "requires_professional_judgment", "prospective_period",
+        "continuing_obligation",
+    )
+    return path if isinstance(atom, dict) and all(field in atom for field in frozen_fields) else None
+
+
+def _invalid_observation_policy_paths(
+    error: ProtocolControlAgentWireValidationError,
+    baseline: Mapping[str, Any],
+    candidate_index: int,
+) -> tuple[tuple[int, int], ...]:
+    """Select only same-candidate atoms whose sole missing field is selection policy."""
+
+    cause = error.__cause__
+    if not isinstance(cause, ValidationError):
+        return ()
+    paths: set[tuple[int, int]] = set()
+    for item in cause.errors(include_url=False):
+        location = tuple(item["loc"])
+        if (
+            len(location) < 7
+            or location[:4] != (
+                "candidate_drafts", candidate_index, "obligation_expression", "groups"
+            )
+            or not isinstance(location[4], int)
+            or location[5] != "atoms"
+            or not isinstance(location[6], int)
+        ):
+            return ()
+        group_index, atom_index = location[4], location[6]
+        try:
+            atom = baseline["candidate_drafts"][candidate_index]["obligation_expression"]["groups"][group_index]["atoms"][atom_index]
+            evaluation = atom["evaluation"]
+        except (KeyError, IndexError, TypeError):
+            return ()
+        if not isinstance(evaluation, dict) or evaluation.get("observation_policy") is not None:
+            return ()
+        paths.add((group_index, atom_index))
+    return tuple(sorted(paths)) if len(paths) > 1 else ()
+
+
+def _merge_observation_policy_repair(
+    raw_text: str,
+    baseline: Mapping[str, Any],
+    candidate_index: int,
+    paths: tuple[tuple[int, int], ...],
+) -> ProtocolControlAgentWire:
+    """Only replace selected observation policies; retain all other model fields."""
+
+    try:
+        repair = _ObservationPolicyRepair.model_validate_json(raw_text)
+        returned = [(item.group_index, item.atom_index) for item in repair.items]
+        if sorted(returned) != list(paths):
+            raise ValueError("观察采用说明的原子位置与授权范围不一致")
+        merged = deepcopy(dict(baseline))
+        candidate = merged["candidate_drafts"][candidate_index]
+        for item in repair.items:
+            atom = candidate["obligation_expression"]["groups"][item.group_index]["atoms"][item.atom_index]
+            atom["evaluation"]["observation_policy"] = item.policy.model_dump(mode="json")
+        return ProtocolControlAgentWire.model_validate(merged)
+    except (ValidationError, ValueError, KeyError, IndexError, TypeError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "OBSERVATION_REPAIR_INVALID",
+            _validation_error_summary(exc) if isinstance(exc, ValidationError) else str(exc),
+        ) from exc
+
+
+def _build_observation_policy_repair_prompt(
+    baseline: Mapping[str, Any],
+    candidate_index: int,
+    paths: tuple[tuple[int, int], ...],
+    problem: str,
+) -> str:
+    candidate = baseline["candidate_drafts"][candidate_index]
+    atoms = [
+        {
+            "group_index": group_index,
+            "atom_index": atom_index,
+            "atom": candidate["obligation_expression"]["groups"][group_index]["atoms"][atom_index],
+        }
+        for group_index, atom_index in paths
+    ]
+    return (
+        "仅为列出的义务原子补充观察采用说明，不重写义务、阈值、时间、例外或来源。"
+        "方案明确规定单次、任一、全部或最近/最早时才选择对应方式；"
+        "原文不足时使用 unresolved 并说明范围，不得猜测。"
+        "每项的来源只能从相应原子的 source_span_ids 与 source_excerpts 成对选取；"
+        "旁边的段落不是本次可引用来源。若原子来源不足以确定采用方式，填 unresolved；"
+        "只返回 items 列表，位置须一一对应。\n"
+        f"校验问题：{problem[:3000]}\n"
+        f"需修原子：{_stable_json(atoms)}\n"
+    )
+
+
+def _invalid_evidence_source_policy_path(
+    error: ProtocolControlAgentWireValidationError,
+    baseline: Mapping[str, Any],
+    candidate_index: int,
+) -> tuple[int, int] | None:
+    cause = error.__cause__
+    if not isinstance(cause, ValidationError):
+        return None
+    paths: set[tuple[int, int]] = set()
+    for item in cause.errors(include_url=False):
+        location = tuple(item["loc"])
+        if (
+            len(location) < 4
+            or location[:2] != ("candidate_drafts", candidate_index)
+            or location[2] != "minimum_evidence"
+            or not isinstance(location[3], int)
+            or location[4:5] != ("source_policy",)
+        ):
+            return None
+        paths.add((candidate_index, location[3]))
+    if len(paths) != 1:
+        return None
+    path = next(iter(paths))
+    try:
+        evidence = baseline["candidate_drafts"][path[0]]["minimum_evidence"][path[1]]
+    except (KeyError, IndexError, TypeError):
+        return None
+    return path if isinstance(evidence, dict) else None
+
+
+def _build_evidence_source_policy_repair_prompt(
+    batch: ProtocolControlDispositionBatch,
+    baseline: Mapping[str, Any],
+    path: tuple[int, int],
+    problem: str,
+) -> str:
+    candidate = baseline["candidate_drafts"][path[0]]
+    evidence = candidate["minimum_evidence"][path[1]]
+    source_texts = _candidate_source_texts(batch, candidate["source_structure_unit_ids"])
+    return (
+        "仅修订这一项最低证据的资料来源要求 source_policy，不改写证据、义务、期别、时间或其他候选。"
+        "source_span_ids 与 source_excerpts 必须成对，摘录必须是相应冻结原文中的连续文字；"
+        "原文未明确是否要求同期客观原件或允许筛选病历转述时填 null，未明确结果有效期时"
+        "填 not_specified，不得补造期限。只返回 policy。\n"
+        f"校验问题：{problem[:2000]}\n"
+        f"需修证据：{_stable_json(evidence)}\n"
+        f"授权原文：{_stable_json(source_texts)}\n"
+    )
+
+
+def _merge_evidence_source_policy_repair(
+    raw_text: str,
+    baseline: Mapping[str, Any],
+    path: tuple[int, int],
+    batch: ProtocolControlDispositionBatch,
+) -> ProtocolControlAgentWire:
+    try:
+        repair = _EvidenceSourcePolicyRepair.model_validate_json(raw_text)
+        merged = deepcopy(dict(baseline))
+        candidate = merged["candidate_drafts"][path[0]]
+        source_texts = _candidate_source_texts(batch, candidate["source_structure_unit_ids"])
+        for span_id, excerpt in zip(
+            repair.policy.source_span_ids, repair.policy.source_excerpts, strict=True
+        ):
+            if not any(excerpt in text for text in source_texts.get(span_id, ())):
+                raise ValueError("资料来源要求的摘录不属于授权原文")
+        candidate["minimum_evidence"][path[1]]["source_policy"] = repair.policy.model_dump(mode="json")
+        return ProtocolControlAgentWire.model_validate(merged)
+    except (ValidationError, ValueError, KeyError, IndexError, TypeError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "EVIDENCE_SOURCE_REPAIR_INVALID",
+            _validation_error_summary(exc) if isinstance(exc, ValidationError) else str(exc),
+        ) from exc
+
+
+def _invalid_time_operand_paths(
+    error: ProtocolControlAgentWireValidationError,
+    baseline: Mapping[str, Any],
+    candidate_index: int,
+) -> tuple[tuple[int, int], ...]:
+    cause = error.__cause__
+    if not isinstance(cause, ValidationError):
+        return ()
+    paths: set[tuple[int, int]] = set()
+    for item in cause.errors(include_url=False):
+        location = tuple(item["loc"])
+        if (
+            item["type"] != "control_time_operand_missing"
+            or len(location) != 7
+            or location[:4] != (
+                "candidate_drafts", candidate_index, "obligation_expression", "groups"
+            )
+            or not isinstance(location[4], int)
+            or location[5] != "atoms"
+            or not isinstance(location[6], int)
+        ):
+            return ()
+        paths.add((location[4], location[6]))
+    for group_index, atom_index in paths:
+        try:
+            atom = baseline["candidate_drafts"][candidate_index]["obligation_expression"]["groups"][group_index]["atoms"][atom_index]
+            if atom["time_constraint"] is None or atom["evaluation"].get("time_operand_attribute") is not None:
+                return ()
+        except (KeyError, IndexError, TypeError):
+            return ()
+    return tuple(sorted(paths))
+
+
+def _build_time_operand_repair_prompt(
+    baseline: Mapping[str, Any],
+    candidate_index: int,
+    paths: tuple[tuple[int, int], ...],
+) -> str:
+    candidate = baseline["candidate_drafts"][candidate_index]
+    atoms = [
+        {
+            "group_index": group_index,
+            "atom_index": atom_index,
+            "atom": candidate["obligation_expression"]["groups"][group_index]["atoms"][atom_index],
+        }
+        for group_index, atom_index in paths
+    ]
+    return (
+        "只为列出的义务原子选择时间核对使用的日期属性：事件所属期间用 date_range，"
+        "记录形成或检查发生的单日日期用 record_time。"
+        "不得更改原文、时间锚点、期限、义务和其他字段；若不能从原子来源判断，不得猜测。"
+        "仅返回 items，位置须一一对应。\n"
+        f"需修原子：{_stable_json(atoms)}\n"
+    )
+
+
+def _merge_time_operand_repair(
+    raw_text: str,
+    baseline: Mapping[str, Any],
+    candidate_index: int,
+    paths: tuple[tuple[int, int], ...],
+) -> ProtocolControlAgentWire:
+    try:
+        repair = _TimeOperandRepair.model_validate_json(raw_text)
+        if sorted((item.group_index, item.atom_index) for item in repair.items) != list(paths):
+            raise ValueError("时间日期属性的原子位置与授权范围不一致")
+        if any(item.attribute == "unresolved" for item in repair.items):
+            raise ProtocolControlAgentWireValidationError(
+                "TIME_OPERAND_UNRESOLVED", "原文不足以确定核对日期属性，保留未核实"
+            )
+        merged = deepcopy(dict(baseline))
+        candidate = merged["candidate_drafts"][candidate_index]
+        for item in repair.items:
+            atom = candidate["obligation_expression"]["groups"][item.group_index]["atoms"][item.atom_index]
+            atom["evaluation"]["time_operand_attribute"] = item.attribute
+        return ProtocolControlAgentWire.model_validate(merged)
+    except ProtocolControlAgentWireValidationError:
+        raise
+    except (ValidationError, ValueError, KeyError, IndexError, TypeError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "TIME_OPERAND_REPAIR_INVALID",
+            _validation_error_summary(exc) if isinstance(exc, ValidationError) else str(exc),
+        ) from exc
+
+
+def _merge_obligation_atom_repair(
+    raw_text: str, baseline: Mapping[str, Any], path: tuple[int, int, int]
+) -> ProtocolControlAgentWire:
+    """Splice a checked atom into the original batch; all siblings remain byte-identical."""
+
+    try:
+        payload = json.loads(raw_text)
+        if not isinstance(payload, dict) or set(payload) != {"atom"}:
+            raise ValueError("义务原子修订只接受 atom")
+        if _find_forbidden_provider_key(payload) is not None:
+            raise ValueError("义务原子修订不得填写系统身份")
+        candidate_index, group_index, atom_index = path
+        merged = deepcopy(dict(baseline))
+        original = merged["candidate_drafts"][candidate_index]["obligation_expression"]["groups"][group_index]["atoms"][atom_index]
+        replacement = ProtocolControlAgentWireObligationAtom.model_validate(payload["atom"])
+        replacement_json = replacement.model_dump(mode="json")
+        for field in (
+            "kind", "statement", "modality", "temporal_scope",
+            "source_span_ids", "source_excerpts", "requires_professional_judgment",
+            "prospective_period", "continuing_obligation",
+        ):
+            if field not in original or replacement_json[field] != original[field]:
+                raise ValueError(f"义务原子修订不得改变 {field}")
+        merged["candidate_drafts"][candidate_index]["obligation_expression"]["groups"][group_index]["atoms"][atom_index] = replacement_json
+        return ProtocolControlAgentWire.model_validate(merged)
+    except (json.JSONDecodeError, ValidationError, ValueError, KeyError, IndexError, TypeError) as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "ATOM_REPAIR_INVALID",
+            _validation_error_summary(exc) if isinstance(exc, ValidationError) else str(exc),
+        ) from exc
+
+
+def _build_obligation_atom_repair_prompt(
+    batch: ProtocolControlDispositionBatch,
+    baseline: Mapping[str, Any],
+    path: tuple[int, int, int],
+    problem: str,
+) -> str:
+    candidate_index, group_index, atom_index = path
+    candidate = baseline["candidate_drafts"][candidate_index]
+    atom = candidate["obligation_expression"]["groups"][group_index]["atoms"][atom_index]
+    owned_ids = set(candidate["source_structure_unit_ids"])
+    sources = [
+        {
+            "structure_unit_id": unit.structure_unit_id,
+            "heading_path": unit.heading_path,
+            "excerpt": unit.excerpt,
+        }
+        for unit in batch.owned_units
+        if unit.structure_unit_id in owned_ids
+    ]
+    return (
+        "仅修订一个已有义务原子的结构，不新增临床含义。"
+        "原句、义务类型、强度、来源定位、后续义务和研究者判断属性必须原样保留；"
+        "只能根据冻结原文修订求值和时间字段。若原文无法支持修订，不得猜测。"
+        "只返回含 atom 的 JSON，其他候选、原子和处置由系统原样保留。\n"
+        f"问题：{problem}\n"
+        f"原子位置：候选{candidate_index}／义务组{group_index}／原子{atom_index}\n"
+        f"原子原稿：{_stable_json(atom)}\n"
+        f"冻结来源：{_stable_json(sources)}"
+    )
 
 
 def _merge_candidate_repairs(
@@ -4005,10 +4752,49 @@ class ProtocolControlAgentRunner:
         attempts: list[ProtocolControlAgentAttempt] = []
         session_id: str | None = None
         raw_text: str | None = None
+        source_interpretation: SourceInterpretation | None = None
+        source_reader = getattr(transport, "start_source_interpretation", None)
+        if callable(source_reader):
+            source_response: ProtocolControlAgentResponse | None = None
+            try:
+                source_response = source_reader(
+                    prompt=build_source_interpretation_prompt(batch)
+                )
+                source_interpretation = SourceInterpretation.model_validate_json(
+                    source_response.text
+                )
+                validate_source_interpretation(batch, source_interpretation)
+            except Exception as exc:  # noqa: BLE001 - product transport/schema boundary
+                source_session_id = (
+                    getattr(exc, "session_id", None)
+                    or (source_response.session_id if source_response is not None else None)
+                    or "source-interpretation-invalid"
+                )
+                return ProtocolControlAgentRunResult(
+                    status="需要核对",
+                    batch_id=batch.batch_id,
+                    session_id=source_session_id,
+                    attempts=[ProtocolControlAgentAttempt(
+                        attempt=1,
+                        session_id=source_session_id,
+                        raw_output_sha256=_sha256(
+                            source_response.text if source_response is not None else str(exc)
+                        ),
+                        raw_output_chars=(
+                            len(source_response.text) if source_response is not None else None
+                        ),
+                        outcome=(
+                            "transport_failed" if source_response is None
+                            else "schema_invalid"
+                        ),
+                        issues=[f"有源陈述核对未通过：{str(exc)[:1800]}"],
+                    )],
+                )
         prompt = build_protocol_control_agent_prompt(
             batch,
             prompt_template=prompt_template,
             include_schema=getattr(transport, "response_format_mode", None) != "json_schema",
+            source_interpretation=source_interpretation,
         )
         transport_failures = 0
         while True:
@@ -4044,6 +4830,7 @@ class ProtocolControlAgentRunner:
                         batch_id=batch.batch_id,
                         session_id=sid,
                         attempts=attempts,
+                        source_interpretation=source_interpretation,
                     )
 
         assert session_id is not None and raw_text is not None
@@ -4060,7 +4847,15 @@ class ProtocolControlAgentRunner:
         mutable_obligation_source_span_ids: set[str] = set()
         allow_candidate_repartition = False
         allow_source_closure_rewrite = False
+        allow_source_insert = False
+        source_insert_candidate_only = False
         candidate_repair_index: int | None = None
+        atom_repair_path: tuple[int, int, int] | None = None
+        time_operand_repair_paths: tuple[tuple[int, int], ...] = ()
+        time_operand_repair_candidate: int | None = None
+        observation_repair_paths: tuple[tuple[int, int], ...] = ()
+        observation_repair_candidate: int | None = None
+        evidence_source_repair_path: tuple[int, int] | None = None
         while True:
             wire: ProtocolControlAgentWire | None = None
             output: ProtocolControlBatchDispositionHydrated | None = None
@@ -4070,6 +4865,34 @@ class ProtocolControlAgentRunner:
             )
             try:
                 wire = (
+                    _merge_time_operand_repair(
+                        raw_text, repair_baseline_raw, time_operand_repair_candidate,
+                        time_operand_repair_paths,
+                    )
+                    if time_operand_repair_candidate is not None and repair_baseline_raw is not None
+                    else _merge_evidence_source_policy_repair(
+                        raw_text, repair_baseline_raw, evidence_source_repair_path, batch
+                    )
+                    if evidence_source_repair_path is not None and repair_baseline_raw is not None
+                    else _merge_observation_policy_repair(
+                        raw_text,
+                        repair_baseline_raw,
+                        observation_repair_candidate,
+                        observation_repair_paths,
+                    )
+                    if observation_repair_candidate is not None and repair_baseline_raw is not None
+                    else _merge_obligation_atom_repair(
+                        raw_text, repair_baseline_raw, atom_repair_path
+                    )
+                    if atom_repair_path is not None and repair_baseline_raw is not None
+                    else
+                    _merge_source_candidate_insert(
+                        raw_text,
+                        repair_baseline_wire,
+                        authorized_unit_ids=mutable_structure_unit_ids,
+                    )
+                    if source_insert_candidate_only and repair_baseline_wire is not None
+                    else
                     _merge_candidate_repairs(
                         raw_text,
                         repair_baseline_wire or repair_baseline_raw,
@@ -4088,6 +4911,12 @@ class ProtocolControlAgentRunner:
                     else parse_protocol_control_agent_wire(raw_text)
                 )
                 repair_baseline_raw = None
+                time_operand_repair_paths = ()
+                time_operand_repair_candidate = None
+                atom_repair_path = None
+                observation_repair_paths = ()
+                observation_repair_candidate = None
+                evidence_source_repair_path = None
                 if repair_baseline_wire is not None:
                     wire, bounded_restore_applied = _restore_bounded_wire_repair(
                         repair_baseline_wire,
@@ -4101,6 +4930,7 @@ class ProtocolControlAgentRunner:
                         ),
                         allow_candidate_repartition=allow_candidate_repartition,
                         allow_source_closure_rewrite=allow_source_closure_rewrite,
+                        allow_source_insert=allow_source_insert,
                     )
                 output = hydrate_protocol_control_agent_output(wire, batch)
                 if output_validator is not None:
@@ -4145,8 +4975,23 @@ class ProtocolControlAgentRunner:
                     session_id=session_id,
                     attempts=attempts,
                     final_output=output,
+                    source_interpretation=source_interpretation,
+                    source_statement_coverage=(
+                        source_statement_coverage(batch, source_interpretation, wire)
+                        if source_interpretation is not None and wire is not None else []
+                    ),
                 )
             except Exception as exc:  # noqa: BLE001 - bounded validation boundary
+                previous_atom_repair_path = atom_repair_path
+                previous_time_operand_repair_candidate = time_operand_repair_candidate
+                previous_observation_repair_candidate = observation_repair_candidate
+                previous_evidence_source_repair_path = evidence_source_repair_path
+                atom_repair_path = None
+                time_operand_repair_paths = ()
+                time_operand_repair_candidate = None
+                observation_repair_paths = ()
+                observation_repair_candidate = None
+                evidence_source_repair_path = None
                 error = (
                     exc
                     if isinstance(exc, ProtocolControlAgentWireValidationError)
@@ -4170,11 +5015,40 @@ class ProtocolControlAgentRunner:
                     set(error.structure_unit_ids) - set(batch.owned_structure_unit_ids)
                 )
                 repair_candidate_indexes = set(error.candidate_indexes)
+                if previous_atom_repair_path is not None:
+                    repair_candidate_indexes.add(previous_atom_repair_path[0])
+                if previous_time_operand_repair_candidate is not None:
+                    repair_candidate_indexes.add(previous_time_operand_repair_candidate)
+                if previous_observation_repair_candidate is not None:
+                    repair_candidate_indexes.add(previous_observation_repair_candidate)
+                if previous_evidence_source_repair_path is not None:
+                    repair_candidate_indexes.add(previous_evidence_source_repair_path[0])
                 if wire is None and error.code == "WIRE_SCHEMA_INVALID" and repair_baseline_raw is None:
                     salvage = _invalid_candidate_payload(raw_text)
                     if salvage is not None:
                         repair_baseline_raw, invalid_indexes = salvage
                         repair_candidate_indexes.update(invalid_indexes)
+                        if len(invalid_indexes) == 1:
+                            atom_repair_path = _invalid_obligation_atom_path(
+                                error,
+                                repair_baseline_raw,
+                                invalid_indexes[0],
+                            )
+                            if atom_repair_path is None:
+                                observation_repair_paths = _invalid_observation_policy_paths(
+                                    error, repair_baseline_raw, invalid_indexes[0]
+                                )
+                                time_operand_repair_paths = _invalid_time_operand_paths(
+                                    error, repair_baseline_raw, invalid_indexes[0]
+                                )
+                                if time_operand_repair_paths:
+                                    time_operand_repair_candidate = invalid_indexes[0]
+                                elif observation_repair_paths:
+                                    observation_repair_candidate = invalid_indexes[0]
+                                else:
+                                    evidence_source_repair_path = _invalid_evidence_source_policy_path(
+                                        error, repair_baseline_raw, invalid_indexes[0]
+                                    )
                 elif repair_baseline_raw is not None and candidate_repair_index is not None:
                     repair_candidate_indexes.add(candidate_repair_index)
                 elif repair_baseline_raw is not None and candidate_repair_indexes:
@@ -4257,15 +5131,30 @@ class ProtocolControlAgentRunner:
                     unknown_obligation_spans = set(
                         error.obligation_source_span_ids
                     ) - selected_candidate_span_ids
+                    insert_source_spans = {
+                        span_id
+                        for unit in batch.owned_units
+                        if unit.structure_unit_id in error.structure_unit_ids
+                        for span_id in unit.source_span_ids
+                    }
+                    insert_scope_valid = (
+                        error.allow_source_insert
+                        and not error.candidate_ids
+                        and bool(error.structure_unit_ids)
+                        and bool(error.obligation_source_span_ids)
+                        and set(error.obligation_source_span_ids) <= insert_source_spans
+                    )
                     repair_scope_unknown = (
                         repair_scope_unknown
                         or bool(unknown_candidate_ids)
                         or bool(unknown_candidate_index_ids)
-                        or bool(unknown_obligation_spans)
+                        or (bool(unknown_obligation_spans) and not insert_scope_valid)
                         or bool(
                             error.obligation_source_span_ids
                             and not error.candidate_ids
+                            and not insert_scope_valid
                         )
+                        or (error.allow_source_insert and not insert_scope_valid)
                         or source_closure_authority_escape
                         or not (error.candidate_ids or error.structure_unit_ids)
                     )
@@ -4310,6 +5199,7 @@ class ProtocolControlAgentRunner:
                         allow_source_closure_rewrite = (
                             error.allow_source_closure_rewrite
                         )
+                        allow_source_insert = error.allow_source_insert
                         mutable_obligation_source_span_ids = set(
                             error.obligation_source_span_ids
                         )
@@ -4321,12 +5211,34 @@ class ProtocolControlAgentRunner:
                             mutable_structure_unit_ids.update(
                                 mutable_candidate_source_union
                             )
+                elif (
+                    wire is not None
+                    and output is None
+                    and len(repair_candidate_indexes) == 1
+                    and not repair_scope_unknown
+                    and not error.allow_candidate_repartition
+                    and not error.allow_source_closure_rewrite
+                    and not error.allow_source_insert
+                    and len(wire.dispositions) == len(batch.owned_structure_unit_ids)
+                    and {item.structure_unit_id for item in wire.dispositions}
+                    == set(batch.owned_structure_unit_ids)
+                ):
+                    index = next(iter(repair_candidate_indexes))
+                    if 0 <= index < len(wire.candidate_drafts):
+                        candidate_source = set(
+                            wire.candidate_drafts[index].source_structure_unit_ids
+                        )
+                        if candidate_source and set(error.structure_unit_ids) <= candidate_source:
+                            repair_baseline_wire = wire
+                            mutable_candidate_indexes = {index}
+                            mutable_structure_unit_ids = set(error.structure_unit_ids)
                 attempts.append(
                     ProtocolControlAgentAttempt(
                         attempt=len(attempts) + 1,
                         session_id=session_id,
                         raw_output_sha256=raw_output_sha256,
                         raw_output_chars=len(raw_text),
+                        raw_output_text=raw_text,
                         outcome=invalid_outcome,
                         issues=(
                             [
@@ -4346,6 +5258,7 @@ class ProtocolControlAgentRunner:
                 )
                 if (
                     no_progress
+                    or error.code == "TIME_OPERAND_UNRESOLVED"
                     or repair_scope_unknown
                     or repairs >= self._max_schema_repairs
                 ):
@@ -4359,13 +5272,48 @@ class ProtocolControlAgentRunner:
                         batch_id=batch.batch_id,
                         session_id=session_id,
                         attempts=attempts,
+                        source_interpretation=source_interpretation,
                     )
                 repairs += 1
+                atom_only = (
+                    atom_repair_path is not None
+                    and repair_baseline_raw is not None
+                    and callable(getattr(transport, "continue_atom", None))
+                )
+                if not atom_only:
+                    atom_repair_path = None
+                time_operand_only = (
+                    time_operand_repair_candidate is not None
+                    and bool(time_operand_repair_paths)
+                    and repair_baseline_raw is not None
+                    and callable(getattr(transport, "continue_time_operands", None))
+                )
+                if not time_operand_only:
+                    time_operand_repair_candidate = None
+                    time_operand_repair_paths = ()
+                observation_only = (
+                    observation_repair_candidate is not None
+                    and bool(observation_repair_paths)
+                    and repair_baseline_raw is not None
+                    and callable(getattr(transport, "continue_observation_policies", None))
+                )
+                if not observation_only:
+                    observation_repair_candidate = None
+                    observation_repair_paths = ()
+                evidence_source_only = (
+                    evidence_source_repair_path is not None
+                    and repair_baseline_raw is not None
+                    and callable(getattr(transport, "continue_evidence_source_policy", None))
+                )
+                if not evidence_source_only:
+                    evidence_source_repair_path = None
                 candidate_only = (
-                    (repair_baseline_wire is not None or repair_baseline_raw is not None)
+                    not atom_only and not time_operand_only and not observation_only and not evidence_source_only
+                    and (repair_baseline_wire is not None or repair_baseline_raw is not None)
                     and len(repair_candidate_indexes) == 1
                     and not allow_candidate_repartition
                     and not allow_source_closure_rewrite
+                    and not allow_source_insert
                     and callable(getattr(transport, "continue_candidate", None))
                 )
                 candidates_only = (
@@ -4373,7 +5321,21 @@ class ProtocolControlAgentRunner:
                     and len(repair_candidate_indexes) > 1
                     and not allow_candidate_repartition
                     and not allow_source_closure_rewrite
+                    and not allow_source_insert
                     and callable(getattr(transport, "continue_candidates", None))
+                )
+                source_insert_candidate_only = (
+                    allow_source_insert
+                    and repair_baseline_wire is not None
+                    and callable(getattr(transport, "continue_candidate", None))
+                    and all(
+                        item.disposition in {
+                            StructureUnitDispositionKind.SUPPORTING_OR_SUPPLEMENT,
+                            StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE,
+                        }
+                        for item in repair_baseline_wire.dispositions
+                        if item.structure_unit_id in mutable_structure_unit_ids
+                    )
                 )
                 candidate_repair_index = (
                     next(iter(repair_candidate_indexes)) if candidate_only else None
@@ -4392,21 +5354,63 @@ class ProtocolControlAgentRunner:
                     obligation_source_span_ids=error.obligation_source_span_ids,
                     candidate_only=candidate_only,
                     candidates_only=candidates_only,
+                    source_insert=allow_source_insert,
+                    source_insert_candidate_only=source_insert_candidate_only,
+                    baseline_wire_sha256=(
+                        _sha256(_stable_json(repair_baseline_wire.model_dump(mode="json")))
+                        if allow_source_insert and repair_baseline_wire is not None
+                        else None
+                    ),
                 )
-                try:
-                    response = (
-                        transport.continue_candidate(
-                            session_id=session_id, prompt=repair_prompt
-                        )
-                        if candidate_only
-                        else transport.continue_candidates(
-                            session_id=session_id, prompt=repair_prompt
-                        )
-                        if candidates_only
-                        else transport.continue_session(
-                            session_id=session_id, prompt=repair_prompt
-                        )
+                if time_operand_only and repair_baseline_raw is not None and time_operand_repair_candidate is not None:
+                    repair_prompt = _build_time_operand_repair_prompt(
+                        repair_baseline_raw, time_operand_repair_candidate,
+                        time_operand_repair_paths,
                     )
+                elif atom_only and repair_baseline_raw is not None and atom_repair_path is not None:
+                    repair_prompt = _build_obligation_atom_repair_prompt(
+                        batch, repair_baseline_raw, atom_repair_path, str(error)
+                    )
+                elif observation_only and repair_baseline_raw is not None and observation_repair_candidate is not None:
+                    repair_prompt = _build_observation_policy_repair_prompt(
+                        repair_baseline_raw,
+                        observation_repair_candidate,
+                        observation_repair_paths,
+                        str(error),
+                    )
+                elif evidence_source_only and repair_baseline_raw is not None and evidence_source_repair_path is not None:
+                    repair_prompt = _build_evidence_source_policy_repair_prompt(
+                        batch, repair_baseline_raw, evidence_source_repair_path, str(error)
+                    )
+                try:
+                    if time_operand_only:
+                        response = transport.continue_time_operands(
+                            session_id=session_id, prompt=repair_prompt
+                        )
+                    elif atom_only:
+                        response = transport.continue_atom(
+                            session_id=session_id, prompt=repair_prompt
+                        )
+                    elif observation_only:
+                        response = transport.continue_observation_policies(
+                            session_id=session_id, prompt=repair_prompt
+                        )
+                    elif evidence_source_only:
+                        response = transport.continue_evidence_source_policy(
+                            session_id=session_id, prompt=repair_prompt
+                        )
+                    elif candidate_only or source_insert_candidate_only:
+                        response = transport.continue_candidate(
+                            session_id=session_id, prompt=repair_prompt
+                        )
+                    elif candidates_only:
+                        response = transport.continue_candidates(
+                            session_id=session_id, prompt=repair_prompt
+                        )
+                    else:
+                        response = transport.continue_session(
+                            session_id=session_id, prompt=repair_prompt
+                        )
                     if response.session_id != session_id:
                         raise RuntimeError("同会话修复不得更换 session_id")
                     raw_text = response.text
@@ -4429,6 +5433,7 @@ class ProtocolControlAgentRunner:
                         batch_id=batch.batch_id,
                         session_id=session_id,
                         attempts=attempts,
+                        source_interpretation=source_interpretation,
                     )
 
 

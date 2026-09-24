@@ -73,11 +73,13 @@ class StepFailure(WorkflowError):
         retryable: bool,
         error_code: str,
         detail: str | None = None,
+        diagnostic_checkpoint: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(detail or error_code, retryable=retryable, error_code=error_code)
         self.retryable = retryable
         self.error_code = error_code
         self.detail = detail
+        self.diagnostic_checkpoint = diagnostic_checkpoint
 
 
 class StepAwaitingUser(WorkflowError):

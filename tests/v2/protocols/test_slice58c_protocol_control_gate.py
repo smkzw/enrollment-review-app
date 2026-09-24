@@ -145,6 +145,34 @@ def test_batch_candidate_diagnostics_collect_independent_first_errors(monkeypatc
         gate.validate_protocol_control_batch_candidates(batch, output)
 
 
+def test_randomization_action_is_not_a_time_window_but_lookback_is() -> None:
+    def check(source: str) -> None:
+        atom = SimpleNamespace(
+            kind=ControlObligationKind.COMPLETE_OR_VERIFY,
+            statement=source,
+            source_excerpts=[source],
+            time_constraint=None,
+            prospective_period=None,
+            continuing_obligation=None,
+        )
+        _check_time_constraints(
+            entity_id="candidate:visit-action",
+            texts=[source],
+            expressions=[SimpleNamespace(groups=[SimpleNamespace(atoms=[atom])])],
+            flat_atoms=[],
+            global_time_constraint=None,
+        )
+
+    check("随机")
+    check("进行随机")
+    check("在双盲治疗期 / V2（基线） / W0 / D1 访视完成随机分组。")
+    check("在筛选访视完成心电图检查。")
+    with pytest.raises(ProtocolControlGateError, match="TIME_ANCHOR_MISSING"):
+        check("随机前4天内使用过禁用药物")
+    with pytest.raises(ProtocolControlGateError, match="TIME_ANCHOR_MISSING"):
+        check("在基线访视前4天内完成禁用药物停用。")
+
+
 @pytest.mark.parametrize(
     ("excerpt", "expected"),
     [
@@ -189,15 +217,118 @@ def test_existing_exact_source_target_covers_enrollment_prohibition() -> None:
         owned_units=[SimpleNamespace(
             structure_unit_id="unit", excerpt=excerpt, source_span_ids=["span"],
         )],
-        known_official_targets=[SimpleNamespace(source_excerpts=[excerpt])],
+        known_official_targets=[SimpleNamespace(
+            official_code="EX-01", source_span_ids=["span"], source_excerpts=[excerpt],
+        )],
         known_procedure_targets=[],
     )
     output = SimpleNamespace(dispositions=[SimpleNamespace(
         structure_unit_id="unit",
         disposition=StructureUnitDispositionKind.OFFICIAL_ELIGIBILITY,
+        linked_official_code="EX-01",
         linked_control_candidate_ids=[],
     )])
     assert _uncovered_enrollment_prohibitions(batch, output) == ()
+
+
+def test_matching_target_quote_without_link_or_shared_source_does_not_cover() -> None:
+    from app.protocols.protocol_control_gate import _uncovered_enrollment_prohibitions
+
+    excerpt = "筛选期不得新增伴随治疗。"
+    batch = SimpleNamespace(
+        owned_units=[SimpleNamespace(
+            structure_unit_id="unit", excerpt=excerpt, source_span_ids=["span:new"],
+            heading_path=["合并用药"], table_context=None,
+        )],
+        known_official_targets=[SimpleNamespace(
+            official_code="EX-01", source_span_ids=["span:old"], source_excerpts=[excerpt],
+        )], known_procedure_targets=[],
+    )
+    disposition = SimpleNamespace(
+        structure_unit_id="unit",
+        disposition=StructureUnitDispositionKind.OFFICIAL_ELIGIBILITY,
+        linked_official_code="EX-01", linked_control_candidate_ids=[],
+    )
+    assert len(_uncovered_enrollment_prohibitions(
+        batch, SimpleNamespace(dispositions=[disposition], candidates=[])
+    )) == 1
+
+
+def test_unrelated_linked_candidate_does_not_hide_prohibition() -> None:
+    from app.protocols.protocol_control_gate import _uncovered_enrollment_prohibitions
+
+    excerpt = "筛选期不得新增伴随治疗。"
+    batch = SimpleNamespace(
+        owned_units=[SimpleNamespace(
+            structure_unit_id="unit", excerpt=excerpt, source_span_ids=["span"],
+            heading_path=["合并用药"], table_context=None,
+        )], known_official_targets=[], known_procedure_targets=[],
+    )
+    candidate = SimpleNamespace(
+        control_candidate_id="candidate-1",
+        semantics=SimpleNamespace(obligation_expression=SimpleNamespace(groups=[
+            SimpleNamespace(atoms=[SimpleNamespace(source_excerpts=["筛选期需记录治疗史"])])
+        ])),
+    )
+    disposition = SimpleNamespace(
+        structure_unit_id="unit",
+        disposition=StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE,
+        linked_control_candidate_ids=["candidate-1"],
+    )
+    assert len(_uncovered_enrollment_prohibitions(
+        batch, SimpleNamespace(dispositions=[disposition], candidates=[candidate])
+    )) == 1
+
+
+def test_stage_heading_exposes_unlinked_prohibition_without_treatment_leakage() -> None:
+    from app.protocols.protocol_control_gate import _uncovered_enrollment_prohibitions
+
+    def check(excerpt: str):
+        batch = SimpleNamespace(
+            owned_units=[SimpleNamespace(
+                structure_unit_id="unit", excerpt=excerpt, source_span_ids=["span"],
+                heading_path=["方案", "筛选期合并用药"], table_context=None,
+            )], known_official_targets=[], known_procedure_targets=[],
+        )
+        output = SimpleNamespace(dispositions=[SimpleNamespace(
+            structure_unit_id="unit",
+            disposition=StructureUnitDispositionKind.SUPPORTING_OR_SUPPLEMENT,
+            linked_control_candidate_ids=[],
+        )], candidates=[])
+        return _uncovered_enrollment_prohibitions(batch, output)
+
+    assert len(check("不得新增伴随治疗。")) == 1
+    assert check("随机后不得新增伴随治疗。") == ()
+
+
+def test_one_quoted_candidate_does_not_cover_second_prohibition_in_same_unit() -> None:
+    from app.protocols.protocol_control_gate import _uncovered_enrollment_prohibitions
+
+    first = "筛选期不得新增伴随治疗"
+    second = "基线前不得改变原有治疗剂量"
+    batch = SimpleNamespace(
+        owned_units=[SimpleNamespace(
+            structure_unit_id="unit", excerpt=f"{first}；{second}。", source_span_ids=["span"],
+            heading_path=["合并用药"], table_context=None,
+        )], known_official_targets=[], known_procedure_targets=[],
+    )
+    candidate = SimpleNamespace(
+        control_candidate_id="candidate-1",
+        semantics=SimpleNamespace(obligation_expression=SimpleNamespace(groups=[
+            SimpleNamespace(atoms=[SimpleNamespace(source_excerpts=[first + "。"])])
+        ])),
+    )
+    output = SimpleNamespace(
+        dispositions=[SimpleNamespace(
+            structure_unit_id="unit",
+            disposition=StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE,
+            linked_control_candidate_ids=["candidate-1"],
+        )], candidates=[candidate],
+    )
+    issues = _uncovered_enrollment_prohibitions(batch, output)
+    assert len(issues) == 1
+    assert issues[0].code == "ENROLLMENT_PROHIBITION_UNCOVERED"
+    assert issues[0].structure_unit_ids == ("unit",)
 
 
 def test_since_visit_reference_is_not_a_procedure_execution_visit() -> None:

@@ -2423,8 +2423,6 @@ class ProtocolControlDiscoveryToDeepPlan(Phase5ControlModel):
             raise ValueError("深析批次 owned 结构单元不得重复")
         for batch in self.batches:
             actual_context_ids = set(batch.context_structure_unit_ids)
-            if actual_context_ids & non_control_ids:
-                raise ValueError("深析批次 context_units 不得包含 non_control 单元")
             expected_context_ids = {
                 context_id
                 for owned_id in batch.owned_structure_unit_ids
@@ -2432,7 +2430,29 @@ class ProtocolControlDiscoveryToDeepPlan(Phase5ControlModel):
                     owned_id
                 ].required_context_structure_unit_ids
             } - set(batch.owned_structure_unit_ids)
-            if actual_context_ids != expected_context_ids:
+            owned_tables = {
+                unit.source_ref.rpartition(".r")[0]
+                for unit in batch.owned_units
+                if unit.table_context is not None
+                and unit.source_ref.rpartition(".r")[1]
+                and unit.source_ref.rpartition(".r")[2].isdigit()
+            }
+            table_context_ids = set()
+            for unit in batch.context_units:
+                table_ref, row_marker, row_text = unit.source_ref.rpartition(".r")
+                if (
+                    unit.structure_unit_id in expected_set
+                    and unit.table_context is not None
+                    and row_marker
+                    and row_text.isdigit()
+                    and int(row_text) == unit.table_context.row_index
+                    and 0 <= unit.table_context.row_index < 5
+                    and table_ref in owned_tables
+                ):
+                    table_context_ids.add(unit.structure_unit_id)
+            if actual_context_ids & (non_control_ids - table_context_ids):
+                raise ValueError("深析批次 context_units 不得包含非表格前置语境的 non_control 单元")
+            if actual_context_ids != expected_context_ids | (actual_context_ids & table_context_ids):
                 raise ValueError("深析批次上下文必须精确闭合到发现阶段声明")
         return self
 

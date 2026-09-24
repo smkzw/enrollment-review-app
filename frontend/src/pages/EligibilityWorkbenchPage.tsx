@@ -33,7 +33,7 @@ type EligibilityListMode = "pending" | "all";
 
 const CLAUSE_PAGE_SIZES = [25, 50, 100] as const;
 
-type EligibilityWorkItem = EligibilityClauseView & { controlId?: string; continuingNote?: string | null };
+type EligibilityWorkItem = EligibilityClauseView & { controlId?: string; controlStatement?: string; continuingNote?: string | null };
 
 function controlWorkItems(controls: ReadonlyArray<EligibilityControlView>): EligibilityWorkItem[] {
   return controls.flatMap((control) => control.obligations.map((obligation) => ({
@@ -42,7 +42,8 @@ function controlWorkItems(controls: ReadonlyArray<EligibilityControlView>): Elig
     ruleCode: control.displayLabel,
     ruleKind: "required_procedure" as const,
     textSummary: control.title,
-    sourceText: obligation.statement,
+    sourceText: obligation.sourceExcerpts.join("\n") || null,
+    controlStatement: obligation.statement,
     parentRuleCode: null,
     decision: ({
       fulfilled: "requirement_met",
@@ -542,16 +543,21 @@ function EligibilityClauseDetail({
         )}
         {(!clause.sourceText || clause.controlId) && (
           <li className="eligibility-detail-bullet">
-            <strong>审核要点</strong>
-            <span>{clause.textSummary}</span>
+          <strong>{clause.controlId ? "系统解构的审核要求" : "审核要点"}</strong>
+          <span>{clause.controlStatement ?? clause.textSummary}</span>
           </li>
         )}
       </ul>
       {clause.sourceText && (
         <details className="eligibility-clause-detail__source">
-          <summary>查看方案原文</summary>
+          <summary>{clause.controlId ? "查看方案原文摘录" : "查看方案原文"}</summary>
           <p>{clause.sourceText}</p>
         </details>
+      )}
+      {!clause.sourceText && (
+        <p className="eligibility-muted" role="note">
+          方案原文定位待补齐，请核对方案版本及条款来源。
+        </p>
       )}
       <section className="eligibility-detail-section" aria-labelledby="eligibility-facts-title">
         <h3 id="eligibility-facts-title">关联事实</h3>

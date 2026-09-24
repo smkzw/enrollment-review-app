@@ -116,7 +116,7 @@ from app.workflow.runner import PreparedStepResult, StepContext, StepExecutor
 PROTOCOL_CONTROL_EXECUTION_JOB_TYPE = "protocol_control_execution"
 # A short alias keeps callers independent from the longer API-facing name.
 PROTOCOL_CONTROL_JOB_TYPE = PROTOCOL_CONTROL_EXECUTION_JOB_TYPE
-PROTOCOL_CONTROL_EXECUTION_VERSION = "phase5/protocol-control-execution/v50"
+PROTOCOL_CONTROL_EXECUTION_VERSION = "phase5/protocol-control-execution/v79"
 PROTOCOL_CONTROL_EXECUTION_CONTROL_SCHEMA = (
     "phase5/protocol-control-execution-control/v1"
 )
@@ -1609,6 +1609,11 @@ def _validate_deep_batch_output(
     if not errors:
         return
     structural_codes = CANDIDATE_REPARTITION_GATE_CODES | SOURCE_CLOSURE_REWRITE_GATE_CODES
+    if any(error.code == "ENROLLMENT_PROHIBITION_UNCOVERED" for error in errors):
+        errors = tuple(
+            error for error in errors
+            if error.code == "ENROLLMENT_PROHIBITION_UNCOVERED"
+        )
     # Structural regrouping changes candidate identities. Resolve it before
     # independent field repairs so the granted repair scope remains exact.
     if any(error.code in structural_codes for error in errors):
@@ -1681,6 +1686,27 @@ def _execute_deep(
                 result.attempts,
                 "深析批次在限定修复次数内未产出合规输出。",
             ),
+            diagnostic_checkpoint={
+                "stage": "deep_failure_diagnostic",
+                "schema_version": "phase5/deep-failure-diagnostic/v1",
+                "batch_id": batch.batch_id,
+                "prompt_template_sha256": protocol_control_agent_prompt_template_sha256(
+                    prompt_template
+                ),
+                "transport_identity": _transport_identity(transport, stage="deep"),
+                "attempts": [
+                    {
+                        "attempt": item.attempt,
+                        "outcome": item.outcome,
+                        "raw_output_sha256": item.raw_output_sha256,
+                        "raw_output_chars": item.raw_output_chars,
+                        "raw_output_text": item.raw_output_text,
+                        "error_classes": item.error_classes,
+                        "issues": item.issues,
+                    }
+                    for item in result.attempts
+                ],
+            },
         )
     return {
         "stage": "deep",

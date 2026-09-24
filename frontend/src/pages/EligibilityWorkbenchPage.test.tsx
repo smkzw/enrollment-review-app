@@ -269,7 +269,7 @@ describe("入排审核工作台", () => {
         protocolControlId: "control-1", displayLabel: "合并用药限制", title: "筛选期用药核对",
         sourceSpanIds: ["span-1"], obligations: [{
           obligationId: "obligation-1", obligationGroupId: "group-1",
-          statement: "核对合并用药原始记录", status: "unverified",
+          statement: "核对合并用药原始记录", sourceExcerpts: ["筛选期不得调整背景治疗剂量。"], status: "unverified",
           statusLabel: "无法判定", reason: "用药记录尚未核实", factRefs: [],
           continuingNote: "治疗期间：不得调整背景治疗。本次入排审核不判定后续期间是否已遵守。",
         }],
@@ -282,6 +282,9 @@ describe("入排审核工作台", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "全部条款" }));
     expect(screen.getByRole("heading", { name: "方案补充要求" })).toBeInTheDocument();
     expect(screen.getByText("核对合并用药原始记录")).toBeInTheDocument();
+    expect(screen.getByText("系统解构的审核要求")).toBeInTheDocument();
+    expect(screen.getByText("查看方案原文摘录")).toBeInTheDocument();
+    expect(screen.getByText("筛选期不得调整背景治疗剂量。")).toBeInTheDocument();
     expect(screen.getByText(/本次入排审核不判定后续期间是否已遵守/)).toBeInTheDocument();
   });
 
@@ -293,7 +296,7 @@ describe("入排审核工作台", () => {
         protocolControlId: "control-2", displayLabel: "其他章节要求", title: "基线前资料核对",
         sourceSpanIds: ["span-2"], obligations: [{
           obligationId: "obligation-2", obligationGroupId: "group-2",
-          statement: "尚未完成必须的核对", status: "unfulfilled",
+          statement: "尚未完成必须的核对", sourceExcerpts: [], status: "unfulfilled",
           statusLabel: "尚未满足", reason: "缺少本节点要求的资料", factRefs: [],
         }],
       }],
@@ -303,6 +306,8 @@ describe("入排审核工作台", () => {
     expect(within(queue).getByRole("button", { name: /基线前资料核对/ })).toBeInTheDocument();
     expect(within(queue).queryByText(/IN-02/)).not.toBeInTheDocument();
     expect(screen.getByText("尚未完成必须的核对")).toBeInTheDocument();
+    expect(screen.queryByText("查看方案原文摘录")).not.toBeInTheDocument();
+    expect(screen.getByText("方案原文定位待补齐，请核对方案版本及条款来源。")).toBeInTheDocument();
   });
 
   it("101项审核要点可翻页且空筛选不显示无关详情", async () => {

@@ -45,8 +45,8 @@ def test_explicit_cloud_pair_efforts_are_preserved():
     assert set(routes) == {PageReviewLane.MAIN_A, PageReviewLane.MAIN_B}
 
 
-def test_cms_page_routes_ignore_stale_other_provider_credentials():
-    routes = require_page_reader_routes({
+def test_cms_page_routes_reject_conflicting_explicit_credentials():
+    config = {
         "CMS_ROUTER_BASE_URL": "http://127.0.0.1:20128/v1",
         "CMS_ROUTER_API_KEY": "cms-key",
         "PAGE_REVIEW_MAIN_A_PROVIDER": "cms-router",
@@ -57,7 +57,14 @@ def test_cms_page_routes_ignore_stale_other_provider_credentials():
         "PAGE_REVIEW_MAIN_B_BASE_URL": "https://old.example/v1",
         "PAGE_REVIEW_MAIN_B_API_KEY": "old-b-key",
         "PAGE_REVIEW_MAIN_B_MODEL": "deepseek-latest-cloud",
-    })
+    }
+    with pytest.raises(PageReviewConfigError, match="冲突"):
+        require_page_reader_routes(config)
+    config.pop("PAGE_REVIEW_MAIN_A_BASE_URL")
+    config.pop("PAGE_REVIEW_MAIN_A_API_KEY")
+    config.pop("PAGE_REVIEW_MAIN_B_BASE_URL")
+    config.pop("PAGE_REVIEW_MAIN_B_API_KEY")
+    routes = require_page_reader_routes(config)
     assert {route.api_key for route in routes.values()} == {"cms-key"}
     assert {route.base_url for route in routes.values()} == {"http://127.0.0.1:20128/v1"}
 

@@ -360,18 +360,14 @@ def test_heartbeat_lease_loss_does_not_mark_step_failed(
     )
 
 
-def test_missing_executor_fails_final_with_typed_error(session_factory, clock):
+def test_missing_executor_does_not_claim_unregistered_job(session_factory, clock):
     create_job_with_steps(session_factory, clock, job_id="job-1", steps=TWO_STEPS)
-    runner = JobRunner(session_factory, {}, worker_id="w1")  # 未注册任何执行器
-    assert runner.run_job("job-1") is True
+    runner = JobRunner(session_factory, {}, worker_id="w1", now=clock.now)  # 未注册任何执行器
+    assert runner.run_job("job-1") is False
     snap = _snapshot(session_factory, clock, "job-1")
-    assert snap.state == "failed_final"
-    assert snap.steps[0].error_code == "EXECUTOR_MISSING"
-    failed = [row.event for row in snap.events if row.event.event_type.value == "step_failed"]
-    assert failed[0].payload.get("error_code") == "EXECUTOR_MISSING"
-    assert failed[0].retryable is False
-    assert "demo" not in failed[0].payload.get("detail", "")
-    assert snap.events[-1].event.event_type.value == "failed"
+    assert snap.state == "queued"
+    assert all(step.state == "queued" for step in snap.steps)
+    assert all(row.event.event_type.value != "step_failed" for row in snap.events)
 
 
 def test_unexpected_executor_exception_fails_fatal_without_retry(session_factory, clock):

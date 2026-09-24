@@ -87,6 +87,7 @@ class EligibilityControlObligationDTO(BaseModel):
     obligation_id: str = Field(min_length=1)
     obligation_group_id: str = Field(min_length=1)
     statement: str = Field(min_length=1)
+    source_excerpts: list[str] = Field(default_factory=list)
     status: Literal["fulfilled", "unfulfilled", "unverified", "not_applicable"]
     status_label: str = Field(min_length=1)
     reason: str = Field(min_length=1)

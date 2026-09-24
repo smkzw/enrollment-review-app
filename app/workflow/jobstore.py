@@ -712,6 +712,7 @@ class JobStore:
         error_code: str,
         retryable: bool,
         detail: str | None = None,
+        diagnostic_checkpoint: dict[str, Any] | None = None,
         settle_job: bool = True,
     ) -> StepFailureOutcome:
         """一个事务提交步骤失败：错误分类、退避时间、任务状态与事件。
@@ -737,6 +738,15 @@ class JobStore:
         }
         if detail:
             event_payload["detail"] = detail
+        diagnostic_checkpoint_id = None
+        if diagnostic_checkpoint is not None:
+            diagnostic_checkpoint_id = uuid4().hex
+            self.repo.create_checkpoint(
+                checkpoint_id=diagnostic_checkpoint_id,
+                job_id=job.job_id,
+                step_id=step_id,
+                payload={"attempt": step.attempt, **diagnostic_checkpoint},
+            )
         step.error_code = error_code
         step.error_classification = classification
         if not retryable or exhausted:
@@ -756,6 +766,7 @@ class JobStore:
                 event_type=JobEventType.STEP_FAILED,
                 step_id=step_id,
                 attempt=step.attempt,
+                checkpoint_id=diagnostic_checkpoint_id,
                 retryable=retryable and not exhausted,
                 progress_completed=job.progress_completed,
                 progress_total=job.progress_total,

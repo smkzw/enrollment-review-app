@@ -12,6 +12,7 @@ import json
 import os
 import subprocess
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -61,6 +62,17 @@ from app.domain.contracts.protocol_controls import (
 
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+@pytest.fixture(autouse=True)
+def _fake_client_tests_do_not_require_a_running_mtplx(monkeypatch):
+    @contextmanager
+    def fake_model_session(*_args, **_kwargs):
+        yield None
+
+    monkeypatch.setattr(
+        "app.llm.mtplx_model_lifecycle.sync_mtplx_model_session", fake_model_session
+    )
 
 
 class _FakeOpenAI:
@@ -226,6 +238,7 @@ def _condition(
 ) -> ProtocolControlAgentWireConditionAtom:
     return ProtocolControlAgentWireConditionAtom(
         statement=statement,
+        evaluation=_evaluation(statement, span_id, excerpt),
         source_span_ids=[span_id],
         source_excerpts=[excerpt],
         time_constraint=None,
@@ -233,9 +246,27 @@ def _condition(
     )
 
 
+def _evaluation(statement: str, span_id: str, excerpt: str) -> dict:
+    return {
+        "determination_mode": "semantic",
+        "proposition": statement,
+        "time_purpose": "not_applicable",
+        "repeat_scheme": None,
+        "observation_policy": {
+            "mode": "unresolved",
+            "scope": "样例未说明采用哪次记录",
+            "source_span_ids": [span_id],
+            "source_excerpts": [excerpt],
+        },
+        "source_span_ids": [span_id],
+        "source_excerpts": [excerpt],
+    }
+
+
 def _candidate() -> ProtocolControlAgentWireCandidate:
     return ProtocolControlAgentWireCandidate(
         title="年龄资料控制",
+        repeat_trigger_conditions=[],
         applicable_population="拟入组受试者",
         applicability_expression=ProtocolControlAgentWireConditionDnf(
             groups=[
@@ -252,6 +283,21 @@ def _candidate() -> ProtocolControlAgentWireCandidate:
                         ProtocolControlAgentWireObligationAtom(
                             kind=ControlObligationKind.REACH_CONDITION,
                             statement="年龄达到18岁",
+                            evaluation={
+                                **_evaluation("年龄达到18岁", "span:01", "年龄至少18岁"),
+                                "determination_mode": "deterministic",
+                                "operation": "value_comparison",
+                                "operand_attribute": "value",
+                                "predicate": {
+                                    "predicate_id": "age-threshold",
+                                    "subject": "受试者",
+                                    "attribute": "年龄",
+                                    "comparator": "gte",
+                                    "value": 18,
+                                    "unit": "岁",
+                                    "source_clause": "年龄至少18岁",
+                                },
+                            },
                             time_constraint=None,
                             prospective_period=None,
                             source_span_ids=["span:01"],
@@ -283,6 +329,16 @@ def _candidate() -> ProtocolControlAgentWireCandidate:
                 description="核对年龄资料",
                 due_stage=ReviewStage.SCREENING,
                 required_source_types=["原始资料"],
+                workflow_stage_ids=["stage:screening:one"],
+                source_policy={
+                    "requires_contemporaneous_objective_source": None,
+                    "allows_screening_record_transcription": None,
+                    "result_validity_status": "not_specified",
+                    "result_validity_constraint": None,
+                    "source_span_ids": ["span:01"],
+                    "source_excerpts": ["年龄至少18岁"],
+                },
+                atom_refs=[{"layer": "obligation", "group_index": 0, "atom_index": 0}],
             )
         ],
         source_structure_unit_ids=["su-01"],
@@ -317,15 +373,15 @@ def _valid_wire_text() -> str:
     return wire.model_dump_json()
 
 
-def test_protocol_control_defaults_use_exact_glm_product_route() -> None:
+def test_protocol_control_defaults_use_current_independent_product_routes() -> None:
     values = _config_probe()
 
     assert values == [
-        "zhipu-coding-plan",
-        "glm-5.3-flash",
+        "cms-router",
+        "deepseek-latest-cloud",
         "high",
         "65536",
-        "zhipu-coding-plan",
+        "cms-router",
         "glm-5.3-flash",
         "high",
         "131072",
@@ -633,6 +689,56 @@ def test_multi_candidate_repair_uses_selected_schema_in_same_session() -> None:
     ]
 
 
+def test_local_repairs_send_only_frozen_source_and_keep_fallback_history() -> None:
+    client, completions = _client([
+        '{"wire":1}', '{"atom":{}}', '{"items":[]}', '{"items":[]}', '{"candidate_draft":{}}',
+    ])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client,
+        backend="cms-router",
+        model="deepseek-latest-cloud",
+        max_tokens=16384,
+    )
+    first = transport.start(prompt="完整冻结批次")
+    history = transport.history(first.session_id)
+    transport.continue_atom(session_id=first.session_id, prompt="冻结的原子及其来源")
+
+    assert completions.calls[1]["messages"] == [
+        {"role": "user", "content": "冻结的原子及其来源"}
+    ]
+    assert completions.calls[1]["response_format"]["json_schema"]["name"] == (
+        "protocol_control_atom_repair_v1"
+    )
+    assert transport.history(first.session_id) == history
+
+    transport.continue_observation_policies(
+        session_id=first.session_id, prompt="冻结的义务原子观察选择"
+    )
+    assert completions.calls[2]["messages"] == [
+        {"role": "user", "content": "冻结的义务原子观察选择"}
+    ]
+    assert completions.calls[2]["response_format"]["json_schema"]["name"] == (
+        "protocol_control_observation_repair_v1"
+    )
+    assert transport.history(first.session_id) == history
+
+    transport.continue_time_operands(
+        session_id=first.session_id, prompt="冻结原子及日期来源"
+    )
+    assert completions.calls[3]["messages"] == [
+        {"role": "user", "content": "冻结原子及日期来源"}
+    ]
+    assert completions.calls[3]["response_format"]["json_schema"]["name"] == (
+        "protocol_control_time_operand_repair_v1"
+    )
+    assert transport.history(first.session_id) == history
+
+    transport.continue_candidate(session_id=first.session_id, prompt="候选级回退")
+    assert [item["content"] for item in completions.calls[4]["messages"]] == [
+        "完整冻结批次", '{"wire":1}', "候选级回退",
+    ]
+
+
 def test_same_session_history_and_restore_continue_keep_one_session_id() -> None:
     client, completions = _client(['{"first":1}', '{"second":2}', '{"third":3}'])
     transport = OpenAICompatibleProtocolControlAgentTransport(
@@ -898,6 +1004,8 @@ def test_runner_uses_real_transport_same_session_repair_without_inex_schema() ->
         reasoning_effort="medium",
         max_tokens=16384,
     )
+    # This fixture isolates the full-wire retry; source inventory has its own tests.
+    transport.start_source_interpretation = None
 
     result = ProtocolControlAgentRunner(max_schema_repairs=1).run(_batch(), transport)
 
@@ -934,6 +1042,12 @@ def test_runner_uses_real_transport_same_session_repair_without_inex_schema() ->
 
 def test_runner_bounds_transport_failures_without_switching_schema_or_model() -> None:
     class _FailingTransport(OpenAICompatibleProtocolControlAgentTransport):
+        def start_source_interpretation(self, *, prompt: str):
+            raise ProtocolControlAgentCallError(
+                "protocol-control-chat-fail",
+                "协议控制模型请求失败：ConnectionError: refused",
+            )
+
         def start(self, *, prompt: str):
             raise ProtocolControlAgentCallError(
                 "protocol-control-chat-fail",
@@ -1067,6 +1181,7 @@ def test_control_glm_backend_requires_credential_before_any_request(
 ) -> None:
     _FakeOpenAI.calls.clear()
     monkeypatch.setattr(transport_module, "OpenAI", _FakeOpenAI)
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_BACKEND", "zhipu-coding-plan")
     monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_GLM_API_KEY", "")
 
     with pytest.raises(ValueError, match="尚未配置 api_key"):

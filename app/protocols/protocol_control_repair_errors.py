@@ -33,6 +33,8 @@ CANDIDATE_EXPRESSION_REPAIR_GATE_CODES = frozenset(
     {"CONDITIONAL_EXEMPTION_BINDING_MISSING"}
 )
 
+SOURCE_INSERT_GATE_CODES = frozenset({"ENROLLMENT_PROHIBITION_UNCOVERED"})
+
 
 def gate_issue_allows_candidate_repartition(issue: Any) -> bool:
     return getattr(issue, "code", None) in CANDIDATE_REPARTITION_GATE_CODES
@@ -55,7 +57,16 @@ def publication_repair_error(
     allow_source_closure_rewrite = any(
         gate_issue_allows_source_closure_rewrite(issue) for issue in issues
     )
-    if allow_source_closure_rewrite:
+    allow_source_insert = any(
+        issue.code in SOURCE_INSERT_GATE_CODES for issue in issues
+    )
+    if allow_source_insert:
+        repair_scope_issues = [
+            issue for issue in issues if issue.code in SOURCE_INSERT_GATE_CODES
+        ]
+        allow_candidate_repartition = False
+        allow_source_closure_rewrite = False
+    elif allow_source_closure_rewrite:
         repair_scope_issues = [
             issue
             for issue in issues
@@ -73,7 +84,10 @@ def publication_repair_error(
     candidate_ids: list[str] = []
     structure_unit_ids: list[str] = []
     obligation_source_span_ids: list[str] = []
-    messages = [f"{issue.code}: {issue.message}" for issue in issues]
+    messages = [
+        f"{issue.code}: {issue.message}"
+        for issue in (repair_scope_issues if allow_source_insert else issues)
+    ]
 
     def candidate_for_entity(entity_id: str | None) -> str | None:
         if not entity_id:
@@ -138,6 +152,7 @@ def publication_repair_error(
         error_class_codes=[issue.code for issue in issues],
         allow_candidate_repartition=allow_candidate_repartition,
         allow_source_closure_rewrite=allow_source_closure_rewrite,
+        allow_source_insert=allow_source_insert,
     )
 
 
@@ -164,7 +179,12 @@ def combined_repair_error(
     allow_source_closure_rewrite = any(
         error.allow_source_closure_rewrite for error in active
     )
-    if allow_source_closure_rewrite:
+    allow_source_insert = any(error.allow_source_insert for error in active)
+    if allow_source_insert:
+        repair_scope_errors = [error for error in active if error.allow_source_insert]
+        allow_candidate_repartition = False
+        allow_source_closure_rewrite = False
+    elif allow_source_closure_rewrite:
         repair_scope_errors = [
             error for error in active if error.allow_source_closure_rewrite
         ]
@@ -208,6 +228,7 @@ def combined_repair_error(
         ],
         allow_candidate_repartition=allow_candidate_repartition,
         allow_source_closure_rewrite=allow_source_closure_rewrite,
+        allow_source_insert=allow_source_insert,
     )
 
 

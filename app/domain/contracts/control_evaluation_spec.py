@@ -2,6 +2,7 @@
 from typing import Literal
 
 from pydantic import ConfigDict, Field, model_serializer, model_validator
+from pydantic_core import PydanticCustomError
 
 from .common import ContractModel
 from .rules import AtomicPredicate
@@ -133,7 +134,10 @@ def validate_control_atom_evaluation(atom, *, require_explicit=False):
                               and spec.determination_mode != "deterministic")
     if (spec.operation == "value_comparison" or supports_semantic_time) and atom.time_constraint is not None:
         if spec.time_operand_attribute is None:
-            raise ValueError("附时间条件的核对须单独声明日期属性")
+            raise PydanticCustomError(
+                "control_time_operand_missing",
+                "附时间条件的核对须单独声明日期属性",
+            )
     elif spec.time_operand_attribute is not None:
         raise ValueError("本规格没有支持的附加时间条件，不能夹带日期属性")
 
