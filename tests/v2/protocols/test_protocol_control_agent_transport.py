@@ -689,6 +689,23 @@ def test_multi_candidate_repair_uses_selected_schema_in_same_session() -> None:
     ]
 
 
+def test_saved_source_insert_starts_fresh_session_with_candidate_schema() -> None:
+    client, completions = _client(['{"candidate_draft":{}}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384,
+    )
+    response = transport.start_source_insert(prompt="已核草稿及未闭合来源", multiple=False)
+    assert response.text == '{"candidate_draft":{}}'
+    assert completions.calls[0]["response_format"]["json_schema"]["name"] == (
+        "protocol_control_candidate_repair_v1"
+    )
+    assert [item["role"] for item in completions.calls[0]["messages"]] == ["user"]
+    assert [item["role"] for item in transport.history(response.session_id)] == [
+        "user", "assistant"
+    ]
+
+
 def test_local_repairs_send_only_frozen_source_and_keep_fallback_history() -> None:
     client, completions = _client([
         '{"wire":1}', '{"atom":{}}', '{"items":[]}', '{"items":[]}', '{"candidate_draft":{}}',

@@ -50,7 +50,7 @@ from .phase_detection import project_single_phase
 from .section_index import formal_source_span_ids
 
 
-CATALOG_BUILDER_VERSION = "required-procedures/v3"
+CATALOG_BUILDER_VERSION = "required-procedures/v4"
 """Stable implementation marker used in IDs, not a project-specific rule."""
 
 _DEFAULT_FROZEN_AT = datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -390,8 +390,29 @@ def _flow_footnote_refs(
     )
     numbered: list[list[StructureBlock]] = []
     numbering_id: int | None = None
+
+    def later_parent(
+        index: int, section_index: int | None, *, nested_list: bool = False,
+    ) -> bool:
+        for later in after_table[index + 1:]:
+            if (later.kind == BlockKind.TABLE or later.outline_level is not None
+                    or later.section_index != section_index):
+                break
+            if later.numbering is not None:
+                if later.numbering.level == 0:
+                    if later.numbering.num_id == numbering_id:
+                        return True
+                    if not nested_list or later.style_name != numbered[-1][0].style_name:
+                        break
+                elif (later.numbering.num_id != numbering_id
+                      and (not nested_list or later.style_name != numbered[-1][0].style_name)):
+                    break
+        return False
+
     for index, block in enumerate(after_table):
-        if block.kind == BlockKind.TABLE:
+        if (block.kind == BlockKind.TABLE or block.outline_level is not None
+                or (root.section_index is not None
+                    and block.section_index != root.section_index)):
             break
         numbering = block.numbering
         if not numbered:
@@ -406,22 +427,18 @@ def _flow_footnote_refs(
         elif numbering is None:
             if not block.text.strip():
                 continue
-            if block.style_name == numbered[-1][0].style_name and block.style_name:
+            if ((block.style_name == numbered[-1][0].style_name and block.style_name)
+                    or later_parent(index, block.section_index)):
                 numbered[-1].append(block)
                 continue
             break
         elif numbering.level != 0 or numbering.num_id != numbering_id:
-            resumes_parent = False
-            for later in after_table[index + 1:]:
-                if (later.kind == BlockKind.TABLE or later.outline_level is not None
-                        or later.section_index != block.section_index
-                        or (later.text.strip() and later.style_name != block.style_name)):
-                    break
-                if (later.numbering is not None and later.numbering.level == 0
-                        and later.numbering.num_id == numbering_id):
-                    resumes_parent = True
-                    break
-            if block.style_name == numbered[-1][0].style_name and resumes_parent:
+            if numbering.level > 0 and numbering.num_id == numbering_id:
+                numbered[-1].append(block)
+                continue
+            if block.style_name == numbered[-1][0].style_name and later_parent(
+                index, block.section_index, nested_list=True,
+            ):
                 numbered[-1].append(block)
                 continue
             break

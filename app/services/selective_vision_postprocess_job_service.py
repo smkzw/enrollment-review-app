@@ -21,10 +21,19 @@ from app.services.evidence_app_errors import (
     app_error_boundary,
 )
 from app.services.job_service import JOB_IDEMPOTENCY_SCOPE, JobService, StepSpec
-from app.services.selective_vision_runtime import selective_vision_route_sha256
+from app.services.selective_vision_runtime import (
+    selective_vision_observation_plan_identity,
+    selective_vision_route_sha256,
+)
 from app.storage.codecs import utc_now, verify_payload_sha256
 from app.storage.idempotency import IdempotencyRepository
 from app.storage.ocr_repositories import EvidenceProcessingRevisionRepository
+from app.storage.selective_vision_observation_repository import (
+    SelectiveVisionObservationRepository,
+)
+from app.domain.contracts.selective_vision_observation import (
+    SelectiveVisionObservationStatus,
+)
 from app.storage.models import JobRecord
 from app.storage.ocr_models import EvidenceProcessingRevisionRecord
 from app.workflow.errors import InvalidJobDefinitionError
@@ -399,6 +408,21 @@ class SelectiveVisionPostprocessJobService:
             and set(expected) == set(observed)
             and result.get("closed_count") == 0
         ):
+            return None
+        observations = SelectiveVisionObservationRepository(session)
+        accepted_pages: list[str] = []
+        for observation_id in created + reused:
+            observation = observations.get_or_none(observation_id)
+            if (observation is None
+                    or observation.status != SelectiveVisionObservationStatus.SUCCEEDED
+                    or observation.plan_version != selective_vision_observation_plan_identity(
+                        SELECTIVE_VISION_PLAN_VERSION,
+                        model_id=observation.model_id,
+                        ocr_raw_text_sha256=observation.ocr_raw_text_sha256,
+                    )):
+                return None
+            accepted_pages.append(observation.page_artifact_id)
+        if sorted(accepted_pages) != sorted(expected):
             return None
         return frozenset(expected), frozenset(created + reused)
 

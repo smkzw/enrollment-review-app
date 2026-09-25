@@ -500,6 +500,20 @@ def source_target_review_response_format() -> dict[str, object]:
     }
 
 
+class SourceTargetReviewValidationError(ValueError):
+    def __init__(
+        self, message: str, *, code: str, statement_index: int | None,
+        json_path: str, source_refs: tuple[str, ...] = (),
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.statement_index = statement_index
+        self.json_path = json_path
+        self.source_refs = source_refs
+        self.retry_class = "single_statement" if statement_index is not None else "whole_review"
+        self.affected_dependents = (statement_index,) if statement_index is not None else ()
+
+
 def validate_source_target_review(
     batch: ProtocolControlDispositionBatch,
     interpretation: SourceInterpretation,
@@ -508,24 +522,38 @@ def validate_source_target_review(
 ) -> None:
     expected = target_review_indexes(interpretation, coverage, batch)
     if sorted(item.statement_index for item in review.items) != sorted(expected):
-        raise ValueError("逐项来源核对必须且只能覆盖本次待核陈述")
+        raise SourceTargetReviewValidationError(
+            "逐项来源核对必须且只能覆盖本次待核陈述",
+            code="REVIEW_SCOPE_INVALID", statement_index=None, json_path="/items",
+        )
     coverage_by_index = {entry.statement_index: entry for entry in coverage}
     official = {item.official_code: item for item in batch.known_official_targets}
     procedures = {item.catalog_item_id: item for item in batch.known_procedure_targets}
     owned = {unit.structure_unit_id: unit for unit in batch.owned_units}
+    positions = {item.statement_index: index for index, item in enumerate(review.items)}
+
+    def reject(item: SourceTargetReviewItem, code: str, field: str, message: str) -> None:
+        statement = interpretation.statements[item.statement_index]
+        unit = owned.get(statement.structure_unit_id)
+        raise SourceTargetReviewValidationError(
+            message, code=code, statement_index=item.statement_index,
+            json_path=f"/items/{positions[item.statement_index]}/{field}",
+            source_refs=tuple(unit.source_span_ids) if unit is not None else (),
+        )
+
     for item in review.items:
         statement = interpretation.statements[item.statement_index]
         action = normalize_source_excerpt(item.source_action_excerpt)
         if not action or action not in normalize_source_excerpt(statement.quoted_text):
-            raise ValueError(f"第{item.statement_index}条动作摘录不属于冻结陈述")
+            reject(item, "SOURCE_ACTION_MISMATCH", "source_action_excerpt", f"第{item.statement_index}条动作摘录不属于冻结陈述")
         covered = item.decision in {"covered_by_official", "covered_by_procedure"}
         if not covered and not item.unresolved_aspects:
-            raise ValueError("未完整覆盖的陈述必须说明待核实之处")
+            reject(item, "UNRESOLVED_ASPECTS_MISSING", "unresolved_aspects", "未完整覆盖的陈述必须说明待核实之处")
         if bool(item.target_id) != bool(item.target_action_excerpt):
-            raise ValueError("目标身份与目标动作摘录必须同时提供")
+            reject(item, "TARGET_ACTION_INCOMPLETE", "target_id", "目标身份与目标动作摘录必须同时提供")
         if not item.target_id:
             if covered or item.target_time_excerpt:
-                raise ValueError("目标时间或完整覆盖必须有冻结目标")
+                reject(item, "FROZEN_TARGET_MISSING", "target_id", "目标时间或完整覆盖必须有冻结目标")
             target = None
         elif item.decision == "covered_by_official":
             target = official.get(item.target_id)
@@ -535,7 +563,7 @@ def validate_source_target_review(
             matches = [entry for entry in (official.get(item.target_id), procedures.get(item.target_id)) if entry]
             target = matches[0] if len(matches) == 1 else None
         if item.target_id and target is None:
-            raise ValueError(f"第{item.statement_index}条引用了非冻结或不唯一的目标")
+            reject(item, "FROZEN_TARGET_INVALID", "target_id", f"第{item.statement_index}条引用了非冻结或不唯一的目标")
         entry = coverage_by_index[item.statement_index]
         if covered and entry.status == "linked_only":
             linked_ids = (
@@ -543,7 +571,7 @@ def validate_source_target_review(
                 else set(entry.linked_procedure_target_ids)
             )
             if item.target_id not in linked_ids:
-                raise ValueError(f"第{item.statement_index}条覆盖目标与草稿链接不一致")
+                reject(item, "TARGET_LINK_MISMATCH", "target_id", f"第{item.statement_index}条覆盖目标与草稿链接不一致")
         if target is None:
             target_excerpts: list[str] = []
         else:
@@ -552,7 +580,7 @@ def validate_source_target_review(
             if not target_action or not any(
                 target_action in normalize_source_excerpt(excerpt) for excerpt in target_excerpts
             ):
-                raise ValueError(f"第{item.statement_index}条目标动作缺少原文摘录")
+                reject(item, "TARGET_ACTION_UNGROUNDED", "target_action_excerpt", f"第{item.statement_index}条目标动作缺少原文摘录")
         source_time = normalize_source_excerpt(item.source_time_excerpt or "")
         target_time = normalize_source_excerpt(item.target_time_excerpt or "")
         source_locations = [
@@ -570,25 +598,25 @@ def validate_source_target_review(
         if source_time and not source_time_is_composite and not any(
             source_time in normalize_source_excerpt(value) for value in statement.time_words
         ):
-            raise ValueError(f"第{item.statement_index}条时间措辞不属于该陈述")
+            reject(item, "SOURCE_TIME_UNGROUNDED", "source_time_excerpt", f"第{item.statement_index}条时间措辞不属于该陈述")
         if target_time and target is not None:
             locations = [*target_excerpts]
             if item.target_id in procedures:
                 locations.append(procedures[item.target_id].visit_instance)
             if not any(target_time in normalize_source_excerpt(value) for value in locations):
-                raise ValueError(f"第{item.statement_index}条目标时间缺少原文或访视定位")
+                reject(item, "TARGET_TIME_UNGROUNDED", "target_time_excerpt", f"第{item.statement_index}条目标时间缺少原文或访视定位")
         if not covered:
             continue
         if item.unresolved_aspects:
-            raise ValueError("仍有未覆盖维度的陈述不能标为已有目标完整覆盖")
+            reject(item, "COVERED_WITH_GAPS", "unresolved_aspects", "仍有未覆盖维度的陈述不能标为已有目标完整覆盖")
         if statement.exception_words and not any(
             _exception_in_target(statement.exception_words, excerpt)
             for excerpt in target_excerpts
         ):
-            raise ValueError(f"第{item.statement_index}条例外未在目标原文定位")
+            reject(item, "TARGET_EXCEPTION_UNGROUNDED", "target_action_excerpt", f"第{item.statement_index}条例外未在目标原文定位")
         if statement.time_words:
             if not source_time or not target_time or source_time != target_time:
-                raise ValueError(f"第{item.statement_index}条时间措辞未获两端一致支持")
+                reject(item, "TIME_SCOPE_MISMATCH", "target_time_excerpt", f"第{item.statement_index}条时间措辞未获两端一致支持")
             target_locations = [*target_excerpts]
             if item.target_id in procedures:
                 target_locations.append(procedures[item.target_id].visit_instance)
@@ -604,11 +632,9 @@ def validate_source_target_review(
                 )
             ]
             if unmatched:
-                raise ValueError(
-                    f"第{item.statement_index}条时间要求未在目标原文逐项覆盖：{unmatched}"
-                )
+                reject(item, "TARGET_TIME_INCOMPLETE", "target_time_excerpt", f"第{item.statement_index}条时间要求未在目标原文逐项覆盖：{unmatched}")
         elif item.source_time_excerpt or item.target_time_excerpt:
-            raise ValueError("无明确时间措辞的陈述不得凭空补时间")
+            reject(item, "TIME_INVENTED", "source_time_excerpt", "无明确时间措辞的陈述不得凭空补时间")
 
 
 def normalize_source_excerpt(value: str) -> str:

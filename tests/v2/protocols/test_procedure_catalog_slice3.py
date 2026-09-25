@@ -373,6 +373,103 @@ def test_flow_notes_keep_preface_continuations_and_nested_numbering():
     assert "span:body.p5" in baseline.source_span_ids
 
 
+@pytest.mark.parametrize("trailing_heading", [False, True])
+def test_final_nested_flow_note_does_not_require_a_later_parent(trailing_heading):
+    blocks, _ = _matrix([
+        ["项目", "基线期^1"], ["访视", "V2"], ["心电检查", "X"],
+    ], cols=2)
+    order = max(block.block_order for block in blocks) + 1
+    blocks.extend([
+        StructureBlock(
+            source_ref="body.p1", document_part=DocumentPart.BODY,
+            section_index=0, block_order=order, kind=BlockKind.PARAGRAPH,
+            text="基线心电检查说明", style_name="List Paragraph",
+            numbering=NumberingRef(num_id=7, level=0, start=1),
+        ),
+        StructureBlock(
+            source_ref="body.p2", document_part=DocumentPart.BODY,
+            section_index=0, block_order=order + 1, kind=BlockKind.PARAGRAPH,
+            text="同一说明的嵌套子项", style_name="List Paragraph",
+            numbering=NumberingRef(num_id=7, level=1, start=1),
+        ),
+    ])
+    if trailing_heading:
+        blocks.append(StructureBlock(
+            source_ref="body.p3", document_part=DocumentPart.BODY,
+            section_index=0, block_order=order + 2, kind=BlockKind.PARAGRAPH,
+            text="下一章节", style_name="Heading 1", outline_level=0,
+        ))
+    root = next(block for block in blocks if block.source_ref == "body.t0")
+    assert _flow_footnote_refs(blocks, root) == {
+        1: ("body.p1", "body.p2"),
+    }
+
+
+def test_changed_style_unnumbered_continuation_requires_a_resuming_parent():
+    blocks, _ = _matrix([
+        ["项目", "基线期^1"], ["访视", "V2"], ["心电检查", "X"],
+    ], cols=2)
+    order = max(block.block_order for block in blocks) + 1
+
+    def paragraph(ref, text, offset, style, numbering=None, heading=None):
+        return StructureBlock(
+            source_ref=ref, document_part=DocumentPart.BODY,
+            section_index=0, block_order=order + offset,
+            kind=BlockKind.PARAGRAPH, text=text,
+            style_name=style, numbering=numbering, outline_level=heading,
+        )
+
+    parent = NumberingRef(num_id=7, level=0, start=1)
+    blocks.extend([
+        paragraph("body.p1", "首条说明", 0, "List Paragraph", parent),
+        paragraph("body.p2", "跨页续行", 1, "Normal"),
+        paragraph("body.p3", "下一条说明", 2, "List Paragraph", parent),
+        paragraph("body.p4", "新节正文", 3, "Heading 1", heading=0),
+        paragraph("body.p5", "不得吞入", 4, "Normal"),
+    ])
+    root = next(block for block in blocks if block.source_ref == "body.t0")
+    assert _flow_footnote_refs(blocks, root) == {
+        1: ("body.p1", "body.p2"), 2: ("body.p3",),
+    }
+
+    without_resumption = [block for block in blocks if block.source_ref != "body.p3"]
+    assert _flow_footnote_refs(without_resumption, root) == {1: ("body.p1",)}
+
+
+def test_flow_note_list_restart_and_heading_do_not_absorb_next_section():
+    blocks, _ = _matrix([
+        ["项目", "基线期^1"], ["访视", "V2"], ["心电检查", "X"],
+    ], cols=2)
+    order = max(block.block_order for block in blocks) + 1
+    blocks.extend([
+        StructureBlock(
+            source_ref="body.p1", document_part=DocumentPart.BODY,
+            section_index=0, block_order=order, kind=BlockKind.PARAGRAPH,
+            text="本表说明", style_name="List Paragraph",
+            numbering=NumberingRef(num_id=7, level=0, start=1),
+        ),
+        StructureBlock(
+            source_ref="body.p2", document_part=DocumentPart.BODY,
+            section_index=0, block_order=order + 1, kind=BlockKind.PARAGRAPH,
+            text="下一列表首条", style_name="List Paragraph",
+            numbering=NumberingRef(num_id=8, level=0, start=1),
+        ),
+        StructureBlock(
+            source_ref="body.p3", document_part=DocumentPart.BODY,
+            section_index=0, block_order=order + 2, kind=BlockKind.PARAGRAPH,
+            text="下一章节", style_name="Heading 1", outline_level=0,
+        ),
+        StructureBlock(
+            source_ref="body.p4", document_part=DocumentPart.BODY,
+            section_index=0, block_order=order + 3, kind=BlockKind.PARAGRAPH,
+            text="下一章节列表", style_name="List Paragraph",
+            numbering=NumberingRef(num_id=7, level=0, start=1),
+        ),
+    ])
+    root = next(block for block in blocks if block.source_ref == "body.t0")
+    assert _flow_footnote_refs(blocks, root) == {1: ("body.p1",)}
+
+
 def test_visit_header_note_named_for_one_operation_does_not_pollute_sibling_rows():
     blocks, spans = _matrix(
         [

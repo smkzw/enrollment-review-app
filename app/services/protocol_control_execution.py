@@ -28,17 +28,28 @@ from app.agents.protocol_control_deconstructor import (
     DEFAULT_PROTOCOL_CONTROL_DISCOVERY_PROMPT_TEMPLATE,
     ProtocolControlAgentRunner,
     ProtocolControlAgentRunResult,
+    ProtocolControlAgentWire,
+    ProtocolControlAgentWireValidationError,
     ProtocolControlAgentTransport,
     ProtocolControlDiscoveryAgentRunner,
     ProtocolControlDiscoveryAgentRunResult,
     ProtocolControlDiscoveryAgentTransport,
+    protocol_control_agent_json_schema,
     protocol_control_agent_prompt_template_sha256,
+    protocol_control_agent_repair_contract_sha256,
+    hydrate_protocol_control_agent_output,
     protocol_control_discovery_prompt_template_sha256,
+)
+from app.agents.protocol_control_stage_compiler import (
+    RELATIVE_STAGE_REQUIREMENT_VERSION,
+    STAGE_BOUND_REQUIREMENT_VERSION,
 )
 from app.agents.protocol_control_discovery_transport import (
     protocol_control_discovery_transport_from_environment,
 )
 from app.agents.protocol_control_source_interpretation import (
+    SourceInterpretation,
+    validate_source_interpretation,
     normalize_schedule_randomization_anchors,
     normalize_mixed_schedule_scopes,
     schedule_column_links,
@@ -107,6 +118,7 @@ from app.protocols.protocol_control_planning import (
     validate_protocol_control_discovery_results,
 )
 from app.services.evidence_app_errors import EvidenceAppError, app_error_boundary
+from app.evidence.artifacts import ArtifactStore, ArtifactStoreError
 from app.services.job_service import JobService, StepSpec
 from app.services.protocol_workbench_service import (
     PROTOCOL_DECONSTRUCTION_JOB_TYPE,
@@ -121,7 +133,7 @@ from app.workflow.runner import PreparedStepResult, StepContext, StepExecutor
 PROTOCOL_CONTROL_EXECUTION_JOB_TYPE = "protocol_control_execution"
 # A short alias keeps callers independent from the longer API-facing name.
 PROTOCOL_CONTROL_JOB_TYPE = PROTOCOL_CONTROL_EXECUTION_JOB_TYPE
-PROTOCOL_CONTROL_EXECUTION_VERSION = "phase5/protocol-control-execution/v127"
+PROTOCOL_CONTROL_EXECUTION_VERSION = "phase5/protocol-control-execution/v130"
 PROTOCOL_CONTROL_EXECUTION_CONTROL_SCHEMA = (
     "phase5/protocol-control-execution-control/v1"
 )
@@ -405,16 +417,25 @@ class ProtocolControlJobService:
             if deep_source_job_id is not None:
                 store = JobStore(session, now=self.jobs.now)
                 try:
-                    previous = store.get_job(deep_source_job_id)
-                    previous_payload = json.loads(previous.payload_json)
-                    _require_compatible_deep_source(payload, previous_payload)
-                except (JobNotFoundError, ValueError, KeyError, TypeError, StepFailure) as exc:
+                    reuse_plan = _preflight_deep_source(
+                        store, payload, deep_source_job_id,
+                        self.deep_prompt_template,
+                    )
+                except (JobNotFoundError, ValueError, KeyError, TypeError,
+                        ValidationError, StepFailure) as exc:
                     raise ProtocolControlExecutionError(
                         "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
                         "既有深审结果与本次原件、版本或模型线路不一致，未建立新任务。",
                         status_code=409,
                     ) from exc
                 payload["deep_source_job_id"] = deep_source_job_id
+                payload["deep_reuse_plan"] = reuse_plan
+                artifact = ArtifactStore(self.data_paths).put(
+                    "protocol_control_reuse_plan",
+                    json.dumps(reuse_plan, ensure_ascii=False, sort_keys=True,
+                               separators=(",", ":")).encode("utf-8"),
+                )
+                payload["deep_reuse_plan_artifact_ref"] = artifact.storage_ref
             discovery_entries = [
                 {
                     "step_id": self._discovery_step_id(batch),
@@ -1666,37 +1687,216 @@ _DEEP_SOURCE_IDENTITY_FIELDS = (
     "source_deconstruction_job_id", "source_snapshot_id", "source_content_sha256",
     "coverage_manifest", "discovery_plan", "discovery_source_job_id",
     "workflow_stages", "phase_projection", "max_deep_units_per_batch",
-    "prompt_templates", "runner_limits", "frozen_model_routes",
+    "frozen_model_routes",
 )
 
 
 def _require_compatible_deep_source(
     current: Mapping[str, Any], previous: Mapping[str, Any],
 ) -> None:
-    versions = {current.get("execution_version")}
-    if current.get("execution_version") == "phase5/protocol-control-execution/v127":
-        # Only these unchanged frozen prompts/routes may contribute completed
-        # batches; each accepted output passes the current gate before adoption.
-        versions.update({
-            "phase5/protocol-control-execution/v116",
-            "phase5/protocol-control-execution/v117",
-            "phase5/protocol-control-execution/v118",
-            "phase5/protocol-control-execution/v119",
-            "phase5/protocol-control-execution/v120",
-            "phase5/protocol-control-execution/v121",
-            "phase5/protocol-control-execution/v122",
-            "phase5/protocol-control-execution/v123",
-            "phase5/protocol-control-execution/v124",
-            "phase5/protocol-control-execution/v125",
-            "phase5/protocol-control-execution/v126",
-        })
-    if (previous.get("execution_version") not in versions
-            or any(current.get(field) != previous.get(field)
-                   for field in _DEEP_SOURCE_IDENTITY_FIELDS)):
+    if any(current.get(field) != previous.get(field)
+           for field in _DEEP_SOURCE_IDENTITY_FIELDS):
         raise StepFailure(
             retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
-            detail="来源、分包、提示、版本或模型线路不一致。",
+            detail="来源、分包或模型线路不一致。",
         )
+
+
+def _deep_component_identity(
+    payload: Mapping[str, Any], prompt_template: str,
+) -> dict[str, Any]:
+    def digest(value: Any) -> str:
+        return hashlib.sha256(json.dumps(
+            value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+
+    return {
+        "schema_version": "phase5/deep-component-identity/v2",
+        "source_sha256": payload.get("source_content_sha256"),
+        "discovery_plan_sha256": digest(payload.get("discovery_plan")),
+        "coverage_manifest_sha256": digest(payload.get("coverage_manifest")),
+        "prompt_text_sha256": hashlib.sha256(prompt_template.strip().encode("utf-8")).hexdigest(),
+        "prompt_material_sha256": protocol_control_agent_prompt_template_sha256(prompt_template),
+        "wire_schema_sha256": digest(protocol_control_agent_json_schema()),
+        "compiler_versions": [
+            STAGE_BOUND_REQUIREMENT_VERSION, RELATIVE_STAGE_REQUIREMENT_VERSION,
+            "source-insert-partial-resume/v1",
+        ],
+        "validator_version": CONTROL_PUBLICATION_GATE_VERSION,
+        "requested_route_sha256": (
+            payload.get("frozen_model_routes") or {}
+        ).get("deep"),
+    }
+
+
+def _preflight_deep_source(
+    store: JobStore,
+    current_payload: Mapping[str, Any],
+    source_job_id: str,
+    prompt_template: str,
+) -> dict[str, Any]:
+    """Plan reuse before creating a long job, without inference or rewriting history."""
+
+    source_job = store.get_job(source_job_id)
+    _require_compatible_deep_source(current_payload, json.loads(source_job.payload_json))
+    closure = store.get_last_checkpoint(source_job_id, STEP_CLOSURE)
+    if closure is None or closure[1].get("stage") != "closure":
+        raise ValueError("来源任务缺少已完成的分包计划")
+    source_plan = ProtocolControlDiscoveryToDeepPlan.model_validate(
+        closure[1].get("deep_plan")
+    )
+    source_steps = {item.step_id: item for item in store.list_steps(source_job_id)}
+    expected_prompt = protocol_control_agent_prompt_template_sha256(prompt_template)
+    current_components = _deep_component_identity(current_payload, prompt_template)
+    routes = current_payload.get("frozen_model_routes")
+    expected_route = routes.get("deep") if isinstance(routes, Mapping) else None
+    if expected_route is not None and (
+        not isinstance(expected_route, str) or len(expected_route) != 64
+    ):
+        raise ValueError("当前深审模型线路身份无效")
+    decisions: dict[str, dict[str, str]] = {}
+    for batch in source_plan.batches:
+        step_id = f"{_DEEP_STEP_PREFIX}{batch.batch_number:04d}"
+        step = source_steps.get(step_id)
+        if step is None:
+            raise ValueError("来源任务缺少深审批次定义")
+        decision = "refresh_required"
+        reason = "source_step_incomplete"
+        if step.state == "completed":
+            checkpoint = store.get_last_checkpoint(source_job_id, step_id)
+            if checkpoint is None:
+                raise ValueError("已完成的来源批次缺少检查点")
+            saved = checkpoint[1]
+            if saved.get("stage") != "deep" or saved.get("batch_id") != batch.batch_id:
+                raise ValueError("已完成的来源批次身份损坏")
+            identity = saved.get("transport_identity")
+            if not isinstance(identity, dict):
+                raise ValueError("已完成的来源批次缺少模型回执身份")
+            actual_route = hashlib.sha256(json.dumps(
+                identity, ensure_ascii=False, sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")).hexdigest()
+            if expected_route is not None and actual_route != expected_route:
+                raise StepFailure(
+                    retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+                    detail="来源深审批次模型线路与当前任务不一致。",
+                )
+            saved_prompt = saved.get("prompt_template_sha256")
+            if not isinstance(saved_prompt, str) or len(saved_prompt) != 64:
+                raise ValueError("已完成的来源批次缺少实际提示摘要")
+            saved_result = saved.get("run_result")
+            if (not isinstance(saved_result, dict)
+                    or saved_result.get("status") != "已解析"
+                    or saved_result.get("batch_id") != batch.batch_id
+                    or not isinstance(saved_result.get("final_output"), dict)):
+                raise ValueError("已完成的来源批次结果身份损坏")
+            saved_components = saved.get("component_identity")
+            if saved_components is not None:
+                if (not isinstance(saved_components, dict)
+                        or set(saved_components) != set(current_components)):
+                    raise ValueError("已完成的来源批次组成身份损坏")
+                for name, value in saved_components.items():
+                    if not name.endswith("sha256") or value is None:
+                        continue
+                    if (not isinstance(value, str) or len(value) != 64
+                            or any(char not in "0123456789abcdef" for char in value)):
+                        raise ValueError("已完成的来源批次组成摘要损坏")
+                if saved_components.get("schema_version") == "phase5/deep-component-identity/v2":
+                    repair_hash = saved.get("repair_contract_sha256")
+                    if (not isinstance(repair_hash, str) or len(repair_hash) != 64
+                            or any(char not in "0123456789abcdef" for char in repair_hash)):
+                        raise ValueError("已完成的来源批次补答材料摘要损坏")
+            if saved_prompt != expected_prompt:
+                reason = "prompt_material_changed"
+            else:
+                if saved_components is None:
+                    reason = "legacy_component_identity_unproven"
+                    decisions[batch.batch_id] = {
+                        "step_id": step_id, "decision": decision, "reason": reason,
+                    }
+                    continue
+                if saved_components != current_components:
+                    reason = "component_material_changed"
+                    decisions[batch.batch_id] = {
+                        "step_id": step_id, "decision": decision, "reason": reason,
+                    }
+                    continue
+                if not _repair_material_matches(saved):
+                    reason = "repair_material_changed_or_unproven"
+                    decisions[batch.batch_id] = {
+                        "step_id": step_id, "decision": decision, "reason": reason,
+                    }
+                    continue
+                result = ProtocolControlAgentRunResult.model_validate(
+                    saved.get("run_result")
+                )
+                if (result.status != "已解析" or result.final_output is None
+                        or result.batch_id != batch.batch_id):
+                    raise ValueError("已完成的来源批次结果损坏")
+                try:
+                    _validate_deep_batch_output(batch, result.final_output)
+                except (ProtocolControlGateError, ProtocolControlAgentWireValidationError):
+                    reason = "current_gate_requires_refresh"
+                else:
+                    if _source_interpretation_requires_refresh(batch, result):
+                        reason = "current_source_links_require_refresh"
+                    else:
+                        decision, reason = "reusable", "same_material_and_current_gate"
+        decisions[batch.batch_id] = {
+            "step_id": step_id, "decision": decision, "reason": reason,
+        }
+    return {
+        "schema_version": "phase5/deep-reuse-plan/v1",
+        "source_job_id": source_job_id,
+        "source_plan_sha256": hashlib.sha256(json.dumps(
+            source_plan.model_dump(mode="json"), ensure_ascii=False,
+            sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest(),
+        "expected_prompt_sha256": expected_prompt,
+        "expected_route_sha256": expected_route,
+        "component_identity": current_components,
+        "decisions": decisions,
+    }
+
+
+def _source_interpretation_requires_refresh(
+    batch: ProtocolControlDispositionBatch,
+    result: ProtocolControlAgentRunResult,
+) -> bool:
+    interpretation = result.source_interpretation
+    if interpretation is None:
+        return False
+    _, changed_anchors = normalize_schedule_randomization_anchors(batch, interpretation)
+    if changed_anchors:
+        return True
+    _, changed_scopes = normalize_mixed_schedule_scopes(batch, interpretation)
+    if changed_scopes:
+        return True
+    prior_coverage = {
+        entry.statement_index: entry for entry in result.source_statement_coverage
+    }
+    for index, statement in enumerate(interpretation.statements):
+        if statement.force != "required":
+            continue
+        current_links = schedule_column_links(
+            batch, statement.structure_unit_id, statement.quoted_text,
+        )
+        if current_links and (
+            index not in prior_coverage
+            or prior_coverage[index].schedule_columns != current_links
+            or prior_coverage[index].disposition == "post_treatment_execution"
+        ):
+            return True
+    return False
+
+
+def _repair_material_matches(saved: Mapping[str, Any]) -> bool:
+    result = saved.get("run_result")
+    if not isinstance(result, Mapping) or type(result.get("repair_used")) is not bool:
+        return False
+    if not result["repair_used"]:
+        return True
+    return saved.get("repair_contract_sha256") == protocol_control_agent_repair_contract_sha256()
 
 
 def _validated_deep_source(
@@ -1734,58 +1934,22 @@ def _validated_deep_source(
             raise ValueError("已完成的来源批次缺少检查点")
         checkpoint_id, saved = saved_checkpoint
         identity = saved.get("transport_identity")
-        accepted_prompt_hashes = {
-            protocol_control_agent_prompt_template_sha256(prompt_template)
-        }
-        # Only completed predecessor batches with the same source, route,
-        # structural prompt and current gate may be reused after a bounded
-        # recovery-path change.  Failed batches are always read again.
-        prior_version = json.loads(source_job.payload_json).get("execution_version")
-        prior_prompt_version = {
-            "phase5/protocol-control-execution/v125": "phase5/control-agent-prompt/v2.74",
-            "phase5/protocol-control-execution/v126": "phase5/control-agent-prompt/v2.75",
-        }.get(prior_version)
-        if prior_prompt_version is not None:
-            accepted_prompt_hashes.add(protocol_control_agent_prompt_template_sha256(
-                prompt_template, prompt_version=prior_prompt_version
-            ))
         if (
             saved.get("stage") != "deep"
             or saved.get("batch_id") != batch.batch_id
             or saved.get("prompt_template_sha256")
-            not in accepted_prompt_hashes
+            != protocol_control_agent_prompt_template_sha256(prompt_template)
+            or saved.get("component_identity")
+            != _deep_component_identity(current_payload, prompt_template)
+            or not _repair_material_matches(saved)
             or identity != _transport_identity(transport, stage="deep")
         ):
             raise ValueError("已完成的来源批次提示或模型回执身份不一致")
         result = ProtocolControlAgentRunResult.model_validate(saved.get("run_result"))
         if result.status != "已解析" or result.final_output is None or result.batch_id != batch.batch_id:
             raise ValueError("来源深审结果不完整")
-        if result.source_interpretation is not None:
-            _, changed_anchors = normalize_schedule_randomization_anchors(
-                batch, result.source_interpretation
-            )
-            if changed_anchors:
-                return None, None
-            _, changed_scopes = normalize_mixed_schedule_scopes(
-                batch, result.source_interpretation
-            )
-            if changed_scopes:
-                return None, None
-            prior_coverage = {
-                entry.statement_index: entry for entry in result.source_statement_coverage
-            }
-            for index, statement in enumerate(result.source_interpretation.statements):
-                if statement.force != "required":
-                    continue
-                current_links = schedule_column_links(
-                    batch, statement.structure_unit_id, statement.quoted_text,
-                )
-                if current_links and (
-                    index not in prior_coverage
-                    or prior_coverage[index].schedule_columns != current_links
-                    or prior_coverage[index].disposition == "post_treatment_execution"
-                ):
-                    return None, None
+        if _source_interpretation_requires_refresh(batch, result):
+            return None, None
         _validate_deep_batch_output(batch, result.final_output)
         return checkpoint_id, saved
     except (JobNotFoundError, ValueError, KeyError, TypeError, ValidationError, ProtocolControlGateError) as exc:
@@ -1818,22 +1982,102 @@ def _execute_deep(
     )
     batch = _deep_batch_for_step(effective_context, deep_plan)
     prompt_template = _prompt_from_payload(context, "deep", config)
+    reuse_plan = context.job_payload.get("deep_reuse_plan")
+    if reuse_plan is not None:
+        ref = context.job_payload.get("deep_reuse_plan_artifact_ref")
+        if not isinstance(reuse_plan, Mapping) or not isinstance(ref, str):
+            raise StepFailure(retryable=False,
+                error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+                detail="深审复用计划身份不完整。")
+        try:
+            persisted = json.loads(ArtifactStore(config.data_paths).read(ref))
+        except (ArtifactStoreError, TypeError, ValueError) as exc:
+            raise StepFailure(retryable=False,
+                error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+                detail="深审复用计划工件无法核验。") from exc
+        plan_hash = hashlib.sha256(json.dumps(
+            deep_plan.model_dump(mode="json"), ensure_ascii=False,
+            sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        if (persisted != reuse_plan
+                or reuse_plan.get("schema_version") != "phase5/deep-reuse-plan/v1"
+                or reuse_plan.get("source_plan_sha256") != plan_hash
+                or reuse_plan.get("expected_prompt_sha256")
+                != protocol_control_agent_prompt_template_sha256(prompt_template)
+                or reuse_plan.get("component_identity")
+                != _deep_component_identity(context.job_payload, prompt_template)):
+            raise StepFailure(retryable=False,
+                error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+                detail="深审复用计划与当前批次或提示不一致。")
     max_transport_retries, max_schema_repairs = _limits_from_payload(
         context, "deep", config
     )
     transport = _resolve_transport(config, stage="deep")
     _require_frozen_route(context, config, transport, stage="deep")
 
+    resume_wire = None
+    resume_interpretation = None
+    resume_session_id = None
+    previous = context.last_checkpoint
+    if isinstance(previous, Mapping) and previous.get("stage") == "deep_failure_diagnostic":
+        saved_wire = previous.get("partial_wire")
+        if saved_wire is not None:
+            if (
+                previous.get("schema_version") != "phase5/deep-failure-diagnostic/v3"
+                or previous.get("batch_id") != batch.batch_id
+                or previous.get("prompt_template_sha256")
+                != protocol_control_agent_prompt_template_sha256(prompt_template)
+                or previous.get("transport_identity") != _transport_identity(transport, stage="deep")
+                or previous.get("component_identity")
+                != _deep_component_identity(context.job_payload, prompt_template)
+                or previous.get("repair_contract_sha256")
+                != protocol_control_agent_repair_contract_sha256()
+                or not isinstance(previous.get("source_interpretation"), Mapping)
+                or not isinstance(previous.get("session_id"), str)
+            ):
+                raise StepFailure(retryable=False,
+                    error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+                    detail="局部深审草稿与当前来源、提示或模型线路不一致。")
+            try:
+                resume_wire = ProtocolControlAgentWire.model_validate(saved_wire)
+                resume_interpretation = SourceInterpretation.model_validate(
+                    previous["source_interpretation"]
+                )
+                validate_source_interpretation(batch, resume_interpretation)
+                _validate_deep_batch_output(
+                    batch, hydrate_protocol_control_agent_output(resume_wire, batch)
+                )
+            except (TypeError, ValueError) as exc:
+                raise StepFailure(retryable=False,
+                    error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+                    detail="局部深审草稿结构损坏，不得作为已核结果继续。") from exc
+            resume_session_id = previous["session_id"]
+
     deep_source_job_id = context.job_payload.get("deep_source_job_id")
     if deep_source_job_id is not None:
         if not isinstance(deep_source_job_id, str) or deep_source_job_id == context.job_id:
             raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID", detail="深审来源任务编号无效。")
-        with config.session_factory() as session:
-            checkpoint_id, saved = _validated_deep_source(
-                JobStore(session, now=config.now), context.job_payload,
-                deep_source_job_id, batch, context.step_id, transport,
-                prompt_template,
-            )
+        plan = reuse_plan
+        decision = None
+        if isinstance(plan, Mapping):
+            entry = plan.get("decisions", {}).get(batch.batch_id)
+            if not isinstance(entry, Mapping) or entry.get("step_id") != context.step_id:
+                raise StepFailure(retryable=False,
+                    error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+                    detail="深审复用计划与当前批次不一致。")
+            decision = entry.get("decision")
+            if decision not in {"reusable", "refresh_required"}:
+                raise StepFailure(retryable=False,
+                    error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+                    detail="深审复用计划的批次处置无效。")
+        checkpoint_id, saved = None, None
+        if decision != "refresh_required":
+            with config.session_factory() as session:
+                checkpoint_id, saved = _validated_deep_source(
+                    JobStore(session, now=config.now), context.job_payload,
+                    deep_source_job_id, batch, context.step_id, transport,
+                    prompt_template,
+                )
         if saved is not None:
             return {**saved, "adopted_from": {
                 "job_id": deep_source_job_id, "checkpoint_id": checkpoint_id,
@@ -1847,6 +2091,9 @@ def _execute_deep(
         transport,
         prompt_template=prompt_template,
         output_validator=lambda output: _validate_deep_batch_output(batch, output),
+        resume_wire=resume_wire,
+        resume_source_interpretation=resume_interpretation,
+        resume_session_id=resume_session_id,
     )
     if result.status != "已解析" or result.final_output is None:
         raise StepFailure(
@@ -1858,12 +2105,19 @@ def _execute_deep(
             ),
             diagnostic_checkpoint={
                 "stage": "deep_failure_diagnostic",
-                "schema_version": "phase5/deep-failure-diagnostic/v2",
+                "schema_version": "phase5/deep-failure-diagnostic/v3",
                 "batch_id": batch.batch_id,
+                "session_id": result.session_id,
+                "partial_wire": (
+                    result.partial_wire.model_dump(mode="json")
+                    if result.partial_wire is not None else None
+                ),
                 "prompt_template_sha256": protocol_control_agent_prompt_template_sha256(
                     prompt_template
                 ),
                 "transport_identity": _transport_identity(transport, stage="deep"),
+                "component_identity": _deep_component_identity(context.job_payload, prompt_template),
+                "repair_contract_sha256": protocol_control_agent_repair_contract_sha256(),
                 "source_interpretation": (
                     result.source_interpretation.model_dump(mode="json")
                     if result.source_interpretation is not None else None
@@ -1884,6 +2138,7 @@ def _execute_deep(
                         "raw_output_chars": item.raw_output_chars,
                         "raw_output_text": item.raw_output_text,
                         "error_classes": item.error_classes,
+                        "error_detail": item.error_detail,
                         "issues": item.issues,
                     }
                     for item in result.attempts
@@ -1897,6 +2152,8 @@ def _execute_deep(
             prompt_template
         ),
         "transport_identity": _transport_identity(transport, stage="deep"),
+        "component_identity": _deep_component_identity(context.job_payload, prompt_template),
+        "repair_contract_sha256": protocol_control_agent_repair_contract_sha256(),
         "run_result": result.model_dump(mode="json"),
     }
 

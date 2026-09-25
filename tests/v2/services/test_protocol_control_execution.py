@@ -810,6 +810,25 @@ def test_deep_publication_gate_repairs_in_the_originating_session(
         "parsed",
     ]
     assert {attempt["session_id"] for attempt in attempts} == {"deep-session"}
+    assert checkpoint[1]["run_result"]["repair_used"] is True
+
+    from app.agents import protocol_control_deconstructor as deconstructor
+
+    monkeypatch.setattr(
+        deconstructor, "_CONTROL_REPAIR_CONTRACT",
+        deconstructor._CONTROL_REPAIR_CONTRACT + "\n修订补答说明。",
+    )
+    planned = _build_service(
+        data_paths, session_factory, seed, max_deep_units_per_batch=256,
+    ).create_from_deconstruction(
+        source_job_id=seed.source_job_id,
+        idempotency_key="control-deep-gate-repair-new-contract",
+        deep_source_job_id=result.job_id,
+    )
+    _, payload = _job_snapshot_and_payload(session_factory, planned.job_id)
+    assert {item["reason"] for item in payload["deep_reuse_plan"]["decisions"].values()} == {
+        "repair_material_changed_or_unproven"
+    }
 
 
 def test_uncertain_discovery_is_final_without_blind_retry(data_paths, session_factory):
@@ -871,7 +890,8 @@ def test_uncertain_deep_is_final_without_blind_retry(data_paths, session_factory
     assert failure_checkpoint is not None
     saved = failure_checkpoint[1]
     assert saved["stage"] == "deep_failure_diagnostic"
-    assert saved["schema_version"] == "phase5/deep-failure-diagnostic/v2"
+    assert saved["schema_version"] == "phase5/deep-failure-diagnostic/v3"
+    assert saved["partial_wire"] is None
     assert saved["batch_id"]
     assert saved["source_interpretation"] is None
     assert saved["source_statement_coverage"] == []
@@ -909,6 +929,78 @@ def test_manual_retry_reexecutes_failed_deep_instead_of_replaying_diagnostic(
     assert deep.owned_batches[1] == deep.owned_batches[0]
 
 
+def test_manual_retry_uses_verified_partial_wire_without_full_reread(
+    data_paths, session_factory, monkeypatch,
+) -> None:
+    from app.agents.protocol_control_deconstructor import (
+        ProtocolControlAgentAttempt, ProtocolControlAgentRunResult,
+        ProtocolControlAgentRunner, build_protocol_control_agent_prompt,
+        parse_protocol_control_agent_wire,
+    )
+    from app.agents.protocol_control_source_interpretation import (
+        SOURCE_INTERPRETATION_VERSION, SourceInterpretation,
+    )
+
+    seed = _seed_frozen_source(data_paths, session_factory, key="deep-partial-resume")
+    discovery = _DiscoveryTransport()
+    deep = _DeepTransport(seed.source_span_excerpts)
+    service = _build_service(data_paths, session_factory, seed)
+    job = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id, idempotency_key="deep-partial-resume-job",
+    )
+    runner, _ = _build_runner(data_paths, session_factory, discovery, deep)
+    original_run = ProtocolControlAgentRunner.run
+    resumed = []
+    failed_once = False
+
+    def fail_then_resume(self, batch, transport, **kwargs):
+        nonlocal failed_once
+        if kwargs.get("resume_wire") is not None:
+            resumed.append(kwargs["resume_wire"].model_dump(mode="json"))
+            return original_run(self, batch, transport, **kwargs)
+        if failed_once:
+            return original_run(self, batch, transport, **kwargs)
+        failed_once = True
+        prompt = build_protocol_control_agent_prompt(
+            batch, prompt_template=kwargs["prompt_template"],
+        )
+        wire = parse_protocol_control_agent_wire(deep._response(prompt).text)
+        interpretation = SourceInterpretation(
+            version=SOURCE_INTERPRETATION_VERSION,
+            statements=[],
+            units_without_statement=list(batch.owned_structure_unit_ids),
+        )
+        return ProtocolControlAgentRunResult(
+            status="需要核对", batch_id=batch.batch_id, session_id="deep-session",
+            attempts=[ProtocolControlAgentAttempt(
+                attempt=1, session_id="deep-session",
+                raw_output_sha256=hashlib.sha256(wire.model_dump_json().encode()).hexdigest(),
+                outcome="publication_invalid",
+            )],
+            source_interpretation=interpretation, partial_wire=wire,
+        )
+
+    monkeypatch.setattr(ProtocolControlAgentRunner, "run", fail_then_resume)
+    assert runner.run_job(job.job_id)
+    snapshot, _ = _job_snapshot_and_payload(session_factory, job.job_id)
+    assert snapshot.state == "failed_final"
+    with session_factory() as session:
+        saved = JobStore(session, now=_now).get_last_checkpoint(job.job_id, "deep_0001")
+    assert saved is not None
+    assert saved[1]["partial_wire"] is not None
+    assert saved[1]["source_interpretation"] is not None
+    with session_factory() as session, session.begin():
+        JobStore(session, now=_now).retry_failed(job.job_id)
+    assert runner.run_job(job.job_id)
+    snapshot, _ = _job_snapshot_and_payload(session_factory, job.job_id)
+    assert snapshot.state == "completed", [
+        (step.step_id, step.state, step.error_code)
+        for step in snapshot.steps if step.state == "failed_final"
+    ]
+    assert resumed
+    assert deep.start_calls == 1  # Only the next batch needs a fresh full read.
+
+
 def test_same_identity_deep_source_reuses_validated_batches_without_model_calls(
     data_paths, session_factory,
 ):
@@ -939,32 +1031,236 @@ def test_same_identity_deep_source_reuses_validated_batches_without_model_calls(
     assert saved[1]["adopted_from"]["job_id"] == source.job_id
 
 
-def test_deep_source_accepts_only_explicit_revalidated_predecessors() -> None:
+def test_unused_repair_wording_does_not_rerun_completed_deep_batches(
+    data_paths, session_factory, monkeypatch,
+):
+    from app.agents import protocol_control_deconstructor as deconstructor
+
+    seed = _seed_frozen_source(data_paths, session_factory, key="unused-repair-wording")
+    deep = _DeepTransport(seed.source_span_excerpts)
+    service = _build_service(data_paths, session_factory, seed)
+    source = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id, idempotency_key="unused-repair-source",
+    )
+    runner, _ = _build_runner(data_paths, session_factory, _DiscoveryTransport(), deep)
+    assert runner.run_job(source.job_id)
+    before = deep.start_calls
+    monkeypatch.setattr(
+        deconstructor, "_CONTROL_REPAIR_CONTRACT",
+        deconstructor._CONTROL_REPAIR_CONTRACT + "\n修订了未使用的补答说明。",
+    )
+    adopted = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id,
+        idempotency_key="unused-repair-adopted",
+        deep_source_job_id=source.job_id,
+    )
+    _, payload = _job_snapshot_and_payload(session_factory, adopted.job_id)
+    assert {item["decision"] for item in payload["deep_reuse_plan"]["decisions"].values()} == {"reusable"}
+    assert runner.run_job(adopted.job_id)
+    assert deep.start_calls == before
+
+
+def test_repair_material_identity_is_required_only_if_repair_was_used(monkeypatch):
+    from app.agents import protocol_control_deconstructor as deconstructor
+
+    hash_before = protocol_control_execution_module.protocol_control_agent_repair_contract_sha256()
+    no_repair = {"run_result": {"repair_used": False}}
+    repaired = {
+        "run_result": {"repair_used": True},
+        "repair_contract_sha256": hash_before,
+    }
+    assert protocol_control_execution_module._repair_material_matches(no_repair)
+    assert protocol_control_execution_module._repair_material_matches(repaired)
+    assert not protocol_control_execution_module._repair_material_matches(
+        {"run_result": {}}
+    )
+    monkeypatch.setattr(
+        deconstructor, "_CONTROL_REPAIR_CONTRACT",
+        deconstructor._CONTROL_REPAIR_CONTRACT + "\n新补答范围。",
+    )
+    assert protocol_control_execution_module._repair_material_matches(no_repair)
+    assert not protocol_control_execution_module._repair_material_matches(repaired)
+
+
+def test_corrupt_repair_receipt_fails_preflight_instead_of_cache_refresh(
+    data_paths, session_factory, monkeypatch,
+):
+    seed = _seed_frozen_source(data_paths, session_factory, key="repair-receipt-corrupt")
+    deep = _DeepTransport(seed.source_span_excerpts)
+    service = _build_service(data_paths, session_factory, seed)
+    source = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id, idempotency_key="repair-receipt-source",
+    )
+    runner, _ = _build_runner(data_paths, session_factory, _DiscoveryTransport(), deep)
+    assert runner.run_job(source.job_id)
+    before = deep.start_calls
+    original = JobStore.get_last_checkpoint
+
+    def damaged(self, job_id, step_id):
+        checkpoint = original(self, job_id, step_id)
+        if job_id != source.job_id or step_id != "deep_0001" or checkpoint is None:
+            return checkpoint
+        checkpoint_id, saved = checkpoint
+        return checkpoint_id, dict(saved, repair_contract_sha256="broken")
+
+    monkeypatch.setattr(JobStore, "get_last_checkpoint", damaged)
+    with pytest.raises(protocol_control_execution_module.ProtocolControlExecutionError) as exc:
+        service.create_from_deconstruction(
+            source_job_id=seed.source_job_id,
+            idempotency_key="repair-receipt-corrupt-adopted",
+            deep_source_job_id=source.job_id,
+        )
+    assert exc.value.code == "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
+    assert deep.start_calls == before
+
+
+def test_deep_source_identity_compares_frozen_scope_without_version_whitelist() -> None:
     fields = protocol_control_execution_module._DEEP_SOURCE_IDENTITY_FIELDS
     current = {field: {"same": field} for field in fields}
     current["execution_version"] = protocol_control_execution_module.PROTOCOL_CONTROL_EXECUTION_VERSION
     previous = dict(current, execution_version="phase5/protocol-control-execution/v116")
     protocol_control_execution_module._require_compatible_deep_source(current, previous)
     protocol_control_execution_module._require_compatible_deep_source(
-        current, dict(previous, execution_version="phase5/protocol-control-execution/v117")
+        current, dict(previous, execution_version="unrelated-version-label")
     )
-    protocol_control_execution_module._require_compatible_deep_source(
-        current, dict(previous, execution_version="phase5/protocol-control-execution/v118")
-    )
-    protocol_control_execution_module._require_compatible_deep_source(
-        current, dict(previous, execution_version="phase5/protocol-control-execution/v119")
-    )
-
-    with pytest.raises(StepFailure) as wrong_version:
-        protocol_control_execution_module._require_compatible_deep_source(
-            current, dict(previous, execution_version="phase5/protocol-control-execution/v115")
-        )
-    assert wrong_version.value.error_code == "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
     with pytest.raises(StepFailure) as wrong_source:
         protocol_control_execution_module._require_compatible_deep_source(
             current, dict(previous, source_content_sha256="different")
         )
     assert wrong_source.value.error_code == "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
+
+
+def test_deep_source_prompt_change_is_planned_before_job_runs(
+    data_paths, session_factory,
+):
+    from app.evidence.artifacts import ArtifactStore
+
+    seed = _seed_frozen_source(data_paths, session_factory, key="deep-reuse-prompt")
+    discovery = _DiscoveryTransport()
+    deep = _DeepTransport(seed.source_span_excerpts)
+    original = _build_service(data_paths, session_factory, seed)
+    source = original.create_from_deconstruction(
+        source_job_id=seed.source_job_id, idempotency_key="deep-reuse-prompt-source",
+    )
+    runner, _ = _build_runner(data_paths, session_factory, discovery, deep)
+    assert runner.run_job(source.job_id)
+    calls_before = deep.start_calls
+
+    changed = _build_service(
+        data_paths, session_factory, seed,
+        deep_prompt_template="当前提示材料已修订；旧回执不可当作本次模型输入。",
+    )
+    planned = changed.create_from_deconstruction(
+        source_job_id=seed.source_job_id,
+        idempotency_key="deep-reuse-prompt-current",
+        deep_source_job_id=source.job_id,
+    )
+    _, payload = _job_snapshot_and_payload(session_factory, planned.job_id)
+    plan = payload["deep_reuse_plan"]
+    assert {item["decision"] for item in plan["decisions"].values()} == {
+        "refresh_required"
+    }
+    assert {item["reason"] for item in plan["decisions"].values()} == {
+        "prompt_material_changed"
+    }
+    assert json.loads(ArtifactStore(data_paths).read(
+        payload["deep_reuse_plan_artifact_ref"]
+    )) == plan
+    assert deep.start_calls == calls_before
+    assert runner.run_job(planned.job_id)
+    assert _job_snapshot_and_payload(session_factory, planned.job_id)[0].state == "completed"
+    assert deep.start_calls > calls_before
+
+
+def test_deep_source_corrupt_completed_checkpoint_rejected_before_job_creation(
+    data_paths, session_factory, monkeypatch,
+):
+    seed = _seed_frozen_source(data_paths, session_factory, key="deep-reuse-corrupt")
+    discovery = _DiscoveryTransport()
+    deep = _DeepTransport(seed.source_span_excerpts)
+    service = _build_service(data_paths, session_factory, seed)
+    source = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id, idempotency_key="deep-reuse-corrupt-source",
+    )
+    runner, _ = _build_runner(data_paths, session_factory, discovery, deep)
+    assert runner.run_job(source.job_id)
+    calls_before = deep.start_calls
+    original = JobStore.get_last_checkpoint
+
+    def without_completed_result(self, job_id, step_id):
+        if job_id == source.job_id and step_id == "deep_0001":
+            return None
+        return original(self, job_id, step_id)
+
+    monkeypatch.setattr(JobStore, "get_last_checkpoint", without_completed_result)
+    with pytest.raises(protocol_control_execution_module.ProtocolControlExecutionError) as exc:
+        service.create_from_deconstruction(
+            source_job_id=seed.source_job_id,
+            idempotency_key="deep-reuse-corrupt-current",
+            deep_source_job_id=source.job_id,
+        )
+    assert exc.value.code == "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
+    assert deep.start_calls == calls_before
+
+
+def test_deep_source_component_change_refreshes_but_corrupt_identity_rejects(
+    data_paths, session_factory, monkeypatch,
+):
+    seed = _seed_frozen_source(data_paths, session_factory, key="deep-reuse-components")
+    service = _build_service(data_paths, session_factory, seed)
+    source = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id, idempotency_key="deep-components-source",
+    )
+    runner, _ = _build_runner(
+        data_paths, session_factory, _DiscoveryTransport(),
+        _DeepTransport(seed.source_span_excerpts),
+    )
+    assert runner.run_job(source.job_id)
+    original = JobStore.get_last_checkpoint
+
+    def changed_component(self, job_id, step_id):
+        checkpoint = original(self, job_id, step_id)
+        if job_id != source.job_id or step_id != "deep_0001":
+            return checkpoint
+        assert checkpoint is not None
+        checkpoint_id, saved = checkpoint
+        saved = dict(saved)
+        saved["component_identity"] = dict(saved["component_identity"])
+        saved["component_identity"]["wire_schema_sha256"] = "0" * 64
+        return checkpoint_id, saved
+
+    monkeypatch.setattr(JobStore, "get_last_checkpoint", changed_component)
+    refreshed = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id,
+        idempotency_key="deep-components-refreshed",
+        deep_source_job_id=source.job_id,
+    )
+    _, payload = _job_snapshot_and_payload(session_factory, refreshed.job_id)
+    assert next(
+        entry["reason"] for entry in payload["deep_reuse_plan"]["decisions"].values()
+        if entry["step_id"] == "deep_0001"
+    ) == "component_material_changed"
+    assert {entry["reason"] for entry in payload["deep_reuse_plan"]["decisions"].values()} <= {
+        "component_material_changed", "same_material_and_current_gate"
+    }
+
+    def corrupt_component(self, job_id, step_id):
+        checkpoint = changed_component(self, job_id, step_id)
+        if job_id == source.job_id and step_id == "deep_0001":
+            checkpoint_id, saved = checkpoint
+            incomplete = dict(saved["component_identity"])
+            incomplete.pop("wire_schema_sha256")
+            return checkpoint_id, dict(saved, component_identity=incomplete)
+        return checkpoint
+
+    monkeypatch.setattr(JobStore, "get_last_checkpoint", corrupt_component)
+    with pytest.raises(protocol_control_execution_module.ProtocolControlExecutionError) as exc:
+        service.create_from_deconstruction(
+            source_job_id=seed.source_job_id,
+            idempotency_key="deep-components-corrupt",
+            deep_source_job_id=source.job_id,
+        )
+    assert exc.value.code == "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
 
 
 def test_process_death_recovers_dynamic_step_from_durable_boundary(

@@ -1107,6 +1107,28 @@ class OpenAICompatibleProtocolControlAgentTransport:
         ]
         return ProtocolControlAgentResponse(session_id=session_id, text=text)
 
+    def start_source_insert(
+        self, *, prompt: str, multiple: bool,
+    ) -> ProtocolControlAgentResponse:
+        """Resume a source-scoped insertion without relying on process-local history."""
+        if not prompt.strip():
+            raise ValueError("来源补入提示不能为空")
+        session_id = f"protocol-control-source-insert-{uuid4().hex}"
+        history = [{"role": "user", "content": prompt}]
+        response_format = (
+            protocol_control_candidates_repair_response_format()
+            if multiple else protocol_control_candidate_repair_response_format()
+        )
+        try:
+            text = self._complete(history, response_format=response_format)
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id, str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        self._histories[session_id] = [*history, {"role": "assistant", "content": text}]
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
     def continue_candidate(
         self,
         *,

@@ -19,7 +19,7 @@ from app.storage.config import DataPaths
 #: 工件类别与契约字段一一对应（分开保存、互不混淆）。
 ARTIFACT_KINDS = frozenset(
     {"page_image", "reading_view_image", "native_text", "native_coordinates", "raw_request", "raw_response",
-     "evaluation_manifest", "method_approval", "approval_source"}
+     "evaluation_manifest", "method_approval", "approval_source", "protocol_control_reuse_plan"}
 )
 
 #: 工件目录相对 V2 数据根；与 blobs/、staging/ 平级，互不重叠。

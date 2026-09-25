@@ -621,6 +621,46 @@ def test_empty_model_observation_cannot_complete_page_coverage(session_factory, 
     ) is False
 
 
+def test_completed_receipt_rejects_observation_from_another_page(
+    session_factory, data_paths, monkeypatch,
+):
+    seeded = _seed_frozen_revision(
+        session_factory, data_paths, revision_id="rev-svo-mismatched-observation"
+    )
+
+    async def valid(plan: SelectiveVisionPlan, inputs):
+        page = inputs[0]
+        return SelectiveVisionReviewOutcome(
+            plan=plan,
+            observations=(SelectiveVisionObservation(
+                source_refs=(page.source_ref,),
+                page_ordinals=(page.page_ordinal,),
+                reasons=(VISION_REASON_SCAN_OR_IMAGE_ONLY,),
+                text=f"source_ref={page.source_ref}\n来源明确的页面观察",
+                model="mock-vlm",
+                finish_reason="stop",
+                usage={},
+            ),),
+        )
+
+    created = enqueue_selective_vision_postprocess_for_revision(
+        session_factory, seeded["revision_id"]
+    )
+    assert _build_runner(session_factory, data_paths, review_runner=valid).run_once()
+    service = SelectiveVisionPostprocessJobService(session_factory)
+    assert service.coverage_page_ids_match(seeded["revision_id"])
+    original = SelectiveVisionObservationRepository.get_or_none
+
+    def wrong_page(self, observation_id):
+        row = original(self, observation_id)
+        return row.model_copy(update={"page_artifact_id": "another-page"}) if row else None
+
+    monkeypatch.setattr(SelectiveVisionObservationRepository, "get_or_none", wrong_page)
+    assert service.coverage_page_ids_match(seeded["revision_id"]) is False
+    with session_factory() as session:
+        assert JobStore(session, now=utc_now).snapshot(created.job_id).state == "completed"
+
+
 def test_job_executor_success_is_idempotent_across_rerun(session_factory, data_paths):
     seeded = _seed_frozen_revision(
         session_factory, data_paths, revision_id="rev-svo-success-idem"

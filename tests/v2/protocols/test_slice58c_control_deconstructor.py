@@ -84,6 +84,7 @@ from app.agents.protocol_control_source_interpretation import (
     SourceScopeCorrection,
     SourceStatementCoverage,
     SourceTargetReview,
+    SourceTargetReviewValidationError,
     build_source_interpretation_prompt,
     apply_source_scope_correction,
     build_source_target_review_prompt,
@@ -1975,8 +1976,19 @@ def test_source_target_review_requires_real_target_excerpts_and_matching_time() 
 
     borrowed_time = review.model_copy(deep=True)
     borrowed_time.items[1].target_time_excerpt = "基线时"
-    with pytest.raises(ValueError, match="目标时间缺少原文或访视定位"):
+    with pytest.raises(SourceTargetReviewValidationError, match="目标时间缺少原文或访视定位") as mismatch:
         validate_source_target_review(batch, inventory, coverage, borrowed_time)
+    assert mismatch.value.code == "TARGET_TIME_UNGROUNDED"
+    assert mismatch.value.statement_index == 1
+    assert mismatch.value.json_path == "/items/1/target_time_excerpt"
+    assert mismatch.value.retry_class == "single_statement"
+    assert mismatch.value.source_refs
+    reversed_review = borrowed_time.model_copy(deep=True)
+    reversed_review.items.reverse()
+    with pytest.raises(SourceTargetReviewValidationError) as reversed_mismatch:
+        validate_source_target_review(batch, inventory, coverage, reversed_review)
+    assert reversed_mismatch.value.statement_index == 1
+    assert reversed_mismatch.value.json_path == "/items/0/target_time_excerpt"
 
     invented_target = review.model_copy(deep=True)
     invented_target.items[0].target_id = "EX-99"
@@ -2272,6 +2284,14 @@ def test_source_target_review_rechecks_only_overclaimed_statement_once() -> None
     assert result.status == "需要核对"
     assert result.source_target_review is not None
     assert result.source_target_review.items[0].decision == "unresolved"
+    review_issue = next(
+        attempt.error_detail for attempt in result.attempts
+        if attempt.error_detail is not None
+    )
+    assert review_issue["code"] == "TARGET_TIME_INCOMPLETE"
+    assert review_issue["statement_id"] == 0
+    assert review_issue["json_path"] == "/items/0/target_time_excerpt"
+    assert review_issue["source_refs"]
     assert any("SOURCE_TARGET_REVIEW_INVALID" in attempt.error_classes for attempt in result.attempts)
 
 
@@ -4876,3 +4896,105 @@ def test_two_sourced_actions_insert_together_without_rewriting_existing_draft() 
     assert len(result.final_output.candidates) == 3
     assert result.source_target_review is not None and result.source_target_review.items == []
     assert {item.session_id for item in result.attempts} >= {"stage-1", "relative-1"}
+
+
+def test_mixed_source_actions_keep_verified_partial_on_failure_and_resume() -> None:
+    batch, inventory, first_review, first = _stage_bound_example()
+    actions = [
+        "拟参加者须完成知情同意记录",
+        "拟参加者须完成既往病史记录",
+        "拟参加者须完成用药记录，除非已有书面核实",
+    ]
+    batch.owned_units[0].excerpt = (
+        "年龄至少18岁；筛选期（D-7~D-1）：" + "。".join(actions) + "。"
+    )
+    inventory.statements = [
+        inventory.statements[0].model_copy(update={
+            "quoted_text": action,
+            "exception_words": "除非已有书面核实" if index == 2 else None,
+        })
+        for index, action in enumerate(actions)
+    ]
+    reviews = [first_review.model_copy(update={
+        "statement_index": index,
+        "source_action_excerpt": action,
+    }) for index, action in enumerate(actions)]
+    selections = [first.model_copy(update={
+        "statement_index": index,
+        "action_excerpt": action,
+        "title": f"记录{index}",
+        "obligation_statement": action,
+    }) for index, action in enumerate(actions[:2])]
+    initial = _wire(candidate=_candidate()).model_dump_json()
+    full_review = SourceTargetReview(
+        version=SOURCE_TARGET_REVIEW_VERSION, items=reviews,
+    )
+
+    class MixedTransport(_FakeTransport):
+        def __init__(self, responses):
+            super().__init__(responses)
+            self.source_calls = 0
+            self.wire_calls = 0
+            self.read_actions = []
+            self.insert_calls = 0
+
+        def start_source_interpretation(self, *, prompt: str) -> ProtocolControlAgentResponse:
+            self.source_calls += 1
+            return ProtocolControlAgentResponse(session_id="source-1", text=inventory.model_dump_json())
+
+        def start_source_target_review(self, *, prompt: str) -> ProtocolControlAgentResponse:
+            review = full_review if self.source_calls else SourceTargetReview(
+                version=SOURCE_TARGET_REVIEW_VERSION, items=reviews[2:],
+            )
+            return ProtocolControlAgentResponse(session_id="target-1", text=review.model_dump_json())
+
+        def start(self, *, prompt: str) -> ProtocolControlAgentResponse:
+            self.wire_calls += 1
+            return super().start(prompt=prompt)
+
+        def read_stage_bound_requirement(self, *, prompt: str) -> ProtocolControlAgentResponse:
+            index = json.loads(prompt.split("冻结来源：", 1)[1])["statement_index"]
+            selection = selections[index]
+            self.read_actions.append(index)
+            return ProtocolControlAgentResponse(
+                session_id=f"stage-{index}", text=selection.model_dump_json(),
+            )
+
+        def start_source_insert(self, *, prompt: str, multiple: bool) -> ProtocolControlAgentResponse:
+            self.insert_calls += 1
+            assert "已核候选只供去重" in prompt
+            raise RuntimeError("未完成条目仍需来源解释")
+
+    first_transport = MixedTransport([ProtocolControlAgentResponse(
+        session_id="wire-1", text=initial,
+    )])
+    result = ProtocolControlAgentRunner(max_schema_repairs=0).run(
+        batch, first_transport, output_validator=lambda _output: None,
+    )
+    assert result.status == "需要核对"
+    assert result.partial_wire is not None
+    assert len(result.partial_wire.candidate_drafts) == 3, [item.issues for item in result.attempts]
+    assert first_transport.read_actions == [0, 1]
+    assert result.source_interpretation is not None
+
+    retry_transport = MixedTransport([])
+    retried = ProtocolControlAgentRunner(max_schema_repairs=0).run(
+        batch, retry_transport, output_validator=lambda _output: None,
+        resume_wire=result.partial_wire,
+        resume_source_interpretation=result.source_interpretation,
+        resume_session_id=result.session_id,
+    )
+    assert retried.status == "需要核对"
+    assert retry_transport.source_calls == retry_transport.wire_calls == 0
+    assert retry_transport.read_actions == []
+    assert retry_transport.insert_calls == 1
+    invalid_source = result.source_interpretation.model_copy(update={
+        "units_without_statement": [], "statements": [],
+    })
+    with pytest.raises(ValueError, match="每个冻结来源单元"):
+        ProtocolControlAgentRunner().run(
+            batch, MixedTransport([]), output_validator=lambda _output: None,
+            resume_wire=result.partial_wire,
+            resume_source_interpretation=invalid_source,
+            resume_session_id=result.session_id,
+        )
