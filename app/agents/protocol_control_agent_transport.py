@@ -49,12 +49,17 @@ from app.agents.protocol_control_deconstructor import (
     protocol_control_observation_repair_response_format,
     protocol_control_time_operand_repair_response_format,
     protocol_control_evidence_source_repair_response_format,
+    protocol_control_evidence_source_types_repair_response_format,
     protocol_control_candidate_repair_response_format,
     protocol_control_post_treatment_repair_response_format,
+    protocol_control_future_prohibition_repair_response_format,
+    protocol_control_calendar_bound_repair_response_format,
     protocol_control_candidates_repair_response_format,
 )
 from app.agents.protocol_control_source_interpretation import (
     source_interpretation_response_format,
+    source_quote_correction_response_format,
+    source_scope_correction_response_format,
     source_target_review_response_format,
 )
 from app.config import (
@@ -977,6 +982,39 @@ class OpenAICompatibleProtocolControlAgentTransport:
             ) from exc
         return ProtocolControlAgentResponse(session_id=session_id, text=text)
 
+    def correct_source_quote(self, *, prompt: str) -> ProtocolControlAgentResponse:
+        if not prompt.strip():
+            raise ValueError("来源摘录校正提示不能为空")
+        session_id = f"protocol-control-source-quote-{uuid4().hex}"
+        try:
+            text = self._complete(
+                [{"role": "user", "content": prompt}],
+                response_format=source_quote_correction_response_format(),
+            )
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id,
+                str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
+    def correct_source_scope(self, *, prompt: str) -> ProtocolControlAgentResponse:
+        if not prompt.strip():
+            raise ValueError("来源范围校正提示不能为空")
+        session_id = f"protocol-control-source-scope-{uuid4().hex}"
+        try:
+            text = self._complete(
+                [{"role": "user", "content": prompt}],
+                response_format=source_scope_correction_response_format(),
+            )
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id, str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
     def start_source_target_review(self, *, prompt: str) -> ProtocolControlAgentResponse:
         """Check only source statements not directly expressed by the first wire."""
 
@@ -987,6 +1025,48 @@ class OpenAICompatibleProtocolControlAgentTransport:
             text = self._complete(
                 [{"role": "user", "content": prompt}],
                 response_format=source_target_review_response_format(),
+            )
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id,
+                str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
+    def read_stage_bound_requirement(self, *, prompt: str) -> ProtocolControlAgentResponse:
+        """Read one source-backed action without generating the final candidate schema."""
+
+        from .protocol_control_stage_compiler import stage_bound_requirement_response_format
+
+        if not prompt.strip():
+            raise ValueError("单项方案语义解释提示不能为空")
+        session_id = f"protocol-control-stage-{uuid4().hex}"
+        try:
+            text = self._complete(
+                [{"role": "user", "content": prompt}],
+                response_format=stage_bound_requirement_response_format(),
+            )
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id,
+                str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
+    def read_relative_stage_requirement(self, *, prompt: str) -> ProtocolControlAgentResponse:
+        """Read one sourced after-stage action without asserting calendar dates."""
+
+        from .protocol_control_stage_compiler import relative_stage_requirement_response_format
+
+        if not prompt.strip():
+            raise ValueError("相对访视语义解释提示不能为空")
+        session_id = f"protocol-control-relative-{uuid4().hex}"
+        try:
+            text = self._complete(
+                [{"role": "user", "content": prompt}],
+                response_format=relative_stage_requirement_response_format(),
             )
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
             raise ProtocolControlAgentCallError(
@@ -1069,6 +1149,50 @@ class OpenAICompatibleProtocolControlAgentTransport:
             text = self._complete(
                 [{"role": "user", "content": prompt}],
                 response_format=protocol_control_post_treatment_repair_response_format(),
+            )
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id, str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        self._histories[session_id] = [*logical_history, {"role": "assistant", "content": text}]
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
+    def continue_future_prohibition_repair(
+        self, *, session_id: str, prompt: str
+    ) -> ProtocolControlAgentResponse:
+        if not prompt.strip():
+            raise ValueError("后续禁止事项修订提示不能为空")
+        history = self._histories.get(session_id)
+        if history is None:
+            raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
+        logical_history = [*history, {"role": "user", "content": prompt}]
+        try:
+            text = self._complete(
+                [{"role": "user", "content": prompt}],
+                response_format=protocol_control_future_prohibition_repair_response_format(),
+            )
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id, str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        self._histories[session_id] = [*logical_history, {"role": "assistant", "content": text}]
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
+    def continue_calendar_bound_repair(
+        self, *, session_id: str, prompt: str
+    ) -> ProtocolControlAgentResponse:
+        if not prompt.strip():
+            raise ValueError("时间条件修订提示不能为空")
+        history = self._histories.get(session_id)
+        if history is None:
+            raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
+        logical_history = [*history, {"role": "user", "content": prompt}]
+        try:
+            text = self._complete(
+                [{"role": "user", "content": prompt}],
+                response_format=protocol_control_calendar_bound_repair_response_format(),
             )
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
             raise ProtocolControlAgentCallError(
@@ -1165,6 +1289,28 @@ class OpenAICompatibleProtocolControlAgentTransport:
             text = self._complete(
                 [{"role": "user", "content": prompt}],
                 response_format=protocol_control_evidence_source_repair_response_format(),
+            )
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id,
+                str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
+    def continue_evidence_source_types(
+        self, *, session_id: str, prompt: str
+    ) -> ProtocolControlAgentResponse:
+        """Fill only missing evidence type lists; keep the previous wire local."""
+
+        if not prompt.strip():
+            raise ValueError("资料类型修订提示不能为空")
+        if session_id not in self._histories:
+            raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
+        try:
+            text = self._complete(
+                [{"role": "user", "content": prompt}],
+                response_format=protocol_control_evidence_source_types_repair_response_format(),
             )
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
             raise ProtocolControlAgentCallError(

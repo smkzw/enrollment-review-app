@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import re
 import unicodedata
+from difflib import SequenceMatcher
 from typing import Literal
 
 from pydantic import Field, model_validator
@@ -13,11 +15,12 @@ from app.domain.contracts.protocol_controls import (
     ProtocolControlDispositionBatch,
     StructureUnitDispositionKind,
 )
+from app.protocols.procedure_catalog import schedule_column_scope
 
 
 SOURCE_INTERPRETATION_VERSION = "phase5/control-source-interpretation/v6"
 SOURCE_INTERPRETATION_PROMPT_VERSION = "phase5/control-source-prompt/v9"
-SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v5"
+SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v7"
 
 
 _ENROLLMENT_DISPOSITIONS = frozenset({
@@ -52,6 +55,238 @@ class SourceInterpretation(ContractModel):
         return self
 
 
+def normalize_schedule_randomization_anchors(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+) -> tuple[SourceInterpretation, list[str]]:
+    """Keep a marker-only schedule row as a workflow anchor, not a new rule."""
+
+    units = {unit.structure_unit_id: unit for unit in batch.owned_units}
+    grouped: dict[str, list[SourceStatement]] = {}
+    for statement in interpretation.statements:
+        grouped.setdefault(statement.structure_unit_id, []).append(statement)
+    anchor_ids = {
+        unit_id for unit_id, statements in grouped.items()
+        if _is_schedule_randomization_anchor(
+            units.get(unit_id), statements[0], require_statement_match=False,
+        ) and (len(statements) != 1 or any(
+            statement.quoted_text != units[unit_id].excerpt
+            or statement.force != "descriptive"
+            or statement.scope_quote is not None
+            or statement.affected_stage is not None
+            or statement.time_words
+            or statement.exception_words is not None
+            or statement.unresolved
+            for statement in statements
+        ))
+    }
+    if not anchor_ids:
+        return interpretation, []
+    updated = interpretation.model_copy(deep=True)
+    seen: set[str] = set()
+    statements = []
+    for statement in updated.statements:
+        if statement.structure_unit_id not in anchor_ids:
+            statements.append(statement)
+        elif statement.structure_unit_id not in seen:
+            unit = units[statement.structure_unit_id]
+            statements.append(SourceStatement(
+                structure_unit_id=statement.structure_unit_id,
+                quoted_text=unit.excerpt,
+                force="descriptive",
+                time_words=[],
+            ))
+            seen.add(statement.structure_unit_id)
+    updated.statements = statements
+    return updated, sorted(anchor_ids)
+
+
+def normalize_mixed_schedule_scopes(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+) -> tuple[SourceInterpretation, list[str]]:
+    """Remove a column heading misapplied to an entire mixed-stage X row."""
+
+    units = {unit.structure_unit_id: unit for unit in batch.owned_units}
+    updated = interpretation.model_copy(deep=True)
+    changed: list[str] = []
+    for statement in updated.statements:
+        unit = units[statement.structure_unit_id]
+        scope = normalize_source_excerpt(statement.scope_quote or "")
+        if (
+            statement.force != "required" or not scope or statement.time_words
+            or statement.affected_stage is not None or statement.exception_words is not None
+            or statement.unresolved or scope in normalize_source_excerpt(unit.excerpt)
+            or any(scope in normalize_source_excerpt(part) for part in unit.heading_path)
+            or not schedule_column_links(batch, unit.structure_unit_id, statement.quoted_text)
+        ):
+            continue
+        columns = schedule_column_scope(unit, batch.context_units)
+        if columns and any(scope in normalize_source_excerpt(column.header_text)
+                           for column in columns) and not all(
+            scope in normalize_source_excerpt(column.header_text) for column in columns
+        ):
+            statement.scope_quote = None
+            changed.append(unit.structure_unit_id)
+    return updated, changed
+
+
+class SourceQuoteCorrection(ContractModel):
+    version: Literal["phase5/control-source-quote-correction/v1"]
+    structure_unit_id: str = Field(min_length=1)
+    corrected_quote: str | None = None
+    unresolved: str | None = None
+
+
+class SourceScopeCorrection(ContractModel):
+    version: Literal["phase5/control-source-scope-correction/v1"]
+    structure_unit_id: str = Field(min_length=1)
+    scope_quote: str | None = None
+    affected_stage: str | None = None
+    time_words: list[str] = Field(...)
+    unresolved: str | None = None
+
+
+def build_source_scope_correction_prompt(
+    batch: ProtocolControlDispositionBatch, statement: SourceStatement, issue: str,
+) -> str:
+    unit = next((item for item in batch.owned_units
+                 if item.structure_unit_id == statement.structure_unit_id), None)
+    if unit is None:
+        raise ValueError("待校正陈述不属于冻结来源")
+    return (
+        "你是内置方案 Agent 的单条来源范围核对步骤。只核原文动作的适用范围、阶段和时间；"
+        "动作摘录、条件、例外及其他陈述已经冻结，不得改写。"
+        "time_words 只保留真正约束本条动作且逐字位于本条、其前置共同范围或所属标题的短语；"
+        "本条及所属标题直接写出的时间不得删除。无法确认时 unresolved 写原因，"
+        "其余字段按原文填写；能够确认则 unresolved 为 null。"
+        "只返回 version、structure_unit_id、scope_quote、affected_stage、time_words、unresolved。\n"
+        f"上轮错误：{issue[:1000]}\n"
+        f"冻结单元：{json.dumps({'structure_unit_id': unit.structure_unit_id, 'heading_path': unit.heading_path, 'excerpt': unit.excerpt, 'table_context': unit.table_context.model_dump(mode='json') if unit.table_context else None}, ensure_ascii=False)}\n"
+        f"原陈述：{statement.model_dump_json()}"
+    )
+
+
+def source_scope_correction_response_format() -> dict[str, object]:
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "protocol_control_source_scope_correction_v1",
+            "strict": True,
+            "schema": SourceScopeCorrection.model_json_schema(),
+        },
+    }
+
+
+def apply_source_scope_correction(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+    statement_index: int,
+    correction: SourceScopeCorrection,
+) -> SourceInterpretation:
+    statement = interpretation.statements[statement_index]
+    unit = next((item for item in batch.owned_units
+                 if item.structure_unit_id == statement.structure_unit_id), None)
+    if unit is None or correction.structure_unit_id != statement.structure_unit_id or correction.unresolved:
+        raise ValueError("单条来源范围仍未核清")
+    direct_locations = [statement.quoted_text, *unit.heading_path]
+    for word in statement.time_words:
+        normalized = normalize_source_excerpt(word)
+        if any(normalized in normalize_source_excerpt(part) for part in direct_locations) and word not in correction.time_words:
+            raise ValueError("陈述或标题中的明确时间不可在局部校正时删除")
+    if statement.affected_stage and any(
+        normalize_source_excerpt(statement.affected_stage) in normalize_source_excerpt(part)
+        for part in direct_locations
+    ) and correction.affected_stage != statement.affected_stage:
+        raise ValueError("陈述或标题中的明确阶段不可在局部校正时删除")
+    updated = interpretation.model_copy(deep=True)
+    updated.statements[statement_index].scope_quote = correction.scope_quote
+    updated.statements[statement_index].affected_stage = correction.affected_stage
+    updated.statements[statement_index].time_words = correction.time_words
+    isolated = SourceInterpretation(
+        version=SOURCE_INTERPRETATION_VERSION,
+        statements=[updated.statements[statement_index]],
+        units_without_statement=[
+            item.structure_unit_id for item in batch.owned_units
+            if item.structure_unit_id != statement.structure_unit_id
+        ],
+    )
+    validate_source_interpretation(batch, isolated)
+    return updated
+
+
+def build_source_quote_correction_prompt(
+    batch: ProtocolControlDispositionBatch,
+    statement: SourceStatement,
+) -> str:
+    unit = next(
+        (item for item in batch.owned_units
+         if item.structure_unit_id == statement.structure_unit_id), None
+    )
+    if unit is None:
+        raise ValueError("待校正陈述不属于冻结来源")
+    return (
+        "你是内置方案 Agent 的逐字来源校正步骤。前次摘录不属于冻结原文。"
+        "只从同一单元标题或正文选取表达原陈述同一要求的连续原句；"
+        "不要换另一条要求、增加临床解释或改写数值、否定、时间与例外。"
+        "无法逐字定位同一要求时 corrected_quote 填 null，并在 unresolved 说明。"
+        "可以找到时 unresolved 填 null。只返回结构化 JSON。\n"
+        f"冻结单元：{json.dumps({'structure_unit_id': unit.structure_unit_id, 'heading_path': unit.heading_path, 'excerpt': unit.excerpt}, ensure_ascii=False)}\n"
+        f"待校正陈述：{statement.model_dump_json()}"
+    )
+
+
+def source_quote_correction_response_format() -> dict[str, object]:
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "protocol_control_source_quote_correction_v1",
+            "strict": True,
+            "schema": SourceQuoteCorrection.model_json_schema(),
+        },
+    }
+
+
+def apply_source_quote_correction(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+    statement_index: int,
+    correction: SourceQuoteCorrection,
+) -> SourceInterpretation:
+    statement = interpretation.statements[statement_index]
+    unit = next(
+        (item for item in batch.owned_units
+         if item.structure_unit_id == statement.structure_unit_id), None
+    )
+    new_quote = normalize_source_excerpt(correction.corrected_quote or "")
+    old_quote = normalize_source_excerpt(statement.quoted_text)
+    if (
+        unit is None
+        or correction.structure_unit_id != statement.structure_unit_id
+        or correction.unresolved is not None
+        or not new_quote
+        or not any(new_quote in normalize_source_excerpt(part)
+                   for part in [*unit.heading_path, unit.excerpt])
+        or re.findall(r"\d+(?:\.\d+)?", old_quote) != re.findall(r"\d+(?:\.\d+)?", new_quote)
+        or SequenceMatcher(None, old_quote, new_quote).ratio() < 0.75
+    ):
+        raise ValueError("校正后的摘录不能证明是同一来源要求")
+    updated = interpretation.model_copy(deep=True)
+    updated.statements[statement_index].quoted_text = correction.corrected_quote
+    validate_source_interpretation(batch, updated)
+    return updated
+
+
+class ScheduleColumnLink(ContractModel):
+    column_index: int = Field(ge=0)
+    cell_source_ref: str = Field(min_length=1)
+    header_source_refs: list[str]
+    visit_instance: str
+    boundary_side: Literal["at_or_before_baseline", "after_baseline"]
+    procedure_target_id: str | None = None
+    marker_footnotes: list[str] = Field(default_factory=list)
+
+
 class SourceStatementCoverage(ContractModel):
     statement_index: int = Field(ge=0)
     structure_unit_id: str = Field(min_length=1)
@@ -64,6 +299,60 @@ class SourceStatementCoverage(ContractModel):
     linked_procedure_target_ids: list[str] = Field(default_factory=list)
     exact_official_excerpt_matches: list[str] = Field(default_factory=list)
     exact_procedure_excerpt_matches: list[str] = Field(default_factory=list)
+    schedule_columns: list[ScheduleColumnLink] = Field(default_factory=list)
+
+
+def schedule_column_links(
+    batch: ProtocolControlDispositionBatch,
+    structure_unit_id: str,
+    quoted_text: str,
+) -> list[ScheduleColumnLink]:
+    """Close only a literal X row whose every enrollment column has a frozen target."""
+
+    unit = next((item for item in batch.owned_units
+                 if item.structure_unit_id == structure_unit_id), None)
+    if unit is None or normalize_source_excerpt(quoted_text) != normalize_source_excerpt(unit.excerpt):
+        return []
+    try:
+        columns = schedule_column_scope(unit, batch.context_units)
+    except ValueError:
+        return []
+    if not columns or any(column.boundary_side == "unresolved" for column in columns):
+        return []
+    parts = unit.excerpt.split(" | ")
+    if len(parts) != len(columns) + 1 or not parts[0].strip() or any(
+        not re.fullmatch(r"[（(]?\s*[xX×]\s*[)）]?(?:\^\d+)*", part.strip())
+        for part in parts[1:]
+    ):
+        return []
+    label_ref = unit.member_source_refs[0]
+    label_span = next((span for span in unit.source_span_ids if span.endswith(f"::{label_ref}")), None)
+    if label_span is None:
+        return []
+    links: list[ScheduleColumnLink] = []
+    for column in columns:
+        target_id = None
+        if column.boundary_side == "at_or_before_baseline":
+            if column.marker_footnotes:
+                return []
+            matches = [target for target in batch.known_procedure_targets
+                       if target.visit_instance == column.header_text
+                       and target.review_stage == column.review_stage
+                       and label_span in target.source_span_ids
+                       and parts[0] in target.source_excerpts]
+            if len(matches) != 1:
+                return []
+            target_id = matches[0].catalog_item_id
+        links.append(ScheduleColumnLink(
+            column_index=column.column_index,
+            cell_source_ref=column.cell_source_ref,
+            header_source_refs=list(column.header_source_refs),
+            visit_instance=column.header_text,
+            boundary_side=column.boundary_side,
+            procedure_target_id=target_id,
+            marker_footnotes=list(column.marker_footnotes),
+        ))
+    return links if any(link.procedure_target_id for link in links) else []
 
 
 class SourceTargetReviewItem(ContractModel):
@@ -87,14 +376,48 @@ class SourceTargetReview(ContractModel):
 def target_review_indexes(
     interpretation: SourceInterpretation,
     coverage: list[SourceStatementCoverage],
+    batch: ProtocolControlDispositionBatch | None = None,
 ) -> list[int]:
+    units = {unit.structure_unit_id: unit for unit in batch.owned_units} if batch else {}
     return [
         entry.statement_index
         for entry in coverage
         if entry.status != "expressed"
         and entry.disposition in _ENROLLMENT_DISPOSITIONS
         and interpretation.statements[entry.statement_index].force in {"required", "prohibited"}
+        and not (
+            entry.schedule_columns
+            and interpretation.statements[entry.statement_index].force == "required"
+            and all(
+                link.procedure_target_id is not None
+                for link in entry.schedule_columns
+                if link.boundary_side == "at_or_before_baseline"
+            )
+        )
+        and not _is_schedule_randomization_anchor(
+            units.get(entry.structure_unit_id),
+            interpretation.statements[entry.statement_index],
+        )
     ]
+
+
+def _is_schedule_randomization_anchor(
+    unit: object, statement: SourceStatement, *, require_statement_match: bool = True,
+) -> bool:
+    if unit is None or getattr(unit, "unit_kind", None) != "table_row":
+        return False
+    table = getattr(unit, "table_context", None)
+    if table is None or not any("随机" in header for header in table.row_headers):
+        return False
+    if not any("日程" in heading or "访视" in heading
+               for heading in getattr(unit, "heading_path", ())):
+        return False
+    marker = re.compile(r"(?:随机(?:分组|化)?|randomi[sz]ation)[|｜][X×√✓]", re.IGNORECASE)
+    return bool(
+        marker.fullmatch(normalize_source_excerpt(getattr(unit, "excerpt", "")))
+        and (not require_statement_match or marker.fullmatch(normalize_source_excerpt(statement.quoted_text)))
+        and (not require_statement_match or (not statement.time_words and not statement.exception_words))
+    )
 
 
 def build_source_target_review_prompt(
@@ -102,7 +425,7 @@ def build_source_target_review_prompt(
     interpretation: SourceInterpretation,
     coverage: list[SourceStatementCoverage],
 ) -> str:
-    indexes = target_review_indexes(interpretation, coverage)
+    indexes = target_review_indexes(interpretation, coverage, batch)
     coverage_by_index = {entry.statement_index: entry for entry in coverage}
     source = [
         {
@@ -144,7 +467,10 @@ def build_source_target_review_prompt(
         "同段已有候选并不等于所有动作已覆盖；目录名称相似也不等于时间、条件、例外都已覆盖。"
         "完整覆盖必须从本陈述截出连续的 source_action_excerpt，并从目标的 source_excerpts 截出连续的"
         " target_action_excerpt；如本陈述有明确时间，须再分别给出来源时间与目标摘录或访视中的"
-        "同一最短连续时间短语，两个字段归一化后必须完全相同；不要把整行访视名称当成目标时间片段。"
+        "同一最短连续时间短语，两个字段归一化后必须完全相同；来源时间可取本条已核实的"
+        "scope_quote 或所属标题，不得借相邻陈述的范围；不要把整行访视名称当成目标时间片段。"
+        "一条陈述若同时列出访视范围和治疗持续期等多项时间要求，目标原文或访视定位必须逐项支持全部时间措辞；"
+        "只对齐其中一项不得宣称完整覆盖，应选 additional_requirement 或 unresolved 并列出未覆盖之处。"
         "若来源只写相对时点而目标只写另一访视名称、两边没有共同时间原文，"
         "即使你认为语义可能相当，也只能选 additional_requirement 或 unresolved，不得报完整覆盖。"
         "未完整覆盖时可以附上已有目标的逐字动作和时间作为核对线索，同时在 unresolved_aspects"
@@ -153,7 +479,7 @@ def build_source_target_review_prompt(
         "已有链接仅为核对线索，不能代替原文；若声称链接的条款或流程完整覆盖，"
         "须引用草稿实际链接的同一目标，否则保持待核。"
         "不得省略任何陈述，不能引用未列出的目标。只返回 JSON 对象。\n"
-        '输出结构：{"version":"phase5/control-source-target-review/v5","items":'
+        '输出结构：{"version":"phase5/control-source-target-review/v7","items":'
         '[{"statement_index":0,"decision":"covered_by_official|covered_by_procedure|'
         'additional_requirement|unresolved","target_id":null,"source_action_excerpt":"逐字动作",'
         '"target_action_excerpt":null,"source_time_excerpt":null,"target_time_excerpt":null,'
@@ -167,7 +493,7 @@ def source_target_review_response_format() -> dict[str, object]:
     return {
         "type": "json_schema",
         "json_schema": {
-            "name": "protocol_control_source_target_review_v5",
+            "name": "protocol_control_source_target_review_v7",
             "strict": True,
             "schema": SourceTargetReview.model_json_schema(),
         },
@@ -180,12 +506,13 @@ def validate_source_target_review(
     coverage: list[SourceStatementCoverage],
     review: SourceTargetReview,
 ) -> None:
-    expected = target_review_indexes(interpretation, coverage)
+    expected = target_review_indexes(interpretation, coverage, batch)
     if sorted(item.statement_index for item in review.items) != sorted(expected):
         raise ValueError("逐项来源核对必须且只能覆盖本次待核陈述")
     coverage_by_index = {entry.statement_index: entry for entry in coverage}
     official = {item.official_code: item for item in batch.known_official_targets}
     procedures = {item.catalog_item_id: item for item in batch.known_procedure_targets}
+    owned = {unit.structure_unit_id: unit for unit in batch.owned_units}
     for item in review.items:
         statement = interpretation.statements[item.statement_index]
         action = normalize_source_excerpt(item.source_action_excerpt)
@@ -228,7 +555,19 @@ def validate_source_target_review(
                 raise ValueError(f"第{item.statement_index}条目标动作缺少原文摘录")
         source_time = normalize_source_excerpt(item.source_time_excerpt or "")
         target_time = normalize_source_excerpt(item.target_time_excerpt or "")
-        if source_time and not any(
+        source_locations = [
+            statement.quoted_text,
+            statement.scope_quote or "",
+            *owned[statement.structure_unit_id].heading_path,
+        ]
+        source_time_is_composite = bool(statement.time_words) and all(
+            normalize_source_excerpt(word) in source_time
+            for word in statement.time_words
+        ) and any(
+            source_time in normalize_source_excerpt(location)
+            for location in source_locations
+        )
+        if source_time and not source_time_is_composite and not any(
             source_time in normalize_source_excerpt(value) for value in statement.time_words
         ):
             raise ValueError(f"第{item.statement_index}条时间措辞不属于该陈述")
@@ -243,13 +582,31 @@ def validate_source_target_review(
         if item.unresolved_aspects:
             raise ValueError("仍有未覆盖维度的陈述不能标为已有目标完整覆盖")
         if statement.exception_words and not any(
-            normalize_source_excerpt(statement.exception_words) in normalize_source_excerpt(excerpt)
+            _exception_in_target(statement.exception_words, excerpt)
             for excerpt in target_excerpts
         ):
             raise ValueError(f"第{item.statement_index}条例外未在目标原文定位")
         if statement.time_words:
             if not source_time or not target_time or source_time != target_time:
                 raise ValueError(f"第{item.statement_index}条时间措辞未获两端一致支持")
+            target_locations = [*target_excerpts]
+            if item.target_id in procedures:
+                target_locations.append(procedures[item.target_id].visit_instance)
+            unmatched = [
+                word for word in statement.time_words
+                if not all(
+                    any(
+                        normalize_source_excerpt(part) in normalize_source_excerpt(location)
+                        for location in target_locations
+                    )
+                    for part in re.split(r"[（）()\[\]]", word)
+                    if normalize_source_excerpt(part)
+                )
+            ]
+            if unmatched:
+                raise ValueError(
+                    f"第{item.statement_index}条时间要求未在目标原文逐项覆盖：{unmatched}"
+                )
         elif item.source_time_excerpt or item.target_time_excerpt:
             raise ValueError("无明确时间措辞的陈述不得凭空补时间")
 
@@ -258,6 +615,31 @@ def normalize_source_excerpt(value: str) -> str:
     return "".join(unicodedata.normalize("NFKC", value).translate(
         str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"'})
     ).split())
+
+
+def _exception_in_target(source_exception: str, target_excerpt: str) -> bool:
+    source = normalize_source_excerpt(source_exception)
+    target = normalize_source_excerpt(target_excerpt)
+    if source in target:
+        return True
+    source = re.sub(r"[()\[\]]", "", source)
+    target = re.sub(r"[()\[\]]", "", target)
+    if source in target:
+        return True
+    declared_alias = normalize_source_excerpt(source_exception)
+    matches = list(re.finditer(r"\([A-Za-z][A-Za-z0-9-]+[,，]([A-Z][A-Z0-9-]{1,})\)", declared_alias))
+    if not matches:
+        return False
+    for match in reversed(matches):
+        prefix = declared_alias[:match.start()]
+        boundaries = [(prefix.rfind(word), word) for word in ("或者", "或", "及", "和", "、", "，", "[", "(")]
+        position, boundary = max(boundaries, key=lambda item: item[0])
+        term_start = position + len(boundary) if position >= 0 else 0
+        term = prefix[term_start:]
+        if len(term) < 2 or not all("\u4e00" <= char <= "\u9fff" for char in term):
+            return False
+        declared_alias = declared_alias[:term_start] + match.group(1) + declared_alias[match.end():]
+    return re.sub(r"[()\[\]]", "", declared_alias) in target
 
 
 def validate_source_interpretation(
@@ -290,13 +672,25 @@ def validate_source_interpretation(
                 scope in normalize_source_excerpt(part)
                 for part in [*table.row_headers, *table.column_headers]
             )
+            scope_in_visit_headers = False
+            if table is not None and unit.unit_kind in {"table_row", "table_note"} and bool(scope):
+                try:
+                    columns = schedule_column_scope(unit, batch.context_units)
+                except ValueError:
+                    columns = ()
+                scope_in_visit_headers = bool(columns) and all(
+                    column.header_source_refs
+                    and scope in normalize_source_excerpt(column.header_text)
+                    for column in columns
+                )
             scope_before_statement = (
                 bool(scope)
                 and scope in source_excerpt
                 and normalized_quote in source_excerpt
-                and source_excerpt.index(scope) < source_excerpt.index(normalized_quote)
+                and source_excerpt.index(scope) <= source_excerpt.index(normalized_quote)
             )
-            if not (scope_in_heading or scope_in_table_header or scope_before_statement):
+            if not (scope_in_heading or scope_in_table_header
+                    or scope_in_visit_headers or scope_before_statement):
                 raise ValueError(
                     f"共享范围须来自陈述之前的原文、所属标题或本单元表格标题：{item.structure_unit_id}"
                 )

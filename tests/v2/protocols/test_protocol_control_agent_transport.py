@@ -1041,7 +1041,7 @@ def test_runner_uses_real_transport_same_session_repair_without_inex_schema() ->
 
 
 def test_source_target_review_uses_its_own_small_schema() -> None:
-    client, completions = _client(['{"version":"phase5/control-source-target-review/v5","items":[]}'])
+    client, completions = _client(['{"version":"phase5/control-source-target-review/v7","items":[]}'])
     transport = OpenAICompatibleProtocolControlAgentTransport(
         client=client,
         backend="mtplx",
@@ -1052,9 +1052,24 @@ def test_source_target_review_uses_its_own_small_schema() -> None:
     response = transport.start_source_target_review(prompt="核对冻结来源与目标")
     assert response.text.startswith('{"version":')
     assert completions.calls[0]["response_format"]["json_schema"]["name"] == (
-        "protocol_control_source_target_review_v5"
+        "protocol_control_source_target_review_v7"
     )
     assert "temperature" not in completions.calls[0]
+
+
+def test_source_scope_correction_uses_bounded_schema() -> None:
+    client, completions = _client(['{"version":"phase5/control-source-scope-correction/v1",'
+                                    '"structure_unit_id":"su-01","scope_quote":null,'
+                                    '"affected_stage":null,"time_words":[],"unresolved":null}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="mtplx", model="mtplx-qwen38-27b-optimized-quality",
+        reasoning_effort="medium", max_tokens=16384,
+    )
+    response = transport.correct_source_scope(prompt="核对单条冻结来源")
+    assert '"su-01"' in response.text
+    assert completions.calls[0]["response_format"]["json_schema"]["name"] == (
+        "protocol_control_source_scope_correction_v1"
+    )
 
 
 def test_runner_bounds_transport_failures_without_switching_schema_or_model() -> None:

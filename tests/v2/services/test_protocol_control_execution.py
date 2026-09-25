@@ -884,6 +884,89 @@ def test_uncertain_deep_is_final_without_blind_retry(data_paths, session_factory
     assert deep.start_calls == 1
 
 
+def test_manual_retry_reexecutes_failed_deep_instead_of_replaying_diagnostic(
+    data_paths, session_factory,
+):
+    seed = _seed_frozen_source(data_paths, session_factory, key="deep-manual-retry")
+    discovery = _DiscoveryTransport()
+    deep = _DeepTransport(seed.source_span_excerpts, invalid=True)
+    service = _build_service(
+        data_paths, session_factory, seed, deep_max_schema_repairs=0,
+    )
+    result = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id, idempotency_key="control-deep-manual-retry",
+    )
+    runner, _ = _build_runner(data_paths, session_factory, discovery, deep)
+    assert runner.run_job(result.job_id)
+    assert _job_snapshot_and_payload(session_factory, result.job_id)[0].state == "failed_final"
+    with session_factory() as session, session.begin():
+        JobStore(session, now=_now).retry_failed(result.job_id)
+    deep.invalid = False
+    assert runner.run_job(result.job_id)
+    snapshot, _ = _job_snapshot_and_payload(session_factory, result.job_id)
+    assert snapshot.state == "completed"
+    assert deep.start_calls == 3
+    assert deep.owned_batches[1] == deep.owned_batches[0]
+
+
+def test_same_identity_deep_source_reuses_validated_batches_without_model_calls(
+    data_paths, session_factory,
+):
+    seed = _seed_frozen_source(data_paths, session_factory, key="deep-source-reuse")
+    discovery = _DiscoveryTransport()
+    deep = _DeepTransport(seed.source_span_excerpts)
+    service = _build_service(data_paths, session_factory, seed)
+    source = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id, idempotency_key="deep-source-first",
+    )
+    runner, _ = _build_runner(data_paths, session_factory, discovery, deep)
+    assert runner.run_job(source.job_id)
+    assert _job_snapshot_and_payload(session_factory, source.job_id)[0].state == "completed"
+    old_calls = deep.start_calls
+
+    adopted = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id,
+        idempotency_key="deep-source-adopted",
+        deep_source_job_id=source.job_id,
+    )
+    deep.invalid = True
+    assert runner.run_job(adopted.job_id)
+    assert _job_snapshot_and_payload(session_factory, adopted.job_id)[0].state == "completed"
+    assert deep.start_calls == old_calls
+    with session_factory() as session:
+        saved = JobStore(session, now=_now).get_last_checkpoint(adopted.job_id, "deep_0001")
+    assert saved is not None
+    assert saved[1]["adopted_from"]["job_id"] == source.job_id
+
+
+def test_deep_source_accepts_only_explicit_revalidated_predecessors() -> None:
+    fields = protocol_control_execution_module._DEEP_SOURCE_IDENTITY_FIELDS
+    current = {field: {"same": field} for field in fields}
+    current["execution_version"] = protocol_control_execution_module.PROTOCOL_CONTROL_EXECUTION_VERSION
+    previous = dict(current, execution_version="phase5/protocol-control-execution/v116")
+    protocol_control_execution_module._require_compatible_deep_source(current, previous)
+    protocol_control_execution_module._require_compatible_deep_source(
+        current, dict(previous, execution_version="phase5/protocol-control-execution/v117")
+    )
+    protocol_control_execution_module._require_compatible_deep_source(
+        current, dict(previous, execution_version="phase5/protocol-control-execution/v118")
+    )
+    protocol_control_execution_module._require_compatible_deep_source(
+        current, dict(previous, execution_version="phase5/protocol-control-execution/v119")
+    )
+
+    with pytest.raises(StepFailure) as wrong_version:
+        protocol_control_execution_module._require_compatible_deep_source(
+            current, dict(previous, execution_version="phase5/protocol-control-execution/v115")
+        )
+    assert wrong_version.value.error_code == "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
+    with pytest.raises(StepFailure) as wrong_source:
+        protocol_control_execution_module._require_compatible_deep_source(
+            current, dict(previous, source_content_sha256="different")
+        )
+    assert wrong_source.value.error_code == "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
+
+
 def test_process_death_recovers_dynamic_step_from_durable_boundary(
     data_paths,
     session_factory,

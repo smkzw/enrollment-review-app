@@ -38,6 +38,7 @@ from app.protocols.phase_detection import (
 )
 from app.protocols.procedure_catalog import (
     ProcedureCatalogError,
+    _flow_footnote_refs,
     build_required_procedure_catalog,
     derive_review_stage,
 )
@@ -335,6 +336,41 @@ def test_flow_display_footnotes_attach_numbered_note_sources_before_label_cleanu
         not span_id.startswith("span:body.p")
         for span_id in scientific_notation.source_span_ids
     )
+
+
+def test_flow_notes_keep_preface_continuations_and_nested_numbering():
+    blocks, spans = _matrix([
+        ["项目", "筛选期", "基线期"], ["访视", "V1", "V2"],
+        ["心电检查^2", "X", "X"],
+    ])
+    order = max(block.block_order for block in blocks) + 1
+    for index, (text, number_id) in enumerate([
+        ("缩略语：ECG=心电图", None), ("注：以下为日程表说明", None),
+        ("首条说明", 7), ("同一条的续行", None),
+        ("心电检查：基线可采用近期报告", 7),
+        ("子项说明", 8), ("下一条说明", 7),
+    ]):
+        blocks.append(StructureBlock(
+            source_ref=f"body.p{index}", document_part=DocumentPart.BODY,
+            section_index=0, block_order=order + index,
+            kind=BlockKind.PARAGRAPH, text=text,
+            style_name="List Paragraph" if index >= 2 else "Normal",
+            numbering=(NumberingRef(num_id=number_id, level=0, start=1,
+                                    num_fmt="decimal", lvl_text="%1.")
+                       if number_id is not None else None),
+        ))
+    spans.extend(_span(block) for block in blocks if block.source_ref.startswith("body.p"))
+    refs = _flow_footnote_refs(blocks, next(block for block in blocks if block.source_ref == "body.t0"))
+    assert refs == {
+        1: ("body.p2", "body.p3"),
+        2: ("body.p4", "body.p5"),
+        3: ("body.p6",),
+    }
+    catalog = _build(blocks, spans, _projection(blocks))
+    baseline = next(item for item in catalog.items
+                    if item.label == "心电检查" and "基线期" in (item.visit_instance or ""))
+    assert "span:body.p4" in baseline.source_span_ids
+    assert "span:body.p5" in baseline.source_span_ids
 
 
 def test_visit_header_note_named_for_one_operation_does_not_pollute_sibling_rows():
@@ -714,6 +750,17 @@ def test_real_protocol_required_procedure_catalog_is_read_only_and_phase_isolate
         frozen_at=FROZEN_AT,
     )
 
+    if label == "MG-K10-SAR":
+        ecg = next(item for item in catalog.items
+                   if item.label == "12导联心电图" and item.review_stage.value == "baseline")
+        assert any(excerpt and "W0可接受给药前7天内结果" in excerpt
+                   for excerpt in ecg.source_excerpts)
+        symptom = next(item for item in catalog.items
+                       if item.label == "rTNSS/rTOSS评估"
+                       and item.review_stage.value == "baseline")
+        assert any(excerpt and "试验期间受试者需每日" in excerpt
+                   for excerpt in symptom.source_excerpts)
+
     if label == "CMS-D001":
         scoring_items = [
             item
@@ -822,11 +869,12 @@ def test_real_protocol_required_procedure_catalog_is_read_only_and_phase_isolate
     }
     note_source_refs = item_source_refs - table_source_refs
     assert table_source_refs
-    assert all(
-        (block := blocks_by_ref[source_ref]).numbering is not None
-        and block.numbering.level == 0
-        for source_ref in note_source_refs
-    )
+    flow_root = blocks_by_ref[expected_root]
+    numbered_note_refs = {
+        ref for refs in _flow_footnote_refs(extraction.blocks, flow_root).values()
+        for ref in refs
+    }
+    assert note_source_refs <= numbered_note_refs
     if label == "CMS-D001":
         assert "body.p325" in note_source_refs
     assert not any(source_ref.startswith("body.t6") for source_ref in item_source_refs)

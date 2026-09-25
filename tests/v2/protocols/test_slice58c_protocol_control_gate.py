@@ -231,6 +231,30 @@ def test_existing_exact_source_target_covers_enrollment_prohibition() -> None:
     assert _uncovered_enrollment_prohibitions(batch, output) == ()
 
 
+def test_exact_official_summary_duplicate_covers_different_source_span() -> None:
+    from app.protocols.protocol_control_gate import _uncovered_enrollment_prohibitions
+
+    excerpt = "筛选期不得新增伴随治疗；随机前须完成规定洗脱。"
+    unit = SimpleNamespace(
+        structure_unit_id="summary", excerpt=excerpt, source_span_ids=["summary:1"],
+        unit_kind="table_row", heading_path=["方案摘要"],
+        table_context=SimpleNamespace(row_headers=["排除标准"]),
+    )
+    target = SimpleNamespace(
+        official_code="EX-01", source_span_ids=["official:1"], source_excerpts=[excerpt],
+    )
+    disposition = SimpleNamespace(
+        structure_unit_id="summary", disposition=StructureUnitDispositionKind.OFFICIAL_ELIGIBILITY,
+        linked_official_code="EX-01", linked_control_candidate_ids=[],
+    )
+    output = SimpleNamespace(dispositions=[disposition], candidates=[])
+    batch = SimpleNamespace(owned_units=[unit], known_official_targets=[target], known_procedure_targets=[])
+    assert _uncovered_enrollment_prohibitions(batch, output) == ()
+
+    target.source_excerpts = ["筛选期不得新增伴随治疗"]
+    assert len(_uncovered_enrollment_prohibitions(batch, output)) == 1
+
+
 def test_matching_target_quote_without_link_or_shared_source_does_not_cover() -> None:
     from app.protocols.protocol_control_gate import _uncovered_enrollment_prohibitions
 
@@ -329,6 +353,103 @@ def test_one_quoted_candidate_does_not_cover_second_prohibition_in_same_unit() -
     assert len(issues) == 1
     assert issues[0].code == "ENROLLMENT_PROHIBITION_UNCOVERED"
     assert issues[0].structure_unit_ids == ("unit",)
+
+
+def test_full_paragraph_quote_covers_only_the_prohibition_expressed_by_atom() -> None:
+    from app.protocols.protocol_control_gate import _uncovered_enrollment_prohibitions
+
+    first = "筛选期不得新增伴随治疗"
+    second = "基线前不得改变原有治疗剂量"
+    paragraph = f"{first}。{second}。"
+    batch = SimpleNamespace(
+        owned_units=[SimpleNamespace(
+            structure_unit_id="unit", excerpt=paragraph, source_span_ids=["span"],
+            heading_path=["合并用药"], table_context=None,
+        )], known_official_targets=[], known_procedure_targets=[],
+    )
+    candidate = SimpleNamespace(
+        control_candidate_id="candidate-1",
+        semantics=SimpleNamespace(obligation_expression=SimpleNamespace(groups=[
+            SimpleNamespace(atoms=[SimpleNamespace(
+                statement=first + "。", source_excerpts=[paragraph],
+            )])
+        ])),
+    )
+    output = SimpleNamespace(
+        dispositions=[SimpleNamespace(
+            structure_unit_id="unit",
+            disposition=StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE,
+            linked_control_candidate_ids=["candidate-1"],
+        )], candidates=[candidate],
+    )
+    issues = _uncovered_enrollment_prohibitions(batch, output)
+    assert len(issues) == 1
+    assert issues[0].code == "ENROLLMENT_PROHIBITION_UNCOVERED"
+
+    candidate.semantics.obligation_expression.groups[0].atoms.append(SimpleNamespace(
+        statement=second + "。", source_excerpts=[paragraph],
+    ))
+    assert _uncovered_enrollment_prohibitions(batch, output) == ()
+
+
+def test_split_current_and_future_prohibition_requires_same_action_and_source() -> None:
+    from app.protocols.protocol_control_gate import _uncovered_enrollment_prohibitions
+
+    sentence = "筛选/导入期、治疗期不得调整背景治疗剂量"
+    paragraph = f"每日记录用药。{sentence}。"
+    batch = SimpleNamespace(
+        owned_units=[SimpleNamespace(
+            structure_unit_id="unit", excerpt=paragraph, source_span_ids=["span"],
+            heading_path=["合并用药"], table_context=None,
+        )], known_official_targets=[], known_procedure_targets=[],
+    )
+    continuation = SimpleNamespace(
+        statement="治疗期不得调整背景治疗剂量",
+        status="not_due_at_review_node",
+        source_span_ids=["span"], source_excerpts=[paragraph],
+    )
+    atom = SimpleNamespace(
+        statement="筛选/导入期不得调整背景治疗剂量",
+        evaluation=SimpleNamespace(proposition="筛选/导入期不得调整背景治疗剂量"),
+        continuing_obligation=continuation,
+        source_span_ids=["span"], source_excerpts=[paragraph],
+    )
+    candidate = SimpleNamespace(
+        control_candidate_id="candidate-1",
+        semantics=SimpleNamespace(obligation_expression=SimpleNamespace(groups=[
+            SimpleNamespace(atoms=[atom])
+        ])),
+    )
+    output = SimpleNamespace(
+        dispositions=[SimpleNamespace(
+            structure_unit_id="unit",
+            disposition=StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE,
+            linked_control_candidate_ids=["candidate-1"],
+        )], candidates=[candidate],
+    )
+    assert _uncovered_enrollment_prohibitions(batch, output) == ()
+    continuation.statement = "治疗期不得调整另一种药物剂量"
+    assert len(_uncovered_enrollment_prohibitions(batch, output)) == 1
+    continuation.statement = "治疗期不得调整背景治疗剂量"
+    continuation.source_span_ids = ["different-span"]
+    assert len(_uncovered_enrollment_prohibitions(batch, output)) == 1
+
+
+def test_full_paragraph_recommendation_does_not_weaken_other_actions() -> None:
+    from app.protocols.protocol_control_gate import _check_obligation_modality_fidelity
+
+    paragraph = "每次给药200单位，每日1次，建议上午使用。筛选期不得调整剂量。"
+    dose = SimpleNamespace(
+        statement="每次给药200单位", source_excerpts=[paragraph], modality="mandatory",
+    )
+    advice = SimpleNamespace(
+        statement="建议上午使用", source_excerpts=[paragraph], modality="recommended",
+    )
+    expression = SimpleNamespace(groups=[SimpleNamespace(atoms=[dose, advice])])
+    _check_obligation_modality_fidelity(entity_id="candidate", obligation_expression=expression)
+    advice.modality = "mandatory"
+    with pytest.raises(ProtocolControlGateError, match="RECOMMENDED_MODALITY_DROPPED"):
+        _check_obligation_modality_fidelity(entity_id="candidate", obligation_expression=expression)
 
 
 def test_since_visit_reference_is_not_a_procedure_execution_visit() -> None:
@@ -2065,6 +2186,27 @@ def test_future_prohibition_has_separate_source_bound_not_due_record() -> None:
             role=ReviewNodeRole.DECIDE_AT_NODE,
         )],
     )
+    with_future_scope = SimpleNamespace(
+        kind=atom.kind,
+        source_excerpts=atom.source_excerpts,
+        prospective_period=atom.prospective_period,
+        continuing_obligation=atom.continuing_obligation,
+        statement=atom.statement,
+        evaluation=SimpleNamespace(
+            proposition=atom.evaluation.proposition,
+            observation_policy=SimpleNamespace(scope="筛选期及双盲治疗期背景治疗调整记录"),
+        ),
+    )
+    with pytest.raises(ProtocolControlGateError, match="FUTURE_PROHIBITION_DECIDED_EARLY"):
+        _check_future_prohibition_not_decided_at_current_node(
+            entity_id="candidate:future-observation-scope",
+            obligation_expression=SimpleNamespace(groups=[SimpleNamespace(atoms=[with_future_scope])]),
+            bindings=[ReviewNodeBinding(
+                workflow_stage_id="baseline-node",
+                review_stage=ReviewStage.BASELINE,
+                role=ReviewNodeRole.DECIDE_AT_NODE,
+            )],
+        )
     _check_future_prohibition_not_decided_at_current_node(
         entity_id="candidate:explicit-no-future-proof",
         obligation_expression=expression,
@@ -3945,7 +4087,7 @@ def test_study_end_period_must_be_typed_on_the_obligation_atom() -> None:
             )
         }
     )
-    with pytest.raises(ProtocolControlGateError, match="TIME_CALENDAR_BOUND_UNSUPPORTED"):
+    with pytest.raises(ProtocolControlGateError, match="TIME_CALENDAR_BOUND_UNSUPPORTED") as exc_info:
         _gate(
             control=unsupported_bound,
             manifest=manifest,
@@ -3954,6 +4096,7 @@ def test_study_end_period_must_be_typed_on_the_obligation_atom() -> None:
             plan=plan,
             batch_dispositions=batch_dispositions,
         )
+    assert exc_info.value.obligation_source_span_ids == ("span:control",)
 
     assert _gate(
         control=complete_period,

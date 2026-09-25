@@ -1,5 +1,7 @@
 # Enrollment Review App Project Context
 
+> 2026-09-25 当前无损暂停：W6 最新 v127 隔离作业在首个深审批次因旧批次身份不一致失败；新源目录已纠正访视表脚注遗漏，但尚无完整官方+跨章发布或病例审核。接手请先读 `.trellis/tasks/09-11-e2e-eligibility-review/HANDOFF_20260925_W6_REVIEW_AND_PAUSE.md` 和现行 `implement.md` 文头。以下较早的“当前”均为历史，`claims_complete=false`。
+
 > 2026-09-24 无损暂停：W6 当前执行身份 v96，最近真实短答因混合原文单元被两个候选共同使用而未通过来源归属核对；已阻止这种情况下的单候选短修订，但未完成方案发布。集中相关检查159项通过，病例与最终验收未做，`claims_complete=false`。当前入口为 `.trellis/tasks/09-11-e2e-eligibility-review/HANDOFF_20260924_0924V1_W6_PAUSED.md`；以下较旧“当前”文字为历史。
 
 > 2026-09-24 W6 当前执行身份 v94：GLM 与 DeepSeek 对同一冻结首批的独立产品诊断均未通过完整发布门禁，失败类型不同；不能据此排名或发布。已进一步收紧时间字段继承条件。下一步依0924V1专家包先验证轻量语义解释/装配的最小真实纵切片，W6/病例/Q3未完成；`claims_complete=false`。进度以 `implement.md` 文头为准。

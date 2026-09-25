@@ -22,7 +22,7 @@ from enum import Enum
 import hashlib
 import re
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Any
+from typing import Any, Literal
 
 from app.domain.contracts.enums import (
     AlignmentStatus,
@@ -39,6 +39,7 @@ from app.domain.contracts.protocol_ingestion import (
     frozen_catalog_content_hash,
     optional_source_excerpts_for_spans,
 )
+from app.domain.contracts.protocol_controls import ProtocolStructureUnit
 from app.domain.contracts.protocol_metadata import (
     PhaseApplicabilityBlock,
     PhaseApplicabilityGraph,
@@ -49,19 +50,21 @@ from .phase_detection import project_single_phase
 from .section_index import formal_source_span_ids
 
 
-CATALOG_BUILDER_VERSION = "required-procedures/v2"
+CATALOG_BUILDER_VERSION = "required-procedures/v3"
 """Stable implementation marker used in IDs, not a project-specific rule."""
 
 _DEFAULT_FROZEN_AT = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _DEFAULT_FROZEN_BY = CATALOG_BUILDER_VERSION
 
 _MARK_RE = re.compile(r"^\s*[\(（]?\s*[xX×]\s*[\)）]?\s*$")
+_SCHEDULE_MARK_RE = re.compile(r"^\s*[\(（]?\s*[xX×]\s*[\)）]?(?P<notes>(?:\^\d+)*)\s*$")
 _CELL_REF_RE = re.compile(r"\.r(?P<row>\d+)\.c(?P<col>\d+)")
 _TRAILING_FOOTNOTE_RE = re.compile(r"\^\d+(?=\s*(?:\^\d+|[\uff09)\]\u3011]|$))")
 _DISPLAY_FOOTNOTE_NUMBER_RE = re.compile(
     r"\^(?P<number>\d+)(?=\s*(?:\^\d+|[\uff09)\]\u3011]|$))"
 )
 _FLOW_NOTE_PREFACE_RE = re.compile(r"^\s*(?:注(?:意)?|说明|备注)\s*[:：]")
+_FLOW_ABBREVIATION_PREFACE_RE = re.compile(r"^\s*(?:缩略语|缩写|abbreviations?)\s*[:：]", re.I)
 
 _PRE_SCREENING_RE = re.compile(r"(?:预筛|预筛选|pre[\s_-]*screen)", re.I)
 _SCREENING_RE = re.compile(r"(?:筛选|screen(?:ing)?|screening)", re.I)
@@ -211,6 +214,27 @@ class _VisitColumn:
 
 
 @dataclass(frozen=True)
+class ScheduleColumnScope:
+    structure_unit_id: str
+    cell_path: tuple[int, int]
+    cell_source_ref: str
+    column_index: int
+    header_text: str
+    header_source_refs: tuple[str, ...]
+    review_stage: ReviewStage | None
+    boundary_side: Literal["at_or_before_baseline", "after_baseline", "unresolved"]
+    visit_unresolved: bool
+    marker_footnotes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class _ScheduleTextBlock:
+    text: str
+    source_ref: str
+    block_order: int
+
+
+@dataclass(frozen=True)
 class _OperationInstance:
     root: str
     row: int
@@ -337,7 +361,7 @@ def _display_footnote_numbers(value: str) -> tuple[int, ...]:
 def _flow_footnote_refs(
     blocks: Sequence[StructureBlock],
     root: StructureBlock,
-) -> dict[int, str]:
+) -> dict[int, tuple[str, ...]]:
     """Map one flow table's numbered notes to their stable paragraph refs.
 
     DOCX list numbering carries the note identity even when the visible list
@@ -364,33 +388,53 @@ def _flow_footnote_refs(
         ),
         key=lambda block: (block.block_order, block.source_ref),
     )
-    numbered: list[StructureBlock] = []
+    numbered: list[list[StructureBlock]] = []
     numbering_id: int | None = None
-    for block in after_table:
+    for index, block in enumerate(after_table):
         if block.kind == BlockKind.TABLE:
             break
         numbering = block.numbering
         if not numbered:
             if numbering is None or numbering.level != 0:
-                if block.text.strip() and not _FLOW_NOTE_PREFACE_RE.match(block.text):
+                if block.text.strip() and not (
+                    _FLOW_NOTE_PREFACE_RE.match(block.text)
+                    or _FLOW_ABBREVIATION_PREFACE_RE.match(block.text)
+                ):
                     return {}
                 continue
             numbering_id = numbering.num_id
-        elif (
-            numbering is None
-            or numbering.level != 0
-            or numbering.num_id != numbering_id
-        ):
-            if block.text.strip():
-                break
-            continue
-        numbered.append(block)
+        elif numbering is None:
+            if not block.text.strip():
+                continue
+            if block.style_name == numbered[-1][0].style_name and block.style_name:
+                numbered[-1].append(block)
+                continue
+            break
+        elif numbering.level != 0 or numbering.num_id != numbering_id:
+            resumes_parent = False
+            for later in after_table[index + 1:]:
+                if (later.kind == BlockKind.TABLE or later.outline_level is not None
+                        or later.section_index != block.section_index
+                        or (later.text.strip() and later.style_name != block.style_name)):
+                    break
+                if (later.numbering is not None and later.numbering.level == 0
+                        and later.numbering.num_id == numbering_id):
+                    resumes_parent = True
+                    break
+            if block.style_name == numbered[-1][0].style_name and resumes_parent:
+                numbered[-1].append(block)
+                continue
+            break
+        numbered.append([block])
     if not numbered:
         return {}
-    first_numbering = numbered[0].numbering
+    first_numbering = numbered[0][0].numbering
     assert first_numbering is not None
     start = first_numbering.start or 1
-    return {start + offset: block.source_ref for offset, block in enumerate(numbered)}
+    return {
+        start + offset: tuple(block.source_ref for block in group)
+        for offset, group in enumerate(numbered)
+    }
 
 
 def _operation_labels_named_by_note(
@@ -528,6 +572,114 @@ def _header_projection(
                     refs.append(ref)
         result[col] = (" / ".join(values), tuple(refs))
     return result
+
+
+def _enrollment_boundary(
+    cells: Mapping[tuple[int, int], _Cell],
+    marks: Sequence[_Cell],
+    header: Mapping[int, tuple[str, tuple[str, ...]]],
+) -> tuple[int | None, int | None]:
+    randomization_columns: list[int] = []
+    for row in sorted({cell.row for cell in marks}):
+        row_marks = [cell for cell in marks if cell.row == row]
+        label = _operation_label(
+            cells, row=row, mark_columns=sorted({cell.col for cell in row_marks}),
+        )
+        if label and _RANDOMIZATION_ACTION_RE.fullmatch(
+            _without_display_footnotes(label[0])
+        ):
+            randomization_columns.extend(cell.col for cell in row_marks)
+    randomization_anchor = min(randomization_columns) if randomization_columns else None
+    explicit_baseline_columns = [
+        col for col, (text, _refs) in header.items()
+        if _derive_visit_stage(text) == ReviewStage.BASELINE
+    ]
+    boundary = (
+        randomization_anchor if randomization_anchor is not None
+        else max(explicit_baseline_columns) if explicit_baseline_columns else None
+    )
+    return randomization_anchor, boundary
+
+
+def _schedule_cells_from_units(
+    units: Sequence[ProtocolStructureUnit], table_root: str,
+) -> dict[tuple[int, int], _Cell]:
+    cells: dict[tuple[int, int], _Cell] = {}
+    for unit in units:
+        prefix, marker, suffix = unit.source_ref.rpartition(".r")
+        context = unit.table_context
+        if not marker or prefix != table_root or not suffix.isdigit() or context is None:
+            continue
+        pieces = unit.excerpt.split(" | ")
+        paths = context.member_cell_paths
+        refs = unit.member_source_refs
+        if len(pieces) != len(paths) or len(paths) != len(refs):
+            raise ValueError("表格行文字与单元格来源不能逐列对应")
+        for piece, path, ref in zip(pieces, paths, refs, strict=True):
+            row, col = path
+            key = (row, col)
+            if key in cells:
+                raise ValueError("同一表格单元格有多条互相冲突的来源")
+            cells[key] = _Cell(
+                root=table_root, row=row, col=col,
+                blocks=(_ScheduleTextBlock(piece, ref, unit.source_order),),
+            )
+    return cells
+
+
+def schedule_column_scope(
+    unit: ProtocolStructureUnit,
+    context_units: Sequence[ProtocolStructureUnit],
+) -> tuple[ScheduleColumnScope, ...]:
+    """Resolve marked source cells using the procedure catalog's boundary."""
+
+    if unit.table_context is None:
+        return ()
+    table_root, marker, suffix = unit.source_ref.rpartition(".r")
+    if not marker or not suffix.isdigit():
+        return ()
+    cells = _schedule_cells_from_units([*context_units, unit], table_root)
+    marks = sorted(
+        (cell for cell in cells.values() if _SCHEDULE_MARK_RE.fullmatch(cell.text)),
+        key=lambda cell: (cell.row, cell.col),
+    )
+    row_marks = [cell for cell in marks if cell.row == unit.table_context.row_index]
+    if not row_marks:
+        return ()
+    header = _header_projection(
+        cells, first_mark_row=min(cell.row for cell in marks),
+        max_columns=max(cell.col for cell in cells.values()) + 1,
+    )
+    randomization_anchor, boundary = _enrollment_boundary(cells, marks, header)
+    result = []
+    for cell in row_marks:
+        header_text, header_refs = header.get(cell.col, ("", ()))
+        derived = (
+            ReviewStage.BASELINE if randomization_anchor == cell.col
+            else _derive_visit_stage(header_text)
+        )
+        side: Literal["at_or_before_baseline", "after_baseline", "unresolved"]
+        if boundary is None:
+            side = "unresolved"
+        elif cell.col > boundary:
+            side = "after_baseline"
+        elif isinstance(derived, ReviewStage) and header_text and header_refs:
+            side = "at_or_before_baseline"
+        else:
+            side = "unresolved"
+        result.append(ScheduleColumnScope(
+            structure_unit_id=unit.structure_unit_id,
+            cell_path=(cell.row, cell.col),
+            cell_source_ref=cell.source_refs[0],
+            column_index=cell.col,
+            header_text=header_text,
+            header_source_refs=header_refs,
+            review_stage=derived if isinstance(derived, ReviewStage) else None,
+            boundary_side=side,
+            visit_unresolved=not bool(_VISIT_OR_DATE_RE.search(header_text)),
+            marker_footnotes=tuple(re.findall(r"\^\d+", cell.text)),
+        ))
+    return tuple(result)
 
 
 def _is_non_enrollment_operation(
@@ -847,7 +999,7 @@ def _build_instances_for_table(
     spans_by_ref: Mapping[str, ProtocolSourceSpan],
     blocks_by_ref: Mapping[str, StructureBlock],
     snapshot_id: str,
-    footnote_refs: Mapping[int, str],
+    footnote_refs: Mapping[int, tuple[str, ...]],
 ) -> list[_OperationInstance]:
     first_mark_row = min(cell.row for cell in all_marks)
     header = _header_projection(
@@ -870,31 +1022,10 @@ def _build_instances_for_table(
     # not a catalog item.  It allows a D1/W0 column under a broad treatment
     # group to be interpreted as baseline without reading clinical prose or a
     # project-specific table number.
-    randomization_columns: list[int] = []
-    for row in sorted({cell.row for cell in selected_marks}):
-        row_marks = [cell for cell in selected_marks if cell.row == row]
-        label_result = _operation_label(
-            cells,
-            row=row,
-            mark_columns=sorted({cell.col for cell in row_marks}),
-        )
-        if label_result and _RANDOMIZATION_ACTION_RE.fullmatch(
-            _without_display_footnotes(label_result[0])
-        ):
-            randomization_columns.extend(cell.col for cell in row_marks)
-    randomization_anchor = min(randomization_columns) if randomization_columns else None
-
-    selected_columns = sorted({cell.col for cell in selected_marks})
-    explicit_baseline_columns = [
-        col
-        for col in selected_columns
-        if _derive_visit_stage(header.get(col, ("", ()))[0]) == ReviewStage.BASELINE
-    ]
-    baseline_boundary = (
-        randomization_anchor
-        if randomization_anchor is not None
-        else (max(explicit_baseline_columns) if explicit_baseline_columns else None)
+    randomization_anchor, baseline_boundary = _enrollment_boundary(
+        cells, selected_marks, header,
     )
+    selected_columns = sorted({cell.col for cell in selected_marks})
 
     visits: dict[int, _VisitColumn] = {}
     unresolved_columns: list[int] = []
@@ -1096,14 +1227,15 @@ def _build_instances_for_table(
                 if block is None:
                     continue
                 for number in _display_footnote_numbers(block.text):
-                    note_ref = footnote_refs.get(number)
-                    note_block = blocks_by_ref.get(note_ref) if note_ref else None
+                    note_refs = footnote_refs.get(number, ())
+                    note_text = " ".join(blocks_by_ref[ref].text for ref in note_refs
+                                         if ref in blocks_by_ref)
                     named_operations = (
                         _operation_labels_named_by_note(
-                            note_block.text,
+                            note_text,
                             table_operations,
                         )
-                        if note_block is not None
+                        if note_text
                         else frozenset()
                     )
                     if not named_operations or operation in named_operations:
@@ -1113,9 +1245,9 @@ def _build_instances_for_table(
             )
             note_span_ids = _formal_span_ids(
                 [
-                    footnote_refs[number]
+                    ref
                     for number in display_note_numbers
-                    if number in footnote_refs
+                    for ref in footnote_refs.get(number, ())
                 ],
                 spans_by_ref=spans_by_ref,
                 blocks_by_ref=blocks_by_ref,

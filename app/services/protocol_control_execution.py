@@ -38,6 +38,11 @@ from app.agents.protocol_control_deconstructor import (
 from app.agents.protocol_control_discovery_transport import (
     protocol_control_discovery_transport_from_environment,
 )
+from app.agents.protocol_control_source_interpretation import (
+    normalize_schedule_randomization_anchors,
+    normalize_mixed_schedule_scopes,
+    schedule_column_links,
+)
 from app.domain.contracts.agent_io import ProtocolDeconstructionInput
 from app.domain.contracts.enums import ExtractionStatus, PhaseScope, StudyPhase
 from app.domain.contracts.protocol_controls import (
@@ -116,7 +121,7 @@ from app.workflow.runner import PreparedStepResult, StepContext, StepExecutor
 PROTOCOL_CONTROL_EXECUTION_JOB_TYPE = "protocol_control_execution"
 # A short alias keeps callers independent from the longer API-facing name.
 PROTOCOL_CONTROL_JOB_TYPE = PROTOCOL_CONTROL_EXECUTION_JOB_TYPE
-PROTOCOL_CONTROL_EXECUTION_VERSION = "phase5/protocol-control-execution/v96"
+PROTOCOL_CONTROL_EXECUTION_VERSION = "phase5/protocol-control-execution/v127"
 PROTOCOL_CONTROL_EXECUTION_CONTROL_SCHEMA = (
     "phase5/protocol-control-execution-control/v1"
 )
@@ -359,6 +364,7 @@ class ProtocolControlJobService:
         source_job_id: str,
         idempotency_key: str,
         discovery_source_job_id: str | None = None,
+        deep_source_job_id: str | None = None,
     ) -> ProtocolControlExecutionResult:
         """Freeze the source chain and create the durable execution job atomically."""
 
@@ -396,6 +402,19 @@ class ProtocolControlJobService:
                         status_code=409,
                     ) from exc
                 payload["discovery_source_job_id"] = discovery_source_job_id
+            if deep_source_job_id is not None:
+                store = JobStore(session, now=self.jobs.now)
+                try:
+                    previous = store.get_job(deep_source_job_id)
+                    previous_payload = json.loads(previous.payload_json)
+                    _require_compatible_deep_source(payload, previous_payload)
+                except (JobNotFoundError, ValueError, KeyError, TypeError, StepFailure) as exc:
+                    raise ProtocolControlExecutionError(
+                        "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+                        "既有深审结果与本次原件、版本或模型线路不一致，未建立新任务。",
+                        status_code=409,
+                    ) from exc
+                payload["deep_source_job_id"] = deep_source_job_id
             discovery_entries = [
                 {
                     "step_id": self._discovery_step_id(batch),
@@ -892,7 +911,10 @@ def create_protocol_control_executor(
                     error_code="PROTOCOL_CONTROL_EXECUTION_VERSION_MISMATCH",
                     detail="此任务使用较早的整理要求，不能与当前版本混合续算；原结果保留，请从方案整理建立新任务。",
                 )
-            if context.last_checkpoint is not None:
+            if (
+                context.last_checkpoint is not None
+                and context.last_checkpoint.get("stage") != "deep_failure_diagnostic"
+            ):
                 return _replay_checkpoint(context)
             from app.llm.mtplx_model_lifecycle import MtplxOwnershipError, require_local_deployment_job
 
@@ -1640,6 +1662,139 @@ def _validate_deep_batch_output(
     )
 
 
+_DEEP_SOURCE_IDENTITY_FIELDS = (
+    "source_deconstruction_job_id", "source_snapshot_id", "source_content_sha256",
+    "coverage_manifest", "discovery_plan", "discovery_source_job_id",
+    "workflow_stages", "phase_projection", "max_deep_units_per_batch",
+    "prompt_templates", "runner_limits", "frozen_model_routes",
+)
+
+
+def _require_compatible_deep_source(
+    current: Mapping[str, Any], previous: Mapping[str, Any],
+) -> None:
+    versions = {current.get("execution_version")}
+    if current.get("execution_version") == "phase5/protocol-control-execution/v127":
+        # Only these unchanged frozen prompts/routes may contribute completed
+        # batches; each accepted output passes the current gate before adoption.
+        versions.update({
+            "phase5/protocol-control-execution/v116",
+            "phase5/protocol-control-execution/v117",
+            "phase5/protocol-control-execution/v118",
+            "phase5/protocol-control-execution/v119",
+            "phase5/protocol-control-execution/v120",
+            "phase5/protocol-control-execution/v121",
+            "phase5/protocol-control-execution/v122",
+            "phase5/protocol-control-execution/v123",
+            "phase5/protocol-control-execution/v124",
+            "phase5/protocol-control-execution/v125",
+            "phase5/protocol-control-execution/v126",
+        })
+    if (previous.get("execution_version") not in versions
+            or any(current.get(field) != previous.get(field)
+                   for field in _DEEP_SOURCE_IDENTITY_FIELDS)):
+        raise StepFailure(
+            retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+            detail="来源、分包、提示、版本或模型线路不一致。",
+        )
+
+
+def _validated_deep_source(
+    store: JobStore,
+    current_payload: Mapping[str, Any],
+    source_job_id: str,
+    batch: ProtocolControlDispositionBatch,
+    step_id: str,
+    transport: Any,
+    prompt_template: str,
+) -> tuple[str | None, dict[str, Any] | None]:
+    try:
+        source_job = store.get_job(source_job_id)
+        _require_compatible_deep_source(
+            current_payload, json.loads(source_job.payload_json)
+        )
+        closure = store.get_last_checkpoint(source_job_id, STEP_CLOSURE)
+        if closure is None or closure[1].get("stage") != "closure":
+            raise ValueError("来源任务缺少已完成的分包计划")
+        source_plan = ProtocolControlDiscoveryToDeepPlan.model_validate(
+            closure[1].get("deep_plan")
+        )
+        matching = [item for item in source_plan.batches
+                    if item.batch_number == batch.batch_number]
+        if len(matching) != 1 or matching[0].model_dump(mode="json") != batch.model_dump(mode="json"):
+            raise ValueError("深审批次内容与来源任务不一致")
+        steps = {item.step_id: item for item in store.list_steps(source_job_id)}
+        source_step = steps.get(step_id)
+        if source_step is None:
+            raise ValueError("来源任务缺少对应深审批次")
+        if source_step.state != "completed":
+            return None, None
+        saved_checkpoint = store.get_last_checkpoint(source_job_id, step_id)
+        if saved_checkpoint is None:
+            raise ValueError("已完成的来源批次缺少检查点")
+        checkpoint_id, saved = saved_checkpoint
+        identity = saved.get("transport_identity")
+        accepted_prompt_hashes = {
+            protocol_control_agent_prompt_template_sha256(prompt_template)
+        }
+        # Only completed predecessor batches with the same source, route,
+        # structural prompt and current gate may be reused after a bounded
+        # recovery-path change.  Failed batches are always read again.
+        prior_version = json.loads(source_job.payload_json).get("execution_version")
+        prior_prompt_version = {
+            "phase5/protocol-control-execution/v125": "phase5/control-agent-prompt/v2.74",
+            "phase5/protocol-control-execution/v126": "phase5/control-agent-prompt/v2.75",
+        }.get(prior_version)
+        if prior_prompt_version is not None:
+            accepted_prompt_hashes.add(protocol_control_agent_prompt_template_sha256(
+                prompt_template, prompt_version=prior_prompt_version
+            ))
+        if (
+            saved.get("stage") != "deep"
+            or saved.get("batch_id") != batch.batch_id
+            or saved.get("prompt_template_sha256")
+            not in accepted_prompt_hashes
+            or identity != _transport_identity(transport, stage="deep")
+        ):
+            raise ValueError("已完成的来源批次提示或模型回执身份不一致")
+        result = ProtocolControlAgentRunResult.model_validate(saved.get("run_result"))
+        if result.status != "已解析" or result.final_output is None or result.batch_id != batch.batch_id:
+            raise ValueError("来源深审结果不完整")
+        if result.source_interpretation is not None:
+            _, changed_anchors = normalize_schedule_randomization_anchors(
+                batch, result.source_interpretation
+            )
+            if changed_anchors:
+                return None, None
+            _, changed_scopes = normalize_mixed_schedule_scopes(
+                batch, result.source_interpretation
+            )
+            if changed_scopes:
+                return None, None
+            prior_coverage = {
+                entry.statement_index: entry for entry in result.source_statement_coverage
+            }
+            for index, statement in enumerate(result.source_interpretation.statements):
+                if statement.force != "required":
+                    continue
+                current_links = schedule_column_links(
+                    batch, statement.structure_unit_id, statement.quoted_text,
+                )
+                if current_links and (
+                    index not in prior_coverage
+                    or prior_coverage[index].schedule_columns != current_links
+                    or prior_coverage[index].disposition == "post_treatment_execution"
+                ):
+                    return None, None
+        _validate_deep_batch_output(batch, result.final_output)
+        return checkpoint_id, saved
+    except (JobNotFoundError, ValueError, KeyError, TypeError, ValidationError, ProtocolControlGateError) as exc:
+        raise StepFailure(
+            retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
+            detail="既有深审批次无法证明与当前来源和校验要求一致：" + str(exc)[:900],
+        ) from exc
+
+
 def _execute_deep(
     context: StepContext,
     config: ProtocolControlExecutorConfig,
@@ -1668,6 +1823,21 @@ def _execute_deep(
     )
     transport = _resolve_transport(config, stage="deep")
     _require_frozen_route(context, config, transport, stage="deep")
+
+    deep_source_job_id = context.job_payload.get("deep_source_job_id")
+    if deep_source_job_id is not None:
+        if not isinstance(deep_source_job_id, str) or deep_source_job_id == context.job_id:
+            raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID", detail="深审来源任务编号无效。")
+        with config.session_factory() as session:
+            checkpoint_id, saved = _validated_deep_source(
+                JobStore(session, now=config.now), context.job_payload,
+                deep_source_job_id, batch, context.step_id, transport,
+                prompt_template,
+            )
+        if saved is not None:
+            return {**saved, "adopted_from": {
+                "job_id": deep_source_job_id, "checkpoint_id": checkpoint_id,
+            }}
 
     result = ProtocolControlAgentRunner(
         max_transport_retries=max_transport_retries,

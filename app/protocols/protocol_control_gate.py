@@ -55,7 +55,7 @@ from app.protocols.supplementary_relation_contract import (
 from app.protocols.protocol_control_planning import detect_required_action_kinds
 
 
-CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v26"
+CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v30"
 
 __all__ = [
     "CONTROL_PUBLICATION_GATE_VERSION",
@@ -142,6 +142,54 @@ _POST_ENROLLMENT_RE = re.compile(r"随机(?:化|分组)?后|首次给药后|治�
 
 def _normalize_prohibition_quote(value: str) -> str:
     return re.sub(r"[。；;]+$", "", re.sub(r"\s+", "", value))
+
+
+def _split_prohibition_atom_covers_clause(clause: str, atom: object) -> bool:
+    """Accept only a verbatim shared-action sentence split by review period."""
+
+    continuation = getattr(atom, "continuing_obligation", None)
+    if continuation is None or _value(getattr(continuation, "status", None)) != "not_due_at_review_node":
+        return False
+    if set(getattr(atom, "source_span_ids", ()) or ()) != set(
+        getattr(continuation, "source_span_ids", ()) or ()
+    ):
+        return False
+
+    def has_exact_sentence(excerpts: object) -> bool:
+        return any(
+            _normalize_prohibition_quote(sentence) == clause
+            for quote in excerpts or () if isinstance(quote, str)
+            for sentence in re.split(r"[。；;\n]", quote)
+        )
+
+    if not has_exact_sentence(getattr(atom, "source_excerpts", ())):
+        return False
+    if not has_exact_sentence(getattr(continuation, "source_excerpts", ())):
+        return False
+    current = _normalize_prohibition_quote(str(getattr(atom, "statement", "") or ""))
+    proposition = _normalize_prohibition_quote(str(
+        getattr(getattr(atom, "evaluation", None), "proposition", "") or ""
+    ))
+    future = _normalize_prohibition_quote(str(getattr(continuation, "statement", "") or ""))
+    if current != proposition:
+        return False
+    matches = [_PROHIBITION_WORD_RE.search(text) for text in (clause, current, future)]
+    if any(match is None for match in matches):
+        return False
+    source_match, current_match, future_match = matches
+    if not (
+        source_match.group() == current_match.group() == future_match.group()
+        and clause[source_match.start():] == current[current_match.start():] == future[future_match.start():]
+    ):
+        return False
+    source_prefix = clause[:source_match.start()]
+    current_prefix = current[:current_match.start()]
+    future_prefix = future[:future_match.start()]
+    return any(
+        source_prefix == f"{first}{separator}{second}"
+        for first, second in ((current_prefix, future_prefix), (future_prefix, current_prefix))
+        for separator in ("、", "，", ",", "和", "及", "与")
+    )
 _AND_CUE_RE = re.compile(
     r"(?:且|并且|同时|以及|均须|均需|both|\band\b)", re.IGNORECASE
 )
@@ -2493,6 +2541,33 @@ def _has_recommended_cue(source_text: str) -> bool:
     return False
 
 
+def _modality_source_for_atom(atom: object) -> str:
+    excerpts = [
+        str(item) for item in getattr(atom, "source_excerpts", ()) or ()
+        if isinstance(item, str)
+    ]
+    statement = str(getattr(atom, "statement", "") or "")
+    if not excerpts:
+        return statement
+
+    def compact(value: str) -> str:
+        return re.sub(r"[\s：:、，,。；;]+", "", value)
+
+    statement_key = compact(statement)
+    matched: list[str] = []
+    for excerpt in excerpts:
+        for clause in re.split(r"[。；;\n，,]", excerpt):
+            clause_key = compact(clause)
+            if (
+                len(statement_key) >= 4 and len(clause_key) >= 4
+                and (clause_key in statement_key or statement_key in clause_key)
+            ) or _split_prohibition_atom_covers_clause(
+                _normalize_prohibition_quote(clause), atom
+            ):
+                matched.append(clause)
+    return " ".join(matched) if matched else " ".join(excerpts)
+
+
 def _check_obligation_modality_fidelity(
     *,
     entity_id: str,
@@ -2501,11 +2576,7 @@ def _check_obligation_modality_fidelity(
     """Ensure recommended / best-effort cues are preserved without source downgrade."""
 
     for atom in _iter_expression_atoms(obligation_expression):
-        source_text = " ".join(
-            str(item) for item in getattr(atom, "source_excerpts", ()) or ()
-        )
-        if not source_text:
-            source_text = str(getattr(atom, "statement", ""))
+        source_text = _modality_source_for_atom(atom)
         modality = _value(getattr(atom, "modality", None)) or ControlObligationModality.MANDATORY.value
         has_recommended = _has_recommended_cue(source_text)
         has_best_effort = bool(_BEST_EFFORT_CUE_RE.search(source_text))
@@ -2795,6 +2866,7 @@ def _check_time_constraints(
                 "TIME_CALENDAR_BOUND_UNSUPPORTED",
                 "结构化时间窗的数值和单位必须由该义务的直接来源原文支持",
                 entity_id=entity_id,
+                obligation_source_span_ids=getattr(atom, "source_span_ids", ()) or (),
             )
         expected_bounds: set[tuple[str, int, str, bool]] = set()
         for match in _TIME_BOUND_PREFIX_RE.finditer(calendar_text):
@@ -2919,10 +2991,7 @@ def _check_time_constraints(
         return False
 
     for atom in obligation_atoms:
-        source_texts = list(getattr(atom, "source_excerpts", ()) or ())
-        if not source_texts:
-            source_texts = [str(getattr(atom, "statement", ""))]
-        source_text = "\n".join(str(item) for item in source_texts)
+        source_text = _modality_source_for_atom(atom)
         continuation = getattr(atom, "continuing_obligation", None)
         period_holder = continuation if continuation is not None else atom
         period = _value(getattr(getattr(period_holder, "prospective_period", None), "period", None))
@@ -3507,6 +3576,14 @@ def _check_future_prohibition_not_decided_at_current_node(
             _fail(
                 "FUTURE_PROHIBITION_DECIDED_EARLY",
                 "同时覆盖当前节点和后续期间的禁止要求，须分开保存可核事实和未到期持续义务",
+                entity_id=entity_id,
+            )
+        observation_policy = getattr(evaluation, "observation_policy", None)
+        observation_scope = str(getattr(observation_policy, "scope", "") or "")
+        if _STUDY_PERIOD_CUE_RE.search(observation_scope) or _TREATMENT_PERIOD_CUE_RE.search(observation_scope):
+            _fail(
+                "FUTURE_PROHIBITION_DECIDED_EARLY",
+                "当前节点的观察范围不得要求覆盖后续期间；未到期记录与本节点资料分开",
                 entity_id=entity_id,
             )
         statement = str(getattr(atom, "statement", "") or "")
@@ -4573,6 +4650,7 @@ def _uncovered_enrollment_prohibitions(
         # requirement. Only an exact atom-level quote proves partial coverage;
         # broader semantic coverage remains for the source review, not regex.
         quoted_clauses: set[str] = set()
+        split_atoms: list[object] = []
         if disposition.linked_control_candidate_ids:
             for candidate_id in disposition.linked_control_candidate_ids:
                 candidate = by_candidate.get(candidate_id)
@@ -4581,15 +4659,25 @@ def _uncovered_enrollment_prohibitions(
                     continue
                 for group in semantics.obligation_expression.groups:
                     for atom in group.atoms:
-                        quoted_clauses.update(
-                            _normalize_prohibition_quote(quote)
-                            for quote in atom.source_excerpts
-                            if isinstance(quote, str)
-                        )
+                        split_atoms.append(atom)
+                        statement = _normalize_prohibition_quote(getattr(atom, "statement", ""))
+                        for quote in atom.source_excerpts:
+                            if not isinstance(quote, str):
+                                continue
+                            for sentence in re.split(r"[。；;\n]", quote):
+                                normalized = _normalize_prohibition_quote(sentence)
+                                if normalized and (
+                                    normalized == statement
+                                    or _normalize_prohibition_quote(quote) == normalized
+                                ):
+                                    quoted_clauses.add(normalized)
         for clause in clauses:
             quote = clause.strip()
             normalized_quote = _normalize_prohibition_quote(quote)
-            if normalized_quote in quoted_clauses:
+            if normalized_quote in quoted_clauses or any(
+                _split_prohibition_atom_covers_clause(normalized_quote, atom)
+                for atom in split_atoms
+            ):
                 continue
             linked_official = getattr(disposition, "linked_official_code", None)
             linked_procedures = set(
@@ -4607,9 +4695,20 @@ def _uncovered_enrollment_prohibitions(
                 ) or getattr(target, "catalog_item_id", None) in linked_procedures
             )
             if any(
-                set(unit.source_span_ids) & set(target.source_span_ids)
-                and any(
+                any(
                     normalized_quote in _normalize_prohibition_quote(target_quote)
+                    and (
+                        bool(set(unit.source_span_ids) & set(target.source_span_ids))
+                        or (
+                            linked_official is not None
+                            and getattr(target, "official_code", None) == linked_official
+                            and getattr(unit, "unit_kind", None) == "table_row"
+                            and any("摘要" in heading for heading in getattr(unit, "heading_path", ()))
+                            and "排除标准" in getattr(getattr(unit, "table_context", None), "row_headers", ())
+                            and _normalize_prohibition_quote(unit.excerpt)
+                            == _normalize_prohibition_quote(target_quote)
+                        )
+                    )
                     for target_quote in target.source_excerpts
                     if isinstance(target_quote, str)
                 )
