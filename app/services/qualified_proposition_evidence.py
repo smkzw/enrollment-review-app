@@ -5,7 +5,27 @@ from app.llm.proposition_context import proposition_context, prospective_require
 from app.services.review_method_evidence import read_method_evaluation
 from app.storage.repositories import ScopeViolationError
 
-PROPOSITION_CONSUMER_VERSION = "qualified-proposition-evidence/v7"
+PROPOSITION_CONSUMER_VERSION = "qualified-proposition-evidence/v9"
+
+
+def _control_current_node_reason(pair):
+    if pair.candidate_family != "control":
+        return None
+    current = pair.episode.get("workflow_stage_id")
+    context = pair.parent_source_context
+    mapping = context.get("workflow_stage_map")
+    bindings = context.get("review_node_bindings")
+    if (not isinstance(current, str) or not current
+            or not isinstance(mapping, dict) or not isinstance(bindings, list)):
+        return "proposition_current_node_unverified"
+    decisions = [item for item in bindings if isinstance(item, dict)
+                 and item.get("role") == "decide_at_node"]
+    if not decisions or any(not isinstance(item.get("workflow_stage_id"), str)
+                            for item in decisions):
+        return "proposition_current_node_unverified"
+    if current not in {mapping.get(item["workflow_stage_id"]) for item in decisions}:
+        return "proposition_current_node_mismatch"
+    return None
 
 
 def require_proposition_method(manifest, binding_method, evidence):
@@ -76,9 +96,24 @@ def select_qualified_relations(evidence, source_records, *, source_validity_spec
             if record["status"] not in {"entails_agreed", "contradicts_agreed"}:
                 reasons = [*reasons, f"proposition_{record['status']}"]
             pair = pairs[record["pair_id"]]
+            node_reason = _control_current_node_reason(pair)
+            if node_reason is not None:
+                reasons.append(node_reason)
             spec, _ = proposition_context(pair)
             policy = spec.get("observation_policy")
             for lane in record["lanes"].values():
+                if isinstance(policy, dict) and policy.get("mode") == "action_completion":
+                    witness = lane.get("action_witness")
+                    expected = (
+                        "completed" if record["status"] == "entails_agreed" else
+                        "explicit_not_completed" if record["status"] == "contradicts_agreed" else None
+                    )
+                    if (not isinstance(witness, dict) or witness.get("status") != expected
+                            or not isinstance(witness.get("action_quote"), str)
+                            or not witness["action_quote"].strip()):
+                        reasons.append("action_completion_source_unverified")
+                    if lane.get("scope_correspondence") != "supported" or not lane.get("scope_quote"):
+                        reasons.append("observation_scope_completeness_unverified")
                 if (lane.get("assertion_extent") == "universal_over_declared_scope"
                         and (not isinstance(policy, dict) or policy.get("mode") not in {"any", "all"})):
                     reasons.append("proposition_scope_policy_mismatch")

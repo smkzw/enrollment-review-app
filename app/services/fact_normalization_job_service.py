@@ -29,6 +29,8 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.agents.evidence_normalizer import (
     DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE,
+    EvidenceNormalizerPromptTooLong,
+    build_evidence_normalizer_prompt,
     evidence_normalizer_prompt_template_sha256,
     validate_evidence_normalizer_model_config,
 )
@@ -69,6 +71,14 @@ PARTIAL_OUTPUT_CODE = "PARTIAL_OUTPUT"
 LATE_REPLY_CODE = "LATE_REPLY"
 DUPLICATE_REQUEST_CODE = "DUPLICATE_REQUEST"
 _FACT_NORMALIZATION_CONTRACT_VERSION = "phase5/facts/v1"
+
+
+class FactNormalizationInputTooLongError(InvalidJobDefinitionError):
+    """A single source page cannot be safely included in one model request."""
+
+
+class FactNormalizationExistingReferencesError(InvalidJobDefinitionError):
+    """Existing published clinical references must be corrected before a new run."""
 
 
 @dataclass(frozen=True)
@@ -301,10 +311,15 @@ class FactNormalizationJobService:
             build_fact_normalization_plan,
             build_evidence_normalizer_input,
             collect_visual_observation_attachments,
+            select_call_visual_observation_attachments,
             visual_observation_run_scope,
         )
         from app.services.selective_vision_postprocess_job_service import (
             SelectiveVisionPostprocessJobService,
+        )
+        from app.services.patient_profile_service import (
+            PatientProfileProjectionError,
+            PatientProfileService,
         )
 
         verified_vision_scope = (
@@ -315,6 +330,13 @@ class FactNormalizationJobService:
         )
 
         with self.session_factory() as session:
+            try:
+                PatientProfileService().validate_published_references(session, authority)
+            except PatientProfileProjectionError as exc:
+                raise FactNormalizationExistingReferencesError(
+                    "现有病史、用药或审核记录与其来源资料已无法对应；本次尚未建立整理任务。"
+                    "请先核对并更正原有资料关联，再重新整理。"
+                ) from exc
             plan, source = build_fact_normalization_plan(
                 session,
                 authority=authority,
@@ -332,6 +354,51 @@ class FactNormalizationJobService:
                     required_scope=verified_vision_scope,
                 )
             )
+            if page_review_coverage_id is None:
+                while True:
+                    oversized = None
+                    for call in plan.calls:
+                        evidence_input = build_evidence_normalizer_input(
+                            session,
+                            authority=authority,
+                            run_id="scope-only",
+                            call_id="scope-only",
+                            logical_document_id=call.logical_document_id,
+                            page_numbers=list(call.page_numbers),
+                            expected_input_sha256=call.input_sha256,
+                            max_pages_per_call=max_pages_per_call,
+                        )
+                        selected = select_call_visual_observation_attachments(
+                            attachments,
+                            doc_version_to_logical=source.doc_version_to_logical,
+                            logical_document_id=call.logical_document_id,
+                            page_numbers=call.page_numbers,
+                        )
+                        try:
+                            build_evidence_normalizer_prompt(
+                                evidence_input,
+                                prompt_template=self.prompt_template,
+                                visual_observations=selected or None,
+                            )
+                        except EvidenceNormalizerPromptTooLong as exc:
+                            oversized = (call, exc)
+                            break
+                    if oversized is None:
+                        break
+                    if max_pages_per_call == 1:
+                        call, exc = oversized
+                        raise FactNormalizationInputTooLongError(
+                            f"资料 {call.logical_document_id} 第 {call.page_numbers[0]} 页"
+                            f"单页输入为 {exc.actual_chars} 字符，超过处理上限；"
+                            "尚未建立作业，请检查原件定位内容。"
+                        ) from exc
+                    max_pages_per_call -= 1
+                    plan, source = build_fact_normalization_plan(
+                        session,
+                        authority=authority,
+                        revision=source.revision,
+                        max_pages_per_call=max_pages_per_call,
+                    )
             if page_review_coverage_id is None:
                 calls = [
                     FactNormalizationCallSpec.from_planned_call(call)

@@ -101,6 +101,12 @@ def build_proposition_evidence_messages(pairs, batch):
             "否则unresolved；确认时population_quote须逐字引用，不能仅从‘全部’推断确有观察。"
             "记录者和自述能否作为依据仍按对应方案来源要求核实，不自行规定某类来源永远可用或不可用。"
             "仅any/all政策允许universal；single、未声明或unresolved政策不得填universal。"
+            "当observation_policy.mode为action_completion时，仅核原文是否明确记载本节点规定的操作已完成、"
+            "明确未做，或尚无法证实，分别填写action_witness.status为completed、explicit_not_completed、"
+            "not_established；action_quote须逐字来自本配对原文，不能借检查结果、计划、资格复核或其他记录推断。"
+            "completed对应entails，explicit_not_completed对应contradicts；记录缺失或只见检查结果不明操作时"
+            "填not_established与undetermined。操作完成不表示检查结果正常或资格合格。"
+            "其他观察政策的action_witness必须为null。"
             "非universal时scope_population填unresolved、population_quote为null。整范围断言不证明所有文件齐全。"
             "返回该命题proposition_sha256；分别记录对象、节点及研究者归属核实状态。"
             "需要研究者判断时，只能依据明确的研究者书面判断；签字、异常箭头、数值、医嘱不能代替。"
@@ -132,6 +138,21 @@ def validate_proposition_evidence_payload(pairs, raw_text):
             raise ValueError("观察范围引用不属于该配对原文")
         if item.population_quote is not None and item.population_quote not in excerpt:
             raise ValueError("观察集合引用不属于该配对原文")
+        action_mode = isinstance(spec.get("observation_policy"), dict) and (
+            spec["observation_policy"].get("mode") == "action_completion"
+        )
+        if action_mode:
+            witness = item.action_witness
+            if witness is None:
+                raise ValueError("操作完成核对缺少来源化的动作记录")
+            if witness.action_quote is not None and witness.action_quote not in excerpt:
+                raise ValueError("操作完成记录不属于本配对原文")
+            if (witness.status == "completed" and item.relation != "entails"
+                    or witness.status == "explicit_not_completed" and item.relation != "contradicts"
+                    or witness.status == "not_established" and item.relation != "undetermined"):
+                raise ValueError("操作完成记录与原文含义方向不一致")
+        elif item.action_witness is not None:
+            raise ValueError("非操作完成要求不得夹带动作见证")
         future = item.prospective_evidence
         if bool(prospective_requirement(pair)) != (future is not None):
             raise ValueError("未来期间核对须与本次方案要求一致，不得漏核或自行添加")

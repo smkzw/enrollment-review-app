@@ -16,6 +16,20 @@ def combine_observations(policy, observations, *, deterministic=False,
             ["observation_scope_completeness_unverified",
              *(reason for item in observations for reason in item.reason_codes)]
         ))
+    if policy.mode == "action_completion":
+        truths = {item.truth for item in observations}
+        if TruthValue.UNKNOWN in truths:
+            return TruthValue.UNKNOWN, list(dict.fromkeys(
+                reason for item in observations if item.truth == TruthValue.UNKNOWN
+                for reason in item.reason_codes
+            ))
+        if len(truths) > 1:
+            return TruthValue.UNKNOWN, ["proposition_relation_conflict"]
+        if not scope_verified:
+            return TruthValue.UNKNOWN, ["observation_scope_completeness_unverified"]
+        return observations[0].truth, list(dict.fromkeys(
+            reason for item in observations for reason in item.reason_codes
+        ))
     individual_truths = [item.truth for item in observations
                          if individual_facts is None or item.fact_id in individual_facts]
     universal_truths = [item.truth for item in observations if item.fact_id in universal_facts]

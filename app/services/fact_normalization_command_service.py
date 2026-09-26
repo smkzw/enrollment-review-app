@@ -34,6 +34,8 @@ from app.services.evidence_app_errors import (
 )
 from app.services.fact_normalization_job_service import (
     CreateNormalizationJobResult,
+    FactNormalizationInputTooLongError,
+    FactNormalizationExistingReferencesError,
     FactNormalizationJobService,
 )
 from app.services.fact_normalization_source_adapter import FactPlanningSourceError
@@ -644,6 +646,8 @@ class FactNormalizationCommandService:
                 "审核节点的活动证据在创建任务前已变化，本次没有新建整理任务。"
                 "请刷新后重新发起。"
             ) from exc
+        except (FactNormalizationInputTooLongError, FactNormalizationExistingReferencesError) as exc:
+            raise AppFactNormalizationRejectedError(str(exc)) from exc
         except InvalidJobDefinitionError as exc:
             raise AppFactNormalizationConfigError(
                 "当前证据规范化配置无法用于建立整理任务。请由维护人员核对登记配置后重试。"

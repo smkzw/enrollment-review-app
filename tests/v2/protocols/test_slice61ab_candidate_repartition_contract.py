@@ -20,6 +20,7 @@ from app.agents.protocol_control_deconstructor import (
     ProtocolControlAgentWireObligationGroup,
     ProtocolControlAgentWireRelation,
     ProtocolControlAgentWireValidationError,
+    _validate_known_targets,
     _repair_problem_guidance,
     _restore_bounded_wire_repair,
 )
@@ -28,6 +29,7 @@ from app.domain.contracts.protocol_controls import (
     ControlObligationKind,
     ControlRelationTargetKind,
     CrossSourceRelationKind,
+    KnownRequiredProcedureTarget,
     StructureUnitDispositionKind,
 )
 from app.protocols.protocol_control_gate import (
@@ -80,6 +82,59 @@ def test_mixed_decision_stage_control_authorizes_candidate_repartition() -> None
     assert error.candidate_ids == ("pcc-mixed",)
     assert error.structure_unit_ids == ("su-a", "su-b")
     assert "MIXED_DECISION_STAGE_CONTROL" in str(error)
+
+
+def test_two_execution_visits_allow_source_bounded_repartition() -> None:
+    batch = _batch_with_baseline()
+    baseline_procedure = KnownRequiredProcedureTarget(
+        catalog_item_id="procedure-baseline-1",
+        label="基线期检查",
+        visit_instance="baseline-1",
+        review_stage=ReviewStage.BASELINE,
+        position=1,
+        source_span_ids=["span:procedure:baseline"],
+    )
+    batch = batch.model_copy(update={
+        "known_procedure_targets": [*batch.known_procedure_targets, baseline_procedure],
+    })
+    candidate = _cross_stage_wire_candidate(
+        affected_id="stage:baseline:1", bindings=[], evidence=[],
+    )
+    original_relation = candidate.cross_source_relations[0]
+    original_atom = candidate.obligation_expression.groups[0].atoms[0]
+    candidate = candidate.model_copy(update={
+        "cross_source_relations": [
+            original_relation,
+            original_relation.model_copy(update={
+                "external_target_id": "procedure-baseline-1",
+            }),
+        ],
+        "obligation_expression": ProtocolControlAgentWireObligationDnf(groups=[
+            ProtocolControlAgentWireObligationGroup(atoms=[
+                ProtocolControlAgentWireObligationAtom.model_validate({
+                    **original_atom.model_dump(mode="json"),
+                    "kind": ControlObligationKind.COMPLETE_OR_VERIFY,
+                    "time_constraint": None,
+                    "evaluation": _evaluation(
+                        "完成检查", "span:01", "年龄至少18岁",
+                    ),
+                }),
+            ]),
+        ]),
+    })
+    with pytest.raises(
+        ProtocolControlAgentWireValidationError,
+        match="PROCEDURE_AFFECTED_STAGE_MISMATCH",
+    ) as failure:
+        _validate_known_targets(candidate, batch=batch)
+    assert failure.value.allow_candidate_repartition is True
+
+    single_target = candidate.model_copy(update={
+        "cross_source_relations": [original_relation],
+    })
+    with pytest.raises(ProtocolControlAgentWireValidationError) as single_failure:
+        _validate_known_targets(single_target, batch=batch)
+    assert single_failure.value.allow_candidate_repartition is False
 
 
 def test_mixed_trigger_decision_stages_authorizes_candidate_repartition() -> None:

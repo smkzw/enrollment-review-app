@@ -16,6 +16,7 @@ REMOTE_OPENAI_PROVIDERS = frozenset(
         "cms-router",
         "cms-smk",
         "opencode-go",
+        "ollama-cloud",
         "deepseek",
         "deepseek-api",
         "zhipu-coding-plan",
@@ -27,6 +28,7 @@ _PROVIDER_ENV = {
     "cms-router": ("CMS_ROUTER_BASE_URL", "CMS_ROUTER_API_KEY", "http://127.0.0.1:20128/v1"),
     "cms-smk": ("CMS_SMK_BASE_URL", "CMS_SMK_API_KEY", "https://new-api.mediportal.com.cn/v1"),
     "opencode-go": ("OPENCODE_BASE_URL", "OPENCODE_API_KEY", "https://opencode.ai/zen/go/v1"),
+    "ollama-cloud": ("OLLAMA_BASE_URL", "OLLAMA_API_KEY", "https://ollama.com/v1"),
     "deepseek": ("DEEPSEEK_BASE_URL", "DEEPSEEK_API_KEY", "https://api.deepseek.com/v1"),
     "deepseek-api": ("DEEPSEEK_BASE_URL", "DEEPSEEK_API_KEY", "https://api.deepseek.com/v1"),
     "zhipu-coding-plan": (
@@ -48,6 +50,7 @@ StructuredResponseMode = Literal["json_schema", "json_object", "text"]
 # identical regardless of the wire mode selected here.
 _PROVIDER_STRUCTURED_RESPONSE_MODE: dict[str, StructuredResponseMode] = {
     "opencode-go": "json_object",
+    "ollama-cloud": "text",
     "deepseek": "json_object",
     "deepseek-api": "json_object",
 }

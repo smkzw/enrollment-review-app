@@ -61,6 +61,7 @@ from app.agents.protocol_control_source_interpretation import (
     source_quote_correction_response_format,
     source_scope_correction_response_format,
     source_target_review_response_format,
+    source_unit_comparison_response_format,
 )
 from app.config import (
     DECONSTRUCT_GLM_API_KEY,
@@ -127,6 +128,7 @@ _SUPPORTED_BACKENDS = frozenset(
         "cms-router",
         "cms-smk",
         "opencode-go",
+        "ollama-cloud",
         *_ZHIPU_BACKENDS,
     }
 )
@@ -482,12 +484,13 @@ class OpenAICompatibleProtocolControlAgentTransport:
                     "PROTOCOL_CONTROL_GLM_BASE_URL", PROTOCOL_CONTROL_GLM_BASE_URL
                 )
             elif selected_backend in REMOTE_OPENAI_PROVIDERS:
+                provider_only = selected_backend == "ollama-cloud"
                 selected_base_url, _ = resolve_openai_connection(
                     selected_backend,
-                    base_url=base_url,
-                    api_key=api_key,
-                    role_base_url_env="PROTOCOL_CONTROL_BASE_URL",
-                    role_api_key_env="PROTOCOL_CONTROL_API_KEY",
+                    base_url=None if provider_only else base_url,
+                    api_key=None if provider_only else api_key,
+                    role_base_url_env=None if provider_only else "PROTOCOL_CONTROL_BASE_URL",
+                    role_api_key_env=None if provider_only else "PROTOCOL_CONTROL_API_KEY",
                 )
             else:
                 selected_base_url = os.getenv("PROTOCOL_CONTROL_BASE_URL", "")
@@ -510,12 +513,13 @@ class OpenAICompatibleProtocolControlAgentTransport:
                     "PROTOCOL_CONTROL_GLM_API_KEY", PROTOCOL_CONTROL_GLM_API_KEY
                 )
             elif selected_backend in REMOTE_OPENAI_PROVIDERS:
+                provider_only = selected_backend == "ollama-cloud"
                 _, selected_api_key = resolve_openai_connection(
                     selected_backend,
                     base_url=selected_base_url,
-                    api_key=api_key,
-                    role_base_url_env="PROTOCOL_CONTROL_BASE_URL",
-                    role_api_key_env="PROTOCOL_CONTROL_API_KEY",
+                    api_key=None if provider_only else api_key,
+                    role_base_url_env=None if provider_only else "PROTOCOL_CONTROL_BASE_URL",
+                    role_api_key_env=None if provider_only else "PROTOCOL_CONTROL_API_KEY",
                 )
             else:
                 selected_api_key = os.getenv("PROTOCOL_CONTROL_API_KEY", "")
@@ -1034,6 +1038,22 @@ class OpenAICompatibleProtocolControlAgentTransport:
             ) from exc
         return ProtocolControlAgentResponse(session_id=session_id, text=text)
 
+    def start_source_unit_comparison(self, *, prompt: str) -> ProtocolControlAgentResponse:
+        if not prompt.strip():
+            raise ValueError("跨章节原文核对提示不能为空")
+        session_id = f"protocol-control-source-pair-{uuid4().hex}"
+        try:
+            text = self._complete(
+                [{"role": "user", "content": prompt}],
+                response_format=source_unit_comparison_response_format(),
+            )
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id, str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
     def read_stage_bound_requirement(self, *, prompt: str) -> ProtocolControlAgentResponse:
         """Read one source-backed action without generating the final candidate schema."""
 
@@ -1042,10 +1062,11 @@ class OpenAICompatibleProtocolControlAgentTransport:
         if not prompt.strip():
             raise ValueError("单项方案语义解释提示不能为空")
         session_id = f"protocol-control-stage-{uuid4().hex}"
+        response_format = stage_bound_requirement_response_format()
         try:
             text = self._complete(
-                [{"role": "user", "content": prompt}],
-                response_format=stage_bound_requirement_response_format(),
+                self._single_requirement_messages(prompt, response_format),
+                response_format=response_format,
             )
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
             raise ProtocolControlAgentCallError(
@@ -1063,10 +1084,11 @@ class OpenAICompatibleProtocolControlAgentTransport:
         if not prompt.strip():
             raise ValueError("相对访视语义解释提示不能为空")
         session_id = f"protocol-control-relative-{uuid4().hex}"
+        response_format = relative_stage_requirement_response_format()
         try:
             text = self._complete(
-                [{"role": "user", "content": prompt}],
-                response_format=relative_stage_requirement_response_format(),
+                self._single_requirement_messages(prompt, response_format),
+                response_format=response_format,
             )
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
             raise ProtocolControlAgentCallError(
@@ -1075,6 +1097,40 @@ class OpenAICompatibleProtocolControlAgentTransport:
                 uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
             ) from exc
         return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
+    def read_shared_prohibition_requirement(self, *, prompt: str) -> ProtocolControlAgentResponse:
+        """Read a sourced present/future split without granting publication."""
+
+        from .protocol_control_stage_compiler import shared_prohibition_requirement_response_format
+
+        if not prompt.strip():
+            raise ValueError("跨阶段禁止语义解释提示不能为空")
+        session_id = f"protocol-control-prohibition-{uuid4().hex}"
+        response_format = shared_prohibition_requirement_response_format()
+        try:
+            text = self._complete(
+                self._single_requirement_messages(prompt, response_format),
+                response_format=response_format,
+            )
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id,
+                str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        return ProtocolControlAgentResponse(session_id=session_id, text=text)
+
+    def _single_requirement_messages(
+        self, prompt: str, response_format: Mapping[str, Any],
+    ) -> list[dict[str, str]]:
+        if self._response_format_mode != "json_schema":
+            schema = response_format["json_schema"]["schema"]
+            prompt += (
+                "\n本次请求未向模型服务传递严格结构约束。请仅返回符合以下完整 JSON Schema "
+                "的对象，version 必须使用结构中的常量值："
+                + json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
+            )
+        return [{"role": "user", "content": prompt}]
 
     def continue_session(
         self,
@@ -1119,6 +1175,14 @@ class OpenAICompatibleProtocolControlAgentTransport:
             protocol_control_candidates_repair_response_format()
             if multiple else protocol_control_candidate_repair_response_format()
         )
+        if self._response_format_mode != "json_schema":
+            prompt += (
+                "\n本次新会话没有先前的候选结构说明。请严格按以下完整 JSON Schema "
+                "返回候选对象，不得以字段摘要代替；groups 不得写成 items："
+                + json.dumps(response_format["json_schema"]["schema"], ensure_ascii=False,
+                             separators=(",", ":"))
+            )
+            history = [{"role": "user", "content": prompt}]
         try:
             text = self._complete(history, response_format=response_format)
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
@@ -1189,10 +1253,19 @@ class OpenAICompatibleProtocolControlAgentTransport:
         if history is None:
             raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
         logical_history = [*history, {"role": "user", "content": prompt}]
+        response_format = protocol_control_future_prohibition_repair_response_format()
+        request_prompt = prompt
+        if self._response_format_mode != "json_schema":
+            request_prompt += (
+                "\n本次请求未向模型服务传递严格结构约束。请仅返回符合以下完整 JSON Schema "
+                "的对象，后续时期须使用结构中规定的对象，不得用文字代替："
+                + json.dumps(response_format["json_schema"]["schema"], ensure_ascii=False,
+                             separators=(",", ":"))
+            )
         try:
             text = self._complete(
-                [{"role": "user", "content": prompt}],
-                response_format=protocol_control_future_prohibition_repair_response_format(),
+                [{"role": "user", "content": request_prompt}],
+                response_format=response_format,
             )
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
             raise ProtocolControlAgentCallError(
@@ -1263,10 +1336,19 @@ class OpenAICompatibleProtocolControlAgentTransport:
             raise ValueError("观察采用说明修订提示不能为空")
         if session_id not in self._histories:
             raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
+        response_format = protocol_control_observation_repair_response_format()
+        request_prompt = prompt
+        if self._response_format_mode != "json_schema":
+            request_prompt += (
+                "\n本次请求未向模型服务传递严格结构约束。仅返回符合以下完整 JSON Schema 的对象；"
+                "观察规则只能写在 policy 内，不得加入采用说明或比较条件字段："
+                + json.dumps(response_format["json_schema"]["schema"], ensure_ascii=False,
+                             separators=(",", ":"))
+            )
         try:
             text = self._complete(
-                [{"role": "user", "content": prompt}],
-                response_format=protocol_control_observation_repair_response_format(),
+                [{"role": "user", "content": request_prompt}],
+                response_format=response_format,
             )
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
             raise ProtocolControlAgentCallError(

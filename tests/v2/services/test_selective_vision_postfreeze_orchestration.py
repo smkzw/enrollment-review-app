@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import fitz
 from sqlalchemy import update
 
 from app.domain.contracts.enums import (
@@ -47,11 +48,14 @@ from app.evidence.artifacts import ArtifactStore
 from app.evidence.fingerprint import build_profile_fingerprint
 from app.evidence.selective_vision_review import (
     SKIP_NATIVE_TEXT_PRIMARY,
+    VISION_REASON_COMPLEX_VISUAL_OR_TABLE,
+    VISION_REASON_NATIVE_EXTRACTION_ANOMALY,
     SelectiveVisionClosedError,
     SelectiveVisionObservation,
     SelectiveVisionPlan,
     SelectiveVisionReviewOutcome,
     VISION_REASON_SCAN_OR_IMAGE_ONLY,
+    assess_page_vision_eligibility,
 )
 from app.services.selective_vision_observation_service import (
     SelectiveVisionObservationPageMaterial,
@@ -59,6 +63,7 @@ from app.services.selective_vision_observation_service import (
 )
 from app.services.selective_vision_postprocess_executor import (
     SelectiveVisionPostprocessExecutorConfig,
+    _pdf_non_text_marks,
     create_selective_vision_postprocess_executor,
 )
 from app.services.selective_vision_postprocess_job_service import (
@@ -110,6 +115,32 @@ RAW_TEXT = "x"
 NATIVE_RAW_TEXT = "native text primary path for skip after freeze"
 
 
+def test_pdf_mark_probe_distinguishes_plain_text_from_drawn_annotation():
+    pdf = fitz.open()
+    plain = pdf.new_page()
+    plain.insert_text((72, 72), "Printed clinical observation", fontsize=12)
+    marked = pdf.new_page()
+    marked.insert_text((72, 72), "Printed clinical observation", fontsize=12)
+    marked.draw_rect(fitz.Rect(65, 55, 245, 82), color=(1, 0, 0))
+    inked = pdf.new_page()
+    inked.insert_text((72, 72), "Printed clinical observation", fontsize=12)
+    inked.add_ink_annot([[(72, 90), (90, 90), (120, 80)]])
+    linked = pdf.new_page()
+    linked.insert_text((72, 72), "Printed clinical observation", fontsize=12)
+    linked.insert_link({
+        "kind": fitz.LINK_URI,
+        "from": fitz.Rect(72, 55, 250, 75),
+        "uri": "https://example.org",
+    })
+
+    counts = _pdf_non_text_marks(pdf.tobytes())
+
+    assert counts[1] == 0
+    assert counts[2] > 0
+    assert counts[3] > 0
+    assert counts[4] == 0
+
+
 def _run(coro):
     return asyncio.run(coro)
 
@@ -149,6 +180,7 @@ def _seed_frozen_revision(
     raw_text: str = RAW_TEXT,
     native_route: bool = False,
     put_native_text: bool = False,
+    source_bytes: bytes | None = None,
 ) -> dict[str, Any]:
     """播种已冻结基础处理修订 + 页产物/OCR + 内容寻址页图。"""
     store = ArtifactStore(data_paths)
@@ -166,8 +198,12 @@ def _seed_frozen_revision(
         episode_id = fixture.review_episode.review_episode_id
         scope = (project_id, subject_id, episode_id)
 
-        blob = make_blob(b"pdf-bytes-svo-postfreeze")
+        blob = make_blob(source_bytes if source_bytes is not None else b"pdf-bytes-svo-postfreeze")
         BlobRepository(session).get_or_create_by_sha256(blob)
+        if source_bytes is not None:
+            target = data_paths.boundary.require_v2_target(data_paths.root / blob.storage_ref)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(source_bytes)
         version = make_version(
             version_id="doc-svo-1",
             logical_id="log-svo-1",
@@ -271,6 +307,80 @@ def _eligible_material(seeded: dict[str, Any]) -> SelectiveVisionObservationPage
         ocr_page_id=seeded["ocr_page_id"],
         image_bytes=IMAGE_BYTES,
     )
+
+
+def test_frozen_pdf_marks_reach_page_review_plan(session_factory, data_paths):
+    pdf = fitz.open()
+    page = pdf.new_page()
+    page.insert_text((72, 72), "Printed clinical observation", fontsize=12)
+    page.draw_rect(fitz.Rect(65, 55, 245, 82), color=(1, 0, 0))
+    seeded = _seed_frozen_revision(
+        session_factory, data_paths,
+        revision_id="rev-svo-pdf-marks", native_route=True,
+        put_native_text=True, raw_text="Printed clinical observation",
+        source_bytes=pdf.tobytes(),
+    )
+    from app.services.selective_vision_postprocess_executor import (
+        load_selective_vision_page_materials_for_revision,
+    )
+
+    with session_factory() as session:
+        materials = load_selective_vision_page_materials_for_revision(
+            session, evidence_processing_revision_id=seeded["revision_id"],
+            artifact_store=ArtifactStore(data_paths),
+        )
+    assert len(materials) == 1
+    assert materials[0].non_text_mark_count is not None
+    assert materials[0].non_text_mark_count > 0
+    signals = SelectiveVisionObservationService(session_factory)._to_signals(materials[0])
+    decision = assess_page_vision_eligibility(signals)
+    assert decision.eligible
+    assert VISION_REASON_COMPLEX_VISUAL_OR_TABLE in decision.reasons
+
+
+def test_unreadable_pdf_marks_require_original_page_review(session_factory, data_paths):
+    seeded = _seed_frozen_revision(
+        session_factory, data_paths,
+        revision_id="rev-svo-bad-pdf", native_route=True,
+        put_native_text=True, raw_text="Printed clinical observation",
+        source_bytes=b"not a valid PDF",
+    )
+    from app.services.selective_vision_postprocess_executor import (
+        load_selective_vision_page_materials_for_revision,
+    )
+
+    with session_factory() as session:
+        materials = load_selective_vision_page_materials_for_revision(
+            session, evidence_processing_revision_id=seeded["revision_id"],
+            artifact_store=ArtifactStore(data_paths),
+        )
+    assert materials[0].non_text_mark_count is None
+    assert materials[0].native_extraction_anomaly
+    signals = SelectiveVisionObservationService(session_factory)._to_signals(materials[0])
+    assert VISION_REASON_NATIVE_EXTRACTION_ANOMALY in assess_page_vision_eligibility(signals).reasons
+
+
+def test_changed_pdf_original_stops_mark_planning(session_factory, data_paths):
+    original = b"not a valid PDF"
+    seeded = _seed_frozen_revision(
+        session_factory, data_paths,
+        revision_id="rev-svo-changed-pdf", native_route=True,
+        put_native_text=True, raw_text="Printed clinical observation",
+        source_bytes=original,
+    )
+    from app.services.selective_vision_postprocess_executor import (
+        load_selective_vision_page_materials_for_revision,
+    )
+
+    with session_factory() as session:
+        blob = BlobRepository(session).get(sha256(original).hexdigest())
+        source_path = data_paths.boundary.require_v2_target(data_paths.root / blob.storage_ref)
+        source_path.write_bytes(b"changed source bytes")
+        with pytest.raises(ValueError, match="source blob digest mismatch"):
+            load_selective_vision_page_materials_for_revision(
+                session, evidence_processing_revision_id=seeded["revision_id"],
+                artifact_store=ArtifactStore(data_paths),
+            )
 
 
 def _native_material(seeded: dict[str, Any]) -> SelectiveVisionObservationPageMaterial:
@@ -489,6 +599,8 @@ def test_evidence_processing_executor_freeze_path_only_enqueues_ast() -> None:
 def test_job_executor_native_text_skip_does_not_call_vlm_or_mutate_ocr(
     session_factory, data_paths
 ):
+    pdf = fitz.open()
+    pdf.new_page().insert_text((72, 72), NATIVE_RAW_TEXT)
     seeded = _seed_frozen_revision(
         session_factory,
         data_paths,
@@ -496,6 +608,7 @@ def test_job_executor_native_text_skip_does_not_call_vlm_or_mutate_ocr(
         raw_text=NATIVE_RAW_TEXT,
         native_route=True,
         put_native_text=True,
+        source_bytes=pdf.tobytes(),
     )
     calls = {"n": 0}
 
@@ -927,8 +1040,12 @@ def test_postprocess_step_id_constant_matches_job_definition() -> None:
     assert SELECTIVE_VISION_POSTPROCESS_STEP_ID == "run_selective_vision"
 
 
+@pytest.mark.parametrize("stale_version", [
+    "selective-vision-plan/obsolete", "selective_vision_review/v2",
+    "selective_vision_review/v3",
+])
 def test_executor_rejects_frozen_plan_version_drift_before_loading_or_vlm(
-    session_factory, data_paths
+    session_factory, data_paths, stale_version
 ) -> None:
     calls = {"n": 0}
 
@@ -948,7 +1065,7 @@ def test_executor_rejects_frozen_plan_version_drift_before_loading_or_vlm(
         job_type=SELECTIVE_VISION_POSTPROCESS_JOB_TYPE,
         job_payload={
             "evidence_processing_revision_id": "revision-must-not-be-loaded",
-            "plan_version": "selective-vision-plan/obsolete",
+            "plan_version": stale_version,
         },
         step_id=SELECTIVE_VISION_POSTPROCESS_STEP_ID,
         name="选择性视觉后处理",

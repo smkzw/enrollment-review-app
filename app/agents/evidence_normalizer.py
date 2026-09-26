@@ -104,6 +104,7 @@ SUPPORTED_EVIDENCE_NORMALIZER_PROVIDERS = frozenset(
         "cms-router",
         "cms-smk",
         "opencode-go",
+        "ollama-cloud",
     }
 )
 SUPPORTED_EVIDENCE_NORMALIZER_REASONING_EFFORTS = frozenset(
@@ -390,6 +391,15 @@ _PROMPT_LAYOUT_VERSION = "phase5/evidence-normalizer-prompt/v24"
 _MAX_PROMPT_CHARS = 100_000
 
 
+class EvidenceNormalizerPromptTooLong(ValueError):
+    def __init__(self, actual_chars: int) -> None:
+        self.actual_chars = actual_chars
+        super().__init__(
+            f"本次个例资料输入为 {actual_chars} 字符，超过单次处理上限 "
+            f"{_MAX_PROMPT_CHARS}；请缩小连续页组后重试"
+        )
+
+
 _SET_LIKE_DRAFT_ARRAY_FIELDS = frozenset(
     {
         "affected_locator_ids",
@@ -410,7 +420,10 @@ _VISUAL_OBSERVATION_PROMPT_BOUNDARY = (
     "原文；一切事实/事件/暴露候选仍必须锚定 locators 中的真实 "
     "locator 与有效文本原句，不得以视觉观察作为唯一断言依据；不得据视觉观察输出"
     "入排结论、期望状态或“通过/不通过”标签；risk_reasons 仅提示对应页可能存在"
-    " OCR 风险，不得用于隐藏、筛选或排序候选。"
+    " OCR 风险，不得用于隐藏、筛选或排序候选。若视觉观察提示手写、便签、图表"
+    "或边注中有临床内容，而对应页的有效原文和定位没有这段内容，须以本页的"
+    " unresolved_items 说明原件位置、可辨与不可辨部分及待核实问题；不要补造"
+    " locator 或事实，也不要把书写者未明的批注当作研究者书面判断。"
 )
 
 _SCHEMA_REPAIR_CONTRACT = (
@@ -614,6 +627,7 @@ def evidence_normalizer_prompt_template_sha256(prompt_template: str) -> str:
                 _PROMPT_LAYOUT_VERSION,
                 prompt_template.strip(),
                 _SYSTEM_CONTRACT,
+                _VISUAL_OBSERVATION_PROMPT_BOUNDARY,
                 _SCHEMA_REPAIR_CONTRACT,
                 _compact_schema(),
             )
@@ -922,10 +936,7 @@ def build_evidence_normalizer_prompt(
     prompt = "".join(sections)
     # Preserve the legacy guard; R3 cloud inputs must not inherit a local-model cap.
     if evidence_input.page_review is None and len(prompt) > _MAX_PROMPT_CHARS:
-        raise ValueError(
-            f"本次个例资料输入为 {len(prompt)} 字符，超过单次处理上限 "
-            f"{_MAX_PROMPT_CHARS}；请缩小连续页组后重试"
-        )
+        raise EvidenceNormalizerPromptTooLong(len(prompt))
     return prompt
 
 

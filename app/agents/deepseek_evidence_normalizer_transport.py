@@ -231,6 +231,7 @@ class DeepSeekEvidenceNormalizerTransport:
             "cms-router",
             "cms-smk",
             "opencode-go",
+            "ollama-cloud",
         }:
             raise ValueError(f"当前证据规范化任务不支持模型供应商 {selected_backend}")
         selected_reasoning_effort = (
@@ -298,10 +299,13 @@ class DeepSeekEvidenceNormalizerTransport:
                     )
             elif selected_backend in REMOTE_OPENAI_PROVIDERS:
                 use_provider_route = (
-                    selected_backend == "cms-router"
-                    and api_key is None
-                    and base_url is None
-                    and bool(os.getenv("CMS_ROUTER_API_KEY", "").strip())
+                    selected_backend == "ollama-cloud"
+                    or (
+                        selected_backend == "cms-router"
+                        and api_key is None
+                        and base_url is None
+                        and bool(os.getenv("CMS_ROUTER_API_KEY", "").strip())
+                    )
                 )
                 resolved_base_url, selected_api_key = resolve_openai_connection(
                     selected_backend,
@@ -680,6 +684,8 @@ def evidence_normalizer_transport_from_model_config(
             reasoning_effort=model_config.reasoning_effort,
             max_tokens=max_tokens,
             temperature=temperature,
-            response_format={"type": "json_object"},
+            response_format=(
+                None if provider == "ollama-cloud" else {"type": "json_object"}
+            ),
         )
     raise ValueError(f"当前证据规范化任务不支持模型供应商 {model_config.provider}")

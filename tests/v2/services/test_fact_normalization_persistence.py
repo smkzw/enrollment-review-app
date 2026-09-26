@@ -66,7 +66,7 @@ from app.storage.repositories import (
     PROMPT_VERSION_CONFIG,
     AppendRepository,
 )
-from app.workflow.errors import StepFailure
+from app.workflow.errors import InvalidJobDefinitionError, StepFailure
 from app.workflow.jobstore import JobStore
 from app.workflow.recovery import recover_expired_jobs
 from app.workflow.runner import JobRunner, StepContext
@@ -540,6 +540,44 @@ def test_create_or_reuse_job_idempotent_same_payload(session_factory):
         rows = session.execute(select(FactNormalizationRunRecord)).scalars().all()
         matching = [r for r in rows if r.idempotency_key == first.idempotency_key]
         assert len(matching) == 1
+
+
+def test_single_page_oversize_is_rejected_before_creating_job(session_factory, monkeypatch):
+    import app.agents.evidence_normalizer as normalizer_module
+
+    with session_factory() as session:
+        chain = _seed_chain(session, prefix="oversized-single-page")
+        session.commit()
+    monkeypatch.setattr(normalizer_module, "_MAX_PROMPT_CHARS", 1)
+    service = FactNormalizationJobService(session_factory)
+    with pytest.raises(InvalidJobDefinitionError, match="第 1 页单页输入"):
+        service.create_or_reuse_from_source(
+            authority=chain["authority"],
+            prompt_version_id=chain["prompt_version_id"],
+            model_config_id=chain["model_config_id"],
+            created_by="tester",
+            max_pages_per_call=2,
+        )
+    with session_factory() as session:
+        assert session.execute(select(FactNormalizationRunRecord)).scalars().all() == []
+
+
+def test_broken_existing_profile_references_reject_job_before_model_calls(session_factory, monkeypatch):
+    from app.services.fact_normalization_job_service import FactNormalizationExistingReferencesError
+    from app.services.patient_profile_service import PatientProfileProjectionError, PatientProfileService
+
+    with session_factory() as session:
+        chain = _seed_chain(session, prefix="broken-profile-preflight")
+        session.commit()
+
+    def broken_references(self, session, authority):
+        raise PatientProfileProjectionError("旧事件引用已折叠链头之外的事实")
+
+    monkeypatch.setattr(PatientProfileService, "validate_published_references", broken_references)
+    with pytest.raises(FactNormalizationExistingReferencesError, match="尚未建立整理任务"):
+        _create_job_from_source(FactNormalizationJobService(session_factory), chain)
+    with session_factory() as session:
+        assert session.execute(select(FactNormalizationRunRecord)).scalars().all() == []
 
 
 def test_source_plan_job_and_run_share_one_input_scope_hash(session_factory):

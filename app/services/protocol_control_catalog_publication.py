@@ -14,6 +14,7 @@ from app.domain.contracts.control_catalog_publication import (
 from app.domain.contracts.enums import GateOutcome
 from app.domain.contracts.protocol_controls import (
     KnownRequiredProcedureTarget, ProtocolControlBatchDispositionHydrated,
+    ProtocolControlSourceUnitRelation,
     ProtocolControlBatchPlan, ProtocolSectionCoverageManifest,
 )
 from app.domain.contracts.rules import EvidenceRequirement, RuleSet, WorkflowStage
@@ -129,10 +130,24 @@ def prepare_control_catalog_publication(
     candidate_ids = sorted(item.control_candidate_id for batch in batches for item in batch.candidates)
     if result.get("candidate_ids") != candidate_ids or result.get("publication_plan_id") != plan.plan_id:
         raise ScopeViolationError("补充审核要求保存的完整候选集合不一致")
+    relations = [ProtocolControlSourceUnitRelation.model_validate(item)
+                 for item in result.get("source_unit_relations", [])]
+    units = {unit.structure_unit_id: unit for unit in coverage_manifest.units}
+    if len({(item.source_structure_unit_id, item.source_statement_index) for item in relations}) != len(relations):
+        raise ScopeViolationError("跨章节来源对应重复")
+    for relation in relations:
+        source = units.get(relation.source_structure_unit_id)
+        target = units.get(relation.target_structure_unit_id)
+        if (source is None or target is None
+                or sorted(source.source_span_ids) != relation.source_span_ids
+                or sorted(target.source_span_ids) != relation.target_span_ids
+                or relation.target_candidate_id not in candidate_ids):
+            raise ScopeViolationError("跨章节来源对应未绑定当前方案原文和候选")
     catalog = materialize_control_catalog(
         coverage_manifest=coverage_manifest,
         plan=plan, batch_dispositions=batches,
         rule_component_ids=[component.rule_component_id for rule in rule_set.rules for component in rule.components],
+        source_unit_relations=relations,
     )
     # Targets are frozen per batch; duplicates across batches must be identical.
     targets: dict[str, KnownRequiredProcedureTarget] = {}

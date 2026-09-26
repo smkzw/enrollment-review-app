@@ -377,8 +377,8 @@ def test_protocol_control_defaults_use_current_independent_product_routes() -> N
     values = _config_probe()
 
     assert values == [
-        "cms-router",
-        "deepseek-latest-cloud",
+        "ollama-cloud",
+        "deepseek-v4.1-flash",
         "high",
         "65536",
         "cms-router",
@@ -641,6 +641,34 @@ def test_alternate_provider_does_not_inherit_active_role_endpoint_or_key(
     ]
 
 
+def test_ollama_control_and_discovery_ignore_previous_role_credentials(monkeypatch):
+    _FakeOpenAI.calls.clear()
+    monkeypatch.setenv("PROTOCOL_CONTROL_BASE_URL", "http://old-gateway.example/v1")
+    monkeypatch.setenv("PROTOCOL_CONTROL_API_KEY", "old-control-key")
+    monkeypatch.setenv("PROTOCOL_CONTROL_DISCOVERY_BASE_URL", "http://old-gateway.example/v1")
+    monkeypatch.setenv("PROTOCOL_CONTROL_DISCOVERY_API_KEY", "old-discovery-key")
+    monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+    monkeypatch.setattr(transport_module, "PROTOCOL_CONTROL_BACKEND", "ollama-cloud")
+    monkeypatch.setattr(discovery_module, "PROTOCOL_CONTROL_DISCOVERY_BACKEND", "ollama-cloud")
+    monkeypatch.setattr(discovery_module, "OpenAI", _FakeOpenAI)
+    frozen = {
+        "provider": "ollama-cloud", "model": "deepseek-v4.1-flash",
+        "reasoning_effort": "high", "parameters": {"max_tokens": 65536},
+    }
+    with pytest.raises(ValueError, match="OLLAMA_API_KEY"):
+        protocol_control_transport_from_model_config(frozen, _client_factory=_FakeOpenAI)
+    monkeypatch.setenv("OLLAMA_API_KEY", "ollama-only-key")
+    deep = protocol_control_transport_from_model_config(frozen, _client_factory=_FakeOpenAI)
+    discovery = protocol_control_discovery_transport_from_model_config(frozen)
+    assert deep.base_url == discovery.base_url == "https://ollama.com/v1"
+    assert deep.response_format_mode == discovery.response_format_mode == "text"
+    assert "response_format" not in deep._completion_kwargs([{"role": "user", "content": "诊断"}])
+    assert "response_format" not in discovery._completion_kwargs([{"role": "user", "content": "诊断"}])
+    assert [call["api_key"] for call in _FakeOpenAI.calls] == [
+        "ollama-only-key", "ollama-only-key",
+    ]
+
+
 def test_candidate_repair_changes_only_response_schema_in_same_session() -> None:
     client, completions = _client(['{"wire":1}', '{"candidate_draft":{}}'])
     transport = OpenAICompatibleProtocolControlAgentTransport(
@@ -706,6 +734,78 @@ def test_saved_source_insert_starts_fresh_session_with_candidate_schema() -> Non
     ]
 
 
+@pytest.mark.parametrize("multiple", [False, True])
+def test_text_mode_source_insert_includes_actual_candidate_schema(multiple: bool) -> None:
+    client, completions = _client(['{"candidate_draft":{}}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode="text",
+    )
+    transport.start_source_insert(prompt="有来源的未闭合要求", multiple=multiple)
+    call = completions.calls[0]
+    assert "response_format" not in call
+    prompt = call["messages"][0]["content"]
+    assert "完整 JSON Schema" in prompt
+    assert ('"candidate_drafts"' if multiple else '"candidate_draft"') in prompt
+    assert '"groups"' in prompt
+
+
+@pytest.mark.parametrize(
+    ("reader", "version"), [
+        ("read_stage_bound_requirement", "phase5/control-stage-bound-requirement/v7"),
+        ("read_relative_stage_requirement", "phase5/control-relative-stage-requirement/v5"),
+        ("read_shared_prohibition_requirement", "phase5/control-shared-prohibition-requirement/v1"),
+    ],
+)
+@pytest.mark.parametrize("mode", ["text", "json_object", "json_schema"])
+def test_single_requirement_reader_receives_its_own_schema(
+    reader: str, version: str, mode: str,
+) -> None:
+    client, completions = _client(['{"version":"test"}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode=mode,
+    )
+
+    getattr(transport, reader)(prompt="冻结来源")
+
+    call = completions.calls[0]
+    prompt = call["messages"][0]["content"]
+    if mode == "json_schema":
+        assert prompt == "冻结来源"
+        assert call["response_format"]["json_schema"]["schema"]["properties"]["version"]["const"] == version
+    else:
+        assert "完整 JSON Schema" in prompt
+        assert version in prompt
+        assert "冻结来源" in prompt
+        assert call.get("response_format") == (
+            {"type": "json_object"} if mode == "json_object" else None
+        )
+
+
+@pytest.mark.parametrize("mode", ["text", "json_schema"])
+def test_future_prohibition_repair_receives_nested_schema(mode: str) -> None:
+    client, completions = _client(['{"wire":1}', '{"current_statement":"已核","current_proposition":"已核","continuing_obligation":null}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode=mode,
+    )
+    first = transport.start(prompt="冻结批次")
+    transport.continue_future_prohibition_repair(
+        session_id=first.session_id, prompt="只修当前和后续禁止要求",
+    )
+    call = completions.calls[1]
+    prompt = call["messages"][0]["content"]
+    if mode == "text":
+        assert "完整 JSON Schema" in prompt
+        assert '"continuing_obligation"' in prompt
+        assert '"prospective_period"' in prompt
+        assert "response_format" not in call
+    else:
+        assert prompt == "只修当前和后续禁止要求"
+        assert "continuing_obligation" in call["response_format"]["json_schema"]["schema"]["properties"]
+
+
 def test_local_repairs_send_only_frozen_source_and_keep_fallback_history() -> None:
     client, completions = _client([
         '{"wire":1}', '{"atom":{}}', '{"items":[]}', '{"items":[]}', '{"candidate_draft":{}}',
@@ -754,6 +854,23 @@ def test_local_repairs_send_only_frozen_source_and_keep_fallback_history() -> No
     assert [item["content"] for item in completions.calls[4]["messages"]] == [
         "完整冻结批次", '{"wire":1}', "候选级回退",
     ]
+
+
+def test_text_mode_observation_repair_includes_exact_policy_schema() -> None:
+    client, completions = _client(['{"wire":1}', '{"items":[]}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode="text",
+    )
+    first = transport.start(prompt="冻结批次")
+    transport.continue_observation_policies(
+        session_id=first.session_id, prompt="仅核对观察采用规则",
+    )
+    call = completions.calls[1]
+    assert "完整 JSON Schema" in call["messages"][0]["content"]
+    assert '"source_excerpts"' in call["messages"][0]["content"]
+    assert '"items"' in call["messages"][0]["content"]
+    assert "response_format" not in call
 
 
 def test_same_session_history_and_restore_continue_keep_one_session_id() -> None:
@@ -1058,7 +1175,8 @@ def test_runner_uses_real_transport_same_session_repair_without_inex_schema() ->
 
 
 def test_source_target_review_uses_its_own_small_schema() -> None:
-    client, completions = _client(['{"version":"phase5/control-source-target-review/v7","items":[]}'])
+    from app.agents.protocol_control_source_interpretation import SOURCE_TARGET_REVIEW_VERSION
+    client, completions = _client([json.dumps({"version": SOURCE_TARGET_REVIEW_VERSION, "items": []})])
     transport = OpenAICompatibleProtocolControlAgentTransport(
         client=client,
         backend="mtplx",
@@ -1069,7 +1187,7 @@ def test_source_target_review_uses_its_own_small_schema() -> None:
     response = transport.start_source_target_review(prompt="核对冻结来源与目标")
     assert response.text.startswith('{"version":')
     assert completions.calls[0]["response_format"]["json_schema"]["name"] == (
-        "protocol_control_source_target_review_v7"
+        "protocol_control_source_target_review_" + SOURCE_TARGET_REVIEW_VERSION.rsplit("/", 1)[-1]
     )
     assert "temperature" not in completions.calls[0]
 

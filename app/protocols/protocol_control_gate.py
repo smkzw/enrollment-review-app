@@ -55,7 +55,7 @@ from app.protocols.supplementary_relation_contract import (
 from app.protocols.protocol_control_planning import detect_required_action_kinds
 
 
-CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v30"
+CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v32"
 
 __all__ = [
     "CONTROL_PUBLICATION_GATE_VERSION",
@@ -127,6 +127,9 @@ _TEMPORAL_CUE_RE = re.compile(
     r"在此期间|\b(?:within|before|after|washout|half[- ]?life|until|throughout)\b|"
     r"\d+\s*(?:天|日|周|月|年|days?|weeks?|months?|years?)\s*(?:内|前|后)? )",
     re.IGNORECASE | re.VERBOSE,
+)
+_NOMINAL_RANDOMIZATION_SUFFIX_RE = re.compile(
+    r"(?:(?:入组)?(?:资格|标准|条件)|号(?:码)?|编号|序号|比例|分层)"
 )
 _ENROLLMENT_PROHIBITION_RE = re.compile(
     r"(?:(?:筛选|导入|基线|入组前|随机(?:化|分组)?前|首次给药前)"
@@ -228,6 +231,12 @@ _CALENDAR_DURATION_RE = re.compile(
     r"(?P<value>\d+)\s*(?:个\s*)?(?P<unit>天|日|周|月|年|days?|weeks?|months?|years?)",
     re.IGNORECASE,
 )
+_CONTINUOUS_TREATMENT_DURATION_RE = re.compile(
+    r"(?:(?:持续|连续)[^。；;\n\d前后内]{0,20}?|(?:治疗|用药|给药)\s*)"
+    r"(?P<value>\d+)\s*(?:个\s*)?"
+    r"(?P<unit>天|日|周|月|年|days?|weeks?|months?|years?)",
+    re.IGNORECASE,
+)
 _TIME_BOUND_PREFIX_RE = re.compile(
     r"(?P<operator>≤|<=|不超过|至多|<|＜|少于|不足|≥|>=|不少于|至少|>|＞|超过|大于)"
     r"\s*(?P<value>\d+)\s*(?:个\s*)?"
@@ -327,11 +336,17 @@ _CONDITIONAL_CUE_AS_REPORTED_CONTENT_RE = re.compile(
 )
 _EXCEPTION_CUE_RE = re.compile(r"(?:除非|除外|例外|\b(?:unless|except)\b)", re.IGNORECASE)
 _OPTIONAL_ACTION_CUE_RE = re.compile(
-    r"(?:可(?:以)?(?:进行|复测|检查|检测|评估|记录)|允许(?:进行|复测|检查|检测|评估|记录)|"
+    r"(?:可(?:以)?(?:进行|重新筛选|再次筛选|复查|复测|检查|检测|评估|记录)|"
+    r"允许(?:进行|重新筛选|再次筛选|复查|复测|检查|检测|评估|记录)|"
     r"\bmay\s+(?:perform|repeat|test|assess|record)\b)",
     re.IGNORECASE,
 )
-_OPTIONAL_ACTION_STATEMENT_RE = re.compile(r"(?:可|允许|\bmay\b)", re.IGNORECASE)
+_OPTIONAL_ACTION_STATEMENT_RE = re.compile(
+    r"(?:可(?:以)?(?:进行|重新筛选|再次筛选|复查|复测|检查|检测|评估|记录)|"
+    r"允许(?:进行|重新筛选|再次筛选|复查|复测|检查|检测|评估|记录)|"
+    r"\bmay\s+(?:perform|repeat|test|assess|record)\b)",
+    re.IGNORECASE,
+)
 _BEST_EFFORT_CUE_RE = re.compile(
     r"(?:尽可能|在可获得范围内|尽力|尽量|as\s+(?:far|much)\s+as\s+possible|best\s+effort)",
     re.IGNORECASE,
@@ -2762,11 +2777,6 @@ def _check_time_constraints(
     constraints.extend(getattr(atom, "time_constraint", None) for atom in atoms)
     constraints = [item for item in constraints if item is not None]
     obligation_atoms = [atom for atom in atoms if getattr(atom, "kind", None) is not None]
-    periods = [
-        getattr(atom, "prospective_period", None)
-        for atom in obligation_atoms
-        if getattr(atom, "prospective_period", None) is not None
-    ]
     for constraint in constraints:
         anchor = _value(getattr(constraint, "anchor_type", None))
         direction = _value(getattr(constraint, "direction", None))
@@ -2809,19 +2819,6 @@ def _check_time_constraints(
                 entity_id=entity_id,
             )
 
-    has_temporal_text = any(_TEMPORAL_CUE_RE.search(text) for text in texts)
-    has_temporal_atom = any(
-        _TEMPORAL_CUE_RE.search(
-            " ".join(
-                [str(getattr(atom, "statement", ""))]
-                + [str(item) for item in getattr(atom, "source_excerpts", ()) or ()]
-            )
-        )
-        for atom in atoms
-    )
-    if has_temporal_text and not has_temporal_atom and not constraints and not periods:
-        _fail("TIME_ANCHOR_MISSING", "时间性控制缺少可求值的命名时间锚点", entity_id=entity_id)
-
     for atom in atoms:
         source_texts = list(getattr(atom, "source_excerpts", ()) or ())
         if not source_texts:
@@ -2844,6 +2841,16 @@ def _check_time_constraints(
             )
             for match in _CALENDAR_DURATION_RE.finditer(calendar_text)
         }
+        evaluation = getattr(atom, "evaluation", None)
+        is_semantic_completion = (
+            _value(getattr(atom, "kind", None)) == "complete_or_verify"
+            and _value(getattr(evaluation, "determination_mode", None)) == "semantic"
+            and _value(getattr(evaluation, "time_purpose", None)) == "interval_condition"
+        )
+        continuous_durations = {
+            (int(match.group("value")), _TIME_UNIT_CANONICAL[match.group("unit").lower()])
+            for match in _CONTINUOUS_TREATMENT_DURATION_RE.finditer(calendar_text)
+        } if is_semantic_completion else set()
         structured_durations: set[tuple[int, str]] = set()
         for field in ("lower_bound", "upper_bound"):
             quantity = getattr(constraint, field, None)
@@ -2855,13 +2862,21 @@ def _check_time_constraints(
             value = getattr(constraint, field, None)
             if value is not None:
                 structured_durations.add((int(value), "day"))
-        if calendar_durations and not structured_durations:
+        if continuous_durations & structured_durations:
+            _fail(
+                "TREATMENT_DURATION_USED_AS_EVENT_WINDOW",
+                "持续治疗的时长不能充当事件发生时间窗，须分别核对起止日期与全程治疗",
+                entity_id=entity_id,
+                obligation_source_span_ids=tuple(getattr(atom, "source_span_ids", ()) or ()),
+            )
+        calendar_window_durations = calendar_durations - continuous_durations
+        if calendar_window_durations and not structured_durations:
             _fail(
                 "TIME_CALENDAR_BOUND_MISSING",
                 "义务原文含明确日历时长，但结构化时间窗未保存该数值和单位",
                 entity_id=entity_id,
             )
-        if structured_durations and structured_durations.isdisjoint(calendar_durations):
+        if structured_durations and structured_durations.isdisjoint(calendar_window_durations):
             _fail(
                 "TIME_CALENDAR_BOUND_UNSUPPORTED",
                 "结构化时间窗的数值和单位必须由该义务的直接来源原文支持",
@@ -2979,6 +2994,10 @@ def _check_time_constraints(
             if any(start <= match.start() < end for start, end in recall_spans):
                 continue
             cue = match.group(0)
+            if cue.startswith("随机"):
+                nominal = _NOMINAL_RANDOMIZATION_SUFFIX_RE.match(source_text, match.end())
+                if nominal and not re.match(r"(?:前|后|时|当天|当日|日起|以前|之后)", source_text[nominal.end():]):
+                    continue
             is_period_cue = bool(
                 _STUDY_PERIOD_CUE_RE.fullmatch(cue)
                 or _TREATMENT_PERIOD_CUE_RE.fullmatch(cue)

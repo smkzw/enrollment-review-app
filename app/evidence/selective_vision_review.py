@@ -1,7 +1,7 @@
 """通用、按页面风险选择的独立视觉核验规划与调用适配。
 
 本模块位于证据处理共享边界：在已有页产物 / OCR 质量元数据之上，决定哪些页面
-值得调用独立 GLM-5.3-Flash 视觉模型做**观察性核验**，并适配一次失败关闭的调用。
+值得调用已配置的独立视觉模型做**观察性核验**，并适配一次失败关闭的调用。
 
 产品合同（内容中立）：
 - 原生 DOCX/PDF 文本仍是主路径；不得只因 VLM 可用就整份逐页重发；
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-SELECTIVE_VISION_PLAN_VERSION = "selective_vision_review/v2"
+SELECTIVE_VISION_PLAN_VERSION = "selective_vision_review/v5"
 NATIVE_TEXT_SUFFICIENT_CHARS = 8
 
 VisionRiskReason = Literal[
@@ -64,6 +64,13 @@ ALLOWED_VISION_RISK_REASONS: frozenset[str] = frozenset(
     }
 )
 
+_VISION_REASON_DESCRIPTIONS = {
+    VISION_REASON_SCAN_OR_IMAGE_ONLY: "扫描或图片页可能遗漏手写及标注",
+    VISION_REASON_COMPLEX_VISUAL_OR_TABLE: "版面或表格关系需要对照原图",
+    VISION_REASON_NATIVE_EXTRACTION_ANOMALY: "原文提取结果需要对照原图",
+    VISION_REASON_OCR_EVIDENCE_RISK: "已提取文字的可靠性需要核实",
+}
+
 SKIP_SELECTIVE_VISION_DISABLED = "selective_vision_disabled"
 SKIP_NATIVE_TEXT_PRIMARY = "native_text_primary"
 SKIP_BLANK_OR_NO_CONTENT = "blank_or_no_content"
@@ -88,9 +95,17 @@ _DEFAULT_REVIEW_SYSTEM_PROMPT = (
 )
 
 _DEFAULT_REVIEW_USER_PROMPT = (
-    "请核对所附原始页面。逐页引用 PAGE_ANCHOR 中的 source_ref，说明版面、表格、"
-    "文字可辨识性及需要人工确认之处；每页先单独输出一行 source_ref=<原值>；"
-    "不要推断任何项目特异的医学结论。"
+    "请核对所附原始页面。每页先单独输出一行 source_ref=<原值>，简要说明版面与文字可辨识性。"
+    "逐字保留与本次临床资料有关的病史、检查结果、数值单位、药物及用法；"
+    "分别写清原文中日期对应的是就诊、检查、开具、给予、实际使用还是停药，"
+    "不得从同段就诊日期推定治疗的实际起止。逐页查看手写字、圈注、便签和表格内的手写内容；"
+    "如有，分别摘录可辨认的原文，说明所在位置、所指向的检查或记录，并区分印刷文字与手写判断。"
+    "手写开头的符号、缩写也须逐字核对；形状不确定时只描述可见笔迹并标为辨认不清，"
+    "不得把它补成勾选、医学分级或研究者判断。看不清或无法确定对应对象、书写者时明确说明，"
+    "不得补字，也不得推定为研究者判断；"
+    "未见时只说明本页未见，不推断其他页面均无。"
+    "机构地址、联系方式、通用声明及空白行政字段只在影响来源或对象对应时说明，勿逐字复述；"
+    "疑难临床文字和可能的识别错误不得因简洁而省略。不要推断任何项目特异的医学结论。"
 )
 
 
@@ -323,13 +338,13 @@ def assess_page_vision_eligibility(
     sufficient_primary_text = sufficient_native or sufficient_ocr
     marks = signals.non_text_mark_count
 
-    if media in _IMAGE_MEDIA_KINDS and (
-        not sufficient_primary_text or signals.ocr_confidence is None
-    ):
+    if media in _IMAGE_MEDIA_KINDS:
+        # Printed-text OCR confidence does not establish that annotations on
+        # an uploaded image were read or linked to the right observation.
         reasons.append(VISION_REASON_SCAN_OR_IMAGE_ONLY)
-    elif route == ExtractionRoute.VISION_OCR.value and (
-        not sufficient_primary_text or signals.ocr_confidence is None
-    ):
+    elif route == ExtractionRoute.VISION_OCR.value:
+        # A readable printed OCR layer does not cover annotations on a
+        # scanned PDF page either.
         reasons.append(VISION_REASON_SCAN_OR_IMAGE_ONLY)
     elif marks is not None and marks > 0:
         reasons.append(VISION_REASON_COMPLEX_VISUAL_OR_TABLE)
@@ -493,7 +508,7 @@ def build_selective_vision_prompts(
     if cleaned:
         reason_note = (
             " 本页因以下结构或识别质量风险进入视觉核验："
-            + ", ".join(cleaned)
+            + "、".join(_VISION_REASON_DESCRIPTIONS[reason] for reason in cleaned)
             + "。"
         )
     return system_prompt, _DEFAULT_REVIEW_USER_PROMPT + reason_note

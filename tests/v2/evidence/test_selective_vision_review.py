@@ -213,6 +213,28 @@ def test_eight_ocr_characters_do_not_prove_image_or_handwriting_coverage():
     assert svr.VISION_REASON_SCAN_OR_IMAGE_ONLY in svr.assess_page_vision_eligibility(page).reasons
 
 
+def test_high_confidence_printed_ocr_does_not_clear_uploaded_image_annotations():
+    page = replace(
+        _signals(media_kind="image", extraction_route=ExtractionRoute.VISION_OCR,
+                 has_native_text=False, native_text_char_count=0),
+        has_ocr_text=True, ocr_text_char_count=200, ocr_confidence=0.99,
+    )
+    decision = svr.assess_page_vision_eligibility(page)
+    assert decision.eligible is True
+    assert svr.VISION_REASON_SCAN_OR_IMAGE_ONLY in decision.reasons
+
+
+def test_high_confidence_ocr_does_not_clear_scanned_pdf_annotations():
+    page = replace(
+        _signals(media_kind="pdf", extraction_route=ExtractionRoute.VISION_OCR,
+                 has_native_text=False, native_text_char_count=0),
+        has_ocr_text=True, ocr_text_char_count=200, ocr_confidence=0.99,
+    )
+    decision = svr.assess_page_vision_eligibility(page)
+    assert decision.eligible is True
+    assert svr.VISION_REASON_SCAN_OR_IMAGE_ONLY in decision.reasons
+
+
 def test_non_text_marks_remain_risk_even_when_native_text_exists():
     decision = svr.assess_page_vision_eligibility(
         _signals(non_text_mark_count=2, has_native_text=True, native_text_char_count=64)
@@ -628,6 +650,19 @@ def test_module_source_has_no_project_specific_hardcoding():
 def test_prompts_reject_unknown_project_specific_reason_codes():
     with pytest.raises(ValueError, match="Unsupported vision risk reasons"):
         svr.build_selective_vision_prompts(reasons=["study_D001_gate"])
+
+
+def test_visual_prompt_checks_handwriting_without_inventing_judgment():
+    from app.domain.contracts.selective_vision_observation import SELECTIVE_VISION_PROMPT_VERSION
+
+    _, user_prompt = svr.build_selective_vision_prompts(reasons=[svr.VISION_REASON_SCAN_OR_IMAGE_ONLY])
+    assert SELECTIVE_VISION_PROMPT_VERSION == "selective_vision_review/v4"
+    for content in ("手写字", "圈注", "便签", "所指向的检查或记录", "不得补字", "不得推定为研究者判断"):
+        assert content in user_prompt
+    assert "不得从同段就诊日期推定治疗的实际起止" in user_prompt
+    assert "不得把它补成勾选、医学分级或研究者判断" in user_prompt
+    assert "扫描或图片页可能遗漏手写及标注" in user_prompt
+    assert "scan_or_image_only" not in user_prompt
 
 
 def test_planner_stays_isolated_from_ocr_executor_and_semantic_backends():

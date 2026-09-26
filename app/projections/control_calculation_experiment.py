@@ -30,7 +30,7 @@ class ControlConditionalObservation(ContractModel):
 
 
 class ControlCalculationExperiment(ContractModel):
-    version: Literal["control-calculation-experiment/v3", "control-calculation-experiment/v4", "control-calculation-experiment/v5", "control-calculation-experiment/v6", "control-calculation-experiment/v7", "control-calculation-experiment/v8", "control-calculation-experiment/v9", "control-calculation-experiment/v10", "control-calculation-experiment/v11", "control-calculation-experiment/v12", "control-calculation-experiment/v13"] = "control-calculation-experiment/v13"
+    version: Literal["control-calculation-experiment/v3", "control-calculation-experiment/v4", "control-calculation-experiment/v5", "control-calculation-experiment/v6", "control-calculation-experiment/v7", "control-calculation-experiment/v8", "control-calculation-experiment/v9", "control-calculation-experiment/v10", "control-calculation-experiment/v11", "control-calculation-experiment/v12", "control-calculation-experiment/v13", "control-calculation-experiment/v14", "control-calculation-experiment/v15"] = "control-calculation-experiment/v15"
     frozen_input_sha256: str
     selections_sha256: str
     accepted: Literal[False] = False
@@ -47,9 +47,9 @@ class ControlCalculationExperiment(ContractModel):
 
     @model_validator(mode="after")
     def validate_repeat_scope(self):
-        if self.repeat_evaluations and (self.version not in {"control-calculation-experiment/v11", "control-calculation-experiment/v12", "control-calculation-experiment/v13"} or self.purpose != "four_layer"):
+        if self.repeat_evaluations and (self.version not in {"control-calculation-experiment/v11", "control-calculation-experiment/v12", "control-calculation-experiment/v13", "control-calculation-experiment/v14", "control-calculation-experiment/v15"} or self.purpose != "four_layer"):
             raise ValueError("旧计算或复查触发条件不能夹带新的最终复查求值")
-        if self.frequency_evaluations and (self.version not in {"control-calculation-experiment/v12", "control-calculation-experiment/v13"}
+        if self.frequency_evaluations and (self.version not in {"control-calculation-experiment/v12", "control-calculation-experiment/v13", "control-calculation-experiment/v14", "control-calculation-experiment/v15"}
                 or (self.version == "control-calculation-experiment/v12" and self.purpose != "four_layer")):
             raise ValueError("频次计算须使用当前完整审核，不能补写历史")
         return self
@@ -113,6 +113,8 @@ def _proposition_observation(atom, records, calculation):
                 return TruthValue.UNKNOWN, ["source_outside_validity_window"]
         if spec.time_purpose == "event_membership" and temporal.truth == TruthValue.FALSE:
             return TruthValue.UNKNOWN, ["observation_out_of_window"]
+        if spec.time_purpose == "interval_condition" and temporal.truth == TruthValue.FALSE:
+            return TruthValue.UNKNOWN, ["interval_condition_requires_scope_review"]
     if spec.observation_policy is not None and spec.observation_policy.mode == "single" and not _scope_supported(records):
         return TruthValue.UNKNOWN, ["observation_scope_completeness_unverified"]
     relations = {record["status"] for record in records}
@@ -339,6 +341,16 @@ def _evaluate_control_selection(
             and not selected_conflicts and _scope_supported(by_observation.get(
                 (identity.identity_sha256, interpreted[0].fact_id), []))
         )
+        if (spec is not None and spec.determination_mode == "semantic"
+                and spec.observation_policy is not None
+                and spec.observation_policy.mode == "action_completion"):
+            scope_verified = bool(
+                interpreted and not selected_conflicts
+                and not any(gap.identity_sha256 == identity.identity_sha256 for gap in gaps)
+                and all(item.truth != TruthValue.UNKNOWN and _scope_supported(
+                    by_observation.get((identity.identity_sha256, item.fact_id), [])
+                ) for item in interpreted)
+            )
         truth, reasons = _conditional_truth(identity.atom, interpreted, scope_verified=scope_verified,
                                            universal_facts=universal_facts, individual_facts=individual_facts,
                                            universal_ready=universal_ready)
@@ -377,7 +389,7 @@ def _evaluate_control_selection(
         atom_truths=by_control.get(control.protocol_control_id, {}),
     ) for control in frozen.publication.catalog.controls] if not repeat_triggers_only else []
     selection_payload = {
-        "version": "control-calculation-experiment/v13",
+        "version": "control-calculation-experiment/v15",
         "frozen_input_sha256": frozen.frozen_input_sha256, "selections": chosen,
         "conflict_groups": [group.model_dump(mode="json") for group in sorted(
             groups, key=lambda group: group.conflict_group_id)],

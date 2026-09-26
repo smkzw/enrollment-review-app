@@ -88,6 +88,16 @@ def _chain_heads(entities: list[Any], identity_attr: str) -> list[Any]:
 class PatientProfileService:
     """把当前权威元组的已发布 v2 实体投影为一条不可变 Patient Profile revision。"""
 
+    def validate_published_references(self, session: Session, authority: FactAuthority) -> None:
+        """Check the existing source graph before starting a new normalization run."""
+        self._validate_referential_closure(
+            facts=self._published_facts(session, authority),
+            events=self._published_events(session, authority),
+            exposures=self._published_exposures(session, authority),
+            conflicts=self._published_conflicts(session, authority),
+            expectations=self._latest_expectations(session, authority),
+        )
+
     # ------------------------------------------------------------------ 生成
 
     def generate(

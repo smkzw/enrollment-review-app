@@ -733,6 +733,8 @@ def test_executor_prompt_carries_frozen_observations_and_publishes(session_facto
     assert '"risk_reasons": []' in prompt
     assert "不覆盖、不改写、不替代" in prompt
     assert "不得以视觉观察作为唯一断言依据" in prompt
+    assert "对应页的有效原文和定位没有这段内容" in prompt
+    assert "不要把书写者未明的批注当作研究者书面判断" in prompt
     # 有效文本与 OCR 原文未被观察改写。
     assert RAW_TEXT in prompt
     # 运行成功且候选锚定真实 locator 发布（观察未豁免定位闭包）

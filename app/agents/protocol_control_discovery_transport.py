@@ -120,12 +120,13 @@ def _connection_defaults(
                 PROTOCOL_CONTROL_GLM_BASE_URL,
             )
         elif backend in REMOTE_OPENAI_PROVIDERS:
+            provider_only = backend == "ollama-cloud"
             base_url, _ = resolve_openai_connection(
                 backend,
-                base_url=base_url,
-                api_key=api_key,
-                role_base_url_env="PROTOCOL_CONTROL_DISCOVERY_BASE_URL",
-                role_api_key_env="PROTOCOL_CONTROL_DISCOVERY_API_KEY",
+                base_url=None if provider_only else base_url,
+                api_key=None if provider_only else api_key,
+                role_base_url_env=None if provider_only else "PROTOCOL_CONTROL_DISCOVERY_BASE_URL",
+                role_api_key_env=None if provider_only else "PROTOCOL_CONTROL_DISCOVERY_API_KEY",
             )
         else:
             base_url = os.getenv("PROTOCOL_CONTROL_DISCOVERY_BASE_URL", "")
@@ -142,12 +143,13 @@ def _connection_defaults(
                 PROTOCOL_CONTROL_GLM_API_KEY,
             )
         elif backend in REMOTE_OPENAI_PROVIDERS:
+            provider_only = backend == "ollama-cloud"
             _, api_key = resolve_openai_connection(
                 backend,
                 base_url=base_url,
-                api_key=api_key,
-                role_base_url_env="PROTOCOL_CONTROL_DISCOVERY_BASE_URL",
-                role_api_key_env="PROTOCOL_CONTROL_DISCOVERY_API_KEY",
+                api_key=None if provider_only else api_key,
+                role_base_url_env=None if provider_only else "PROTOCOL_CONTROL_DISCOVERY_BASE_URL",
+                role_api_key_env=None if provider_only else "PROTOCOL_CONTROL_DISCOVERY_API_KEY",
             )
         else:
             api_key = os.getenv("PROTOCOL_CONTROL_DISCOVERY_API_KEY", "")

@@ -37,8 +37,7 @@ __all__ = [
 _SHA256 = r"^[0-9a-f]{64}$"
 
 SELECTIVE_VISION_OBSERVATION_CONTRACT = "selective_vision_observation/v1"
-# 提示正文未变；页级规划版本独立演进，观察身份同时绑定两者。
-SELECTIVE_VISION_PROMPT_VERSION = "selective_vision_review/v1"
+SELECTIVE_VISION_PROMPT_VERSION = "selective_vision_review/v4"
 
 ALLOWED_SELECTIVE_VISION_RISK_REASONS: frozenset[str] = frozenset(
     {

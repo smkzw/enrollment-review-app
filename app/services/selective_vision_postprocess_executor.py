@@ -9,11 +9,14 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, Callable
 
+import pdfplumber
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -37,7 +40,7 @@ from app.services.selective_vision_postprocess_job_service import (
 )
 from app.services.selective_vision_runtime import selective_vision_route_sha256
 from app.storage.config import DataPaths
-from app.storage.evidence_repositories import SourceDocumentRepository
+from app.storage.evidence_repositories import BlobRepository, SourceDocumentRepository
 from app.storage.ocr_models import OCRProfileRecord
 from app.storage.ocr_repositories import (
     EvidenceProcessingRevisionRepository,
@@ -98,6 +101,23 @@ def _profile_route(session: Session, ocr_profile_sha256: str | None) -> str | No
     return str(row.extraction_route)
 
 
+def _pdf_non_text_marks(source: bytes) -> dict[int, int]:
+    """Read visual marks from the immutable PDF, indexed by one-based page number."""
+    with pdfplumber.open(io.BytesIO(source)) as pdf:
+        return {
+            number: (
+                len(page.images) + len(page.rects) + len(page.curves)
+                + len(page.lines)
+                + sum(
+                    getattr((annotation.get("data") or {}).get("Subtype"), "name", None)
+                    != "Link"
+                    for annotation in page.annots
+                )
+            )
+            for number, page in enumerate(pdf.pages, start=1)
+        }
+
+
 def load_selective_vision_page_materials_for_revision(
     session: Session,
     *,
@@ -112,11 +132,33 @@ def load_selective_vision_page_materials_for_revision(
     ocr_repo = OcrPageRepository(session)
     version_repo = SourceDocumentRepository(session)
     materials: list[SelectiveVisionObservationPageMaterial] = []
+    pdf_marks_by_source: dict[str, dict[int, int] | None] = {}
 
     for entry in revision.manifest:
         artifact = artifact_repo.get(entry.page_artifact_id)
         version = version_repo.get(entry.source_document_version_id)
         media_kind = _media_kind(version.media_type, version.file_name)
+        non_text_mark_count: int | None = None
+        mark_probe_failed = False
+        if media_kind == "pdf" and artifact.native_text_sha256:
+            digest = version.source_blob_sha256
+            if digest not in pdf_marks_by_source:
+                blob = BlobRepository(session).get(digest)
+                source_path = artifact_store.data_paths.boundary.require_v2_target(
+                    artifact_store.data_paths.root / blob.storage_ref
+                )
+                source = source_path.read_bytes()
+                if sha256(source).hexdigest() != digest:
+                    raise ValueError("source blob digest mismatch")
+                try:
+                    pdf_marks_by_source[digest] = _pdf_non_text_marks(source)
+                except (ValueError, pdfplumber.utils.exceptions.PdfminerException) as exc:
+                    logger.warning("PDF page marks unavailable for source=%s: %s", digest, type(exc).__name__)
+                    pdf_marks_by_source[digest] = None
+            marks = pdf_marks_by_source[digest]
+            mark_probe_failed = marks is None or int(entry.page_number) not in marks
+            if marks is not None:
+                non_text_mark_count = marks.get(int(entry.page_number))
         page_image_sha = artifact.page_image_sha256
         has_page_image = bool(page_image_sha)
         image_bytes: bytes | None = None
@@ -167,7 +209,7 @@ def load_selective_vision_page_materials_for_revision(
             native_text_char_count=native_text_char_count,
             layout_block_count=layout_block_count,
         )
-        native_anomaly = artifact.status == PageArtifactStatus.DEGRADED
+        native_anomaly = artifact.status == PageArtifactStatus.DEGRADED or mark_probe_failed
         materials.append(
             SelectiveVisionObservationPageMaterial(
                 page_artifact_id=artifact.page_artifact_id,
@@ -182,7 +224,7 @@ def load_selective_vision_page_materials_for_revision(
                 native_text_char_count=native_text_char_count,
                 has_ocr_text=has_ocr_text,
                 ocr_text_char_count=ocr_text_char_count,
-                non_text_mark_count=None,
+                non_text_mark_count=non_text_mark_count,
                 complex_layout_not_represented_by_native_text=complex_layout,
                 native_extraction_anomaly=native_anomaly,
                 ocr_confidence=ocr_confidence,

@@ -69,6 +69,7 @@ def test_repair_keeps_original_schema_and_current_budget():
 @pytest.mark.parametrize("warning", [None, "299 omlx structured output not enforced"])
 def test_sdk_native_body_and_downgrade_rejection(monkeypatch, warning):
     import httpx
+    from app.domain.contracts.page_review import PageReviewLane
     from app.llm import page_review_harness as harness
     messages = [{"role": "user", "content": [{"type": "text", "text": json.dumps({
         "output_schema": {"type": "object"}})}]}]
@@ -86,7 +87,7 @@ def test_sdk_native_body_and_downgrade_rejection(monkeypatch, warning):
             super().__init__(**kwargs, transport=httpx.MockTransport(handle))
 
     monkeypatch.setattr(harness.httpx, "AsyncClient", Client)
-    route = SimpleNamespace(provider="omlx", model="test", reasoning_effort="medium",
+    route = SimpleNamespace(lane=PageReviewLane.MAIN_B, provider="omlx", model="test", reasoning_effort="medium",
                             base_url="http://localhost/v1", api_key="test")
     if warning:
         with pytest.raises(harness.PageReviewHarnessError, match="未能启用"):
@@ -98,3 +99,51 @@ def test_sdk_native_body_and_downgrade_rejection(monkeypatch, warning):
     assert captured[0]["thinking_budget"] == 131072
     assert captured[0]["max_tokens"] == 131072
     assert "temperature" not in captured[0]
+
+
+def test_ollama_cloud_page_request_uses_direct_model_and_image(monkeypatch):
+    import httpx
+    from app.domain.contracts.page_review import PageReviewLane
+    from app.llm import page_review_harness as harness
+    from app.llm.page_review_harness import require_page_reader_routes
+
+    route = require_page_reader_routes({
+        "PAGE_REVIEW_MAIN_A_PROVIDER": "cms-router",
+        "CMS_ROUTER_API_KEY": "main-a-only",
+        "PAGE_REVIEW_MAIN_B_PROVIDER": "ollama-cloud",
+        "PAGE_REVIEW_MAIN_B_MODEL": "deepseek-v4.1-flash",
+        "PAGE_REVIEW_MAIN_B_REASONING_EFFORT": "high",
+        "OLLAMA_API_KEY": "ollama-test-only",
+    })[PageReviewLane.MAIN_B]
+    messages = [{"role": "user", "content": [
+        {"type": "text", "text": "只读取这一页"},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,eA=="}},
+    ]}]
+    captured = []
+
+    def handle(request):
+        captured.append((str(request.url), json.loads(request.content)))
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=(
+            'data: {"id":"ollama-test","model":"deepseek-v4.1-flash",'
+            '"choices":[{"index":0,"delta":{"content":"{}"},"finish_reason":"stop"}]}\n\n'
+            'data: [DONE]\n\n'
+        ))
+
+    class Client(httpx.AsyncClient):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs, transport=httpx.MockTransport(handle))
+
+    monkeypatch.setattr(harness.httpx, "AsyncClient", Client)
+    result = asyncio.run(harness.direct_openai_completion(route, messages, 65536))
+    assert result.text == "{}"
+    assert result.response_model == "deepseek-v4.1-flash"
+    assert len(captured) == 1
+    url, body = captured[0]
+    assert url == "https://ollama.com/v1/chat/completions"
+    assert body["model"] == "deepseek-v4.1-flash"
+    assert body["reasoning_effort"] == "high"
+    assert body["max_tokens"] == 65536
+    assert body["messages"] == messages
+    assert body["stream_options"] == {"include_usage": True}
+    assert "response_format" not in body
+    assert "temperature" not in body

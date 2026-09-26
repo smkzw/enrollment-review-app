@@ -5,7 +5,22 @@ from pydantic import Field, model_validator
 
 from .common import ContractModel
 
-PROPOSITION_EVIDENCE_VERSION = "proposition-evidence/v6"
+PROPOSITION_EVIDENCE_VERSION = "proposition-evidence/v7"
+
+
+class ActionCompletionWitness(ContractModel):
+    """A source quote about the required action, not its clinical result."""
+
+    status: Literal["completed", "explicit_not_completed", "not_established"]
+    action_quote: str | None
+
+    @model_validator(mode="after")
+    def validate_quote(self):
+        if (self.status == "not_established") != (self.action_quote is None):
+            raise ValueError("操作完成或明确未做须有对应原文；未证实不得伪造原文")
+        if self.action_quote is not None and not self.action_quote.strip():
+            raise ValueError("操作依据原文不能为空")
+        return self
 
 
 class ProspectiveEvidenceCheck(ContractModel):
@@ -58,6 +73,7 @@ class PropositionEvidenceCheck(ContractModel):
     scope_population: Literal["nonempty", "empty", "unresolved"]
     population_quote: str | None
     prospective_evidence: ProspectiveEvidenceCheck | None
+    action_witness: ActionCompletionWitness | None = None
     target_correspondence: Literal["supported", "rejected", "unresolved"]
     node_correspondence: Literal["supported", "rejected", "unresolved"]
     investigator_attribution: Literal["supported", "rejected", "unresolved", "not_applicable"]
@@ -107,7 +123,8 @@ class PropositionEvidenceCheck(ContractModel):
         return (self.proposition_sha256, self.scope, self.relation, self.basis,
                 self.target_correspondence, self.node_correspondence, self.investigator_attribution,
                 self.scope_correspondence, self.assertion_extent, self.scope_population,
-                self.prospective_evidence.agreement_key() if self.prospective_evidence else None)
+                self.prospective_evidence.agreement_key() if self.prospective_evidence else None,
+                self.action_witness.status if self.action_witness else None)
 
 
 class PropositionEvidencePayload(ContractModel):

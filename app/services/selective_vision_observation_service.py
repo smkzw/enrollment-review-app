@@ -66,6 +66,11 @@ logger = logging.getLogger(__name__)
 
 ReviewRunner = Callable[..., Awaitable[SelectiveVisionReviewOutcome]]
 
+_ROUTE_WIDE_FAILURE_KINDS = frozenset({
+    "auth", "balance_insufficient", "config_error", "independent_vlm_error",
+    "quota", "remote_error",
+})
+
 
 class SelectiveVisionObservationServiceError(RuntimeError):
     """观察后处理服务错误基类。"""
@@ -294,8 +299,19 @@ class SelectiveVisionObservationService:
             closed.extend(saved.closed)
             created_ids.extend(saved.created_observation_ids)
             reused_ids.extend(saved.reused_observation_ids)
-            if first_closed_error is None and saved.closed_error is not None:
+            if saved.closed_error is not None and (
+                first_closed_error is None
+                or (
+                    saved.closed_error.failure_kind in _ROUTE_WIDE_FAILURE_KINDS
+                    and first_closed_error.failure_kind not in _ROUTE_WIDE_FAILURE_KINDS
+                )
+            ):
                 first_closed_error = saved.closed_error
+            if (
+                saved.closed_error is not None
+                and saved.closed_error.failure_kind in _ROUTE_WIDE_FAILURE_KINDS
+            ):
+                break
         if prepared.pending_missing_pages:
             with self.session_factory() as session, session.begin():
                 missing_result = self._persist_missing_page_closed(

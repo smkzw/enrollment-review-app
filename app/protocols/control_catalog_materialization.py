@@ -12,6 +12,7 @@ from app.domain.contracts.protocol_controls import (
     ControlCrossSourceRelation, ControlRelationTargetKind,
     KnownRequiredProcedureTarget,
     ProtocolControlBatchDispositionHydrated, ProtocolControlBatchPlan,
+    ProtocolControlSourceUnitRelation,
     ProtocolReviewControl, ProtocolSectionCoverageManifest,
     PublishedProtocolControlCatalog,
 )
@@ -28,6 +29,7 @@ def materialize_control_catalog(
     batch_dispositions: Sequence[ProtocolControlBatchDispositionHydrated],
     rule_component_ids: Sequence[str],
     phase_applicability_view: FullProtocolCoverageResolutionView | None = None,
+    source_unit_relations: Sequence[ProtocolControlSourceUnitRelation] = (),
 ) -> PublishedProtocolControlCatalog:
     """Copy every hydrated candidate, then validate the complete nonempty content.
 
@@ -55,12 +57,15 @@ def materialize_control_catalog(
         min(units[key].source_order for key in item.frozen_structure_unit_ids),
         item.control_candidate_id,
     ))
-    digest = canonical_hash({
+    digest_payload = {
         "version": "control-catalog-materialization/v1",
         "manifest": manifest.model_dump(mode="json"),
         "plan": plan.model_dump(mode="json"),
         "batches": [item.model_dump(mode="json") for item in sorted(batches, key=lambda item: item.batch_id)],
-    })
+    }
+    if source_unit_relations:
+        digest_payload["source_unit_relations"] = [item.model_dump(mode="json") for item in source_unit_relations]
+    digest = canonical_hash(digest_payload)
     identities = {item.control_candidate_id: "protocol-control:" + canonical_hash(
         [digest, item.control_candidate_id],
     )[:32] for item in candidates}
@@ -98,6 +103,7 @@ def materialize_control_catalog(
         coverage_manifest_id=manifest.manifest_id,
         allowed_source_span_ids=sorted({span for unit in manifest.units for span in unit.source_span_ids}),
         controls=controls,
+        source_unit_relations=list(source_unit_relations),
     )
     return validate_protocol_control_publication(
         manifest, catalog, plan=plan, batch_dispositions=batches,

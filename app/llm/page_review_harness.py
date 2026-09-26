@@ -281,8 +281,11 @@ def require_page_reader_routes(
         main_b_base_url = _value(env, "PAGE_REVIEW_MAIN_B_BASE_URL", PAGE_REVIEW_MAIN_B_BASE_URL)
         if not local_main_b:
             try:
-                use_provider_route = main_b_provider == "cms-router" and bool(_value(env, "CMS_ROUTER_API_KEY", ""))
-                if use_provider_route and (
+                use_provider_route = (
+                    main_b_provider == "ollama-cloud"
+                    or (main_b_provider == "cms-router" and bool(_value(env, "CMS_ROUTER_API_KEY", "")))
+                )
+                if main_b_provider == "cms-router" and use_provider_route and (
                     _value(env, "PAGE_REVIEW_MAIN_B_BASE_URL", "") not in ("", _value(env, "CMS_ROUTER_BASE_URL", CMS_ROUTER_BASE_URL))
                     or _value(env, "PAGE_REVIEW_MAIN_B_API_KEY", "") not in ("", _value(env, "CMS_ROUTER_API_KEY", ""))
                 ):
@@ -312,7 +315,9 @@ def require_page_reader_routes(
             missing.append("GEMINI_PROJECT_ID")
     elif not main_b_key:
         missing.append(
-            "PAGE_REVIEW_MAIN_B_API_KEY（或 CMS_SMK_API_KEY）"
+            "OLLAMA_API_KEY"
+            if main_b_provider == "ollama-cloud"
+            else "PAGE_REVIEW_MAIN_B_API_KEY（或 CMS_SMK_API_KEY）"
             if main_b_provider == "cms-smk"
             else "PAGE_REVIEW_MAIN_B_API_KEY"
         )

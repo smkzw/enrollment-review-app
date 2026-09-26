@@ -11,7 +11,10 @@ invent an identity or an official IN/EX/REQ number.
 from __future__ import annotations
 
 import re
+import unicodedata
+from collections import Counter, defaultdict
 from collections.abc import Sequence
+from difflib import SequenceMatcher
 
 from app.domain.contracts.enums import CatalogKind, PhaseScope, StudyPhase
 from app.domain.contracts.protocol_controls import (
@@ -27,6 +30,7 @@ from app.domain.contracts.protocol_controls import (
     ProtocolControlDispositionBatch,
     ProtocolSectionCoverageManifest,
     ProtocolStructureUnit,
+    is_source_list_continuation_group,
     stable_protocol_control_discovery_batch_id,
     stable_protocol_control_manifest_structure_unit_ids_sha256,
     stable_protocol_control_batch_id,
@@ -263,6 +267,35 @@ def detect_required_action_kinds(text: str) -> tuple[str, ...]:
             if pattern.search(text)
         )
     )
+
+
+def _owned_action_gate_metadata(
+    owned: Sequence[ProtocolStructureUnit],
+    procedure_targets: Sequence[KnownRequiredProcedureTarget],
+) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    action_kinds: dict[str, list[str]] = {}
+    procedure_ids: dict[str, list[str]] = {}
+    for unit in owned:
+        kinds = detect_required_action_kinds(unit.excerpt)
+        if not kinds:
+            continue
+        action_kinds[unit.structure_unit_id] = list(kinds)
+        unit_text = re.sub(r"\s+", "", unit.excerpt)
+        matched = sorted(
+            target.catalog_item_id
+            for target in procedure_targets
+            if target.source_excerpts and any(
+                span_id in unit.source_span_ids
+                and excerpt is not None
+                and re.sub(r"\s+", "", excerpt) == unit_text
+                for span_id, excerpt in zip(
+                    target.source_span_ids, target.source_excerpts, strict=True
+                )
+            )
+        )
+        if matched:
+            procedure_ids[unit.structure_unit_id] = matched
+    return action_kinds, procedure_ids
 
 
 def _catalog_targets(
@@ -504,6 +537,9 @@ def plan_protocol_control_batches(
     for number, (owned, context) in enumerate(chunks, start=1):
         owned_ids = [unit.structure_unit_id for unit in owned]
         owned_spans = sorted({span for unit in owned for span in unit.source_span_ids})
+        action_kinds, procedure_ids = _owned_action_gate_metadata(
+            owned, procedure_targets
+        )
         context_spans = sorted(
             {span for unit in context for span in unit.source_span_ids}
         )
@@ -526,11 +562,8 @@ def plan_protocol_control_batches(
                 context_structure_unit_ids=[unit.structure_unit_id for unit in context],
                 owned_source_span_ids=owned_spans,
                 context_source_span_ids=context_spans,
-                owned_required_action_kinds_by_structure_unit_id={
-                    unit.structure_unit_id: list(action_kinds)
-                    for unit in owned
-                    if (action_kinds := detect_required_action_kinds(unit.excerpt))
-                },
+                owned_required_action_kinds_by_structure_unit_id=action_kinds,
+                owned_required_procedure_target_ids_by_structure_unit_id=procedure_ids,
                 known_official_targets=list(official_targets),
                 known_procedure_targets=list(procedure_targets),
                 known_workflow_stage_targets=list(workflow_stage_targets),
@@ -874,6 +907,10 @@ def _deep_batch_chunks(
         unit.structure_unit_id: unit
         for unit in (all_units or units)
     }
+    source_position = {
+        unit.structure_unit_id: index
+        for index, unit in enumerate(all_units or units)
+    }
     table_rows: dict[str, dict[int, list[ProtocolStructureUnit]]] = {}
     for unit in unit_by_id.values():
         if unit.table_context is None:
@@ -901,8 +938,26 @@ def _deep_batch_chunks(
         tuple[tuple[ProtocolStructureUnit, ...], tuple[ProtocolStructureUnit, ...]]
     ] = []
     for run in _heading_runs(units):
-        for start in range(0, len(run), max_owned_units_per_batch):
-            owned = tuple(run[start : start + max_owned_units_per_batch])
+        start = 0
+        while start < len(run):
+            end = start + 1
+            if (run[start].unit_kind == "paragraph"
+                    and run[start].excerpt.rstrip().endswith(("：", ":"))):
+                while (end < len(run)
+                       and run[end].unit_kind == "list_item"
+                       and run[end].heading_path == run[start].heading_path
+                       and source_position[run[end].structure_unit_id]
+                       == source_position[run[end - 1].structure_unit_id] + 1):
+                    end += 1
+            if not is_source_list_continuation_group(run[start:end]):
+                end = start + 1
+                while (end < len(run)
+                       and end - start < max_owned_units_per_batch
+                       and not (run[end].unit_kind == "paragraph"
+                                and run[end].excerpt.rstrip().endswith(("：", ":")))):
+                    end += 1
+            owned = tuple(run[start:end])
+            start = end
             owned_ids = [unit.structure_unit_id for unit in owned]
             required_context_ids = {
                 context_id
@@ -920,6 +975,61 @@ def _deep_batch_chunks(
             )
             chunks.append((owned, context))
     return chunks
+
+
+def _cross_chapter_readonly_context(
+    owned_units: Sequence[ProtocolStructureUnit],
+    all_units: Sequence[ProtocolStructureUnit],
+) -> dict[str, tuple[str, ...]]:
+    """Shortlist similar source units; similarity never establishes equivalence."""
+
+    def normalized(value: str) -> str:
+        return "".join(
+            char.casefold() for char in unicodedata.normalize("NFKC", value)
+            if char.isalnum()
+        )
+
+    texts = {unit.structure_unit_id: normalized(unit.excerpt) for unit in all_units}
+    grams = {
+        unit_id: {value[index:index + 6] for index in range(len(value) - 5)}
+        for unit_id, value in texts.items() if 60 <= len(value) <= 4000
+    }
+    by_ngram: dict[str, set[str]] = defaultdict(set)
+    for unit in all_units:
+        for gram in grams.get(unit.structure_unit_id, ()):
+            by_ngram[gram].add(unit.structure_unit_id)
+    units_by_id = {unit.structure_unit_id: unit for unit in all_units}
+    result: dict[str, tuple[str, ...]] = {}
+    for unit in owned_units:
+        source = texts[unit.structure_unit_id]
+        source_grams = grams.get(unit.structure_unit_id)
+        if not source_grams:
+            continue
+        counts: Counter[str] = Counter()
+        for gram in source_grams:
+            counts.update(by_ngram[gram])
+        matches: list[tuple[float, str]] = []
+        for target_id, overlap in counts.most_common(24):
+            target = units_by_id[target_id]
+            target_text = texts[target_id]
+            compatible_scope = (
+                bool({PhaseScope.SHARED, PhaseScope.UNKNOWN}
+                     & (set(target.phase_scopes) | set(unit.phase_scopes)))
+                or bool(set(target.phase_scopes) & set(unit.phase_scopes))
+            )
+            if (target_id == unit.structure_unit_id
+                    or target.heading_path == unit.heading_path
+                    or not compatible_scope
+                    or overlap < 0.65 * min(len(source_grams), len(grams[target_id]))
+                    or min(len(source), len(target_text)) / max(len(source), len(target_text)) < 0.8):
+                continue
+            score = SequenceMatcher(None, source, target_text, autojunk=False).ratio()
+            if score >= 0.86:
+                matches.append((score, target_id))
+        if matches:
+            matches.sort(key=lambda item: (-item[0], units_by_id[item[1]].source_order))
+            result[unit.structure_unit_id] = tuple(target_id for _, target_id in matches[:3])
+    return result
 
 
 def _route_explicit_other_phase_units(
@@ -1031,6 +1141,16 @@ def plan_protocol_control_deep_batches_from_discovery(
         )
         for decision in decisions
     }
+    similar_context = _cross_chapter_readonly_context(
+        deep_units,
+        [unit for unit in coverage_manifest.units
+         if decision_by_id[unit.structure_unit_id].disposition
+         != ProtocolControlDiscoveryDisposition.NON_CONTROL],
+    )
+    context_ids_by_unit_id = {
+        unit_id: tuple(dict.fromkeys((*context_ids_by_unit_id[unit_id], *similar_context.get(unit_id, ()))))
+        for unit_id in context_ids_by_unit_id
+    }
     chunks = _deep_batch_chunks(
         deep_units,
         context_ids_by_unit_id,
@@ -1057,6 +1177,9 @@ def plan_protocol_control_deep_batches_from_discovery(
     for number, (owned, context) in enumerate(chunks, start=1):
         owned_ids = [unit.structure_unit_id for unit in owned]
         context_ids = [unit.structure_unit_id for unit in context]
+        action_kinds, procedure_ids = _owned_action_gate_metadata(
+            owned, procedure_targets
+        )
         batches.append(
             ProtocolControlDispositionBatch(
                 batch_id=stable_protocol_control_batch_id(
@@ -1088,6 +1211,8 @@ def plan_protocol_control_deep_batches_from_discovery(
                         for span_id in unit.source_span_ids
                     }
                 ),
+                owned_required_action_kinds_by_structure_unit_id=action_kinds,
+                owned_required_procedure_target_ids_by_structure_unit_id=procedure_ids,
                 known_official_targets=list(official_targets),
                 known_procedure_targets=list(procedure_targets),
                 known_workflow_stage_targets=list(workflow_stage_targets),
@@ -1096,7 +1221,10 @@ def plan_protocol_control_deep_batches_from_discovery(
     deep_plan_id = "pcdp-" + stable_protocol_control_batch_id(
         coverage_manifest.manifest_id,
         len(batches),
-        [batch.batch_id for batch in batches],
+        [
+            f"{batch.batch_id}:{','.join(batch.context_structure_unit_ids)}"
+            for batch in batches
+        ],
     ).removeprefix("pcb-")
     return ProtocolControlDiscoveryToDeepPlan(
         plan_id=deep_plan_id,
@@ -1114,6 +1242,10 @@ def plan_protocol_control_deep_batches_from_discovery(
         ),
         expected_structure_unit_ids=expected_ids,
         discovery_decisions=list(decisions),
+        related_context_ids_by_owned={
+            unit_id: list(related_ids)
+            for unit_id, related_ids in similar_context.items()
+        },
         max_owned_units_per_batch=max_owned_units_per_batch,
         batches=batches,
     )

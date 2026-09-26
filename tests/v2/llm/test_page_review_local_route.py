@@ -45,6 +45,27 @@ def test_remote_provider_never_receives_another_providers_fallback_key():
         })
 
 
+def test_ollama_main_b_uses_only_its_own_credential():
+    env = {
+        "PAGE_REVIEW_MAIN_A_PROVIDER": "cms-router",
+        "PAGE_REVIEW_MAIN_A_MODEL": "glm-5.3-flash",
+        "CMS_ROUTER_API_KEY": "cms-only",
+        "PAGE_REVIEW_MAIN_B_PROVIDER": "ollama-cloud",
+        "PAGE_REVIEW_MAIN_B_MODEL": "deepseek-v4.1-flash",
+        "PAGE_REVIEW_MAIN_B_REASONING_EFFORT": "high",
+        "PAGE_REVIEW_MAIN_B_BASE_URL": "http://old-gateway.example/v1",
+        "PAGE_REVIEW_MAIN_B_API_KEY": "old-provider-key",
+    }
+    with pytest.raises(harness.PageReviewConfigError, match="OLLAMA_API_KEY"):
+        require_page_reader_routes(env)
+    env["OLLAMA_API_KEY"] = "ollama-only"
+    route = require_page_reader_routes(env)[PageReviewLane.MAIN_B]
+    assert (route.provider, route.base_url, route.api_key, route.model, route.reasoning_effort) == (
+        "ollama-cloud", "https://ollama.com/v1", "ollama-only",
+        "deepseek-v4.1-flash", "high",
+    )
+
+
 def test_current_cloud_pair_resolves_provider_specific_routes_and_budgets():
     routes = require_page_reader_routes({
         "PAGE_REVIEW_MAIN_A_PROVIDER": "cms-router",
@@ -95,7 +116,7 @@ def test_local_preflight_requires_ready_visual_model(monkeypatch, loaded, capabi
     }]}))
     monkeypatch.setattr(harness.httpx, "AsyncClient", lambda **kwargs: client(transport=transport, **kwargs))
     route = require_page_reader_routes({"PAGE_REVIEW_MAIN_A_PROVIDER": "zhipu-coding-plan",
-        "INDEPENDENT_VLM_API_KEY": "a",
+        "PAGE_REVIEW_MAIN_A_API_KEY": "a",
         "PAGE_REVIEW_MAIN_B_PROVIDER": "mlx-serve", "PAGE_REVIEW_MAIN_B_MODEL": MODEL,
         "PAGE_REVIEW_MAIN_B_BASE_URL": "http://127.0.0.1:11234/v1"})[PageReviewLane.MAIN_B]
     if valid:
@@ -109,7 +130,7 @@ def test_local_route_keeps_cloud_credentials_out_and_runs_serially(monkeypatch):
     monkeypatch.setattr("app.llm.page_review_harness.PAGE_REVIEW_MAIN_B_API_KEY", "old-cloud-secret")
     routes = require_page_reader_routes({
         "PAGE_REVIEW_MAIN_A_PROVIDER": "zhipu-coding-plan",
-        "INDEPENDENT_VLM_API_KEY": "a",
+        "PAGE_REVIEW_MAIN_A_API_KEY": "a",
         "CMS_SMK_API_KEY": "another-cloud-secret",
         "PAGE_REVIEW_MAIN_B_API_KEY": "legacy-explicit-cloud-secret",
         "PAGE_REVIEW_MAIN_B_PROVIDER": "mlx-serve",
@@ -128,7 +149,7 @@ def test_local_route_keeps_cloud_credentials_out_and_runs_serially(monkeypatch):
 def test_local_explicit_credential_is_used():
     routes = require_page_reader_routes({
         "PAGE_REVIEW_MAIN_A_PROVIDER": "zhipu-coding-plan",
-        "INDEPENDENT_VLM_API_KEY": "a",
+        "PAGE_REVIEW_MAIN_A_API_KEY": "a",
         "PAGE_REVIEW_MAIN_B_PROVIDER": "mlx-serve",
         "PAGE_REVIEW_MAIN_B_MODEL": MODEL,
         "PAGE_REVIEW_MAIN_B_BASE_URL": "http://127.0.0.1:11234/v1",
@@ -141,7 +162,7 @@ def test_local_explicit_credential_is_used():
 def test_mtplx_main_reader_requires_visual_identity_and_does_not_vote_twice(monkeypatch, visual):
     routes = require_page_reader_routes({
         "PAGE_REVIEW_MAIN_A_PROVIDER": "zhipu-coding-plan",
-            "INDEPENDENT_VLM_API_KEY": "a", "PAGE_REVIEW_MAIN_B_PROVIDER": "mtplx",
+            "PAGE_REVIEW_MAIN_A_API_KEY": "a", "PAGE_REVIEW_MAIN_B_PROVIDER": "mtplx",
             "PAGE_REVIEW_MAIN_B_MODEL": "mtplx-flash-next-optimized-speed",
             "PAGE_REVIEW_MAIN_B_BASE_URL": "http://127.0.0.1:8002/v1",
             "PAGE_REVIEW_MAIN_B_REASONING_EFFORT": "xhigh",

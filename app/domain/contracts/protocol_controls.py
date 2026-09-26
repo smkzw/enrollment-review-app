@@ -1910,6 +1910,22 @@ class ProtocolReviewControl(Phase5ControlModel):
         return self
 
 
+class ProtocolControlSourceUnitRelation(Phase5ControlModel):
+    """A reviewed source pair, accepted only after the target batch is checked."""
+
+    source_structure_unit_id: str = Field(min_length=1)
+    source_statement_index: int = Field(ge=0)
+    source_action_excerpt: str = Field(min_length=1)
+    source_object_excerpt: str = Field(min_length=1)
+    source_span_ids: list[str] = Field(min_length=1)
+    target_structure_unit_id: str = Field(min_length=1)
+    target_action_excerpt: str = Field(min_length=1)
+    target_object_excerpt: str = Field(min_length=1)
+    target_scope_excerpt: str = Field(min_length=1)
+    target_span_ids: list[str] = Field(min_length=1)
+    target_candidate_id: str = Field(min_length=1)
+
+
 class PublishedProtocolControlCatalog(Phase5ControlModel):
     """正式发布控制目录：来源闭包与未解冲突门禁。"""
 
@@ -1920,6 +1936,14 @@ class PublishedProtocolControlCatalog(Phase5ControlModel):
     coverage_manifest_id: str = Field(min_length=1)
     allowed_source_span_ids: list[str] = Field(min_length=1)
     controls: list[ProtocolReviewControl] = Field(default_factory=list)
+    source_unit_relations: list[ProtocolControlSourceUnitRelation] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_catalog_shape(self, handler):
+        value = handler(self)
+        if not self.source_unit_relations:
+            value.pop("source_unit_relations", None)
+        return value
 
     @model_validator(mode="after")
     def validate_catalog(self) -> "PublishedProtocolControlCatalog":
@@ -1939,6 +1963,16 @@ class PublishedProtocolControlCatalog(Phase5ControlModel):
             raise ValueError("发布控制必须按 display_ordinal 升序排列")
 
         allowed = set(self.allowed_source_span_ids)
+        candidate_ids = {control.originating_candidate_id for control in self.controls}
+        relation_keys = set()
+        for relation in self.source_unit_relations:
+            key = (relation.source_structure_unit_id, relation.source_statement_index)
+            if key in relation_keys or relation.source_structure_unit_id == relation.target_structure_unit_id:
+                raise ValueError("跨章节来源对应重复或指向自身")
+            relation_keys.add(key)
+            if (relation.target_candidate_id not in candidate_ids
+                    or not set([*relation.source_span_ids, *relation.target_span_ids]) <= allowed):
+                raise ValueError("跨章节来源对应缺少正式候选或原文定位")
         unresolved_conflicts: list[str] = []
         for control in self.controls:
             if control.protocol_version_id != self.protocol_version_id:
@@ -2033,6 +2067,27 @@ class KnownWorkflowStageTarget(Phase5ControlModel):
     display_name: str = Field(min_length=1)
     visit_instance: str | None = Field(default=None, min_length=1)
     visit_window: str | None = Field(default=None, min_length=1)
+
+
+MAX_SOURCE_LIST_GROUP_UNITS = 24
+
+
+def is_source_list_continuation_group(units: Sequence[ProtocolStructureUnit]) -> bool:
+    """A source introduction and its bounded, same-section list are one unit of meaning."""
+
+    if not 2 <= len(units) <= MAX_SOURCE_LIST_GROUP_UNITS:
+        return False
+    head = units[0]
+    return (
+        head.unit_kind == StructureUnitKind.PARAGRAPH
+        and head.excerpt.rstrip().endswith(("：", ":"))
+        and all(
+            item.unit_kind == StructureUnitKind.LIST_ITEM
+            and item.heading_path == head.heading_path
+            and item.source_order > preceding.source_order
+            for preceding, item in zip(units, units[1:])
+        )
+    )
 
 
 class ProtocolControlDispositionBatch(Phase5ControlModel):
@@ -2134,10 +2189,6 @@ class ProtocolControlDispositionBatch(Phase5ControlModel):
         visit_unit_ids = list(self.owned_visit_instance_by_structure_unit_id)
         if not set(visit_unit_ids) <= set(owned_ids):
             raise ValueError("执行访视归属只能引用本批 owned_units")
-        if visit_unit_ids != [
-            unit_id for unit_id in owned_ids if unit_id in set(visit_unit_ids)
-        ]:
-            raise ValueError("执行访视归属必须按 owned_units 原文顺序排列")
         known_visit_instances = {
             item.visit_instance
             for item in self.known_workflow_stage_targets
@@ -2157,10 +2208,6 @@ class ProtocolControlDispositionBatch(Phase5ControlModel):
         )
         if not set(family_unit_ids) <= set(owned_ids):
             raise ValueError("流程资料家族归属只能引用本批 owned_units")
-        if family_unit_ids != [
-            unit_id for unit_id in owned_ids if unit_id in set(family_unit_ids)
-        ]:
-            raise ValueError("流程资料家族归属必须按 owned_units 原文顺序排列")
         known_families = {
             item.semantic_family
             for item in self.known_procedure_targets
@@ -2177,10 +2224,6 @@ class ProtocolControlDispositionBatch(Phase5ControlModel):
         )
         if not set(action_unit_ids) <= set(owned_ids):
             raise ValueError("必需动作归属只能引用本批 owned_units")
-        if action_unit_ids != [
-            unit_id for unit_id in owned_ids if unit_id in set(action_unit_ids)
-        ]:
-            raise ValueError("必需动作归属必须按 owned_units 原文顺序排列")
         for unit_id, action_kinds in (
             self.owned_required_action_kinds_by_structure_unit_id.items()
         ):
@@ -2190,10 +2233,6 @@ class ProtocolControlDispositionBatch(Phase5ControlModel):
         )
         if not set(target_unit_ids) <= set(owned_ids):
             raise ValueError("必需流程目标归属只能引用本批 owned_units")
-        if target_unit_ids != [
-            unit_id for unit_id in owned_ids if unit_id in set(target_unit_ids)
-        ]:
-            raise ValueError("必需流程目标归属必须按 owned_units 原文顺序排列")
         known_procedure_ids = {
             item.catalog_item_id for item in self.known_procedure_targets
         }
@@ -2323,6 +2362,7 @@ class ProtocolControlBatchPlan(Phase5ControlModel):
             raise ValueError("处置批次未覆盖全部且仅覆盖清单结构单元")
         if any(
             len(batch.owned_units) > self.max_owned_units_per_batch
+            and not is_source_list_continuation_group(batch.owned_units)
             for batch in self.batches
         ):
             raise ValueError("批次超过 max_owned_units_per_batch")
@@ -2343,6 +2383,7 @@ class ProtocolControlDiscoveryToDeepPlan(Phase5ControlModel):
     discovery_decisions: list[ProtocolControlDiscoveryDecision] = Field(
         min_length=1
     )
+    related_context_ids_by_owned: dict[str, list[str]] = Field(default_factory=dict)
     max_owned_units_per_batch: int = Field(ge=1)
     batches: list[ProtocolControlDispositionBatch] = Field(default_factory=list)
 
@@ -2387,6 +2428,13 @@ class ProtocolControlDiscoveryToDeepPlan(Phase5ControlModel):
             if decision.disposition
             == ProtocolControlDiscoveryDisposition.NON_CONTROL
         }
+        for owned_id, related_ids in self.related_context_ids_by_owned.items():
+            if owned_id not in deep_ids:
+                raise ValueError("跨章节只读线索必须归属深析单元")
+            if (len(related_ids) != len(set(related_ids))
+                    or owned_id in related_ids
+                    or not set(related_ids) <= expected_set - non_control_ids):
+                raise ValueError("跨章节只读线索必须引用清单中仍可核对的其他单元")
         for decision in self.discovery_decisions:
             if any(
                 context_id in non_control_ids
@@ -2409,6 +2457,7 @@ class ProtocolControlDiscoveryToDeepPlan(Phase5ControlModel):
             raise ValueError("深析批次必须按连续序号排列")
         if any(
             len(batch.owned_units) > self.max_owned_units_per_batch
+            and not is_source_list_continuation_group(batch.owned_units)
             for batch in self.batches
         ):
             raise ValueError("深析批次超过 max_owned_units_per_batch")
@@ -2429,7 +2478,12 @@ class ProtocolControlDiscoveryToDeepPlan(Phase5ControlModel):
                 for context_id in decision_by_id[
                     owned_id
                 ].required_context_structure_unit_ids
-            } - set(batch.owned_structure_unit_ids)
+            } | {
+                context_id
+                for owned_id in batch.owned_structure_unit_ids
+                for context_id in self.related_context_ids_by_owned.get(owned_id, ())
+            }
+            expected_context_ids -= set(batch.owned_structure_unit_ids)
             owned_tables = {
                 unit.source_ref.rpartition(".r")[0]
                 for unit in batch.owned_units

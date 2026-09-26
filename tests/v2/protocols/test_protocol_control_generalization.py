@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 import pytest
 
@@ -17,21 +18,27 @@ from app.agents.protocol_control_deconstructor import (
     parse_protocol_control_discovery_agent_wire,
     wire_to_protocol_control_discovery_decisions,
 )
-from app.domain.contracts.enums import PhaseScope, StudyPhase
+from app.domain.contracts.enums import CatalogItemKind, CatalogKind, PhaseScope, ReviewStage, StudyPhase
 from app.domain.contracts.protocol_controls import (
+    ProtocolControlDispositionBatch,
     ProtocolControlDiscoveryDecision,
     ProtocolControlDiscoveryDisposition,
     ProtocolSectionCoverageManifest,
     ProtocolStructureUnit,
+    StructureUnitKind,
 )
+from app.domain.contracts.protocol_ingestion import FrozenCatalogItem, FrozenProtocolCatalog
+from app.domain.publication import canonical_hash
 from app.protocols.protocol_control_planning import (
     DEFAULT_PROTOCOL_CONTROL_DISCOVERY_BATCH_UNITS,
+    _cross_chapter_readonly_context,
     _deep_batch_chunks,
     plan_protocol_control_deep_batches_from_discovery,
     plan_protocol_control_discovery,
     validate_protocol_control_deep_selection,
     validate_protocol_control_discovery_results,
 )
+from app.services.protocol_control_execution import _build_publication_plan
 
 
 _PROTOCOL = "protocol:general"
@@ -62,6 +69,135 @@ def _manifest(count: int = 100) -> ProtocolSectionCoverageManifest:
         snapshot_id="snapshot:general",
         units=[_unit(number) for number in range(count)],
     )
+
+
+def test_cross_chapter_similarity_is_readonly_and_scoped() -> None:
+    summary = _unit(0, "摘要").model_copy(update={
+        "excerpt": "所有参加者须在筛选时完成采样，随后每日按规定剂量给药，并记录每次用药；如有漏服须在当次访视记录原因及实际给药情况，相关记录应保留在受试者原始病历中供后续访视核对。",
+        "phase_scopes": [PhaseScope.PHASE_II],
+    })
+    later = _unit(1, "研究用药").model_copy(update={
+        "excerpt": summary.excerpt,
+        "phase_scopes": [PhaseScope.SHARED],
+    })
+    other_phase = _unit(2, "另一阶段").model_copy(update={
+        "excerpt": later.excerpt,
+        "phase_scopes": [PhaseScope.PHASE_III],
+    })
+    unrelated = _unit(3, "统计").model_copy(update={
+        "excerpt": "本研究的统计分析将根据预定计划实施，资料核对和数据锁定的责任另行规定。",
+    })
+    matches = _cross_chapter_readonly_context(
+        [summary], [summary, later, other_phase, unrelated],
+    )
+    assert matches[summary.structure_unit_id] == (later.structure_unit_id,)
+
+
+def test_cross_chapter_short_text_is_not_promoted_to_context() -> None:
+    first = _unit(0, "摘要").model_copy(update={"excerpt": "每日给药"})
+    second = _unit(1, "研究用药").model_copy(update={"excerpt": "每日给药"})
+    assert _cross_chapter_readonly_context([first], [first, second]) == {}
+
+
+def test_deep_plan_preserves_source_action_and_exact_procedure_targets() -> None:
+    action = "在筛选及基线访视完成症状评估；非到院日建议于给药前1 h内进行评估，每日均需评估。"
+    owned = _unit(0).model_copy(update={"excerpt": action})
+    manifest = _manifest(2).model_copy(update={"units": [owned, _unit(1)]})
+    discovery = plan_protocol_control_discovery(manifest, max_units_per_batch=2)
+    decisions = [[ProtocolControlDiscoveryDecision(
+        structure_unit_id=unit_id,
+        disposition=(ProtocolControlDiscoveryDisposition.CANDIDATE
+                     if unit_id == owned.structure_unit_id else
+                     ProtocolControlDiscoveryDisposition.NON_CONTROL),
+        rationale="按原文核对",
+    ) for unit_id in discovery.batches[0].target_structure_unit_ids]]
+    items = [
+        FrozenCatalogItem(
+            item_id=f"procedure-{stage.value}",
+            kind=CatalogItemKind.REQUIRED_PROCEDURE,
+            label="症状评估",
+            visit_instance=f"visit-{stage.value}",
+            review_stage=stage,
+            position=index,
+            source_span_ids=("span:000",),
+            source_excerpts=(action,),
+        )
+        for index, stage in enumerate((ReviewStage.SCREENING, ReviewStage.BASELINE))
+    ] + [
+        FrozenCatalogItem(
+            item_id="procedure-other-excerpt",
+            kind=CatalogItemKind.REQUIRED_PROCEDURE,
+            label="其他评估",
+            visit_instance="visit-other",
+            review_stage=ReviewStage.BASELINE,
+            position=2,
+            source_span_ids=("span:000",),
+            source_excerpts=("同页的另一项评估",),
+        ),
+    ]
+    catalog_fields = dict(
+        catalog_id="catalog:general-actions",
+        snapshot_id=manifest.snapshot_id,
+        catalog_kind=CatalogKind.REQUIRED_PROCEDURES,
+        study_phase=manifest.study_phase,
+        items=tuple(items),
+        frozen_at=datetime(2026, 9, 26, tzinfo=timezone.utc),
+        frozen_by="synthetic-test",
+    )
+    shell = FrozenProtocolCatalog.model_construct(
+        schema_version="fixture/v1", **catalog_fields, catalog_sha256="",
+    )
+    procedures = FrozenProtocolCatalog(
+        **catalog_fields,
+        catalog_sha256=canonical_hash(
+            shell.model_dump(mode="json", exclude={"catalog_sha256"})
+        ),
+    )
+
+    plan = plan_protocol_control_deep_batches_from_discovery(
+        manifest, discovery, decisions, required_procedure_catalog=procedures,
+    )
+    batch = plan.batches[0]
+    assert batch.owned_required_action_kinds_by_structure_unit_id
+    assert batch.owned_required_procedure_target_ids_by_structure_unit_id == {
+        owned.structure_unit_id: ["procedure-baseline", "procedure-screening"]
+    }
+
+
+def test_cross_chapter_context_is_readonly_and_changes_plan_identity() -> None:
+    source = "受试者在筛选开始后应持续按规定方案用药，每次访视核对实际剂量与给药次数，并记录任何中断原因和恢复日期。"
+    source += "研究团队须核查已记录的给药情况，不得将未核对的用药记录视为完成。"
+    manifest = _manifest(3).model_copy(update={"units": [
+        _unit(0, "概要").model_copy(update={"excerpt": source}),
+        _unit(1, "合并用药").model_copy(update={"excerpt": source}),
+        _unit(2, "统计说明"),
+    ]})
+    discovery = plan_protocol_control_discovery(manifest, max_units_per_batch=3)
+    decisions = [[ProtocolControlDiscoveryDecision(
+        structure_unit_id=unit_id,
+        disposition=(ProtocolControlDiscoveryDisposition.CANDIDATE
+                     if unit_id == "unit-000" else
+                     ProtocolControlDiscoveryDisposition.CONTEXT_ONLY
+                     if unit_id == "unit-001" else
+                     ProtocolControlDiscoveryDisposition.NON_CONTROL),
+        rationale="只按来源处置",
+    ) for unit_id in discovery.batches[0].target_structure_unit_ids]]
+    linked = plan_protocol_control_deep_batches_from_discovery(manifest, discovery, decisions)
+    assert linked.deep_structure_unit_ids == ("unit-000",)
+    assert linked.batches[0].context_structure_unit_ids == ["unit-001"]
+    assert linked.batches[0].owned_structure_unit_ids == ["unit-000"]
+    changed = manifest.model_copy(update={"units": [
+        manifest.units[0],
+        manifest.units[1].model_copy(update={"excerpt": "这段只说明统计分析，不说明受试者用药。"}),
+        manifest.units[2],
+    ]})
+    unlinked = plan_protocol_control_deep_batches_from_discovery(changed, discovery, decisions)
+    assert unlinked.batches[0].context_structure_unit_ids == []
+    assert unlinked.plan_id != linked.plan_id
+    altered = linked.model_dump(mode="json")
+    altered["related_context_ids_by_owned"] = {"unit-000": ["unit-002"]}
+    with pytest.raises(ValueError, match="跨章节只读线索"):
+        type(linked).model_validate(altered)
 
 
 def test_deep_table_rows_retain_read_only_leading_headers() -> None:
@@ -133,6 +269,64 @@ def test_deep_table_rows_retain_read_only_leading_headers() -> None:
         unit_id not in deep.deep_structure_unit_ids
         for unit_id in deep.batches[0].context_structure_unit_ids
     )
+
+
+def test_short_source_list_is_owned_together_without_absorbing_next_paragraph() -> None:
+    units = [
+        _unit(0).model_copy(update={"excerpt": "满足以下条件后方可复核："}),
+        *[
+            _unit(number).model_copy(update={
+                "unit_kind": StructureUnitKind.LIST_ITEM, "excerpt": f"条件{number}须有记录；",
+            })
+            for number in range(1, 5)
+        ],
+        _unit(5).model_copy(update={"excerpt": "下一项独立要求须单独核对。"}),
+    ]
+    manifest = _manifest(6).model_copy(update={"units": units})
+    discovery = plan_protocol_control_discovery(manifest, max_units_per_batch=6)
+    decisions = [[ProtocolControlDiscoveryDecision(
+        structure_unit_id=unit_id,
+        disposition=ProtocolControlDiscoveryDisposition.CANDIDATE,
+        rationale="逐条核对",
+    ) for unit_id in batch.target_structure_unit_ids] for batch in discovery.batches]
+
+    plan = plan_protocol_control_deep_batches_from_discovery(
+        manifest, discovery, decisions, max_owned_units_per_batch=1,
+    )
+    assert [batch.owned_structure_unit_ids for batch in plan.batches] == [
+        [f"unit-{number:03d}" for number in range(5)], ["unit-005"],
+    ]
+    assert plan.max_owned_units_per_batch == 1
+    assert plan.batches[0].batch_total == 2
+    publication = _build_publication_plan(manifest, plan)
+    assert publication.batches[0].owned_structure_unit_ids == [
+        f"unit-{number:03d}" for number in range(5)
+    ]
+    batch_payload = plan.batches[0].model_dump(mode="json")
+    batch_payload["owned_required_action_kinds_by_structure_unit_id"] = {
+        "unit-004": ["obtain_signature"],
+        "unit-001": ["obtain_signature"],
+    }
+    stored = json.loads(json.dumps(batch_payload, sort_keys=True))
+    assert ProtocolControlDispositionBatch.model_validate(stored).owned_structure_unit_ids == [
+        f"unit-{number:03d}" for number in range(5)
+    ]
+    stored["owned_required_action_kinds_by_structure_unit_id"] = {
+        "unit-not-owned": ["obtain_signature"],
+    }
+    with pytest.raises(ValueError, match="只能引用本批"):
+        ProtocolControlDispositionBatch.model_validate(stored)
+
+
+def test_source_list_does_not_jump_over_an_unowned_or_different_section_unit() -> None:
+    parent = _unit(0).model_copy(update={"excerpt": "满足以下条件："})
+    separator = _unit(1).model_copy(update={"excerpt": "只作结构说明。"})
+    child = _unit(2).model_copy(update={"unit_kind": StructureUnitKind.LIST_ITEM, "excerpt": "须复核。"})
+    groups = _deep_batch_chunks(
+        [parent, child], {}, max_owned_units_per_batch=1,
+        all_units=[parent, separator, child],
+    )
+    assert [owned[0].structure_unit_id for owned, _ in groups] == ["unit-000", "unit-002"]
 
 
 def _discovery_decisions(
@@ -361,7 +555,7 @@ def test_discovery_gate_closes_results_and_routes_only_candidate_uncertain_deep(
     assert "manifest_structure_unit_ids" not in deep_input.model_dump(mode="json")
     assert "unit-099" not in deep_prompt
     assert "unit-001" in deep_prompt
-    assert len(deep_prompt) < 30_000
+    assert len(deep_prompt) < 60_000
 
 
 def test_context_can_be_deep_owned_elsewhere_but_non_control_cannot_be_required() -> None:

@@ -167,10 +167,34 @@ def test_randomization_action_is_not_a_time_window_but_lookback_is() -> None:
     check("进行随机")
     check("在双盲治疗期 / V2（基线） / W0 / D1 访视完成随机分组。")
     check("在筛选访视完成心电图检查。")
+    check("核对资料以判断随机入组资格")
+    check("核对随机分层信息")
     with pytest.raises(ProtocolControlGateError, match="TIME_ANCHOR_MISSING"):
         check("随机前4天内使用过禁用药物")
     with pytest.raises(ProtocolControlGateError, match="TIME_ANCHOR_MISSING"):
+        check("随机入组前4天内使用过禁用药物")
+    with pytest.raises(ProtocolControlGateError, match="TIME_ANCHOR_MISSING"):
+        check("随机分层前4天内使用过禁用药物")
+    with pytest.raises(ProtocolControlGateError, match="TIME_ANCHOR_MISSING"):
         check("在基线访视前4天内完成禁用药物停用。")
+
+
+def test_population_only_randomization_qualification_cannot_create_time_window() -> None:
+    atom = SimpleNamespace(
+        kind=ControlObligationKind.SELECT_BASELINE_VALUE,
+        statement="计算已取得评分的均值",
+        source_excerpts=["按已有评分计算均值"],
+        time_constraint=None,
+        prospective_period=None,
+        continuing_obligation=None,
+    )
+    _check_time_constraints(
+        entity_id="candidate:baseline-calculation",
+        texts=["作为随机入组资格的核对材料", atom.statement, *atom.source_excerpts],
+        expressions=[SimpleNamespace(groups=[SimpleNamespace(atoms=[atom])])],
+        flat_atoms=[],
+        global_time_constraint=None,
+    )
 
 
 @pytest.mark.parametrize(
@@ -1897,6 +1921,30 @@ def test_optional_action_cannot_be_rewritten_as_mandatory() -> None:
         )
 
 
+def test_optional_action_cue_matches_action_not_unrelated_possibility() -> None:
+    optional = _explicit_obligation_dnf(atoms=[_obligation(
+        statement="必须重新筛选一次，因为结果可改善",
+        source_excerpts=["原则上至多可重新筛选1次"],
+    )])
+    with pytest.raises(ProtocolControlGateError, match="OPTIONAL_ACTION_MODALITY_DROPPED"):
+        _check_obligation_modality_and_event_anchor(
+            entity_id="candidate:optional-rescreen", obligation_expression=optional,
+        )
+
+    optional.groups[0].atoms[0].statement = "原则上至多可重新筛选1次"
+    _check_obligation_modality_and_event_anchor(
+        entity_id="candidate:optional-rescreen", obligation_expression=optional,
+    )
+
+    conditional_action = _explicit_obligation_dnf(atoms=[_obligation(
+        statement="再次检查者应记录结论",
+        source_excerpts=["再次检查者应记录结论"],
+    )])
+    _check_obligation_modality_and_event_anchor(
+        entity_id="candidate:conditional-action", obligation_expression=conditional_action,
+    )
+
+
 def test_prohibited_randomization_is_anchored_on_randomization_event() -> None:
     obligation = _explicit_obligation_dnf(
         atoms=[
@@ -3507,6 +3555,51 @@ def test_missing_time_anchor_reports_exact_atom_and_statement() -> None:
         "control:baseline-selection/condition-baseline-selection"
     )
     assert excerpt in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    ("excerpt", "constraint", "error"),
+    [
+        (
+            "自筛选开始连续治疗7天",
+            TimeConstraint(anchor_type="screening_date", direction="after", upper_bound_days=7),
+            "TREATMENT_DURATION_USED_AS_EVENT_WINDOW",
+        ),
+        (
+            "自筛选开始连续治疗7天",
+            TimeConstraint(anchor_type="screening_date", direction="on"),
+            None,
+        ),
+        (
+            "筛选后7天内完成治疗",
+            TimeConstraint(anchor_type="screening_date", direction="after", upper_bound_days=7),
+            None,
+        ),
+    ],
+)
+def test_continuous_treatment_duration_is_not_an_event_window(
+    excerpt: str, constraint: TimeConstraint, error: str | None,
+) -> None:
+    evaluation = ControlAtomEvaluationSpec(
+        determination_mode="semantic", proposition=excerpt,
+        time_purpose="interval_condition", time_operand_attribute="date_range",
+        source_span_ids=["span:control"], source_excerpts=[excerpt],
+    )
+    atom = _obligation(
+        kind=ControlObligationKind.COMPLETE_OR_VERIFY,
+        statement=excerpt, source_excerpts=[excerpt], time_constraint=constraint,
+    ).model_copy(update={"evaluation": evaluation})
+    call = lambda: _check_time_constraints(
+        entity_id="control:treatment-duration", texts=[excerpt], expressions=[],
+        flat_atoms=[atom], global_time_constraint=None,
+    )
+    if error is None:
+        call()
+    else:
+        with pytest.raises(ProtocolControlGateError, match=error) as caught:
+            call()
+        if error == "TREATMENT_DURATION_USED_AS_EVENT_WINDOW":
+            assert caught.value.obligation_source_span_ids == ("span:control",)
 
 
 def test_questionnaire_recall_period_is_not_a_study_visit_time_window() -> None:

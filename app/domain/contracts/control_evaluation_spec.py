@@ -17,6 +17,8 @@ ControlTimePurpose = Literal[
 class ControlObservationPolicy(ObservationPolicy):
     """Source-declared aggregation, not proof that observations cover its scope."""
 
+    mode: Literal["single", "any", "all", "action_completion", "unresolved"]
+
 class ControlAtomEvaluationSpec(ContractModel):
     """The predicate expresses the atom itself; obligation kind never inverts it.
 
@@ -122,6 +124,11 @@ def validate_control_atom_evaluation(atom, *, require_explicit=False):
         for span, excerpt in zip(policy.source_span_ids, policy.source_excerpts, strict=True)
     ):
         raise ValueError("观察选择的原文不属于所在控制原子")
+    if policy is not None and policy.mode == "action_completion" and (
+        spec.determination_mode != "semantic" or atom.kind.value != "complete_or_verify"
+        or atom.time_constraint is not None or spec.repeat_scheme is not None
+    ):
+        raise ValueError("操作完成核对只适用于无额外持续期或结果条件的必做操作")
     if atom.time_constraint is None and spec.time_purpose not in {"not_applicable", "unresolved"}:
         raise ValueError("未给出时间约束，不能声明已确定其计算用途")
     if atom.time_constraint is not None and spec.time_purpose == "not_applicable":

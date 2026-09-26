@@ -269,6 +269,19 @@ def test_prompt_template_sha_is_stable():
     assert evidence_normalizer_prompt_template_sha256(t) != evidence_normalizer_prompt_template_sha256(t + "x")
 
 
+def test_visual_observation_boundary_changes_prompt_identity(monkeypatch):
+    from app.agents import evidence_normalizer
+
+    template = "请按输入页组抽取候选。"
+    original = evidence_normalizer_prompt_template_sha256(template)
+    monkeypatch.setattr(
+        evidence_normalizer,
+        "_VISUAL_OBSERVATION_PROMPT_BOUNDARY",
+        evidence_normalizer._VISUAL_OBSERVATION_PROMPT_BOUNDARY + "核对新范围。",
+    )
+    assert evidence_normalizer_prompt_template_sha256(template) != original
+
+
 def test_build_prompt_contains_input_and_schema_and_contract():
     inp = _input()
     prompt = build_evidence_normalizer_prompt(inp, prompt_template="请按输入页组抽取候选。")

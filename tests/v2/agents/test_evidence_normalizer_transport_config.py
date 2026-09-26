@@ -45,6 +45,41 @@ def test_cms_normalizer_uses_provider_route_before_stale_role_route(monkeypatch)
     assert _FakeOpenAI.calls[-1]["base_url"] == "http://127.0.0.1:20128/v1"
 
 
+def test_ollama_normalizer_never_reuses_old_role_credentials(monkeypatch):
+    _FakeOpenAI.calls.clear()
+    monkeypatch.setattr(transport_module, "OpenAI", _FakeOpenAI)
+    monkeypatch.setenv("EVIDENCE_NORMALIZER_BASE_URL", "http://old-gateway.example/v1")
+    monkeypatch.setenv("EVIDENCE_NORMALIZER_API_KEY", "old-normalizer-key")
+    monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="OLLAMA_API_KEY"):
+        transport_module.DeepSeekEvidenceNormalizerTransport(
+            backend="ollama-cloud", model="deepseek-v4.1-flash",
+        )
+    monkeypatch.setenv("OLLAMA_API_KEY", "ollama-only-key")
+    transport = transport_module.DeepSeekEvidenceNormalizerTransport(
+        backend="ollama-cloud", model="deepseek-v4.1-flash",
+    )
+    assert _FakeOpenAI.calls[-1]["api_key"] == "ollama-only-key"
+    assert _FakeOpenAI.calls[-1]["base_url"] == "https://ollama.com/v1"
+    assert "response_format" not in transport._completion_kwargs([{"role": "user", "content": "诊断"}])
+
+
+def test_ollama_normalizer_frozen_factory_keeps_text_mode(monkeypatch):
+    _FakeOpenAI.calls.clear()
+    monkeypatch.setattr(transport_module, "OpenAI", _FakeOpenAI)
+    monkeypatch.setenv("OLLAMA_API_KEY", "ollama-only-key")
+    config = ModelConfigContract(
+        model_config_id="ollama-normalizer", provider="ollama-cloud",
+        model="deepseek-v4.1-flash", reasoning_effort="high",
+        parameters={"max_tokens": 65536},
+    )
+    transport = transport_module.evidence_normalizer_transport_from_model_config(config)
+    kwargs = transport._completion_kwargs([{"role": "user", "content": "诊断"}])
+    assert kwargs["reasoning_effort"] == "high"
+    assert "response_format" not in kwargs
+    assert "temperature" not in kwargs
+
+
 class _FakeStream:
     def __init__(self, chunks):
         self._chunks = tuple(chunks)

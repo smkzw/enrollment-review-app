@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from types import SimpleNamespace
 
 from app.agents.protocol_control_deconstructor import (
     ProtocolControlAgentWireCandidate,
@@ -130,6 +131,21 @@ def test_helper_detects_cross_stage_subsequent_control_supplement() -> None:
         procedure=procedure,
         affected_workflow_stage_id="stage:screening:1",
         workflow_targets=workflow,
+    )
+
+
+def test_future_continuing_prohibition_does_not_authorize_cross_stage_supplement() -> None:
+    prohibition = SimpleNamespace(
+        kind=ControlObligationKind.PROHIBIT_MEDICATION_OR_TREATMENT_EXPOSURE,
+        time_constraint=TimeConstraint(anchor_type="baseline_date", direction="before"),
+        continuing_obligation=SimpleNamespace(status="not_due_at_review_node"),
+    )
+    expression = SimpleNamespace(groups=[SimpleNamespace(atoms=[prohibition])])
+    assert not is_cross_stage_subsequent_control_supplement(
+        obligation_expression=expression,
+        procedure=_screening_procedure(),
+        affected_workflow_stage_id="stage:baseline:1",
+        workflow_targets=_workflow_targets(include_baseline=True),
     )
 
 

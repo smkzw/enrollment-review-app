@@ -14,6 +14,7 @@ import pytest
 from app.agents.protocol_control_deconstructor import (
     CONTROL_AGENT_WIRE_VERSION,
     CONTROL_DISCOVERY_WIRE_VERSION,
+    ProtocolControlAgentRunResult,
     ProtocolControlAgentResponse,
     ProtocolControlAgentWireValidationError,
     ProtocolControlDiscoveryAgentResponse,
@@ -47,6 +48,51 @@ from app.workflow.recovery import recover_expired_jobs
 from app.workflow.runner import JobRunner, StepContext
 
 from tests.v2.protocols.test_deconstruction_service import _synthetic_fixture
+
+
+def test_pending_cross_chapter_result_survives_checkpoint_contract() -> None:
+    payload = {
+        "status": "待跨章核验",
+        "batch_id": "batch-a",
+        "session_id": "session-a",
+        "attempts": [{
+            "attempt": 1, "session_id": "session-a",
+            "raw_output_sha256": "a" * 64, "outcome": "parsed",
+        }],
+    }
+    saved = ProtocolControlAgentRunResult.model_validate(payload).model_dump(mode="json")
+    assert ProtocolControlAgentRunResult.model_validate(saved).status == "待跨章核验"
+    with pytest.raises(ValueError):
+        ProtocolControlAgentRunResult.model_validate({**payload, "status": "已发布"})
+
+
+def test_deep_step_preserves_pending_cross_chapter_for_final_relation_check(monkeypatch) -> None:
+    module = protocol_control_execution_module
+    batch = SimpleNamespace(batch_id="batch-a")
+    monkeypatch.setattr(module, "_closure_checkpoint", lambda *_: {"deep_plan": {}})
+    monkeypatch.setattr(module.ProtocolControlDiscoveryToDeepPlan, "model_validate",
+                        staticmethod(lambda _: SimpleNamespace(batches=[batch])))
+    monkeypatch.setattr(module, "_deep_batch_for_step", lambda *_: batch)
+    monkeypatch.setattr(module, "_prompt_from_payload", lambda *_: "冻结提示")
+    monkeypatch.setattr(module, "_limits_from_payload", lambda *_: (1, 2))
+    monkeypatch.setattr(module, "_resolve_transport", lambda *_ , **__: object())
+    monkeypatch.setattr(module, "_require_frozen_route", lambda *_ , **__: None)
+    monkeypatch.setattr(module, "_deep_component_identity", lambda *_: {})
+    monkeypatch.setattr(module, "_transport_identity", lambda *_ , **__: {})
+    result = SimpleNamespace(
+        status="待跨章核验", final_output=SimpleNamespace(model_dump=lambda **_: {}),
+        model_dump=lambda **_: {"status": "待跨章核验", "batch_id": "batch-a"},
+    )
+    monkeypatch.setattr(module.ProtocolControlAgentRunner, "run", lambda *_ , **__: result)
+    context = StepContext(
+        job_id="job-a", job_type=PROTOCOL_CONTROL_EXECUTION_JOB_TYPE,
+        job_payload={}, step_id="deep_0001", name="深审", attempt=1,
+        last_checkpoint_id=None, last_checkpoint=None,
+    )
+    config = SimpleNamespace()
+    checkpoint = module._execute_deep(context, config)
+    assert checkpoint["stage"] == "deep"
+    assert checkpoint["run_result"]["status"] == "待跨章核验"
 
 
 NOW = datetime(2026, 8, 14, tzinfo=timezone.utc)
@@ -114,6 +160,80 @@ def test_deep_repair_resolves_candidate_repartition_before_field_repair(monkeypa
     assert exc.value.candidate_ids == ("second",)
     assert exc.value.structure_unit_ids == ("u2",)
     assert "TIME_ANCHOR_MISSING" not in exc.value.error_class_codes
+
+
+def test_cross_chapter_source_pair_requires_independent_target_result(monkeypatch) -> None:
+    action = "每次给药10 mg，每日1次"
+    source_unit = SimpleNamespace(structure_unit_id="su-a", source_span_ids=["span:a"])
+    target_unit = SimpleNamespace(structure_unit_id="su-b", source_span_ids=["span:b"])
+    source_batch = SimpleNamespace(batch_id="batch-a", owned_structure_unit_ids=["su-a"],
+                                   owned_units=[source_unit], context_structure_unit_ids=["su-b"])
+    target_batch = SimpleNamespace(batch_id="batch-b", owned_structure_unit_ids=["su-b"],
+                                   owned_units=[target_unit], context_structure_unit_ids=[])
+    plan = SimpleNamespace(batches=[source_batch, target_batch])
+    monkeypatch.setattr(protocol_control_execution_module.ProtocolControlDiscoveryToDeepPlan,
+                        "model_validate", staticmethod(lambda _: plan))
+    monkeypatch.setattr(protocol_control_execution_module, "validate_source_target_review",
+                        lambda *_: None)
+    monkeypatch.setattr(protocol_control_execution_module, "_validate_saved_source_review",
+                        lambda *_: None)
+    statement = SimpleNamespace(structure_unit_id="su-a", quoted_text=action, force="required")
+    target_statement = SimpleNamespace(structure_unit_id="su-b", quoted_text="自筛选期开始接受背景治疗：" + action,
+                                       scope_quote="自筛选期开始", force="required")
+    relation = SimpleNamespace(decision="potential_same_requirement", statement_index=0,
+                               target_id="su-b", source_action_excerpt=action,
+                               target_action_excerpt=action, target_scope_excerpt="自筛选期开始",
+                               source_object_excerpt="背景治疗", target_object_excerpt="背景治疗")
+    source_result = SimpleNamespace(status="待跨章核验", batch_id="batch-a",
+                                    final_output=SimpleNamespace(owned_structure_unit_ids=["su-a"]),
+                                    source_target_review=SimpleNamespace(items=[relation]),
+                                    source_interpretation=SimpleNamespace(statements=[statement]),
+                                    source_statement_coverage=[])
+    candidate = SimpleNamespace(control_candidate_id="candidate-b", frozen_structure_unit_ids=["su-b"],
+                                semantics=SimpleNamespace(
+                                    applicability_expression=None, trigger_expression=None,
+                                    obligation_expression=SimpleNamespace(groups=[SimpleNamespace(atoms=[
+                                        SimpleNamespace(source_excerpts=["自筛选期开始接受背景治疗：" + action])
+                                    ])]), exception_expression=None))
+    target_result = SimpleNamespace(status="已解析", batch_id="batch-b",
+                                    final_output=SimpleNamespace(owned_structure_unit_ids=["su-b"],
+                                                                  candidates=[candidate]),
+                                    source_target_review=None,
+                                    source_interpretation=SimpleNamespace(statements=[target_statement]),
+                                    source_statement_coverage=[SimpleNamespace(
+                                        status="expressed", statement_index=0, candidate_indexes=[0],
+                                    )])
+    records = {"deep_0001": source_result, "deep_0002": target_result}
+    class FakeStore:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def get_last_checkpoint(self, _job_id, step_id):
+            return (step_id, {"run_result": records[step_id]})
+
+    class SessionFactory:
+        def __enter__(self):
+            return None
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(protocol_control_execution_module, "JobStore", FakeStore)
+    monkeypatch.setattr(protocol_control_execution_module.ProtocolControlAgentRunResult,
+                        "model_validate", staticmethod(lambda item: item))
+    context = SimpleNamespace(job_id="job")
+    config = SimpleNamespace(session_factory=SessionFactory, now=lambda: NOW)
+    closure = {"deep_plan": {}, "deep_step_ids": [
+        {"step_id": "deep_0001", "batch_id": "batch-a"},
+        {"step_id": "deep_0002", "batch_id": "batch-b"},
+    ]}
+    _, proofs = protocol_control_execution_module._deep_results(context, config, closure)
+    assert len(proofs) == 1
+    assert proofs[0].target_candidate_id == "candidate-b"
+    target_result.status = "待跨章核验"
+    with pytest.raises(StepFailure) as error:
+        protocol_control_execution_module._deep_results(context, config, closure)
+    assert error.value.error_code == "PROTOCOL_CONTROL_SOURCE_RELATION_INVALID" or error.value.error_code == "PROTOCOL_CONTROL_SOURCE_RELATION_UNRESOLVED"
 
 
 @dataclass(frozen=True)
@@ -929,8 +1049,9 @@ def test_manual_retry_reexecutes_failed_deep_instead_of_replaying_diagnostic(
     assert deep.owned_batches[1] == deep.owned_batches[0]
 
 
+@pytest.mark.parametrize("new_job", [False, True])
 def test_manual_retry_uses_verified_partial_wire_without_full_reread(
-    data_paths, session_factory, monkeypatch,
+    data_paths, session_factory, monkeypatch, new_job: bool,
 ) -> None:
     from app.agents.protocol_control_deconstructor import (
         ProtocolControlAgentAttempt, ProtocolControlAgentRunResult,
@@ -989,16 +1110,95 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
     assert saved is not None
     assert saved[1]["partial_wire"] is not None
     assert saved[1]["source_interpretation"] is not None
-    with session_factory() as session, session.begin():
-        JobStore(session, now=_now).retry_failed(job.job_id)
-    assert runner.run_job(job.job_id)
-    snapshot, _ = _job_snapshot_and_payload(session_factory, job.job_id)
+    if new_job:
+        continued = service.create_from_deconstruction(
+            source_job_id=seed.source_job_id,
+            deep_source_job_id=job.job_id,
+            idempotency_key="deep-partial-resume-new-version",
+        )
+        _, payload = _job_snapshot_and_payload(session_factory, continued.job_id)
+        assert "resume_partial" in {
+            entry["decision"] for entry in payload["deep_reuse_plan"]["decisions"].values()
+        }
+        target_job_id = continued.job_id
+    else:
+        with session_factory() as session, session.begin():
+            JobStore(session, now=_now).retry_failed(job.job_id)
+        target_job_id = job.job_id
+    assert runner.run_job(target_job_id)
+    snapshot, _ = _job_snapshot_and_payload(session_factory, target_job_id)
     assert snapshot.state == "completed", [
         (step.step_id, step.state, step.error_code)
         for step in snapshot.steps if step.state == "failed_final"
     ]
     assert resumed
     assert deep.start_calls == 1  # Only the next batch needs a fresh full read.
+
+
+@pytest.mark.parametrize("new_job", [False, True])
+def test_manual_retry_reuses_verified_source_without_partial_wire(
+    data_paths, session_factory, monkeypatch, new_job: bool,
+) -> None:
+    from app.agents.protocol_control_deconstructor import (
+        ProtocolControlAgentAttempt, ProtocolControlAgentRunResult,
+        ProtocolControlAgentRunner,
+    )
+    from app.agents.protocol_control_source_interpretation import (
+        SOURCE_INTERPRETATION_VERSION, SourceInterpretation,
+    )
+
+    seed = _seed_frozen_source(data_paths, session_factory, key="deep-source-only-resume")
+    deep = _DeepTransport(seed.source_span_excerpts)
+    service = _build_service(data_paths, session_factory, seed)
+    job = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id, idempotency_key="deep-source-only-resume-job",
+    )
+    runner, _ = _build_runner(data_paths, session_factory, _DiscoveryTransport(), deep)
+    original_run = ProtocolControlAgentRunner.run
+    resumed = []
+    first = True
+
+    def fail_then_resume(self, batch, transport, **kwargs):
+        nonlocal first
+        if first:
+            first = False
+            inventory = SourceInterpretation(
+                version=SOURCE_INTERPRETATION_VERSION,
+                statements=[], units_without_statement=list(batch.owned_structure_unit_ids),
+            )
+            return ProtocolControlAgentRunResult(
+                status="需要核对", batch_id=batch.batch_id, session_id="source-only",
+                attempts=[ProtocolControlAgentAttempt(
+                    attempt=1, session_id="source-only",
+                    raw_output_sha256=hashlib.sha256(b"source-only").hexdigest(),
+                    outcome="publication_invalid",
+                )], source_interpretation=inventory,
+            )
+        resumed.append(kwargs.get("resume_source_interpretation"))
+        assert kwargs.get("resume_wire") is None
+        return original_run(self, batch, transport, **kwargs)
+
+    monkeypatch.setattr(ProtocolControlAgentRunner, "run", fail_then_resume)
+    assert runner.run_job(job.job_id)
+    assert _job_snapshot_and_payload(session_factory, job.job_id)[0].state == "failed_final"
+    if new_job:
+        continued = service.create_from_deconstruction(
+            source_job_id=seed.source_job_id,
+            deep_source_job_id=job.job_id,
+            idempotency_key="deep-source-only-resume-new-job",
+        )
+        _, payload = _job_snapshot_and_payload(session_factory, continued.job_id)
+        assert "verified_source_interpretation" in {
+            item["reason"] for item in payload["deep_reuse_plan"]["decisions"].values()
+        }
+        target_job_id = continued.job_id
+    else:
+        with session_factory() as session, session.begin():
+            JobStore(session, now=_now).retry_failed(job.job_id)
+        target_job_id = job.job_id
+    assert runner.run_job(target_job_id)
+    assert _job_snapshot_and_payload(session_factory, target_job_id)[0].state == "completed"
+    assert resumed and resumed[0] is not None
 
 
 def test_same_identity_deep_source_reuses_validated_batches_without_model_calls(
@@ -1029,6 +1229,58 @@ def test_same_identity_deep_source_reuses_validated_batches_without_model_calls(
         saved = JobStore(session, now=_now).get_last_checkpoint(adopted.job_id, "deep_0001")
     assert saved is not None
     assert saved[1]["adopted_from"]["job_id"] == source.job_id
+
+    from app.domain.contracts.protocol_controls import ProtocolControlDiscoveryToDeepPlan
+    from app.agents.protocol_control_deconstructor import build_protocol_control_agent_prompt
+    with session_factory() as session:
+        closure = JobStore(session, now=_now).get_last_checkpoint(source.job_id, "deterministic_closure")
+    assert closure is not None
+    batch = ProtocolControlDiscoveryToDeepPlan.model_validate(closure[1]["deep_plan"]).batches[0]
+    new_total = batch.model_copy(update={"batch_total": batch.batch_total + 1})
+    assert protocol_control_execution_module._same_deep_batch_material(batch, new_total)
+    assert build_protocol_control_agent_prompt(batch) == build_protocol_control_agent_prompt(new_total)
+    changed_source_gate = batch.model_copy(update={
+        "owned_required_action_kinds_by_structure_unit_id": {
+            batch.owned_structure_unit_ids[0]: ["different_action"],
+        },
+    })
+    assert not protocol_control_execution_module._same_deep_batch_material(batch, changed_source_gate)
+
+
+def test_preflight_marks_changed_action_gate_batch_for_refresh_before_model_call(
+    data_paths, session_factory, monkeypatch,
+):
+    from app.protocols import protocol_control_planning as planning
+
+    seed = _seed_frozen_source(data_paths, session_factory, key="action-gate-change")
+    deep = _DeepTransport(seed.source_span_excerpts)
+    service = _build_service(data_paths, session_factory, seed)
+    source = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id,
+        idempotency_key="action-gate-source",
+    )
+    runner, _ = _build_runner(data_paths, session_factory, _DiscoveryTransport(), deep)
+    assert runner.run_job(source.job_id)
+    before = deep.start_calls
+
+    monkeypatch.setattr(
+        planning, "detect_required_action_kinds", lambda _text: ("perform_ecg",),
+    )
+    planned = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id,
+        idempotency_key="action-gate-current",
+        deep_source_job_id=source.job_id,
+    )
+    _, payload = _job_snapshot_and_payload(session_factory, planned.job_id)
+    assert {entry["reason"] for entry in payload["deep_reuse_plan"]["decisions"].values()} == {
+        "planning_material_changed"
+    }
+    assert deep.start_calls == before
+    assert runner.run_job(planned.job_id)
+    snapshot, _ = _job_snapshot_and_payload(session_factory, planned.job_id)
+    assert snapshot.state == "failed_final"
+    assert snapshot.error_code != "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
+    assert deep.start_calls > before
 
 
 def test_unused_repair_wording_does_not_rerun_completed_deep_batches(
@@ -1080,6 +1332,71 @@ def test_repair_material_identity_is_required_only_if_repair_was_used(monkeypatc
     )
     assert protocol_control_execution_module._repair_material_matches(no_repair)
     assert not protocol_control_execution_module._repair_material_matches(repaired)
+
+
+def test_changed_repair_guidance_only_refreshes_affected_attempts() -> None:
+    prior_atom = protocol_control_execution_module.protocol_control_agent_repair_contract_sha256(
+        legacy_atom_v2=True
+    )
+    assert protocol_control_execution_module._repair_material_matches({
+        "run_result": {"repair_used": True, "attempts": [
+            {"error_classes": ["SOURCE_TARGET_REVIEW_INVALID"]},
+        ]},
+        "repair_contract_sha256": prior_atom,
+    })
+    assert not protocol_control_execution_module._repair_material_matches({
+        "run_result": {"repair_used": True, "attempts": [
+            {"error_classes": ["WIRE_SCHEMA_INVALID"]},
+        ]},
+        "repair_contract_sha256": prior_atom,
+    })
+    assert protocol_control_execution_module._repair_material_matches({
+        "run_result": {"repair_used": True, "attempts": [
+            {"outcome": "parsed", "error_classes": []},
+        ]},
+        "repair_contract_sha256": prior_atom,
+    })
+    assert not protocol_control_execution_module._repair_material_matches({
+        "run_result": {"repair_used": True, "attempts": [
+            {"outcome": "schema_invalid", "error_classes": []},
+        ]},
+        "repair_contract_sha256": prior_atom,
+    })
+    old_base = protocol_control_execution_module.protocol_control_agent_repair_contract_sha256(
+        base_only=True
+    )
+    def saved(code: str) -> dict[str, object]:
+        return {
+            "run_result": {"repair_used": True, "attempts": [
+                {"error_classes": [code]},
+            ]},
+            "repair_contract_sha256": old_base,
+        }
+
+    assert protocol_control_execution_module._repair_material_matches(saved("WIRE_SCHEMA_INVALID"))
+    assert not protocol_control_execution_module._repair_material_matches(
+        saved("SOURCE_TARGET_ADDITIONAL_REQUIREMENT")
+    )
+    assert not protocol_control_execution_module._repair_material_matches(
+        saved("OPTIONAL_ACTION_MODALITY_DROPPED")
+    )
+    assert not protocol_control_execution_module._repair_material_matches({
+        "run_result": {"repair_used": True, "attempts": []},
+        "repair_contract_sha256": old_base,
+    })
+    prior_duration = protocol_control_execution_module.protocol_control_agent_repair_contract_sha256(
+        without_duration_guidance=True
+    )
+    assert protocol_control_execution_module._repair_material_matches({
+        "run_result": {"repair_used": True, "attempts": [{"error_classes": ["WIRE_SCHEMA_INVALID"]}]},
+        "repair_contract_sha256": prior_duration,
+    })
+    assert not protocol_control_execution_module._repair_material_matches({
+        "run_result": {"repair_used": True, "attempts": [
+            {"error_classes": ["TREATMENT_DURATION_USED_AS_EVENT_WINDOW"]},
+        ]},
+        "repair_contract_sha256": prior_duration,
+    })
 
 
 def test_corrupt_repair_receipt_fails_preflight_instead_of_cache_refresh(
@@ -1201,6 +1518,49 @@ def test_deep_source_corrupt_completed_checkpoint_rejected_before_job_creation(
         )
     assert exc.value.code == "PROTOCOL_CONTROL_DEEP_SOURCE_INVALID"
     assert deep.start_calls == calls_before
+
+
+def test_gate_only_change_revalidates_reusable_batch_without_model_call(
+    data_paths, session_factory, monkeypatch,
+):
+    seed = _seed_frozen_source(data_paths, session_factory, key="gate-only-reuse")
+    deep = _DeepTransport(seed.source_span_excerpts)
+    service = _build_service(data_paths, session_factory, seed)
+    source = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id, idempotency_key="gate-only-source",
+    )
+    runner, _ = _build_runner(data_paths, session_factory, _DiscoveryTransport(), deep)
+    assert runner.run_job(source.job_id)
+    calls_before = deep.start_calls
+    original = JobStore.get_last_checkpoint
+    old_gate = "phase5/control-publication-gate/v31"
+
+    def previous_gate_checkpoint(self, job_id, step_id):
+        checkpoint = original(self, job_id, step_id)
+        if job_id != source.job_id or step_id != "deep_0001" or checkpoint is None:
+            return checkpoint
+        checkpoint_id, saved = checkpoint
+        saved = dict(saved)
+        saved["component_identity"] = dict(saved["component_identity"], validator_version=old_gate)
+        return checkpoint_id, saved
+
+    monkeypatch.setattr(JobStore, "get_last_checkpoint", previous_gate_checkpoint)
+    adopted = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id,
+        idempotency_key="gate-only-adopted",
+        deep_source_job_id=source.job_id,
+    )
+    _, payload = _job_snapshot_and_payload(session_factory, adopted.job_id)
+    assert {entry["decision"] for entry in payload["deep_reuse_plan"]["decisions"].values()} == {"reusable"}
+    assert runner.run_job(adopted.job_id)
+    assert deep.start_calls == calls_before
+    with session_factory() as session:
+        checkpoint = JobStore(session, now=_now).get_last_checkpoint(adopted.job_id, "deep_0001")
+    assert checkpoint is not None
+    assert checkpoint[1]["revalidated_from_gate_version"] == old_gate
+    assert checkpoint[1]["component_identity"]["validator_version"] == (
+        protocol_control_execution_module.CONTROL_PUBLICATION_GATE_VERSION
+    )
 
 
 def test_deep_source_component_change_refreshes_but_corrupt_identity_rejects(

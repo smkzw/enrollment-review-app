@@ -417,6 +417,111 @@ def test_fail_closed_persists_closed_only_and_leaves_ocr_unchanged(session_facto
         assert ocr.raw_text_sha256 == seeded["raw_text_sha256"]
 
 
+def test_route_failure_stops_remaining_pages_but_preserves_failed_page(session_factory):
+    seeded = _seed(session_factory)
+    with session_factory() as session, session.begin():
+        for number in (2, 3):
+            PageArtifactRepository(session).get_or_create(
+                make_artifact(
+                    artifact_id=f"pa-{number}",
+                    version_id="doc-1",
+                    page_number=number,
+                    page_input=IMAGE_SHA,
+                    page_image=IMAGE_SHA,
+                )
+            )
+
+    first = _material(
+        seeded=seeded,
+        media_kind="image",
+        extraction_route=ExtractionRoute.VISION_OCR.value,
+        has_native_text=False,
+        native_text_char_count=0,
+    )
+    pages = [first] + [
+        replace(
+            first,
+            page_artifact_id=f"pa-{number}",
+            source_ref=f"pa-{number}",
+            page_ordinal=number,
+            ocr_page_id=None,
+        )
+        for number in (2, 3)
+    ]
+    called: list[int] = []
+
+    async def runner(plan, inputs):
+        called.append(inputs[0].page_ordinal)
+        return SelectiveVisionReviewOutcome(
+            plan=plan,
+            closed_error=SelectiveVisionClosedError(
+                "provider unavailable", failure_kind="remote_error", disabled=True
+            ),
+        )
+
+    service = SelectiveVisionObservationService(
+        session_factory, review_runner=runner, default_model_id="mock-vlm"
+    )
+    result = _run(service.run_postprocess(pages))
+    assert called == [1]
+    assert result.closed_error is not None
+    assert result.closed_error.failure_kind == "remote_error"
+    assert len(result.plan.eligible) == 3
+    assert len(result.closed) == 1
+    with session_factory() as session:
+        rows = [
+            SelectiveVisionObservationRepository(session).list_by_page_artifact(
+                f"pa-{number}"
+            )
+            for number in (1, 2, 3)
+        ]
+    assert [len(items) for items in rows] == [1, 0, 0]
+
+    called.clear()
+
+    async def page_specific_failure(plan, inputs):
+        called.append(inputs[0].page_ordinal)
+        return SelectiveVisionReviewOutcome(
+            plan=plan,
+            closed_error=SelectiveVisionClosedError(
+                "page source claim invalid",
+                failure_kind="source_fidelity",
+                disabled=True,
+            ),
+        )
+
+    page_service = SelectiveVisionObservationService(
+        session_factory, review_runner=page_specific_failure, default_model_id="mock-vlm"
+    )
+    page_result = _run(page_service.run_postprocess(pages))
+    assert called == [1, 2, 3]
+    assert len(page_result.closed) == 3
+
+    called.clear()
+
+    async def mixed_failures(plan, inputs):
+        number = inputs[0].page_ordinal
+        called.append(number)
+        kind = "source_fidelity" if number == 1 else "remote_error"
+        return SelectiveVisionReviewOutcome(
+            plan=plan,
+            closed_error=SelectiveVisionClosedError(
+                "page or route failed", failure_kind=kind, disabled=True
+            ),
+        )
+
+    mixed_service = SelectiveVisionObservationService(
+        session_factory, review_runner=mixed_failures, default_model_id="mock-vlm"
+    )
+    mixed_result = _run(mixed_service.run_postprocess(pages))
+    assert called == [1, 2]
+    assert [row.failure_kind for row in mixed_result.closed] == [
+        "source_fidelity", "remote_error"
+    ]
+    assert mixed_result.closed_error is not None
+    assert mixed_result.closed_error.failure_kind == "remote_error"
+
+
 def test_missing_image_bytes_fail_closed_without_model_body(session_factory):
     seeded = _seed(session_factory)
     called = {"n": 0}
