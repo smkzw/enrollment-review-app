@@ -41,6 +41,7 @@ from app.domain.interpretation import (
     clarification_anchor_resolutions,
 )
 from app.domain.publication import canonical_hash
+from app.protocols.definition_scope_check import nested_example_definitions
 from app.protocols.section_index import formal_source_span_ids
 
 
@@ -61,7 +62,7 @@ CHECK_NAMES = (
 
 # 完整性检查结果会写入持久任务检查点。任何会改变问题判定语义的
 # 修改都必须提升此版本，避免旧检查结果在升级后继续冒充当前结论。
-DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/2026-09-18.3"
+DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/2026-09-27.1"
 
 
 class ProtocolGateIssue(VersionedModel):
@@ -1212,6 +1213,32 @@ def _predicate_preserves_frequency(
     )
 
 
+def _frequency_window_on_example_head(predicate) -> bool:
+    window = predicate.occurrence_window
+    if window is None:
+        return False
+    binding = _normalized(predicate.attribute)
+    for clause in predicate.exact_source_clauses:
+        for head, _member, definition in nested_example_definitions(clause):
+            head_binding = _normalized(head)
+            if not head_binding or not binding.startswith(head_binding):
+                continue
+            if any(
+                window.duration.value == duration
+                and window.duration.unit == unit
+                and (
+                    window.minimum_count == count
+                    or (
+                        predicate.unit == count_unit
+                        and predicate.value == count
+                    )
+                )
+                for duration, unit, count, count_unit in _source_frequency_specs(definition)
+            ):
+                return True
+    return False
+
+
 def _source_comparators(text: str) -> set[Comparator]:
     """Return unambiguous comparator classes explicitly expressed in source."""
     found: set[Comparator] = set()
@@ -2276,6 +2303,14 @@ class ProtocolDeconstructionGate:
                     occurrence_window = predicate.occurrence_window
                     prospective_window = predicate.prospective_window
                     prospective_period = predicate.prospective_period
+                    if _frequency_window_on_example_head(predicate):
+                        issues.append(_issue(
+                            "temporal_semantics",
+                            "FREQUENCY_DEFINITION_SCOPE_UNVERIFIED",
+                            f"{component.display_code} 把列举项括号内的发生频次附到了更宽的上位条件，适用对象未核清。",
+                            [predicate.predicate_id],
+                            action="请核对频次是否仅定义列举中的具体情况；不得把该频次加到整个上位条件。不能证明作用范围时保留待核，不得作为已核规则发布。",
+                        ))
                     if source_validity_windows:
                         normalized_predicate_text = _normalized(predicate_text)
                         matching_requirements = [
@@ -2377,7 +2412,7 @@ class ProtocolDeconstructionGate:
                                     "FREQUENCY_WINDOW_NOT_STRUCTURED",
                                     f"{component.display_code} 的发生次数和频率周期没有形成可计算结构。",
                                     [predicate.predicate_id],
-                                    action="若频率本身是触发条件，请用数值谓词保存次数及‘次’单位；若频率是宽泛病史条件中的括号定义，请在 occurrence_window.minimum_count 保存最小次数。两种情况都用 occurrence_window.duration 逐字保留周期。",
+                                    action="若频率本身是触发条件，请由该事件的谓词保存次数和周期；若是列举项括号内的定义，频次只能附着于该列举项，不得成为上位条件的限制。不能明确作用范围时保留待核。",
                                 )
                             )
                     elif occurrence_window is not None:

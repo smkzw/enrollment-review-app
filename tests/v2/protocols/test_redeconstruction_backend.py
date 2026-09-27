@@ -907,8 +907,8 @@ def test_source_error_feedback_may_only_close_selected_rule_unresolved_item(
     draft = draft.model_copy(
         update={
             "unresolved_items": [
-                UnresolvedItem(code="RESOLVED", affected_scope=["IN-01"]),
-                UnresolvedItem(code="KEEP", affected_scope=["EX-01"]),
+                UnresolvedItem(code="RESOLVED", affected_scope=["component:IN-01:01"]),
+                UnresolvedItem(code="KEEP", affected_scope=["component:EX-01:01"]),
             ]
         }
     )
@@ -920,7 +920,9 @@ def test_source_error_feedback_may_only_close_selected_rule_unresolved_item(
                 "unresolved_items": [
                     item
                     for item in current_draft.unresolved_items
-                    if target_rule_code not in item.affected_scope
+                    if not ProtocolWorkbenchService._feedback_scope_is_target_only(
+                        item, target_rule_code
+                    )
                 ]
             },
             deep=True,
@@ -959,6 +961,34 @@ def test_source_error_feedback_may_only_close_selected_rule_unresolved_item(
     assert after.revision.revision_number == before.revision.revision_number + 1
     assert [item.code for item in after.revision.content.unresolved_items] == ["KEEP"]
     assert after.revision.diff.modified_rule_codes == []
+
+
+@pytest.mark.parametrize(
+    "outside_scope",
+    [
+        ["component:EX-01:01"],
+        ["component:IN-01:01", "component:EX-01:01"],
+        ["source:unknown"],
+    ],
+)
+def test_source_error_feedback_preserves_unrelated_or_ambiguous_unresolved_items(
+    outside_scope,
+) -> None:
+    _source_input, previous, _spans = confirmed_fixture()
+    previous = previous.model_copy(
+        update={
+            "unresolved_items": [
+                UnresolvedItem(code="KEEP", affected_scope=outside_scope)
+            ]
+        },
+        deep=True,
+    )
+    current = previous.model_copy(update={"unresolved_items": []}, deep=True)
+
+    with pytest.raises(ValueError, match="不得改写其他入排标准"):
+        ProtocolWorkbenchService._validate_source_error_scope(
+            previous, current, target_rule_code="IN-01"
+        )
 
 
 def test_failed_source_error_feedback_keeps_current_revision(

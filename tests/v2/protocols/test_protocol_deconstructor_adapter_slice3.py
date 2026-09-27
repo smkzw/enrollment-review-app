@@ -950,6 +950,7 @@ def test_feedback_revision_replaces_only_selected_parent_rule():
     assert revised.draft_id == draft.draft_id
     assert transport.start_output_kinds == ["semantic_rule_repair"]
     assert "replacement_rules 必须且只能包含 EX-01" in transport.start_prompts[0]
+    assert "每项 affected_scope 必须明确包含 EX-01" in transport.start_prompts[0]
 
 
 def test_noncompact_feedback_keeps_interpretation_in_dedicated_section():
@@ -1208,6 +1209,7 @@ def test_feedback_revision_rejects_wrong_rule_then_repairs_in_same_session():
     assert semantic_candidate_from_draft(revised).proposed_rules[1].components[0].title == "修正后的目标规则"
     assert transport.repair_prompts[0][0] == "feedback-session"
     assert "指定父规则的局部修订" in transport.repair_prompts[0][1]
+    assert "无该条事项时两个数组均为空" in transport.repair_prompts[0][1]
 
 
 def test_valid_json_passes_without_repair():

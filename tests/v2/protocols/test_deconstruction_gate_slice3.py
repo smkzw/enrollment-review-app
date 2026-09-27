@@ -2694,7 +2694,7 @@ def test_boolean_history_frequency_allows_leading_possession_word() -> None:
     )
 
 
-def test_nested_frequency_definition_is_preserved_on_boolean_history():
+def test_nested_frequency_definition_cannot_limit_boolean_example_head():
     source_input, draft, spans = _fixture()
     text = "有严重带状疱疹既往史（包括复发性带状疱疹（2年内发生2次或以上））"
     component = draft.proposed_rules[1].components[0]
@@ -2723,8 +2723,9 @@ def test_nested_frequency_definition_is_preserved_on_boolean_history():
     result = ProtocolDeconstructionGate().evaluate(
         source_input, draft, source_spans=spans
     )
-    assert not any(
-        issue.issue_code.startswith("FREQUENCY_WINDOW")
+    assert any(
+        issue.issue_code == "FREQUENCY_DEFINITION_SCOPE_UNVERIFIED"
+        and issue.affected_refs == ["predicate-severe-history"]
         for issue in _issues(result, "temporal_semantics")
     )
 

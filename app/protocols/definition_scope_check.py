@@ -1,5 +1,29 @@
 """Conservative source-position check, not a semantic equivalence proof."""
 
+import re
+
+
+def nested_example_definitions(text: str) -> list[tuple[str, str, str]]:
+    """Return (head, member, definition) for explicit listed-member brackets.
+
+    A closed inner definition remains locatable when the outer example bracket
+    is missing; the caller must still verify what the definition means.
+    """
+
+    found: list[tuple[str, str, str]] = []
+    for marker in re.finditer(r"包括但不限于|包括|例如", text):
+        head = text[:marker.start()].rstrip("（( ")
+        listed = re.split(r"[。；;]", text[marker.end():], maxsplit=1)[0]
+        for match in re.finditer(
+            r"(?P<member>[^，、；;（）()]{1,80})[（(]"
+            r"(?P<definition>[^（）()]{1,100})[）)]",
+            listed,
+        ):
+            member = re.sub(r"^(?:或|和|及|与|、)+", "", match.group("member").strip())
+            if head and member:
+                found.append((head, member, match.group("definition")))
+    return found
+
 
 def example_ranges(text: str) -> list[tuple[int, int]]:
     stack = []

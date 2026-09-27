@@ -1,6 +1,10 @@
 import pytest
 
-from app.protocols.definition_scope_check import crosses_example_scope, example_ranges
+from app.protocols.definition_scope_check import (
+    crosses_example_scope,
+    example_ranges,
+    nested_example_definitions,
+)
 
 
 @pytest.mark.parametrize("brackets", [("（", "）"), ("(", ")")])
@@ -21,3 +25,11 @@ def test_ambiguous_or_malformed_spans_do_not_claim_scope_proof():
     assert example_ranges("条件（包括示例]") == []
     assert not crosses_example_scope("条件（包括示例）及示例", "示例", "条件")
     assert not crosses_example_scope("条件（包括示例）", "", "条件")
+
+
+def test_inner_example_definition_survives_unclosed_outer_bracket():
+    source = "上位条件（包括甲、乙（2年内发生2次或以上）或当前条件"
+    assert nested_example_definitions(source) == [
+        ("上位条件", "乙", "2年内发生2次或以上")
+    ]
+    assert nested_example_definitions("上位条件（同时满足2年内发生2次）") == []

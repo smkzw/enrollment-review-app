@@ -1760,24 +1760,24 @@ class ProtocolWorkbenchService:
                                 [
                                     item
                                     for item in current_draft.unresolved_items
-                                    if target_rule_code in item.affected_scope
+                                    if self._feedback_scope_is_target_only(item, target_rule_code)
                                 ],
                                 [
                                     item
                                     for item in draft.unresolved_items
-                                    if target_rule_code in item.affected_scope
+                                    if self._feedback_scope_is_target_only(item, target_rule_code)
                                 ],
                             ),
                             (
                                 [
                                     item
                                     for item in current_draft.structural_warnings
-                                    if target_rule_code in item.affected_scope
+                                    if self._feedback_scope_is_target_only(item, target_rule_code)
                                 ],
                                 [
                                     item
                                     for item in draft.structural_warnings
-                                    if target_rule_code in item.affected_scope
+                                    if self._feedback_scope_is_target_only(item, target_rule_code)
                                 ],
                             ),
                         )
@@ -1874,6 +1874,15 @@ class ProtocolWorkbenchService:
         return self.get_draft_detail(job_id)
 
     @staticmethod
+    def _feedback_scope_is_target_only(item: Any, target_rule_code: str) -> bool:
+        codes = {
+            code
+            for ref in item.affected_scope
+            for code in re.findall(r"(?:IN|EX)-\d{2}", ref)
+        }
+        return codes == {target_rule_code}
+
+    @staticmethod
     def _validate_source_error_scope(
         previous: ProtocolDeconstructionDraft,
         current: ProtocolDeconstructionDraft,
@@ -1908,12 +1917,12 @@ class ProtocolWorkbenchService:
             previous_outside = [
                 item
                 for item in previous_items
-                if target_rule_code not in item.affected_scope
+                if not ProtocolWorkbenchService._feedback_scope_is_target_only(item, target_rule_code)
             ]
             current_outside = [
                 item
                 for item in current_items
-                if target_rule_code not in item.affected_scope
+                if not ProtocolWorkbenchService._feedback_scope_is_target_only(item, target_rule_code)
             ]
             if previous_outside != current_outside:
                 raise ValueError("原文理解纠错不得改写其他入排标准的待确认事项")
