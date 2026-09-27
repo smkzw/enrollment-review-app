@@ -39,12 +39,13 @@ async function request(suffix: string, init: RequestInit): Promise<Record<string
   return record(payload);
 }
 
-export async function startProtocolControls(sourceJobId: string, signal: AbortSignal): Promise<string> {
+export async function startProtocolControls(sourceJobId: string, draftRevisionId: string, signal: AbortSignal): Promise<string> {
   const payload = await request("", {
     method: "POST", signal, headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       source_job_id: sourceJobId,
-      idempotency_key: `control-publication-v3:${sourceJobId}`,
+      draft_revision_id: draftRevisionId,
+      idempotency_key: `control-publication-v4:${sourceJobId}:${draftRevisionId}`,
     }),
   });
   if (payload.source_job_id !== sourceJobId) return invalidResponse();

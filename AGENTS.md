@@ -1,3 +1,16 @@
+<!-- ENROLLMENT-0927V1-R1:BEGIN -->
+> **现行产品规范已更新：0927V1-R1（2026-09-27，用户已确认）。**
+> 入排子系统采用“完整覆盖、混合执行、例外驱动、先闭环再扩展”。完整有源包可保留严格的真实未决/能力缺口；独立已核工作稿继续，受影响项不假判通过。已知错义、来源缺失、越界和损坏仍硬拒绝；官方与相关跨章同源共同纳入。
+> 唯一当前入口：`.trellis/tasks/09-11-e2e-eligibility-review/delivery_0927V1_R1/00_START_HERE.md`；需求/设计/排序/验收为同任务 `prd.md`、`design.md`、`plan.md`、`acceptance.md`。旧“等待该宏观确认”、全机器化前置、旧模型默认和旧串行排序不再作为现行指令。
+> 下方内容保留为历史或不冲突技术参考，不代表当前完成。规范批准不等于代码迁移、临床验证、规则激活或签发；不自动恢复暂停Goal。更高层安全/工具权限和原件保护不变。
+<!-- ENROLLMENT-0927V1-R1:END -->
+
+<!-- ENROLLMENT-0927V1-R1-AGENT:BEGIN -->
+## 当前Agent接续裁定
+
+不再重复征询混合执行宏观边界。按 `.trellis/tasks/09-11-e2e-eligibility-review/plan.md` 的P1–P3实施，最多两线并行；历史回归资产按受影响范围复用，不每轮叠新框架/长作业。技术能力缺口归开发，真实医学未决归相应责任方。用户要求安装本包时，只更改规范；后续真实调用/写入/发布按实际授权。以下Trellis、来源、安全、会商和工具路由约束完整保留；本段不改变工具使用权限。
+<!-- ENROLLMENT-0927V1-R1-AGENT:END -->
+
 # Enrollment Review Project Instructions
 
 ## Current Phase

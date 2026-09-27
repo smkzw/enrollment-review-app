@@ -1,0 +1,68 @@
+{
+  "document_version": "0927V1-R1",
+  "decision_status": "approved",
+  "claims_complete": false,
+  "basis_commit": "963a972634b3c8b41d41b44d8392a0da7269b6cb",
+  "max_parallel_workstreams": 2,
+  "notes": [
+    "索引是实施计划，不是已验证业务资格",
+    "真实执行/发布按现场用户授权",
+    "不新增Phase/规则真相库"
+  ],
+  "work_packages": [
+    {
+      "id": "P0",
+      "name": "规范安装与状态冻结",
+      "kind": "documentation",
+      "dependencies": [],
+      "exit": [
+        "原文归档",
+        "现行入口一致",
+        "状态与授权准确"
+      ]
+    },
+    {
+      "id": "P1",
+      "name": "完整要求包、定义作用域与局部修订",
+      "dependencies": [
+        "P0"
+      ],
+      "exit": [
+        "合法受限采用",
+        "错误不能采用",
+        "真实消费者",
+        "独立工作稿与正确聚合"
+      ]
+    },
+    {
+      "id": "P2",
+      "name": "来源观察、采集、计算与更正",
+      "dependencies": [
+        "P0"
+      ],
+      "integration_dependencies": [
+        "P1"
+      ],
+      "exit": [
+        "来源实例资格",
+        "真实计算消费",
+        "有源更正与旧历史"
+      ]
+    },
+    {
+      "id": "P3",
+      "name": "完整个例、留出与可用首版",
+      "dependencies": [
+        "P1",
+        "P2"
+      ],
+      "exit": [
+        "完整当前节点",
+        "一次更正/补证",
+        "原件导航",
+        "留出与运维",
+        "公开限制"
+      ]
+    }
+  ]
+}

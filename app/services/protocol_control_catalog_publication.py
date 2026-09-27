@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
 from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunResult
+from app.agents.protocol_control_source_interpretation import normalize_source_excerpt
 from app.domain.contracts.agent_io import ProtocolDeconstructionDraft, ProtocolDeconstructionInput
 from app.domain.contracts.agents import GateResult
 from app.domain.contracts.control_catalog_publication import (
@@ -29,12 +31,14 @@ from app.protocols.protocol_control_gate import CONTROL_PUBLICATION_GATE_VERSION
 from app.services.protocol_control_execution import (
     CANDIDATE_CONTROL_PACKAGE_RESULT_KIND, FORMAL_CATALOG_STATUS_NOT_MATERIALIZED,
     PROTOCOL_CONTROL_JOB_TYPE, STEP_CLOSURE, STEP_GATE,
+    _validate_saved_source_review,
 )
 from app.storage.codecs import verify_payload_sha256
 from app.storage.control_catalog_repository import ControlCatalogPublicationRepository
 from app.storage.models import EvidenceRequirementRecord, JobCheckpointRecord, JobRecord, JobStepRecord
 from app.storage.repositories import (
     AppendRepository, GATE_RESULT_CONFIG, ScopeViolationError,
+    ProtocolDraftRevisionRepository,
     _save_requirement_row, get_evidence_requirement, get_rule_set,
     save_expectation_templates,
 )
@@ -43,10 +47,22 @@ from app.projections.evidence_expectation_templates import project_evidence_expe
 from app.workflow.jobstore import JobStore
 
 
-def _require_source_calculations_consumable(
+@dataclass(frozen=True)
+class SourceCalculationGap:
+    batch_number: int
+    statement_index: int
+    structure_unit_id: str
+    source_span_ids: tuple[str, ...]
+    source_quote: str
+    linked_official_code: str | None
+    review_decision: str | None
+    unresolved_aspects: tuple[str, ...]
+
+
+def source_calculation_gaps(
     store: JobStore, source_job_id: str,
-) -> None:
-    """Textual rule coverage cannot certify a source-defined calculation."""
+) -> tuple[SourceCalculationGap, ...]:
+    """Read source-bound calculation gaps from the frozen deep-review steps."""
     closure = store.get_last_checkpoint(source_job_id, STEP_CLOSURE)
     if closure is None:
         raise ScopeViolationError("补充审核要求缺少已冻结的来源分包")
@@ -54,6 +70,7 @@ def _require_source_calculations_consumable(
     steps = closure[1].get("deep_step_ids")
     if not isinstance(steps, list) or len(steps) != len(plan.batches):
         raise ScopeViolationError("补充审核要求的逐批来源核对身份不完整")
+    gaps = []
     for batch, entry in zip(plan.batches, steps, strict=True):
         if not isinstance(entry, Mapping) or entry.get("batch_id") != batch.batch_id:
             raise ScopeViolationError("补充审核要求的逐批来源核对身份不一致")
@@ -67,15 +84,75 @@ def _require_source_calculations_consumable(
         interpretation = run.source_interpretation
         if run.batch_id != batch.batch_id or interpretation is None:
             raise ScopeViolationError("补充审核要求的逐批来源解释与冻结分包不一致")
-        pending = [
-            index for index, statement in enumerate(interpretation.statements)
-            if "calculation_input" in statement.decision_functions
-        ]
-        if pending:
-            raise ScopeViolationError(
-                "方案中的计算定义尚无可核验的正式求值方式，不能仅凭条款文字对应发布"
-                f"（批次 {batch.batch_number}，陈述 {pending[0]}）"
-            )
+        units = {unit.structure_unit_id: unit for unit in batch.owned_units}
+        reviews = ({item.statement_index: item for item in run.source_target_review.items}
+                   if run.source_target_review is not None else {})
+        official_codes = {item.official_code for item in batch.known_official_targets}
+        for index, statement in enumerate(interpretation.statements):
+            if "calculation_input" not in statement.decision_functions:
+                continue
+            review = reviews.get(index)
+            if review is not None and review.decision == "not_current_control":
+                try:
+                    _validate_saved_source_review(batch, run)
+                except ValueError as exc:
+                    raise ScopeViolationError("非当前审核计算的来源核对记录无效") from exc
+                if (set(statement.decision_functions) <= {"action", "calculation_input"}
+                        and statement.eligibility_sequence == "after_eligibility_decision"
+                        and not statement.unresolved and not review.unresolved_aspects):
+                    continue
+            unit = units.get(statement.structure_unit_id)
+            source_parts = ([unit.excerpt, *unit.heading_path] if unit is not None else [])
+            normalized = normalize_source_excerpt(statement.quoted_text)
+            source_part = next((part for part in source_parts
+                                if normalized and normalized in normalize_source_excerpt(part)), None)
+            if source_part is None:
+                raise ScopeViolationError("计算定义的原文摘录与冻结来源单元不一致")
+            linked_code = (review.target_id if review is not None
+                           and review.decision == "covered_by_official"
+                           and review.target_id in official_codes else None)
+            gaps.append(SourceCalculationGap(
+                batch_number=batch.batch_number, statement_index=index,
+                structure_unit_id=unit.structure_unit_id,
+                source_span_ids=tuple(unit.source_span_ids),
+                source_quote=(statement.quoted_text if statement.quoted_text in source_part
+                              else source_part),
+                linked_official_code=linked_code,
+                review_decision=review.decision if review is not None else None,
+                unresolved_aspects=tuple(sorted(set([
+                    *statement.unresolved,
+                    *(review.unresolved_aspects if review is not None else []),
+                ]))),
+            ))
+    return tuple(gaps)
+
+
+def _require_source_calculations_consumable(
+    store: JobStore, source_job_id: str,
+) -> None:
+    """Textual rule coverage cannot certify a source-defined calculation."""
+    gaps = source_calculation_gaps(store, source_job_id)
+    if gaps:
+        first = gaps[0]
+        raise ScopeViolationError(
+            "方案中的计算定义尚无可核验的正式求值方式，不能仅凭条款文字对应发布"
+            f"（批次 {first.batch_number}，陈述 {first.statement_index}）"
+        )
+
+
+def _require_frozen_draft_revision(
+    session: Session, payload: Mapping[str, object], draft: ProtocolDeconstructionDraft,
+) -> None:
+    revision_id = payload.get("draft_revision_id")
+    content_sha256 = payload.get("draft_content_sha256")
+    if not isinstance(revision_id, str) or not isinstance(content_sha256, str):
+        raise ScopeViolationError("补充审核要求尚未绑定当前方案草稿修订")
+    revision = ProtocolDraftRevisionRepository(session).get(revision_id)
+    if (revision.content_sha256 != content_sha256
+            or revision.content != draft
+            or revision.content.draft_id != draft.draft_id
+            or revision.content.draft_revision != draft.draft_revision):
+        raise ScopeViolationError("补充审核要求对应旧版方案草稿，请重新整理后发布")
 
 
 def prepare_control_catalog_publication(
@@ -116,6 +193,7 @@ def prepare_control_catalog_publication(
         or rule_set.study_phase != source_input.selected_phase
     ):
         raise ScopeViolationError("补充审核要求与当前草稿、规则版本或研究期别不一致")
+    _require_frozen_draft_revision(session, payload, draft)
 
     coverage_manifest = ProtocolSectionCoverageManifest.model_validate(
         payload["coverage_manifest"]

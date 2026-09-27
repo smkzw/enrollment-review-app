@@ -12,6 +12,7 @@ class StartProtocolControlExecutionRequest(_StrictModel):
     """Public start contract; execution tuning stays in server configuration."""
 
     source_job_id: str = Field(min_length=1, max_length=128)
+    draft_revision_id: str | None = Field(default=None, min_length=1, max_length=256)
     idempotency_key: str = Field(min_length=1, max_length=256)
     discovery_source_job_id: str | None = Field(default=None, min_length=1, max_length=128)
 
@@ -39,6 +40,17 @@ class ProtocolControlExecutionStatusResponse(_StrictModel):
     candidate_count: int | None = Field(default=None, ge=0)
 
 
+class ProtocolControlCalculationGapResponse(_StrictModel):
+    batch_number: int = Field(ge=1)
+    statement_index: int = Field(ge=0)
+    structure_unit_id: str
+    source_span_ids: list[str]
+    source_quote: str
+    linked_official_code: str | None
+    review_decision: str | None
+    unresolved_aspects: list[str]
+
+
 class ProtocolControlRequirementsResponse(_StrictModel):
     job_id: str
     source_job_id: str
@@ -46,3 +58,4 @@ class ProtocolControlRequirementsResponse(_StrictModel):
     candidates: list[ProtocolControlCandidate]
     workflow_stages: list[WorkflowStage]
     relation_target_labels: dict[str, str]
+    calculation_gaps: list[ProtocolControlCalculationGapResponse]

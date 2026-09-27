@@ -79,12 +79,17 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
   const sessionData = sessionStatus === "success" ? session.state.data : null;
   const jobState = sessionData?.state ?? null;
   const isRedo = sessionData?.sessionKind === "re_deconstruction";
-  const controls = useProtocolControls(jobId, repo.kind === "http" && publishResult === null &&
+  const controls = useProtocolControls(jobId, sessionData?.draftRevisionId ?? null,
+    repo.kind === "http" && publishResult === null &&
     (sessionData?.awaitingUser === "review" || sessionData?.awaitingUser === "publish"));
   const controlPublication = controls.state.status === "ready"
     ? { jobId: controls.state.data.jobId, checkpointId: controls.state.data.checkpointId }
     : undefined;
-  const publicationBlocked = repo.kind === "http" && controlPublication === undefined;
+  const calculationBlocked = controls.state.status === "ready" && controls.state.data.calculationGaps.length > 0;
+  const calculationMeaningUnresolved = controls.state.status === "ready" &&
+    controls.state.data.calculationGaps.some((gap) => gap.unresolvedAspects.length > 0 ||
+      !["covered_by_official", "covered_by_procedure", "additional_requirement"].includes(gap.reviewDecision ?? ""));
+  const publicationBlocked = repo.kind === "http" && (controlPublication === undefined || calculationBlocked);
 
   const identity = useLoad(
     (signal) => repo.getIdentityReview(jobId, { signal }),
@@ -264,9 +269,11 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
           expectedRevisionId: candidate.revisionId,
           feedbackKind: values.kind,
           targetRuleCode: values.targetRuleCode,
+          targetComponentId: values.targetComponentId ?? undefined,
           feedbackNote: values.note,
         });
         setFeedbackOpen(false);
+        session.retry();
         comparison.retry();
         redoReview.retry();
         if (isStubDemo && next.revisionNumber > 1) setDraftSaved(true);
@@ -282,7 +289,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
         setFeedbackBusy(false);
       }
     },
-    [comparison, isStubDemo, jobId, redoReview, repo, setDraftSaved],
+    [comparison, isStubDemo, jobId, redoReview, repo, session.retry, setDraftSaved],
   );
 
   const handleSubmitManualEdit = useCallback(
@@ -302,6 +309,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
           draft: patched,
         });
         setManualEditOpen(false);
+        session.retry();
         comparison.retry();
         redoReview.retry();
         if (isStubDemo && next.revisionNumber > 1) setDraftSaved(true);
@@ -317,7 +325,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
         setManualEditBusy(false);
       }
     },
-    [comparison, isStubDemo, jobId, redoReview, repo, setDraftSaved],
+    [comparison, isStubDemo, jobId, redoReview, repo, session.retry, setDraftSaved],
   );
 
   const handleCancelDraft = useCallback(async () => {
@@ -353,7 +361,11 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
 
   const handlePublish = useCallback(async () => {
     if (publicationBlocked) {
-      setPublishError("补充审核要求尚未整理完成，请完成核对后再发布。");
+      setPublishError(calculationBlocked
+        ? calculationMeaningUnresolved
+          ? "方案中部分计算原文的适用含义尚待核对，当前不能发布。请查看补充审核要求中的原文。"
+          : "方案中的计算要求尚未接通可靠的取值和计算方式，当前不能发布。请查看补充审核要求中的原文。"
+        : "补充审核要求尚未整理完成，请完成核对后再发布。");
       return;
     }
     setPublishBusy(true);
@@ -373,7 +385,7 @@ export function ProtocolJobFlow({ jobId, componentParam }: ProtocolJobFlowProps)
     } finally {
       setPublishBusy(false);
     }
-  }, [jobId, repo, publicationBlocked, controlPublication]);
+  }, [jobId, repo, publicationBlocked, calculationBlocked, calculationMeaningUnresolved, controlPublication]);
 
   const handleResetTrial = useCallback(() => {
     resetDraftSaved();

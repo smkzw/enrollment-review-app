@@ -27,18 +27,23 @@ from app.agents.protocol_control_semantic_inquiry import (
 )
 from app.agents.protocol_control_source_interpretation import (
     SOURCE_INTERPRETATION_VERSION,
+    SOURCE_TARGET_REVIEW_VERSION,
     SourceInterpretation,
     SourceStatement,
+    SourceStatementCoverage,
 )
 from app.domain.contracts.enums import PhaseScope, StudyPhase
 from app.domain.contracts.protocol_controls import (
+    KnownOfficialRuleTarget,
     ProtocolControlDispositionBatch, ProtocolControlDiscoveryDecision,
     ProtocolControlDiscoveryDisposition, ProtocolControlDiscoveryToDeepPlan,
     ProtocolStructureUnit, StructureUnitKind,
     TableCellContext,
     stable_protocol_control_manifest_structure_unit_ids_sha256,
 )
-from app.services.protocol_control_catalog_publication import _require_source_calculations_consumable
+from app.services.protocol_control_catalog_publication import (
+    _require_frozen_draft_revision, _require_source_calculations_consumable, source_calculation_gaps,
+)
 from app.services.protocol_control_execution import STEP_CLOSURE
 from app.storage.repositories import ScopeViolationError
 from scripts.run_frozen_semantic_points import (
@@ -139,11 +144,71 @@ def _publication_source_store(batch, interpretation):
     return SimpleNamespace(get_last_checkpoint=lambda _job, step: (step, checkpoints[step]))
 
 
+def test_publication_requires_exact_frozen_draft_revision(monkeypatch) -> None:
+    from app.services import protocol_control_catalog_publication as publication
+    draft = SimpleNamespace(draft_id="draft-a", draft_revision=2)
+    revision = SimpleNamespace(content=draft, content_sha256="a" * 64)
+    monkeypatch.setattr(publication.ProtocolDraftRevisionRepository, "get",
+                        lambda self, revision_id: revision)
+    frozen = {"draft_revision_id": "revision-a", "draft_content_sha256": "a" * 64}
+    _require_frozen_draft_revision(None, frozen, draft)
+    with pytest.raises(ScopeViolationError, match="尚未绑定"):
+        _require_frozen_draft_revision(None, {}, draft)
+    with pytest.raises(ScopeViolationError, match="旧版"):
+        _require_frozen_draft_revision(None, {**frozen, "draft_content_sha256": "b" * 64}, draft)
+    with pytest.raises(ScopeViolationError, match="旧版"):
+        _require_frozen_draft_revision(None, frozen, SimpleNamespace(draft_id="draft-a", draft_revision=3))
+
+
 def test_publication_refuses_textual_coverage_without_calculation_consumer() -> None:
     batch, interpretation = _source()
     store = _publication_source_store(batch, interpretation)
     with pytest.raises(ScopeViolationError, match="计算定义尚无可核验的正式求值方式"):
         _require_source_calculations_consumable(store, "job-generic")
+    gaps = source_calculation_gaps(store, "job-generic")
+    assert [(item.batch_number, item.statement_index, item.source_span_ids, item.source_quote)
+            for item in gaps] == [
+        (1, 0, ("span-0",), batch.owned_units[0].excerpt),
+        (1, 1, ("span-1",), batch.owned_units[1].excerpt),
+    ]
+    assert all(item.linked_official_code is None for item in gaps)
+    assert all(item.review_decision is None and not item.unresolved_aspects for item in gaps)
+
+
+def test_calculation_preview_only_links_a_frozen_official_target() -> None:
+    batch, interpretation = _source()
+    batch.known_official_targets = [KnownOfficialRuleTarget(
+        catalog_item_id="target-1", official_code="IN-01", label="有源要求",
+        position=0, source_span_ids=["span-0"],
+        source_excerpts=[batch.owned_units[0].excerpt],
+    )]
+    store = _publication_source_store(batch, interpretation)
+    checkpoint = store.get_last_checkpoint("job-generic", "deep-1")[1]
+    checkpoint["run_result"]["source_target_review"] = {
+        "version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{
+            "statement_index": 0, "decision": "covered_by_official",
+            "target_id": "IN-01", "source_action_excerpt": batch.owned_units[0].excerpt,
+            "target_action_excerpt": "取其均值",
+        }],
+    }
+    gaps = source_calculation_gaps(store, "job-generic")
+    assert gaps[0].linked_official_code == "IN-01"
+    assert gaps[0].review_decision == "covered_by_official"
+    assert gaps[0].unresolved_aspects == ()
+    assert gaps[1].linked_official_code is None
+    assert gaps[1].review_decision is None
+    interpretation.statements[1].unresolved = ["输入次数的适用范围"]
+    checkpoint["run_result"]["source_interpretation"] = interpretation.model_dump(mode="json")
+    assert source_calculation_gaps(store, "job-generic")[1].unresolved_aspects == ("输入次数的适用范围",)
+    interpretation.statements[1].unresolved = []
+    interpretation.statements[0].quoted_text = batch.owned_units[0].excerpt.replace("三次", "三 次")
+    checkpoint["run_result"]["source_interpretation"] = interpretation.model_dump(mode="json")
+    assert source_calculation_gaps(store, "job-generic")[0].source_quote == batch.owned_units[0].excerpt
+    interpretation.statements[0].quoted_text = "原文没有的计算定义"
+    checkpoint["run_result"]["source_interpretation"] = interpretation.model_dump(mode="json")
+    with pytest.raises(ScopeViolationError, match="原文摘录与冻结来源单元不一致"):
+        source_calculation_gaps(store, "job-generic")
 
 
 def test_publication_allows_noncalculated_source_through_this_guard() -> None:
@@ -151,6 +216,46 @@ def test_publication_allows_noncalculated_source_through_this_guard() -> None:
     for statement in interpretation.statements:
         statement.decision_functions = ["action"]
     _require_source_calculations_consumable(_publication_source_store(batch, interpretation), "job-generic")
+
+
+def test_post_eligibility_calculation_does_not_block_current_review() -> None:
+    batch, interpretation = _source()
+    unit = batch.owned_units[0]
+    unit.excerpt = "确认符合入排标准后，选择最近三次记录，取其均值作为研究结果。"
+    statement = interpretation.statements[0]
+    statement.quoted_text = "选择最近三次记录，取其均值作为研究结果。"
+    statement.decision_functions = ["action", "calculation_input"]
+    statement.eligibility_sequence = "after_eligibility_decision"
+    statement.eligibility_sequence_quote = "确认符合入排标准后"
+    coverage = SourceStatementCoverage(
+        statement_index=0, structure_unit_id=unit.structure_unit_id,
+        disposition="supporting_or_supplement", status="not_located",
+    )
+    store = _publication_source_store(batch, interpretation)
+    saved = store.get_last_checkpoint("job-generic", "deep-1")[1]["run_result"]
+    saved["source_statement_coverage"] = [coverage.model_dump(mode="json")]
+    saved["source_target_review"] = {
+        "version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{
+            "statement_index": 0, "decision": "not_current_control",
+            "source_action_excerpt": statement.quoted_text,
+            "non_control_basis_excerpt": statement.eligibility_sequence_quote,
+        }],
+    }
+    assert [gap.statement_index for gap in source_calculation_gaps(store, "job-generic")] == [1]
+
+    # An unverified source review cannot exclude a calculation from publication.
+    saved["source_target_review"]["items"][0]["non_control_basis_excerpt"] = "没有这段先后说明"
+    with pytest.raises(ScopeViolationError, match="来源核对记录无效"):
+        source_calculation_gaps(store, "job-generic")
+    saved["source_target_review"]["items"][0]["non_control_basis_excerpt"] = statement.eligibility_sequence_quote
+    statement.decision_functions = ["definition", "calculation_input"]
+    saved["source_interpretation"] = interpretation.model_dump(mode="json")
+    assert [gap.statement_index for gap in source_calculation_gaps(store, "job-generic")] == [0, 1]
+    statement.decision_functions = ["action", "calculation_input"]
+    interpretation.statements[1].decision_functions = ["action"]
+    saved["source_interpretation"] = interpretation.model_dump(mode="json")
+    _require_source_calculations_consumable(store, "job-generic")
 
 
 def test_mean_remains_source_bound_but_not_executable() -> None:
@@ -260,7 +365,7 @@ def test_action_without_a_compiled_consumer_is_not_marked_ready() -> None:
     packet["items"][0]["review_scope"] = "patient_eligibility"
     bound = bind_semantic_packet(batch, interpretation, [0], SourceSemanticPacket.model_validate(packet))
     assert bound[0].capability == "capability_gap"
-    assert SEMANTIC_BINDER_VERSION.endswith("/v32")
+    assert SEMANTIC_BINDER_VERSION.endswith("/v33")
 
 
 def test_structured_cross_statement_dependency_names_one_point_not_its_siblings() -> None:
@@ -508,6 +613,39 @@ def test_partial_binding_keeps_valid_shared_calculation_policy() -> None:
     assert [point.statement_index for point in bound] == [0, 1, 2]
     assert [point.capability for point in bound] == [
         "capability_gap", "not_applicable", "not_applicable"]
+
+
+def test_partial_binding_does_not_block_a_calculation_for_an_unrelated_sibling() -> None:
+    batch, interpretation = _source()
+    source = "缺失记录不填补，另列随访说明。"
+    batch.owned_units[1].excerpt = source
+    interpretation.statements[1].quoted_text = source
+    packet = _packet().model_dump(mode="json")
+    packet["items"][1]["exact_source_quote"] = "缺失记录不填补"
+    packet["items"].insert(2, {
+        "statement_index": 1, "point_key": "unrelated",
+        "exact_source_quote": "未出现在原文的内容", "proposition": "另列随访说明",
+        "role": "context", "review_scope": "study_level_background",
+    })
+    bound, issues = bind_semantic_packet_partially(
+        batch, interpretation, [0, 1, 2], SourceSemanticPacket.model_validate(packet),
+    )
+    assert {(point.statement_index, point.point_key) for point in bound} == {
+        (0, "main"), (1, "main"), (2, "main"),
+    }
+    assert [(issue.statement_index, issue.point_key) for issue in issues] == [(1, "unrelated")]
+
+    wrong = _packet().model_dump(mode="json")
+    wrong["items"][1]["point_key"] = "unrelated"
+    wrong["items"][1]["exact_source_quote"] = "另列随访说明"
+    wrong["items"][0]["dependencies"] = [
+        {"statement_index": 1, "point_key": "unrelated"},
+    ]
+    bound, issues = bind_semantic_packet_partially(
+        batch, interpretation, [0, 1, 2], SourceSemanticPacket.model_validate(wrong),
+    )
+    assert (0, "main") not in {(point.statement_index, point.point_key) for point in bound}
+    assert any("包含该原文摘录" in issue.reason for issue in issues)
 
 
 def test_partial_binding_rejects_computation_if_referenced_meaning_is_missing() -> None:

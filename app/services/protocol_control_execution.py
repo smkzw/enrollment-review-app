@@ -132,9 +132,13 @@ from app.evidence.artifacts import ArtifactStore, ArtifactStoreError
 from app.services.job_service import JobService, StepSpec
 from app.services.protocol_workbench_service import (
     PROTOCOL_DECONSTRUCTION_JOB_TYPE,
+    STEP_GENERATE as SOURCE_STEP_GENERATE,
+    STEP_AWAIT_REVIEW as SOURCE_STEP_AWAIT_REVIEW,
+    STEP_PUBLISH as SOURCE_STEP_PUBLISH,
 )
 from app.storage.codecs import utc_now, verify_payload_sha256
 from app.storage.config import DataPaths
+from app.storage.repositories import NotFoundError, ProtocolDraftRevisionRepository
 from app.workflow.errors import JobNotFoundError, StepFailure
 from app.workflow.jobstore import DEFAULT_LEASE_TTL, JobStore
 from app.workflow.runner import PreparedStepResult, StepContext, StepExecutor
@@ -282,6 +286,8 @@ class _PreparedSource:
     workflow_stages: tuple[WorkflowStage, ...]
     coverage_manifest: ProtocolSectionCoverageManifest
     discovery_plan: ProtocolControlDiscoveryPlan
+    draft_revision_id: str | None = None
+    draft_content_sha256: str | None = None
 
 
 class ProtocolControlJobService:
@@ -385,6 +391,7 @@ class ProtocolControlJobService:
         *,
         source_job_id: str,
         idempotency_key: str,
+        draft_revision_id: str | None = None,
         discovery_source_job_id: str | None = None,
         deep_source_job_id: str | None = None,
     ) -> ProtocolControlExecutionResult:
@@ -410,6 +417,12 @@ class ProtocolControlJobService:
                 max_discovery_units_per_batch=self.max_discovery_units_per_batch,
                 discovery_context_radius=self.discovery_context_radius,
             )
+            if draft_revision_id is not None and draft_revision_id != prepared.draft_revision_id:
+                raise ProtocolControlExecutionError(
+                    "PROTOCOL_CONTROL_DRAFT_CHANGED",
+                    "方案草稿版本已变化，请刷新后重新整理补充审核要求。",
+                    status_code=409,
+                )
             payload = self._job_payload(prepared)
             if discovery_source_job_id is not None:
                 store = JobStore(session, now=self.jobs.now)
@@ -557,6 +570,11 @@ class ProtocolControlJobService:
                     }
                 )
 
+        for step_id in (SOURCE_STEP_GENERATE, SOURCE_STEP_AWAIT_REVIEW, SOURCE_STEP_PUBLISH):
+            checkpoint = store.get_last_checkpoint(source_job_id, step_id)
+            if checkpoint is not None and "draft_revision_id" in checkpoint[1]:
+                merged["draft_revision_id"] = checkpoint[1]["draft_revision_id"]
+
         source_input = self._model_from_source(
             merged.get("source_input"), ProtocolDeconstructionInput, "来源方案输入"
         )
@@ -660,6 +678,26 @@ class ProtocolControlJobService:
         workflow_stages = self.workflow_stages or _workflow_stages_from_frozen_source(
             source_input
         )
+        draft_revision_id = merged.get("draft_revision_id")
+        draft_content_sha256 = None
+        if draft_revision_id is not None:
+            if not isinstance(draft_revision_id, str) or not draft_revision_id:
+                raise ProtocolControlExecutionError(
+                    "PROTOCOL_CONTROL_DRAFT_INVALID", "方案草稿修订身份无效。", status_code=409,
+                )
+            try:
+                revision = ProtocolDraftRevisionRepository(session).get(draft_revision_id)
+            except NotFoundError as exc:
+                raise ProtocolControlExecutionError(
+                    "PROTOCOL_CONTROL_DRAFT_MISSING", "方案草稿修订无法核对。", status_code=409,
+                ) from exc
+            if (revision.project_id, revision.protocol_version_id, revision.study_phase) != (
+                source_input.project_id, source_input.protocol_version_id, source_input.selected_phase
+            ):
+                raise ProtocolControlExecutionError(
+                    "PROTOCOL_CONTROL_DRAFT_SCOPE_INVALID", "方案草稿与补充审核要求的来源不一致。", status_code=409,
+                )
+            draft_content_sha256 = revision.content_sha256
         return _PreparedSource(
             source_job_id=source_job_id,
             source_input=source_input,
@@ -670,6 +708,8 @@ class ProtocolControlJobService:
             workflow_stages=workflow_stages,
             coverage_manifest=coverage_manifest,
             discovery_plan=discovery_plan,
+            draft_revision_id=draft_revision_id,
+            draft_content_sha256=draft_content_sha256,
         )
 
     @staticmethod
@@ -816,6 +856,10 @@ class ProtocolControlJobService:
             "frozen_model_routes": frozen_routes,
             **local_deployment_job_fields(),
             "source_deconstruction_job_id": prepared.source_job_id,
+            **({
+                "draft_revision_id": prepared.draft_revision_id,
+                "draft_content_sha256": prepared.draft_content_sha256,
+            } if prepared.draft_revision_id is not None else {}),
             "actor": self.actor,
             "source_snapshot_id": prepared.snapshot.snapshot_id,
             "source_content_sha256": prepared.snapshot.content_sha256,

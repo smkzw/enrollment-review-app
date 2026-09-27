@@ -37,6 +37,7 @@ from app.services.protocol_control_execution import (
     CANDIDATE_CONTROL_PACKAGE_RESULT_KIND,
     FORMAL_CATALOG_STATUS_NOT_MATERIALIZED,
     PROTOCOL_CONTROL_EXECUTION_JOB_TYPE,
+    ProtocolControlExecutionError,
     ProtocolControlExecutorConfig,
     ProtocolControlJobService,
     create_protocol_control_executor,
@@ -382,6 +383,45 @@ def test_service_derives_unique_workflow_nodes_from_frozen_source(
     assert len(stages) == len(stage_keys)
     assert len({item["workflow_stage_id"] for item in stages}) == len(stages)
     assert all(item["display_name"] == item["visit_instance"] for item in stages)
+
+
+def test_control_job_freezes_current_draft_and_rejects_stale_request(
+    data_paths, session_factory, monkeypatch,
+) -> None:
+    seed = _seed_frozen_source(data_paths, session_factory, key="draft-bound-source")
+    original_checkpoint = JobStore.get_last_checkpoint
+
+    def with_draft(self, job_id, step_id):
+        if job_id == seed.source_job_id and step_id == "generate_draft":
+            return "draft-checkpoint", {"draft_revision_id": "revision-current"}
+        return original_checkpoint(self, job_id, step_id)
+
+    monkeypatch.setattr(JobStore, "get_last_checkpoint", with_draft)
+    from app.storage.repositories import ProtocolDraftRevisionRepository
+    with session_factory() as session:
+        source_payload = verify_payload_sha256(
+            JobStore(session, now=_now).get_job(seed.source_job_id).payload_json,
+            JobStore(session, now=_now).get_job(seed.source_job_id).payload_sha256,
+        )["source_input"]
+    monkeypatch.setattr(ProtocolDraftRevisionRepository, "get", lambda self, revision_id: SimpleNamespace(
+        project_id=source_payload["project_id"], protocol_version_id=source_payload["protocol_version_id"],
+        study_phase=source_payload["selected_phase"],
+        content_sha256="a" * 64,
+    ))
+    service = _build_service(data_paths, session_factory, seed)
+    with pytest.raises(ProtocolControlExecutionError, match="草稿版本已变化"):
+        service.create_from_deconstruction(
+            source_job_id=seed.source_job_id, draft_revision_id="revision-old",
+            idempotency_key="stale-draft-control",
+        )
+    created = service.create_from_deconstruction(
+        source_job_id=seed.source_job_id, draft_revision_id="revision-current",
+        idempotency_key="current-draft-control",
+    )
+    _, payload = _job_snapshot_and_payload(session_factory, created.job_id)
+    assert (payload["draft_revision_id"], payload["draft_content_sha256"]) == (
+        "revision-current", "a" * 64,
+    )
 
 
 def _build_runner(data_paths, session_factory, discovery, deep):

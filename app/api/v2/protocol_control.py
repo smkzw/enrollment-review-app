@@ -5,6 +5,7 @@ from fastapi import APIRouter, Request, Response
 from fastapi import status as http_status
 
 from app.api.v2.protocol_control_schemas import (
+    ProtocolControlCalculationGapResponse,
     ProtocolControlExecutionStatusResponse,
     ProtocolControlRequirementsResponse,
     StartProtocolControlExecutionRequest,
@@ -37,6 +38,7 @@ def start_protocol_control_execution(
 ) -> StartProtocolControlExecutionResponse:
     result = _service(request).create_from_deconstruction(
         source_job_id=body.source_job_id,
+        draft_revision_id=body.draft_revision_id,
         idempotency_key=body.idempotency_key,
         discovery_source_job_id=body.discovery_source_job_id,
     )
@@ -81,4 +83,12 @@ def get_protocol_control_requirements(job_id: str, request: Request) -> Protocol
         job_id=view.job_id, source_job_id=view.source_job_id, checkpoint_id=view.checkpoint_id,
         candidates=list(view.candidates), workflow_stages=list(view.workflow_stages),
         relation_target_labels=dict(view.relation_target_labels),
+        calculation_gaps=[ProtocolControlCalculationGapResponse(
+            batch_number=item.batch_number, statement_index=item.statement_index,
+            structure_unit_id=item.structure_unit_id,
+            source_span_ids=list(item.source_span_ids), source_quote=item.source_quote,
+            linked_official_code=item.linked_official_code,
+            review_decision=item.review_decision,
+            unresolved_aspects=list(item.unresolved_aspects),
+        ) for item in view.calculation_gaps],
     )
