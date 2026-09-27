@@ -2,6 +2,8 @@
 
 时间：2026-09-27 17:05 CST。用户要求完成手头工作后暂停。本文件是恢复入口，不是 W6、W7 或 Q3 验收。`claims_complete=false`。
 
+GitHub 交付：源码、测试、当前任务文档与本交接的 WIP 提交 `ca9c7ccbaf58cd4b78e306f7a148fa33be54d7d8`，已推送 `origin/codex/phase5-clinical-facts-profile`。随后这份交接的状态补记以分支最新提交为准，不把它当产品完工提交。
+
 ## 1. 接手先做什么
 
 1. 唯一现行工作树：`/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile`；分支 `codex/phase5-clinical-facts-profile`；本轮开始 HEAD `f0163fd8c5498e562e2c6a4f09a0e9f5c85b15eb`。先重新检查 HEAD、dirty、服务和数据目录归属，不 reset/clean/覆盖其他代理修改。GitHub 交付的具体提交及未提交范围以本文件下方和现场 `git status` 为准。
@@ -54,3 +56,5 @@
 ## 7. 交付边界
 
 GitHub 只应提交经检查的源码、测试、任务文档与本交接；`artifacts/`、13 GB 隔离库、原始方案/病例、凭据、会商运行原始记录和其他代理未确认的缓存不推送。若仍有 dirty，逐项列在最终答复，不能用提交成功声称完整交付。Goal 标为用户要求的 `paused`，不是 `complete`。恢复须由用户明确提出。
+
+本次推送后工作树仍有228条未跟踪目录/文件，主要是 `conference/`、`context/`、`metrics/`、`plans/`、`prompts/`、`reviews/`、`runs/` 下历次执行/会商原始过程记录；它们未被清理、提交或推送。正式实验回执还在被忽略的 `artifacts/`。接手者先按归属和敏感性逐项检查，不把“未跟踪”视为可删除。工作树没有剩余已跟踪源码修改（本补记提交前除外）。
