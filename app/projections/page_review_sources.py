@@ -9,6 +9,12 @@ def _literal_text(value):
     return "".join(unicodedata.normalize("NFKC", value or "").split())
 
 
+def page_observation_ref(review_id, kind, index):
+    return "page-observation:" + canonical_hash({
+        "review_id": review_id, "kind": kind, "index": index,
+    })
+
+
 def accepted_observations(reviews, reconciliation, *, include_clause_signals=True):
     result = []
     for review in reviews:
@@ -24,9 +30,7 @@ def accepted_observations(reviews, reconciliation, *, include_clause_signals=Tru
                     else observation in reconciliation.accepted_clause_signals
                 )
                 if accepted:
-                    ref = "page-observation:" + canonical_hash({
-                        "review_id": review.page_review_id, "kind": kind, "index": index,
-                    })
+                    ref = page_observation_ref(review.page_review_id, kind, index)
                     result.append({"source_observation_ref": ref, "kind": kind,
                                    "observation": observation.model_dump(mode="json")})
     return result

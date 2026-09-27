@@ -7,6 +7,7 @@ _REFERENCE_FIELDS = {
     "locator_id": "locator", "locator_ids": "locator",
     "affected_locator_ids": "locator",
     "source_observation_ref": "observation", "source_observation_refs": "observation",
+    "affected_observation_refs": "observation",
     "requirement_id": "requirement", "supported_requirement_ids": "requirement",
     "affected_requirement_ids": "requirement",
 }

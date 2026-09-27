@@ -219,6 +219,7 @@ def test_pending_only_group_preserves_pages_without_model_call(
     assert len(retained) == int(with_pending and not legacy)
     if retained:
         assert "2条" in retained[0]["message"]
+        assert len(retained[0]["affected_observation_refs"]) == 2
         assert _fact().raw_value in retained[0]["reason"]
         assert retained[0]["gap_type"] is None
     with session_factory() as session, session.begin():

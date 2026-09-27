@@ -10,6 +10,7 @@ from app.agents.protocol_deconstructor import (
     ProtocolDeconstructionAttempt,
     ProtocolDeconstructionRunResult,
     ProtocolAgentResponse,
+    ProtocolAgentCallError,
     ProtocolDeconstructorRunner,
     _parse_semantic_candidate,
     _plan_semantic_rule_batches,
@@ -2186,6 +2187,32 @@ def test_initial_transport_failure_returns_auditable_review_result():
     assert result.status == "需要核对"
     assert result.attempts[0].outcome == "会话异常"
     assert "上游连续返回空正文" in result.attempts[0].issues[0].problem
+
+
+def test_interrupted_stream_metadata_survives_in_failed_run_receipt():
+    source_input, _draft, spans = _fixture()
+
+    class InterruptedTransport:
+        def start(self, *, prompt, output_kind="semantic_candidate"):
+            raise ProtocolAgentCallError(
+                "stream-session", "方案解构流式回包中断：ReadError",
+                error_code="STREAM_INTERRUPTED",
+                error_metadata={"request_id": "request-1", "content_characters": 8},
+            )
+
+    template = "按正式方案原文进行结构化解构。"
+    result = ProtocolDeconstructorRunner().run(
+        source_input,
+        prompt_version=_prompt_version(template),
+        prompt_template=template,
+        transport=InterruptedTransport(),
+        source_spans=spans,
+    )
+    assert result.status == "需要核对"
+    assert result.attempts[0].call_metadata == {
+        "request_id": "request-1", "content_characters": 8,
+    }
+    assert result.model_dump(mode="json")["attempts"][0]["call_metadata"]["request_id"] == "request-1"
 
 
 def test_repair_transport_failure_preserves_prior_draft_and_stops_cleanly():

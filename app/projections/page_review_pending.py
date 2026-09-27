@@ -6,6 +6,7 @@ import hashlib
 
 from app.domain.contracts.page_review import PageReconciliation, PageReviewRecord
 from app.domain.page_normalization import normalize_field_name, observation_context_key, source_arrow_marks
+from app.projections.page_review_sources import page_observation_ref
 
 
 def _fact_review_status(review, observation, reviews):
@@ -52,7 +53,7 @@ def pending_page_observations(reviews: Sequence[PageReviewRecord], reconciliatio
     pending = []
     for review in reviews:
         for kind, keys in accepted.items():
-            for observation in getattr(review, kind):
+            for index, observation in enumerate(getattr(review, kind)):
                 if observation.normalization_key in keys:
                     continue
                 status, message = (_fact_review_status(review, observation, reviews)
@@ -61,6 +62,7 @@ def pending_page_observations(reviews: Sequence[PageReviewRecord], reconciliatio
                 text = (page_texts or {}).get((review.source_document_version_id, review.page_number), "")
                 anchor = _unique_text_anchor(text, observation.region.excerpt)
                 pending.append({
+                    "source_observation_ref": page_observation_ref(review.page_review_id, kind, index),
                     "page_review_id": review.page_review_id,
                     "lane": review.lane.value,
                     "page_artifact_id": review.page_artifact_id,

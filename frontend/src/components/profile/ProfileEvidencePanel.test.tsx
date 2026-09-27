@@ -9,7 +9,7 @@
 
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   decodeProcessingRevision,
   decodeSnapshot,
@@ -21,6 +21,7 @@ import {
   decodePatientProfileRevision,
 } from "../../api/patient-profile/patientProfileViewModels";
 import { makeRevision } from "../../api/patient-profile/patientProfileFixtures";
+import { getPatientProfileRepository, setPatientProfileRepository, type PatientProfileRepository } from "../../api/patient-profile";
 import { ProfileEvidencePanel } from "./ProfileEvidencePanel";
 
 const SUBJECT = "subject-1";
@@ -183,6 +184,20 @@ function laneItem(model: ReturnType<typeof loadModel>, laneName: string) {
 describe("ProfileEvidencePanel", () => {
   beforeEach(() => {
     HTMLElement.prototype.scrollIntoView = vi.fn();
+    const profileRepo: PatientProfileRepository = {
+      kind: "http",
+      getFactSourceReadings: vi.fn(() => Promise.resolve([])),
+      getLatestPatientProfile: vi.fn(),
+      listPatientProfileHistory: vi.fn(),
+      getPatientProfileRevision: vi.fn(),
+      previewFactCorrection: vi.fn(),
+      submitFactCorrection: vi.fn(),
+      listFactCorrectionHistory: vi.fn(),
+      getFactCorrectionJobStatus: vi.fn(),
+      cancelFactCorrectionJob: vi.fn(),
+      retryFactCorrectionJob: vi.fn(),
+    };
+    setPatientProfileRepository(profileRepo);
     const repo: EvidenceRepository = {
       kind: "http",
       createUploadPreview: vi.fn<EvidenceRepository["createUploadPreview"]>(),
@@ -216,6 +231,8 @@ describe("ProfileEvidencePanel", () => {
     setEvidenceRepository(repo);
   });
 
+  afterEach(() => setPatientProfileRepository(null));
+
   it("加载完整处理修订与快照，展示文档名与连续原件页", async () => {
     const model = loadModel();
     render(
@@ -224,6 +241,29 @@ describe("ProfileEvidencePanel", () => {
     await screen.findByText("筛选病历.pdf");
     expect(screen.getByText("2 页连续查看")).toBeInTheDocument();
     expect(screen.getByLabelText("原始资料查看区")).toBeInTheDocument();
+  });
+
+  it("展示已保存的原值但不把候选数量称作测量次数", async () => {
+    vi.mocked(getPatientProfileRepository().getFactSourceReadings).mockResolvedValue([{
+      candidateId: "candidate-1", rawValue: 120, canonicalValue: 120,
+      unit: "mmHg", sourceDateText: "2026-03-01", locatorIds: ["loc-bp-1"],
+    }]);
+    const model = loadModel();
+    render(<ProfileEvidencePanel model={model} item={openItem(model)} onClose={vi.fn()} />);
+    await screen.findByText("120 mmHg");
+    expect(screen.getByText(/不代表独立测量次数/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看这处原文" })).toBeInTheDocument();
+  });
+
+  it("原始布尔值用中文呈现，且不显示无量纲代码", async () => {
+    vi.mocked(getPatientProfileRepository().getFactSourceReadings).mockResolvedValue([{
+      candidateId: "candidate-boolean", rawValue: false, canonicalValue: false,
+      unit: "unitless", sourceDateText: null, locatorIds: [],
+    }]);
+    const model = loadModel();
+    render(<ProfileEvidencePanel model={model} item={openItem(model)} onClose={vi.fn()} />);
+    await screen.findByText("否");
+    expect(screen.queryByText(/unitless|false/)).not.toBeInTheDocument();
   });
 
   it("真实 bbox 定位提供定位按钮，并只画当前单框", async () => {

@@ -51,7 +51,9 @@ from app.agents.protocol_control_discovery_transport import (
 from app.agents.protocol_control_source_interpretation import (
     SOURCE_TARGET_REVIEW_VERSION,
     SourceInterpretation,
+    SourceInterpretationValidationError,
     SourceTargetReview,
+    SourceTargetReviewValidationError,
     is_study_phase_label,
     normalize_source_excerpt,
     validate_source_interpretation,
@@ -141,9 +143,9 @@ from app.workflow.runner import PreparedStepResult, StepContext, StepExecutor
 PROTOCOL_CONTROL_EXECUTION_JOB_TYPE = "protocol_control_execution"
 # A short alias keeps callers independent from the longer API-facing name.
 PROTOCOL_CONTROL_JOB_TYPE = PROTOCOL_CONTROL_EXECUTION_JOB_TYPE
-PROTOCOL_CONTROL_EXECUTION_VERSION = "phase5/protocol-control-execution/v191"
+PROTOCOL_CONTROL_EXECUTION_VERSION = "phase5/protocol-control-execution/v192"
 PROTOCOL_CONTROL_EXECUTION_CONTROL_SCHEMA = (
-    "phase5/protocol-control-execution-control/v1"
+    "phase5/protocol-control-execution-control/v2"
 )
 
 STEP_CLOSURE = "deterministic_closure"
@@ -876,10 +878,16 @@ class ProtocolControlJobService:
                     entry["step_id"] for entry in discovery_steps
                 ],
                 "parallel_scope": "discovery_batches_only",
+                "continue_after_final_failure": {
+                    "step_prefix": _DEEP_STEP_PREFIX,
+                    "error_codes": ["PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID"],
+                    "max_failed_steps": 2,
+                },
                 "notes": [
                     "Only explicitly listed independent discovery steps may share one lease wave.",
                     "Jobs without execution_control keep the historical serial runner path.",
                     "Do not rewrite paused serial discovery jobs to a mixed parallel config.",
+                    "An invalid deep output fails its batch and publication, while unrelated deep batches may finish.",
                 ],
             },
         }
@@ -1182,6 +1190,7 @@ def _transport_identity(transport: Any, *, stage: str) -> dict[str, Any]:
         "response_format_sha256",
         "response_format_mode",
         "model_identity_policy",
+        "response_validation_version",
     ):
         try:
             value = getattr(transport, name)
@@ -1422,6 +1431,8 @@ def _execute_discovery(
         transport,
         prompt_template=prompt_template,
     )
+    take_receipts = getattr(transport, "take_call_receipts", None)
+    model_call_receipts = take_receipts() if callable(take_receipts) else []
     if result.status not in {"已解析", "待跨章核验"} or result.final_output is None:
         raise StepFailure(
             retryable=False,
@@ -1432,9 +1443,16 @@ def _execute_discovery(
                 "外层 JobRunner 不会自动新建模型会话。"
                 "仅人工调用任务重试后才会再次执行该批次。",
             ),
+            diagnostic_checkpoint={
+                "stage": "discovery_failure_diagnostic",
+                "schema_version": "phase5/discovery-failure-diagnostic/v1",
+                "discovery_batch_id": batch.discovery_batch_id,
+                "model_call_receipts": model_call_receipts,
+            },
         )
     return {
         "stage": "discovery",
+        "model_call_receipts": model_call_receipts,
         "discovery_batch_id": batch.discovery_batch_id,
         "prompt_template_sha256": protocol_control_discovery_prompt_template_sha256(
             prompt_template
@@ -1729,6 +1747,7 @@ def _deep_component_identity(
         "compiler_versions": [
             STAGE_BOUND_REQUIREMENT_VERSION, RELATIVE_STAGE_REQUIREMENT_VERSION,
             SHARED_PROHIBITION_REQUIREMENT_VERSION,
+            "source-statement-coverage/v2",
             "source-insert-partial-resume/v1",
             "source-insert-batch-merge/v1",
             "multi-candidate-focused-repair/v1",
@@ -1988,16 +2007,20 @@ def _preflight_deep_source(
                 if (result.status not in {"已解析", "待跨章核验"} or result.final_output is None
                         or result.batch_id != batch.batch_id):
                     raise ValueError("已完成的来源批次结果损坏")
-                _validate_saved_source_review(batch, result)
                 try:
-                    _validate_deep_batch_output(batch, result.final_output)
-                except (ProtocolControlGateError, ProtocolControlAgentWireValidationError):
-                    reason = "current_gate_requires_refresh"
+                    _validate_saved_source_review(batch, result)
+                except (SourceInterpretationValidationError, SourceTargetReviewValidationError):
+                    reason = "current_source_review_requires_refresh"
                 else:
-                    if _source_interpretation_requires_refresh(batch, result):
-                        reason = "current_source_links_require_refresh"
+                    try:
+                        _validate_deep_batch_output(batch, result.final_output)
+                    except (ProtocolControlGateError, ProtocolControlAgentWireValidationError):
+                        reason = "current_gate_requires_refresh"
                     else:
-                        decision, reason = "reusable", "same_material_and_current_gate"
+                        if _source_interpretation_requires_refresh(batch, result):
+                            reason = "current_source_links_require_refresh"
+                        else:
+                            decision, reason = "reusable", "same_material_and_current_gate"
         elif step is not None and step.state == "failed_final":
             partial = _validated_deep_partial_source(
                 store, current_payload, source_job_id, batch, step_id, prompt_template,
@@ -2052,8 +2075,6 @@ def _source_interpretation_requires_refresh(
         entry.statement_index: entry for entry in result.source_statement_coverage
     }
     for index, statement in enumerate(interpretation.statements):
-        if statement.force != "required":
-            continue
         current_links = schedule_column_links(
             batch, statement.structure_unit_id, statement.quoted_text,
         )
@@ -2115,7 +2136,12 @@ def _validate_saved_source_review(
     if interpretation is None:
         if result.source_target_review is not None:
             raise ValueError("来源逐项核对缺少有源陈述")
-        return
+        raise SourceTargetReviewValidationError(
+            "来源逐项核对缺少有源陈述",
+            code="SOURCE_INTERPRETATION_ABSENT",
+            statement_index=None,
+            json_path="/source_interpretation",
+        )
     validate_source_interpretation(batch, interpretation)
     review = result.source_target_review or SourceTargetReview(
         version=SOURCE_TARGET_REVIEW_VERSION, items=[],
@@ -2184,7 +2210,10 @@ def _validated_deep_source(
             raise ValueError("来源深审结果不完整")
         if _source_interpretation_requires_refresh(batch, result):
             return None, None
-        _validate_saved_source_review(batch, result)
+        try:
+            _validate_saved_source_review(batch, result)
+        except (SourceInterpretationValidationError, SourceTargetReviewValidationError):
+            return None, None
         _validate_deep_batch_output(batch, result.final_output)
         return checkpoint_id, saved
     except (JobNotFoundError, ValueError, KeyError, TypeError, ValidationError, ProtocolControlGateError) as exc:
@@ -2351,6 +2380,12 @@ def _execute_deep(
                 resume_wire = ProtocolControlAgentWire.model_validate(draft["partial_wire"])
                 resume_session_id = draft["session_id"]
 
+    if not callable(getattr(transport, "start_source_interpretation", None)):
+        raise StepFailure(
+            retryable=False,
+            error_code="PROTOCOL_CONTROL_SOURCE_READER_UNAVAILABLE",
+            detail="方案来源逐项核对服务不可用，不能跳过来源陈述直接生成控制。",
+        )
     result = ProtocolControlAgentRunner(
         max_transport_retries=max_transport_retries,
         max_schema_repairs=max_schema_repairs,
@@ -2363,6 +2398,8 @@ def _execute_deep(
         resume_source_interpretation=resume_interpretation,
         resume_session_id=resume_session_id,
     )
+    take_receipts = getattr(transport, "take_call_receipts", None)
+    model_call_receipts = take_receipts() if callable(take_receipts) else []
     if result.status not in {"已解析", "待跨章核验"} or result.final_output is None:
         raise StepFailure(
             retryable=False,
@@ -2373,6 +2410,7 @@ def _execute_deep(
             ),
             diagnostic_checkpoint={
                 "stage": "deep_failure_diagnostic",
+                "model_call_receipts": model_call_receipts,
                 "schema_version": "phase5/deep-failure-diagnostic/v3",
                 "batch_id": batch.batch_id,
                 "session_id": result.session_id,
@@ -2415,6 +2453,7 @@ def _execute_deep(
         )
     return {
         "stage": "deep",
+        "model_call_receipts": model_call_receipts,
         "batch_id": batch.batch_id,
         "prompt_template_sha256": protocol_control_agent_prompt_template_sha256(
             prompt_template

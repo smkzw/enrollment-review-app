@@ -497,6 +497,29 @@
   margin-bottom: var(--space-2);
 }
 
+.profile-evidence__readings {
+  border-bottom: 1px solid var(--color-line);
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-3);
+  font-size: var(--font-size-small);
+}
+
+.profile-evidence__readings ul {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+}
+
+.profile-evidence__readings li {
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-line);
+}
+
+.profile-evidence__readings li button {
+  display: block;
+  margin-top: var(--space-1);
+}
+
 .profile-evidence__viewer {
   flex: 1 1 auto;
   min-width: 0;

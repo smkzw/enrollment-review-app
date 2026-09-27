@@ -448,8 +448,8 @@ _PHASE_QUALIFIED_VISIT_RE = re.compile(
 _NUMBERED_WEEK_RE = re.compile(
     r"第\s*(?P<weeks>\d+(?:\s*[、,，]\s*\d+)*)\s*周"
 )
-_WEEK_VISIT_RE = re.compile(r"\bW\s*[-≤]?\s*(?P<week>\d+)\b", re.IGNORECASE)
-_DAY_VISIT_RE = re.compile(r"\bD\s*[-≤]?\s*(?P<day>\d+)\b", re.IGNORECASE)
+_WEEK_VISIT_RE = re.compile(r"(?<![A-Za-z0-9])W\s*[-≤]?\s*(?P<week>\d+)(?![A-Za-z0-9])", re.IGNORECASE)
+_DAY_VISIT_RE = re.compile(r"(?<![A-Za-z0-9])D\s*[-≤]?\s*(?P<day>\d+)(?![A-Za-z0-9])", re.IGNORECASE)
 
 
 def _value(value: object) -> str | None:
@@ -823,6 +823,8 @@ def _visit_scope_keys(text: str) -> set[str]:
         keys.add("randomization")
     if re.search(r"(?:提前退出|退出访视)", compact):
         keys.add("early_exit")
+    if re.search(r"(?<![A-Za-z])EOS(?![A-Za-z])|研究结束访视|试验结束访视", compact, re.IGNORECASE):
+        keys.add("end_of_study")
     for match in _NUMBERED_WEEK_RE.finditer(compact):
         for value in re.split(r"[、,，]", match.group("weeks")):
             keys.add(f"week:{int(value)}")
@@ -842,6 +844,7 @@ def _visit_scope_label(key: str) -> str:
         "first_dose": "首次给药前访视",
         "randomization": "随机访视",
         "early_exit": "提前退出访视",
+        "end_of_study": "研究结束访视",
     }
     if key.startswith("week:"):
         return f"第{key.split(':', 1)[1]}周访视"

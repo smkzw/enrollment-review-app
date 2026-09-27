@@ -413,6 +413,36 @@ def test_duplicate_stable_identity_conflict_is_rejected():
         )
 
 
+def test_frozen_fact_preserves_candidate_lineage_without_counting_measurements():
+    base = _fact_record("fact-1", _sha("identity-1"), ["loc-1"])
+    legacy = base.model_dump(mode="json")
+    assert "source_candidate_ids" not in legacy
+    with_lineage = base.model_copy(update={"source_candidate_ids": ["candidate-a", "candidate-b"]})
+    assert with_lineage.model_dump(mode="json")["source_candidate_ids"] == ["candidate-a", "candidate-b"]
+    with_observations = base.model_copy(update={"source_observation_refs": ["observation-a", "observation-b"]})
+    assert with_observations.model_dump(mode="json")["source_observation_refs"] == ["observation-a", "observation-b"]
+    assert _frozen_input(
+        components=[_component_contract(["p-1"], "component-a")],
+        facts=[base], locators=[_locator_record("loc-1")],
+    ).frozen_input_sha256 != _frozen_input(
+        components=[_component_contract(["p-1"], "component-a")],
+        facts=[with_observations], locators=[_locator_record("loc-1")],
+    ).frozen_input_sha256
+    assert _frozen_input(
+        components=[_component_contract(["p-1"], "component-a")],
+        facts=[base], locators=[_locator_record("loc-1")],
+    ).frozen_input_sha256 != _frozen_input(
+        components=[_component_contract(["p-1"], "component-a")],
+        facts=[with_lineage], locators=[_locator_record("loc-1")],
+    ).frozen_input_sha256
+    with pytest.raises(ValidationError, match="来源候选必须排序"):
+        FrozenFactRecord.model_validate({**legacy, "source_candidate_ids": ["candidate-b", "candidate-a"]})
+    with pytest.raises(ValidationError, match="来源观察必须排序"):
+        FrozenFactRecord.model_validate({**legacy, "source_observation_refs": ["observation-b", "observation-a"]})
+    with pytest.raises(ValidationError, match="来源观察不得为空白"):
+        FrozenFactRecord.model_validate({**legacy, "source_observation_refs": [" "]})
+
+
 def test_different_objects_same_value_are_separate_records():
     identity_a = clinical_fact_stable_identity(
         authority=_authority(),
@@ -596,6 +626,7 @@ def test_different_objects_same_value_publish_separately(session):
     assert by_object["血压"].stable_identity != by_object["静息心率"].stable_identity
     assert by_object["血压"].value == by_object["静息心率"].value == "120/80"
     assert second.fact_id in {item.fact_id for item in frozen.facts}
+    assert by_object["静息心率"].source_candidate_ids == second.source_candidate_ids
 
 
 def test_missing_locator_reference_is_rejected(session):

@@ -19,6 +19,7 @@ from app.agents.protocol_control_deconstructor import (
     ProtocolControlAgentWireValidationError,
     ProtocolControlDiscoveryAgentResponse,
 )
+from app.agents.protocol_control_source_interpretation import SOURCE_INTERPRETATION_VERSION
 from app.domain.contracts.enums import ReviewStage
 from app.domain.contracts.protocol_controls import (
     ControlObligationKind,
@@ -75,7 +76,10 @@ def test_deep_step_preserves_pending_cross_chapter_for_final_relation_check(monk
     monkeypatch.setattr(module, "_deep_batch_for_step", lambda *_: batch)
     monkeypatch.setattr(module, "_prompt_from_payload", lambda *_: "冻结提示")
     monkeypatch.setattr(module, "_limits_from_payload", lambda *_: (1, 2))
-    monkeypatch.setattr(module, "_resolve_transport", lambda *_ , **__: object())
+    monkeypatch.setattr(module, "_resolve_transport", lambda *_ , **__: SimpleNamespace(
+        start_source_interpretation=lambda **_: None,
+        take_call_receipts=lambda: [{"request_id": "request-1", "usage": None}],
+    ))
     monkeypatch.setattr(module, "_require_frozen_route", lambda *_ , **__: None)
     monkeypatch.setattr(module, "_deep_component_identity", lambda *_: {})
     monkeypatch.setattr(module, "_transport_identity", lambda *_ , **__: {})
@@ -93,6 +97,7 @@ def test_deep_step_preserves_pending_cross_chapter_for_final_relation_check(monk
     checkpoint = module._execute_deep(context, config)
     assert checkpoint["stage"] == "deep"
     assert checkpoint["run_result"]["status"] == "待跨章核验"
+    assert checkpoint["model_call_receipts"] == [{"request_id": "request-1", "usage": None}]
 
 
 NOW = datetime(2026, 8, 14, tzinfo=timezone.utc)
@@ -638,6 +643,19 @@ class _DeepTransport:
             raise ProcessDeath()
         return self._response(prompt)
 
+    def start_source_interpretation(self, *, prompt: str) -> ProtocolControlAgentResponse:
+        # This fixture exercises Job/checkpoint mechanics, not source semantics.
+        payload = _prompt_payload(prompt, "冻结来源：")
+        units = payload["owned"]
+        return ProtocolControlAgentResponse(
+            session_id="synthetic-source-session",
+            text=json.dumps({
+                "version": SOURCE_INTERPRETATION_VERSION,
+                "statements": [],
+                "units_without_statement": [unit["structure_unit_id"] for unit in units],
+            }, ensure_ascii=False),
+        )
+
     def continue_session(
         self,
         *,
@@ -698,6 +716,11 @@ def test_service_reuses_frozen_snapshot_and_builds_candidate_package(
     assert runner.run_job(result.job_id)
     snapshot, payload = _job_snapshot_and_payload(session_factory, result.job_id)
     assert snapshot.state == "completed"
+    assert payload["execution_control"]["continue_after_final_failure"] == {
+        "step_prefix": "deep_",
+        "error_codes": ["PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID"],
+        "max_failed_steps": 2,
+    }
     step_ids = {step.step_id for step in snapshot.steps}
     assert {"deterministic_closure", "hydrate", "gate"} <= step_ids
     assert {step_id for step_id in step_ids if step_id.startswith("deep_")} == {
@@ -1013,15 +1036,17 @@ def test_uncertain_deep_is_final_without_blind_retry(data_paths, session_factory
     assert saved["schema_version"] == "phase5/deep-failure-diagnostic/v3"
     assert saved["partial_wire"] is None
     assert saved["batch_id"]
-    assert saved["source_interpretation"] is None
+    assert saved["source_interpretation"]["version"] == SOURCE_INTERPRETATION_VERSION
+    assert saved["source_interpretation"]["statements"] == []
+    assert len(saved["source_interpretation"]["units_without_statement"]) == 2
     assert saved["source_statement_coverage"] == []
     assert saved["source_target_review"] is None
     assert saved["attempts"][0]["raw_output_sha256"]
     assert saved["attempts"][0]["raw_output_text"] is not None
-    assert deep.start_calls == 1
+    assert deep.start_calls == 2
     assert deep.continue_calls == 0
     assert not runner.run_job(result.job_id)
-    assert deep.start_calls == 1
+    assert deep.start_calls == 2  # No failed batch is blindly retried.
 
 
 def test_manual_retry_reexecutes_failed_deep_instead_of_replaying_diagnostic(
@@ -1045,8 +1070,8 @@ def test_manual_retry_reexecutes_failed_deep_instead_of_replaying_diagnostic(
     assert runner.run_job(result.job_id)
     snapshot, _ = _job_snapshot_and_payload(session_factory, result.job_id)
     assert snapshot.state == "completed"
-    assert deep.start_calls == 3
-    assert deep.owned_batches[1] == deep.owned_batches[0]
+    assert deep.start_calls == 4
+    assert deep.owned_batches[2:] == deep.owned_batches[:2]
 
 
 @pytest.mark.parametrize("new_job", [False, True])
@@ -1131,7 +1156,7 @@ def test_manual_retry_uses_verified_partial_wire_without_full_reread(
         (step.step_id, step.state, step.error_code)
         for step in snapshot.steps if step.state == "failed_final"
     ]
-    assert resumed
+    assert any(item is not None for item in resumed)
     assert deep.start_calls == 1  # Only the next batch needs a fresh full read.
 
 
@@ -1198,7 +1223,7 @@ def test_manual_retry_reuses_verified_source_without_partial_wire(
         target_job_id = job.job_id
     assert runner.run_job(target_job_id)
     assert _job_snapshot_and_payload(session_factory, target_job_id)[0].state == "completed"
-    assert resumed and resumed[0] is not None
+    assert any(item is not None for item in resumed)
 
 
 def test_same_identity_deep_source_reuses_validated_batches_without_model_calls(

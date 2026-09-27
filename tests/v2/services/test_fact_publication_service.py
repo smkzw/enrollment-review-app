@@ -43,6 +43,7 @@ from app.domain.contracts.facts import (
     AssertionBasis,
     ClinicalEventCandidateV2,
     ClinicalFactCandidateV2,
+    ClinicalFactV2,
     FactAuthority,
     FactGateResult,
     FactNormalizationCall,
@@ -415,6 +416,7 @@ def _seed_chain(
     *,
     fact_gate_outcome: GateOutcome = GateOutcome.ACCEPTED,
     supported_requirement_ids=None,
+    source_observation_refs=None,
 ) -> dict[str, str]:
     chain = seed_valid_fact_chain(session, prefix, create_run=True)
     run_id = chain["run_id"]
@@ -435,6 +437,7 @@ def _seed_chain(
             run_id=run_id,
             call_id=call_id,
             fact_type="vital_sign",
+            source_observation_refs=source_observation_refs or [],
             supported_requirement_ids=supported_requirement_ids or ["req-z"],
             polarity=FactPolarity.AFFIRMED,
             asserted_object="血压",
@@ -534,12 +537,13 @@ def _bind_isolated_fact_candidate(session, prefix, locator_id, asserted_object="
 
 def test_merged_locator_closure(session):
     prefix = "pub-merge"
-    chain = _seed_chain(session, prefix)
+    chain = _seed_chain(session, prefix, source_observation_refs=["observation-a"])
     run_id = chain["run_id"]
     call_id = chain["call_id"]
     # 追加同 stable 的第二个候选，使用 locator2 且相同语义
     cand2 = ClinicalFactCandidateV2(
         candidate_id=f"{prefix}-cand2", run_id=run_id, call_id=call_id,
+        source_observation_refs=["observation-b"],
         fact_type="vital_sign", polarity=FactPolarity.AFFIRMED, asserted_object="血压",
         supported_requirement_ids=["req-a"],
         raw_value="120/80", canonical_value="120/80", unit="unitless",
@@ -560,6 +564,17 @@ def test_merged_locator_closure(session):
     assert fact.source_candidate_ids == sorted(
         [chain["fact_candidate_id"], cand2.candidate_id]
     )
+    assert fact.source_observation_refs == ["observation-a", "observation-b"]
+    candidate = FactNormalizationCandidateRepository(session).get(cand2.candidate_id)
+    for invalid in (["observation-b", "observation-a"], ["observation-a", "observation-a"], [" "]):
+        with pytest.raises(ValueError, match="候选来源观察"):
+            ClinicalFactCandidateV2.model_validate({
+                **candidate.model_dump(mode="json"), "source_observation_refs": invalid,
+            })
+        with pytest.raises(ValueError, match="发布事实来源观察"):
+            ClinicalFactV2.model_validate({
+                **fact.model_dump(mode="json"), "source_observation_refs": invalid,
+            })
     assert fact.gate_ids == sorted([chain["gate_id"], f"{prefix}-gate2"])
     assert fact.supported_requirement_ids == ["req-a", "req-z"]
     # 不产生冲突组
@@ -629,6 +644,7 @@ def test_later_run_preserves_fact_identity_and_sources(session, same_lane, has_d
     chain = _seed_chain(
         session, prefix,
         supported_requirement_ids=["slice54-req-z"] if has_dependent_event else None,
+        source_observation_refs=["observation-a"],
     )
     if has_dependent_event:
         event = ClinicalEventCandidateV2(
@@ -720,6 +736,7 @@ def test_later_run_preserves_fact_identity_and_sources(session, same_lane, has_d
             run_id=run_id,
             call_id=call_id,
             fact_type="vital_sign",
+            source_observation_refs=["observation-b"],
             profile_lane=(
                 ProfileLane.EVIDENCE_QUALITY if same_lane
                 else ProfileLane.TEST_EXAM_SCORE
@@ -768,6 +785,7 @@ def test_later_run_preserves_fact_identity_and_sources(session, same_lane, has_d
         assert set(original.locator_ids) <= set(current.locator_ids)
         assert set(original.supported_requirement_ids) <= set(current.supported_requirement_ids)
         assert set(original.source_candidate_ids) <= set(current.source_candidate_ids)
+        assert current.source_observation_refs == ["observation-a", "observation-b"]
         assert set(original.gate_ids) <= set(current.gate_ids)
         assert current.inherited_from_fact_id == original.fact_id
         assert FactPublicationService().publish(session, run_id).is_replay

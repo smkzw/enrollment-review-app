@@ -10,6 +10,7 @@ import type {
   PatientProfileRevisionView,
 } from "./patientProfileViewModels";
 import type { FactCorrectionRequestInput } from "./factCorrectionTypes";
+import type { FactSourceReadingView } from "./factSourceReadings";
 import type {
   FactCorrectionHistoryView,
   FactCorrectionJobActionView,
@@ -47,6 +48,12 @@ export interface PatientProfileRepository {
     patientProfileRevisionId: string,
     options?: PatientProfileRequestOptions,
   ): Promise<PatientProfileRevisionView>;
+  getFactSourceReadings(
+    subjectId: string,
+    patientProfileRevisionId: string,
+    factId: string,
+    options?: PatientProfileRequestOptions,
+  ): Promise<FactSourceReadingView[]>;
   /** POST .../fact-corrections/preview：只读预览，不创建修订或任务。 */
   previewFactCorrection(
     subjectId: string,

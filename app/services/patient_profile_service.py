@@ -28,7 +28,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.domain.contracts.facts import FactAuthority
+from app.domain.contracts.facts import ClinicalFactCandidateV2, FactAuthority
 from app.domain.contracts.patient_profile_v2 import (
     PatientProfileRevisionV2,
     ProfileItemKind,
@@ -43,6 +43,9 @@ from app.storage.active_facts import current_fact_heads
 from app.storage.fact_repositories import (
     ClinicalConflictGroupV2Repository,
     ClinicalEventV2Repository,
+    ClinicalFactV2Repository,
+    FactNormalizationCandidateRepository,
+    FactNormalizationRunRepository,
     MedicationExposureV2Repository,
 )
 from app.storage.patient_profile_repository import PatientProfileRevisionRepository
@@ -87,6 +90,33 @@ def _chain_heads(entities: list[Any], identity_attr: str) -> list[Any]:
 
 class PatientProfileService:
     """把当前权威元组的已发布 v2 实体投影为一条不可变 Patient Profile revision。"""
+
+    def fact_source_readings(
+        self, session: Session, revision: PatientProfileRevisionV2, fact_id: str,
+    ) -> list[ClinicalFactCandidateV2]:
+        """Return saved source readings for one fact visible in this frozen profile."""
+        if not any(
+            item.kind == ProfileItemKind.FACT and item.source_id == fact_id
+            for lane in revision.lanes for item in lane.items
+        ):
+            raise InvalidReferenceError("该病历档案中没有对应事实")
+        fact = ClinicalFactV2Repository(session).get(fact_id)
+        if fact.authority != revision.authority:
+            raise PatientProfileProjectionError("事实与病历档案的资料版本不一致")
+        candidates = FactNormalizationCandidateRepository(session)
+        runs = FactNormalizationRunRepository(session)
+        readings = []
+        for candidate_id in fact.source_candidate_ids:
+            candidate = candidates.get(candidate_id)
+            if (
+                not isinstance(candidate, ClinicalFactCandidateV2)
+                or runs.get(candidate.run_id).authority != revision.authority
+                or not set(candidate.locator_ids) <= set(fact.locator_ids)
+                or not set(candidate.source_observation_refs) <= set(fact.source_observation_refs)
+            ):
+                raise PatientProfileProjectionError("事实的来源读数与已发布原件不一致")
+            readings.append(candidate)
+        return readings
 
     def validate_published_references(self, session: Session, authority: FactAuthority) -> None:
         """Check the existing source graph before starting a new normalization run."""

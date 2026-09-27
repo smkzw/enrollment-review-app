@@ -26,6 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.api.v2.evidence_processing_schemas import LocatorDTO, locator_dto
 from app.api.v2.vocabulary import review_stage_label
 from app.domain.contracts.common import ScalarValue
+from app.domain.contracts.facts import ClinicalFactCandidateV2
 from app.domain.contracts.evidence_locator import EvidenceLocatorArtifact
 from app.domain.contracts.patient_profile_v2 import (
     PatientProfileRevisionV2,
@@ -59,6 +60,26 @@ __all__ = [
 
 class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class ProfileFactSourceReadingDTO(_StrictModel):
+    candidate_id: str
+    raw_value: ScalarValue | None
+    canonical_value: ScalarValue | None
+    unit: str | None
+    source_date_text: str | None
+    locator_ids: list[str]
+
+
+def profile_fact_source_reading_dto(candidate: ClinicalFactCandidateV2) -> ProfileFactSourceReadingDTO:
+    return ProfileFactSourceReadingDTO(
+        candidate_id=candidate.candidate_id,
+        raw_value=candidate.raw_value,
+        canonical_value=candidate.canonical_value,
+        unit=candidate.unit,
+        source_date_text=candidate.date_range.source_text if candidate.date_range else None,
+        locator_ids=candidate.locator_ids,
+    )
 
 
 # ---------------------------------------------------------------------------

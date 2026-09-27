@@ -43,6 +43,8 @@ from app.domain.contracts.page_review import (
     PageDisposition,
     PageReconciliation,
     PageRegion,
+    PageFactObservation,
+    ObservationContext,
     PageReviewLane,
     PageReviewRecord,
 )
@@ -143,6 +145,7 @@ def _valid_output_dict():
 
 def test_system_contract_is_chinese_native_and_covers_required_terms():
     assert "候选" in _SYSTEM_CONTRACT
+    assert "多个原始读数须分别保留" in _SYSTEM_CONTRACT
     assert "未解决" in _SYSTEM_CONTRACT
     assert "沉默" in _SYSTEM_CONTRACT
     assert "否定" in _SYSTEM_CONTRACT
@@ -399,6 +402,250 @@ def _r3_input():
     return inp
 
 
+def _r3_input_with_accepted_fact():
+    from app.domain.page_normalization import fact_normalization_key
+    from app.projections.page_review_sources import accepted_observations
+
+    inp = _r3_input()
+    page_review = inp.page_review
+    context = ObservationContext(target_text="患者")
+    key, value, unit = fact_normalization_key(
+        "病史", "无糖尿病病史", context=context.model_dump()
+    )
+    reviews = [review.model_copy(update={"facts": [PageFactObservation(
+        observation_id=f"observation-{review.lane.value}", field_name="病史",
+        raw_text="患者无糖尿病病史。", raw_value="无糖尿病病史",
+        normalized_value=value, normalized_unit=unit, normalization_key=key,
+        region=PageRegion(excerpt="患者无糖尿病病史。"), context=context,
+    )]}) for review in page_review.reviews]
+    reconciliation = page_review.reconciliations[0].model_copy(
+        update={"accepted_fact_keys": [key]}
+    )
+    updated = EvidenceNormalizerPageReviewInput.model_validate({
+        **page_review.model_dump(mode="json"),
+        "reviews": [review.model_dump(mode="json") for review in reviews],
+        "reconciliations": [reconciliation.model_dump(mode="json")],
+        "scope_sha256": page_review_input_scope_hash(
+            coverage_id=page_review.coverage_id,
+            clause_pack_sha256=page_review.clause_pack_sha256,
+            entries=page_review.entries, reviews=reviews,
+            reconciliations=[reconciliation],
+        ),
+    })
+    inp = EvidenceNormalizerInput.model_validate({
+        **inp.model_dump(mode="json"),
+        "page_review": updated.model_dump(mode="json"),
+        "input_scope_sha256": evidence_normalizer_input_scope_hash(
+            authority=inp.authority, logical_document_id=inp.logical_document_id,
+            context=inp.context, related_requirements=inp.related_requirements,
+            manifest_sha256=inp.manifest_sha256,
+            completion_manifest_sha256=inp.completion_manifest_sha256,
+            page_numbers=inp.page_numbers, pages=inp.pages,
+            page_review=updated, available_locator_ids=inp.available_locator_ids,
+            available_locators=inp.available_locators,
+        ),
+    })
+    refs = accepted_observations(reviews, reconciliation, include_clause_signals=False)
+    return inp, [item["source_observation_ref"] for item in refs]
+
+
+def test_accepted_observation_needs_fact_or_specific_unresolved_reference():
+    from app.agents.evidence_normalizer import _model_input_payload
+    from app.projections.normalizer_reference_aliases import NormalizerReferenceAliases
+
+    inp, refs = _r3_input_with_accepted_fact()
+    aliases = NormalizerReferenceAliases.from_payload(_model_input_payload(inp))
+    shortened = aliases.transform({"affected_observation_refs": [refs[0]]})
+    assert aliases.transform(shortened, expand=True) == {"affected_observation_refs": [refs[0]]}
+    payload = _valid_output_dict()
+    output = parse_evidence_normalizer_output(
+        json.dumps(payload, ensure_ascii=False), expected_run_id=inp.run_id,
+        expected_call_id=inp.call_id,
+        expected_logical_document_id=inp.logical_document_id,
+        expected_page_numbers=inp.page_numbers,
+        available_locator_ids=set(inp.available_locator_ids), created_at=inp.created_at,
+        locator_source_hashes={item.locator_id: item.source_text_sha256 for item in inp.available_locators},
+    )
+    with pytest.raises(ValueError, match="逐项整理或列为待核"):
+        validate_evidence_normalizer_output(output, inp)
+    fact_payload = _bound_draft_payload("req-history")
+    fact_payload["fact_candidates"][0]["supported_requirement_ids"] = []
+    fact_payload["fact_candidates"][0]["source_observation_refs"] = [refs[0]]
+    fact_output = parse_evidence_normalizer_output(
+        json.dumps(fact_payload, ensure_ascii=False), expected_run_id=inp.run_id,
+        expected_call_id=inp.call_id,
+        expected_logical_document_id=inp.logical_document_id,
+        expected_page_numbers=inp.page_numbers,
+        available_locator_ids=set(inp.available_locator_ids), created_at=inp.created_at,
+        locator_source_hashes={item.locator_id: item.source_text_sha256 for item in inp.available_locators},
+    )
+    assert validate_evidence_normalizer_output(fact_output, inp).fact_candidates[0].source_observation_refs == [refs[0]]
+    issue = output.unresolved_items[0]
+    covered = output.model_copy(update={"unresolved_items": [
+        issue.model_copy(update={"affected_observation_refs": [refs[0]]})
+    ]})
+    assert validate_evidence_normalizer_output(covered, inp).unresolved_items[0].affected_observation_refs == [refs[0]]
+    unknown = output.model_copy(update={"unresolved_items": [
+        issue.model_copy(update={"affected_observation_refs": ["not-accepted"]})
+    ]})
+    with pytest.raises(ValueError, match="不存在的原件观察"):
+        validate_evidence_normalizer_output(unknown, inp)
+    wrong_page = output.model_copy(update={"unresolved_items": [
+        issue.model_copy(update={"affected_pages": [1]}),
+        issue.model_copy(update={"affected_pages": [2], "affected_observation_refs": [refs[0]]}),
+    ]})
+    with pytest.raises(ValueError, match="受影响页面"):
+        validate_evidence_normalizer_output(wrong_page, inp)
+
+
+def test_repeated_equal_values_on_one_page_need_separate_dispositions():
+    from app.agents.evidence_normalizer import validate_output_page_closure
+    from app.projections.page_review_sources import accepted_observations
+
+    inp, _ = _r3_input_with_accepted_fact()
+    page_review = inp.page_review
+    first = page_review.reviews[0]
+    duplicate = first.facts[0].model_copy(update={
+        "observation_id": "second-measurement",
+        "region": PageRegion(excerpt="另一处记录：患者无糖尿病病史。"),
+    })
+    reviews = [first.model_copy(update={"facts": [first.facts[0], duplicate]}),
+               page_review.reviews[1]]
+    reconciliation = page_review.reconciliations[0]
+    refs = [item["source_observation_ref"] for review in reviews
+            for item in accepted_observations([review], reconciliation, include_clause_signals=False)]
+    changed = inp.model_copy(update={"page_review": page_review.model_copy(update={"reviews": reviews})})
+    base_output = parse_evidence_normalizer_output(
+        json.dumps(_valid_output_dict(), ensure_ascii=False), expected_run_id=inp.run_id,
+        expected_call_id=inp.call_id, expected_logical_document_id=inp.logical_document_id,
+        expected_page_numbers=inp.page_numbers,
+        available_locator_ids=set(inp.available_locator_ids), created_at=inp.created_at,
+        locator_source_hashes={item.locator_id: item.source_text_sha256 for item in inp.available_locators},
+    )
+    issue = base_output.unresolved_items[0]
+    output = base_output.model_copy(update={"unresolved_items": [
+        issue.model_copy(update={"affected_observation_refs": [refs[0]]})
+    ]})
+    with pytest.raises(ValueError, match="逐项整理或列为待核"):
+        validate_output_page_closure(output, changed)
+    complete = output.model_copy(update={"unresolved_items": [
+        issue.model_copy(update={"affected_observation_refs": sorted(refs)})
+    ]})
+    validate_output_page_closure(complete, changed)
+
+
+def test_distinct_accepted_readings_cannot_be_replaced_by_calculated_candidate():
+    from app.agents.evidence_normalizer import validate_output_page_closure
+    from app.domain.page_normalization import fact_normalization_key
+    from app.projections.page_review_sources import accepted_observations
+
+    inp, _ = _r3_input_with_accepted_fact()
+    page_review = inp.page_review
+    context = ObservationContext(target_text="症状评分")
+    readings = []
+    for value in (2, 4):
+        key, normalized, unit = fact_normalization_key("症状评分", str(value), context=context.model_dump())
+        readings.append((key, PageFactObservation(
+            observation_id=f"reading-{value}", field_name="症状评分",
+            raw_text=f"症状评分{value}", raw_value=str(value),
+            normalized_value=normalized, normalized_unit=unit, normalization_key=key,
+            region=PageRegion(excerpt=f"症状评分{value}"), context=context,
+        )))
+    reviews = [review.model_copy(update={"facts": [item for _, item in readings]})
+               for review in page_review.reviews]
+    reconciliation = page_review.reconciliations[0].model_copy(
+        update={"accepted_fact_keys": sorted(key for key, _ in readings)}
+    )
+    refs_by_value = {
+        value: sorted(item["source_observation_ref"] for review in reviews
+                      for item in accepted_observations([review], reconciliation,
+                                                        include_clause_signals=False)
+                      if item["observation"]["normalized_value"] == str(value))
+        for value in (2, 4)
+    }
+    changed = inp.model_copy(update={"page_review": page_review.model_copy(update={
+        "reviews": reviews, "reconciliations": [reconciliation],
+    })})
+    output = parse_evidence_normalizer_output(
+        json.dumps(_bound_draft_payload("req-history"), ensure_ascii=False),
+        expected_run_id=inp.run_id, expected_call_id=inp.call_id,
+        expected_logical_document_id=inp.logical_document_id,
+        expected_page_numbers=inp.page_numbers,
+        available_locator_ids=set(inp.available_locator_ids), created_at=inp.created_at,
+        locator_source_hashes={item.locator_id: item.source_text_sha256
+                               for item in inp.available_locators},
+    )
+    candidate = output.fact_candidates[0]
+    combined = output.model_copy(update={"fact_candidates": [candidate.model_copy(update={
+        "canonical_value": 3, "raw_value": 3, "unit": "unitless",
+        "source_observation_refs": sorted(refs_by_value[2] + refs_by_value[4]),
+    })]})
+    with pytest.raises(ValueError, match="不能合并不同读数或自行计算"):
+        validate_output_page_closure(combined, changed)
+    string_number = combined.model_copy(update={"fact_candidates": [
+        combined.fact_candidates[0].model_copy(update={"canonical_value": "3"})
+    ]})
+    with pytest.raises(ValueError, match="不能合并不同读数或自行计算"):
+        validate_output_page_closure(string_number, changed)
+
+    separate = output.model_copy(update={"fact_candidates": [
+        candidate.model_copy(update={
+            "candidate_id": f"reading-{value}", "canonical_value": value,
+            "raw_value": value, "unit": "unitless",
+            "source_observation_refs": refs_by_value[value],
+        }) for value in (2, 4)
+    ]})
+    validate_output_page_closure(separate, changed)
+    text_single = separate.model_copy(update={"fact_candidates": [
+        separate.fact_candidates[0].model_copy(update={"canonical_value": "2"}),
+        separate.fact_candidates[1],
+    ]})
+    validate_output_page_closure(text_single, changed)
+
+
+def test_numeric_candidate_cannot_drop_explicit_source_unit():
+    from app.agents.evidence_normalizer import validate_output_page_closure
+    from app.domain.page_normalization import fact_normalization_key
+    from app.projections.page_review_sources import accepted_observations
+
+    inp, _ = _r3_input_with_accepted_fact()
+    page_review = inp.page_review
+    context = ObservationContext(target_text="血红蛋白")
+    key, value, unit = fact_normalization_key("血红蛋白", "120 g/L", context=context.model_dump())
+    reviews = [review.model_copy(update={"facts": [PageFactObservation(
+        observation_id=f"unit-{review.lane.value}", field_name="血红蛋白",
+        raw_text="血红蛋白120 g/L", raw_value="120 g/L",
+        normalized_value=value, normalized_unit=unit, normalization_key=key,
+        region=PageRegion(excerpt="血红蛋白120 g/L"), context=context,
+    )]}) for review in page_review.reviews]
+    reconciliation = page_review.reconciliations[0].model_copy(update={"accepted_fact_keys": [key]})
+    refs = sorted(item["source_observation_ref"] for review in reviews
+                  for item in accepted_observations([review], reconciliation,
+                                                    include_clause_signals=False))
+    changed = inp.model_copy(update={"page_review": page_review.model_copy(update={
+        "reviews": reviews, "reconciliations": [reconciliation],
+    })})
+    output = parse_evidence_normalizer_output(
+        json.dumps(_bound_draft_payload("req-history"), ensure_ascii=False),
+        expected_run_id=inp.run_id, expected_call_id=inp.call_id,
+        expected_logical_document_id=inp.logical_document_id,
+        expected_page_numbers=inp.page_numbers,
+        available_locator_ids=set(inp.available_locator_ids), created_at=inp.created_at,
+        locator_source_hashes={item.locator_id: item.source_text_sha256
+                               for item in inp.available_locators},
+    )
+    candidate = output.fact_candidates[0]
+    def with_unit(candidate_unit):
+        return output.model_copy(update={"fact_candidates": [candidate.model_copy(update={
+            "raw_value": 120, "canonical_value": 120,
+            "unit": candidate_unit, "source_observation_refs": refs,
+        })]})
+
+    with pytest.raises(ValueError, match="不得自行换算或丢弃单位"):
+        validate_output_page_closure(with_unit("unitless"), changed)
+    validate_output_page_closure(with_unit("g/L"), changed)
+
+
 def test_r3_prompt_uses_accepted_page_review_and_ocr_as_sidecar():
     inp = _r3_input()
 
@@ -598,6 +845,7 @@ def test_generation_schema_accepts_valid_requirement_gap_combinations(
                 "message": "日期需要核对",
                 "affected_pages": [1],
                 "affected_locator_ids": ["loc-1"],
+                "affected_observation_refs": [],
                 "affected_requirement_ids": requirement_ids,
                 "gap_type": gap_type,
                 "referenced_file_id": referenced_file_id,

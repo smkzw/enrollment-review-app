@@ -270,6 +270,9 @@ class ClinicalFactCandidateV2(Phase5Model):
         if self.record_time is not None:
             _require_utc(self.record_time, "record_time")
         _require_sorted_unique(self.locator_ids, "候选定位")
+        _require_sorted_unique(self.source_observation_refs, "候选来源观察")
+        if any(not ref.strip() for ref in self.source_observation_refs):
+            raise ValueError("候选来源观察不得为空白")
         _require_sorted_unique(self.supported_requirement_ids, "候选支持的资料要求")
         if self.polarity == FactPolarity.UNKNOWN:
             if self.raw_value is not None or self.canonical_value is not None:
@@ -371,7 +374,8 @@ class ClinicalFactV2(Phase5Model):
     """发布接受的临床事实：绑定权威元组、Gate id、来源强度与稳定身份。
 
     不含模型置信度；稳定身份由权威元组、类型、极性、规范值/单位与日期范围推导，
-    不包含定位（同内容多来源合并后保留全部定位）。
+    不包含定位（同内容多来源合并后保留全部定位）。来源观察引用只供回溯，
+    不能据其数量推断独立测量次数。
     """
 
     fact_id: str = Field(min_length=1)
@@ -379,6 +383,7 @@ class ClinicalFactV2(Phase5Model):
     run_id: str = Field(min_length=1)
     gate_id: str = Field(min_length=1)
     source_candidate_ids: list[str] = Field(default_factory=list)
+    source_observation_refs: list[str] = Field(default_factory=list, exclude_if=lambda value: not value)
     gate_ids: list[str] = Field(default_factory=list)
     authority: FactAuthority
     fact_type: str = Field(min_length=1)
@@ -404,6 +409,9 @@ class ClinicalFactV2(Phase5Model):
             _require_utc(self.record_time, "record_time")
         _require_sorted_unique(self.locator_ids, "发布事实定位")
         _require_sorted_unique(self.source_candidate_ids, "发布事实来源候选")
+        _require_sorted_unique(self.source_observation_refs, "发布事实来源观察")
+        if any(not ref.strip() for ref in self.source_observation_refs):
+            raise ValueError("发布事实来源观察不得为空白")
         _require_sorted_unique(self.gate_ids, "发布事实门禁")
         _require_sorted_unique(self.supported_requirement_ids, "发布事实支持的资料要求")
         if self.gate_ids and self.gate_id not in self.gate_ids:

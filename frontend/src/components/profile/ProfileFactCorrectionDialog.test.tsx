@@ -169,6 +169,7 @@ function makeRepo(
     ),
     listPatientProfileHistory: vi.fn(),
     getPatientProfileRevision: vi.fn(),
+    getFactSourceReadings: vi.fn(() => Promise.resolve([])),
     previewFactCorrection: preview,
     submitFactCorrection: submit,
     listFactCorrectionHistory: vi.fn(() =>

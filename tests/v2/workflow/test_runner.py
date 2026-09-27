@@ -72,6 +72,156 @@ def test_runner_completes_dependent_steps_in_order(session_factory, clock):
     assert seqs == sorted(seqs) and len(set(seqs)) == len(seqs)
 
 
+def test_opted_in_fatal_read_preserves_independent_results_but_blocks_publication(
+    session_factory, clock,
+):
+    create_job_with_steps(
+        session_factory, clock, job_id="partial-reads",
+        payload={"execution_control": {"continue_after_final_failure": {
+            "step_prefix": "deep_", "error_codes": ["INVALID_READ"], "max_failed_steps": 2,
+        }}},
+        steps=[
+            {"step_id": "deep_0001", "name": "read one"},
+            {"step_id": "deep_0002", "name": "read two"},
+            {"step_id": "gate", "name": "publish", "depends_on": ("deep_0001", "deep_0002")},
+        ],
+    )
+    calls = []
+
+    def executor(ctx):
+        calls.append(ctx.step_id)
+        if ctx.step_id == "deep_0001":
+            raise StepFailure(retryable=False, error_code="INVALID_READ")
+        return {"step": ctx.step_id}
+
+    runner = JobRunner(session_factory, {"demo": executor}, worker_id="w1", now=clock.now)
+    assert runner.run_job("partial-reads") is True
+    snap = _snapshot(session_factory, clock, "partial-reads")
+    assert calls == ["deep_0001", "deep_0002"]
+    assert snap.state == "failed_final"
+    assert {step.step_id: step.state for step in snap.steps} == {
+        "deep_0001": "failed_final", "deep_0002": "completed", "gate": "failed_final",
+    }
+    assert snap.progress_completed == 1
+    with _store(session_factory, clock) as store:
+        assert store.get_last_checkpoint("partial-reads", "deep_0002")[1]["step"] == "deep_0002"
+
+
+def test_unlisted_fatal_read_still_stops_before_independent_steps(session_factory, clock):
+    create_job_with_steps(
+        session_factory, clock, job_id="hard-failure",
+        payload={"execution_control": {"continue_after_final_failure": {
+            "step_prefix": "deep_", "error_codes": ["INVALID_READ"], "max_failed_steps": 2,
+        }}},
+        steps=[
+            {"step_id": "deep_0001", "name": "read one"},
+            {"step_id": "deep_0002", "name": "read two"},
+        ],
+    )
+    calls = []
+
+    def executor(ctx):
+        calls.append(ctx.step_id)
+        raise StepFailure(retryable=False, error_code="IDENTITY_INVALID")
+
+    runner = JobRunner(session_factory, {"demo": executor}, worker_id="w1", now=clock.now)
+    assert runner.run_job("hard-failure") is True
+    assert calls == ["deep_0001"]
+    assert _snapshot(session_factory, clock, "hard-failure").state == "failed_final"
+
+
+def test_second_opted_in_failure_stops_before_more_model_reads(session_factory, clock):
+    create_job_with_steps(
+        session_factory, clock, job_id="bounded-failure",
+        payload={"execution_control": {"continue_after_final_failure": {
+            "step_prefix": "deep_", "error_codes": ["INVALID_READ"], "max_failed_steps": 2,
+        }}},
+        steps=[{"step_id": f"deep_{number:04d}", "name": "read"}
+               for number in range(1, 4)],
+    )
+    calls = []
+
+    def executor(ctx):
+        calls.append(ctx.step_id)
+        raise StepFailure(retryable=False, error_code="INVALID_READ")
+
+    runner = JobRunner(session_factory, {"demo": executor}, worker_id="w1", now=clock.now)
+    assert runner.run_job("bounded-failure") is True
+    assert calls == ["deep_0001", "deep_0002"]
+    snap = _snapshot(session_factory, clock, "bounded-failure")
+    assert snap.state == "failed_final"
+    assert {step.step_id: step.state for step in snap.steps} == {
+        "deep_0001": "failed_final", "deep_0002": "failed_final", "deep_0003": "queued",
+    }
+
+
+def test_opted_in_failure_continues_from_checkpoint_after_worker_stop(session_factory, clock):
+    create_job_with_steps(
+        session_factory, clock, job_id="resume-independent",
+        payload={"execution_control": {"continue_after_final_failure": {
+            "step_prefix": "deep_", "error_codes": ["INVALID_READ"], "max_failed_steps": 2,
+        }}},
+        steps=[
+            {"step_id": "deep_0001", "name": "read one"},
+            {"step_id": "deep_0002", "name": "read two"},
+            {"step_id": "gate", "name": "publish", "depends_on": ("deep_0001", "deep_0002")},
+        ],
+    )
+    calls = []
+
+    def executor(ctx):
+        calls.append(ctx.step_id)
+        if ctx.step_id == "deep_0001":
+            first.request_stop()
+            raise StepFailure(retryable=False, error_code="INVALID_READ")
+        return {"step": ctx.step_id}
+
+    first = JobRunner(session_factory, {"demo": executor}, worker_id="w1", now=clock.now)
+    assert first.run_job("resume-independent") is True
+    assert _snapshot(session_factory, clock, "resume-independent").state == "queued"
+    second = JobRunner(session_factory, {"demo": executor}, worker_id="w2", now=clock.now)
+    assert second.run_job("resume-independent") is True
+    assert calls == ["deep_0001", "deep_0002"]
+    snap = _snapshot(session_factory, clock, "resume-independent")
+    assert snap.state == "failed_final"
+    assert {step.step_id: step.state for step in snap.steps} == {
+        "deep_0001": "failed_final", "deep_0002": "completed", "gate": "failed_final",
+    }
+
+
+def test_retry_of_partial_read_does_not_repeat_independent_success(session_factory, clock):
+    create_job_with_steps(
+        session_factory, clock, job_id="retry-partial-read",
+        payload={"execution_control": {"continue_after_final_failure": {
+            "step_prefix": "deep_", "error_codes": ["INVALID_READ"], "max_failed_steps": 2,
+        }}},
+        steps=[
+            {"step_id": "deep_0001", "name": "read one"},
+            {"step_id": "deep_0002", "name": "read two"},
+            {"step_id": "gate", "name": "publish", "depends_on": ("deep_0001", "deep_0002")},
+        ],
+    )
+    calls = []
+    armed = True
+
+    def executor(ctx):
+        nonlocal armed
+        calls.append(ctx.step_id)
+        if ctx.step_id == "deep_0001" and armed:
+            armed = False
+            raise StepFailure(retryable=False, error_code="INVALID_READ")
+        return {"step": ctx.step_id}
+
+    runner = JobRunner(session_factory, {"demo": executor}, worker_id="w1", now=clock.now)
+    assert runner.run_job("retry-partial-read") is True
+    assert _snapshot(session_factory, clock, "retry-partial-read").state == "failed_final"
+    with _store(session_factory, clock) as store:
+        store.retry_failed("retry-partial-read")
+    assert runner.run_job("retry-partial-read") is True
+    assert calls == ["deep_0001", "deep_0002", "deep_0001", "gate"]
+    assert _snapshot(session_factory, clock, "retry-partial-read").state == "completed"
+
+
 def test_retryable_failure_reruns_only_failed_step_after_backoff(session_factory, clock):
     steps = [
         {"step_id": "s1", "name": "解析", "retryable": True, "max_attempts": 3},

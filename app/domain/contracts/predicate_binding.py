@@ -9,7 +9,7 @@
 - ``FrozenRuleComponent``        一个规则组件的冻结身份：触发与例外谓词分别列出，
                                  已发布资料要求全文随组件提供（仅候选收窄用，
                                  ``fact_type`` 索引不是语义证明）；
-- ``FrozenFactRecord``           当前已校正事实头：对象/值/单位/日期/极性与定位；
+- ``FrozenFactRecord``           当前已校正事实头：对象/值/单位/日期/极性、定位与原候选身份；
 - ``FrozenLocatorIdentity``      经仓储来源核验的定位身份（原文摘录/哈希/精度）；
 - ``PredicateBindingFrozenInput`` 冻结输入整体：``frozen_input_sha256`` 对全部内容
                                  寻址；同内容不同顺序得到同一哈希。
@@ -411,8 +411,9 @@ class FrozenFactRecord(ContractModel):
     """当前已校正事实头：对象/值/单位/日期/极性与定位集合。
 
     不含 run/gate 等过程元数据；``fact_id + stable_identity + revision`` 足以回溯
-    持久化记录。``stable_identity`` 由既有发布合同推导，包含被断言对象——
-    不同对象同值不会被合并。
+    持久化记录。``source_candidate_ids`` 仅保留来源链，不表示独立测量次数。
+    ``source_observation_refs`` 也只供回溯，不代表独立采集次数。
+    ``stable_identity`` 由既有发布合同推导，包含被断言对象——不同对象同值不会被合并。
     """
 
     fact_id: str = Field(min_length=1)
@@ -428,12 +429,24 @@ class FrozenFactRecord(ContractModel):
     date_range: PartialDateRange | None = None
     record_time: datetime | None = None
     locator_ids: list[str] = Field(min_length=1)
+    source_candidate_ids: list[str] = Field(
+        default_factory=list, exclude_if=lambda value: not value,
+    )
+    source_observation_refs: list[str] = Field(
+        default_factory=list, exclude_if=lambda value: not value,
+    )
     assertion_basis: AssertionBasis | None = None
 
     @model_validator(mode="after")
     def validate_fact_record(self) -> "FrozenFactRecord":
         if self.locator_ids != sorted(set(self.locator_ids)):
             raise ValueError("冻结事实定位必须排序且不得重复")
+        if self.source_candidate_ids != sorted(set(self.source_candidate_ids)):
+            raise ValueError("冻结事实来源候选必须排序且不得重复")
+        if self.source_observation_refs != sorted(set(self.source_observation_refs)):
+            raise ValueError("冻结事实来源观察必须排序且不得重复")
+        if any(not ref.strip() for ref in self.source_observation_refs):
+            raise ValueError("冻结事实来源观察不得为空白")
         if (
             self.polarity != FactPolarity.UNKNOWN
             and self.value is None

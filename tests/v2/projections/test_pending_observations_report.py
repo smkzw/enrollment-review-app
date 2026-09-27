@@ -149,6 +149,10 @@ def test_mixed_page_retains_only_unaccepted_observations():
     item = items[0]
     assert item.code == PENDING_RETENTION_CODE
     assert item.affected_pages == [1]
+    from app.projections.page_review_sources import page_observation_ref
+    assert item.affected_observation_refs == [
+        page_observation_ref(reviews[0].page_review_id, "facts", 1)
+    ]
     assert item.affected_locator_ids == []
     assert item.affected_requirement_ids == []
     assert item.gap_type is None

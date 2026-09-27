@@ -25,6 +25,7 @@ import unicodedata
 from copy import deepcopy
 from collections.abc import Mapping, Sequence
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from math import isfinite
 from typing import Literal, Protocol
 
@@ -525,7 +526,9 @@ _SYSTEM_CONTRACT = (
     "终止日期。ongoing 必须不带 end_range；ended 必须有原文明确给出的 end_range；"
     "持续状态与终止日期不能同时明确时使用 unknown，不得删除候选规避。"
     "每条明确临床陈述均单独形成事实候选，尤其是带数值和单位的检验、生命体征、评分"
-    "或检查结果，不得改写成未解决项。被断言对象必须是 assertion_text 中逐字出现的最短"
+    "或检查结果，不得改写成未解决项。多个原始读数须分别保留，不得由模型先求均值或合计后"
+    "伪装成原始事实；规则要求的计算由后续审核依据已核实的逐次记录完成。"
+    "被断言对象必须是 assertion_text 中逐字出现的最短"
     "临床名词或名词短语，例如原句“患者否认糖尿病病史”使用“糖尿病病史”，原句“收缩压"
     "120 mmHg”使用“收缩压”；不得扩写成问句、解释句、目标疾病说明或原文未出现的名称。"
     "原句以“无/未/有/等”等虚词分隔修饰语与对象时，必须连同虚词截取原句中的连续片段，"
@@ -586,6 +589,9 @@ _SYSTEM_CONTRACT = (
     "未解决项只能记录候选抽取后仍然存在的不确定性，不能替代清晰事实候选；同一条原文"
     "可以同时生成事实候选和日期、单位或来源未解决项。输入含 page_review 时，只能从"
     "accepted_pages 的 accepted_observations 中已核实事实和手写观察生成候选；条款证据关系仅作审核上下文，不能代替双读一致的具体事实。"
+    "每项已采信事实或手写观察均须有去向：能核对的事实候选引用 source_observation_ref；"
+    "尚不能整理的观察在 unresolved_items.affected_observation_refs 引用对应编号并说明问题。"
+    "同一测量的两次独立判读是同一项来源，不可据两个编号推断为两次测量。"
     "page_review_visual 定位的文字来自绑定的原始判读摘录，source_text_sha256是该摘录的哈希，不是页图哈希；"
     "pending_observation_groups仅合并重复元数据：shared适用于组内每一条observations.detail，position保留原顺序；"
     "各条仍是独立的待核对内容，不因分组而视为一致，不可用于生成已核实事实。"
@@ -1377,7 +1383,7 @@ def _hydrate_draft_output(
             fact = ClinicalFactCandidateV2(
                 candidate_id=candidate.candidate_ref,
                 value_kind=candidate.value_kind,
-                source_observation_refs=candidate.source_observation_refs,
+                source_observation_refs=sorted(candidate.source_observation_refs),
                 run_id=run_id,
                 call_id=call_id,
                 fact_type=candidate.fact_type,
@@ -1901,6 +1907,93 @@ def validate_output_page_closure(
     missing = sorted(set(evidence_input.page_numbers) - covered_pages)
     if missing:
         raise ValueError(f"以下页面既无候选证据引用，也无逐页未解决说明：{missing}")
+    page_review = evidence_input.page_review
+    if page_review is None or not page_review.reconciliations:
+        return
+    from app.projections.page_review_pending import pending_page_observations
+    from app.projections.page_review_sources import accepted_observations
+
+    reviews = {review.page_review_id: review for review in page_review.reviews}
+    group_by_ref: dict[str, tuple[str, str, str]] = {}
+    group_pages: dict[tuple[str, str, str], int] = {}
+    pending_pages: dict[str, int] = {}
+    accepted_facts: dict[str, dict] = {}
+    for reconciliation in page_review.reconciliations:
+        source_reviews = [reviews[review_id] for review_id in reconciliation.page_review_ids]
+        for item in pending_page_observations(source_reviews, reconciliation):
+            pending_pages[item["source_observation_ref"]] = item["page_number"]
+        observations = []
+        counts_by_read: dict[tuple[str, str, str], int] = {}
+        for review in source_reviews:
+            for item in accepted_observations([review], reconciliation, include_clause_signals=False):
+                key = (reconciliation.page_artifact_id, item["kind"], item["observation"]["normalization_key"])
+                observations.append((review.page_review_id, key, item["source_observation_ref"]))
+                if item["kind"] == "facts":
+                    accepted_facts[item["source_observation_ref"]] = item["observation"]
+                read_key = (review.page_review_id, key[1], key[2])
+                counts_by_read[read_key] = counts_by_read.get(read_key, 0) + 1
+        ambiguous_keys = {
+            key for review_id, key, _ in observations
+            if counts_by_read[(review_id, key[1], key[2])] > 1
+        }
+        for _, key, ref in observations:
+            # A key appearing twice in one reading may represent two measurements.
+            # Without source-level pairing, each occurrence needs its own disposition.
+            group = (key[0], key[1], ref) if key in ambiguous_keys else key
+            group_by_ref[ref] = group
+            group_pages[group] = source_reviews[0].page_number
+    claimed_refs = {
+        ref for candidate in output.fact_candidates for ref in candidate.source_observation_refs
+    }
+    for candidate in output.fact_candidates:
+        if candidate.value_kind == "identifier" or isinstance(candidate.canonical_value, bool):
+            continue
+        try:
+            candidate_value = Decimal(str(candidate.canonical_value).strip())
+        except InvalidOperation:
+            continue
+        if not candidate_value.is_finite():
+            continue
+        source_values = set()
+        for ref in candidate.source_observation_refs:
+            observation = accepted_facts.get(ref)
+            if observation is None:
+                continue
+            source_unit = observation["normalized_unit"]
+            if source_unit and unicodedata.normalize("NFKC", source_unit).casefold() != (
+                unicodedata.normalize("NFKC", candidate.unit or "").casefold()
+            ):
+                raise ValueError("数值候选单位与已采信的原件单位不一致，不得自行换算或丢弃单位")
+            text = observation["normalized_value"].strip()
+            unit = candidate.unit
+            if unit and unit != "unitless" and text.endswith(unit):
+                text = text[:-len(unit)].strip()
+            try:
+                value = Decimal(text)
+            except InvalidOperation:
+                continue
+            if value.is_finite():
+                source_values.add(value)
+        if source_values and (len(source_values) != 1 or candidate_value not in source_values):
+            raise ValueError("数值候选与已采信的原件读数不一致，不能合并不同读数或自行计算")
+    unresolved_refs = {
+        ref for issue in output.unresolved_items for ref in issue.affected_observation_refs
+    }
+    if unresolved_refs - group_by_ref.keys() - pending_pages.keys():
+        raise ValueError("未解决项引用了本次不存在的原件观察")
+    for issue in output.unresolved_items:
+        issue_pages = set(issue.affected_pages) | {
+            locator_pages[locator_id] for locator_id in issue.affected_locator_ids
+            if locator_id in locator_pages
+        }
+        if any((group_pages[group_by_ref[ref]] if ref in group_by_ref else pending_pages[ref])
+               not in issue_pages for ref in issue.affected_observation_refs):
+            raise ValueError("未解决项的原件观察与受影响页面不一致")
+    accounted = {group_by_ref[ref] for ref in claimed_refs | unresolved_refs if ref in group_by_ref}
+    uncovered = sorted(set(group_pages) - accounted)
+    if uncovered:
+        pages = sorted({group_pages[group] for group in uncovered})
+        raise ValueError(f"已采信的原件观察尚未逐项整理或列为待核：第{pages}页，共{len(uncovered)}项")
 
 
 # ---------------------------------------------------------------------------

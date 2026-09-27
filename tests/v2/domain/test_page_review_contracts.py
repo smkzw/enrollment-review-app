@@ -19,6 +19,7 @@ from app.domain.contracts.page_review import (
     SubjectPageCoverage,
 )
 from app.domain.contracts.clause_pack import DeterminationMode
+from app.domain.contracts.evidence import BoundingBox
 from app.domain.page_reconciliation import (
     PageReconciliationError,
     reconcile_page_reviews,
@@ -282,6 +283,29 @@ def test_repeated_equal_values_need_occurrence_association_before_acceptance():
     result = reconcile_page_reviews([a, b], determination_modes={})
     assert result.accepted_fact_keys == []
     assert result.fact_conflicts
+
+
+def test_equal_values_from_separate_source_regions_remain_unverified():
+    payload = _review_payload()
+    a_fact = _fact().model_copy(update={"region": PageRegion(
+        excerpt="白细胞 4.2 x10^9/L", bbox=BoundingBox(x0=10, y0=10, x1=90, y1=30),
+    )})
+    b_fact = _fact().model_copy(update={"region": PageRegion(
+        excerpt="白细胞 4.2 x10^9/L", bbox=BoundingBox(x0=10, y0=100, x1=90, y1=120),
+    )})
+    a = PageReviewRecord(**{**payload, "facts": [a_fact]})
+    b = PageReviewRecord(**{**payload, "page_review_id": "b", "lane": "main-B", "facts": [b_fact]})
+    separate = reconcile_page_reviews([a, b], determination_modes={})
+    assert separate.accepted_fact_keys == []
+    assert "不同位置" in separate.fact_conflicts[0].reason
+
+    b_same_position = b.model_copy(update={"facts": [b_fact.model_copy(update={
+        "region": PageRegion(excerpt=b_fact.region.excerpt,
+                             bbox=BoundingBox(x0=20, y0=15, x1=100, y1=35)),
+    })]})
+    aligned = reconcile_page_reviews([a, b_same_position], determination_modes={})
+    assert aligned.accepted_fact_keys == [a_fact.normalization_key]
+    assert aligned.reconciliation_id != separate.reconciliation_id
 
 
 def test_ambiguous_handwriting_lane_does_not_vote_for_two_different_occurrences():

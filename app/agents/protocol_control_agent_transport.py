@@ -34,8 +34,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from threading import local
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 import httpx
@@ -62,6 +63,10 @@ from app.agents.protocol_control_source_interpretation import (
     source_scope_correction_response_format,
     source_target_review_response_format,
     source_unit_comparison_response_format,
+)
+from app.agents.protocol_control_semantic_point import semantic_point_response_format
+from app.agents.protocol_control_semantic_inquiry import (
+    inquiry_plan_response_format, inquiry_result_response_format,
 )
 from app.config import (
     DECONSTRUCT_GLM_API_KEY,
@@ -321,6 +326,14 @@ class _ProtocolControlRequestTimeout(RuntimeError):
     """The client timed out while the serial local service may still be working."""
 
 
+class _ProtocolControlStreamInterrupted(_ProtocolControlRequestTimeout):
+    """A sent stream ended without a final response; its completion is uncertain."""
+
+    def __init__(self, cause: Exception, metadata: dict[str, Any]) -> None:
+        super().__init__(f"流式响应中断：{type(cause).__name__}: {cause}")
+        self.metadata = metadata
+
+
 class OpenAICompatibleProtocolControlAgentTransport:
     """Synchronous OpenAI-compatible transport for protocol-control Agent runs.
 
@@ -454,6 +467,7 @@ class OpenAICompatibleProtocolControlAgentTransport:
             env_name=_response_format_mode_env,
         )
         self._histories: dict[str, list[dict[str, str]]] = {}
+        self._receipt_local = local()
         self._model_identity_check = selected_identity_check
         self._model_identity_probe = model_identity_probe
         self._model_identity_verified: str | None = None
@@ -607,6 +621,10 @@ class OpenAICompatibleProtocolControlAgentTransport:
         # Retain the frozen route signature: the non-clinical fallback now also
         # handles catalogs that list generic aliases but omit this route.
         return "list_then_chat_on_empty" if self._backend == "cms-router" else "list_only"
+
+    @property
+    def response_validation_version(self) -> str:
+        return "reported-model-and-stop/v1"
 
     @property
     def response_format_sha256(self) -> str:
@@ -768,7 +786,6 @@ class OpenAICompatibleProtocolControlAgentTransport:
         return kwargs
 
     @staticmethod
-    @staticmethod
     def _stream_completion(client: Any, kwargs: dict[str, Any]) -> Any:
         """全模型统一 streaming（2026-09-19 用户指令）：云路由器对非流式长生成
         有队列等待上限（OmniRoute 504）；流式按块保活即不受限。重组为下游
@@ -787,20 +804,49 @@ class OpenAICompatibleProtocolControlAgentTransport:
             stream = client.chat.completions.create(**kwargs)
         content_parts: list[str] = []
         finish_reason: str | None = None
-        for chunk in stream:
-            choices = getattr(chunk, "choices", None) or []
-            if not choices:
-                continue
-            choice = choices[0]
-            if getattr(choice, "finish_reason", None):
-                finish_reason = choice.finish_reason
-            delta = getattr(choice, "delta", None)
-            piece = getattr(delta, "content", None) if delta is not None else None
-            if piece:
-                content_parts.append(piece)
+        request_id: str | None = None
+        reported_model: str | None = None
+        usage: dict[str, Any] | None = None
+
+        def partial_metadata() -> dict[str, Any]:
+            partial = "".join(content_parts)
+            return {
+                "request_id": request_id,
+                "reported_model": reported_model,
+                "usage": usage,
+                "finish_reason": finish_reason,
+                "partial_content_sha256": hashlib.sha256(partial.encode("utf-8")).hexdigest(),
+                "received_content_characters": len(partial),
+            }
+
+        try:
+            for chunk in stream:
+                request_id = request_id or getattr(chunk, "id", None)
+                reported_model = reported_model or getattr(chunk, "model", None)
+                raw_usage = getattr(chunk, "usage", None)
+                if raw_usage is not None:
+                    usage = (raw_usage.model_dump(mode="json") if hasattr(raw_usage, "model_dump")
+                             else dict(raw_usage) if isinstance(raw_usage, Mapping) else None)
+                choices = getattr(chunk, "choices", None) or []
+                if not choices:
+                    continue
+                choice = choices[0]
+                if getattr(choice, "finish_reason", None):
+                    finish_reason = choice.finish_reason
+                delta = getattr(choice, "delta", None)
+                piece = getattr(delta, "content", None) if delta is not None else None
+                if piece:
+                    content_parts.append(piece)
+        except Exception as exc:  # noqa: BLE001 - preserve partial metadata at provider boundary
+            raise _ProtocolControlStreamInterrupted(exc, partial_metadata()) from exc
+        if finish_reason is None:
+            raise _ProtocolControlStreamInterrupted(
+                RuntimeError("服务未返回完成状态"), partial_metadata(),
+            )
         message = SimpleNamespace(content="".join(content_parts))
         return SimpleNamespace(
-            choices=[SimpleNamespace(message=message, finish_reason=finish_reason or "未提供")]
+            choices=[SimpleNamespace(message=message, finish_reason=finish_reason or "未提供")],
+            id=request_id, model=reported_model, usage=usage,
         )
 
     @staticmethod
@@ -827,21 +873,25 @@ class OpenAICompatibleProtocolControlAgentTransport:
         messages: list[dict[str, str]],
         *,
         response_format: Mapping[str, Any] | None = None,
-    ) -> str:
+        with_receipt: bool = False,
+    ) -> str | tuple[str, dict[str, object]]:
         from app.llm.mtplx_model_lifecycle import sync_mtplx_model_session
 
         with sync_mtplx_model_session(
             self._backend, str(getattr(self._client, "base_url", "")),
             self._model, self._reasoning_effort,
         ):
-            return self._complete_owned(messages, response_format=response_format)
+            return self._complete_owned(
+                messages, response_format=response_format, with_receipt=with_receipt,
+            )
 
     def _complete_owned(
         self,
         messages: list[dict[str, str]],
         *,
         response_format: Mapping[str, Any] | None = None,
-    ) -> str:
+        with_receipt: bool = False,
+    ) -> str | tuple[str, dict[str, object]]:
         """Run one logical completion, with ephemeral in-call retries.
 
         Length/empty-body repair turns are used only for the live request and
@@ -855,10 +905,19 @@ class OpenAICompatibleProtocolControlAgentTransport:
         self._ensure_model_identity_verified()
         request_messages = [dict(message) for message in messages]
         diagnostics: list[str] = []
+        attempt_receipts: list[dict[str, object]] = []
         # One shared reasoning+content budget per logical request; a length
         # finish may raise it once, capped, and never a second time.
         request_budget = self._max_tokens
         for attempt in range(2):
+            request_hash = hashlib.sha256(json.dumps(
+                request_messages, ensure_ascii=False, sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")).hexdigest()
+            schema_hash = hashlib.sha256(json.dumps(
+                response_format or self._response_format,
+                ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            ).encode("utf-8")).hexdigest()
             try:
                 completion = self._stream_completion(
                     self._client,
@@ -868,11 +927,30 @@ class OpenAICompatibleProtocolControlAgentTransport:
                         response_format=response_format,
                     ),
                 )
+            except _ProtocolControlStreamInterrupted as exc:
+                self._save_call_receipt({
+                    "request_sha256": request_hash, "schema_sha256": schema_hash,
+                    "requested_model": self._model, "requested_max_tokens": request_budget,
+                    **exc.metadata, "error_kind": type(exc.__cause__).__name__,
+                })
+                raise
             except (APITimeoutError, httpx.TimeoutException, TimeoutError) as exc:
+                self._save_call_receipt({
+                    "request_sha256": request_hash, "schema_sha256": schema_hash,
+                    "requested_model": self._model, "requested_max_tokens": request_budget,
+                    "request_id": None, "reported_model": None, "usage": None,
+                    "finish_reason": None, "error_kind": type(exc).__name__,
+                })
                 raise _ProtocolControlRequestTimeout(
                     f"协议控制模型请求超时：{type(exc).__name__}: {exc}"
                 ) from exc
             except Exception as exc:  # noqa: BLE001 - external adapter boundary
+                self._save_call_receipt({
+                    "request_sha256": request_hash, "schema_sha256": schema_hash,
+                    "requested_model": self._model, "requested_max_tokens": request_budget,
+                    "request_id": None, "reported_model": None, "usage": None,
+                    "finish_reason": None, "error_kind": type(exc).__name__,
+                })
                 raise RuntimeError(
                     f"协议控制模型请求失败：{type(exc).__name__}: {exc}"
                 ) from exc
@@ -880,6 +958,24 @@ class OpenAICompatibleProtocolControlAgentTransport:
             finish_reason = (
                 getattr(choices[0], "finish_reason", None) if choices else None
             )
+            receipt = {
+                "request_sha256": request_hash, "schema_sha256": schema_hash,
+                "requested_model": self._model,
+                "request_id": getattr(completion, "id", None),
+                "reported_model": getattr(completion, "model", None),
+                "finish_reason": finish_reason,
+                "usage": getattr(completion, "usage", None),
+                "requested_max_tokens": request_budget,
+            }
+            attempt_receipts.append(receipt)
+            self._save_call_receipt(receipt)
+            reported_model = receipt["reported_model"]
+            if isinstance(reported_model, str) and reported_model.strip():
+                try:
+                    _match_configured_control_model(self._model, [reported_model])
+                except ProtocolControlModelIdentityError:
+                    receipt["error_kind"] = "reported_model_mismatch"
+                    raise
             if finish_reason == "length":
                 diagnostics.append(
                     f"第{attempt + 1}次输出达到长度上限（请求预算{request_budget} tokens）"
@@ -923,8 +1019,11 @@ class OpenAICompatibleProtocolControlAgentTransport:
                     ]
                     continue
                 continue
+            if finish_reason != "stop":
+                raise RuntimeError(f"协议控制模型未正常完成：{finish_reason or '未提供'}")
             try:
-                return self._message_text(completion)
+                text = self._message_text(completion)
+                return (text, {"attempts": attempt_receipts}) if with_receipt else text
             except ValueError as exc:
                 diagnostics.append(
                     f"第{attempt + 1}次结束原因={finish_reason or '未提供'}：{exc}"
@@ -947,6 +1046,17 @@ class OpenAICompatibleProtocolControlAgentTransport:
             "协议控制模型连续两次未返回可读取的 JSON 正文："
             + "；".join(diagnostics)
         )
+
+    def _save_call_receipt(self, receipt: dict[str, object]) -> None:
+        if not hasattr(self._receipt_local, "items"):
+            self._receipt_local.items = []
+        self._receipt_local.items.append(receipt)
+
+    def take_call_receipts(self) -> list[dict[str, object]]:
+        """Take current thread's metadata without retaining source text or reasoning."""
+        receipts = list(getattr(self._receipt_local, "items", ()))
+        self._receipt_local.items = []
+        return receipts
 
     def start(self, *, prompt: str) -> ProtocolControlAgentResponse:
         if not prompt.strip():
@@ -974,9 +1084,10 @@ class OpenAICompatibleProtocolControlAgentTransport:
             raise ValueError("方案来源解释提示不能为空")
         session_id = f"protocol-control-source-{uuid4().hex}"
         try:
+            response_format = source_interpretation_response_format()
             text = self._complete(
-                [{"role": "user", "content": prompt}],
-                response_format=source_interpretation_response_format(),
+                self._single_requirement_messages(prompt, response_format),
+                response_format=response_format,
             )
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
             raise ProtocolControlAgentCallError(
@@ -986,14 +1097,74 @@ class OpenAICompatibleProtocolControlAgentTransport:
             ) from exc
         return ProtocolControlAgentResponse(session_id=session_id, text=text)
 
+    def read_semantic_points(self, *, prompt: str) -> ProtocolControlAgentResponse:
+        """Isolated source-bound reading; it does not enter the publication path."""
+
+        if not prompt.strip():
+            raise ValueError("来源语义点提示不能为空")
+        session_id = f"protocol-control-semantic-point-{uuid4().hex}"
+        response_format = semantic_point_response_format()
+        try:
+            completed = self._complete(
+                self._single_requirement_messages(prompt, response_format),
+                response_format=response_format,
+                with_receipt=True,
+            )
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id,
+                str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        if isinstance(completed, tuple):
+            text, receipt = completed
+        else:
+            text, receipt = completed, None
+        return ProtocolControlAgentResponse(
+            session_id=session_id, text=text, transport_receipt=receipt,
+        )
+
+    def read_semantic_inquiry(
+        self, *, prompt: str, step: Literal["plan", "result"],
+    ) -> ProtocolControlAgentResponse:
+        """An isolated, bounded request; the caller owns source retrieval."""
+
+        if not prompt.strip():
+            raise ValueError("方案原文核查提示不能为空")
+        formats = {
+            "plan": inquiry_plan_response_format,
+            "result": inquiry_result_response_format,
+        }
+        response_format = formats[step]()
+        session_id = f"protocol-control-inquiry-{uuid4().hex}"
+        try:
+            completed = self._complete(
+                self._single_requirement_messages(prompt, response_format),
+                response_format=response_format,
+                with_receipt=True,
+            )
+        except Exception as exc:  # noqa: BLE001 - external adapter boundary
+            raise ProtocolControlAgentCallError(
+                session_id, str(exc),
+                uncertain_completion=isinstance(exc, _ProtocolControlRequestTimeout),
+            ) from exc
+        if isinstance(completed, tuple):
+            text, receipt = completed
+        else:
+            text, receipt = completed, None
+        return ProtocolControlAgentResponse(
+            session_id=session_id, text=text, transport_receipt=receipt,
+        )
+
     def correct_source_quote(self, *, prompt: str) -> ProtocolControlAgentResponse:
         if not prompt.strip():
             raise ValueError("来源摘录校正提示不能为空")
         session_id = f"protocol-control-source-quote-{uuid4().hex}"
+        response_format = source_quote_correction_response_format()
         try:
             text = self._complete(
-                [{"role": "user", "content": prompt}],
-                response_format=source_quote_correction_response_format(),
+                self._single_requirement_messages(prompt, response_format),
+                response_format=response_format,
             )
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
             raise ProtocolControlAgentCallError(
@@ -1007,10 +1178,11 @@ class OpenAICompatibleProtocolControlAgentTransport:
         if not prompt.strip():
             raise ValueError("来源范围校正提示不能为空")
         session_id = f"protocol-control-source-scope-{uuid4().hex}"
+        response_format = source_scope_correction_response_format()
         try:
             text = self._complete(
-                [{"role": "user", "content": prompt}],
-                response_format=source_scope_correction_response_format(),
+                self._single_requirement_messages(prompt, response_format),
+                response_format=response_format,
             )
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
             raise ProtocolControlAgentCallError(
@@ -1026,9 +1198,10 @@ class OpenAICompatibleProtocolControlAgentTransport:
             raise ValueError("逐项来源核对提示不能为空")
         session_id = f"protocol-control-target-{uuid4().hex}"
         try:
+            response_format = source_target_review_response_format()
             text = self._complete(
-                [{"role": "user", "content": prompt}],
-                response_format=source_target_review_response_format(),
+                self._single_requirement_messages(prompt, response_format),
+                response_format=response_format,
             )
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
             raise ProtocolControlAgentCallError(
@@ -1042,10 +1215,11 @@ class OpenAICompatibleProtocolControlAgentTransport:
         if not prompt.strip():
             raise ValueError("跨章节原文核对提示不能为空")
         session_id = f"protocol-control-source-pair-{uuid4().hex}"
+        response_format = source_unit_comparison_response_format()
         try:
             text = self._complete(
-                [{"role": "user", "content": prompt}],
-                response_format=source_unit_comparison_response_format(),
+                self._single_requirement_messages(prompt, response_format),
+                response_format=response_format,
             )
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
             raise ProtocolControlAgentCallError(
@@ -1207,7 +1381,7 @@ class OpenAICompatibleProtocolControlAgentTransport:
         if history is None:
             raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
         response_format = protocol_control_candidate_repair_response_format()
-        logical_history = [*history, {"role": "user", "content": prompt}]
+        logical_history = [*history, *self._single_requirement_messages(prompt, response_format)]
         try:
             text = self._complete(logical_history, response_format=response_format)
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
@@ -1231,10 +1405,11 @@ class OpenAICompatibleProtocolControlAgentTransport:
         if history is None:
             raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
         logical_history = [*history, {"role": "user", "content": prompt}]
+        response_format = protocol_control_post_treatment_repair_response_format()
         try:
             text = self._complete(
-                [{"role": "user", "content": prompt}],
-                response_format=protocol_control_post_treatment_repair_response_format(),
+                self._single_requirement_messages(prompt, response_format),
+                response_format=response_format,
             )
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
             raise ProtocolControlAgentCallError(
@@ -1284,10 +1459,11 @@ class OpenAICompatibleProtocolControlAgentTransport:
         if history is None:
             raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
         logical_history = [*history, {"role": "user", "content": prompt}]
+        response_format = protocol_control_calendar_bound_repair_response_format()
         try:
             text = self._complete(
-                [{"role": "user", "content": prompt}],
-                response_format=protocol_control_calendar_bound_repair_response_format(),
+                self._single_requirement_messages(prompt, response_format),
+                response_format=response_format,
             )
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
             raise ProtocolControlAgentCallError(
@@ -1312,11 +1488,12 @@ class OpenAICompatibleProtocolControlAgentTransport:
             raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
         # The prompt carries the frozen atom and its source. Sending the full
         # batch history would turn a one-atom repair into another full review.
-        repair_messages = [{"role": "user", "content": prompt}]
+        response_format = protocol_control_atom_repair_response_format()
+        repair_messages = self._single_requirement_messages(prompt, response_format)
         try:
             text = self._complete(
                 repair_messages,
-                response_format=protocol_control_atom_repair_response_format(),
+                response_format=response_format,
             )
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
             raise ProtocolControlAgentCallError(
@@ -1367,10 +1544,11 @@ class OpenAICompatibleProtocolControlAgentTransport:
             raise ValueError("日期属性修订提示不能为空")
         if session_id not in self._histories:
             raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
+        response_format = protocol_control_time_operand_repair_response_format()
         try:
             text = self._complete(
-                [{"role": "user", "content": prompt}],
-                response_format=protocol_control_time_operand_repair_response_format(),
+                self._single_requirement_messages(prompt, response_format),
+                response_format=response_format,
             )
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
             raise ProtocolControlAgentCallError(
@@ -1389,10 +1567,11 @@ class OpenAICompatibleProtocolControlAgentTransport:
             raise ValueError("资料来源要求修订提示不能为空")
         if session_id not in self._histories:
             raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
+        response_format = protocol_control_evidence_source_repair_response_format()
         try:
             text = self._complete(
-                [{"role": "user", "content": prompt}],
-                response_format=protocol_control_evidence_source_repair_response_format(),
+                self._single_requirement_messages(prompt, response_format),
+                response_format=response_format,
             )
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
             raise ProtocolControlAgentCallError(
@@ -1411,10 +1590,11 @@ class OpenAICompatibleProtocolControlAgentTransport:
             raise ValueError("资料类型修订提示不能为空")
         if session_id not in self._histories:
             raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
+        response_format = protocol_control_evidence_source_types_repair_response_format()
         try:
             text = self._complete(
-                [{"role": "user", "content": prompt}],
-                response_format=protocol_control_evidence_source_types_repair_response_format(),
+                self._single_requirement_messages(prompt, response_format),
+                response_format=response_format,
             )
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
             raise ProtocolControlAgentCallError(
@@ -1437,11 +1617,12 @@ class OpenAICompatibleProtocolControlAgentTransport:
         history = self._histories.get(session_id)
         if history is None:
             raise ProtocolControlAgentCallError(session_id, "找不到原协议控制 Agent 会话")
-        logical_history = [*history, {"role": "user", "content": prompt}]
+        response_format = protocol_control_candidates_repair_response_format()
+        logical_history = [*history, *self._single_requirement_messages(prompt, response_format)]
         try:
             text = self._complete(
                 logical_history,
-                response_format=protocol_control_candidates_repair_response_format(),
+                response_format=response_format,
             )
         except Exception as exc:  # noqa: BLE001 - external adapter boundary
             raise ProtocolControlAgentCallError(

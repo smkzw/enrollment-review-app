@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import io
 import json
 from dataclasses import replace
 
 import pytest
+from PIL import Image
 
 from app.domain.contracts.enums import Comparator, RuleKind, StudyPhase
 from app.domain.contracts.page_review import PageCoverageEntry, PageDisposition, PageReviewLane
@@ -84,7 +86,9 @@ def _pack():
 
 
 def _page(index: int = 1) -> PageReviewInput:
-    image = f"page-{index}".encode()
+    buffer = io.BytesIO()
+    Image.new("RGB", (2, 2), color=(index % 256, 0, 0)).save(buffer, format="PNG")
+    image = buffer.getvalue()
     return PageReviewInput(
         page_artifact_id=f"page-{index}",
         source_document_version_id="document-1",

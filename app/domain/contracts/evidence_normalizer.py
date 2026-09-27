@@ -411,6 +411,7 @@ class EvidenceNormalizerUnresolvedItem(ContractModel):
     message: str = Field(min_length=1, description="中文原生未解决说明")
     affected_pages: list[int] = Field(default_factory=list)
     affected_locator_ids: list[str] = Field(default_factory=list)
+    affected_observation_refs: list[str] = Field(default_factory=list, exclude_if=lambda value: not value)
     affected_requirement_ids: list[str] = Field(default_factory=list)
     gap_type: GapType | None = None
     referenced_file_id: str | None = None
@@ -426,6 +427,8 @@ class EvidenceNormalizerUnresolvedItem(ContractModel):
             raise ValueError("未解决项受影响页码必须从 1 起")
         if self.affected_locator_ids != sorted(set(self.affected_locator_ids)):
             raise ValueError("未解决项受影响定位必须按 ID 排序且不得重复")
+        if self.affected_observation_refs != sorted(set(self.affected_observation_refs)):
+            raise ValueError("未解决项受影响观察必须按 ID 排序且不得重复")
         _require_sorted_unique(self.affected_requirement_ids, "未解决项受影响资料要求")
         if bool(self.affected_requirement_ids) != (self.gap_type is not None):
             raise ValueError("资料要求绑定与结构化缺口类型必须同时提供")

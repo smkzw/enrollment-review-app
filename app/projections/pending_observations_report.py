@@ -96,7 +96,7 @@ def pending_retention_items(
     if attachment is None:
         return []
     reviews = {item.page_review_id: item for item in attachment.reviews}
-    records: dict[tuple[str, int, str], tuple[str, dict, str]] = {}
+    records: dict[tuple[str, int, str], tuple[str, dict, str, str]] = {}
     for reconciliation in attachment.reconciliations:
         lane_reviews = [reviews[key] for key in reconciliation.page_review_ids]
         for pending in pending_page_observations(lane_reviews, reconciliation):
@@ -105,20 +105,21 @@ def pending_retention_items(
             message = pending["review_message"]
             key = (pending["source_document_version_id"], pending["page_number"],
                    _identity(pending, content))
-            records.setdefault(key, (kind, content, message))
-    by_page: dict[tuple[str, int], list[tuple[str, dict, str]]] = {}
+            records.setdefault(key, (kind, content, message, pending["source_observation_ref"]))
+    by_page: dict[tuple[str, int], list[tuple[str, dict, str, str]]] = {}
     for key in sorted(records):
         by_page.setdefault((key[0], key[1]), []).append(records[key])
     items = []
     for (_source_document_version_id, page_number), entries in sorted(by_page.items()):
         listing = "；".join(
             f"{index}．{_entry_text(kind, content, message)}"
-            for index, (kind, content, message) in enumerate(entries, 1)
+            for index, (kind, content, message, _ref) in enumerate(entries, 1)
         )
         items.append(EvidenceNormalizerUnresolvedItem(
             code=PENDING_RETENTION_CODE,
             message=f"第{page_number}页有{len(entries)}条内容尚待核对，原文已保留。",
             affected_pages=[page_number],
+            affected_observation_refs=sorted({ref for _kind, _content, _message, ref in entries}),
             reason=(
                 f"第{page_number}页有尚未核实的内容，以下保留各条原文，供后续核对；"
                 "这不代表已确认的病史，也不代表符合或不符合入排标准。"

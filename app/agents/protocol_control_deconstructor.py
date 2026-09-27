@@ -95,6 +95,7 @@ from .protocol_control_source_interpretation import (
     SourceInterpretationValidationError,
     SourceQuoteCorrection,
     SourceScopeCorrection,
+    SourceStatement,
     SourceStatementCoverage,
     schedule_column_links,
     SourceTargetReview,
@@ -108,6 +109,7 @@ from .protocol_control_source_interpretation import (
     build_source_target_review_prompt,
     build_source_unit_comparison_prompt,
     normalize_source_excerpt,
+    parse_product_source_interpretation,
     _unreported_time_fragments,
     target_review_indexes,
     validate_source_interpretation,
@@ -236,6 +238,7 @@ class ProtocolControlAgentResponse(ContractModel):
 
     session_id: str = Field(min_length=1)
     text: str = Field(min_length=1)
+    transport_receipt: dict[str, object] | None = None
 
 
 class ProtocolControlAgentTransport(Protocol):
@@ -4033,7 +4036,10 @@ def source_statement_coverage(
                 continue
             unit_candidates.append(candidate_index)
             source_action = normalize_source_excerpt(statement.quoted_text).rstrip("。；;.!！?？")
-            if any(
+            time_scope_preserved = _candidate_preserves_source_time_words(
+                statement, candidate, unit_spans[statement.structure_unit_id]
+            )
+            if time_scope_preserved and any(
                 excerpt and (
                     normalize_source_excerpt(excerpt) in source_action
                     or source_action in normalize_source_excerpt(excerpt)
@@ -4074,12 +4080,46 @@ def source_statement_coverage(
                                 for excerpt in continuing.source_excerpts
                             ):
                                 candidate_roles.add("continuing")
+            if not time_scope_preserved:
+                candidate_roles.difference_update({"obligation", "continuing"})
             matched_roles.update(candidate_roles)
-            if (
-                candidate_roles & {"obligation", "continuing"}
-                if statement.force in {"required", "prohibited", "recommended"}
-                else candidate_roles
-            ):
+            defining_functions = set(statement.decision_functions) & {
+                "definition", "calculation_input", "threshold", "time_validity",
+            }
+            if statement.decision_functions in (["background"], ["unclassified"]):
+                expressed = False
+            elif defining_functions or statement.force == "descriptive":
+                compatible_kinds = {
+                    "definition": {ControlObligationKind.SELECT_BASELINE_VALUE,
+                                   ControlObligationKind.REACH_CONDITION,
+                                   ControlObligationKind.VERIFY_RESULT_VALIDITY},
+                    "calculation_input": {ControlObligationKind.SELECT_BASELINE_VALUE,
+                                          ControlObligationKind.REACH_CONDITION},
+                    "threshold": {ControlObligationKind.REACH_CONDITION},
+                    "time_validity": {ControlObligationKind.VERIFY_RESULT_VALIDITY,
+                                      ControlObligationKind.SELECT_BASELINE_VALUE,
+                                      ControlObligationKind.COMPLETE_BEFORE_ANCHOR},
+                }
+                expressed = "obligation" in candidate_roles and all(
+                    any(
+                        atom.kind in compatible_kinds[function]
+                        and source_action in normalize_source_excerpt(atom.statement)
+                        for group in candidate.obligation_expression.groups
+                        for atom in group.atoms
+                    )
+                    for function in defining_functions
+                ) and (bool(defining_functions) or any(
+                    source_action in normalize_source_excerpt(atom.statement)
+                    for group in candidate.obligation_expression.groups
+                    for atom in group.atoms
+                ))
+            else:
+                expressed = bool(
+                    candidate_roles & {"obligation", "continuing"}
+                    if statement.force in {"required", "prohibited", "recommended"}
+                    else candidate_roles
+                )
+            if expressed:
                 linked_candidates.append(candidate_index)
         disposition = dispositions[statement.structure_unit_id]
         quote = normalize_source_excerpt(statement.quoted_text)
@@ -4117,9 +4157,8 @@ def source_statement_coverage(
                 StructureUnitDispositionKind.REQUIRED_PROCEDURE,
             } else "not_located"
         )
-        schedule_columns = (
-            schedule_column_links(batch, statement.structure_unit_id, statement.quoted_text)
-            if statement.force == "required" else []
+        schedule_columns = schedule_column_links(
+            batch, statement.structure_unit_id, statement.quoted_text
         )
         if schedule_columns and disposition.disposition == StructureUnitDispositionKind.POST_TREATMENT_EXECUTION:
             raise ProtocolControlAgentWireValidationError(
@@ -4146,7 +4185,76 @@ def source_statement_coverage(
             exact_official_excerpt_matches=exact_official_matches,
             exact_procedure_excerpt_matches=exact_procedure_matches,
         ))
+    siblings_by_unit: dict[str, list[int]] = {}
+    for index, statement in enumerate(interpretation.statements):
+        siblings_by_unit.setdefault(statement.structure_unit_id, []).append(index)
+    for unit_id, sibling_indexes in siblings_by_unit.items():
+        if len(sibling_indexes) < 2:
+            continue
+        atom_refs: dict[int, set[tuple[int, int, int, str]]] = {}
+        for statement_index in sibling_indexes:
+            quote = normalize_source_excerpt(
+                interpretation.statements[statement_index].quoted_text
+            ).rstrip("。；;.!！?？")
+            refs: set[tuple[int, int, int, str]] = set()
+            for candidate_index in entries[statement_index].linked_candidate_indexes:
+                candidate = wire.candidate_drafts[candidate_index]
+                for group_index, group in enumerate(candidate.obligation_expression.groups):
+                    for atom_index, atom in enumerate(group.atoms):
+                        if not set(atom.source_span_ids) & unit_spans[unit_id]:
+                            continue
+                        if (quote in normalize_source_excerpt(atom.statement)
+                                and any(quote in normalize_source_excerpt(excerpt)
+                                        for excerpt in atom.source_excerpts)):
+                            refs.add((candidate_index, group_index, atom_index, "current"))
+                        continuing = atom.continuing_obligation
+                        if continuing is not None and (
+                            set(continuing.source_span_ids) & unit_spans[unit_id]
+                            and quote in normalize_source_excerpt(continuing.statement)
+                            and any(quote in normalize_source_excerpt(excerpt)
+                                    for excerpt in continuing.source_excerpts)
+                        ):
+                            refs.add((candidate_index, group_index, atom_index, "continuing"))
+            atom_refs[statement_index] = refs
+        for statement_index in sibling_indexes:
+            entry = entries[statement_index]
+            if entry.status != "expressed":
+                continue
+            other_refs = set().union(*(
+                atom_refs[other] for other in sibling_indexes if other != statement_index
+            ))
+            if not atom_refs[statement_index] - other_refs:
+                entries[statement_index] = entry.model_copy(update={
+                    "status": "candidate_linked", "candidate_indexes": [],
+                })
     return entries
+
+
+def _candidate_preserves_source_time_words(
+    statement: SourceStatement,
+    candidate: ProtocolControlAgentWireCandidate,
+    source_span_ids: set[str],
+) -> bool:
+    """A whole-source citation cannot hide one of several explicit visit scopes."""
+
+    time_words = {
+        normalize_source_excerpt(word) for word in statement.time_words if word.strip()
+    }
+    if len(time_words) < 2:
+        return True
+    quote = normalize_source_excerpt(statement.quoted_text)
+    rendered: list[str] = []
+    for group in candidate.obligation_expression.groups:
+        for atom in group.atoms:
+            if not set(atom.source_span_ids) & source_span_ids:
+                continue
+            excerpts = [normalize_source_excerpt(value) for value in atom.source_excerpts]
+            if not any(value and (value in quote or quote in value) for value in excerpts):
+                continue
+            rendered.append(normalize_source_excerpt(atom.statement))
+            if atom.continuing_obligation is not None:
+                rendered.append(normalize_source_excerpt(atom.continuing_obligation.statement))
+    return all(any(word in text for text in rendered) for word in time_words)
 
 
 def _split_obligation_quotes_cover_statement(quote: str, atoms: Sequence[object]) -> bool:
@@ -6095,8 +6203,8 @@ class ProtocolControlAgentRunner:
                 source_response = None
                 try:
                     source_response = source_reader(prompt=source_prompt)
-                    source_interpretation = SourceInterpretation.model_validate_json(
-                        source_response.text
+                    source_interpretation = parse_product_source_interpretation(
+                        batch, source_response.text
                     )
                     source_interpretation, anchor_ids = normalize_schedule_randomization_anchors(
                         batch, source_interpretation
@@ -6743,6 +6851,9 @@ class ProtocolControlAgentRunner:
                                            "时间填时间字段，例外与目标原文单独比对。"
                                            if review_error.code == "SOURCE_ACTION_MISMATCH" else "")
                                         + "不能证明同一目标完整覆盖时，选增量要求或无法核清并写明差额。"
+                                        "若仍引用已有目标作对照，target_id 与该目标原文中的 "
+                                        "target_action_excerpt 必须同时填写；不引用目标时两者及 "
+                                        "target_time_excerpt 都填 null，不能把来源原文复制成目标摘录。"
                                         "不得重写其他陈述，只返回本提示要求的一个 items 条目。"
                                         "同单元其他句子仅供辨认上下文，不自动成为本句的适用时期。"
                                         + ("本次只比较列出的目标，不得改引其他目标。" if compare_one else "")

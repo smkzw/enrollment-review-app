@@ -75,6 +75,9 @@ function makeProfileRepo(
 ): PatientProfileRepository {
   return {
     kind: "http",
+    async getFactSourceReadings() {
+      return [];
+    },
     async getLatestPatientProfile(subjectId, reviewEpisodeId) {
       const result = resolve(subjectId, reviewEpisodeId);
       if (result instanceof Error) throw result;

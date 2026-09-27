@@ -89,10 +89,12 @@ class ProtocolAgentCallError(RuntimeError):
         message: str,
         *,
         error_code: str = "SEMANTIC_CALL_FAILED",
+        error_metadata: Mapping[str, object] | None = None,
     ):
         super().__init__(message)
         self.session_id = session_id
         self.error_code = error_code
+        self.error_metadata = dict(error_metadata or {})
 
 
 class ProtocolParentSegmentError(RuntimeError):
@@ -234,6 +236,7 @@ class ProtocolDeconstructionAttempt(VersionedModel):
     outcome: Literal["通过完整性检查", "需要定向修正", "输出格式无效", "会话异常"]
     draft_id: str | None = None
     issues: list[ProtocolGateIssue] = Field(default_factory=list)
+    call_metadata: dict[str, object] = Field(default_factory=dict, exclude_if=lambda value: not value)
 
 
 class ProtocolDeconstructionRunResult(VersionedModel):
@@ -5364,6 +5367,8 @@ class ProtocolDeconstructorRunner:
                         raw_output_sha256=_sha256(str(exc)),
                         outcome="会话异常",
                         issues=[issue],
+                        call_metadata=(exc.error_metadata
+                                       if isinstance(exc, ProtocolAgentCallError) else {}),
                     )
                 ],
             )

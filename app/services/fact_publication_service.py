@@ -463,6 +463,10 @@ class FactPublicationService:
                 run_id=run_id,
                 gate_id=primary_gate_id,
                 source_candidate_ids=candidate_ids,
+                source_observation_refs=sorted(
+                    {ref for item in group for ref in item.source_observation_refs}
+                    | (set(prior.source_observation_refs) if prior is not None else set())
+                ),
                 gate_ids=gate_ids,
                 authority=authority,
                 fact_type=representative.fact_type,

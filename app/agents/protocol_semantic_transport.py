@@ -115,10 +115,9 @@ MLX_SERVE_PROTOCOL_BATCH_MAX_TOKENS = int(
 
 logger = logging.getLogger(__name__)
 
-# Transient provider-side failures are retried against the identical request
-# payload, so a retry can never change the logical session or model routing.
-# Timeouts are deliberately excluded: they surface as TRANSPORT_TIMEOUT and
-# the segment runner recovers them with a fresh transport at most once.
+# Transient failures before a response are retried against the same request.
+# A started stream is never replayed: its upstream completion is uncertain.
+# Timeouts surface as TRANSPORT_TIMEOUT for bounded segment recovery.
 TRANSPORT_TRANSIENT_MAX_ATTEMPTS = 3
 TRANSPORT_TRANSIENT_RETRY_BACKOFF_SECONDS = 2.0
 # One length-finish retry may raise the output budget once, but the shared
@@ -135,6 +134,14 @@ _TRANSIENT_RETRYABLE_ERRORS: tuple[type[Exception], ...] = (
     APIConnectionError,
     httpx.TransportError,
 )
+
+
+class ProtocolSemanticStreamInterrupted(RuntimeError):
+    """The server started a response; its completion is unknown, so do not resend."""
+
+    def __init__(self, cause: Exception, metadata: Mapping[str, object]):
+        super().__init__(f"方案解构流式回包中断：{type(cause).__name__}")
+        self.metadata = dict(metadata)
 
 
 def _quota_exhausted(error: Exception, backend: str) -> bool:
@@ -436,8 +443,14 @@ class DeepSeekProtocolAgentTransport:
             "backend": self._backend,
             "model": self._model,
             "reasoning_effort": self._reasoning_effort,
+            "response_gate_version": "reported-model-and-stop/v1",
             "request": kwargs,
         }
+        if self._backend in _GRAMMAR_INCOMPATIBLE_BACKENDS:
+            payload["text_contract_mode"] = (
+                "compact_schema_prompt" if self.uses_compact_wire_contract
+                else "no_embedded_schema"
+            )
         from app.llm.mtplx_model_lifecycle import mtplx_deployment_identity
 
         deployment = mtplx_deployment_identity(
@@ -562,31 +575,56 @@ class DeepSeekProtocolAgentTransport:
         reasoning_parts: list[str] = []
         finish_reason: str | None = None
         usage: Any = None
-        for chunk in stream:
-            if getattr(chunk, "usage", None) is not None:
-                usage = chunk.usage
-            choices = getattr(chunk, "choices", None) or []
-            if not choices:
-                continue
-            choice = choices[0]
-            if getattr(choice, "finish_reason", None):
-                finish_reason = choice.finish_reason
-            delta = getattr(choice, "delta", None)
-            if delta is None:
-                continue
-            piece = getattr(delta, "content", None)
-            if piece:
-                content_parts.append(piece)
-            reasoning = getattr(delta, "reasoning_content", None)
-            if reasoning:
-                reasoning_parts.append(reasoning)
+        request_id: str | None = None
+        reported_model: str | None = None
+        def partial_metadata() -> dict[str, object]:
+            content = "".join(content_parts)
+            reasoning = "".join(reasoning_parts)
+            return {
+                "request_id": request_id,
+                "reported_model": reported_model,
+                "finish_reason": finish_reason,
+                "usage": (usage.model_dump(mode="json") if hasattr(usage, "model_dump")
+                          else dict(usage) if isinstance(usage, Mapping) else None),
+                "content_characters": len(content),
+                "reasoning_characters": len(reasoning),
+                "partial_content_sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+            }
+
+        try:
+            for chunk in stream:
+                request_id = request_id or getattr(chunk, "id", None)
+                reported_model = reported_model or getattr(chunk, "model", None)
+                if getattr(chunk, "usage", None) is not None:
+                    usage = chunk.usage
+                choices = getattr(chunk, "choices", None) or []
+                if not choices:
+                    continue
+                choice = choices[0]
+                if getattr(choice, "finish_reason", None):
+                    finish_reason = choice.finish_reason
+                delta = getattr(choice, "delta", None)
+                if delta is None:
+                    continue
+                piece = getattr(delta, "content", None)
+                if piece:
+                    content_parts.append(piece)
+                reasoning = getattr(delta, "reasoning_content", None)
+                if reasoning:
+                    reasoning_parts.append(reasoning)
+        except Exception as exc:  # noqa: BLE001 - provider iterator may fail after dispatch
+            raise ProtocolSemanticStreamInterrupted(exc, partial_metadata()) from exc
+        if finish_reason is None:
+            raise ProtocolSemanticStreamInterrupted(
+                RuntimeError("服务未返回完成状态"), partial_metadata(),
+            )
         message = SimpleNamespace(
             content="".join(content_parts),
             reasoning_content="".join(reasoning_parts),
         )
         return SimpleNamespace(
             choices=[SimpleNamespace(message=message, finish_reason=finish_reason or "未提供")],
-            usage=usage,
+            id=request_id, model=reported_model, usage=usage,
         )
 
     def _send_completion(
@@ -598,10 +636,9 @@ class DeepSeekProtocolAgentTransport:
     ) -> Any:
         """Send one HTTP completion with bounded transient-error retries.
 
-        Every attempt resends the identical request payload, so a retry can
-        never mutate session history or switch the model route.  Only
-        transient 5xx/429/connection failures are retried; timeouts and any
-        other failure surface immediately through the existing boundary.
+        Before-response transient failures may retry the identical request.
+        A stream that started but did not finish is never replayed because its
+        upstream completion is unknown. Timeouts surface through the caller.
         """
         kwargs = self._completion_kwargs(
             request_messages,
@@ -621,13 +658,14 @@ class DeepSeekProtocolAgentTransport:
                     kwargs.setdefault("stream_options", {"include_usage": True})
                     try:
                         stream = self._client.chat.completions.create(**kwargs)
-                        return self._accumulate_stream(stream)
                     except Exception as stream_opt_exc:
                         if "stream_options" not in str(stream_opt_exc):
                             raise
                         kwargs.pop("stream_options", None)
                         stream = self._client.chat.completions.create(**kwargs)
-                        return self._accumulate_stream(stream)
+                    return self._accumulate_stream(stream)
+            except ProtocolSemanticStreamInterrupted:
+                raise
             except _TRANSPORT_TIMEOUT_ERRORS:
                 raise
             except _TRANSIENT_RETRYABLE_ERRORS as exc:
@@ -667,6 +705,13 @@ class DeepSeekProtocolAgentTransport:
                 output_kind=output_kind,
                 max_tokens=request_budget,
             )
+            reported_model = getattr(response, "model", None)
+            if (isinstance(reported_model, str) and reported_model.strip()
+                    and reported_model.strip().casefold() != self._model.casefold()):
+                raise RuntimeError(
+                    "方案解构模型实际回报身份与本次配置不一致，结果未采用："
+                    f"配置={self._model}，回报={reported_model.strip()}"
+                )
             choice = response.choices[0]
             message = choice.message
             text = message.content or ""
@@ -713,6 +758,10 @@ class DeepSeekProtocolAgentTransport:
                     ]
                     continue
                 continue
+            if finish_reason != "stop":
+                raise RuntimeError(
+                    f"方案解构模型未正常完成，结果未采用：{finish_reason}"
+                )
             if text.strip():
                 json_text = _unwrap_complete_json_fence(text)
                 try:
@@ -851,6 +900,11 @@ class DeepSeekProtocolAgentTransport:
         self._histories[session_id] = history
         try:
             text = self._complete(history, output_kind=output_kind)
+        except ProtocolSemanticStreamInterrupted as exc:
+            raise ProtocolAgentCallError(
+                session_id, str(exc), error_code="STREAM_INTERRUPTED",
+                error_metadata=exc.metadata,
+            ) from exc
         except (APITimeoutError, httpx.TimeoutException, TimeoutError) as exc:
             raise ProtocolAgentCallError(
                 session_id,
@@ -883,6 +937,11 @@ class DeepSeekProtocolAgentTransport:
         self._histories[session_id] = history
         try:
             text = self._complete(history, output_kind=output_kind)
+        except ProtocolSemanticStreamInterrupted as exc:
+            raise ProtocolAgentCallError(
+                session_id, str(exc), error_code="STREAM_INTERRUPTED",
+                error_metadata=exc.metadata,
+            ) from exc
         except (APITimeoutError, httpx.TimeoutException, TimeoutError) as exc:
             raise ProtocolAgentCallError(
                 session_id,

@@ -404,24 +404,25 @@ def compile_shared_prohibition_requirement(
                   if item.workflow_stage_id == selection.workflow_stage_id), None)
     if stage is None:
         raise StageBoundCompilationGap("本次判定节点不属于冻结目录")
-    quote = normalize_source_excerpt(statement.quoted_text)
-    clause = re.sub(r"[。；;]+$", "", quote)
-    if not quote or quote not in normalize_source_excerpt(unit.excerpt):
+    raw_quote = statement.quoted_text
+    quote = normalize_source_excerpt(raw_quote)
+    clause = re.sub(r"[。；;]+$", "", re.sub(r"\s+", "", raw_quote))
+    if not quote or raw_quote not in unit.excerpt:
         raise StageBoundCompilationGap("禁止原句不属于冻结来源单元")
     if normalize_source_excerpt(review.source_action_excerpt) not in quote:
         raise StageBoundCompilationGap("禁止动作不得省略已核原文")
-    current = normalize_source_excerpt(selection.current_statement)
-    future = normalize_source_excerpt(selection.future_statement)
+    current = selection.current_statement
+    future = selection.future_statement
     atom_shape = SimpleNamespace(
         statement=current,
         evaluation=SimpleNamespace(proposition=current),
         source_span_ids=unit.source_span_ids,
-        source_excerpts=[quote],
+        source_excerpts=[raw_quote],
         continuing_obligation=SimpleNamespace(
             statement=future,
             status="not_due_at_review_node",
             source_span_ids=unit.source_span_ids,
-            source_excerpts=[quote],
+            source_excerpts=[raw_quote],
         ),
     )
     if not _split_prohibition_atom_covers_clause(clause, atom_shape):
@@ -435,14 +436,15 @@ def compile_shared_prohibition_requirement(
             raise StageBoundCompilationGap("后续时期未明确属于治疗或用药期")
     elif not re.search(r"(?:随机|基线|给药|入组)后", future_prefix):
         raise StageBoundCompilationGap("研究期未明确从本次审核节点以后开始")
-    if current_prefix not in normalize_source_excerpt(selection.observation_scope) or (
-        future_prefix in normalize_source_excerpt(selection.observation_scope)
+    if normalize_source_excerpt(current_prefix) not in normalize_source_excerpt(selection.observation_scope) or (
+        normalize_source_excerpt(future_prefix) in normalize_source_excerpt(selection.observation_scope)
     ):
         raise StageBoundCompilationGap("本次观察范围不得包含后续时期")
     stage_texts = [normalize_source_excerpt(" ".join(filter(None, (
         item.display_name, item.visit_instance, item.visit_window
     )))) for item in batch.known_workflow_stage_targets]
-    stage_parts = [part.rstrip("期") for part in re.split(r"[/、和及与]", current_prefix) if part]
+    stage_parts = [normalize_source_excerpt(part).rstrip("期")
+                   for part in re.split(r"[/、和及与]", current_prefix) if part]
     matching = [item.review_stage for item, text in zip(batch.known_workflow_stage_targets,
                                                          stage_texts, strict=True)
                 if any(part and part in text for part in stage_parts)]
@@ -467,8 +469,8 @@ def compile_shared_prohibition_requirement(
                     "time_purpose": "not_applicable",
                     "repeat_scheme": None,
                     "observation_policy": {"mode": "unresolved", "scope": selection.observation_scope,
-                                           "source_span_ids": spans, "source_excerpts": [quote]},
-                    "source_span_ids": spans, "source_excerpts": [quote],
+                                           "source_span_ids": spans, "source_excerpts": [raw_quote]},
+                    "source_span_ids": spans, "source_excerpts": [raw_quote],
                 },
                 "time_constraint": None,
                 "prospective_period": None,
@@ -476,12 +478,12 @@ def compile_shared_prohibition_requirement(
                     "statement": future,
                     "prospective_period": {"period": selection.prospective_period.value},
                     "source_span_ids": spans,
-                    "source_excerpts": [quote],
+                    "source_excerpts": [raw_quote],
                     "status": "not_due_at_review_node",
                 },
                 "modality": "mandatory",
                 "temporal_scope": None,
-                "source_span_ids": spans, "source_excerpts": [quote],
+                "source_span_ids": spans, "source_excerpts": [raw_quote],
                 "requires_professional_judgment": False,
             }], "applies_to_trigger_branch_indexes": []}]},
             "exception_expression": None,
@@ -504,7 +506,7 @@ def compile_shared_prohibition_requirement(
                     "result_validity_status": "not_specified",
                     "result_validity_constraint": None,
                     "source_span_ids": spans,
-                    "source_excerpts": [quote],
+                    "source_excerpts": [raw_quote],
                 },
                 "atom_refs": [{"layer": "obligation", "group_index": 0, "atom_index": 0}],
             }],

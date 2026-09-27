@@ -77,6 +77,7 @@ const notes: Readonly<Record<string, string>> = {
   repeat_result_polarity_unverified: "尚未核清原文对这项结果的表述，暂不能作为数值参与计算。",
   repeat_result_numeric_value_missing: "现有记录尚无可直接计算的明确数值。",
   repeat_result_unit_unverified: "拟合并结果的单位尚未核对一致，暂不能计算。",
+  repeat_result_acquisition_overlap: "同一条检查记录被重复列入多次检查，暂不能据此计算平均值；请核对原始记录的每次采集。",
   repeat_same_acquisition_value_conflict: "同一次检查在不同资料中的结果不一致，需先核对原件，不能取平均值消除差异。",
   repeat_result_requires_proposition_calculation: "本项需要逐次判断是否满足方案条件，不能直接对数值进行合并。",
   prospective_scope_unverified: "尚未核清相关安排是否覆盖方案要求的未来期间，不能以既往记录代替。",

@@ -73,3 +73,4 @@ export {
   type FactCorrectionSubmitView,
 } from "./factCorrectionViewModels";
 export type { LocatorView } from "../evidence/evidenceProcessingViewModels";
+export type { FactSourceReadingView } from "./factSourceReadings";

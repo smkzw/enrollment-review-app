@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunResult
 from app.domain.contracts.agent_io import ProtocolDeconstructionDraft, ProtocolDeconstructionInput
 from app.domain.contracts.agents import GateResult
 from app.domain.contracts.control_catalog_publication import (
@@ -15,7 +16,8 @@ from app.domain.contracts.enums import GateOutcome
 from app.domain.contracts.protocol_controls import (
     KnownRequiredProcedureTarget, ProtocolControlBatchDispositionHydrated,
     ProtocolControlSourceUnitRelation,
-    ProtocolControlBatchPlan, ProtocolSectionCoverageManifest,
+    ProtocolControlBatchPlan, ProtocolControlDiscoveryToDeepPlan,
+    ProtocolSectionCoverageManifest,
 )
 from app.domain.contracts.rules import EvidenceRequirement, RuleSet, WorkflowStage
 from app.domain.contracts.protocol_ingestion import ProtocolSourceSpan
@@ -26,7 +28,7 @@ from app.protocols.control_catalog_materialization import (
 from app.protocols.protocol_control_gate import CONTROL_PUBLICATION_GATE_VERSION
 from app.services.protocol_control_execution import (
     CANDIDATE_CONTROL_PACKAGE_RESULT_KIND, FORMAL_CATALOG_STATUS_NOT_MATERIALIZED,
-    PROTOCOL_CONTROL_JOB_TYPE, STEP_GATE,
+    PROTOCOL_CONTROL_JOB_TYPE, STEP_CLOSURE, STEP_GATE,
 )
 from app.storage.codecs import verify_payload_sha256
 from app.storage.control_catalog_repository import ControlCatalogPublicationRepository
@@ -39,6 +41,41 @@ from app.storage.repositories import (
 from app.projections.control_evidence_requirements import shared_control_requirements
 from app.projections.evidence_expectation_templates import project_evidence_expectation_templates
 from app.workflow.jobstore import JobStore
+
+
+def _require_source_calculations_consumable(
+    store: JobStore, source_job_id: str,
+) -> None:
+    """Textual rule coverage cannot certify a source-defined calculation."""
+    closure = store.get_last_checkpoint(source_job_id, STEP_CLOSURE)
+    if closure is None:
+        raise ScopeViolationError("补充审核要求缺少已冻结的来源分包")
+    plan = ProtocolControlDiscoveryToDeepPlan.model_validate(closure[1]["deep_plan"])
+    steps = closure[1].get("deep_step_ids")
+    if not isinstance(steps, list) or len(steps) != len(plan.batches):
+        raise ScopeViolationError("补充审核要求的逐批来源核对身份不完整")
+    for batch, entry in zip(plan.batches, steps, strict=True):
+        if not isinstance(entry, Mapping) or entry.get("batch_id") != batch.batch_id:
+            raise ScopeViolationError("补充审核要求的逐批来源核对身份不一致")
+        step_id = entry.get("step_id")
+        if not isinstance(step_id, str):
+            raise ScopeViolationError("补充审核要求的逐批来源核对步骤缺失")
+        checkpoint = store.get_last_checkpoint(source_job_id, step_id)
+        if checkpoint is None:
+            raise ScopeViolationError("补充审核要求的逐批来源核对尚未完成")
+        run = ProtocolControlAgentRunResult.model_validate(checkpoint[1].get("run_result"))
+        interpretation = run.source_interpretation
+        if run.batch_id != batch.batch_id or interpretation is None:
+            raise ScopeViolationError("补充审核要求的逐批来源解释与冻结分包不一致")
+        pending = [
+            index for index, statement in enumerate(interpretation.statements)
+            if "calculation_input" in statement.decision_functions
+        ]
+        if pending:
+            raise ScopeViolationError(
+                "方案中的计算定义尚无可核验的正式求值方式，不能仅凭条款文字对应发布"
+                f"（批次 {batch.batch_number}，陈述 {pending[0]}）"
+            )
 
 
 def prepare_control_catalog_publication(
@@ -102,6 +139,8 @@ def prepare_control_catalog_publication(
         or result.get("coverage_manifest_id") != coverage_manifest.manifest_id
     ):
         raise ScopeViolationError("补充审核要求的最终核对记录不完整或版本不一致")
+
+    _require_source_calculations_consumable(JobStore(session), source_job_id)
 
     plan = ProtocolControlBatchPlan.model_validate(result["publication_plan"])
     batches = tuple(ProtocolControlBatchDispositionHydrated.model_validate(item)

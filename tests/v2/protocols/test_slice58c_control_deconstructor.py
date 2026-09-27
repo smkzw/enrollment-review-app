@@ -93,10 +93,13 @@ from app.agents.protocol_control_source_interpretation import (
     SourceUnitComparison,
     SourceTargetReviewValidationError,
     build_source_interpretation_prompt,
+    parse_product_source_interpretation,
+    source_interpretation_response_format,
     build_source_quote_correction_prompt,
     build_source_scope_correction_prompt,
     apply_source_scope_correction,
     build_source_target_review_prompt,
+    source_target_review_response_format,
     build_source_unit_comparison_prompt,
     target_review_indexes,
     schedule_column_links,
@@ -172,6 +175,14 @@ def _unit(unit_id: str, order: int, span_id: str, excerpt: str) -> ProtocolStruc
         phase_scopes=[PhaseScope.SHARED],
         excerpt=excerpt,
     )
+
+
+def _source_inventory(payload: dict) -> SourceInterpretation:
+    # Legacy synthetic fixtures predate the required product-reader function field.
+    material = deepcopy(payload)
+    for statement in material.get("statements", []):
+        statement.setdefault("decision_functions", ["action"])
+    return SourceInterpretation.model_validate(material)
 
 
 def _batch() -> ProtocolControlDispositionBatch:
@@ -1721,7 +1732,7 @@ def test_source_interpretation_is_source_bound_and_not_a_rule() -> None:
         ],
         "units_without_statement": [],
     }
-    inventory = SourceInterpretation.model_validate(payload)
+    inventory = _source_inventory(payload)
     validate_source_interpretation(batch, inventory)
     assert '"time_words":[]' in build_source_interpretation_prompt(batch)
     assert f'"version":"{SOURCE_INTERPRETATION_VERSION}"' in build_source_interpretation_prompt(batch)
@@ -1735,11 +1746,11 @@ def test_source_interpretation_is_source_bound_and_not_a_rule() -> None:
     assert [item["structure_unit_id"] for item in prompt_input["owned"]] == ["su-01", "su-02"]
     payload["statements"][1]["quoted_text"] = "筛选前六个月内停止治疗"
     with pytest.raises(ValueError, match="不属于冻结来源"):
-        validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+        validate_source_interpretation(batch, _source_inventory(payload))
     payload["statements"][1]["quoted_text"] = "筛选时记录末次用药日期"
     payload["statements"][1]["time_words"] = ["筛选时", "治疗后六周"]
     with pytest.raises(SourceInterpretationValidationError, match="时间措辞不属于本条陈述") as error:
-        validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+        validate_source_interpretation(batch, _source_inventory(payload))
     assert error.value.code == "SOURCE_TIME_UNGROUNDED"
     assert error.value.statement_id == 1
     assert error.value.structure_unit_id == "su-02"
@@ -1747,11 +1758,11 @@ def test_source_interpretation_is_source_bound_and_not_a_rule() -> None:
     assert error.value.retry_class == "correct_source_scope"
     assert error.value.source_refs
     payload["statements"][1]["time_words"] = ["筛选时", "末次用药日期"]
-    validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+    validate_source_interpretation(batch, _source_inventory(payload))
     payload["statements"][1]["quoted_text"] = "末次用药日期"
     payload["statements"][1]["time_words"] = ["筛选时"]
     with pytest.raises(ValueError, match="时间措辞不属于本条陈述"):
-        validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+        validate_source_interpretation(batch, _source_inventory(payload))
 
 
 def test_shared_scope_must_precede_the_action_and_survive_target_review() -> None:
@@ -1771,21 +1782,21 @@ def test_shared_scope_must_precede_the_action_and_survive_target_review() -> Non
         }],
         "units_without_statement": ["su-01"],
     }
-    validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+    validate_source_interpretation(batch, _source_inventory(payload))
     payload["statements"][0]["quoted_text"] = "筛选期（D-7~D-1）：记录末次用药日期"
-    validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+    validate_source_interpretation(batch, _source_inventory(payload))
     payload["statements"][0]["quoted_text"] = "记录末次用药日期"
     payload["statements"][0]["scope_quote"] = "治疗后七天"
     with pytest.raises(ValueError, match="共享范围须来自陈述之前"):
-        validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+        validate_source_interpretation(batch, _source_inventory(payload))
     payload["statements"][0]["scope_quote"] = "筛选期（D-7~D-1）"
     payload["statements"][0]["time_words"] = []
     with pytest.raises(ValueError, match="明确阶段范围不得从时间措辞中遗漏"):
-        validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+        validate_source_interpretation(batch, _source_inventory(payload))
     payload["statements"][0]["affected_stage"] = None
     payload["statements"][0]["quoted_text"] = "治疗后七天核对其他资料"
     payload["statements"][0]["time_words"] = ["治疗后七天"]
-    validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+    validate_source_interpretation(batch, _source_inventory(payload))
 
 
 def test_previous_action_time_is_not_a_shared_scope_across_clause_boundary() -> None:
@@ -1800,21 +1811,21 @@ def test_previous_action_time_is_not_a_shared_scope_across_clause_boundary() -> 
         "units_without_statement": ["su-01"],
     }
     with pytest.raises(SourceInterpretationValidationError) as error:
-        validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+        validate_source_interpretation(batch, _source_inventory(payload))
     assert error.value.code == "SOURCE_SCOPE_UNGROUNDED"
 
     batch.owned_units[1].excerpt = "筛选期：记录末次用药日期；核对其他资料。"
     payload["statements"][0].update(
         quoted_text="核对其他资料", scope_quote="筛选期", time_words=["筛选期"],
     )
-    validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+    validate_source_interpretation(batch, _source_inventory(payload))
 
     batch.owned_units[1].excerpt = "筛选期记录末次用药日期。治疗后核对其他资料。"
     payload["statements"][0].update(
         quoted_text="治疗后核对其他资料", scope_quote="筛选期", time_words=["治疗后"],
     )
     with pytest.raises(SourceInterpretationValidationError) as error:
-        validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+        validate_source_interpretation(batch, _source_inventory(payload))
     assert error.value.code == "SOURCE_SCOPE_UNGROUNDED"
 
 
@@ -1832,13 +1843,13 @@ def test_leading_colon_scope_covers_later_sentence_but_not_next_scope() -> None:
         }],
         "units_without_statement": ["su-01"],
     }
-    validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+    validate_source_interpretation(batch, _source_inventory(payload))
 
     batch.owned_units[1].excerpt = (
         "筛选期：记录既往用药。基线期：受试者接受规定的背景治疗。"
     )
     with pytest.raises(SourceInterpretationValidationError) as error:
-        validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+        validate_source_interpretation(batch, _source_inventory(payload))
     assert error.value.code == "SOURCE_SCOPE_UNGROUNDED"
 
 
@@ -1854,11 +1865,11 @@ def test_leading_visit_scope_covers_parallel_clauses_without_new_time() -> None:
         }],
         "units_without_statement": ["su-01"],
     }
-    validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+    validate_source_interpretation(batch, _source_inventory(payload))
     batch.owned_units[1].excerpt = "基线时完成甲检查；治疗后乙检查。"
     payload["statements"][0]["quoted_text"] = "治疗后乙检查"
     with pytest.raises(SourceInterpretationValidationError) as error:
-        validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+        validate_source_interpretation(batch, _source_inventory(payload))
     assert error.value.code == "SOURCE_SCOPE_UNGROUNDED"
 
 
@@ -1892,11 +1903,11 @@ def test_nested_clinical_lookback_is_detected_for_target_review() -> None:
         }],
         "units_without_statement": ["su-01"],
     }
-    interpretation = SourceInterpretation.model_validate(payload)
+    interpretation = _source_inventory(payload)
     validate_source_interpretation(batch, interpretation)
     assert _unreported_time_fragments(interpretation.statements[0]) == ["1年内"]
     payload["statements"][0]["time_words"].append("1年内")
-    validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+    validate_source_interpretation(batch, _source_inventory(payload))
 
 
 def test_shared_scope_can_quote_the_owned_table_row_header() -> None:
@@ -1913,10 +1924,10 @@ def test_shared_scope_can_quote_the_owned_table_row_header() -> None:
         }],
         "units_without_statement": ["su-02"],
     }
-    validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+    validate_source_interpretation(batch, _source_inventory(payload))
     payload["statements"][0]["scope_quote"] = "相邻行适用范围"
     with pytest.raises(ValueError, match="共享范围须来自"):
-        validate_source_interpretation(batch, SourceInterpretation.model_validate(payload))
+        validate_source_interpretation(batch, _source_inventory(payload))
 
 
 def test_repair_guidance_distinguishes_same_stage_and_cross_stage() -> None:
@@ -1938,7 +1949,7 @@ def test_repair_guidance_distinguishes_same_stage_and_cross_stage() -> None:
 
 def test_real_transport_inventory_is_checked_before_full_wire() -> None:
     batch = _batch()
-    source = SourceInterpretation.model_validate({
+    source = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [
             {"structure_unit_id": "su-01", "quoted_text": "年龄至少18岁", "force": "required", "time_words": []},
@@ -1982,7 +1993,7 @@ def test_invalid_source_inventory_keeps_response_session_identity() -> None:
 
 
 def test_source_inventory_rechecks_unlocated_scope_once_without_inventing_it() -> None:
-    valid = SourceInterpretation.model_validate({
+    valid = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{"structure_unit_id": "su-01", "quoted_text": "年龄至少18岁",
                         "force": "required", "time_words": []}],
@@ -2018,7 +2029,7 @@ def test_source_inventory_rechecks_unlocated_scope_once_without_inventing_it() -
 def test_source_scope_repair_targets_statement_not_shared_unit_label() -> None:
     batch = _batch().model_copy(deep=True)
     batch.owned_units[1].excerpt = "筛选时记录末次用药日期；治疗后七天核对其他资料。"
-    invalid = SourceInterpretation.model_validate({
+    invalid = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [
             {"structure_unit_id": "su-02", "quoted_text": "筛选时记录末次用药日期",
@@ -2058,7 +2069,7 @@ def test_source_scope_repair_targets_statement_not_shared_unit_label() -> None:
 def test_two_invalid_scopes_in_one_unit_are_corrected_separately() -> None:
     batch = _batch().model_copy(deep=True)
     batch.owned_units[1].excerpt = "筛选时记录末次用药日期；治疗后七天核对其他资料。"
-    invalid = SourceInterpretation.model_validate({
+    invalid = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [
             {"structure_unit_id": "su-02", "quoted_text": "筛选时记录末次用药日期",
@@ -2125,7 +2136,7 @@ def test_source_list_introduction_and_time_repair_have_explicit_contracts() -> N
 
 
 def test_source_inventory_corrects_one_nearby_quote_without_rewriting_batch() -> None:
-    invalid = SourceInterpretation.model_validate({
+    invalid = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{"structure_unit_id": "su-01", "quoted_text": "年龄至少18周岁",
                         "force": "required", "time_words": []}],
@@ -2161,7 +2172,7 @@ def test_source_inventory_corrects_one_nearby_quote_without_rewriting_batch() ->
 def test_source_inventory_corrects_embedded_eligibility_basis_locally() -> None:
     batch = _batch().model_copy(deep=True)
     batch.owned_units[1].excerpt = "经入排标准判定符合后，筛选时记录末次用药日期并核对既往用药剂量与停药时间"
-    invalid = SourceInterpretation.model_validate({
+    invalid = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{
             "structure_unit_id": "su-02",
@@ -2198,7 +2209,7 @@ def test_source_inventory_corrects_embedded_eligibility_basis_locally() -> None:
 
 
 def test_source_inventory_rejects_quote_correction_that_changes_number() -> None:
-    invalid = SourceInterpretation.model_validate({
+    invalid = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{"structure_unit_id": "su-01", "quoted_text": "年龄至少16岁",
                         "force": "required", "time_words": []}],
@@ -2230,7 +2241,7 @@ def test_source_inventory_rejects_quote_correction_that_changes_number() -> None
 
 def test_source_coverage_requires_direct_atom_quote_not_candidate_unit_only() -> None:
     batch = _batch()
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [
             {"structure_unit_id": "su-01", "quoted_text": "年龄至少18岁", "force": "required", "time_words": []},
@@ -2320,7 +2331,7 @@ def test_source_coverage_accepts_literal_split_but_not_missing_connector() -> No
     })
     group.atoms = [first, second]
     wire = _wire(candidate=candidate)
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{"structure_unit_id": "su-01", "quoted_text": sentence,
                         "force": "required", "time_words": []}],
@@ -2332,6 +2343,261 @@ def test_source_coverage_accepts_literal_split_but_not_missing_connector() -> No
     assert source_statement_coverage(batch, inventory, wire)[0].status == "candidate_linked"
 
 
+def test_source_coverage_does_not_treat_whole_sentence_citation_as_whole_action() -> None:
+    batch = _batch().model_copy(deep=True)
+    source = "筛选期和研究结束访视均须核查同一记录"
+    batch.owned_units[0].excerpt = source
+    inventory = _source_inventory({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [{"structure_unit_id": "su-01", "quoted_text": source,
+                        "force": "required", "time_words": ["筛选期", "研究结束访视"]}],
+        "units_without_statement": ["su-02"],
+    })
+    candidate = _candidate().model_copy(deep=True)
+    atom = candidate.obligation_expression.groups[0].atoms[0]
+    atom.statement = "筛选期须核查同一记录"
+    atom.source_excerpts = [source]
+    partial = source_statement_coverage(batch, inventory, _wire(candidate=candidate))[0]
+    assert partial.status == "candidate_linked"
+    assert partial.action_candidate_indexes == []
+    assert "obligation" not in partial.matched_roles
+
+    atom.statement = source
+    complete = source_statement_coverage(batch, inventory, _wire(candidate=candidate))[0]
+    assert complete.status == "expressed"
+    assert complete.action_candidate_indexes == [0]
+
+
+def test_descriptive_decision_input_is_reviewed_even_when_same_unit_has_candidate() -> None:
+    batch = _batch().model_copy(deep=True)
+    batch.owned_units[0].excerpt = "审核值取最近两次检查的平均值；筛选时记录结果。"
+    inventory = SourceInterpretation(
+        version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(
+            structure_unit_id="su-01",
+            quoted_text="审核值取最近两次检查的平均值",
+            force="descriptive", decision_functions=["definition", "calculation_input"],
+            time_words=[],
+        )], units_without_statement=["su-02"],
+    )
+    validate_source_interpretation(batch, inventory)
+    coverage = [SourceStatementCoverage(
+        statement_index=0, structure_unit_id="su-01",
+        disposition="other_control_candidate", status="candidate_linked",
+        linked_candidate_indexes=[0],
+    )]
+    assert target_review_indexes(inventory, coverage, batch) == [0]
+    with pytest.raises(SourceTargetReviewValidationError, match="逐项来源核对"):
+        validate_source_target_review(batch, inventory, coverage,
+                                      SourceTargetReview(version=SOURCE_TARGET_REVIEW_VERSION, items=[]))
+
+    candidate = _candidate().model_copy(deep=True)
+    candidate.applicability_expression.groups[0].atoms[0].source_excerpts = [batch.owned_units[0].excerpt]
+    candidate.obligation_expression.groups[0].atoms[0].source_excerpts = [batch.owned_units[0].excerpt]
+    production_coverage = source_statement_coverage(batch, inventory, _wire(candidate=candidate))
+    assert production_coverage[0].status == "candidate_linked"
+    assert target_review_indexes(inventory, production_coverage, batch) == [0]
+    candidate.obligation_expression.groups[0].atoms[0].statement = inventory.statements[0].quoted_text
+    production_coverage = source_statement_coverage(batch, inventory, _wire(candidate=candidate))
+    assert production_coverage[0].status == "expressed"
+
+
+def test_sibling_statements_need_distinct_obligation_evidence() -> None:
+    batch = _batch().model_copy(deep=True)
+    first, second = "筛选时记录甲项", "筛选时记录乙项"
+    batch.owned_units[0].excerpt = f"{first}；{second}。"
+    inventory = _source_inventory({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [
+            {"structure_unit_id": "su-01", "quoted_text": quote,
+             "force": "required", "time_words": ["筛选时"]}
+            for quote in (first, second)
+        ],
+        "units_without_statement": ["su-02"],
+    })
+    validate_source_interpretation(batch, inventory)
+    candidate = _candidate().model_copy(deep=True)
+    atom = candidate.obligation_expression.groups[0].atoms[0]
+    atom.statement = batch.owned_units[0].excerpt
+    atom.source_excerpts = [batch.owned_units[0].excerpt]
+    shared = source_statement_coverage(batch, inventory, _wire(candidate=candidate))
+    assert [entry.status for entry in shared] == ["candidate_linked", "candidate_linked"]
+    assert target_review_indexes(inventory, shared, batch) == [0, 1]
+
+    candidate.obligation_expression.groups[0].atoms = [
+        atom.model_copy(update={"statement": quote, "source_excerpts": [quote]})
+        for quote in (first, second)
+    ]
+    independent = source_statement_coverage(batch, inventory, _wire(candidate=candidate))
+    assert [entry.status for entry in independent] == ["expressed", "expressed"]
+    assert target_review_indexes(inventory, independent, batch) == []
+
+
+def test_background_exit_requires_source_and_cannot_hide_candidate() -> None:
+    batch = _batch().model_copy(deep=True)
+    batch.owned_units[0].excerpt = "预计样本量约二百人；筛选时记录结果。"
+    inventory = SourceInterpretation(
+        version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(
+            structure_unit_id="su-01", quoted_text="预计样本量约二百人",
+            force="descriptive", decision_functions=["background"], time_words=[],
+        )], units_without_statement=["su-02"],
+    )
+    coverage = [SourceStatementCoverage(
+        statement_index=0, structure_unit_id="su-01",
+        disposition="supporting_or_supplement", status="candidate_linked",
+    )]
+    review = SourceTargetReview.model_validate({
+        "version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{"statement_index": 0, "decision": "background_context",
+                   "source_action_excerpt": "预计样本量约二百人",
+                   "non_control_basis_excerpt": "预计样本量约二百人"}],
+    })
+    validate_source_interpretation(batch, inventory)
+    validate_source_target_review(batch, inventory, coverage, review)
+    with pytest.raises(SourceTargetReviewValidationError, match="不能同时形成候选控制"):
+        validate_source_target_review(batch, inventory,
+                                      [coverage[0].model_copy(update={"candidate_indexes": [0]})], review)
+    with pytest.raises(SourceTargetReviewValidationError, match="原文及功能分类"):
+        validate_source_target_review(batch, inventory, [coverage[0].model_copy(update={
+            "exact_official_excerpt_matches": ["EX-01"],
+        })], review)
+    with pytest.raises(SourceTargetReviewValidationError, match="原文及功能分类"):
+        wrong = review.model_copy(deep=True)
+        wrong.items[0].non_control_basis_excerpt = "未见条款"
+        validate_source_target_review(batch, inventory, coverage, wrong)
+    with pytest.raises(ValueError, match="不能与决策功能并列"):
+        SourceStatement(structure_unit_id="su-01", quoted_text="预计样本量约二百人",
+                        force="descriptive", decision_functions=["background", "threshold"], time_words=[])
+    inventory.statements[0].force = "required"
+    with pytest.raises(SourceTargetReviewValidationError, match="原文及功能分类"):
+        validate_source_target_review(batch, inventory, coverage, review)
+
+
+def test_unclassified_source_cannot_be_closed_by_matching_candidate_text() -> None:
+    batch = _batch()
+    inventory = SourceInterpretation(
+        version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(
+            structure_unit_id="su-01", quoted_text="年龄至少18岁", force="unclear",
+            decision_functions=["unclassified"], time_words=[], unresolved=["用途未核清"],
+        )], units_without_statement=["su-02"],
+    )
+    candidate = _candidate().model_copy(deep=True)
+    candidate.obligation_expression.groups[0].atoms[0].statement = "年龄至少18岁"
+    coverage = source_statement_coverage(batch, inventory, _wire(candidate=candidate))
+    assert coverage[0].status != "expressed"
+    assert target_review_indexes(inventory, coverage, batch) == [0]
+    claimed_covered = SourceTargetReview.model_validate({
+        "version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{"statement_index": 0, "decision": "covered_by_official",
+                   "source_action_excerpt": "年龄至少18岁", "target_id": "EX-01",
+                   "target_action_excerpt": "年龄至少18岁"}],
+    })
+    with pytest.raises(SourceTargetReviewValidationError) as error:
+        validate_source_target_review(batch, inventory, coverage, claimed_covered)
+    assert error.value.code == "SOURCE_FUNCTION_UNRESOLVED"
+    unresolved = SourceTargetReview.model_validate({
+        "version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{"statement_index": 0, "decision": "unresolved",
+                   "source_action_excerpt": "年龄至少18岁",
+                   "unresolved_aspects": ["原文对本节点审核的用途尚未核清"]}],
+    })
+    validate_source_target_review(batch, inventory, coverage, unresolved)
+
+
+def test_shared_procedure_paragraph_does_not_prove_every_visit_scope() -> None:
+    batch = _batch().model_copy(deep=True)
+    paragraph = (
+        "筛选期和EOS需完成甲检查，其余访视可完成乙检查。"
+        "W0可接受给药前7天内乙检查结果。"
+        "筛选期及首次给药前完成丙检查。"
+        "除筛选期外其余访视完成丁检查。"
+    )
+    batch.owned_units[0].excerpt = paragraph
+    batch.known_procedure_targets = [
+        KnownRequiredProcedureTarget(
+            catalog_item_id=f"procedure-{visit}", label="检查",
+            visit_instance=visit, review_stage=stage, position=index,
+            source_span_ids=["span:shared"], source_excerpts=[paragraph],
+        )
+        for index, (visit, stage) in enumerate((
+            ("筛选访视", ReviewStage.SCREENING),
+            ("基线访视 / W0", ReviewStage.BASELINE),
+        ))
+    ]
+
+    def check(quote: str, time_words: list[str], target_id: str,
+              decision: str = "covered_by_procedure") -> None:
+        inventory = SourceInterpretation(
+            version=SOURCE_INTERPRETATION_VERSION,
+            statements=[SourceStatement(
+                structure_unit_id="su-01", quoted_text=quote,
+                force="required", decision_functions=["action"], time_words=time_words,
+            )], units_without_statement=["su-02"],
+        )
+        coverage = [SourceStatementCoverage(
+            statement_index=0, structure_unit_id="su-01",
+            disposition="required_procedure", status="not_located",
+        )]
+        review = SourceTargetReview.model_validate({
+            "version": SOURCE_TARGET_REVIEW_VERSION,
+            "items": [{
+                "statement_index": 0, "decision": decision,
+                "target_id": target_id, "source_action_excerpt": quote,
+                "target_action_excerpt": quote,
+                "source_time_excerpt": quote if time_words else None,
+                "target_time_excerpt": quote if time_words else None,
+                "unresolved_aspects": [] if decision == "covered_by_procedure" else ["访视范围待核"],
+            }],
+        })
+        validate_source_target_review(batch, inventory, coverage, review)
+
+    with pytest.raises(SourceTargetReviewValidationError) as other_visit:
+        check("其余访视可完成乙检查", ["其余访视"], "procedure-筛选访视")
+    assert other_visit.value.code == "TARGET_VISIT_SCOPE_UNPROVEN"
+    with pytest.raises(SourceTargetReviewValidationError) as omitted_time:
+        check("其余访视可完成乙检查", [], "procedure-筛选访视")
+    assert omitted_time.value.code == "SOURCE_TIME_INCOMPLETE"
+    with pytest.raises(SourceTargetReviewValidationError) as mixed_visit:
+        check("筛选期和EOS需完成甲检查", ["筛选期", "EOS"], "procedure-筛选访视")
+    assert mixed_visit.value.code == "TARGET_VISIT_SCOPE_UNPROVEN"
+    with pytest.raises(SourceTargetReviewValidationError) as parallel_visit:
+        check("筛选期及首次给药前完成丙检查", ["筛选期", "首次给药前"],
+              "procedure-筛选访视")
+    assert parallel_visit.value.code == "TARGET_VISIT_SCOPE_UNPROVEN"
+    with pytest.raises(SourceTargetReviewValidationError) as excluded_visit:
+        check("除筛选期外其余访视完成丁检查", ["筛选期", "其余访视"],
+              "procedure-筛选访视")
+    assert excluded_visit.value.code == "TARGET_VISIT_SCOPE_UNPROVEN"
+    batch.known_procedure_targets[1].source_excerpts[0] = paragraph.replace(
+        "W0可接受给药前7天内乙检查结果。", "W0可接受给药前7天内乙检查结果；"
+    )
+    with pytest.raises(SourceTargetReviewValidationError) as formatting:
+        check("其余访视可完成乙检查", ["其余访视"], "procedure-筛选访视")
+    assert formatting.value.code == "TARGET_VISIT_SCOPE_UNPROVEN"
+    check("W0可接受给药前7天内乙检查结果", ["W0", "给药前7天内"],
+          "procedure-基线访视 / W0")
+    check("其余访视可完成乙检查", ["其余访视"], "procedure-筛选访视",
+          "additional_requirement")
+
+
+def test_source_coverage_rejects_cross_statement_identity() -> None:
+    inventory = _source_inventory({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [{"structure_unit_id": "su-01", "quoted_text": "年龄至少18岁",
+                        "force": "required", "time_words": []}],
+        "units_without_statement": ["su-02"],
+    })
+    wrong = SourceStatementCoverage(
+        statement_index=0, structure_unit_id="su-02",
+        disposition="other_control_candidate", status="candidate_linked",
+    )
+    with pytest.raises(SourceTargetReviewValidationError) as error:
+        target_review_indexes(inventory, [wrong], _batch())
+    assert error.value.code == "SOURCE_COVERAGE_IDENTITY_INVALID"
+
+
 def test_post_eligibility_action_requires_source_order_and_no_current_candidate() -> None:
     batch = _batch()
     batch.owned_units[0].excerpt = (
@@ -2341,7 +2607,7 @@ def test_post_eligibility_action_requires_source_order_and_no_current_candidate(
         version=SOURCE_INTERPRETATION_VERSION,
         statements=[SourceStatement(
             structure_unit_id="su-01", quoted_text="随机分组并给予研究治疗",
-            force="required", time_words=[],
+            force="required", decision_functions=["action"], time_words=[],
             eligibility_sequence="after_eligibility_decision",
             eligibility_sequence_quote="先确认符合入排条件的受试者",
         )],
@@ -2410,8 +2676,8 @@ def test_cited_external_rationale_closes_only_its_own_statement() -> None:
         version=SOURCE_INTERPRETATION_VERSION,
         statements=[
             SourceStatement(
-                structure_unit_id="su-01", quoted_text="识别对对照处理有反应者（予以排除）",
-                force="prohibited", time_words=[],
+                    structure_unit_id="su-01", quoted_text="识别对对照处理有反应者（予以排除）",
+                    force="prohibited", decision_functions=["background"], time_words=[],
                 control_authority="cited_external_rationale", attribution_quote="某共识建议",
             ),
             SourceStatement(
@@ -2505,7 +2771,7 @@ def test_runner_keeps_external_rationale_out_of_new_control() -> None:
         version=SOURCE_INTERPRETATION_VERSION,
         statements=[SourceStatement(
             structure_unit_id="su-01", quoted_text="识别对照反应者（予以排除）",
-            force="prohibited", time_words=[],
+            force="prohibited", decision_functions=["background"], time_words=[],
             control_authority="cited_external_rationale", attribution_quote="某共识建议",
         )], units_without_statement=["su-02"],
     )
@@ -2585,7 +2851,7 @@ def test_source_target_review_requires_real_target_excerpts_and_matching_time() 
     batch.known_official_targets[0].source_excerpts = ["年龄至少18岁"]
     batch.known_procedure_targets[0].source_excerpts = ["记录末次用药日期"]
     batch.known_procedure_targets[0].visit_instance = "筛选时"
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [
             {"structure_unit_id": "su-01", "quoted_text": "其他控制：年龄至少18岁", "force": "required", "time_words": []},
@@ -2718,6 +2984,50 @@ def test_source_target_review_requires_real_target_excerpts_and_matching_time() 
     )
 
 
+def test_source_target_review_does_not_relabel_old_receipts_as_current() -> None:
+    current = json.dumps({"version": SOURCE_TARGET_REVIEW_VERSION, "items": []})
+    for prior_version in ("phase5/control-source-target-review/v17",
+                          "phase5/control-source-target-review/v20"):
+        with pytest.raises(ValidationError):
+            SourceTargetReview.model_validate_json(json.dumps({
+                "version": prior_version, "items": [],
+            }))
+    assert SourceTargetReview.model_validate_json(current).version == SOURCE_TARGET_REVIEW_VERSION
+    assert (source_target_review_response_format()["json_schema"]["schema"]["properties"]["version"]["const"]
+            == SOURCE_TARGET_REVIEW_VERSION)
+
+
+def test_product_source_reader_must_name_function_or_explain_unknown() -> None:
+    payload = {
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [{
+            "structure_unit_id": "su-01", "quoted_text": "完成筛选检查",
+            "force": "required", "time_words": [],
+        }],
+        "units_without_statement": [],
+    }
+    statement_schema = source_interpretation_response_format()["json_schema"]["schema"]["$defs"]["SourceStatement"]
+    required = statement_schema["required"]
+    assert "decision_functions" in required
+    assert "default" not in statement_schema["properties"]["decision_functions"]
+    with pytest.raises(SourceInterpretationValidationError) as missing:
+        parse_product_source_interpretation(_batch(), json.dumps(payload))
+    assert missing.value.code == "SOURCE_FUNCTION_UNSTATED"
+    payload["statements"][0]["decision_functions"] = ["unclassified"]
+    with pytest.raises(SourceInterpretationValidationError) as unclear:
+        parse_product_source_interpretation(_batch(), json.dumps(payload))
+    assert unclear.value.code == "SOURCE_FUNCTION_UNRESOLVED"
+    payload["statements"][0]["unresolved"] = ["尚不能判断是否用于本节点"]
+    assert parse_product_source_interpretation(_batch(), json.dumps(payload)).statements[0].decision_functions == [
+        "unclassified",
+    ]
+    payload["statements"][0]["decision_functions"] = ["action"]
+    payload["statements"][0]["unresolved"] = []
+    assert parse_product_source_interpretation(_batch(), json.dumps(payload)).statements[0].decision_functions == [
+        "action",
+    ]
+
+
 def test_source_target_review_accepts_only_earlier_same_unit_time_prefix() -> None:
     batch = _batch().model_copy(deep=True)
     batch.owned_units[1].excerpt = (
@@ -2725,7 +3035,7 @@ def test_source_target_review_accepts_only_earlier_same_unit_time_prefix() -> No
     )
     batch.known_procedure_targets[0].source_excerpts = ["记录末次用药日期"]
     batch.known_procedure_targets[0].visit_instance = "筛选/导入期 D-7~D-1"
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{
             "structure_unit_id": "su-02",
@@ -2767,7 +3077,7 @@ def test_source_target_review_keeps_same_sentence_subject_without_importing_cond
     full_action = "所有受试者均需要完成肺功能测定"
     batch.owned_units[1].excerpt = full_action + "。"
     batch.known_procedure_targets[0].source_excerpts = [full_action]
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{
             "structure_unit_id": "su-02", "quoted_text": "均需要完成肺功能测定",
@@ -2806,7 +3116,7 @@ def test_source_target_review_accepts_only_verified_shared_time_scope() -> None:
     action = "受试者及其伴侣同意采取避孕措施"
     batch.owned_units[1].excerpt = f"{period}，{action}"
     batch.known_procedure_targets[0].source_excerpts = [f"{period}，{action}"]
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{
             "structure_unit_id": "su-02", "quoted_text": action,
@@ -2843,13 +3153,63 @@ def test_source_target_review_accepts_only_verified_shared_time_scope() -> None:
         validate_source_target_review(absent_target_time, inventory, coverage, review)
 
 
+@pytest.mark.parametrize(
+    ("source_time", "target_time", "expected_code"),
+    [
+        ("筛选前2周内", "筛选前14天内", None),
+        ("筛选前2周内", "基线前14天内", "TIME_SCOPE_MISMATCH"),
+        ("筛选前2周内", "筛选后14天内", "TIME_SCOPE_MISMATCH"),
+        ("筛选前2周内", "筛选前14天以上", "TIME_SCOPE_MISMATCH"),
+        ("筛选前2周内", "筛选前30天内", "TIME_SCOPE_MISMATCH"),
+        ("筛选前2周内", "第14天访视", "TIME_SCOPE_MISMATCH"),
+        ("筛选前1个月内", "筛选前30天内", "TIME_SCOPE_MISMATCH"),
+    ],
+)
+def test_source_target_review_converts_only_same_bounded_day_week_window(
+    source_time: str, target_time: str, expected_code: str | None,
+) -> None:
+    batch = _batch().model_copy(deep=True)
+    action = "核对既往用药"
+    batch.owned_units[1].excerpt = f"{source_time}，{action}"
+    batch.known_procedure_targets[0].source_excerpts = [f"{target_time}，{action}"]
+    inventory = _source_inventory({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [{
+            "structure_unit_id": "su-02", "quoted_text": action,
+            "scope_quote": source_time, "force": "required",
+            "time_words": [source_time],
+        }],
+        "units_without_statement": ["su-01"],
+    })
+    coverage = [SourceStatementCoverage(
+        statement_index=0, structure_unit_id="su-02",
+        disposition="other_control_candidate", status="candidate_linked",
+    )]
+    review = SourceTargetReview.model_validate({
+        "version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{
+            "statement_index": 0, "decision": "covered_by_procedure",
+            "target_id": "procedure-screening-1",
+            "source_action_excerpt": action, "target_action_excerpt": action,
+            "source_time_excerpt": source_time, "target_time_excerpt": target_time,
+            "unresolved_aspects": [],
+        }],
+    })
+    if expected_code is None:
+        validate_source_target_review(batch, inventory, coverage, review)
+    else:
+        with pytest.raises(SourceTargetReviewValidationError) as failure:
+            validate_source_target_review(batch, inventory, coverage, review)
+        assert failure.value.code == expected_code
+
+
 def test_source_target_review_checks_scope_and_duration_separately() -> None:
     batch = _batch().model_copy(deep=True)
     period = "筛选期及治疗期"
     action = "计划离开观察区48小时及以上"
     batch.owned_units[1].excerpt = f"{period}，{action}"
     batch.known_procedure_targets[0].source_excerpts = [f"{period}，{action}"]
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{
             "structure_unit_id": "su-02", "quoted_text": action,
@@ -2888,7 +3248,7 @@ def test_matching_dosing_frequency_alone_does_not_close_visit_coverage() -> None
     quote = "每日1次记录用药情况"
     batch.owned_units[1].excerpt = quote
     batch.known_procedure_targets[0].source_excerpts = [quote]
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{"structure_unit_id": "su-02", "quoted_text": quote,
                         "force": "required", "time_words": ["每日1次"]}],
@@ -2926,7 +3286,7 @@ def test_context_correspondence_is_only_a_sourced_pending_relation() -> None:
     action = "每次给药10 mg，每日1次"
     batch.owned_units[1].excerpt = "背景治疗：" + action
     batch.context_units[0].excerpt = "所有受试者自筛选期开始接受背景治疗：" + action
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{"structure_unit_id": "su-02", "quoted_text": action,
                         "force": "required", "time_words": ["每日1次"]}],
@@ -2997,7 +3357,7 @@ def test_target_review_rejects_unreported_period_even_when_model_claims_coverage
     quote = "整个治疗期（W0~W4）每日记录用药"
     batch.owned_units[1].excerpt = quote
     batch.known_procedure_targets[0].source_excerpts = [quote]
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{"structure_unit_id": "su-02", "quoted_text": quote,
                         "force": "required", "time_words": reported_time}],
@@ -3029,7 +3389,7 @@ def test_missing_history_duration_is_reported_before_target_time_mismatch() -> N
     quote = "既往情况至少2年"
     batch.owned_units[1].excerpt = quote
     batch.known_official_targets[0].source_excerpts = [quote]
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{"structure_unit_id": "su-02", "quoted_text": quote,
                         "force": "required", "time_words": []}],
@@ -3065,7 +3425,7 @@ def test_time_overclaim_rechecks_only_claimed_target_with_source_context(
     batch.owned_units[0].excerpt += f"；某药：{quote}。筛选期及基线期不得调整剂量。"
     batch.known_procedure_targets[0].source_excerpts = [target_excerpt]
     batch.known_procedure_targets[0].visit_instance = "筛选期"
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{"structure_unit_id": "su-01", "quoted_text": quote,
                         "scope_quote": "某药：", "force": "required", "time_words": ["每日1次"]}],
@@ -3127,7 +3487,7 @@ def test_time_overclaim_rechecks_only_claimed_target_with_source_context(
 
 def test_source_scope_correction_is_local_and_preserves_direct_time() -> None:
     batch = _batch().model_copy(deep=True)
-    original = SourceInterpretation.model_validate({
+    original = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{
             "structure_unit_id": "su-02",
@@ -3157,7 +3517,7 @@ def test_source_scope_correction_is_local_and_preserves_direct_time() -> None:
 
 def test_runner_repairs_two_source_scopes_without_rereading_other_statements() -> None:
     batch = _batch().model_copy(deep=True)
-    original = SourceInterpretation.model_validate({
+    original = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [
             {"structure_unit_id": "su-01", "quoted_text": "年龄至少18岁",
@@ -3202,7 +3562,7 @@ def test_runner_repairs_two_source_scopes_without_rereading_other_statements() -
 def test_runner_corrects_study_phase_stage_without_rereading_source() -> None:
     batch = _batch().model_copy(deep=True)
     batch.owned_units[0].excerpt = "Ⅲ期计划纳入164例受试者"
-    original = SourceInterpretation.model_validate({
+    original = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{
             "structure_unit_id": "su-01", "quoted_text": "Ⅲ期计划纳入164例受试者",
@@ -3241,7 +3601,7 @@ def test_runner_corrects_study_phase_stage_without_rereading_source() -> None:
 
 
 def test_source_target_review_selects_unexpressed_enrollment_requirements() -> None:
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [
             {"structure_unit_id": f"su-{index}", "quoted_text": "应核查原文",
@@ -3271,7 +3631,7 @@ def test_source_target_review_preserves_uncovered_statement_as_failure() -> None
     batch = _batch().model_copy(deep=True)
     batch.owned_units[0].excerpt = "其他控制：年龄至少18岁；筛选前说明年龄记录来源"
     batch.known_official_targets[0].source_excerpts = ["年龄至少18岁"]
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [
                 {"structure_unit_id": "su-01", "quoted_text": "筛选前说明年龄记录来源", "force": "required", "time_words": ["筛选前"]},
@@ -3329,7 +3689,7 @@ def test_source_target_review_rechecks_only_overclaimed_statement_once() -> None
     batch = _batch().model_copy(deep=True)
     batch.owned_units[0].excerpt = "其他控制：年龄至少18岁；筛选期及治疗期完成记录"
     batch.known_official_targets[0].source_excerpts = ["筛选期完成记录"]
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{
             "structure_unit_id": "su-01", "quoted_text": "筛选期及治疗期完成记录",
@@ -3396,7 +3756,7 @@ def test_candidate_linked_unresolved_target_gets_one_source_bound_read(
     quote = "筛选前说明年龄记录来源"
     batch.owned_units[0].excerpt = f"其他控制：年龄至少18岁；{quote}"
     batch.known_official_targets[0].source_excerpts = [quote]
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{"structure_unit_id": "su-01", "quoted_text": quote,
                         "force": "required", "time_words": ["筛选前"]}],
@@ -3446,7 +3806,7 @@ def test_candidate_linked_unresolved_target_gets_one_source_bound_read(
 def test_source_target_addition_enters_bounded_repair_without_accepting_unchanged_wire() -> None:
     batch = _batch().model_copy(deep=True)
     batch.owned_units[0].excerpt = "其他控制：年龄至少18岁；筛选前说明年龄记录来源"
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{"structure_unit_id": "su-01", "quoted_text": "筛选前说明年龄记录来源",
                         "force": "required", "time_words": []}],
@@ -3490,7 +3850,7 @@ def test_source_target_addition_can_publish_only_after_source_bound_insert() -> 
     batch = _batch().model_copy(deep=True)
     quote = "须记录年龄资料来源"
     batch.owned_units[0].excerpt = f"其他控制：{quote}"
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{"structure_unit_id": "su-01", "quoted_text": quote,
                         "force": "required", "time_words": []}],
@@ -3679,7 +4039,7 @@ def test_marker_only_randomization_row_is_not_new_eligibility_control() -> None:
         "structure_unit_id": "schedule-row", "quoted_text": "随机 | X",
         "force": "required", "time_words": [],
     }
-    interpretation = SourceInterpretation.model_validate({
+    interpretation = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [statement], "units_without_statement": [],
     })
@@ -3719,15 +4079,17 @@ def test_marker_only_randomization_row_is_not_new_eligibility_control() -> None:
     assert target_review_indexes(interpretation, coverage, batch) == [0]
 
 
+@pytest.mark.parametrize("force", ["required", "descriptive"])
 def test_schedule_row_with_enrollment_columns_cannot_be_discarded_as_post_treatment(
     monkeypatch: pytest.MonkeyPatch,
+    force: str,
 ) -> None:
     batch = _batch().model_copy(deep=True)
     batch.owned_units[0].excerpt = "检查评估 | X | X | X"
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{"structure_unit_id": "su-01", "quoted_text": batch.owned_units[0].excerpt,
-                        "force": "required", "time_words": []}],
+                        "force": force, "time_words": []}],
         "units_without_statement": ["su-02"],
     })
     monkeypatch.setattr(
@@ -3785,7 +4147,7 @@ def test_single_source_id_copy_error_is_rebound_only_when_unambiguous() -> None:
 def test_trial_phase_heading_remains_scope_not_subject_time() -> None:
     batch = _batch().model_copy(deep=True)
     batch.owned_units[0].excerpt = "Ⅲ期：筛选/导入期开展检查评估"
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{
             "structure_unit_id": "su-01", "quoted_text": "筛选/导入期开展检查评估",
@@ -3812,7 +4174,7 @@ def test_trial_phase_heading_remains_scope_not_subject_time() -> None:
 def test_trial_phase_in_quoted_population_is_not_a_visit_time_or_stage() -> None:
     batch = _batch().model_copy(deep=True)
     batch.owned_units[0].excerpt = "Ⅲ期计划纳入164例受试者"
-    original = SourceInterpretation.model_validate({
+    original = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{
             "structure_unit_id": "su-01", "quoted_text": "Ⅲ期计划纳入164例受试者",
@@ -3882,7 +4244,7 @@ def test_schedule_columns_close_only_existing_enrollment_visits() -> None:
         "procedure-1", "procedure-2", None,
     ]
     assert [item.cell_source_ref for item in links] == mixed.member_source_refs[1:]
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{"structure_unit_id": mixed.structure_unit_id,
                         "quoted_text": mixed.excerpt, "force": "required", "time_words": []}],
@@ -3893,6 +4255,8 @@ def test_schedule_columns_close_only_existing_enrollment_visits() -> None:
         disposition="supporting_or_supplement", status="not_located",
         schedule_columns=links,
     )]
+    assert target_review_indexes(inventory, coverage, batch) == []
+    inventory.statements[0].force = "descriptive"
     assert target_review_indexes(inventory, coverage, batch) == []
     batch.known_procedure_targets.pop()
     assert schedule_column_links(batch, mixed.structure_unit_id, mixed.excerpt) == []
@@ -3949,7 +4313,7 @@ def test_mixed_official_source_keeps_its_link_when_new_requirement_is_added(
     quote = "须记录年龄资料来源"
     batch.owned_units[0].excerpt = f"其他控制：年龄至少18岁；{quote}"
     batch.known_official_targets[0].source_excerpts = ["年龄至少18岁"]
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{"structure_unit_id": "su-01", "quoted_text": quote,
                         "force": "required", "time_words": []}],
@@ -4017,7 +4381,7 @@ def test_source_insert_reuses_unchanged_validated_target_matches() -> None:
     added_quote = "须记录年龄资料来源"
     batch.owned_units[0].excerpt = f"其他控制：年龄至少18岁；签署知情同意；{added_quote}"
     batch.known_official_targets[0].source_excerpts = ["签署知情同意"]
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [
             {"structure_unit_id": "su-01", "quoted_text": "签署知情同意",
@@ -6488,7 +6852,7 @@ def _stage_bound_example():
     batch.owned_units[0].excerpt = "筛选期（D-7~D-1）：拟参加者须完成知情同意记录。"
     batch.known_workflow_stage_targets[0].display_name = "筛选期 / V1 / D-7~D-1"
     batch.known_workflow_stage_targets[0].visit_instance = "筛选期 / V1 / D-7~D-1"
-    inventory = SourceInterpretation.model_validate({
+    inventory = _source_inventory({
         "version": SOURCE_INTERPRETATION_VERSION,
         "statements": [{
             "structure_unit_id": "su-01",
@@ -6597,6 +6961,47 @@ def test_shared_prohibition_keeps_future_period_out_of_current_evidence() -> Non
                 "current_statement": "基线期不得调整既定治疗",
                 "observation_scope": "基线期既定治疗调整记录",
             }))
+
+
+def test_shared_prohibition_preserves_raw_fullwidth_source_excerpt() -> None:
+    from app.domain.contracts.enums import ProtocolPeriod
+    from app.protocols.protocol_control_gate import validate_protocol_control_batch_candidates
+
+    batch, inventory, review, _ = _stage_bound_example()
+    source = "筛选期、治疗期（第1访视）不得调整既定治疗。"
+    batch.owned_units[0].excerpt = source
+    inventory.statements[0].quoted_text = source
+    inventory.statements[0].scope_quote = "筛选期、治疗期（第1访视）"
+    inventory.statements[0].force = "prohibited"
+    inventory.statements[0].time_words = ["筛选期", "治疗期（第1访视）"]
+    review.source_action_excerpt = "不得调整既定治疗"
+    selection = SharedProhibitionRequirement.model_validate({
+        "version": SHARED_PROHIBITION_REQUIREMENT_VERSION,
+        "statement_index": 0,
+        "current_statement": "筛选期不得调整既定治疗",
+        "future_statement": "治疗期（第1访视）不得调整既定治疗",
+        "workflow_stage_id": "stage:screening:one",
+        "prospective_period": ProtocolPeriod.TREATMENT_PERIOD,
+        "kind": "prohibit_medication_or_treatment_exposure",
+        "title": "治疗调整限制",
+        "applicable_population": "拟参加者",
+        "observation_scope": "筛选期治疗调整记录",
+        "fact_type": "treatment_change",
+        "evidence_description": "筛选期治疗记录",
+        "required_source_types": ["病历记录"],
+        "unresolved_aspects": [],
+    })
+    candidate = compile_shared_prohibition_requirement(batch, inventory, review, selection)
+    atom = candidate.obligation_expression.groups[0].atoms[0]
+    assert atom.source_excerpts == [source]
+    assert atom.continuing_obligation.source_excerpts == [source]
+    _, output, coverage = assemble_source_requirement_inserts(
+        batch, inventory, [review], _wire(),
+        [ProtocolControlAgentResponse(session_id="fullwidth-1", text=selection.model_dump_json())],
+        lambda _output: None,
+    )
+    assert coverage[0].status == "expressed"
+    validate_protocol_control_batch_candidates(batch, output)
 
 
 def test_stage_bound_requirement_compiles_only_frozen_visit_scope() -> None:

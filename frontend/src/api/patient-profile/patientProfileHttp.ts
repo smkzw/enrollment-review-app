@@ -11,6 +11,7 @@ import {
   PatientProfileApiError,
 } from "./patientProfileViewModels";
 import type { PatientProfileRepository } from "./patientProfileRepository";
+import { decodeFactSourceReadings } from "./factSourceReadings";
 import { encodeFactCorrectionRequest } from "./factCorrectionTypes";
 import {
   decodeFactCorrectionHistory,
@@ -118,6 +119,14 @@ export function createPatientProfileHttp(
         `/api/v2/subjects/${encodeURIComponent(subjectId)}/patient-profile-revisions/${encodeURIComponent(patientProfileRevisionId)}`,
         { method: "GET", signal: options?.signal },
         decodePatientProfileRevision,
+      );
+    },
+
+    async getFactSourceReadings(subjectId, patientProfileRevisionId, factId, options) {
+      return request(
+        `/api/v2/subjects/${encodeURIComponent(subjectId)}/patient-profile-revisions/${encodeURIComponent(patientProfileRevisionId)}/facts/${encodeURIComponent(factId)}/source-readings`,
+        { method: "GET", signal: options?.signal },
+        decodeFactSourceReadings,
       );
     },
 

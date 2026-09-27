@@ -167,6 +167,8 @@ def _frozen_fact(fact: ClinicalFactV2) -> FrozenFactRecord:
         date_range=fact.date_range,
         record_time=fact.record_time,
         locator_ids=list(fact.locator_ids),
+        source_candidate_ids=list(fact.source_candidate_ids),
+        source_observation_refs=list(fact.source_observation_refs),
         assertion_basis=fact.assertion_basis,
     )
 

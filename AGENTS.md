@@ -2,9 +2,8 @@
 
 ## Current Phase
 
-- The current rearchitecture task is in design and conference review.
-- Do not implement the large rearchitecture until Codex presents the final design and the user approves continuation.
-- Keep `docs/REARCHITECTURE_DISCOVERY_20260812.md`, `docs/PROJECT_CONTEXT.md`, and the active task/conference context as durable decision sources.
+- The approved rearchitecture is under implementation in `.trellis/tasks/09-11-e2e-eligibility-review/`; use its current PRD, design, implementation record, and the live user request for scope and status.
+- Keep `docs/REARCHITECTURE_DISCOVERY_20260812.md`, `docs/PROJECT_CONTEXT.md`, and the active task/conference context as durable historical decision sources. Historical review notes do not by themselves authorize a new clinical job or publication.
 
 ## Clinical And Evidence Boundaries
 

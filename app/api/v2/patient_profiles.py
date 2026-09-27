@@ -24,8 +24,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 
 from app.api.v2.patient_profile_schemas import (
+    ProfileFactSourceReadingDTO,
     PatientProfileHistoryDTO,
     PatientProfileRevisionDTO,
+    profile_fact_source_reading_dto,
     profile_locator_ids,
     profile_revision_dto,
 )
@@ -153,3 +155,23 @@ def get_patient_profile_revision(
     if revision.authority.subject_id != subject_id:
         raise AppNotFoundError("找不到对应的病历档案。")
     return _revision_dto(request, revision)
+
+
+@router.get(
+    "/subjects/{subject_id}/patient-profile-revisions/{patient_profile_revision_id}/facts/{fact_id}/source-readings",
+    response_model=list[ProfileFactSourceReadingDTO],
+)
+def get_profile_fact_source_readings(
+    subject_id: str, patient_profile_revision_id: str, fact_id: str, request: Request,
+) -> list[ProfileFactSourceReadingDTO]:
+    """Read only the candidate readings behind a fact in this exact profile revision."""
+    with _session(request) as session:
+        try:
+            revision = _profile(request).get(session, patient_profile_revision_id)
+            if revision.authority.subject_id != subject_id:
+                raise AppNotFoundError("找不到对应的病历档案。")
+            readings = _profile(request).fact_source_readings(session, revision, fact_id)
+            return [profile_fact_source_reading_dto(item) for item in readings]
+        except Exception as exc:  # noqa: BLE001 - same read boundary as profile routes
+            _raise_translated(exc)
+            raise

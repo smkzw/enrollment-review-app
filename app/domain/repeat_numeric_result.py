@@ -1,13 +1,64 @@
 """Numeric repeat aggregates remain calculations, never fabricated source facts."""
+from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from fractions import Fraction
+
+from app.domain.contracts.evidence import ClinicalFact
 
 from app.domain.contracts.enums import FactPolarity
 from app.domain.contracts.repeat_scheme import RepeatScheme
 from app.domain.expression import EvaluationContext
 from app.domain.publication import canonical_hash
 from app.domain.repeat_result_selection import RepeatResultSelection
+
+
+def aggregate_numeric_acquisitions(
+    groups: Sequence[Sequence[ClinicalFact]], *, operation: str | None, unit_required: bool,
+) -> tuple[Fraction | None, str | None, tuple[str, ...]]:
+    """Collapse representations of one acquisition before exact aggregation."""
+    if not groups:
+        return None, None, ("repeat_result_missing",)
+    values, units = [], set()
+    seen_fact_ids = set()
+    for group in groups:
+        group_values = set()
+        for fact in group:
+            if fact.fact_id in seen_fact_ids:
+                return None, None, ("repeat_result_acquisition_overlap",)
+            seen_fact_ids.add(fact.fact_id)
+            if fact.conflict_group_id:
+                return None, None, ("source_conflict",)
+            if fact.polarity != FactPolarity.AFFIRMED:
+                return None, None, ("repeat_result_polarity_unverified",)
+            if isinstance(fact.value, bool) or not isinstance(fact.value, (int, float, Decimal)):
+                return None, None, ("repeat_result_numeric_value_missing",)
+            value = Decimal(str(fact.value))
+            if not value.is_finite():
+                return None, None, ("repeat_result_numeric_value_missing",)
+            if unit_required and (not fact.unit or not fact.unit.strip()):
+                return None, None, ("repeat_result_unit_unverified",)
+            group_values.add((Fraction(value), fact.unit))
+        if len(group_values) != 1:
+            return None, None, ("repeat_same_acquisition_value_conflict",)
+        value, unit = next(iter(group_values))
+        values.append(value)
+        units.add(unit)
+    if len(units) != 1:
+        return None, None, ("repeat_result_unit_unverified",)
+    if operation in {"sum", "mean"}:
+        value = sum(values, Fraction(0))
+        if operation == "mean":
+            value /= len(values)
+    elif operation == "minimum":
+        value = min(values)
+    elif operation == "maximum":
+        value = max(values)
+    elif operation is None and len(values) == 1:
+        value = values[0]
+    else:
+        return None, None, ("repeat_result_combination_unverified",)
+    return value, next(iter(units)), ()
 
 
 @dataclass(frozen=True)
@@ -88,38 +139,10 @@ def calculate_repeat_numeric_result(
     facts = {item.fact_id: item for item in context.facts}
     if not set(fact_ids) <= qualified_value_fact_ids or not set(fact_ids) <= facts.keys():
         return unresolved("repeat_result_value_unverified")
-    values, units = [], set()
-    for group_id in selected:
-        group_values = set()
-        for fact_id in groups[group_id]:
-            fact = facts[fact_id]
-            if fact.conflict_group_id:
-                return unresolved("source_conflict")
-            if fact.polarity != FactPolarity.AFFIRMED:
-                return unresolved("repeat_result_polarity_unverified")
-            if isinstance(fact.value, bool) or not isinstance(fact.value, (int, float, Decimal)):
-                return unresolved("repeat_result_numeric_value_missing")
-            value = Decimal(str(fact.value))
-            if not value.is_finite():
-                return unresolved("repeat_result_numeric_value_missing")
-            if unit_required and (not fact.unit or not fact.unit.strip()):
-                return unresolved("repeat_result_unit_unverified")
-            group_values.add((Fraction(value), fact.unit))
-        if len(group_values) != 1:
-            return unresolved("repeat_same_acquisition_value_conflict")
-        value, unit = next(iter(group_values))
-        values.append(value)
-        units.add(unit)
-    if len(units) != 1:
-        return unresolved("repeat_result_unit_unverified")
-    if operation in {"sum", "mean"}:
-        value = sum(values, Fraction(0))
-        if operation == "mean":
-            value /= len(values)
-    elif operation == "minimum":
-        value = min(values)
-    elif operation == "maximum":
-        value = max(values)
-    else:
-        value = values[0]
-    return result(value=value, unit=next(iter(units)))
+    value, unit, reasons = aggregate_numeric_acquisitions(
+        [[facts[fact_id] for fact_id in groups[group_id]] for group_id in selected],
+        operation=operation, unit_required=unit_required,
+    )
+    if reasons:
+        return unresolved(*reasons)
+    return result(value=value, unit=unit)

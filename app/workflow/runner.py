@@ -240,6 +240,35 @@ class JobRunner:
             return max_parallel, None, scope
         return None, None, "discovery_*"
 
+    def _continue_independent_after_failure(
+        self, context: StepContext, failure: StepFailure,
+    ) -> bool:
+        """Keep only explicitly opted-in independent reads running after a fatal read."""
+        control = context.job_payload.get("execution_control")
+        policy = control.get("continue_after_final_failure") if isinstance(control, Mapping) else None
+        if not isinstance(policy, Mapping) or failure.retryable:
+            return False
+        prefix = policy.get("step_prefix")
+        codes = policy.get("error_codes")
+        max_failed = policy.get("max_failed_steps")
+        eligible = bool(
+            isinstance(prefix, str) and prefix
+            and isinstance(codes, list) and codes
+            and all(isinstance(code, str) and code for code in codes)
+            and type(max_failed) is int and max_failed > 0
+            and context.step_id.startswith(prefix)
+            and failure.error_code in codes
+        )
+        if not eligible:
+            return False
+        with self.session_factory() as session:
+            prior_failed = sum(
+                step.state == "failed_final" and step.step_id.startswith(prefix)
+                and step.error_code in codes
+                for step in self._store(session).list_steps(context.job_id)
+            )
+        return prior_failed + 1 < max_failed
+
     def _effective_parallel_limit(
         self, payload: Mapping[str, Any] | None
     ) -> tuple[int, set[str] | None, str]:
@@ -433,11 +462,16 @@ class JobRunner:
                     )
                 return
             except StepFailure as failure:
-                outcome = self._commit_step_failure(lease, step_id, failure)
+                continue_independent = self._continue_independent_after_failure(context, failure)
+                outcome = self._commit_step_failure(
+                    lease, step_id, failure, settle_job=not continue_independent,
+                )
                 if outcome.job_state == "cancelled":
                     self._notify_cancelled(lease.job_id)
                 elif outcome.job_state in {"failed", "failed_final"}:
                     self._notify_failed(lease.job_id)
+                if continue_independent and outcome.job_state == "running":
+                    continue
                 return
             except Exception:  # 意外异常按 fatal 处理，避免无限重试
                 logger.exception("任务 %s 步骤 %s 意外失败", lease.job_id, step_id)

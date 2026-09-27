@@ -289,6 +289,32 @@ def test_latest_profile_returns_complete_dto_with_lanes(client) -> None:
     assert fact["value"] == "120/80"
 
 
+def test_profile_fact_source_readings_keep_raw_candidate_and_revision_scope(client) -> None:
+    chain = _seed(client, "source-readings")
+    with client.app.state.session_factory() as session:
+        ClinicalFactV2Repository(session).create(
+            _fact(chain, source_candidate_ids=[chain["fact_candidate_id"]])
+        )
+        revision = PatientProfileService().generate(
+            session, authority=_authority(chain), created_at=NOW, generated_at=NOW,
+        )
+        session.commit()
+    path = (
+        f"/api/v2/subjects/{chain['subject_id']}/patient-profile-revisions/"
+        f"{revision.patient_profile_revision_id}/facts/{chain['run_id']}-fact/source-readings"
+    )
+    response = client.get(path)
+    assert response.status_code == 200, response.text
+    assert response.json() == [{
+        "candidate_id": chain["fact_candidate_id"],
+        "raw_value": "120/80", "canonical_value": "120/80",
+        "unit": "unitless", "source_date_text": "2026-03-01",
+        "locator_ids": [chain["locator_id"]],
+    }]
+    assert client.get(path.replace(chain["subject_id"], "other-subject", 1)).status_code == 404
+    assert client.get(path.replace(f"{chain['run_id']}-fact", "unlisted-fact")).status_code == 404
+
+
 def test_latest_profile_404_when_not_generated(client) -> None:
     chain = _seed(client)
     response = client.get(_latest_url(chain))

@@ -8,11 +8,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getEvidenceRepository } from "../../api/evidence";
+import { getPatientProfileRepository } from "../../api/patient-profile";
 import type {
   LocatorView,
   ProcessingRevisionPageView,
 } from "../../api/evidence";
-import type { ProfileItemView } from "../../api/patient-profile";
+import type { ProfileItemView, ProfileScalarValue } from "../../api/patient-profile";
 import { OriginalEvidenceViewer } from "../evidence-workspace/OriginalEvidenceViewer";
 import type { PatientProfileModel } from "../../features/patient-profile/model";
 import { locatorsForItem } from "../../features/patient-profile/model";
@@ -49,6 +50,12 @@ function locatorMatchesPage(
     page.sourceDocumentVersionId === locator.sourceDocumentVersionId;
 }
 
+function sourceValueText(value: ProfileScalarValue | null, unit: string | null): string {
+  if (value === null) return "原文未单列数值";
+  const text = typeof value === "boolean" ? (value ? "是" : "否") : String(value);
+  return unit && unit !== "unitless" ? `${text} ${unit}` : text;
+}
+
 export function ProfileEvidencePanel({
   model,
   item,
@@ -56,6 +63,14 @@ export function ProfileEvidencePanel({
   initialPageArtifactId = null,
 }: ProfileEvidencePanelProps) {
   const navigation = model.evidenceNavigation;
+
+  const sourceReadings = useLoad(
+    (signal) => getPatientProfileRepository().getFactSourceReadings(
+      navigation.subjectId, model.revisionId, item.sourceId, { signal },
+    ),
+    [navigation.subjectId, model.revisionId, item.sourceId],
+    { enabled: item.kind === "fact" },
+  );
 
   const revision = useLoad(
     (signal) =>
@@ -218,6 +233,34 @@ export function ProfileEvidencePanel({
       ) : (
         <div className="profile-evidence__body">
           <div className="profile-evidence__rail">
+            {item.kind === "fact" && (
+              <section className="profile-evidence__readings" aria-label="已保存的来源读数">
+                <h4 className="profile-evidence__rail-title">来源读数</h4>
+                {sourceReadings.state.status === "loading" ? <p>正在读取来源记录…</p>
+                  : sourceReadings.state.status === "error" ? (
+                    <p role="alert">来源读数暂不可查看。原件仍可核对。<button type="button" onClick={sourceReadings.retry}>重试</button></p>
+                  ) : sourceReadings.state.data.length === 0 ? (
+                    <p>这条事实没有单独保存的提取读数，请直接核对原件。</p>
+                  ) : (
+                    <>
+                      <p>以下为提取时保存的记录，不代表独立测量次数；以右侧原件为准。</p>
+                      <ul>
+                        {sourceReadings.state.data.map((reading) => (
+                          <li key={reading.candidateId}>
+                            <strong>{sourceValueText(reading.rawValue, reading.unit)}</strong>
+                            {reading.sourceDateText && <span> · {reading.sourceDateText}</span>}
+                            {reading.rawValue !== reading.canonicalValue && reading.canonicalValue !== null &&
+                              <span> · 整理值：{sourceValueText(reading.canonicalValue, reading.unit)}</span>}
+                            {reading.locatorIds.filter((id) => consistentItemLocators.some((locator) => locator.locatorId === id)).map((id) => (
+                              <button key={id} type="button" onClick={() => selectLocator(id)}>查看这处原文</button>
+                            ))}
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+              </section>
+            )}
             <h4 className="profile-evidence__rail-title">定位详情</h4>
             {hasInconsistentLocator && (
               <p className="profile-correction-warning" role="alert">

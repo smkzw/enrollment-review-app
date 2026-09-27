@@ -19,11 +19,19 @@ from app.domain.publication import canonical_hash
 from app.domain.page_normalization import normalize_field_name, normalize_text, observation_context_key, source_arrow_marks
 from app.domain.page_source_association import PageAssociationSource, source_aligned_fact_keys
 
-RECONCILIATION_VERSION = "page-reconciliation/r3-v13"
+RECONCILIATION_VERSION = "page-reconciliation/r3-v14"
 
 
 class PageReconciliationError(ValueError):
     pass
+
+
+def _separate_source_regions(left, right) -> bool:
+    """Two located reads of one value cannot vote for different page regions."""
+    a, b = left.region.bbox, right.region.bbox
+    return bool(a is not None and b is not None and (
+        a.x1 <= b.x0 or b.x1 <= a.x0 or a.y1 <= b.y0 or b.y1 <= a.y0
+    ))
 
 
 def _conflict(
@@ -67,6 +75,7 @@ def reconcile_page_reviews(
     if main_records[0].reading_view != main_records[1].reading_view:
         raise PageReconciliationError("两次独立判读使用的阅读视图不一致，不能合并核对")
     facts_by_key: dict[str, list[PageReviewRecord]] = defaultdict(list)
+    positioned_facts_by_key = defaultdict(list)
     facts_by_field: dict[str, list[tuple[str, PageReviewRecord]]] = defaultdict(list)
     unassociated_fact_keys: set[str] = set()
     facts_by_identity = defaultdict(list)
@@ -79,6 +88,7 @@ def reconcile_page_reviews(
                 identity = (normalize_field_name(fact.field_name), observation_context_key(fact.context.model_dump()))
                 facts_by_identity[identity].append((record.lane, fact.normalization_key))
             facts_by_key[fact.normalization_key].append(record)
+            positioned_facts_by_key[fact.normalization_key].append((record.lane, fact))
             marks_by_key[fact.normalization_key].add(source_arrow_marks(fact.raw_value))
             facts_by_field[fact.field_name].append((fact.normalization_key, record))
 
@@ -94,8 +104,14 @@ def reconcile_page_reviews(
         if any(count > 1 for count in Counter(lane for lane, _ in observations).values())
         for _, key in observations
     }
+    separate_region_keys = {
+        key for key, pairs in positioned_facts_by_key.items()
+        if len(pairs) == 2 and pairs[0][0] != pairs[1][0]
+        and _separate_source_regions(pairs[0][1], pairs[1][1])
+    }
     annotation_conflicts = {key for key, marks in marks_by_key.items() if len(marks) > 1}
-    accepted_fact_keys = [key for key in accepted_fact_keys if key not in ambiguous_keys | annotation_conflicts]
+    accepted_fact_keys = [key for key in accepted_fact_keys
+                          if key not in ambiguous_keys | annotation_conflicts | separate_region_keys]
     fact_conflicts: list[ReconciliationConflict] = []
     for field_name, observations in sorted(facts_by_field.items()):
         keys = [key for key, _record in observations]
@@ -107,6 +123,7 @@ def reconcile_page_reviews(
                     keys=keys,
                     record_ids=source_ids,
                     reason=("原件异常标记的判读不一致，需核对原件" if set(keys) & annotation_conflicts
+                            else "相同读数对应原件不同位置，需核对是否为同一次记录" if set(keys) & separate_region_keys
                             else "观察所指对象尚待核对" if set(keys) & unassociated_fact_keys
                             else "主读结果未形成双源一致事实"),
                 )

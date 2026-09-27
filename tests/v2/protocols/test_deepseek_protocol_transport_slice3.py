@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from types import SimpleNamespace
 
 import httpx
@@ -39,6 +40,13 @@ class FakeCompletions:
             content, finish_reason, reasoning_content = output
         else:
             content, finish_reason, reasoning_content = output, "stop", ""
+        if kwargs.get("stream"):
+            return iter([SimpleNamespace(
+                choices=[SimpleNamespace(
+                    finish_reason=finish_reason,
+                    delta=SimpleNamespace(content=content, reasoning_content=reasoning_content),
+                )],
+            )])
         return SimpleNamespace(
             choices=[
                 SimpleNamespace(
@@ -106,6 +114,137 @@ def test_direct_deepseek_model_keeps_json_object_without_backend_argument():
     assert completions.calls[0]["extra_body"] == {"thinking": {"type": "enabled"}}
 
 
+@pytest.mark.parametrize(
+    "reported_model,finish_reason,expected",
+    [
+        ("other-model", "stop", "模型实际回报身份"),
+        ("deepseek-v4-flash", "content_filter", "未正常完成"),
+    ],
+)
+def test_formal_stream_rejects_wrong_model_or_incomplete_finish(
+    reported_model, finish_reason, expected,
+):
+    class StreamCompletions:
+        calls = 0
+
+        def create(self, **kwargs):
+            self.calls += 1
+            return iter([SimpleNamespace(
+                id="formal-request-1", model=reported_model,
+                choices=[SimpleNamespace(
+                    finish_reason=finish_reason,
+                    delta=SimpleNamespace(content='{"draft":1}', reasoning_content=None),
+                )],
+            )])
+
+    completions = StreamCompletions()
+    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    transport = DeepSeekProtocolAgentTransport(
+        client=client, backend="deepseek", model="deepseek-v4-flash",
+        max_tokens=60000,
+    )
+    with pytest.raises(ProtocolAgentCallError, match=expected):
+        transport.start(prompt="冻结方案输入")
+    assert completions.calls == 1
+
+
+def test_formal_stream_accepts_matching_reported_model() -> None:
+    class StreamCompletions:
+        def create(self, **kwargs):
+            return iter([SimpleNamespace(
+                id="formal-request-ok", model="DEEPSEEK-V4-FLASH",
+                choices=[SimpleNamespace(
+                    finish_reason="stop",
+                    delta=SimpleNamespace(content='{"draft":1}', reasoning_content=None),
+                )],
+            )])
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=StreamCompletions()))
+    transport = DeepSeekProtocolAgentTransport(
+        client=client, backend="deepseek", model="deepseek-v4-flash",
+        max_tokens=60000,
+    )
+    assert transport.start(prompt="冻结方案输入").text == '{"draft":1}'
+
+
+def test_interrupted_formal_stream_preserves_partial_identity_without_resending() -> None:
+    class StreamCompletions:
+        calls = 0
+
+        def create(self, **kwargs):
+            self.calls += 1
+
+            def chunks():
+                yield SimpleNamespace(
+                    id="formal-partial-1", model="deepseek-v4-flash",
+                    usage={"completion_tokens": 9},
+                    choices=[SimpleNamespace(
+                        finish_reason=None,
+                        delta=SimpleNamespace(content='{"draft":', reasoning_content="核对原文"),
+                    )],
+                )
+                raise httpx.ReadError("stream disconnected")
+
+            return chunks()
+
+    completions = StreamCompletions()
+    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    transport = DeepSeekProtocolAgentTransport(
+        client=client, backend="deepseek", model="deepseek-v4-flash",
+        max_tokens=60000,
+    )
+    with pytest.raises(ProtocolAgentCallError) as caught:
+        transport.start(prompt="冻结方案输入")
+    assert completions.calls == 1
+    assert caught.value.error_code == "STREAM_INTERRUPTED"
+    assert caught.value.error_metadata == {
+        "request_id": "formal-partial-1", "reported_model": "deepseek-v4-flash",
+        "finish_reason": None, "usage": {"completion_tokens": 9},
+        "content_characters": 9, "reasoning_characters": 4,
+        "partial_content_sha256": hashlib.sha256(b'{"draft":').hexdigest(),
+    }
+    assert len(transport._histories[caught.value.session_id]) == 1
+
+
+def test_formal_stream_without_terminal_status_is_not_accepted_or_retried() -> None:
+    class StreamCompletions:
+        calls = 0
+
+        def create(self, **kwargs):
+            self.calls += 1
+            return iter([SimpleNamespace(
+                id="formal-no-finish", model="deepseek-v4-flash",
+                choices=[SimpleNamespace(
+                    finish_reason=None,
+                    delta=SimpleNamespace(content='{"draft":1}', reasoning_content=None),
+                )],
+            )])
+
+    completions = StreamCompletions()
+    transport = DeepSeekProtocolAgentTransport(
+        client=SimpleNamespace(chat=SimpleNamespace(completions=completions)),
+        backend="deepseek", model="deepseek-v4-flash", max_tokens=60000,
+    )
+    with pytest.raises(ProtocolAgentCallError) as caught:
+        transport.start(prompt="冻结方案输入")
+    assert completions.calls == 1
+    assert caught.value.error_code == "STREAM_INTERRUPTED"
+    assert caught.value.error_metadata["request_id"] == "formal-no-finish"
+
+
+def test_pre_response_transport_error_can_still_retry(monkeypatch) -> None:
+    monkeypatch.setattr("app.agents.protocol_semantic_transport.time.sleep", lambda _delay: None)
+    client, completions = _client([
+        httpx.ReadError("connection failed before response"), '{"draft":1}',
+    ])
+    transport = DeepSeekProtocolAgentTransport(
+        client=client, backend="deepseek", model="deepseek-v4-flash",
+        max_tokens=60000,
+    )
+    assert transport.start(prompt="冻结方案输入").text == '{"draft":1}'
+    assert len(completions.calls) == 2
+
+
 def test_parent_segmentation_capability_is_independent_from_compact_wire():
     glm = DeepSeekProtocolAgentTransport(
         client=object(),
@@ -129,16 +268,22 @@ def test_parent_segmentation_capability_is_independent_from_compact_wire():
     assert glm.supports_parent_rule_segmentation is True
     assert mtplx.uses_compact_wire_contract is True
     assert mtplx.supports_parent_rule_segmentation is True
-    assert deepseek.supports_parent_rule_segmentation is False
+    assert deepseek.supports_parent_rule_segmentation is True
 
 
 @pytest.mark.parametrize("backend", ["omlx", "mtplx", "mlx-serve"])
 def test_local_formal_contract_is_explicit_and_keeps_route(backend, monkeypatch):
     from app.agents import protocol_semantic_transport as _transport_module
+    from app.llm import mtplx_model_lifecycle
 
     monkeypatch.setattr(
         _transport_module, "MLX_SERVE_PROTOCOL_BATCH_MAX_TOKENS", 131072
     )
+    if backend == "mtplx":
+        monkeypatch.setattr(
+            mtplx_model_lifecycle, "mtplx_deployment_identity",
+            lambda *_args: {"lifecycle": "isolated-test/v1"},
+        )
     options = dict(client=object(), backend=backend, model="test-local-model",
                    reasoning_effort="medium", max_tokens=131072,
                    provider_defaults=True)
@@ -149,7 +294,10 @@ def test_local_formal_contract_is_explicit_and_keeps_route(backend, monkeypatch)
     assert formal.supports_parent_rule_segmentation is True
     before = default._completion_kwargs([])
     after = formal._completion_kwargs([])
-    assert after["response_format"]["json_schema"]["name"] == "protocol_semantic_deconstruction_candidate"
+    if backend == "mtplx":
+        assert after["response_format"] == {"type": "json_object"}
+    else:
+        assert after["response_format"]["json_schema"]["name"] == "protocol_semantic_deconstruction_candidate"
     assert "temperature" not in after
     assert {k: v for k, v in before.items() if k != "response_format"} == {
         k: v for k, v in after.items() if k != "response_format"}

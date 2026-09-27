@@ -561,6 +561,103 @@ def test_control_length_retry_budget_capped_at_131072() -> None:
     assert budgets == [100000, 131072]
 
 
+def test_control_call_receipts_keep_missing_provider_usage_unknown() -> None:
+    client, _ = _client(['{"wire":1}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384,
+    )
+    transport.start(prompt="冻结控制输入")
+    receipts = transport.take_call_receipts()
+    assert len(receipts) == 1
+    assert receipts[0]["requested_model"] == "deepseek-latest-cloud"
+    assert receipts[0]["request_id"] is None
+    assert receipts[0]["usage"] is None
+    assert len(receipts[0]["request_sha256"]) == 64
+    assert len(receipts[0]["schema_sha256"]) == 64
+    assert "冻结控制输入" not in str(receipts)
+    assert transport.take_call_receipts() == []
+
+
+def test_interrupted_stream_keeps_partial_metadata_without_replaying_request() -> None:
+    class InterruptedCompletions:
+        calls = 0
+
+        def create(self, **kwargs):
+            self.calls += 1
+
+            def chunks():
+                yield SimpleNamespace(
+                    id="request-123", model="deepseek-latest-cloud",
+                    usage={"completion_tokens": 9},
+                    choices=[SimpleNamespace(
+                        finish_reason=None,
+                        delta=SimpleNamespace(content='{"private":"partial'),
+                    )],
+                )
+                raise ConnectionError("stream closed")
+
+            return chunks()
+
+    completions = InterruptedCompletions()
+    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384,
+    )
+    with pytest.raises(ProtocolControlAgentCallError) as error:
+        transport.start(prompt="冻结控制输入")
+    assert error.value.uncertain_completion is True
+    assert completions.calls == 1
+    receipts = transport.take_call_receipts()
+    assert receipts[0]["request_id"] == "request-123"
+    assert receipts[0]["reported_model"] == "deepseek-latest-cloud"
+    assert receipts[0]["usage"] == {"completion_tokens": 9}
+    assert receipts[0]["received_content_characters"] > 0
+    assert len(receipts[0]["partial_content_sha256"]) == 64
+    assert "private" not in str(receipts)
+
+
+def test_stream_reported_model_mismatch_is_rejected_without_retry() -> None:
+    class SwitchedCompletions:
+        calls = 0
+
+        def create(self, **kwargs):
+            self.calls += 1
+            return iter([SimpleNamespace(
+                id="request-switched", model="another-model",
+                choices=[SimpleNamespace(
+                    finish_reason="stop", delta=SimpleNamespace(content='{"ok":true}'),
+                )],
+            )])
+
+    completions = SwitchedCompletions()
+    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384,
+    )
+    with pytest.raises(ProtocolControlAgentCallError, match="模型身份不一致"):
+        transport.start(prompt="冻结控制输入")
+    assert completions.calls == 1
+    receipts = transport.take_call_receipts()
+    assert receipts[0]["requested_model"] == "deepseek-latest-cloud"
+    assert receipts[0]["reported_model"] == "another-model"
+    assert receipts[0]["error_kind"] == "reported_model_mismatch"
+
+
+def test_filtered_completion_is_not_accepted_as_a_parsed_answer() -> None:
+    client, completions = _client([('{"looks":"complete"}', "content_filter")])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384,
+    )
+    with pytest.raises(ProtocolControlAgentCallError, match="未正常完成"):
+        transport.start(prompt="冻结控制输入")
+    assert len(completions.calls) == 1
+    assert transport.take_call_receipts()[0]["finish_reason"] == "content_filter"
+
+
 def test_injected_official_inex_schema_is_rejected_visibly() -> None:
     official = protocol_output_response_format("semantic_candidate", compact=True)
 
@@ -870,6 +967,62 @@ def test_text_mode_observation_repair_includes_exact_policy_schema() -> None:
     assert "完整 JSON Schema" in call["messages"][0]["content"]
     assert '"source_excerpts"' in call["messages"][0]["content"]
     assert '"items"' in call["messages"][0]["content"]
+    assert "response_format" not in call
+
+
+@pytest.mark.parametrize("mode", ["text", "json_object", "json_schema"])
+@pytest.mark.parametrize(
+    ("method", "required_field"),
+    [
+        ("continue_candidate", "candidate_draft"),
+        ("continue_candidates", "candidate_drafts"),
+        ("continue_atom", "atom"),
+        ("continue_post_treatment_repair", None),
+        ("continue_calendar_bound_repair", None),
+        ("continue_time_operands", None),
+        ("continue_evidence_source_policy", None),
+        ("continue_evidence_source_types", None),
+    ],
+)
+def test_local_repair_receives_full_contract_in_non_strict_modes(
+    mode: str, method: str, required_field: str | None,
+) -> None:
+    client, completions = _client(['{"wire":1}', '{}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode=mode,
+    )
+    first = transport.start(prompt="冻结批次")
+    getattr(transport, method)(session_id=first.session_id, prompt="只修指定内容")
+    call = completions.calls[1]
+    repair_prompt = call["messages"][-1]["content"]
+    if mode == "json_schema":
+        assert repair_prompt == "只修指定内容"
+        assert call["response_format"]["json_schema"]["schema"]
+    else:
+        assert "完整 JSON Schema" in repair_prompt
+        assert '"required"' in repair_prompt
+        assert call.get("response_format") == (
+            {"type": "json_object"} if mode == "json_object" else None
+        )
+        if required_field:
+            assert f'"{required_field}"' in repair_prompt
+
+
+@pytest.mark.parametrize(
+    "method",
+    ["correct_source_quote", "correct_source_scope", "start_source_unit_comparison"],
+)
+def test_text_mode_source_corrections_receive_full_contract(method: str) -> None:
+    client, completions = _client(['{}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode="text",
+    )
+    getattr(transport, method)(prompt="冻结来源")
+    call = completions.calls[0]
+    assert "完整 JSON Schema" in call["messages"][0]["content"]
+    assert '"required"' in call["messages"][0]["content"]
     assert "response_format" not in call
 
 
@@ -1190,6 +1343,29 @@ def test_source_target_review_uses_its_own_small_schema() -> None:
         "protocol_control_source_target_review_" + SOURCE_TARGET_REVIEW_VERSION.rsplit("/", 1)[-1]
     )
     assert "temperature" not in completions.calls[0]
+
+
+def test_text_mode_source_reads_include_their_actual_schema() -> None:
+    from app.agents.protocol_control_source_interpretation import (
+        SOURCE_INTERPRETATION_VERSION, SOURCE_TARGET_REVIEW_VERSION,
+    )
+    client, completions = _client([
+        json.dumps({"version": SOURCE_INTERPRETATION_VERSION, "statements": [],
+                    "units_without_statement": []}),
+        json.dumps({"version": SOURCE_TARGET_REVIEW_VERSION, "items": []}),
+    ])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="ollama-cloud", model="deepseek-v4.1-flash",
+        reasoning_effort="high", max_tokens=16384, response_format_mode="text",
+    )
+    transport.start_source_interpretation(prompt="解释冻结来源")
+    transport.start_source_target_review(prompt="核对来源目标")
+    assert len(completions.calls) == 2
+    assert all("response_format" not in call for call in completions.calls)
+    assert "decision_functions" in completions.calls[0]["messages"][0]["content"]
+    assert "background_context" in completions.calls[1]["messages"][0]["content"]
+    assert all("完整 JSON Schema" in call["messages"][0]["content"]
+               for call in completions.calls)
 
 
 def test_source_scope_correction_uses_bounded_schema() -> None:

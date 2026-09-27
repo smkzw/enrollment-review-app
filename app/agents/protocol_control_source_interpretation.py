@@ -15,12 +15,32 @@ from app.domain.contracts.protocol_controls import (
     ProtocolControlDispositionBatch,
     StructureUnitDispositionKind,
 )
+from app.protocols.protocol_control_gate import _visit_scope_keys
 from app.protocols.procedure_catalog import schedule_column_scope
 
 
-SOURCE_INTERPRETATION_VERSION = "phase5/control-source-interpretation/v8"
-SOURCE_INTERPRETATION_PROMPT_VERSION = "phase5/control-source-prompt/v16"
-SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v17"
+SOURCE_INTERPRETATION_VERSION = "phase5/control-source-interpretation/v10"
+SOURCE_INTERPRETATION_PROMPT_VERSION = "phase5/control-source-prompt/v18"
+SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v21"
+
+
+_DAY_WEEK_WINDOW_RE = re.compile(
+    r"(?P<anchor>.+?[前后])(?P<number>[1-9]\d{0,3})(?P<unit>天|日|周)"
+    r"(?P<boundary>内|以内|以上|以下|不满|超过)?"
+)
+
+
+def _same_explicit_day_week_window(source: str, target: str) -> bool:
+    """Only convert exact relative day/week windows with unchanged anchors and bounds."""
+    left = _DAY_WEEK_WINDOW_RE.fullmatch(source)
+    right = _DAY_WEEK_WINDOW_RE.fullmatch(target)
+    if left is None or right is None:
+        return False
+    if (left["anchor"], left["boundary"]) != (right["anchor"], right["boundary"]):
+        return False
+    left_days = int(left["number"]) * (7 if left["unit"] == "周" else 1)
+    right_days = int(right["number"]) * (7 if right["unit"] == "周" else 1)
+    return left_days == right_days
 
 _EXTERNAL_ATTRIBUTION_RE = re.compile(
     r"(?:指南|指导原则|共识|文献|报告|教科书|研究论文)"
@@ -78,7 +98,8 @@ _EXPLICIT_TIME_FRAGMENT_RE = re.compile(
     r"(?:筛选|基线|随机(?:化|分组)?|首次给药)(?:前|后|时)|"
     r"(?:W|D)\s*-?\d+\s*[~～至-]\s*(?:W|D)?\s*-?\d+|"
     r"\d+\s*(?:天|日|周|月|年)(?!岁|龄)(?:内|前|后|以上|以下)?|"
-    r"每(?:日|天|周|月)(?:\d+|[一二三四五六七八九十]+)次",
+    r"每(?:日|天|周|月)(?:\d+|[一二三四五六七八九十]+)次|"
+    r"(?:其余|其他|剩余|后续)(?:的)?访视",
     re.IGNORECASE,
 )
 
@@ -104,6 +125,10 @@ class SourceStatement(ContractModel):
     quoted_text: str = Field(min_length=1)
     scope_quote: str | None = None
     force: Literal["required", "prohibited", "recommended", "descriptive", "unclear"]
+    decision_functions: list[Literal[
+        "action", "definition", "calculation_input", "threshold",
+        "time_validity", "exception", "background", "unclassified",
+    ]] = Field(default_factory=lambda: ["unclassified"])
     affected_stage: str | None = None
     time_words: list[str] = Field(...)
     exception_words: str | None = None
@@ -112,6 +137,14 @@ class SourceStatement(ContractModel):
     eligibility_sequence_quote: str | None = None
     control_authority: Literal["study_or_unknown", "cited_external_rationale"] = "study_or_unknown"
     attribution_quote: str | None = None
+
+    @model_validator(mode="after")
+    def require_coherent_functions(self) -> "SourceStatement":
+        if not self.decision_functions or len(self.decision_functions) != len(set(self.decision_functions)):
+            raise ValueError("每条陈述须有不重复的决策功能；未知时保留未分类")
+        if len(self.decision_functions) > 1 and set(self.decision_functions) & {"background", "unclassified"}:
+            raise ValueError("纯背景或未分类不能与决策功能并列")
+        return self
 
 
 class SourceInterpretation(ContractModel):
@@ -185,7 +218,7 @@ def normalize_mixed_schedule_scopes(
         unit = units[statement.structure_unit_id]
         scope = normalize_source_excerpt(statement.scope_quote or "")
         if (
-            statement.force != "required" or not scope or statement.time_words
+            not scope or statement.time_words
             or statement.affected_stage is not None or statement.exception_words is not None
             or statement.unresolved or scope in normalize_source_excerpt(unit.excerpt)
             or any(scope in normalize_source_excerpt(part) for part in unit.heading_path)
@@ -469,7 +502,7 @@ class SourceTargetReviewItem(ContractModel):
     decision: Literal[
         "covered_by_official", "covered_by_procedure", "additional_requirement",
         "not_current_control", "unresolved", "potential_same_requirement",
-        "cited_external_rationale",
+        "cited_external_rationale", "background_context",
     ]
     target_id: str | None = None
     source_action_excerpt: str = Field(min_length=1)
@@ -595,6 +628,15 @@ def target_review_indexes(
     coverage: list[SourceStatementCoverage],
     batch: ProtocolControlDispositionBatch | None = None,
 ) -> list[int]:
+    for entry in coverage:
+        if (entry.statement_index >= len(interpretation.statements)
+                or entry.structure_unit_id != interpretation.statements[entry.statement_index].structure_unit_id):
+            raise SourceTargetReviewValidationError(
+                "来源覆盖账与陈述清单不一致",
+                code="SOURCE_COVERAGE_IDENTITY_INVALID",
+                statement_index=None,
+                json_path="/source_statement_coverage",
+            )
     units = {unit.structure_unit_id: unit for unit in batch.owned_units} if batch else {}
     return [
         entry.statement_index
@@ -603,10 +645,8 @@ def target_review_indexes(
             == "cited_external_rationale"
             or (entry.status != "expressed"
                 and entry.disposition in _ENROLLMENT_DISPOSITIONS
-                and interpretation.statements[entry.statement_index].force in {"required", "prohibited"}
                 and not (
                     entry.schedule_columns
-                    and interpretation.statements[entry.statement_index].force == "required"
                     and all(
                         link.procedure_target_id is not None
                         for link in entry.schedule_columns
@@ -659,6 +699,7 @@ def build_source_target_review_prompt(
             "scope_quote": interpretation.statements[index].scope_quote,
             "affected_stage": interpretation.statements[index].affected_stage,
             "time_words": interpretation.statements[index].time_words,
+            "decision_functions": interpretation.statements[index].decision_functions,
             "exception_words": interpretation.statements[index].exception_words,
             "eligibility_sequence": interpretation.statements[index].eligibility_sequence,
             "eligibility_sequence_quote": interpretation.statements[index].eligibility_sequence_quote,
@@ -710,6 +751,12 @@ def build_source_target_review_prompt(
         "设计目的的转述、本批没有把该动作做成候选，选 cited_external_rationale；"
         "attribution_excerpt 必须与上一步归因摘录逐字一致。不能仅因为标题叫科学原理、"
         "出现指南二字或未找到已有目标就选此项。若同句明确写本研究采纳为要求，仍须按要求核对。"
+        "force 只记原文语气，不决定是否要核对；描述性语句可能定义入排所用的取值、计算、时窗或例外。"
+        "背景说明只有在逐字摘录确实不改变本节点任何选择、计算或判断，且没有被装成候选动作时，"
+        "才选 background_context，并用 non_control_basis_excerpt 引用本条内证明其为背景的连续原文。"
+        "本条 decision_functions 不是结论；只有标为纯 background 且核对原文后确为背景，"
+        "才可选 background_context。"
+        "若只因未找到条款或不确定用途，选 unresolved，不得当作背景。"
         "同段已有候选并不等于所有动作已覆盖；目录名称相似也不等于时间、条件、例外都已覆盖。"
         "完整覆盖必须从本陈述截出连续的 source_action_excerpt，并从目标的 source_excerpts 截出连续的"
         " target_action_excerpt。"
@@ -718,7 +765,8 @@ def build_source_target_review_prompt(
         "两端动作摘录各自必须有原文依据，但文字不必完全相同；全称、缩写或表述差异"
         "只有在给出的方案原文能证明条件、对象、否定、阈值及例外相同后才可报完整覆盖。"
         "如本陈述有明确时间，须再分别给出来源时间与目标摘录或访视中的同一最短连续时间短语，"
-        "两个字段归一化后必须完全相同；来源时间可取本条已核实的"
+        "两个字段归一化后须相同；仅同一锚点、前后方向及边界完全一致时，整数天/周可按七天一周核对等价，"
+        "月份、访视周编号及其他表达不能推算等价。来源时间可取本条已核实的"
         "scope_quote 或所属标题，不得借相邻陈述的范围；不要把整行访视名称当成目标时间片段。"
         "一条陈述若同时列出访视范围和治疗持续期等多项时间要求，目标原文或访视定位必须逐项支持全部时间措辞；"
         "只对齐其中一项不得宣称完整覆盖，应选 additional_requirement 或 unresolved 并列出未覆盖之处。"
@@ -728,9 +776,16 @@ def build_source_target_review_prompt(
         "若本条来源的动作、对象和相对时点本身均有逐字依据，只是已有目标缺少该时点，"
         "应选 additional_requirement，引用已有目标作为对照并写明时间差额；"
         "只有来源动作或适用时期自身无法从本条及其明确范围核清时才选 unresolved。"
+        "若多个访视目录项共用同一段说明，不能仅因该段包含本条时期就说所选访视已覆盖；"
+        "还须核对该目录项独有的访视名称或独有来源。其余访视等相对称谓若无法定位到"
+        "所选访视，应保留待核，不得借共用说明报完整覆盖。"
         "不得为了选增量要求，借同单元另一动作的时期、频次或治疗持续期。"
         "未完整覆盖时可以附上已有目标的逐字动作和时间作为核对线索，同时在 unresolved_aspects"
         "写明未对齐之处；此类目标引用不代表已覆盖。"
+        "引用已有目标作对照时，target_id 必须是该冻结目标的编号，target_action_excerpt "
+        "必须逐字摘自该目标的 source_excerpts，两者须同时填写；不引用目标时两者都填 null，"
+        "target_time_excerpt 也填 null。不能把本条原文复制到目标摘录，"
+        "也不能因选择 additional_requirement 就省略所引用目标的编号。"
         "不要把未来要求提前判作当前已完成，不推断原文未写的例外。"
         "只读来源单元仅供识别跨章节复述、补充或矛盾的待核线索；它们不是冻结已有目标。"
         "不得因两段文字相似就报完整覆盖，也不得把只读来源的时期、例外或完成强度写成本陈述自己的原文。"
@@ -746,7 +801,7 @@ def build_source_target_review_prompt(
         "不得省略任何陈述，不能引用未列出的目标。只返回 JSON 对象。\n"
         f'输出结构：{{"version":"{SOURCE_TARGET_REVIEW_VERSION}","items":'
         '[{"statement_index":0,"decision":"covered_by_official|covered_by_procedure|'
-        'additional_requirement|not_current_control|unresolved|potential_same_requirement|cited_external_rationale","target_id":null,"source_action_excerpt":"逐字动作",'
+        'additional_requirement|not_current_control|unresolved|potential_same_requirement|cited_external_rationale|background_context","target_id":null,"source_action_excerpt":"逐字动作",'
         '"target_action_excerpt":null,"source_object_excerpt":null,"target_object_excerpt":null,'
         '"source_time_excerpt":null,"target_time_excerpt":null,"target_scope_excerpt":null,'
         '"unresolved_aspects":[],"non_control_basis_excerpt":null,"attribution_excerpt":null}]}。枚举值只选一个，未知目标填 null；'
@@ -827,9 +882,12 @@ def validate_source_target_review(
         )
         if not action or (action not in quoted and not same_sentence_subject_extension):
             reject(item, "SOURCE_ACTION_MISMATCH", "source_action_excerpt", f"第{item.statement_index}条动作摘录不属于冻结陈述")
+        if statement.decision_functions == ["unclassified"] and item.decision != "unresolved":
+            reject(item, "SOURCE_FUNCTION_UNRESOLVED", "decision",
+                   "原文对本节点审核的用途仍未核清，不能仅凭文字对应宣称已覆盖或无需审核")
         covered = item.decision in {"covered_by_official", "covered_by_procedure"}
         if (not covered and item.decision not in {"not_current_control", "potential_same_requirement",
-                                                "cited_external_rationale"}
+                                                "cited_external_rationale", "background_context"}
                 and not item.unresolved_aspects):
             reject(item, "UNRESOLVED_ASPECTS_MISSING", "unresolved_aspects", "未完整覆盖的陈述必须说明待核实之处")
         if item.decision == "cited_external_rationale":
@@ -852,6 +910,24 @@ def validate_source_target_review(
                     item.non_control_basis_excerpt)) or item.unresolved_aspects:
                 reject(item, "SOURCE_ATTRIBUTION_SCOPE_INVALID", "decision",
                        "外部资料说明不能携带已有目标、跨章关系、额外时间或未决项目")
+            continue
+        if item.decision == "background_context":
+            entry = coverage_by_index[item.statement_index]
+            basis = normalize_source_excerpt(item.non_control_basis_excerpt or "")
+            if (statement.decision_functions != ["background"]
+                    or statement.force not in {"descriptive", "unclear"}
+                    or not basis or basis not in quoted
+                    or entry.action_candidate_indexes or entry.candidate_indexes
+                    or entry.exact_official_excerpt_matches
+                    or entry.exact_procedure_excerpt_matches
+                    or item.target_id is not None or item.target_action_excerpt is not None
+                    or item.source_time_excerpt is not None or item.target_time_excerpt is not None
+                    or item.target_scope_excerpt is not None
+                    or item.source_object_excerpt is not None
+                    or item.target_object_excerpt is not None
+                    or item.attribution_excerpt is not None or item.unresolved_aspects):
+                reject(item, "BACKGROUND_CONTEXT_UNPROVEN", "decision",
+                       "纯背景处置须由本条原文及功能分类支持，且不能同时形成候选控制")
             continue
         if item.attribution_excerpt is not None:
             reject(item, "SOURCE_ATTRIBUTION_UNEXPECTED", "attribution_excerpt",
@@ -987,6 +1063,10 @@ def validate_source_target_review(
             if missing_time:
                 reject(item, "SOURCE_TIME_INCOMPLETE", "source_time_excerpt",
                        f"第{item.statement_index}条原文时间未在陈述清单中逐项列明：{missing_time}")
+            if (re.search(r"(?:其余|其他|剩余|后续)(?:的)?访视", quoted_text)
+                    and not re.search(r"(?:其余|其他|剩余|后续)(?:的)?访视", source_time)):
+                reject(item, "SOURCE_TIME_INCOMPLETE", "source_time_excerpt",
+                       "来源时间摘录缺少原文中的相对访视范围")
         source_time_in_scope = bool(source_time) and any(
             source_time in normalize_source_excerpt(location)
             for location in [statement.scope_quote or "", *owned[statement.structure_unit_id].heading_path]
@@ -1013,6 +1093,42 @@ def validate_source_target_review(
                 reject(item, "FREQUENCY_ONLY_COVERAGE", "target_time_excerpt", "给药频次相同仍须证明来源与目标属于同一访视范围")
         if not covered:
             continue
+        if item.decision == "covered_by_procedure" and source_time and target is not None:
+            shared_time_spans = {
+                span_id
+                for span_id, excerpt in zip(target.source_span_ids, target.source_excerpts)
+                if excerpt and target_time in normalize_source_excerpt(excerpt)
+                and any(
+                    other.catalog_item_id != target.catalog_item_id
+                    and other.visit_instance != target.visit_instance
+                    and any(
+                        other_span == span_id and other_excerpt
+                        and target_time in normalize_source_excerpt(other_excerpt)
+                        for other_span, other_excerpt in zip(
+                            other.source_span_ids, other.source_excerpts
+                        )
+                    )
+                    for other in procedures.values()
+                )
+            }
+            if shared_time_spans:
+                visit = normalize_source_excerpt(target.visit_instance)
+                specific_quote = any(
+                    excerpt and target_time in normalize_source_excerpt(excerpt)
+                    and span_id not in shared_time_spans
+                    for span_id, excerpt in zip(target.source_span_ids, target.source_excerpts)
+                )
+                source_visits = _visit_scope_keys(source_time)
+                target_visits = _visit_scope_keys(visit)
+                relative_or_excluded = bool(re.search(
+                    r"(?:其余|其他|剩余|后续)(?:的)?访视|除[^。；;]{0,30}外",
+                    source_time,
+                ))
+                if not specific_quote and (
+                    relative_or_excluded or not source_visits or not source_visits <= target_visits
+                ):
+                    reject(item, "TARGET_VISIT_SCOPE_UNPROVEN", "target_id",
+                           "多个访视共用原文，所选流程目标缺少本条时期的独立访视依据")
         if item.unresolved_aspects:
             reject(item, "COVERED_WITH_GAPS", "unresolved_aspects", "仍有未覆盖维度的陈述不能标为已有目标完整覆盖")
         if statement.exception_words and not any(
@@ -1021,14 +1137,15 @@ def validate_source_target_review(
         ):
             reject(item, "TARGET_EXCEPTION_UNGROUNDED", "target_action_excerpt", f"第{item.statement_index}条例外未在目标原文定位")
         if statement.time_words:
-            if not source_time or not target_time or source_time != target_time:
+            equivalent_window = _same_explicit_day_week_window(source_time, target_time)
+            if not source_time or not target_time or (source_time != target_time and not equivalent_window):
                 reject(item, "TIME_SCOPE_MISMATCH", "target_time_excerpt", f"第{item.statement_index}条时间措辞未获两端一致支持")
             target_locations = [*target_excerpts]
             if item.target_id in procedures:
                 target_locations.append(procedures[item.target_id].visit_instance)
             unmatched = [
                 word for word in statement.time_words
-                if not all(
+                if not equivalent_window and not all(
                     any(
                         normalize_source_excerpt(part) in normalize_source_excerpt(location)
                         for location in target_locations
@@ -1133,6 +1250,34 @@ class SourceInterpretationValidationError(ValueError):
         self.source_refs = source_refs
         self.retry_class = retry_class
         self.affected_dependents = [structure_unit_id]
+
+
+def parse_product_source_interpretation(
+    batch: ProtocolControlDispositionBatch, text: str,
+) -> SourceInterpretation:
+    """Require the live reader to state each decision function explicitly."""
+    payload = json.loads(text)
+    if isinstance(payload, dict) and isinstance(payload.get("statements"), list):
+        units = {unit.structure_unit_id: unit for unit in batch.owned_units}
+        for index, raw in enumerate(payload["statements"]):
+            if not isinstance(raw, dict):
+                continue
+            missing = "decision_functions" not in raw
+            unqualified = raw.get("decision_functions") == ["unclassified"] and not raw.get("unresolved")
+            if not missing and not unqualified:
+                continue
+            unit_id = raw.get("structure_unit_id")
+            unit = units.get(unit_id) if isinstance(unit_id, str) else None
+            raise SourceInterpretationValidationError(
+                "SOURCE_FUNCTION_UNSTATED" if missing else "SOURCE_FUNCTION_UNRESOLVED",
+                "来源陈述须说明对本次审核的用途；暂不能确定时写明具体待核之处",
+                statement_id=index,
+                structure_unit_id=unit_id if isinstance(unit_id, str) else "未知来源单元",
+                json_path=f"/statements/{index}/decision_functions",
+                source_refs=list(unit.source_span_ids) if unit is not None else [],
+                retry_class="source_interpretation",
+            )
+    return SourceInterpretation.model_validate(payload)
 
 
 def validate_source_interpretation(
@@ -1286,6 +1431,10 @@ def build_source_interpretation_prompt(batch: ProtocolControlDispositionBatch) -
         "不适用共同范围时填 null。quoted_text 只取本条动作；若另填资格先决原文，"
         "该先决短语须在 quoted_text 之前，不能把它并入动作摘录。"
         "force 只表示原文语气，不表示受试者是否满足。"
+        "decision_functions 独立记录本条对当前入排决策的功能，可多选 action、definition、"
+        "calculation_input、threshold、time_validity、exception；仅明确与入排无关的说明选"
+        " background；不能确认用途选 unclassified。描述性语气仍可能规定取值窗口、计算输入"
+        "或判定定义，不能因 force 为 descriptive 就选 background。背景或未分类不得与其他功能并列。"
         "引用外部指南、共识、文献等说明研究设计目的时，即使引文内有‘排除’，"
         "也不能因此把转述写成本研究的独立排除要求；逐条保留 force 原语气，"
         "control_authority 填 cited_external_rationale，attribution_quote 填同一句动作之前"
@@ -1318,6 +1467,7 @@ def build_source_interpretation_prompt(batch: ProtocolControlDispositionBatch) -
         f'{{"version":"{SOURCE_INTERPRETATION_VERSION}",'
         '"statements":[{"structure_unit_id":"来源单元ID","quoted_text":"逐字原文",'
         '"force":"required|prohibited|recommended|descriptive|unclear",'
+        '"decision_functions":["definition","calculation_input"],'
         '"scope_quote":null,"affected_stage":null,"time_words":[], '
         '"exception_words":null,"unresolved":[],"eligibility_sequence":"current_or_unknown|after_eligibility_decision",'
         '"eligibility_sequence_quote":null,"control_authority":"study_or_unknown|cited_external_rationale",'
@@ -1328,11 +1478,17 @@ def build_source_interpretation_prompt(batch: ProtocolControlDispositionBatch) -
 
 
 def source_interpretation_response_format() -> dict[str, object]:
+    schema = SourceInterpretation.model_json_schema()
+    statement_schema = schema["$defs"]["SourceStatement"]
+    statement_schema["properties"]["decision_functions"].pop("default", None)
+    statement_schema["required"] = [
+        *statement_schema.get("required", []), "decision_functions",
+    ]
     return {
         "type": "json_schema",
         "json_schema": {
             "name": "protocol_control_source_interpretation_" + SOURCE_INTERPRETATION_VERSION.rsplit("/", 1)[-1],
             "strict": True,
-            "schema": SourceInterpretation.model_json_schema(),
+            "schema": schema,
         },
     }
