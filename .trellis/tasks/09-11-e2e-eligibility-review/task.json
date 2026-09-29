@@ -2,7 +2,7 @@
   "id": "e2e-eligibility-review",
   "name": "e2e-eligibility-review",
   "title": "端到端入排审核：判断检索界面+入排工作台+真实全链验收",
-  "description": "0922V2工程审阅后的连续全交付计划：同源资格、内置方案、真实OCR/局部核实来源、工作台、纠错补证和集中验收",
+  "description": "0927V1-R1完整覆盖与混合执行：P1方案要求、P2有源事实与更正、P3完整个例及宽屏验收；当前无损暂停",
   "status": "in_progress",
   "dev_type": null,
   "scope": null,
@@ -33,18 +33,22 @@
     "delivery_20260922/00_START_HERE.md",
     "delivery_20260922/07_FORK_PROMPT.md",
     "delivery_20260922/03_PLAN.md",
-    "delivery_20260922/05_ACCEPTANCE.md"
+    "delivery_20260922/05_ACCEPTANCE.md",
+    "delivery_0927V1_R1/00_START_HERE.md",
+    "plan.md",
+    "acceptance.md",
+    "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md"
   ],
-  "notes": "2026-09-22已完成本地/GitHub及专家0922V2审阅并进入连续实施。W0源码修订完成，待W1/W2后在Q1集中验证；不修改产品env或临床库，不启动旧守望任务。入口delivery_20260922/00_START_HERE.md。",
+  "notes": "2026-09-29按用户要求无损暂停；当前入口delivery_0927V1_R1/00_START_HERE.md，精确恢复点见HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md和implement.md文头。P1跨章来源仍需核对；P2/P3及临床验收未完成，claims_complete=false。",
   "meta": {
-    "execution_paused_by_user": false,
-    "paused_at_date": null,
-    "current_checkpoint": "implement.md",
-    "current_scope": "W0-W7 continuous product implementation with Q1-Q3 concentrated verification.",
+    "execution_paused_by_user": true,
+    "paused_at_date": "2026-09-29",
+    "current_checkpoint": "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md",
+    "current_scope": "0927V1-R1 P1-P3; paused in P1 cross-chapter source and schedule review; P2/P3 not accepted.",
     "claims_complete": false,
     "review_packet_status": "implementation_in_progress",
-    "runtime_goal_status_observed": "active",
-    "current_handoff": "delivery_20260922/00_START_HERE.md",
-    "current_decision_source": "research/ENROLLMENT_REVIEW_AGENT_RECOVERY_V3_20260917.md"
+    "runtime_goal_status_observed": "paused",
+    "current_handoff": "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md",
+    "current_decision_source": "delivery_0927V1_R1/01_DECISION.md"
   }
 }
