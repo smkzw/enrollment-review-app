@@ -1,0 +1,56 @@
+{
+  "schema_version": "review-index/0929v1/v1",
+  "document_kind": "handoff",
+  "round_id": "0929V1",
+  "recorded_at": "2026-09-30T10:48:00+08:00",
+  "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
+  "execution_variant": "RV29-NATIVE-VISUAL",
+  "base_review_commit": "a1cf89028b9ef63aa725f5016d3f3fc2c7ab6b61",
+  "delivered_snapshot_id": "WT-01",
+  "runtime_state": "paused_requested; control-job-e561e15180154ea5b6c19ff25f54c5b8=failed_final",
+  "code_snapshots": [
+    {"id": "WT-01", "kind": "working_tree", "base_commit": "a1cf89028b9ef63aa725f5016d3f3fc2c7ab6b61", "access": "local_only", "manifest_artifact_id": "E-05", "file_hashes": {
+      "app/agents/protocol_deconstructor.py": "1749ab6e4ea0ab816f1f8e033e2e61a24c713c186d6d34aef10729ae1b7a5352",
+      "app/protocols/deconstruction_gate.py": "86b209351ce46a5108331e1cc8d7d2777c39a0cb6d5addd2cf125ba5987b40b1",
+      "app/services/protocol_workbench_service.py": "5444d51c5a18d1dcf77ddf2300cdf42ce2786a57a72df8a5d9b2c1637302f448",
+      "app/domain/contracts/protocol_controls.py": "767bdc5854aa28dd8612678efcc396f9eeced8a941dd05279727da02d28de1bc",
+      "app/protocols/protocol_control_planning.py": "b53b4a50ab74438d9bc29baff306782d6459b4ab176fce6c0d05630e901b9ff0",
+      "tests/v2/protocols/test_deconstruction_gate_slice3.py": "0e0a559920c81565e312c701ce603e40eeac286feac431d84f6cdc75cb333fad",
+      "tests/v2/protocols/test_protocol_control_generalization.py": "69b7c2a1661fda0f9c5b31e19e3292f1fe965df1ce337bc44568ca6aa4ecfcaf"
+    }}
+  ],
+  "changes": [
+    {"id": "CH-01", "summary": "Official draft feedback/gate source-scope repair", "delivery_state": "local_only", "paths": ["app/agents/protocol_deconstructor.py", "app/protocols/deconstruction_gate.py", "app/services/protocol_workbench_service.py", "tests/v2/protocols/test_deconstruction_gate_slice3.py"], "evidence_ids": ["E-01"]},
+    {"id": "CH-02", "summary": "Same-table same-row read-only context accepted; unrelated non-control rejected", "delivery_state": "local_only", "paths": ["app/domain/contracts/protocol_controls.py", "tests/v2/protocols/test_protocol_control_generalization.py"], "evidence_ids": ["E-02"]},
+    {"id": "CH-03", "summary": "GitHub handoff and review index", "delivery_state": "committed", "paths": [".trellis/tasks/09-11-e2e-eligibility-review/HANDOFF.md", ".trellis/tasks/09-11-e2e-eligibility-review/HANDOFF_20260930_0929V1_PAUSE.md", ".trellis/tasks/09-11-e2e-eligibility-review/review_index_20260930_0929V1.json"], "evidence_ids": ["E-04"]},
+    {"id": "CH-04", "summary": "Current Trellis implementation milestone", "delivery_state": "local_only", "paths": [".trellis/tasks/09-11-e2e-eligibility-review/implement.md"], "evidence_ids": ["E-04"]}
+  ],
+  "claims": [
+    {"id": "CL-01", "status": "author_report", "statement": "Official draft revision 15 passed structural publication gate", "limitations": "Not clinical QC or common publication", "evidence_ids": ["E-01"]},
+    {"id": "CL-02", "status": "static_observation", "statement": "71 discovery checkpoints completed, closure failed_final", "limitations": "Local DB only; no deep batches", "evidence_ids": ["E-02"]},
+    {"id": "CL-03", "status": "author_report", "statement": "After contract fix saved discovery results build 63 deep batches offline", "limitations": "Read-only replay reported in this handoff; raw execution transcript was not saved as an external artifact, not a new durable job or publication", "evidence_ids": ["E-02", "E-04"]}
+  ],
+  "tests": [
+    {"id": "T-01", "status": "passed", "snapshot_id": "WT-01", "command": ".venv/bin/python -m pytest tests/v2/protocols/test_protocol_control_generalization.py tests/v2/protocols/test_deconstruction_gate_slice3.py -q", "exit_code": 0, "counts": {"passed": 215, "failed": 0, "skipped": 0}, "scope": "synthetic contracts and source gate; not clinical acceptance", "evidence_ids": ["E-04"]}
+  ],
+  "artifacts": [
+    {"id": "E-01", "kind": "isolated_product_job", "access": "local_only", "sensitivity": "restricted_source", "path": "/Users/smkzw/tmp/enrollment-rv29-p1-ex18-feedback-20260930", "contains_clinical_source": true},
+    {"id": "E-02", "kind": "isolated_control_job", "access": "local_only", "sensitivity": "restricted_source", "path": "/Users/smkzw/tmp/enrollment-rv29-p1-ex18-feedback-20260930/enrollment-review-v2.sqlite3", "job_id": "e561e15180154ea5b6c19ff25f54c5b8", "contains_clinical_source": true},
+    {"id": "E-03", "kind": "read_only_conference", "access": "local_only", "sensitivity": "redacted", "path": "runs/conference/enrollment-rv29-example-proposition-20260930/evidence_single_object.md", "contains_clinical_source": false},
+    {"id": "E-04", "kind": "handoff_report", "access": "reviewer_accessible", "sensitivity": "public_technical", "path": ".trellis/tasks/09-11-e2e-eligibility-review/HANDOFF_20260930_0929V1_PAUSE.md", "raw_test_log": false},
+    {"id": "E-05", "kind": "code_hash_manifest", "access": "reviewer_accessible", "sensitivity": "public_technical", "path": ".trellis/tasks/09-11-e2e-eligibility-review/review_index_20260930_0929V1.json"}
+  ],
+  "hypotheses": [
+    {"id": "H-01", "summary": "Repeated full-protocol repair cycles, not only model capability, dominate elapsed development time", "status": "supported_not_proven_exclusive", "support_evidence_ids": ["E-02"], "counter_evidence_ids": [], "alternatives": ["Upstream model latency or real protocol ambiguity may also dominate some calls"], "disconfirming_test": "Compare isolated source-identical local-replay plus one true deep run by stage timing and failed family"}
+  ],
+  "recommendations": [
+    {"id": "REC-01", "decision_status": "proposed", "proposal": "Use existing job identity preflight and reuse 71 completed discovery receipts before new deep run", "basis": "All discovery steps completed and the product exposes validated discovery_source_job_id", "risk": "Current source, prompt, model or batch identity may differ and correctly reject reuse", "validation": "Create through formal product entry, log compatibility result and reused checkpoint count before any model call"}
+  ],
+  "next_actions": [
+    {"id": "N-01", "summary": "Create versioned control job through product entry with discovery_source_job_id after identity preflight; do not rewrite old failed job"},
+    {"id": "N-02", "summary": "Review official and cross-chapter source semantics before publication; complete current-node subject work draft and correction"},
+    {"id": "N-03", "summary": "Run held-out structure and wide-screen browser acceptance after integrated result"}
+  ],
+  "product_claims_complete": false,
+  "notes": "No raw protocol, patient files, credentials, database, or model response stored in this index. GitHub delivery does not make local-only code or clinical evidence remotely reviewable."
+}
