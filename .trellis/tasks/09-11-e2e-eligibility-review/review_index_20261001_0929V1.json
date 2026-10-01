@@ -1,0 +1,47 @@
+{
+  "schema_version": "review-index/0929v1/v1",
+  "document_kind": "handoff",
+  "round_id": "0929V1-20261001-pause",
+  "recorded_at": "2026-10-01T21:10:11+08:00",
+  "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
+  "execution_variant": "RV29-NATIVE-VISUAL",
+  "base_review_commit": "9f8d9cd46f0c7c98c916a279f0d37f94b86fcc53",
+  "delivered_snapshot_id": "S-01",
+  "runtime_state": "goal_paused; owned model driver ended; draft job failed_retryable; owned 64685/5195 stopped; shared services untouched",
+  "code_snapshots": [{"id":"S-01","kind":"commit","base_commit":"9f8d9cd46f0c7c98c916a279f0d37f94b86fcc53","commit":"d04a199ad4d4c1dc550399716b99ba87927bc022","access":"reviewer_accessible","manifest_artifact_id":"E-01","note":"263 selected current task files, includes inherited same-task changes; not all revalidated this period"}],
+  "changes": [
+    {"id":"CH-01","delivery_state":"committed","paths":["app/agents/protocol_control_deconstructor.py","app/services/protocol_control_execution.py","app/services/protocol_control_restricted_source.py"],"evidence_ids":["E-01","E-02"],"note":"Frozen source snapshot; terminal failures preserved, no claim of full clinical completion"},
+    {"id":"CH-02","delivery_state":"committed","paths":["app/services/local_visual_verification.py","app/evidence/local_region_position_trial.py","frontend/src/components/evidence-workspace/LocalVisualVerificationPanel.tsx"],"evidence_ids":["E-01","E-02"],"note":"Isolated candidate verification only; no formal numeric adoption"}
+  ],
+  "claims": [
+    {"id":"CL-01","status":"verified","snapshot_id":"S-01","statement":"Scoped backend and frontend software checks pass on current source bytes","limitations":"Not whole repository, clinical validation, joint rule publication, complete patient workflow or Q3","evidence_ids":["E-02"],"test_ids":["T-01","T-02","T-03"]},
+    {"id":"CL-02","status":"reproduced","snapshot_id":"S-01","statement":"Fresh DOCX official generation ended failed_retryable, preview 15/23; no publication","limitations":"Exit0 from owner driver only checks failed_final and is not successful generation; raw clinical receipts local-only","evidence_ids":["E-02","E-03"],"test_ids":["T-04"]}
+  ],
+  "tests": [
+    {"id":"T-01","status":"passed","snapshot_id":"S-01","command":"env ENROLLMENT_ENV_FILE=$PWD/.env PYTHONPATH=$PWD .venv/bin/python -m pytest tests/v2/protocols/test_slice58c_control_deconstructor.py tests/v2/services/test_protocol_control_execution.py tests/v2/evidence/test_local_region_comparison.py tests/v2/evidence/test_local_region_position_trial.py tests/v2/services/test_local_region_comparison.py tests/v2/services/test_local_region_structured_read.py tests/v2/services/test_local_visual_job.py tests/v2/services/test_local_visual_verification.py tests/v2/api/test_local_visual_verification_api.py -q","exit_code":0,"counts":{"passed":623,"failed":0,"skipped":0},"seconds":59.84,"evidence_ids":["E-02"],"note":"Session21719 actual tool receipt; public record is owner summary, not raw log"},
+    {"id":"T-02","status":"passed","snapshot_id":"S-01","command":"frontend: npm run test -- src/api/evidence/localVisualHttp.test.ts src/components/evidence-workspace/LocalVisualVerificationPanel.test.tsx src/components/evidence-workspace/OriginalEvidenceViewer.region.test.tsx src/components/evidence-workspace/OriginalEvidenceViewer.test.tsx src/api/evidence/evidenceViewModels.test.ts src/pages/EvidencePage.test.tsx src/pages/EligibilityWorkbenchPage.test.tsx src/api/eligibility-review/eligibilityReviewHttp.test.ts","exit_code":0,"counts":{"passed":123,"failed":0,"skipped":0},"seconds":8.03,"evidence_ids":["E-02"],"note":"Session48374; 8 files, current source snapshot"},
+    {"id":"T-03","status":"passed","snapshot_id":"S-01","command":"frontend: npm run build","exit_code":0,"counts":{"passed":null,"failed":null,"skipped":null},"evidence_ids":["E-02"],"note":"tsc and Vite8.2.1; existing chunk-size warning, no browser acceptance"},
+    {"id":"T-04","status":"failed","snapshot_id":"S-01","command":"env ENROLLMENT_ENV_FILE=$PWD/.env PYTHONPATH=$PWD .venv/bin/python /Users/smkzw/tmp/enrollment-rv29-fresh-official-run-20261001.py","exit_code":0,"counts":{"passed":null,"failed":null,"skipped":null},"seconds":5989.043,"evidence_ids":["E-02","E-03"],"note":"Session61648 ended, cell2480 received; driver exit0 does not include retryable failures; job failed_retryable/SEMANTIC_DRAFT_MISSING, protected history unchanged"},
+    {"id":"T-05","status":"not_run","command":"Full current rule patient workflow, real correction, independent holdout and Q3 desktop/browser/recovery acceptance","exit_code":null,"counts":{"passed":null,"failed":null,"skipped":null},"evidence_ids":[],"reason":"Incomplete product chain and user-directed pause; do not claim old tests or empty UI as substitute"}
+  ],
+  "artifacts": [
+    {"id":"E-01","access":"reviewer_accessible","sensitivity":"public_technical","path":".trellis/tasks/09-11-e2e-eligibility-review/SOURCE_SNAPSHOT_20261001.json","sha256":null},
+    {"id":"E-02","access":"reviewer_accessible","sensitivity":"redacted","path":".trellis/tasks/09-11-e2e-eligibility-review/HANDOFF_20261001_0929V1_PAUSE.md","sha256":null,"note":"Owner-authored sanitized summary, actual raw clinical evidence not publicly accessible"},
+    {"id":"E-03","access":"local_only","sensitivity":"restricted_source","path":"/Users/smkzw/tmp/enrollment-rv29-sar-local-repair-20260930/data/artifacts/evaluation_manifest/8851a39225ef7d1512e212abd9430b66663a5a76d83c4b79434608799dca1abd","sha256":"8851a39225ef7d1512e212abd9430b66663a5a76d83c4b79434608799dca1abd"},
+    {"id":"E-04","access":"reviewer_accessible","sensitivity":"redacted","path":".trellis/tasks/09-11-e2e-eligibility-review/RETROSPECTIVE_20261001.md","sha256":null},
+    {"id":"E-05","access":"reviewer_accessible","sensitivity":"redacted","path":".trellis/tasks/09-11-e2e-eligibility-review/maintenance/CLEANUP_20260930.md","sha256":null}
+  ],
+  "hypotheses": [
+    {"id":"H-01","support_evidence_ids":["E-02","E-04"],"counter_evidence_ids":["E-04"],"alternatives":["Source complexity, stochastic generation and legitimate cache invalidation explain some cost, not all repeated first-batch failures"],"disconfirming_test":"Same frozen inputs and budget, semantically preserved/counterfactual/recovery variants reach the same formal consumer and a real patient action with fewer long retries"}
+  ],
+  "recommendations": [
+    {"id":"REC-01","decision_status":"proposed","proposal":"One connected semantic-production/consumption package, then one real patient correction loop; do not add a platform or clinical special cases","basis":"16 new control jobs failed in first deep batch, software progress not yet patient delivery","risk":"Cannot relax source completeness, sibling preservation, numeric qualification or release authorization","validation":"Normal/equivalent/counterfactual/recovery family plus actual source/save/consumer/API workflow under existing R1 contract"}
+  ],
+  "next_actions": [
+    {"id":"N-01","action":"Only after user resumes: audit saved fresh-DOCX terminal and compatible successful cache; scoped semantic consumer repair rather than blind rerun","authority":"User resume required; handoff is not execution authorization"},
+    {"id":"N-02","action":"Current adopted rules to one sourced patient work draft and real correction; numeric auto-adoption remains isolated-only until separately confirmed"},
+    {"id":"N-03","action":"Complete joint publication and patient loop, then independent holdout, desktop Ego Lite interaction and recovery acceptance"}
+  ],
+  "product_claims_complete": false,
+  "notes": "Paused on latest user instruction. This index distinguishes current scoped checks, earlier author reports and unperformed final clinical acceptance. No private inputs or model reasoning included."
+}

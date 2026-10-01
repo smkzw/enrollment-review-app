@@ -2,7 +2,7 @@
   "id": "e2e-eligibility-review",
   "name": "e2e-eligibility-review",
   "title": "端到端入排审核：判断检索界面+入排工作台+真实全链验收",
-  "description": "0927V1-R1完整覆盖与混合执行：P1方案要求、P2有源事实与更正、P3完整个例及宽屏验收；当前无损暂停",
+  "description": "0927V1-R1完整覆盖与混合执行；0929V1增量推进P1原生表格来源与受限采用、P2有源事实更正、P3完整个例和宽屏验收",
   "status": "in_progress",
   "dev_type": null,
   "scope": null,
@@ -35,20 +35,20 @@
     "delivery_20260922/03_PLAN.md",
     "delivery_20260922/05_ACCEPTANCE.md",
     "delivery_0927V1_R1/00_START_HERE.md",
+    "delivery_0929V1/00_START_HERE.md",
     "plan.md",
     "acceptance.md",
     "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md"
   ],
-  "notes": "2026-09-29按用户要求无损暂停；当前入口delivery_0927V1_R1/00_START_HERE.md，精确恢复点见HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md和implement.md文头。P1跨章来源仍需核对；P2/P3及临床验收未完成，claims_complete=false。",
+  "notes": "2026-10-01按用户指令无损暂停，当前读取已failed_retryable且不重试；现行入口HANDOFF_20261001_0929V1_PAUSE.md。代码d04a199a已推送，P1真实共同发布、P2/P3及临床验收未完成，claims_complete=false。",
   "meta": {
     "execution_paused_by_user": true,
-    "paused_at_date": "2026-09-29",
-    "current_checkpoint": "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md",
-    "current_scope": "0927V1-R1 P1-P3; paused in P1 cross-chapter source and schedule review; P2/P3 not accepted.",
+    "current_checkpoint": "HANDOFF_20261001_0929V1_PAUSE.md",
+    "current_scope": "0927V1-R1 P1-P3 with 0929V1 native-structure-first and selective visual validation; P1/P2 active, P3 not accepted.",
     "claims_complete": false,
-    "review_packet_status": "implementation_in_progress",
+    "review_packet_status": "paused_by_user_incomplete",
     "runtime_goal_status_observed": "paused",
-    "current_handoff": "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md",
-    "current_decision_source": "delivery_0927V1_R1/01_DECISION.md"
+    "current_handoff": "HANDOFF_20261001_0929V1_PAUSE.md",
+    "current_decision_source": "delivery_0927V1_R1/01_DECISION.md; delivery_0929V1/02_DECISION.md"
   }
 }
