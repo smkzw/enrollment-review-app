@@ -519,7 +519,7 @@ export function OcrReviewPanel({
     try {
       await onSubmitPageRiskReview(
         pageReviewScan.scanId,
-        "已对照右侧原件逐项核对本页识别内容",
+        "已对照右侧原件逐项核对本页所列风险片段",
       );
       setPageReviewConfirmed(false);
     } finally {
@@ -862,7 +862,7 @@ export function OcrReviewPanel({
                   disabled={editingDisabledReason !== null || pageReviewBusy}
                   onChange={(event) => setPageReviewConfirmed(event.target.checked)}
                 />
-                <span>我已对照右侧原件逐项核对本页识别内容</span>
+                <span>我已对照右侧原件逐项核对本页所列风险片段</span>
               </label>
               <button
                 type="button"

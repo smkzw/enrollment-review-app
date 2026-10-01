@@ -7,7 +7,7 @@
  *   兜底中文映射，确保缺失标签时界面仍保持自然中文，不暴露内部枚举词。
  */
 
-import type { EvidenceUploadErrorBody } from "./evidenceTypes";
+import type { DocumentCategory, EvidenceUploadErrorBody, SourceCategory } from "./evidenceTypes";
 import type { ProcessingCandidateStatusWire } from "./evidenceProcessingTypes";
 
 // ---------------------------------------------------------------------------
@@ -79,6 +79,8 @@ export interface EvidenceMetadataRevisionView {
   sourceDocumentVersionId: string;
   documentType: string;
   sourceParty: string;
+  documentCategory?: DocumentCategory | null;
+  sourceCategory?: SourceCategory | null;
   reason: string;
   isAutoSuggestion: boolean;
   supersedesMetadataRevisionId: string | null;
@@ -101,6 +103,7 @@ export interface EvidenceSnapshotMemberView {
   fileName: string;
   mediaType: string;
   versionNumber: number;
+  uploadedBy: string;
   origin: string;
   originLabel: string;
   metadataHead: EvidenceMetadataRevisionView;
@@ -345,6 +348,19 @@ function requireArray(value: unknown, field: string): unknown[] {
 function optionalString(value: unknown, field: string): string | null {
   if (value === null || value === undefined) return null;
   return requireString(value, field);
+}
+
+function optionalMetadataCategory<T extends string>(
+  value: unknown,
+  field: string,
+  allowed: readonly T[],
+): T | null {
+  if (value === null || value === undefined) return null;
+  const category = requireString(value, field);
+  if (!allowed.includes(category as T)) {
+    throw new EvidenceDecodeError(`响应字段 ${field} 的资料类别无法识别`);
+  }
+  return category as T;
 }
 
 function requiredNullableString(
@@ -705,6 +721,16 @@ export function decodeMetadataRevision(
       row.source_party,
       "metadata.source_party",
     ),
+    documentCategory: optionalMetadataCategory<DocumentCategory>(
+      row.document_category,
+      "metadata.document_category",
+      ["objective_report", "historical_record", "study_chart", "screening_transcription", "other", "unknown"],
+    ),
+    sourceCategory: optionalMetadataCategory<SourceCategory>(
+      row.source_category,
+      "metadata.source_category",
+      ["study_site", "external_hospital", "participant", "other", "unknown"],
+    ),
     reason: requireNonEmptyString(row.reason, "metadata.reason"),
     isAutoSuggestion: requireBoolean(
       row.is_auto_suggestion,
@@ -748,6 +774,7 @@ function decodeSnapshotMember(wire: unknown): EvidenceSnapshotMemberView {
     fileName: requireString(row.file_name, "member.file_name"),
     mediaType: textOr(row.media_type, "member.media_type", "未知格式"),
     versionNumber: requireNumber(row.version_number, "member.version_number"),
+    uploadedBy: requireString(row.uploaded_by, "member.uploaded_by"),
     origin: requireString(row.origin, "member.origin"),
     originLabel: textOr(row.origin_label, "member.origin_label", ""),
     metadataHead,

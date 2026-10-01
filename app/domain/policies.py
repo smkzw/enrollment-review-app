@@ -24,6 +24,7 @@ DEFINITIVE_DECISIONS = {
 }
 
 INDETERMINATE_GAPS = {
+    GapType.APPLICABLE_POPULATION_UNVERIFIED,
     GapType.OBSERVATION_UNVERIFIED,
     GapType.RECORD_INCOMPLETE,
     GapType.DESCRIPTION_INSUFFICIENT,
@@ -65,6 +66,11 @@ class ActionDirective:
 
 
 ACTION_CONTENT = {
+    GapType.APPLICABLE_POPULATION_UNVERIFIED: (
+        ActionTarget.SPONSOR_MEDICAL_OR_PROJECT,
+        "核实该方案条件适用于哪些受试者，以及本例是否属于该范围；完成前不作自动入排结论。",
+        "可回溯至方案原文、适用条件及本例资料的核对记录。",
+    ),
     GapType.OBSERVATION_UNVERIFIED: (
         ActionTarget.CRA,
         "核对现有原始资料及相关记录的归属；核实前不要求补写研究者判断。",

@@ -721,6 +721,45 @@ def test_node_fallback_is_persisted_when_replacement_signature_missing(session_f
         assert preview.old_snapshot["value"] == "120/80"
 
 
+def test_preview_siblings_require_the_same_observation_not_just_the_same_page(
+    session_factory,
+):
+    from app.services.fact_correction_service import preview_fact_correction
+
+    with session_factory() as session, session.begin():
+        chain = _seed_valid_chain(session, "corr-observation-siblings")
+        target = _publish_fact(
+            session, chain, suffix="target", value="120/80",
+            source_observation_refs=["observation:one"],
+        )
+        same_observation = _publish_fact(
+            session, chain, suffix="same", value="121/81",
+            source_observation_refs=["observation:one"],
+        )
+        _publish_fact(
+            session, chain, suffix="other", value="122/82",
+            source_observation_refs=["observation:two"],
+        )
+        _publish_fact(
+            session, chain, suffix="legacy", value="123/83",
+        )
+        authority = _authority(chain)
+        locator_id = chain["locator_id"]
+
+    with session_factory() as session:
+        preview = preview_fact_correction(
+            session,
+            authority=authority,
+            target_kind="fact",
+            target_id=target.fact_id,
+            locator_ids=[locator_id],
+            updates={"value": "124/84"},
+        )
+        assert [item["fact_id"] for item in preview.sibling_facts] == [
+            same_observation.fact_id
+        ]
+
+
 def test_preview_is_read_only(session_factory):
     from app.services.fact_correction_service import preview_fact_correction
     from app.storage.models import JobRecord
@@ -809,6 +848,64 @@ def test_profile_lane_only_correction_preserves_assertion_and_source_strength(
         assert corrected.assertion_basis is not None
         assert corrected.assertion_basis.assertion_text == precise_text
         assert corrected.source_strength == SourceStrength.CONTEMPORANEOUS_OBJECTIVE
+
+
+def test_fact_correction_keeps_single_observation_source_through_profile(session_factory):
+    from app.storage.fact_repositories import FactNormalizationCandidateRepository
+
+    with session_factory() as session, session.begin():
+        chain = _seed_valid_chain(session, "corr-observation-ref")
+        fact = _publish_fact(
+            session, chain, source_observation_refs=["observed-measurement-1"],
+        )
+        PatientProfileService().generate(
+            session, authority=_authority(chain), created_at=NOW, generated_at=NOW,
+        )
+
+    created = _submit(session_factory, chain, fact, value="130/80")
+    assert _run(session_factory) is True
+    with session_factory() as session:
+        assert JobStore(session, now=utc_now).snapshot(created.job_id).state == "completed"
+        history = list_fact_correction_history(session, chain["review_episode_id"])
+        assert len(history) == 1
+        corrected = ClinicalFactV2Repository(session).get(history[0].correction.new_entity_id)
+        assert corrected.source_observation_refs == ["observed-measurement-1"]
+        assert corrected.value == "130/80"
+        candidate = FactNormalizationCandidateRepository(session).get(
+            corrected.source_candidate_ids[0]
+        )
+        assert candidate.source_observation_refs == ["observed-measurement-1"]
+        assert PatientProfileService().get(
+            session, history[0].patient_profile_revision_id,
+        ) is not None
+
+
+def test_multi_observation_fact_cannot_receive_one_value_correction(session_factory):
+    from app.services.fact_correction_service import (
+        FactCorrectionValidationError,
+        prepare_fact_correction,
+    )
+
+    with session_factory() as session, session.begin():
+        chain = _seed_valid_chain(session, "corr-multiple-observations")
+        fact = _publish_fact(
+            session, chain,
+            source_observation_refs=["observed-measurement-1", "observed-measurement-2"],
+        )
+
+    with session_factory() as session:
+        with pytest.raises(FactCorrectionValidationError, match="逐项核对"):
+            prepare_fact_correction(
+                session,
+                authority=_authority(chain),
+                target_kind="fact",
+                target_id=fact.fact_id,
+                locator_ids=[chain["locator_id"]],
+                reason="核对原件发现其中一次读数有误",
+                operator_id="reviewer-1",
+                updates={"value": "130/80"},
+                created_at=NOW,
+            )
 
 
 def test_conflict_member_correction_appends_successor_or_resolution(session_factory):

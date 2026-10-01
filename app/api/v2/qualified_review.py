@@ -128,6 +128,8 @@ class PreparedReviewWorkflowResponse(BaseModel):
     review_run_id: str
     state: str
     state_label: str
+    failure_reason: str | None
+    retry_available: bool
     stage_label: str
     progress_completed: int
     progress_total: int

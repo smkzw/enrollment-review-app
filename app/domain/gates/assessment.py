@@ -204,6 +204,7 @@ STAGE_RANK = {
 
 
 REASON_GAPS = {
+    "applicable_population_unverified": GapType.APPLICABLE_POPULATION_UNVERIFIED,
     "occurrence_scope_unverified": GapType.OBSERVATION_UNVERIFIED,
     "prospective_scope_unverified": GapType.OBSERVATION_UNVERIFIED,
     "repeat_relation_unverified": GapType.OBSERVATION_UNVERIFIED,

@@ -33,3 +33,12 @@ def test_inner_example_definition_survives_unclosed_outer_bracket():
         ("上位条件", "乙", "2年内发生2次或以上")
     ]
     assert nested_example_definitions("上位条件（同时满足2年内发生2次）") == []
+
+
+def test_adjacent_example_markers_do_not_duplicate_a_definition():
+    assert nested_example_definitions(
+        "上位条件（例如包括甲、复发性乙（2年内至少2次发作））"
+    ) == [("上位条件", "复发性乙", "2年内至少2次发作")]
+    assert nested_example_definitions(
+        "独立检查≥5；上位条件（包括复发性乙（2年内发生2次或以上））"
+    ) == [("上位条件", "复发性乙", "2年内发生2次或以上")]

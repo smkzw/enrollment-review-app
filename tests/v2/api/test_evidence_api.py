@@ -529,10 +529,12 @@ def test_commit_creates_candidate_snapshot_and_job(client) -> None:
         "file_name",
         "media_type",
         "version_number",
+        "uploaded_by",
         "origin",
         "origin_label",
         "metadata_head",
     }
+    assert all(member["uploaded_by"] == "测试用户" for member in snapshot["members"])
     # 持久任务可查询。
     job_response = client.get(f"/api/v2/jobs/{body['job_id']}")
     assert job_response.status_code == 200
@@ -563,6 +565,7 @@ def test_source_document_metadata_is_visible_append_only_and_idempotent(client) 
     preview = _upload(client, subject_id, episode_id, [pdf(b"one")]).json()
     committed = _commit(client, preview, "key-metadata-source").json()
     member = committed["snapshot"]["members"][0]
+    assert member["uploaded_by"] == "测试用户"
     initial = member["metadata_head"]
     assert initial["revision"] == 1
     assert initial["is_auto_suggestion"] is True
@@ -612,6 +615,30 @@ def test_source_document_metadata_is_visible_append_only_and_idempotent(client) 
     )
     assert unchanged.status_code == 422
     _assert_error_envelope(unchanged.json(), code="METADATA_UNCHANGED", status=422)
+
+    classified = client.patch(
+        f"/api/v2/source-document-versions/{version_id}/metadata",
+        json={
+            **payload,
+            "document_category": "objective_report",
+            "source_category": "study_site",
+            "expected_metadata_revision": 2,
+            "idempotency_key": "key-metadata-classified",
+        },
+    )
+    assert classified.status_code == 201, classified.text
+    classified_metadata = classified.json()["metadata"]
+    assert classified_metadata["document_type"] == initial["document_type"]
+    assert classified_metadata["source_party"] == initial["source_party"]
+    assert classified_metadata["document_category"] == "objective_report"
+    assert classified_metadata["source_category"] == "study_site"
+    assert classified_metadata["supersedes_metadata_revision_id"] == revised["metadata_revision_id"]
+
+    invalid_category = client.patch(
+        f"/api/v2/source-document-versions/{version_id}/metadata",
+        json={**payload, "source_category": "guessed_hospital", "idempotency_key": "key-invalid-category"},
+    )
+    assert invalid_category.status_code == 422
 
 
 def test_commit_different_key_on_committed_preview_rejected(client) -> None:

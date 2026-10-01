@@ -409,6 +409,7 @@ const GAP_TYPES: readonly ProfileGapTypeWire[] = [
   "future_stage_not_due",
   "provenance_followup",
   "control_applicability_pending",
+  "applicable_population_unverified",
 ];
 
 const EXPECTATION_STATUSES: readonly ProfileExpectationStatusWire[] = [

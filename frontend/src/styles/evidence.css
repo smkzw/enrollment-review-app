@@ -940,6 +940,31 @@
   pointer-events: none;
 }
 
+.original-evidence-page__region {
+  position: absolute;
+  border: 2px dashed var(--risk, #c00000);
+  pointer-events: none;
+}
+
+.local-visual-verification {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  padding: 8px 12px;
+  max-height: 28vh;
+  overflow: auto;
+}
+.local-visual-verification__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.local-visual-verification pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+
 .original-evidence-page__box--muted {
   opacity: 0.28;
 }

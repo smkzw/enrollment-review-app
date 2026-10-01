@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import Mapping, Sequence
 
@@ -88,6 +88,8 @@ _PARAGRAPH_PHASE_HANDOFF_RE = re.compile(r"[，,]")
 _PARAGRAPH_PHASE_MARKER_RE = re.compile(
     r"(?:Ⅱ|II|2|二|Ⅲ|III|3|三)\s*期", re.IGNORECASE
 )
+_MAX_AGGREGATED_TABLE_ROW_CHARS = 1024
+_MAX_AGGREGATED_CELL_PARAGRAPHS = 12
 
 
 class FullProtocolCoverageError(ValueError):
@@ -1225,6 +1227,7 @@ def build_full_protocol_coverage_manifest(
 
     units: list[ProtocolStructureUnit] = []
     used_orders: set[int] = set()
+    long_table_rows_atomized = False
 
     def _next_order(preferred: int) -> int:
         order = preferred
@@ -1314,7 +1317,22 @@ def build_full_protocol_coverage_manifest(
             all_table_cells[row].extend(row_cells)
 
         heading = table_heading_paths.get(table_root) or ["（无标题）"]
-        atomize = _table_row_requires_atomization(ordered_cells, graph_blocks)
+        phase_atomize = _table_row_requires_atomization(ordered_cells, graph_blocks)
+        # One row may contain many independent paragraphs in a single cell;
+        # short multi-column visit grids should still retain row ownership.
+        paragraphs_per_cell = Counter(_cell_path(cell) for cell in ordered_cells)
+        long_row_atomize = (
+            kind != StructureUnitKind.TABLE_HEADER
+            and len(ordered_cells) > 1
+            and (
+                any(count > _MAX_AGGREGATED_CELL_PARAGRAPHS
+                    for count in paragraphs_per_cell.values())
+                or sum(len(_normalize(cell.text)) for cell in ordered_cells)
+                > _MAX_AGGREGATED_TABLE_ROW_CHARS
+            )
+        )
+        atomize = phase_atomize or long_row_atomize
+        long_table_rows_atomized |= long_row_atomize and not phase_atomize
         member_groups: Sequence[Sequence[StructureBlock]] = (
             tuple((cell,) for cell in ordered_cells)
             if atomize
@@ -1327,7 +1345,8 @@ def build_full_protocol_coverage_manifest(
             if not excerpt:
                 continue
             hits = _priority_hits(excerpt, keywords)
-            member_source_refs = sorted(cell.source_ref for cell in member_cells)
+            source_members = sorted(member_cells, key=lambda cell: cell.source_ref)
+            member_source_refs = [cell.source_ref for cell in source_members]
             member_cell_paths = sorted(
                 {
                     path
@@ -1340,6 +1359,21 @@ def build_full_protocol_coverage_manifest(
                 raise FullProtocolCoverageError(
                     f"表格结构单元缺少成员 table_path：{member_source_refs[0]}"
                 )
+            member_cell_col_spans: list[int] | None = []
+            for path in member_cell_paths:
+                spans = {
+                    cell.table_col_span for cell in member_cells
+                    if _cell_path(cell) == path
+                }
+                if len(spans) != 1:
+                    raise FullProtocolCoverageError(
+                        f"同一表格单元格的合并宽度不一致：{member_source_refs[0]}"
+                    )
+                span = spans.pop()
+                if span is None:
+                    member_cell_col_spans = None
+                    break
+                member_cell_col_spans.append(span)
             unit_source_ref = (
                 member_cells[0].source_ref
                 if atomize
@@ -1368,6 +1402,11 @@ def build_full_protocol_coverage_manifest(
                     structure_unit_id=unit_id,
                     source_ref=unit_source_ref,
                     member_source_refs=member_source_refs,
+                    member_texts=[_normalize(cell.text) for cell in source_members],
+                    member_source_span_ids=[
+                        _span_ids_for([ref], source_span_ids, graph_blocks)
+                        for ref in member_source_refs
+                    ],
                     source_span_ids=_span_ids_for(
                         member_source_refs, source_span_ids, graph_blocks
                     ),
@@ -1378,6 +1417,7 @@ def build_full_protocol_coverage_manifest(
                         row_index=row_index,
                         column_index=unit_column_index,
                         member_cell_paths=member_cell_paths,
+                        member_cell_col_spans=member_cell_col_spans,
                         row_headers=_table_row_headers(all_table_cells, row_index),
                         column_headers=_table_column_headers(
                             all_table_cells, unit_column_index
@@ -1404,6 +1444,11 @@ def build_full_protocol_coverage_manifest(
         snapshot_id,
         projection.projection_id,
         projection.selected_phase.value,
+        (
+            "long-table-paragraphs/v2"
+            if long_table_rows_atomized
+            else "table-member-texts/v2"
+        ),
     )
     return ProtocolSectionCoverageManifest(
         manifest_id=resolved_manifest_id,

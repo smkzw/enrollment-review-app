@@ -12,7 +12,7 @@ from pydantic import Field, model_validator
 
 from app.domain.contracts.common import ContractModel
 from app.domain.contracts.protocol_controls import ProtocolControlDispositionBatch
-from app.protocols.procedure_catalog import schedule_column_scope
+from app.protocols.procedure_catalog import schedule_column_scope, schedule_row_values
 
 from .protocol_control_source_interpretation import (
     SourceInterpretation, SourceStatement, normalize_source_excerpt,
@@ -20,7 +20,7 @@ from .protocol_control_source_interpretation import (
 
 
 SEMANTIC_POINT_VERSION = "phase5/control-semantic-point/v14"
-SEMANTIC_BINDER_VERSION = "phase5/control-semantic-binder/v32"
+SEMANTIC_BINDER_VERSION = "phase5/control-semantic-binder/v33"
 SourceSemanticRole = Literal[
     "definition", "condition", "exception", "constraint", "action",
     "evidence_policy", "context", "unresolved",
@@ -262,10 +262,7 @@ def build_semantic_point_prompt(
             raise ValueError("来源陈述序位不属于本批")
         statement = interpretation.statements[index]
         unit = units[statement.structure_unit_id]
-        try:
-            schedule_columns = schedule_column_scope(unit, batch.context_units)
-        except ValueError:
-            schedule_columns = ()
+        schedule_columns = schedule_column_scope(unit, batch.context_units)
         source.append({
             "statement_index": index,
             "purpose": "output" if index in statement_indexes else "read_only_context",
@@ -377,29 +374,12 @@ def bind_semantic_packet(
                 for ref in item.dependencies
             ):
                 _reject_point(item, "共用来源尚未核清时不能认定缺失处理已适用于本计算")
-    output_keys_by_statement: dict[int, set[tuple[int, str]]] = {}
-    for item in packet.items:
-        output_keys_by_statement.setdefault(item.statement_index, set()).add(
-            (item.statement_index, item.point_key)
-        )
     remaining = {}
     for item in packet.items:
-        linked_statements = set(item.dependency_statement_indexes)
-        if item.computation is not None:
-            refs = [*item.computation.input_refs]
-            if item.computation.missing_ref is not None:
-                refs.append(item.computation.missing_ref)
-            for count in (item.computation.declared_input_count, item.computation.max_missing_count):
-                if count is not None:
-                    refs.append(count.source)
-            linked_statements.update(ref.statement_index for ref in refs)
         remaining[(item.statement_index, item.point_key)] = {
             (item.statement_index, key) for key in item.dependency_point_keys
         } | {
             (ref.statement_index, ref.point_key) for ref in item.dependencies
-        } | {
-            key for index in linked_statements if index != item.statement_index
-            for key in output_keys_by_statement.get(index, set())
         }
     point_dependencies = {key: set(value) for key, value in remaining.items()}
     while remaining:
@@ -483,22 +463,20 @@ def bind_semantic_packet(
             for other in packet.items
         )
         background = item.review_scope == "study_level_background"
+        row_values = schedule_row_values(unit) if unit.table_context is not None else ()
         has_schedule_mark = bool(
-            unit.table_context is not None and any(
+            row_values and any(
                 re.fullmatch(r"[（(]?\s*[xX×]\s*[)）]?(?:\^\d+)*", cell.strip())
-                for cell in unit.excerpt.split(" | ")[1:]
+                for _column, cell, _refs in row_values[1:]
             )
         )
         schedule_only_markers = has_schedule_mark and all(
             not cell.strip() or re.fullmatch(
                 r"[（(]?\s*[xX×]\s*[)）]?(?:\^\d+)*", cell.strip()
-            ) for cell in unit.excerpt.split(" | ")[1:]
+            ) for _column, cell, _refs in row_values[1:]
         )
         if has_schedule_mark:
-            try:
-                schedule_columns = schedule_column_scope(unit, batch.context_units)
-            except ValueError:
-                schedule_columns = ()
+            schedule_columns = schedule_column_scope(unit, batch.context_units)
         else:
             schedule_columns = ()
         schedule_scope_unresolved = background and has_schedule_mark and (
@@ -531,6 +509,7 @@ def bind_semantic_packet(
                 and not background
                 and not used_as_calculation_source
                 and not item.unresolved_dimensions
+                and not (item.role == "constraint" and item.exact_source_quote is not None)
                 and not any(
                     other is not item and other.statement_index == item.statement_index
                     and other.computation is not None for other in packet.items
@@ -579,6 +558,21 @@ def bind_semantic_packet(
                     dependencies.append(ref.statement_index)
             if calculation.operator in {"mean", "sum", "minimum", "maximum", "count", "ratio"} and not calculation.input_refs:
                 _reject_point(item, "计算操作未说明输入的原文来源")
+            for ref in refs:
+                if ref.statement_index == item.statement_index or ref.statement_index not in statement_indexes:
+                    continue
+                matching = [
+                    points_by_key[(dependency.statement_index, dependency.point_key)]
+                    for dependency in item.dependencies
+                    if dependency.statement_index == ref.statement_index
+                    and (dependency.statement_index, dependency.point_key) in points_by_key
+                ]
+                if not any(
+                    ref.quote in (point.exact_source_quote or interpretation.statements[ref.statement_index].quoted_text)
+                    or (point.exact_source_quote is not None and point.exact_source_quote in ref.quote)
+                    for point in matching
+                ):
+                    _reject_point(item, "跨陈述计算依赖须指向包含该原文摘录的有身份语义点")
         if (item.role == "unresolved" or item.review_scope == "unresolved"
                 or statement.unresolved or item.unresolved_dimensions):
             capability = "unresolved"
@@ -700,20 +694,12 @@ def bind_semantic_packet_partially(
                 continue
             eligible.append(point)
 
-    def dependencies(point: SourceSemanticPoint | BoundSemanticPoint) -> set[int]:
-        indexes = set(point.dependency_statement_indexes)
-        if point.computation is not None:
-            refs = [point.computation.operator_ref, *point.computation.input_refs]
-            if point.computation.missing_ref is not None:
-                refs.append(point.computation.missing_ref)
-            for count in (
-                point.computation.declared_input_count,
-                point.computation.max_missing_count,
-            ):
-                if count is not None:
-                    refs.append(count.source)
-            indexes.update(ref.statement_index for ref in refs)
-        return (indexes & requested) - {point.statement_index}
+    def dependencies(point: SourceSemanticPoint | BoundSemanticPoint) -> set[tuple[int, str]]:
+        return {
+            (ref.statement_index, ref.point_key) for ref in point.dependencies
+        } | {
+            (point.statement_index, key) for key in point.dependency_point_keys
+        }
 
     accepted: list[BoundSemanticPoint] = []
     remaining = list(eligible)
@@ -721,25 +707,17 @@ def bind_semantic_packet_partially(
         group = [remaining.pop(0)]
         group_indexes = {group[0].statement_index}
         group_keys = {(group[0].statement_index, group[0].point_key)}
-        group_deps = dependencies(group[0])
         while True:
             linked = [point for point in remaining if (
-                point.statement_index in group_deps
-                or bool(dependencies(point) & group_indexes)
-                or any((ref.statement_index, ref.point_key) in group_keys
-                       for ref in point.dependencies)
-                or any((ref.statement_index, ref.point_key)
-                       == (point.statement_index, point.point_key)
-                       for member in group for ref in member.dependencies)
-                or (point.statement_index in group_indexes and any(
-                    point.point_key in member.dependency_point_keys
-                    or member.point_key in point.dependency_point_keys
-                    for member in group if member.statement_index == point.statement_index
-                ))
+                (point.statement_index, point.point_key) in set().union(
+                    *(dependencies(member) for member in group)
+                )
+                or bool(dependencies(point) & group_keys)
                 or any(
-                    point.statement_index == member.statement_index
-                    and ((point.role == "constraint" and member.computation is not None)
-                         or (member.role == "constraint" and point.computation is not None))
+                    point.computation is not None and member.computation is not None
+                    and point.computation.max_missing_count is not None
+                    and member.computation.max_missing_count is not None
+                    and point.computation.max_missing_count == member.computation.max_missing_count
                     for member in group
                 )
             )]
@@ -749,7 +727,6 @@ def bind_semantic_packet_partially(
             group.extend(linked)
             group_indexes.update(point.statement_index for point in linked)
             group_keys.update((point.statement_index, point.point_key) for point in linked)
-            group_deps.update(*(dependencies(point) for point in linked))
         try:
             accepted.extend(bind_semantic_packet(
                 batch, interpretation, sorted(group_indexes),
@@ -770,17 +747,8 @@ def bind_semantic_packet_partially(
     # A source reference may be visible while its separately requested meaning
     # failed verification. Do not promote dependent points on that basis.
     while True:
-        accepted_indexes = {point.statement_index for point in accepted}
         accepted_keys = {(point.statement_index, point.point_key) for point in accepted}
-        dependent = [point for point in accepted if any(
-            index not in accepted_indexes for index in dependencies(point)
-        ) or any(
-            (point.statement_index, key) not in accepted_keys
-            for key in point.dependency_point_keys
-        ) or any(
-            (ref.statement_index, ref.point_key) not in accepted_keys
-            for ref in point.dependencies
-        )]
+        dependent = [point for point in accepted if dependencies(point) - accepted_keys]
         if not dependent:
             break
         rejected_ids = {point.semantic_id for point in dependent}

@@ -513,6 +513,8 @@ def evaluate_observed_value(
 def _evaluate_atomic(expression: AtomicExpression, context: EvaluationContext,
                      fact_ids: Sequence[str] | None = None) -> EvaluationResult:
     predicate = expression.predicate
+    if predicate.applicable_population is not None:
+        return _result(TruthValue.UNKNOWN, "applicable_population_unverified")
     if predicate.repeat_scheme is not None:
         return _result(TruthValue.UNKNOWN, "repeat_relation_unverified")
     if predicate.semantic_proposition is not None:
@@ -521,6 +523,8 @@ def _evaluate_atomic(expression: AtomicExpression, context: EvaluationContext,
         return _result(TruthValue.UNKNOWN, "occurrence_scope_unverified")
     if predicate.prospective_window is not None or predicate.prospective_period is not None:
         return _result(TruthValue.UNKNOWN, "prospective_scope_unverified")
+    if predicate.requires_professional_judgment and fact_ids is None:
+        return _result(TruthValue.UNKNOWN, "professional_judgment_unverified")
     policy = predicate.observation_policy
     if policy is not None and (policy.mode == "unresolved" or fact_ids is None):
         return _result(TruthValue.UNKNOWN, "observation_selection_unverified")
@@ -728,6 +732,8 @@ def _evaluate_bound_predicates(
                 raise ValueError("频次计算不能跨越方案、原件或未核实状态")
     predicate_evaluations = {
         atom.predicate.predicate_id: (
+            _result(TruthValue.UNKNOWN, "applicable_population_unverified")
+            if atom.predicate.applicable_population is not None else
             frequency_evaluations[atom.predicate.predicate_id].result
             if atom.predicate.predicate_id in frequency_evaluations else
             repeat_evaluations[atom.predicate.predicate_id].result

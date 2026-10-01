@@ -10,6 +10,7 @@ from sqlalchemy.orm import aliased
 
 from app.domain.publication import canonical_hash
 from app.services.job_service import JobService, StepSpec
+from app.services.binding_qualification import QualificationSourcePolicyError
 from app.services.page_review_job_service import route_identity
 from app.services.prepared_review_intake import require_prepared_review_intent
 from app.services.review_runtime_ownership import OWNER, OWNED_TYPES, WORKFLOW_JOB_TYPE
@@ -263,8 +264,9 @@ class PreparedReviewContinuation:
                 elif step_id is not None:
                     store.start_step(lease, step_id)
                     store.fail_step(lease, step_id, retryable=False,
-                                    error_code="PREPARED_REVIEW_CONTINUATION_FAILED",
-                                    detail=(str(exc) if isinstance(exc, ScopeViolationError) else
+                                    error_code=(exc.code if isinstance(exc, QualificationSourcePolicyError)
+                                                else "PREPARED_REVIEW_CONTINUATION_FAILED"),
+                                    detail=(str(exc) if isinstance(exc, (ScopeViolationError, QualificationSourcePolicyError)) else
                                             "本次审核衔接未完成，已保留完成记录，请核对失败步骤后重试"))
                     if isinstance(exc, (FactAuthorityError, ScopeViolationError)):
                         parent = store.get_job(workflow_id)
@@ -397,6 +399,20 @@ def require_workflow_scope(session, *, subject_id, review_episode_id, workflow_i
     return row, payload, context
 
 
+def workflow_source_policy_notice(session, workflow_id):
+    steps = JobStore(session).list_steps(workflow_id)
+    if any(step.state in {"failed_final", "failed_retryable"}
+           and step.error_code == QualificationSourcePolicyError.code for step in steps):
+        return str(QualificationSourcePolicyError())
+    return None
+
+
+def require_workflow_retryable_policy(session, workflow_id):
+    notice = workflow_source_policy_notice(session, workflow_id)
+    if notice is not None:
+        raise ScopeViolationError(notice + " 完善方案并采用新的规则版本后，请重新准备审核。")
+
+
 def cancel_workflow_children(session_factory, workflow_id):
     """Called after the existing cancellation transaction; never touches other work."""
     with session_factory() as session, session.begin():
@@ -424,6 +440,7 @@ def change_review_workflow(session_factory, *, subject_id, review_episode_id, wo
         children = PreparedReviewContinuation._children(session, workflow_id, payload)
         if operation != "retry":
             raise ScopeViolationError("不支持该审核操作")
+        require_workflow_retryable_policy(session, workflow_id)
         require_current_review_tasks(payload)
         FactAuthorityValidator(session).validate(context.authority)
         if routes is None or {lane.value: route_identity(route) for lane, route in routes.items()} != payload["routes"]:

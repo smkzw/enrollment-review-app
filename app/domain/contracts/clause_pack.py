@@ -43,15 +43,30 @@ class ClausePackClause(VersionedModel):
         return data
 
 
+class ClausePackRestrictedClause(VersionedModel):
+    clause_id: str = Field(min_length=1)
+    rule_id: str = Field(min_length=1)
+    official_code: str = Field(pattern=r"^(IN|EX|REQ)-\d{2}$")
+    display_code: str = Field(min_length=1)
+    kind: RuleKind
+    title: str = Field(min_length=1)
+    source_text: str = Field(min_length=1)
+    source_span_ids: list[str] = Field(min_length=1)
+    source_excerpts: list[str] = Field(min_length=1)
+    limitation_kind: Literal["interpretation_unresolved", "consumer_unavailable"]
+    unresolved_dimensions: list[str] = Field(min_length=1)
+
+
 class ClausePack(VersionedModel):
-    projection_version: Literal["clause-pack/v1", "clause-pack/v2", "clause-pack/v3"] = "clause-pack/v1"
+    projection_version: Literal["clause-pack/v1", "clause-pack/v2", "clause-pack/v3", "clause-pack/v4"] = "clause-pack/v1"
     clause_pack_id: str = Field(pattern=r"^clause-pack:[0-9a-f]{32}$")
     clause_pack_sha256: str = Field(pattern=_SHA256)
     rule_set_id: str = Field(min_length=1)
     rule_set_revision: int = Field(ge=1)
     protocol_version_id: str = Field(min_length=1)
     study_phase: StudyPhase
-    clauses: list[ClausePackClause] = Field(min_length=1)
+    clauses: list[ClausePackClause]
+    restricted_clauses: list[ClausePackRestrictedClause] = Field(default_factory=list)
     control_publication: ControlCatalogPublication | None = None
 
     @model_serializer(mode="wrap")
@@ -60,6 +75,8 @@ class ClausePack(VersionedModel):
         # Preserve the canonical bytes of historical v1 packs.
         if self.control_publication is None:
             data.pop("control_publication", None)
+        if not self.restricted_clauses:
+            data.pop("restricted_clauses", None)
         return data
 
     @model_validator(mode="after")
@@ -68,20 +85,37 @@ class ClausePack(VersionedModel):
         if ((self.projection_version == "clause-pack/v1" and publication is not None)
                 or (self.projection_version == "clause-pack/v2" and publication is None)):
             raise ValueError("条款包版本与补充审核要求不一致")
-        if self.projection_version != "clause-pack/v3" and any(
+        if self.projection_version not in {"clause-pack/v3", "clause-pack/v4"} and any(
             item.repeat_trigger_conditions for item in self.clauses
         ):
             raise ValueError("旧版条款包不能补入复查条件")
+        has_restricted_controls = bool(
+            publication is not None and publication.catalog.restricted_statements
+        )
+        if (bool(self.restricted_clauses) or has_restricted_controls) != (self.projection_version == "clause-pack/v4"):
+            raise ValueError("有源未决子项必须采用新版条款包并显式保留")
+        if not self.clauses and not self.restricted_clauses and not has_restricted_controls and (
+            publication is None or not publication.catalog.controls
+        ):
+            raise ValueError("条款包不能没有可审核内容")
+        identities = [item.clause_id for item in self.clauses]
+        identities.extend(item.clause_id for item in self.restricted_clauses)
+        if len(identities) != len(set(identities)):
+            raise ValueError("可执行与有源未决条款身份不能重复")
         if publication is not None:
             if (publication.rule_set_id, publication.rule_set_revision,
                     publication.protocol_version_id, publication.catalog.study_phase) != (
                     self.rule_set_id, self.rule_set_revision,
                     self.protocol_version_id, self.study_phase):
                 raise ValueError("补充审核要求与条款包所属方案修订不同")
-            official_ids = {item.clause_id for item in self.clauses}
-            if official_ids.intersection(item.protocol_control_id for item in publication.catalog.controls):
+            official_ids = set(identities)
+            control_ids = {item.protocol_control_id for item in publication.catalog.controls}
+            restricted_ids = {
+                item.restricted_statement_id for item in publication.catalog.restricted_statements
+            }
+            if official_ids.intersection(control_ids | restricted_ids):
                 raise ValueError("补充审核要求与官方条款身份重复")
         return self
 
 
-__all__ = ["ClausePack", "ClausePackClause", "DeterminationMode"]
+__all__ = ["ClausePack", "ClausePackClause", "ClausePackRestrictedClause", "DeterminationMode"]

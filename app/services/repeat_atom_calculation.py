@@ -8,6 +8,7 @@ from app.domain.expression import (
     evaluate_calculated_numeric_value,
 )
 from app.domain.proposition_observations import scope_supported
+from app.domain.observation_relation_graph import observation_appearance_id
 from app.domain.publication import canonical_hash
 from app.domain.repeat_numeric_result import calculate_repeat_numeric_result
 from app.domain.repeat_result_selection import RepeatResultSelection
@@ -66,15 +67,19 @@ def calculate_repeat_atoms(selections, context, resolutions):
                 or resolution["source_observation_sha256"] != canonical_hash(observation)):
             raise ValueError("复查结果采用依据与已核实的来源不同")
         sources = observation.get("result_sources")
-        if sources is None or sources["version"] != "repeat-result-sources/v1" or sources["owner_identity_sha256"] != owner:
-            raise ValueError("原核对未保留逐次结果原文，须按当前方法准备")
         graph = observation["relationship_graph"]
+        appearance_graph = graph.get("version") == "observation-relation-graph/v3"
+        expected_source_version = "repeat-result-sources/v2" if appearance_graph else "repeat-result-sources/v1"
+        if sources is None or sources["version"] != expected_source_version or sources["owner_identity_sha256"] != owner:
+            raise ValueError("原核对未保留逐次结果原文，须按当前方法准备")
         group_facts = {item["group_id"]: item["fact_ids"] for item in graph["acquisition_groups"]}
         source_ids = sorted({key for ids in group_facts.values() for key in ids})
         if not set(source_ids) <= set(facts):
             raise ValueError("复查结果包含本次范围外的原文")
         pairs = sources["qualified_pairs"]
-        qualified = {(item["fact_id"], item["fact_attribute"]) for item in pairs}
+        qualified = {(item["fact_id"], item["locator_id"], item["fact_attribute"])
+                     if appearance_graph else (item["fact_id"], item["fact_attribute"])
+                     for item in pairs}
         pair_ids = {item["pair_id"] for item in pairs}
         if len(pair_ids) != len(pairs):
             raise ValueError("复查结果的来源配对重复")
@@ -121,24 +126,33 @@ def calculate_repeat_atoms(selections, context, resolutions):
         def unknown(*reasons):
             return EvaluationResult(truth=TruthValue.UNKNOWN, reason_codes=sorted(set(reasons)))
 
-        def fact_result(fact_id):
+        def fact_result(fact_id, locator_id=None):
             fact = facts[fact_id]
-            if (not any((fact_id, attribute) in qualified for attribute in ("value", "assertion_basis"))
-                    if semantic else (fact_id, operand) not in qualified):
+            def qualified_attribute(attribute):
+                return ((fact_id, locator_id, attribute) if appearance_graph
+                        else (fact_id, attribute)) in qualified
+            if (not any(qualified_attribute(attribute) for attribute in ("value", "assertion_basis"))
+                    if semantic else not qualified_attribute(operand)):
                 return unknown("repeat_result_value_unverified")
-            if date_attribute is not None and (fact_id, date_attribute) not in qualified:
+            if date_attribute is not None and not qualified_attribute(date_attribute):
                 return unknown("declared_time_operand_not_qualified")
             if fact.conflict_group_id:
                 return unknown("source_conflict")
             if professional:
-                written = [item for item in pairs if item["fact_id"] == fact_id and item["fact_attribute"] == "value"]
+                written = [item for item in pairs if item["fact_id"] == fact_id
+                           and (not appearance_graph or item["locator_id"] == locator_id)
+                           and item["fact_attribute"] == "value"]
                 if not written or not all(item["written_content_verified"] for item in written):
                     return unknown("professional_judgment_unverified")
             if policy is None or policy.mode == "unresolved":
                 return unknown("repeat_observation_policy_unverified")
             if semantic:
-                local = [item for item in relations if item["fact_id"] == fact_id]
-                expected_pairs = {item["pair_id"] for item in sources["source_content_pairs"] if item["fact_id"] == fact_id}
+                pair_locations = {item["pair_id"]: item["locator_id"] for item in pairs} if appearance_graph else {}
+                local = [item for item in relations if item["fact_id"] == fact_id
+                         and (not appearance_graph or pair_locations.get(item["pair_id"]) == locator_id)]
+                expected_pairs = {item["pair_id"] for item in sources["source_content_pairs"]
+                                  if item["fact_id"] == fact_id
+                                  and (not appearance_graph or item["locator_id"] == locator_id)}
                 if (not expected_pairs or expected_pairs != {item["pair_id"] for item in local}
                         or not scope_supported(local)):
                     return unknown("semantic_evidence_unverified")
@@ -165,8 +179,12 @@ def calculate_repeat_atoms(selections, context, resolutions):
             return value
 
         group_results = {}
-        for group_id, ids in group_facts.items():
-            values = [fact_result(key) for key in ids]
+        appearance_by_id = {item["appearance_id"]: item for item in graph.get("appearances", ())}
+        for group in graph["acquisition_groups"]:
+            group_id, ids = group["group_id"], group["fact_ids"]
+            values = ([fact_result(appearance_by_id[key]["fact_id"], appearance_by_id[key]["locator_id"])
+                       for key in group["appearance_ids"]] if appearance_graph
+                      else [fact_result(key) for key in ids])
             if not values:
                 group_results[group_id] = unknown("repeat_result_missing")
                 continue
@@ -206,7 +224,13 @@ def calculate_repeat_atoms(selections, context, resolutions):
                         for key, value in raw.items() if key not in {"scope", "replacement_authorized"}})
                     numeric = calculate_repeat_numeric_result(
                         selection, graph, context, scheme=scheme,
-                        qualified_value_fact_ids=frozenset(key for key, attribute in qualified if attribute == "value"),
+                        qualified_value_fact_ids=frozenset(
+                            key[0] for key in qualified if key[-1] == "value"
+                        ),
+                        qualified_value_appearance_ids=frozenset(
+                            observation_appearance_id(key[0], key[1])
+                            for key in qualified if appearance_graph and key[-1] == "value"
+                        ),
                         unit_required=predicate.unit is not None,
                     )
                     calculated = (unknown(*numeric.reason_codes) if numeric.value is None else
@@ -247,6 +271,9 @@ def calculate_repeat_atoms(selections, context, resolutions):
         if ordering_audit is not None:
             audit["observation_ordering"] = ordering_audit
         audit["acquisition_results"] = [{"group_id": key, "fact_ids": group_facts[key],
+                                         **({"appearance_ids": next(item["appearance_ids"]
+                                              for item in graph["acquisition_groups"] if item["group_id"] == key)}
+                                            if appearance_graph else {}),
                                          "result": value.model_dump(mode="json")}
                                         for key, value in group_results.items()]
         result[owner] = RepeatAtomEvaluation(

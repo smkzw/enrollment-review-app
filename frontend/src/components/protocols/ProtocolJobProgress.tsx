@@ -121,6 +121,17 @@ export function ProtocolJobProgress({ session, preview, onRefresh }: ProtocolJob
                     )}
                   </div>
                 ))}
+                {rule.restrictedComponents.map((component) => (
+                  <div key={component.componentId} className="protocol-job-progress__preview-component">
+                    <p className="protocol-job-progress__preview-component-title">
+                      {component.displayCode} · {component.title} · {component.limitationKind === "consumer_unavailable"
+                        ? "审核方法待补齐" : "方案含义待核清"}
+                    </p>
+                    <blockquote className="protocol-job-progress__preview-excerpt">
+                      {excerptText(component.sourceExcerpts)}
+                    </blockquote>
+                  </div>
+                ))}
               </li>
             ))}
           </ul>

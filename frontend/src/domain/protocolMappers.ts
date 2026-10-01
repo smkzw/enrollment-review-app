@@ -74,13 +74,32 @@ export function mapProtocolDraftRules(
 
   return rules.map((rawRule) => {
     const rule = asRuleWire(rawRule);
+    const restrictedRaw = Array.isArray(rawRule.restricted_components)
+      ? rawRule.restricted_components as ReadonlyArray<Record<string, unknown>>
+      : [];
+    const restrictedComponents = restrictedRaw.map((item) => ({
+      componentId: toId<RuleComponentId>(String(item.rule_component_id ?? "")),
+      parentRuleId: toId<RuleId>(rule.rule_id),
+      displayCode: displayRuleCode(String(item.display_code ?? "")),
+      title: String(item.title ?? ""),
+      sourceRefs: stringList(item.source_span_ids),
+      sourceExcerpts: stringList(item.source_excerpts),
+      unresolvedDimensions: stringList(item.unresolved_dimensions),
+      limitationKind: item.limitation_kind === "consumer_unavailable"
+        ? "consumer_unavailable" as const
+        : "interpretation_unresolved" as const,
+    }));
     return {
       ruleId: toId<RuleId>(rule.rule_id),
       officialCode: displayRuleCode(rule.official_code),
       kind: rule.kind as RuleKind,
       kindLabel: ruleKindLabel[rule.kind as RuleKind],
       sourceText: rule.source_text,
-      sourceRefs: draftRefByRule.get(rule.official_code) ?? [],
+      sourceRefs: [...new Set([
+        ...(draftRefByRule.get(rule.official_code) ?? []),
+        ...restrictedComponents.flatMap((item) => item.sourceRefs),
+      ])],
+      restrictedComponents,
       components: rule.components.map((component, componentIndex) => {
         const wire = asComponentWire(component as unknown as Record<string, unknown>);
         const ruleDrafts = draftsByRule.get(rule.official_code) ?? [];

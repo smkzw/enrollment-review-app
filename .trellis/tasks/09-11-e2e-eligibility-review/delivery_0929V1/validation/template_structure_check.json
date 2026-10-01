@@ -1,0 +1,8 @@
+{
+  "status": "index_structure_ok",
+  "errors": [],
+  "warnings": [
+    "TEMPLATE ONLY: no real execution or evidence is asserted."
+  ],
+  "scope": "Index consistency only; not proof of source fidelity, code execution, access, redaction, or clinical correctness."
+}

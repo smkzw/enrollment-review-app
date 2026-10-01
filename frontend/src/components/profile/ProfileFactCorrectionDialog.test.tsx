@@ -107,6 +107,7 @@ function makePreview(): FactCorrectionPreviewView {
       affectedExpectationIds: [],
       affectedProfileRevisionIds: ["profile-revision-1"],
     },
+    siblingFactIds: [],
   };
 }
 
@@ -237,6 +238,21 @@ describe("ProfileFactCorrectionDialog", () => {
 
     await user.click(screen.getByRole("checkbox", { name: /我已核对/ }));
     expect(screen.getByRole("button", { name: "提交修订" })).toBeEnabled();
+  });
+
+  it("explains which other facts share the source without silently changing them", async () => {
+    const user = userEvent.setup();
+    const { repo, preview } = makeRepo();
+    preview.mockResolvedValue({ ...makePreview(), siblingFactIds: ["fact-2"] });
+    renderDialog(repo);
+
+    await user.type(screen.getByRole("textbox", { name: "修订理由（必填）" }), "原始报告与当前记录不一致。");
+    await user.click(screen.getByRole("button", { name: "预览影响范围" }));
+
+    expect(await screen.findByText(/同一处原始资料还关联 1 条其他病史/)).toHaveTextContent(
+      "本次只更正当前条目，请在提交后核对这些条目是否也需更正。",
+    );
+    expect(screen.queryByText("fact-2")).not.toBeInTheDocument();
   });
 
   it("reports completion only after the persistent status is completed", async () => {

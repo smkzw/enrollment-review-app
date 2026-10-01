@@ -1,0 +1,166 @@
+{
+  "version": "0929V1/acceptance/v1",
+  "all_cases_status": "not_run_by_package_author",
+  "cases": [
+    {
+      "id": "C01",
+      "family": "快照与接口",
+      "scenario": "交付代码与实际测试代码一致，或有可读取补丁与清单",
+      "expected": "审阅者可取得同一相关源码，测试不借用另一工作树",
+      "when": "起始／每次正式交接",
+      "status": "pending"
+    },
+    {
+      "id": "C02",
+      "family": "接口",
+      "scenario": "requirements正常返回同时覆盖有／无计算缺口",
+      "expected": "服务DTO、API、UI一致；不靠默认空列表隐藏问题",
+      "when": "P1受影响接口",
+      "status": "pending"
+    },
+    {
+      "id": "N01",
+      "family": "原生结构",
+      "scenario": "一格多段，真实管道符文字，空格与合并单元格",
+      "expected": "位置按原生身份，内容和段落不丢失，不以展示字符串推身份",
+      "when": "结构修订",
+      "status": "pending"
+    },
+    {
+      "id": "N02",
+      "family": "诊断",
+      "scenario": "无相关列、结构故障、目标不唯一、时间未决",
+      "expected": "原因可区分；空列表不是通用故障包装",
+      "when": "结构／关系修订",
+      "status": "pending"
+    },
+    {
+      "id": "V01",
+      "family": "负对照",
+      "scenario": "普通原生结构清晰的表格",
+      "expected": "无需无意义视觉调用；原有正确结果保持",
+      "when": "首轮视觉小样",
+      "status": "pending"
+    },
+    {
+      "id": "V02",
+      "family": "视觉取证",
+      "scenario": "复杂合并表头、周日窗口与多段操作格",
+      "expected": "正确关联原图、列、表头与目标；未核维度不被覆盖",
+      "when": "首轮视觉小样",
+      "status": "pending"
+    },
+    {
+      "id": "V03",
+      "family": "跨页与脚注",
+      "scenario": "续表标题在前页、脚注在后页",
+      "expected": "必要上下文可展开、页和区域回源正确；不孤立判X",
+      "when": "首轮视觉小样",
+      "status": "pending"
+    },
+    {
+      "id": "V04",
+      "family": "变体与反事实",
+      "scenario": "相同含义改布局，另将X或窗口移到另一列",
+      "expected": "等义结果稳定，关系真变则结果相应改变",
+      "when": "首轮视觉小样",
+      "status": "pending"
+    },
+    {
+      "id": "V05",
+      "family": "未知与缺证",
+      "scenario": "渲染漏行、图像裁断、原文真有歧义",
+      "expected": "分别记录技术故障、证据缺失、语义未决；不强行读清",
+      "when": "首轮视觉小样",
+      "status": "pending"
+    },
+    {
+      "id": "V06",
+      "family": "调用身份",
+      "scenario": "实际路由不接受图像、响应身份缺失或流中断",
+      "expected": "不宣称视觉成功；残答不采用；用量缺报null",
+      "when": "传输受影响时",
+      "status": "pending"
+    },
+    {
+      "id": "V07",
+      "family": "方法取舍",
+      "scenario": "同输入／消费者的两臂有限对照",
+      "expected": "质量、合理未知、成本、总时间分开；不同模型须标混杂",
+      "when": "有限实验结束",
+      "status": "pending"
+    },
+    {
+      "id": "A01",
+      "family": "受限采用",
+      "scenario": "完整有源包有忠实局部未决及独立已核要求",
+      "expected": "独立要求可用，受影响项未决，整体无全部合格保证",
+      "when": "R1首次运行时接线",
+      "status": "pending"
+    },
+    {
+      "id": "A02",
+      "family": "错误拒绝",
+      "scenario": "已知错义表达式被只改名为能力缺口",
+      "expected": "错误版本不采用；修复须新修订回源和重新核对",
+      "when": "R1首次运行时接线",
+      "status": "pending"
+    },
+    {
+      "id": "A03",
+      "family": "依赖",
+      "scenario": "项目对应明确，但时点未明或共享定义仍未决",
+      "expected": "保留维度差别；依赖未明不猜独立，不扩大为全库未知",
+      "when": "关系修订",
+      "status": "pending"
+    },
+    {
+      "id": "A04",
+      "family": "兼容与风险",
+      "scenario": "旧读者遇新受限状态；当前风险和未决并存",
+      "expected": "旧读者明确拒绝／只读；当前风险不被全局未知隐去",
+      "when": "R1首次运行时接线",
+      "status": "pending"
+    },
+    {
+      "id": "P01",
+      "family": "病例实例",
+      "scenario": "同次多扫描、同日同值独立采集、身份不明",
+      "expected": "分别去重、保留独立实例、明确未决；不按ref数计数",
+      "when": "P2相邻回归",
+      "status": "pending"
+    },
+    {
+      "id": "P02",
+      "family": "更正与工作稿",
+      "scenario": "来源清楚的单值／时间或合格序列问题",
+      "expected": "原件→结果→来源→更正→新结果；无关结果和旧历史保持",
+      "when": "P2垂直切片",
+      "status": "pending"
+    },
+    {
+      "id": "U01",
+      "family": "用户动作",
+      "scenario": "队列→受试者／节点→方案及病例原件→返回",
+      "expected": "正确版本、真实定位、短依据/影响/动作、返回上下文保持",
+      "when": "P3集成",
+      "status": "pending"
+    },
+    {
+      "id": "H01",
+      "family": "交接证据",
+      "scenario": "本地已改但未推送，测试对应脏工作树",
+      "expected": "明确边界及可审查最小补丁，不能标远端已实现",
+      "when": "每次交接",
+      "status": "pending"
+    },
+    {
+      "id": "H02",
+      "family": "批判性报告",
+      "scenario": "提出模型／结构／数据歧义的根因解释",
+      "expected": "事实与假设分开，列替代解释和可推翻条件，不设唯一路线",
+      "when": "每次交接",
+      "status": "pending"
+    }
+  ]
+}

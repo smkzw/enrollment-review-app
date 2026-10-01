@@ -39,7 +39,12 @@ def _source_material(group):
     # Existing projection removes peer declarations and deduplicates full excerpts.
     sources = binding_qualification_prompt_payload(members, batch)
     sources.pop("conditions")
+    appearances = sorted({(item.fact_id, item.locator_id) for item in group.members})
     return {"group_id": group.pair_id, "observation_scope": group.scheme.scope, "sources": sources,
+            "observation_appearances": [
+                {"fact_id": fact_id, "locator_id": locator_id}
+                for fact_id, locator_id in appearances
+            ],
             "review_episode_membership": group.scheme.count_scope == "per_current_episode",
             "workflow_stage": group.workflow_stage.model_dump(mode="json", include={
                 "workflow_stage_id", "stage", "display_name", "visit_instance", "visit_window"
@@ -58,8 +63,18 @@ def build_observation_relation_messages(groups, batch):
     schema["properties"]["results"].update(minItems=len(groups), maxItems=len(groups))
     schema["$defs"]["ObservationRelationResult"]["properties"]["pair_id"]["enum"] = batch.pair_ids
     result_schema = schema["$defs"]["ObservationRelationResult"]
-    result_schema["required"] = sorted({*result_schema.get("required", ()), "origins"})
+    result_schema["required"] = sorted({*result_schema.get("required", ()), "origins", "reviewed_appearances"})
     result_schema["properties"]["origins"] = {"type": "array", "items": {"$ref": "#/$defs/ObservationOrigin"}}
+    result_schema["properties"]["reviewed_appearances"] = {
+        "type": "array", "items": {"$ref": "#/$defs/ObservationAppearance"},
+    }
+    for name, fields in (
+        ("ObservationRelationLink", ("left_locator_id", "right_locator_id")),
+        ("ObservationOrigin", ("locator_id",)),
+        ("ObservationEpisodeMembership", ("locator_id",)),
+    ):
+        definition = schema["$defs"][name]
+        definition["required"] = sorted({*definition.get("required", ()), *fields})
     for name, items in (
         ("reviewed_auxiliary_pair_ids", {"type": "string"}),
         ("auxiliary_unresolved_notes", {"type": "string"}),
@@ -85,6 +100,11 @@ def build_observation_relation_messages(groups, batch):
             "两端都能引用仍不等于已经证明关系，必须同时有明确回指或同次检查的依据。"
             "若原文未说明、归属含糊或只有时间推测，不新增link，在unresolved_notes说明。"
             "没有link不表示独立初查、没有复查或资料完整；reviewed_fact_ids只表示本次看过所供记录。"
+            "reviewed_appearances须逐项覆盖observation_appearances中的每一处事实及原文位置；"
+            "同一fact_id的不同locator_id是不同原文呈现，不自动代表两次采集。"
+            "links的两端必须分别给出fact_id和locator_id，origins和episode_memberships也逐处给出locator_id。"
+            "同一事实在两处原文出现时，只有原文明确说明同一次采集，才能用same_acquisition连接；"
+            "只有明确复查回指，才能用repeat_of连接。不能仅因未连same_acquisition便认定两次独立采集。"
             "origins逐条说明原文是否明确记载该记录在本项要求范围内为初查initial或复查repeat；"
             "无明确依据用unresolved，解释原因。已知归属必须引用本条记录自身原文，"
             "不得因它是所供文件中日期最早的一份、没有回指或只有一条记录便称初查。"
@@ -131,16 +151,30 @@ def validate_observation_relation_payload(groups, text):
         excerpts = {(item.fact_id, item.locator_id): item.locator.get("excerpt") for item in group.members}
         if result.reviewed_fact_ids != sorted(facts):
             raise ValueError("观察关系核对遗漏或增加了原文记录")
+        appearances = sorted(excerpts)
+        if group.version == "observation-relation/v6":
+            if (result.reviewed_appearances is None
+                    or [(item.fact_id, item.locator_id) for item in result.reviewed_appearances] != appearances):
+                raise ValueError("观察核对须逐处覆盖冻结原文，不能按事实合并后遗漏来源")
+        elif result.reviewed_appearances is not None:
+            raise ValueError("旧观察结果不能补入未执行的逐处原文核对")
         if result.origins is None:
             raise ValueError("本次观察核对须逐条保留原文次序说明，不能补推旧回答")
-        if group.version in {"observation-relation/v4", "observation-relation/v5"}:
-            expected_memberships = facts if group.scheme.count_scope == "per_current_episode" else set()
+        if group.version in {"observation-relation/v4", "observation-relation/v5", "observation-relation/v6"}:
+            expected_memberships = (set(appearances) if group.version == "observation-relation/v6" else facts)
+            if group.scheme.count_scope != "per_current_episode":
+                expected_memberships = set()
             if (result.episode_memberships is None
-                    or {item.fact_id for item in result.episode_memberships} != expected_memberships):
+                    or {(item.fact_id, item.locator_id) if group.version == "observation-relation/v6"
+                        else item.fact_id for item in result.episode_memberships} != expected_memberships):
                 raise ValueError("本次节点归属核对须按方案范围逐条完整返回")
         elif result.episode_memberships is not None:
             raise ValueError("旧观察结果不能补入新节点归属冒充原回答")
         for membership in result.episode_memberships or ():
+            if group.version == "observation-relation/v6" and (membership.fact_id, membership.locator_id) not in excerpts:
+                raise ValueError("检查节点归属须指向本次逐处原文")
+            if group.version != "observation-relation/v6" and membership.locator_id is not None:
+                raise ValueError("旧检查节点归属不能补入逐处原文身份")
             for quote in membership.quotes:
                 excerpt = excerpts.get((quote.fact_id, quote.locator_id))
                 if not isinstance(excerpt, str) or quote.excerpt not in excerpt:
@@ -149,7 +183,7 @@ def validate_observation_relation_payload(groups, text):
         if result.reviewed_auxiliary_pair_ids != sorted(auxiliary) or result.auxiliary_associations is None:
             raise ValueError("辅助原文须完整核对，不能补推旧回答")
         for association in result.auxiliary_associations:
-            if group.version != "observation-relation/v5" and association.shared_scope_excerpt is not None:
+            if group.version not in {"observation-relation/v5", "observation-relation/v6"} and association.shared_scope_excerpt is not None:
                 raise ValueError("旧回答不能补入未核实的多次共用范围")
             member = auxiliary.get(association.auxiliary_pair_id)
             excerpt = member.locator.get("excerpt") if member is not None else None
@@ -163,6 +197,10 @@ def validate_observation_relation_payload(groups, text):
                 if not isinstance(excerpt, str) or quote.excerpt not in excerpt:
                     raise ValueError("辅助对应引用不属于指定检查原文")
         for origin in result.origins:
+            if group.version == "observation-relation/v6" and (origin.fact_id, origin.locator_id) not in excerpts:
+                raise ValueError("检查次序须指向本次逐处原文")
+            if group.version != "observation-relation/v6" and origin.locator_id is not None:
+                raise ValueError("旧观察次序不能补入逐处原文身份")
             for quote in origin.quotes:
                 excerpt = excerpts.get((quote.fact_id, quote.locator_id))
                 if not isinstance(excerpt, str) or quote.excerpt not in excerpt:
@@ -170,10 +208,18 @@ def validate_observation_relation_payload(groups, text):
         for link in result.links:
             if link.relation == "repeat_of" and link.reference_kind is None:
                 raise ValueError("复查回指须区分初查、紧邻上次或无法确定")
-            ends = {link.left_fact_id, link.right_fact_id}
-            if not ends <= facts:
+            if group.version == "observation-relation/v6":
+                ends = {(link.left_fact_id, link.left_locator_id),
+                        (link.right_fact_id, link.right_locator_id)}
+                cited = {(quote.fact_id, quote.locator_id) for quote in link.quotes}
+                valid = None not in {link.left_locator_id, link.right_locator_id} and ends <= set(appearances)
+            else:
+                ends = {link.left_fact_id, link.right_fact_id}
+                cited = {quote.fact_id for quote in link.quotes}
+                valid = link.left_locator_id is None and link.right_locator_id is None and ends <= facts
+            if not valid:
                 raise ValueError("观察关系引用了本组以外的记录")
-            if not ends <= {quote.fact_id for quote in link.quotes}:
+            if not ends <= cited:
                 raise ValueError("观察关系缺少关系两端的原文依据")
             for quote in link.quotes:
                 excerpt = excerpts.get((quote.fact_id, quote.locator_id))

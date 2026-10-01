@@ -54,7 +54,7 @@ export function ProtocolDraftWorkbench({
   const draftSaved = uatDraftSaved === true;
   const rules = useMemo(() => mapProtocolDraftRules(draft.content), [draft.content]);
   const allComponents = useMemo(
-    () => rules.flatMap((rule) => rule.components),
+    () => rules.flatMap((rule) => [...rule.components, ...rule.restrictedComponents]),
     [rules],
   );
 

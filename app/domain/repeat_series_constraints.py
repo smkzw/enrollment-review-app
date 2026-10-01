@@ -11,6 +11,7 @@ from app.domain.repeat_acquisition_chains import decompose_repeat_chains
 def calculate_repeat_series_constraints(
     scheme, graph, supplied_scope, *, fact_dates, qualified_date_fact_ids, anchor_dates,
     qualified_episode_memberships=None, episode_sha256=None,
+    qualified_date_appearance_ids=frozenset(),
 ):
     """No permission or result adoption is inferred from passing these checks.
 
@@ -43,6 +44,11 @@ def calculate_repeat_series_constraints(
                 visited.add(prior)
                 pending.extend(predecessors[prior])
         return visited
+
+    # In the appearance graph an unlinked presentation is not evidence of a
+    # separate clinical acquisition, even when its origin is labelled repeat.
+    proven_repeats = (tuple(key for key in repeats if len(initials & ancestors(key)) == 1)
+                      if graph.get("version") == "observation-relation-graph/v3" else repeats)
 
     def unknown(reason):
         return EvaluationResult(truth=TruthValue.UNKNOWN, reason_codes=[reason])
@@ -78,13 +84,14 @@ def calculate_repeat_series_constraints(
     if structural:
         count_result = EvaluationResult(truth=TruthValue.UNKNOWN, reason_codes=graph["structural_reasons"])
     elif scheme.count_status == "specified" and scheme.count_scope == "per_current_episode":
-        counted_repeats = tuple(key for key in repeats if group_memberships[key] == "current_episode")
+        counted_repeats = tuple(key for key in proven_repeats if group_memberships[key] == "current_episode")
         if not isinstance(episode_sha256, str) or len(episode_sha256) != 64:
             count_result = unknown("repeat_count_scope_unverified")
         else:
             count = evaluate_repeat_count(
                 scheme, repeat_group_ids=counted_repeats, qualified_scope="per_current_episode",
                 scope_complete=supplied_scope["complete"] and role_complete
+                and len(proven_repeats) == len(repeats)
                 and all(value != "unresolved" for value in group_memberships.values()),
             )
             count_result = count.result
@@ -103,6 +110,10 @@ def calculate_repeat_series_constraints(
         ids = groups[key]
         if not ids or not ids <= qualified_date_fact_ids:
             return None
+        if graph.get("version") == "observation-relation-graph/v3":
+            group = next(item for item in graph["acquisition_groups"] if item["group_id"] == key)
+            if not set(group["appearance_ids"]) <= qualified_date_appearance_ids:
+                return None
         values = [fact_dates.get(fact_id) for fact_id in sorted(ids)]
         if any(value is None for value in values):
             return None
@@ -150,6 +161,8 @@ def calculate_repeat_series_constraints(
         "scheme_sha256": canonical_hash(scheme.model_dump(mode="json")),
         "graph_sha256": graph["graph_sha256"], "supplied_scope_sha256": canonical_hash(supplied_scope),
         "observed_repeat_group_ids": list(repeats), "count_result": count_result.model_dump(mode="json"),
+        **({"unverified_repeat_group_ids": sorted(set(repeats) - set(proven_repeats))}
+           if graph.get("version") == "observation-relation-graph/v3" else {}),
         "acquisition_chains": chains, "count_by_initial": count_by_initial,
         "counted_repeat_group_ids": list(counted_repeats),
         "episode_sha256": episode_sha256,

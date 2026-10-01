@@ -724,8 +724,23 @@ _SOURCE_LABEL_TO_STRENGTH = {
 def derive_source_strength_from_metadata(
     document_type: str,
     source_party: str,
+    *,
+    document_category: str | None = None,
+    source_category: str | None = None,
 ) -> SourceStrength:
     """从冻结文档类型与来源方确定性派生单一来源强度。"""
+    if document_category is not None or source_category is not None:
+        if source_category not in {"study_site", "external_hospital"}:
+            return SourceStrength.UNVERIFIABLE
+        if document_category == "objective_report":
+            return SourceStrength.CONTEMPORANEOUS_OBJECTIVE
+        if document_category == "historical_record":
+            return SourceStrength.HISTORICAL_PRIMARY
+        if document_category == "study_chart" and source_category == "study_site":
+            return SourceStrength.CURRENT_STUDY_CHART
+        if document_category == "screening_transcription" and source_category == "study_site":
+            return SourceStrength.SCREENING_RECORD_TRANSCRIPTION
+        return SourceStrength.UNVERIFIABLE
     document_type = document_type.strip().lower()
     source_party = source_party.strip().lower()
     if document_type in {
@@ -808,7 +823,12 @@ def derive_source_strength_for_candidate(
                 f"定位 {locator_id} 的资料未在完整修订中冻结唯一 Phase 4 元数据"
             )
         strengths.append(
-            derive_source_strength_from_metadata(item.document_type, item.source_party)
+            derive_source_strength_from_metadata(
+                item.document_type,
+                item.source_party,
+                document_category=getattr(item, "document_category", None),
+                source_category=getattr(item, "source_category", None),
+            )
         )
     rank = {
         SourceStrength.UNVERIFIABLE: 0,
@@ -819,7 +839,7 @@ def derive_source_strength_for_candidate(
     }
     if not strengths:
         raise ValueError("候选没有可派生来源强度的定位")
-    return max(strengths, key=rank.__getitem__)
+    return min(strengths, key=rank.__getitem__)
 
 
 def resolve_source_strength_for_candidate(

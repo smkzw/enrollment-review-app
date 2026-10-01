@@ -8,6 +8,7 @@ D001 protocol read-only and writes only extraction artifacts below pytest's
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -70,7 +71,12 @@ from app.domain.contracts.rules import (
     TimeUnit,
     WorkflowStage,
 )
-from app.domain.contracts.control_evaluation_spec import ControlAtomEvaluationSpec
+from app.domain.contracts.control_evaluation_spec import (
+    ControlAtomEvaluationSpec,
+    ControlObservationPolicy,
+)
+from app.domain.contracts.control_evidence_dependency import ControlEvidenceAtomReference
+from app.domain.contracts.control_evidence_policy import ControlEvidenceSourcePolicy
 from app.protocols.docx_structure import extract_docx_structure
 from app.protocols.full_protocol_coverage import build_full_protocol_coverage_manifest
 from app.protocols.full_protocol_coverage import build_resolved_full_protocol_coverage_view
@@ -2202,13 +2208,14 @@ def test_future_prohibition_cannot_be_certified_at_baseline(
         )
 
 
-def test_future_prohibition_has_separate_source_bound_not_due_record() -> None:
+@pytest.mark.parametrize("narrow_excerpt", [False, True])
+def test_future_prohibition_has_separate_source_bound_not_due_record(narrow_excerpt: bool) -> None:
     source = "筛选期及双盲治疗期不得调整既定治疗"
     continuation = ControlContinuingObligation(
         statement="双盲治疗期不得调整既定治疗",
         prospective_period=ProspectivePeriod(period="treatment_period"),
         source_span_ids=["span:control"],
-        source_excerpts=[source],
+        source_excerpts=["双盲治疗期不得调整既定治疗" if narrow_excerpt else source],
     )
     atom = _obligation(
         kind=ControlObligationKind.PROHIBIT_EVENT,
@@ -2306,6 +2313,18 @@ def test_future_prohibition_has_separate_source_bound_not_due_record() -> None:
                 "source_span_ids": ["span:other"],
             },
         })
+
+    for invented_excerpt in (
+        "双盲治疗期可以调整既定治疗",
+        "双盲治疗期不得调整既定治疗且随访期也不得调整",
+        "筛选期不得调整既定治疗",  # Not a contiguous excerpt of this source.
+    ):
+        with pytest.raises(ValueError, match="同一原子的直接来源"):
+            ControlObligationAtom.model_validate(atom.model_dump(mode="json") | {
+                "continuing_obligation": continuation.model_dump(mode="json") | {
+                    "source_excerpts": [invented_excerpt],
+                },
+            })
 
 
 def test_study_period_obligation_is_not_assumed_to_start_after_enrollment() -> None:
@@ -2630,6 +2649,230 @@ def _candidate(
     )
 
 
+# ``ProtocolReviewControl`` and candidate semantics validate every atom against
+# an explicit evaluation specification.  These synthetic fixtures declare no
+# deterministic predicate and no observation selection, so the derived spec
+# keeps the atom's own source pairs, states the determination mode the atom
+# actually carries (``investigator_judgment`` only where the atom requires
+# professional judgment, otherwise ``semantic``), and records an explicitly
+# unresolved observation policy instead of silently asserting a
+# single-observation or action-completion reading the synthetic source never
+# states.
+_VALIDITY_CUE_RE = re.compile(r"有效(?:期|性)?|valid", re.IGNORECASE)
+_PERIOD_CUE_RE = re.compile(
+    r"期间|治疗期|筛选期|基线期|随访期|双盲|导入期|洗脱|半衰期|持续|连续|"
+    r"至(?:试验|研究)结束|全程"
+)
+_PROHIBITION_CUE_RE = re.compile(r"不得|不允许|禁止|严禁|不应")
+
+
+def _time_purpose_for_atom(atom: object, text: str) -> str:
+    """Read the time purpose from the atom's own statement and source quotes."""
+
+    if _VALIDITY_CUE_RE.search(text):
+        return "source_validity"
+    if (
+        _PERIOD_CUE_RE.search(text)
+        or _PROHIBITION_CUE_RE.search(text)
+        or getattr(atom, "kind", None) in {
+            ControlObligationKind.PROHIBIT_EVENT,
+            ControlObligationKind.PROHIBIT_MEDICATION_OR_TREATMENT_EXPOSURE,
+        }
+    ):
+        return "interval_condition"
+    return "event_membership"
+
+
+def _evaluation_spec_for_atom(atom: object) -> ControlAtomEvaluationSpec | None:
+    pairs = list(dict.fromkeys(
+        (str(span), excerpt)
+        for span, excerpt in zip(
+            getattr(atom, "source_span_ids", ()) or (),
+            getattr(atom, "source_excerpts", ()) or (),
+        )
+        if isinstance(excerpt, str) and excerpt.strip() and str(span).strip()
+    ))
+    if not pairs:
+        return None
+    spans = [span for span, _ in pairs]
+    excerpts = [excerpt for _, excerpt in pairs]
+    statement = str(getattr(atom, "statement", "") or "").strip()
+    constraint = getattr(atom, "time_constraint", None)
+    return ControlAtomEvaluationSpec(
+        determination_mode=(
+            "investigator_judgment"
+            if getattr(atom, "requires_professional_judgment", False)
+            else "semantic"
+        ),
+        proposition=statement or excerpts[0],
+        time_operand_attribute="date_range" if constraint is not None else None,
+        time_purpose=(
+            _time_purpose_for_atom(atom, " ".join([statement, *excerpts]))
+            if constraint is not None
+            else "not_applicable"
+        ),
+        observation_policy=ControlObservationPolicy(
+            mode="unresolved",
+            scope="原文未声明观察选择规则，观察范围保持未核实",
+            source_span_ids=spans,
+            source_excerpts=excerpts,
+        ),
+        source_span_ids=spans,
+        source_excerpts=excerpts,
+    )
+
+
+def _atom_with_evaluation(atom):
+    """Rebuild one atom with its derived spec so atom validators still run."""
+
+    spec = _evaluation_spec_for_atom(atom)
+    if spec is None:
+        return atom
+    payload = atom.model_dump(mode="json")
+    payload["evaluation"] = spec.model_dump(mode="json")
+    return type(atom).model_validate(payload)
+
+
+def _with_evaluation_specs(owner):
+    """Return a copy whose atoms carry the current-contract evaluation specs.
+
+    Atoms that already declare a spec are preserved, so cases that intentionally
+    omit or hand-author a specification are unaffected.
+    """
+
+    updates = {}
+    for layer in ("applicability", "trigger", "obligation", "exception"):
+        expression = getattr(owner, f"{layer}_expression", None)
+        groups = list(getattr(expression, "groups", ()) or ())
+        if not groups:
+            continue
+        updates[f"{layer}_expression"] = expression.model_copy(update={"groups": [
+            group.model_copy(update={"atoms": [
+                atom if getattr(atom, "evaluation", None) is not None
+                else _atom_with_evaluation(atom)
+                for atom in group.atoms
+            ]})
+            for group in groups
+        ]})
+    return owner.model_copy(update=updates) if updates else owner
+
+
+def _expression_groups(owner: object, layer: str) -> list:
+    expression = getattr(owner, f"{layer}_expression", None)
+    return list(getattr(expression, "groups", ()) or ())
+
+
+def _atom_source_pairs(atom: object) -> list[tuple[str, str]]:
+    return [
+        (str(span), excerpt)
+        for span, excerpt in zip(
+            getattr(atom, "source_span_ids", ()) or (),
+            getattr(atom, "source_excerpts", ()) or (),
+        )
+        if isinstance(excerpt, str) and excerpt.strip() and str(span).strip()
+    ]
+
+
+def _atom_text(atom: object) -> str:
+    return " ".join([
+        str(getattr(atom, "statement", "") or ""),
+        *(str(item) for item in getattr(atom, "source_excerpts", ()) or ()
+          if isinstance(item, str)),
+    ])
+
+
+def _owner_source_pairs(owner: object) -> list[tuple[str, str]]:
+    pairs = [
+        pair
+        for layer in ("applicability", "trigger", "obligation", "exception")
+        for group in _expression_groups(owner, layer)
+        for atom in group.atoms
+        for pair in _atom_source_pairs(atom)
+    ]
+    return list(dict.fromkeys(pairs))
+
+
+def _evidence_source_policy(owner: object) -> ControlEvidenceSourcePolicy | None:
+    """Keep the record-source policy unresolved unless the source settles it."""
+
+    pairs = _owner_source_pairs(owner)
+    if not pairs:
+        return None
+    validity_constraints = []
+    for atom in (
+        atom
+        for group in _expression_groups(owner, "obligation")
+        for atom in group.atoms
+    ):
+        constraint = getattr(atom, "time_constraint", None)
+        if constraint is None or _time_purpose_for_atom(atom, _atom_text(atom)) != "source_validity":
+            continue
+        if all(existing != constraint for existing in validity_constraints):
+            validity_constraints.append(constraint)
+    if len(validity_constraints) == 1:
+        status, constraint = "specified", validity_constraints[0]
+    else:
+        status, constraint = ("unknown" if validity_constraints else "not_specified"), None
+    return ControlEvidenceSourcePolicy(
+        # The synthetic fixture source does not settle these two questions.
+        requires_contemporaneous_objective_source=None,
+        allows_screening_record_transcription=None,
+        result_validity_status=status,
+        result_validity_constraint=constraint,
+        source_span_ids=[span for span, _ in pairs],
+        source_excerpts=[excerpt for _, excerpt in pairs],
+    )
+
+
+def _with_current_contract(owner):
+    """Return a fixture copy that satisfies the current publication contract.
+
+    Atom evaluation specs and the minimum-evidence source policy are derived
+    from the fixture's own frozen source; the evidence node binding reuses the
+    owner's own frozen review-node binding for the declared ``due_stage``.
+    """
+
+    owner = _with_evaluation_specs(owner)
+    evidence = list(getattr(owner, "minimum_evidence", ()) or ())
+    if not evidence:
+        return owner
+    policy = _evidence_source_policy(owner)
+    refs = [
+        ControlEvidenceAtomReference(
+            layer="obligation", group_index=group_index, atom_index=atom_index,
+        )
+        for group_index, group in enumerate(_expression_groups(owner, "obligation"))
+        for atom_index in range(len(group.atoms))
+    ]
+    normalized = []
+    for item in evidence:
+        item_updates = {}
+        if item.source_policy is None and policy is not None:
+            item_updates["source_policy"] = policy
+        if not item.workflow_stage_ids:
+            nodes = [
+                binding.workflow_stage_id
+                for binding in getattr(owner, "review_node_bindings", ()) or ()
+                if binding.review_stage == item.due_stage
+            ]
+            if nodes:
+                item_updates["workflow_stage_ids"] = nodes
+        if not item.atom_refs and refs:
+            item_updates["atom_refs"] = refs
+        normalized.append(
+            item.model_copy(update=item_updates) if item_updates else item
+        )
+    return owner.model_copy(update={"minimum_evidence": normalized})
+
+
+def _candidate_with_current_contract(candidate: ProtocolControlCandidate) -> ProtocolControlCandidate:
+    """Candidates expose the same contract through ``semantics``."""
+
+    return candidate.model_copy(
+        update={"semantics": _with_current_contract(candidate.semantics)}
+    )
+
+
 def _catalog(
     controls: list[ProtocolReviewControl],
     *,
@@ -2643,7 +2886,7 @@ def _catalog(
         coverage_manifest_id=_MANIFEST,
         allowed_source_span_ids=allowed_spans
         or ["span:control", "span:support", "span:table:a", "span:table:b"],
-        controls=controls,
+        controls=[_with_current_contract(control) for control in controls],
     )
 
 
@@ -2702,7 +2945,7 @@ def _result_candidates(
                 )
             )
             candidates.append(
-                _candidate(
+                _candidate_with_current_contract(_candidate(
                     candidate_id=candidate_id,
                     title=(
                         "用药资料控制"
@@ -2712,7 +2955,7 @@ def _result_candidates(
                     source_unit_ids=[unit_id],
                     source_span_ids=source_span_ids,
                     source_excerpt=source_excerpt,
-                )
+                ))
             )
     return candidates
 
@@ -2781,6 +3024,14 @@ def _gate(
 ) -> PublishedProtocolControlCatalog:
     actual_manifest = manifest or _manifest()
     actual_catalog = catalog or _catalog(controls or [control or _control()])
+    if catalog is not None:
+        # A caller-supplied catalog is still fixture input: keep its atoms on
+        # the current evaluation contract before the gate reads them.
+        actual_catalog = catalog.model_copy(
+            update={"controls": [
+                _with_current_contract(item) for item in catalog.controls
+            ]}
+        )
     actual_workflow = workflow_targets if workflow_targets is not None else _workflow_targets()
     actual_plan = plan or _plan(actual_manifest, actual_workflow)
     actual_results = (
@@ -2805,6 +3056,7 @@ def _gate_control_with_manifest(
     *,
     workflow_targets: list[KnownWorkflowStageTarget] | None = None,
 ) -> PublishedProtocolControlCatalog:
+    control = _with_current_contract(control)
     actual_workflow = workflow_targets or _workflow_targets()
     plan = _plan(manifest, actual_workflow)
     batch_dispositions = []
@@ -3557,6 +3809,60 @@ def test_missing_time_anchor_reports_exact_atom_and_statement() -> None:
     assert excerpt in str(caught.value)
 
 
+@pytest.mark.parametrize("excerpt", [
+    "给药前90分钟内采集样本", "给药后两小时复查", "静坐半小时后完成测量",
+    "Collect within 45 minutes before administration", "给药前0.5h完成测量",
+])
+@pytest.mark.parametrize("calendar_replacement", [False, True])
+def test_calendar_consumer_cannot_claim_intraday_requirement_complete(
+    excerpt: str, calendar_replacement: bool,
+) -> None:
+    atom = ControlConditionAtom(
+        condition_atom_id="condition-clock", statement=excerpt,
+        source_span_ids=["span:clock"], source_excerpts=[excerpt],
+        time_constraint=TimeConstraint(anchor_type="first_dose_date", direction="on")
+        if calendar_replacement else None,
+    )
+    with pytest.raises(ProtocolControlGateError) as caught:
+        _check_time_constraints(
+            entity_id="control:clock", texts=[excerpt],
+            expressions=[ControlConditionDnf(groups=[ControlConditionGroup(atoms=[atom])])],
+            flat_atoms=[], global_time_constraint=None,
+        )
+    assert caught.value.code == "TIME_PRECISION_UNSUPPORTED"
+    assert caught.value.entity_id == "control:clock/condition-clock"
+    assert caught.value.obligation_source_span_ids == ("span:clock",)
+
+
+def test_clock_guard_only_checks_own_atom_and_preserves_supported_half_life() -> None:
+    from app.domain.contracts.half_life_evidence import HalfLifeEvidence
+
+    excerpt = "药物甲的半衰期为12小时"
+    evidence = HalfLifeEvidence(
+        value=12, unit="hour", source_span_id="span:half-life", source_excerpt=excerpt,
+        applies_to_quote="药物甲", duration_quote="12小时",
+    )
+    atom = ControlConditionAtom(
+        condition_atom_id="condition-half-life", statement="停药达到五个半衰期",
+        source_span_ids=["span:half-life", "span:multiplier"],
+        source_excerpts=[excerpt, "停药达到5个半衰期"],
+        time_constraint=TimeConstraint(
+            anchor_type="first_dose_date", direction="before", half_life_multiplier=5,
+            half_life_evidence=evidence,
+        ),
+    )
+    _check_time_constraints(
+        entity_id="control:half-life", texts=["同一段另有给药后90分钟采样", excerpt],
+        expressions=[], flat_atoms=[atom], global_time_constraint=None,
+    )
+    atom.source_excerpts.append("同一原子还要求给药前30分钟完成检查")
+    with pytest.raises(ProtocolControlGateError, match="TIME_PRECISION_UNSUPPORTED"):
+        _check_time_constraints(
+            entity_id="control:half-life", texts=atom.source_excerpts,
+            expressions=[], flat_atoms=[atom], global_time_constraint=None,
+        )
+
+
 @pytest.mark.parametrize(
     ("excerpt", "constraint", "error"),
     [
@@ -3615,6 +3921,52 @@ def test_questionnaire_recall_period_is_not_a_study_visit_time_window() -> None:
         texts=[excerpt],
         expressions=[_explicit_obligation_dnf(atoms=[atom])],
         flat_atoms=[],
+        global_time_constraint=None,
+    )
+
+
+@pytest.mark.parametrize("purpose", ["interval_condition", "event_membership", "source_validity"])
+@pytest.mark.parametrize("mode", ["semantic", "deterministic"])
+@pytest.mark.parametrize("condition_atom", [False, True])
+def test_duration_guard_does_not_trust_model_role_or_atom_category(purpose, mode, condition_atom):
+    excerpt = "自筛选开始连续治疗7天"
+    constraint = TimeConstraint(anchor_type="screening_date", direction="after", upper_bound_days=7)
+    evaluation = ControlAtomEvaluationSpec(
+        determination_mode=mode, proposition=excerpt,
+        operation="time_constraint" if mode == "deterministic" else None,
+        operand_attribute="date_range" if mode == "deterministic" else None,
+        time_operand_attribute="date_range" if mode == "semantic" else None,
+        time_purpose=purpose, source_span_ids=["span:control"], source_excerpts=[excerpt],
+    )
+    if condition_atom:
+        atom = ControlConditionAtom(
+            condition_atom_id="condition-duration", statement=excerpt, evaluation=evaluation,
+            source_span_ids=["span:control"], source_excerpts=[excerpt], time_constraint=constraint,
+        )
+    else:
+        atom = _obligation(statement=excerpt, source_excerpts=[excerpt], time_constraint=constraint
+        ).model_copy(update={"evaluation": evaluation})
+    with pytest.raises(ProtocolControlGateError, match="TREATMENT_DURATION_USED_AS_EVENT_WINDOW") as caught:
+        _check_time_constraints(
+            entity_id="control:duration", texts=[excerpt], expressions=[], flat_atoms=[atom],
+            global_time_constraint=None,
+        )
+    assert caught.value.obligation_source_span_ids == ("span:control",)
+
+
+def test_treatment_followup_event_window_is_not_unconditionally_reclassified_as_duration():
+    excerpt = "筛选治疗7天后复查"
+    atom = ControlConditionAtom(
+        condition_atom_id="condition-followup", statement=excerpt,
+        source_span_ids=["span:control"], source_excerpts=[excerpt],
+        time_constraint=TimeConstraint(anchor_type="screening_date", direction="after", lower_bound_days=7),
+        evaluation=ControlAtomEvaluationSpec(
+            determination_mode="semantic", proposition=excerpt, time_purpose="event_membership",
+            time_operand_attribute="date_range", source_span_ids=["span:control"], source_excerpts=[excerpt],
+        ),
+    )
+    _check_time_constraints(
+        entity_id="control:followup", texts=[excerpt], expressions=[], flat_atoms=[atom],
         global_time_constraint=None,
     )
 
@@ -3737,9 +4089,9 @@ def test_exception_copied_to_sibling_branch_is_rejected() -> None:
         _gate(
             manifest=_manifest(units=shared_units, dispositions=dispositions),
             catalog=_catalog(
-                [],
+                [first, second],
                 allowed_spans=["span:shared-ex", "span:support"],
-            ).model_copy(update={"controls": [first, second]}),
+            ),
             candidates=[],
         )
 
@@ -4084,6 +4436,11 @@ def test_study_end_period_must_be_typed_on_the_obligation_atom() -> None:
     for result in _hydrated_batch_results(manifest, plan):
         candidates = []
         for candidate in result.candidates:
+            # The hydrated batch result is the source-complete reading of the
+            # same frozen sentence: verbatim clause quote, first-dose window,
+            # study-period scope, and the baseline decision node.  The catalog
+            # controls below then isolate the structured period as the only
+            # difference under test.
             semantics = candidate.semantics.model_copy(
                 update={
                     "obligation_expression": _explicit_obligation_dnf(
@@ -4091,13 +4448,19 @@ def test_study_end_period_must_be_typed_on_the_obligation_atom() -> None:
                             _obligation(
                                 statement="禁止使用系统治疗",
                                 source_span_ids=list(candidate.source_span_ids),
-                                source_excerpts=["禁止使用系统治疗"],
+                                source_excerpts=[excerpt],
+                                time_constraint=window,
+                                prospective_period=ProspectivePeriod(period="study_period"),
                             )
                         ]
-                    )
+                    ),
+                    "review_node_bindings": [baseline_binding],
+                    "minimum_evidence": _evidence(ReviewStage.BASELINE),
                 }
             )
-            candidates.append(candidate.model_copy(update={"semantics": semantics}))
+            candidates.append(_candidate_with_current_contract(
+                candidate.model_copy(update={"semantics": semantics})
+            ))
         batch_dispositions.append(result.model_copy(update={"candidates": candidates}))
     missing_period = _control(
         bindings=[baseline_binding],
@@ -4842,6 +5205,8 @@ def test_unknown_relation_target_and_unresolved_conflict_stop_publication() -> N
         notes="来源冲突未解决",
     )
     conflict_control = _control(cross_source_relations=[conflict])
+    # Assembled without the catalog-level validator on purpose: this simulates a
+    # persisted/legacy catalog and lets the publication gate own the stop.
     catalog = _catalog([]).model_copy(update={"controls": [conflict_control]})
     with pytest.raises(ProtocolControlGateError, match="UNRESOLVED_SUBSTANTIVE_CONFLICT"):
         _gate(catalog=catalog, candidates=[])
@@ -5142,7 +5507,7 @@ def test_real_d001_table5_rows_remain_in_review_input_and_ignore_keyword_filter(
     before_counts = (len(extraction.blocks), len(base.units))
     after_counts = (len(extraction.blocks), len(filtered.units))
     assert before_counts == after_counts
-    assert before_counts == (3581, 1848)
+    assert before_counts == (3581, 1918)
     base_table5 = [unit for unit in base.units if unit.source_ref.startswith("body.t10.")]
     filtered_table5 = [
         unit for unit in filtered.units if unit.source_ref.startswith("body.t10.")

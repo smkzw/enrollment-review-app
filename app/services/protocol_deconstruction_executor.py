@@ -1103,6 +1103,7 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
             "请联系维护人员核对草稿历史。",
         )
 
+    result: ProtocolDeconstructionRunResult | None = None
     revision = persisted[0] if persisted else None
     final_draft = revision.content if revision is not None else None
     gate = None
@@ -1238,6 +1239,15 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
     }
     if route_audit_payload is not None:
         payload["semantic_route_audit"] = route_audit_payload
+    if result is not None:
+        payload["semantic_call_metadata"] = [
+            {
+                "attempt": attempt.attempt,
+                "outcome": attempt.outcome,
+                "call_metadata": attempt.call_metadata,
+            }
+            for attempt in result.attempts
+        ]
     return payload
 
 

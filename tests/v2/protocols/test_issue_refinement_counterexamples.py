@@ -18,19 +18,21 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.agents.protocol_deconstructor import regressing_rule_codes
+from app.agents.protocol_deconstructor import issue_reduced_for_rule, regressing_rule_codes
 from app.domain.contracts.agent_io import (
     EvidenceRequirementDraft,
     ProtocolSourceMaterial,
     RuleComponentDraft,
 )
 from app.domain.contracts.enums import Comparator, ReviewStage
+from app.domain.contracts.normalization import UnresolvedItem
 from app.domain.contracts.protocol_drafts import DraftFeedbackKind
 from app.domain.contracts.rules import (
     AtomicExpression,
     AtomicPredicate,
     EvidenceRequirement,
     RuleComponent,
+    RestrictedRuleComponent,
 )
 from app.protocols.deconstruction_gate import (
     CHECK_NAMES,
@@ -364,6 +366,38 @@ def _apply_source_error(service, job_id):
     )
 
 
+def test_component_feedback_preserves_sibling_and_shared_unresolved_items():
+    _source, before, _spans = _fixture()
+    rule = before.proposed_rules[1]
+    rule.restricted_components = [RestrictedRuleComponent(
+        rule_component_id="component-ex-sibling", display_code="EX-01b",
+        title="同源待核要求", source_span_ids=["span-ex"],
+        source_excerpts=["ALT或AST≥1.5×ULN"],
+        limitation_kind="interpretation_unresolved",
+        unresolved_dimensions=["适用范围待确认"],
+    )]
+    shared = UnresolvedItem(
+        code="shared-context", affected_scope=["EX-01"], source_refs=["span-ex"],
+    )
+    selected = UnresolvedItem(
+        code="selected-old", affected_scope=["EX-01", "component-ex"],
+        source_refs=["span-ex"],
+    )
+    before.unresolved_items = [shared, selected]
+    after = before.model_copy(deep=True)
+    replacement = UnresolvedItem(
+        code="selected-new", affected_scope=["EX-01", "component-ex"],
+        source_refs=["span-ex"],
+    )
+    after.unresolved_items = [replacement]
+
+    merged = ProtocolWorkbenchService._retain_protected_feedback_issues(
+        before, after, target_rule_code="EX-01", target_component_id="component-ex",
+    )
+    assert merged.unresolved_items == [shared, replacement]
+    assert before.unresolved_items == [shared, selected]
+
+
 def test_refined_unresolved_anchor_saves_but_stays_unpublishable(
     slice4_env, data_paths
 ) -> None:
@@ -645,9 +679,30 @@ def test_comparator_keeps_accepting_plain_gap_closing():
     )
 
 
+def test_local_source_repair_can_keep_a_nonblocking_capability_reminder():
+    draft = _previous_state()
+    previous = [_gate_issue("SOURCE_UNBOUND", ["predicate-age"])]
+    reminder = _gate_issue("CAPABILITY_UNAVAILABLE", ["predicate-age"]).model_copy(
+        update={"level": "提醒"}
+    )
+    assert regressing_rule_codes(draft, previous, draft, [reminder], ["IN-01"]) == set()
+    assert issue_reduced_for_rule(draft, previous, draft, [reminder], "IN-01")
+    dangerous = _gate_issue("NEGATION_NOT_BOUND_TO_SOURCE", ["predicate-age"])
+    assert regressing_rule_codes(draft, previous, draft, [reminder, dangerous], ["IN-01"]) == {"IN-01"}
+
+
+def test_reminder_becoming_a_blocker_is_a_regression_even_with_the_same_identity():
+    draft = _previous_state()
+    blocker = _gate_issue("CAPABILITY_UNAVAILABLE", ["predicate-age"])
+    reminder = blocker.model_copy(update={"level": "提醒"})
+    assert regressing_rule_codes(draft, [reminder], draft, [blocker], ["IN-01"]) == {"IN-01"}
+    assert issue_reduced_for_rule(draft, [blocker], draft, [reminder], "IN-01")
+
+
 def test_comparator_accepts_all_to_any_source_binding_refinement():
     previous = _previous_state()
     component = previous.proposed_rules[1].components[0]
+    component.expression.operator = "all"
     revised = previous.model_copy(deep=True)
     revised_component = revised.proposed_rules[1].components[0]
     revised_component.expression.operator = "any"
@@ -674,6 +729,7 @@ def test_comparator_accepts_all_to_any_source_binding_refinement():
 def test_comparator_rejects_disjunction_binding_issue_on_different_component():
     previous = _previous_state()
     component = previous.proposed_rules[1].components[0]
+    component.expression.operator = "all"
     revised = previous.model_copy(deep=True)
     revised.proposed_rules[1].components[0].expression.operator = "any"
     previous_issues = [

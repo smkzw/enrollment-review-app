@@ -2,10 +2,14 @@ import json
 
 import pytest
 
-from app.llm.predicate_binding_batches import plan_binding_batches, project_binding_batch, validate_binding_batch
-from app.llm.predicate_binding_candidates import predicate_binding_prompt_input, validate_predicate_candidates
+from app.llm.predicate_binding_batches import _batch, plan_binding_batches, project_binding_batch, validate_binding_batch
+from app.llm.predicate_binding_candidates import (
+    build_predicate_binding_messages, predicate_binding_prompt_input, validate_predicate_candidates,
+)
 from tests.v2.llm.test_predicate_binding_candidates import _case
-from tests.v2.services.test_predicate_binding_input import _fact_record, _frozen_input, _locator_record, _sha
+from tests.v2.services.test_predicate_binding_input import (
+    _component_contract, _fact_record, _frozen_input, _locator_record, _sha,
+)
 
 
 def _input():
@@ -60,3 +64,41 @@ def test_batch_identity_is_independent_of_input_order():
     frozen = _input()
     shuffled = _frozen_input(list(reversed(frozen.components)), list(reversed(frozen.facts)), list(reversed(frozen.locators)))
     assert plan_binding_batches(frozen, predicate_binding_prompt_input(frozen), max_characters=100000) == plan_binding_batches(shuffled, predicate_binding_prompt_input(shuffled), max_characters=100000)
+
+
+def test_rule_and_fact_tiles_cover_full_cartesian_scope_without_phantom_answers():
+    frozen = _frozen_input(
+        [_component_contract([f"a-{n}" for n in range(12)], "component-a"),
+         _component_contract([f"b-{n}" for n in range(12)], "component-b")],
+        [_fact_record(f"fact-{n}", _sha(str(n)), [f"loc-{n}"]) for n in range(3)],
+        [_locator_record(f"loc-{n}") for n in range(3)],
+    )
+    prompt = predicate_binding_prompt_input(frozen)
+    both = _batch(frozen, [frozen.facts[0].fact_id], [c.rule_component_id for c in frozen.components])
+    limit = len(json.dumps(project_binding_batch(prompt, frozen, both), ensure_ascii=False, separators=(",", ":"))) - 1
+    batches = plan_binding_batches(frozen, prompt, max_characters=limit)
+    expected = {(c.rule_component_id, fact.fact_id) for c in frozen.components for fact in frozen.facts}
+    covered = {(component_id, fact_id) for batch in batches
+               for component_id in batch.component_ids for fact_id in batch.fact_ids}
+    assert covered == expected
+    assert len(batches) >= 2
+    assert all(len(batch.component_ids) == 1 for batch in batches)
+    for batch in batches:
+        projected = project_binding_batch(prompt, frozen, batch)
+        assert len(json.dumps(projected, ensure_ascii=False, separators=(",", ":"))) <= limit
+        assert {item["rule_component_id"] for item in projected["components"]} == set(batch.component_ids)
+        message = build_predicate_binding_messages(frozen, batch=batch)
+        request = json.loads(message[1]["content"][0]["text"])
+        assert len(request["required_predicate_identities"]) == 12
+        payload = {"results": [{
+            "predicate_identity_sha256": identity,
+            "status": "unresolved", "candidates": [], "uncertainty": "合成资料未核实",
+            "fact_accounting": {
+                "accounting_version": "candidate-fact-accounting/v2",
+                "grouped_dispositions": [],
+                "default_group": {"disposition": "uncertain", "reason_code": "category_match_only"},
+            },
+        } for identity in request["required_predicate_identities"]]}
+        assert len(validate_predicate_candidates(frozen, json.dumps(payload), batch=batch).results) == 12
+        with pytest.raises(ValueError, match="完整覆盖"):
+            validate_predicate_candidates(frozen, json.dumps({"results": []}), batch=batch)

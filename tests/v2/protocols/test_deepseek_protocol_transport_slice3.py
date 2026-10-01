@@ -97,6 +97,45 @@ def test_transport_retains_full_same_session_history_and_max_reasoning():
     assert len(transport.history(first.session_id)) == 4
 
 
+def test_successful_stream_keeps_usage_and_reasoning_size_without_reasoning_text():
+    class Completions:
+        def create(self, **kwargs):
+            assert kwargs["stream_options"] == {"include_usage": True}
+            return iter([
+                SimpleNamespace(
+                    id="request-7", model="deepseek-v4-flash", usage=None,
+                    choices=[SimpleNamespace(
+                        finish_reason="stop",
+                        delta=SimpleNamespace(content='{"ok":1}', reasoning_content="核对来源"),
+                    )],
+                ),
+                SimpleNamespace(
+                    id="request-7", model="deepseek-v4-flash",
+                    usage={"prompt_tokens": 45, "completion_tokens": 12}, choices=[],
+                ),
+            ])
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=Completions()))
+    transport = DeepSeekProtocolAgentTransport(
+        client=client, backend="deepseek", model="deepseek-v4-flash", max_tokens=60000,
+    )
+    response = transport.start(prompt="有源方案输入")
+
+    assert response.text == '{"ok":1}'
+    assert response.call_metadata == {"attempts": [{
+        "request_sha256": hashlib.sha256('[{"content":"有源方案输入","role":"user"}]'.encode()).hexdigest(),
+        "requested_model": "deepseek-v4-flash",
+        "reported_model": "deepseek-v4-flash",
+        "request_id": "request-7",
+        "requested_max_tokens": 60000,
+        "finish_reason": "stop",
+        "usage": {"prompt_tokens": 45, "completion_tokens": 12},
+        "content_characters": 8,
+        "reasoning_characters": 4,
+    }]}
+    assert "核对来源" not in str(response.call_metadata)
+
+
 def test_direct_deepseek_model_keeps_json_object_without_backend_argument():
     client, completions = _client(['{"draft":1}'])
     transport = DeepSeekProtocolAgentTransport(
@@ -165,6 +204,54 @@ def test_formal_stream_accepts_matching_reported_model() -> None:
         max_tokens=60000,
     )
     assert transport.start(prompt="冻结方案输入").text == '{"draft":1}'
+
+
+def test_formal_stream_ignores_empty_keepalive_before_model_response() -> None:
+    frames = [
+        SimpleNamespace(id="chatcmpl-keepalive", model="keepalive", choices=[
+            SimpleNamespace(finish_reason=None, delta=SimpleNamespace(
+                content=None, reasoning_content=None,
+            )),
+        ]),
+        SimpleNamespace(id="real-request", model="deepseek-v4-flash", choices=[
+            SimpleNamespace(finish_reason="stop", delta=SimpleNamespace(
+                content='{"draft":1}', reasoning_content=None,
+            )),
+        ]),
+    ]
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
+        create=lambda **kwargs: iter(frames),
+    )))
+    transport = DeepSeekProtocolAgentTransport(
+        client=client, backend="deepseek", model="deepseek-v4-flash", max_tokens=60000,
+    )
+    assert transport.start(prompt="冻结方案输入").text == '{"draft":1}'
+
+
+def test_formal_stream_rejects_identity_change_after_content() -> None:
+    frames = [
+        SimpleNamespace(id="first", model="deepseek-v4-flash", choices=[
+            SimpleNamespace(finish_reason=None, delta=SimpleNamespace(
+                content='{"draft":', reasoning_content=None,
+            )),
+        ]),
+        SimpleNamespace(id="second", model="another-model", choices=[
+            SimpleNamespace(finish_reason="stop", delta=SimpleNamespace(
+                content="1}", reasoning_content=None,
+            )),
+        ]),
+    ]
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
+        create=lambda **kwargs: iter(frames),
+    )))
+    transport = DeepSeekProtocolAgentTransport(
+        client=client, backend="deepseek", model="deepseek-v4-flash", max_tokens=60000,
+    )
+    with pytest.raises(ProtocolAgentCallError, match="流式回包中断") as caught:
+        transport.start(prompt="冻结方案输入")
+    assert caught.value.error_code == "STREAM_INTERRUPTED"
+    assert caught.value.error_metadata["reported_model"] == "deepseek-v4-flash"
+    assert "模型流在有效内容之间变更了模型身份" in str(caught.value.__cause__.__cause__)
 
 
 def test_interrupted_formal_stream_preserves_partial_identity_without_resending() -> None:
@@ -359,6 +446,21 @@ def test_formal_batch_repair_does_not_request_dnf_wire():
     assert formal.endswith("输出结构：" + _compact_schema())
     assert "wire_version=" not in formal
     assert f"wire_version='{DNF_WIRE_VERSION}'" in compact
+
+
+def test_event_frequency_prompt_does_not_require_result_selection() -> None:
+    from app.agents.protocol_deconstructor import _SYSTEM_CONTRACT, _batch_schema_repair_prompt
+
+    assert "仅统计临床事件发生次数" in _SYSTEM_CONTRACT
+    assert "observation_policy和repeat_scheme均填null" in _SYSTEM_CONTRACT
+    repair = _batch_schema_repair_prompt(
+        ["EX-01"], candidate_id="candidate", agent_call_id="call",
+        batch_id="2/2", problem="频次计数不能与未定义先后关系的复查或观察选择混用",
+        compact=False,
+    )
+    assert "仅统计事件次数且原文没有结果选择要求时" in repair
+    assert "原文两者都要求而关系未明时" in repair
+    assert "unanchored_lookback 的情况" in repair
 
 
 def test_formal_local_semantic_repair_restores_frozen_source(monkeypatch):

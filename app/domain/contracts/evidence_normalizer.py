@@ -29,6 +29,7 @@ from datetime import datetime
 from pydantic import ConfigDict, Field, model_validator
 
 from .common import ContractModel
+from .evidence_ingestion import DocumentCategory, SourceCategory
 from .evidence_locator import PageReviewVisualProvenance
 from .enums import (
     DurationStatus,
@@ -159,6 +160,8 @@ class EvidenceNormalizerContextInput(ContractModel):
     metadata_revision_id: str = Field(min_length=1)
     document_type: str = Field(min_length=1)
     source_party: str = Field(min_length=1)
+    document_category: DocumentCategory | None = Field(default=None, exclude_if=lambda value: value is None)
+    source_category: SourceCategory | None = Field(default=None, exclude_if=lambda value: value is None)
     document_record_time: PartialDateRange | None = None
     current_review_stage: ReviewStage
     workflow_stage_id: str | None = None

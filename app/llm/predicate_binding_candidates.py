@@ -27,12 +27,19 @@ from app.llm.candidate_fact_accounting import (
 )
 from app.llm.predicate_binding_batches import PredicateBindingBatch, project_binding_batch, validate_binding_batch
 
-PROMPT_VERSION = "predicate-binding-candidates/v8"
-BATCH_PROMPT_VERSION = "predicate-binding-candidates-batch/v6"
+PROMPT_VERSION = "predicate-binding-candidates/v9"
+BATCH_PROMPT_VERSION = "predicate-binding-candidates-batch/v8"
+TRAILING_CLOSURE_REPAIR_VERSION = "predicate-candidate-trailing-closure/v1"
 
 
 def predicate_binding_prompt_input(frozen: PredicateBindingFrozenInput) -> dict:
     """Keep clinical fields verbatim; persistence hashes stay in the frozen artifact."""
+    parent_sources: dict[str, str] = {}
+    divergent_parents: set[str] = set()
+    for component in frozen.components:
+        previous = parent_sources.setdefault(component.parent_rule_id, component.rule_source_text)
+        if previous != component.rule_source_text:
+            divergent_parents.add(component.parent_rule_id)
     facts = {}
     for fact in frozen.facts:
         value = fact.model_dump(mode="json", exclude={"fact_id", "stable_identity", "revision"}, exclude_none=True)
@@ -48,7 +55,22 @@ def predicate_binding_prompt_input(frozen: PredicateBindingFrozenInput) -> dict:
             for item in frozen.documents
         ])),
         "episode": frozen.episode.model_dump(mode="json"),
-        "components": [{**component.model_dump(mode="json", exclude_none=True),
+        "rule_sources": {
+            parent_id: text for parent_id, text in parent_sources.items()
+            if parent_id not in divergent_parents
+        },
+        # Correspondence is per atomic condition. The frozen expression trees
+        # remain in the job and evaluator; repeating them here adds no source
+        # or condition identity and substantially enlarges every model call.
+        "components": [{**component.model_dump(
+                            mode="json", exclude_none=True,
+                            exclude={
+                                "expression", "exception_expression",
+                                *({"rule_source_text"}
+                                  if component.parent_rule_id not in divergent_parents
+                                  else set()),
+                            },
+                        ),
                         **({"repeat_trigger_predicates": [item.model_dump(mode="json", exclude_none=True)
                                                            for item in component.repeat_trigger_predicates]}
                            if component.repeat_trigger_conditions else {})}
@@ -66,12 +88,14 @@ def build_predicate_alias_maps(frozen: PredicateBindingFrozenInput, batch=None) 
     if batch is None:
         facts = list(frozen.facts)
         locators = list(frozen.locators)
+        components = list(frozen.components)
     else:
         facts = [item for item in frozen.facts if item.fact_id in batch.fact_ids]
         locators = [item for item in frozen.locators if item.locator_id in batch.locator_ids]
+        components = [item for item in frozen.components if item.rule_component_id in batch.component_ids]
     predicate_ids = sorted({
         predicate.predicate_identity_sha256
-        for component in frozen.components
+        for component in components
         for predicate in component.binding_predicates
     })
     return {
@@ -211,8 +235,12 @@ def build_predicate_binding_messages(frozen: PredicateBindingFrozenInput, *, bat
     if batch is not None:
         prompt_input = project_binding_batch(prompt_input, frozen, batch)
     prompt_input = _apply_aliases(prompt_input, maps)
+    components = (frozen.components if batch is None else [
+        component for component in frozen.components
+        if component.rule_component_id in batch.component_ids
+    ])
     identities = [maps["predicate"][p.predicate_identity_sha256]
-                  for component in frozen.components
+                  for component in components
                   for p in component.binding_predicates]
     output_schema = PredicateCandidatePayload.model_json_schema()
     output_schema["properties"]["results"].update(minItems=len(identities), maxItems=len(identities))
@@ -239,6 +267,8 @@ def build_predicate_binding_messages(frozen: PredicateBindingFrozenInput, *, bat
             "不要自行编造或改写别名，也不要输出64位哈希。"
             "documents给出上传文件名和媒体类型，由source_document_version_id与摘录关联；"
             "文件名和媒体类型仅是来源线索，不证明作者、资料性质或医学事实，缺少时不能猜测。"
+            "rule_sources按parent_rule_id列出完整父规则原文；components通过同名parent_rule_id关联，"
+            "若组件自带rule_source_text则以该组件原文为准，不得把别的父规则原文套入。"
             "须按方案要求核对原始记录与说明材料的证据资格；转述、邮件或说明不能替代方案指定的原始记录。"
             "核对具体对象、属性、否认范围、事件时间与记录时间的区别、审核节点和原文出处。"
             "同一事实可以对应多个条件，但每个对应都须有独立理由。"
@@ -286,7 +316,7 @@ def build_predicate_binding_messages(frozen: PredicateBindingFrozenInput, *, bat
         }, ensure_ascii=False, separators=(",", ":"))}]},
     ]
     if batch is not None:
-        messages[0]["content"] += "本次仅提供完整事实集合的一批；逐个条件检查本批事实，不引用其他批次，不将本批未对应解释为全部资料未见。逐事实考虑记录同样仅覆盖本批提供的事实，不含其他批次的facts。跨来源时间或对象尚不足时保留不确定，不能猜测补齐。"
+        messages[0]["content"] += "本次仅提供冻结规则与事实的一个分包；逐个所列条件检查本批事实，不引用其他批次，不将本批未对应解释为全部规则或资料未见。逐事实考虑记录仅覆盖本批提供的事实。跨来源时间或对象尚不足时保留不确定，不能猜测补齐。"
     return messages
 
 
@@ -315,6 +345,18 @@ def _unique_object(pairs):
     return result
 
 
+def _candidate_json_object(raw_text: str) -> tuple[dict, str | None]:
+    """Accept one missing result-object closer; preserve every original field byte."""
+    body = _strip_json_fences(raw_text)
+    try:
+        return json.loads(body, object_pairs_hook=_unique_object), None
+    except json.JSONDecodeError as exc:
+        if exc.pos != len(body) - 2 or not body.endswith("]}"):
+            raise
+        repaired = body[:-2] + "}" + body[-2:]
+        return json.loads(repaired, object_pairs_hook=_unique_object), TRAILING_CLOSURE_REPAIR_VERSION
+
+
 def validate_predicate_candidates(
     frozen: PredicateBindingFrozenInput, raw_text: str, *, batch: PredicateBindingBatch | None = None,
 ) -> PredicateCandidatePayload:
@@ -327,10 +369,15 @@ def validate_predicate_candidates(
     if batch is not None:
         validate_binding_batch(frozen, batch)
     maps = build_predicate_alias_maps(frozen, batch)
-    restored = _restore_ids(json.loads(_strip_json_fences(raw_text), object_pairs_hook=_unique_object), maps)
+    parsed, _ = _candidate_json_object(raw_text)
+    restored = _restore_ids(parsed, maps)
     payload = PredicateCandidatePayload.model_validate(restored)
+    components = (frozen.components if batch is None else [
+        component for component in frozen.components
+        if component.rule_component_id in batch.component_ids
+    ])
     predicates = {
-        p.predicate_identity_sha256: p for component in frozen.components
+        p.predicate_identity_sha256: p for component in components
         for p in component.binding_predicates
     }
     identities = [result.predicate_identity_sha256 for result in payload.results]
@@ -389,6 +436,7 @@ class PredicateCandidateRead:
     completions: tuple[PageCompletion, ...]
     budgets: tuple[int, ...]
     batch_sha256: str | None = None
+    format_repair: str | None = None
 
 
 class PredicateCandidateReadError(ValueError):
@@ -432,6 +480,7 @@ async def read_predicate_candidates(
          if any(candidate.locator_id == locator.locator_id
                 for item in payload.results for candidate in item.candidates)},
         responses, budgets, batch.batch_sha256 if batch is not None else None,
+        _candidate_json_object(responses[-1].text)[1],
     )
 
 

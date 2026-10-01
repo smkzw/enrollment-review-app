@@ -5,6 +5,7 @@ import type {
   EligibilityDecisionWire,
   EligibilityDeterminationModeWire,
   EligibilityFactRefWire,
+  EligibilityLimitationKindWire,
   EligibilityRuleKindWire,
 } from "./eligibilityReviewTypes";
 
@@ -34,6 +35,7 @@ export interface EligibilityClauseView {
   factRefs: EligibilityFactRefView[];
   gapType: string | null;
   determinationMode: EligibilityDeterminationMode;
+  limitationKind?: EligibilityLimitationKindWire | null;
   actionOwner: EligibilityActionTarget | null;
   actionDetail: string | null;
   actionEvidence: string | null;
@@ -48,9 +50,13 @@ export interface EligibilityControlObligationView {
   sourceExcerpts: string[];
   status: EligibilityControlStatus;
   statusLabel: string;
+  limitationKind?: EligibilityLimitationKindWire | null;
   reason: string;
   factRefs: EligibilityFactRefView[];
   continuingNote?: string | null;
+  actionOwner?: EligibilityActionTarget | null;
+  actionDetail?: string | null;
+  actionEvidence?: string | null;
 }
 
 export interface EligibilityControlView {
@@ -68,6 +74,7 @@ export type EligibilityActionTarget =
   | "sponsor_medical_or_project";
 
 export interface EligibilityReviewView {
+  workDraftState?: "not_started" | "current" | "source_changed";
   unassignedConflicts?: { conflictGroupId: string; memberKind: "event" | "exposure"; memberIds: string[] }[];
   subjectId: string;
   reviewEpisodeId: string;
@@ -204,12 +211,18 @@ const DETERMINATION_MODES: readonly EligibilityDeterminationMode[] = [
   "deterministic",
   "semantic",
   "investigator_judgment",
+  "restricted",
 ];
 const CONTROL_STATUSES: readonly EligibilityControlStatus[] = [
   "fulfilled",
   "unfulfilled",
   "unverified",
+  "restricted",
   "not_applicable",
+];
+
+const LIMITATION_KINDS: readonly EligibilityLimitationKindWire[] = [
+  "interpretation_unresolved", "consumer_unavailable",
 ];
 
 function decodeFactRef(value: unknown, index: number, parentPath = "clauses[].fact_refs"): EligibilityFactRefView {
@@ -266,6 +279,7 @@ function decodeClause(value: unknown, index: number): EligibilityClauseView {
     reason: requiredString(field(row, "reason", path), `${path}.reason`),
     factRefs: refs.map((value, index) => decodeFactRef(value, index)),
     gapType: nullableString(field(row, "gap_type", path), `${path}.gap_type`),
+    limitationKind: optionalEnumValue(row.limitation_kind ?? null, LIMITATION_KINDS, `${path}.limitation_kind`),
     determinationMode: enumValue(
       field(row, "determination_mode", path),
       DETERMINATION_MODES,
@@ -301,11 +315,19 @@ function decodeControl(value: unknown, index: number): EligibilityControlView {
             .map((item) => requiredString(item, `${obligationPath}.source_excerpts[]`)),
         status: enumValue(field(obligation, "status", obligationPath), CONTROL_STATUSES, `${obligationPath}.status`),
         statusLabel: requiredString(field(obligation, "status_label", obligationPath), `${obligationPath}.status_label`),
+        limitationKind: optionalEnumValue(obligation.limitation_kind ?? null, LIMITATION_KINDS, `${obligationPath}.limitation_kind`),
         reason: requiredString(field(obligation, "reason", obligationPath), `${obligationPath}.reason`),
         factRefs: refs.map((item, refIndex) => decodeFactRef(item, refIndex, `${obligationPath}.fact_refs`)),
         continuingNote: obligation.continuing_note == null
           ? null
           : requiredString(obligation.continuing_note, `${obligationPath}.continuing_note`),
+        actionOwner: optionalEnumValue(
+          field(obligation, "action_owner", obligationPath),
+          ACTION_TARGETS,
+          `${obligationPath}.action_owner`,
+        ),
+        actionDetail: nullableString(field(obligation, "action_detail", obligationPath), `${obligationPath}.action_detail`),
+        actionEvidence: nullableString(field(obligation, "action_evidence", obligationPath), `${obligationPath}.action_evidence`),
       };
     });
   const obligationIds = obligations.map((item) => `${item.obligationGroupId}:${item.obligationId}`);
@@ -357,6 +379,9 @@ export function decodeEligibilityReview(value: unknown): EligibilityReviewView {
   }
   return {
     unassignedConflicts,
+    workDraftState: "work_draft_state" in row
+      ? enumValue(row.work_draft_state, ["not_started", "current", "source_changed"] as const, "work_draft_state")
+      : "not_started",
     subjectId: requiredString(field(row, "subject_id", "eligibility_review"), "subject_id"),
     reviewEpisodeId: requiredString(
       field(row, "review_episode_id", "eligibility_review"),

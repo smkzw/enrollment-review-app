@@ -58,13 +58,14 @@ class EligibilityClauseDTO(BaseModel):
     fact_refs: list[EligibilityFactRefDTO] = Field(default_factory=list)
     gap_type: str | None = Field(default=None, min_length=1)
     determination_mode: Literal[
-        "deterministic", "semantic", "investigator_judgment"
+        "deterministic", "semantic", "investigator_judgment", "restricted"
     ]
     action_owner: Literal[
         "investigator", "crc", "cra", "sponsor_medical_or_project"
     ] | None = None
     action_detail: str | None = None
     action_evidence: str | None = None
+    limitation_kind: Literal["interpretation_unresolved", "consumer_unavailable"] | None = None
 
 
 class EligibilityUnassignedConflictDTO(BaseModel):
@@ -88,11 +89,17 @@ class EligibilityControlObligationDTO(BaseModel):
     obligation_group_id: str = Field(min_length=1)
     statement: str = Field(min_length=1)
     source_excerpts: list[str] = Field(default_factory=list)
-    status: Literal["fulfilled", "unfulfilled", "unverified", "not_applicable"]
+    status: Literal["fulfilled", "unfulfilled", "unverified", "restricted", "not_applicable"]
     status_label: str = Field(min_length=1)
     reason: str = Field(min_length=1)
     fact_refs: list[EligibilityFactRefDTO] = Field(default_factory=list)
     continuing_note: str | None = None
+    action_owner: Literal[
+        "investigator", "crc", "cra", "sponsor_medical_or_project"
+    ] | None = None
+    action_detail: str | None = None
+    action_evidence: str | None = None
+    limitation_kind: Literal["interpretation_unresolved", "consumer_unavailable"] | None = None
 
 
 class EligibilityControlDTO(BaseModel):
@@ -117,6 +124,7 @@ class EligibilityReviewResponse(BaseModel):
     clauses: list[EligibilityClauseDTO] = Field(default_factory=list)
     controls: list[EligibilityControlDTO] = Field(default_factory=list)
     unassigned_conflicts: list[EligibilityUnassignedConflictDTO] = Field(default_factory=list)
+    work_draft_state: Literal["not_started", "current", "source_changed"] = "not_started"
 
     @model_validator(mode="after")
     def validate_component_identity(self) -> "EligibilityReviewResponse":

@@ -38,6 +38,7 @@ function task(overrides: Record<string, unknown> = {}) {
     skippedPageCount: 7,
     observationPageCount: 1,
     closedPageCount: 2,
+    failedPageArtifactIds: ["artifact-1"],
     closedReasonLabel: "部分页面暂时无法核验",
     failedScopeLabel: "页面视觉核验",
     createdAt: "2026-09-01T01:00:00Z",
@@ -95,5 +96,18 @@ describe("证据工作台页面视觉核验面板", () => {
     expect(cancelSelectiveVisionTask).toHaveBeenCalledWith("complete-1");
     await waitFor(() => expect(getSelectiveVisionTask).toHaveBeenCalledTimes(2));
     expect(await screen.findByText("已停止")).toBeInTheDocument();
+  });
+
+  it("只对选中的失败页提供有方向的重读，不将普通重试伪装成旋转重读", async () => {
+    getSelectiveVisionTask.mockResolvedValue(task());
+    retrySelectiveVisionTask.mockResolvedValue({
+      jobId: "new-job", state: "queued", stateLabel: "等待处理", changed: true,
+    });
+    render(<SelectiveVisionTaskPanel revisionId="complete-1"
+      selectedPage={{ pageArtifactId: "artifact-1", pageNumber: 4, readingRotation: 270 }} />);
+    fireEvent.click(await screen.findByRole("button", { name: "按当前方向重读第 4 页" }));
+    await waitFor(() => expect(retrySelectiveVisionTask).toHaveBeenCalledWith(
+      "complete-1", undefined, { "artifact-1": 270 },
+    ));
   });
 });

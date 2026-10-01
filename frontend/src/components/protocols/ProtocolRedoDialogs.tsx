@@ -16,6 +16,7 @@ import {
 export interface FeedbackDraftValues {
   kind: FeedbackKind;
   targetRuleCode: string;
+  targetComponentId: string | null;
   note: string;
 }
 
@@ -55,6 +56,10 @@ export function ProtocolFeedbackDialog({
     [candidateContent],
   );
   const [targetRuleCode, setTargetRuleCode] = useState("");
+  const [targetComponentId, setTargetComponentId] = useState("");
+  const targetRule = rules.find((rule) => rule.officialCode === targetRuleCode);
+  const targetItems = targetRule === undefined
+    ? [] : [...targetRule.components, ...targetRule.restrictedComponents];
   const [note, setNote] = useState("");
   const titleId = useId();
   const noteRef = useRef<HTMLTextAreaElement>(null);
@@ -64,6 +69,7 @@ export function ProtocolFeedbackDialog({
     if (!open) return;
     setKind("clarification");
     setTargetRuleCode(rules[0]?.officialCode ?? "");
+    setTargetComponentId("");
     setNote("");
     requestAnimationFrame(() => noteRef.current?.focus());
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -76,11 +82,13 @@ export function ProtocolFeedbackDialog({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open, onClose, rules]);
 
-  const canSubmit = targetRuleCode.length > 0 && note.trim().length > 0;
+  const needsComponent = kind === "source_error" && targetItems.length > 1;
+  const canSubmit = targetRuleCode.length > 0 && note.trim().length > 0
+    && (!needsComponent || targetComponentId.length > 0);
 
   const submit = () => {
     if (!canSubmit) return;
-    onSubmit({ kind, targetRuleCode, note: note.trim() });
+    onSubmit({ kind, targetRuleCode, targetComponentId: needsComponent ? targetComponentId : null, note: note.trim() });
   };
 
   if (!open) return null;
@@ -107,7 +115,7 @@ export function ProtocolFeedbackDialog({
                 name="protocol-feedback-kind"
                 value={item.kind}
                 checked={kind === item.kind}
-                onChange={() => setKind(item.kind)}
+                onChange={() => { setKind(item.kind); setTargetComponentId(""); }}
               />
               <span>
                 <strong>{item.label}</strong>
@@ -120,7 +128,7 @@ export function ProtocolFeedbackDialog({
           <span>需要核对的入排标准</span>
           <select
             value={targetRuleCode}
-            onChange={(event) => setTargetRuleCode(event.target.value)}
+            onChange={(event) => { setTargetRuleCode(event.target.value); setTargetComponentId(""); }}
           >
             {rules.map((rule) => (
               <option key={rule.ruleId} value={rule.officialCode}>
@@ -129,6 +137,19 @@ export function ProtocolFeedbackDialog({
             ))}
           </select>
         </label>
+        {needsComponent && (
+          <label className="protocol-feedback-note">
+            <span>需要纠正的具体要求</span>
+            <select value={targetComponentId} onChange={(event) => setTargetComponentId(event.target.value)}>
+              <option value="">请选择具体要求</option>
+              {targetItems.map((item) => (
+                <option key={item.componentId} value={item.componentId}>
+                  {item.displayCode}｜{item.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="protocol-feedback-note">
           <span>具体意见（必填）</span>
           <textarea

@@ -41,19 +41,22 @@ from app.llm.predicate_binding_candidates import (
     PROMPT_VERSION as PREDICATE_PROMPT_VERSION,
     BATCH_PROMPT_VERSION as PREDICATE_BATCH_PROMPT_VERSION,
     PredicateCandidateReadError,
+    _candidate_json_object,
     build_predicate_binding_messages,
     candidate_value_shape,
     validate_predicate_candidates,
 )
 from app.projections.control_atom_binding_input import project_control_atom_identities
-from app.services.binding_candidate_comparison import COMPARISON_VERSION, compare_candidate_declarations
+from app.services.binding_candidate_comparison import (
+    COMPARISON_VERSION, PREDICATE_COMPARISON_VERSION, compare_candidate_declarations,
+)
 from app.services.predicate_binding_job import LANES
 from app.storage.codecs import verify_payload_sha256
 from app.workflow.errors import InvalidJobDefinitionError, StepFailure
 from app.workflow.jobstore import JobStore
 
 JOB_TYPE = "binding_qualification"
-CONTRACT = "binding-qualification-job/v2"
+CONTRACT = "binding-qualification-job/v3"
 SEMANTIC_DIMENSIONS = [
     "source_admissibility",
     "object_match",
@@ -65,9 +68,10 @@ SEMANTIC_DIMENSIONS = [
 
 _PREDICATE = {
     "job_type": "predicate_binding_candidates",
-    "contract": "predicate-binding-candidate-job/v8",
+    "contract": "predicate-binding-candidate-job/v11",
     "prompt_version": PREDICATE_PROMPT_VERSION,
     "batch_prompt_version": PREDICATE_BATCH_PROMPT_VERSION,
+    "comparison_version": PREDICATE_COMPARISON_VERSION,
     "family": "predicate",
     "identity_field": "predicate_identity_sha256",
 }
@@ -76,6 +80,7 @@ _CONTROL = {
     "contract": "control-binding-candidate-job/v6",
     "prompt_version": CONTROL_PROMPT_VERSION,
     "batch_prompt_version": None,
+    "comparison_version": COMPARISON_VERSION,
     "family": "control",
     "identity_field": "atom_identity_sha256",
 }
@@ -386,7 +391,7 @@ def verify_completed_candidate_comparison(
         artifact_store.read_by_sha("raw_response", summary[1]["comparison_sha256"]),
     )
     if (
-        stored_comparison.get("version") != COMPARISON_VERSION
+        stored_comparison.get("version") != spec["comparison_version"]
         or stored_comparison.get("accepted") is not False
     ):
         raise InvalidJobDefinitionError("候选比较工件版本或采信状态无效")
@@ -418,6 +423,10 @@ def verify_completed_candidate_comparison(
             raise InvalidJobDefinitionError("候选读取检查点范围或状态无效")
         reads[step_id] = record
     groups = {}
+    batch_fact_ids = {
+        batch.batch_sha256: set(batch.fact_ids)
+        for _, _, batch in _candidate_reads(payload) if batch is not None
+    }
     for step_id, lane, batch in _candidate_reads(payload):
         read = reads[step_id]
         artifact = json.loads(artifact_store.read_by_sha("raw_response", read["candidate_sha256"]))
@@ -461,6 +470,8 @@ def verify_completed_candidate_comparison(
             raise InvalidJobDefinitionError("候选请求/回答与冻结提示或路由不一致")
         if family == "predicate":
             original = validate_predicate_candidates(frozen, response["text"], batch=batch)
+            if artifact.get("format_repair") != _candidate_json_object(response["text"])[1]:
+                raise InvalidJobDefinitionError("候选格式修复记录与原始回答不一致")
         else:
             original = validate_control_candidates(frozen, response["text"])
         if original != validated:
@@ -479,11 +490,14 @@ def verify_completed_candidate_comparison(
             "results": compare_candidate_declarations(
                 group[LANES[0]][0], group[LANES[1]][0],
                 identity_field=spec["identity_field"],
-                universe_fact_ids={fact.fact_id for fact in frozen.facts},
+                universe_fact_ids=(
+                    batch_fact_ids[batch_hash] if family == "predicate" and batch_hash is not None
+                    else {fact.fact_id for fact in frozen.facts}
+                ),
             ),
         })
     rebuilt = {
-        "version": COMPARISON_VERSION,
+        "version": spec["comparison_version"],
         "accepted": False,
         "frozen_input_sha256": frozen.frozen_input_sha256,
         "batches": rebuilt_batches,

@@ -38,6 +38,7 @@ Phase 3 的 ``app.domain.contracts.evidence`` 投影合同（FixtureV1 等）保
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field, model_validator
 
@@ -48,6 +49,14 @@ from .enums import (
     UploadMode,
 )
 from .review import ReviewEpisode, Subject
+
+DocumentCategory = Literal[
+    "objective_report", "historical_record", "study_chart",
+    "screening_transcription", "other", "unknown",
+]
+SourceCategory = Literal[
+    "study_site", "external_hospital", "participant", "other", "unknown",
+]
 
 __all__ = [
     "EvidenceSnapshot",
@@ -133,6 +142,8 @@ class SourceDocumentMetadataRevision(RevisionedModel):
     source_document_version_id: str = Field(min_length=1)
     document_type: str = Field(min_length=1)
     source_party: str = Field(min_length=1)
+    document_category: DocumentCategory | None = None
+    source_category: SourceCategory | None = None
     reason: str = Field(min_length=1)
     is_auto_suggestion: bool = False
     supersedes_metadata_revision_id: str | None = None

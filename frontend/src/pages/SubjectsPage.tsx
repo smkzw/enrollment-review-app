@@ -730,6 +730,10 @@ function ProfileBody({
     [model, onToggleAll, scrollToTodo, showAll],
   );
 
+  const unverifiedSourceCount = model.items.filter(
+    (item) => item.sourceStrength === "unverifiable_source",
+  ).length;
+
   return (
     <>
       <ProfileStatusBanner model={model} />
@@ -749,6 +753,11 @@ function ProfileBody({
           <span className="count-chip">资料版本 {episode.revision}</span>
           <span className="count-chip">生成时间 {formatProfileDateTime(model.generatedAt) ?? "未记录"}</span>
           <span className="count-chip">待核对 {model.pendingReviewCount} 项</span>
+          {unverifiedSourceCount > 0 && (
+            <span className="count-chip" title="这些内容已从原件整理，但来源尚未确认，不能直接用于入排判断">
+              来源待确认 {unverifiedSourceCount} 项
+            </span>
+          )}
           <RouteLink
             to={`/subjects/${subjectId}/evidence`}
             params={{ episode: episode.reviewEpisodeId }}
@@ -821,6 +830,7 @@ function ProfileBody({
             <span className="section-count">{model.highlights.length}</span>
           </h3>
           <ProfileHighlights
+            key={model.revisionId}
             model={model}
             onOpenEvidence={onOpenEvidence}
             onRequestCorrection={onRequestCorrection}

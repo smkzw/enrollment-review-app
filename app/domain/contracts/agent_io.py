@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import Field, model_serializer, model_validator
 
 from .agents import AgentCallContract, CriticRun, GateResult, ModelConfigContract, PromptVersion
@@ -189,9 +191,31 @@ class SemanticRuleComponent(ContractModel):
         return self
 
 
+class SemanticRestrictedComponent(ContractModel):
+    title: str = Field(min_length=1)
+    source_span_ids: list[str] = Field(min_length=1)
+    source_excerpts: list[str] = Field(min_length=1)
+    limitation_kind: Literal["interpretation_unresolved", "consumer_unavailable"]
+    unresolved_dimensions: list[str] = Field(min_length=1)
+
+
 class SemanticRule(ContractModel):
     official_code: str = Field(pattern=r"^(IN|EX)-\d{2}$")
-    components: list[SemanticRuleComponent] = Field(min_length=1)
+    components: list[SemanticRuleComponent]
+    restricted_components: list[SemanticRestrictedComponent] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def preserve_historical_semantic_rules(self, handler):
+        value = handler(self)
+        if not self.restricted_components:
+            value.pop("restricted_components", None)
+        return value
+
+    @model_validator(mode="after")
+    def validate_component_coverage(self) -> "SemanticRule":
+        if not self.components and not self.restricted_components:
+            raise ValueError("语义规则不能省略所有可核对要求")
+        return self
 
 
 class ProtocolDeconstructionInput(VersionedModel):

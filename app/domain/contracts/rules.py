@@ -621,13 +621,53 @@ class RuleComponent(VersionedModel):
         return self
 
 
+class RestrictedRuleComponent(VersionedModel):
+    """Source-bound obligation without a fabricated executable expression."""
+
+    rule_component_id: str = Field(min_length=1)
+    display_code: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    source_span_ids: list[str] = Field(min_length=1)
+    source_excerpts: list[str] = Field(min_length=1)
+    limitation_kind: Literal["interpretation_unresolved", "consumer_unavailable"]
+    unresolved_dimensions: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_sources(self) -> "RestrictedRuleComponent":
+        if len(self.source_span_ids) != len(set(self.source_span_ids)):
+            raise ValueError("未决要求的来源片段不得重复")
+        if any(not item.strip() for item in self.source_excerpts):
+            raise ValueError("未决要求的原文摘录不得为空")
+        if any(not item.strip() for item in self.unresolved_dimensions):
+            raise ValueError("未决要求必须说明具体尚未核清之处")
+        return self
+
+
 class Rule(VersionedModel):
     rule_id: str = Field(min_length=1)
     official_code: str = Field(pattern=r"^(IN|EX|REQ)-\d{2}$")
     kind: RuleKind
     source_text: str = Field(min_length=1)
     study_phase: StudyPhase
-    components: list[RuleComponent] = Field(min_length=1)
+    components: list[RuleComponent]
+    restricted_components: list[RestrictedRuleComponent] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def preserve_historical_rules(self, handler):
+        value = handler(self)
+        if not self.restricted_components:
+            value.pop("restricted_components", None)
+        return value
+
+    @model_validator(mode="after")
+    def validate_component_coverage(self) -> "Rule":
+        if not self.components and not self.restricted_components:
+            raise ValueError("每条正式规则至少应有一项可核对要求")
+        identities = [item.rule_component_id for item in self.components]
+        identities.extend(item.rule_component_id for item in self.restricted_components)
+        if len(identities) != len(set(identities)):
+            raise ValueError("可执行与未决子项不能复用同一身份")
+        return self
 
 
 class RuleSet(RevisionedModel):
@@ -676,6 +716,10 @@ class RuleSet(RevisionedModel):
                         if predicate.predicate_id in predicate_ids:
                             raise ValueError("RuleSet 中的原子谓词 ID 必须唯一")
                         predicate_ids.add(predicate.predicate_id)
+            for restricted in rule.restricted_components:
+                if restricted.rule_component_id in component_ids:
+                    raise ValueError("RuleSet 中的未决子项身份必须唯一")
+                component_ids.add(restricted.rule_component_id)
         return self
 
 

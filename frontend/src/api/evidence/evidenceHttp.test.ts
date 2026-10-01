@@ -163,6 +163,8 @@ function metadataResponseWire(overrides: Record<string, unknown> = {}) {
       source_document_version_id: "version-1",
       document_type: "影像学检查",
       source_party: "中心影像科",
+      document_category: "objective_report",
+      source_category: "study_site",
       reason: "已与原始资料核对。",
       is_auto_suggestion: false,
       supersedes_metadata_revision_id: "metadata-1",
@@ -210,6 +212,8 @@ describe("证据处理 HTTP 仓储", () => {
     const result = await repository.reviseSourceDocumentMetadata("version/1", {
       document_type: "影像学检查",
       source_party: "中心影像科",
+      document_category: "objective_report",
+      source_category: "study_site",
       reason: "已与原始资料核对。",
       expected_metadata_revision: 1,
       idempotency_key: "metadata-idem-1",
@@ -223,6 +227,8 @@ describe("证据处理 HTTP 仓储", () => {
         sourceDocumentVersionId: "version/1",
         documentType: "影像学检查",
         sourceParty: "中心影像科",
+        documentCategory: "objective_report",
+        sourceCategory: "study_site",
         revision: 2,
       },
     });
@@ -236,6 +242,8 @@ describe("证据处理 HTTP 仓储", () => {
     expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).toEqual({
       document_type: "影像学检查",
       source_party: "中心影像科",
+      document_category: "objective_report",
+      source_category: "study_site",
       reason: "已与原始资料核对。",
       expected_metadata_revision: 1,
       idempotency_key: "metadata-idem-1",

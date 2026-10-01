@@ -9,6 +9,9 @@
 - ``workflow_stage_map`` 只做身份命名空间映射：冻结原节点 ID -> 正式
   已由必做项目映射证明的正式节点，绝不按名称、访视或阶段猜配节点；
 - 同一 ``RuleSet`` 修订只能有一个已发布目录（目录变化必须发布新的正式规则修订）。
+- 版本边界：``control-catalog/v1`` 不携带来源定义消费关系；``v2`` 必须携带且全部
+  已核清；``v3`` 必须显式保留跨章未决来源陈述，且仍不接受未核清的定义消费关系
+  （该放宽属定义 lane 的独立工作项，不在本合同内）。
 
 硬边界：
 
@@ -17,6 +20,8 @@
   只是内容哈希字段，本模块不验证 Job 与检查点内容——发布服务必须在签发门禁前
   证明任务、检查点与目录来源；
 - 存储完整性由 ``ControlCatalogPublicationRepository`` 负责，本模块不做任何 I/O。
+- 受限来源陈述只随 ``v3`` 保留：旧版本（v1/v2）不得携带，且本模块不验证逐字
+  摘录是否真的落在冻结原文，也不做任何临床判断——发布服务必须在签发前证明。
 """
 
 from __future__ import annotations
@@ -25,13 +30,14 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import ConfigDict, Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_serializer, model_validator
 
 from app.domain.publication import canonical_hash
 
 from .common import ContractModel
 from .protocol_controls import (
     ControlRelationTargetKind,
+    ProtocolControlDefinitionConsumerRecord,
     PublishedProtocolControlCatalog,
 )
 
@@ -76,7 +82,9 @@ class _ControlCatalogPublicationBody(ContractModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal["control-catalog/v1"] = "control-catalog/v1"
+    schema_version: Literal[
+        "control-catalog/v1", "control-catalog/v2", "control-catalog/v3"
+    ] = "control-catalog/v1"
     project_id: str = Field(min_length=1)
     protocol_version_id: str = Field(min_length=1)
     rule_set_id: str = Field(min_length=1)
@@ -87,11 +95,19 @@ class _ControlCatalogPublicationBody(ContractModel):
     source_checkpoint_id: str = Field(min_length=1)
     source_checkpoint_sha256: str = Field(pattern=_SHA256)
     catalog: PublishedProtocolControlCatalog
+    definition_consumer_records: list[ProtocolControlDefinitionConsumerRecord] = Field(default_factory=list)
     #: 冻结原节点 ID -> 正式命名空间节点 ID；值必须逐字等于
     #: 当前规则修订前缀。两条来源链的原始节点 ID 不相同，由发布服务验证桥接。
     workflow_stage_map: dict[str, str]
     gate_result_id: str = Field(min_length=1)
     created_at: datetime
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_body(self, handler):
+        body = handler(self)
+        if not self.definition_consumer_records:
+            body.pop("definition_consumer_records", None)
+        return body
 
     @field_validator("created_at")
     @classmethod
@@ -103,6 +119,19 @@ class _ControlCatalogPublicationBody(ContractModel):
     def validate_body(self) -> "_ControlCatalogPublicationBody":
         if self.protocol_version_id != self.catalog.protocol_version_id:
             raise ValueError("控制目录发布必须绑定目录自身的方案版本")
+        if (self.schema_version == "control-catalog/v1" and self.definition_consumer_records):
+            raise ValueError("旧版控制目录不能补入来源定义消费关系")
+        if (self.schema_version == "control-catalog/v2" and not self.definition_consumer_records):
+            raise ValueError("新版控制目录须包含已核对的来源定义消费关系")
+        if self.schema_version != "control-catalog/v1" and any(
+            not record.scope_complete for record in self.definition_consumer_records
+        ):
+            raise ValueError("来源定义影响范围尚未核清，不能进入新版控制目录")
+        if self.schema_version == "control-catalog/v3":
+            if not self.catalog.restricted_statements:
+                raise ValueError("受限控制目录必须显式保留跨章未决来源陈述")
+        elif self.catalog.restricted_statements:
+            raise ValueError("旧版控制目录不能携带跨章未决来源陈述")
         self._validate_workflow_stage_map()
         return self
 

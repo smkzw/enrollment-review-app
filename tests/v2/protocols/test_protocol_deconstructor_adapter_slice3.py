@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from itertools import product
+from types import SimpleNamespace
 
 import pytest
 
@@ -11,10 +12,12 @@ from app.agents.protocol_deconstructor import (
     ProtocolDeconstructionRunResult,
     ProtocolAgentResponse,
     ProtocolAgentCallError,
+    ProtocolWireError,
     ProtocolDeconstructorRunner,
     _parse_semantic_candidate,
     _plan_semantic_rule_batches,
     _merge_semantic_batches,
+    _merge_component_only_repair,
     _repair_batch_id,
     _validate_semantic_batch,
     _validate_semantic_repair,
@@ -24,6 +27,7 @@ from app.agents.protocol_deconstructor import (
     _parse_protocol_draft,
     _recover_exact_fragments,
     _wire_atom,
+    _wire_dnf_expression,
     _wire_time_constraint,
     _wire_time_quantity,
     build_protocol_deconstruction_prompt,
@@ -39,12 +43,14 @@ from app.domain.contracts.agent_io import (
     ProtocolSemanticDeconstructionCandidate,
     ProtocolSemanticRuleRepair,
     SemanticEvidenceRequirement,
+    SemanticRestrictedComponent,
     SemanticRule,
     SemanticRuleComponent,
 )
 from app.domain.contracts.enums import (
     AgentNode,
     AnchorResolutionMode,
+    CatalogKind,
     InterpretationSourceType,
     LogicalOperator,
     ReviewStage,
@@ -54,9 +60,9 @@ from app.domain.contracts.protocol_metadata import (
     AnchorResolutionStatement,
     InterpretationSource,
 )
-from app.domain.contracts.rules import iter_atomic_predicates
-from app.protocols.deconstruction_gate import ProtocolGateIssue
-from tests.v2.protocols.test_deconstruction_gate_slice3 import _fixture
+from app.domain.contracts.rules import RestrictedRuleComponent, iter_atomic_predicates
+from app.protocols.deconstruction_gate import ProtocolDeconstructionGate, ProtocolGateIssue
+from tests.v2.protocols.test_deconstruction_gate_slice3 import _catalog, _fixture
 
 
 class FakeTransport:
@@ -235,6 +241,8 @@ def _wire_candidate(candidate, *, batch_id="1/1"):
         if expression.kind != "predicate":
             raise AssertionError("DNF test encoder expects an atomic expression")
         predicate = expression.predicate.model_dump(mode="json")
+        predicate.setdefault("semantic_proposition", None)
+        predicate.setdefault("repeat_scheme", None)
         predicate_id = predicate.pop("predicate_id")
         del predicate_id
         source_clause = predicate.pop("source_clause")
@@ -313,9 +321,11 @@ def _wire_candidate(candidate, *, batch_id="1/1"):
                     "source_excerpts": list(component.source_excerpts),
                 }
             )
-        rules.append({"official_code": rule.official_code, "components": components})
+        rules.append({"official_code": rule.official_code, "components": components,
+                      "restricted_components": [item.model_dump(mode="json")
+                                                for item in rule.restricted_components]})
     return {
-        "wire_version": "dnf-v1",
+        "wire_version": DNF_WIRE_VERSION,
         "candidate_id": candidate.candidate_id,
         "batch_id": batch_id,
         "proposed_rules": rules,
@@ -486,6 +496,27 @@ def test_wire_optional_objects_normalize_only_when_semantically_empty():
     assert predicate["unit_match_policy"] == "exact_canonical_label"
 
 
+def test_wire_accepts_explicit_null_observation_policy_without_inventing_selection():
+    from jsonschema import validate
+    from app.agents.protocol_deconstructor import _wire_observation_policy_schema
+
+    validate(None, _wire_observation_policy_schema())
+    predicate = _wire_atom(
+        {
+            "subject": "参与者",
+            "attribute": "既往手术史",
+            "source_locator": {"source_clause": "既往手术史"},
+            "semantic_proposition": None,
+            "observation_policy": None,
+            "repeat_scheme": None,
+            "requires_professional_judgment": False,
+            "negated": False,
+        },
+        shape="existence",
+    )
+    assert predicate["observation_policy"] is None
+
+
 def test_wire_partial_semantic_objects_are_rejected_precisely():
     with pytest.raises(ValueError, match="时间数量的 value 和 unit"):
         _wire_time_quantity({"value": 1, "unit": None})
@@ -608,8 +639,8 @@ def test_compact_wire_round_trips_each_comparator_shape_and_categorical_dnf():
     existence_atom = {
         **json.loads(json.dumps(first_scalar)),
         "subject": "受试者",
-        "attribute": "肝功能记录",
-        "source_locator": {"source_clause": "肝功能记录"},
+        "attribute": "ALT或AST",
+        "source_locator": {"source_clause": "ALT或AST≥1.5×ULN"},
         "negated": False,
     }
     existence_atom.pop("comparator")
@@ -663,7 +694,7 @@ def test_compact_wire_round_trips_each_comparator_shape_and_categorical_dnf():
     assert by_attribute_and_comparator[("ALT", "gte")].unit == "ULN"
     assert by_attribute_and_comparator[("AST", "in")].value == ["ALT", "AST"]
     assert by_attribute_and_comparator[("AST", "in")].unit == "unitless"
-    assert by_attribute_and_comparator[("肝功能记录", "exists")].value is None
+    assert by_attribute_and_comparator[("ALT或AST", "exists")].value is None
     assert by_attribute_and_comparator[("肝功能记录", "exists")].predicate_id != (
         parsed_component.exception_expression.predicate.predicate_id
     )
@@ -951,6 +982,715 @@ def test_feedback_revision_replaces_only_selected_parent_rule():
     assert transport.start_output_kinds == ["semantic_rule_repair"]
     assert "replacement_rules 必须且只能包含 EX-01" in transport.start_prompts[0]
     assert "每项 affected_scope 必须明确包含 EX-01" in transport.start_prompts[0]
+    assert "可以仅把本子项谓词的来源片段缩窄" in transport.start_prompts[0]
+    assert "不能通过截掉本子项真正适用的限定词" in transport.start_prompts[0]
+
+
+def test_feedback_keeps_unselected_draft_structure_byte_equivalent():
+    source_input, draft, _spans = _fixture()
+    untouched = draft.proposed_rules[0].components[0]
+    untouched.display_code = "IN-01-original"
+    draft.component_drafts[0].proposed_component = untouched
+    candidate = semantic_candidate_from_draft(draft)
+    replacement = candidate.proposed_rules[1].model_copy(deep=True)
+    replacement.components[0].title = "仅修订目标规则"
+    repair = ProtocolSemanticRuleRepair(
+        candidate_id=candidate.candidate_id, replacement_rules=[replacement],
+    )
+    transport = FakeTransport([
+        ProtocolAgentResponse(session_id="feedback-session", text=repair.model_dump_json())
+    ])
+
+    revised = revise_protocol_draft_from_feedback(
+        source_input, draft, target_rule_code="EX-01",
+        feedback_note="仅修订本条来源含义。", transport=transport,
+    )
+    assert revised.proposed_rules[0] == draft.proposed_rules[0]
+    assert revised.component_drafts[0] == draft.component_drafts[0]
+    original_stages = {stage.workflow_stage_id: stage for stage in draft.proposed_workflow_stages}
+    revised_stages = {stage.workflow_stage_id: stage for stage in revised.proposed_workflow_stages}
+    for stage_id, stage in original_stages.items():
+        assert stage_id in revised_stages
+        assert [
+            rid for rid in revised_stages[stage_id].due_requirement_ids
+            if rid != "req-ex" and not rid.startswith("requirement:component:EX-01:")
+        ] == [rid for rid in stage.due_requirement_ids if rid != "req-ex"]
+    for stage_id, stage in revised_stages.items():
+        if stage_id not in original_stages:
+            assert all(
+                rid.startswith("requirement:component:EX-01:")
+                for rid in stage.due_requirement_ids
+            )
+    from app.services.protocol_workbench_service import ProtocolWorkbenchService
+    ProtocolWorkbenchService._validate_source_error_scope(
+        draft, revised, target_rule_code="EX-01",
+    )
+    assert revised.proposed_rules[1].components[0].title == "仅修订目标规则"
+
+
+def test_component_feedback_returns_one_component_and_preserves_siblings():
+    source_input, draft, _spans = _fixture()
+    original = semantic_candidate_from_draft(draft).proposed_rules[1]
+    sibling = original.components[0].model_copy(deep=True)
+    selected = original.components[0].model_copy(deep=True)
+    selected.title = "仅修改选中的子项"
+    parent = SemanticRule(
+        official_code="EX-01", components=[sibling, original.components[0]],
+    )
+    single = ProtocolSemanticRuleRepair(
+        candidate_id="candidate-1",
+        replacement_rules=[SemanticRule(official_code="EX-01", components=[selected])],
+    )
+    merged = _merge_component_only_repair(single, parent, 1, "component-ex-second")
+    assert merged.replacement_rules[0].components[0] == sibling
+    assert merged.replacement_rules[0].components[1].title == "仅修改选中的子项"
+    split = _merge_component_only_repair(
+        single.model_copy(update={"replacement_rules": [parent]}),
+        parent, 1, "component-ex-second",
+    )
+    assert len(split.replacement_rules[0].components) == 3
+    mixed = _merge_component_only_repair(
+        single.model_copy(update={"replacement_rules": [SemanticRule(
+            official_code="EX-01", components=[selected],
+            restricted_components=[SemanticRestrictedComponent(
+                title="独立待核要求", source_span_ids=["span-ex"],
+                source_excerpts=["ALT或AST≥1.5×ULN"],
+                limitation_kind="interpretation_unresolved",
+                unresolved_dimensions=["独立要求的适用范围未明确"],
+            )],
+        )]}),
+        parent, 1, "component-ex-second",
+    )
+    assert mixed.replacement_rules[0].components == [sibling, selected]
+    assert len(mixed.replacement_rules[0].restricted_components) == 1
+    with pytest.raises(ValueError, match="可执行分支或单个受限子项"):
+        _merge_component_only_repair(
+            single.model_copy(update={"replacement_rules": [
+                single.replacement_rules[0].model_copy(update={"components": []})
+            ]}),
+            parent, 1, "component-ex-second",
+        )
+
+
+    unsupported = single.model_copy(update={"replacement_rules": [SemanticRule(
+        official_code="EX-01", components=[],
+        restricted_components=[SemanticRestrictedComponent(
+            title="未核清的子项", source_span_ids=["span-ex"],
+            source_excerpts=["ALT或AST≥1.5×ULN"],
+            limitation_kind="consumer_unavailable",
+            unresolved_dimensions=["原文判断关系尚未核清"],
+        )],
+    )]})
+    converted = _merge_component_only_repair(unsupported, parent, 1, "component-ex-second")
+    assert converted.replacement_rules[0].components == [sibling]
+    assert converted.replacement_rules[0].restricted_components[0].title == "未核清的子项"
+    ambiguous = unsupported.model_copy(deep=True)
+    ambiguous.replacement_rules[0].restricted_components[0].limitation_kind = "interpretation_unresolved"
+    with pytest.raises(ValueError, match="不能把可执行子项改为含义待核"):
+        _merge_component_only_repair(ambiguous, parent, 1, "component-ex-second")
+    unscoped = single.model_copy(update={
+        "replacement_unresolved_items": [UnresolvedItem(
+            code="scope_unresolved", affected_scope=["component-ex-other"],
+            source_refs=["span-ex"],
+        )],
+    })
+    with pytest.raises(ValueError, match="必须指向选中的子项"):
+        _merge_component_only_repair(unscoped, parent, 1, "component-ex-second")
+    parent_scoped = single.model_copy(update={
+        "replacement_unresolved_items": [UnresolvedItem(
+            code="source_question", affected_scope=["EX-01"], source_refs=["span-ex"],
+        )],
+    })
+    singleton = SemanticRule(official_code="EX-01", components=[original.components[0]])
+    narrowed = _merge_component_only_repair(parent_scoped, singleton, 0, "component-ex")
+    assert narrowed.replacement_unresolved_items[0].affected_scope == ["component-ex"]
+    with pytest.raises(ValueError, match="必须指向选中的子项"):
+        _merge_component_only_repair(parent_scoped, parent, 1, "component-ex-second")
+    borrowed = parent_scoped.model_copy(deep=True)
+    borrowed.replacement_unresolved_items[0].source_refs = ["span-in"]
+    with pytest.raises(ValueError, match="必须指向选中的子项"):
+        _merge_component_only_repair(borrowed, singleton, 0, "component-ex")
+
+
+def test_component_feedback_only_sends_selected_component_gate_issues():
+    from app.services.protocol_workbench_service import ProtocolWorkbenchService
+
+    _, draft, _ = _fixture()
+    selected = draft.proposed_rules[1].components[0]
+    sibling = selected.model_copy(update={
+        "rule_component_id": "component-ex-sibling",
+        "display_code": "EX-01b",
+    })
+    rule = SimpleNamespace(components=[selected, sibling], restricted_components=[])
+    predicate_id = next(iter_atomic_predicates(selected.expression)).predicate_id
+
+    def issue(ref: str) -> ProtocolGateIssue:
+        return ProtocolGateIssue(
+            issue_code="SOURCE_CHECK", check_name="来源核对", level="阻止发布",
+            problem="原文未对应", impact="不能采用", next_action="核对原文",
+            affected_refs=[ref], repair_scope=[ref],
+        )
+
+    selected_issue = issue(selected.rule_component_id)
+    predicate_issue = issue(predicate_id)
+    sibling_issue = issue(sibling.rule_component_id)
+    parent_issue = issue("EX-01")
+    issues = [selected_issue, predicate_issue, sibling_issue, parent_issue]
+    assert ProtocolWorkbenchService._feedback_issues_for_component(
+        rule, selected.rule_component_id, issues,
+    ) == [selected_issue, predicate_issue]
+    assert ProtocolWorkbenchService._feedback_issues_for_component(
+        SimpleNamespace(components=[selected], restricted_components=[]),
+        selected.rule_component_id, issues,
+    ) == issues
+
+
+def test_component_feedback_split_preserves_siblings_and_source_scope():
+    from app.services.protocol_workbench_service import ProtocolWorkbenchService
+
+    source_input, draft, _ = _fixture()
+    initial = semantic_candidate_from_draft(draft)
+    sibling_semantic = initial.proposed_rules[1].components[0].model_copy(deep=True)
+    sibling_semantic.title = "不参与本次修订的另一子项"
+    initial.proposed_rules[1].components.append(sibling_semantic)
+    draft = _hydrate_semantic_candidate(source_input, initial)
+    candidate = semantic_candidate_from_draft(draft)
+    target = draft.proposed_rules[1].components[0]
+    untouched_sibling = draft.proposed_rules[1].components[1]
+    original = candidate.proposed_rules[1].components[0]
+    second = original.model_copy(deep=True)
+    second.title = "第二个完整触发分支"
+    repair = ProtocolSemanticRuleRepair(
+        candidate_id=candidate.candidate_id,
+        replacement_rules=[SemanticRule(
+            official_code="EX-01", components=[original, second],
+        )],
+    )
+    transport = FakeTransport([
+        ProtocolAgentResponse(session_id="split-feedback", text=repair.model_dump_json()),
+    ])
+    revised = revise_protocol_draft_from_feedback(
+        source_input, draft, target_rule_code="EX-01",
+        target_component_id=target.rule_component_id,
+        feedback_note="逐字核对两个完整分支", transport=transport,
+    )
+    components = revised.proposed_rules[1].components
+    assert [item.rule_component_id for item in components] == [
+        target.rule_component_id, f"{target.rule_component_id}:split:02",
+        untouched_sibling.rule_component_id,
+    ]
+    assert components[2] == untouched_sibling
+    assert revised.proposed_rules[0] == draft.proposed_rules[0]
+    ProtocolWorkbenchService._validate_source_error_scope(
+        draft, revised, target_rule_code="EX-01",
+        target_component_id=target.rule_component_id,
+    )
+    borrowed = revised.model_copy(deep=True)
+    extra = next(item for item in borrowed.component_drafts
+                 if item.proposed_component.rule_component_id == components[1].rule_component_id)
+    extra.source_refs = ["span-in"]
+    with pytest.raises(ValueError, match="所选子项以外的原文"):
+        ProtocolWorkbenchService._validate_source_error_scope(
+            draft, borrowed, target_rule_code="EX-01",
+            target_component_id=target.rule_component_id,
+        )
+
+
+def test_component_feedback_uses_compact_target_input():
+    source_input, draft, _spans = _fixture()
+    candidate = semantic_candidate_from_draft(draft)
+    selected = candidate.proposed_rules[1].components[0].model_copy(deep=True)
+    selected.title = "按目标原文修订"
+    repair = ProtocolSemanticRuleRepair(
+        candidate_id=candidate.candidate_id,
+        replacement_rules=[SemanticRule(official_code="EX-01", components=[selected])],
+    )
+    transport = FakeTransport([
+        ProtocolAgentResponse(session_id="component-feedback", text=repair.model_dump_json())
+    ])
+    revised = revise_protocol_draft_from_feedback(
+        source_input, draft, target_rule_code="EX-01", target_component_id="component-ex",
+        feedback_note="只纠正本子项。", transport=transport,
+    )
+    assert revised.proposed_rules[0] == draft.proposed_rules[0]
+    assert revised.proposed_rules[1].components[0].title == "按目标原文修订"
+    assert "只返回子项 component-ex" in transport.start_prompts[0]
+
+
+def test_component_feedback_restricted_conversion_preserves_identity_and_rejects_clear_bound():
+    source_input, draft, spans = _fixture()
+    draft = _hydrate_semantic_candidate(source_input, semantic_candidate_from_draft(draft))
+    candidate = semantic_candidate_from_draft(draft)
+    target_id = draft.proposed_rules[1].components[0].rule_component_id
+    target_display = draft.proposed_rules[1].components[0].display_code
+    replacement = ProtocolSemanticRuleRepair(
+        candidate_id=candidate.candidate_id,
+        replacement_rules=[SemanticRule(
+            official_code="EX-01", components=[],
+            restricted_components=[SemanticRestrictedComponent(
+                title="需核清的要求", source_span_ids=["span-ex"],
+                source_excerpts=["ALT或AST≥1.5×ULN"],
+                limitation_kind="consumer_unavailable",
+                unresolved_dimensions=["原文范围尚待核清"],
+            )],
+        )],
+    )
+    transport = FakeTransport([
+        ProtocolAgentResponse(session_id="restricted-feedback", text=replacement.model_dump_json()),
+    ])
+    revised = revise_protocol_draft_from_feedback(
+        source_input, draft, target_rule_code="EX-01",
+        target_component_id=target_id, feedback_note="请核对来源范围", transport=transport,
+    )
+    assert revised.proposed_rules[0] == draft.proposed_rules[0]
+    assert not revised.proposed_rules[1].components
+    assert revised.proposed_rules[1].restricted_components[0].rule_component_id == target_id
+    assert revised.proposed_rules[1].restricted_components[0].display_code == target_display
+    assert all(item.draft_component_id != f"draft-component:{target_id}"
+               for item in revised.component_drafts)
+    assert all(item.proposed_requirement.rule_component_id != target_id
+               for item in revised.evidence_requirement_drafts)
+    from app.services.protocol_workbench_service import ProtocolWorkbenchService
+    ProtocolWorkbenchService._validate_source_error_scope(
+        draft, revised, target_rule_code="EX-01", target_component_id=target_id,
+    )
+    result = ProtocolDeconstructionGate().evaluate(source_input, revised, source_spans=spans)
+    assert "RESTRICTED_COMPONENT_SOURCE_INVALID" in {
+        issue.issue_code for check in result.checks for issue in check.issues
+    }
+
+
+def test_component_feedback_mixed_branch_is_source_bound_and_not_auto_accepted():
+    source_input, draft, spans = _fixture()
+    draft = _hydrate_semantic_candidate(source_input, semantic_candidate_from_draft(draft))
+    candidate = semantic_candidate_from_draft(draft)
+    selected = draft.proposed_rules[1].components[0]
+    selected_semantic = candidate.proposed_rules[1].components[0]
+    repair = ProtocolSemanticRuleRepair(
+        candidate_id=candidate.candidate_id,
+        replacement_rules=[SemanticRule(
+            official_code="EX-01", components=[selected_semantic],
+            restricted_components=[SemanticRestrictedComponent(
+                title="待核的独立要求", source_span_ids=["span-ex"],
+                source_excerpts=["ALT或AST≥1.5×ULN"],
+                limitation_kind="interpretation_unresolved",
+                unresolved_dimensions=["独立要求的适用范围未明确"],
+            )],
+        )],
+    )
+    revised = revise_protocol_draft_from_feedback(
+        source_input, draft, target_rule_code="EX-01",
+        target_component_id=selected.rule_component_id,
+        feedback_note="核对独立要求", transport=FakeTransport([
+            ProtocolAgentResponse(session_id="mixed-feedback", text=repair.model_dump_json()),
+        ]),
+    )
+    rule = revised.proposed_rules[1]
+    assert rule.components[0].rule_component_id == selected.rule_component_id
+    assert rule.restricted_components[0].rule_component_id.startswith(
+        selected.rule_component_id + ":split:"
+    )
+    from app.services.protocol_workbench_service import ProtocolWorkbenchService
+    ProtocolWorkbenchService._validate_source_error_scope(
+        draft, revised, target_rule_code="EX-01",
+        target_component_id=selected.rule_component_id,
+    )
+    issues = {
+        issue.issue_code
+        for check in ProtocolDeconstructionGate().evaluate(
+            source_input, revised, source_spans=spans,
+        ).checks for issue in check.issues
+    }
+    assert "RESTRICTED_COMPONENT_SCOPE_INVALID" in issues or "RESTRICTED_COMPONENT_SWALLOWS_NUMERIC_BOUND" in issues
+
+    borrowed = revised.model_copy(deep=True)
+    borrowed.proposed_rules[1].restricted_components[0].source_span_ids = ["span-in"]
+    with pytest.raises(ValueError, match="不得借用所选子项以外的原文"):
+        ProtocolWorkbenchService._validate_source_error_scope(
+            draft, borrowed, target_rule_code="EX-01",
+            target_component_id=selected.rule_component_id,
+        )
+
+
+def test_component_feedback_mixed_branch_publishes_independent_unresolved_requirement(slice4_env):
+    source_input, draft, spans = _fixture()
+    source_text = "年龄≥18岁；必要时另须完成专项评估"
+    source_input.source_materials[0].text = source_text
+    parent_items = list(source_input.parent_rule_catalog.items)
+    parent_items[0] = parent_items[0].model_copy(update={"label": source_text})
+    source_input.parent_rule_catalog = _catalog(CatalogKind.OFFICIAL_PARENT_RULES, parent_items)
+    candidate = semantic_candidate_from_draft(draft)
+    candidate.proposed_rules[0].components[0].source_excerpts = [source_text]
+    draft = _hydrate_semantic_candidate(source_input, candidate)
+    selected = draft.proposed_rules[0].components[0]
+    candidate = semantic_candidate_from_draft(draft)
+    repair = ProtocolSemanticRuleRepair(
+        candidate_id=candidate.candidate_id,
+        replacement_rules=[SemanticRule(
+            official_code="IN-01", components=[candidate.proposed_rules[0].components[0]],
+            restricted_components=[SemanticRestrictedComponent(
+                title="独立专项评估", source_span_ids=["span-in"],
+                source_excerpts=["必要时另须完成专项评估"],
+                limitation_kind="interpretation_unresolved",
+                unresolved_dimensions=["必要时的适用条件未在原文明确"],
+            )],
+        )],
+    )
+    revised = revise_protocol_draft_from_feedback(
+        source_input, draft, target_rule_code="IN-01",
+        target_component_id=selected.rule_component_id,
+        feedback_note="将独立专项评估单列待核", transport=FakeTransport([
+            ProtocolAgentResponse(session_id="mixed-positive", text=repair.model_dump_json()),
+        ]),
+    )
+    from app.services.protocol_workbench_service import ProtocolWorkbenchService
+    ProtocolWorkbenchService._validate_source_error_scope(
+        draft, revised, target_rule_code="IN-01",
+        target_component_id=selected.rule_component_id,
+    )
+    gate = ProtocolDeconstructionGate().evaluate(source_input, revised, source_spans=spans)
+    assert gate.publishable, [issue.issue_code for check in gate.checks for issue in check.issues]
+
+    from app.domain.contracts.protocol_drafts import DraftFeedbackKind
+    from app.projections.clause_pack import project_clause_pack
+    from app.services.eligibility_review_projection import _restricted_clause_projection
+    from app.services.protocol_draft_service import ProtocolDraftService
+    from app.services.protocol_publication_service import (
+        ProtocolPublicationRequest, ProtocolPublicationService,
+    )
+    from app.storage.repositories import get_rule_set
+    from tests.v2.protocols.slice4_helpers import NOW
+    factory, _now = slice4_env
+    with factory() as session:
+        with session.begin():
+            service = ProtocolDraftService(session)
+            initial = service.save_initial_draft(draft, actor="医学监查员", created_at=NOW)
+            saved = service.apply_feedback(
+                revised, expected_revision_id=initial.revision_id,
+                feedback_kind=DraftFeedbackKind.SOURCE_ERROR,
+                feedback_note="将独立专项评估单列待核", actor="医学监查员", created_at=NOW,
+            )
+    published = ProtocolPublicationService(factory, now=lambda: NOW).publish(
+        ProtocolPublicationRequest(
+            idempotency_key="mixed-feedback-publication", draft_revision_id=saved.revision_id,
+            source_input=source_input, source_spans=spans, actor="医学监查员", published_at=NOW,
+        ),
+    )
+    with factory() as session:
+        rule_set = get_rule_set(session, published.rule_set_id, published.rule_set_revision)
+        pack = project_clause_pack(rule_set)
+    assert any(item.clause_id == selected.rule_component_id for item in pack.clauses)
+    restricted = next(item for item in pack.restricted_clauses
+                      if item.clause_id.startswith(selected.rule_component_id + ":split:"))
+    assert _restricted_clause_projection(restricted).decision_label == "无法判定"
+
+
+def test_component_feedback_restricted_conversion_accepts_source_bound_separate_obligation(slice4_env):
+    source_input, draft, spans = _fixture()
+    nested = "有严重感染既往史（包括反复细菌感染（2年内发生2次或以上））"
+    source_input.source_materials[1].text = nested
+    parent_items = list(source_input.parent_rule_catalog.items)
+    parent_items[1] = parent_items[1].model_copy(update={"label": nested})
+    source_input.parent_rule_catalog = _catalog(CatalogKind.OFFICIAL_PARENT_RULES, parent_items)
+    draft.proposed_rules[1].source_text = nested
+    draft = _hydrate_semantic_candidate(source_input, semantic_candidate_from_draft(draft))
+    candidate = semantic_candidate_from_draft(draft)
+    target_id = draft.proposed_rules[1].components[0].rule_component_id
+    replacement = ProtocolSemanticRuleRepair(
+        candidate_id=candidate.candidate_id,
+        replacement_rules=[SemanticRule(
+            official_code="EX-01", components=[],
+            restricted_components=[SemanticRestrictedComponent(
+                title="既往感染史", source_span_ids=["span-ex"],
+                source_excerpts=[nested],
+                limitation_kind="consumer_unavailable",
+                unresolved_dimensions=["上位开放既往史与列举项专属频次尚不能同时可靠表达"],
+            )],
+        )],
+    )
+    transport = FakeTransport([
+        ProtocolAgentResponse(session_id="restricted-feedback", text=replacement.model_dump_json()),
+    ])
+    revised = revise_protocol_draft_from_feedback(
+        source_input, draft, target_rule_code="EX-01",
+        target_component_id=target_id, feedback_note="请核对列举项专属频次", transport=transport,
+    )
+    result = ProtocolDeconstructionGate().evaluate(source_input, revised, source_spans=spans)
+    assert result.publishable, {issue.issue_code for check in result.checks for issue in check.issues}
+    from app.domain.contracts.protocol_drafts import DraftFeedbackKind
+    from app.projections.clause_pack import project_clause_pack
+    from app.services.eligibility_review_projection import _restricted_clause_projection
+    from app.services.protocol_draft_service import ProtocolDraftService
+    from app.services.protocol_publication_service import (
+        ProtocolPublicationRequest, ProtocolPublicationService,
+    )
+    from app.storage.repositories import get_rule_set
+    from tests.v2.protocols.slice4_helpers import NOW
+    factory, _now = slice4_env
+    with factory() as session:
+        with session.begin():
+            initial = ProtocolDraftService(session).save_initial_draft(
+                draft, actor="医学监查员", created_at=NOW,
+            )
+            saved = ProtocolDraftService(session).apply_feedback(
+                revised, expected_revision_id=initial.revision_id,
+                feedback_kind=DraftFeedbackKind.SOURCE_ERROR,
+                feedback_note="EX-01：核对专项评估原文", actor="医学监查员", created_at=NOW,
+            )
+    published = ProtocolPublicationService(factory, now=lambda: NOW).publish(
+        ProtocolPublicationRequest(
+            idempotency_key="restricted-feedback-publication",
+            draft_revision_id=saved.revision_id, source_input=source_input,
+            source_spans=spans, actor="医学监查员", published_at=NOW,
+        ),
+    )
+    with factory() as session:
+        rule_set = get_rule_set(session, published.rule_set_id, published.rule_set_revision)
+        pack = project_clause_pack(rule_set)
+    restricted = next(item for item in pack.restricted_clauses if item.clause_id == target_id)
+    projection = _restricted_clause_projection(restricted)
+    assert projection.decision_label == "无法判定"
+    assert projection.fact_refs == ()
+
+
+def test_component_feedback_restricted_conversion_keeps_later_sibling_identity():
+    source_input, draft, spans = _fixture()
+    nested = "有严重感染既往史（包括反复细菌感染（2年内发生2次或以上））"
+    source_input.source_materials[1].text = f"ALT或AST≥1.5×ULN；{nested}"
+    parent_items = list(source_input.parent_rule_catalog.items)
+    parent_items[1] = parent_items[1].model_copy(update={"label": source_input.source_materials[1].text})
+    source_input.parent_rule_catalog = _catalog(CatalogKind.OFFICIAL_PARENT_RULES, parent_items)
+    original = semantic_candidate_from_draft(draft)
+    parent = original.proposed_rules[1]
+    sibling = parent.components[0].model_copy(deep=True)
+    target = sibling.model_copy(update={
+        "title": "既往感染史", "source_excerpts": [nested],
+    }, deep=True)
+    original.proposed_rules[1] = parent.model_copy(update={
+        "components": [sibling, target],
+    })
+    draft = _hydrate_semantic_candidate(source_input, original)
+    before = draft.proposed_rules[1]
+    target_id = before.components[1].rule_component_id
+    repair = ProtocolSemanticRuleRepair(
+        candidate_id=semantic_candidate_from_draft(draft).candidate_id,
+        replacement_rules=[SemanticRule(
+            official_code="EX-01", components=[],
+            restricted_components=[SemanticRestrictedComponent(
+                title="既往感染史", source_span_ids=["span-ex"],
+                source_excerpts=[nested],
+                limitation_kind="consumer_unavailable",
+                unresolved_dimensions=["上位开放既往史与列举项专属频次尚不能同时可靠表达"],
+            )],
+        )],
+    )
+    revised = revise_protocol_draft_from_feedback(
+        source_input, draft, target_rule_code="EX-01", target_component_id=target_id,
+        feedback_note="只核对列举项专属频次", transport=FakeTransport([
+            ProtocolAgentResponse(session_id="restricted-sibling", text=repair.model_dump_json()),
+        ]),
+    )
+    after = revised.proposed_rules[1]
+    assert after.components == [before.components[0]]
+    assert after.restricted_components[0].rule_component_id == target_id
+    assert after.restricted_components[0].display_code == before.components[1].display_code
+    from app.services.protocol_workbench_service import ProtocolWorkbenchService
+    ProtocolWorkbenchService._validate_source_error_scope(
+        draft, revised, target_rule_code="EX-01", target_component_id=target_id,
+    )
+    result = ProtocolDeconstructionGate().evaluate(source_input, revised, source_spans=spans)
+    assert result.publishable, {issue.issue_code for check in result.checks for issue in check.issues}
+    next_candidate = semantic_candidate_from_draft(revised)
+    next_sibling = next_candidate.proposed_rules[1].components[0].model_copy(
+        update={"title": "肝功能界限"}, deep=True,
+    )
+    next_repair = ProtocolSemanticRuleRepair(
+        candidate_id=next_candidate.candidate_id,
+        replacement_rules=[SemanticRule(official_code="EX-01", components=[next_sibling])],
+    )
+    second = revise_protocol_draft_from_feedback(
+        source_input, revised, target_rule_code="EX-01",
+        target_component_id=before.components[0].rule_component_id,
+        feedback_note="仅修订肝功能子项标题", transport=FakeTransport([
+            ProtocolAgentResponse(session_id="second-feedback", text=next_repair.model_dump_json()),
+        ]),
+    )
+    assert second.proposed_rules[1].restricted_components == after.restricted_components
+    assert second.proposed_rules[1].components[0].rule_component_id == before.components[0].rule_component_id
+
+
+def test_restricted_child_feedback_can_restore_one_executable_with_same_identity(slice4_env):
+    source_input, draft, spans = _fixture()
+    original = semantic_candidate_from_draft(draft)
+    executable = original.proposed_rules[0].components[0]
+    original.proposed_rules[0] = SemanticRule(
+        official_code="IN-01", components=[],
+        restricted_components=[SemanticRestrictedComponent(
+            title="年龄要求待核", source_span_ids=["span-in"],
+            source_excerpts=["年龄≥18岁"],
+            limitation_kind="interpretation_unresolved",
+            unresolved_dimensions=["适用范围待核"],
+        )],
+    )
+    draft = _hydrate_semantic_candidate(source_input, original)
+    before = draft.proposed_rules[0].restricted_components[0]
+    repair = ProtocolSemanticRuleRepair(
+        candidate_id=semantic_candidate_from_draft(draft).candidate_id,
+        replacement_rules=[SemanticRule(official_code="IN-01", components=[executable])],
+    )
+    transport = FakeTransport([
+        ProtocolAgentResponse(session_id="restricted-to-executable", text=repair.model_dump_json()),
+    ])
+    revised = revise_protocol_draft_from_feedback(
+        source_input, draft, target_rule_code="IN-01",
+        target_component_id=before.rule_component_id,
+        feedback_note="按原文核实年龄要求", transport=transport,
+    )
+    after = revised.proposed_rules[0]
+    assert after.restricted_components == []
+    assert after.components[0].rule_component_id == before.rule_component_id
+    assert after.components[0].display_code == before.display_code
+    assert revised.proposed_rules[1] == draft.proposed_rules[1]
+    assert "本次只返回待核子项" in transport.start_prompts[0]
+    from app.services.protocol_workbench_service import ProtocolWorkbenchService
+    ProtocolWorkbenchService._validate_source_error_scope(
+        draft, revised, target_rule_code="IN-01",
+        target_component_id=before.rule_component_id,
+    )
+    result = ProtocolDeconstructionGate().evaluate(source_input, revised, source_spans=spans)
+    assert result.publishable, {issue.issue_code for check in result.checks for issue in check.issues}
+    from app.domain.contracts.protocol_drafts import DraftFeedbackKind
+    from app.projections.clause_pack import project_clause_pack
+    from app.services.protocol_draft_service import ProtocolDraftService
+    from app.services.protocol_publication_service import (
+        ProtocolPublicationRequest, ProtocolPublicationService,
+    )
+    from app.storage.repositories import get_rule_set
+    from tests.v2.protocols.slice4_helpers import NOW
+    factory, _ = slice4_env
+    with factory() as session:
+        with session.begin():
+            service = ProtocolDraftService(session)
+            initial = service.save_initial_draft(draft, actor="医学监查员", created_at=NOW)
+            saved = service.apply_feedback(
+                revised, expected_revision_id=initial.revision_id,
+                feedback_kind=DraftFeedbackKind.SOURCE_ERROR,
+                feedback_note="IN-01：核对年龄要求", actor="医学监查员", created_at=NOW,
+            )
+    published = ProtocolPublicationService(factory, now=lambda: NOW).publish(
+        ProtocolPublicationRequest(
+            idempotency_key="restricted-restored-publication",
+            draft_revision_id=saved.revision_id, source_input=source_input,
+            source_spans=spans, actor="医学监查员", published_at=NOW,
+        ),
+    )
+    with factory() as session:
+        rule_set = get_rule_set(session, published.rule_set_id, published.rule_set_revision)
+        pack = project_clause_pack(rule_set)
+    assert any(item.clause_id == before.rule_component_id for item in pack.clauses)
+    assert all(item.clause_id != before.rule_component_id for item in pack.restricted_clauses)
+
+
+def test_restricted_child_feedback_keeps_executable_sibling_and_rejects_multiple_replacements():
+    source_input, draft, _ = _fixture()
+    candidate = semantic_candidate_from_draft(draft)
+    candidate.proposed_rules[1].restricted_components = [SemanticRestrictedComponent(
+        title="独立待核要求", source_span_ids=["span-ex"],
+        source_excerpts=["ALT或AST≥1.5×ULN"],
+        limitation_kind="interpretation_unresolved",
+        unresolved_dimensions=["适用条件待核"],
+    )]
+    draft = _hydrate_semantic_candidate(source_input, candidate)
+    before = draft.proposed_rules[1]
+    restricted_id = before.restricted_components[0].rule_component_id
+    revised_restricted = candidate.proposed_rules[1].restricted_components[0].model_copy(
+        update={"unresolved_dimensions": ["仍需核对条件范围"]}, deep=True,
+    )
+    repair = ProtocolSemanticRuleRepair(
+        candidate_id=semantic_candidate_from_draft(draft).candidate_id,
+        replacement_rules=[SemanticRule(
+            official_code="EX-01", components=[],
+            restricted_components=[revised_restricted],
+        )],
+    )
+    revised = revise_protocol_draft_from_feedback(
+        source_input, draft, target_rule_code="EX-01",
+        target_component_id=restricted_id,
+        feedback_note="仅核对待核子项", transport=FakeTransport([
+            ProtocolAgentResponse(session_id="restricted-only", text=repair.model_dump_json()),
+        ]),
+    )
+    assert revised.proposed_rules[1].components[0] == before.components[0]
+    assert revised.proposed_rules[1].restricted_components[0].rule_component_id == restricted_id
+    from app.services.protocol_workbench_service import ProtocolWorkbenchService
+    ProtocolWorkbenchService._validate_source_error_scope(
+        draft, revised, target_rule_code="EX-01", target_component_id=restricted_id,
+    )
+    duplicated = repair.model_copy(update={"replacement_rules": [SemanticRule(
+        official_code="EX-01", components=[
+            candidate.proposed_rules[1].components[0],
+            candidate.proposed_rules[1].components[0].model_copy(deep=True),
+        ],
+    )]})
+    with pytest.raises(ValueError, match="一次只能转为一个"):
+        _merge_component_only_repair(
+            duplicated, semantic_candidate_from_draft(draft).proposed_rules[1],
+            None, restricted_id, restricted_index=0,
+        )
+
+
+@pytest.mark.parametrize(
+    ("invalid_atom", "expected_code"),
+    [
+        ({"comparator": "gte"}, "DNF_WIRE_UNKNOWN_FIELD"),
+        ({"semantic_proposition": None}, "DNF_WIRE_MISSING_FIELD"),
+    ],
+)
+def test_wire_atom_errors_identify_group_and_atom(invalid_atom, expected_code):
+    group = {"existence_atoms": [invalid_atom], "scalar_atoms": [], "set_atoms": []}
+    with pytest.raises(ProtocolWireError) as exc_info:
+        _wire_dnf_expression(
+            [group], identity_prefix="test", label="expression", source_text="原文",
+        )
+    assert exc_info.value.code == expected_code
+    assert "第 1 组 existence_atoms[1]" in str(exc_info.value)
+
+
+def test_compact_feedback_repair_prompt_names_rejected_atom_location():
+    source_input, draft, _ = _fixture()
+    candidate = semantic_candidate_from_draft(draft)
+    payload = _wire_candidate(candidate.model_copy(
+        update={"proposed_rules": [candidate.proposed_rules[1]]}, deep=True,
+    ), batch_id="repair:EX-01")
+    payload["replacement_rules"] = payload.pop("proposed_rules")
+    payload["replacement_structural_warnings"] = payload.pop("structural_warnings")
+    payload["replacement_unresolved_items"] = payload.pop("unresolved_items")
+    payload.pop("created_by_agent_call_id")
+    invalid = json.loads(json.dumps(payload))
+    invalid["replacement_rules"][0]["components"][0]["expression"][0]["scalar_atoms"][0]["unexpected"] = True
+    transport = CompactFakeTransport([
+        ProtocolAgentResponse(session_id="located-repair", text=json.dumps(invalid, ensure_ascii=False)),
+        ProtocolAgentResponse(session_id="located-repair", text=json.dumps(payload, ensure_ascii=False)),
+    ])
+    revise_protocol_draft_from_feedback(
+        source_input, draft, target_rule_code="EX-01",
+        feedback_note="按原文核对", transport=transport,
+    )
+    assert len(transport.repair_prompts) == 1
+    assert "DNF_WIRE_UNKNOWN_FIELD" in transport.repair_prompts[0][1]
+    assert "第 1 组 scalar_atoms[1]" in transport.repair_prompts[0][1]
+
+
+def test_feedback_projection_preserves_existing_restricted_limitation_kind():
+    _, draft, _spans = _fixture()
+    draft.proposed_rules[0].restricted_components.append(RestrictedRuleComponent(
+        rule_component_id="component:IN-01:02", display_code="IN-01b",
+        title="有源但暂不能自动计算的要求", source_span_ids=["span-in"],
+        source_excerpts=["年龄≥18岁"], limitation_kind="consumer_unavailable",
+        unresolved_dimensions=["当前结构不能表达源中的限定关系"],
+    ))
+    projected = semantic_candidate_from_draft(draft)
+    assert projected.proposed_rules[0].restricted_components[0].limitation_kind == "consumer_unavailable"
 
 
 def test_noncompact_feedback_keeps_interpretation_in_dedicated_section():
@@ -1059,10 +1799,46 @@ def test_compact_feedback_revision_sends_only_target_rule_source_context():
     assert "ALT或AST≥1.5×ULN" in transport.start_prompts[0]
     assert "年龄≥18岁" not in transport.start_prompts[0]
     assert "span-proc-screen" not in transport.start_prompts[0]
+    assert "筛选期血生化检查" not in transport.start_prompts[0]
+    assert "基线血生化检查" not in transport.start_prompts[0]
     assert "parent_rule_catalog_total" not in transport.start_prompts[0]
     assert "required_procedure_catalog_total" not in transport.start_prompts[0]
     assert len(transport.repair_prompts) == 1
     assert "batch_id 必须为 repair:EX-01" in transport.repair_prompts[0][1]
+
+
+def test_feedback_source_context_keeps_only_procedures_sharing_selected_source():
+    source_input, draft, _spans = _fixture()
+    first, second = source_input.required_procedure_catalog.items
+    related = first.model_copy(update={"source_span_ids": ("span-ex",)})
+    source_input.required_procedure_catalog = source_input.required_procedure_catalog.model_copy(
+        update={"items": (related, second)}
+    )
+    candidate = semantic_candidate_from_draft(draft)
+    repair = ProtocolSemanticRuleRepair(
+        candidate_id=candidate.candidate_id,
+        replacement_rules=[candidate.proposed_rules[1]],
+    )
+    transport = FakeTransport([
+        ProtocolAgentResponse(session_id="feedback-scope", text=repair.model_dump_json())
+    ])
+
+    revised = revise_protocol_draft_from_feedback(
+        source_input, draft, target_rule_code="EX-01",
+        feedback_note="核对原文", transport=transport,
+    )
+
+    payload = json.loads(
+        transport.start_prompts[0].split("冻结的方案输入：", 1)[1].split(
+            "\n\n输出结构：", 1
+        )[0]
+    )
+    assert revised.proposed_rules[0] == draft.proposed_rules[0]
+    assert [item["item_id"] for item in payload["required_procedure_catalog"]] == [
+        related.item_id
+    ]
+    assert payload["allowed_source_span_ids"] == ["span-ex"]
+    assert [item["source_span_id"] for item in payload["source_materials"]] == ["span-ex"]
 
 
 def test_feedback_replaces_only_selected_rule_unresolved_items():
@@ -1178,6 +1954,33 @@ def test_feedback_namespaced_draft_id_round_trips_without_creating_new_chain():
     assert revised.draft_id == "draft:feedback:stable-id"
 
 
+def test_joint_source_feedback_explains_whole_source_restriction_without_changing_default():
+    source_input, draft, _spans = _fixture()
+    candidate = semantic_candidate_from_draft(draft)
+    repair = ProtocolSemanticRuleRepair(
+        candidate_id=candidate.candidate_id,
+        replacement_rules=[candidate.proposed_rules[1]],
+    )
+    transports = [
+        FakeTransport([ProtocolAgentResponse(session_id="joint", text=repair.model_dump_json())]),
+        FakeTransport([ProtocolAgentResponse(session_id="ordinary", text=repair.model_dump_json())]),
+    ]
+    for joint, transport in zip((True, False), transports):
+        revise_protocol_draft_from_feedback(
+            source_input, draft, target_rule_code="EX-01",
+            feedback_note="核对同一来源段的条件关系。", transport=transport,
+            joint_source_repair=joint,
+        )
+    joint_prompt, ordinary_prompt = (item.start_prompts[0] for item in transports)
+    assert "不要同时保留与其来源重叠的可执行子项" in joint_prompt
+    assert "本次是最小范围纠错，不是重写整条规则" not in joint_prompt
+    assert "本次是最小范围纠错，不是重写整条规则" in ordinary_prompt
+    for prompt in (joint_prompt, ordinary_prompt):
+        assert "source_clauses 必须按原文出现顺序排列" in prompt
+        assert "不是要求它排在 source_clauses 数组第一项" in prompt
+    assert "不要同时保留与其来源重叠的可执行子项" not in ordinary_prompt
+
+
 def test_feedback_revision_rejects_wrong_rule_then_repairs_in_same_session():
     source_input, draft, _spans = _fixture()
     candidate = semantic_candidate_from_draft(draft)
@@ -1238,6 +2041,27 @@ def test_valid_json_passes_without_repair():
     assert "不得为表示审核阶段而复制原子条件" in transport.start_prompts[0]
     assert "不得为了‘再次确认’" in transport.start_prompts[0]
     assert "同时引用父级引导段和当前子项" in transport.start_prompts[0]
+
+
+def test_runner_keeps_successful_transport_receipt_on_existing_attempt():
+    source_input, draft, spans = _fixture()
+    template = "按正式方案原文进行结构化解构。"
+    metadata = {"attempts": [{
+        "request_id": "receipt-1", "usage": {"total_tokens": 31},
+        "reasoning_characters": 12,
+    }]}
+    transport = FakeTransport([ProtocolAgentResponse(
+        session_id="receipt-session", text=draft.model_dump_json(),
+        call_metadata=metadata,
+    )])
+
+    result = ProtocolDeconstructorRunner().run(
+        source_input, prompt_version=_prompt_version(template),
+        prompt_template=template, transport=transport, source_spans=spans,
+    )
+
+    assert result.attempts[0].call_metadata == metadata
+    assert result.model_dump(mode="json")["attempts"][0]["call_metadata"] == metadata
 
 
 def _gate_issue(code, refs, *, level="阻止发布"):
@@ -1392,13 +2216,13 @@ def test_hydration_preserves_rule_only_stage_and_procedure_catalog_order():
     )
 
 
-def test_large_official_catalog_is_collected_in_ordered_same_session_batches():
+def test_large_official_catalog_is_collected_in_ordered_same_session_batches(monkeypatch):
     source_input, draft, _spans = _fixture()
     base_candidate = _semantic_candidate(source_input, draft)
     codes = ["IN-01", "IN-02", "IN-03", "EX-01", "EX-02", "EX-03"]
     items = []
     for index, code in enumerate(codes):
-        template = source_input.parent_rule_catalog.items[index % 2]
+        template = source_input.parent_rule_catalog.items[0 if code.startswith("IN-") else 1]
         items.append(
             template.model_copy(
                 update={
@@ -1418,19 +2242,28 @@ def test_large_official_catalog_is_collected_in_ordered_same_session_batches():
 
     def batch(rule_codes):
         rules = []
-        for index, code in enumerate(rule_codes):
-            rule = base_candidate.proposed_rules[index % 2].model_copy(deep=True)
+        for code in rule_codes:
+            rule = base_candidate.proposed_rules[0 if code.startswith("IN-") else 1].model_copy(deep=True)
             rule.official_code = code
             rules.append(rule)
         return base_candidate.model_copy(update={"proposed_rules": rules}, deep=True)
 
+    # This test covers ordered collection and receipts; planner budget boundaries
+    # are exercised separately with the real planner.
+    monkeypatch.setattr(
+        "app.agents.protocol_deconstructor._plan_semantic_rule_batches",
+        lambda *_args, **_kwargs: [codes[:3], codes[3:]],
+    )
+
     transport = FakeTransport(
         [
             ProtocolAgentResponse(
-                session_id="session-1", text=batch(codes[:3]).model_dump_json()
+                session_id="session-1", text=batch(codes[:3]).model_dump_json(),
+                call_metadata={"attempts": [{"request_id": "batch-1", "usage": None}]},
             ),
             ProtocolAgentResponse(
-                session_id="session-1", text=batch(codes[3:]).model_dump_json()
+                session_id="session-1", text=batch(codes[3:]).model_dump_json(),
+                call_metadata={"attempts": [{"request_id": "batch-2", "usage": None}]},
             ),
         ]
     )
@@ -1445,6 +2278,10 @@ def test_large_official_catalog_is_collected_in_ordered_same_session_batches():
 
     assert error is None
     assert [rule.official_code for rule in merged.proposed_rules] == codes
+    assert [item["attempts"][0]["request_id"] for item in response.call_metadata["batches"]] == [
+        "batch-1", "batch-2",
+    ]
+    assert response.call_metadata["reused_without_call"] == []
     assert "必须且只能返回这些官方父规则" in transport.start_prompts[0]
     assert transport.repair_prompts[0][0] == "session-1"
     assert "第 2/2 批" in transport.repair_prompts[0][1]

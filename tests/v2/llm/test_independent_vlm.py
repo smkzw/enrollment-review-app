@@ -404,12 +404,18 @@ def test_independent_vlm_page_chat_enforces_source_fidelity(monkeypatch):
 
     monkeypatch.setattr(vlm, "get_independent_vlm_client", lambda: _Client())
 
-    with pytest.raises(vlm.IndependentVlmSourceFidelityError, match="invented"):
+    with pytest.raises(vlm.IndependentVlmSourceFidelityError, match="invented") as error:
         asyncio.run(
             vlm.independent_vlm_page_chat(
                 "核验", [page], reasoning_effort="high"
             )
         )
+    rejected = error.value.rejected_response
+    assert rejected.text == "claim source_ref=body.forged"
+    assert rejected.model == "glm-5.3-flash"
+    assert rejected.finish_reason == "stop"
+    assert rejected.usage == {"completion_tokens": 3, "prompt_tokens": 5, "total_tokens": 8}
+    assert rejected.allowed_source_refs == ("body.p803",)
 
 
 def test_independent_vlm_page_chat_requires_source_ref_claim(monkeypatch):

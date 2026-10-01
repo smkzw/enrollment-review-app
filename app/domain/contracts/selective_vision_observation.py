@@ -19,6 +19,7 @@ from app.domain.publication import canonical_hash
 
 from .common import ContractModel, VersionedModel
 from .enums import StableEnum
+from .reading_view import ReadingViewBinding
 
 __all__ = [
     "ALLOWED_SELECTIVE_VISION_RISK_REASONS",
@@ -92,10 +93,10 @@ def build_observation_identity_sha256(
     model_id: str,
     prompt_sha256: str,
     risk_reasons_sha256: str,
+    reading_view: ReadingViewBinding | None = None,
 ) -> str:
     """成功观察幂等身份：页产物 + 输入图像 + 计划/模型/提示/理由。"""
-    return canonical_hash(
-        {
+    identity = {
             "contract": SELECTIVE_VISION_OBSERVATION_CONTRACT,
             "page_artifact_id": str(page_artifact_id).strip(),
             "page_image_sha256": str(page_image_sha256).strip().lower(),
@@ -105,7 +106,9 @@ def build_observation_identity_sha256(
             "risk_reasons_sha256": str(risk_reasons_sha256).strip().lower(),
             "status": SelectiveVisionObservationStatus.SUCCEEDED.value,
         }
-    )
+    if reading_view is not None:
+        identity["reading_view"] = reading_view.model_dump(mode="json")
+    return canonical_hash(identity)
 
 
 def sanitize_observation_usage(usage: dict[str, Any] | None) -> dict[str, Any]:
@@ -140,6 +143,7 @@ class SelectiveVisionObservationRecord(VersionedModel):
     source_ref: str = Field(min_length=1)
     page_ordinal: int = Field(ge=1)
     page_image_sha256: str = Field(pattern=_SHA256)
+    reading_view: ReadingViewBinding | None = None
     ocr_page_id: str | None = None
     ocr_raw_text_sha256: str | None = Field(default=None, pattern=_SHA256)
     plan_version: str = Field(min_length=1)
@@ -198,6 +202,7 @@ class SelectiveVisionObservationRecord(VersionedModel):
             model_id=self.model_id,
             prompt_sha256=self.prompt_sha256,
             risk_reasons_sha256=self.risk_reasons_sha256,
+            reading_view=self.reading_view,
         )
         if self.observation_identity_sha256 != expected_identity:
             raise ValueError("observation_identity_sha256 与成功观察身份不一致")
@@ -263,6 +268,7 @@ class SelectiveVisionObservationAttachment(ContractModel):
     source_document_version_id: str = Field(min_length=1)
     page_ordinal: int = Field(ge=1)
     page_image_sha256: str = Field(pattern=_SHA256)
+    reading_view: ReadingViewBinding | None = None
     ocr_page_id: str | None = None
     ocr_raw_text_sha256: str | None = Field(default=None, pattern=_SHA256)
     plan_version: str = Field(min_length=1)
@@ -308,6 +314,7 @@ class SelectiveVisionObservationAttachment(ContractModel):
             model_id=self.model_id,
             prompt_sha256=self.prompt_sha256,
             risk_reasons_sha256=self.risk_reasons_sha256,
+            reading_view=self.reading_view,
         )
         if self.observation_identity_sha256 != expected_identity:
             raise ValueError("observation_identity_sha256 与观察附件身份不一致")

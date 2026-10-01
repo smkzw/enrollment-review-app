@@ -1,0 +1,21 @@
+{
+  "schema_version": "review-index/0929v1/v1",
+  "document_kind": "template",
+  "round_id": "0929V1",
+  "recorded_at": null,
+  "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
+  "execution_variant": "RV29-NATIVE-VISUAL",
+  "base_review_commit": "a1cf89028b9ef63aa725f5016d3f3fc2c7ab6b61",
+  "delivered_snapshot_id": null,
+  "runtime_state": "not_observed_in_this_template",
+  "code_snapshots": [],
+  "changes": [],
+  "claims": [],
+  "tests": [],
+  "artifacts": [],
+  "hypotheses": [],
+  "recommendations": [],
+  "next_actions": [],
+  "product_claims_complete": false,
+  "notes": "待Agent填写；不是运行回执。字段定义及示例见review_index_fields.md。"
+}

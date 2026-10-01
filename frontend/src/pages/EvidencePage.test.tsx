@@ -163,6 +163,7 @@ function makeCommitWire(overrides: Record<string, unknown> = {}) {
           file_name: "检查报告.pdf",
           media_type: "application/pdf",
           version_number: 1,
+          uploaded_by: "本地用户",
           origin: "added",
           origin_label: "本次新增",
           metadata_head: {
@@ -218,6 +219,7 @@ function makeSnapshotWire(
               file_name: "筛选病历.pdf",
               media_type: "application/pdf",
               version_number: 1,
+              uploaded_by: "本地用户",
               origin: "added",
               origin_label: "本次新增",
               metadata_head: {
@@ -894,6 +896,56 @@ describe("证据工作台", () => {
       }),
     );
     expect(buildRequest).not.toHaveProperty("scanner_rule_version");
+  });
+
+  it("资料信息改变后可从当前原件生成新版本", async () => {
+    const user = userEvent.setup();
+    const active = makeSnapshotWire("snap-active", "active");
+    const members = active.members as Array<{ metadata_head: Record<string, unknown> }>;
+    const snapshots = (metadataId: string) => decodeSnapshotList({
+      subject_id: SUBJECT_ID,
+      review_episode_id: EPISODE_ID,
+      active_evidence_snapshot_id: "snap-active",
+      active_evidence_processing_revision_id: "processing-revision-1",
+      items: [{ ...active, members: members.map((member) => ({
+        ...member,
+        metadata_head: { ...member.metadata_head, metadata_revision_id: metadataId },
+      })) }],
+    });
+    fns.listEvidenceSnapshots.mockResolvedValue(snapshots("metadata-active-2"));
+    fns.getProcessingRevision.mockResolvedValue(decodeProcessingRevision({
+      ...makeProcessingRevisionWire(), metadata_revision_ids: ["metadata-active-1"],
+    }));
+    fns.buildProcessingRevision.mockResolvedValue({
+      candidateId: "candidate-updated", jobId: "job-updated", candidateStatus: "staged",
+      candidateStatusLabel: "等待处理", candidateEventSeq: null,
+      completeRevisionId: null, created: true, revision: null,
+    });
+    await openValid(user);
+    const build = await screen.findByRole("button", { name: "更新资料信息并生成新版本" });
+    await user.click(build);
+    await waitFor(() => expect(fns.buildProcessingRevision).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evidence_snapshot_id: "snap-active", base_processing_revision_id: "base-revision-1",
+      }),
+    ));
+  });
+
+  it("资料信息与已启用版本一致时不提示重复生成", async () => {
+    const user = userEvent.setup();
+    fns.listEvidenceSnapshots.mockResolvedValue(decodeSnapshotList({
+      subject_id: SUBJECT_ID, review_episode_id: EPISODE_ID,
+      active_evidence_snapshot_id: "snap-active",
+      active_evidence_processing_revision_id: "processing-revision-1",
+      items: [makeSnapshotWire("snap-active", "active")],
+    }));
+    fns.getProcessingRevision.mockResolvedValue(decodeProcessingRevision({
+      ...makeProcessingRevisionWire(), metadata_revision_ids: ["metadata-active-1"],
+    }));
+    await openValid(user);
+    await screen.findByRole("heading", { name: /资料版本/ });
+    await waitFor(() => expect(fns.getProcessingRevision).toHaveBeenCalledWith("processing-revision-1"));
+    expect(screen.queryByRole("button", { name: "更新资料信息并生成新版本" })).not.toBeInTheDocument();
   });
 
   it("活动指针与处理版本不成对时停止核对，不开放任何页", async () => {

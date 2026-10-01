@@ -91,6 +91,7 @@ export const gapTypeLabel: Record<GapType, string> = {
   future_stage_not_due: "后续节点尚未到期",
   provenance_followup: "来源待补充核实",
   control_applicability_pending: "控制适用条件待评估",
+  applicable_population_unverified: "适用人群尚未核实",
 };
 
 /** 阻断程度：长说明 + 短徽标词。溯源待办/关注类一律不称为“阻断”。 */

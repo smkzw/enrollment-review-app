@@ -9,11 +9,11 @@ from .common import ContractModel
 from .repeat_scheme import RepeatScheme
 from .rules import WorkflowStage
 
-OBSERVATION_RELATION_VERSION = "observation-relation/v5"
+OBSERVATION_RELATION_VERSION = "observation-relation/v6"
 
 
 class ObservationRelationContext(ContractModel):
-    version: Literal["observation-relation/v1", "observation-relation/v2", "observation-relation/v3", "observation-relation/v4", "observation-relation/v5"] = "observation-relation/v1"
+    version: Literal["observation-relation/v1", "observation-relation/v2", "observation-relation/v3", "observation-relation/v4", "observation-relation/v5", "observation-relation/v6"] = "observation-relation/v1"
     pair_id: str = Field(pattern=r"^[0-9a-f]{64}$")
     identity_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     candidate_job_id: str = Field(min_length=1)
@@ -32,7 +32,7 @@ class ObservationRelationContext(ContractModel):
         value = handler(self)
         if self.version == "observation-relation/v1":
             value.pop("version", None)
-        if self.version not in {"observation-relation/v3", "observation-relation/v4", "observation-relation/v5"}:
+        if self.version not in {"observation-relation/v3", "observation-relation/v4", "observation-relation/v5", "observation-relation/v6"}:
             value.pop("auxiliary_members", None)
         if self.workflow_stage is None:
             value.pop("workflow_stage", None)
@@ -40,7 +40,7 @@ class ObservationRelationContext(ContractModel):
 
     @model_validator(mode="after")
     def validate_group(self):
-        if self.version in {"observation-relation/v4", "observation-relation/v5"}:
+        if self.version in {"observation-relation/v4", "observation-relation/v5", "observation-relation/v6"}:
             if (self.workflow_stage is None
                     or self.workflow_stage.workflow_stage_id != self.members[0].episode.get("workflow_stage_id")
                     or self.workflow_stage.stage != self.members[0].episode.get("stage")):
@@ -51,7 +51,7 @@ class ObservationRelationContext(ContractModel):
         if ids != sorted(set(ids)):
             raise ValueError("复查关系的原文配对须排序且不得重复")
         auxiliary_ids = [item.pair_id for item in self.auxiliary_members]
-        if (self.version not in {"observation-relation/v3", "observation-relation/v4", "observation-relation/v5"} and self.auxiliary_members
+        if (self.version not in {"observation-relation/v3", "observation-relation/v4", "observation-relation/v5", "observation-relation/v6"} and self.auxiliary_members
                 or auxiliary_ids != sorted(set(auxiliary_ids)) or set(ids) & set(auxiliary_ids)):
             raise ValueError("辅助原文须独立排序，不能重复或补入历史核对")
         for item in self.auxiliary_members:
@@ -97,6 +97,8 @@ class ObservationRelationQuote(ContractModel):
 class ObservationRelationLink(ContractModel):
     left_fact_id: str = Field(min_length=1)
     right_fact_id: str = Field(min_length=1)
+    left_locator_id: str | None = Field(default=None, min_length=1)
+    right_locator_id: str | None = Field(default=None, min_length=1)
     relation: Literal["repeat_of", "same_acquisition"]
     reference_kind: Literal["initial_observation", "preceding_observation", "unspecified"] | None = None
     quotes: list[ObservationRelationQuote] = Field(min_length=1)
@@ -104,7 +106,10 @@ class ObservationRelationLink(ContractModel):
 
     @model_validator(mode="after")
     def distinct_observations(self):
-        if self.left_fact_id == self.right_fact_id or not self.explanation.strip():
+        if (not self.explanation.strip()
+                or (self.left_locator_id is None) != (self.right_locator_id is None)
+                or (self.left_fact_id, self.left_locator_id)
+                == (self.right_fact_id, self.right_locator_id)):
             raise ValueError("观察关系须指向不同记录并说明原文依据")
         if self.relation == "same_acquisition" and self.reference_kind is not None:
             raise ValueError("同次检查关系不能夹带复查回指类型")
@@ -115,16 +120,26 @@ class ObservationRelationLink(ContractModel):
         value = handler(self)
         if self.reference_kind is None:
             value.pop("reference_kind", None)
+        if self.left_locator_id is None:
+            value.pop("left_locator_id", None)
+            value.pop("right_locator_id", None)
         return value
 
     def agreement_key(self):
-        ids = (self.left_fact_id, self.right_fact_id)
+        if self.left_locator_id is None:
+            ids = (self.left_fact_id, self.right_fact_id)
+        else:
+            ids = (
+                (self.left_fact_id, self.left_locator_id),
+                (self.right_fact_id, self.right_locator_id),
+            )
         key = (self.relation, *(sorted(ids) if self.relation == "same_acquisition" else ids))
         return (*key, self.reference_kind) if self.reference_kind is not None else key
 
 
 class ObservationOrigin(ContractModel):
     fact_id: str = Field(min_length=1)
+    locator_id: str | None = Field(default=None, min_length=1)
     role: Literal["initial", "repeat", "unresolved"]
     quotes: list[ObservationRelationQuote]
     explanation: str = Field(min_length=1)
@@ -135,9 +150,17 @@ class ObservationOrigin(ContractModel):
             raise ValueError("检查次序须保留记录身份及原文说明")
         if self.role != "unresolved" and not self.quotes:
             raise ValueError("初查或复查归属须有明确原文，不能仅据日期推断")
-        if any(item.fact_id != self.fact_id for item in self.quotes):
+        if any(item.fact_id != self.fact_id or self.locator_id is not None
+               and item.locator_id != self.locator_id for item in self.quotes):
             raise ValueError("检查次序说明须引用本条记录的原文")
         return self
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_origin(self, handler):
+        value = handler(self)
+        if self.locator_id is None:
+            value.pop("locator_id", None)
+        return value
 
 
 class AuxiliaryObservationAssociation(ContractModel):
@@ -172,6 +195,7 @@ class AuxiliaryObservationAssociation(ContractModel):
 class ObservationEpisodeMembership(ContractModel):
     """Source-stated visit membership, never inferred from upload ownership."""
     fact_id: str = Field(min_length=1)
+    locator_id: str | None = Field(default=None, min_length=1)
     membership: Literal["current_episode", "other_episode", "unresolved"]
     quotes: list[ObservationRelationQuote]
     explanation: str = Field(min_length=1)
@@ -182,14 +206,28 @@ class ObservationEpisodeMembership(ContractModel):
             raise ValueError("检查节点归属须保留记录身份及原文说明")
         if self.membership != "unresolved" and not self.quotes:
             raise ValueError("明确检查节点归属须有原文依据，不能按上传位置推断")
-        if any(quote.fact_id != self.fact_id for quote in self.quotes):
+        if any(quote.fact_id != self.fact_id or self.locator_id is not None
+               and quote.locator_id != self.locator_id for quote in self.quotes):
             raise ValueError("检查节点归属须引用本条记录原文")
         return self
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_membership(self, handler):
+        value = handler(self)
+        if self.locator_id is None:
+            value.pop("locator_id", None)
+        return value
+
+
+class ObservationAppearance(ContractModel):
+    fact_id: str = Field(min_length=1)
+    locator_id: str = Field(min_length=1)
 
 
 class ObservationRelationResult(ContractModel):
     pair_id: str = Field(pattern=r"^[0-9a-f]{64}$")
     reviewed_fact_ids: list[str]
+    reviewed_appearances: list[ObservationAppearance] | None = None
     links: list[ObservationRelationLink]
     origins: list[ObservationOrigin] | None = None
     unresolved_notes: list[str]
@@ -201,6 +239,8 @@ class ObservationRelationResult(ContractModel):
     @model_serializer(mode="wrap")
     def preserve_legacy_origins(self, handler):
         value = handler(self)
+        if self.reviewed_appearances is None:
+            value.pop("reviewed_appearances", None)
         if self.origins is None:
             value.pop("origins", None)
         for key in ("reviewed_auxiliary_pair_ids", "auxiliary_associations", "auxiliary_unresolved_notes", "episode_memberships"):
@@ -212,16 +252,28 @@ class ObservationRelationResult(ContractModel):
     def unique_coverage(self):
         if self.reviewed_fact_ids != sorted(set(self.reviewed_fact_ids)):
             raise ValueError("已核对的观察记录须完整列出且不得重复")
+        appearances = None
+        if self.reviewed_appearances is not None:
+            appearances = [(item.fact_id, item.locator_id) for item in self.reviewed_appearances]
+            if appearances != sorted(set(appearances)) or {item[0] for item in appearances} != set(self.reviewed_fact_ids):
+                raise ValueError("已核对的逐处原文须完整排序，且与事实范围一致")
         if self.episode_memberships is not None:
-            ids = [item.fact_id for item in self.episode_memberships]
-            if len(ids) != len(set(ids)) or not set(ids) <= set(self.reviewed_fact_ids):
+            ids = [(item.fact_id, item.locator_id) if appearances is not None else item.fact_id
+                   for item in self.episode_memberships]
+            if (len(ids) != len(set(ids))
+                    or (appearances is not None and not set(ids) <= set(appearances))
+                    or (appearances is None and not set(ids) <= set(self.reviewed_fact_ids))):
                 raise ValueError("检查节点归属不得重复或超出本次核对记录")
         keys = [link.agreement_key() for link in self.links]
         if len(set(keys)) != len(keys):
             raise ValueError("同一观察关系不得重复声明")
+        bases = [key[:3] for key in keys]
+        if len(set(bases)) != len(bases):
+            raise ValueError("同一复查回指不能在一次回答中声明互相冲突的参照类型")
         if self.origins is not None:
-            ids = [item.fact_id for item in self.origins]
-            if len(ids) != len(set(ids)) or set(ids) != set(self.reviewed_fact_ids):
+            ids = [(item.fact_id, item.locator_id) if appearances is not None else item.fact_id
+                   for item in self.origins]
+            if len(ids) != len(set(ids)) or set(ids) != set(appearances if appearances is not None else self.reviewed_fact_ids):
                 raise ValueError("检查次序说明须逐项覆盖已核对记录且不得重复")
         if any(not note.strip() for note in self.unresolved_notes):
             raise ValueError("待核实原因不得为空白")

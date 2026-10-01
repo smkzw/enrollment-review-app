@@ -40,6 +40,13 @@ function reviewBody() {
 }
 
 describe("eligibility review HTTP repository", () => {
+  it("keeps a changed-source work draft distinct from an unstarted review", async () => {
+    const body = { ...reviewBody(), work_draft_state: "source_changed" };
+    const repository = createEligibilityReviewHttp({ fetchImpl: (() => Promise.resolve(response(body))) as typeof fetch });
+    expect((await repository.getEligibilityReview("subject", "episode")).workDraftState).toBe("source_changed");
+    body.work_draft_state = "unknown";
+    await expect(repository.getEligibilityReview("subject", "episode")).rejects.toThrow(EligibilityReviewDecodeError);
+  });
   it("preserves unresolved entity conflicts without assigning clause gaps", async () => {
     const body = { ...reviewBody(), unassigned_conflicts: [{ conflict_group_id: "group", member_kind: "event", member_ids: ["a", "b"] }] };
     const repository = createEligibilityReviewHttp({ fetchImpl: (() => Promise.resolve(response(body))) as typeof fetch });
@@ -108,6 +115,67 @@ describe("eligibility review HTTP repository", () => {
     });
     const result = await repository.getEligibilityReview("subject", "episode");
     expect(result.clauses[0]?.decision).toBe("indeterminate");
+  });
+
+  it("keeps unresolved protocol meaning separate from missing investigator judgment", async () => {
+    const body = reviewBody();
+    Object.assign(body.clauses[0], {
+      decision: "indeterminate", determination_mode: "restricted",
+      reason: "方案原文中有这项要求，但适用对象尚未核清。",
+      gap_type: null, fact_refs: [], action_owner: null,
+      action_detail: null, action_evidence: null,
+    });
+    const repository = createEligibilityReviewHttp({
+      fetchImpl: (() => Promise.resolve(response(body))) as typeof fetch,
+    });
+    const clause = (await repository.getEligibilityReview("subject", "episode")).clauses[0];
+    expect(clause?.determinationMode).toBe("restricted");
+    expect(clause?.actionOwner).toBeNull();
+    expect(clause?.gapType).toBeNull();
+    expect(clause?.limitationKind).toBeNull();
+  });
+
+  it.each(["interpretation_unresolved", "consumer_unavailable"])(
+    "preserves the source-defined limitation kind %s without guessing from copy", async (kind) => {
+      const body = reviewBody();
+      Object.assign(body.clauses[0], {
+        decision: "indeterminate", determination_mode: "restricted", limitation_kind: kind,
+        gap_type: null, fact_refs: [], action_owner: null,
+      });
+      const repository = createEligibilityReviewHttp({
+        fetchImpl: (() => Promise.resolve(response(body))) as typeof fetch,
+      });
+      expect((await repository.getEligibilityReview("subject", "episode")).clauses[0]?.limitationKind).toBe(kind);
+      Object.assign(body.clauses[0], { limitation_kind: "made_up" });
+      await expect(repository.getEligibilityReview("subject", "episode")).rejects.toThrow(EligibilityReviewDecodeError);
+    },
+  );
+
+  it("decodes a source-bound restricted control without treating it as missing case evidence", async () => {
+    const body = {
+      ...reviewBody(),
+      controls: [{
+        protocol_control_id: "restricted:unit-1", display_label: "方案补充要求",
+        title: "基线前尚未核清的要求", source_span_ids: ["span:source-1"],
+        obligations: [{
+          obligation_id: "restricted:unit-1", obligation_group_id: "restricted",
+          statement: "基线前尚未核清的要求", source_excerpts: ["基线前尚未核清的要求"],
+          status: "restricted", status_label: "方案待澄清",
+          limitation_kind: "interpretation_unresolved",
+          reason: "适用范围尚未核清", fact_refs: [],
+          action_owner: "sponsor_medical_or_project", action_detail: "请澄清适用范围",
+          action_evidence: "方案书面澄清或正式修订",
+        }],
+      }],
+    };
+    const repository = createEligibilityReviewHttp({
+      fetchImpl: (() => Promise.resolve(response(body))) as typeof fetch,
+    });
+    const item = (await repository.getEligibilityReview("subject", "episode")).controls[0]?.obligations[0];
+    expect(item?.status).toBe("restricted");
+    expect(item?.actionOwner).toBe("sponsor_medical_or_project");
+    expect(item?.actionEvidence).toContain("方案书面澄清");
+    expect(item?.limitationKind).toBe("interpretation_unresolved");
   });
 
   it("rejects unknown decision values instead of guessing a display state", async () => {

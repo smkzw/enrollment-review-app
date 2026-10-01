@@ -118,6 +118,23 @@ def test_occurrence_id_same_range_deterministic():
     assert a == b
 
 
+def test_same_range_with_distinct_targets_has_distinct_new_ids_and_preserves_legacy_identity():
+    sha_of = sha256(TEXT.encode("utf-8")).hexdigest()
+    common = dict(
+        page_artifact_id="pa-1", source_layer=LocatorSourceLayer.RAW_OCR,
+        source_text_sha256=sha_of, precision=LocatorPrecision.TEXT_RANGE,
+        text_start=0, text_end=3,
+    )
+    assert occurrence_locator_id(**common, target_id="scan-old:risk-1") != occurrence_locator_id(
+        **common, target_id="scan-new:risk-1"
+    )
+    assert occurrence_locator_id(
+        **common, target_id="scan-old:risk-1", locator_algorithm_version="slice4.4/v1"
+    ) == occurrence_locator_id(
+        **common, target_id="scan-new:risk-1", locator_algorithm_version="slice4.4/v1"
+    )
+
+
 def test_occurrence_id_bbox_requires_range():
     with pytest.raises(ValueError, match="范围"):
         occurrence_locator_id(

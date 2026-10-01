@@ -44,6 +44,7 @@ from app.domain.contracts.protocol_metadata import (
 )
 from app.domain.contracts.occurrence_scope import OccurrenceScope
 from app.domain.contracts.observation_selection import ObservationPolicy
+from app.domain.contracts.repeat_scheme import RepeatScheme
 from app.domain.contracts.rules import (
     AtomicExpression,
     AtomicPredicate,
@@ -54,6 +55,7 @@ from app.domain.contracts.rules import (
     ProspectivePeriod,
     Rule,
     RuleComponent,
+    RestrictedRuleComponent,
     TimeConstraint,
     TimeQuantity,
     TimeUnit,
@@ -63,13 +65,557 @@ from app.domain.contracts.rules import (
 from app.domain.publication import canonical_hash
 from app.protocols.deconstruction_gate import (
     ProtocolDeconstructionGate,
+    _any_is_source_scoped_longer_washout,
     _predicate_binds_obligation,
+    _predicate_temporal_text,
+    _qualifier_is_structured,
+    _requires_observation_policy,
+    _shared_named_anchor_lead_in,
+    _source_frequency_specs,
     _substantive_obligation_segments,
+    _time_bound_matches_source,
 )
+
+
+def test_named_parenthetical_washout_owns_its_window_without_general_window():
+    clauses = [
+        "随机前规定的洗脱期内接受以下任何一种治疗者：",
+        "2周内接受过口服制剂（以下制剂需洗脱4周：",
+        "经研究者判断具有持续免疫影响的制剂）；",
+    ]
+    named = AtomicPredicate(
+        predicate_id="named-washout", subject="受试者",
+        attribute="接受过经研究者判断具有持续免疫影响的制剂",
+        comparator=Comparator.EXISTS, source_clauses=clauses,
+    )
+    named_text = _predicate_temporal_text(named)
+    assert _time_bound_matches_source(4, TimeUnit.WEEK, named_text)
+    assert not _time_bound_matches_source(2, TimeUnit.WEEK, named_text)
+
+    unrelated = named.model_copy(deep=True)
+    unrelated.attribute = "接受过另一类注射治疗"
+    unrelated_text = _predicate_temporal_text(unrelated)
+    assert _time_bound_matches_source(2, TimeUnit.WEEK, unrelated_text)
+    assert not _time_bound_matches_source(4, TimeUnit.WEEK, unrelated_text)
+
+
+def test_parenthetical_washout_does_not_leak_to_following_sibling_clause():
+    unrelated = AtomicPredicate(
+        predicate_id="later-sibling", subject="受试者",
+        attribute="接受过另一类注射治疗", comparator=Comparator.EXISTS,
+        source_clauses=[
+            "随机前规定的洗脱期内接受以下任何一种治疗者：",
+            "2周内接受过口服制剂（以下需洗脱4周：甲类制剂）",
+            "受试者接受过另一类注射治疗",
+        ],
+    )
+    temporal_text = _predicate_temporal_text(unrelated)
+    assert _time_bound_matches_source(2, TimeUnit.WEEK, temporal_text)
+    assert not _time_bound_matches_source(4, TimeUnit.WEEK, temporal_text)
+
+
+def test_quoted_sibling_window_in_attribute_does_not_override_source_scope():
+    general = AtomicPredicate(
+        predicate_id="general-quoting-subclass", subject="受试者",
+        attribute="接受过口服制剂（其中强免疫抑制成分制剂需洗脱4周）",
+        comparator=Comparator.EXISTS,
+        source_clauses=[
+            "2周内接受过口服制剂（以下含明确强免疫抑制成分的制剂需洗脱4周：甲类制剂）"
+        ],
+    )
+    temporal_text = _predicate_temporal_text(general)
+    assert _time_bound_matches_source(2, TimeUnit.WEEK, temporal_text)
+    assert not _time_bound_matches_source(4, TimeUnit.WEEK, temporal_text)
+
+
+def test_longer_washout_subclass_is_not_fabricated_disjunction():
+    source = (
+        "随机前规定的洗脱期内接受以下任何一种治疗者："
+        "2周内接受过口服制剂（以下含明确强免疫抑制成分的制剂需洗脱4周：甲类制剂）"
+    )
+    lead = "随机前规定的洗脱期内接受以下任何一种治疗者："
+    first_text = "2周内接受过口服制剂"
+    second_text = "2周内接受过口服制剂（以下含明确强免疫抑制成分的制剂需洗脱4周：甲类制剂）"
+
+    def branch(pid, attribute, weeks, clauses):
+        return AtomicExpression(
+            predicate=AtomicPredicate(
+                predicate_id=pid, subject="参与者", attribute=attribute,
+                comparator=Comparator.EXISTS, source_clauses=clauses,
+            ),
+            time_constraint=TimeConstraint(
+                anchor_type=AnchorType.RANDOMIZATION_DATE,
+                direction=TimeDirection.BEFORE,
+                upper_bound=TimeQuantity(value=weeks, unit=TimeUnit.WEEK),
+            ),
+        )
+
+    first = branch("oral-general", "接受过口服制剂", 2, [lead, first_text])
+    second = branch(
+        "oral-subclass", "接受过口服制剂，且属于强免疫抑制成分类别",
+        4, [lead, second_text],
+    )
+    expression = LogicalExpression(operator=LogicalOperator.ANY, children=[first, second])
+    assert _any_is_source_scoped_longer_washout(expression, source)
+    assert _shared_named_anchor_lead_in(second.predicate, source) == lead
+
+    assert not _any_is_source_scoped_longer_washout(expression, source.replace("以下", "另有"))
+    second.predicate.attribute = "接受过注射制剂，且属于强免疫抑制成分类别"
+    assert not _any_is_source_scoped_longer_washout(expression, source)
+    second.predicate.attribute = "接受过口服制剂，且属于强免疫抑制成分类别"
+    second.time_constraint.anchor_type = AnchorType.SCREENING_DATE
+    assert not _any_is_source_scoped_longer_washout(expression, source)
+    assert not _shared_named_anchor_lead_in(
+        second.predicate, "随机前规定的洗脱期内接受其他治疗者："
+    )
+
+
+def test_observation_policy_requirement_follows_result_structure():
+    history = AtomicPredicate(
+        predicate_id="history", subject="参与者", attribute="既往病史",
+        comparator=Comparator.EXISTS,
+    )
+    measurement = AtomicPredicate(
+        predicate_id="measurement", subject="检查", attribute="测量值",
+        comparator=Comparator.LTE, value=5, unit="mmol/L",
+    )
+    assert not _requires_observation_policy(history)
+    assert not _requires_observation_policy(measurement)
+    assert _requires_observation_policy(measurement.model_copy(update={
+        "source_clause": "以最近一次检测结果为准，测量值≤5 mmol/L",
+    }))
+    assert _requires_observation_policy(measurement.model_copy(update={
+        "source_clause": "复查后采用复查结果，测量值≤5 mmol/L",
+    }))
+    assert not _requires_observation_policy(measurement.model_copy(update={
+        "source_clause": "测量值≤5 mmol/L，可重复检测但未规定采用哪次",
+    }))
+    assert not _requires_observation_policy(
+        measurement.model_copy(update={"semantic_proposition": "原文需核的非确定性命题"})
+    )
+
+
+def test_population_label_cannot_be_published_as_executable_applicability():
+    source, draft, spans = _fixture()
+    predicate = draft.proposed_rules[0].components[0].expression.predicate
+    predicate.applicable_population = "仅适用于满足方案所述条件的参与者"
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert any(
+        issue.issue_code == "APPLICABLE_POPULATION_SOURCE_UNBOUND"
+        and predicate.predicate_id in issue.affected_refs
+        for issue in _issues(result, "boolean_logic")
+    )
+
+
+@pytest.mark.parametrize("population", ["仅女性受试者", "男性受试者", "   "])
+def test_source_bound_population_can_only_be_adopted_with_explicit_consumer_gap(population):
+    source, draft, spans = _fixture()
+    text = "年龄≥18岁（仅女性受试者）"
+    items = list(source.parent_rule_catalog.items)
+    items[0] = items[0].model_copy(update={"label": text})
+    source.parent_rule_catalog = _catalog(CatalogKind.OFFICIAL_PARENT_RULES, items)
+    source.source_materials[0].text = text
+    draft.proposed_rules[0].source_text = text
+    predicate = draft.proposed_rules[0].components[0].expression.predicate
+    predicate.source_clause = None
+    predicate.source_clauses = ["年龄≥18岁", "（仅女性受试者）"]
+    draft.component_drafts[0].source_excerpts = [text]
+    predicate.applicable_population = population
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    issues = _issues(result, "boolean_logic")
+    if population == "仅女性受试者":
+        issue = next(item for item in issues if item.issue_code == "APPLICABLE_POPULATION_NOT_EVALUATED")
+        assert issue.level == "提醒"
+        assert result.publishable
+    else:
+        assert not result.publishable
+        assert any(item.issue_code == "APPLICABLE_POPULATION_SOURCE_UNBOUND" for item in issues)
+
+
+def test_population_substring_cannot_drop_a_source_negation():
+    source, draft, spans = _fixture()
+    predicate = draft.proposed_rules[0].components[0].expression.predicate
+    predicate.source_clauses = ["非男性受试者", "年龄≥18岁"]
+    predicate.source_clause = None
+    predicate.applicable_population = "男性受试者"
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert any(item.issue_code == "APPLICABLE_POPULATION_SOURCE_UNBOUND"
+               for item in _issues(result, "boolean_logic"))
+
+
+def test_population_in_exception_remains_blocked_even_with_an_exact_quote():
+    source, draft, spans = _fixture()
+    component = draft.proposed_rules[0].components[0]
+    component.exception_expression = component.expression.model_copy(deep=True)
+    predicate = component.exception_expression.predicate
+    predicate.predicate_id = "population-exception"
+    predicate.applicable_population = "年龄"
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert any(item.issue_code == "APPLICABLE_POPULATION_SOURCE_UNBOUND"
+               for item in _issues(result, "boolean_logic"))
 
 
 NOW = datetime(2026, 8, 14, tzinfo=timezone.utc)
 SHA = "a" * 64
+
+
+@pytest.mark.parametrize(
+    ("excerpt", "limitation_kind", "expected_issue"),
+    [
+        ("另须完成专项评估", "interpretation_unresolved", None),
+        ("年龄≥18岁", "interpretation_unresolved", "RESTRICTED_COMPONENT_SCOPE_INVALID"),
+        ("另须完成专项评估", "consumer_unavailable", "RESTRICTED_COMPONENT_SOURCE_INVALID"),
+    ],
+)
+def test_source_bound_unresolved_requirement_cannot_replace_a_sibling_or_claim_model_capacity(
+    excerpt, limitation_kind, expected_issue,
+):
+    source, draft, spans = _fixture()
+    items = list(source.parent_rule_catalog.items)
+    items[0] = items[0].model_copy(update={"label": "年龄≥18岁；另须完成专项评估"})
+    source.parent_rule_catalog = _catalog(CatalogKind.OFFICIAL_PARENT_RULES, items)
+    source.source_materials[0].text = "年龄≥18岁；另须完成专项评估"
+    draft.proposed_rules[0].source_text = "年龄≥18岁；另须完成专项评估"
+    draft.proposed_rules[0].restricted_components = [RestrictedRuleComponent(
+        rule_component_id="component-extra", display_code="IN-01b",
+        title="另项独立要求", source_span_ids=["span-in"], source_excerpts=[excerpt],
+        limitation_kind=limitation_kind,
+        unresolved_dimensions=["要求的适用对象尚未核清"],
+    )]
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    codes = {issue.issue_code for check in result.checks for issue in check.issues}
+    if expected_issue is None:
+        assert result.publishable, codes
+    else:
+        assert not result.publishable
+        assert expected_issue in codes
+
+
+def test_verified_member_frequency_can_remain_non_executable_beside_valid_rule():
+    source, draft, spans = _fixture()
+    nested = "有严重感染既往史（包括反复细菌感染（2年内发生2次或以上））"
+    text = f"ALT或AST≥1.5×ULN；{nested}"
+    items = list(source.parent_rule_catalog.items)
+    items[1] = items[1].model_copy(update={"label": text})
+    source.parent_rule_catalog = _catalog(CatalogKind.OFFICIAL_PARENT_RULES, items)
+    next(item for item in source.source_materials if item.source_span_id == "span-ex").text = text
+    rule = draft.proposed_rules[1]
+    rule.source_text = text
+    rule.restricted_components = [RestrictedRuleComponent(
+        rule_component_id="component-ex-limited", display_code="EX-01b",
+        title="严重感染史", source_span_ids=["span-ex"],
+        source_excerpts=[nested], limitation_kind="consumer_unavailable",
+        unresolved_dimensions=["开放列举中的复发项有专属频次定义，当前表达结构无法同时保留上位范围"],
+    )]
+
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert result.publishable, [
+        issue.issue_code for check in result.checks for issue in check.issues
+    ]
+
+    rule.restricted_components[0].source_excerpts = ["有严重感染既往史"]
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert any(
+        issue.issue_code == "RESTRICTED_COMPONENT_SOURCE_INVALID"
+        for issue in _issues(result, "source_coverage")
+    )
+
+
+@pytest.mark.parametrize(("excerpt", "supported"), [
+    ("存在可能影响吸收的情况，包括但不限于甲病、乙术（丙术除外）", True),
+    ("所有参与者需遵守记录要求。（注：若属于特殊人群的参与者，必须另行完成核查）", True),
+    ("所有参与者需完成检查。（注：所有参与者必须带记录）", False),
+])
+def test_source_proven_capability_gap_requires_whole_requirement_without_live_sibling(
+    excerpt, supported,
+):
+    source, draft, spans = _fixture()
+    items = list(source.parent_rule_catalog.items)
+    items[1] = items[1].model_copy(update={"label": excerpt})
+    source.parent_rule_catalog = _catalog(CatalogKind.OFFICIAL_PARENT_RULES, items)
+    next(material for material in source.source_materials
+         if material.source_span_id == "span-ex").text = excerpt
+    rule = draft.proposed_rules[1]
+    rule.source_text = excerpt
+    original = rule.components.pop()
+    rule.restricted_components = [RestrictedRuleComponent(
+        rule_component_id=original.rule_component_id,
+        display_code=original.display_code,
+        title=original.title,
+        source_span_ids=["span-ex"], source_excerpts=[excerpt],
+        limitation_kind="consumer_unavailable",
+        unresolved_dimensions=["局部例外与同时存在的其他情况尚不能可靠分别判断"],
+    )]
+    draft.component_drafts = [item for item in draft.component_drafts
+                              if item.parent_official_code != "EX-01"]
+    draft.evidence_requirement_drafts = [item for item in draft.evidence_requirement_drafts
+                                         if item.draft_component_id != "draft-component-ex"]
+    draft.proposed_workflow_stages[0].due_requirement_ids.remove("req-ex")
+
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    if not supported:
+        assert any(issue.issue_code == "RESTRICTED_COMPONENT_SOURCE_INVALID"
+                   for issue in _issues(result, "source_coverage"))
+        return
+    assert result.publishable, [issue.issue_code for check in result.checks for issue in check.issues]
+
+    rule.components = [original]
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert any(issue.issue_code == "RESTRICTED_COMPONENT_SOURCE_INVALID"
+               for issue in _issues(result, "source_coverage"))
+
+    rule.components = []
+    rule.restricted_components[0].source_excerpts = ["乙术（丙术除外）"]
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert any(issue.issue_code == "RESTRICTED_COMPONENT_SOURCE_INVALID"
+               for issue in _issues(result, "source_coverage"))
+
+
+@pytest.mark.parametrize(("note", "excerpts", "accepted"), [
+    (
+        "（注：若属于特殊人群的参与者，必须另行完成核查）",
+        ["（注：若属于特殊人群的参与者，必须另行完成核查）"], True,
+    ),
+    (
+        "（注：若属于特殊人群的参与者，必须另行完成核查）",
+        ["（注：若属于特殊人群的参与者，必须另行完成核查）", "若属于特殊人群的参与者"], True,
+    ),
+    (
+        "（注：若属于特殊人群的参与者，必须另行完成核查）",
+        ["若属于特殊人群的参与者"], False,
+    ),
+    (
+        "（注：所有参与者必须另行完成核查）",
+        ["（注：所有参与者必须另行完成核查）"], False,
+    ),
+    (
+        "（注：若属于特殊人群的参与者，必须至少完成2次核查）",
+        ["（注：若属于特殊人群的参与者，必须至少完成2次核查）"], False,
+    ),
+    (
+        "（注：若属于特殊人群的参与者，必须完成两次核查）",
+        ["（注：若属于特殊人群的参与者，必须完成两次核查）"], False,
+    ),
+    (
+        "（注：若属于特殊人群的参与者，必须按第 5.2 节完成核查）",
+        ["（注：若属于特殊人群的参与者，必须按第 5.2 节完成核查）"], True,
+    ),
+    (
+        "（注：如果存在特别情况，该类参与者必须另行完成核查）",
+        ["（注：如果存在特别情况，该类参与者必须另行完成核查）"], True,
+    ),
+    (
+        "（注：与既往研究一致，参与者必须完成核查）",
+        ["（注：与既往研究一致，参与者必须完成核查）"], False,
+    ),
+])
+def test_independent_population_note_can_be_restricted_without_hiding_siblings(
+    note, excerpts, accepted,
+):
+    source, draft, spans = _fixture()
+    text = f"年龄≥18岁；{note}"
+    items = list(source.parent_rule_catalog.items)
+    items[0] = items[0].model_copy(update={"label": text})
+    source.parent_rule_catalog = _catalog(CatalogKind.OFFICIAL_PARENT_RULES, items)
+    source.source_materials[0].text = text
+    rule = draft.proposed_rules[0]
+    rule.source_text = text
+    rule.restricted_components = [RestrictedRuleComponent(
+        rule_component_id="component-population-note", display_code="IN-01b",
+        title="限定人群的额外核查", source_span_ids=["span-in"],
+        source_excerpts=excerpts, limitation_kind="consumer_unavailable",
+        unresolved_dimensions=["尚不能核实本例是否属于限定人群"],
+    )]
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    codes = {issue.issue_code for issue in _issues(result, "source_coverage")}
+    assert ("RESTRICTED_COMPONENT_SOURCE_INVALID" not in codes) is accepted
+    if accepted:
+        assert "RESTRICTED_COMPONENT_SCOPE_INVALID" not in codes
+
+
+def test_scoped_note_cannot_claim_unrelated_sibling_source():
+    source, draft, spans = _fixture()
+    note = "（注：若属于特殊人群的参与者，必须另行完成核查）"
+    text = f"年龄≥18岁；{note}"
+    items = list(source.parent_rule_catalog.items)
+    items[0] = items[0].model_copy(update={"label": text})
+    source.parent_rule_catalog = _catalog(CatalogKind.OFFICIAL_PARENT_RULES, items)
+    source.source_materials[0].text = text
+    rule = draft.proposed_rules[0]
+    rule.source_text = text
+    rule.restricted_components = [RestrictedRuleComponent(
+        rule_component_id="component-population-note", display_code="IN-01b",
+        title="限定人群的额外核查", source_span_ids=["span-in"],
+        source_excerpts=[note, "年龄≥18岁"], limitation_kind="consumer_unavailable",
+        unresolved_dimensions=["尚不能核实本例是否属于限定人群"],
+    )]
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert "RESTRICTED_COMPONENT_SOURCE_INVALID" in {
+        issue.issue_code for issue in _issues(result, "source_coverage")
+    }
+
+
+def test_scoped_note_is_not_owned_by_a_sibling_with_shared_words():
+    source, draft, spans = _fixture()
+    note = "（注：若属于特殊人群的参与者，必须另行完成专项核查）"
+    text = f"需完成专项核查；{note}"
+    items = list(source.parent_rule_catalog.items)
+    items[0] = items[0].model_copy(update={"label": text})
+    source.parent_rule_catalog = _catalog(CatalogKind.OFFICIAL_PARENT_RULES, items)
+    source.source_materials[0].text = text
+    rule = draft.proposed_rules[0]
+    rule.source_text = text
+    predicate = rule.components[0].expression.predicate
+    predicate.source_clauses = ["需完成专项核查"]
+    predicate.source_term = "专项核查"
+    rule.restricted_components = [RestrictedRuleComponent(
+        rule_component_id="component-population-note", display_code="IN-01b",
+        title="限定人群的额外核查", source_span_ids=["span-in"],
+        source_excerpts=[note, "若属于特殊人群的参与者"],
+        limitation_kind="consumer_unavailable",
+        unresolved_dimensions=["尚不能核实本例是否属于限定人群"],
+    )]
+    assert _predicate_binds_obligation(predicate, note)
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    codes = {issue.issue_code for issue in _issues(result, "source_coverage")}
+    assert "RESTRICTED_COMPONENT_SOURCE_INVALID" not in codes
+    assert "RESTRICTED_COMPONENT_SCOPE_INVALID" not in codes
+
+    predicate.source_clauses.append(note)
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert "RESTRICTED_COMPONENT_SOURCE_INVALID" in {
+        issue.issue_code for issue in _issues(result, "source_coverage")
+    }
+
+
+@pytest.mark.parametrize("inline", [False, True])
+def test_scoped_note_remains_visible_when_sibling_quotes_whole_sentence(inline):
+    source, draft, spans = _fixture()
+    note = "（注：若属于特殊人群的参与者，必须另行完成专项核查）"
+    text = f"需完成专项核查{'' if inline else '；'}{note}"
+    items = list(source.parent_rule_catalog.items)
+    items[0] = items[0].model_copy(update={"label": text})
+    source.parent_rule_catalog = _catalog(CatalogKind.OFFICIAL_PARENT_RULES, items)
+    source.source_materials[0].text = text
+    rule = draft.proposed_rules[0]
+    rule.source_text = text
+    predicate = rule.components[0].expression.predicate
+    predicate.source_clauses = [text]
+    predicate.source_term = "专项核查"
+    rule.restricted_components = [RestrictedRuleComponent(
+        rule_component_id="component-population-note", display_code="IN-01b",
+        title="限定人群的额外核查", source_span_ids=["span-in"],
+        source_excerpts=[note, "若属于特殊人群的参与者"],
+        limitation_kind="consumer_unavailable",
+        unresolved_dimensions=["尚不能核实本例是否属于限定人群"],
+    )]
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    codes = {issue.issue_code for issue in _issues(result, "source_coverage")}
+    assert "RESTRICTED_COMPONENT_SOURCE_INVALID" not in codes
+    assert "RESTRICTED_COMPONENT_SCOPE_INVALID" not in codes
+    assert "PARENT_RULE_OBLIGATION_NOT_COVERED" not in codes
+
+    rule.restricted_components = []
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert any(
+        issue.issue_code == "PARENT_RULE_OBLIGATION_NOT_COVERED"
+        and any(note in ref for ref in issue.affected_refs)
+        for issue in _issues(result, "source_coverage")
+    )
+
+
+def test_inline_scoped_note_does_not_cover_unrelated_host_requirement():
+    source, draft, spans = _fixture()
+    note = "（注：若属于特殊人群的参与者，必须另行完成核查）"
+    text = f"年龄≥18岁{note}"
+    items = list(source.parent_rule_catalog.items)
+    items[0] = items[0].model_copy(update={"label": text})
+    source.parent_rule_catalog = _catalog(CatalogKind.OFFICIAL_PARENT_RULES, items)
+    source.source_materials[0].text = text
+    rule = draft.proposed_rules[0]
+    rule.source_text = text
+    rule.components[0].expression.predicate.source_clauses = ["另一项独立检查"]
+    rule.restricted_components = [RestrictedRuleComponent(
+        rule_component_id="component-population-note", display_code="IN-01b",
+        title="限定人群的额外核查", source_span_ids=["span-in"],
+        source_excerpts=[note], limitation_kind="consumer_unavailable",
+        unresolved_dimensions=["尚不能核实本例是否属于限定人群"],
+    )]
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    issues = _issues(result, "source_coverage")
+    assert not any(item.issue_code == "RESTRICTED_COMPONENT_SCOPE_INVALID" for item in issues)
+    assert any(
+        item.issue_code == "PARENT_RULE_OBLIGATION_NOT_COVERED"
+        and any("年龄≥18岁" in ref for ref in item.affected_refs)
+        for item in issues
+    )
+
+
+def test_population_only_note_is_not_absorbed_by_sibling():
+    source, draft, spans = _fixture()
+    note = "（注：仅适用于存在某种疾病的参与者）"
+    text = f"需完成专项核查{note}"
+    items = list(source.parent_rule_catalog.items)
+    items[0] = items[0].model_copy(update={"label": text})
+    source.parent_rule_catalog = _catalog(CatalogKind.OFFICIAL_PARENT_RULES, items)
+    source.source_materials[0].text = text
+    rule = draft.proposed_rules[0]
+    rule.source_text = text
+    predicate = rule.components[0].expression.predicate
+    predicate.source_clauses = [text]
+    predicate.source_term = "专项核查"
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert "PARENT_RULE_OBLIGATION_NOT_COVERED" in {
+        issue.issue_code for issue in _issues(result, "source_coverage")
+    }
+
+
+def test_model_added_brackets_do_not_prove_scoped_source():
+    source, draft, spans = _fixture()
+    note = "注：若属于特殊人群的参与者，必须另行完成核查"
+    original = f"年龄≥18岁；{note}"
+    rule = draft.proposed_rules[0]
+    rule.source_text = f"年龄≥18岁；（{note}）"
+    items = list(source.parent_rule_catalog.items)
+    items[0] = items[0].model_copy(update={"label": original})
+    source.parent_rule_catalog = _catalog(CatalogKind.OFFICIAL_PARENT_RULES, items)
+    source.source_materials[0].text = original
+    rule.restricted_components = [RestrictedRuleComponent(
+        rule_component_id="component-population-note", display_code="IN-01b",
+        title="限定人群的额外核查", source_span_ids=["span-in"],
+        source_excerpts=[note], limitation_kind="consumer_unavailable",
+        unresolved_dimensions=["尚不能核实本例是否属于限定人群"],
+    )]
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert "RESTRICTED_COMPONENT_SOURCE_INVALID" in {
+        issue.issue_code for issue in _issues(result, "source_coverage")
+    }
+
+
+def test_clear_numeric_bound_cannot_be_replaced_by_unspecified_interpretation_gap():
+    source, draft, spans = _fixture()
+    rule = draft.proposed_rules[1]
+    original = rule.components[0]
+    assert ProtocolDeconstructionGate().evaluate(
+        source, draft, source_spans=spans,
+    ).publishable
+
+    rule.components = []
+    rule.restricted_components = [RestrictedRuleComponent(
+        rule_component_id=original.rule_component_id,
+        display_code=original.display_code,
+        title=original.title,
+        source_span_ids=["span-ex"],
+        source_excerpts=["ALT或AST≥1.5×ULN"],
+        limitation_kind="interpretation_unresolved",
+        unresolved_dimensions=["尚未核清"],
+    )]
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert not result.publishable
+    assert any(
+        issue.issue_code == "RESTRICTED_COMPONENT_SWALLOWS_NUMERIC_BOUND"
+        for issue in _issues(result, "source_coverage")
+    )
 
 
 def _catalog(kind, items):
@@ -594,6 +1140,36 @@ def test_numeric_gate_uses_full_catalog_source_not_only_parent_heading():
     )
 
 
+def test_numeric_professional_judgment_requires_bound_assessment_source():
+    source_input, draft, spans = _fixture()
+    plain = ProtocolDeconstructionGate().evaluate(source_input, draft, source_spans=spans)
+    assert not any(
+        item.issue_code == "NUMERIC_JUDGMENT_SOURCE_UNBOUND"
+        for item in _issues(plain, "numeric_semantics")
+    )
+
+    atom = draft.proposed_rules[0].components[0].expression
+    atom.predicate = atom.predicate.model_copy(update={"requires_professional_judgment": True})
+    collapsed = ProtocolDeconstructionGate().evaluate(source_input, draft, source_spans=spans)
+    assert any(
+        item.issue_code == "NUMERIC_JUDGMENT_SOURCE_UNBOUND"
+        and atom.predicate.predicate_id in item.affected_refs
+        for item in _issues(collapsed, "numeric_semantics")
+    )
+    requirement = draft.proposed_rules[0].components[0].evidence_requirements[0]
+    draft.proposed_rules[0].components[0].evidence_requirements[0] = requirement.model_copy(
+        update={
+            "predicate_ids": [atom.predicate.predicate_id],
+            "required_source_types": ["investigator_assessment"],
+        }
+    )
+    source_bound = ProtocolDeconstructionGate().evaluate(source_input, draft, source_spans=spans)
+    assert not any(
+        item.issue_code == "NUMERIC_JUDGMENT_SOURCE_UNBOUND"
+        for item in _issues(source_bound, "numeric_semantics")
+    )
+
+
 def test_incidental_or_inside_one_condition_is_not_treated_as_top_level_or():
     source_input, draft, spans = _fixture()
     incidental_text = "既往病史≥2年，当前季节或同期检测结果阳性"
@@ -767,11 +1343,28 @@ def test_explicit_investigator_assessment_requires_professional_judgment():
     )
 
 
+def test_written_investigator_judgment_cannot_be_dropped():
+    source_input, draft, spans = _fixture()
+    text = "存在重大风险，须经研究者书面判断不宜参加"
+    expression = LogicalExpression(
+        operator=LogicalOperator.ALL,
+        children=[
+            _exists_predicate("predicate-risk", "重大风险", "存在重大风险"),
+            _exists_predicate("predicate-unfit", "不宜参加", "须经研究者书面判断不宜参加"),
+        ],
+    )
+    _replace_inclusion_source_and_expression(source_input, draft, text, expression)
+    result = ProtocolDeconstructionGate().evaluate(source_input, draft, source_spans=spans)
+    assert any(issue.issue_code == "INVESTIGATOR_JUDGMENT_DROPPED"
+               for issue in _issues(result, "boolean_logic"))
+
+
 @pytest.mark.parametrize(
     ("text", "attributes"),
     [
         ("筛选或基线时完成肝功能检查", ("筛选", "基线")),
         ("复发性带状疱疹（2年内发生2次或以上）", ("2次", "以上")),
+        ("存在重大甲类（级别甲或级别乙）、乙类问题", ("重大甲类", "乙类问题")),
     ],
 )
 def test_stage_or_frequency_words_do_not_authorize_any_branches(text, attributes):
@@ -791,6 +1384,32 @@ def test_stage_or_frequency_words_do_not_authorize_any_branches(text, attributes
 
     assert any(
         item.issue_code == "DISJUNCTION_NOT_BOUND_TO_SOURCE"
+        for item in _issues(result, "boolean_logic")
+    )
+
+
+def test_named_alternatives_inside_one_parenthetical_list_keep_their_scope():
+    source_input, draft, spans = _fixture()
+    text = (
+        "节点前使用以下任何一种治疗者：2周内接受口服制剂"
+        "（以下制剂需洗脱4周：甲类制剂；乙类制剂）"
+    )
+    expression = LogicalExpression(
+        operator=LogicalOperator.ANY,
+        children=[
+            _exists_predicate("predicate-a", "甲类制剂", "甲类制剂"),
+            _exists_predicate("predicate-b", "乙类制剂", "乙类制剂"),
+        ],
+    )
+    _replace_inclusion_source_and_expression(source_input, draft, text, expression)
+
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+    assert not any(
+        item.issue_code in {
+            "DISJUNCTION_NOT_BOUND_TO_SOURCE", "CONJUNCTION_CHANGED_TO_DISJUNCTION",
+        }
         for item in _issues(result, "boolean_logic")
     )
 
@@ -815,6 +1434,94 @@ def test_chinese_clinical_alternatives_remain_valid_any_branches():
         item.issue_code == "DISJUNCTION_NOT_BOUND_TO_SOURCE"
         for item in _issues(result, "boolean_logic")
     )
+
+
+@pytest.mark.parametrize(
+    ("text", "first_attribute", "second_attribute", "valid"),
+    [
+        (
+            "参与者可能患有早发型或慢进型系统异常史",
+            "参与者可能患有早发型系统异常史",
+            "参与者可能患有慢进型系统异常史",
+            True,
+        ),
+        (
+            "筛选或基线时参与者可能患有早发型和慢进型系统异常史",
+            "参与者可能患有早发型系统异常史",
+            "参与者可能患有慢进型系统异常史",
+            False,
+        ),
+        (
+            "参与者可能患有早发型或慢进型系统异常史",
+            "参与者可能患有早发型系统异常史",
+            "参与者可能患有其他型系统异常史",
+            False,
+        ),
+        (
+            "未见甲类或乙类系统异常史",
+            "未见甲类系统异常史",
+            "未见乙类系统异常史",
+            False,
+        ),
+        (
+            "受试者在筛选期或基线期完成实验室检查",
+            "受试者在筛选期完成实验室检查",
+            "受试者在基线期完成实验室检查",
+            False,
+        ),
+        (
+            "受试者有2次或以上事件记录",
+            "受试者有2次事件记录",
+            "受试者有以上事件记录",
+            False,
+        ),
+    ],
+)
+def test_disjunction_with_shared_prefix_and_suffix_requires_exact_source(
+    text, first_attribute, second_attribute, valid,
+):
+    source_input, draft, spans = _fixture()
+    expression = LogicalExpression(
+        operator=LogicalOperator.ANY,
+        children=[
+            _exists_predicate("predicate-a", first_attribute, text),
+            _exists_predicate("predicate-b", second_attribute, text),
+        ],
+    )
+    _replace_inclusion_source_and_expression(source_input, draft, text, expression)
+
+    result = ProtocolDeconstructionGate().evaluate(source_input, draft, source_spans=spans)
+
+    issue_codes = {item.issue_code for item in _issues(result, "boolean_logic")}
+    assert ("DISJUNCTION_NOT_BOUND_TO_SOURCE" not in issue_codes) is valid
+
+
+@pytest.mark.parametrize(
+    ("text", "accept_alternatives"),
+    [
+        ("筛选时任何显著异常，经研究者评估有风险者，包括但不限于：甲项异常、乙项异常。", True),
+        ("出现任何有临床意义的异常情况（包括但不限于甲项异常、乙项异常），经研究者评估有风险者。", True),
+        ("筛选时所有下列情况均须存在：甲项异常、乙项异常。", False),
+        ("筛选时任何显著异常，包括但不限于甲项异常且乙项异常。", False),
+    ],
+)
+def test_quantified_open_examples_support_only_source_bound_alternatives(text, accept_alternatives):
+    source_input, draft, spans = _fixture()
+    expression = LogicalExpression(
+        operator=LogicalOperator.ANY,
+        children=[
+            _exists_predicate("predicate-a", "甲项异常", "甲项异常"),
+            _exists_predicate("predicate-b", "乙项异常", "乙项异常"),
+        ],
+    )
+    _replace_inclusion_source_and_expression(source_input, draft, text, expression)
+
+    result = ProtocolDeconstructionGate().evaluate(source_input, draft, source_spans=spans)
+    issue_codes = {item.issue_code for item in _issues(result, "boolean_logic")}
+    rejected = bool(issue_codes & {
+        "DISJUNCTION_NOT_BOUND_TO_SOURCE", "CONJUNCTION_CHANGED_TO_DISJUNCTION",
+    })
+    assert rejected is not accept_alternatives
 
 
 def test_disjunction_can_bind_each_branch_by_its_verbatim_clause():
@@ -854,6 +1561,88 @@ def test_parent_lead_in_and_exception_outcome_are_not_atomic_obligations():
     ]
 
 
+def test_shared_stage_qualifier_requires_evidence_at_each_named_node():
+    _, draft, _ = _fixture()
+    rule = draft.proposed_rules[0]
+    component = rule.components[0]
+    component.expression.predicate.source_clause = "筛选和基线时，评分≥4"
+    assert not _qualifier_is_structured(rule, "筛选和基线时")
+    component.evidence_requirements.append(
+        _requirement("baseline-score", component.rule_component_id, ReviewStage.BASELINE)
+    )
+    assert _qualifier_is_structured(rule, "筛选和基线时")
+
+
+def test_cited_time_qualifier_requires_matching_anchor_and_window():
+    _, draft, _ = _fixture()
+    rule = draft.proposed_rules[0]
+    expression = rule.components[0].expression
+    expression.predicate.source_clause = "首次给药前7天内，存在急性疾病"
+    expression.time_constraint = TimeConstraint(
+        anchor_type=AnchorType.FIRST_DOSE_DATE,
+        direction=TimeDirection.BEFORE,
+        upper_bound=TimeQuantity(value=7, unit=TimeUnit.DAY),
+    )
+    assert _qualifier_is_structured(rule, "首次给药前7天内")
+    expression.time_constraint = expression.time_constraint.model_copy(
+        update={"upper_bound": TimeQuantity(value=14, unit=TimeUnit.DAY)}
+    )
+    assert not _qualifier_is_structured(rule, "首次给药前7天内")
+    expression.time_constraint = expression.time_constraint.model_copy(
+        update={"anchor_type": AnchorType.SCREENING_DATE,
+                "upper_bound": TimeQuantity(value=7, unit=TimeUnit.DAY)}
+    )
+    assert not _qualifier_is_structured(rule, "首次给药前7天内")
+
+
+def test_repeat_permission_qualifier_requires_matching_structured_count():
+    _, draft, _ = _fixture()
+    rule = draft.proposed_rules[0]
+    predicate = rule.components[0].expression.predicate
+    predicate.source_clause = "如结果不确定者，可进行1次复测。"
+    assert not _qualifier_is_structured(rule, "可进行1次复测")
+    predicate.repeat_scheme = RepeatScheme.model_construct(
+        scope="结果不确定时复测", source_span_ids=["span-in"],
+        source_excerpts=[predicate.source_clause], permission="optional",
+        trigger="source_condition", count_status="specified", maximum_repeats=1,
+        time_status="not_specified", result_use="use_single_repeat",
+    )
+    assert _qualifier_is_structured(rule, "可进行1次复测")
+    predicate.repeat_scheme = predicate.repeat_scheme.model_copy(
+        update={"maximum_repeats": 2}
+    )
+    assert not _qualifier_is_structured(rule, "可进行1次复测")
+
+
+@pytest.mark.parametrize("kind,expected_uncovered", [
+    (RuleKind.EXCLUSION, False),
+    (RuleKind.INCLUSION, True),
+])
+def test_list_lead_in_requires_compatible_parent_logic(kind, expected_uncovered):
+    source, draft, spans = _fixture()
+    text = "符合以下任一项检查标准：\n甲项异常；乙项异常"
+    items = list(source.parent_rule_catalog.items)
+    items[1] = items[1].model_copy(update={"label": text})
+    source.parent_rule_catalog = _catalog(CatalogKind.OFFICIAL_PARENT_RULES, items)
+    next(item for item in source.source_materials if item.source_span_id == "span-ex").text = text
+    rule = draft.proposed_rules[1]
+    rule.kind = kind
+    rule.source_text = text
+    first = rule.components[0]
+    first.expression = _exists_predicate("first", "甲项异常", "甲项异常")
+    second = first.model_copy(deep=True)
+    second.rule_component_id = "component-ex-second"
+    second.display_code = "EX-01b"
+    second.expression = _exists_predicate("second", "乙项异常", "乙项异常")
+    second.evidence_requirements = [_requirement("req-ex-second", second.rule_component_id)]
+    rule.components = [first, second]
+
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    uncovered = any(issue.issue_code == "PARENT_RULE_OBLIGATION_NOT_COVERED"
+                    for issue in _issues(result, "source_coverage"))
+    assert uncovered is expected_uncovered
+
+
 def test_chinese_clinical_alternatives_cannot_be_weakened_to_all():
     source_input, draft, spans = _fixture()
     text = "需要全身性抗菌药或抗病毒药治疗的感染"
@@ -874,6 +1663,27 @@ def test_chinese_clinical_alternatives_cannot_be_weakened_to_all():
         item.issue_code == "DISJUNCTION_CHANGED_TO_CONJUNCTION"
         for item in _issues(result, "boolean_logic")
     )
+
+
+@pytest.mark.parametrize("connector,should_reject", [("或", False), ("且", True)])
+def test_shared_object_alternatives_inside_conjunction(connector, should_reject):
+    source_input, draft, spans = _fixture()
+    shared = f"既往接受过{connector}计划接受器官移植手术"
+    text = f"{shared}且需服用免疫抑制剂"
+    expression = LogicalExpression(operator=LogicalOperator.ALL, children=[
+        LogicalExpression(operator=LogicalOperator.ANY, children=[
+            _exists_predicate("past", "既往接受过器官移植手术（如肝移植）", shared),
+            _exists_predicate("planned", "计划接受器官移植手术（如肝移植）", shared),
+        ]),
+        _exists_predicate("medication", "需服用免疫抑制剂", "且需服用免疫抑制剂"),
+    ])
+    _replace_inclusion_source_and_expression(source_input, draft, text, expression)
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans,
+    )
+    rejected = any(issue.issue_code == "CONJUNCTION_CHANGED_TO_DISJUNCTION"
+                   for issue in _issues(result, "boolean_logic"))
+    assert rejected is should_reject
 
 
 def test_parent_disjunction_does_not_turn_one_component_into_internal_any():
@@ -1029,6 +1839,30 @@ def test_parent_rule_requires_every_substantive_conjunct_to_be_structured():
     )
     assert any("良好沟通" in ref for ref in issue.affected_refs)
     assert any("理解和遵守" in ref for ref in issue.affected_refs)
+
+
+def test_uncovered_obligation_feedback_keeps_the_full_source_tail():
+    source_input, draft, spans = _fixture()
+    uncovered = (
+        "且需核对受试者既往治疗的实际开始时间结束时间剂量调整时间停药原因"
+        "和原始记录中的后续变化以及相关检查记录的有效范围和具体对应对象"
+        "并确认最后一次调整的原始记录是否仍然有效"
+    )
+    assert len(uncovered) > 80
+    text = "自愿签署知情同意书，" + uncovered
+    _replace_inclusion_source_and_expression(
+        source_input, draft, text,
+        _exists_predicate("predicate-icf", "签署知情同意书", "自愿签署知情同意书"),
+    )
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans,
+    )
+    issue = next(
+        item for item in _issues(result, "source_coverage")
+        if item.issue_code == "PARENT_RULE_OBLIGATION_NOT_COVERED"
+    )
+    assert any("最后一次调整的原始记录是否仍然有效" in ref
+               for ref in issue.affected_refs)
 
 
 def test_parent_rule_duration_and_stability_cannot_be_omitted():
@@ -2694,15 +3528,20 @@ def test_boolean_history_frequency_allows_leading_possession_word() -> None:
     )
 
 
-def test_nested_frequency_definition_cannot_limit_boolean_example_head():
+@pytest.mark.parametrize(("text", "attribute"), [
+    ("有严重带状疱疹既往史（包括复发性带状疱疹（2年内发生2次或以上））",
+     "有严重带状疱疹既往史"),
+    ("排除严重既往综合征甲或严重既往综合征乙（例如复发性甲（2年内发生2次或以上））",
+     "严重既往综合征甲"),
+])
+def test_nested_frequency_definition_cannot_limit_boolean_example_head(text, attribute):
     source_input, draft, spans = _fixture()
-    text = "有严重带状疱疹既往史（包括复发性带状疱疹（2年内发生2次或以上））"
     component = draft.proposed_rules[1].components[0]
     component.expression = AtomicExpression(
         predicate=AtomicPredicate(
             predicate_id="predicate-severe-history",
             subject="受试者",
-            attribute="有严重带状疱疹既往史",
+            attribute=attribute,
             comparator=Comparator.EQ,
             value=True,
             source_clause=text,
@@ -2726,6 +3565,178 @@ def test_nested_frequency_definition_cannot_limit_boolean_example_head():
     assert any(
         issue.issue_code == "FREQUENCY_DEFINITION_SCOPE_UNVERIFIED"
         and issue.affected_refs == ["predicate-severe-history"]
+        for issue in _issues(result, "temporal_semantics")
+    )
+
+
+@pytest.mark.parametrize("wrap_member", [False, True])
+def test_nested_frequency_definition_cannot_narrow_parent_through_logical_all(wrap_member):
+    source_input, draft, spans = _fixture()
+    text = "有严重感染既往史（包括反复细菌感染（2年内发生2次或以上））或有感染现病史"
+    component = draft.proposed_rules[1].components[0]
+    member = AtomicExpression(predicate=AtomicPredicate(
+        predicate_id="predicate-recurrence",
+        subject="受试者",
+        attribute="反复细菌感染发生次数",
+        source_term="反复细菌感染",
+        comparator=Comparator.GTE,
+        value=2,
+        unit="次",
+        source_clause=text,
+        occurrence_window=OccurrenceWindow(
+            duration=TimeQuantity(value=2, unit=TimeUnit.YEAR),
+            minimum_count=2,
+        ),
+    ))
+    required_member = (
+        LogicalExpression(operator=LogicalOperator.ANY, children=[
+            member,
+            _predicate("predicate-another", "有其他感染", True, "unitless", source_clause=text),
+        ])
+        if wrap_member else member
+    )
+    component.expression = LogicalExpression(
+        operator=LogicalOperator.ANY,
+        children=[
+            LogicalExpression(
+                operator=LogicalOperator.ALL,
+                children=[
+                    _predicate("predicate-history", "有严重感染既往史", True, "unitless", source_clause=text),
+                    required_member,
+                ],
+            ),
+            _predicate("predicate-active", "有感染现病史", True, "unitless", source_clause=text),
+        ],
+    )
+    draft.component_drafts[1].proposed_component = component
+    draft.component_drafts[1].source_excerpts = [text]
+    next(item for item in source_input.source_materials if item.source_span_id == "span-ex").text = text
+
+    result = ProtocolDeconstructionGate().evaluate(source_input, draft, source_spans=spans)
+    assert any(
+        issue.issue_code == "FREQUENCY_DEFINITION_SCOPE_UNVERIFIED"
+        for issue in _issues(result, "temporal_semantics")
+    )
+
+
+@pytest.mark.parametrize(("text", "excerpt"), [
+    ("有严重感染既往史（包括反复细菌感染（2年内发生2次或以上））",
+     "有严重感染既往史"),
+    ("排除严重既往综合征甲或严重既往综合征乙（例如复发性甲（2年内发生2次或以上））",
+     "排除严重既往综合征甲或严重既往综合征乙"),
+])
+def test_frozen_source_frequency_cannot_be_hidden_by_short_draft_excerpt(text, excerpt):
+    source_input, draft, spans = _fixture()
+    component = draft.proposed_rules[1].components[0]
+    component.expression = _predicate(
+        "predicate-history", excerpt, True, "unitless",
+        source_clause=excerpt,
+    )
+    draft.component_drafts[1].proposed_component = component
+    draft.component_drafts[1].source_excerpts = [excerpt]
+    next(item for item in source_input.source_materials if item.source_span_id == "span-ex").text = text
+
+    result = ProtocolDeconstructionGate().evaluate(source_input, draft, source_spans=spans)
+    assert any(
+        issue.issue_code == "FREQUENCY_WINDOW_NOT_STRUCTURED"
+        for issue in _issues(result, "temporal_semantics")
+    )
+
+
+@pytest.mark.parametrize("definition", [
+    "2年内至少2次发作", "2年内发作≥2次", "2年内发生2次或以上",
+])
+def test_parenthetical_frequency_word_order_is_accounted_for(definition):
+    assert (2, TimeUnit.YEAR, 2, "次") in _source_frequency_specs(definition)
+
+
+def test_frozen_frequency_on_unrelated_sibling_does_not_bind_current_component():
+    source_input, draft, spans = _fixture()
+    text = "有严重感染既往史（包括反复细菌感染（2年内发生2次或以上））；有感染现病史"
+    component = draft.proposed_rules[1].components[0]
+    component.expression = _predicate(
+        "predicate-active", "有感染现病史", True, "unitless",
+        source_clause="有感染现病史",
+    )
+    draft.component_drafts[1].proposed_component = component
+    draft.component_drafts[1].source_excerpts = ["有感染现病史"]
+    next(item for item in source_input.source_materials if item.source_span_id == "span-ex").text = text
+
+    result = ProtocolDeconstructionGate().evaluate(source_input, draft, source_spans=spans)
+    assert not any(
+        issue.issue_code.startswith("FREQUENCY_")
+        for issue in _issues(result, "temporal_semantics")
+    )
+
+
+def test_frequency_explicitly_on_parent_is_not_an_example_scope_error():
+    source_input, draft, spans = _fixture()
+    text = "2年内发生2次或以上严重感染"
+    component = draft.proposed_rules[1].components[0]
+    component.expression = AtomicExpression(predicate=AtomicPredicate(
+        predicate_id="predicate-severe",
+        subject="受试者",
+        attribute="严重感染发生次数",
+        source_term="严重感染",
+        comparator=Comparator.GTE,
+        value=2,
+        unit="次",
+        source_clause=text,
+        occurrence_window=OccurrenceWindow(
+            duration=TimeQuantity(value=2, unit=TimeUnit.YEAR),
+            minimum_count=2,
+        ),
+    ))
+    draft.component_drafts[1].proposed_component = component
+    draft.component_drafts[1].source_excerpts = [text]
+    next(item for item in source_input.source_materials if item.source_span_id == "span-ex").text = text
+
+    result = ProtocolDeconstructionGate().evaluate(source_input, draft, source_spans=spans)
+    assert not any(
+        issue.issue_code in {
+            "FREQUENCY_DEFINITION_SCOPE_UNVERIFIED",
+            "FREQUENCY_WINDOW_NOT_STRUCTURED",
+        }
+        for issue in _issues(result, "temporal_semantics")
+    )
+
+
+def test_frequency_scope_uses_component_source_when_predicate_cites_split_fragments():
+    source_input, draft, spans = _fixture()
+    text = "有严重感染既往史（包括反复细菌感染（2年内发生2次或以上））"
+    component = draft.proposed_rules[1].components[0]
+    component.expression = AtomicExpression(
+        predicate=AtomicPredicate(
+            predicate_id="predicate-parent-history",
+            subject="受试者",
+            attribute="有严重感染既往史",
+            comparator=Comparator.EQ,
+            value=True,
+            source_clauses=["有严重感染既往史", "2年内发生2次或以上"],
+            occurrence_window=OccurrenceWindow(
+                duration=TimeQuantity(value=2, unit=TimeUnit.YEAR),
+                minimum_count=2,
+            ),
+        )
+    )
+    draft.component_drafts[1].proposed_component = component
+    draft.component_drafts[1].source_excerpts = [text]
+    next(item for item in source_input.source_materials if item.source_span_id == "span-ex").text = text
+
+    result = ProtocolDeconstructionGate().evaluate(source_input, draft, source_spans=spans)
+    assert any(
+        issue.issue_code == "FREQUENCY_DEFINITION_SCOPE_UNVERIFIED"
+        and issue.affected_refs == ["predicate-parent-history"]
+        for issue in _issues(result, "temporal_semantics")
+    )
+
+    component.expression.predicate.attribute = "反复细菌感染发生次数"
+    component.expression.predicate.comparator = Comparator.GTE
+    component.expression.predicate.value = 2
+    component.expression.predicate.unit = "次"
+    result = ProtocolDeconstructionGate().evaluate(source_input, draft, source_spans=spans)
+    assert not any(
+        issue.issue_code == "FREQUENCY_DEFINITION_SCOPE_UNVERIFIED"
         for issue in _issues(result, "temporal_semantics")
     )
 
@@ -3034,6 +4045,73 @@ def test_future_plan_window_preserves_unspecified_study_drug_administration_anch
     assert not prospective_issues, prospective_issues
 
 
+@pytest.mark.parametrize("duration", [3, 9])
+@pytest.mark.parametrize("segmented", [False, True])
+def test_shared_period_window_is_preserved_in_contiguous_or_segmented_source(duration, segmented):
+    source, draft, spans = _fixture()
+    lead = f"整个研究期间（从签署ICF到研究药物给药后{duration}个月）"
+    action = "无捐献配子的计划"
+    text = f"{lead}，{action}"
+    component = draft.proposed_rules[0].components[0]
+    component.expression = _predicate(
+        "predicate-plan", action, True, "unitless",
+        source_clause=None if segmented else text,
+    )
+    predicate = component.expression.predicate
+    if segmented:
+        predicate.source_clauses = [lead, action]
+    predicate.prospective_period = ProspectivePeriod(period=ProtocolPeriod.STUDY_PERIOD)
+    predicate.prospective_window = ProspectiveWindow(
+        anchor_type=AnchorType.STUDY_DRUG_ADMINISTRATION_DATE,
+        upper_bound=TimeQuantity(value=duration, unit=TimeUnit.MONTH),
+    )
+    draft.component_drafts[0].proposed_component = component
+    draft.component_drafts[0].source_excerpts = [text]
+    next(item for item in source.source_materials if item.source_span_id == "span-in").text = text
+    result = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert not [issue for issue in _issues(result, "temporal_semantics")
+                if issue.issue_code.startswith("PROSPECTIVE_")]
+
+    predicate.prospective_window.upper_bound.value = duration + 1
+    changed = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert any(issue.issue_code == "PROSPECTIVE_WINDOW_NOT_STRUCTURED"
+               for issue in _issues(changed, "temporal_semantics"))
+
+
+def test_shared_period_cannot_be_borrowed_from_a_sibling_or_reversed_fragments():
+    lead = "整个研究期间（从签署ICF到研究药物给药后9个月）"
+    action = "无捐献配子的计划"
+    predicate = AtomicPredicate(
+        predicate_id="plan", subject="受试者", attribute=action,
+        comparator=Comparator.EXISTS, source_clauses=[lead, action],
+    )
+    assert not _time_bound_matches_source(
+        9, TimeUnit.MONTH, _predicate_temporal_text(predicate, f"{lead}，另一项义务；治疗期间（至研究结束），{action}")
+    )
+    assert not _time_bound_matches_source(
+        9, TimeUnit.MONTH, _predicate_temporal_text(predicate, f"{action}；{lead}")
+    )
+    assert not _time_bound_matches_source(
+        9, TimeUnit.MONTH, _predicate_temporal_text(predicate, f"{lead}，同意参加随访")
+    )
+
+
+def test_second_shared_period_uses_its_own_scope_and_cannot_borrow_the_first():
+    first = "整个研究期间（从签署ICF到研究药物给药后3个月）"
+    second = "整个研究期间（从签署ICF到研究药物给药后9个月）"
+    action = "无捐献卵子的计划"
+    text = f"{first}，无捐献精子的计划；{second}，{action}"
+    predicate = AtomicPredicate(
+        predicate_id="plan", subject="受试者", attribute=action,
+        comparator=Comparator.EXISTS, source_clauses=[second, action],
+    )
+    temporal = _predicate_temporal_text(predicate, text)
+    assert _time_bound_matches_source(9, TimeUnit.MONTH, temporal)
+    assert not _time_bound_matches_source(3, TimeUnit.MONTH, temporal)
+    predicate.source_clauses = [first, action]
+    assert not _time_bound_matches_source(3, TimeUnit.MONTH, _predicate_temporal_text(predicate, text))
+
+
 def test_component_level_parenthetical_exception_cannot_cover_any_branches():
     source_input, draft, spans = _fixture()
     text = "患有恶性肿瘤（皮肤原位癌除外）或淋巴组织增生性疾病"
@@ -3107,7 +4185,7 @@ def test_open_list_local_exception_requires_exclusive_component_exception():
     )
 
 
-def test_specific_open_list_item_keeps_its_local_exception_without_exclusivity():
+def test_specific_open_list_item_requires_exclusivity_when_exception_is_presence():
     source_input, draft, spans = _fixture()
     text = "存在下列情况，包括但不限于：情况甲、手术乙（手术丙除外）"
     component = draft.proposed_rules[1].components[0]
@@ -3130,6 +4208,9 @@ def test_specific_open_list_item_keeps_its_local_exception_without_exclusivity()
         "unitless",
         source_clause="手术乙（手术丙除外）",
     )
+    component.exception_expression.predicate.comparator = Comparator.EXISTS
+    component.exception_expression.predicate.value = None
+    component.exception_expression.predicate.unit = None
     draft.component_drafts[1].proposed_component = component
     draft.component_drafts[1].source_excerpts = [text]
     next(
@@ -3142,7 +4223,63 @@ def test_specific_open_list_item_keeps_its_local_exception_without_exclusivity()
         source_input, draft, source_spans=spans
     )
     codes = {issue.issue_code for issue in _issues(result, "boolean_logic")}
-    assert "LOCAL_EXCEPTION_MAY_WAIVE_CONCURRENT_TRIGGER" not in codes
+    assert "LOCAL_EXCEPTION_MAY_WAIVE_CONCURRENT_TRIGGER" in codes
+
+    component.exception_expression.predicate.attribute = "仅有手术丙，且无其他相关手术"
+    exclusive = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans
+    )
+    assert "LOCAL_EXCEPTION_MAY_WAIVE_CONCURRENT_TRIGGER" not in {
+        issue.issue_code for issue in _issues(exclusive, "boolean_logic")
+    }
+
+
+@pytest.mark.parametrize(
+    ("text", "same_source_unit"),
+    [
+        ("存在慢性或复发性情况，包括但不限于情况甲、情况乙（情况丙除外）", True),
+        ("存在慢性或复发性情况，包括但不限于情况甲；另有情况乙（情况丙除外）", False),
+    ],
+)
+def test_split_open_list_exception_checks_only_its_source_unit(text, same_source_unit):
+    source_input, draft, spans = _fixture()
+    rule = draft.proposed_rules[1]
+    broad = rule.components[0]
+    broad.expression = _predicate(
+        "predicate-broad", "存在慢性或复发性情况，包括但不限于情况甲",
+        True, "unitless", source_clause="存在慢性或复发性情况，包括但不限于情况甲",
+    )
+    broad.exception_expression = None
+    draft.component_drafts[1].proposed_component = broad
+    draft.component_drafts[1].source_excerpts = [text]
+    next(item for item in source_input.source_materials if item.source_span_id == "span-ex").text = text
+
+    local = broad.model_copy(deep=True)
+    local.rule_component_id = "component:EX-01:02"
+    local.display_code = "EX-01b"
+    local.expression = _predicate(
+        "predicate-local", "情况乙", True, "unitless",
+        source_clause="情况乙（情况丙除外）",
+    )
+    local.exception_expression = _predicate(
+        "predicate-local-exception", "存在情况丙", True, "unitless",
+        source_clause="情况乙（情况丙除外）",
+    )
+    local.exception_expression.predicate.comparator = Comparator.EXISTS
+    local.exception_expression.predicate.value = None
+    local.exception_expression.predicate.unit = None
+    local.evidence_requirements = []
+    rule.components.append(local)
+    mapping = draft.component_drafts[1].model_copy(deep=True)
+    mapping.draft_component_id = "draft-component:component:EX-01:02"
+    mapping.proposed_component = local
+    mapping.source_excerpts = [text]
+    draft.component_drafts.append(mapping)
+
+    result = ProtocolDeconstructionGate().evaluate(source_input, draft, source_spans=spans)
+    codes = {issue.issue_code for issue in _issues(result, "boolean_logic")}
+    assert ("LOCAL_EXCEPTION_REENTERED_OPEN_LIST" in codes) is same_source_unit
+    assert ("LOCAL_EXCEPTION_MAY_WAIVE_CONCURRENT_TRIGGER" in codes) is same_source_unit
 
 
 def test_exception_on_later_list_item_does_not_apply_to_previous_item():
@@ -3187,6 +4324,45 @@ def test_concessive_qualifier_is_covered_by_its_exact_owning_clause():
         expression.predicate,
         "即使感染已消退",
     )
+
+
+def test_descriptive_examples_are_located_without_becoming_a_patient_proposition():
+    examples = "例如但不限于甲型表现、乙型表现（达到三级）"
+    predicate = AtomicPredicate(
+        predicate_id="predicate-risk", subject="参与者", attribute="综合风险",
+        comparator=Comparator.EXISTS, source_clause="存在综合风险，" + examples,
+        semantic_proposition="受试者存在综合风险",
+    )
+    assert _predicate_binds_obligation(predicate, examples)
+    assert _predicate_binds_obligation(
+        predicate.model_copy(update={"semantic_proposition": None}), examples,
+    )
+    assert not _predicate_binds_obligation(
+        predicate.model_copy(update={"source_clause": "存在综合风险"}), examples,
+    )
+
+
+def test_semantic_proposition_must_describe_a_patient_fact_without_invented_bounds():
+    source_input, draft, spans = _fixture()
+    source = "存在重大情况，指标≥80时应核对甲项"
+    expression = _exists_predicate("predicate-risk", "重大情况", source)
+    _replace_inclusion_source_and_expression(source_input, draft, source, expression)
+    predicate = expression.predicate
+    predicate.semantic_proposition = "受试者存在重大情况，指标≥80时应核对甲项"
+    normal = ProtocolDeconstructionGate().evaluate(source_input, draft, source_spans=spans)
+    assert not {"SEMANTIC_PROPOSITION_RULE_COMMENTARY", "SEMANTIC_PROPOSITION_UNSOURCED_BOUND"} & {
+        issue.issue_code for issue in _issues(normal, "source_coverage")
+    }
+    predicate.semantic_proposition = "原文例示甲项属于上位条件，指标≥80"
+    commentary = ProtocolDeconstructionGate().evaluate(source_input, draft, source_spans=spans)
+    assert "SEMANTIC_PROPOSITION_RULE_COMMENTARY" in {
+        issue.issue_code for issue in _issues(commentary, "source_coverage")
+    }
+    predicate.semantic_proposition = "受试者存在重大情况，指标≥99时应核对甲项"
+    invented = ProtocolDeconstructionGate().evaluate(source_input, draft, source_spans=spans)
+    assert "SEMANTIC_PROPOSITION_UNSOURCED_BOUND" in {
+        issue.issue_code for issue in _issues(invented, "source_coverage")
+    }
 
 
 def test_procedure_mapping_cannot_borrow_component_requirement():
@@ -3414,6 +4590,40 @@ def test_adjacent_any_branches_can_share_the_exact_or_connector():
     )
     assert not any(
         issue.issue_code == "DISJUNCTION_NOT_BOUND_TO_SOURCE"
+        for issue in _issues(result, "boolean_logic")
+    )
+
+
+def test_old_branch_connector_cannot_override_current_conjunction():
+    source_input, draft, spans = _fixture()
+    text = "有重要器官移植且造血干细胞移植史"
+    component = draft.proposed_rules[1].components[0]
+    component.expression = LogicalExpression(
+        operator=LogicalOperator.ANY,
+        children=[
+            _predicate(
+                "predicate-organ", "重要器官移植", True, "unitless",
+                source_clause="有重要器官移植或",
+            ),
+            _predicate(
+                "predicate-stem-cell", "造血干细胞移植史", True, "unitless",
+                source_clause="或造血干细胞移植史",
+            ),
+        ],
+    )
+    draft.component_drafts[1].proposed_component = component
+    draft.component_drafts[1].source_excerpts = [text]
+    next(
+        item for item in source_input.source_materials
+        if item.source_span_id == "span-ex"
+    ).text = text
+
+    result = ProtocolDeconstructionGate().evaluate(
+        source_input, draft, source_spans=spans,
+    )
+    assert not result.publishable
+    assert any(
+        issue.issue_code == "CONJUNCTION_CHANGED_TO_DISJUNCTION"
         for issue in _issues(result, "boolean_logic")
     )
 

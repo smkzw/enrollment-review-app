@@ -61,6 +61,8 @@ __all__ = [
 
 
 DEFAULT_PROTOCOL_CONTROL_DISCOVERY_BATCH_UNITS = 48
+_MAX_SCHEDULE_ROW_CONTEXT_CHARS = 6000
+_MAX_SCHEDULE_ROW_CONTEXT_UNITS = 48
 
 
 _REQUIRED_ACTION_PATTERNS = (
@@ -911,29 +913,45 @@ def _deep_batch_chunks(
         unit.structure_unit_id: index
         for index, unit in enumerate(all_units or units)
     }
+    def table_row_key(unit: ProtocolStructureUnit) -> tuple[str, int] | None:
+        if unit.table_context is None:
+            return None
+        prefix, marker, suffix = unit.source_ref.rpartition(".r")
+        row_token = suffix.partition(".")[0]
+        if (not marker or not row_token.isdigit()
+                or int(row_token) != unit.table_context.row_index):
+            return None
+        return prefix, unit.table_context.row_index
+
     table_rows: dict[str, dict[int, list[ProtocolStructureUnit]]] = {}
     for unit in unit_by_id.values():
-        if unit.table_context is None:
+        row_key = table_row_key(unit)
+        if row_key is None:
             continue
-        prefix, marker, suffix = unit.source_ref.rpartition(".r")
-        if not marker or not suffix.isdigit():
-            continue
-        table_rows.setdefault(prefix, {}).setdefault(
-            unit.table_context.row_index, []
-        ).append(unit)
+        table_rows.setdefault(row_key[0], {}).setdefault(row_key[1], []).append(unit)
 
     table_context_by_unit: dict[str, tuple[str, ...]] = {}
     for table_key, rows in table_rows.items():
-        first = min(rows)
         leading_rows = []
-        for row_index in range(first, first + 5):
+        # The native coordinate bounds match the bridge contract. Stop at a
+        # gap rather than treating later body rows as leading context.
+        for row_index in range(min(rows), 5):
             if row_index not in rows:
                 break
             leading_rows.extend(rows[row_index])
         leading_ids = tuple(unit.structure_unit_id for unit in leading_rows)
         for row_units in rows.values():
+            same_row_ids = (
+                tuple(unit.structure_unit_id for unit in row_units)
+                if (len(row_units) <= _MAX_SCHEDULE_ROW_CONTEXT_UNITS
+                    and sum(len(unit.excerpt) for unit in row_units)
+                    <= _MAX_SCHEDULE_ROW_CONTEXT_CHARS)
+                else ()
+            )
             for unit in row_units:
-                table_context_by_unit[unit.structure_unit_id] = leading_ids
+                table_context_by_unit[unit.structure_unit_id] = tuple(dict.fromkeys(
+                    (*leading_ids, *same_row_ids)
+                ))
     chunks: list[
         tuple[tuple[ProtocolStructureUnit, ...], tuple[ProtocolStructureUnit, ...]]
     ] = []
@@ -956,6 +974,14 @@ def _deep_batch_chunks(
                        and not (run[end].unit_kind == "paragraph"
                                 and run[end].excerpt.rstrip().endswith(("：", ":")))):
                     end += 1
+            if end < len(run) and table_row_key(run[end - 1]) is not None:
+                row_key = table_row_key(run[end - 1])
+                if row_key == table_row_key(run[end]):
+                    row_start = end - 1
+                    while row_start > start and table_row_key(run[row_start - 1]) == row_key:
+                        row_start -= 1
+                    if row_start > start:
+                        end = row_start
             owned = tuple(run[start:end])
             start = end
             owned_ids = [unit.structure_unit_id for unit in owned]

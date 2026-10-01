@@ -12,6 +12,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getCatalogRepository, getEvidenceRepository } from "../api";
+import type { DocumentCategory, SourceCategory } from "../api/evidence/evidenceTypes";
 import {
   EvidenceApiError,
   EvidenceDecodeError,
@@ -391,6 +392,7 @@ export function EvidencePage() {
   const [selectedPageEntryId, setSelectedPageEntryId] = useState<string | null>(
     null,
   );
+  const [readingRotations, setReadingRotations] = useState<Record<string, number>>({});
   const [selectedLocatorId, setSelectedLocatorId] = useState<string | null>(
     null,
   );
@@ -840,6 +842,8 @@ export function EvidencePage() {
   async function saveSourceMetadata(values: {
     documentType: string;
     sourceParty: string;
+    documentCategory: DocumentCategory;
+    sourceCategory: SourceCategory;
     reason: string;
   }): Promise<void> {
     if (selectedMember === null) return;
@@ -853,6 +857,8 @@ export function EvidencePage() {
         {
           document_type: values.documentType.trim(),
           source_party: values.sourceParty.trim(),
+          document_category: values.documentCategory,
+          source_category: values.sourceCategory,
           reason: values.reason.trim(),
           expected_metadata_revision: selectedMember.metadataHead.revision,
           idempotency_key: idempotencyKeyFor(action),
@@ -861,7 +867,7 @@ export function EvidencePage() {
       );
       completeAction(action);
       setSnapshotsKey((key) => key + 1);
-      setMetadataNotice("资料类型与提供方已保存，将纳入下一次生成的资料版本。");
+      setMetadataNotice("资料类型与提供方已保存。请在当前资料旁生成更新后的资料版本，核对并启用后再整理个例档案。");
     } catch (error) {
       setMetadataError(toActionError(error));
     } finally {
@@ -1553,6 +1559,14 @@ export function EvidencePage() {
         selectedSnapshotId={selectedSnapshotId}
         onSelect={setSelectedSnapshotId}
         onBuild={buildReviewableRevision}
+        currentMetadataRevisionIds={
+          selectedSnapshotId === activeSnapshotId &&
+          viewedProcessingRevisionId === activeProcessingRevisionId &&
+          processingRevision.state.status === "success" &&
+          processingRevision.state.data.revisionKind === "complete"
+            ? processingRevision.state.data.metadataRevisionIds
+            : null
+        }
         building={
           buildBusy ||
           (processingCandidate != null &&
@@ -1602,7 +1616,13 @@ export function EvidencePage() {
         episode: factNormalization.completedReview.reviewEpisodeId,
       }}>查看最近一次资料识别</RouteLink>}
       {viewedProcessingRevisionId !== null && (
-        <SelectiveVisionTaskPanel revisionId={viewedProcessingRevisionId} />
+        <SelectiveVisionTaskPanel revisionId={viewedProcessingRevisionId}
+          selectedPage={selectedPageEntry ? {
+            pageArtifactId: selectedPageEntry.pageArtifactId,
+            pageNumber: selectedPageEntry.pageNumber,
+            readingRotation: readingRotations[`${viewedProcessingRevisionId}:${selectedPageEntry.pageArtifactId}`] ?? 0,
+          } : null}
+        />
       )}
       {processingCandidate?.candidateStatus === "ready" &&
         processingCandidate.completeRevisionId !== null && (
@@ -1755,6 +1775,7 @@ export function EvidencePage() {
   const rightContent =
     processingRevision.state.status === "success" && viewedPairConsistent ? (
       <OriginalEvidenceViewer
+        allowLocalVerification
         revisionId={processingRevision.state.data.revisionId}
         pages={revisionPageEntries}
         documentNames={
@@ -1770,6 +1791,12 @@ export function EvidencePage() {
         onSelectPage={(entryId) => {
           setSelectedPageEntryId(entryId);
           setSelectedLocatorId(null);
+        }}
+        onReadingRotationChange={(pageArtifactId, degrees) => {
+          setReadingRotations((previous) => ({
+            ...previous,
+            [`${viewedProcessingRevisionId}:${pageArtifactId}`]: degrees,
+          }));
         }}
       />
     ) : (
@@ -2033,6 +2060,7 @@ function SnapshotListPanel({
   selectedSnapshotId,
   onSelect,
   onBuild,
+  currentMetadataRevisionIds,
   building,
 }: {
   snapshots: UseLoadResult<EvidenceSnapshotListView>;
@@ -2041,6 +2069,7 @@ function SnapshotListPanel({
   onBuild: (
     snapshot: EvidenceSnapshotListView["items"][number],
   ) => Promise<void>;
+  currentMetadataRevisionIds: string[] | null;
   building: boolean;
 }) {
   if (snapshots.state.status === "loading") {
@@ -2071,6 +2100,10 @@ function SnapshotListPanel({
           const buttonState = buildButtonState(
             snapshot.latestProcessingCandidate,
           );
+          const metadataChanged = snapshot.isCurrent && selectedSnapshotId === snapshot.evidenceSnapshotId &&
+            currentMetadataRevisionIds !== null && snapshot.members.some(
+              (member) => !currentMetadataRevisionIds.includes(member.metadataHead.metadataRevisionId),
+            );
           return (
             <li
               key={snapshot.evidenceSnapshotId}
@@ -2099,6 +2132,13 @@ function SnapshotListPanel({
                   ·{formatLocalDate(snapshot.createdAt)}
                 </span>
               </button>
+              {metadataChanged && snapshot.baseProcessingRevisionId !== null && (
+                <button type="button" className="button evidence-snapshots__action"
+                  disabled={building || buttonState.disabled}
+                  onClick={() => void onBuild(snapshot)}>
+                  更新资料信息并生成新版本
+                </button>
+              )}
               {!snapshot.isCurrent &&
                 snapshot.baseProcessingRevisionId !== null && (
                   <button

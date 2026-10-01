@@ -380,14 +380,13 @@ class _FakeCompletions:
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
-        return SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    finish_reason="stop",
-                    message=SimpleNamespace(content=next(self.outputs)),
-                )
-            ]
-        )
+        assert kwargs["stream"] is True
+        return iter((
+            SimpleNamespace(choices=[SimpleNamespace(
+                delta=SimpleNamespace(content=next(self.outputs)),
+                finish_reason="stop",
+            )]),
+        ))
 
 
 def _transport_with_fake_outputs(outputs: Sequence[str]):
@@ -397,7 +396,7 @@ def _transport_with_fake_outputs(outputs: Sequence[str]):
     )
     transport = OpenAICompatibleProtocolControlAgentTransport(
         client=client,
-        backend="mtplx",
+        backend="ollama-cloud",
         model="opaque-control-model",
         max_tokens=8192,
     )

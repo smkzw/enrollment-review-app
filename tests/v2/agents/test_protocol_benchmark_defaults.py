@@ -65,6 +65,28 @@ def _kwargs(transport: DeepSeekProtocolAgentTransport) -> dict:
     return transport._completion_kwargs(list(USER_MESSAGE))
 
 
+def test_ollama_cloud_semantic_route_uses_its_own_key_and_text_mode(monkeypatch):
+    monkeypatch.setenv("DECONSTRUCT_API_KEY", "wrong-provider-key")
+    monkeypatch.setenv("DECONSTRUCT_BASE_URL", "http://wrong-provider.invalid/v1")
+    monkeypatch.setenv("OLLAMA_API_KEY", "ollama-test-key")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "https://ollama.com/v1")
+    transport = DeepSeekProtocolAgentTransport(
+        backend="ollama-cloud",
+        model="deepseek-v4.1-flash",
+        reasoning_effort="high",
+        max_tokens=65536,
+    )
+
+    assert transport._client.api_key == "ollama-test-key"
+    assert str(transport._client.base_url).rstrip("/") == "https://ollama.com/v1"
+    kwargs = _kwargs(transport)
+    assert kwargs["model"] == "deepseek-v4.1-flash"
+    assert kwargs["reasoning_effort"] == "high"
+    assert kwargs["max_tokens"] == 65536
+    assert "response_format" not in kwargs
+    assert "temperature" not in kwargs
+
+
 def test_mlx_serve_backend_uses_explicit_url_model_and_local_wire_contract(
     monkeypatch,
 ):

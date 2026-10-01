@@ -23,6 +23,7 @@ from app.domain.contracts.protocol_controls import (
     ProtocolControlDispositionBatch,
     ProtocolControlDiscoveryDecision,
     ProtocolControlDiscoveryDisposition,
+    ProtocolControlDiscoveryToDeepPlan,
     ProtocolSectionCoverageManifest,
     ProtocolStructureUnit,
     StructureUnitKind,
@@ -238,6 +239,39 @@ def test_deep_table_rows_retain_read_only_leading_headers() -> None:
         f"table-1-row-{index}" for index in range(5)
     ]
 
+    atom = first_table[-1].model_copy(update={
+        "structure_unit_id": "table-1-row-6-paragraph",
+        "source_ref": "body.t1.r6.c1.p0",
+        "member_source_refs": ["body.t1.r6.c1.p0"],
+        "source_span_ids": ["span:t1:r6:c1:p0"],
+        "table_context": first_table[-1].table_context.model_copy(update={
+            "table_path": (6, 1), "column_index": 1,
+            "member_cell_paths": [(6, 1)],
+        }),
+    })
+    atom_chunks = _deep_batch_chunks(
+        [atom], {}, max_owned_units_per_batch=1,
+        all_units=[*first_table[:-1], atom, *other_table],
+    )
+    assert [unit.structure_unit_id for unit in atom_chunks[0][1]] == [
+        f"table-1-row-{index}" for index in range(5)
+    ]
+
+    nested = atom.model_copy(update={
+        "structure_unit_id": "nested-paragraph",
+        "source_ref": "body.t1.r6.c1.t0.r0.c0.p0",
+        "member_source_refs": ["body.t1.r6.c1.t0.r0.c0.p0"],
+        "table_context": atom.table_context.model_copy(update={
+            "table_path": (6, 1, 0, 0), "row_index": 0,
+            "column_index": 0, "member_cell_paths": [(6, 1, 0, 0)],
+        }),
+    })
+    nested_chunks = _deep_batch_chunks(
+        [nested], {}, max_owned_units_per_batch=1,
+        all_units=[*first_table, nested],
+    )
+    assert nested_chunks[0][1] == ()
+
     manifest = ProtocolSectionCoverageManifest(
         manifest_id=_MANIFEST,
         protocol_version_id=_PROTOCOL,
@@ -269,6 +303,138 @@ def test_deep_table_rows_retain_read_only_leading_headers() -> None:
         unit_id not in deep.deep_structure_unit_ids
         for unit_id in deep.batches[0].context_structure_unit_ids
     )
+
+
+@pytest.mark.parametrize("rows,expected", [
+    ((1, 2, 3, 4, 5, 7), (1, 2, 3, 4)),
+    ((0, 2, 4, 7), (0,)),
+    ((5, 6, 7), ()),
+])
+def test_deep_table_context_uses_native_first_five_rows_after_filtering(rows, expected) -> None:
+    units = []
+    for index in rows:
+        ref = f"body.t0.r{index}.c0.p0"
+        units.append(ProtocolStructureUnit(
+            structure_unit_id=ref, source_ref=ref, member_source_refs=[ref],
+            source_span_ids=[f"span:{ref}"], unit_kind="table_row",
+            heading_path=["访视安排"], source_order=index,
+            study_phase=StudyPhase.PHASE_II, phase_scopes=[PhaseScope.SHARED],
+            excerpt=f"原始第{index}行",
+            table_context={"table_path": (index, 0), "row_index": index,
+                           "column_index": 0, "member_cell_paths": [(index, 0)]},
+        ))
+    manifest = _manifest(1).model_copy(update={"units": units})
+    discovery = plan_protocol_control_discovery(manifest, max_units_per_batch=20)
+    target_id = units[-1].structure_unit_id
+    decisions = [[ProtocolControlDiscoveryDecision(
+        structure_unit_id=unit_id,
+        disposition=(ProtocolControlDiscoveryDisposition.CANDIDATE
+                     if unit_id == target_id else ProtocolControlDiscoveryDisposition.NON_CONTROL),
+        rationale="目标或同表只读上下文",
+    ) for unit_id in batch.target_structure_unit_ids] for batch in discovery.batches]
+    deep = plan_protocol_control_deep_batches_from_discovery(
+        manifest, discovery, decisions, max_owned_units_per_batch=1,
+    )
+    assert deep.batches[0].context_structure_unit_ids == [
+        f"body.t0.r{index}.c0.p0" for index in expected
+    ]
+    assert deep.deep_structure_unit_ids == (target_id,)
+
+
+def test_split_schedule_row_stays_together_or_uses_bounded_readonly_siblings() -> None:
+    def cell(row: int, col: int, text: str) -> ProtocolStructureUnit:
+        ref = f"body.t0.r{row}.c{col}.p0"
+        return ProtocolStructureUnit(
+            structure_unit_id=ref, source_ref=ref,
+            member_source_refs=[ref], member_texts=[text],
+            source_span_ids=[f"snapshot::{ref}"],
+            unit_kind="table_row", heading_path=["访视安排"],
+            table_context={
+                "table_path": (row, col), "row_index": row, "column_index": col,
+                "member_cell_paths": [(row, col)],
+            },
+            source_order=row * 10 + col,
+            study_phase=StudyPhase.PHASE_II,
+            phase_scopes=[PhaseScope.SHARED], excerpt=text,
+        )
+
+    header = [cell(0, col, text) for col, text in enumerate(
+        ["项目", "筛选期", "基线期", "治疗期"]
+    )]
+    row = [cell(2, col, text) for col, text in enumerate(
+        ["心电检查", "X", "X", "X"]
+    )]
+    preceding = _unit(1, "访视安排")
+    preceding.source_order = 15
+    all_units = [*header, preceding, *row]
+    chunks = _deep_batch_chunks(
+        [preceding, *row], {}, max_owned_units_per_batch=4, all_units=all_units,
+    )
+    assert [[unit.structure_unit_id for unit in owned] for owned, _context in chunks] == [
+        [preceding.structure_unit_id], [unit.structure_unit_id for unit in row],
+    ]
+
+    only_label = _deep_batch_chunks(
+        [row[0]], {}, max_owned_units_per_batch=4, all_units=all_units,
+    )
+    assert {unit.structure_unit_id for unit in only_label[0][1]} >= {
+        unit.structure_unit_id for unit in [*header, *row[1:]]
+    }
+
+    too_large = row[1].model_copy(deep=True)
+    too_large.excerpt = "原文" * 3500
+    too_large.member_texts = [too_large.excerpt]
+    bounded = _deep_batch_chunks(
+        [row[0]], {}, max_owned_units_per_batch=4,
+        all_units=[*header, row[0], too_large, *row[2:]],
+    )
+    assert all(unit.structure_unit_id not in {
+        item.structure_unit_id for item in row[1:]
+    } for unit in bounded[0][1])
+
+    wide_row = [cell(3, col, "项目" if col == 0 else "X") for col in range(16)]
+    wide_context = _deep_batch_chunks(
+        [wide_row[0]], {}, max_owned_units_per_batch=4,
+        all_units=[*header, *wide_row],
+    )
+    assert {unit.structure_unit_id for unit in wide_context[0][1]} >= {
+        unit.structure_unit_id for unit in wide_row[1:]
+    }
+
+    unrelated = cell(10, 0, "其他表格").model_copy(update={
+        "structure_unit_id": "other-table-row-10",
+        "source_ref": "body.t1.r10.c0.p0",
+        "member_source_refs": ["body.t1.r10.c0.p0"],
+        "source_span_ids": ["snapshot::body.t1.r10.c0.p0"],
+    })
+    source_units = [*header, *[cell(10, col, "项目" if col == 0 else "X")
+                              for col in range(3)], unrelated]
+    manifest = _manifest(1).model_copy(update={
+        "units": sorted(source_units, key=lambda unit: (unit.source_order, unit.structure_unit_id)),
+    })
+    discovery = plan_protocol_control_discovery(manifest, max_units_per_batch=10)
+    target_id = source_units[len(header)].structure_unit_id
+    decisions = [[ProtocolControlDiscoveryDecision(
+        structure_unit_id=unit_id,
+        disposition=(ProtocolControlDiscoveryDisposition.CANDIDATE
+                     if unit_id == target_id
+                     else ProtocolControlDiscoveryDisposition.NON_CONTROL),
+        rationale="候选单元或只读表格背景",
+    ) for unit_id in batch.target_structure_unit_ids] for batch in discovery.batches]
+    deep = plan_protocol_control_deep_batches_from_discovery(
+        manifest, discovery, decisions, max_owned_units_per_batch=1,
+    )
+    context_ids = set(deep.batches[0].context_structure_unit_ids)
+    assert {unit.structure_unit_id for unit in [*header, *source_units[len(header) + 1:-1]]} <= context_ids
+    assert unrelated.structure_unit_id not in context_ids
+
+    invalid = deep.model_dump(mode="json")
+    invalid_batch = invalid["batches"][0]
+    invalid_batch["context_units"].append(unrelated.model_dump(mode="json"))
+    invalid_batch["context_structure_unit_ids"].append(unrelated.structure_unit_id)
+    invalid_batch["context_source_span_ids"].append(unrelated.source_span_ids[0])
+    with pytest.raises(ValueError, match="non_control"):
+        ProtocolControlDiscoveryToDeepPlan.model_validate(invalid)
 
 
 def test_short_source_list_is_owned_together_without_absorbing_next_paragraph() -> None:

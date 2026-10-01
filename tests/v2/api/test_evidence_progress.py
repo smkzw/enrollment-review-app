@@ -39,10 +39,40 @@ from app.storage.ocr_repositories import (
 )
 from app.storage.repositories import persist_fixture
 from app.workflow.jobstore import JobStore
+from fastapi.testclient import TestClient
 from tests.v2.api.conftest import parse_sse_frames
 from tests.v2.storage.test_repositories_roundtrip import FIXTURES
 
 FIXED_UTC = datetime(2026, 8, 19, 12, 0, 0, tzinfo=UTC)
+
+
+def test_bootstrap_shares_document_converter_with_upload_and_reprocessing(
+    data_paths, monkeypatch,
+) -> None:
+    import app.api.v2.app as bootstrap
+    import app.services.evidence_reprocessing as reprocessing
+
+    converter = object()
+    captured = {}
+    original_processing = bootstrap.create_evidence_processing_executor
+    original_reprocessing = reprocessing.create_reprocessing_executor
+
+    def processing(config):
+        captured["upload"] = config
+        return original_processing(config)
+
+    def reprocess(config):
+        captured["reprocessing"] = config
+        return original_reprocessing(config)
+
+    monkeypatch.setattr(bootstrap, "LibreOfficeDocConverter", lambda: converter)
+    monkeypatch.setattr(bootstrap, "create_evidence_processing_executor", processing)
+    monkeypatch.setattr(reprocessing, "create_reprocessing_executor", reprocess)
+    with TestClient(bootstrap.create_app(data_paths=data_paths, run_runner=False)):
+        assert captured["upload"] is captured["reprocessing"]
+        assert captured["upload"].doc_converter is converter
+        assert captured["upload"].adapter is not None
+        assert captured["upload"].gate is not None
 
 
 def _seed_scope(sf) -> tuple[str, str, str]:

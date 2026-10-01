@@ -227,6 +227,8 @@ export function createEvidenceHttp(
           body: JSON.stringify({
             document_type: body.document_type,
             source_party: body.source_party,
+            ...(body.document_category !== undefined ? { document_category: body.document_category } : {}),
+            ...(body.source_category !== undefined ? { source_category: body.source_category } : {}),
             reason: body.reason,
             expected_metadata_revision: body.expected_metadata_revision,
             idempotency_key: body.idempotency_key,

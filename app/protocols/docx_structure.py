@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
+from typing import Literal
 
 from docx import Document
 from docx.oxml.ns import qn
@@ -48,7 +49,7 @@ from .ingestion import (
 )
 
 PARSER_NAME = "docx-ooxml"
-PARSER_VERSION = "1.4.0"
+PARSER_VERSION = "1.5.0"
 
 # OOXML 限定名
 _W_P = qn("w:p")
@@ -75,6 +76,10 @@ _W_INS = qn("w:ins")
 _W_DEL = qn("w:del")
 _W_TCPR = qn("w:tcPr")
 _W_GRIDSPAN = qn("w:gridSpan")
+_W_VMERGE = qn("w:vMerge")
+_W_TRPR = qn("w:trPr")
+_W_GRIDBEFORE = qn("w:gridBefore")
+_W_GRIDAFTER = qn("w:gridAfter")
 _W_STYLE = qn("w:style")
 _W_STYLE_ID = qn("w:styleId")
 _W_BASED_ON = qn("w:basedOn")
@@ -147,6 +152,10 @@ class StructureBlock(BaseModel):
     numbering: NumberingRef | None = None
     # 段落/嵌套表所在单元格的完整祖先 (row, col, ...) 链；body 顶层内容为 None。
     table_path: tuple[int, ...] | None = None
+    table_col_span: int | None = Field(default=None, ge=1, exclude_if=lambda value: value is None)
+    table_vertical_merge: Literal["restart", "continue"] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     table_rows: int | None = None
     table_cols: int | None = None
     tracked_change: bool = False
@@ -237,12 +246,32 @@ def _grid_span(tc) -> int:
     return 1
 
 
+def _grid_before(row_el) -> int:
+    trpr = row_el.find(_W_TRPR)
+    before = trpr.find(_W_GRIDBEFORE) if trpr is not None else None
+    return max(0, _int_attr(before, _W_VAL) or 0)
+
+
+def _grid_after(row_el) -> int:
+    trpr = row_el.find(_W_TRPR)
+    after = trpr.find(_W_GRIDAFTER) if trpr is not None else None
+    return max(0, _int_attr(after, _W_VAL) or 0)
+
+
+def _vertical_merge(tc) -> str | None:
+    tcpr = tc.find(_W_TCPR)
+    merge = tcpr.find(_W_VMERGE) if tcpr is not None else None
+    if merge is None:
+        return None
+    return "restart" if merge.get(_W_VAL) == "restart" else "continue"
+
+
 def _cells_with_col(row_el):
-    """按 gridSpan 展开列序号，避免合并单元格文本重复。
+    """按 gridBefore/gridSpan 定位列，避免省略列和合并格错位。
 
     每个单元格产出 (tc, 起始列, 跨列数)。
     """
-    col = 0
+    col = _grid_before(row_el)
     for tc in row_el.findall(_W_TC):
         span = _grid_span(tc)
         yield tc, col, span
@@ -288,8 +317,10 @@ def _table_size(tbl_el) -> tuple[int, int]:
     row_count = len(rows)
     col_count = 0
     for row in rows:
+        last_col = _grid_before(row)
         for _tc, col, span in _cells_with_col(row):
-            col_count = max(col_count, col + span)
+            last_col = col + span
+        col_count = max(col_count, last_col + _grid_after(row))
     return row_count, col_count
 
 
@@ -610,6 +641,8 @@ class _Extractor:
         section_index: int | None,
         p_el,
         table_path: tuple[int, ...] | None = None,
+        table_col_span: int | None = None,
+        table_vertical_merge: str | None = None,
         part_kind: HeaderFooterKind | None = None,
         section_indexes: tuple[int, ...] | None = None,
     ) -> None:
@@ -630,6 +663,8 @@ class _Extractor:
                 outline_level=outline_level,
                 numbering=self._para_numbering(p_el, source_ref),
                 table_path=table_path,
+                table_col_span=table_col_span,
+                table_vertical_merge=table_vertical_merge,
                 tracked_change=_para_tracked_change(p_el),
                 part_kind=part_kind,
                 section_indexes=section_indexes,
@@ -726,7 +761,7 @@ class _Extractor:
         段落/嵌套表的 ``table_path`` 追加当前 (row, col) 形成完整链。
         """
         for row_idx, row in enumerate(tbl_el.findall(_W_TR)):
-            for tc, col_idx, _span in _cells_with_col(row):
+            for tc, col_idx, span in _cells_with_col(row):
                 cell_path = (
                     parent_path + (row_idx, col_idx)
                     if parent_path is not None
@@ -743,6 +778,8 @@ class _Extractor:
                             section_index=section_index,
                             p_el=child,
                             table_path=cell_path,
+                            table_col_span=span,
+                            table_vertical_merge=_vertical_merge(tc),
                             part_kind=part_kind,
                             section_indexes=section_indexes,
                         )

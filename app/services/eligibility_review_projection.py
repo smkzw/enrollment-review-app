@@ -7,12 +7,12 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Literal, Mapping
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.domain.contracts.clause_pack import ClausePackClause
+from app.domain.contracts.clause_pack import ClausePackClause, ClausePackRestrictedClause
 from app.domain.contracts.common import DateValue
 from app.domain.contracts.enums import (
     ComponentDecision,
@@ -67,6 +67,8 @@ __all__ = [
     "fold_fact_chain_heads",
 ]
 
+_STALE_WORK_DRAFT = object()
+
 
 # 按临床安全优先级选取单值 gap_type。完整缺口集合仍由 evaluator/仓储确定，
 # wire 只保留一个主缺口用于列表筛选和详情摘要。
@@ -74,6 +76,7 @@ _GAP_PRIORITY: tuple[GapType, ...] = (
     GapType.SOURCE_CONFLICT,
     GapType.INTERPRETATION_CONFLICT,
     GapType.PROFESSIONAL_JUDGMENT,
+    GapType.APPLICABLE_POPULATION_UNVERIFIED,
     GapType.REFERENCED_FILE_MISSING,
     GapType.OBSERVATION_UNVERIFIED,
     GapType.RECORD_INCOMPLETE,
@@ -88,8 +91,9 @@ _GAP_PRIORITY: tuple[GapType, ...] = (
 )
 
 _GAP_LABELS: dict[GapType, str] = {
+    GapType.APPLICABLE_POPULATION_UNVERIFIED: "适用人群尚未核实",
     GapType.OBSERVATION_UNVERIFIED: "资料尚待核实",
-    GapType.RECORD_INCOMPLETE: "病历记录不完整",
+    GapType.RECORD_INCOMPLETE: "本次资料未见相关记录",
     GapType.DESCRIPTION_INSUFFICIENT: "描述不充分",
     GapType.HISTORICAL_SOURCE_UNAVAILABLE: "历史来源不可用",
     GapType.REFERENCED_FILE_MISSING: "已引用文件未提供",
@@ -149,6 +153,7 @@ class EligibilityClauseProjection:
     action_owner: str | None = None
     action_detail: str | None = None
     action_evidence: str | None = None
+    limitation_kind: str | None = None
 
 
 @dataclass(frozen=True)
@@ -169,6 +174,10 @@ class EligibilityControlObligationProjection:
     reason: str
     fact_refs: tuple[EligibilityFactRef, ...]
     continuing_note: str | None = None
+    action_owner: str | None = None
+    action_detail: str | None = None
+    action_evidence: str | None = None
+    limitation_kind: str | None = None
 
 
 @dataclass(frozen=True)
@@ -191,6 +200,7 @@ class EligibilityReviewProjection:
     clauses: tuple[EligibilityClauseProjection, ...]
     controls: tuple[EligibilityControlProjection, ...] = ()
     unassigned_conflicts: tuple[EligibilityUnassignedConflict, ...] = ()
+    work_draft_state: Literal["not_started", "current", "source_changed"] = "not_started"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -198,6 +208,54 @@ class EligibilityReviewProjection:
 
 class EligibilityReviewProjectionError(RuntimeError):
     """投影输入缺少可安全装配的结构化闭包。"""
+
+
+def _restricted_clause_projection(
+    clause: ClausePackRestrictedClause,
+) -> EligibilityClauseProjection:
+    if clause.limitation_kind == "interpretation_unresolved":
+        reason = (
+            "方案原文中有这项要求，但其适用含义尚未核清："
+            + "；".join(clause.unresolved_dimensions)
+            + "。本项暂不能判为符合或不符合。"
+        )
+    else:
+        reason = (
+            "方案原文中有这项要求，但当前审核方式尚不能可靠判定："
+            + "；".join(clause.unresolved_dimensions)
+            + "。本项暂不能判为符合或不符合。"
+        )
+    return EligibilityClauseProjection(
+        rule_component_id=clause.clause_id,
+        rule_code=clause.official_code,
+        rule_kind=clause.kind.value,
+        text_summary=clause.title,
+        source_text="\n".join(clause.source_excerpts),
+        parent_rule_code=(
+            None if clause.display_code == clause.official_code else clause.official_code
+        ),
+        decision=ComponentDecision.INDETERMINATE.value,
+        decision_label=_DECISION_LABELS[ComponentDecision.INDETERMINATE],
+        reason=reason,
+        fact_refs=(),
+        gap_type=None,
+        determination_mode="restricted",
+        limitation_kind=clause.limitation_kind,
+        action_owner=(
+            "sponsor_medical_or_project"
+            if clause.limitation_kind == "interpretation_unresolved" else None
+        ),
+        action_detail=(
+            "请澄清该要求的适用对象、时期或例外，并与本版方案原文对应。"
+            if clause.limitation_kind == "interpretation_unresolved"
+            else "请完善该项要求的核对方法，不要求研究者替软件补判。"
+        ),
+        action_evidence=(
+            "方案书面澄清或正式修订"
+            if clause.limitation_kind == "interpretation_unresolved"
+            else "经核实的审核方法与原文对应关系"
+        ),
+    )
 
 
 # --------------------------------------------------------------------------- V2 -> Phase 3 适配
@@ -393,25 +451,12 @@ def _latest_expectations(
 ) -> list[EvidenceExpectationV2]:
     """按当前权威元组和模板取最新期望 revision。"""
     repository = EvidenceExpectationV2Repository(session)
-    bound = [
-        expectation
-        for expectation in repository.list_by_episode(authority.review_episode_id)
-        if expectation.authority == authority
-    ]
+    bound = repository.list_for_authority(authority)
     by_template: dict[str, EvidenceExpectationV2] = {}
     for expectation in bound:
         current = by_template.get(expectation.template_id)
         if current is None or expectation.revision > current.revision:
             by_template[expectation.template_id] = expectation
-
-    # latest_by_template 是仓储提供的权威读取入口；在多权威历史并存时，
-    # 仍以当前 authority 过滤后的 list_by_episode 结果为准，防止旧版本串入。
-    for template_id in tuple(by_template):
-        latest = repository.latest_by_template(
-            authority.review_episode_id, template_id
-        )
-        if latest is not None and latest.authority == authority:
-            by_template[template_id] = latest
     return sorted(by_template.values(), key=lambda item: (item.revision, item.template_id))
 
 
@@ -506,6 +551,7 @@ def _fact_refs(
     session: Session,
     used_fact_ids: Iterable[str],
     facts_by_id: Mapping[str, ClinicalFactV2],
+    selected_locators_by_fact: Mapping[str, set[str]] | None = None,
 ) -> tuple[EligibilityFactRef, ...]:
     selected = [facts_by_id[fact_id] for fact_id in sorted(set(used_fact_ids))]
     locator_ids = [
@@ -517,7 +563,14 @@ def _fact_refs(
     locator_by_id = {item.locator_id: item for item in locators}
     refs: list[EligibilityFactRef] = []
     for fact in selected:
+        selected_locators = (selected_locators_by_fact or {}).get(fact.fact_id)
+        if selected_locators is not None and (
+            not selected_locators or not selected_locators <= set(fact.locator_ids)
+        ):
+            raise EligibilityReviewProjectionError("本次核对位置与事实原件范围不一致")
         for locator_id in fact.locator_ids:
+            if selected_locators is not None and locator_id not in selected_locators:
+                continue
             locator = locator_by_id.get(locator_id)
             if locator is None:
                 raise EligibilityReviewProjectionError(
@@ -534,6 +587,51 @@ def _fact_refs(
                 )
             )
     return tuple(refs)
+
+
+def _selected_predicate_locators(
+    selection: Any,
+    component_id: str,
+    evaluation: ComponentEvaluation,
+    used_fact_ids: set[str],
+) -> dict[str, set[str]]:
+    """Narrow source navigation only for receipt-verified, non-repeat pairs."""
+    source = selection.predicate_frozen_input
+    if source is None or not selection.source_pair_locations:
+        return {}
+    identities = {
+        item.predicate_id: item
+        for component in source.components
+        if component.rule_component_id == component_id
+        for item in component.binding_predicates
+    }
+    outcomes = {item.identity_sha256: item for item in selection.identity_outcomes}
+    pairs: dict[tuple[str, str], set[str]] = {}
+    for identity, pair_id, fact_id, locator_id in selection.source_pair_locations:
+        outcome = outcomes.get(identity)
+        if outcome is None or pair_id not in outcome.usable_pair_ids:
+            raise EligibilityReviewProjectionError("原件配对不属于本次核对的资料范围")
+        pairs.setdefault((identity, fact_id), set()).add(locator_id)
+    chosen: dict[str, set[str]] = {}
+    unproven: set[str] = set()
+    for predicate_id, result in evaluation.predicate_evaluations.items():
+        fact_ids = set(result.used_fact_ids) & used_fact_ids
+        if not fact_ids:
+            continue
+        item = identities.get(predicate_id)
+        outcome = outcomes.get(item.predicate_identity_sha256) if item is not None else None
+        if (item is None or outcome is None or outcome.status != "usable"
+                or item.predicate.repeat_scheme is not None
+                or item.predicate.occurrence_window is not None):
+            unproven.update(fact_ids)
+            continue
+        for fact_id in fact_ids:
+            locators = pairs.get((item.predicate_identity_sha256, fact_id))
+            if locators:
+                chosen.setdefault(fact_id, set()).update(locators)
+            else:
+                unproven.add(fact_id)
+    return {fact_id: locators for fact_id, locators in chosen.items() if fact_id not in unproven}
 
 
 def _used_fact_ids(evaluation: ComponentEvaluation) -> set[str]:
@@ -582,6 +680,8 @@ def _reason(
         GapType.INTERPRETATION_CONFLICT,
     }:
         return "本次提交的资料中存在相互冲突的事实，尚未完成核对，因此无法判定。"
+    if gap == GapType.APPLICABLE_POPULATION_UNVERIFIED:
+        return "方案对该条件限定了适用人群，本例是否属于该范围尚未完成有源核对，因此不能据现有结果判定本条。"
 
     # 终局判定优先给结论文案；缺口转"附带提醒"，避免"未触发排除标准"却配
     # "无法判定"理由的决策-文案矛盾（C 桥接激活确定性判定后暴露）。
@@ -723,16 +823,19 @@ class EligibilityReviewProjectionService:
         episode = EpisodeRepository(session).get(review_episode_id)
         rule_set = get_rule_set(session, authority.rule_set_id, authority.rule_set_revision)
         clause_pack = project_published_clause_pack(session, rule_set)
-        if not clause_pack.clauses and (
+        if not clause_pack.clauses and not clause_pack.restricted_clauses and (
             clause_pack.control_publication is None
-            or not clause_pack.control_publication.catalog.controls
+            or not (
+                clause_pack.control_publication.catalog.controls
+                or clause_pack.control_publication.catalog.restricted_statements
+            )
         ):
             raise EligibilityReviewProjectionError("当前方案没有可审核的官方条款或补充要求")
 
         frozen_work_draft = self._completed_work_draft(
             session, authority=authority, rule_set=rule_set,
         )
-        if frozen_work_draft is not None:
+        if frozen_work_draft is not None and frozen_work_draft is not _STALE_WORK_DRAFT:
             frozen, selections = frozen_work_draft
             return self._project_frozen_work_draft(
                 session, frozen=frozen, rule_set=rule_set, selections=selections,
@@ -882,7 +985,10 @@ class EligibilityReviewProjectionService:
             rule_set_revision=authority.rule_set_revision,
             evidence_snapshot_v2_id=authority.evidence_snapshot_v2_id,
             complete_processing_revision_id=authority.complete_processing_revision_id,
-            clauses=tuple(output),
+            clauses=tuple(output) + tuple(
+                _restricted_clause_projection(item)
+                for item in clause_pack.restricted_clauses
+            ),
             controls=_unverified_control_projections(clause_pack),
             unassigned_conflicts=tuple(
                 EligibilityUnassignedConflict(
@@ -891,6 +997,9 @@ class EligibilityReviewProjectionService:
                     member_ids=tuple(group.event_ids or group.exposure_ids),
                 )
                 for group in unassigned_groups
+            ),
+            work_draft_state=(
+                "source_changed" if frozen_work_draft is _STALE_WORK_DRAFT else "not_started"
             ),
         )
 
@@ -935,16 +1044,16 @@ class EligibilityReviewProjectionService:
             if context_id not in context_ids:
                 raise EligibilityReviewProjectionError("审核工作记录与当前资料范围不一致")
             frozen = context_repository.get(context_id)
-            require_current_review_tasks(payload)
             if (
                 current_review_clinical_material_sha256(session, authority)
                 != frozen_review_clinical_material_sha256(frozen)
             ):
-                return None
+                return _STALE_WORK_DRAFT if row.state == "completed" else None
             # Never borrow an older completed result while a newer exact-scope
             # workflow is still running, failed or cancelled.
             if row.state != "completed":
                 return None
+            require_current_review_tasks(payload)
             if frozen.rule_set_sha256 != canonical_hash(rule_set.model_dump(mode="json")):
                 raise EligibilityReviewProjectionError("工作稿对应的方案规则版本与当前节点不一致")
             store = JobStore(session)
@@ -1005,6 +1114,9 @@ class EligibilityReviewProjectionService:
             for item in frozen.judgment_search_results
         }
         output = []
+        predicate_selection = next(
+            (item for item in selections if item.candidate_family == "predicate"), None
+        )
         for item in calculation.components:
             clause = clauses[item.rule_component_id]
             result = item.result
@@ -1027,7 +1139,13 @@ class EligibilityReviewProjectionService:
                     summaries=summaries,
                 ),
                 fact_refs=_fact_refs(
-                    session, _used_fact_ids(result.evaluation), facts_by_id,
+                    session,
+                    _used_fact_ids(result.evaluation),
+                    facts_by_id,
+                    _selected_predicate_locators(
+                        predicate_selection, clause.rule_component_id,
+                        result.evaluation, _used_fact_ids(result.evaluation),
+                    ) if predicate_selection is not None else None,
                 ),
                 gap_type=gap.value if gap is not None else None,
                 determination_mode=clause.determination_mode.value,
@@ -1099,8 +1217,15 @@ class EligibilityReviewProjectionService:
             rule_set_revision=frozen.authority.rule_set_revision,
             evidence_snapshot_v2_id=frozen.authority.evidence_snapshot_v2_id,
             complete_processing_revision_id=frozen.authority.complete_processing_revision_id,
-            clauses=tuple(output),
-            controls=tuple(controls),
+            clauses=tuple(output) + tuple(
+                _restricted_clause_projection(item)
+                for item in frozen.clause_pack.restricted_clauses
+            ),
+            controls=tuple(controls) + (
+                _restricted_control_projections(publication)
+                if publication is not None else ()
+            ),
+            work_draft_state="current",
         )
 
 
@@ -1157,6 +1282,41 @@ def _unverified_control_projections(clause_pack) -> tuple[EligibilityControlProj
             title=control.title,
             source_span_ids=tuple(control.source_span_ids),
             obligations=tuple(obligations),
+        ))
+    result.extend(_restricted_control_projections(publication))
+    return tuple(result)
+
+
+def _restricted_control_projections(publication) -> tuple[EligibilityControlProjection, ...]:
+    result = []
+    for statement in publication.catalog.restricted_statements:
+        interpretive = statement.limitation_kind == "interpretation_unresolved"
+        reason = (
+            "方案原文的适用含义尚未核清：" if interpretive
+            else "方案原文有此要求，但当前审核尚不能可靠计算："
+        ) + "；".join(statement.unresolved_dimensions) + "。本项暂不能判为符合或不符合。"
+        result.append(EligibilityControlProjection(
+            protocol_control_id=statement.restricted_statement_id,
+            display_label="方案补充要求",
+            title=statement.source_quote,
+            source_span_ids=tuple(statement.source_span_ids),
+            obligations=(EligibilityControlObligationProjection(
+                obligation_id=statement.restricted_statement_id,
+                obligation_group_id="restricted",
+                statement=statement.source_quote,
+                source_excerpts=(statement.source_quote,),
+                status="restricted",
+                limitation_kind=statement.limitation_kind,
+                status_label="方案待澄清" if interpretive else "审核方法待完善",
+                reason=reason,
+                fact_refs=(),
+                action_owner="sponsor_medical_or_project" if interpretive else None,
+                action_detail=(
+                    "请澄清该要求的适用对象、时期或例外，并与本版方案原文对应。"
+                    if interpretive else "请完善该项要求的核对方法，不要求研究者替软件补判。"
+                ),
+                action_evidence="方案书面澄清或正式修订" if interpretive else "经核实的审核方法与原文对应关系",
+            ),),
         ))
     return tuple(result)
 def clause_to_rule_component(clause: ClausePackClause):

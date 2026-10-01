@@ -215,6 +215,22 @@ def _fixture(
     return blocks, spans, graph
 
 
+def test_numeric_word_style_id_still_closes_official_rule_range() -> None:
+    blocks, spans, graph = _fixture()
+    for index in (0, 4, 7):
+        blocks[index] = blocks[index].model_copy(
+            update={
+                "style": "110",
+                "style_name": "自控1.1 标题",
+                "outline_level": 1,
+            }
+        )
+    indexed = build_section_index(blocks, graph, spans)
+    catalog = freeze_official_parent_rules(indexed, StudyPhase.PHASE_III)
+    last = next(item for item in catalog.items if item.official_code == "EX-02")
+    assert last.source_span_ids == ("span-body.p6",)
+
+
 def _index(
     *,
     numbering_mode: str = "normal",

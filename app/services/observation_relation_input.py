@@ -120,7 +120,7 @@ def load_observation_relation_input(session, artifact_store, *, candidate_job_id
             "reasons": [] if rows else ["no_observation_sources_in_candidate_input"],
         })
     payload = {
-        "version": "observation-relation-input/v5", "candidate_job_id": candidate_job_id,
+        "version": "observation-relation-input/v6", "candidate_job_id": candidate_job_id,
         "review_context_id": context_id, "review_context_sha256": digest,
         "frozen_input_sha256": material["frozen_input_sha256"],
         "comparison_sha256": material["comparison_sha256"],

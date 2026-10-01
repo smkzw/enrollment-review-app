@@ -7,24 +7,53 @@ from app.agents.protocol_semantic_transport import DeepSeekProtocolAgentTranspor
 
 
 @pytest.mark.parametrize("backend", ["zhipu-coding-plan", "deepseek", "mtplx"])
-def test_explicit_context_policy_is_provider_neutral_and_cache_separated(backend):
+def test_explicit_context_policy_is_provider_neutral_and_cache_separated(backend, monkeypatch):
+    monkeypatch.setattr(
+        "app.llm.mtplx_model_lifecycle.mtplx_deployment_identity",
+        lambda *_: None,
+    )
     options = dict(client=object(), backend=backend, model="test", max_tokens=65536)
     default = DeepSeekProtocolAgentTransport(**options)
     bounded = DeepSeekProtocolAgentTransport(**options, bounded_batch_context=True)
     full = DeepSeekProtocolAgentTransport(**options, bounded_batch_context=False)
     assert bounded.supports_bounded_batch_context is True
     assert full.supports_bounded_batch_context is False
-    assert default.supports_bounded_batch_context is (backend == "mtplx")
+    assert default.supports_bounded_batch_context is True
     identities = {
         t.semantic_cache_identity(output_kind="semantic_candidate")
         for t in (default, bounded, full)
     }
     assert len(identities) == 3
-    for transport in (bounded, full):
+    for transport in (default, bounded, full):
         transport.restore_history(session_id="batch", messages=[
             {"role": "user", "content": "old batch source"},
             {"role": "assistant", "content": "old batch output"},
         ])
         _compact_transport_history(transport, "batch", context="current frozen identity")
+    assert "old batch" not in str(default.history("batch"))
     assert "old batch" not in str(bounded.history("batch"))
     assert "old batch source" in str(full.history("batch"))
+
+
+def test_default_remote_next_batch_sends_only_anchor_and_current_source(monkeypatch):
+    transport = DeepSeekProtocolAgentTransport(
+        client=object(), backend="cms-router", model="test", max_tokens=65536,
+    )
+    transport.restore_history(session_id="batch", messages=[
+        {"role": "user", "content": "old batch source"},
+        {"role": "assistant", "content": "old batch output"},
+    ])
+    _compact_transport_history(transport, "batch", context="frozen batch identity")
+    sent = []
+
+    def complete(messages, *, output_kind):
+        sent.extend(messages)
+        return '{"current": true}'
+
+    monkeypatch.setattr(transport, "_complete", complete)
+    transport.continue_session(
+        session_id="batch", prompt="current rule source", output_kind="semantic_candidate",
+    )
+    assert [message["role"] for message in sent] == ["user", "assistant", "user"]
+    assert "old batch" not in str(sent)
+    assert "current rule source" in sent[-1]["content"]

@@ -58,6 +58,19 @@ def test_distinct_values_inside_window_still_require_resolution():
     assert result.truth == TruthValue.UNKNOWN
 
 
+def test_investigator_judgment_cannot_be_inferred_from_legacy_fact_type_match():
+    expression = AtomicExpression(predicate=AtomicPredicate(
+        predicate_id="investigator-review", subject="laboratory",
+        attribute="measurement", comparator="exists",
+        requires_professional_judgment=True,
+    ))
+    result = evaluate_expression(
+        expression, evaluation_context(facts=[_fact("reported", 3, date(2026, 9, 9))])
+    )
+    assert result.truth == TruthValue.UNKNOWN
+    assert "professional_judgment_unverified" in result.reason_codes
+
+
 @pytest.mark.parametrize("values", [(3,), (3, 3), (3, 9)])
 @pytest.mark.parametrize("reverse", [False, True])
 @pytest.mark.xfail(strict=True, reason="T1 F1: distinguish observation validity from an actual temporal requirement before changing definitive decisions")

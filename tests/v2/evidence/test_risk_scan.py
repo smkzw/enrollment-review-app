@@ -1,6 +1,8 @@
 """风险扫描种子集测试：冻结矩阵、漏检 0、页面级误报 ≤10%。"""
 from __future__ import annotations
 
+from hashlib import sha256
+
 from app.domain.contracts.enums import OcrRiskKind, OcrRiskLevel
 from app.evidence import (
     evaluate_risk_seed,
@@ -120,6 +122,35 @@ def test_compact_lab_analyte_values_are_not_mistaken_for_identifiers() -> None:
         flag.text for flag in flags if flag.kind == OcrRiskKind.NUMERIC_VALUE
     ]
     assert numeric_texts == ["32.5", "28.0", "128"]
+
+
+def test_scanned_lab_result_keeps_polarity_scientific_value_and_unit_together() -> None:
+    text = "HBV-DNA定量 未检测到靶基因 IU/mL 2.00E+01；检出限1.00E+01IU/mL。"
+    flags = scan_ocr_risks(text)
+    assert [f.text for f in flags if f.kind == OcrRiskKind.NEGATION_POLARITY] == ["未检测到"]
+    assert [f.text for f in flags if f.kind == OcrRiskKind.NUMERIC_VALUE] == ["2.00E+01", "1.00E+01"]
+    assert [f.text for f in flags if f.kind == OcrRiskKind.UNIT] == ["IU/mL", "IU/mL"]
+    assert not any(f.kind == OcrRiskKind.DATE for f in flags)
+
+
+def test_contact_number_is_not_a_partial_date() -> None:
+    text = "采样时间:2025-08-15 9:46 联系电话:0311-69095547"
+    dates = [f.text for f in scan_ocr_risks(text) if f.kind == OcrRiskKind.DATE]
+    assert dates == ["2025-08-15 9:46"]
+
+
+def test_frozen_previous_scan_keeps_its_original_flags_and_ids() -> None:
+    text = "HBV-DNA 未检测到靶基因 IU/mL 2.00E+01 电话0311-69095547"
+    flags = scan_ocr_risks(text, rule_version="slice4.6/v2")
+    assert not any(f.kind == OcrRiskKind.NEGATION_POLARITY for f in flags)
+    assert not any(f.kind == OcrRiskKind.UNIT for f in flags)
+    assert [f.text for f in flags if f.kind == OcrRiskKind.NUMERIC_VALUE][:2] == ["2.00", "01"]
+    assert any(f.kind == OcrRiskKind.DATE and f.text == "0311-69" for f in flags)
+    first = flags[0]
+    digest = sha256(
+        f"{first.kind.value}:{first.text_start}:{first.text_end}:slice4.6/v2".encode()
+    ).hexdigest()
+    assert first.risk_id == f"risk-{digest[:16]}"
 
 
 def test_repeated_text_is_informational() -> None:

@@ -437,6 +437,7 @@ export interface FeedbackInput {
   expectedRevisionId: string;
   feedbackKind: FeedbackKind;
   targetRuleCode: string;
+  targetComponentId?: string;
   feedbackNote: string;
   actor?: string;
 }

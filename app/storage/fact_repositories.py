@@ -556,10 +556,14 @@ class FactNormalizationCandidateRepository:
         return contract
 
     def list_by_run(self, run_id: str) -> list[CandidateContract]:
-        rows = self.session.execute(select(FactNormalizationCandidateRecord)).scalars().all()
+        rows = self.session.execute(
+            select(FactNormalizationCandidateRecord).where(
+                FactNormalizationCandidateRecord.run_id == run_id
+            )
+        ).scalars().all()
         contracts = [self._decode_record(row) for row in rows]
         return sorted(
-            (candidate for candidate in contracts if candidate.run_id == run_id),
+            contracts,
             key=lambda candidate: (candidate.created_at, candidate.candidate_id),
         )
 

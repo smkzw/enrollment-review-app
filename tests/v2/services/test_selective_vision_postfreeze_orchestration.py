@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import io
+import json
 import time
 from datetime import timedelta
 from hashlib import sha256
@@ -30,6 +32,7 @@ from typing import Any
 
 import pytest
 import fitz
+from PIL import Image
 from sqlalchemy import update
 
 from app.domain.contracts.enums import (
@@ -45,6 +48,7 @@ from app.domain.contracts.selective_vision_observation import (
 )
 from app.domain.publication import evidence_processing_manifest_hash
 from app.evidence.artifacts import ArtifactStore
+from app.llm.independent_vlm import IndependentVlmChatResult, IndependentVlmSourceFidelityError
 from app.evidence.fingerprint import build_profile_fingerprint
 from app.evidence.selective_vision_review import (
     SKIP_NATIVE_TEXT_PRIMARY,
@@ -181,11 +185,13 @@ def _seed_frozen_revision(
     native_route: bool = False,
     put_native_text: bool = False,
     source_bytes: bytes | None = None,
+    image_bytes: bytes = IMAGE_BYTES,
 ) -> dict[str, Any]:
     """播种已冻结基础处理修订 + 页产物/OCR + 内容寻址页图。"""
     store = ArtifactStore(data_paths)
-    stored = store.put("page_image", IMAGE_BYTES)
-    assert stored.sha256 == IMAGE_SHA
+    image_sha = sha256(image_bytes).hexdigest()
+    stored = store.put("page_image", image_bytes)
+    assert stored.sha256 == image_sha
     native_text_sha = None
     if put_native_text:
         native_text_sha = store.put("native_text", raw_text.encode("utf-8")).sha256
@@ -232,8 +238,8 @@ def _seed_frozen_revision(
             make_artifact(
                 artifact_id="pa-svo-1",
                 version_id="doc-svo-1",
-                page_image=IMAGE_SHA,
-                page_input=IMAGE_SHA,
+                page_image=image_sha,
+                page_input=image_sha,
                 status=PageArtifactStatus.SUCCEEDED,
                 native_text_sha256=native_text_sha,
             )
@@ -243,7 +249,7 @@ def _seed_frozen_revision(
                 page_id="op-svo-1",
                 artifact_id="pa-svo-1",
                 profile_sha=profile.profile_sha256,
-                page_input=IMAGE_SHA,
+                page_input=image_sha,
                 raw_text=raw_text,
             )
         )
@@ -288,7 +294,7 @@ def _seed_frozen_revision(
             "ocr_page_id": page.ocr_page_id,
             "raw_text": page.raw_text,
             "raw_text_sha256": page.raw_text_sha256,
-            "image_sha": IMAGE_SHA,
+            "image_sha": image_sha,
         }
 
 
@@ -672,9 +678,16 @@ def test_job_executor_remote_failure_closes_without_mutating_ocr(
         )
         assert all(row.observation_text is None for row in listed)
         assert all(row.failure_kind == "remote_error" for row in listed)
-    assert SelectiveVisionPostprocessJobService(session_factory).retry_revision_task(
+    service = SelectiveVisionPostprocessJobService(session_factory)
+    failed_view = service.get_revision_task(seeded["revision_id"])
+    assert failed_view.closed_page_count == 1
+    assert failed_view.closed_failure_kind == "remote_error"
+    assert service.retry_revision_task(
         seeded["revision_id"]
     ).state == "queued"
+    queued_view = service.get_revision_task(seeded["revision_id"])
+    assert queued_view.closed_page_count is None
+    assert queued_view.closed_failure_kind is None
 
     async def recovered(plan: SelectiveVisionPlan, inputs):
         page = inputs[0]
@@ -698,9 +711,151 @@ def test_job_executor_remote_failure_closes_without_mutating_ocr(
                 seeded["page_artifact_id"]
             ) if row.status == SelectiveVisionObservationStatus.SUCCEEDED
         ]) == 1
+    completed_view = service.get_revision_task(seeded["revision_id"])
+    assert completed_view.closed_page_count == 0
+    assert completed_view.closed_failure_kind is None
     assert SelectiveVisionPostprocessJobService(session_factory).coverage_page_ids_match(
         seeded["revision_id"]
     ) is True
+    _assert_ocr_immutable(session_factory, seeded)
+
+
+def test_rejected_source_response_is_diagnostic_only_and_retry_reads_page(
+    session_factory, data_paths,
+):
+    seeded = _seed_frozen_revision(
+        session_factory, data_paths, revision_id="rev-svo-source-diagnostic"
+    )
+
+    async def failed(plan, inputs):
+        rejected = IndependentVlmChatResult(
+            text="source_ref=forged-page\nRejected printed text",
+            model="mock-vlm", finish_reason="stop",
+            usage={"completion_tokens": 13, "prompt_tokens": 17, "total_tokens": 30},
+            reasoning_content="private reasoning must not be persisted",
+            raw_message={"reasoning_content": "private reasoning must not be persisted"},
+            allowed_source_refs=(inputs[0].source_ref,),
+        )
+        return SelectiveVisionReviewOutcome(
+            plan=plan,
+            closed_error=SelectiveVisionClosedError(
+                "invented source", failure_kind="source_fidelity", disabled=True,
+                cause=IndependentVlmSourceFidelityError(
+                    "invented source", rejected_response=rejected
+                ),
+            ),
+        )
+
+    service = SelectiveVisionPostprocessJobService(session_factory)
+    created = service.enqueue_for_revision(seeded["revision_id"])
+    assert _build_runner(session_factory, data_paths, review_runner=failed).run_once()
+    with session_factory() as session:
+        store = JobStore(session, now=utc_now)
+        assert store.snapshot(created.job_id).state == "failed_final"
+        checkpoint = store.get_last_checkpoint(created.job_id, SELECTIVE_VISION_POSTPROCESS_STEP_ID)[1]
+        assert checkpoint["status"] == "failed"
+        assert checkpoint["closed_page_artifact_ids"] == [seeded["page_artifact_id"]]
+        diagnostic_bytes = ArtifactStore(data_paths).read(checkpoint["rejected_response_artifact"])
+        assert sha256(diagnostic_bytes).hexdigest() == checkpoint["rejected_response_sha256"]
+        diagnostic = json.loads(diagnostic_bytes)
+        assert diagnostic["text"].startswith("source_ref=forged-page")
+        assert diagnostic["usage"]["total_tokens"] == 30
+        assert b"private reasoning" not in diagnostic_bytes
+        assert all(row.observation_text is None for row in
+                   SelectiveVisionObservationRepository(session).list_by_page_artifact(
+                       seeded["page_artifact_id"]))
+    assert not service.coverage_page_ids_match(seeded["revision_id"])
+    service.retry_revision_task(seeded["revision_id"])
+    calls = []
+
+    async def recovered(plan, inputs):
+        page = inputs[0]
+        calls.append(page.source_ref)
+        return SelectiveVisionReviewOutcome(
+            plan=plan,
+            observations=(SelectiveVisionObservation(
+                source_refs=(page.source_ref,), page_ordinals=(page.page_ordinal,),
+                reasons=(VISION_REASON_SCAN_OR_IMAGE_ONLY,),
+                text=f"source_ref={page.source_ref}\nVerified printed text",
+                model="mock-vlm", finish_reason="stop",
+            ),),
+        )
+
+    assert _build_runner(session_factory, data_paths, review_runner=recovered).run_once()
+    assert len(calls) == 1
+    assert service.get_revision_task(seeded["revision_id"]).state == "completed"
+    assert service.coverage_page_ids_match(seeded["revision_id"])
+    _assert_ocr_immutable(session_factory, seeded)
+
+
+def test_failed_page_reopens_in_source_bound_reading_view_without_changing_ocr(
+    session_factory, data_paths,
+):
+    buffer = io.BytesIO()
+    Image.new("RGB", (595, 842), "white").save(buffer, format="PNG")
+    seeded = _seed_frozen_revision(
+        session_factory, data_paths,
+        revision_id="rev-svo-reading-view",
+        image_bytes=buffer.getvalue(),
+    )
+
+    async def failed(plan, inputs):
+        return SelectiveVisionReviewOutcome(
+            plan=plan,
+            closed_error=SelectiveVisionClosedError(
+                "timed out", failure_kind="remote_error", disabled=True,
+            ),
+        )
+
+    service = SelectiveVisionPostprocessJobService(session_factory)
+    original = service.enqueue_for_revision(seeded["revision_id"])
+    assert _build_runner(session_factory, data_paths, review_runner=failed).run_once()
+    assert service.get_revision_task(seeded["revision_id"]).failed_page_artifact_ids == (
+        seeded["page_artifact_id"],
+    )
+    with pytest.raises(Exception, match="阅读方向|未能核验"):
+        service.retry_revision_task(
+            seeded["revision_id"], reading_rotations={"unrelated-page": 270},
+        )
+
+    reopened = service.retry_revision_task(
+        seeded["revision_id"],
+        reading_rotations={seeded["page_artifact_id"]: 270},
+    )
+    assert reopened.job_id != original.job_id
+    assert service.get_revision_task(seeded["revision_id"]).job_id == reopened.job_id
+
+    async def rotated(plan, inputs):
+        page = inputs[0]
+        with Image.open(io.BytesIO(page.image_bytes)) as image:
+            assert image.size == (842, 595)
+        return SelectiveVisionReviewOutcome(
+            plan=plan,
+            observations=(SelectiveVisionObservation(
+                source_refs=(page.source_ref,),
+                page_ordinals=(page.page_ordinal,),
+                reasons=(VISION_REASON_SCAN_OR_IMAGE_ONLY,),
+                text=f"source_ref={page.source_ref}\n这只是来源观察，不是临床事实。",
+                model="mock-vlm", finish_reason="stop",
+            ),),
+        )
+
+    assert _build_runner(session_factory, data_paths, review_runner=rotated).run_once()
+    with session_factory() as session:
+        store = JobStore(session, now=utc_now)
+        assert store.snapshot(original.job_id).state == "failed_final"
+        assert store.snapshot(reopened.job_id).state == "completed"
+        rows = SelectiveVisionObservationRepository(session).list_by_page_artifact(
+            seeded["page_artifact_id"]
+        )
+        assert len([row for row in rows if row.status == SelectiveVisionObservationStatus.CLOSED]) == 1
+        succeeded = [row for row in rows if row.status == SelectiveVisionObservationStatus.SUCCEEDED]
+        assert len(succeeded) == 1
+        assert succeeded[0].page_image_sha256 == seeded["image_sha"]
+        assert succeeded[0].reading_view is not None
+        assert succeeded[0].reading_view.clockwise_degrees == 270
+        assert succeeded[0].reading_view.source_image_sha256 == seeded["image_sha"]
+    assert service.coverage_page_ids_match(seeded["revision_id"])
     _assert_ocr_immutable(session_factory, seeded)
 
 

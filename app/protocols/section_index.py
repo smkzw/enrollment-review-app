@@ -283,13 +283,17 @@ def _same_container(left: StructureBlock, right: StructureBlock) -> bool:
     return _table_root(left) == _table_root(right)
 
 
-def _looks_like_generic_boundary(block: StructureBlock) -> bool:
+def _looks_like_generic_boundary(
+    block: StructureBlock, *, section_heading_level: int | None = None
+) -> bool:
     if block.document_part != DocumentPart.BODY or not _normalize_text(block.text):
         return False
     if _heading_kind(block) is not None:
         return True
     text = _normalize_text(block.text)
-    style = (block.style or "").lower()
+    if block.outline_level is not None and section_heading_level is not None:
+        return block.outline_level <= section_heading_level
+    style = (block.style_name or block.style or "").lower()
     if any(token in style for token in ("heading", "title", "标题")) and len(text) <= 120:
         return True
     numbering = block.numbering
@@ -721,7 +725,9 @@ def _next_boundary(
     for block in sorted(blocks, key=lambda item: (item.block_order, item.source_ref)):
         if block.block_order <= exclusion.block_order or not _same_container(exclusion, block):
             continue
-        if _looks_like_generic_boundary(block):
+        if _looks_like_generic_boundary(
+            block, section_heading_level=exclusion.outline_level
+        ):
             return block.block_order
     return max((block.block_order for block in blocks), default=exclusion.block_order) + 1
 

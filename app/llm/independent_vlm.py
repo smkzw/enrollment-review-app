@@ -127,6 +127,10 @@ class IndependentVlmBalanceError(IndependentVlmRemoteError):
 class IndependentVlmSourceFidelityError(IndependentVlmError):
     """Response invented or omitted required source locator identity."""
 
+    def __init__(self, message: str, *, rejected_response=None) -> None:
+        super().__init__(message)
+        self.rejected_response = rejected_response
+
 
 @dataclass(frozen=True)
 class PageVisionInput:
@@ -601,13 +605,6 @@ async def independent_vlm_chat(
                     usage[key] = value
 
     allowed = tuple(allowed_source_refs or ())
-    if enforce_source_fidelity and allowed:
-        assert_source_locator_fidelity(
-            text,
-            allowed,
-            require_claim=require_source_claim,
-        )
-
     raw_message: dict[str, Any] = {}
     if message is not None:
         raw_message = {
@@ -616,7 +613,7 @@ async def independent_vlm_chat(
             "reasoning_content": reasoning,
         }
 
-    return IndependentVlmChatResult(
+    result = IndependentVlmChatResult(
         text=text,
         model=str(getattr(resp, "model", None) or kwargs["model"]),
         finish_reason=getattr(choice, "finish_reason", None) if choice else None,
@@ -625,6 +622,13 @@ async def independent_vlm_chat(
         raw_message=raw_message,
         allowed_source_refs=allowed,
     )
+    if enforce_source_fidelity and allowed:
+        try:
+            assert_source_locator_fidelity(text, allowed, require_claim=require_source_claim)
+        except IndependentVlmSourceFidelityError as exc:
+            # Rejected output is diagnostic evidence, never a page observation.
+            raise IndependentVlmSourceFidelityError(str(exc), rejected_response=result) from exc
+    return result
 
 
 async def independent_vlm_page_chat(

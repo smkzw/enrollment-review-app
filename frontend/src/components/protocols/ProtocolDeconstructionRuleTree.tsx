@@ -21,7 +21,7 @@ export function ProtocolDeconstructionRuleTree({
   const selectedRuleId = useMemo(
     () =>
       rules.find((rule) =>
-        rule.components.some(
+        [...rule.components, ...rule.restrictedComponents].some(
           (component) => component.componentId === selectedComponentId,
         ),
       )?.ruleId ?? rules[0]?.ruleId ?? null,
@@ -44,7 +44,7 @@ export function ProtocolDeconstructionRuleTree({
     for (const rule of rules) {
       keys.push(`rule:${rule.ruleId}`);
       if (expanded.has(rule.ruleId)) {
-        for (const component of rule.components) {
+        for (const component of [...rule.components, ...rule.restrictedComponents]) {
           keys.push(`component:${component.componentId}`);
         }
       }
@@ -125,6 +125,27 @@ export function ProtocolDeconstructionRuleTree({
                       >
                         <span className="protocol-tree__code">{component.displayCode}</span>
                         <span className="protocol-tree__text">{component.title}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+                {rule.restrictedComponents.map((component) => {
+                  const selected = selectedComponentId === component.componentId;
+                  return (
+                    <li key={component.componentId} role="treeitem">
+                      <button
+                        id={`protocol-tree-component:${component.componentId}`}
+                        type="button"
+                        className={`protocol-tree__component${selected ? " protocol-tree__component--selected" : ""}`}
+                        aria-selected={selected}
+                        onClick={() => onSelectComponent(component.componentId)}
+                        onKeyDown={(event) => onKeyDown(event, `component:${component.componentId}`)}
+                      >
+                        <span className="protocol-tree__code">{component.displayCode}</span>
+                        <span className="protocol-tree__text">
+                          {component.title} · {component.limitationKind === "consumer_unavailable"
+                            ? "审核方法待补齐" : "方案含义待核清"}
+                        </span>
                       </button>
                     </li>
                   );

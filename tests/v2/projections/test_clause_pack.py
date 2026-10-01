@@ -21,6 +21,7 @@ from app.domain.contracts.rules import (
     Rule,
     RuleComponent,
     RuleSet,
+    RestrictedRuleComponent,
     TimeConstraint,
 )
 from app.projections.clause_pack import (
@@ -164,6 +165,41 @@ def test_clause_pack_is_stable_content_addressed_and_verifiable() -> None:
     changed = rule_set.model_copy(deep=True)
     changed.rules[0].source_text = "方案原文发生受控修订。"
     assert project_clause_pack(changed).clause_pack_sha256 != first.clause_pack_sha256
+
+
+def test_source_bound_unresolved_requirement_is_versioned_and_not_executable() -> None:
+    rule_set = _rule_set(_component("number", AtomicExpression(predicate=_predicate(
+        "number", comparator=Comparator.GTE, value=18, unit="岁",
+    ))))
+    rule_set.rules[0].restricted_components = [RestrictedRuleComponent(
+        rule_component_id="component-unresolved",
+        display_code="IN-01-b",
+        title="另项原文要求",
+        source_span_ids=["span-in"],
+        source_excerpts=["另项原文要求"],
+        limitation_kind="interpretation_unresolved",
+        unresolved_dimensions=["适用对象尚未核清"],
+    )]
+    pack = project_clause_pack(rule_set)
+    assert pack.projection_version == "clause-pack/v4"
+    assert len(pack.clauses) == len(pack.restricted_clauses) == 1
+    assert pack.restricted_clauses[0].clause_id == "component-unresolved"
+    verify_clause_pack(pack)
+    assert ClausePack.model_validate(pack.model_dump(mode="json")) == pack
+
+    changed = pack.model_copy(deep=True)
+    changed.restricted_clauses[0].unresolved_dimensions = ["时间范围尚未核清"]
+    with pytest.raises(ClausePackProjectionError, match="哈希"):
+        verify_clause_pack(changed)
+
+
+def test_legacy_pack_bytes_do_not_gain_empty_restricted_list() -> None:
+    pack = project_clause_pack(_rule_set(_component(
+        "presence", AtomicExpression(predicate=_predicate("presence")),
+    )))
+    assert "restricted_clauses" not in pack.model_dump(mode="json")
+    assert pack.projection_version == "clause-pack/v1"
+    verify_clause_pack(pack)
 
 
 def test_clause_pack_verifier_rejects_tampering() -> None:

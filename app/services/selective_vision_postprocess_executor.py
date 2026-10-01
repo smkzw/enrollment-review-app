@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, Callable
@@ -21,7 +22,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.domain.contracts.enums import PageArtifactStatus
+from app.domain.contracts.reading_view import ReadingViewBinding
 from app.evidence.artifacts import ArtifactStore
+from app.evidence.reading_view import make_reading_view
 from app.evidence.ocr_adapter import PAGE_IMAGE_MIME
 from app.evidence.selective_vision_review import (
     SELECTIVE_VISION_PLAN_VERSION,
@@ -123,11 +126,16 @@ def load_selective_vision_page_materials_for_revision(
     *,
     evidence_processing_revision_id: str,
     artifact_store: ArtifactStore,
+    page_artifact_ids: set[str] | None = None,
 ) -> list[SelectiveVisionObservationPageMaterial]:
     """从已冻结修订清单装载页材料；图像字节来自不可变工件库。"""
     revision = EvidenceProcessingRevisionRepository(session).get(
         evidence_processing_revision_id
     )
+    if page_artifact_ids is not None and page_artifact_ids - {
+        entry.page_artifact_id for entry in revision.manifest
+    }:
+        raise ValueError("所选页面超出冻结资料范围")
     artifact_repo = PageArtifactRepository(session)
     ocr_repo = OcrPageRepository(session)
     version_repo = SourceDocumentRepository(session)
@@ -135,6 +143,8 @@ def load_selective_vision_page_materials_for_revision(
     pdf_marks_by_source: dict[str, dict[int, int] | None] = {}
 
     for entry in revision.manifest:
+        if page_artifact_ids is not None and entry.page_artifact_id not in page_artifact_ids:
+            continue
         artifact = artifact_repo.get(entry.page_artifact_id)
         version = version_repo.get(entry.source_document_version_id)
         media_kind = _media_kind(version.media_type, version.file_name)
@@ -253,7 +263,7 @@ def create_selective_vision_postprocess_executor(
                 error_code="SELECTIVE_VISION_STEP_UNKNOWN",
                 detail="选择性视觉后处理步骤无法识别。",
             )
-        if context.last_checkpoint is not None:
+        if context.last_checkpoint is not None and context.last_checkpoint.get("status") == "completed":
             return dict(context.last_checkpoint)
 
         payload = context.job_payload or {}
@@ -292,6 +302,38 @@ def create_selective_vision_postprocess_executor(
                 retryable=True,
                 error_code="SELECTIVE_VISION_MATERIAL_LOAD_FAILED",
                 detail="已冻结资料页清单暂无法读取，系统将稍后重试视觉后处理。",
+            ) from exc
+        try:
+            rotations = payload.get("reading_rotations", {})
+            if not isinstance(rotations, dict) or set(rotations) - {
+                page.page_artifact_id for page in materials
+            }:
+                raise ValueError("阅读方向超出冻结页面范围")
+            if rotations:
+                oriented = []
+                for page in materials:
+                    angle = rotations.get(page.page_artifact_id)
+                    if angle is None:
+                        oriented.append(page)
+                        continue
+                    if type(angle) is not int or angle not in (90, 180, 270) or page.image_bytes is None:
+                        raise ValueError("阅读方向或原始页图不可用")
+                    view = make_reading_view(
+                        page.image_bytes,
+                        source_page_artifact_id=page.page_artifact_id,
+                        source_image_sha256=page.page_image_sha256,
+                        clockwise_degrees=angle,
+                    )
+                    artifact_store.put("reading_view_image", view.image_bytes)
+                    oriented.append(replace(
+                        page, reading_view=ReadingViewBinding.model_validate(view.identity())
+                    ))
+                materials = oriented
+        except (ValueError, TypeError) as exc:
+            raise StepFailure(
+                retryable=False,
+                error_code="SELECTIVE_VISION_READING_VIEW_INVALID",
+                detail="本次资料页的阅读方向无法与原件核对，请重新选择后发起核实。",
             ) from exc
 
         try:
@@ -335,10 +377,37 @@ def create_selective_vision_postprocess_executor(
             or set(observed_ids) != set(eligible_ids)
         )
         if incomplete:
+            diagnostic = {
+                "status": "failed",
+                "evidence_processing_revision_id": revision_id,
+                "eligible_page_artifact_ids": eligible_ids,
+                "observed_page_artifact_ids": observed_ids,
+                "eligible_count": len(eligible_ids),
+                "observation_count": len(observed_ids),
+                "skipped_count": len(result.skipped),
+                "closed_count": len(result.closed),
+                "closed_page_artifact_ids": [row.page_artifact_id for row in result.closed],
+                "closed_failure_kind": result.closed_error.failure_kind if result.closed_error else None,
+            }
+            rejected = getattr(getattr(result.closed_error, "cause", None), "rejected_response", None)
+            if rejected is not None:
+                artifact = artifact_store.put("raw_response", json.dumps({
+                    "purpose": "rejected_selective_vision_diagnostic/v1",
+                    "job_id": context.job_id,
+                    "evidence_processing_revision_id": revision_id,
+                    "model": rejected.model,
+                    "finish_reason": rejected.finish_reason,
+                    "usage": dict(rejected.usage),
+                    "allowed_source_refs": list(rejected.allowed_source_refs),
+                    "text": rejected.text,
+                }, ensure_ascii=False, sort_keys=True).encode("utf-8"))
+                diagnostic["rejected_response_artifact"] = artifact.storage_ref
+                diagnostic["rejected_response_sha256"] = artifact.sha256
             raise StepFailure(
                 retryable=False,
                 error_code="SELECTIVE_VISION_PAGES_UNVERIFIED",
                 detail="部分原始资料页尚未核实或无法读取；已核实页面已保留，可重试未完成的页面。",
+                diagnostic_checkpoint=diagnostic,
             )
         return {
             "job_type": SELECTIVE_VISION_POSTPROCESS_JOB_TYPE,

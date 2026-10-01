@@ -9,7 +9,10 @@ from __future__ import annotations
 import importlib.util
 import hashlib
 import json
+from contextlib import nullcontext
+from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -47,6 +50,47 @@ def smoke():
 
 def _prompt_payload(prompt: str, marker: str) -> dict[str, Any]:
     return json.loads(prompt.split(marker, 1)[1].split("\n\n", 1)[0])
+
+
+def test_failed_deep_checkpoint_remains_a_visible_model_failure(smoke, monkeypatch):
+    class Store:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def get_job(self, job_id):
+            return SimpleNamespace(state="failed_final")
+
+        def list_steps(self, job_id):
+            return [SimpleNamespace(step_id="deep_0001", state="failed_final",
+                                    error_code="PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID")]
+
+        def list_event_rows(self, job_id):
+            return [SimpleNamespace(event=SimpleNamespace(
+                step_id="deep_0001", event_type="step_failed",
+                payload={"detail": "来源目标未逐项覆盖"},
+            ))]
+
+        def get_last_checkpoint(self, job_id, step_id):
+            return "checkpoint", {"stage": "deep_failure_diagnostic", "attempts": [
+                {"outcome": "schema_invalid"}, {"outcome": "publication_invalid"},
+            ]}
+
+    monkeypatch.setattr(smoke, "JobStore", Store)
+    metrics = smoke._control_metrics(
+        lambda: nullcontext(object()), "job", {},
+        now=lambda: datetime.now(timezone.utc),
+    )
+    assert metrics["failure"] == {
+        "step_id": "deep_0001",
+        "error_code": "PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID",
+        "detail": "来源目标未逐项覆盖",
+    }
+    assert metrics["deep"]["batches"][0]["state"] == "failed_final"
+    assert metrics["deep"]["completed_batch_count"] == 0
+    assert metrics["deep"]["failed_batch_count"] == 1
+    assert metrics["deep"]["schema_repair_count"] == 1
+    assert metrics["discovery"]["schema_repair_count"] == 0
+    assert "CONTROL_JOB_NOT_COMPLETED" in smoke._candidate_gate_failure_codes(metrics)
 
 
 class _FakeDiscoveryTransport:

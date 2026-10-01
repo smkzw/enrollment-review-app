@@ -21,7 +21,10 @@ export type EligibilityDecisionWire =
 export type EligibilityDeterminationModeWire =
   | "deterministic"
   | "semantic"
-  | "investigator_judgment";
+  | "investigator_judgment"
+  | "restricted";
+
+export type EligibilityLimitationKindWire = "interpretation_unresolved" | "consumer_unavailable";
 
 export interface EligibilityFactRefWire {
   excerpt: string | null;
@@ -45,12 +48,14 @@ export interface EligibilityClauseWire {
   fact_refs: EligibilityFactRefWire[];
   gap_type: string | null;
   determination_mode: EligibilityDeterminationModeWire;
+  limitation_kind?: EligibilityLimitationKindWire | null;
 }
 
 export type EligibilityControlStatusWire =
   | "fulfilled"
   | "unfulfilled"
   | "unverified"
+  | "restricted"
   | "not_applicable";
 
 export interface EligibilityControlObligationWire {
@@ -59,9 +64,13 @@ export interface EligibilityControlObligationWire {
   statement: string;
   status: EligibilityControlStatusWire;
   status_label: string;
+  limitation_kind?: EligibilityLimitationKindWire | null;
   reason: string;
   fact_refs: EligibilityFactRefWire[];
   continuing_note?: string | null;
+  action_owner?: "investigator" | "crc" | "cra" | "sponsor_medical_or_project" | null;
+  action_detail?: string | null;
+  action_evidence?: string | null;
 }
 
 export interface EligibilityControlWire {
@@ -73,6 +82,7 @@ export interface EligibilityControlWire {
 }
 
 export interface EligibilityReviewWire {
+  work_draft_state?: "not_started" | "current" | "source_changed";
   unassigned_conflicts?: { conflict_group_id: string; member_kind: "event" | "exposure"; member_ids: string[] }[];
   subject_id: string;
   review_episode_id: string;

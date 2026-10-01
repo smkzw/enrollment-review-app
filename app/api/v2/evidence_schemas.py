@@ -12,6 +12,7 @@ from datetime import datetime
 from pydantic import Field, field_validator
 
 from app.api.v2.schemas import _StrictModel
+from app.domain.contracts.evidence_ingestion import DocumentCategory, SourceCategory
 from app.domain.contracts.enums import (
     UploadConflictResolution,
     UploadMode,
@@ -64,6 +65,8 @@ class EvidenceMetadataRevisionDTO(_StrictModel):
     revision: int
     document_type: str
     source_party: str
+    document_category: DocumentCategory | None = None
+    source_category: SourceCategory | None = None
     reason: str
     is_auto_suggestion: bool
     supersedes_metadata_revision_id: str | None = None
@@ -74,6 +77,8 @@ class EvidenceMetadataRevisionDTO(_StrictModel):
 class EvidenceMetadataRevisionRequest(_StrictModel):
     document_type: str = Field(min_length=1, max_length=128)
     source_party: str = Field(min_length=1, max_length=128)
+    document_category: DocumentCategory | None = None
+    source_category: SourceCategory | None = None
     reason: str = Field(min_length=1, max_length=500)
     expected_metadata_revision: int = Field(ge=1)
     idempotency_key: str = Field(min_length=1, max_length=256)
@@ -103,6 +108,7 @@ class EvidenceSnapshotMemberDTO(_StrictModel):
     file_name: str
     media_type: str
     version_number: int
+    uploaded_by: str
     origin: str
     origin_label: str
     metadata_head: EvidenceMetadataRevisionDTO

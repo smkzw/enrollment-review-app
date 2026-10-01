@@ -9,12 +9,14 @@ from app.domain.contracts.evidence import ClinicalFact
 from app.domain.contracts.enums import FactPolarity
 from app.domain.contracts.repeat_scheme import RepeatScheme
 from app.domain.expression import EvaluationContext
+from app.domain.observation_relation_graph import reused_fact_groups_follow_source_chain
 from app.domain.publication import canonical_hash
 from app.domain.repeat_result_selection import RepeatResultSelection
 
 
 def aggregate_numeric_acquisitions(
     groups: Sequence[Sequence[ClinicalFact]], *, operation: str | None, unit_required: bool,
+    allow_reused_facts: bool = False,
 ) -> tuple[Fraction | None, str | None, tuple[str, ...]]:
     """Collapse representations of one acquisition before exact aggregation."""
     if not groups:
@@ -24,7 +26,7 @@ def aggregate_numeric_acquisitions(
     for group in groups:
         group_values = set()
         for fact in group:
-            if fact.fact_id in seen_fact_ids:
+            if fact.fact_id in seen_fact_ids and not allow_reused_facts:
                 return None, None, ("repeat_result_acquisition_overlap",)
             seen_fact_ids.add(fact.fact_id)
             if fact.conflict_group_id:
@@ -93,6 +95,7 @@ def calculate_repeat_numeric_result(
     selection: RepeatResultSelection, graph: dict, context: EvaluationContext, *,
     scheme: RepeatScheme, qualified_value_fact_ids: frozenset[str],
     unit_required: bool = True,
+    qualified_value_appearance_ids: frozenset[str] = frozenset(),
 ) -> RepeatNumericResult:
     """Use all qualified records of each acquisition and collapse equal values.
 
@@ -139,9 +142,21 @@ def calculate_repeat_numeric_result(
     facts = {item.fact_id: item for item in context.facts}
     if not set(fact_ids) <= qualified_value_fact_ids or not set(fact_ids) <= facts.keys():
         return unresolved("repeat_result_value_unverified")
+    appearance_graph = graph.get("version") == "observation-relation-graph/v3"
+    if appearance_graph:
+        if not reused_fact_groups_follow_source_chain(graph):
+            return unresolved("repeat_acquisition_identity_unverified")
+        required_appearances = {
+            appearance_id for group_id in selected for appearance_id in
+            next(item["appearance_ids"] for item in graph["acquisition_groups"]
+                 if item["group_id"] == group_id)
+        }
+        if not required_appearances <= qualified_value_appearance_ids:
+            return unresolved("repeat_result_value_unverified")
     value, unit, reasons = aggregate_numeric_acquisitions(
         [[facts[fact_id] for fact_id in groups[group_id]] for group_id in selected],
         operation=operation, unit_required=unit_required,
+        allow_reused_facts=appearance_graph,
     )
     if reasons:
         return unresolved(*reasons)

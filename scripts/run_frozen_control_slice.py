@@ -19,8 +19,33 @@ from app.agents.protocol_control_deconstructor import (
     DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE,
     ProtocolControlAgentRunner,
 )
-from app.domain.contracts.protocol_controls import ProtocolControlDiscoveryToDeepPlan
+from app.domain.contracts.agent_io import ProtocolDeconstructionInput
+from app.domain.contracts.protocol_controls import (
+    ProtocolControlDiscoveryPlan, ProtocolControlDiscoveryToDeepPlan,
+    ProtocolSectionCoverageManifest,
+)
+from app.domain.contracts.rules import WorkflowStage
+from app.protocols.protocol_control_planning import plan_protocol_control_deep_batches_from_discovery
+from app.storage.codecs import verify_payload_sha256
 from app.services.protocol_control_execution import _validate_deep_batch_output
+
+
+def replan_frozen_slice(payload: dict, previous: ProtocolControlDiscoveryToDeepPlan,
+                        max_owned_units: int) -> ProtocolControlDiscoveryToDeepPlan:
+    """Repartition the complete frozen ledger; never select or drop source units."""
+    discovery = ProtocolControlDiscoveryPlan.model_validate(payload["discovery_plan"])
+    source = ProtocolDeconstructionInput.model_validate(payload["source_input"])
+    decisions = {item.structure_unit_id: item for item in previous.discovery_decisions}
+    return plan_protocol_control_deep_batches_from_discovery(
+        ProtocolSectionCoverageManifest.model_validate(payload["coverage_manifest"]),
+        discovery,
+        [[decisions[unit_id] for unit_id in batch.target_structure_unit_ids]
+         for batch in discovery.batches],
+        source.parent_rule_catalog, source.required_procedure_catalog,
+        max_owned_units_per_batch=max_owned_units,
+        workflow_stages=[WorkflowStage.model_validate(item)
+                         for item in payload.get("workflow_stages", [])],
+    )
 
 
 def main() -> int:
@@ -30,18 +55,22 @@ def main() -> int:
     parser.add_argument("--batch-number", type=int, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--max-schema-repairs", type=int, default=2)
+    parser.add_argument("--replan-max-owned-units", type=int,
+                        help="仅在内存中用现有规划器重新分包；批次序号指新计划，不改旧作业")
     parser.add_argument("--run", action="store_true", help="确认发起真实产品模型请求")
     args = parser.parse_args()
     if args.batch_number < 1 or args.max_schema_repairs < 0:
         parser.error("批次序号须从1开始，修订预算不得为负")
+    if args.replan_max_owned_units is not None and args.replan_max_owned_units < 1:
+        parser.error("重新分包的单元上限须为正整数")
     database = args.database.resolve(strict=True)
     connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
     try:
         job = connection.execute(
-            "SELECT state FROM jobs WHERE job_id=?", (args.job_id,)
+            "SELECT state, payload_json, payload_sha256 FROM jobs WHERE job_id=?", (args.job_id,)
         ).fetchone()
         closure = connection.execute(
-            "SELECT payload_json FROM job_checkpoints "
+            "SELECT payload_json, payload_sha256 FROM job_checkpoints "
             "WHERE job_id=? AND step_id='deterministic_closure' ORDER BY created_at DESC LIMIT 1",
             (args.job_id,),
         ).fetchone()
@@ -49,9 +78,11 @@ def main() -> int:
         connection.close()
     if job is None or closure is None or job[0] not in {"failed_final", "cancelled", "completed"}:
         raise ValueError("只接受已有终态且具有冻结深审计划的作业")
-    plan = ProtocolControlDiscoveryToDeepPlan.model_validate(
-        json.loads(closure[0])["deep_plan"]
-    )
+    payload = verify_payload_sha256(job[1], job[2])
+    saved_closure = verify_payload_sha256(closure[0], closure[1])
+    previous = ProtocolControlDiscoveryToDeepPlan.model_validate(saved_closure["deep_plan"])
+    plan = (replan_frozen_slice(payload, previous, args.replan_max_owned_units)
+            if args.replan_max_owned_units is not None else previous)
     batch = next((item for item in plan.batches
                   if item.batch_number == args.batch_number), None)
     if batch is None:
@@ -59,6 +90,11 @@ def main() -> int:
     identity = {
         "source_job_id": args.job_id,
         "source_job_state": job[0],
+        "source_job_payload_sha256": job[2],
+        "source_closure_sha256": closure[1],
+        "source_plan_id": previous.plan_id,
+        "diagnostic_plan_id": plan.plan_id,
+        "replan_max_owned_units": args.replan_max_owned_units,
         "batch_number": args.batch_number,
         "batch_id": batch.batch_id,
         "protocol_document_sha256": plan.protocol_document_sha256,
@@ -87,7 +123,9 @@ def main() -> int:
         batch, transport,
         output_validator=lambda output: _validate_deep_batch_output(batch, output),
     )
-    record = {**identity, "result": result.model_dump(mode="json")}
+    record = {**identity, "frozen_batch": batch.model_dump(mode="json"),
+              "result": result.model_dump(mode="json")}
+    record["call_receipts"] = transport.take_call_receipts()
     record["attempt_raw_outputs"] = [attempt.raw_output_text for attempt in result.attempts]
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("x", encoding="utf-8") as stream:

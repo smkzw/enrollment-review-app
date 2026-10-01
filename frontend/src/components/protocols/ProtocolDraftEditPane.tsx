@@ -3,13 +3,13 @@
  */
 
 import { ExpressionView } from "../review/ExpressionView";
-import type { ProtocolDraftComponentView } from "../../domain/protocolViewModels";
+import type { ProtocolDraftItemView } from "../../domain/protocolViewModels";
 import type { IntegrityIssueView } from "../../api/protocolWorkbenchTypes";
 import { EmptyState } from "../shell/Feedback";
 import type { ExpressionNodeView } from "../../domain/viewModels";
 
 interface ProtocolDraftEditPaneProps {
-  component: ProtocolDraftComponentView | null;
+  component: ProtocolDraftItemView | null;
   revisionLabel: string;
   issues: ReadonlyArray<IntegrityIssueView>;
 }
@@ -27,7 +27,7 @@ function collectPredicateIds(expression: ExpressionNodeView | null): Set<string>
 
 export function isIntegrityIssueRelatedToComponent(
   issue: IntegrityIssueView,
-  component: ProtocolDraftComponentView,
+  component: ProtocolDraftItemView,
 ): boolean {
   const componentRefs = new Set<string>([
     component.componentId,
@@ -35,8 +35,8 @@ export function isIntegrityIssueRelatedToComponent(
     component.displayCode,
     component.displayCode.split("-")[0],
     ...component.sourceRefs,
-    ...collectPredicateIds(component.expression),
-    ...collectPredicateIds(component.exceptionExpression),
+    ...("expression" in component ? collectPredicateIds(component.expression) : []),
+    ...("exceptionExpression" in component ? collectPredicateIds(component.exceptionExpression) : []),
   ]);
 
   return issue.affectedRefs.some((ref) =>
@@ -69,7 +69,11 @@ export function ProtocolDraftEditPane({
           <span className="protocol-edit-pane__code">{component.displayCode}</span>
           {component.title}
         </h3>
-        <p className="protocol-edit-pane__meta">{revisionLabel} · 请逐项核对原文、逻辑和资料要求</p>
+        <p className="protocol-edit-pane__meta">
+          {revisionLabel} · {"expression" in component
+            ? "请逐项核对原文、逻辑和资料要求"
+            : "请核对尚未厘清的方案原文含义"}
+        </p>
       </header>
 
       <section className="protocol-edit-pane__section" aria-labelledby="protocol-edit-source">
@@ -87,15 +91,25 @@ export function ProtocolDraftEditPane({
         )}
       </section>
 
-      <section className="protocol-edit-pane__section" aria-labelledby="protocol-edit-logic">
-        <h4 id="protocol-edit-logic" className="protocol-edit-pane__section-title">
-          逻辑结构
-        </h4>
-        <ExpressionView
-          expression={component.expression}
-          exception={component.exceptionExpression}
-        />
-      </section>
+      {"expression" in component ? (
+        <section className="protocol-edit-pane__section" aria-labelledby="protocol-edit-logic">
+          <h4 id="protocol-edit-logic" className="protocol-edit-pane__section-title">逻辑结构</h4>
+          <ExpressionView expression={component.expression} exception={component.exceptionExpression} />
+        </section>
+      ) : (
+        <section className="protocol-edit-pane__section" aria-labelledby="protocol-edit-unresolved">
+          <h4 id="protocol-edit-unresolved" className="protocol-edit-pane__section-title">方案含义待核清</h4>
+          <p className="protocol-edit-pane__muted">
+            {component.limitationKind === "consumer_unavailable"
+              ? "这项要求已有原文依据，但当前审核方式还不能可靠判断。"
+              : "这项要求已有原文依据，适用含义尚未核清。"}
+            本项不能据此判为符合或不符合。
+          </p>
+          <ul className="protocol-edit-pane__excerpts">
+            {component.unresolvedDimensions.map((dimension, index) => <li key={index}>{dimension}</li>)}
+          </ul>
+        </section>
+      )}
 
       {relatedIssues.length > 0 && (
         <section className="protocol-edit-pane__section" aria-labelledby="protocol-edit-issues">

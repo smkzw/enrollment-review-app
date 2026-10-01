@@ -237,6 +237,7 @@ describe("中文标签：穷尽与卫生", () => {
         "future_stage_not_due",
         "provenance_followup",
         "control_applicability_pending",
+        "applicable_population_unverified",
       ],
       BlockingLevel: ["none", "attention", "blocking"],
       ActionTarget: [

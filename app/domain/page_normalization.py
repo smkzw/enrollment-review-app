@@ -69,6 +69,8 @@ def normalize_scalar_v2(value: object) -> tuple[str, str | None]:
 
 
 _NUMBER_RX = re.compile(r"^(<=|>=|<|>|≤|≥)?([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)$")
+# NFKC turns superscript exponents into digits: the optional caret deliberately
+# keeps 10⁹/L and 10^9/L equivalent, without dropping a negative exponent sign.
 _CURRENT_UNIT_RX = re.compile(_UNIT_RX.pattern.replace("×?10", "[x×]?10"), re.IGNORECASE)
 
 

@@ -26,6 +26,10 @@ from fastapi import FastAPI
 from app.api.v2.errors import register_error_handlers
 from app.api.v2.evidence import router as evidence_router
 from app.api.v2.evidence_processing import router as evidence_processing_router
+from app.api.v2.local_visual_verification import router as local_visual_router
+from app.services.local_visual_verification import (
+    LOCAL_VISUAL_JOB_TYPE, LocalVisualVerificationService, create_local_visual_executor,
+)
 from app.api.v2.jobs import router as jobs_router
 from app.api.v2.protocol_control import router as protocol_control_router
 from app.api.v2.fact_corrections import router as fact_corrections_router
@@ -50,6 +54,7 @@ from app.api.v2.subjects import router as subjects_router
 from app.domain.contracts.enums import FactNormalizationRunStatus
 from app.domain.contracts.evidence_upload import EVIDENCE_PROCESSING_JOB_TYPE
 from app.evidence.artifacts import ArtifactStore
+from app.evidence.doc_converter import LibreOfficeDocConverter
 from app.services.evidence_activation_service import EvidenceActivationService
 from app.services.evidence_api_command_service import EvidenceApiCommandService
 from app.services.evidence_api_read_service import EvidenceApiReadService
@@ -195,6 +200,7 @@ def create_app(
         app.state.session_factory = session_factory
         artifact_store = ArtifactStore(paths)
         app.state.artifact_store = artifact_store
+        app.state.local_visual_verification_service = LocalVisualVerificationService(session_factory, artifact_store)
 
         def project_cancelled_evidence_job(job_id: str) -> None:
             from app.services.batch_review_workflow import cancel_batch_children
@@ -297,6 +303,7 @@ def create_app(
             data_paths=paths, session_factory=session_factory, gate=evidence_ocr_gate,
             inference=omlx_http_inference(gate=evidence_ocr_gate),
             adapter=app.state.evidence_reprocess_adapter,
+            doc_converter=LibreOfficeDocConverter(),
         )
         protocol_control_config = ProtocolControlExecutorConfig(
             data_paths=paths,
@@ -304,6 +311,7 @@ def create_app(
             require_frozen_routes=True,
         )
         default_executors = {
+            LOCAL_VISUAL_JOB_TYPE: create_local_visual_executor(session_factory, artifact_store),
             **{job_type: app.state.page_review_runtime for job_type in OWNED_TYPES},
             PAGE_REVIEW_JOB_TYPE: app.state.page_review_runtime,
             "r3_targeted_page_review": app.state.page_review_runtime,
@@ -448,6 +456,7 @@ def create_app(
     app.include_router(subjects_router)
     app.include_router(evidence_router)
     app.include_router(evidence_processing_router)
+    app.include_router(local_visual_router)
     app.include_router(patient_profiles_router)
     app.include_router(fact_corrections_router)
     app.include_router(fact_normalization_router)

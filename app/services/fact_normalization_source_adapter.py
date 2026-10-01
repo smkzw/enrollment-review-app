@@ -73,6 +73,10 @@ class FactPlanningSourceError(RuntimeError):
     """源适配器领域错误（缺页、跨节点、映射漂移、校对不可投影等）。"""
 
 
+class UnconfirmedDocumentMetadataError(FactPlanningSourceError):
+    """活动资料版本仍冻结着无法确定类型的自动建议。"""
+
+
 def _compact_locator_inputs(
     locators: list[EvidenceNormalizerLocatorInput],
 ) -> list[EvidenceNormalizerLocatorInput]:
@@ -146,7 +150,7 @@ def _load_normalizer_context(
         # 仅当document_type为完全未知的占位值时才阻断——
         # "其他资料（待确认）"表示系统无法识别文件类型。
         if metadata.is_auto_suggestion and "待确认" in (metadata.document_type or ""):
-            raise FactPlanningSourceError(
+            raise UnconfirmedDocumentMetadataError(
                 f"逻辑文档 {logical_document_id} 的资料类型无法自动识别（仍为待确认），"
                 "需人工确认后才能进入证据规范化"
             )
@@ -155,6 +159,8 @@ def _load_normalizer_context(
             metadata_revision_id=metadata.metadata_revision_id,
             document_type=metadata.document_type,
             source_party=metadata.source_party,
+            document_category=metadata.document_category,
+            source_category=metadata.source_category,
             document_record_time=None,
             current_review_stage=episode.stage,
             workflow_stage_id=episode.workflow_stage_id,
@@ -725,6 +731,7 @@ def collect_visual_observation_attachments(
                     source_document_version_id=observation.source_document_version_id,
                     page_ordinal=observation.page_ordinal,
                     page_image_sha256=observation.page_image_sha256,
+                    reading_view=observation.reading_view,
                     ocr_page_id=observation.ocr_page_id,
                     ocr_raw_text_sha256=observation.ocr_raw_text_sha256,
                     plan_version=observation.plan_version,

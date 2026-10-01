@@ -798,10 +798,17 @@ def test_projection_service_uses_authoritative_episode_stage(chain, session):
     assert by_template[template.template_id].status == ExpectationStatus.NOT_DUE
 
 
-def test_projection_service_rejects_ambiguous_same_stage_workflow_node(
+def test_projection_service_scopes_same_stage_requirements_to_current_workflow_node(
     chain, session
 ):
     sibling_stage_id = "t1-screening-sibling"
+    current = _template(
+        session,
+        chain,
+        requirement_id="current-screening",
+        fact_type="vital_sign",
+        due_stage=ReviewStage.SCREENING,
+    )
     _add(
         session,
         WorkflowStageRecord(
@@ -814,7 +821,7 @@ def test_projection_service_rejects_ambiguous_same_stage_workflow_node(
             created_at=NOW,
         ),
     )
-    _template(
+    sibling = _template(
         session,
         {**chain, "workflow_stage_id": sibling_stage_id},
         requirement_id="sibling-screening",
@@ -822,16 +829,19 @@ def test_projection_service_rejects_ambiguous_same_stage_workflow_node(
         due_stage=ReviewStage.SCREENING,
     )
 
-    with pytest.raises(
-        EvidenceExpectationProjectionError,
-        match="同一阶段的另一流程节点",
-    ):
-        EvidenceExpectationProjectionService().project(
-            session,
-            authority=_authority(chain),
-            gap_signals=[],
-            created_at=NOW,
-        )
+    projected = EvidenceExpectationProjectionService().project(
+        session,
+        authority=_authority(chain),
+        gap_signals=[CoverageGapSignal(
+            kind=GapType.OBSERVATION_UNVERIFIED,
+            detail="当前节点的资料尚待核实",
+            applies_to_template_id=current.template_id,
+        )],
+        created_at=NOW,
+        template_ids={current.template_id, sibling.template_id},
+    )
+    assert {item.template_id for item in projected} == {current.template_id}
+    assert sibling.template_id not in {item.template_id for item in projected}
 
 
 # ---------------------------------------------------------------------------

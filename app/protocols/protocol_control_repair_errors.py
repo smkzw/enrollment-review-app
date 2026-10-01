@@ -36,6 +36,24 @@ CANDIDATE_EXPRESSION_REPAIR_GATE_CODES = frozenset(
 SOURCE_INSERT_GATE_CODES = frozenset({"ENROLLMENT_PROHIBITION_UNCOVERED"})
 
 
+def _partial_prohibition_candidates(issue: Any, candidate_by_id: dict[str, Any]) -> list[str]:
+    """An existing prohibition in the same source needs regrouping, not appending."""
+
+    scope = set(getattr(issue, "structure_unit_ids", ()) or ())
+    if not scope:
+        return []
+    return [
+        candidate_id for candidate_id, candidate in candidate_by_id.items()
+        if set(candidate.frozen_structure_unit_ids) <= scope
+        and candidate.semantics is not None
+        and any(
+            str(getattr(atom.kind, "value", atom.kind)).startswith("prohibit_")
+            for group in candidate.semantics.obligation_expression.groups
+            for atom in group.atoms
+        )
+    ]
+
+
 def gate_issue_allows_candidate_repartition(issue: Any) -> bool:
     return getattr(issue, "code", None) in CANDIDATE_REPARTITION_GATE_CODES
 
@@ -57,10 +75,17 @@ def publication_repair_error(
     allow_source_closure_rewrite = any(
         gate_issue_allows_source_closure_rewrite(issue) for issue in issues
     )
-    allow_source_insert = any(
-        issue.code in SOURCE_INSERT_GATE_CODES for issue in issues
-    )
-    if allow_source_insert:
+    source_issues = [issue for issue in issues if issue.code in SOURCE_INSERT_GATE_CODES]
+    source_rewrite_ids = {
+        issue.entity_id: _partial_prohibition_candidates(issue, candidate_by_id)
+        for issue in source_issues
+    }
+    allow_source_closure_rewrite = allow_source_closure_rewrite or any(source_rewrite_ids.values())
+    allow_source_insert = bool(source_issues) and not allow_source_closure_rewrite
+    if source_issues and allow_source_closure_rewrite:
+        repair_scope_issues = source_issues
+        allow_candidate_repartition = False
+    elif allow_source_insert:
         repair_scope_issues = [
             issue for issue in issues if issue.code in SOURCE_INSERT_GATE_CODES
         ]
@@ -99,8 +124,40 @@ def publication_repair_error(
             return owner
         return control_to_candidate.get(entity_id)
 
+    repair_scopes = []
+    repair_scope_unknown = False
+    by_candidate: dict[str, list[Any]] = {}
+    for issue in issues:
+        if issue.code not in (
+            CANDIDATE_REPARTITION_GATE_CODES | SOURCE_CLOSURE_REWRITE_GATE_CODES
+            | SOURCE_INSERT_GATE_CODES
+        ):
+            owners = set(getattr(issue, "candidate_ids", ()) or ())
+            owner = candidate_for_entity(issue.entity_id)
+            if owner is not None:
+                owners.add(owner)
+            units = set(getattr(issue, "structure_unit_ids", ()) or ())
+            if (len(owners) != 1 or not owners <= set(candidate_by_id)
+                    or not units <= set(candidate_by_id[next(iter(owners))].frozen_structure_unit_ids)):
+                # Unknown ownership or a cross-candidate finding cannot grant a
+                # narrower scope by guessing from overlapping source paragraphs.
+                by_candidate.clear()
+                repair_scope_unknown = True
+                break
+            by_candidate.setdefault(next(iter(owners)), []).append(issue)
+    if (not repair_scope_unknown and len(by_candidate) > 1
+            and not (allow_candidate_repartition or allow_source_closure_rewrite or allow_source_insert)):
+        repair_scopes = [
+            publication_repair_error(
+                issues=group, candidate_by_id=candidate_by_id,
+                control_to_candidate=control_to_candidate,
+                default_structure_unit_ids=default_structure_unit_ids,
+            ) for group in by_candidate.values()
+        ]
+
     for issue in repair_scope_issues:
         issue_candidate_ids = list(getattr(issue, "candidate_ids", ()) or ())
+        issue_candidate_ids.extend(source_rewrite_ids.get(issue.entity_id, ()))
         issue_structure_unit_ids = list(
             getattr(issue, "structure_unit_ids", ()) or ()
         )
@@ -137,7 +194,7 @@ def publication_repair_error(
         if candidate is not None:
             candidate_ids.append(candidate.control_candidate_id)
             structure_unit_ids.extend(candidate.frozen_structure_unit_ids)
-        else:
+        elif allow_candidate_repartition or allow_source_closure_rewrite or allow_source_insert:
             structure_unit_ids.extend(default_structure_unit_ids)
     return ProtocolControlAgentWireValidationError(
         "PUBLICATION_GATE_REJECTED",
@@ -157,6 +214,14 @@ def publication_repair_error(
             for issue in repair_scope_issues
         ),
         allow_source_insert=allow_source_insert,
+        repair_scopes=repair_scopes,
+        repair_scope_unknown=repair_scope_unknown,
+        validation_findings=[{
+            "code": issue.code, "entity_id": issue.entity_id,
+            "structure_unit_ids": list(getattr(issue, "structure_unit_ids", ()) or ()),
+            "candidate_ids": list(getattr(issue, "candidate_ids", ()) or ()),
+            "obligation_source_span_ids": list(getattr(issue, "obligation_source_span_ids", ()) or ()),
+        } for issue in issues],
     )
 
 
@@ -233,6 +298,12 @@ def combined_repair_error(
         allow_candidate_repartition=allow_candidate_repartition,
         allow_source_closure_rewrite=allow_source_closure_rewrite,
         allow_source_insert=allow_source_insert,
+        repair_scopes=(active[0].repair_scopes if len(active) == 1 else ()),
+        repair_scope_unknown=(
+            any(error.repair_scope_unknown for error in active)
+            or len(active) > 1 and any(error.repair_scopes for error in active)
+        ),
+        validation_findings=[finding for error in active for finding in error.validation_findings],
     )
 
 

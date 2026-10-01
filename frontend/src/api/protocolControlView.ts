@@ -37,6 +37,8 @@ export interface ProtocolControlRequirements {
   sourceJobId: string;
   checkpointId: string;
   requirements: ControlRequirementView[];
+  calculationGaps: { id: string; sourceQuote: string; linkedOfficialCode: string | null;
+    reviewDecision: string | null; unresolvedAspects: string[] }[];
 }
 
 function invalid(): never {
@@ -289,5 +291,18 @@ export function normalizeProtocolControlRequirements(raw: unknown): ProtocolCont
   return {
     jobId: string(payload.job_id), sourceJobId: string(payload.source_job_id),
     checkpointId: string(payload.checkpoint_id), requirements,
+    calculationGaps: array(payload.calculation_gaps).map((rawGap) => {
+      const gap = object(rawGap);
+      const target = optionalString(gap.linked_official_code);
+      if (target !== null && !/^(IN|EX)-\d{2}$/.test(target)) invalid();
+      if (strings(gap.source_span_ids).length === 0 || typeof gap.statement_index !== "number" ||
+          !Number.isSafeInteger(gap.statement_index) || gap.statement_index < 0) invalid();
+      return {
+        id: `${string(gap.structure_unit_id)}:${gap.statement_index}`,
+        sourceQuote: string(gap.source_quote), linkedOfficialCode: target,
+        reviewDecision: gap.review_decision == null ? null : string(gap.review_decision),
+        unresolvedAspects: gap.unresolved_aspects == null ? [] : strings(gap.unresolved_aspects),
+      };
+    }),
   };
 }

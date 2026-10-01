@@ -1086,6 +1086,55 @@ def test_nearby_phase_narrative_does_not_retag_following_visit_table() -> None:
     assert atomic["body.t0.r1.c1.p0"].phase_scopes == [PhaseScope.UNKNOWN]
 
 
+def test_single_phase_protocol_title_scopes_unlabelled_visit_table_only() -> None:
+    blocks = [
+        _block("body.p0", "试验题目：某药治疗疾病的Ⅱ期临床研究", 0),
+        _block("body.p1", "研究流程表", 1),
+        _block("body.t0", "", 2),
+        _block("body.t0.r0.c0.p0", "访视", 3, table_path=(0, 0)),
+        _block("body.t0.r0.c1.p0", "筛选期", 4, table_path=(0, 1)),
+        _block("body.t0.r1.c0.p0", "完成检查", 5, table_path=(1, 0)),
+        _block("body.t0.r1.c1.p0", "X", 6, table_path=(1, 1)),
+        _block("body.t1", "", 7),
+        _block("body.t1.r0.c0.p0", "资料类型", 8, table_path=(0, 0)),
+        _block("body.t1.r0.c1.p0", "说明", 9, table_path=(0, 1)),
+    ]
+    graph = build_phase_applicability_graph(blocks, snapshot_id="titled-single-phase").graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+    assert atomic["body.t0.r1.c1.p0"].phase_scopes == [PhaseScope.PHASE_II]
+    assert atomic["body.t1.r0.c0.p0"].phase_scopes == [PhaseScope.UNKNOWN]
+    assert "body.t0.c1" in {
+        item.source_ref for item in project_single_phase(graph, StudyPhase.PHASE_II).blocks
+    }
+
+
+@pytest.mark.parametrize(
+    "extra_title,expected_scope",
+    [
+        ("方案名称：Ⅱ/Ⅲ期临床研究", PhaseScope.UNKNOWN),
+        ("方案名称：另一项Ⅲ期临床研究", PhaseScope.UNKNOWN),
+        ("Ⅲ期临床研究阶段", PhaseScope.PHASE_III),
+    ],
+)
+def test_ambiguous_or_opposite_phase_title_does_not_scope_visit_table(
+    extra_title: str,
+    expected_scope: PhaseScope,
+) -> None:
+    blocks = [
+        _block("body.p0", "试验题目：某药治疗疾病的Ⅱ期临床研究", 0),
+        _block("body.p1", extra_title, 1),
+        _block("body.p2", "研究流程表", 2),
+        _block("body.t0", "", 3),
+        _block("body.t0.r0.c0.p0", "访视", 4, table_path=(0, 0)),
+        _block("body.t0.r0.c1.p0", "筛选期", 5, table_path=(0, 1)),
+        _block("body.t0.r1.c0.p0", "完成检查", 6, table_path=(1, 0)),
+        _block("body.t0.r1.c1.p0", "X", 7, table_path=(1, 1)),
+    ]
+    graph = build_phase_applicability_graph(blocks, snapshot_id="ambiguous-title").graph
+    atomic = {item.source_ref: item for item in graph.blocks if not item.is_aggregate}
+    assert atomic["body.t0.r1.c1.p0"].phase_scopes == [expected_scope]
+
+
 def test_single_phase_common_wording_does_not_leak_and_projection_text_is_derived_only() -> None:
     blocks = [
         _block("body.p0", "Ⅲ期共同适用标准", 0),

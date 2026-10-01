@@ -21,11 +21,15 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.agents.protocol_control_agent_transport import (
     protocol_control_transport_from_environment,
 )
+from app.agents.protocol_control_definition_scope import (
+    DefinitionScopeReview, build_definition_scope_prompt,
+)
 from app.agents.protocol_control_deconstructor import (
     DEFAULT_MAX_SCHEMA_REPAIRS,
     DEFAULT_MAX_TRANSPORT_RETRIES,
     DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE,
     DEFAULT_PROTOCOL_CONTROL_DISCOVERY_PROMPT_TEMPLATE,
+    SOURCE_TARGET_REPAIR_VERSION,
     ProtocolControlAgentRunner,
     ProtocolControlAgentRunResult,
     ProtocolControlAgentWire,
@@ -37,7 +41,10 @@ from app.agents.protocol_control_deconstructor import (
     protocol_control_agent_json_schema,
     protocol_control_agent_prompt_template_sha256,
     protocol_control_agent_repair_contract_sha256,
+    PUBLICATION_REPAIR_SCOPE_VERSION,
     hydrate_protocol_control_agent_output,
+    hydrated_source_coverage_indexes,
+    source_statement_coverage,
     protocol_control_discovery_prompt_template_sha256,
 )
 from app.agents.protocol_control_stage_compiler import (
@@ -49,13 +56,18 @@ from app.agents.protocol_control_discovery_transport import (
     protocol_control_discovery_transport_from_environment,
 )
 from app.agents.protocol_control_source_interpretation import (
+    SOURCE_QUOTE_RECOVERY_VERSION,
     SOURCE_TARGET_REVIEW_VERSION,
+    SourceDefinitionConsumers,
     SourceInterpretation,
     SourceInterpretationValidationError,
+    SourceStatementCoverage,
     SourceTargetReview,
     SourceTargetReviewValidationError,
+    is_post_eligibility_calculation,
     is_study_phase_label,
     normalize_source_excerpt,
+    validate_source_definition_consumers,
     validate_source_interpretation,
     normalize_schedule_randomization_anchors,
     normalize_mixed_schedule_scopes,
@@ -63,11 +75,33 @@ from app.agents.protocol_control_source_interpretation import (
     validate_source_target_review,
     target_review_indexes,
 )
+from app.agents.protocol_control_source_function import SOURCE_FUNCTION_RECHECK_VERSION
+from app.agents.protocol_control_candidate_alignment import (
+    SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+    SourceCandidateAlignment,
+    SourceCandidateAlignmentItem,
+    SourceCandidateAlignmentProof,
+    alignment_with_items,
+    SourceCandidateAlignmentValidationError,
+    reusable_proven_alignment_items,
+    validate_candidate_alignment,
+)
+from app.services.protocol_control_definition_scope import (
+    close_definition_scope, definition_scope_inputs,
+)
+from app.services.protocol_control_restricted_source import (
+    TEMPORAL_RESTRICTION_VERSION,
+    restricted_batch_from_review,
+)
 from app.domain.contracts.agent_io import ProtocolDeconstructionInput
 from app.domain.contracts.enums import ExtractionStatus, PhaseScope, StudyPhase
 from app.domain.contracts.protocol_controls import (
+    CONTROL_CONTINUATION_SOURCE_VERSION,
+    KnownOfficialRuleTarget,
     ProtocolControlBatchDispositionHydrated,
     ProtocolControlBatchPlan,
+    ProtocolControlDefinitionAtomConsumption,
+    ProtocolControlDefinitionConsumerRecord,
     ProtocolControlDiscoveryBatch,
     ProtocolControlDiscoveryDecision,
     ProtocolControlDiscoveryDisposition,
@@ -88,12 +122,13 @@ from app.domain.contracts.protocol_ingestion import (
     ProtocolSourceSpan,
 )
 from app.domain.contracts.protocol_metadata import PhaseApplicabilityGraph, PhaseProjection
-from app.domain.contracts.rules import WorkflowStage
+from app.domain.contracts.rules import WorkflowStage, iter_atomic_predicates
 from app.protocols.docx_structure import StructureBlock, block_set_hash
 from app.protocols.full_protocol_coverage import (
     FullProtocolCoverageError,
     build_full_protocol_coverage_manifest,
 )
+from app.protocols.procedure_catalog import schedule_row_values
 from app.protocols.protocol_control_gate import (
     CONTROL_PUBLICATION_GATE_VERSION,
     ProtocolControlGateError,
@@ -102,8 +137,6 @@ from app.protocols.protocol_control_gate import (
     validate_protocol_control_publication,
 )
 from app.protocols.protocol_control_repair_errors import (
-    CANDIDATE_REPARTITION_GATE_CODES,
-    SOURCE_CLOSURE_REWRITE_GATE_CODES,
     publication_repair_error,
 )
 from app.config import (
@@ -147,12 +180,13 @@ from app.workflow.runner import PreparedStepResult, StepContext, StepExecutor
 PROTOCOL_CONTROL_EXECUTION_JOB_TYPE = "protocol_control_execution"
 # A short alias keeps callers independent from the longer API-facing name.
 PROTOCOL_CONTROL_JOB_TYPE = PROTOCOL_CONTROL_EXECUTION_JOB_TYPE
-PROTOCOL_CONTROL_EXECUTION_VERSION = "phase5/protocol-control-execution/v192"
+PROTOCOL_CONTROL_EXECUTION_VERSION = "phase5/protocol-control-execution/v216"
 PROTOCOL_CONTROL_EXECUTION_CONTROL_SCHEMA = (
     "phase5/protocol-control-execution-control/v2"
 )
 
 STEP_CLOSURE = "deterministic_closure"
+STEP_SCOPE = "definition_scope"
 STEP_HYDRATE = "hydrate"
 STEP_GATE = "gate"
 CANDIDATE_CONTROL_PACKAGE_RESULT_KIND = "hydrated_candidate_control_package"
@@ -161,6 +195,9 @@ FORMAL_CATALOG_STATUS_NOT_MATERIALIZED = "not_materialized"
 
 _DISCOVERY_STEP_PREFIX = "discovery_"
 _DEEP_STEP_PREFIX = "deep_"
+# Recorded on every relation with verified consumers: this per-batch closure
+# cannot see a consumer in another batch, so completeness stays unproven.
+_DEFINITION_CONSUMER_SCOPE_UNPROVEN = "定义消费范围完整性尚未证实（含跨批消费者）"
 _SOURCE_DECONSTRUCTION_JOB_TYPE = PROTOCOL_DECONSTRUCTION_JOB_TYPE
 _SOURCE_STEP_ORDER = (
     "register_file",
@@ -922,16 +959,11 @@ class ProtocolControlJobService:
                     entry["step_id"] for entry in discovery_steps
                 ],
                 "parallel_scope": "discovery_batches_only",
-                "continue_after_final_failure": {
-                    "step_prefix": _DEEP_STEP_PREFIX,
-                    "error_codes": ["PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID"],
-                    "max_failed_steps": 2,
-                },
                 "notes": [
                     "Only explicitly listed independent discovery steps may share one lease wave.",
                     "Jobs without execution_control keep the historical serial runner path.",
                     "Do not rewrite paused serial discovery jobs to a mixed parallel config.",
-                    "An invalid deep output fails its batch and publication, while unrelated deep batches may finish.",
+                    "A terminal deep failure stops new inference; completed receipts remain available for verified reuse.",
                 ],
             },
         }
@@ -1009,6 +1041,8 @@ def create_protocol_control_executor(
                 return _execute_closure(context, config)
             if context.step_id.startswith(_DEEP_STEP_PREFIX):
                 return _execute_deep(context, config)
+            if context.step_id == STEP_SCOPE:
+                return _execute_definition_scope(context, config)
             if context.step_id == STEP_HYDRATE:
                 return _execute_hydrate(context, config)
             if context.step_id == STEP_GATE:
@@ -1649,16 +1683,22 @@ def _execute_closure(
                     depends_on=(STEP_CLOSURE,),
                 )
         existing_steps = {step.step_id: step for step in store.list_steps(context.job_id)}
-        if STEP_HYDRATE not in existing_steps:
+        if STEP_SCOPE not in existing_steps:
             store.create_step(
-                step_id=STEP_HYDRATE,
+                step_id=STEP_SCOPE,
                 job_id=context.job_id,
-                name="聚合水合结果",
+                name="核对定义影响范围",
                 depends_on=tuple(
                     f"{_DEEP_STEP_PREFIX}{number:04d}"
                     for number in range(1, len(deep_plan.batches) + 1)
                 )
                 or (STEP_CLOSURE,),
+            )
+        existing_steps = {step.step_id: step for step in store.list_steps(context.job_id)}
+        if STEP_HYDRATE not in existing_steps:
+            store.create_step(
+                step_id=STEP_HYDRATE, job_id=context.job_id,
+                name="聚合水合结果", depends_on=(STEP_SCOPE,),
             )
         existing_steps = {step.step_id: step for step in store.list_steps(context.job_id)}
         if STEP_GATE not in existing_steps:
@@ -1721,16 +1761,8 @@ def _validate_deep_batch_output(
     errors = check_protocol_control_batch_candidates(batch, output)
     if not errors:
         return
-    structural_codes = CANDIDATE_REPARTITION_GATE_CODES | SOURCE_CLOSURE_REWRITE_GATE_CODES
-    if any(error.code == "ENROLLMENT_PROHIBITION_UNCOVERED" for error in errors):
-        errors = tuple(
-            error for error in errors
-            if error.code == "ENROLLMENT_PROHIBITION_UNCOVERED"
-        )
-    # Structural regrouping changes candidate identities. Resolve it before
-    # independent field repairs so the granted repair scope remains exact.
-    if any(error.code in structural_codes for error in errors):
-        errors = tuple(error for error in errors if error.code in structural_codes)
+    # The scope mapper prioritizes structural recovery without discarding
+    # other findings: a source-bound hard failure must still stop the runner.
     candidate_by_id = {
         candidate.control_candidate_id: candidate
         for candidate in output.candidates
@@ -1755,7 +1787,7 @@ def _validate_deep_batch_output(
 
 _DEEP_SOURCE_IDENTITY_FIELDS = (
     "source_deconstruction_job_id", "source_snapshot_id", "source_content_sha256",
-    "coverage_manifest", "discovery_plan", "discovery_source_job_id",
+    "coverage_manifest", "discovery_plan",
     "workflow_stages", "phase_projection", "max_deep_units_per_batch",
     "frozen_model_routes",
 )
@@ -1772,6 +1804,23 @@ def _require_compatible_deep_source(
         )
 
 
+def _require_schedule_member_sources(units: Sequence[ProtocolStructureUnit]) -> None:
+    for unit in units:
+        row_token = unit.source_ref.rpartition(".r")[2].partition(".")[0]
+        if (unit.table_context is not None
+                and row_token.isdigit()):
+            if unit.member_texts is None:
+                raise ValueError(
+                    f"冻结表格行缺少逐格原文，须从原方案重建来源清单：{unit.structure_unit_id}"
+                )
+            try:
+                schedule_row_values(unit)
+            except ValueError as exc:
+                raise ValueError(
+                    f"冻结表格行来源结构不一致：{unit.structure_unit_id}；{exc}"
+                ) from exc
+
+
 def _deep_component_identity(
     payload: Mapping[str, Any], prompt_template: str,
 ) -> dict[str, Any]:
@@ -1781,19 +1830,46 @@ def _deep_component_identity(
         ).encode("utf-8")).hexdigest()
 
     return {
-        "schema_version": "phase5/deep-component-identity/v2",
+        "schema_version": "phase5/deep-component-identity/v3",
         "source_sha256": payload.get("source_content_sha256"),
+        "draft_revision_id": payload.get("draft_revision_id"),
+        "draft_content_sha256": payload.get("draft_content_sha256"),
         "discovery_plan_sha256": digest(payload.get("discovery_plan")),
         "coverage_manifest_sha256": digest(payload.get("coverage_manifest")),
         "prompt_text_sha256": hashlib.sha256(prompt_template.strip().encode("utf-8")).hexdigest(),
         "prompt_material_sha256": protocol_control_agent_prompt_template_sha256(prompt_template),
         "wire_schema_sha256": digest(protocol_control_agent_json_schema()),
         "compiler_versions": [
+            CONTROL_CONTINUATION_SOURCE_VERSION,
+            "observation-policy-patch-staging/v1",
+            "bounded-atom-position-preservation/v1",
+            "temporal-candidate-alignment-before-insert/v1",
             STAGE_BOUND_REQUIREMENT_VERSION, RELATIVE_STAGE_REQUIREMENT_VERSION,
             SHARED_PROHIBITION_REQUIREMENT_VERSION,
-            "source-statement-coverage/v2",
+            "stage-period-inside-visit-scope/v3",
+            "source-statement-coverage/v4",
+            SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+            SOURCE_FUNCTION_RECHECK_VERSION,
+            SOURCE_TARGET_REPAIR_VERSION,
+            SOURCE_QUOTE_RECOVERY_VERSION,
+            PUBLICATION_REPAIR_SCOPE_VERSION,
+            "source-candidate-index-projection/v1",
+            "source-insert-cited-statement-stop/v1",
+            "source-interpretation-local-scope/v2",
+            "source-unresolved-covered-review/v1",
+            "source-stage-time-complete/v1",
+            "restricted-nonreview-unit-preservation/v1",
+            "restricted-independent-candidate-preservation/v1",
+            TEMPORAL_RESTRICTION_VERSION,
+            "saved-review-temporal-failure-classification/v1",
+            "source-intraday-scope-preservation/v1",
+            "source-numeric-unscoped-repair-stop/v1",
+            "source-clock-capability-disposition/v1",
+            "schedule-sibling-header-and-multiblock-cell/v1",
+            "schedule-native-member-source/v2",
             "source-insert-partial-resume/v1",
             "source-insert-batch-merge/v1",
+            "source-insert-pending-authority-and-append-order/v1",
             "multi-candidate-focused-repair/v1",
             "calendar-bound-wrapper-normalization/v1",
             "calendar-bound-distinct-atom-repair/v1",
@@ -1839,6 +1915,152 @@ def _same_deep_batch_material(
     return old == new
 
 
+@dataclass(frozen=True)
+class _ResumedSourceReview:
+    """State of the saved per-statement source review carried into a rerun.
+
+    ``state`` is explicit so a refreshed review is never a silent drop:
+    ``absent`` (nothing was saved), ``reused`` (every saved decision still
+    passes the current validators) or ``refresh_required`` (only the affected
+    statements are sent back to the reader while the proven candidate/source
+    base stays reusable).
+    """
+
+    state: str
+    reason: str
+    review: SourceTargetReview | None = None
+    coverage: tuple[SourceStatementCoverage, ...] = ()
+
+
+def _resumable_saved_candidate_alignment(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+    coverage: Sequence[SourceStatementCoverage],
+    wire: ProtocolControlAgentWire | None,
+    saved: Mapping[str, Any],
+) -> SourceCandidateAlignment | None:
+    """Revalidate saved candidate pairs before any alignment reader call is skipped.
+
+    Only fully_expressed items that still pass the current source/candidate
+    validators are returned. Incomplete, uncertain, malformed, or provenance-
+    broken responses never become a skip token.
+    """
+
+    if wire is None:
+        return None
+    payload = saved.get("source_candidate_alignment")
+    if payload is None:
+        return None
+    if (not isinstance(payload, Mapping)
+            or payload.get("version") != SOURCE_CANDIDATE_ALIGNMENT_VERSION
+            or not isinstance(payload.get("items"), list)
+            or not isinstance(payload.get("proofs"), list)):
+        return None
+    items, proofs = [], []
+    for entry in payload["items"]:
+        try:
+            items.append(SourceCandidateAlignmentItem.model_validate(entry))
+        except (TypeError, ValidationError):
+            continue
+    for entry in payload["proofs"]:
+        try:
+            proofs.append(SourceCandidateAlignmentProof.model_validate(entry))
+        except (TypeError, ValidationError):
+            continue
+    if not items:
+        return None
+    alignment = SourceCandidateAlignment(
+        version=SOURCE_CANDIDATE_ALIGNMENT_VERSION, items=items, proofs=proofs,
+    )
+    proven = reusable_proven_alignment_items(
+        batch, interpretation, coverage, wire, alignment,
+    )
+    if not proven:
+        return None
+    return alignment_with_items(alignment, proven)
+
+
+def _resumable_saved_source_review(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+    saved: Mapping[str, Any],
+) -> _ResumedSourceReview:
+    """Prove a saved source review still holds before any reader call is skipped.
+
+    The whole saved review is revalidated against the restored source
+    statements, the restored batch and its own saved coverage; each statement is
+    then revalidated on its own so one stale statement cannot take its siblings
+    down with it. A saved review is provable without a partial wire: the frozen
+    batch/route/prompt identity checked by the caller plus these current
+    validators carry the proof. A review whose saved coverage is missing or
+    unprovable stays out of the reuse seed and goes back through the existing
+    reader path.
+    """
+
+    payload = saved.get("source_target_review")
+    if payload is None:
+        return _ResumedSourceReview(state="absent", reason="no_saved_source_review")
+    coverage_payload = saved.get("source_statement_coverage")
+    if not isinstance(coverage_payload, list) or not coverage_payload:
+        return _ResumedSourceReview(
+            state="refresh_required", reason="saved_source_review_without_wire_proof",
+        )
+    try:
+        review = SourceTargetReview.model_validate(payload)
+        coverage = [
+            SourceStatementCoverage.model_validate(item) for item in coverage_payload
+        ]
+    except (TypeError, ValidationError):
+        return _ResumedSourceReview(
+            state="refresh_required", reason="saved_source_review_invalid",
+        )
+    if sorted(entry.statement_index for entry in coverage) != list(
+        range(len(interpretation.statements))
+    ):
+        return _ResumedSourceReview(
+            state="refresh_required", reason="saved_source_coverage_identity_invalid",
+        )
+    try:
+        validate_source_target_review(batch, interpretation, coverage, review)
+    except (SourceTargetReviewValidationError, ValueError, KeyError, TypeError):
+        return _ResumedSourceReview(
+            state="refresh_required", reason="current_validators_reject_saved_source_review",
+        )
+    if not review.items:
+        return _ResumedSourceReview(state="absent", reason="no_saved_source_review")
+    coverage_by_index = {entry.statement_index: entry for entry in coverage}
+    kept_items: list[Any] = []
+    kept_coverage: list[SourceStatementCoverage] = []
+    for item in review.items:
+        single = SourceTargetReview(
+            version=SOURCE_TARGET_REVIEW_VERSION, items=[item],
+        )
+        try:
+            validate_source_target_review(
+                batch, interpretation, [coverage_by_index[item.statement_index]], single,
+            )
+        except (SourceTargetReviewValidationError, ValueError, KeyError, TypeError):
+            continue
+        kept_items.append(item)
+        kept_coverage.append(coverage_by_index[item.statement_index])
+    if not kept_items:
+        return _ResumedSourceReview(
+            state="refresh_required", reason="no_saved_source_review_item_still_valid",
+        )
+    state = "reused" if len(kept_items) == len(review.items) else "partially_reused"
+    return _ResumedSourceReview(
+        state=state,
+        reason=(
+            "saved_source_review_still_current" if state == "reused"
+            else "affected_source_review_statements_require_refresh"
+        ),
+        review=SourceTargetReview(
+            version=SOURCE_TARGET_REVIEW_VERSION, items=kept_items,
+        ),
+        coverage=tuple(kept_coverage),
+    )
+
+
 def _validated_deep_partial_source(
     store: JobStore,
     current_payload: Mapping[str, Any],
@@ -1846,7 +2068,7 @@ def _validated_deep_partial_source(
     batch: ProtocolControlDispositionBatch,
     step_id: str,
     prompt_template: str,
-) -> tuple[str, Mapping[str, Any]] | None:
+) -> tuple[str, Mapping[str, Any], _ResumedSourceReview] | None:
     """Resume a verified source interpretation or gate-valid draft, never its failed result."""
 
     source_job = store.get_job(source_job_id)
@@ -1894,18 +2116,26 @@ def _validated_deep_partial_source(
             )):
         return None
     source = saved.get("source_interpretation")
+    repair_identity = saved.get("repair_contract_sha256")
+    if (not isinstance(repair_identity, str) or len(repair_identity) != 64
+            or any(char not in "0123456789abcdef" for char in repair_identity)):
+        raise ValueError("局部草稿修复合同身份缺失或损坏")
+    if repair_identity != protocol_control_agent_repair_contract_sha256():
+        return None
     if source is None and saved.get("partial_wire") is None:
         return None
     if not isinstance(source, Mapping):
         raise ValueError("局部草稿缺少有源解释")
     interpretation = SourceInterpretation.model_validate(source)
     validate_source_interpretation(batch, interpretation)
+    wire = None
     if saved.get("partial_wire") is not None:
         if not isinstance(saved.get("session_id"), str):
             raise ValueError("局部草稿缺少会话身份")
         wire = ProtocolControlAgentWire.model_validate(saved["partial_wire"])
         _validate_deep_batch_output(batch, hydrate_protocol_control_agent_output(wire, batch))
-    return checkpoint_id, saved
+    resumed_review = _resumable_saved_source_review(batch, interpretation, saved)
+    return checkpoint_id, saved, resumed_review
 
 
 def _preflight_deep_source(
@@ -1927,6 +2157,7 @@ def _preflight_deep_source(
     coverage = ProtocolSectionCoverageManifest.model_validate(
         current_payload["coverage_manifest"]
     )
+    _require_schedule_member_sources(coverage.units)
     discovery = ProtocolControlDiscoveryPlan.model_validate(
         current_payload["discovery_plan"]
     )
@@ -1974,6 +2205,7 @@ def _preflight_deep_source(
         step = source_steps.get(step_id)
         decision = "refresh_required"
         reason = "new_or_incomplete_batch"
+        review_state = "not_applicable"
         old_batch = old_batches_by_number.get(batch.batch_number)
         if old_batch is not None and step is None:
             raise ValueError("来源任务缺少深审批次定义")
@@ -2002,9 +2234,10 @@ def _preflight_deep_source(
                 raise ValueError("已完成的来源批次缺少实际提示摘要")
             saved_result = saved.get("run_result")
             if (not isinstance(saved_result, dict)
-                    or saved_result.get("status") not in {"已解析", "待跨章核验"}
+                    or saved_result.get("status") not in {"已解析", "待跨章核验", "需要核对"}
                     or saved_result.get("batch_id") != old_batch.batch_id
-                    or not isinstance(saved_result.get("final_output"), dict)):
+                    or (not isinstance(saved_result.get("final_output"), dict)
+                        and not isinstance(saved.get("restricted_batch"), dict))):
                 raise ValueError("已完成的来源批次结果身份损坏")
             saved_components = saved.get("component_identity")
             if saved_components is not None:
@@ -2017,7 +2250,10 @@ def _preflight_deep_source(
                     if (not isinstance(value, str) or len(value) != 64
                             or any(char not in "0123456789abcdef" for char in value)):
                         raise ValueError("已完成的来源批次组成摘要损坏")
-                if saved_components.get("schema_version") == "phase5/deep-component-identity/v2":
+                if saved_components.get("schema_version") in {
+                    "phase5/deep-component-identity/v2",
+                    "phase5/deep-component-identity/v3",
+                }:
                     repair_hash = saved.get("repair_contract_sha256")
                     if (not isinstance(repair_hash, str) or len(repair_hash) != 64
                             or any(char not in "0123456789abcdef" for char in repair_hash)):
@@ -2048,35 +2284,58 @@ def _preflight_deep_source(
                 result = ProtocolControlAgentRunResult.model_validate(
                     saved.get("run_result")
                 )
-                if (result.status not in {"已解析", "待跨章核验"} or result.final_output is None
-                        or result.batch_id != batch.batch_id):
+                if result.batch_id != batch.batch_id:
                     raise ValueError("已完成的来源批次结果损坏")
-                try:
-                    _validate_saved_source_review(batch, result)
-                except (SourceInterpretationValidationError, SourceTargetReviewValidationError):
-                    reason = "current_source_review_requires_refresh"
-                else:
-                    try:
-                        _validate_deep_batch_output(batch, result.final_output)
-                    except (ProtocolControlGateError, ProtocolControlAgentWireValidationError):
-                        reason = "current_gate_requires_refresh"
+                if saved.get("restricted_batch") is not None:
+                    expected = restricted_batch_from_review(batch, result)
+                    if (expected is None or expected != ProtocolControlBatchDispositionHydrated.model_validate(
+                            saved["restricted_batch"]
+                    )):
+                        raise ValueError("已保存的受限来源与当前逐项核对不一致")
+                    if _source_interpretation_requires_refresh(batch, result):
+                        reason = "current_source_links_require_refresh"
                     else:
-                        if _source_interpretation_requires_refresh(batch, result):
-                            reason = "current_source_links_require_refresh"
+                        decision, reason = "reusable", "same_restricted_source_and_current_gate"
+                else:
+                    if result.status not in {"已解析", "待跨章核验"} or result.final_output is None:
+                        raise ValueError("已完成的来源批次结果损坏")
+                    try:
+                        _validate_saved_source_review(batch, result)
+                    except (SourceInterpretationValidationError, SourceTargetReviewValidationError,
+                            SourceCandidateAlignmentValidationError):
+                        reason = "current_source_review_requires_refresh"
+                    else:
+                        try:
+                            _validate_deep_batch_output(batch, result.final_output)
+                        except (ProtocolControlGateError, ProtocolControlAgentWireValidationError):
+                            reason = "current_gate_requires_refresh"
                         else:
-                            decision, reason = "reusable", "same_material_and_current_gate"
+                            if _source_interpretation_requires_refresh(batch, result):
+                                reason = "current_source_links_require_refresh"
+                            else:
+                                decision, reason = "reusable", "same_material_and_current_gate"
         elif step is not None and step.state == "failed_final":
             partial = _validated_deep_partial_source(
                 store, current_payload, source_job_id, batch, step_id, prompt_template,
             )
             if partial is not None:
                 decision = "resume_partial"
-                reason = (
+                base_reason = (
                     "verified_unpublished_draft" if partial[1].get("partial_wire") is not None
                     else "verified_source_interpretation"
                 )
+                review_state = partial[2].state
+                reason = (
+                    base_reason if review_state == "absent"
+                    else base_reason + "_source_review_reused"
+                    if review_state == "reused"
+                    else base_reason + "_source_review_partially_reused"
+                    if review_state == "partially_reused"
+                    else base_reason + "_source_review_refresh_required"
+                )
         decisions[batch.batch_id] = {
             "step_id": step_id, "decision": decision, "reason": reason,
+            "source_review": review_state,
         }
     return {
         "schema_version": "phase5/deep-reuse-plan/v1",
@@ -2195,8 +2454,60 @@ def _validate_saved_source_review(
     )
     if target_review_indexes(interpretation, result.source_statement_coverage, batch) and not result.source_target_review:
         raise ValueError("待核来源陈述缺少逐项核对结果")
-    if any(item.decision in {"unresolved", "additional_requirement"} for item in review.items):
+    if any(item.decision == "unresolved" for item in review.items):
         raise ValueError("来源逐项核对仍有未闭合要求")
+    additions = {item.statement_index for item in review.items
+                 if item.decision == "additional_requirement"}
+    if additions:
+        if (result.final_output is None or result.partial_wire is None
+                or result.source_candidate_alignment is None):
+            raise SourceCandidateAlignmentValidationError("新增要求缺少已保存的候选语义核对")
+        try:
+            rehydrated = hydrate_protocol_control_agent_output(result.partial_wire, batch)
+            if rehydrated != result.final_output:
+                raise ValueError("候选正式身份与保存的原草稿不一致")
+            validate_candidate_alignment(
+                batch, interpretation, result.source_statement_coverage,
+                result.partial_wire, result.source_candidate_alignment,
+            )
+            expected_coverage = hydrated_source_coverage_indexes(
+                batch, result.partial_wire, result.final_output,
+                source_statement_coverage(batch, interpretation, result.partial_wire),
+            )
+        except ValueError as exc:
+            raise SourceCandidateAlignmentValidationError(str(exc)) from exc
+        aligned = {item.statement_index for item in result.source_candidate_alignment.items
+                   if item.decision == "fully_expressed"}
+        if aligned != additions or len(result.source_candidate_alignment.items) != len(additions):
+            raise SourceCandidateAlignmentValidationError("新增要求与已核候选未逐项对应")
+        proven = reusable_proven_alignment_items(
+            batch, interpretation, result.source_statement_coverage,
+            result.partial_wire, result.source_candidate_alignment,
+        )
+        if len(proven) != len(additions):
+            raise SourceCandidateAlignmentValidationError("候选对应证明未绑定当前完整来源与候选")
+        for item in result.source_candidate_alignment.items:
+            entry = next((entry for entry in result.source_statement_coverage
+                          if entry.statement_index == item.statement_index), None)
+            expected = next((entry for entry in expected_coverage
+                             if entry.statement_index == item.statement_index), None)
+            if entry is None or expected is None:
+                raise SourceCandidateAlignmentValidationError("已核候选缺少逐项来源覆盖账")
+            mapped = hydrated_source_coverage_indexes(
+                batch, result.partial_wire, result.final_output,
+                [expected.model_copy(update={"candidate_indexes": [item.candidate_index]})],
+            )[0]
+            if (entry.status != "semantically_aligned"
+                    or expected.status != "candidate_linked"
+                    or entry.action_candidate_indexes != expected.action_candidate_indexes
+                    or entry.candidate_indexes != mapped.candidate_indexes):
+                raise SourceCandidateAlignmentValidationError("已核候选与来源覆盖账不一致")
+    elif result.source_candidate_alignment is not None:
+        raise SourceCandidateAlignmentValidationError("没有新增要求却保留候选语义核对")
+    if result.source_definition_consumers is not None:
+        validate_source_definition_consumers(
+            batch, interpretation, result.source_definition_consumers,
+        )
 
 
 def _validated_deep_source(
@@ -2249,14 +2560,25 @@ def _validated_deep_source(
         ):
             raise ValueError("已完成的来源批次提示或模型回执身份不一致")
         result = ProtocolControlAgentRunResult.model_validate(saved.get("run_result"))
-        if (result.status not in {"已解析", "待跨章核验"}
-                or result.final_output is None or result.batch_id != batch.batch_id):
+        if result.batch_id != batch.batch_id:
+            raise ValueError("来源深审结果身份不一致")
+        if saved.get("restricted_batch") is not None:
+            expected = restricted_batch_from_review(batch, result)
+            if (expected is None or expected != ProtocolControlBatchDispositionHydrated.model_validate(
+                    saved["restricted_batch"]
+            )):
+                raise ValueError("已保存的受限来源与当前逐项核对不一致")
+            if _source_interpretation_requires_refresh(batch, result):
+                return None, None
+            return checkpoint_id, saved
+        if result.status not in {"已解析", "待跨章核验"} or result.final_output is None:
             raise ValueError("来源深审结果不完整")
         if _source_interpretation_requires_refresh(batch, result):
             return None, None
         try:
             _validate_saved_source_review(batch, result)
-        except (SourceInterpretationValidationError, SourceTargetReviewValidationError):
+        except (SourceInterpretationValidationError, SourceTargetReviewValidationError,
+                SourceCandidateAlignmentValidationError):
             return None, None
         _validate_deep_batch_output(batch, result.final_output)
         return checkpoint_id, saved
@@ -2265,6 +2587,72 @@ def _validated_deep_source(
             retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
             detail="既有深审批次无法证明与当前来源和校验要求一致：" + str(exc)[:900],
         ) from exc
+
+
+def _frozen_official_predicates(
+    config: ProtocolControlExecutorConfig,
+    payload: Mapping[str, Any],
+    batch: ProtocolControlDispositionBatch | None = None,
+    *, official_codes: set[str] | None = None,
+) -> tuple[
+    dict[str, list[tuple[str, str]]],
+    dict[str, dict[tuple[str, str], tuple[str, ...]]],
+]:
+    revision_id = payload.get("draft_revision_id")
+    expected_hash = payload.get("draft_content_sha256")
+    if revision_id is None and expected_hash is None:
+        return {}, {}
+    if not isinstance(revision_id, str) or not isinstance(expected_hash, str):
+        raise StepFailure(
+            retryable=False, error_code="PROTOCOL_CONTROL_DRAFT_INVALID",
+            detail="方案草稿修订身份不完整，不能核对正式子条件。",
+        )
+    with config.session_factory() as session:
+        try:
+            revision = ProtocolDraftRevisionRepository(session).get(revision_id)
+        except NotFoundError as exc:
+            raise StepFailure(
+                retryable=False, error_code="PROTOCOL_CONTROL_DRAFT_INVALID",
+                detail="方案草稿修订不存在，不能核对正式子条件。",
+            ) from exc
+        source = payload.get("source_input") or {}
+        if (revision.content_sha256 != expected_hash
+                or revision.project_id != source.get("project_id")
+                or revision.protocol_version_id != source.get("protocol_version_id")
+                or getattr(revision.study_phase, "value", revision.study_phase)
+                != source.get("selected_phase")):
+            raise StepFailure(
+                retryable=False, error_code="PROTOCOL_CONTROL_DRAFT_INVALID",
+                detail="方案草稿修订与本次冻结来源不一致。",
+            )
+        rules = revision.content.proposed_rules
+    allowed = (official_codes if official_codes is not None else
+               ({target.official_code for target in batch.known_official_targets}
+                if batch is not None else None))
+    identities: dict[str, list[tuple[str, str]]] = {}
+    excerpts: dict[str, dict[tuple[str, str], tuple[str, ...]]] = {}
+    for rule in rules:
+        if allowed is not None and rule.official_code not in allowed:
+            continue
+        for component in rule.components:
+            expressions = [component.expression, component.exception_expression]
+            expressions.extend(item.expression for item in component.repeat_trigger_conditions)
+            for expression in expressions:
+                if expression is None:
+                    continue
+                for predicate in iter_atomic_predicates(expression):
+                    source_clauses = tuple(predicate.exact_source_clauses)
+                    if not source_clauses:
+                        continue
+                    key = (component.rule_component_id, predicate.predicate_id)
+                    if key in excerpts.setdefault(rule.official_code, {}):
+                        raise StepFailure(
+                            retryable=False, error_code="PROTOCOL_CONTROL_DRAFT_INVALID",
+                            detail="方案草稿正式子条件身份重复。",
+                        )
+                    excerpts[rule.official_code][key] = source_clauses
+                    identities.setdefault(rule.official_code, []).append(key)
+    return identities, excerpts
 
 
 def _execute_deep(
@@ -2289,6 +2677,16 @@ def _execute_deep(
         max_attempts=context.max_attempts,
     )
     batch = _deep_batch_for_step(effective_context, deep_plan)
+    try:
+        _require_schedule_member_sources([*batch.owned_units, *batch.context_units])
+    except ValueError as exc:
+        raise StepFailure(
+            retryable=False, error_code="PROTOCOL_CONTROL_TABLE_SOURCE_INVALID",
+            detail=str(exc),
+        ) from exc
+    official_predicate_identities, official_predicate_sources = _frozen_official_predicates(
+        config, context.job_payload, batch,
+    )
     prompt_template = _prompt_from_payload(context, "deep", config)
     reuse_plan = context.job_payload.get("deep_reuse_plan")
     if reuse_plan is not None:
@@ -2326,6 +2724,8 @@ def _execute_deep(
     resume_wire = None
     resume_interpretation = None
     resume_session_id = None
+    resume_review = _ResumedSourceReview(state="absent", reason="no_saved_source_review")
+    resume_alignment_saved: Mapping[str, Any] | None = None
     previous = context.last_checkpoint
     if isinstance(previous, Mapping) and previous.get("stage") == "deep_failure_diagnostic":
         saved_wire = previous.get("partial_wire")
@@ -2363,6 +2763,13 @@ def _execute_deep(
                     detail="局部深审草稿结构损坏，不得作为已核结果继续。") from exc
             if resume_wire is not None:
                 resume_session_id = previous["session_id"]
+            # A saved review is proven against the current batch even when the
+            # failed run had no reusable partial wire; an unproven one is
+            # recorded as refresh_required and never silently adopted.
+            resume_review = _resumable_saved_source_review(
+                batch, resume_interpretation, previous,
+            )
+            resume_alignment_saved = previous
 
     deep_source_job_id = context.job_payload.get("deep_source_job_id")
     if deep_source_job_id is not None:
@@ -2411,7 +2818,7 @@ def _execute_deep(
                     retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
                     detail="已核局部草稿不再符合当前方案或批次，未继续执行。",
                 )
-            _, draft = partial
+            _, draft, resume_review = partial
             if draft.get("transport_identity") != _transport_identity(transport, stage="deep"):
                 raise StepFailure(
                     retryable=False, error_code="PROTOCOL_CONTROL_DEEP_SOURCE_INVALID",
@@ -2423,6 +2830,27 @@ def _execute_deep(
             if draft.get("partial_wire") is not None:
                 resume_wire = ProtocolControlAgentWire.model_validate(draft["partial_wire"])
                 resume_session_id = draft["session_id"]
+            resume_alignment_saved = draft
+
+    resume_candidate_alignment = None
+    if (resume_alignment_saved is not None and resume_interpretation is not None
+            and resume_wire is not None):
+        coverage_payload = resume_alignment_saved.get("source_statement_coverage")
+        alignment_coverage: list[SourceStatementCoverage]
+        if isinstance(coverage_payload, list) and coverage_payload:
+            try:
+                alignment_coverage = [
+                    SourceStatementCoverage.model_validate(item)
+                    for item in coverage_payload
+                ]
+            except (TypeError, ValidationError):
+                alignment_coverage = []
+        else:
+            alignment_coverage = []
+        resume_candidate_alignment = _resumable_saved_candidate_alignment(
+            batch, resume_interpretation, alignment_coverage, resume_wire,
+            resume_alignment_saved,
+        )
 
     if not callable(getattr(transport, "start_source_interpretation", None)):
         raise StepFailure(
@@ -2441,16 +2869,75 @@ def _execute_deep(
         resume_wire=resume_wire,
         resume_source_interpretation=resume_interpretation,
         resume_session_id=resume_session_id,
+        resume_source_target_review=(
+            resume_review.review if resume_interpretation is not None else None
+        ),
+        resume_source_statement_coverage=(
+            resume_review.coverage if resume_interpretation is not None else ()
+        ),
+        resume_source_candidate_alignment=resume_candidate_alignment,
+        official_predicate_identities=official_predicate_identities,
+        official_predicate_sources=official_predicate_sources,
     )
     take_receipts = getattr(transport, "take_call_receipts", None)
     model_call_receipts = take_receipts() if callable(take_receipts) else []
-    if result.status not in {"已解析", "待跨章核验"} or result.final_output is None:
+    restricted_batch = None
+    restricted_error: ValueError | None = None
+    try:
+        if isinstance(result, ProtocolControlAgentRunResult):
+            if result.final_output is not None and result.source_candidate_alignment is not None:
+                _validate_saved_source_review(batch, result)
+            restricted_batch = restricted_batch_from_review(batch, result)
+    except ValueError as exc:
+        restricted_error = exc
+    if restricted_batch is not None:
+        return {
+            "stage": "deep",
+            "model_call_receipts": model_call_receipts,
+            "batch_id": batch.batch_id,
+            "prompt_template_sha256": protocol_control_agent_prompt_template_sha256(prompt_template),
+            "transport_identity": _transport_identity(transport, stage="deep"),
+            "component_identity": _deep_component_identity(context.job_payload, prompt_template),
+            "repair_contract_sha256": protocol_control_agent_repair_contract_sha256(),
+            "run_result": result.model_dump(mode="json"),
+            "source_review_reuse": _source_review_reuse_record(resume_review),
+            "restricted_batch": restricted_batch.model_dump(mode="json"),
+        }
+    if (restricted_error is not None or result.status not in {"已解析", "待跨章核验"}
+            or result.final_output is None):
+        source_review_failure_codes = {
+            "SOURCE_FUNCTION_RECHECK_TRANSPORT_FAILED",
+            "SOURCE_FUNCTION_RECHECK_SCHEMA_INVALID",
+            "SOURCE_FUNCTION_RECHECK_INVALID",
+            "SOURCE_FUNCTION_RECHECK_UNRESOLVED",
+            "SOURCE_TARGET_REVIEW_TRANSPORT_FAILED",
+            "SOURCE_TARGET_FOCUSED_TRANSPORT_FAILED",
+            "SOURCE_TARGET_FOCUSED_INVALID",
+            "SOURCE_TARGET_FOCUSED_SCHEMA_INVALID",
+            "SOURCE_TARGET_REVIEW_UNAVAILABLE",
+        }
+        source_review_failure = next((code for code in (
+            result.attempts[-1].error_classes if result.attempts else []
+        ) if code in source_review_failure_codes), None)
         raise StepFailure(
-            retryable=False,
-            error_code="PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID",
+            retryable=(restricted_error is None
+                       and source_review_failure in {
+                           "SOURCE_FUNCTION_RECHECK_TRANSPORT_FAILED",
+                           "SOURCE_TARGET_REVIEW_TRANSPORT_FAILED",
+                           "SOURCE_TARGET_FOCUSED_TRANSPORT_FAILED",
+                       }),
+            error_code=("PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID" if restricted_error
+                        else "PROTOCOL_CONTROL_" + source_review_failure if source_review_failure
+                        else "PROTOCOL_CONTROL_CAPABILITY_RESTRICTION_UNPROVEN"
+                        if result.capability_wire is not None
+                        else "PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID"),
             detail=_run_diagnostics(
                 result.attempts,
-                "深析批次在限定修复次数内未产出合规输出。",
+                ("来源逐项核对与未决陈述相矛盾：" + str(restricted_error)[:500]
+                 if restricted_error else
+                 "原文要求小时或分钟精度，但该批尚未满足有源局部采用条件；结果保持未采信。"
+                 if result.capability_wire is not None else
+                 "深析批次在限定修复次数内未产出合规输出。"),
             ),
             diagnostic_checkpoint={
                 "stage": "deep_failure_diagnostic",
@@ -2461,6 +2948,10 @@ def _execute_deep(
                 "partial_wire": (
                     result.partial_wire.model_dump(mode="json")
                     if result.partial_wire is not None else None
+                ),
+                "capability_wire": (
+                    result.capability_wire.model_dump(mode="json")
+                    if result.capability_wire is not None else None
                 ),
                 "prompt_template_sha256": protocol_control_agent_prompt_template_sha256(
                     prompt_template
@@ -2480,6 +2971,11 @@ def _execute_deep(
                     result.source_target_review.model_dump(mode="json")
                     if result.source_target_review is not None else None
                 ),
+                "source_candidate_alignment": (
+                    result.source_candidate_alignment.model_dump(mode="json")
+                    if result.source_candidate_alignment is not None else None
+                ),
+                "source_review_reuse": _source_review_reuse_record(resume_review),
                 "attempts": [
                     {
                         "attempt": item.attempt,
@@ -2506,14 +3002,244 @@ def _execute_deep(
         "component_identity": _deep_component_identity(context.job_payload, prompt_template),
         "repair_contract_sha256": protocol_control_agent_repair_contract_sha256(),
         "run_result": result.model_dump(mode="json"),
+        "source_review_reuse": _source_review_reuse_record(resume_review),
     }
+
+
+def _source_review_reuse_record(resume_review: _ResumedSourceReview) -> dict[str, Any]:
+    """Record the validated source seed, not candidate acceptance or saved calls."""
+
+    return {
+        "state": resume_review.state,
+        "reason": resume_review.reason,
+        "proof_scope": "saved_source_target_review",
+        "verified_seed_statements": sorted(
+            item.statement_index for item in (
+                resume_review.review.items if resume_review.review is not None else ()
+            )
+        ),
+    }
+
+
+def _definition_consumer_atom(
+    candidate: Any, consumer: ProtocolControlDefinitionAtomConsumption,
+) -> tuple[Any, list[str]]:
+    """Resolve one declared consumer position inside a frozen candidate."""
+
+    if consumer.consumer_kind != "control_atom":
+        raise ValueError("官方条件消费不能按控制原子解析")
+    semantics = getattr(candidate, "semantics", None)
+    if semantics is None:
+        raise ValueError("消费原子所属候选缺少冻结语义")
+    if consumer.layer == "repeat_trigger":
+        condition = next(
+            (item for item in semantics.repeat_trigger_conditions
+             if item.condition_id == consumer.condition_id),
+            None,
+        )
+        expression = condition.expression if condition is not None else None
+    else:
+        expression = getattr(semantics, f"{consumer.layer}_expression", None)
+    groups = expression.groups if expression is not None else ()
+    if consumer.group_index >= len(groups):
+        raise ValueError("消费原子引用了不存在的条件组")
+    atoms = groups[consumer.group_index].atoms
+    if consumer.atom_index >= len(atoms):
+        raise ValueError("消费原子引用了不存在的原子")
+    atom = atoms[consumer.atom_index]
+    excerpts = [value for value in atom.source_excerpts if value]
+    continuation = getattr(atom, "continuing_obligation", None)
+    if continuation is not None:
+        excerpts.extend(value for value in continuation.source_excerpts if value)
+    return atom, excerpts
+
+
+def _definition_consumer_official_target(
+    consumer: ProtocolControlDefinitionAtomConsumption,
+    targets: Mapping[str, KnownOfficialRuleTarget],
+) -> list[str]:
+    """Resolve a declared official consumer against the batch's frozen targets.
+
+    This proves the declared official code is one of the batch's frozen official
+    targets and returns that target's own declared excerpts. The finer
+    ``(rule_component_id, predicate_id)`` identity is proven against the frozen
+    RuleSet where it exists (publication and working draft); a parent code alone
+    never selects a consumer.
+    """
+
+    if consumer.consumer_kind != "official_predicate":
+        raise ValueError("控制原子消费不能按官方条件解析")
+    target = targets.get(consumer.official_code)
+    if target is None:
+        raise ValueError("官方条件消费引用了本批冻结官方目标之外的编号")
+    return [value for value in target.source_excerpts if value]
+
+
+def _source_definition_consumers(
+    deep_plan: ProtocolControlDiscoveryToDeepPlan,
+    outputs: Mapping[str, ProtocolControlBatchDispositionHydrated],
+    reviewed: Mapping[str, ProtocolControlAgentRunResult],
+) -> list[ProtocolControlDefinitionConsumerRecord]:
+    """Close declared definition consumers into frozen, identity-bound records.
+
+    Every calculation definition of every deep batch yields exactly one record.
+    Each side of the relation is verified against its own frozen source: the
+    definition quote stays on the record, and the declared consumer excerpt must
+    occur in that consumer's own declared frozen excerpts — a control candidate
+    atom resolved by position, or a frozen official target resolved by code. The
+    two anchors are never required to contain each other, and ``scope_complete``
+    is never claimed here, because this per-batch closure cannot prove the
+    complete consumer scope including consumers in other batches.
+    """
+
+    records: list[ProtocolControlDefinitionConsumerRecord] = []
+    for batch in deep_plan.batches:
+        run = reviewed[batch.batch_id]
+        interpretation = run.source_interpretation
+        if interpretation is None:
+            continue
+        output = outputs[batch.batch_id]
+        units = {unit.structure_unit_id: unit for unit in batch.owned_units}
+        declared = (
+            {item.statement_index: item for item in run.source_definition_consumers.items}
+            if run.source_definition_consumers is not None else {}
+        )
+        reviews = (
+            {item.statement_index: item for item in run.source_target_review.items}
+            if run.source_target_review is not None else {}
+        )
+        definition_indexes = {
+            index for index, statement in enumerate(interpretation.statements)
+            if "calculation_input" in statement.decision_functions
+        }
+        stray = sorted(set(declared) - definition_indexes)
+        if stray:
+            raise StepFailure(
+                retryable=False,
+                error_code="PROTOCOL_CONTROL_SOURCE_DEFINITION_CONSUMER_INVALID",
+                detail="定义消费登记引用了非计算来源陈述：" + ",".join(map(str, stray)),
+            )
+        for index, statement in enumerate(interpretation.statements):
+            if index not in definition_indexes:
+                continue
+            unit = units.get(statement.structure_unit_id)
+            if unit is None:
+                raise StepFailure(
+                    retryable=False,
+                    error_code="PROTOCOL_CONTROL_SOURCE_DEFINITION_CONSUMER_INVALID",
+                    detail="定义所在来源单元不属于本批冻结来源。",
+                )
+            review = reviews.get(index)
+            if is_post_eligibility_calculation(statement, review):
+                continue
+            reasons = {
+                *statement.unresolved,
+                *(review.unresolved_aspects if review is not None else ()),
+            }
+            entry = declared.get(index)
+            consumers: list[ProtocolControlDefinitionAtomConsumption] = []
+            official_targets = {
+                target.official_code: target for target in batch.known_official_targets
+            }
+            if entry is not None:
+                reasons.update(entry.unresolved_aspects)
+                for consumer in entry.consumers:
+                    if consumer.consumer_kind == "official_predicate":
+                        try:
+                            excerpts = _definition_consumer_official_target(
+                                consumer, official_targets,
+                            )
+                        except ValueError as exc:
+                            raise StepFailure(
+                                retryable=False,
+                                error_code="PROTOCOL_CONTROL_SOURCE_DEFINITION_CONSUMER_INVALID",
+                                detail="官方条件消费未绑定本批冻结官方目标：" + str(exc),
+                            ) from exc
+                    else:
+                        if consumer.candidate_index >= len(output.candidates):
+                            raise StepFailure(
+                                retryable=False,
+                                error_code="PROTOCOL_CONTROL_SOURCE_DEFINITION_CONSUMER_INVALID",
+                                detail="定义消费原子引用了不存在的候选。",
+                            )
+                        candidate = output.candidates[consumer.candidate_index]
+                        try:
+                            _, excerpts = _definition_consumer_atom(candidate, consumer)
+                        except ValueError as exc:
+                            raise StepFailure(
+                                retryable=False,
+                                error_code="PROTOCOL_CONTROL_SOURCE_DEFINITION_CONSUMER_INVALID",
+                                detail="定义消费原子未绑定冻结候选原子：" + str(exc),
+                            ) from exc
+                    consumer_excerpt = normalize_source_excerpt(consumer.consumer_excerpt)
+                    if not consumer_excerpt or not any(
+                        consumer_excerpt in normalize_source_excerpt(excerpt)
+                        for excerpt in excerpts
+                    ):
+                        raise StepFailure(
+                            retryable=False,
+                            error_code="PROTOCOL_CONTROL_SOURCE_DEFINITION_CONSUMER_UNGROUNDED",
+                            detail="消费来源摘录不在该消费者自身声明的冻结原文中。",
+                        )
+                    if consumer.consumer_kind == "official_predicate":
+                        consumers.append(ProtocolControlDefinitionAtomConsumption(
+                            consumer_kind="official_predicate",
+                            rule_component_id=consumer.rule_component_id,
+                            predicate_id=consumer.predicate_id,
+                            consumer_excerpt=consumer.consumer_excerpt,
+                            relation_note=consumer.relation_note,
+                        ))
+                    else:
+                        consumers.append(ProtocolControlDefinitionAtomConsumption(
+                            control_candidate_id=candidate.control_candidate_id,
+                            layer=consumer.layer,
+                            condition_id=consumer.condition_id,
+                            group_index=consumer.group_index,
+                            atom_index=consumer.atom_index,
+                            consumer_excerpt=consumer.consumer_excerpt,
+                            relation_note=consumer.relation_note,
+                        ))
+            # A missing declaration is not proof that no other batch consumes
+            # this definition; the per-batch view never closes global scope.
+            reasons.add(_DEFINITION_CONSUMER_SCOPE_UNPROVEN)
+            records.append(ProtocolControlDefinitionConsumerRecord(
+                batch_id=batch.batch_id,
+                source_structure_unit_id=statement.structure_unit_id,
+                source_statement_index=index,
+                source_quote=statement.quoted_text,
+                source_span_ids=sorted(unit.source_span_ids),
+                consumers=consumers,
+                scope_complete=False,
+                unresolved_reasons=sorted(reasons),
+            ))
+    return records
+
+
+def _require_definition_consumer_checkpoint_match(
+    hydrate: Mapping[str, Any],
+    verified: Sequence[ProtocolControlDefinitionConsumerRecord],
+) -> None:
+    """A pre-contract checkpoint must not acquire the relation by re-derivation."""
+
+    if hydrate.get("source_definition_consumers", []) != [
+        item.model_dump(mode="json") for item in verified
+    ]:
+        raise StepFailure(
+            retryable=False,
+            error_code="PROTOCOL_CONTROL_SOURCE_DEFINITION_CONSUMER_INVALID",
+            detail="来源定义消费关系与已核深审批次不一致。",
+        )
 
 
 def _deep_results(
     context: StepContext,
     config: ProtocolControlExecutorConfig,
     closure: Mapping[str, Any],
-) -> tuple[dict[str, ProtocolControlBatchDispositionHydrated], list[ProtocolControlSourceUnitRelation]]:
+) -> tuple[
+    dict[str, ProtocolControlBatchDispositionHydrated],
+    list[ProtocolControlSourceUnitRelation],
+    list[ProtocolControlDefinitionConsumerRecord],
+]:
     deep_plan = ProtocolControlDiscoveryToDeepPlan.model_validate(closure["deep_plan"])
     deep_step_ids = closure.get("deep_step_ids") or []
     if not isinstance(deep_step_ids, list) or len(deep_step_ids) != len(deep_plan.batches):
@@ -2551,6 +3277,23 @@ def _deep_results(
             run_result = ProtocolControlAgentRunResult.model_validate(
                 payload.get("run_result")
             )
+            if payload.get("restricted_batch") is not None:
+                try:
+                    expected = restricted_batch_from_review(batch, run_result)
+                    restricted = ProtocolControlBatchDispositionHydrated.model_validate(
+                        payload["restricted_batch"]
+                    )
+                    if expected is None or restricted != expected:
+                        raise ValueError("受限来源与已保存的原文核对不一致")
+                except (TypeError, ValueError) as exc:
+                    raise StepFailure(
+                        retryable=False,
+                        error_code="PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID",
+                        detail="受限来源陈述未通过逐条原文重核。",
+                    ) from exc
+                output[batch.batch_id] = restricted
+                reviewed[batch.batch_id] = run_result
+                continue
             if (
                 run_result.status not in {"已解析", "待跨章核验"}
                 or run_result.final_output is None
@@ -2621,7 +3364,7 @@ def _deep_results(
             target_statements = (target_run.source_interpretation.statements
                                  if target_run.source_interpretation else [])
             matches = [entry for entry in target_run.source_statement_coverage
-                       if entry.status == "expressed"
+                       if entry.status in {"expressed", "semantically_aligned"}
                        and entry.statement_index < len(target_statements)
                        and target_statements[entry.statement_index].structure_unit_id == target_unit.structure_unit_id
                        and target_statements[entry.statement_index].force == statement.force
@@ -2670,9 +3413,116 @@ def _deep_results(
                 target_span_ids=sorted(target_unit.source_span_ids),
                 target_candidate_id=candidate.control_candidate_id,
             ))
-    return output, sorted(relations, key=lambda item: (
-        item.source_structure_unit_id, item.source_statement_index,
-    ))
+    return (
+        output,
+        sorted(relations, key=lambda item: (
+            item.source_structure_unit_id, item.source_statement_index,
+        )),
+        _source_definition_consumers(deep_plan, output, reviewed),
+    )
+
+
+def _definition_scope_basis(
+    context: StepContext, config: ProtocolControlExecutorConfig,
+) -> tuple[list[ProtocolControlDefinitionConsumerRecord], dict[str, object], dict]:
+    closure = _closure_checkpoint(context, config)
+    outputs, _, records = _deep_results(context, config, closure)
+    _, official_sources = _frozen_official_predicates(
+        config, context.job_payload,
+    )
+    inventory, keyed = definition_scope_inputs(records, outputs, official_sources)
+    return records, inventory, keyed
+
+
+def _execute_definition_scope(
+    context: StepContext, config: ProtocolControlExecutorConfig,
+) -> dict[str, Any]:
+    records, inventory, keyed = _definition_scope_basis(context, config)
+    review = None
+    session_id = None
+    prompt_sha256 = None
+    raw_output_sha256 = None
+    if records:
+        transport = _resolve_transport(config, stage="deep")
+        _require_frozen_route(context, config, transport, stage="deep")
+        reader = getattr(transport, "start_definition_scope", None)
+        if not callable(reader):
+            raise StepFailure(
+                retryable=False, error_code="PROTOCOL_CONTROL_DEFINITION_SCOPE_UNAVAILABLE",
+                detail="本次方案分析模型没有全批次定义核对能力。",
+            )
+        try:
+            prompt = build_definition_scope_prompt(inventory)
+            prompt_sha256 = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+            response = reader(prompt=prompt)
+            session_id = response.session_id
+            raw_output_sha256 = hashlib.sha256(response.text.encode("utf-8")).hexdigest()
+            review = DefinitionScopeReview.model_validate_json(response.text)
+            closed = close_definition_scope(
+                records, review, inventory, keyed,
+                scope_unproven_reason=_DEFINITION_CONSUMER_SCOPE_UNPROVEN,
+            )
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise StepFailure(
+                retryable=False, error_code="PROTOCOL_CONTROL_DEFINITION_SCOPE_INVALID",
+                detail="全批次定义影响范围未核清：" + str(exc)[:900],
+            ) from exc
+    else:
+        closed = []
+    return {
+        "stage": STEP_SCOPE,
+        "inventory_sha256": inventory["sha256"],
+        "prompt_sha256": prompt_sha256,
+        "raw_output_sha256": raw_output_sha256,
+        "review": None if review is None else review.model_dump(mode="json"),
+        "session_id": session_id,
+        "source_definition_consumers": [item.model_dump(mode="json") for item in closed],
+    }
+
+
+def _verified_definition_scope(
+    context: StepContext, config: ProtocolControlExecutorConfig,
+) -> list[ProtocolControlDefinitionConsumerRecord]:
+    checkpoint = _checkpoint_for_step(context, STEP_SCOPE, config)
+    records, inventory, keyed = _definition_scope_basis(context, config)
+    if (checkpoint.get("stage") != STEP_SCOPE
+            or checkpoint.get("inventory_sha256") != inventory["sha256"]):
+        raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEFINITION_SCOPE_INVALID",
+                          detail="全批次定义核对与当前冻结来源不一致。")
+    raw = checkpoint.get("review")
+    if records:
+        if raw is None:
+            raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEFINITION_SCOPE_INVALID",
+                              detail="计算定义缺少全批次影响范围核对。")
+        expected_prompt = hashlib.sha256(
+            build_definition_scope_prompt(inventory).encode("utf-8")
+        ).hexdigest()
+        if (checkpoint.get("prompt_sha256") != expected_prompt
+                or not isinstance(checkpoint.get("raw_output_sha256"), str)
+                or len(checkpoint["raw_output_sha256"]) != 64
+                or not checkpoint.get("session_id")):
+            raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEFINITION_SCOPE_INVALID",
+                              detail="全批次定义核对缺少对应提示与模型返回身份。")
+        try:
+            reviewed = close_definition_scope(
+                records, DefinitionScopeReview.model_validate(raw), inventory, keyed,
+                scope_unproven_reason=_DEFINITION_CONSUMER_SCOPE_UNPROVEN,
+            )
+        except (TypeError, ValueError) as exc:
+            raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEFINITION_SCOPE_INVALID",
+                              detail="全批次定义核对内容无效：" + str(exc)[:900]) from exc
+    else:
+        if (raw is not None or checkpoint.get("prompt_sha256") is not None
+                or checkpoint.get("raw_output_sha256") is not None):
+            raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEFINITION_SCOPE_INVALID",
+                              detail="无计算定义的任务不能夹带模型核对。")
+        reviewed = []
+    if checkpoint.get("source_definition_consumers") != [
+        item.model_dump(mode="json") for item in reviewed
+    ]:
+        raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEFINITION_SCOPE_INVALID",
+                          detail="全批次定义核对记录与已保存结果不一致。")
+    return reviewed
 
 
 def _execute_hydrate(
@@ -2687,7 +3537,10 @@ def _execute_hydrate(
     publication_plan = ProtocolControlBatchPlan.model_validate(
         closure["publication_plan"]
     )
-    deep_results, source_unit_relations = _deep_results(context, config, closure)
+    deep_results, source_unit_relations, _ = _deep_results(
+        context, config, closure,
+    )
+    source_definition_consumers = _verified_definition_scope(context, config)
     decisions = [
         ProtocolControlDiscoveryDecision.model_validate(item)
         for item in closure.get("discovery_decisions", [])
@@ -2768,6 +3621,9 @@ def _execute_hydrate(
             for candidate in item.candidates
         ),
         "source_unit_relations": [item.model_dump(mode="json") for item in source_unit_relations],
+        "source_definition_consumers": [
+            item.model_dump(mode="json") for item in source_definition_consumers
+        ],
         "hydration": "system_hydrated_and_revalidated",
     }
 
@@ -2793,14 +3649,16 @@ def _execute_gate(
         ProtocolControlBatchDispositionHydrated.model_validate(item)
         for item in hydrate["batch_dispositions"]
     ]
-    _, verified_relations = _deep_results(
+    _, verified_relations, _ = _deep_results(
         context, config, _closure_checkpoint(context, config),
     )
+    verified_definition_consumers = _verified_definition_scope(context, config)
     if hydrate.get("source_unit_relations", []) != [
         item.model_dump(mode="json") for item in verified_relations
     ]:
         raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_SOURCE_RELATION_INVALID",
                           detail="跨章节来源对应与已核深审批次不一致。")
+    _require_definition_consumer_checkpoint_match(hydrate, verified_definition_consumers)
 
     catalog_scaffold = PublishedProtocolControlCatalog(
         catalog_id=_stable_catalog_id(
@@ -2819,6 +3677,11 @@ def _execute_gate(
             }
         ),
         controls=[],
+        restricted_statements=sorted(
+            (statement for batch in batch_results
+             for statement in batch.restricted_statements),
+            key=lambda item: (item.source_structure_unit_id, item.source_statement_index),
+        ),
     )
     # The existing gate is reused as a closure validator only.  This empty
     # catalog scaffold is intentionally not returned or persisted: this
@@ -2855,6 +3718,7 @@ def _execute_gate(
         ],
         "candidate_ids": candidate_ids,
         "source_unit_relations": hydrate.get("source_unit_relations", []),
+        "source_definition_consumers": hydrate.get("source_definition_consumers", []),
         "publication_plan_id": publication_plan.plan_id,
     }
 
@@ -3016,6 +3880,7 @@ __all__ = [
     "ProtocolControlExecutorConfig",
     "ProtocolControlJobService",
     "STEP_CLOSURE",
+    "STEP_SCOPE",
     "STEP_GATE",
     "STEP_HYDRATE",
     "create_protocol_control_executor",

@@ -71,6 +71,7 @@ describe("ReferencedDocumentsPanel", () => {
         file_name: "影像报告.pdf",
         media_type: "application/pdf",
         version_number: 1,
+        uploaded_by: "本地用户",
         origin: "added",
         origin_label: "本次新增",
         metadata_head: {

@@ -493,7 +493,10 @@ def _run_source_chain(
 
 
 def _attempt_metrics(attempts: list[Any]) -> dict[str, int]:
-    outcomes = Counter(str(getattr(item, "outcome", "")) for item in attempts)
+    outcomes = Counter(str(
+        item.get("outcome", "") if isinstance(item, dict)
+        else getattr(item, "outcome", "")
+    ) for item in attempts)
     return {
         "attempt_count": len(attempts),
         "schema_repair_count": int(outcomes.get("schema_invalid", 0)),
@@ -513,7 +516,8 @@ def _control_metrics(
     distribution: Counter[str] = Counter()
     discovery_batches: list[dict[str, Any]] = []
     deep_batches: list[dict[str, Any]] = []
-    totals = {"attempt_count": 0, "schema_repair_count": 0, "transport_retry_count": 0}
+    discovery_totals = {"attempt_count": 0, "schema_repair_count": 0, "transport_retry_count": 0}
+    deep_totals = {"attempt_count": 0, "schema_repair_count": 0, "transport_retry_count": 0}
     gate: dict[str, Any] | None = None
     failure: dict[str, Any] | None = None
     final_state = None
@@ -523,18 +527,32 @@ def _control_metrics(
         job = store.get_job(job_id)
         final_state = job.state
         steps = {step.step_id: step for step in store.list_steps(job_id)}
+        failed_events = {
+            row.event.step_id: row.event.payload
+            for row in store.list_event_rows(job_id)
+            if row.event.event_type == "step_failed" and row.event.step_id
+        }
         for step_id in sorted(steps):
             step = steps[step_id]
+            if step.state in {"failed_final", "failed"} and failure is None:
+                event_payload = failed_events.get(step_id, {})
+                failure = {
+                    "step_id": step.step_id,
+                    "error_code": step.error_code,
+                    "detail": str(event_payload.get("detail") or "")[:2000],
+                }
             if step_id.startswith(_DISCOVERY_STEP_PREFIX):
                 checkpoint = store.get_last_checkpoint(job_id, step_id)
                 if checkpoint is None:
+                    continue
+                if "run_result" not in checkpoint[1]:
                     continue
                 run_result = ProtocolControlDiscoveryAgentRunResult.model_validate(
                     checkpoint[1]["run_result"]
                 )
                 attempts = _attempt_metrics(list(run_result.attempts))
-                for key in totals:
-                    totals[key] += attempts[key]
+                for key in discovery_totals:
+                    discovery_totals[key] += attempts[key]
                 decisions = list(run_result.final_output or [])
                 batch_distribution: Counter[str] = Counter(
                     decision.disposition.value for decision in decisions
@@ -553,16 +571,27 @@ def _control_metrics(
                 checkpoint = store.get_last_checkpoint(job_id, step_id)
                 if checkpoint is None:
                     continue
+                if "run_result" not in checkpoint[1]:
+                    attempts = _attempt_metrics(list(checkpoint[1].get("attempts", [])))
+                    for key in deep_totals:
+                        deep_totals[key] += attempts[key]
+                    deep_batches.append({
+                        "step_id": step_id, "state": step.state,
+                        "batch_id": None, "owned_structure_unit_ids": [],
+                        "candidate_count": 0, **attempts,
+                    })
+                    continue
                 run_result = ProtocolControlAgentRunResult.model_validate(
                     checkpoint[1]["run_result"]
                 )
                 attempts = _attempt_metrics(list(run_result.attempts))
-                for key in totals:
-                    totals[key] += attempts[key]
+                for key in deep_totals:
+                    deep_totals[key] += attempts[key]
                 output = run_result.final_output
                 deep_batches.append(
                     {
                         "step_id": step_id,
+                        "state": step.state,
                         "batch_id": output.batch_id if output else None,
                         "owned_structure_unit_ids": (
                             list(output.owned_structure_unit_ids) if output else []
@@ -575,14 +604,6 @@ def _control_metrics(
                 checkpoint = store.get_last_checkpoint(job_id, step_id)
                 if checkpoint is not None:
                     gate = checkpoint[1]
-            if step.state in {"failed_final", "failed"} and failure is None:
-                failure = {
-                    "step_id": step.step_id,
-                    "error_code": step.error_code,
-                    "detail": (step.detail or "")[:2000]
-                    if hasattr(step, "detail")
-                    else None,
-                }
     candidate_ids = sorted(gate.get("candidate_ids", [])) if gate else []
     return {
         "job_id": job_id,
@@ -595,16 +616,18 @@ def _control_metrics(
             "batch_count": len(discovery_batches),
             "distribution": dict(sorted(distribution.items())),
             "batches": discovery_batches,
-            **totals,
+            **discovery_totals,
         },
         "deep": {
             "batch_count": len(deep_batches),
+            "completed_batch_count": sum(item["state"] == "completed" for item in deep_batches),
+            "failed_batch_count": sum(item["state"] in {"failed", "failed_final"} for item in deep_batches),
             "batches": deep_batches,
             "candidate_count_total": sum(item["candidate_count"] for item in deep_batches),
             "owned_structure_unit_count": sum(
                 len(item["owned_structure_unit_ids"]) for item in deep_batches
             ),
-            **totals,
+            **deep_totals,
         },
         "result_kind": gate.get("result_kind") if gate else None,
         "formal_catalog_status": gate.get("formal_catalog_status") if gate else None,

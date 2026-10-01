@@ -1,6 +1,8 @@
 """Saved orchestration progress, separate from the frozen clinical report."""
 from app.services.prepared_review_progress import TASK_KINDS
-from app.services.prepared_review_workflow import PreparedReviewContinuation, require_workflow_scope
+from app.services.prepared_review_workflow import (
+    PreparedReviewContinuation, require_workflow_scope, workflow_source_policy_notice,
+)
 from app.storage.codecs import verify_payload_sha256
 from app.workflow.jobstore import JobStore
 from app.storage.repositories import AppendRepository, REVIEW_RUN_CONFIG, ScopeViolationError
@@ -21,6 +23,8 @@ def read_review_workflow(session, *, subject_id, review_episode_id, workflow_id)
         })
     steps = JobStore(session).list_steps(workflow_id)
     remaining = [step for step in steps if step.state != "completed"]
+    failure_reason = (workflow_source_policy_notice(session, workflow_id)
+                      if row.state in {"failed_final", "failed_retryable"} else None)
     report = AppendRepository(session, REVIEW_RUN_CONFIG).get_or_none(context.review_run_id)
     if report is not None and (report.subject_id != subject_id or report.review_episode_id != review_episode_id
                                or report.context_id != context.context_id):
@@ -29,6 +33,9 @@ def read_review_workflow(session, *, subject_id, review_episode_id, workflow_id)
         "job_id": workflow_id, "context_id": context.context_id,
         "context_sha256": context.context_sha256, "review_run_id": context.review_run_id,
         "state": row.state,
+        "failure_reason": failure_reason,
+        "retry_available": (row.state in {"failed_final", "failed_retryable"}
+                            and not row.cancel_requested and failure_reason is None),
         "report_saved": report is not None and report.completed_at is not None,
         "stage_label": remaining[0].name if remaining else "本次核对已结束",
         "progress_completed": row.progress_completed, "progress_total": row.progress_total,

@@ -126,9 +126,12 @@ class PageReviewRuntime:
 
     @app_error_boundary
     def retry_review_workflow(self, **kwargs):
-        from app.services.prepared_review_workflow import change_review_workflow, require_workflow_scope
+        from app.services.prepared_review_workflow import (
+            change_review_workflow, require_workflow_scope, require_workflow_retryable_policy,
+        )
         with self.session_factory() as session:
             require_workflow_scope(session, **kwargs)
+            require_workflow_retryable_policy(session, kwargs["workflow_id"])
         self._prepare()
         return change_review_workflow(self.session_factory, **kwargs, operation="retry", routes=self._routes)
 

@@ -5,6 +5,12 @@ import "./protocolControlPanel.css";
 
 interface Props { controls: ReturnType<typeof useProtocolControls> }
 
+function officialRuleLabel(code: string | null): string {
+  if (code === null) return "对应条款待核";
+  const match = /^(IN|EX)-(\d{2})$/.exec(code);
+  return match ? `${match[1] === "IN" ? "入选" : "排除"}标准第${Number(match[2])}条` : "对应条款待核";
+}
+
 function Groups({ title, groups }: { title: string; groups: ControlGroupView[] }) {
   if (!groups.length) return null;
   return <section className="kz-control-layer">
@@ -51,9 +57,26 @@ export function ProtocolControlPanel({ controls }: Props) {
     </>}
     {state.status === "error" && <p role="alert">{state.message}</p>}
     {state.status === "ready" && <>
-      <p>{state.data.requirements.length === 0
-        ? "本次整理未列出额外审核要求。"
-        : `已整理${state.data.requirements.length}项补充要求，待随方案发布。`}</p>
+      <p>{state.data.calculationGaps.length > 0
+        ? `已整理${state.data.requirements.length}项补充要求，另有${state.data.calculationGaps.length}处计算相关原文尚未纳入可靠审核，当前不能发布。`
+        : state.data.requirements.length === 0
+          ? "本次整理未列出额外审核要求。"
+          : `已整理${state.data.requirements.length}项补充要求，待随方案发布。`}</p>
+      {state.data.calculationGaps.length > 0 && <section className="kz-control-layer" aria-label="尚未纳入审核的计算相关原文">
+        <h4>尚未纳入审核的计算相关原文</h4>
+        <p>这里保留了方案原文。仍需核对它对哪些审核要求起作用，并接通可靠的取值或计算方式；这不是请研究者补写医学判断。</p>
+        <ol>{state.data.calculationGaps.map((gap) => <li key={gap.id}>
+          <strong>{gap.linkedOfficialCode === null
+            ? "关联的审核条款尚待核对"
+            : `原文核对时提及${officialRuleLabel(gap.linkedOfficialCode)}，尚未证明它影响哪项具体判断`}</strong>
+          <blockquote>{gap.sourceQuote}</blockquote>
+          <p>{gap.unresolvedAspects.length > 0 || gap.reviewDecision === "unresolved"
+            ? "这段原文的适用含义仍需核清，不能先当作已确定要求。"
+            : gap.reviewDecision === "covered_by_official" || gap.reviewDecision === "covered_by_procedure" || gap.reviewDecision === "additional_requirement"
+              ? "已记录原文与审核要求的对应；可靠计算方式尚未接通，由系统建设继续处理。"
+              : "这段原文是否属于本次审核、对应哪些要求仍需核对。"}</p>
+        </li>)}</ol>
+      </section>}
       <div className="kz-control-list">
         {state.data.requirements.map((item, index) => <details key={item.id} className="kz-control-item">
           <summary><span>补充要求 {index + 1}</span><strong>{item.title}</strong></summary>

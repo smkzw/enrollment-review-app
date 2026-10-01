@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import unicodedata
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -53,9 +54,10 @@ from app.protocols.supplementary_relation_contract import (
     procedure_execution_workflow_stage_id,
 )
 from app.protocols.protocol_control_planning import detect_required_action_kinds
+from app.protocols.source_time_fragments import intraday_time_fragments
 
 
-CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v32"
+CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v42"
 
 __all__ = [
     "CONTROL_PUBLICATION_GATE_VERSION",
@@ -63,6 +65,8 @@ __all__ = [
     "ProtocolControlPublicationError",
     "ProtocolControlGateIssue",
     "ProtocolControlGateReport",
+    "candidate_cites_unit_quote",
+    "locate_source_quote_offsets",
     "check_protocol_control_batch_candidates",
     "validate_protocol_control_batch_candidates",
     "check_protocol_control_publication",
@@ -232,7 +236,7 @@ _CALENDAR_DURATION_RE = re.compile(
     re.IGNORECASE,
 )
 _CONTINUOUS_TREATMENT_DURATION_RE = re.compile(
-    r"(?:(?:持续|连续)[^。；;\n\d前后内]{0,20}?|(?:治疗|用药|给药)\s*)"
+    r"(?:(?P<continuity>持续|连续)[^。；;\n\d前后内]{0,20}?|(?:治疗|用药|给药)\s*)"
     r"(?P<value>\d+)\s*(?:个\s*)?"
     r"(?P<unit>天|日|周|月|年|days?|weeks?|months?|years?)",
     re.IGNORECASE,
@@ -1308,6 +1312,7 @@ def _check_hydrated_result_links(
         StructureUnitDispositionKind.OFFICIAL_ELIGIBILITY.value,
         StructureUnitDispositionKind.REQUIRED_PROCEDURE.value,
         StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE.value,
+        StructureUnitDispositionKind.RESTRICTED_SOURCE.value,
     }
     invalid_structural_units = [
         item.structure_unit_id
@@ -1340,6 +1345,7 @@ def _check_hydrated_result_links(
         preserves_action = disposition in {
             StructureUnitDispositionKind.REQUIRED_PROCEDURE.value,
             StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE.value,
+            StructureUnitDispositionKind.RESTRICTED_SOURCE.value,
         }
         preserves_out_of_scope_action = (
             item.structure_unit_id not in pre_enrollment_ids
@@ -1822,6 +1828,21 @@ def _check_plan_and_batch_results(
             if item.structure_unit_id not in manifest_id_set:
                 _fail("DISPOSITION_UNIT_UNKNOWN", "批次结果引用了未知结构单元", entity_id=item.structure_unit_id)
             authoritative_by_unit[item.structure_unit_id] = item
+        units = {unit.structure_unit_id: unit for unit in batch.owned_units}
+        for statement in result.restricted_statements:
+            unit = units.get(statement.source_structure_unit_id)
+            if (unit is None
+                    or statement.source_span_ids != sorted(unit.source_span_ids)
+                    or not any(statement.source_quote in text
+                               for text in [unit.excerpt, *unit.heading_path])):
+                _fail(
+                    "RESTRICTED_SOURCE_UNGROUNDED",
+                    "受限陈述必须逐字来自本批冻结原文，且保留完整来源位置",
+                    entity_id=statement.restricted_statement_id,
+                )
+        scope_issues = _restricted_statement_scope_issues(batch, result)
+        if scope_issues:
+            raise scope_issues[0]
         uncovered = _uncovered_enrollment_prohibitions(batch, result)
         if uncovered:
             raise uncovered[0]
@@ -2828,8 +2849,6 @@ def _check_time_constraints(
             source_texts = [str(getattr(atom, "statement", ""))]
         source_text = "\n".join(str(item) for item in source_texts)
         constraint = getattr(atom, "time_constraint", None)
-        if constraint is None:
-            continue
         evidence = getattr(constraint, "half_life_evidence", None)
         calendar_text = source_text
         if evidence is not None:
@@ -2837,6 +2856,20 @@ def _check_time_constraints(
                 evidence.source_excerpt,
                 evidence.mask_duration(),
             )
+        clock_fragments = intraday_time_fragments(calendar_text)
+        if clock_fragments:
+            atom_id = next((str(value) for field in (
+                "condition_atom_id", "obligation_id", "exception_atom_id", "predicate_id",
+            ) if (value := getattr(atom, field, None))), "temporal-atom")
+            _fail(
+                "TIME_PRECISION_UNSUPPORTED",
+                "原文要求小时或分钟精度，当前日历日期计算不能据此判定；不得改为当天或按天："
+                + "、".join(clock_fragments),
+                entity_id=f"{entity_id}/{atom_id}",
+                obligation_source_span_ids=tuple(getattr(atom, "source_span_ids", ()) or ()),
+            )
+        if constraint is None:
+            continue
         calendar_durations = {
             (
                 int(match.group("value")),
@@ -2853,7 +2886,8 @@ def _check_time_constraints(
         continuous_durations = {
             (int(match.group("value")), _TIME_UNIT_CANONICAL[match.group("unit").lower()])
             for match in _CONTINUOUS_TREATMENT_DURATION_RE.finditer(calendar_text)
-        } if is_semantic_completion else set()
+            if is_semantic_completion or match.group("continuity") is not None
+        }
         structured_durations: set[tuple[int, str]] = set()
         for field in ("lower_bound", "upper_bound"):
             quantity = getattr(constraint, field, None)
@@ -4032,6 +4066,56 @@ def _check_temporal_obligation_relation_scope(
             )
 
 
+def _check_evaluation_numeric_sources(entity_id: str, control: object) -> None:
+    from app.protocols.deconstruction_gate import (
+        _numeric_tokens, _numeric_value_in_tokens, _source_comparators,
+        _unit_matches_source,
+    )
+
+    for layer in ("applicability", "trigger", "obligation", "exception"):
+        expression = getattr(control, f"{layer}_expression", None)
+        for atom in _iter_expression_atoms(expression):
+            spec = getattr(atom, "evaluation", None)
+            predicate = spec.predicate if spec is not None else None
+            if predicate is None:
+                continue
+            values = predicate.value if isinstance(predicate.value, list) else [predicate.value]
+            numbers = [value for value in values if isinstance(value, (int, float))
+                       and not isinstance(value, bool)]
+            if not numbers:
+                continue
+            clauses = [part for clause in predicate.exact_source_clauses
+                       for part in re.split(r"[；;。\n]|(?<!\d)[，,]|[，,](?!\d)",
+                                            unicodedata.normalize("NFKC", clause)) if part.strip()]
+            atom_id = (getattr(atom, "condition_atom_id", None)
+                       or getattr(atom, "obligation_id", None)
+                       or getattr(atom, "exception_atom_id", None))
+            locator = f"{entity_id}/{atom_id}" if atom_id else entity_id
+            value_clauses = [clause for clause in clauses
+                             if all(_numeric_value_in_tokens(value, _numeric_tokens(clause))
+                                    for value in numbers)]
+            if not value_clauses:
+                _fail("NUMERIC_VALUE_NOT_IN_SOURCE", "计算数值尚不能在该原子的逐字原文中核对",
+                      entity_id=locator, obligation_source_span_ids=atom.source_span_ids)
+            directed = [clause for clause in value_clauses
+                        if _source_comparators(clause) == {predicate.comparator}]
+            if not directed:
+                if any(len(_source_comparators(clause)) != 1 for clause in value_clauses):
+                    _fail("SOURCE_NUMERIC_SEMANTICS_UNVERIFIED",
+                          "数值及比较范围尚不能由所绑定原文独立核实，不能自动改写条件",
+                          entity_id=locator, obligation_source_span_ids=atom.source_span_ids)
+                _fail("COMPARATOR_CHANGED", "计算比较方向与该原子原文不一致",
+                      entity_id=locator, obligation_source_span_ids=atom.source_span_ids)
+            if predicate.unit and not any(_unit_matches_source(predicate.unit, clause)
+                                          for clause in directed):
+                _fail("NUMERIC_UNIT_NOT_IN_SOURCE", "计算单位尚不能在该原子原文中核对",
+                      entity_id=locator, obligation_source_span_ids=atom.source_span_ids)
+            if any(len(_numeric_tokens(clause)) > len(numbers) for clause in directed):
+                _fail("SOURCE_NUMERIC_SEMANTICS_UNVERIFIED",
+                      "同一摘录含多个数值，尚未证明当前指标与阈值的对应关系",
+                      entity_id=locator, obligation_source_span_ids=atom.source_span_ids)
+
+
 def _validate_candidate(
     candidate: ProtocolControlCandidate,
     *,
@@ -4224,6 +4308,7 @@ def _validate_candidate(
         validate_control_expression_evaluations(semantics)
     except ValueError as exc:
         _fail("CONTROL_EVALUATION_SPEC_INVALID", str(exc), entity_id=candidate_id)
+    _check_evaluation_numeric_sources(candidate_id, semantics)
     try:
         validate_control_evidence_policy_sources(semantics.minimum_evidence, source_spans, units)
         validate_control_evidence_dependencies(semantics)
@@ -4526,6 +4611,7 @@ def _validate_control(
         validate_control_evaluations(control)
     except ValueError as exc:
         _fail("CONTROL_EVALUATION_SPEC_INVALID", str(exc), entity_id=control_id)
+    _check_evaluation_numeric_sources(control_id, control)
     try:
         validate_control_evidence_policy_sources(control.minimum_evidence, source_spans, units)
         validate_control_evidence_dependencies(control)
@@ -4645,6 +4731,10 @@ def _uncovered_enrollment_prohibitions(
 
     by_unit = {item.structure_unit_id: item for item in output.dispositions}
     by_candidate = {item.control_candidate_id: item for item in getattr(output, "candidates", ())}
+    restricted_quotes = {
+        (item.source_structure_unit_id, _normalize_prohibition_quote(item.source_quote))
+        for item in getattr(output, "restricted_statements", ())
+    }
     issues: list[ProtocolControlGateError] = []
     for unit in batch.owned_units:
         disposition = by_unit.get(unit.structure_unit_id)
@@ -4696,6 +4786,8 @@ def _uncovered_enrollment_prohibitions(
         for clause in clauses:
             quote = clause.strip()
             normalized_quote = _normalize_prohibition_quote(quote)
+            if (unit.structure_unit_id, normalized_quote) in restricted_quotes:
+                continue
             if normalized_quote in quoted_clauses or any(
                 _split_prohibition_atom_covers_clause(normalized_quote, atom)
                 for atom in split_atoms
@@ -4751,6 +4843,300 @@ def _uncovered_enrollment_prohibitions(
     return tuple(issues)
 
 
+def _compact_source_text(value: str) -> str:
+    """Collapse whitespace only: frozen source positions are never fuzzy."""
+
+    return "".join(value.split())
+
+
+def locate_source_quote_offsets(excerpt: str, quote: str) -> tuple[int, int] | None:
+    """Map one verbatim quote to a half-open range of the frozen excerpt.
+
+    The frozen text may carry whitespace the quote does not, so the mapping is
+    built character by character and the returned range is the exact frozen text
+    that covers the quote. ``None`` means the quote is absent or ambiguous, and
+    no statement-level independence may be claimed from it.
+    """
+
+    target = _compact_source_text(quote)
+    if not target:
+        return None
+    positions = [index for index, character in enumerate(excerpt) if not character.isspace()]
+    source = "".join(excerpt[index] for index in positions)
+    start = source.find(target)
+    if start < 0 or source.find(target, start + 1) >= 0:
+        return None
+    return positions[start], positions[start + len(target) - 1] + 1
+
+
+def source_statement_qualifier_quotes(statement: object) -> tuple[str, ...]:
+    return tuple(value for value in (
+        getattr(statement, "scope_quote", None),
+        *(getattr(statement, "time_words", ()) or ()),
+        getattr(statement, "exception_words", None),
+        getattr(statement, "affected_stage", None),
+    ) if value is not None)
+
+
+def source_statement_context_is_self_contained(statement: object) -> bool:
+    """Disjoint actions alone cannot establish independence from shared qualifiers."""
+
+    quote = _compact_source_text(getattr(statement, "source_quote", None)
+                                 or getattr(statement, "quoted_text", ""))
+    return all(_compact_source_text(value) and _compact_source_text(value) in quote
+               for value in source_statement_qualifier_quotes(statement))
+
+
+def source_statement_is_standalone_action(statement: object) -> bool:
+    return (getattr(statement, "decision_functions", ()) == ["action"]
+            and (getattr(statement, "source_force", None)
+                 or getattr(statement, "force", None)) in {"required", "prohibited"})
+
+
+def source_statement_ranges_cover_unit(
+    excerpt: str, ranges: Sequence[tuple[int, int]],
+) -> bool:
+    """An independence proof cannot omit words outside its claimed statements."""
+
+    if not ranges:
+        return False
+    cursor = 0
+    for start, end in sorted(ranges):
+        if start < cursor or end <= start or end > len(excerpt):
+            return False
+        if any(not char.isspace() and char not in "；;。.:："
+               for char in excerpt[cursor:start]):
+            return False
+        cursor = end
+    return all(char.isspace() or char in "；;。.:：" for char in excerpt[cursor:])
+
+
+def candidate_cites_unit_quote(
+    candidate: object,
+    unit: ProtocolStructureUnit,
+    quote: str,
+) -> bool:
+    """Require a literal citation of the quote on an atom bound to this unit."""
+
+    target = _compact_source_text(quote)
+    if not target:
+        return False
+    semantics = getattr(candidate, "semantics", None)
+    if semantics is None:
+        return False
+    unit_span_ids = set(unit.source_span_ids)
+    for role in (
+        "applicability_expression",
+        "trigger_expression",
+        "obligation_expression",
+        "exception_expression",
+    ):
+        for atom in _iter_expression_atoms(getattr(semantics, role, None)):
+            if not set(getattr(atom, "source_span_ids", ()) or ()) & unit_span_ids:
+                continue
+            excerpts = [
+                excerpt
+                for excerpt in getattr(atom, "source_excerpts", ()) or ()
+                if isinstance(excerpt, str)
+            ]
+            evaluation = getattr(atom, "evaluation", None)
+            excerpts.extend(
+                excerpt
+                for excerpt in getattr(evaluation, "source_excerpts", ()) or ()
+                if isinstance(excerpt, str)
+            )
+            if any(target in _compact_source_text(excerpt) for excerpt in excerpts):
+                return True
+    return False
+
+
+def _scope_proof_failure(
+    code: str,
+    message: str,
+    *,
+    statement: object,
+    unit_id: str,
+) -> ProtocolControlGateError:
+    return ProtocolControlGateError(
+        code,
+        message,
+        entity_id=getattr(statement, "restricted_statement_id", None) or unit_id,
+        structure_unit_ids=[unit_id],
+    )
+
+
+def _statement_scope_proof_issues(
+    unit: ProtocolStructureUnit,
+    statement: object,
+    proof: object,
+    result: ProtocolControlBatchDispositionHydrated,
+) -> tuple[ProtocolControlGateError, ...]:
+    """Recheck one independence proof against the frozen text and live candidates."""
+
+    unit_id = unit.structure_unit_id
+    excerpt = unit.excerpt
+
+    def failure(code: str, message: str) -> tuple[ProtocolControlGateError, ...]:
+        return (_scope_proof_failure(code, message, statement=statement, unit_id=unit_id),)
+
+    if hashlib.sha256(excerpt.encode("utf-8")).hexdigest() != proof.unit_excerpt_sha256:
+        return failure(
+            "RESTRICTED_SOURCE_SCOPE_MISMATCH",
+            "受限陈述独立来源证明未绑定当前冻结原文；不得按已变化的原文放行。",
+        )
+    if (not source_statement_context_is_self_contained(statement)
+            or not source_statement_is_standalone_action(statement)):
+        return failure(
+            "RESTRICTED_SOURCE_CONTEXT_UNPROVEN",
+            "受限陈述的适用范围、时间或例外位于动作摘录之外；仅按不重叠摘录不能"
+            "证明同段其他要求独立。",
+        )
+    restricted = locate_source_quote_offsets(excerpt, statement.source_quote)
+    if restricted != (proof.restricted_source_start, proof.restricted_source_end):
+        return failure(
+            "RESTRICTED_SOURCE_SCOPE_MISMATCH",
+            "受限陈述逐字摘录未落在证明声明的原文区间上；受限区间必须由原文位置证明。",
+        )
+    candidates = [
+        candidate
+        for candidate in getattr(result, "candidates", ())
+        if unit_id in candidate.frozen_structure_unit_ids
+    ]
+    if any(
+        candidate_cites_unit_quote(candidate, unit, statement.source_quote)
+        for candidate in candidates
+    ):
+        return failure(
+            "RESTRICTED_SOURCE_POINT_REUSED",
+            "本单元可执行候选逐字引用了受限陈述；同一个语义点不得同时可执行与受限。",
+        )
+    occupied = [restricted]
+    for item in proof.independent_excerpts:
+        if (not source_statement_context_is_self_contained(item)
+                or not source_statement_is_standalone_action(item)):
+            return failure(
+                "RESTRICTED_SOURCE_CONTEXT_UNPROVEN",
+                "独立要求仍引用摘录之外的限定语，不能以字面区间代替作用关系核实。",
+            )
+        offsets = locate_source_quote_offsets(excerpt, item.source_quote)
+        if offsets != (item.source_start, item.source_end):
+            return failure(
+                "RESTRICTED_SOURCE_SCOPE_MISMATCH",
+                "独立来源区间的逐字摘录未落在声明的原文位置上；独立证明只能按原文位置成立。",
+            )
+        if any(
+            offsets[0] < end and start < offsets[1] for start, end in occupied
+        ):
+            return failure(
+                "RESTRICTED_SOURCE_SCOPE_MISMATCH",
+                "独立来源区间与受限陈述或其他独立区间重叠；相邻条文不能证明条目独立。",
+            )
+        occupied.append(offsets)
+        for candidate_id in item.candidate_control_ids:
+            candidate = next(
+                (
+                    entry
+                    for entry in candidates
+                    if entry.control_candidate_id == candidate_id
+                ),
+                None,
+            )
+            if candidate is None or not candidate_cites_unit_quote(
+                candidate, unit, item.source_quote
+            ):
+                return failure(
+                    "RESTRICTED_SOURCE_SCOPE_UNATTRIBUTED",
+                    "独立来源陈述没有本单元可执行候选的逐字引用；不得以身份引用或词面"
+                    "相似代替独立归属证明。",
+                )
+    return ()
+
+
+def _restricted_statement_scope_issues(
+    batch: ProtocolControlDispositionBatch,
+    output: ProtocolControlBatchDispositionHydrated,
+) -> tuple[ProtocolControlGateError, ...]:
+    """Consume statement-level independence proofs for restricted statements."""
+
+    unit_by_id = {unit.structure_unit_id: unit for unit in batch.owned_units}
+    disposition_by_unit = {
+        item.structure_unit_id: item
+        for item in getattr(output, "dispositions", ())
+    }
+    by_unit: dict[str, list[object]] = {}
+    for statement in getattr(output, "restricted_statements", ()):
+        by_unit.setdefault(statement.source_structure_unit_id, []).append(statement)
+    issues: list[ProtocolControlGateError] = []
+    for unit_id, statements in sorted(by_unit.items()):
+        unit = unit_by_id.get(unit_id)
+        if unit is None:
+            issues.append(ProtocolControlGateError(
+                "RESTRICTED_SOURCE_UNGROUNDED",
+                "受限陈述必须逐字来自本批冻结原文，且保留完整来源位置",
+                entity_id=statements[0].restricted_statement_id,
+            ))
+            continue
+        disposition = disposition_by_unit.get(unit_id)
+        keeps_executable = (
+            disposition is not None
+            and _value(disposition.disposition)
+            != StructureUnitDispositionKind.RESTRICTED_SOURCE.value
+        )
+        if keeps_executable and any(
+            statement.independent_scope_proof is None for statement in statements
+        ):
+            issues.append(ProtocolControlGateError(
+                "RESTRICTED_SOURCE_SCOPE_UNPROVEN",
+                "该冻结单元既有受限陈述又保留可执行处置，但受限陈述没有逐字互不重叠"
+                "的独立来源区间证明；不得按同段其他候选省略。",
+                entity_id=unit_id,
+                structure_unit_ids=[unit_id],
+            ))
+            continue
+        unit_issues: list[ProtocolControlGateError] = []
+        ranges_by_index: dict[int, tuple[int, int]] = {}
+        consistent_ranges = True
+        for statement in statements:
+            texts = [_compact_source_text(value) for value in [unit.excerpt, *unit.heading_path]]
+            if any(not _compact_source_text(value)
+                   or not any(_compact_source_text(value) in text for text in texts)
+                   for value in source_statement_qualifier_quotes(statement)):
+                unit_issues.append(_scope_proof_failure(
+                    "RESTRICTED_SOURCE_CONTEXT_UNGROUNDED",
+                    "受限陈述的适用范围、时间或例外未逐字保留冻结来源。",
+                    statement=statement, unit_id=unit_id,
+                ))
+                continue
+            proof = statement.independent_scope_proof
+            if proof is None:
+                continue
+            unit_issues.extend(
+                _statement_scope_proof_issues(unit, statement, proof, output)
+            )
+            for index, bounds in [
+                (statement.source_statement_index,
+                 (proof.restricted_source_start, proof.restricted_source_end)),
+                *((item.statement_index, (item.source_start, item.source_end))
+                  for item in proof.independent_excerpts),
+            ]:
+                if index in ranges_by_index and ranges_by_index[index] != bounds:
+                    consistent_ranges = False
+                ranges_by_index[index] = bounds
+        if keeps_executable and not unit_issues and (
+            not consistent_ranges or not source_statement_ranges_cover_unit(
+                unit.excerpt, list(ranges_by_index.values()),
+            )
+        ):
+            unit_issues.append(_scope_proof_failure(
+                "RESTRICTED_SOURCE_UNINTERPRETED_CONTEXT",
+                "同段独立来源证明未覆盖整段原文，仍有未核实的限定语或其他内容；"
+                "不能仅按模型选出的不重叠摘录放行。",
+                statement=statements[0], unit_id=unit_id,
+            ))
+        issues.extend(unit_issues)
+    return tuple(issues)
+
+
 def check_protocol_control_batch_candidates(
     batch: ProtocolControlDispositionBatch,
     output: ProtocolControlBatchDispositionHydrated,
@@ -4785,6 +5171,7 @@ def check_protocol_control_batch_candidates(
     }
     issues: list[ProtocolControlGateError] = []
     issues.extend(_uncovered_enrollment_prohibitions(batch, output))
+    issues.extend(_restricted_statement_scope_issues(batch, output))
     for candidate in output.candidates:
         try:
             _validate_candidate(
@@ -4859,6 +5246,15 @@ def validate_protocol_control_publication(
         plan,
         batch_dispositions,
     )
+    restricted_from_batches = sorted(
+        (item for batch in batch_dispositions for item in batch.restricted_statements),
+        key=lambda item: (item.source_structure_unit_id, item.source_statement_index),
+    )
+    if catalog.restricted_statements != restricted_from_batches:
+        _fail(
+            "RESTRICTED_SOURCE_SCOPE_MISMATCH",
+            "受限陈述必须与完整批次的已核来源逐项一致",
+        )
     if candidates:
         _fail(
             "STANDALONE_CANDIDATES_NOT_ALLOWED",

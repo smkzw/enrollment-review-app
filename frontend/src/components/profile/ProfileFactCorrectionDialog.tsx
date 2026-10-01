@@ -971,6 +971,11 @@ export function ProfileFactCorrectionDialog({
                       <p className="profile-correction-impact__reason">{preview.impact.fallbackReason}</p>
                     )}
                     <CorrectionImpactSummary impact={preview.impact} />
+                    {preview.siblingFactIds.length > 0 && (
+                      <p className="profile-correction-impact__notice">
+                        同一处原始资料还关联 {preview.siblingFactIds.length} 条其他病史。本次只更正当前条目，请在提交后核对这些条目是否也需更正。
+                      </p>
+                    )}
                   </section>
                   <label className="profile-correction-confirm">
                     <input

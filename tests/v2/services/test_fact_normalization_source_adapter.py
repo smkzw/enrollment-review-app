@@ -374,6 +374,20 @@ def test_build_fact_normalization_plan_deterministic_with_fake_session():
     assert plan.input_scope_sha256 == plan2.input_scope_sha256
     assert plan.calls[0].input_sha256 == plan2.calls[0].input_sha256
 
+    classified_context = context.model_copy(update={
+        "document_category": "study_chart",
+        "source_category": "study_site",
+    })
+    classified_plan = plan_fact_normalization_calls(
+        authority=authority,
+        revision=rev,
+        page_effective_text_map={("docv-1", 1): pi1, ("docv-1", 2): pi2},
+        doc_version_to_logical={"docv-1": "logical-1"},
+        context_by_logical_document={"logical-1": classified_context},
+        related_requirements=[],
+    )
+    assert classified_plan.calls[0].input_sha256 != plan.calls[0].input_sha256
+
 
 def test_source_adapter_rejects_authority_revision_mismatch():
     from unittest.mock import MagicMock

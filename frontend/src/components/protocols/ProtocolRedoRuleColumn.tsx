@@ -75,6 +75,15 @@ export function ProtocolRedoRuleColumn({
                         <span className="protocol-redo-column__text">{component.title}</span>
                       </li>
                     ))}
+                    {rule.restrictedComponents.map((component) => (
+                      <li key={component.componentId} className="protocol-redo-column__component">
+                        <span className="protocol-redo-column__code">{component.displayCode}</span>
+                        <span className="protocol-redo-column__text">
+                          {component.title} · {component.limitationKind === "consumer_unavailable"
+                            ? "审核方法待补齐" : "方案含义待核清"}
+                        </span>
+                      </li>
+                    ))}
                   </ul>
                 )}
               </li>

@@ -1,6 +1,8 @@
 """入排审核只读投影 HTTP 作用域与 wire 契约测试。"""
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 from pydantic import ValidationError
 
@@ -60,6 +62,58 @@ def test_eligibility_review_rejects_cross_subject_path(client):
     response = client.get(_url(chain, subject_id="subject-does-not-own-episode"))
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "NOT_FOUND"
+
+
+def test_restricted_clause_and_control_action_reach_http_without_claiming_a_decision(
+    client, monkeypatch,
+):
+    from app.services.eligibility_review_projection import (
+        EligibilityControlObligationProjection,
+        EligibilityControlProjection,
+    )
+
+    chain = _seed(client, "eligibility-restricted-wire")
+    service = client.app.state.eligibility_review_projection_service
+    with client.app.state.session_factory() as session:
+        base = service.project(session, chain["episode_id"])
+    clause = replace(
+        base.clauses[0], rule_component_id="restricted-component",
+        decision="indeterminate", decision_label="无法判定",
+        reason="方案本项仍需核实，不能判为符合或不符合。",
+        fact_refs=(), gap_type=None, determination_mode="restricted",
+        action_owner="sponsor_medical_or_project",
+        action_detail="请核清适用范围。", action_evidence="正式方案澄清。",
+    )
+    obligation = EligibilityControlObligationProjection(
+        obligation_id="restricted-obligation", obligation_group_id="restricted",
+        statement="核实补充要求", source_excerpts=("核实补充要求",),
+        status="restricted", status_label="方案待澄清",
+        reason="来源已保留，适用条件尚待核实。", fact_refs=(),
+        action_owner="sponsor_medical_or_project",
+        action_detail="请核清适用范围。", action_evidence="正式方案澄清。",
+    )
+    control = EligibilityControlProjection(
+        protocol_control_id="restricted-control", display_label="方案补充要求",
+        title="核实补充要求", source_span_ids=("synthetic-source",),
+        obligations=(obligation,),
+    )
+    projected = replace(
+        base, clauses=(*base.clauses, clause), controls=(*base.controls, control)
+    )
+    monkeypatch.setattr(service, "project", lambda _session, _episode: projected)
+
+    response = client.get(_url(chain))
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert next(item for item in body["clauses"] if item["rule_component_id"] == "restricted-component")["determination_mode"] == "restricted"
+    wire = next(item for item in body["controls"] if item["protocol_control_id"] == "restricted-control")["obligations"][0]
+    assert wire["status"] == "restricted"
+    assert wire["action_owner"] == "sponsor_medical_or_project"
+    assert wire["action_detail"] == "请核清适用范围。"
+
+    body["controls"][-1]["obligations"][0]["status"] = "approved"
+    with pytest.raises(ValidationError):
+        EligibilityReviewResponse.model_validate(body)
 
 
 @pytest.mark.parametrize("kind", ["event", "exposure"])

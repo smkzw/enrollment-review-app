@@ -193,6 +193,30 @@ describe("受试者与 Patient Profile 页", () => {
     expect(screen.getByRole("button", { name: "筛选期" })).toBeInTheDocument();
   });
 
+  it("档案已生成但事实来源无法确认时在首屏提示，不把整理完成当作可判定", async () => {
+    setPatientProfileRepository(makeProfileRepo((subjectId, episodeId) => {
+      const revision = defaultRevision(subjectId, episodeId);
+      return {
+        ...revision,
+        lanes: revision.lanes.map((lane) =>
+          lane.lane === "demographics"
+            ? {
+                ...lane,
+                items: lane.items.map((item) => ({
+                  ...item,
+                  source_strength: "unverifiable_source" as const,
+                  source_strength_label: "来源无法确认",
+                })),
+              }
+            : lane,
+        ),
+      };
+    }));
+    render(<SubjectsPage />);
+    expect(await screen.findByText("来源待确认 1 项")).toBeInTheDocument();
+    expect(screen.getByTitle(/不能直接用于入排判断/)).toBeInTheDocument();
+  });
+
   it("“全部历时信息”展开 13 条泳道，空泳道不判为资料缺口", async () => {
     const user = userEvent.setup();
     render(<SubjectsPage />);

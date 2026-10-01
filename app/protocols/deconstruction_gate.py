@@ -26,6 +26,7 @@ from app.domain.contracts.enums import (
     LogicalOperator,
     ProtocolPeriod,
     ReviewStage,
+    RuleKind,
     TimeDirection,
 )
 from app.domain.contracts.protocol_ingestion import ProtocolSourceSpan
@@ -62,7 +63,7 @@ CHECK_NAMES = (
 
 # 完整性检查结果会写入持久任务检查点。任何会改变问题判定语义的
 # 修改都必须提升此版本，避免旧检查结果在升级后继续冒充当前结论。
-DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/2026-09-27.1"
+DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/2026-09-30.33"
 
 
 class ProtocolGateIssue(VersionedModel):
@@ -244,7 +245,37 @@ def _predicate_text(predicate) -> str:
     return "\n".join(predicate.exact_source_clauses)
 
 
-def _predicate_temporal_text(predicate) -> str:
+def _shared_period_lead_in(predicate, component_source: str) -> str:
+    """Bind ordered exact fragments inside one explicitly named period scope."""
+    clauses = predicate.exact_source_clauses
+    if len(clauses) < 2:
+        return ""
+    lead = clauses[0]
+    source = re.sub(r"\s+", "", component_source)
+    prefix = re.sub(r"\s+", "", lead)
+    period_pattern = re.compile(r"(?:整个)?(?:研究|治疗)期间[（(][^）)]+[）)]")
+    if not period_pattern.fullmatch(prefix):
+        return ""
+    periods = list(period_pattern.finditer(source))
+    for position, match in enumerate(periods):
+        if match.group() != prefix or (
+            match.start() and source[match.start() - 1] not in "；;。，,:："
+        ):
+            continue
+        limit = periods[position + 1].start() if position + 1 < len(periods) else len(source)
+        offset = match.end()
+        for clause in clauses[1:]:
+            fragment = re.sub(r"\s+", "", clause)
+            index = source.find(fragment, offset, limit)
+            if not fragment or index < 0:
+                break
+            offset = index + len(fragment)
+        else:
+            return lead
+    return ""
+
+
+def _predicate_temporal_text(predicate, component_source: str = "") -> str:
     """Return the temporal meaning owned by one atomic predicate.
 
     Exact source clauses may repeat a complete protocol sentence so that the
@@ -256,6 +287,7 @@ def _predicate_temporal_text(predicate) -> str:
     """
 
     text = _predicate_text(predicate)
+    shared_period = _shared_period_lead_in(predicate, component_source)
     identity = "\n".join(
         dict.fromkeys(
             part.strip()
@@ -274,12 +306,32 @@ def _predicate_temporal_text(predicate) -> str:
     )
 
     def retain_or_remove(match: re.Match[str]) -> str:
+        if shared_period and _normalized(match.group(0)) == _normalized(shared_period):
+            return match.group(0)
         label = _normalized(match.group("label"))
+        scoped_list = re.split(r"[：:]", match.group("note"), maxsplit=1)
+        named_terms = (
+            [_normalized(part) for part in re.split(r"[、，；。\n]", scoped_list[1])]
+            if len(scoped_list) == 2 else []
+        )
+        named_in_list = (
+            any(
+                part[offset : offset + 8] in term
+                for part in named_terms
+                for term in binding_terms
+                for offset in range(max(0, len(part) - 7))
+            )
+        )
+        if named_in_list:
+            prefix = match.group(0)[0] if match.group(0)[0] in "、，；。" else ""
+            return prefix + match.group("note")
+        same_clause_suffix = text[match.end() :].split("\n", 1)[0]
         following_segment = re.split(
-            r"[、，；。\n]", text[match.end() :].lstrip("、，；。\n"), maxsplit=1
+            r"[、，；。]", same_clause_suffix.lstrip("、，；。"), maxsplit=1
         )[0]
-        if any(label and label in term for term in binding_terms) or any(
-            term in _normalized(following_segment) for term in binding_terms
+        if any(label and label in term for term in binding_terms) or (
+            len(scoped_list) == 1
+            and any(term in _normalized(following_segment) for term in binding_terms)
         ):
             return match.group(0)
         prefix = match.group(0)[0] if match.group(0)[0] in "、，；。" else ""
@@ -299,6 +351,20 @@ def _predicate_temporal_text(predicate) -> str:
         marker in compact_identity
         for marker in ("研究期间", "治疗期间", "筛选/导入期", "筛选导入期")
     )
+    identity_quantities = _source_time_quantities(identity)
+    parenthetical_quantities = set().union(*(
+        _source_time_quantities(match.group(0))
+        for match in re.finditer(r"[（(][^）)]*[）)]", identity)
+    ))
+    if (
+        identity_quantities
+        and identity_quantities <= parenthetical_quantities
+        and _source_time_quantities(text) - identity_quantities
+    ):
+        identity_owns_window = False
+        identity_owns_period = False
+    if identity_owns_period and not identity_owns_window and shared_period:
+        return shared_period + "\n" + identity
     if identity_owns_window or identity_owns_period:
         return identity
     normalized_attribute = _normalized(predicate.attribute)
@@ -393,6 +459,72 @@ def _any_is_same_event_time_alternatives(expression, source: str) -> bool:
     )
 
 
+def _any_is_source_scoped_longer_washout(expression, source: str) -> bool:
+    """A named subclass may have a longer washout than its parent treatment."""
+
+    if (expression.kind != "logical" or expression.operator != LogicalOperator.ANY
+            or len(expression.children) != 2):
+        return False
+    first, second = expression.children
+    if first.kind != "predicate" or second.kind != "predicate":
+        return False
+    short, long = first.time_constraint, second.time_constraint
+    if short is None or long is None or short.upper_bound is None or long.upper_bound is None:
+        return False
+    if (short.anchor_type != long.anchor_type or short.direction != TimeDirection.BEFORE
+            or long.direction != TimeDirection.BEFORE
+            or short.upper_bound.unit != long.upper_bound.unit
+            or short.upper_bound.value >= long.upper_bound.value):
+        return False
+    parent = _normalized(first.predicate.attribute)
+    subclass = _normalized(second.predicate.attribute)
+    if len(parent) < 6 or not subclass.startswith(parent) or len(subclass) == len(parent):
+        return False
+    compact = re.sub(r"\s+", "", source)
+    unit = {TimeUnit.DAY: "(?:天|日)", TimeUnit.WEEK: "(?:周|星期)",
+            TimeUnit.MONTH: "(?:个月|月)", TimeUnit.YEAR: "年"}.get(short.upper_bound.unit)
+    if unit is None:
+        return False
+    pattern = (rf"{short.upper_bound.value}{unit}内[^。；;]{{0,160}}?"
+               rf"[（(](?:以下|其中)[^）)]{{0,60}}?(?:需|应|必须)洗脱"
+               rf"{long.upper_bound.value}{unit}")
+    return bool(re.search(pattern, compact)) and all(
+        any(_normalized(clause) in _normalized(source)
+            for clause in child.predicate.exact_source_clauses)
+        for child in (first, second)
+    )
+
+
+def _shared_named_anchor_lead_in(predicate, component_text: str) -> str:
+    """Use an exact shared lead-in for the anchor, never sibling durations."""
+
+    pattern = re.compile(
+        r"^(?:随机|筛选|基线|知情同意|首次给药|首剂|研究药物给药)"
+        r"(?:前|后|时)[^。；;\n]{0,60}?(?:以下|下列|任一|任何一种)"
+    )
+    return "\n".join(
+        clause for clause in predicate.exact_source_clauses
+        if pattern.search(re.sub(r"\s+", "", clause))
+        and _normalized(clause) in _normalized(component_text)
+    )
+
+
+def _requires_observation_policy(predicate) -> bool:
+    """Require a policy only when the source declares how records are selected."""
+
+    if any((predicate.occurrence_window, predicate.repeat_scheme,
+            predicate.prospective_window, predicate.prospective_period,
+            predicate.semantic_proposition)):
+        return False
+    source = _normalized(_predicate_text(predicate))
+    return bool(
+        re.search(r"(?:最近|最早|最新|末次|首次|任意|任一)一次(?:[^。；;]{0,25})?(?:结果|检查|测量|记录)", source)
+        or re.search(r"(?:所有|全部|每次)(?:[^。；;]{0,25})?(?:结果|检查|测量|记录)", source)
+        or re.search(r"(?:复查|重测)(?:[^。；;]{0,35})?(?:结果|数值)(?:[^。；;]{0,20})?(?:为准|采用|选取)", source)
+        or re.search(r"(?:复查|重测)(?:[^。；;]{0,35})?(?:采用|选取|以)(?:[^。；;]{0,20})?(?:结果|数值)", source)
+    )
+
+
 def _source_requires_investigator_judgment(text: str) -> bool:
     """Distinguish the investigator as decision-maker from other roles.
 
@@ -405,7 +537,7 @@ def _source_requires_investigator_judgment(text: str) -> bool:
     judgment = r"(?:评估|评定|判断|判定|认为|认定|确定|决定|确认|同意)"
     return bool(
         re.search(
-            rf"(?:由|经|需由|须由|应由|根据)?研究者(?:进行)?{judgment}",
+            rf"(?:由|经|需由|须由|应由|根据)?研究者(?:进行)?(?:书面)?{judgment}",
             compact,
         )
         or re.search(rf"{judgment}(?:应|需)?(?:由|经)研究者", compact)
@@ -481,18 +613,123 @@ def _branch_source_anchors(expression, source: str) -> list[tuple[int, int, str]
     return anchors
 
 
+def _parenthetical_stack_at(source: str, position: int) -> tuple[int, ...]:
+    stack: list[int] = []
+    for index, char in enumerate(source[:position]):
+        if char in "（(":
+            stack.append(index)
+        elif char in "）)" and stack:
+            stack.pop()
+    return tuple(stack)
+
+
+def _source_separator_in_shared_scope(
+    source: str, left: tuple[int, int, str], right: tuple[int, int, str],
+) -> str:
+    """Only connectors at the scope shared by both branches authorize an OR."""
+
+    left_scope = _parenthetical_stack_at(source, left[0])
+    right_scope = _parenthetical_stack_at(source, right[0])
+    shared: list[int] = []
+    for left_open, right_open in zip(left_scope, right_scope):
+        if left_open != right_open:
+            break
+        shared.append(left_open)
+    stack = list(_parenthetical_stack_at(source, left[1]))
+    visible: list[str] = []
+    for index in range(left[1], right[0]):
+        char = source[index]
+        if char in "（(":
+            stack.append(index)
+        elif char in "）)" and stack:
+            stack.pop()
+        elif stack == shared:
+            visible.append(char)
+    if (left[1] > 0
+            and source[left[1] - 1] in "、，；;,"
+            and _parenthetical_stack_at(source, left[1] - 1) == tuple(shared)):
+        visible.insert(0, source[left[1] - 1])
+    return "".join(visible)
+
+
 def _branches_have_source_disjunction(expression, source: str) -> bool:
     """Verify that sibling branches are individually named around a real OR."""
 
     if expression.kind != "logical" or expression.operator == LogicalOperator.NOT:
         return False
     compact_source = re.sub(r"\s+", "", source)
+    normalized_source = _normalized(source)
+    open_list = compact_source.find("包括但不限于")
+    quantified_open_list = (
+        open_list >= 0
+        and bool(re.search(
+            r"任何[^；。\n]{0,80}(?:异常|情况|事件|发现|结果)[^；。\n]{0,80}$",
+            compact_source[:open_list],
+        ))
+        and not re.search(r"(?:全部|均需|均须|同时满足)", compact_source[:open_list])
+    )
+    if expression.operator == LogicalOperator.ANY and len(expression.children) == 2:
+        children = expression.children
+        if all(child.kind == "predicate" for child in children):
+            left, right = (
+                _normalized(re.sub(r"[（(](?:如|例如)[^）)]*[）)]$", "",
+                                   child.predicate.attribute))
+                for child in children
+            )
+            prefix = 0
+            while (prefix < min(len(left), len(right))
+                   and left[prefix] == right[prefix]):
+                prefix += 1
+            common = 0
+            while (common < min(len(left), len(right)) - prefix
+                   and left[-common - 1] == right[-common - 1]):
+                common += 1
+            if prefix >= 2 and common >= 2:
+                first, second = left[prefix:len(left) - common], right[prefix:len(right) - common]
+                suffix = left[-common:]
+                shared_prefix = left[:prefix]
+                shared_negation = any(
+                    token in shared_prefix
+                    for token in ("没有", "否认", "未见", "未发现", "未发生", "未患",
+                                  "未使用", "未接受", "未完成", "未进行", "不存在",
+                                  "不具备", "不符合", "不满足")
+                ) or shared_prefix.endswith("无") or suffix.endswith(
+                    ("均无", "皆无", "不存在", "未发生", "未完成")
+                )
+                stage_terms = {"预筛", "预筛期", "筛选", "筛选期", "导入", "导入期",
+                               "基线", "基线期", "随机", "随机期", "首次给药", "首次给药期"}
+                if (len(first) >= 2 and len(second) >= 2
+                        and not shared_negation
+                        and not {first, second} <= stage_terms
+                        and not second.startswith(("以上", "以下", "等于", "更多", "更少"))):
+                    for repeat_length in range(common + 1):
+                        repeated, trailing = suffix[:repeat_length], suffix[repeat_length:]
+                        shared_phrase = f"{left[:prefix]}{first}{repeated}或{second}{repeated}{trailing}"
+                        if (any(shared_phrase in re.sub(r"\s+", "", line) for line in source.splitlines())
+                                and all(
+                                    any(shared_phrase in re.sub(r"\s+", "", line)
+                                        for clause in child.predicate.exact_source_clauses
+                                        for line in clause.splitlines())
+                                    for child in children)):
+                            return True
+            if common >= 4:
+                suffix = left[-common:]
+                first, second = left[:-common], right[:-common]
+                shared_phrase = f"{first}或{second}{suffix}"
+                if (len(first) >= 2 and len(second) >= 2
+                        and shared_phrase in normalized_source
+                        and all(
+                            any(shared_phrase in _normalized(clause)
+                                for clause in child.predicate.exact_source_clauses)
+                            for child in children
+                        )):
+                    return True
     child_clauses = [
         [
             _normalized(clause)
             for predicate in iter_atomic_predicates(child)
             for clause in predicate.exact_source_clauses
-            if _normalized(clause)
+            if _normalized(clause) and _normalized(clause) in normalized_source
         ]
         for child in expression.children
     ]
@@ -532,12 +769,23 @@ def _branches_have_source_disjunction(expression, source: str) -> bool:
             if all(term in {"筛选", "筛选期", "基线", "基线期"} for term in terms):
                 continue
             separators = [
-                compact_source[left[1] : right[0]]
+                _source_separator_in_shared_scope(compact_source, left, right)
+                for left, right in zip(path, path[1:])
+            ]
+            raw_separators = [
+                compact_source[left[1]:right[0]]
                 for left, right in zip(path, path[1:])
             ]
             if any(
-                re.search(r"(?:和/或|及/或|或(?!以上|等于))", separator)
-                for separator in separators
+                not right[2].startswith(("以上", "以下", "等于", "更多", "更少"))
+                and (
+                re.search(r"(?:和/或|及/或)", separator)
+                or any(
+                    not separator[match.end():].startswith(("以上", "等于"))
+                    for match in re.finditer("或", separator)
+                )
+                )
+                for (left, right), separator in zip(zip(path, path[1:]), separators)
             ):
                 return True
             # 原文以“满足以下条件之一/任一”显式引导替代关系时，各分支之间的
@@ -546,6 +794,11 @@ def _branches_have_source_disjunction(expression, source: str) -> bool:
                 re.search(r"[、，；。;,\n]", separator)
                 for separator in separators
             ):
+                return True
+            if quantified_open_list and all(
+                anchor[0] >= open_list + len("包括但不限于")
+                for anchor in path
+            ) and any(re.search(r"[、，；。;,\n]", separator) for separator in raw_separators):
                 return True
     return False
 
@@ -700,6 +953,23 @@ def _normalized(text: str) -> str:
     return re.sub(r"[\s，。；：、（）()【】\[\]]+", "", text).lower()
 
 
+def _scoped_population_notes(text: str) -> list[str]:
+    notes: list[str] = []
+    for match in re.finditer(r"[（(](?:注[：:])?[^（）()]*[）)]", text):
+        note = match.group()
+        interior = re.sub(r"^注[：:]", "", note[1:-1].strip()).strip()
+        scoped = re.search(
+            r"(?:若|如果|仅|只|对于|其中)[^）)]{0,120}(?:参与者|受试者|患者)",
+            interior,
+        ) or re.match(
+            r"与[^，。；：:]{1,80}的[^，。；：:]{0,20}(?:参与者|受试者|患者)",
+            interior,
+        )
+        if scoped:
+            notes.append(note)
+    return notes
+
+
 def _substantive_obligation_segments(text: str) -> list[str]:
     """Split one official parent rule into independently material obligations.
 
@@ -840,11 +1110,11 @@ def _predicate_binds_obligation(predicate, segment: str) -> bool:
     # second invented predicate (for example one whose attribute is merely
     # "even if ...") would damage the clinical rule rather than decompose it.
     if normalized_segment.startswith(
-        ("即使", "即便", "无论", "不论", "包括但不限于", "但不限于")
+        ("即使", "即便", "无论", "不论", "例如但不限于", "包括但不限于", "但不限于")
     ) and any(normalized_segment in clause for clause in clauses):
         return True
 
-    terms = [predicate.source_term, predicate.attribute]
+    terms = [predicate.source_term, predicate.attribute, predicate.semantic_proposition]
     if isinstance(predicate.value, str):
         terms.append(predicate.value)
     elif isinstance(predicate.value, list):
@@ -868,6 +1138,80 @@ def _predicate_binds_obligation(predicate, segment: str) -> bool:
         and _numeric_value_in_tokens(value, source_numbers)
         for value in values
     )
+
+
+def _qualifier_is_structured(rule: Rule, segment: str) -> bool:
+    """A cited qualifier is covered only when its corresponding rule field exists."""
+
+    normalized = _normalized(segment)
+    cited = [
+        component
+        for component in rule.components
+        if any(
+            normalized in _normalized(clause)
+            for predicate in iter_atomic_predicates(component.expression)
+            for clause in predicate.exact_source_clauses
+        )
+    ]
+    if not cited:
+        return False
+
+    stage = re.fullmatch(
+        r"(筛选|基线)(?:访视|期)?(?:和|或|及|与)(筛选|基线)(?:访视|期)?时|"
+        r"(筛选|基线)(?:访视|期)?时(?:存在下列任一感染者)?",
+        normalized,
+    )
+    if stage:
+        if len(cited) != len(rule.components):
+            return False
+        required = {
+            ReviewStage.SCREENING if name == "筛选" else ReviewStage.BASELINE
+            for name in stage.groups() if name in {"筛选", "基线"}
+        }
+        return all(
+            required <= {item.due_stage for item in component.evidence_requirements}
+            for component in cited
+        )
+
+    time_match = re.fullmatch(
+        r"(首次给药|首剂)(前|后)(\d+)(天|日|周|星期|个月|年)内",
+        normalized,
+    )
+    if time_match:
+        anchor, direction, value, unit = time_match.groups()
+        expected_anchor = AnchorType.FIRST_DOSE_DATE
+        expected_direction = TimeDirection.BEFORE if direction == "前" else TimeDirection.AFTER
+        return all(
+            any(
+                (constraint := expression.time_constraint) is not None
+                and constraint.anchor_type == expected_anchor
+                and constraint.direction == expected_direction
+                and (
+                    (constraint.upper_bound is not None
+                     and constraint.upper_bound.value == int(value)
+                     and _unit_matches_source(constraint.upper_bound.unit.value, unit))
+                    or (constraint.upper_bound_days == int(value) and unit in {"天", "日"})
+                )
+                for expression in _walk_expression_tree(component.expression)
+                if expression.kind == "predicate"
+            )
+            for component in cited
+        )
+
+    repeat = re.fullmatch(r"可进行(\d+)次复测", normalized)
+    if repeat:
+        return any(
+            predicate.repeat_scheme is not None
+            and predicate.repeat_scheme.permission == "optional"
+            and predicate.repeat_scheme.maximum_repeats == int(repeat.group(1))
+            and any(
+                normalized in _normalized(excerpt)
+                for excerpt in predicate.repeat_scheme.source_excerpts
+            )
+            for component in cited
+            for predicate in iter_atomic_predicates(component.expression)
+        )
+    return False
 
 
 def _categorical_values_are_source_terms(predicate) -> bool:
@@ -914,6 +1258,7 @@ _ALTERNATIVE_LEAD_IN = re.compile(
     r"(?:条件|标准|要求|情形|情况|条款|项|条|者)之一"
     r"|(?:以下|下列|如下|下述)[^，。；；\n]{0,6}之一"
     r"|(?:\d+|[一二两三四五六七八九十百]+)(?:种|类|项|个|条)?[^，。；\n]{0,12}之一"
+    r"|(?:以下|下列|如下|下述)[^，。；\n]{0,8}任何一(?:种|类|项|条)?"
     r"|任选其一|满足其一|符合其一"
     r"|一项或多项|至少一项|至少一条|任一条|任意一项|任意一条|任何一条"
 )
@@ -940,7 +1285,11 @@ def _has_unambiguous_disjunction(text: str) -> bool:
 
 
 def _numeric_tokens(text: str) -> set[str]:
-    tokens = set(re.findall(r"(?<![A-Za-z])\d+(?:\.\d+)?", text))
+    tokens = set(re.findall(
+        r"(?<![A-Za-z0-9.])[-+−]?\d+(?:,\d{3})*(?:\.\d+)?(?:[eE][-+]?\d+)?",
+        text,
+    ))
+    tokens = {token.replace(",", "").replace("−", "-") for token in tokens}
     roman_values = {
         "Ⅰ": "1",
         "Ⅱ": "2",
@@ -963,7 +1312,10 @@ def _unit_matches_source(unit: str, text: str) -> bool:
     normalized_text = _normalized(text)
     if not normalized_unit or normalized_unit == "unitless":
         return True
-    if normalized_unit in normalized_text:
+    if normalized_unit in normalized_text and (
+        not re.search(r"[a-z]", normalized_unit)
+        or re.search(r"(?<![a-z])" + re.escape(normalized_unit) + r"(?![a-z])", normalized_text)
+    ):
         return True
     aliases = {
         "year": ("年", "周岁", "岁"),
@@ -1100,7 +1452,13 @@ def _source_frequency_specs(text: str) -> set[tuple[int, TimeUnit, int, str]]:
     history_pattern = re.compile(
         r"(?P<duration>\d+)\s*(?P<duration_unit>天|日|周|星期|个月|月|年)内"
         r"[^，。；]{0,24}?(?:发生|出现|发作|复发)\s*"
+        r"(?:≥|至少|不低于|大于或等于)?\s*"
         r"(?P<count>\d+)\s*次"
+    )
+    count_before_event_pattern = re.compile(
+        r"(?P<duration>\d+)\s*(?P<duration_unit>天|日|周|星期|个月|月|年)内"
+        r"[^，。；]{0,12}?(?:≥|至少|不低于|大于或等于)\s*"
+        r"(?P<count>\d+)\s*次\s*(?:发生|出现|发作|复发|感染)"
     )
     occurrence_day_pattern = re.compile(
         r"(?P<duration>\d+)\s*(?P<duration_unit>天|日|周|星期|个月|月|年)"
@@ -1112,7 +1470,7 @@ def _source_frequency_specs(text: str) -> set[tuple[int, TimeUnit, int, str]]:
         r"[^，。；]{0,12}?(?:≥|大于或等于|不低于|至少)\s*"
         r"(?P<count>\d+)\s*(?P<count_unit>天|日|次)"
     )
-    for match in history_pattern.finditer(text):
+    for match in (*history_pattern.finditer(text), *count_before_event_pattern.finditer(text)):
         specs.add(
             (
                 int(match.group("duration")),
@@ -1213,15 +1571,15 @@ def _predicate_preserves_frequency(
     )
 
 
-def _frequency_window_on_example_head(predicate) -> bool:
+def _frequency_window_on_example_head(predicate, component_source: str = "") -> bool:
     window = predicate.occurrence_window
     if window is None:
         return False
-    binding = _normalized(predicate.attribute)
-    for clause in predicate.exact_source_clauses:
-        for head, _member, definition in nested_example_definitions(clause):
-            head_binding = _normalized(head)
-            if not head_binding or not binding.startswith(head_binding):
+    binding = _normalized(predicate.source_term or predicate.attribute)
+    for clause in dict.fromkeys((*predicate.exact_source_clauses, component_source)):
+        for _head, member, definition in nested_example_definitions(clause):
+            member_binding = _normalized(member)
+            if not member_binding or member_binding in binding:
                 continue
             if any(
                 window.duration.value == duration
@@ -1239,17 +1597,149 @@ def _frequency_window_on_example_head(predicate) -> bool:
     return False
 
 
+def _frozen_nested_frequency_definitions(
+    component_id: str,
+    draft: ProtocolDeconstructionDraft,
+    source_input: ProtocolDeconstructionInput,
+):
+    mapping = next(
+        (item for item in draft.component_drafts
+         if item.proposed_component.rule_component_id == component_id),
+        None,
+    )
+    if mapping is None:
+        return []
+    materials = {item.source_span_id: item.text for item in source_input.source_materials}
+    return [
+        (head, member, definition)
+        for ref in mapping.source_refs
+        for head, member, definition in nested_example_definitions(materials.get(ref, ""))
+        if _source_frequency_specs(definition)
+    ]
+
+
+def _source_proves_unsupported_member_frequency(excerpts: Sequence[str]) -> bool:
+    return any(
+        _source_frequency_specs(definition)
+        for excerpt in excerpts
+        for _head, _member, definition in nested_example_definitions(excerpt)
+    )
+
+
+def _source_proves_unsupported_whole_requirement(restricted, rule, item, materials) -> bool:
+    """Allow a whole source-bound requirement to remain unresolved, not a fragment."""
+
+    if (rule.components or len(rule.restricted_components) != 1
+            or len(restricted.source_excerpts) != 1
+            or set(restricted.source_span_ids) != set(item.source_span_ids)):
+        return False
+    excerpt = restricted.source_excerpts[0]
+    source = _normalized(excerpt)
+    return bool(
+        source == _normalized(rule.source_text)
+        and (
+            _localized_open_list_exception_requires_exclusivity([excerpt])
+            or re.search(
+                r"[（(](?:注[：:])?[^）)]{0,80}(?:若|如果|仅|只|对于|与|其中|符合)"
+                r"[^）)]{1,80}(?:参与者|受试者|患者)[^）)]{0,50}(?:必须|需|应|须)",
+                excerpt,
+            )
+        )
+        and all(_normalized(materials.get(ref, "")) in source
+                for ref in item.source_span_ids)
+    )
+
+
+def _source_proves_unsupported_scoped_branch(
+    restricted, rule, source_texts: Sequence[str],
+) -> bool:
+    """Accept a complete conditional note beside executable siblings, never a fragment."""
+
+    if not rule.components:
+        return False
+    excerpts = [_normalized(text) for text in restricted.source_excerpts]
+    for note in _scoped_population_notes(rule.source_text):
+        normalized = _normalized(note)
+        if (not any(note in text for text in source_texts)
+                or not re.search(r"(?:必须|需|应|须)", note)
+                or _source_comparators(note)
+                or _has_explicit_quantity(note)
+                or not any(text == normalized for text in excerpts)
+                or not all(text and text in normalized for text in excerpts)):
+            continue
+        if any(
+            normalized == _normalized(clause)
+            for component in rule.components
+            for root in (component.expression, component.exception_expression)
+            if root is not None
+            for predicate in iter_atomic_predicates(root)
+            for clause in predicate.exact_source_clauses
+        ):
+            continue
+        if any(
+            other is not restricted
+            and normalized in {_normalized(text) for text in other.source_excerpts}
+            for other in rule.restricted_components
+        ):
+            continue
+        return True
+    return False
+
+
+def _has_explicit_quantity(text: str) -> bool:
+    """Distinguish clinical quantities from section numbers and identifiers."""
+
+    return bool(re.search(
+        r"(?:\d+(?:\.\d+)?|[一二两三四五六七八九十百千]+)\s*"
+        r"(?:次|天|日|周|星期|个月|月|年|岁|小时|分钟|条|项|个|级|分|倍|%|％|mg|g|kg|mL|L|IU|U/L|℃)",
+        text,
+        flags=re.IGNORECASE,
+    ))
+
+
+def _frequency_definition_required_as_sibling(expression, definitions) -> bool:
+    if expression.kind != "logical":
+        return False
+    if expression.operator == LogicalOperator.ALL:
+        child_predicates = [list(iter_atomic_predicates(child)) for child in expression.children]
+        for head, member, definition in definitions:
+            parent = _normalized(head)
+            member_binding = _normalized(member)
+            if not parent or not member_binding:
+                continue
+            parent_branches = {
+                index for index, predicates in enumerate(child_predicates)
+                if any(_normalized(item.source_term or item.attribute).startswith(parent)
+                       for item in predicates)
+            }
+            member_branches = {
+                index for index, predicates in enumerate(child_predicates)
+                if any(
+                    member_binding in _normalized(item.source_term or item.attribute)
+                    and any(_predicate_preserves_frequency(item, spec)
+                            for spec in _source_frequency_specs(definition))
+                    for item in predicates
+                )
+            }
+            if any(left != right for left in parent_branches for right in member_branches):
+                return True
+    return any(
+        _frequency_definition_required_as_sibling(child, definitions)
+        for child in expression.children
+    )
+
+
 def _source_comparators(text: str) -> set[Comparator]:
     """Return unambiguous comparator classes explicitly expressed in source."""
     found: set[Comparator] = set()
     patterns = (
-        (Comparator.GTE, r"≥|大于或等于|不低于|至少"),
-        (Comparator.LTE, r"≤|小于或等于|不超过|至多"),
-        (Comparator.GT, r"(?<![≥>])>(?!=)|超过|(?<!或等于)大于"),
-        (Comparator.LT, r"(?<![≤<])<(?!=)|低于|(?<!或等于)小于"),
+        (Comparator.GTE, r"≥|>=|大于或等于|不低于|至少|\bat\s+least\b|\bgreater\s+than\s+or\s+equal\s+to\b"),
+        (Comparator.LTE, r"≤|<=|小于或等于|不超过|至多|\bat\s+most\b|\bless\s+than\s+or\s+equal\s+to\b"),
+        (Comparator.GT, r"(?<![≥>])>(?!=)|(?<!不)超过|大于(?!或等于)|\bgreater\s+than\b(?!\s+or\s+equal)|\bmore\s+than\b"),
+        (Comparator.LT, r"(?<![≤<])<(?!=)|(?<!不)低于|小于(?!或等于)|\bless\s+than\b(?!\s+or\s+equal)"),
     )
     for comparator, pattern in patterns:
-        if re.search(pattern, text):
+        if re.search(pattern, text, re.IGNORECASE):
             found.add(comparator)
     return found
 
@@ -1448,7 +1938,7 @@ class ProtocolDeconstructionGate:
         display_codes = [
             component.display_code
             for rule in draft.proposed_rules
-            for component in rule.components
+            for component in (*rule.components, *rule.restricted_components)
         ]
         if len(display_codes) != len(set(display_codes)):
             issues.append(
@@ -1584,6 +2074,14 @@ class ProtocolDeconstructionGate:
     @staticmethod
     def _boolean_logic(source_input, draft, issues):
         for rule in draft.proposed_rules:
+            parent_source = _catalog_text(rule, source_input)
+            local_open_exception_segments = [
+                segment for segment in re.split(r"[；;\n]", parent_source)
+                if _localized_open_list_exception_requires_exclusivity([segment])
+            ]
+            has_sibling_exception = any(
+                item.exception_expression is not None for item in rule.components
+            )
             for component in rule.components:
                 text = _component_text(
                     rule,
@@ -1591,6 +2089,53 @@ class ProtocolDeconstructionGate:
                     draft,
                     source_input,
                 )
+                population_predicates = [
+                    predicate
+                    for root in (component.expression, component.exception_expression)
+                    if root is not None
+                    for predicate in iter_atomic_predicates(root)
+                    if predicate.applicable_population is not None
+                ]
+                if population_predicates:
+                    source_bound = all(
+                        predicate.applicable_population.strip()
+                        and any(
+                            clause.lstrip().lstrip("（(").startswith(predicate.applicable_population.strip())
+                            for clause in predicate.exact_source_clauses
+                        )
+                        for predicate in population_predicates
+                    )
+                    supported_position = (
+                        not any(predicate.applicable_population is not None
+                                for predicate in iter_atomic_predicates(component.exception_expression))
+                        if component.exception_expression is not None else True
+                    ) and all(
+                        _is_population_scoped_any(node)
+                        for node in _walk_expression_tree(component.expression)
+                        if node.kind == "logical" and node.operator == LogicalOperator.ANY
+                        and any(predicate.applicable_population is not None
+                                for predicate in iter_atomic_predicates(node))
+                    )
+                    if not source_bound or not supported_position:
+                        issues.append(_issue(
+                            "boolean_logic", "APPLICABLE_POPULATION_SOURCE_UNBOUND",
+                            f"{component.display_code} 的适用人群尚未逐字绑定当前条件，或其条件关系尚不支持局部未决。",
+                            [predicate.predicate_id for predicate in population_predicates],
+                            action="保留适用人群及对应条件的完整逐字原文；不得借用兄弟条件的人群文字，也不得把未经核实的人群当作不适用或已满足。",
+                        ))
+                    else:
+                        issues.append(_issue(
+                            "boolean_logic",
+                            "APPLICABLE_POPULATION_NOT_EVALUATED",
+                            f"{component.display_code} 指定了适用人群，但当前审核计算尚不能核实人群条件。",
+                            [predicate.predicate_id for predicate in population_predicates],
+                            level="提醒",
+                            impact="完整要求可供工作稿采用，但本条人群适用性保持未决，不能自动给出确定入排结论。",
+                            action=(
+                                "请在审核结果中保留具体适用范围未决及方案定位；"
+                                "完成本例有源适用性核对前，不得把本条件当作已满足、不适用或未触发。"
+                            ),
+                        ))
                 normalized = _normalized(text)
                 has_and = any(
                     token in normalized
@@ -1600,6 +2145,7 @@ class ProtocolDeconstructionGate:
                     clause
                     for predicate in iter_atomic_predicates(component.expression)
                     for clause in predicate.exact_source_clauses
+                    if _normalized(clause) and _normalized(clause) in normalized
                 )
                 has_or = _has_unambiguous_disjunction(predicate_source) or any(
                     _branches_have_source_disjunction(node, text)
@@ -1651,6 +2197,7 @@ class ProtocolDeconstructionGate:
                         has_or and _any_branches_preserve_internal_conjunction(node)
                     )
                     and not _any_is_same_event_time_alternatives(node, text)
+                    and not _any_is_source_scoped_longer_washout(node, text)
                     and not _branches_have_source_disjunction(node, text)
                     for node in _walk_expression_tree(expression)
                 )
@@ -1706,6 +2253,12 @@ class ProtocolDeconstructionGate:
                     for predicate in iter_atomic_predicates(component.expression)
                     for clause in predicate.exact_source_clauses
                 ]
+                component_has_local_open_exception = any(
+                    _normalized(clause) in _normalized(segment)
+                    for segment in local_open_exception_segments
+                    for clause in trigger_clauses
+                    if len(_normalized(clause)) >= 6
+                )
                 has_exception = _exception_applies_to_trigger(
                     text, trigger_clauses
                 ) or any(
@@ -1719,6 +2272,11 @@ class ProtocolDeconstructionGate:
                             "EXCEPTION_NOT_STRUCTURED",
                             f"{component.display_code} 原文含例外条件，但草稿没有独立例外表达式。",
                             [component.rule_component_id],
+                            action=(
+                                "请核对例外究竟作用于本条件还是共享原文中的相邻分支。"
+                                "属于本条件时结构化例外；只属于相邻分支时，"
+                                "将本条件的逐字来源片段缩窄到完整适用分支，保留父规则原文和相邻分支。"
+                            ),
                         )
                     )
                 if component.exception_expression is not None:
@@ -1751,8 +2309,15 @@ class ProtocolDeconstructionGate:
                                 )
                             )
                     if (
-                        _localized_open_list_exception_requires_exclusivity(
-                            trigger_clauses
+                        (
+                            _localized_open_list_exception_requires_exclusivity(trigger_clauses)
+                            or (
+                                component_has_local_open_exception
+                                and any(
+                                    item.comparator == Comparator.EXISTS
+                                    for item in iter_atomic_predicates(component.exception_expression)
+                                )
+                            )
                         )
                         and not _exception_asserts_exclusivity(
                             component.exception_expression
@@ -1784,6 +2349,24 @@ class ProtocolDeconstructionGate:
                                 action="请把带括号例外的触发分支拆成独立子组件，并把后续‘或’分支放入不带该例外的兄弟子组件。",
                             )
                         )
+                elif (
+                    component_has_local_open_exception
+                    and has_sibling_exception
+                    and any(
+                        "包括但不限于" in _normalized(predicate.attribute)
+                        or "但不限于" in _normalized(predicate.attribute)
+                        for predicate in iter_atomic_predicates(component.expression)
+                    )
+                ):
+                    issues.append(
+                        _issue(
+                            "boolean_logic",
+                            "LOCAL_EXCEPTION_REENTERED_OPEN_LIST",
+                            f"{component.display_code} 仍保留可覆盖局部例外的开放上位条件，却没有本分支的例外约束。",
+                            [component.rule_component_id],
+                            action="请核对开放上位条件会否重新纳入被括号排除的对象；若会，应以有源的排他条件约束该分支，且不得豁免同时存在的其他触发情况。",
+                        )
+                    )
                 if not _source_requires_investigator_judgment(text):
                     continue
                 predicates = list(iter_atomic_predicates(component.expression))
@@ -1844,6 +2427,19 @@ class ProtocolDeconstructionGate:
                             and not isinstance(value, bool)
                             for value in predicate_values
                         )
+                        has_bound_assessment = any(
+                            predicate.predicate_id in requirement.predicate_ids
+                            and "investigator_assessment" in requirement.required_source_types
+                            for requirement in component.evidence_requirements
+                        )
+                        if (has_numeric_value and predicate.requires_professional_judgment
+                                and not has_bound_assessment):
+                            issues.append(_issue(
+                                "numeric_semantics", "NUMERIC_JUDGMENT_SOURCE_UNBOUND",
+                                f"{component.display_code} 的数值条件被标为研究者判断，但没有对应的书面评估资料要求。",
+                                [predicate.predicate_id],
+                                action="核对原文要求的判断对象；医生评定的数值需逐项绑定评估记录，客观数值与另行作出的临床判断不得相互代替。",
+                            ))
                         frequency_specs = _source_frequency_specs(predicate_text)
                         is_structured_frequency = bool(frequency_specs) and any(
                             _predicate_preserves_frequency(predicate, spec)
@@ -2030,6 +2626,40 @@ class ProtocolDeconstructionGate:
                     if expression.kind == "predicate"
                 ]
                 component_frequency_specs = _source_frequency_specs(component_text)
+                frozen_definitions = _frozen_nested_frequency_definitions(
+                    component.rule_component_id, draft, source_input
+                )
+                for head, member, definition in frozen_definitions:
+                    parent = _normalized(head)
+                    member_binding = _normalized(member)
+                    quoted_scopes = [
+                        _normalized(excerpt)
+                        for excerpt in (component_draft.source_excerpts if component_draft else ())
+                    ]
+                    if any(
+                        _normalized(item.predicate.source_term or item.predicate.attribute).startswith(parent)
+                        or member_binding in _normalized(
+                            item.predicate.source_term or item.predicate.attribute
+                        )
+                        for item in atomic_expressions
+                    ) or any(
+                        len(quote) >= 4 and (
+                            parent in quote or quote in parent or member_binding in quote
+                        )
+                        for quote in quoted_scopes
+                    ):
+                        component_frequency_specs.update(_source_frequency_specs(definition))
+                if any(
+                    _frequency_definition_required_as_sibling(root, frozen_definitions)
+                    for root in roots
+                ):
+                    issues.append(_issue(
+                        "temporal_semantics",
+                        "FREQUENCY_DEFINITION_SCOPE_UNVERIFIED",
+                        f"{component.display_code} 把列举项的频次定义变成上位条件的必备条件。",
+                        [component.rule_component_id],
+                        action="请保留列举项的定义作用域，不得以该列举项频次收窄上位条件。",
+                    ))
                 missing_frequency_specs = {
                     spec
                     for spec in component_frequency_specs
@@ -2202,14 +2832,17 @@ class ProtocolDeconstructionGate:
                 for expression in atomic_expressions:
                     predicate = expression.predicate
                     predicate_text = (
-                        _predicate_temporal_text(predicate)
+                        _predicate_temporal_text(predicate, component_text)
                         if has_precise_excerpt
                         else component_text
+                    )
+                    anchor_text = predicate_text + "\n" + _shared_named_anchor_lead_in(
+                        predicate, component_text
                     )
                     expected = {
                         anchor
                         for anchor, markers in anchor_markers.items()
-                        if any(marker in predicate_text for marker in markers)
+                        if any(marker in anchor_text for marker in markers)
                     }
                     component_expected = {
                         anchor
@@ -2218,17 +2851,17 @@ class ProtocolDeconstructionGate:
                     }
                     constraint = expression.time_constraint
                     has_before = any(
-                        marker.endswith("前") and marker in predicate_text
+                        marker.endswith("前") and marker in anchor_text
                         for markers in anchor_markers.values()
                         for marker in markers
                     )
                     has_on = any(
-                        marker.endswith("时") and marker in predicate_text
+                        marker.endswith("时") and marker in anchor_text
                         for markers in anchor_markers.values()
                         for marker in markers
                     )
                     has_after = any(
-                        marker.endswith("后") and marker in predicate_text
+                        marker.endswith("后") and marker in anchor_text
                         for markers in anchor_markers.values()
                         for marker in markers
                     )
@@ -2303,7 +2936,7 @@ class ProtocolDeconstructionGate:
                     occurrence_window = predicate.occurrence_window
                     prospective_window = predicate.prospective_window
                     prospective_period = predicate.prospective_period
-                    if _frequency_window_on_example_head(predicate):
+                    if _frequency_window_on_example_head(predicate, component_text):
                         issues.append(_issue(
                             "temporal_semantics",
                             "FREQUENCY_DEFINITION_SCOPE_UNVERIFIED",
@@ -3288,6 +3921,9 @@ class ProtocolDeconstructionGate:
         refs = []
         for item in draft.component_drafts:
             refs.extend(item.source_refs)
+        for rule in draft.proposed_rules:
+            for restricted in rule.restricted_components:
+                refs.extend(restricted.source_span_ids)
         for item in draft.evidence_requirement_drafts:
             refs.extend(item.source_refs)
         for item in (*draft.parent_catalog_mappings, *draft.procedure_catalog_mappings):
@@ -3337,6 +3973,48 @@ class ProtocolDeconstructionGate:
                 item.parent_official_code, set()
             ).update(item.source_refs)
 
+        rules_by_code = {rule.official_code: rule for rule in draft.proposed_rules}
+        valid_restricted_by_parent: dict[str, list] = {}
+        for item in source_input.parent_rule_catalog.items:
+            code = item.official_code or ""
+            rule = rules_by_code.get(code)
+            if rule is None:
+                continue
+            for restricted in rule.restricted_components:
+                mapped_texts = [materials.get(ref, "") for ref in restricted.source_span_ids]
+                source_valid = (
+                    (
+                        restricted.limitation_kind == "interpretation_unresolved"
+                        or (
+                            restricted.limitation_kind == "consumer_unavailable"
+                            and (
+                                _source_proves_unsupported_member_frequency(
+                                    restricted.source_excerpts
+                                )
+                                or _source_proves_unsupported_scoped_branch(
+                                    restricted, rule, mapped_texts
+                                )
+                                or _source_proves_unsupported_whole_requirement(
+                                    restricted, rule, item, materials
+                                )
+                            )
+                        )
+                    )
+                    and set(restricted.source_span_ids) <= set(item.source_span_ids)
+                    and set(restricted.source_span_ids) <= formal_ids
+                    and all(any(excerpt in text for text in mapped_texts)
+                            for excerpt in restricted.source_excerpts)
+                )
+                if not source_valid:
+                    issues.append(_issue(
+                        "source_coverage", "RESTRICTED_COMPONENT_SOURCE_INVALID",
+                        f"{code} 的受限要求未能逐字对应当前官方来源，或能力缺口缺少可核的限定结构。",
+                        [code, restricted.rule_component_id], scope=[code],
+                    ))
+                    continue
+                valid_restricted_by_parent.setdefault(code, []).append(restricted)
+                component_refs_by_parent.setdefault(code, set()).update(restricted.source_span_ids)
+
         for item in source_input.parent_rule_catalog.items:
             expected_refs = list(item.source_span_ids)
             if expected_refs:
@@ -3370,7 +4048,6 @@ class ProtocolDeconstructionGate:
                     )
                 )
 
-        rules_by_code = {rule.official_code: rule for rule in draft.proposed_rules}
         for item in source_input.parent_rule_catalog.items:
             official_code = item.official_code or item.item_id
             rule = rules_by_code.get(item.official_code or "")
@@ -3383,24 +4060,99 @@ class ProtocolDeconstructionGate:
             ]
             if not parent_texts and item.label:
                 parent_texts = [item.label]
-            obligations = [
-                segment
-                for text in parent_texts
-                for segment in _substantive_obligation_segments(text)
-            ]
+            obligations = []
+            for text in parent_texts:
+                for segment in _substantive_obligation_segments(text):
+                    obligations.append(segment)
+                    obligations.extend(
+                        note for note in _scoped_population_notes(segment)
+                        if note != segment
+                    )
             predicates = [
                 predicate
                 for expression in _walk_expressions(rule)
                 for predicate in iter_atomic_predicates(expression)
             ]
-            uncovered = [
-                segment
-                for segment in dict.fromkeys(obligations)
-                if not any(
-                    _predicate_binds_obligation(predicate, segment)
-                    for predicate in predicates
+            covered_by_restriction: set[str] = set()
+            for restricted in valid_restricted_by_parent.get(official_code, []):
+                if (restricted.limitation_kind == "consumer_unavailable"
+                        and _source_proves_unsupported_whole_requirement(
+                            restricted, rule, item, materials
+                        )):
+                    covered_by_restriction.update(obligations)
+                    continue
+                matches = [
+                    segment for segment in obligations
+                    if any(_normalized(segment) == _normalized(excerpt)
+                           for excerpt in restricted.source_excerpts)
+                ]
+                scoped_note = _source_proves_unsupported_scoped_branch(
+                    restricted, rule, parent_texts
                 )
-            ]
+                if (len(matches) != 1
+                        or (len(restricted.source_excerpts) != 1 and not scoped_note)
+                        or matches[0] in covered_by_restriction
+                        or (not scoped_note and any(
+                            _predicate_binds_obligation(predicate, matches[0])
+                            for predicate in predicates
+                        ))):
+                    issues.append(_issue(
+                        "source_coverage", "RESTRICTED_COMPONENT_SCOPE_INVALID",
+                        f"{official_code} 的待核范围没有唯一对应一项未被条件承接的原文要求。",
+                        [official_code, restricted.rule_component_id], scope=[official_code],
+                    ))
+                    continue
+                if (restricted.limitation_kind == "interpretation_unresolved"
+                        and _numeric_tokens(matches[0])
+                        and _source_comparators(matches[0])):
+                    issues.append(_issue(
+                        "source_coverage", "RESTRICTED_COMPONENT_SWALLOWS_NUMERIC_BOUND",
+                        f"{official_code} 的数值界限和比较方向在原文中已明确，不能仅以含义待核撤下该条件。",
+                        [official_code, restricted.rule_component_id], scope=[official_code],
+                        action="请保留有原文依据的数值条件；如确有例外或适用范围不明，单独定位原文并核对，不得把整条界限改为待澄清。",
+                    ))
+                    continue
+                covered_by_restriction.add(matches[0])
+            uncovered = []
+            for segment in dict.fromkeys(obligations):
+                if segment in covered_by_restriction:
+                    continue
+                if segment in _scoped_population_notes(segment):
+                    covered = any(
+                        predicate.applicable_population is not None
+                        and any(
+                            _normalized(segment) == _normalized(clause)
+                            for clause in predicate.exact_source_clauses
+                        )
+                        for predicate in predicates
+                    )
+                else:
+                    covered = _qualifier_is_structured(rule, segment) or any(
+                        _predicate_binds_obligation(predicate, segment)
+                        for predicate in predicates
+                    )
+                if not covered:
+                    uncovered.append(segment)
+            # A lead-in names the parent condition; it is not a second test when
+            # every actual listed requirement is already represented.
+            if len(obligations) > 2 and len(predicates) > 1:
+                uncovered = [
+                    segment for segment in uncovered
+                    if not (
+                        (lead := _normalized(segment)).startswith("符合")
+                        and lead.endswith("标准")
+                        and lead in _normalized(rule.source_text)
+                        and ("任一" not in lead or rule.kind == RuleKind.EXCLUSION)
+                        and all(
+                            other == segment
+                            or other in covered_by_restriction
+                            or _qualifier_is_structured(rule, other)
+                            or any(_predicate_binds_obligation(predicate, other)
+                                   for predicate in predicates)
+                            for other in obligations
+                        )
+                    )
+                ]
             if uncovered:
                 issues.append(
                     _issue(
@@ -3409,7 +4161,7 @@ class ProtocolDeconstructionGate:
                         f"{official_code} 原文中有实质性条件没有进入可判定的原子条件。",
                         [
                             official_code,
-                            *[f"未承接：{segment[:80]}" for segment in uncovered],
+                            *[f"未承接：{segment}" for segment in uncovered],
                         ],
                         action=(
                             "请逐项保留父条款中的病史时长、疾病状态、时间窗、数值阈值、"
@@ -3505,16 +4257,8 @@ class ProtocolDeconstructionGate:
                             for span, excerpt in zip(repeat.source_span_ids, repeat.source_excerpts, strict=True)
                         ):
                             invalid_repeat_sources.append(predicate.predicate_id)
-                        scoped_frequency_atom = (
-                            predicate.occurrence_window is not None
-                            and predicate.occurrence_window.scope is not None
-                        )
-                        # 带scope频次窗口的原子按合同（rules.py）禁止再携带
-                        # observation_policy：其“采用范围”由频次结构自身表达
-                        # （如“1周≥4天”的每周期计数），采用方式由组件外层条件
-                        # 或用户确认的读法承接。此类原子缺省policy不算缺失。
                         if policy is None:
-                            if not scoped_frequency_atom:
+                            if _requires_observation_policy(predicate):
                                 invalid_observation_policies.append(predicate.predicate_id)
                         elif (policy.selection is not None and policy.selection.window_order is None) or any(
                             span_id not in component_draft.source_refs
@@ -3546,9 +4290,9 @@ class ProtocolDeconstructionGate:
         if invalid_observation_policies:
             issues.append(_issue(
                 "source_coverage", "OBSERVATION_POLICY_SOURCE_UNVERIFIED",
-                "部分条件尚未说明检查结果的采用范围，或所引原文与来源不符。",
+                "方案明确规定的多次结果采用方式尚未结构化，或已有采用规则的原文与来源不符。",
                 sorted(set(invalid_observation_policies)),
-                action="请逐项说明采用一次、任一次或全部记录，并将依据逐段对应到所引方案原文；方案未明确的选择方式须保留为待核实。",
+                action="仅将方案明确规定的最近一次、任一次、全部或复查结果采用方式逐字绑定；未规定时不要编造。当前若有多条合格记录，资料对应须保留待核，不得默取最新或有利值。",
             ))
         if invalid_clauses:
             issues.append(
@@ -3586,6 +4330,28 @@ class ProtocolDeconstructionGate:
                 ]
                 if not propositional_atoms:
                     continue
+                for predicate in propositional_atoms:
+                    proposition = predicate.semantic_proposition or ""
+                    cited = "\n".join(predicate.exact_source_clauses)
+                    if re.search(
+                        r"(?:方案原文|原文|上位条件|上位疾病|例示|列举|分支|任一满足|"
+                        r"谓词|消费者|\bANY\b|\bALL\b)",
+                        proposition, flags=re.IGNORECASE,
+                    ):
+                        issues.append(_issue(
+                            "source_coverage", "SEMANTIC_PROPOSITION_RULE_COMMENTARY",
+                            "语义核对内容在解释方案结构，不能由受试者病历证明。",
+                            [predicate.predicate_id],
+                            action="请将方案结构关系留在规则来源核对中；语义命题仅描述可从本例原始资料核实的临床事实。",
+                        ))
+                    if (_numeric_tokens(proposition) - _numeric_tokens(cited)
+                            or _source_comparators(proposition) - _source_comparators(cited)):
+                        issues.append(_issue(
+                            "source_coverage", "SEMANTIC_PROPOSITION_UNSOURCED_BOUND",
+                            "语义核对内容增加了所引原文没有的数值或比较方向。",
+                            [predicate.predicate_id],
+                            action="仅保留逐字来源支持的数值和方向；不明确的组合关系须保留待核，不能自行补足。",
+                        ))
                 if component_draft is not None and component_draft.source_excerpts:
                     continue
                 mapped_texts = [

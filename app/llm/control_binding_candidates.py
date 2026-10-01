@@ -85,6 +85,7 @@ def build_control_binding_messages(frozen: ControlBindingFrozenInput) -> list[di
     maps = build_control_alias_maps(frozen)
     source = _apply_aliases(predicate_binding_prompt_input(frozen.evidence_input), maps)
     source.pop("components")
+    source.pop("rule_sources", None)
     catalog = _apply_aliases(frozen.publication.catalog.model_dump(mode="json"), maps)
     schema = ControlCandidatePayload.model_json_schema()
     schema["properties"]["results"].update(minItems=len(identities), maxItems=len(identities))

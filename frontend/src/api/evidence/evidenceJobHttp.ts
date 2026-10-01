@@ -112,11 +112,18 @@ export async function getSelectiveVisionTask(
 export async function retrySelectiveVisionTask(
   revisionId: string,
   fetchImpl: typeof fetch = fetch.bind(globalThis),
+  readingRotations?: Record<string, 90 | 180 | 270>,
 ): Promise<SelectiveVisionTaskActionView> {
   const encoded = encodeURIComponent(revisionId);
   return request(
     `/api/v2/evidence-processing-revisions/${encoded}/selective-vision-task/retry`,
-    { method: "POST" },
+    {
+      method: "POST",
+      ...(readingRotations ? {
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reading_rotations: readingRotations }),
+      } : {}),
+    },
     decodeSelectiveVisionTaskAction,
     fetchImpl,
   );

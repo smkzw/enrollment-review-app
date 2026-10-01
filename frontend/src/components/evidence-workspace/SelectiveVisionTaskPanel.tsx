@@ -15,6 +15,7 @@ import { StatusBadge, type Tone } from "../shell/StatusBadge";
 
 interface SelectiveVisionTaskPanelProps {
   revisionId: string;
+  selectedPage?: { pageArtifactId: string; pageNumber: number; readingRotation: number } | null;
 }
 
 /** 停止请求受理后任务尚未落定，仍需轮询直到终态。 */
@@ -48,12 +49,13 @@ function formatTime(iso: string): string {
 
 export function SelectiveVisionTaskPanel({
   revisionId,
+  selectedPage,
 }: SelectiveVisionTaskPanelProps) {
   const detail = useLoad(
     (signal) => getSelectiveVisionTask(revisionId, signal),
     [revisionId],
   );
-  const [busyAction, setBusyAction] = useState<"retry" | "cancel" | null>(null);
+  const [busyAction, setBusyAction] = useState<"retry" | "rotate" | "cancel" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -91,19 +93,30 @@ export function SelectiveVisionTaskPanel({
     summaryEntries.push({ label: "未能核验而关闭", value: task.closedPageCount });
   }
 
-  async function runAction(action: "retry" | "cancel"): Promise<void> {
+  const canRotateRetry = Boolean(
+    task.canRetry && selectedPage && selectedPage.readingRotation !== 0
+    && task.failedPageArtifactIds.includes(selectedPage.pageArtifactId),
+  );
+
+  async function runAction(action: "retry" | "rotate" | "cancel"): Promise<void> {
     setBusyAction(action);
     setActionError(null);
     try {
-      if (action === "retry") {
-        await retrySelectiveVisionTask(revisionId);
+      if (action === "retry" || action === "rotate") {
+        const angle = selectedPage?.readingRotation;
+        await retrySelectiveVisionTask(
+          revisionId, undefined,
+          action === "rotate" && selectedPage && (angle === 90 || angle === 180 || angle === 270)
+            ? { [selectedPage.pageArtifactId]: angle }
+            : undefined,
+        );
       } else {
         await cancelSelectiveVisionTask(revisionId);
       }
       detail.retry();
     } catch {
       setActionError(
-        action === "retry"
+        action === "retry" || action === "rotate"
           ? "未能重新开始页面视觉核验。已保存的识别结果不受影响，请稍后再试。"
           : "未能停止页面视觉核验。请刷新状态后重试。",
       );
@@ -174,6 +187,14 @@ export function SelectiveVisionTaskPanel({
             onClick={() => void runAction("retry")}
           >
             {busyAction === "retry" ? "正在重新开始…" : "重新开始核验"}
+          </button>
+        )}
+        {canRotateRetry && selectedPage && (
+          <button type="button" className="button" disabled={busyAction !== null}
+            onClick={() => void runAction("rotate")}
+            title="原件和旧识别结果不变，仅按当前方向重新核对本页"
+          >
+            {busyAction === "rotate" ? "正在重新核对…" : `按当前方向重读第 ${selectedPage.pageNumber} 页`}
           </button>
         )}
         {task.canCancel && (

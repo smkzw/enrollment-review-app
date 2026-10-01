@@ -47,7 +47,7 @@ export function PreparedReviewPanel(props: Props) {
             onClick={() => void review.publish()}><FileText size={16} aria-hidden="true" />生成审核报告</button>}
           <button className="icon-button" type="button" title="刷新审核进度" aria-label="刷新审核进度"
             disabled={review.busy} onClick={review.refresh}><RefreshCw size={16} aria-hidden="true" /></button>
-          {failed && <button className="button" type="button" disabled={review.busy}
+          {failed && review.data?.retryAvailable && <button className="button" type="button" disabled={review.busy}
             onClick={() => void review.change("retry")}><RefreshCw size={16} aria-hidden="true" />重试未完成部分</button>}
           {!ended && <button className="button" type="button" disabled={review.busy || state === "cancel_requested"}
             onClick={() => void review.change("cancel")}><Square size={16} aria-hidden="true" />停止核对</button>}
@@ -60,6 +60,10 @@ export function PreparedReviewPanel(props: Props) {
       当前节点的资料尚未整理完成，请先完成资料判读与病史整理。
     </p>}
     {review.errorMessage && <p className="prepared-review__notice" role="alert"><TriangleAlert size={16} aria-hidden="true" />{review.errorMessage}</p>}
+    {review.data?.failureReason && <p className="prepared-review__notice" role="alert">
+      <TriangleAlert size={16} aria-hidden="true" />{review.data.failureReason}
+      完善方案并采用新的规则版本后，请重新准备审核。
+    </p>}
     {review.data && <>
       <p className="prepared-review__stage">{review.data.stageLabel}</p>
       <ul className="prepared-review__steps">

@@ -94,6 +94,7 @@ _TABLE_APPLICABILITY_HEADING_RE = re.compile(
     r"(?:研究)?(?:流程|日程|访视)(?:图|表)|临床研究阶段流程表",
     re.I,
 )
+_PROTOCOL_TITLE_LABEL_RE = re.compile(r"(?:试验|研究|方案)(?:题目|名称|标题)\s*[:：]", re.I)
 # Table cells often carry plain ``Normal`` paragraphs rather than a Word
 # outline style.  Keep the fallback deliberately narrow: only a phase marker
 # at the start of the paragraph followed by a small vocabulary of heading
@@ -423,6 +424,22 @@ def _table_heading_scopes(
         for block in ordered
         if block.document_part == DocumentPart.BODY and block.table_path is None
     ]
+    title_scopes = {
+        _scope_from_text(candidate.text)[0]
+        for candidate in top_level
+        if _PROTOCOL_TITLE_LABEL_RE.search(_normalize(candidate.text))
+    }
+    protocol_scope = next(iter(title_scopes)) if len(title_scopes) == 1 else None
+    if protocol_scope is not None and not _scope_is_clear(protocol_scope):
+        protocol_scope = None
+    if protocol_scope is not None and any(
+        _looks_like_heading(candidate)
+        and _scope_is_clear(scopes := _scope_from_text(candidate.text)[0])
+        and scopes not in {protocol_scope, (PhaseScope.SHARED,)}
+        for candidate in top_level
+    ):
+        protocol_scope = None
+    table_groups = _table_groups(blocks)
     result: dict[str, tuple[PhaseScope, ...]] = {}
     body_contexts = body_contexts or {}
     for index, block in enumerate(top_level):
@@ -464,6 +481,15 @@ def _table_heading_scopes(
             else:
                 result[block.source_ref] = (PhaseScope.PHASE_III,)
             break
+        # The nearby-heading search may stop at another table or section
+        # boundary. A confirmed single-phase protocol title can still scope
+        # an unlabelled visit matrix, never an ordinary table.
+        if (
+            block.source_ref not in result
+            and protocol_scope
+            and _table_is_visit_table(table_groups, block.source_ref)
+        ):
+            result[block.source_ref] = protocol_scope
     return result
 
 

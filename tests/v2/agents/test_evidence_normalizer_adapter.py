@@ -1478,6 +1478,33 @@ def test_decoder_losslessly_uses_raw_scalar_when_repair_omits_canonical_value():
 
 
 @pytest.mark.parametrize(
+    ("raw_value", "canonical_value", "assertion_text", "expected"),
+    [
+        ("2025-08-15 9:46", "2025-08-15", "采样时间:2025-08-15 9:46", "2025-08-15 9:46"),
+        ("2025-08-15 14:57", "2025-08-15", "报告时间:2025-08-15 14:57", "2025-08-15 14:57"),
+        ("2025-08-15 9:46", "2025-08-16", "采样时间:2025-08-15 9:46", "2025-08-16"),
+        ("2025-08-15 9:46", "2025-08-15", "采样日期:2025-08-15", "2025-08-15"),
+        ("2025-08-15 25:46", "2025-08-15", "采样时间:2025-08-15 25:46", "2025-08-15"),
+        ("2025-08-15", "2025-08-15", "采样日期:2025-08-15", "2025-08-15"),
+    ],
+)
+def test_decoder_keeps_source_time_precision_only_when_excerpt_proves_it(
+    raw_value, canonical_value, assertion_text, expected
+):
+    from app.agents.evidence_normalizer import _normalize_evidence_json
+
+    fact = {
+        "fact_type": "采样时间",
+        "value_kind": "value",
+        "raw_value": raw_value,
+        "canonical_value": canonical_value,
+        "unit": None,
+        "assertion_basis": {"assertion_text": assertion_text},
+    }
+    assert _normalize_evidence_json(fact)["canonical_value"] == expected
+
+
+@pytest.mark.parametrize(
     ("model_value", "expected"),
     [
         ("84", 84),

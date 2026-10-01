@@ -6,6 +6,8 @@ from types import SimpleNamespace
 import pytest
 
 from app.llm.predicate_binding_candidates import (
+    TRAILING_CLOSURE_REPAIR_VERSION,
+    _candidate_json_object,
     _apply_aliases,
     build_predicate_alias_maps,
     build_predicate_binding_messages, validate_predicate_candidates,
@@ -59,6 +61,22 @@ def test_one_fact_can_be_a_candidate_for_multiple_predicates():
     assert len(result.results) == 2
     assert all(item.candidates[0].fact_id == "fact-a" for item in result.results)
     assert "truth" not in result.model_dump()
+
+
+def test_only_one_trailing_result_closer_can_be_repaired_without_changing_fields():
+    frozen, payload = _case()
+    raw = json.dumps(payload, ensure_ascii=False)
+    final_array = raw.rfind("]")
+    assert raw[final_array - 1] == "}"
+    missing_closer = raw[:final_array - 1] + raw[final_array:]
+    parsed, mode = _candidate_json_object(missing_closer)
+    assert mode == TRAILING_CLOSURE_REPAIR_VERSION
+    assert parsed == payload
+    assert validate_predicate_candidates(frozen, missing_closer) == validate_predicate_candidates(frozen, raw)
+    with pytest.raises(ValueError):
+        validate_predicate_candidates(frozen, missing_closer[:-2])
+    with pytest.raises(ValueError):
+        validate_predicate_candidates(frozen, raw.replace('"status": "candidates"', '"status":', 1))
 
 
 @pytest.mark.parametrize("attribute,value,shape", [
@@ -198,6 +216,13 @@ def test_exception_identity_is_required_separately_and_adapter_preserves_constra
     messages = build_predicate_binding_messages(frozen)
     data = json.loads(messages[1]["content"][0]["text"])
     assert len(data["required_predicate_identities"]) == 3
+    projected = data["frozen_input"]["components"][0]
+    assert "expression" not in projected
+    assert "exception_expression" not in projected
+    assert "rule_source_text" not in projected
+    assert data["frozen_input"]["rule_sources"][projected["parent_rule_id"]] == component.rule_source_text
+    assert len(projected["trigger_predicates"]) == 2
+    assert len(projected["exception_predicates"]) == 1
     alias_maps = build_predicate_alias_maps(frozen)
     assert alias_maps["predicate"][exception.predicate_identity_sha256] in data["required_predicate_identities"]
     assert exception.predicate_identity_sha256 != component.trigger_predicates[1].predicate_identity_sha256
@@ -225,6 +250,37 @@ def test_prompt_uses_frozen_input_without_a_model_specific_branch():
         predicate_binding_prompt_input(frozen), build_predicate_alias_maps(frozen))
     assert "glm" not in messages[0]["content"].lower()
     assert "qwen" not in messages[0]["content"].lower()
+
+
+def test_correspondence_prompt_omits_duplicate_logic_but_keeps_frozen_conditions():
+    frozen, _ = _case()
+    projected = predicate_binding_prompt_input(frozen)["components"][0]
+    assert "expression" not in projected
+    assert "exception_expression" not in projected
+    assert "rule_source_text" not in projected
+    assert predicate_binding_prompt_input(frozen)["rule_sources"][projected["parent_rule_id"]] == (
+        frozen.components[0].rule_source_text
+    )
+    assert [item["predicate_identity_sha256"] for item in projected["trigger_predicates"]] == [
+        item.predicate_identity_sha256 for item in frozen.components[0].trigger_predicates
+    ]
+    assert projected["evidence_requirements"] == [
+        item.model_dump(mode="json", exclude_none=True)
+        for item in frozen.components[0].evidence_requirements
+    ]
+
+
+def test_different_text_under_one_parent_keeps_each_source_inline():
+    frozen, _ = _case()
+    first = frozen.components[0]
+    second = first.model_copy(update={"rule_source_text": "另一份逐字原文"})
+    projected = predicate_binding_prompt_input(
+        frozen.model_copy(update={"components": [first, second]})
+    )
+    assert first.parent_rule_id not in projected["rule_sources"]
+    assert [item["rule_source_text"] for item in projected["components"]] == [
+        first.rule_source_text, second.rule_source_text,
+    ]
 
 
 def test_duplicate_json_fields_are_rejected():

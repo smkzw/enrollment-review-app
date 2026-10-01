@@ -129,8 +129,9 @@ PROFILE_HIGHLIGHT_REASON_LABELS: dict[str, str] = {
 }
 
 GAP_TYPE_LABELS: dict[str, str] = {
+    "applicable_population_unverified": "适用人群尚未核实",
     "observation_unverified": "资料尚待核实",
-    "record_incomplete": "病历记录不完整",
+    "record_incomplete": "本次资料未见相关记录",
     "description_insufficient": "描述不充分",
     "historical_source_unavailable": "历史来源不可用",
     "referenced_file_missing": "已引用文件未提供",

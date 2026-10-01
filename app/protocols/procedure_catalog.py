@@ -50,19 +50,16 @@ from .phase_detection import project_single_phase
 from .section_index import formal_source_span_ids
 
 
-CATALOG_BUILDER_VERSION = "required-procedures/v4"
+CATALOG_BUILDER_VERSION = "required-procedures/v6"
 """Stable implementation marker used in IDs, not a project-specific rule."""
 
 _DEFAULT_FROZEN_AT = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _DEFAULT_FROZEN_BY = CATALOG_BUILDER_VERSION
 
-_MARK_RE = re.compile(r"^\s*[\(（]?\s*[xX×]\s*[\)）]?\s*$")
 _SCHEDULE_MARK_RE = re.compile(r"^\s*[\(（]?\s*[xX×]\s*[\)）]?(?P<notes>(?:\^\d+)*)\s*$")
 _CELL_REF_RE = re.compile(r"\.r(?P<row>\d+)\.c(?P<col>\d+)")
-_TRAILING_FOOTNOTE_RE = re.compile(r"\^\d+(?=\s*(?:\^\d+|[\uff09)\]\u3011]|$))")
-_DISPLAY_FOOTNOTE_NUMBER_RE = re.compile(
-    r"\^(?P<number>\d+)(?=\s*(?:\^\d+|[\uff09)\]\u3011]|$))"
-)
+_TRAILING_FOOTNOTE_RE = re.compile(r"(?<!\d)(?:\^\d+)+(?=\s*(?:[\uff09)\]\u3011(（]|$))")
+_DISPLAY_FOOTNOTE_NUMBER_RE = _TRAILING_FOOTNOTE_RE
 _FLOW_NOTE_PREFACE_RE = re.compile(r"^\s*(?:注(?:意)?|说明|备注)\s*[:：]")
 _FLOW_ABBREVIATION_PREFACE_RE = re.compile(r"^\s*(?:缩略语|缩写|abbreviations?)\s*[:：]", re.I)
 
@@ -204,6 +201,10 @@ class _Cell:
     def block_order(self) -> int:
         return min(block.block_order for block in self.blocks)
 
+    @property
+    def col_span(self) -> int | None:
+        return self.blocks[0].table_col_span
+
 
 @dataclass(frozen=True)
 class _VisitColumn:
@@ -232,6 +233,7 @@ class _ScheduleTextBlock:
     text: str
     source_ref: str
     block_order: int
+    table_col_span: int | None = None
 
 
 @dataclass(frozen=True)
@@ -243,6 +245,7 @@ class _OperationInstance:
     visit: _VisitColumn
     source_span_ids: tuple[str, ...]
     position_hint: tuple[int, int, int]
+    note_excerpt_overrides: tuple[tuple[str, str], ...] = ()
 
 
 def _short_digest(*parts: object) -> str:
@@ -319,7 +322,7 @@ def _make_cells(
 
 
 def _is_mark(text: str) -> bool:
-    return bool(_MARK_RE.fullmatch(text.strip()))
+    return bool(_SCHEDULE_MARK_RE.fullmatch(text.strip()))
 
 
 def _non_mark_text(cell: _Cell | None) -> str:
@@ -352,8 +355,9 @@ def _display_footnote_numbers(value: str) -> tuple[int, ...]:
 
     return tuple(
         dict.fromkeys(
-            int(match.group("number"))
+            int(number)
             for match in _DISPLAY_FOOTNOTE_NUMBER_RE.finditer(value)
+            for number in re.findall(r"\^(\d+)", match.group())
         )
     )
 
@@ -458,15 +462,6 @@ def _operation_labels_named_by_note(
     note_text: str,
     operation_labels: Sequence[str],
 ) -> frozenset[str]:
-    """Return table operations explicitly named by a visit-header note.
-
-    A superscript on a merged visit header is usually visit-wide, but some
-    protocols place an operation-specific note there for visual convenience.
-    When the note names a concrete operation from the same table, attaching it
-    to every marked row corrupts provenance.  Longest matches win so a broad
-    label such as ``体重`` does not shadow ``身高和体重``.
-    """
-
     normalized_note = re.sub(r"\s+", "", note_text).casefold()
     matches = {
         label
@@ -474,11 +469,18 @@ def _operation_labels_named_by_note(
         if len(normalized_label := re.sub(r"\s+", "", label).casefold()) >= 2
         and not _is_generic_header(label)
         and not _is_placeholder_operation(label)
-        and normalized_label in normalized_note
+        and any(
+            len(stem := re.sub(r"(?:评分|评估|检查|测量)$", "", part)) >= 3
+            and stem in normalized_note
+            for part in (
+                normalized_label.split("/")
+                if re.fullmatch(r"[a-z0-9]+(?:/[a-z0-9]+)+(?:评分|评估|检查|测量)?", normalized_label)
+                else (normalized_label,)
+            )
+        )
     }
     return frozenset(
-        label
-        for label in matches
+        label for label in matches
         if not any(
             label != other
             and re.sub(r"\s+", "", label).casefold()
@@ -486,6 +488,51 @@ def _operation_labels_named_by_note(
             for other in matches
         )
     )
+
+
+def _scoped_visit_note_excerpt(
+    text: str, operation: str, operation_labels: Sequence[str], *, table_root: str,
+) -> str | None:
+    """Keep contiguous visit-wide and named-operation sentences from one source block."""
+
+    sentences = [
+        match for match in re.finditer(r"[^。；;\n]+[。；;\n]?", text)
+        if match.group().strip()
+    ]
+    named_by_sentence = [
+        _operation_labels_named_by_note(sentence.group(), operation_labels)
+        for sentence in sentences
+    ]
+    has_named_operation = any(named_by_sentence)
+    selected: list[int] = []
+    for index, sentence in enumerate(sentences):
+        value = sentence.group()
+        named = named_by_sentence[index]
+        if named and re.search(r"(?:所有|全部|各项)(?:检查|操作|项目)", value):
+            raise ProcedureCatalogError(
+                "note_scope_unresolved",
+                "同一句流程表注释同时涉及访视和具体操作，无法仅按结构确定适用范围",
+                table_root=table_root,
+            )
+        visit_wide = not named and (
+            not has_named_operation
+            or ("访视" in value and "检查" in value)
+        )
+        if visit_wide or operation in named:
+            selected.append(index)
+    if not selected:
+        return None
+    if selected != list(range(selected[0], selected[-1] + 1)):
+        if any(operation in named for named in named_by_sentence):
+            # One named operation may recur around another in the same note.
+            # Retain the complete literal source rather than splice quotations.
+            return text.strip()
+        raise ProcedureCatalogError(
+            "note_scope_unresolved",
+            "流程表注释中适用于同一操作的语句不连续，需按原文核对",
+            table_root=table_root,
+        )
+    return text[sentences[selected[0]].start():sentences[selected[-1]].end()].strip()
 
 
 def _normalized_header_key(value: str) -> str:
@@ -544,6 +591,12 @@ def _header_projection(
     # source span is manufactured for a merged blank cell.
     effective: dict[tuple[int, int], tuple[str, tuple[str, ...]]] = {}
     for row in range(first_mark_row):
+        row_cells = [
+            cell for (cell_row, _col), cell in cells.items() if cell_row == row
+        ]
+        explicit_geometry = bool(row_cells) and all(
+            cell.col_span is not None for cell in row_cells
+        )
         row_values = [
             _non_mark_text(cells.get((row, col))) for col in range(1, max_columns)
         ]
@@ -554,12 +607,16 @@ def _header_projection(
             for value in row_values
         )
         last: tuple[str, tuple[str, ...]] | None = None
+        last_end = 0
         for col in range(max_columns):
             cell = cells.get((row, col))
             text = _non_mark_text(cell)
             if text:
                 last = (text, cell.source_refs if cell else ())
-            elif propagate_group and last is not None:
+                last_end = col + (cell.col_span or 1) if cell else col + 1
+            elif propagate_group and last is not None and (
+                not explicit_geometry or col < last_end
+            ):
                 effective[(row, col)] = last
                 continue
             effective[(row, col)] = (text, cell.source_refs if cell else ())
@@ -621,27 +678,89 @@ def _enrollment_boundary(
 def _schedule_cells_from_units(
     units: Sequence[ProtocolStructureUnit], table_root: str,
 ) -> dict[tuple[int, int], _Cell]:
-    cells: dict[tuple[int, int], _Cell] = {}
+    grouped_cells: dict[tuple[int, int], list[tuple[int, _ScheduleTextBlock]]] = {}
     for unit in units:
         prefix, marker, suffix = unit.source_ref.rpartition(".r")
         context = unit.table_context
-        if not marker or prefix != table_root or not suffix.isdigit() or context is None:
+        row_token = suffix.partition(".")[0]
+        if (not marker or prefix != table_root or not row_token.isdigit()
+                or context is None or int(row_token) != context.row_index):
             continue
-        pieces = unit.excerpt.split(" | ")
+        pieces = unit.member_texts
         paths = context.member_cell_paths
+        spans = context.member_cell_col_spans
         refs = unit.member_source_refs
-        if len(pieces) != len(paths) or len(paths) != len(refs):
-            raise ValueError("表格行文字与单元格来源不能逐列对应")
-        for piece, path, ref in zip(pieces, paths, refs, strict=True):
-            row, col = path
-            key = (row, col)
-            if key in cells:
-                raise ValueError("同一表格单元格有多条互相冲突的来源")
-            cells[key] = _Cell(
-                root=table_root, row=row, col=col,
-                blocks=(_ScheduleTextBlock(piece, ref, unit.source_order),),
+        if pieces is None or len(pieces) != len(refs):
+            raise ProcedureCatalogError("schedule_row_members_missing", "表格行缺少与来源逐项对应的原文，不能核对访视列", table_root=table_root)
+        grouped: dict[tuple[int, ...], list[tuple[int, _ScheduleTextBlock]]] = {}
+        display_members: list[tuple[tuple[int, ...], int, str]] = []
+        for piece, ref in zip(pieces, refs, strict=True):
+            matches = tuple(_CELL_REF_RE.finditer(ref))
+            paragraph = re.search(r"\.p(?P<index>\d+)$", ref)
+            if not matches or paragraph is None or not ref.startswith(table_root + ".r"):
+                raise ProcedureCatalogError("schedule_row_member_path_mismatch", "表格行成员缺少可核对的单元格位置", table_root=table_root)
+            path = tuple(
+                coordinate
+                for match in matches
+                for coordinate in (int(match.group("row")), int(match.group("col")))
             )
+            if path not in paths or path[-2] != context.row_index:
+                raise ProcedureCatalogError("schedule_row_member_path_mismatch", "表格行成员与冻结单元格位置不一致", table_root=table_root)
+            grouped.setdefault(path, []).append(
+                (int(paragraph.group("index")), _ScheduleTextBlock(
+                    piece, ref, unit.source_order,
+                    spans[paths.index(path)] if spans is not None else None,
+                ))
+            )
+            display_members.append((path, int(paragraph.group("index")), piece))
+        numeric_display = " | ".join(item[2] for item in sorted(display_members) if item[2].strip())
+        lexical_display = " | ".join(
+            piece for _ref, piece in zip(refs, pieces, strict=True) if piece.strip()
+        )
+        if unit.excerpt not in {numeric_display, lexical_display}:
+            raise ProcedureCatalogError("schedule_row_display_mismatch", "表格展示文字与逐项来源原文不一致", table_root=table_root)
+        if set(grouped) != set(paths) or any(
+            len({index for index, _block in blocks}) != len(blocks)
+            for blocks in grouped.values()
+        ):
+            raise ProcedureCatalogError("schedule_row_member_path_mismatch", "表格行段落顺序与冻结单元格来源不一致", table_root=table_root)
+        for path, blocks in grouped.items():
+            row, col = path[-2:]
+            key = (row, col)
+            grouped_cells.setdefault(key, []).extend(blocks)
+    cells: dict[tuple[int, int], _Cell] = {}
+    for (row, col), blocks in grouped_cells.items():
+        if (len({index for index, _block in blocks}) != len(blocks)
+                or len({block.table_col_span for _index, block in blocks}) != 1):
+            raise ProcedureCatalogError("schedule_cell_conflict", "同一表格单元格有多条互相冲突的来源", table_root=table_root)
+        cells[(row, col)] = _Cell(
+            root=table_root, row=row, col=col,
+            blocks=tuple(block for _index, block in sorted(blocks)),
+        )
     return cells
+
+
+def schedule_row_values(
+    unit: ProtocolStructureUnit,
+    context_units: Sequence[ProtocolStructureUnit] = (),
+) -> tuple[tuple[int, str, tuple[str, ...]], ...]:
+    """Return source-aligned row values; the display excerpt is never parsed."""
+
+    table_root, marker, suffix = unit.source_ref.rpartition(".r")
+    row_token = suffix.partition(".")[0]
+    if (not marker or not row_token.isdigit() or unit.table_context is None
+            or int(row_token) != unit.table_context.row_index):
+        return ()
+    same_row = [other for other in context_units
+                if other.structure_unit_id != unit.structure_unit_id
+                and other.source_ref.rpartition(".r")[0] == table_root
+                and other.table_context is not None
+                and other.table_context.row_index == unit.table_context.row_index]
+    cells = _schedule_cells_from_units([unit, *same_row], table_root)
+    return tuple(
+        (cell.col, cell.text, cell.source_refs)
+        for cell in sorted(cells.values(), key=lambda item: item.col)
+    )
 
 
 def schedule_column_scope(
@@ -653,7 +772,9 @@ def schedule_column_scope(
     if unit.table_context is None:
         return ()
     table_root, marker, suffix = unit.source_ref.rpartition(".r")
-    if not marker or not suffix.isdigit():
+    row_token = suffix.partition(".")[0]
+    if (not marker or not row_token.isdigit()
+            or int(row_token) != unit.table_context.row_index):
         return ()
     cells = _schedule_cells_from_units([*context_units, unit], table_root)
     marks = sorted(
@@ -902,6 +1023,18 @@ def _validate_phase_context(
     return projection, phase
 
 
+def _required_note_span_id(
+    ref: str, spans_by_ref: Mapping[str, ProtocolSourceSpan], table_root: str,
+) -> str:
+    span = spans_by_ref.get(ref)
+    if span is None:
+        raise ProcedureCatalogError(
+            "source_coverage_missing", "流程表注释缺少正式来源定位：" + ref,
+            table_root=table_root,
+        )
+    return span.source_span_id
+
+
 def _formal_span_ids(
     refs: Iterable[str],
     *,
@@ -1003,6 +1136,21 @@ def _table_looks_like_flow(
         and len(header_cells) >= 2
         and marked_rows_with_labels >= 1
     )
+    if structural:
+        header = _header_projection(
+            cells,
+            first_mark_row=first_mark_row,
+            max_columns=max_columns,
+        )
+        # An X matrix with visits down the rows and analytes across columns
+        # is not the enrollment schedule this catalog expects. Its marked
+        # columns need at least one source-labelled visit. A matrix whose
+        # visits are all after baseline remains a recognized but empty
+        # enrollment schedule, distinct from a missing flow table.
+        structural = any(
+            _derive_visit_stage(header.get(col, ("", ()))[0]) is not None
+            for col in marked_columns
+        )
     return structural, marks, first_mark_row
 
 
@@ -1086,23 +1234,14 @@ def _build_instances_for_table(
     selected_rows = sorted({cell.row for cell in selected_marks})
     table_operations = tuple(
         dict.fromkeys(
-            operation
+            _without_display_footnotes(label_result[0])
             for row in selected_rows
-            if (
-                label_result := _operation_label(
-                    cells,
-                    row=row,
-                    mark_columns=sorted(
-                        {
-                            cell.col
-                            for cell in selected_marks
-                            if cell.row == row
-                        }
-                    ),
-                )
-            )
-            for operation in (_without_display_footnotes(label_result[0]),)
-            if not _is_placeholder_operation(operation)
+            if (label_result := _operation_label(
+                cells,
+                row=row,
+                mark_columns=sorted({cell.col for cell in selected_marks if cell.row == row}),
+            )) is not None
+            and not _is_placeholder_operation(_without_display_footnotes(label_result[0]))
         )
     )
     for row in selected_rows:
@@ -1238,34 +1377,73 @@ def _build_instances_for_table(
                     for number in _display_footnote_numbers(block.text)
                 )
             )
-            visit_note_numbers: list[int] = []
+            mark_note_numbers = tuple(
+                dict.fromkeys(
+                    number
+                    for cell in mark_cells
+                    for number in _display_footnote_numbers(cell.text)
+                )
+            )
+            visit_note_refs: list[str] = []
+            note_excerpt_overrides: dict[str, str] = {}
             for ref in visit.header_refs:
                 block = blocks_by_ref.get(ref)
                 if block is None:
                     continue
                 for number in _display_footnote_numbers(block.text):
                     note_refs = footnote_refs.get(number, ())
-                    note_text = " ".join(blocks_by_ref[ref].text for ref in note_refs
-                                         if ref in blocks_by_ref)
-                    named_operations = (
-                        _operation_labels_named_by_note(
-                            note_text,
-                            table_operations,
+                    if not note_refs:
+                        raise ProcedureCatalogError(
+                            "source_coverage_missing",
+                            f"访视表头引用的脚注 {number} 没有来源段落",
+                            table_root=root.source_ref,
                         )
-                        if note_text
-                        else frozenset()
-                    )
-                    if not named_operations or operation in named_operations:
-                        visit_note_numbers.append(number)
-            display_note_numbers = tuple(
-                dict.fromkeys((*operation_note_numbers, *visit_note_numbers))
+                    for note_ref in note_refs:
+                        note_block = blocks_by_ref.get(note_ref)
+                        if note_block is None:
+                            raise ProcedureCatalogError(
+                                "source_coverage_missing",
+                                f"流程表注释缺少来源段落：{note_ref}",
+                                table_root=root.source_ref,
+                            )
+                        excerpt = _scoped_visit_note_excerpt(
+                            note_block.text, operation, table_operations,
+                            table_root=root.source_ref,
+                        )
+                        if excerpt is not None:
+                            visit_note_refs.append(note_ref)
+                            note_excerpt_overrides[note_ref] = excerpt
+            direct_note_numbers = tuple(
+                dict.fromkeys((*operation_note_numbers, *mark_note_numbers))
             )
+            missing_numbers = tuple(
+                number for number in direct_note_numbers if not footnote_refs.get(number)
+            )
+            if missing_numbers:
+                raise ProcedureCatalogError(
+                    "source_coverage_missing",
+                    "流程表引用的脚注没有来源段落："
+                    + "、".join(str(number) for number in missing_numbers),
+                    table_root=root.source_ref,
+                )
+            note_refs = tuple(
+                dict.fromkeys(
+                    [
+                        *(ref for number in operation_note_numbers
+                          for ref in footnote_refs[number]),
+                        *visit_note_refs,
+                        *(ref for number in mark_note_numbers
+                          for ref in footnote_refs[number]),
+                    ]
+                )
+            )
+            direct_note_refs = {
+                ref for number in direct_note_numbers for ref in footnote_refs[number]
+            }
+            for ref in direct_note_refs:
+                note_excerpt_overrides.pop(ref, None)
             note_span_ids = _formal_span_ids(
-                [
-                    ref
-                    for number in display_note_numbers
-                    for ref in footnote_refs.get(number, ())
-                ],
+                note_refs,
                 spans_by_ref=spans_by_ref,
                 blocks_by_ref=blocks_by_ref,
                 snapshot_id=snapshot_id,
@@ -1273,6 +1451,19 @@ def _build_instances_for_table(
                 role="流程表注释",
                 required=False,
             )
+            formal_note_refs = {
+                span.source_ref
+                for ref in note_refs
+                if (span := spans_by_ref.get(ref)) is not None
+                and span.source_span_id in note_span_ids
+            }
+            if set(note_refs) != formal_note_refs:
+                raise ProcedureCatalogError(
+                    "source_coverage_missing",
+                    "流程表注释无法完整定位："
+                    + "、".join(ref for ref in note_refs if ref not in formal_note_refs),
+                    table_root=root.source_ref,
+                )
             refs = tuple(
                 dict.fromkeys(
                     (
@@ -1292,6 +1483,10 @@ def _build_instances_for_table(
                     visit=visit,
                     source_span_ids=refs,
                     position_hint=(root.block_order, row, visit.column),
+                    note_excerpt_overrides=tuple(sorted(
+                        (_required_note_span_id(ref, spans_by_ref, root.source_ref), excerpt)
+                        for ref, excerpt in note_excerpt_overrides.items()
+                    )),
                 )
             )
     if not instances:
@@ -1487,6 +1682,9 @@ def build_required_procedure_catalog(
                 dict.fromkeys((*existing.source_span_ids, *instance.source_span_ids))
             ),
             position_hint=min(existing.position_hint, instance.position_hint),
+            note_excerpt_overrides=tuple(dict.fromkeys(
+                (*existing.note_excerpt_overrides, *instance.note_excerpt_overrides)
+            )),
         )
 
     ordered_instances = sorted(
@@ -1518,6 +1716,7 @@ def build_required_procedure_catalog(
             instance.operation,
             instance.operation_refs,
             source_ids,
+            instance.note_excerpt_overrides,
         )
         item_id = f"procedure:{_short_digest(*item_key)}"
         source_excerpts = optional_source_excerpts_for_spans(
@@ -1526,6 +1725,12 @@ def build_required_procedure_catalog(
             by_ref=spans_by_ref,
             blocks_by_ref=blocks_by_ref,
         )
+        excerpt_overrides = dict(instance.note_excerpt_overrides)
+        if source_excerpts:
+            source_excerpts = tuple(
+                excerpt_overrides.get(span_id, excerpt)
+                for span_id, excerpt in zip(source_ids, source_excerpts, strict=True)
+            )
         items.append(
             FrozenCatalogItem(
                 item_id=item_id,

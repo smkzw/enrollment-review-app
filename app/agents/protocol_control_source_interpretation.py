@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from collections.abc import Mapping, Sequence
 from difflib import SequenceMatcher
 from typing import Literal
 
@@ -12,16 +13,20 @@ from pydantic import Field, model_validator
 
 from app.domain.contracts.common import ContractModel
 from app.domain.contracts.protocol_controls import (
+    ControlObligationKind,
     ProtocolControlDispositionBatch,
+    ReviewNodeRole,
     StructureUnitDispositionKind,
 )
 from app.protocols.protocol_control_gate import _visit_scope_keys
-from app.protocols.procedure_catalog import schedule_column_scope
+from app.protocols.procedure_catalog import schedule_column_scope, schedule_row_values
+from app.protocols.source_time_fragments import intraday_time_fragments
 
 
-SOURCE_INTERPRETATION_VERSION = "phase5/control-source-interpretation/v10"
-SOURCE_INTERPRETATION_PROMPT_VERSION = "phase5/control-source-prompt/v18"
-SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v21"
+SOURCE_INTERPRETATION_VERSION = "phase5/control-source-interpretation/v11"
+SOURCE_INTERPRETATION_PROMPT_VERSION = "phase5/control-source-prompt/v19"
+SOURCE_QUOTE_RECOVERY_VERSION = "phase5/source-quote-local-recovery/v2"
+SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v23"
 
 
 _DAY_WEEK_WINDOW_RE = re.compile(
@@ -51,6 +56,15 @@ _STUDY_ADOPTION_RE = re.compile(
     r"(?:规定|要求|设定|排除|不得|禁止|必须|须|应)|"
     r"(?:入选|排除|入组)标准|不得随机|不得入组|不予入组"
 )
+
+
+def _object_in_action_clause(text: str, action: str, action_at: int, object_text: str) -> bool:
+    if action_at < 0 or not object_text or any(mark in action for mark in "。！？!?；;"):
+        return False
+    start = max((text.rfind(mark, 0, action_at) for mark in "。！？!?；;"), default=-1) + 1
+    ends = [text.find(mark, action_at + len(action)) for mark in "。！？!?；;"]
+    end = min((pos for pos in ends if pos >= 0), default=len(text))
+    return object_text in text[start:end]
 
 
 def _attribution_in_same_sentence(source: str, quote: str, attribution: str) -> bool:
@@ -115,6 +129,8 @@ def _unreported_time_fragments(statement: "SourceStatement") -> list[str]:
             for title in re.finditer(r"《[^》]*》", source)
         )
     }
+    fragments.update(fragment for source in (statement.quoted_text, statement.scope_quote or "")
+                     for fragment in intraday_time_fragments(source))
     return sorted(fragment for fragment in fragments if fragment and not any(
         fragment in word for word in reported
     ))
@@ -262,6 +278,10 @@ def build_source_scope_correction_prompt(
         "你是内置方案 Agent 的单条来源范围核对步骤。只核原文动作的适用范围、阶段和时间；"
         "动作摘录、条件、例外及其他陈述已经冻结，不得改写。"
         "time_words 只保留真正约束本条动作且逐字位于本条、其前置共同范围或所属标题的短语；"
+        "冻结单元若含多条陈述，不得借同单元另一条陈述的时点；"
+        "相邻 context 单元和前一段的文字也不能填入本条 scope_quote 或 time_words。"
+        "上轮错误字段不可照抄：若共享范围不在本条动作前的同一来源单元、所属标题或表格标题中，"
+        "scope_quote 填 null；本条没有对应时间原文则 time_words 填空数组。"
         "本条括号内的临床子条件若有独立回溯期限也要逐项列出，文献书名的版本年份不算；"
         "本条及所属标题直接写出的时间不得删除。无法确认时 unresolved 写原因，"
         "I/II/III/IV 期是研究期别，不是受试者访视阶段或动作时间：保留在原句或有据共享范围，"
@@ -401,6 +421,28 @@ def apply_source_quote_correction(
     )
     new_quote = normalize_source_excerpt(correction.corrected_quote or "")
     old_quote = normalize_source_excerpt(statement.quoted_text)
+    protected_marks = re.compile(
+        r"不得|不可|不能|不允许|禁止|必须|除外|除非|否则|仅当|只有|如果|可以|应当|建议|"
+        r"至少|至多|不超过|不低于|不高于|超过|低于|高于|未|无|不|须|应|若|≤|≥|<|>|"
+        r"\b(?:not|no|never|must|shall|may|unless|except)\b", re.IGNORECASE,
+    )
+    chinese_quantity = re.compile(
+        r"[零〇一二两三四五六七八九十百千万]+(?:个)?"
+        r"(?:小时|分钟|天|日|周期|周|月|年|次|例|岁|毫克|微克|毫升)(?:内|前|后|以上|以下)?"
+    )
+    # Text similarity locates a spelling repair; it is not semantic equivalence.
+    if (
+        protected_marks.findall(unicodedata.normalize("NFKC", statement.quoted_text).casefold())
+        != protected_marks.findall(unicodedata.normalize("NFKC", correction.corrected_quote or "").casefold())
+        or chinese_quantity.findall(old_quote) != chinese_quantity.findall(new_quote)
+        or any(
+            normalize_source_excerpt(part) in old_quote
+            and normalize_source_excerpt(part) not in new_quote
+            for part in [*statement.time_words, statement.exception_words or ""]
+            if normalize_source_excerpt(part)
+        )
+    ):
+        raise ValueError("局部摘录校正不得改变否定、强度、数量、已核时间或例外")
     if (
         unit is None
         or correction.structure_unit_id != statement.structure_unit_id
@@ -414,7 +456,15 @@ def apply_source_quote_correction(
         raise ValueError("校正后的摘录不能证明是同一来源要求")
     updated = interpretation.model_copy(deep=True)
     updated.statements[statement_index].quoted_text = correction.corrected_quote
-    validate_source_interpretation(batch, updated)
+    isolated = SourceInterpretation(
+        version=SOURCE_INTERPRETATION_VERSION,
+        statements=[updated.statements[statement_index]],
+        units_without_statement=[
+            item.structure_unit_id for item in batch.owned_units
+            if item.structure_unit_id != statement.structure_unit_id
+        ],
+    )
+    validate_source_interpretation(batch, isolated)
     return updated
 
 
@@ -432,7 +482,7 @@ class SourceStatementCoverage(ContractModel):
     statement_index: int = Field(ge=0)
     structure_unit_id: str = Field(min_length=1)
     disposition: str = Field(min_length=1)
-    status: Literal["expressed", "candidate_linked", "linked_only", "not_located"]
+    status: Literal["expressed", "semantically_aligned", "candidate_linked", "linked_only", "not_located"]
     candidate_indexes: list[int] = Field(default_factory=list)
     linked_candidate_indexes: list[int] = Field(default_factory=list)
     action_candidate_indexes: list[int] = Field(default_factory=list)
@@ -455,21 +505,71 @@ def schedule_column_links(
                  if item.structure_unit_id == structure_unit_id), None)
     if unit is None or normalize_source_excerpt(quoted_text) != normalize_source_excerpt(unit.excerpt):
         return []
-    try:
-        columns = schedule_column_scope(unit, batch.context_units)
-    except ValueError:
-        return []
+    table_root = unit.source_ref.rpartition(".r")[0]
+    sibling_rows = [item for item in batch.owned_units
+                    if item.structure_unit_id != unit.structure_unit_id
+                    and item.source_ref.rpartition(".r")[0] == table_root]
+    columns = schedule_column_scope(unit, [*batch.context_units, *sibling_rows])
     if not columns or any(column.boundary_side == "unresolved" for column in columns):
         return []
-    parts = unit.excerpt.split(" | ")
+    row_values = schedule_row_values(unit, [*batch.context_units, *sibling_rows])
+    row_token = unit.source_ref.rpartition(".r")[2]
+    if "." in row_token:
+        header_columns = [
+            path[-1] + (span or 1) - 1
+            for header in [*batch.context_units, *sibling_rows]
+            if (header.table_context is not None
+                and header.source_ref.rpartition(".r")[0] == table_root
+                and header.table_context.row_index < unit.table_context.row_index)
+            for path, span in zip(
+                header.table_context.member_cell_paths,
+                header.table_context.member_cell_col_spans
+                or [None] * len(header.table_context.member_cell_paths),
+                strict=True,
+            )
+        ]
+        if (not header_columns or not row_values
+                or {column for column, _text, _refs in row_values}
+                != set(range(max(header_columns) + 1))):
+            return []
+    parts = [text for _column, text, _refs in row_values]
+    # A parenthesized mark can be conditional on a visit note; it is not an
+    # unconditional X that the existing-procedure shortcut may close.
+    if any(
+        text.strip().startswith(("(", "（"))
+        for column, text, _refs in row_values
+        if any(scope.column_index == column and scope.boundary_side == "at_or_before_baseline"
+               for scope in columns)
+    ):
+        return []
     if len(parts) != len(columns) + 1 or not parts[0].strip() or any(
         not re.fullmatch(r"[（(]?\s*[xX×]\s*[)）]?(?:\^\d+)*", part.strip())
         for part in parts[1:]
     ):
         return []
-    label_ref = unit.member_source_refs[0]
-    label_span = next((span for span in unit.source_span_ids if span.endswith(f"::{label_ref}")), None)
-    if label_span is None:
+    label_refs = set(row_values[0][2])
+    label_sources: list[tuple[str, str]] = []
+    mapped_refs: set[str] = set()
+    for row_unit in [unit, *batch.context_units, *sibling_rows]:
+        if row_unit.member_source_span_ids is None:
+            continue
+        for ref, spans, text in zip(
+            row_unit.member_source_refs, row_unit.member_source_span_ids,
+            row_unit.member_texts or [], strict=True,
+        ):
+            if ref in label_refs:
+                mapped_refs.add(ref)
+                label_sources.extend((span, text) for span in spans)
+    if mapped_refs and mapped_refs != label_refs:
+        return []
+    if not label_sources:
+        # Old frozen units did not retain a per-member span mapping. A short
+        # locator can still be proved; hashed locators remain unresolved.
+        label_ref = row_values[0][2][0]
+        label_span = next((span for span in unit.source_span_ids if span.endswith(f"::{label_ref}")), None)
+        if label_span is not None:
+            label_sources = [(label_span, parts[0])]
+    if not label_sources:
         return []
     links: list[ScheduleColumnLink] = []
     for column in columns:
@@ -480,8 +580,15 @@ def schedule_column_links(
             matches = [target for target in batch.known_procedure_targets
                        if target.visit_instance == column.header_text
                        and target.review_stage == column.review_stage
-                       and label_span in target.source_span_ids
-                       and parts[0] in target.source_excerpts]
+                       and target.source_excerpts
+                       and all(
+                           any(span == target_span and normalize_source_excerpt(text)
+                               in normalize_source_excerpt(excerpt or "")
+                               for target_span, excerpt in zip(
+                                   target.source_span_ids, target.source_excerpts, strict=True,
+                               ))
+                           for span, text in label_sources
+                       )]
             if len(matches) != 1:
                 return []
             target_id = matches[0].catalog_item_id
@@ -520,6 +627,311 @@ class SourceTargetReviewItem(ContractModel):
 class SourceTargetReview(ContractModel):
     version: Literal[SOURCE_TARGET_REVIEW_VERSION]
     items: list[SourceTargetReviewItem]
+
+
+def is_post_eligibility_calculation(
+    statement: SourceStatement, review: SourceTargetReviewItem | None,
+) -> bool:
+    """Exclude only a proven later-stage calculation from current eligibility."""
+    return bool(
+        review is not None
+        and review.decision == "not_current_control"
+        and set(statement.decision_functions) <= {"action", "calculation_input"}
+        and getattr(statement, "eligibility_sequence", "current_or_unknown")
+        == "after_eligibility_decision"
+        and not statement.unresolved
+        and not review.unresolved_aspects
+    )
+
+
+SOURCE_DEFINITION_CONSUMER_VERSION = "phase5/control-source-definition-consumer/v2"
+
+
+class SourceDefinitionAtomConsumer(ContractModel):
+    """One bounded declaration of a consumer that evaluates a source definition.
+
+    Two consumer kinds are declared and never substituted for each other:
+
+    * ``control_atom`` — a hydrated control candidate atom. Candidate indexes
+      are batch-local and are resolved by the execution layer against the frozen
+      hydrated candidates.
+    * ``official_predicate`` — an ``AtomicPredicate`` of the frozen official
+      rules. The official code is checked against the batch's frozen official
+      targets, and the ``(rule_component_id, predicate_id)`` identity is proven
+      later against the frozen RuleSet; a parent IN/EX code is never accepted as
+      the consumer identity.
+
+    The declaration carries the consumer's own source excerpt as its anchor; the
+    definition quote is already stored on the record, and the two anchors are
+    validated against their own frozen sources instead of being required to
+    overlap. The optional relation note may explain the proposed connection but
+    never proves it.
+    """
+
+    consumer_kind: Literal["control_atom", "official_predicate"] = "control_atom"
+    candidate_index: int | None = Field(default=None, ge=0)
+    layer: Literal["applicability", "trigger", "obligation", "exception", "repeat_trigger"] | None = None
+    group_index: int | None = Field(default=None, ge=0)
+    atom_index: int | None = Field(default=None, ge=0)
+    condition_id: str | None = Field(default=None, min_length=1)
+    official_code: str | None = Field(default=None, pattern=r"^(IN|EX)-\d{2}$")
+    rule_component_id: str | None = Field(default=None, min_length=1)
+    predicate_id: str | None = Field(default=None, min_length=1)
+    consumer_excerpt: str = Field(min_length=1)
+    relation_note: str | None = Field(default=None, min_length=1)
+
+    @property
+    def key(self) -> tuple:
+        if self.consumer_kind == "official_predicate":
+            return (self.consumer_kind, self.rule_component_id, self.predicate_id)
+        return (
+            self.consumer_kind, self.candidate_index, self.layer,
+            self.group_index, self.atom_index, self.condition_id,
+        )
+
+    @model_validator(mode="after")
+    def require_repeat_condition(self) -> "SourceDefinitionAtomConsumer":
+        if self.consumer_kind == "official_predicate":
+            if (self.official_code is None or self.rule_component_id is None
+                    or self.predicate_id is None
+                    or any(value is not None for value in (
+                        self.candidate_index, self.layer, self.condition_id,
+                        self.group_index, self.atom_index,
+                    ))):
+                raise ValueError("官方条件消费声明必须且只能携带官方编号、子规则与条件身份")
+        elif (
+            self.candidate_index is None or self.layer is None
+            or self.group_index is None or self.atom_index is None
+            or any(value is not None for value in (
+                self.official_code, self.rule_component_id, self.predicate_id,
+            ))
+        ):
+            raise ValueError("控制原子消费声明必须且只能携带候选索引与原子位置")
+        if (self.layer == "repeat_trigger") != (self.condition_id is not None):
+            raise ValueError("复查触发消费原子必须且只能携带所属条件编号")
+        if self.condition_id is not None and not self.condition_id.strip():
+            raise ValueError("复查条件编号不能为空")
+        if not normalize_source_excerpt(self.consumer_excerpt):
+            raise ValueError("消费原子来源摘录不得为空白")
+        if self.relation_note is not None and not self.relation_note.strip():
+            raise ValueError("定义消费说明不得为空白")
+        return self
+
+
+class SourceDefinitionConsumerItem(ContractModel):
+    statement_index: int = Field(ge=0)
+    consumers: list[SourceDefinitionAtomConsumer] = Field(min_length=1)
+    unresolved_aspects: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def require_unique_consumers(self) -> "SourceDefinitionConsumerItem":
+        keys = [consumer.key for consumer in self.consumers]
+        if len(keys) != len(set(keys)):
+            raise ValueError("同一来源定义的消费原子不得重复")
+        if any(not aspect.strip() for aspect in self.unresolved_aspects):
+            raise ValueError("定义消费关系的未决之处不得为空白")
+        return self
+
+
+class SourceDefinitionConsumers(ContractModel):
+    version: Literal[SOURCE_DEFINITION_CONSUMER_VERSION]
+    items: list[SourceDefinitionConsumerItem]
+
+    @model_validator(mode="after")
+    def require_unique_statements(self) -> "SourceDefinitionConsumers":
+        indexes = [item.statement_index for item in self.items]
+        if len(indexes) != len(set(indexes)):
+            raise ValueError("同一来源陈述不得重复登记消费原子")
+        return self
+
+
+SOURCE_DEFINITION_CONSUMER_PROMPT_VERSION = (
+    "phase5/control-source-definition-consumer-prompt/v2"
+)
+
+
+def source_definition_statement_indexes(
+    interpretation: SourceInterpretation,
+) -> list[int]:
+    """Only a source statement that feeds a calculation may own consumers."""
+
+    return [
+        index for index, statement in enumerate(interpretation.statements)
+        if "calculation_input" in statement.decision_functions
+    ]
+
+
+def _definition_consumer_atom_excerpts(atom: object) -> list[str]:
+    excerpts = [value for value in getattr(atom, "source_excerpts", ()) if value]
+    continuation = getattr(atom, "continuing_obligation", None)
+    if continuation is not None:
+        excerpts.extend(value for value in continuation.source_excerpts if value)
+    return excerpts
+
+
+def definition_consumer_candidate_atoms(candidate: object) -> list[dict[str, object]]:
+    """Frozen atom positions with their own excerpts, resolved like the closure.
+
+    The positions are exactly the ones the execution layer resolves: an atom is
+    addressed by its layer, group index and atom index, and a repeat-trigger
+    atom additionally by its condition id. Each entry exposes the atom's own
+    frozen excerpts so a declared consumer excerpt can be anchored to its own
+    source instead of to wording similarity.
+    """
+
+    semantics = getattr(candidate, "semantics", None)
+    if semantics is None:
+        raise ValueError("定义消费提示缺少冻结候选语义")
+    entries: list[dict[str, object]] = []
+    layers = (
+        ("applicability", getattr(semantics, "applicability_expression", None)),
+        ("trigger", getattr(semantics, "trigger_expression", None)),
+        ("obligation", getattr(semantics, "obligation_expression", None)),
+        ("exception", getattr(semantics, "exception_expression", None)),
+    )
+    for layer, expression in layers:
+        if expression is None:
+            continue
+        for group_index, group in enumerate(expression.groups):
+            for atom_index, atom in enumerate(group.atoms):
+                entries.append({
+                    "layer": layer,
+                    "group_index": group_index,
+                    "atom_index": atom_index,
+                    "condition_id": None,
+                    "excerpts": _definition_consumer_atom_excerpts(atom),
+                })
+    for condition in getattr(semantics, "repeat_trigger_conditions", ()):
+        for group_index, group in enumerate(condition.expression.groups):
+            for atom_index, atom in enumerate(group.atoms):
+                entries.append({
+                    "layer": "repeat_trigger",
+                    "group_index": group_index,
+                    "atom_index": atom_index,
+                    "condition_id": condition.condition_id,
+                    "excerpts": _definition_consumer_atom_excerpts(atom),
+                })
+    return entries
+
+
+def build_source_definition_consumers_prompt(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+    output: object,
+    *,
+    official_predicate_identities: Mapping[str, Sequence[tuple[str, str]]] | None = None,
+    official_predicate_sources: Mapping[str, Mapping[tuple[str, str], Sequence[str]]] | None = None,
+) -> str:
+    """Ask only which frozen consumers evaluate a frozen calculation definition.
+
+    The prompt exposes exactly the frozen inputs the declaration may reference:
+    the calculation definitions of this batch, the hydrated candidate atom
+    positions with their own excerpts, and the batch's frozen official targets.
+    A frozen official predicate identity is offered only when the caller passes
+    one, because the deep batch itself carries no official rule identity; an
+    absent identity makes a parent IN/EX code unusable instead of guessed.
+    """
+
+    units = {unit.structure_unit_id: unit for unit in batch.owned_units}
+    definitions = []
+    for index in source_definition_statement_indexes(interpretation):
+        statement = interpretation.statements[index]
+        unit = units.get(statement.structure_unit_id)
+        definitions.append({
+            "statement_index": index,
+            "structure_unit_id": statement.structure_unit_id,
+            "quoted_text": statement.quoted_text,
+            "scope_quote": statement.scope_quote,
+            "force": statement.force,
+            "decision_functions": list(statement.decision_functions),
+            "unresolved": list(statement.unresolved),
+            "source_unit_excerpt": unit.excerpt if unit is not None else None,
+            "heading_path": list(unit.heading_path) if unit is not None else [],
+        })
+    candidates = [
+        {
+            "candidate_index": index,
+            "control_candidate_id": candidate.control_candidate_id,
+            "title": candidate.semantics.title,
+            "atoms": definition_consumer_candidate_atoms(candidate),
+        }
+        for index, candidate in enumerate(output.candidates)
+    ]
+    official_targets = [
+        {
+            "official_code": target.official_code,
+            "label": target.label,
+            "source_excerpts": list(target.source_excerpts),
+        }
+        for target in batch.known_official_targets
+    ]
+    frozen_official = {
+        code: [
+            {
+                "rule_component_id": component_id,
+                "predicate_id": predicate_id,
+                "source_excerpts": list(
+                    (official_predicate_sources or {}).get(code, {}).get(
+                        (component_id, predicate_id), ()
+                    )
+                ),
+            }
+            for component_id, predicate_id in identities
+        ]
+        for code, identities in (official_predicate_identities or {}).items()
+    }
+    output_shape = (
+        f'{{"version":"{SOURCE_DEFINITION_CONSUMER_VERSION}","items":[]}}'
+    )
+    official_rule = (
+        "官方条件消费必须同时给出冻结官方编号 official_code 与“冻结官方条件身份”中该编号下"
+        "逐字列出的 rule_component_id、predicate_id；consumer_excerpt 还必须取自该条件"
+        "自己的 source_excerpts；身份或自身原文未列出时不得登记官方条件消费，"
+        "不得用父编号、相同措辞、算子或阈值替代身份。"
+        if frozen_official else
+        "本批未提供冻结官方条件身份，任何官方条件消费都不得登记；"
+        "父编号、相同措辞、算子或阈值都不能代替冻结的 rule_component_id 与 predicate_id。"
+    )
+    return (
+        "你是本系统方案 Agent 的来源定义消费登记步骤。只登记下面列出的冻结计算定义由哪些"
+        "已冻结消费者求值；不生成规则、不修改候选、不判断受试者。"
+        "控制原子消费必须用冻结候选索引 candidate_index 加原子位置 layer、group_index、atom_index"
+        "（复查触发原子还须逐字填写该条件的 condition_id），consumer_excerpt 必须逐字取自"
+        "该原子自己列出的 excerpts 中任一段连续原文，不得改写或拼接。"
+        f"{official_rule}"
+        "一个定义可以有多个消费者；无法证明的消费者不要登记，把待核之处写入该陈述的"
+        " unresolved_aspects。没有任何可登记消费者的定义可以不出现；"
+        "不得登记没有计算输入的定义，也不得登记未列出的候选、原子位置或官方编号。"
+        "relation_note 只解释拟定关系，不构成覆盖证据；statement_index 必须是下面列出的定义编号。"
+        "不得因词语相同、数值接近或常识相似就登记消费者。只返回 JSON 对象。\n"
+        f"提示版本：{SOURCE_DEFINITION_CONSUMER_PROMPT_VERSION}\n"
+        f"无可证消费者时的输出形状：{output_shape}。"
+        "有消费者时 items 每项写 statement_index、非空 consumers、unresolved_aspects；"
+        "官方条件消费填写冻结列表中的 official_code、rule_component_id、predicate_id，"
+        "candidate_index、layer、group_index、atom_index、condition_id 填 null；"
+        "控制原子消费则填写已给出的 candidate_index、"
+        "layer、group_index、atom_index；非 repeat_trigger 的 condition_id 填 null，"
+        "official_code、rule_component_id、predicate_id 填 null。两种身份不能混填；"
+        "relation_note 可为 null，不确定就不要登记该消费者。\n"
+        f"冻结计算定义：{json.dumps(definitions, ensure_ascii=False, sort_keys=True)}\n"
+        f"冻结候选身份与原子：{json.dumps(candidates, ensure_ascii=False, sort_keys=True)}\n"
+        f"冻结官方目标：{json.dumps(official_targets, ensure_ascii=False, sort_keys=True)}\n"
+        f"冻结官方条件身份：{json.dumps(frozen_official, ensure_ascii=False, sort_keys=True)}"
+    )
+
+
+def source_definition_consumers_response_format() -> dict[str, object]:
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": (
+                "protocol_control_source_definition_consumers_"
+                + SOURCE_DEFINITION_CONSUMER_VERSION.rsplit("/", 1)[-1]
+            ),
+            "strict": True,
+            "schema": SourceDefinitionConsumers.model_json_schema(),
+        },
+    }
 
 
 SOURCE_UNIT_COMPARISON_VERSION = "phase5/control-source-unit-comparison/v3"
@@ -700,6 +1112,9 @@ def build_source_target_review_prompt(
             "affected_stage": interpretation.statements[index].affected_stage,
             "time_words": interpretation.statements[index].time_words,
             "decision_functions": interpretation.statements[index].decision_functions,
+            "background_context_allowed": (
+                interpretation.statements[index].decision_functions == ["background"]
+            ),
             "exception_words": interpretation.statements[index].exception_words,
             "eligibility_sequence": interpretation.statements[index].eligibility_sequence,
             "eligibility_sequence_quote": interpretation.statements[index].eligibility_sequence_quote,
@@ -756,6 +1171,9 @@ def build_source_target_review_prompt(
         "才选 background_context，并用 non_control_basis_excerpt 引用本条内证明其为背景的连续原文。"
         "本条 decision_functions 不是结论；只有标为纯 background 且核对原文后确为背景，"
         "才可选 background_context。"
+        "background_context_allowed 为 false 时不能在此步骤改写用途或仍选背景；"
+        "用途复核若维持原分类，应核对其实际目标或保留具体用途/依赖未决，"
+        "不能为了让流程通过而添加无源要求。"
         "若只因未找到条款或不确定用途，选 unresolved，不得当作背景。"
         "同段已有候选并不等于所有动作已覆盖；目录名称相似也不等于时间、条件、例外都已覆盖。"
         "完整覆盖必须从本陈述截出连续的 source_action_excerpt，并从目标的 source_excerpts 截出连续的"
@@ -791,8 +1209,12 @@ def build_source_target_review_prompt(
         "不得因两段文字相似就报完整覆盖，也不得把只读来源的时期、例外或完成强度写成本陈述自己的原文。"
         "如后文可能补充本句但当前无法证明完整关系，列出具体差异并选增量或未核，不能直接舍弃本句。"
         "potential_same_requirement 只可引用给出的另一只读原文单元；两端对象与核心动作均须逐字相同，"
+        "对象可在同句动作之前、之后或包含在动作摘录内，不得从另一句借用。"
         "并给出该单元同句的明确适用时期 target_scope_excerpt。此判断仅登记待核关系，"
         "不等于已有控制覆盖；后文必须独立解构并在最终发布前再次核验。"
+        "选择此项时 source_time_excerpt、target_time_excerpt、non_control_basis_excerpt 均填 null，"
+        "unresolved_aspects 填 []；时期只记在 target_scope_excerpt。若仍有真实差异，应选 unresolved，"
+        "不能同时登记同一要求。"
         "source_object_excerpt、target_object_excerpt、target_scope_excerpt 仅限"
         " potential_same_requirement；其他所有 decision 的这三个字段必须填 null，"
         "不能把对象从 source_action_excerpt 中拆走，也不能以额外字段表达普通目标覆盖。"
@@ -806,6 +1228,8 @@ def build_source_target_review_prompt(
         '"source_time_excerpt":null,"target_time_excerpt":null,"target_scope_excerpt":null,'
         '"unresolved_aspects":[],"non_control_basis_excerpt":null,"attribution_excerpt":null}]}。枚举值只选一个，未知目标填 null；'
         '非跨章节关系的对象与另一来源时期字段一律填 null。\n'
+        f"本次必须且只能返回这些 statement_index：{json.dumps(indexes)}。"
+        "不得返回同单元其他陈述或上一轮整批清单；items 数量必须与本次序号数量相同。\n"
         f"待核陈述：{json.dumps(source, ensure_ascii=False, sort_keys=True)}\n"
         f"冻结已有目标：{json.dumps(targets, ensure_ascii=False, sort_keys=True)}\n"
         f"只读来源线索：{json.dumps(read_only_sources, ensure_ascii=False, sort_keys=True)}"
@@ -835,6 +1259,39 @@ class SourceTargetReviewValidationError(ValueError):
         self.source_refs = source_refs
         self.retry_class = "single_statement" if statement_index is not None else "whole_review"
         self.affected_dependents = (statement_index,) if statement_index is not None else ()
+
+
+class SourceTemporalScopeUnresolved(ValueError):
+    """Carry the exact duration/cross-node failure range as structured data.
+
+    The failure semantics do not change: the batch stays unpublished and every
+    listed statement keeps its unresolved source scope. This typed object only
+    replaces the earlier free-text carrier so the range survives without
+    parsing a Chinese message. It is not evidence of missing clinical data and
+    it does not authorize any consumer for the range.
+    """
+
+    code = "TEMPORAL_SCOPE_UNRESOLVED"
+
+    def __init__(
+        self, *, statement_ids: Sequence[int], json_path: str,
+        source_refs: Sequence[str] = (),
+        retry_class: str = "temporal_scope_review",
+        affected_dependents: Sequence[int] | None = None,
+    ) -> None:
+        ids = tuple(statement_ids)
+        super().__init__(
+            "来源陈述含持续期或跨节点时间要求，不能按单次访视补入："
+            + ",".join(map(str, ids))
+        )
+        self.statement_ids = ids
+        self.statement_index = ids[0] if len(ids) == 1 else None
+        self.json_path = json_path
+        self.source_refs = tuple(source_refs)
+        self.retry_class = retry_class
+        self.affected_dependents = (
+            tuple(affected_dependents) if affected_dependents is not None else ids
+        )
 
 
 def validate_source_target_review(
@@ -886,6 +1343,9 @@ def validate_source_target_review(
             reject(item, "SOURCE_FUNCTION_UNRESOLVED", "decision",
                    "原文对本节点审核的用途仍未核清，不能仅凭文字对应宣称已覆盖或无需审核")
         covered = item.decision in {"covered_by_official", "covered_by_procedure"}
+        if covered and statement.unresolved:
+            reject(item, "SOURCE_UNRESOLVED_STILL_COVERED", "decision",
+                   "来源陈述仍有未核清内容，不能宣称已有目标完整覆盖")
         if (not covered and item.decision not in {"not_current_control", "potential_same_requirement",
                                                 "cited_external_rationale", "background_context"}
                 and not item.unresolved_aspects):
@@ -949,20 +1409,20 @@ def validate_source_target_review(
             context_text = normalize_source_excerpt(context.excerpt) if context else ""
             source_action_at = source_context.find(source_text) if source_text else -1
             action_at = context_text.find(target_action) if target_action else -1
-            scope_at = context_text.rfind(scope, 0, action_at) if scope and action_at >= 0 else -1
-            source_object_at = (source_context.rfind(source_object, 0, source_action_at)
-                                if source_object and source_action_at >= 0 else -1)
-            target_object_at = (context_text.rfind(target_object, 0, action_at)
-                                if target_object and action_at >= 0 else -1)
+            # A period may be embedded in the exact action quote, not only
+            # precede it. Never borrow a period following another action.
+            scope_at = (context_text.rfind(scope, 0, action_at + len(target_action))
+                        if scope and action_at >= 0 else -1)
             if (context is None or len(source_text) < 8
                     or source_text not in normalize_source_excerpt(statement.quoted_text)
                     or source_text != target_action
                     or source_object != target_object or len(source_object) < 3
-                    or source_object_at < 0 or target_object_at < 0
+                    or not _object_in_action_clause(
+                        source_context, source_text, source_action_at, source_object)
+                    or not _object_in_action_clause(
+                        context_text, target_action, action_at, target_object)
                     or source_action_at < 0 or action_at < 0 or scope_at < 0
-                    or any(mark in source_context[source_object_at:source_action_at] for mark in "。；;")
-                    or any(mark in context_text[target_object_at:action_at] for mark in "。；;")
-                    or any(mark in context_text[scope_at:action_at] for mark in "。；;")):
+                    or any(mark in context_text[scope_at:action_at] for mark in "。！？!?；;")):
                 reject(item, "CONTEXT_RELATION_UNGROUNDED", "target_id",
                        "跨章对应必须有两端同句的相同对象、逐字动作及后文明确时期")
             if (item.unresolved_aspects or item.non_control_basis_excerpt is not None
@@ -1161,10 +1621,170 @@ def validate_source_target_review(
                 reject(item, "TIME_INVENTED", "source_time_excerpt", "无明确时间措辞的陈述不得凭空补时间")
 
 
+def validate_source_definition_consumers(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+    consumers: SourceDefinitionConsumers,
+) -> None:
+    """Verify the definition side of a bounded consumer declaration.
+
+    This step proves the declaration belongs to a source-bound calculation
+    definition in this batch and that the definition carries a usable quote.
+    The consumer excerpt is validated independently against its own frozen
+    source by the layer that holds it: the execution layer resolves a control
+    atom inside the frozen hydrated candidate, while an official predicate is
+    proven against the frozen RuleSet at publication. This step additionally
+    proves the declared official code is one of this batch's frozen official
+    targets, so a parent code can never be invented. The two anchors are
+    deliberately not required to contain each other, because the definition may
+    live in a calculation/method chapter while the consumer is excerpted in an
+    eligibility or visit chapter.
+    """
+
+    units = {unit.structure_unit_id: unit for unit in batch.owned_units}
+    official_codes = {target.official_code for target in batch.known_official_targets}
+    for position, item in enumerate(consumers.items):
+        path = f"/source_definition_consumers/items/{position}"
+
+        def reject(code: str, message: str, field: str) -> None:
+            statement_index = (
+                item.statement_index if item.statement_index < len(interpretation.statements) else None
+            )
+            unit = (
+                units.get(interpretation.statements[item.statement_index].structure_unit_id)
+                if statement_index is not None else None
+            )
+            raise SourceTargetReviewValidationError(
+                message, code=code, statement_index=statement_index,
+                json_path=f"{path}/{field}",
+                source_refs=tuple(unit.source_span_ids) if unit is not None else (),
+            )
+
+        if item.statement_index >= len(interpretation.statements):
+            reject(
+                "SOURCE_DEFINITION_CONSUMER_SCOPE_INVALID",
+                "定义消费登记引用了不存在的来源陈述", "statement_index",
+            )
+        statement = interpretation.statements[item.statement_index]
+        if "calculation_input" not in statement.decision_functions:
+            reject(
+                "SOURCE_DEFINITION_CONSUMER_SCOPE_INVALID",
+                "只有含计算输入的来源定义可以登记消费原子", "statement_index",
+            )
+        if not units.get(statement.structure_unit_id):
+            reject(
+                "SOURCE_DEFINITION_CONSUMER_SCOPE_INVALID",
+                "定义消费登记不属于本批冻结来源单元", "statement_index",
+            )
+        if not normalize_source_excerpt(statement.quoted_text):
+            reject(
+                "SOURCE_DEFINITION_CONSUMER_QUOTE_BLANK",
+                "空来源摘录不能登记消费原子", "statement_index",
+            )
+        for consumer_position, consumer in enumerate(item.consumers):
+            if (consumer.consumer_kind == "official_predicate"
+                    and consumer.official_code not in official_codes):
+                reject(
+                    "SOURCE_DEFINITION_CONSUMER_SCOPE_INVALID",
+                    "官方条件消费登记引用了本批冻结官方目标之外的编号",
+                    f"consumers/{consumer_position}/official_code",
+                )
+
+
+def require_frozen_official_predicate_identities(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+    consumers: SourceDefinitionConsumers,
+    official_predicate_identities: Mapping[str, Sequence[tuple[str, str]]] | None,
+) -> None:
+    """A declared official predicate must exist in the frozen identity index.
+
+    The deep batch exposes parent IN/EX codes only, so the finer
+    ``(rule_component_id, predicate_id)`` identity is never derivable from the
+    batch itself. A declaration is accepted only when the caller passes the
+    frozen identity index that holds it; an absent or empty index rejects every
+    official declaration instead of accepting a parent code or wording as
+    identity. The publication layer proves the same identity again against the
+    frozen RuleSet.
+    """
+
+    frozen = {
+        code: {(component_id, predicate_id) for component_id, predicate_id in identities}
+        for code, identities in (official_predicate_identities or {}).items()
+    }
+    units = {unit.structure_unit_id: unit for unit in batch.owned_units}
+    for item in consumers.items:
+        unit = (
+            units.get(interpretation.statements[item.statement_index].structure_unit_id)
+            if item.statement_index < len(interpretation.statements) else None
+        )
+        for consumer in item.consumers:
+            if consumer.consumer_kind != "official_predicate":
+                continue
+            if (consumer.rule_component_id, consumer.predicate_id) not in frozen.get(
+                consumer.official_code, set()
+            ):
+                raise SourceTargetReviewValidationError(
+                    "官方条件消费身份不在冻结官方条件身份中，不能用父编号或相近文字替代",
+                    code="SOURCE_DEFINITION_CONSUMER_IDENTITY_UNPROVEN",
+                    statement_index=item.statement_index,
+                    json_path="/source_definition_consumers/items",
+                    source_refs=tuple(unit.source_span_ids) if unit is not None else (),
+                )
+
+
+def parse_product_source_definition_consumers(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+    text: str,
+    *,
+    official_predicate_identities: Mapping[str, Sequence[tuple[str, str]]] | None = None,
+) -> SourceDefinitionConsumers:
+    """Parse and source-bind one declaration; invalid input never becomes a record."""
+
+    consumers = SourceDefinitionConsumers.model_validate_json(text)
+    validate_source_definition_consumers(batch, interpretation, consumers)
+    require_frozen_official_predicate_identities(
+        batch, interpretation, consumers, official_predicate_identities,
+    )
+    return consumers
+
+
 def normalize_source_excerpt(value: str) -> str:
     return "".join(unicodedata.normalize("NFKC", value).translate(
         str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"'})
     ).split())
+
+
+def simple_visit_action_preserves_time(batch, statement, candidate) -> bool:
+    """A named visit scope may be carried by the bound stage, without a date window."""
+
+    if (statement.force not in {"required", "descriptive"}
+            or "action" not in statement.decision_functions
+            or len(statement.time_words) != 1):
+        return False
+    word = normalize_source_excerpt(statement.time_words[0])
+    source = normalize_source_excerpt(statement.quoted_text)
+    scope = normalize_source_excerpt(statement.scope_quote or "")
+    if (not re.fullmatch(r"[^\d、，和及与/]+期内", word)
+            or not (source.startswith(word) or scope == word)):
+        return False
+    stages = {item.workflow_stage_id: item for item in batch.known_workflow_stage_targets}
+    for node in candidate.review_node_bindings:
+        stage = stages.get(node.workflow_stage_id)
+        if stage is None or node.role != ReviewNodeRole.DECIDE_AT_NODE:
+            continue
+        frozen_visit = normalize_source_excerpt(" ".join(filter(None, (
+            stage.display_name, stage.visit_instance, stage.visit_window,
+        ))))
+        if word[:-1] in frozen_visit:
+            return any(
+                atom.kind == ControlObligationKind.COMPLETE_OR_VERIFY
+                and source in normalize_source_excerpt(atom.statement)
+                for group in candidate.obligation_expression.groups
+                for atom in group.atoms
+            )
+    return False
 
 
 def is_study_phase_label(value: str) -> bool:
@@ -1319,10 +1939,7 @@ def validate_source_interpretation(
             )
             scope_in_visit_headers = False
             if table is not None and unit.unit_kind in {"table_row", "table_note"} and bool(scope):
-                try:
-                    columns = schedule_column_scope(unit, batch.context_units)
-                except ValueError:
-                    columns = ()
+                columns = schedule_column_scope(unit, batch.context_units)
                 scope_in_visit_headers = bool(columns) and all(
                     column.header_source_refs
                     and scope in normalize_source_excerpt(column.header_text)
@@ -1351,7 +1968,6 @@ def validate_source_interpretation(
                        "affected_stage", "correct_source_scope")
             if not any(
                 affected in normalize_source_excerpt(part)
-                or normalize_source_excerpt(part) in affected
                 for part in item.time_words if normalize_source_excerpt(part)
             ):
                 reject("SOURCE_STAGE_TIME_MISSING", "明确阶段范围不得从时间措辞中遗漏",
@@ -1370,6 +1986,15 @@ def validate_source_interpretation(
             ):
                 reject("SOURCE_TIME_UNGROUNDED", "时间措辞不属于本条陈述、共享范围或所属标题",
                        "time_words", "correct_source_scope")
+        reported_time = [normalize_source_excerpt(word) for word in item.time_words]
+        missing_clock = sorted({
+            fragment for source in (item.quoted_text, item.scope_quote or "")
+            for fragment in intraday_time_fragments(source)
+            if not any(fragment in word for word in reported_time)
+        })
+        if missing_clock:
+            reject("SOURCE_TIME_INCOMPLETE", "原文小时或分钟要求不得从时间措辞遗漏："
+                   + "、".join(missing_clock), "time_words", "correct_source_scope")
         if item.eligibility_sequence == "after_eligibility_decision":
             source = normalize_source_excerpt(unit.excerpt)
             boundary = normalize_source_excerpt(item.eligibility_sequence_quote or "")
@@ -1428,6 +2053,8 @@ def build_source_interpretation_prompt(batch: ProtocolControlDispositionBatch) -
         "不可再虚构一条无法回源的独立控制。"
         "若段首范围或本单元 table_context 的行列标题同时约束本条动作，scope_quote 逐字摘录其共同范围，"
         "正文中的范围须在本条动作之前；"
+        "相邻段落或 context 单元的适用说明不能直接填入本条 scope_quote、affected_stage 或 time_words；"
+        "同一 owned 单元有多条陈述时，时间措辞也不能借自另一条陈述，除非本条动作之前有明确共同范围。"
         "不适用共同范围时填 null。quoted_text 只取本条动作；若另填资格先决原文，"
         "该先决短语须在 quoted_text 之前，不能把它并入动作摘录。"
         "force 只表示原文语气，不表示受试者是否满足。"
@@ -1452,6 +2079,8 @@ def build_source_interpretation_prompt(batch: ProtocolControlDispositionBatch) -
         "不要在来源摘录阶段预测某句相对筛选、基线或给药节点的判定归属；"
         "time_words 是逐段连续原文组成的数组；无明确时间措辞填空数组，"
         "同一动作有多段时间措辞时分别摘录，不能用分号拼成非原文字串；"
+        "小时、分钟和小数时长也须逐字摘出；不得改成当天或若干天，"
+        "同句给药前与给药后的时间要求均须保留，程序未支持不等于原文没有要求；"
         "另一动作的日期、阶段或持续时长均不能借给本条，除非有直接适用的共同范围原文；"
         "每项时间措辞须出现在本条 quoted_text、确实适用的 scope_quote 或所属标题中，"
         "段首范围若限定本条动作，应列入 time_words，不可借同段另一动作的时长；"

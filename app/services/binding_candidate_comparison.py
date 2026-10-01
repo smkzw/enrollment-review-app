@@ -3,6 +3,7 @@ from app.llm.candidate_fact_accounting import ACCOUNTING_V1, ACCOUNTING_V2
 from app.llm.predicate_binding_candidates import PredicateFactCandidate
 
 COMPARISON_VERSION = "binding-candidate-comparison/v2"
+PREDICATE_COMPARISON_VERSION = "predicate-binding-candidate-comparison/v4"
 
 # Accounting dispositions are compared per fact so that a one-lane candidate
 # against the other lane's exclusion or uncertainty stays explicitly visible

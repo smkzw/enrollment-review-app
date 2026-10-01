@@ -104,6 +104,10 @@ def materialize_control_catalog(
         allowed_source_span_ids=sorted({span for unit in manifest.units for span in unit.source_span_ids}),
         controls=controls,
         source_unit_relations=list(source_unit_relations),
+        restricted_statements=sorted(
+            (item for batch in batches for item in batch.restricted_statements),
+            key=lambda item: (item.source_structure_unit_id, item.source_statement_index),
+        ),
     )
     return validate_protocol_control_publication(
         manifest, catalog, plan=plan, batch_dispositions=batches,

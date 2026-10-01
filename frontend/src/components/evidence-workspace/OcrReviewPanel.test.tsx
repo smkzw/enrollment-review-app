@@ -281,7 +281,7 @@ describe("OcrReviewPanel", () => {
     );
 
     const confirm = screen.getByRole("checkbox", {
-      name: "我已对照右侧原件逐项核对本页识别内容",
+      name: "我已对照右侧原件逐项核对本页所列风险片段",
     });
     const submit = screen.getByRole("button", { name: "确认本页 1 项" });
     expect(submit).toBeDisabled();
@@ -291,7 +291,7 @@ describe("OcrReviewPanel", () => {
     await waitFor(() =>
       expect(onSubmitPageRiskReview).toHaveBeenCalledWith(
         "scan-1",
-        "已对照右侧原件逐项核对本页识别内容",
+        "已对照右侧原件逐项核对本页所列风险片段",
       ),
     );
   });

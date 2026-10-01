@@ -7,9 +7,12 @@ import pytest
 from sqlalchemy import func, select
 
 from app.domain.contracts.common import DateValue
-from app.domain.contracts.enums import DatePrecision
+from app.domain.contracts.enums import CatalogKind, DatePrecision
+from app.domain.contracts.rules import RestrictedRuleComponent
 from app.domain.publication import canonical_hash
+from app.projections.clause_pack import project_clause_pack, verify_clause_pack
 from app.services.protocol_draft_service import ProtocolDraftService
+from app.services.eligibility_review_projection import _restricted_clause_projection
 from app.services.protocol_publication_service import (
     DuplicateFirstProjectError,
     ProtocolPublicationRequest,
@@ -41,6 +44,7 @@ from app.storage.repositories import (
 )
 
 from tests.v2.protocols.slice4_helpers import NOW, confirmed_fixture
+from tests.v2.protocols.test_deconstruction_gate_slice3 import _catalog
 
 
 def _count(session, model) -> int:
@@ -142,6 +146,111 @@ def test_first_publication_writes_full_formal_chain_in_one_transaction(
         assert all(
             item.template_id.startswith("expectation-template:") for item in templates
         )
+
+
+def test_source_bound_unresolved_requirement_survives_formal_rule_storage(slice4_env) -> None:
+    factory, _ = slice4_env
+    source, draft, spans = confirmed_fixture()
+    items = list(source.parent_rule_catalog.items)
+    items[0] = items[0].model_copy(update={"label": "年龄≥18岁；另须完成专项评估"})
+    source.parent_rule_catalog = _catalog(CatalogKind.OFFICIAL_PARENT_RULES, items)
+    source.source_materials[0].text = "年龄≥18岁；另须完成专项评估"
+    draft.proposed_rules[0].source_text = "年龄≥18岁；另须完成专项评估"
+    draft.proposed_rules[0].restricted_components = [RestrictedRuleComponent(
+        rule_component_id="component-extra", display_code="IN-01b",
+        title="另项独立要求", source_span_ids=["span-in"],
+        source_excerpts=["另须完成专项评估"],
+        limitation_kind="interpretation_unresolved",
+        unresolved_dimensions=["适用对象尚未核清"],
+    )]
+    revision = _save_revision(factory, draft)
+    result = _publish(factory, source, draft, spans, revision.revision_id, "pub-limited-source")
+    with factory() as session:
+        rule_set = get_rule_set(session, result.rule_set_id, result.rule_set_revision)
+        restricted = rule_set.rules[0].restricted_components
+        assert len(restricted) == 1
+        assert restricted[0].source_excerpts == ["另须完成专项评估"]
+        pack = project_clause_pack(rule_set)
+        assert pack.projection_version == "clause-pack/v4"
+        assert pack.restricted_clauses[0].clause_id == restricted[0].rule_component_id
+        verify_clause_pack(pack)
+
+
+def test_population_gap_survives_publication_pack_and_actual_component_consumer(slice4_env):
+    from app.domain.contracts.enums import ComponentDecision, GapType, ReviewStage, TruthValue
+    from app.services.component_review import calculate_component_review
+    from app.services.eligibility_review_projection import _reason
+    from app.domain.policies import ACTION_CONTENT
+    from tests.v2.test_contract_logic import evaluation_context
+
+    factory, _ = slice4_env
+    source, draft, spans = confirmed_fixture()
+    text = "年龄≥18岁（仅女性受试者）"
+    items = list(source.parent_rule_catalog.items)
+    items[0] = items[0].model_copy(update={"label": text})
+    source.parent_rule_catalog = _catalog(CatalogKind.OFFICIAL_PARENT_RULES, items)
+    source.source_materials[0].text = text
+    draft.proposed_rules[0].source_text = text
+    predicate = draft.proposed_rules[0].components[0].expression.predicate
+    predicate.source_clause = None
+    predicate.source_clauses = ["年龄≥18岁", "（仅女性受试者）"]
+    draft.component_drafts[0].source_excerpts = [text]
+    predicate.applicable_population = "仅女性受试者"
+    revision = _save_revision(factory, draft)
+    result = _publish(factory, source, draft, spans, revision.revision_id, "pub-population-gap")
+    with factory() as session:
+        rule_set = get_rule_set(session, result.rule_set_id, result.rule_set_revision)
+        pack = project_clause_pack(rule_set)
+        verify_clause_pack(pack)
+        rule = next(item for item in rule_set.rules if item.official_code == "IN-01")
+        component = rule.components[0]
+        assert component.expression.predicate.applicable_population == "仅女性受试者"
+        clause = next(item for item in pack.clauses if item.official_code == "IN-01")
+        assert clause.expression == component.expression
+        review = calculate_component_review(
+            component=component, rule_kind=rule.kind, context=evaluation_context(),
+            episode_stage=ReviewStage.SCREENING, expectations=[], conflicts=[],
+            predicate_fact_ids={predicate.predicate_id: []},
+        )
+        assert review.evaluation.trigger.truth == TruthValue.UNKNOWN
+        assert review.decision == ComponentDecision.INDETERMINATE
+        assert GapType.APPLICABLE_POPULATION_UNVERIFIED in review.gaps
+        reason = _reason(clause, decision=review.decision,
+                        gap=GapType.APPLICABLE_POPULATION_UNVERIFIED, summaries={})
+        assert "适用人群" in reason and "无法取得" not in reason
+        assert ACTION_CONTENT[GapType.APPLICABLE_POPULATION_UNVERIFIED][0].value == "sponsor_medical_or_project"
+
+
+def test_verified_member_frequency_gap_keeps_sibling_executable_on_publication(slice4_env) -> None:
+    factory, _ = slice4_env
+    source, draft, spans = confirmed_fixture()
+    nested = "有严重感染既往史（包括反复细菌感染（2年内发生2次或以上））"
+    text = f"ALT或AST≥1.5×ULN；{nested}"
+    items = list(source.parent_rule_catalog.items)
+    items[1] = items[1].model_copy(update={"label": text})
+    source.parent_rule_catalog = _catalog(CatalogKind.OFFICIAL_PARENT_RULES, items)
+    next(item for item in source.source_materials if item.source_span_id == "span-ex").text = text
+    rule = draft.proposed_rules[1]
+    rule.source_text = text
+    rule.restricted_components = [RestrictedRuleComponent(
+        rule_component_id="component-ex-limited", display_code="EX-01b",
+        title="严重感染史", source_span_ids=["span-ex"],
+        source_excerpts=[nested], limitation_kind="consumer_unavailable",
+        unresolved_dimensions=["开放列举中的复发项有专属频次定义，当前表达结构无法同时保留上位范围"],
+    )]
+
+    revision = _save_revision(factory, draft)
+    published = _publish(factory, source, draft, spans, revision.revision_id, "pub-frequency-gap")
+    with factory() as session:
+        rule_set = get_rule_set(session, published.rule_set_id, published.rule_set_revision)
+        pack = project_clause_pack(rule_set)
+        verify_clause_pack(pack)
+        assert len(pack.clauses) == 2
+        assert len(pack.restricted_clauses) == 1
+        assert pack.restricted_clauses[0].limitation_kind == "consumer_unavailable"
+        projection = _restricted_clause_projection(pack.restricted_clauses[0])
+        assert "当前审核方式尚不能可靠判定" in projection.reason
+        assert not projection.fact_refs
 
 
 def test_authority_record_closure_hashes_are_self_consistent(slice4_env) -> None:

@@ -2,9 +2,12 @@
 from dataclasses import asdict, dataclass, field
 from collections.abc import Mapping, Sequence
 
+from app.agents.protocol_control_source_interpretation import normalize_source_excerpt
 from app.domain.contracts.control_atom_binding import ControlBindingFrozenInput
+from app.domain.contracts.control_catalog_publication import ControlCatalogPublication
+from app.domain.contracts.protocol_controls import ProtocolControlDefinitionConsumerRecord
 from app.domain.contracts.review_context_v2 import ReviewContextSnapshotV2
-from app.domain.contracts.rules import RuleSet
+from app.domain.contracts.rules import RuleSet, iter_atomic_predicates
 from app.domain.contracts.qualified_binding_selection import QualifiedBindingSelectionMaterial
 from app.domain.expression import EvaluationContext, RepeatAtomEvaluation
 from app.domain.contracts.evaluation_result import FrequencyAtomEvaluation
@@ -29,6 +32,22 @@ from app.services.qualified_binding_selection import (
 
 EVALUATOR_VERSION = "component-review/v35"
 
+#: Reason attached to a consumer whose source definition has no proven
+#: consumer relation yet. It never replaces the evidence-based reason of an
+#: unaffected sibling.
+DEFINITION_CONSUMER_UNVERIFIED_REASON = "source_definition_consumer_unproven"
+
+
+@dataclass(frozen=True)
+class DefinitionConsumerConsumption:
+    """What the working draft consumed from one saved definition relation."""
+
+    batch_id: str
+    source_statement_index: int
+    structure_unit_id: str
+    predicate_ids: tuple[tuple[str, str], ...]
+    control_atom_identities: tuple[str, ...]
+
 
 @dataclass(frozen=True)
 class FrozenComponentCalculation:
@@ -52,6 +71,7 @@ class FrozenReviewCalculation:
     repeat_result_resolutions: tuple[dict, ...] = ()
     repeat_atom_evaluations: dict[str, dict[str, RepeatAtomEvaluation]] = field(default_factory=dict)
     frequency_atom_evaluations: dict[str, dict[str, FrequencyAtomEvaluation]] = field(default_factory=dict)
+    definition_consumption: tuple[DefinitionConsumerConsumption, ...] = ()
     accepted: bool = field(default=False, init=False)
 
 
@@ -159,6 +179,162 @@ def _work_draft_inputs(value) -> tuple[ReceiptVerifiedWorkDraftSelections, ...]:
     return tuple(sorted(value, key=lambda item: item.candidate_family))
 
 
+def _definition_records_for_review(
+    publication: ControlCatalogPublication | None,
+    supplied: Sequence[ProtocolControlDefinitionConsumerRecord] | None,
+) -> Sequence[ProtocolControlDefinitionConsumerRecord] | None:
+    if publication is None or publication.schema_version == "control-catalog/v1":
+        return supplied
+    if publication.schema_version not in {"control-catalog/v2", "control-catalog/v3"}:
+        raise ValueError("补充要求的发布版本尚不能用于本次审核")
+    published = publication.definition_consumer_records
+    if supplied is not None and [
+        ProtocolControlDefinitionConsumerRecord.model_validate(item).model_dump(mode="json")
+        for item in supplied
+    ] != [item.model_dump(mode="json") for item in published]:
+        raise ValueError("来源定义消费关系与本次冻结发布版本不一致")
+    return published
+
+
+def _eligible_control_calculations(evaluated, definition_unverified):
+    """A derived repeat/frequency result cannot settle an unverified definition."""
+    return {
+        identity: result for identity, result in evaluated.items()
+        if identity not in definition_unverified
+    }
+
+
+def _withhold_unverified_definition_predicates(
+    selections, derived_by_family, unverified, affected,
+) -> None:
+    """Remove only the consumers of unproven source definitions."""
+    for component_id, predicate_ids in affected.items():
+        choices = selections.get(component_id)
+        if choices is None or any(predicate_id not in choices for predicate_id in predicate_ids):
+            raise ValueError("来源定义消费条件不在本次审核的完整资料对应清单内")
+        for predicate_id in predicate_ids:
+            choices[predicate_id] = []
+        for family in derived_by_family:
+            evaluated = family.get(component_id)
+            if evaluated is not None:
+                for predicate_id in predicate_ids:
+                    evaluated.pop(predicate_id, None)
+        unverified[component_id] = frozenset(unverified.get(component_id, ())) | predicate_ids
+
+
+def _definition_consumer_consumption(
+    pack, rule_set: RuleSet, records,
+) -> tuple[dict[str, frozenset[str]], dict[str, tuple[str, ...]], tuple[DefinitionConsumerConsumption, ...]]:
+    """Turn saved definition→consumer relations into working-draft unknowns.
+
+    Each consumer is resolved against the same frozen identities the
+    publication path re-verified: an official predicate by its owning rule
+    component and content-derived predicate id inside this ``rule_set``, a
+    control atom by its originating candidate plus frozen atom position inside
+    this review's control publication. A relation that does not resolve fails
+    closed instead of being ignored, and only the listed consumers are marked;
+    every sibling keeps its evidence-based status.
+    """
+
+    if records is None:
+        return {}, {}, ()
+    if not isinstance(records, Sequence) or isinstance(records, (str, bytes)):
+        raise ValueError("来源定义消费关系必须是已保存记录的完整清单")
+    records = [ProtocolControlDefinitionConsumerRecord.model_validate(
+        item.model_dump(mode="json") if hasattr(item, "model_dump") else item,
+    ) for item in records]
+    clause_components = {
+        clause.rule_component_id for clause in [*pack.clauses, *pack.restricted_clauses]
+    }
+    predicates_by_component: dict[str, set[str]] = {}
+    source_excerpts_by_predicate: dict[tuple[str, str], list[str]] = {}
+    for rule in rule_set.rules:
+        for component in rule.components:
+            component_predicates = predicates_by_component.setdefault(
+                component.rule_component_id, set(),
+            )
+            for expression in (component.expression, component.exception_expression,
+                               *(item.expression for item in component.repeat_trigger_conditions)):
+                if expression is None:
+                    continue
+                for predicate in iter_atomic_predicates(expression):
+                    component_predicates.add(predicate.predicate_id)
+                    source_excerpts_by_predicate[(
+                        component.rule_component_id, predicate.predicate_id,
+                    )] = list(predicate.exact_source_clauses)
+    publication = pack.control_publication
+    catalog = None if publication is None else publication.catalog
+    controls_by_candidate: dict[str, str] = {}
+    atom_identity_by_position: dict[tuple, str] = {}
+    if catalog is not None:
+        from app.projections.control_atom_binding_input import project_control_atom_identities
+
+        controls_by_candidate = {
+            control.originating_candidate_id: control.protocol_control_id
+            for control in catalog.controls
+        }
+        atom_identity_by_position = {
+            (identity.protocol_control_id, identity.layer, identity.condition_id,
+             identity.group_index, identity.atom_index): identity.identity_sha256
+            for identity in project_control_atom_identities(publication, include_repeat_triggers=True)
+        }
+    predicate_unverified: dict[str, frozenset[str]] = {}
+    control_unverified: dict[str, tuple[str, ...]] = {}
+    consumed: list[DefinitionConsumerConsumption] = []
+    for record in records:
+        record_predicates: list[tuple[str, str]] = []
+        record_identities: list[str] = []
+        for consumer in record.consumers:
+            if consumer.consumer_kind == "official_predicate":
+                if consumer.rule_component_id not in clause_components:
+                    raise ValueError("来源定义消费条件不属于本次审核的冻结条款")
+                if consumer.predicate_id not in predicates_by_component.get(
+                    consumer.rule_component_id, set()
+                ):
+                    raise ValueError("来源定义消费条件未绑定当前冻结规则条件")
+                excerpt = normalize_source_excerpt(consumer.consumer_excerpt)
+                if not excerpt or not any(
+                    excerpt in normalize_source_excerpt(value)
+                    for value in source_excerpts_by_predicate[(
+                        consumer.rule_component_id, consumer.predicate_id,
+                    )]
+                ):
+                    raise ValueError("消费来源摘录不在该条件自身声明的冻结原文中")
+                record_predicates.append(
+                    (consumer.rule_component_id, consumer.predicate_id)
+                )
+            else:
+                published_id = controls_by_candidate.get(consumer.control_candidate_id)
+                if published_id is None:
+                    raise ValueError("来源定义消费原子引用了非本次发布的补充要求")
+                identity = atom_identity_by_position.get((
+                    published_id, consumer.layer, consumer.condition_id,
+                    consumer.group_index, consumer.atom_index,
+                ))
+                if identity is None:
+                    raise ValueError("来源定义消费原子未绑定冻结控制原子位置")
+                record_identities.append(identity)
+        if not record_predicates and not record_identities:
+            continue
+        for rule_component_id, predicate_id in record_predicates:
+            predicate_unverified[rule_component_id] = (
+                predicate_unverified.get(rule_component_id, frozenset()) | {predicate_id}
+            )
+        for identity in record_identities:
+            control_unverified[identity] = tuple(sorted({
+                *control_unverified.get(identity, ()),
+                DEFINITION_CONSUMER_UNVERIFIED_REASON,
+            }))
+        consumed.append(DefinitionConsumerConsumption(
+            batch_id=record.batch_id,
+            source_statement_index=record.source_statement_index,
+            structure_unit_id=record.source_structure_unit_id,
+            predicate_ids=tuple(sorted(record_predicates)),
+            control_atom_identities=tuple(sorted(record_identities)),
+        ))
+    return predicate_unverified, control_unverified, tuple(consumed)
+
+
 def calculate_frozen_review(
     frozen: ReviewContextSnapshotV2, rule_set: RuleSet,
     *,
@@ -167,6 +343,7 @@ def calculate_frozen_review(
     control_selections: Mapping[str, Sequence[str]] | None = None,
     qualified_binding_selections: ReceiptVerifiedQualifiedBindingSelections | Sequence[ReceiptVerifiedQualifiedBindingSelections] | None = None,
     work_draft_selections: ReceiptVerifiedWorkDraftSelections | Sequence[ReceiptVerifiedWorkDraftSelections] | None = None,
+    definition_consumer_records: Sequence[ProtocolControlDefinitionConsumerRecord] | None = None,
 ) -> FrozenReviewCalculation:
     """Calculate explicit selections without category fallback or publication.
 
@@ -179,6 +356,10 @@ def calculate_frozen_review(
     by the receipt-verified consumer under owning-service authorization. It does
     not enable clinical adoption or replace isolated evaluation / user approval.
     The pre-existing explicit-selection maps remain available and non-authoritative.
+
+    New publications carry their verified definition relations in the same
+    frozen catalog used by this review. Explicit records are retained for
+    isolated diagnostics, but cannot override the published version.
     """
     frozen = ReviewContextSnapshotV2.model_validate(frozen.model_dump(mode="json"))
     if frozen.requirements_scope_version != "review-requirements-scope/v1":
@@ -191,6 +372,20 @@ def calculate_frozen_review(
     # The context validator verifies the stored pack; a newer projector must not
     # replace the clinical requirements frozen for this review.
     pack = frozen.clause_pack
+    definition_consumer_records = _definition_records_for_review(
+        pack.control_publication, definition_consumer_records,
+    )
+    has_restricted_controls = bool(
+        pack.control_publication is not None
+        and pack.control_publication.catalog.restricted_statements
+    )
+    if (pack.restricted_clauses or has_restricted_controls) and work_draft_selections is None:
+        raise ValueError("本版方案仍含有源未决要求，不能按旧版完整签发路径计算")
+    (
+        definition_predicate_unverified,
+        definition_control_unverified,
+        definition_consumption,
+    ) = _definition_consumer_consumption(pack, rule_set, definition_consumer_records)
     component_ids = {clause.rule_component_id for clause in pack.clauses}
     draft_items = _work_draft_inputs(work_draft_selections)
     formal_items = _qualification_inputs(qualified_binding_selections)
@@ -274,6 +469,12 @@ def calculate_frozen_review(
                                   for outcome in item.material.identity_outcomes
                                   if outcome.status == "unresolved"
                                   and outcome.identity_sha256 in final_identities}
+    if definition_control_unverified:
+        control_unverified = {**(control_unverified or {})}
+        for identity, reasons in definition_control_unverified.items():
+            control_unverified[identity] = tuple(sorted({
+                *control_unverified.get(identity, ()), *reasons,
+            }))
     facts = list(frozen.facts)
     links_by_fact = {}
     for link in frozen.fact_rule_links:
@@ -314,6 +515,7 @@ def calculate_frozen_review(
         for item in calculation_items
     }
     repeat_by_component = {}
+    control_repeat_for_review = {}
     predicate_fact_ids_by_component = {
         parent: {key: list(values) for key, values in choices.items()}
         for parent, choices in predicate_fact_ids_by_component.items()
@@ -328,13 +530,18 @@ def calculate_frozen_review(
                         repeat_by_component.setdefault(component.rule_component_id, {})[entry.predicate_id] = value
                         predicate_fact_ids_by_component[component.rule_component_id][entry.predicate_id] = list(value.result.used_fact_ids)
         elif evaluated:
+            control_repeat_for_review = _eligible_control_calculations(
+                evaluated, definition_control_unverified,
+            )
             control_selections = {key: list(values) for key, values in control_selections.items()}
-            control_unverified = {key: values for key, values in (control_unverified or {}).items() if key not in evaluated}
-            control_relations = [row for row in control_relations if row["identity_sha256"] not in evaluated]
-            control_pair_gaps = [row for row in control_pair_gaps if row["identity_sha256"] not in evaluated]
+            control_unverified = {key: values for key, values in (control_unverified or {}).items() if key not in control_repeat_for_review}
+            control_relations = [row for row in control_relations if row["identity_sha256"] not in control_repeat_for_review]
+            control_pair_gaps = [row for row in control_pair_gaps if row["identity_sha256"] not in control_repeat_for_review]
             for observation in item.material.observation_relations:
                 key = observation["identity_sha256"]
-                chosen = list(evaluated[key].result.used_fact_ids)
+                if key not in control_repeat_for_review:
+                    continue
+                chosen = list(control_repeat_for_review[key].result.used_fact_ids)
                 control_selections[key] = chosen
                 control_relations.extend(row for row in observation["result_sources"]["proposition_relations"]
                                          if row["fact_id"] in chosen)
@@ -345,6 +552,7 @@ def calculate_frozen_review(
         for item in calculation_items
     }
     frequency_by_component = {}
+    control_frequency_for_review = {}
     for item in calculation_items:
         evaluated = frequency_atom_evaluations[item.candidate_family]
         if item.candidate_family == "predicate":
@@ -355,15 +563,26 @@ def calculate_frozen_review(
                         frequency_by_component.setdefault(component.rule_component_id, {})[entry.predicate_id] = value
                         predicate_fact_ids_by_component[component.rule_component_id][entry.predicate_id] = list(value.result.used_fact_ids)
         elif evaluated:
+            control_frequency_for_review = _eligible_control_calculations(
+                evaluated, definition_control_unverified,
+            )
             control_selections = {key: list(values) for key, values in control_selections.items()}
-            control_unverified = {key: values for key, values in (control_unverified or {}).items() if key not in evaluated}
-            control_relations = [row for row in control_relations if row["identity_sha256"] not in evaluated]
-            control_pair_gaps = [row for row in control_pair_gaps if row["identity_sha256"] not in evaluated]
-            for key, value in evaluated.items():
+            control_unverified = {key: values for key, values in (control_unverified or {}).items() if key not in control_frequency_for_review}
+            control_relations = [row for row in control_relations if row["identity_sha256"] not in control_frequency_for_review]
+            control_pair_gaps = [row for row in control_pair_gaps if row["identity_sha256"] not in control_frequency_for_review]
+            for key, value in control_frequency_for_review.items():
                 control_selections[key] = list(value.result.used_fact_ids)
+    if definition_control_unverified:
+        if not isinstance(control_selections, Mapping):
+            raise ValueError("来源定义消费原子缺少本次审核的补充要求资料对应清单")
+        control_selections = {key: list(values) for key, values in control_selections.items()}
+        for identity in definition_control_unverified:
+            if identity not in control_selections:
+                raise ValueError("来源定义消费原子不在本次审核的完整资料对应清单内")
+            control_selections[identity] = []
     controls = _calculate_controls(frozen, control_input, control_selections, control_unverified,
-                                   control_relations, control_pair_gaps, repeat_atom_evaluations.get("control"),
-                                   frequency_atom_evaluations.get("control"))
+                                   control_relations, control_pair_gaps, control_repeat_for_review,
+                                   control_frequency_for_review)
     templates = {item.template_id: item for item in frozen.expectation_templates}
     templates_by_requirement = {item.requirement_id: item for item in templates.values()}
     expectations = _expectation_views(frozen.expectations, templates)
@@ -393,6 +612,17 @@ def calculate_frozen_review(
                 and predicate.predicate_id not in repeat_by_component.get(component.rule_component_id, {})
                 and predicate.predicate_id not in frequency_by_component.get(component.rule_component_id, {})
             )
+    # A consumer of an unproven source definition cannot keep its evidence
+    # result: its selection is cleared and it is marked unverified. Siblings are
+    # never touched, so an unaffected predicate keeps its real status. The
+    # evaluator only accepts an unverified atom with an explicitly empty
+    # selection, so any repeat / frequency / proposition result for it must be
+    # dropped as well instead of being carried past the unverified state.
+    _withhold_unverified_definition_predicates(
+        predicate_fact_ids_by_component,
+        (proposition_by_component, repeat_by_component, frequency_by_component),
+        unverified_by_component, definition_predicate_unverified,
+    )
     result = []
     verified_judgment_requirements = frozenset(
         requirement for item in calculation_items
@@ -471,6 +701,19 @@ def calculate_frozen_review(
             }
             for item in draft_items
         ]
+    if definition_consumption:
+        # The consumed relation is part of the calculation identity, so a later
+        # comparison cannot read this result as one computed without it.
+        selection_payload["definition_consumption"] = [
+            {
+                "batch_id": item.batch_id,
+                "source_statement_index": item.source_statement_index,
+                "structure_unit_id": item.structure_unit_id,
+                "predicate_ids": [list(pair) for pair in item.predicate_ids],
+                "control_atom_identities": list(item.control_atom_identities),
+            }
+            for item in definition_consumption
+        ]
     return FrozenReviewCalculation(
         context_sha256=frozen.context_sha256,
         selections_sha256=canonical_hash(selection_payload),
@@ -485,4 +728,5 @@ def calculate_frozen_review(
         ),
         control_outcomes=(project_control_review_outcomes(control_input, controls, observation_ordering=control_ordering)
                           if controls is not None else ()),
+        definition_consumption=definition_consumption,
     )

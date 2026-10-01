@@ -15,6 +15,7 @@ function member(isAutoSuggestion = true): EvidenceSnapshotMemberView {
     fileName: "筛选病历.pdf",
     mediaType: "application/pdf",
     versionNumber: 1,
+    uploadedBy: "上传者甲",
     origin: "added",
     originLabel: "本次新增",
     metadataHead: {
@@ -47,6 +48,7 @@ describe("SourceMetadataEditor", () => {
     );
 
     expect(screen.getByText("系统建议，待核对")).toBeInTheDocument();
+    expect(screen.getByText("上传者：上传者甲 · 资料归属由上传者核对")).toBeInTheDocument();
     const save = screen.getByRole("button", { name: "保存核对结果" });
     expect(save).toBeDisabled();
     await user.type(
@@ -58,8 +60,65 @@ describe("SourceMetadataEditor", () => {
     expect(onSave).toHaveBeenCalledWith({
       documentType: "筛选病历",
       sourceParty: "研究中心（待确认）",
+      documentCategory: "unknown",
+      sourceCategory: "unknown",
       reason: "已核对文件标题与正文内容",
     });
+  });
+
+  it("类别独立核对，保留原件上的具体名称和出具方", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <SourceMetadataEditor
+        member={member()}
+        busy={false}
+        error={null}
+        notice={null}
+        onSave={onSave}
+      />,
+    );
+
+    const documentName = screen.getByRole("textbox", { name: "原件所写资料名称" });
+    const issuer = screen.getByRole("textbox", { name: "原件所写出具方" });
+    await user.clear(documentName);
+    await user.type(documentName, "某项检验原始报告");
+    await user.clear(issuer);
+    await user.type(issuer, "某研究中心检验科");
+    await user.selectOptions(screen.getByRole("combobox", { name: "资料类别" }), "objective_report");
+    await user.selectOptions(screen.getByRole("combobox", { name: "出具方类别" }), "study_site");
+    await user.type(screen.getByRole("textbox", { name: "核对说明" }), "已核对报告抬头与出具机构");
+    await user.click(screen.getByRole("button", { name: "保存核对结果" }));
+
+    expect(onSave).toHaveBeenCalledWith({
+      documentType: "某项检验原始报告",
+      sourceParty: "某研究中心检验科",
+      documentCategory: "objective_report",
+      sourceCategory: "study_site",
+      reason: "已核对报告抬头与出具机构",
+    });
+  });
+
+  it("来源无法确认时可以明确保留未决", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <SourceMetadataEditor
+        member={member()}
+        busy={false}
+        error={null}
+        notice={null}
+        onSave={onSave}
+      />,
+    );
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "出具方类别" }), "unknown");
+    await user.type(screen.getByRole("textbox", { name: "核对说明" }), "原件未见出具机构");
+    await user.click(screen.getByRole("button", { name: "保存核对结果" }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      sourceParty: "研究中心（待确认）",
+      sourceCategory: "unknown",
+    }));
   });
 
   it("人工核对状态与保存错误均使用面向用户的中文呈现", () => {

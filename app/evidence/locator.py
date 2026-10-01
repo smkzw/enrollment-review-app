@@ -33,7 +33,7 @@ from app.evidence.pdf_native import NativeChar, NativePage
 
 LOCATOR_ALGORITHM_VERSION = "slice4.0/v1"
 #: WP-44B occurrence-aware 定位身份算法版本（与 Slice 4.0 的 ``_locator_id`` 区分）。
-OCCURRENCE_LOCATOR_ALGORITHM_VERSION = "slice4.4/v1"
+OCCURRENCE_LOCATOR_ALGORITHM_VERSION = "slice4.4/v2"
 
 
 class _LocatorCommon(TypedDict):
@@ -223,6 +223,8 @@ def occurrence_locator_id(
             "sidecar_sha256": sidecar_sha256,
             "locator_algorithm_version": locator_algorithm_version,
         }
+        if locator_algorithm_version != "slice4.4/v1":
+            material["target_id"] = target_id
     elif precision == LocatorPrecision.PAGE_EXCERPT:
         if anchor_hash is None:
             raise ValueError("page_excerpt 定位身份必须携带可回放摘录锚点哈希")

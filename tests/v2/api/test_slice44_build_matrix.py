@@ -22,6 +22,7 @@ from app.workflow.errors import ProcessDeath
 from app.workflow.recovery import recover_expired_jobs
 from app.workflow.runner import JobRunner
 from tests.v2.api.test_slice44_api import (
+    COMPLETE1,
     OCR_PAGE_ID,
     REV1,
     SNAP1,
@@ -30,7 +31,11 @@ from tests.v2.api.test_slice44_api import (
     _run_revision_job,
     _seed_api_stack,
     _seed_metadata_helper,
+    _seed_ready_complete,
     _seed_reviews_for_blocking,
+    _make_candidate_ready,
+    _ready_snapshot,
+    activate,
 )
 from tests.v2.workflow.conftest import expire_lease
 
@@ -144,6 +149,130 @@ def test_build_rejects_unsupported_processing_configuration_without_history(clie
     )
     assert error["title"] == "当前资料处理方式已更新"
     assert _candidate_count(client) == 0
+
+
+def test_metadata_only_build_keeps_reviewed_scanner_version(client) -> None:
+    """修改资料类型不应把已核对原件改用新扫描规则重审。"""
+    from app.evidence.risk import _PREVIOUS_RISK_RULE_VERSION
+    from app.services.evidence_revision_builder import EvidenceRevisionBuilder
+    from app.storage.evidence_locator_repositories import (
+        CompleteEvidenceProcessingRevisionRepository,
+    )
+    from tests.v2.storage.test_slice44_repositories import _complete_revision
+
+    keys = _seed_api_stack(client)
+    _seed_metadata_helper(client, keys)
+    scan = EvidenceRiskScanService(client.app.state.session_factory).scan_page(
+        OCR_PAGE_ID, rule_version=_PREVIOUS_RISK_RULE_VERSION
+    )
+    _seed_reviews_for_blocking(client, scan.scan_id)
+    with client.app.state.session_factory() as session, session.begin():
+        _ready_snapshot(session, keys)
+        closure = EvidenceRevisionBuilder(
+            artifact_store=client.app.state.artifact_store
+        ).gather_closure(
+            session,
+            evidence_snapshot_id=SNAP1,
+            base_processing_revision_id=REV1,
+            scanner_rule_version=_PREVIOUS_RISK_RULE_VERSION,
+        )
+        revision = _complete_revision(
+            keys, session,
+            metadata_revision_ids=closure.metadata_revision_ids,
+            risk_scan_ids=closure.risk_scan_ids,
+            risk_review_ids=closure.risk_review_ids,
+            locator_ids=closure.locator_ids,
+        )
+        created_revision = CompleteEvidenceProcessingRevisionRepository(
+            session, client.app.state.artifact_store
+        ).create(revision)
+        _make_candidate_ready(
+            session, created_revision.producer_candidate_id,
+            created_revision.evidence_processing_revision_id,
+        )
+    activate(client, keys, COMPLETE1, "activate-before-metadata-update")
+    metadata = client.patch(
+        "/api/v2/source-document-versions/doc-1/metadata",
+        json={
+            "document_type": "检验报告",
+            "source_party": "研究中心检验科",
+            "reason": "核对资料类型",
+            "expected_metadata_revision": 1,
+            "idempotency_key": "metadata-only-update",
+            "actor": "测试用户",
+        },
+    )
+    assert metadata.status_code == 201, metadata.text
+    new_metadata_id = metadata.json()["metadata"]["metadata_revision_id"]
+    body = _build_body(client, keys, key="build-after-metadata-update")
+    created = client.post("/api/v2/evidence-processing-revisions/build", json=body)
+    assert created.status_code == 201, created.text
+    _run_revision_job(client, created.json()["job_id"])
+    from app.storage.evidence_locator_repositories import EvidenceProcessingCandidateRepository
+    with client.app.state.session_factory() as session:
+        events = EvidenceProcessingCandidateRepository(
+            session, client.app.state.artifact_store
+        ).get_events(created.json()["candidate_id"])
+    assert events[-1].to_status.value == "ready", [event.reason for event in events]
+    with client.app.state.session_factory() as session:
+        new_candidate = EvidenceProcessingCandidateRepository(
+            session, client.app.state.artifact_store
+        ).get(created.json()["candidate_id"])
+        frozen = CompleteEvidenceProcessingRevisionRepository(
+            session, client.app.state.artifact_store
+        ).get(new_candidate.complete_revision_id)
+    assert frozen.metadata_revision_ids == [new_metadata_id]
+    client.app.state.evidence_api_command_service.build_revision(
+        evidence_snapshot_id=SNAP1,
+        base_processing_revision_id=REV1,
+        expected_revision=body["expected_revision"],
+        idempotency_key=body["idempotency_key"],
+        actor=body["actor"],
+    )
+    completed = client.post("/api/v2/evidence-processing-revisions/build", json=body)
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["candidate_status"] == "ready"
+    with client.app.state.session_factory() as session:
+        revision = CompleteEvidenceProcessingRevisionRepository(
+            session, client.app.state.artifact_store
+        ).get(completed.json()["revision"]["evidence_processing_revision_id"])
+    assert revision.metadata_revision_ids == [new_metadata_id]
+    assert revision.risk_scan_ids == [scan.scan_id]
+    assert revision.risk_review_ids == closure.risk_review_ids
+
+
+def test_metadata_only_reuse_rejected_after_page_correction(client) -> None:
+    """页校对变化时不能误用仅更新资料信息的快速路径。"""
+    from app.storage.evidence_locator_repositories import CorrectionRepository
+    from tests.v2.storage.test_slice44_repositories import _correction
+
+    keys = _seed_ready_complete(client)
+    activate(client, keys, COMPLETE1, "activate-before-correction")
+    metadata = client.patch(
+        "/api/v2/source-document-versions/doc-1/metadata",
+        json={
+            "document_type": "检验报告",
+            "source_party": "研究中心检验科",
+            "reason": "核对资料类型",
+            "expected_metadata_revision": 1,
+            "idempotency_key": "metadata-before-correction",
+            "actor": "测试用户",
+        },
+    )
+    assert metadata.status_code == 201, metadata.text
+    with client.app.state.session_factory() as session, session.begin():
+        CorrectionRepository(session).create(
+            _correction(keys, correction_id="later-correction")
+        )
+    service = client.app.state.evidence_api_command_service
+    with client.app.state.session_factory() as session:
+        assert service._metadata_only_scanner_version(
+            session,
+            snapshot_id=SNAP1,
+            base_processing_revision_id=REV1,
+            selected_locator_ids=[],
+            default_version="new-scanner-version",
+        ) == "new-scanner-version"
 
 
 def test_build_new_key_stale_revision_409_no_history(client) -> None:

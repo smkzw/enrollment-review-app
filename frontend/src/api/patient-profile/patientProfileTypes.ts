@@ -93,7 +93,8 @@ export type ProfileGapTypeWire =
   | "interpretation_conflict"
   | "future_stage_not_due"
   | "provenance_followup"
-  | "control_applicability_pending";
+  | "control_applicability_pending"
+  | "applicable_population_unverified";
 
 /** 首屏突出原因的完整允许集（显式结构化，绝不从阈值/关键词推导）。 */
 export type ProfileHighlightReasonWire =

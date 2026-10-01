@@ -67,6 +67,7 @@ SUPPORTED_PROTOCOL_DECONSTRUCTION_BACKENDS = frozenset(
         "cms-router",
         "cms-smk",
         "opencode-go",
+        "ollama-cloud",
     }
 )
 _DEEPSEEK_BACKENDS = frozenset({"deepseek"})
@@ -368,12 +369,13 @@ class DeepSeekProtocolAgentTransport:
                     selected_base_url
                 )
             elif selected_backend in REMOTE_OPENAI_PROVIDERS:
+                provider_only = selected_backend == "ollama-cloud"
                 resolved_base_url, selected_api_key = resolve_openai_connection(
                     selected_backend,
-                    base_url=base_url or DECONSTRUCT_BASE_URL,
-                    api_key=api_key or DECONSTRUCT_API_KEY,
-                    role_base_url_env="DECONSTRUCT_BASE_URL",
-                    role_api_key_env="DECONSTRUCT_API_KEY",
+                    base_url=None if provider_only else base_url or DECONSTRUCT_BASE_URL,
+                    api_key=None if provider_only else api_key or DECONSTRUCT_API_KEY,
+                    role_base_url_env=None if provider_only else "DECONSTRUCT_BASE_URL",
+                    role_api_key_env=None if provider_only else "DECONSTRUCT_API_KEY",
                 )
             else:
                 selected_api_key = OMLX_API_KEY if api_key is None else api_key
@@ -464,6 +466,11 @@ class DeepSeekProtocolAgentTransport:
                 "version": "explicit-batch-context/v1",
                 "bounded": self._bounded_batch_context,
             }
+        elif self._backend not in _LOCAL_STRUCTURED_BACKENDS:
+            payload["batch_context_policy"] = {
+                "version": "remote-default-bounded/v1",
+                "bounded": True,
+            }
         return hashlib.sha256(
             json.dumps(
                 payload,
@@ -482,7 +489,7 @@ class DeepSeekProtocolAgentTransport:
     def supports_bounded_batch_context(self) -> bool:
         if self._bounded_batch_context is not None:
             return self._bounded_batch_context
-        return self._backend in _LOCAL_STRUCTURED_BACKENDS
+        return True
 
     @property
     def supports_parent_rule_segmentation(self) -> bool:
@@ -512,6 +519,8 @@ class DeepSeekProtocolAgentTransport:
             "max_tokens": self._max_tokens if max_tokens is None else max_tokens,
             "response_format": {"type": "json_object"},
         }
+        if self._backend == "ollama-cloud":
+            kwargs.pop("response_format")
         if (
             self._backend in _LOCAL_STRUCTURED_BACKENDS
             and self._backend not in _GRAMMAR_INCOMPATIBLE_BACKENDS
@@ -530,7 +539,7 @@ class DeepSeekProtocolAgentTransport:
             if self._reasoning_effort not in {"", "default", "auto"}:
                 kwargs["reasoning_effort"] = self._reasoning_effort
             kwargs["extra_body"] = {"thinking": {"type": "enabled"}}
-        elif self._backend == "opencode-go":
+        elif self._backend in {"opencode-go", "ollama-cloud"}:
             if self._reasoning_effort not in {"", "default", "auto"}:
                 kwargs["reasoning_effort"] = self._reasoning_effort
         elif self._backend in {"cms-router", "cms-smk"}:
@@ -593,23 +602,27 @@ class DeepSeekProtocolAgentTransport:
 
         try:
             for chunk in stream:
-                request_id = request_id or getattr(chunk, "id", None)
-                reported_model = reported_model or getattr(chunk, "model", None)
                 if getattr(chunk, "usage", None) is not None:
                     usage = chunk.usage
                 choices = getattr(chunk, "choices", None) or []
                 if not choices:
                     continue
                 choice = choices[0]
-                if getattr(choice, "finish_reason", None):
-                    finish_reason = choice.finish_reason
                 delta = getattr(choice, "delta", None)
-                if delta is None:
-                    continue
-                piece = getattr(delta, "content", None)
+                piece = getattr(delta, "content", None) if delta is not None else None
+                reasoning = getattr(delta, "reasoning_content", None) if delta is not None else None
+                terminal = getattr(choice, "finish_reason", None)
+                if piece or reasoning or terminal:
+                    chunk_model = getattr(chunk, "model", None)
+                    if chunk_model:
+                        if reported_model and chunk_model.casefold() != reported_model.casefold():
+                            raise RuntimeError("模型流在有效内容之间变更了模型身份")
+                        reported_model = chunk_model
+                    request_id = request_id or getattr(chunk, "id", None)
+                if terminal:
+                    finish_reason = terminal
                 if piece:
                     content_parts.append(piece)
-                reasoning = getattr(delta, "reasoning_content", None)
                 if reasoning:
                     reasoning_parts.append(reasoning)
         except Exception as exc:  # noqa: BLE001 - provider iterator may fail after dispatch
@@ -691,32 +704,51 @@ class DeepSeekProtocolAgentTransport:
         messages: list[dict[str, str]],
         *,
         output_kind: ProtocolOutputKind,
-    ) -> str:
+        with_receipt: bool = False,
+    ) -> str | tuple[str, dict[str, object]]:
         request_messages = [dict(message) for message in messages]
         diagnostics: list[str] = []
+        receipts: list[dict[str, object]] = []
         length_attempts = 0
         malformed_attempts = 0
         # One logical request carries one shared reasoning+content budget; a
         # single length-finish retry may raise it once, capped, never silently.
         request_budget = self._max_tokens
         for attempt in range(2):
+            request_hash = hashlib.sha256(json.dumps(
+                request_messages, ensure_ascii=False, sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")).hexdigest()
             response = self._send_completion(
                 request_messages,
                 output_kind=output_kind,
                 max_tokens=request_budget,
             )
+            choice = response.choices[0]
+            message = choice.message
+            text = message.content or ""
+            reasoning_chars = len(getattr(message, "reasoning_content", "") or "")
+            finish_reason = getattr(choice, "finish_reason", None) or "未提供"
             reported_model = getattr(response, "model", None)
+            raw_usage = getattr(response, "usage", None)
+            receipts.append({
+                "request_sha256": request_hash,
+                "requested_model": self._model,
+                "reported_model": reported_model,
+                "request_id": getattr(response, "id", None),
+                "requested_max_tokens": request_budget,
+                "finish_reason": finish_reason,
+                "usage": (raw_usage.model_dump(mode="json") if hasattr(raw_usage, "model_dump")
+                          else dict(raw_usage) if isinstance(raw_usage, Mapping) else None),
+                "content_characters": len(text) if isinstance(text, str) else 0,
+                "reasoning_characters": reasoning_chars,
+            })
             if (isinstance(reported_model, str) and reported_model.strip()
                     and reported_model.strip().casefold() != self._model.casefold()):
                 raise RuntimeError(
                     "方案解构模型实际回报身份与本次配置不一致，结果未采用："
                     f"配置={self._model}，回报={reported_model.strip()}"
                 )
-            choice = response.choices[0]
-            message = choice.message
-            text = message.content or ""
-            reasoning_chars = len(getattr(message, "reasoning_content", "") or "")
-            finish_reason = getattr(choice, "finish_reason", None) or "未提供"
             if finish_reason == "length":
                 if local_early_length(self._backend, getattr(response, "usage", None), request_budget):
                     raise RuntimeError(
@@ -807,7 +839,7 @@ class DeepSeekProtocolAgentTransport:
                         ]
                         continue
                     continue
-                return json_text
+                return (json_text, {"attempts": receipts}) if with_receipt else json_text
             diagnostics.append(
                 f"第{attempt + 1}次结束原因={finish_reason}，推理内容长度={reasoning_chars}"
             )
@@ -899,7 +931,7 @@ class DeepSeekProtocolAgentTransport:
         history = [{"role": "user", "content": self._wire_contract_prompt(prompt, output_kind)}]
         self._histories[session_id] = history
         try:
-            text = self._complete(history, output_kind=output_kind)
+            text, metadata = self._complete(history, output_kind=output_kind, with_receipt=True)
         except ProtocolSemanticStreamInterrupted as exc:
             raise ProtocolAgentCallError(
                 session_id, str(exc), error_code="STREAM_INTERRUPTED",
@@ -919,7 +951,7 @@ class DeepSeekProtocolAgentTransport:
             ) from exc
         history.append({"role": "assistant", "content": text})
         self._histories[session_id] = history
-        return ProtocolAgentResponse(session_id=session_id, text=text)
+        return ProtocolAgentResponse(session_id=session_id, text=text, call_metadata=metadata)
 
     def continue_session(
         self,
@@ -936,7 +968,7 @@ class DeepSeekProtocolAgentTransport:
         ]
         self._histories[session_id] = history
         try:
-            text = self._complete(history, output_kind=output_kind)
+            text, metadata = self._complete(history, output_kind=output_kind, with_receipt=True)
         except ProtocolSemanticStreamInterrupted as exc:
             raise ProtocolAgentCallError(
                 session_id, str(exc), error_code="STREAM_INTERRUPTED",
@@ -956,7 +988,7 @@ class DeepSeekProtocolAgentTransport:
             ) from exc
         history.append({"role": "assistant", "content": text})
         self._histories[session_id] = history
-        return ProtocolAgentResponse(session_id=session_id, text=text)
+        return ProtocolAgentResponse(session_id=session_id, text=text, call_metadata=metadata)
 
     def restore_history(
         self, *, session_id: str, messages: Sequence[Mapping[str, str]]

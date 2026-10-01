@@ -432,7 +432,7 @@ SELECTIVE_VISION_TASK_LABEL = "页面视觉核验"
 _SELECTIVE_VISION_RECOVERY_ACTIONS: dict[str, str] = {
     "queued": "页面视觉核验正在等待开始；关闭页面不会中断任务。",
     "running": "正在对需要视觉核验的页面进行核验；完成后此处会自动更新。",
-    "completed": "页面视觉核验已完成。",
+    "completed": "本次页面补充识读已保存；识别文字和资料版本仍需分别核对。",
     "failed_retryable": "页面视觉核验尚未完成，系统将自动重试；也可以手动重新开始。",
     "failed_final": "页面视觉核验未完成；可以点击“重新开始核验”，识别原文与核对结果不受影响。",
     "cancel_requested": "停止请求已受理，将在安全节点停止页面视觉核验。",

@@ -49,6 +49,7 @@ from app.domain.contracts.evidence import (
     EvidenceSpan,
     SourceDocumentVersion,
 )
+from app.domain.contracts.evaluation_result import EvaluationResult
 from app.domain.contracts.projections import EpisodeRollup
 from app.domain.contracts.review import (
     ActionRequest,
@@ -76,7 +77,9 @@ from app.domain.expression import (
     EvaluationContext,
     evaluate_component,
     evaluate_expression,
+    evaluate_time_constraint,
 )
+from app.services.component_review import calculate_component_review
 from app.domain.gates import (
     ActionGateError,
     AgentPermissionError,
@@ -1558,6 +1561,60 @@ def test_rule_expression_all_any_not_have_distinct_truth_semantics() -> None:
     ).truth == TruthValue.FALSE
 
 
+def test_population_scoped_condition_cannot_be_decided_from_selected_fact() -> None:
+    scoped = AtomicPredicate(
+        subject="history", attribute="treatment", comparator="eq", value=True,
+        applicable_population="仅适用于方案定义的特定人群",
+    )
+    sibling = AtomicPredicate(
+        subject="history", attribute="recorded", comparator="eq", value=True,
+    )
+    component = gate_component().model_copy(update={
+        "expression": LogicalExpression(operator=LogicalOperator.ALL, children=[
+            AtomicExpression(predicate=scoped), AtomicExpression(predicate=sibling),
+        ]),
+    })
+    facts = [
+        clinical_fact(
+            fact_id="fact-treatment", fact_type="history.treatment", value=True,
+            polarity=FactPolarity.AFFIRMED, certainty=1, evidence_span_ids=["span-treatment"],
+        ),
+        clinical_fact(
+            fact_id="fact-recorded", fact_type="history.recorded", value=True,
+            polarity=FactPolarity.AFFIRMED, certainty=1, evidence_span_ids=["span-recorded"],
+        ),
+    ]
+    result = calculate_component_review(
+        component=component, rule_kind=RuleKind.EXCLUSION,
+        context=evaluation_context(facts=facts), episode_stage=ReviewStage.SCREENING,
+        expectations=[], conflicts=[], predicate_fact_ids={
+            scoped.predicate_id: ["fact-treatment"], sibling.predicate_id: ["fact-recorded"],
+        },
+    )
+    assert result.evaluation.predicate_evaluations[scoped.predicate_id].truth == TruthValue.UNKNOWN
+    assert result.evaluation.predicate_evaluations[sibling.predicate_id].truth == TruthValue.TRUE
+    assert result.decision == ComponentDecision.INDETERMINATE
+    assert result.gaps == frozenset({GapType.APPLICABLE_POPULATION_UNVERIFIED})
+
+
+def test_population_scope_cannot_be_bypassed_by_semantic_result() -> None:
+    predicate = AtomicPredicate(
+        subject="history", attribute="condition", comparator="exists",
+        semantic_proposition="病史符合方案中的条件",
+        applicable_population="仅适用于方案定义的特定人群",
+    )
+    component = gate_component().model_copy(update={
+        "expression": AtomicExpression(predicate=predicate),
+    })
+    evaluated = evaluate_component(
+        component, evaluation_context(),
+        predicate_fact_ids={predicate.predicate_id: []},
+        proposition_evaluations={predicate.predicate_id: EvaluationResult(truth=TruthValue.TRUE)},
+    )
+    assert evaluated.trigger.truth == TruthValue.UNKNOWN
+    assert evaluated.trigger.reason_codes == ["applicable_population_unverified"]
+
+
 def test_indicator_identity_is_part_of_predicate_resolution() -> None:
     ggt = AtomicExpression(
         predicate=AtomicPredicate(
@@ -1749,7 +1806,7 @@ def test_randomization_and_baseline_anchors_are_not_screening_date() -> None:
 
 @pytest.mark.parametrize(
     ("distance_days", "expected"),
-    [(27, TruthValue.FALSE), (28, TruthValue.TRUE), (29, TruthValue.TRUE)],
+    [(27, TruthValue.UNKNOWN), (28, TruthValue.TRUE), (29, TruthValue.TRUE)],
 )
 def test_time_window_uses_explicit_randomization_anchor_and_boundaries(
     distance_days,
@@ -1786,7 +1843,16 @@ def test_time_window_uses_explicit_randomization_anchor_and_boundaries(
             )
         },
     )
-    assert evaluate_expression(expression, context).truth == expected
+    result = evaluate_expression(expression, context)
+    assert result.truth == expected
+    membership = evaluate_time_constraint(
+        expression.time_constraint, event_value=fact.effective_date,
+        anchor_value=context.anchor_dates["randomization_date"],
+    )
+    assert membership.truth == (TruthValue.FALSE if distance_days == 27 else TruthValue.TRUE)
+    if distance_days == 27:
+        # An observed event outside the window does not prove absence inside it.
+        assert result.reason_codes == ["observation_out_of_window", "below_time_window"]
 
     missing_anchor = evaluation_context(
         facts=[fact],

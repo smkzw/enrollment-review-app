@@ -348,6 +348,10 @@ class EvidenceLocatorRepository:
                     EvidenceLocatorArtifactRecord.text_end == artifact.text_end,
                 ]
             )
+            if artifact.locator_algorithm_version == "slice4.4/v2":
+                base.append(
+                    EvidenceLocatorArtifactRecord.target_id == artifact.target_id
+                )
             if artifact.precision == LocatorPrecision.BBOX:
                 base.append(
                     EvidenceLocatorArtifactRecord.sidecar_sha256
@@ -3297,6 +3301,7 @@ class CompleteEvidenceProcessingRevisionRepository:
         self._verify_candidate_binding(
             revision,
             require_processing=require_producer_processing,
+            require_current_locators=require_current_heads,
         )
 
     def _verify_candidate_binding(
@@ -3304,6 +3309,7 @@ class CompleteEvidenceProcessingRevisionRepository:
         revision: CompleteEvidenceProcessingRevision,
         *,
         require_processing: bool,
+        require_current_locators: bool,
     ) -> None:
         candidate = EvidenceProcessingCandidateRepository(self.session).get(
             revision.producer_candidate_id
@@ -3339,7 +3345,7 @@ class CompleteEvidenceProcessingRevisionRepository:
             for scan_id in revision.risk_scan_ids
             for flag in OCRRiskScanRepository(self.session).get(scan_id).flags
         }
-        if base_page_artifact_ids:
+        if require_current_locators and base_page_artifact_ids:
             automatic_locator_ids = self.session.execute(
                 select(EvidenceLocatorArtifactRecord.locator_id).where(
                     EvidenceLocatorArtifactRecord.page_artifact_id.in_(

@@ -1,0 +1,1334 @@
+{
+  "schema_version": "enrollment-source-snapshot/v1",
+  "recorded_at": "2026-10-01T19:11:00+08:00",
+  "base_commit": "9f8d9cd46f0c7c98c916a279f0d37f94b86fcc53",
+  "scope": "Current task product source/tests/spec and current authority docs; includes inherited same-task changes, not attributed entirely to this session. No raw sources, databases, model answers, env, logs, caches or arbitrary process directories.",
+  "ownership_note": "User-authorized current-task delivery includes previously uncommitted same-task source, not all authored or revalidated in this resumption. Explicit paths only; no broad staging.",
+  "files": [
+    {
+      "path": ".trellis/spec/backend/persistent-jobs.md",
+      "sha256": "a3951837d28e2c2cf4c3ec7b94e5c8194f206fca6f43b03f74f985fb43a3ef9a",
+      "bytes": 4288
+    },
+    {
+      "path": ".trellis/spec/backend/quality-guidelines.md",
+      "sha256": "61fd755f36326788099c565fcecf7a7128e2fcdd391c0855b1e5a337ad6fac7d",
+      "bytes": 25881
+    },
+    {
+      "path": ".trellis/tasks/09-11-e2e-eligibility-review/acceptance.md",
+      "sha256": "33b8d174806c8e1baa575ceb58cff01db4900eb84dda7fdac963a312145ed4b2",
+      "bytes": 10403
+    },
+    {
+      "path": ".trellis/tasks/09-11-e2e-eligibility-review/design.md",
+      "sha256": "aa8fc41abcb92eeeeaa02bd19a181a35f09eaba43a2326a6b91b96dff0868d07",
+      "bytes": 27441
+    },
+    {
+      "path": ".trellis/tasks/09-11-e2e-eligibility-review/plan.md",
+      "sha256": "8b0335f916e3b080be353879195fe9f4b8fc532cbdfa9351a654da991629e93e",
+      "bytes": 13506
+    },
+    {
+      "path": ".trellis/tasks/09-11-e2e-eligibility-review/prd.md",
+      "sha256": "6bbea09f688720325cd8bf34ceee7fabf487b231cd03ae90ee358508fda75bd0",
+      "bytes": 12973
+    },
+    {
+      "path": "AGENTS.md",
+      "sha256": "e2869bfed29c527e207cd5ce35231617acb50d7fa9f7b2a00a17ebfb1928cd0c",
+      "bytes": 6930
+    },
+    {
+      "path": "app/agents/evidence_normalizer.py",
+      "sha256": "ec6d1b58f25c1275559ff4307fc33ccb076d166f42136f6b4ac22bf73b080229",
+      "bytes": 111784
+    },
+    {
+      "path": "app/agents/protocol_control_agent_transport.py",
+      "sha256": "5365b5d8a0d238b583d68d53a9c69e7894e129edcc5b5b6b909ddcdade79f6cd",
+      "bytes": 83593
+    },
+    {
+      "path": "app/agents/protocol_control_candidate_alignment.py",
+      "sha256": "e13f5940c62856199ff76697f79acaeaddce6668ccd7a73ce027579f75fcf4f1",
+      "bytes": 22178
+    },
+    {
+      "path": "app/agents/protocol_control_deconstructor.py",
+      "sha256": "b3cf3abdbbe6ef07d6c3cffcbeec50a3c356dae81f485eb73ca7bc36bf04e816",
+      "bytes": 518434
+    },
+    {
+      "path": "app/agents/protocol_control_definition_scope.py",
+      "sha256": "56ae301bbe7a6b53bd8aa1aead6a11d1f3ab5ce7dcf69656b5abcc4122b24293",
+      "bytes": 4232
+    },
+    {
+      "path": "app/agents/protocol_control_semantic_point.py",
+      "sha256": "03f21cc6af9d9b2b3b0b2f579e4e4eb8d557231fdd0b1bb70f5bc007d4dc2169",
+      "bytes": 40899
+    },
+    {
+      "path": "app/agents/protocol_control_source_function.py",
+      "sha256": "c03a50ef39b2316015a44e9f78ec5992e428cc4b3a9d8799cb3ef7fc1b0d4b4c",
+      "bytes": 7018
+    },
+    {
+      "path": "app/agents/protocol_control_source_interpretation.py",
+      "sha256": "bcb42387c16ca36492cb19cebb9a7e8e109a428650e7bda045311a05ec7b4041",
+      "bytes": 116785
+    },
+    {
+      "path": "app/agents/protocol_control_stage_compiler.py",
+      "sha256": "c7e610e14a08ea310139aed4d1b8c1f85e824f41bfd28d3e4723430b57311370",
+      "bytes": 40986
+    },
+    {
+      "path": "app/agents/protocol_deconstructor.py",
+      "sha256": "9a36374df8a5f4dbc2167d81c0bdd4e4aaf2fcf21684ff1b8f206f98309608cd",
+      "bytes": 279446
+    },
+    {
+      "path": "app/agents/protocol_semantic_model_router.py",
+      "sha256": "dec99465b61b9b2a7dd06b57fc905a9c6934c5f54de4138d412d1d50d4599fbc",
+      "bytes": 17972
+    },
+    {
+      "path": "app/agents/protocol_semantic_transport.py",
+      "sha256": "f0ba1325485a06eb3317c4328bf03dbceedd051e6fc0b9615806b51f0c81ee05",
+      "bytes": 46305
+    },
+    {
+      "path": "app/api/v2/app.py",
+      "sha256": "e2a7e50e6b66b0702066bab55628e9cfd5c2b2c6da45a30c00fe9ed6ea1bafb3",
+      "bytes": 22350
+    },
+    {
+      "path": "app/api/v2/eligibility_review.py",
+      "sha256": "ceaee7a598bc1e72e53f8679b7134fafabf34bb4dda8a2310af547059a93786e",
+      "bytes": 7402
+    },
+    {
+      "path": "app/api/v2/evidence.py",
+      "sha256": "9da3726b2e6272d64a07bb4ec38b8d88f4ea259f532d03274b3554eb43d78321",
+      "bytes": 19969
+    },
+    {
+      "path": "app/api/v2/evidence_processing.py",
+      "sha256": "f8c503de1fb8301d406c81ca25054cae60a96b11b8cf3e5f57420375b8d844e7",
+      "bytes": 41568
+    },
+    {
+      "path": "app/api/v2/evidence_processing_schemas.py",
+      "sha256": "8c1b151e248974bd91d20eedeaf501941d72e694b376dc3963e1caba1e8ddf1b",
+      "bytes": 22437
+    },
+    {
+      "path": "app/api/v2/evidence_schemas.py",
+      "sha256": "f69086090130a9e05a8beec4c24f1c99690790493e036cd3af292b14412c9959",
+      "bytes": 8359
+    },
+    {
+      "path": "app/api/v2/local_visual_verification.py",
+      "sha256": "e4a2cd0789424080e6aaa3ba0a5575340a1518a05e843a7bc4ac06d9b71ed7fc",
+      "bytes": 824
+    },
+    {
+      "path": "app/api/v2/patient_profile_schemas.py",
+      "sha256": "91c98ceaa53f78d4db93df65a56a7b7ea340996e447363123a3d3dc8f44fbef6",
+      "bytes": 19858
+    },
+    {
+      "path": "app/api/v2/protocol_schemas.py",
+      "sha256": "43fed86caccd341f913d26ded9f727bc98a02490637a389f921a785ffe429539",
+      "bytes": 10285
+    },
+    {
+      "path": "app/api/v2/protocols.py",
+      "sha256": "447234a84cfab6654cdf6d42230bc7eb7ddf884e5e5d391889e1d089d6f16542",
+      "bytes": 24423
+    },
+    {
+      "path": "app/api/v2/qualified_review.py",
+      "sha256": "afbf5a59a70a2389590d9dcf7f3ca5fef25d1974c0b00aecabe2f026fb212ec0",
+      "bytes": 11812
+    },
+    {
+      "path": "app/api/v2/vocabulary.py",
+      "sha256": "fc29bb5c566739acfbcac7652bc3baea5c5b4d052ddeec5b8e5496b0419513f4",
+      "bytes": 15453
+    },
+    {
+      "path": "app/domain/contracts/agent_io.py",
+      "sha256": "6a9f2560f497f00c897970355b0c5b251ebd41a7019992f46cf4f7ae5b373b48",
+      "bytes": 21360
+    },
+    {
+      "path": "app/domain/contracts/clause_pack.py",
+      "sha256": "633845ef2aade95c6623e9a93913df0815962faa7d6eff653a13bd14ea634482",
+      "bytes": 5582
+    },
+    {
+      "path": "app/domain/contracts/control_catalog_publication.py",
+      "sha256": "5e1404d45386a5cada1b78a1bd6b57c09e32c53b13497812c5a9b2916f88db4e",
+      "bytes": 10066
+    },
+    {
+      "path": "app/domain/contracts/enums.py",
+      "sha256": "4d2cc11bccc1ff2e7777206e310b0666f4c29e91f2275e6fe89b0471125e26c8",
+      "bytes": 29067
+    },
+    {
+      "path": "app/domain/contracts/evidence_ingestion.py",
+      "sha256": "93af204c5dc56a32c49df2f20bc035e00c728c8fd2d813de18daaf6680b7b453",
+      "bytes": 12741
+    },
+    {
+      "path": "app/domain/contracts/evidence_normalizer.py",
+      "sha256": "bfc7117be845fba6d67921b8ec102548d7ba440f30c66bb2f0a2d7964352a756",
+      "bytes": 26503
+    },
+    {
+      "path": "app/domain/contracts/local_region_read.py",
+      "sha256": "53bd05880b840d479f422405565266b5dbaea431668879966c1a8b80e0fb94cc",
+      "bytes": 3343
+    },
+    {
+      "path": "app/domain/contracts/observation_relation.py",
+      "sha256": "9fd893fa4cd19adc777c34191442e030b3b16b3ce296ce59ec622bcef98ad351",
+      "bytes": 15792
+    },
+    {
+      "path": "app/domain/contracts/protocol_controls.py",
+      "sha256": "57a289775a9d0e8a35a58b35efba9cdb50621887e48aa81e6ecee872e8113b2b",
+      "bytes": 177238
+    },
+    {
+      "path": "app/domain/contracts/qualified_binding_selection.py",
+      "sha256": "5c0a0ad9514ae1e8828bd0eb206c53de6a6e38fc235816187bb874ac64d2b775",
+      "bytes": 21712
+    },
+    {
+      "path": "app/domain/contracts/rules.py",
+      "sha256": "2f98ae8a002bf267e6368f5b5f2a3b33a98dcea532de639437999780b581556a",
+      "bytes": 46113
+    },
+    {
+      "path": "app/domain/contracts/selective_vision_observation.py",
+      "sha256": "cc26aabff3572deb6edf974d5209e62ad3ffe08cf9dd88dd344242f40b315c54",
+      "bytes": 14214
+    },
+    {
+      "path": "app/domain/expression.py",
+      "sha256": "ffd214aa40f49d87392764a11a56515f3e003e3bf408aac5cbc1e509ab31aba6",
+      "bytes": 38076
+    },
+    {
+      "path": "app/domain/gates/assessment.py",
+      "sha256": "6a6a277072cb1d660e6b9ea3e927bda001658167d3464633f63b35e02a2b710b",
+      "bytes": 34653
+    },
+    {
+      "path": "app/domain/gates/fact_evidence_closure.py",
+      "sha256": "8fa3b9a88cc3d74eacae43d495719390a3286f7efa3816aa0d43bd5d3a765a05",
+      "bytes": 50391
+    },
+    {
+      "path": "app/domain/observation_relation_graph.py",
+      "sha256": "a383a00ec05f2c7161126c06b40b3064a61976aaf42368f624001610d5c430d7",
+      "bytes": 10464
+    },
+    {
+      "path": "app/domain/page_normalization.py",
+      "sha256": "47c4f69459cda8d430520861a6ced0e3373fe0685f7d7b067be5ac2f0370425b",
+      "bytes": 6863
+    },
+    {
+      "path": "app/domain/policies.py",
+      "sha256": "944b6eddbbaa24cc529d5a1af3c2e8c8ef437743651fb55e7046e6ac6b845c50",
+      "bytes": 10155
+    },
+    {
+      "path": "app/domain/repeat_numeric_result.py",
+      "sha256": "f0a104b56dda7da3a28ae193b7d27e8bdf172ef35203de5239ff4a20b8d05302",
+      "bytes": 7753
+    },
+    {
+      "path": "app/domain/repeat_series_constraints.py",
+      "sha256": "0efeb3e9c5ecc31ee6434a1c0e4695c04cd121aa1ecb26f435451365b4db3809",
+      "bytes": 9785
+    },
+    {
+      "path": "app/domain/rollup.py",
+      "sha256": "3c57f17f5cc88d011af9a20ecac1bda4e6d41e2fec442397855d9cca43bb17f0",
+      "bytes": 10965
+    },
+    {
+      "path": "app/domain/series_numeric_result.py",
+      "sha256": "aa101e005387687084da526abfd38a944168d6dcab0f8cab19a6af9fd3a9a1f6",
+      "bytes": 6730
+    },
+    {
+      "path": "app/evidence/local_region_comparison.py",
+      "sha256": "cc9bb1365e5bac7b46d187f4d8768b75ff48570f08b43d1e7055114aaf9ce342",
+      "bytes": 8197
+    },
+    {
+      "path": "app/evidence/local_region_position_trial.py",
+      "sha256": "56186202e309f2576e6ab8d69a112eb9d65eba5861a0c8d915e413449f69ab1a",
+      "bytes": 2381
+    },
+    {
+      "path": "app/evidence/locator.py",
+      "sha256": "536b641e6072da2086a1501d6266196f0bb82a525684e160aea311e1fcd8a7c0",
+      "bytes": 13223
+    },
+    {
+      "path": "app/evidence/reading_view.py",
+      "sha256": "ed3bee0d86b2a3de00e12fff70f2d70e8dd28d2145100660ab87efe2ff6b4261",
+      "bytes": 7600
+    },
+    {
+      "path": "app/evidence/risk.py",
+      "sha256": "6f2e5fc283bc27080838975c3d75591fcaf15f45a54a92144092af838f8f1b7e",
+      "bytes": 14267
+    },
+    {
+      "path": "app/llm/control_binding_candidates.py",
+      "sha256": "333703538787fd269f8827baf781d5d5623f6cd8312eb9b1c1b580ebd992c5fb",
+      "bytes": 13247
+    },
+    {
+      "path": "app/llm/independent_vlm.py",
+      "sha256": "27d8c016f154c22cd8a6c412189896fcb4b0561b40186f6b15928e6d8d23b23a",
+      "bytes": 24124
+    },
+    {
+      "path": "app/llm/observation_relation.py",
+      "sha256": "3f46a9d98a0af50a6c22df82fe422777364b5f52996a24d1644a0eb0ecf73165",
+      "bytes": 18508
+    },
+    {
+      "path": "app/llm/predicate_binding_batches.py",
+      "sha256": "5182cf7ab296dfeb66b37f29b16a8ac0e2dc5c59b59f08d62903cda1acc5f3bc",
+      "bytes": 5472
+    },
+    {
+      "path": "app/llm/predicate_binding_candidates.py",
+      "sha256": "9a0342c0b66b641481a1f2ba6b23d617d57cdefb924164030bb78abf1462a0f7",
+      "bytes": 28045
+    },
+    {
+      "path": "app/projections/clause_pack.py",
+      "sha256": "bac10ac76a97b01f7e1e58549aec3b01efa174e9f70db3baa3ae5ea691032839",
+      "bytes": 8736
+    },
+    {
+      "path": "app/projections/control_calculation_experiment.py",
+      "sha256": "c29afa8cafa055bc04e1a52d6803a8474bc5155c72e7197680f59ee514b97950",
+      "bytes": 27372
+    },
+    {
+      "path": "app/projections/control_operand_calculation.py",
+      "sha256": "436f58422d83260c654592ab814f7def99c39d576f5825da86c70984ae6df802",
+      "bytes": 6266
+    },
+    {
+      "path": "app/protocols/control_catalog_materialization.py",
+      "sha256": "2eda18f55afc4b5efd71a591ddf1b0a310be24b85322f049a7f1f2c2a708fac2",
+      "bytes": 10926
+    },
+    {
+      "path": "app/protocols/deconstruction_gate.py",
+      "sha256": "3e53e0559754cf02e2ac1cfd1b5078557a2b72c6b4472a93911b52e5cd547358",
+      "bytes": 219563
+    },
+    {
+      "path": "app/protocols/definition_scope_check.py",
+      "sha256": "53574c7bff441e9e0647818e926f93097db72b1847f4184ee4e5b1d0f68e0d5b",
+      "bytes": 2375
+    },
+    {
+      "path": "app/protocols/docx_structure.py",
+      "sha256": "fc0efe3f601af37e442e1213b868cf949e392b2dd9b49da4e979bda986b82cab",
+      "bytes": 40476
+    },
+    {
+      "path": "app/protocols/full_protocol_coverage.py",
+      "sha256": "a9838c68a18999bd5116cccf29f6e92d72ab7294cf50be065ac66e1ebd02fc5d",
+      "bytes": 56956
+    },
+    {
+      "path": "app/protocols/phase_detection.py",
+      "sha256": "cf5ea609332a2802862b07174c2d2f3520145cdd8d767d620e71322c3f933084",
+      "bytes": 44477
+    },
+    {
+      "path": "app/protocols/procedure_catalog.py",
+      "sha256": "f745cfd1cc8482a0fefd35059289e8dcd925c229fb645336cd5bfc43ed8b4db1",
+      "bytes": 70829
+    },
+    {
+      "path": "app/protocols/protocol_control_gate.py",
+      "sha256": "e654d0dac249a0a5e306ca282d3fd2c833303cfeb0956f50d37b8feb11bfecd1",
+      "bytes": 234164
+    },
+    {
+      "path": "app/protocols/protocol_control_planning.py",
+      "sha256": "d536d21fbfaa2a3582e55cf7d130ba262c9779d10903edae16f8eab4a694fd25",
+      "bytes": 50902
+    },
+    {
+      "path": "app/protocols/protocol_control_repair_errors.py",
+      "sha256": "c0986daf959dfc0113675a37d83387d046f26a2326889a17b8143a3b415d17fd",
+      "bytes": 14099
+    },
+    {
+      "path": "app/protocols/section_index.py",
+      "sha256": "898b5a571d5ba36f83acb4a527105b1d10c37de64e38d27f05f19cbe3a7650c7",
+      "bytes": 38329
+    },
+    {
+      "path": "app/protocols/source_alignment.py",
+      "sha256": "9fa809ff03bac93f37732a769c981ab50d55e98af7a2a699809a8c2ab6db2ac1",
+      "bytes": 41242
+    },
+    {
+      "path": "app/protocols/source_time_fragments.py",
+      "sha256": "cd9c5104887d9bc635f4671e971f8bf80f5ed9a469b2735702379925e8f563b3",
+      "bytes": 991
+    },
+    {
+      "path": "app/services/binding_candidate_comparison.py",
+      "sha256": "8e2776a843c737a670e02d6202a83af7d51e439e1d2117c3a6fa3d1aa21a41a7",
+      "bytes": 7024
+    },
+    {
+      "path": "app/services/binding_qualification.py",
+      "sha256": "1f4dc8bf08f3f0f376ab49421ad2fa311c2b623ac47a12c556e6456dcdcb9544",
+      "bytes": 17792
+    },
+    {
+      "path": "app/services/binding_qualification_support.py",
+      "sha256": "7825c4b5c9cd9329416267fa4939687d14ff58fb14ba5c931f13898a74b672d3",
+      "bytes": 56237
+    },
+    {
+      "path": "app/services/eligibility_review_projection.py",
+      "sha256": "8a87fa0d28f4ffd924790439556b2f8cff7c179397e7aac2831b726bfca25480",
+      "bytes": 60380
+    },
+    {
+      "path": "app/services/evidence_api_command_service.py",
+      "sha256": "a0b79f1367d51d0fd3f9be54e25da12ef44596669476685170a64cf7f19f547f",
+      "bytes": 100913
+    },
+    {
+      "path": "app/services/evidence_locator_service.py",
+      "sha256": "df3bf21cc194731cfaa60843d97ecf5873c38f08d2771590f2075b4fac61e0f8",
+      "bytes": 16298
+    },
+    {
+      "path": "app/services/evidence_processing_executor.py",
+      "sha256": "499cad1ea34f14d0f9b1d202d89d38047eb8bd295758dbdaaab6f75e2f7b191b",
+      "bytes": 88774
+    },
+    {
+      "path": "app/services/fact_correction_service.py",
+      "sha256": "6a202f76a535ee5ebc7157092dd053a0904ee217bb109782f82fee63dd6adcb8",
+      "bytes": 80576
+    },
+    {
+      "path": "app/services/fact_normalization_command_service.py",
+      "sha256": "644d882133a2e5011f4623397214e6e78e17cd8782069e78836a1be44e0e0a11",
+      "bytes": 27319
+    },
+    {
+      "path": "app/services/fact_normalization_source_adapter.py",
+      "sha256": "3c355fc085607ee50987f4b1bb7702c2340a9e03bcc40b1ace0c897eed78b5bf",
+      "bytes": 36354
+    },
+    {
+      "path": "app/services/frozen_review_calculation.py",
+      "sha256": "c718ad00152dfdc71085e593e0ed6e575947bd8ce121f9e3ea3084d10229f28f",
+      "bytes": 41042
+    },
+    {
+      "path": "app/services/local_region_comparison.py",
+      "sha256": "c1953dbb8b6627188e55b166783ade83ea860922e7a06e50f5f35f8efd44b0e1",
+      "bytes": 13301
+    },
+    {
+      "path": "app/services/local_visual_verification.py",
+      "sha256": "1d40ea29617e36df8559cb7ddb430b4901bd13204e9488f702356a662019a518",
+      "bytes": 14165
+    },
+    {
+      "path": "app/services/observation_relation_input.py",
+      "sha256": "8e383c3a3b8bf8f388dce80aeb862404a792c191a0b7410b98648c29680a9eed",
+      "bytes": 8243
+    },
+    {
+      "path": "app/services/observation_relation_receipts.py",
+      "sha256": "61011a2f85406f0a92c3e581b41b5fd6186fbe4c56fceafb5b045e9c43f53f6a",
+      "bytes": 8650
+    },
+    {
+      "path": "app/services/page_review_runtime.py",
+      "sha256": "df15a94b1b384025572b72f3df13b189d580dcbac8d39c3cbe5b728836dbd9c2",
+      "bytes": 9334
+    },
+    {
+      "path": "app/services/predicate_binding_job.py",
+      "sha256": "db5ffa24438eb439c0eb1cdfb3f4f54bb3a90294ccd04a6cdd54fa4ac03b3231",
+      "bytes": 18092
+    },
+    {
+      "path": "app/services/prepared_review_workflow.py",
+      "sha256": "22a0d845299fc6cf72607bc5a6bdeba54cdcf6053ad506f5e816b3da830d85f5",
+      "bytes": 27231
+    },
+    {
+      "path": "app/services/prepared_review_workflow_view.py",
+      "sha256": "dc3f2cfe027280b5b3716fa4005322deb831780f4dc848dea9ada0cdf319e178",
+      "bytes": 2634
+    },
+    {
+      "path": "app/services/protocol_control_catalog_publication.py",
+      "sha256": "deafdf7fef1668731df3e54ba98506dddd7bba33815300dcd2961b533089b38c",
+      "bytes": 28549
+    },
+    {
+      "path": "app/services/protocol_control_definition_scope.py",
+      "sha256": "f6817f178d610b41fb8707d2f82062a6671966ceced52235b6ea7d7596c4577c",
+      "bytes": 5811
+    },
+    {
+      "path": "app/services/protocol_control_execution.py",
+      "sha256": "edf36a27fa15b0b409b354659383aaec9493007614c1ccf54c5ed51289d181e5",
+      "bytes": 180358
+    },
+    {
+      "path": "app/services/protocol_control_restricted_source.py",
+      "sha256": "11944a9aafa9b43befa6a0b884bafcc06ec2fc063e76672dbaa13d226ee76f1f",
+      "bytes": 25767
+    },
+    {
+      "path": "app/services/protocol_control_status.py",
+      "sha256": "6955e808975313122f3519a6832db2821182baade9d115429b591c3e6e455aef",
+      "bytes": 14071
+    },
+    {
+      "path": "app/services/protocol_deconstruction_executor.py",
+      "sha256": "388a8e85bf2bb3bbdf933d6e4a78830ff0436642d22d5ffc9a8b85305decba4c",
+      "bytes": 52516
+    },
+    {
+      "path": "app/services/protocol_workbench_service.py",
+      "sha256": "5d33b1037bb254bae7dba3085ac6f2fad42afa539ab299d3069df3d23d3a8f42",
+      "bytes": 154712
+    },
+    {
+      "path": "app/services/qualified_binding_selection.py",
+      "sha256": "8c540dc8f31f2d5dd79eb6d87c4814a27931f0807aee42ad4c2eab44652c550b",
+      "bytes": 85345
+    },
+    {
+      "path": "app/services/qualified_observation_relation.py",
+      "sha256": "f2ba9bd87ee8b017d8381b7f71daa99e682e76f077291194aba1cbdba8702f22",
+      "bytes": 27341
+    },
+    {
+      "path": "app/services/repeat_atom_calculation.py",
+      "sha256": "839722b39c47e70160c9524d736c233853f1e76c81ef4158f67650f20cdf63cc",
+      "bytes": 18941
+    },
+    {
+      "path": "app/services/repeat_condition_selection.py",
+      "sha256": "32e4cf0a07ae997d09bd5255c0c5b71d89325d6e3e108a53516756f2249ee2ba",
+      "bytes": 23770
+    },
+    {
+      "path": "app/services/repeat_observation_ordering.py",
+      "sha256": "a7251c4cde71eaa2cdfe3867fc67bda63bef1ecb1238e50399e171b9f6e45055",
+      "bytes": 4470
+    },
+    {
+      "path": "app/services/selective_vision_observation_service.py",
+      "sha256": "baf29317f0010a94252ca006e3bd7ea3a7f6c2574bb82b259346f5947a429014",
+      "bytes": 42732
+    },
+    {
+      "path": "app/services/selective_vision_postprocess_executor.py",
+      "sha256": "e278a76e0a544cbc78e3cea65ea2095cf730cb95beda9e0ed1b36f14550da93e",
+      "bytes": 19065
+    },
+    {
+      "path": "app/services/selective_vision_postprocess_job_service.py",
+      "sha256": "212190316ccbff3bc2474cd2d5863bb81b89292e9988ee780133d46bc20561d4",
+      "bytes": 27936
+    },
+    {
+      "path": "app/storage/evidence_locator_repositories.py",
+      "sha256": "dfffd827241c874bcf8799375c46999c11b3371ad0d59207aaad5f45404eec19",
+      "bytes": 168878
+    },
+    {
+      "path": "app/storage/fact_repositories.py",
+      "sha256": "a4c5747aed56258f42e2f068a5908cf9ea11352cf27b5873b3b47f230ae0bb0b",
+      "bytes": 94775
+    },
+    {
+      "path": "app/storage/selective_vision_observation_repository.py",
+      "sha256": "ae6c6caf5f2408bda42a78206357299ecf5a62dbfd9ad52b936cb5b9d7f4ecbf",
+      "bytes": 15270
+    },
+    {
+      "path": "docs/PROJECT_CONTEXT.md",
+      "sha256": "c0e163a5969b1b366678f17b258801617a33b1447e565abcd8301f6159454c61",
+      "bytes": 638032
+    },
+    {
+      "path": "docs/REARCHITECTURE_FINAL_DESIGN_20260812.md",
+      "sha256": "569f2a4aaaa11851fa07a62f285ee37058e2de64de76d10e2f45c9461a296d7e",
+      "bytes": 49704
+    },
+    {
+      "path": "frontend/src/api/eligibility-review/eligibilityReviewHttp.test.ts",
+      "sha256": "55119b956417359394031664ca1aea3ee998ca2df00f1d389d904c27d3dc1c1a",
+      "bytes": 10431
+    },
+    {
+      "path": "frontend/src/api/eligibility-review/eligibilityReviewTypes.ts",
+      "sha256": "61f65e7a1899cbe5b4accc2f2224afd30ae5388ee54454a3cb8fed6e4bb91c8e",
+      "bytes": 2745
+    },
+    {
+      "path": "frontend/src/api/eligibility-review/eligibilityReviewViewModels.ts",
+      "sha256": "e5f32562a7d5dca1ade042d0008849f87d59f0e0b95c5055d3ffef26bf1acda0",
+      "bytes": 16615
+    },
+    {
+      "path": "frontend/src/api/eligibility-review/preparedReviewHttp.test.ts",
+      "sha256": "aaf88ebb24fdc7fd09560b1c34d5f34a23f656e966a7c571287bcf977ed88662",
+      "bytes": 1830
+    },
+    {
+      "path": "frontend/src/api/eligibility-review/preparedReviewHttp.ts",
+      "sha256": "deb8995fcfe6b5806522695b48c166ae4698f181531c78713faf60ed2a89ad51",
+      "bytes": 9787
+    },
+    {
+      "path": "frontend/src/api/evidence/evidenceHttp.test.ts",
+      "sha256": "ec0ed91d67392d379b9f5cde0d379460c5792b547100f1c9b7c83008571a075f",
+      "bytes": 16054
+    },
+    {
+      "path": "frontend/src/api/evidence/evidenceHttp.ts",
+      "sha256": "bdae5d9d52c8c2f0edc82e25a8aba85bbd0d91d3aeb6107ac7ff526301348e99",
+      "bytes": 16230
+    },
+    {
+      "path": "frontend/src/api/evidence/evidenceJobHttp.ts",
+      "sha256": "3e12d16c41c5059561e6db3d4c798d6abc89820da3b5ed0ce62d712d6025b270",
+      "bytes": 4866
+    },
+    {
+      "path": "frontend/src/api/evidence/evidenceJobViewModels.ts",
+      "sha256": "59795b4a1120a8d316cd23f1e1879919285dbc1b83b6815ca404b5e01a9d8d69",
+      "bytes": 10517
+    },
+    {
+      "path": "frontend/src/api/evidence/evidenceTypes.ts",
+      "sha256": "3507854ce63cfd87803c26a1a89bd4499c43d9d2c81898b26eec3a57e2b1617d",
+      "bytes": 5567
+    },
+    {
+      "path": "frontend/src/api/evidence/evidenceViewModels.test.ts",
+      "sha256": "7e1d433d26722abca4f54c12a87c11d963b4c4d1a8d32463dd84ab584613d7be",
+      "bytes": 17821
+    },
+    {
+      "path": "frontend/src/api/evidence/evidenceViewModels.ts",
+      "sha256": "55f9688720c364f27e2fd13243e1fef1a43d1f58e73f28fbece6b0e05b55ba42",
+      "bytes": 34113
+    },
+    {
+      "path": "frontend/src/api/evidence/localVisualHttp.test.ts",
+      "sha256": "c852a63009955306dbdcbfc4a90bdcd6a5dd60de3f402bb64c6e43eff0bd39b9",
+      "bytes": 1641
+    },
+    {
+      "path": "frontend/src/api/evidence/localVisualHttp.ts",
+      "sha256": "37b20cb5ab3a68f3ed6024a4cac91f46c53fbf8baa0ddb3775cd398f00f83537",
+      "bytes": 4509
+    },
+    {
+      "path": "frontend/src/api/evidence/selective_vision_user_control.test.ts",
+      "sha256": "9d4149e8083caaf178beb07832442118fe5644fc1aecdd928b82490a18be47f7",
+      "bytes": 11183
+    },
+    {
+      "path": "frontend/src/api/patient-profile/factCorrectionHttp.test.ts",
+      "sha256": "55885d420cb5c5f86e9bb55bdb363e2f738178c5f5cf23ca21ddeec4db462d5d",
+      "bytes": 6549
+    },
+    {
+      "path": "frontend/src/api/patient-profile/factCorrectionViewModels.ts",
+      "sha256": "208b70f1ceded7fe2e68a2360a58aac5b4c9f7b12fb4d4d75247bbe95d1cc3c6",
+      "bytes": 16020
+    },
+    {
+      "path": "frontend/src/api/patient-profile/patientProfileTypes.ts",
+      "sha256": "9205e2cfebb041a73588028ae3668584f3636f6a9c06cccd53c34610e1f71d04",
+      "bytes": 7472
+    },
+    {
+      "path": "frontend/src/api/patient-profile/patientProfileViewModels.ts",
+      "sha256": "2a82da705db36b5277b9807c75f41ea9ded8f84df936d9d08e1f794550c83f9e",
+      "bytes": 29996
+    },
+    {
+      "path": "frontend/src/api/protocolControlView.ts",
+      "sha256": "33cfd52ebf64a8682bbc61fefb2fadb8d65be1492077c7569945bc1b2000ca5f",
+      "bytes": 16232
+    },
+    {
+      "path": "frontend/src/api/protocolWorkbenchHttp.test.ts",
+      "sha256": "e0672e1236807cccb2891abf94fa8dfe21d824315c342c7fb9e6f2a8de14cae6",
+      "bytes": 17156
+    },
+    {
+      "path": "frontend/src/api/protocolWorkbenchNormalize.ts",
+      "sha256": "a439d837f03c0d84bc0736b379986d683794e366f0859c4bd6933b00362bf80d",
+      "bytes": 43247
+    },
+    {
+      "path": "frontend/src/api/protocolWorkbenchTypes.ts",
+      "sha256": "dda0f61641bea460ee663e9b54cc0f2d1250311e2621b52f91a03c312257b0cf",
+      "bytes": 12087
+    },
+    {
+      "path": "frontend/src/api/review-history/reviewHistoryTypes.ts",
+      "sha256": "5367ee23a888a7ad9b905d9db661384fc7174818f66597dafb09cbcca3ac129c",
+      "bytes": 8924
+    },
+    {
+      "path": "frontend/src/api/wire.ts",
+      "sha256": "f333460e7b758079f45690bde2a322a870ae20a37fca3bcd0af1e4c3855230e8",
+      "bytes": 11060
+    },
+    {
+      "path": "frontend/src/components/evidence-workspace/LocalVisualVerificationPanel.test.tsx",
+      "sha256": "d7bbf5dfe19b9da98eca2ec2a40dcd3272484cef84153ca6167f6d7fc4e547d3",
+      "bytes": 2920
+    },
+    {
+      "path": "frontend/src/components/evidence-workspace/LocalVisualVerificationPanel.tsx",
+      "sha256": "21924c08615002fcecec114fce18e8f20a0449052047b19dcca7dfe4b6dfde34",
+      "bytes": 4329
+    },
+    {
+      "path": "frontend/src/components/evidence-workspace/OcrReviewPanel.test.tsx",
+      "sha256": "21b66b34c49bd97575f987c333f7e1ba918e70958eab685cadfa462720646f9f",
+      "bytes": 24007
+    },
+    {
+      "path": "frontend/src/components/evidence-workspace/OcrReviewPanel.tsx",
+      "sha256": "f23b19db450d8df7561391c24c9f48d85fdaaa6b2d51a761d9f882391451841d",
+      "bytes": 36081
+    },
+    {
+      "path": "frontend/src/components/evidence-workspace/OriginalEvidenceViewer.region.test.tsx",
+      "sha256": "f77387e75a50709ec8fdf5ac09d3db0455e6da488914f9c559ee07f8722369ee",
+      "bytes": 3535
+    },
+    {
+      "path": "frontend/src/components/evidence-workspace/OriginalEvidenceViewer.test.tsx",
+      "sha256": "3ef78b06826caac6a6ca55d285f23ab8b330a70d8c76fc95ca364ebc08fa1383",
+      "bytes": 12468
+    },
+    {
+      "path": "frontend/src/components/evidence-workspace/OriginalEvidenceViewer.tsx",
+      "sha256": "f146a085d1eb8aecde5625699edf49b3dea9501b14822da4e0bd7ba9f49820ad",
+      "bytes": 24390
+    },
+    {
+      "path": "frontend/src/components/evidence-workspace/ReferencedDocumentsPanel.test.tsx",
+      "sha256": "eca6a51f5190d38104fbf02d4fdd20b29d1d7e79ecc0cc737b4deebba3965b9f",
+      "bytes": 6699
+    },
+    {
+      "path": "frontend/src/components/evidence-workspace/SelectiveVisionTaskPanel.test.tsx",
+      "sha256": "6251820216c2ec087e9b134c95df87f36dace92103ebedab22e85d7a1b87fa50",
+      "bytes": 4214
+    },
+    {
+      "path": "frontend/src/components/evidence-workspace/SelectiveVisionTaskPanel.tsx",
+      "sha256": "54763f04b46a2c91a011d9ab6d3a97937aa47ce2920ec08e6f8f29c0af19325f",
+      "bytes": 7219
+    },
+    {
+      "path": "frontend/src/components/evidence-workspace/SourceMetadataEditor.test.tsx",
+      "sha256": "c583b4de68ebc56875c4dcdba1f7fcfc5c88065c811cc47e9772ace8fb2bfe18",
+      "bytes": 5433
+    },
+    {
+      "path": "frontend/src/components/evidence-workspace/SourceMetadataEditor.tsx",
+      "sha256": "47aadaf9a38ef66090f2af5644a5c137a5ad5e2d619cdb0a69bda26c4f133ebd",
+      "bytes": 5122
+    },
+    {
+      "path": "frontend/src/components/profile/ProfileEvidencePanel.test.tsx",
+      "sha256": "66c66cd4121d35bf525c63fccd8c05923db7297d87b825304022f174c9c0ab19",
+      "bytes": 14067
+    },
+    {
+      "path": "frontend/src/components/profile/ProfileFactCorrectionDialog.test.tsx",
+      "sha256": "2f9bb401696f55eb0396a9f284acd0a8b7476d145813f2ac7fb0fa090633868b",
+      "bytes": 14991
+    },
+    {
+      "path": "frontend/src/components/profile/ProfileFactCorrectionDialog.tsx",
+      "sha256": "ff6eb1e9142f94b67e628de90e9634b5bf602b62ab4ee5fd9642325847db2c32",
+      "bytes": 38914
+    },
+    {
+      "path": "frontend/src/components/profile/ProfileHighlights.test.tsx",
+      "sha256": "72f11b1d2854919b7646149bc405fd1dd495a3d8d5a0609f7726c1ea0a6dc727",
+      "bytes": 5213
+    },
+    {
+      "path": "frontend/src/components/profile/ProfileHighlights.tsx",
+      "sha256": "8078cf61ce4dba50b8e6eb789fd5d08081945f0aeb25fbf2338250869eead860",
+      "bytes": 5254
+    },
+    {
+      "path": "frontend/src/components/protocols/ProtocolControlPanel.tsx",
+      "sha256": "a0c7bdfe633a89f651c5754b510ae2b26dbd4f8568c9822c68c4b07754db53f0",
+      "bytes": 7612
+    },
+    {
+      "path": "frontend/src/components/protocols/ProtocolDeconstructionRuleTree.tsx",
+      "sha256": "97f777864caf98fceaee26fbc538ace4946fe7dc3e03a1263667d17094a8b0ea",
+      "bytes": 6434
+    },
+    {
+      "path": "frontend/src/components/protocols/ProtocolDraftEditPane.tsx",
+      "sha256": "595e0b7965533d61558500bc95b813a7c70ae0315d44ec34ede1cc12c7588de4",
+      "bytes": 5351
+    },
+    {
+      "path": "frontend/src/components/protocols/ProtocolDraftSourcePane.tsx",
+      "sha256": "c57ed152aea459106620dd35cac3eef563524cc3b89da26900e50c610010056b",
+      "bytes": 2374
+    },
+    {
+      "path": "frontend/src/components/protocols/ProtocolDraftWorkbench.tsx",
+      "sha256": "4f1580d3d844dfe95f3979a8849f0e90dd3a5b2d6713f0466d4737d6229309c9",
+      "bytes": 8676
+    },
+    {
+      "path": "frontend/src/components/protocols/ProtocolFeedbackDialog.test.tsx",
+      "sha256": "bd4da22a871134b01bc5810375544e3fc5a4a9e8092dfb51ebeeb2a0ace06d48",
+      "bytes": 1775
+    },
+    {
+      "path": "frontend/src/components/protocols/ProtocolJobProgress.tsx",
+      "sha256": "556245b70fe1e909670ec29da6f5f222e4b51c036f106b0f11f5ae97c85cb139",
+      "bytes": 6277
+    },
+    {
+      "path": "frontend/src/components/protocols/ProtocolRedoDialogs.tsx",
+      "sha256": "6ab3a9d6b9a1474f25439ef67d432ed7224bb2eae7141e028d13e1a0ece40d90",
+      "bytes": 27297
+    },
+    {
+      "path": "frontend/src/components/protocols/ProtocolRedoRuleColumn.tsx",
+      "sha256": "359c701c6af0487985544c095fce0e8787ec5d5572436a60617e6bb1ed4d896e",
+      "bytes": 3772
+    },
+    {
+      "path": "frontend/src/components/review/PreparedReviewPanel.test.tsx",
+      "sha256": "7c71d834d836e0731bdb265130ed9dee9ef1396edc7deafa2147e69db2f24fc5",
+      "bytes": 2465
+    },
+    {
+      "path": "frontend/src/components/review/PreparedReviewPanel.tsx",
+      "sha256": "435ecc0436630b4912d212664fb8758c60eee8355cff4ab4a8a0d2b89f08a383",
+      "bytes": 5218
+    },
+    {
+      "path": "frontend/src/domain/enums.ts",
+      "sha256": "1bfd44c514bfa2860292a34a90574246327efebfe1b76522e9be3b2c0d561503",
+      "bytes": 3104
+    },
+    {
+      "path": "frontend/src/domain/labels.ts",
+      "sha256": "67f480a4cf708e8393d04fd5d7f0b0bd6467d3f3a7feb91c8be95eccefaea6b3",
+      "bytes": 11078
+    },
+    {
+      "path": "frontend/src/domain/protocolMappers.test.ts",
+      "sha256": "b9ce023ae47dd3b34b269f5fc71e46943583884abb9c5fd76b3cafd7d3b8ca6a",
+      "bytes": 3764
+    },
+    {
+      "path": "frontend/src/domain/protocolMappers.ts",
+      "sha256": "27906814e6e60d99ed46e3087bdb6d3d54df54801e78cf620a91fa445eb986f5",
+      "bytes": 6465
+    },
+    {
+      "path": "frontend/src/domain/protocolViewModels.ts",
+      "sha256": "2a100b235a6795ce22688e2d2ca3e9ac15e1e8ce25a566af86753292a06f820c",
+      "bytes": 1446
+    },
+    {
+      "path": "frontend/src/domain/reviewConditionNotes.test.ts",
+      "sha256": "31063cbc76151cac4ca28a4fb5c5a2effc4bf8e8ed6608135a0ba46b97a95c91",
+      "bytes": 1349
+    },
+    {
+      "path": "frontend/src/domain/reviewConditionNotes.ts",
+      "sha256": "62a4753e6db3e13310676f47c9f9cbfa44f57a1d3d31b17fc93e1b2324a94ffc",
+      "bytes": 15793
+    },
+    {
+      "path": "frontend/src/pages/EligibilityWorkbenchPage.test.tsx",
+      "sha256": "c7808e32ccaf34dc5f603189711c8354926677575c53f417a315df312b14d7e5",
+      "bytes": 25381
+    },
+    {
+      "path": "frontend/src/pages/EligibilityWorkbenchPage.tsx",
+      "sha256": "b4645703556341575e78535774e94dd2fec552fe9267e204d921497f8a8deb0d",
+      "bytes": 46478
+    },
+    {
+      "path": "frontend/src/pages/EvidencePage.test.tsx",
+      "sha256": "475e931039ad73e9999de2cc9592c375013ca431f277490804efc5f43fbf1c8c",
+      "bytes": 73646
+    },
+    {
+      "path": "frontend/src/pages/EvidencePage.tsx",
+      "sha256": "028e9dd4da21f5c5d9a0660298ccd9e226e48bb8e6a4736cc3ab55e0ee015490",
+      "bytes": 81197
+    },
+    {
+      "path": "frontend/src/pages/SubjectsPage.test.tsx",
+      "sha256": "7206c70397e7ea02d91ca8bc5831965063a7f0ff3e568de189958acc4a4046cd",
+      "bytes": 19489
+    },
+    {
+      "path": "frontend/src/pages/SubjectsPage.tsx",
+      "sha256": "0daa9822a734aa1e0e950c3cec9b648a5ca678e0dab6e8b3efaa2cbfa8647cf9",
+      "bytes": 33188
+    },
+    {
+      "path": "frontend/src/styles/evidence.css",
+      "sha256": "ef2b86b14009a34c2065b5b67c3dd50c47558ad6d7d659322b4ae707af45d733",
+      "bytes": 34810
+    },
+    {
+      "path": "frontend/src/styles/profile.css",
+      "sha256": "eb0c92cf7c3ebda038549a0e353a49fd50b3a0c89293fb0f7954940fdef4e383",
+      "bytes": 36588
+    },
+    {
+      "path": "frontend/src/test/labels.test.ts",
+      "sha256": "eaf1dad24703b460000b3490e11611eaee3874d8a48e47caf1d922c5e6dc2dda",
+      "bytes": 12584
+    },
+    {
+      "path": "plans/REARCHITECTURE_IMPLEMENTATION_PLAN_20260812.md",
+      "sha256": "fb8d05d2c30d81e5f1786c540d40fdd3e1d97c708ddc128558def32cb4acc957",
+      "bytes": 30634
+    },
+    {
+      "path": "scripts/run_frozen_control_slice.py",
+      "sha256": "6dc1b13e74caffbbdfd096403930186d0cf1793fb19aa07c524bca2539a4603c",
+      "bytes": 7099
+    },
+    {
+      "path": "scripts/run_protocol_control_smoke.py",
+      "sha256": "6522bcfb87886efc0d34586e9c92edb383959ebe3cfd4496a60651bcb2ead2bd",
+      "bytes": 53261
+    },
+    {
+      "path": "tests/v2/agents/test_evidence_normalizer_adapter.py",
+      "sha256": "1a38016d3874187b38de62f3fb517dcfcced1bc5ff2aa61ea4fb381e3dff1118",
+      "bytes": 130661
+    },
+    {
+      "path": "tests/v2/agents/test_protocol_batch_context_option.py",
+      "sha256": "f2da58ec63b6e07070178e6643f47d481c4a5bb4552b084da0204387e2a5852a",
+      "bytes": 2703
+    },
+    {
+      "path": "tests/v2/agents/test_protocol_benchmark_defaults.py",
+      "sha256": "3ca5fc53f2d891c13f44eedf293a5ae33c324a16ac84a8c4ec38c3d12815e34d",
+      "bytes": 10674
+    },
+    {
+      "path": "tests/v2/agents/test_protocol_control_candidate_alignment.py",
+      "sha256": "a440706d40bac890a9a84bc957cffb235c8510ce16187b21666cd6ec6a2a466a",
+      "bytes": 19434
+    },
+    {
+      "path": "tests/v2/agents/test_protocol_semantic_model_routing.py",
+      "sha256": "fb2b110c6bda7cb291a800145db93f445c64bf02af201f52e2ddaf9ede3e5fdc",
+      "bytes": 25847
+    },
+    {
+      "path": "tests/v2/agents/test_protocol_source_scope.py",
+      "sha256": "e4c290b8943920eeab064271adb0ae68bfac8781428f1a09b25f402ed565b74a",
+      "bytes": 9941
+    },
+    {
+      "path": "tests/v2/api/test_eligibility_review.py",
+      "sha256": "1e63499df7ca66427e04e4a2ea8fa51b6f38a8d9d5ea1518f949ca5fbeaa5636",
+      "bytes": 8817
+    },
+    {
+      "path": "tests/v2/api/test_evidence_api.py",
+      "sha256": "c8bd5fb2f9feccfba20807029963b084aaa0a24db70f375c1054908fc9f5ca2c",
+      "bytes": 42151
+    },
+    {
+      "path": "tests/v2/api/test_evidence_progress.py",
+      "sha256": "5ac0346feb756ef395f263dfa6af133aa97a834e3fa9fb23bba02dda93fe3408",
+      "bytes": 20908
+    },
+    {
+      "path": "tests/v2/api/test_local_visual_verification_api.py",
+      "sha256": "6d687c0ac54023f88119f7af884bbccfb2066c894588c5ccd020c234ce8a0d75",
+      "bytes": 1856
+    },
+    {
+      "path": "tests/v2/api/test_slice44_build_matrix.py",
+      "sha256": "bbc56efca977a08228f5cf71900d5f6aabc5898ceb515ff6fa51afc2ec84cb71",
+      "bytes": 19965
+    },
+    {
+      "path": "tests/v2/domain/test_control_catalog_restricted_contract.py",
+      "sha256": "f144974148f7749840e7ba0f6ce54b7170c1dfe5664785c24f2cc0add3306ee3",
+      "bytes": 40409
+    },
+    {
+      "path": "tests/v2/domain/test_fact_evidence_closure.py",
+      "sha256": "e0fb4a2a82f3ddc1781802b3a9b6d5f5b3a6498d9dbe2f2b9ba7110f81102dd7",
+      "bytes": 104152
+    },
+    {
+      "path": "tests/v2/domain/test_repeat_numeric_result.py",
+      "sha256": "2fda48e88ad5474ac74d89c7fbc4a5b8691063f7b934d97ab7c63d07402e2849",
+      "bytes": 5523
+    },
+    {
+      "path": "tests/v2/domain/test_series_numeric_result.py",
+      "sha256": "6f33ade510d683830aa0be2a82765e621be57282cf3d7a856bdb30bf5bcc7d32",
+      "bytes": 10201
+    },
+    {
+      "path": "tests/v2/evidence/test_local_region_comparison.py",
+      "sha256": "f868233fb868af8195ba5c72d29ea3ce64532e9f135b7a168bc44c2eac3b172b",
+      "bytes": 7755
+    },
+    {
+      "path": "tests/v2/evidence/test_local_region_position_trial.py",
+      "sha256": "bb849f6ca94fedd8c2e55036e3b0ff08f005212023608239d1fe37ec9abaeddf",
+      "bytes": 4125
+    },
+    {
+      "path": "tests/v2/evidence/test_risk_scan.py",
+      "sha256": "6fb1a0aadf07e95b7ca5998443b3e8e0b392fdaeaed83c1cbf36290a94ef2e50",
+      "bytes": 10971
+    },
+    {
+      "path": "tests/v2/evidence/test_slice44_locator_engine.py",
+      "sha256": "b101333e165916231c8e24e2bd392cef33fe2b92c175926d61fdeccb06353b0c",
+      "bytes": 6444
+    },
+    {
+      "path": "tests/v2/llm/test_independent_vlm.py",
+      "sha256": "ff9ff674e11a05aa674f0c1d59c7c38673f8e90d9ca55e759a10347a87b1e81a",
+      "bytes": 21981
+    },
+    {
+      "path": "tests/v2/llm/test_predicate_binding_batches.py",
+      "sha256": "b759f47a3f8ece23da128c6816a59697ef34875a0ed7322af52a58f645148a8c",
+      "bytes": 5837
+    },
+    {
+      "path": "tests/v2/llm/test_predicate_binding_candidates.py",
+      "sha256": "916bf95f660ad4afed36f0d7bb3e94645c354930897b1ab02136c05e24a00c2a",
+      "bytes": 19708
+    },
+    {
+      "path": "tests/v2/projections/test_clause_pack.py",
+      "sha256": "b537f845cf8dbe32f00c0cd49f554560bb24c50c5a21368132681cf9b9b7cef0",
+      "bytes": 7297
+    },
+    {
+      "path": "tests/v2/projections/test_control_interval_semantics.py",
+      "sha256": "ec449728ffd69ba3125024f751f85d6431ff3bb09929f320a03de21bb3334b8a",
+      "bytes": 5740
+    },
+    {
+      "path": "tests/v2/projections/test_evidence_expectations.py",
+      "sha256": "6565db40274ab2169706b07bbe493087d78b952a058d565f72c8de86e3de7323",
+      "bytes": 81512
+    },
+    {
+      "path": "tests/v2/protocols/test_catalogs_slice3.py",
+      "sha256": "32698cb89b2d823b19e36796dbbcc2d2871c3cf89ba00bf84ddddf1c207c273c",
+      "bytes": 25602
+    },
+    {
+      "path": "tests/v2/protocols/test_control_definition_consumer_producer.py",
+      "sha256": "7dd4da8ddd0a365aecdbbc37f8ffea55fb05fda088492bba8135ec7ada38a775",
+      "bytes": 21165
+    },
+    {
+      "path": "tests/v2/protocols/test_deconstruction_gate_slice3.py",
+      "sha256": "268acb1107484ceac32373a694bd90736e22a6ccb15c256cebf93ae988d0a2bb",
+      "bytes": 190260
+    },
+    {
+      "path": "tests/v2/protocols/test_deconstruction_transport_config.py",
+      "sha256": "1698d4b249db8d424094bcb245e1bfcca8dd959ebeef94dd109885b550f5ecd4",
+      "bytes": 24557
+    },
+    {
+      "path": "tests/v2/protocols/test_deepseek_protocol_transport_slice3.py",
+      "sha256": "598ee0d114c0547103a9715a20a60d7695b377129621015d40fd0e43c416d127",
+      "bytes": 29796
+    },
+    {
+      "path": "tests/v2/protocols/test_definition_scope_check.py",
+      "sha256": "6adaaaa90b6ddebac7d749577e024d0148bd9c3a7ea018513da6efe2b7cb75d1",
+      "bytes": 1939
+    },
+    {
+      "path": "tests/v2/protocols/test_docx_structure.py",
+      "sha256": "c49c2d948ec52885fa746bb9c66d99e68c13ff80eb6c3471e8163766a48aa194",
+      "bytes": 9893
+    },
+    {
+      "path": "tests/v2/protocols/test_issue_refinement_counterexamples.py",
+      "sha256": "f6ebd846e7ac8b2070f5a9d3f2899bbfe96d0996da732db9e78d9bd9d94c1cd9",
+      "bytes": 31081
+    },
+    {
+      "path": "tests/v2/protocols/test_metadata_phase_slice2.py",
+      "sha256": "80bebe744cfb00878ca4ff9a9cdd0d7e56a9e5a6f77192aafa3dc915c483ab17",
+      "bytes": 52642
+    },
+    {
+      "path": "tests/v2/protocols/test_procedure_catalog_slice3.py",
+      "sha256": "d442cc86abdb84aa98953b2f05fd260e88fd0c2e170da5e3f55dd6b57e80d7f1",
+      "bytes": 44767
+    },
+    {
+      "path": "tests/v2/protocols/test_protocol_control_agent_transport.py",
+      "sha256": "5dc8b8516749b931b93c7b3c86af4f60b6081cf89b42f968cae3895afa987589",
+      "bytes": 69421
+    },
+    {
+      "path": "tests/v2/protocols/test_protocol_control_generalization.py",
+      "sha256": "f8c5ff44e3105d5a5d7fd80428d95c84bf78ca48c1b33f606174e54053404f0a",
+      "bytes": 39362
+    },
+    {
+      "path": "tests/v2/protocols/test_protocol_control_production_regressions.py",
+      "sha256": "b67312d2f8f969d2a10842dcef5c31b4508e34dcadd8efda771ec1db63127d0f",
+      "bytes": 15726
+    },
+    {
+      "path": "tests/v2/protocols/test_protocol_control_semantic_point.py",
+      "sha256": "a0fb2ef99748ef9aafbc0ddce21e02813e7da1340538c7d81b997fba191bd2ea",
+      "bytes": 69558
+    },
+    {
+      "path": "tests/v2/protocols/test_protocol_deconstructor_adapter_slice3.py",
+      "sha256": "fec8028fd650393c307d02b2224aef50e4f06dda5ea7d114f70e28bc7959e6e3",
+      "bytes": 125856
+    },
+    {
+      "path": "tests/v2/protocols/test_publication_service.py",
+      "sha256": "c09a4cb56ed5b75612d26c69f125b4eeb1addc14acfa0dd34a1db8721454e0b2",
+      "bytes": 36221
+    },
+    {
+      "path": "tests/v2/protocols/test_real_protocols_slice2.py",
+      "sha256": "c41e0c4c8439dafa02ddb672991308f100ecbcdf7bad3464ecae39a9b5329979",
+      "bytes": 17073
+    },
+    {
+      "path": "tests/v2/protocols/test_redeconstruction_backend.py",
+      "sha256": "50b73b0ff975dc4424d577455d5d7112e14198ea1eab74376611757c24712088",
+      "bytes": 89844
+    },
+    {
+      "path": "tests/v2/protocols/test_restricted_semantic_contract.py",
+      "sha256": "c16e0e321d970092cc8cb18e4fe32a1d954f75590c992e07c6007b547c908b1f",
+      "bytes": 4809
+    },
+    {
+      "path": "tests/v2/protocols/test_slice58a_full_protocol_coverage_contracts.py",
+      "sha256": "ddf923b45df5e3a07152803be027e94402316afd056df141bf13cbdb29f9574c",
+      "bytes": 42114
+    },
+    {
+      "path": "tests/v2/protocols/test_slice58c_control_deconstructor.py",
+      "sha256": "c5b2a19ef86d74d3fa5120050e21ebe03252dd8773f0400275daef2c77234d47",
+      "bytes": 509533
+    },
+    {
+      "path": "tests/v2/protocols/test_slice58c_protocol_control_gate.py",
+      "sha256": "dcb718345475f480fb5778b82e8d8f0e54950ba5e9303916ba14d489561692ea",
+      "bytes": 206073
+    },
+    {
+      "path": "tests/v2/protocols/test_source_alignment.py",
+      "sha256": "c3a15c9be841893f4f8fb8d8ced39f1f304c4d555954af25000c4a88f2030a45",
+      "bytes": 27415
+    },
+    {
+      "path": "tests/v2/services/test_binding_qualification_policy_preflight.py",
+      "sha256": "265f073c1579cfc79bedfa1abde601b3d80080662a14e042cca9cb7a4034866d",
+      "bytes": 12271
+    },
+    {
+      "path": "tests/v2/services/test_control_definition_scope.py",
+      "sha256": "4549a3fddb75af79a8aac38bd0dc0a2bd3723a45a3b663c9b31498dc30087972",
+      "bytes": 8822
+    },
+    {
+      "path": "tests/v2/services/test_control_source_definition_consumers.py",
+      "sha256": "48b573da0f9f32ba55a6df9f35e455f511b17b0338bb1f4c63e4bf563e6afc8a",
+      "bytes": 38298
+    },
+    {
+      "path": "tests/v2/services/test_eligibility_review_projection.py",
+      "sha256": "e7ccd1e5759efe21d11f7d9113d5b8c3c3b5c16a529e2cee1ffb0ef21f986a64",
+      "bytes": 30064
+    },
+    {
+      "path": "tests/v2/services/test_fact_correction_job.py",
+      "sha256": "14b0f1719e768c6d276c89c2d8c42a7e0c31db97871874deb284f6bfde53d94c",
+      "bytes": 75311
+    },
+    {
+      "path": "tests/v2/services/test_fact_normalization_source_adapter.py",
+      "sha256": "269c70345d310939b60a11c1a2740a6e190ebe158c78202fa86d2cf604cacd62",
+      "bytes": 15487
+    },
+    {
+      "path": "tests/v2/services/test_local_region_comparison.py",
+      "sha256": "4897fcc6799d71c68ca876973f1b07f75d3098c3594ebdbcca638419d89f8c26",
+      "bytes": 11053
+    },
+    {
+      "path": "tests/v2/services/test_local_region_structured_read.py",
+      "sha256": "09b7d9177a29da41beeda3e3cd9d2837f25a6ef779858da3e1f0718caf47064a",
+      "bytes": 4991
+    },
+    {
+      "path": "tests/v2/services/test_local_visual_job.py",
+      "sha256": "a1196e075a09fb936303e1b33bb15b1e63e365bb08e4b544f32018547cbd2ac5",
+      "bytes": 8638
+    },
+    {
+      "path": "tests/v2/services/test_local_visual_verification.py",
+      "sha256": "d98564b7106c0f467cfe08776dfa4bf0f551844754e0826d7d028b8de8eb710f",
+      "bytes": 5510
+    },
+    {
+      "path": "tests/v2/services/test_observation_appearance_relation.py",
+      "sha256": "75a9292d35aaf96ad60cf2b63d2d34a0606121c82cdd10638162c490102c2434",
+      "bytes": 26933
+    },
+    {
+      "path": "tests/v2/services/test_predicate_binding_job.py",
+      "sha256": "51ba5cd63ef885d42d2fe7882eb34d9be1130e839b9d6f19f5106435b984cc9a",
+      "bytes": 13432
+    },
+    {
+      "path": "tests/v2/services/test_prepared_review_staleness.py",
+      "sha256": "0b99fcbb5e18db826b1c3443e9ce6c8cf31194aa5fb91f85036bedecaa4245b5",
+      "bytes": 5379
+    },
+    {
+      "path": "tests/v2/services/test_protocol_control_execution.py",
+      "sha256": "ee3e7633c01f8be27fb7c12cda7191906d4c315228fcfd19841bd50a507a57d0",
+      "bytes": 177747
+    },
+    {
+      "path": "tests/v2/services/test_protocol_control_requirements.py",
+      "sha256": "69f4dfd0108234484d907edeb3faafee54408f4abf8ac3d0eff390faeaa57e4d",
+      "bytes": 4901
+    },
+    {
+      "path": "tests/v2/services/test_protocol_control_smoke_runner.py",
+      "sha256": "26ac5e086f23b6905ad9b157d241e2fa7a661ae521b84a7d29b84f86effb5729",
+      "bytes": 21521
+    },
+    {
+      "path": "tests/v2/services/test_qualified_binding_unit_equivalence.py",
+      "sha256": "3615107ed59b3aa0afd6af971424bc30b2ee4901138e4c47df269e35709cdd5f",
+      "bytes": 2961
+    },
+    {
+      "path": "tests/v2/services/test_qualified_observation_relation_scope.py",
+      "sha256": "9758b3698a827ed9afbfcecfed020c5aae07a76d7620986ffe70094fab564ec9",
+      "bytes": 11346
+    },
+    {
+      "path": "tests/v2/services/test_selective_vision_postfreeze_orchestration.py",
+      "sha256": "73d08002a318a33ddffc04e8ebab0e27a512e22cb682e250f9dfd37705f5389d",
+      "bytes": 47668
+    },
+    {
+      "path": "tests/v2/storage/test_fact_correction_repository.py",
+      "sha256": "9ca433cdcff96711c83afe2888a023d3193484b7a541fb31ceb2eabb6a17b664",
+      "bytes": 36105
+    },
+    {
+      "path": "tests/v2/storage/test_fact_repositories.py",
+      "sha256": "b0c24adfe5a9dc25ca1ab9b749cfe18d1d63dfec16edc9836534f3ed7ef7d687",
+      "bytes": 67953
+    },
+    {
+      "path": "tests/v2/storage/test_slice44_repositories.py",
+      "sha256": "b86cf46fbcaae644b56176aa05cf85cc8da57a52b1eafa276114604a62cc4c40",
+      "bytes": 127909
+    },
+    {
+      "path": "tests/v2/test_contract_logic.py",
+      "sha256": "6370f88ea1eb00cee7e532808778c9be1f7963e3a556a7f78a921356256be44b",
+      "bytes": 108174
+    },
+    {
+      "path": "tests/v2/test_expression_temporal_candidate_scope.py",
+      "sha256": "d9679bc644271b3f6b68e2847ccd02249e3e8dc75c08ede9c9fda99182836b96",
+      "bytes": 4075
+    },
+    {
+      "path": "tests/v2/test_predicate_semantic_binding_boundary.py",
+      "sha256": "cd97f8ceab6b3be04fb0b67523f60d828aaddd1a391b962d0098881b48c8f6c6",
+      "bytes": 5807
+    }
+  ],
+  "verification": {
+    "backend": "623 passed, 5 SWIG warnings, 59.84s, exit0; 9 adjacent modules, not whole repository",
+    "frontend": "123 passed, 8 files, 8.03s, exit0; production build exit0, existing large chunk warning",
+    "clinical_complete": false,
+    "raw_artifacts_access": "local_only",
+    "sensitive_pattern_scan": {
+      "count": 0,
+      "limitation": "Pattern scan is not proof of complete confidentiality review; paths classified as source/test/docs only."
+    }
+  }
+}

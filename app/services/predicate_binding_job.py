@@ -12,10 +12,11 @@ from app.llm.predicate_binding_candidates import (
     PROMPT_VERSION, BATCH_PROMPT_VERSION, PredicateCandidateReadError, read_predicate_candidates,
     predicate_binding_prompt_input,
     candidate_value_shape,
+    _candidate_json_object,
     validate_predicate_candidates,
     build_predicate_binding_messages,
 )
-from app.services.binding_candidate_comparison import COMPARISON_VERSION, compare_candidate_declarations
+from app.services.binding_candidate_comparison import PREDICATE_COMPARISON_VERSION, compare_candidate_declarations
 from app.llm.predicate_binding_batches import PredicateBindingBatch, plan_binding_batches
 from app.llm.page_review_harness import direct_completion
 from app.llm.page_reader_capabilities import LOCAL_PAGE_PROVIDERS
@@ -29,7 +30,7 @@ from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
 JOB_TYPE = "predicate_binding_candidates"
-CONTRACT = "predicate-binding-candidate-job/v8"
+CONTRACT = "predicate-binding-candidate-job/v11"
 LANES = (PageReviewLane.MAIN_A, PageReviewLane.MAIN_B)
 
 
@@ -144,6 +145,10 @@ class PredicateBindingJobExecutor:
 
     def _comparison_artifact(self, frozen, payload, reads, *, job_id):
         groups = {}
+        batch_fact_ids = {
+            batch.batch_sha256: set(batch.fact_ids)
+            for _, _, batch in _reads(payload) if batch is not None
+        }
         for step_id, lane, batch in _reads(payload):
             read = reads[step_id]
             artifact = json.loads(self.artifact_store.read_by_sha("raw_response", read["candidate_sha256"]))
@@ -174,7 +179,8 @@ class PredicateBindingJobExecutor:
                     or response.get("finish_reason") != "stop"):
                 raise StepFailure(retryable=False, error_code=f"{self.error_prefix}_RECEIPT_SCOPE_CHANGED")
             original = self._validate_candidate_payload(frozen, response["text"], batch)
-            if original != validated:
+            if (original != validated
+                    or artifact.get("format_repair") != _candidate_json_object(response["text"])[1]):
                 raise StepFailure(retryable=False, error_code=f"{self.error_prefix}_CANDIDATE_RESPONSE_CHANGED")
             group = groups.setdefault(batch_hash, {})
             if lane in group:
@@ -190,11 +196,14 @@ class PredicateBindingJobExecutor:
                 "results": compare_candidate_declarations(
                     group[LANES[0]][0], group[LANES[1]][0],
                     identity_field=self.candidate_identity_field,
-                    universe_fact_ids={fact.fact_id for fact in frozen.facts},
+                    universe_fact_ids=(
+                        batch_fact_ids[batch_hash] if batch_hash is not None
+                        else {fact.fact_id for fact in frozen.facts}
+                    ),
                 ),
             })
         return {
-            "version": COMPARISON_VERSION, "accepted": False,
+            "version": PREDICATE_COMPARISON_VERSION, "accepted": False,
             "frozen_input_sha256": frozen.frozen_input_sha256, "batches": comparisons,
         }
 
@@ -210,6 +219,7 @@ class PredicateBindingJobExecutor:
             "payload": result.payload.model_dump(mode="json"),
             "source_excerpts": result.source_excerpts, "accepted": False,
             "batch_sha256": result.batch_sha256,
+            "format_repair": result.format_repair,
             "operand_checks": [
                 {"predicate_identity_sha256": item.predicate_identity_sha256,
                  "fact_id": candidate.fact_id, "fact_attribute": candidate.fact_attribute,

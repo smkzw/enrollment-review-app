@@ -11,6 +11,9 @@
   正式发布控制：非空多义务原子、审核节点作用、最低证据、来源闭包与跨来源关系。
 - ``Control*Dnf`` / ``ProtocolControl*Batch``
   5.8b 的独立适用性、触发、义务、例外 DNF 层、语义草稿/系统水合与逐项处置批次。
+- ``RestrictedProtocolControlStatement``
+  跨章未决来源陈述的受限载体：保留原文单元/陈述序号/逐字摘录/片段身份、未决种类与
+  受限依赖，不产生任何可执行语义；只有受限采用目录（``control-catalog/v3``）可以携带。
 
 硬边界：
 
@@ -20,6 +23,7 @@
   必须记录、必须专业评估；
 - 审核节点绑定必须显式标记：提前关注、本节点判定或后续节点复核；
 - 跨来源关系仅为重复表述、补充要求、进一步解释或实质冲突；不实现文本相似度合并；
+- 受限来源陈述不得携带义务/DNF/证据/审核节点字段，也不得与发布控制或候选复用身份；
 - 任一结构单元未处置时，不得宣称全文覆盖完整。
 """
 
@@ -43,6 +47,8 @@ from .repeat_scheme import (RepeatEvidenceRole, RepeatEvidenceRoleReference,
                             resolve_repeat_evidence_roles, validate_repeat_evidence_roles)
 
 __all__ = [
+    "CONTROL_CONTINUATION_SOURCE_VERSION",
+    "validate_control_continuing_obligation",
     "ControlConditionAtom",
     "ControlConditionAtomDraft",
     "ControlConditionDnf",
@@ -93,6 +99,9 @@ __all__ = [
     "ProtocolSectionCoverageManifest",
     "ProtocolStructureUnit",
     "PublishedProtocolControlCatalog",
+    "RestrictedProtocolControlStatement",
+    "RestrictedStatementIndependentExcerpt",
+    "RestrictedStatementScopeProof",
     "ReviewNodeBinding",
     "ReviewNodeRole",
     "StructureUnitDisposition",
@@ -150,6 +159,7 @@ class StructureUnitDispositionKind(StableEnum):
     ADMINISTRATIVE_STATISTICAL_BACKGROUND = "administrative_statistical_background"
     PHASE_EXCLUDED = "phase_excluded"
     PENDING_CONFIRMATION = "pending_confirmation"
+    RESTRICTED_SOURCE = "restricted_source"
  
  
 class ProtocolControlDiscoveryDisposition(StableEnum):
@@ -375,6 +385,7 @@ class TableCellContext(ContractModel):
     row_index: int = Field(ge=0)
     column_index: int = Field(ge=0)
     member_cell_paths: list[tuple[int, ...]] = Field(min_length=1)
+    member_cell_col_spans: list[int] | None = Field(default=None, exclude_if=lambda value: value is None)
     row_headers: list[str] = Field(default_factory=list)
     column_headers: list[str] = Field(default_factory=list)
 
@@ -391,6 +402,11 @@ class TableCellContext(ContractModel):
             raise ValueError("row_index/column_index 必须等于 table_path 最内层坐标")
         if len(self.member_cell_paths) != len(set(self.member_cell_paths)):
             raise ValueError("表格结构单元的成员单元格路径不得重复")
+        if self.member_cell_col_spans is not None and (
+            len(self.member_cell_col_spans) != len(self.member_cell_paths)
+            or any(span < 1 for span in self.member_cell_col_spans)
+        ):
+            raise ValueError("表格合并宽度必须与成员单元格逐项对应且大于零")
         if any(
             len(path) % 2 != 0 or any(value < 0 for value in path)
             for path in self.member_cell_paths
@@ -411,6 +427,8 @@ class ProtocolStructureUnit(Phase5ControlModel):
     structure_unit_id: str = Field(min_length=1)
     source_ref: str = Field(min_length=1)
     member_source_refs: list[str] = Field(min_length=1)
+    member_texts: list[str] | None = None
+    member_source_span_ids: list[list[str]] | None = None
     source_span_ids: list[str] = Field(min_length=1)
     unit_kind: StructureUnitKind
     heading_path: list[str] = Field(min_length=1)
@@ -427,6 +445,14 @@ class ProtocolStructureUnit(Phase5ControlModel):
     @model_validator(mode="after")
     def validate_unit(self) -> "ProtocolStructureUnit":
         _require_sorted_unique(self.member_source_refs, "member_source_refs")
+        if self.member_texts is not None and len(self.member_texts) != len(self.member_source_refs):
+            raise ValueError("成员原文必须与来源编号逐项对应")
+        if self.member_source_span_ids is not None:
+            if (len(self.member_source_span_ids) != len(self.member_source_refs)
+                    or any(not spans for spans in self.member_source_span_ids)
+                    or {span for spans in self.member_source_span_ids for span in spans}
+                    != set(self.source_span_ids)):
+                raise ValueError("成员来源定位必须逐项闭合到结构单元来源")
         _require_sorted_unique(self.source_span_ids, "source_span_ids")
         if len(self.phase_scopes) != len(set(self.phase_scopes)):
             raise ValueError("结构单元期别适用性不得重复")
@@ -868,7 +894,10 @@ class ControlContinuingObligation(Phase5ControlModel):
         return self
 
 
-def _validate_continuing_obligation(atom: object) -> None:
+CONTROL_CONTINUATION_SOURCE_VERSION = "control-continuation-direct-source/v2"
+
+
+def validate_control_continuing_obligation(atom: object) -> None:
     continuation = getattr(atom, "continuing_obligation", None)
     if continuation is None:
         return
@@ -879,9 +908,20 @@ def _validate_continuing_obligation(atom: object) -> None:
         raise ValueError("后续持续义务只适用于禁止类原子")
     if getattr(atom, "prospective_period") is not None:
         raise ValueError("当前节点义务不得同时承担后续持续期间")
-    sources = set(zip(getattr(atom, "source_span_ids"), getattr(atom, "source_excerpts")))
-    if not set(zip(continuation.source_span_ids, continuation.source_excerpts)) <= sources:
-        raise ValueError("后续持续义务必须引用同一原子的直接来源")
+    sources = list(zip(
+        getattr(atom, "source_span_ids"), getattr(atom, "source_excerpts"), strict=True,
+    ))
+    # A future-period excerpt may narrow its own atom's quote, never another
+    # atom's quote or the surrounding source block. Semantic gates still apply.
+    for span_id, excerpt in zip(
+        continuation.source_span_ids, continuation.source_excerpts, strict=True,
+    ):
+        if not any(
+            span_id == direct_span and isinstance(direct_excerpt, str)
+            and excerpt in direct_excerpt
+            for direct_span, direct_excerpt in sources
+        ):
+            raise ValueError("后续持续义务必须引用同一原子的直接来源")
 
 
 class ControlObligationAtom(Phase5ControlModel):
@@ -928,7 +968,7 @@ class ControlObligationAtom(Phase5ControlModel):
             strict=False,
             label="义务原子",
         )
-        _validate_continuing_obligation(self)
+        validate_control_continuing_obligation(self)
         return self
 
 
@@ -1019,7 +1059,7 @@ class ControlObligationAtomDraft(Phase5ControlModel):
             strict=True,
             label="义务原子草稿",
         )
-        _validate_continuing_obligation(self)
+        validate_control_continuing_obligation(self)
         return self
 
 
@@ -1926,6 +1966,294 @@ class ProtocolControlSourceUnitRelation(Phase5ControlModel):
     target_candidate_id: str = Field(min_length=1)
 
 
+class ProtocolControlDefinitionAtomConsumption(Phase5ControlModel):
+    """A verified consumer for one source calculation definition.
+
+    Two consumer kinds share this relation and never substitute for each other:
+
+    * ``control_atom`` — an atom inside one frozen hydrated control candidate,
+      addressed by candidate id plus ``(layer, group_index, atom_index)`` and the
+      owning repeat ``condition_id``; the positions are only valid inside that
+      one frozen expression and are never matched by text.
+    * ``official_predicate`` — an ``AtomicPredicate`` inside the frozen RuleSet,
+      addressed by its owning ``rule_component_id`` and its content-derived
+      ``predicate_id``. The parent IN/EX code is never the consumer identity.
+
+    The relation keeps two independent source anchors: the definition quote on
+    the record and this consumer's own excerpt. Each side is validated against
+    its own frozen source, so a definition in a calculation/method chapter may
+    link to a consumer excerpted in an eligibility or visit chapter. The anchors
+    are never required to overlap and no semantic equivalence test is derived
+    from wording or numbers; ``relation_note`` may explain the proposal but never
+    proves it.
+    """
+
+    consumer_kind: Literal["control_atom", "official_predicate"] = "control_atom"
+    control_candidate_id: str | None = Field(default=None, min_length=1)
+    layer: Literal["applicability", "trigger", "obligation", "exception", "repeat_trigger"] | None = None
+    condition_id: str | None = Field(default=None, min_length=1)
+    group_index: int | None = Field(default=None, ge=0)
+    atom_index: int | None = Field(default=None, ge=0)
+    rule_component_id: str | None = Field(default=None, min_length=1)
+    predicate_id: str | None = Field(default=None, min_length=1)
+    consumer_excerpt: str = Field(min_length=1)
+    relation_note: str | None = Field(default=None, min_length=1)
+
+    @model_serializer(mode="wrap")
+    def preserve_control_atom_shape(self, handler):
+        value = handler(self)
+        if self.consumer_kind == "control_atom":
+            # Keep the historical control-atom bytes; the official variant is a
+            # different consumer and must never be silently read as one.
+            value.pop("consumer_kind", None)
+            for name in ("rule_component_id", "predicate_id"):
+                value.pop(name, None)
+        else:
+            for name in ("control_candidate_id", "layer", "condition_id",
+                         "group_index", "atom_index"):
+                value.pop(name, None)
+        if self.relation_note is None:
+            value.pop("relation_note", None)
+        return value
+
+    @property
+    def key(self) -> tuple:
+        if self.consumer_kind == "official_predicate":
+            return (self.consumer_kind, self.rule_component_id, self.predicate_id)
+        return (
+            self.consumer_kind, self.control_candidate_id, self.layer,
+            self.group_index, self.atom_index, self.condition_id,
+        )
+
+    @model_validator(mode="after")
+    def validate_reference(self) -> "ProtocolControlDefinitionAtomConsumption":
+        if self.consumer_kind == "official_predicate":
+            if (self.rule_component_id is None or self.predicate_id is None
+                    or any(value is not None for value in (
+                        self.control_candidate_id, self.layer, self.condition_id,
+                        self.group_index, self.atom_index,
+                    ))):
+                raise ValueError("官方条件消费引用必须且只能携带子规则与条件身份")
+        elif (
+            self.control_candidate_id is None or self.layer is None
+            or self.group_index is None or self.atom_index is None
+            or self.rule_component_id is not None or self.predicate_id is not None
+        ):
+            raise ValueError("控制原子消费引用必须且只能携带候选与原子位置")
+        if (self.layer == "repeat_trigger") != (self.condition_id is not None):
+            raise ValueError("复查条件引用必须且只能携带所属条件编号")
+        if self.condition_id is not None and not self.condition_id.strip():
+            raise ValueError("复查条件编号不能为空")
+        if not self.consumer_excerpt.strip():
+            raise ValueError("消费原子来源摘录不得为空白")
+        if self.relation_note is not None and not self.relation_note.strip():
+            raise ValueError("定义消费说明不得为空白")
+        return self
+
+
+class ProtocolControlDefinitionConsumerRecord(Phase5ControlModel):
+    """One frozen source calculation definition and its verified consumers.
+
+    ``scope_complete`` is the fail-closed release claim and stays conservative:
+    it may only be asserted once a producer proves the complete consumer scope,
+    including consumers in other batches, *and* the affected consumers are already
+    consumed as unknown by the working draft. It is the only value that can narrow
+    the calculation publication block, so a producer must not set it while the
+    consumer scope or the working-draft consumption path is still missing. An
+    empty, unresolved or scope-unproven record never authorizes release, so a
+    missing relation keeps the current publication block instead of silently
+    passing.
+    """
+
+    batch_id: str = Field(min_length=1)
+    source_structure_unit_id: str = Field(min_length=1)
+    source_statement_index: int = Field(ge=0)
+    source_quote: str = Field(min_length=1)
+    source_span_ids: list[str] = Field(min_length=1)
+    consumers: list[ProtocolControlDefinitionAtomConsumption] = Field(default_factory=list)
+    scope_complete: bool
+    unresolved_reasons: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_record(self) -> "ProtocolControlDefinitionConsumerRecord":
+        keys = [item.key for item in self.consumers]
+        if len(keys) != len(set(keys)):
+            raise ValueError("同一来源定义的消费原子引用不得重复")
+        if any(not reason.strip() for reason in self.unresolved_reasons):
+            raise ValueError("定义消费关系未决原因不得为空白")
+        if self.scope_complete and (not self.consumers or self.unresolved_reasons):
+            raise ValueError("未证实的定义消费关系不得声明作用范围完整")
+        return self
+
+
+class RestrictedStatementIndependentExcerpt(Phase5ControlModel):
+    """同一冻结单元内一条独立、已由可执行候选逐字引用的来源陈述。
+
+    ``source_start`` / ``source_end`` 是冻结单元 ``excerpt`` 上的半开区间，必须与
+    ``source_quote`` 由同一次确定性定位得到。本模块不做原文 I/O：逐字落点、互不
+    重叠以及候选引用都由门禁按冻结原文复核，声明本身不构成独立证明。
+    """
+
+    statement_index: int = Field(ge=0)
+    source_quote: str = Field(min_length=1)
+    source_start: int = Field(ge=0)
+    source_end: int = Field(ge=0)
+    candidate_control_ids: list[str] = Field(min_length=1)
+    scope_quote: str | None = None
+    time_words: list[str] = Field(default_factory=list)
+    exception_words: str | None = None
+    affected_stage: str | None = None
+    decision_functions: list[str] = Field(default_factory=list)
+    source_force: Literal["required", "prohibited", "recommended", "descriptive", "unclear"] | None = None
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_excerpt_shape(self, handler):
+        value = handler(self)
+        for key in ("scope_quote", "time_words", "exception_words", "affected_stage",
+                    "decision_functions", "source_force"):
+            if not value[key]:
+                value.pop(key)
+        return value
+
+    @model_validator(mode="after")
+    def validate_excerpt(self) -> "RestrictedStatementIndependentExcerpt":
+        if self.source_end <= self.source_start:
+            raise ValueError("独立来源区间必须是非空半开区间")
+        if not self.source_quote.strip():
+            raise ValueError("独立来源区间必须逐字保留原文摘录")
+        _require_sorted_unique(self.candidate_control_ids, "独立来源候选身份")
+        for candidate_id in self.candidate_control_ids:
+            _reject_forbidden_control_identity(
+                candidate_id,
+                "independent_candidate_control_ids",
+            )
+        return self
+
+
+class RestrictedStatementScopeProof(Phase5ControlModel):
+    """受限陈述不吸收同单元其余独立要求的显式来源区间证明。
+
+    仅当同一冻结单元内存在与受限陈述逐字区间互不重叠、且已由本单元可执行候选逐字
+    引用的来源陈述时，该单元才可以在登记受限陈述的同时保留可执行候选。证明只按原
+    文位置成立：门禁必须复核摘录哈希、摘录确实落在区间上、区间两两不相交，以及每
+    条独立陈述确有本单元候选引用；任何环节缺失都不得据此放行。
+    """
+
+    unit_excerpt_sha256: str = Field(pattern=_SHA256)
+    restricted_source_start: int = Field(ge=0)
+    restricted_source_end: int = Field(ge=0)
+    independent_excerpts: list[RestrictedStatementIndependentExcerpt] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_scope_proof(self) -> "RestrictedStatementScopeProof":
+        if self.restricted_source_end <= self.restricted_source_start:
+            raise ValueError("受限来源区间必须是非空半开区间")
+        keys = [
+            (item.statement_index, item.source_start, item.source_end)
+            for item in self.independent_excerpts
+        ]
+        if keys != sorted(keys) or len(keys) != len(set(keys)):
+            raise ValueError("独立来源区间必须按陈述序号与位置升序排列且不得重复")
+        occupied = [(self.restricted_source_start, self.restricted_source_end)]
+        for item in self.independent_excerpts:
+            if any(
+                item.source_start < end and start < item.source_end
+                for start, end in occupied
+            ):
+                raise ValueError("同单元独立来源区间不得与受限陈述区间重叠")
+            occupied.append((item.source_start, item.source_end))
+        return self
+
+
+class RestrictedProtocolControlStatement(Phase5ControlModel):
+    """跨章来源陈述的受限载体：忠实保留原文，但不产生任何可执行含义。
+
+    与官方 lane 已采用的受限形态（``RestrictedRuleComponent`` /
+    ``ClausePackRestrictedClause``）同构：冻结一个确切来源陈述（结构单元、陈述
+    序号、逐字摘录与片段 ID），并用类型化字段说明它为何暂不能执行、仍依赖哪些
+    其他受限陈述。
+
+    本类故意不含义务/条件表达式、最低证据、审核节点绑定与顺序标签，任何读者都
+    不能把它当作已发布控制；目录还会拒绝它与发布控制或候选复用同一身份。
+    逐字摘录是否真的落在冻结原文里由核对与发布服务在发布前证明，本模块不做原文
+    I/O，也不做临床判断。
+    """
+
+    restricted_statement_id: str = Field(min_length=1)
+    source_structure_unit_id: str = Field(min_length=1)
+    source_statement_index: int = Field(ge=0)
+    source_quote: str = Field(min_length=1)
+    source_span_ids: list[str] = Field(min_length=1)
+    limitation_kind: Literal["interpretation_unresolved", "consumer_unavailable"]
+    unresolved_dimensions: list[str] = Field(min_length=1)
+    #: 本条含义仍依赖的其他受限来源陈述 ID；只在本目录内解析，不得指向可执行控制、
+    #: 候选或自由文本，也不得成环（成环时没有任何可核的依赖终点）。
+    dependency_refs: list[str] = Field(default_factory=list)
+    #: 同单元独立可执行要求的显式来源区间证明。缺省表示本条仍是单元级受限，该单元不
+    #: 得同时保留可执行候选；存在时由门禁按冻结原文逐字复核。
+    independent_scope_proof: RestrictedStatementScopeProof | None = None
+    #: 原解释的逐字限定语随受限记录保存，不从动作摘录猜测适用范围。
+    scope_quote: str | None = None
+    time_words: list[str] = Field(default_factory=list)
+    exception_words: str | None = None
+    affected_stage: str | None = None
+    decision_functions: list[str] = Field(default_factory=list)
+    source_force: Literal["required", "prohibited", "recommended", "descriptive", "unclear"] | None = None
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_statement_shape(self, handler):
+        value = handler(self)
+        if self.independent_scope_proof is None:
+            value.pop("independent_scope_proof", None)
+        for key in ("scope_quote", "time_words", "exception_words", "affected_stage",
+                    "decision_functions", "source_force"):
+            if not value[key]:
+                value.pop(key)
+        return value
+
+    @model_validator(mode="after")
+    def validate_restricted_statement(self) -> "RestrictedProtocolControlStatement":
+        _reject_forbidden_control_identity(
+            self.restricted_statement_id,
+            "restricted_statement_id",
+        )
+        _require_sorted_unique(self.source_span_ids, "受限来源片段 ID")
+        _require_sorted_unique(self.dependency_refs, "受限依赖引用")
+        if not self.source_quote.strip():
+            raise ValueError("受限来源陈述必须逐字保留原文摘录")
+        if any(not dimension.strip() for dimension in self.unresolved_dimensions):
+            raise ValueError("受限来源陈述必须说明具体尚未核清之处")
+        if self.restricted_statement_id in self.dependency_refs:
+            raise ValueError("受限来源陈述不得依赖自身")
+        return self
+
+
+def _reject_restricted_dependency_cycle(dependencies: dict[str, list[str]]) -> None:
+    """受限依赖必须构成有向无环图；成环意味着没有可核的依赖终点。"""
+
+    settled: set[str] = set()
+    for root in dependencies:
+        if root in settled:
+            continue
+        active: set[str] = set()
+        stack: list[tuple[str, int]] = [(root, 0)]
+        while stack:
+            node, index = stack.pop()
+            refs = dependencies[node]
+            if index == 0:
+                active.add(node)
+            if index < len(refs):
+                stack.append((node, index + 1))
+                target = refs[index]
+                if target in active:
+                    raise ValueError("受限来源陈述依赖不得成环")
+                if target not in settled:
+                    stack.append((target, 0))
+            else:
+                active.discard(node)
+                settled.add(node)
+
+
 class PublishedProtocolControlCatalog(Phase5ControlModel):
     """正式发布控制目录：来源闭包与未解冲突门禁。"""
 
@@ -1937,12 +2265,15 @@ class PublishedProtocolControlCatalog(Phase5ControlModel):
     allowed_source_span_ids: list[str] = Field(min_length=1)
     controls: list[ProtocolReviewControl] = Field(default_factory=list)
     source_unit_relations: list[ProtocolControlSourceUnitRelation] = Field(default_factory=list)
+    restricted_statements: list[RestrictedProtocolControlStatement] = Field(default_factory=list)
 
     @model_serializer(mode="wrap")
     def preserve_legacy_catalog_shape(self, handler):
         value = handler(self)
         if not self.source_unit_relations:
             value.pop("source_unit_relations", None)
+        if not self.restricted_statements:
+            value.pop("restricted_statements", None)
         return value
 
     @model_validator(mode="after")
@@ -1973,6 +2304,43 @@ class PublishedProtocolControlCatalog(Phase5ControlModel):
             if (relation.target_candidate_id not in candidate_ids
                     or not set([*relation.source_span_ids, *relation.target_span_ids]) <= allowed):
                 raise ValueError("跨章节来源对应缺少正式候选或原文定位")
+        restricted_ids = [
+            item.restricted_statement_id for item in self.restricted_statements
+        ]
+        if len(restricted_ids) != len(set(restricted_ids)):
+            raise ValueError("受限来源陈述 ID 必须唯一")
+        statement_keys = [
+            (item.source_structure_unit_id, item.source_statement_index)
+            for item in self.restricted_statements
+        ]
+        if (statement_keys != sorted(statement_keys)
+                or len(statement_keys) != len(set(statement_keys))):
+            raise ValueError("受限来源陈述必须按来源单元与陈述序号升序排列且不得重复")
+        executable_identities = set(control_ids) | {
+            control.originating_candidate_id
+            for control in self.controls
+            if control.originating_candidate_id is not None
+        }
+        reused = sorted(set(restricted_ids) & executable_identities)
+        if reused:
+            raise ValueError(
+                "受限来源陈述不得复用可执行控制身份：" + ",".join(reused)
+            )
+        dependencies: dict[str, list[str]] = {}
+        for item in self.restricted_statements:
+            outside = set(item.source_span_ids) - allowed
+            if outside:
+                raise ValueError(
+                    "受限来源陈述来源越界：" + ",".join(sorted(outside))
+                )
+            unknown = sorted(set(item.dependency_refs) - set(restricted_ids))
+            if unknown:
+                raise ValueError(
+                    "受限来源陈述依赖必须指向本目录内的受限来源陈述："
+                    + ",".join(unknown)
+                )
+            dependencies[item.restricted_statement_id] = list(item.dependency_refs)
+        _reject_restricted_dependency_cycle(dependencies)
         unresolved_conflicts: list[str] = []
         for control in self.controls:
             if control.protocol_version_id != self.protocol_version_id:
@@ -2484,24 +2852,29 @@ class ProtocolControlDiscoveryToDeepPlan(Phase5ControlModel):
                 for context_id in self.related_context_ids_by_owned.get(owned_id, ())
             }
             expected_context_ids -= set(batch.owned_structure_unit_ids)
-            owned_tables = {
-                unit.source_ref.rpartition(".r")[0]
-                for unit in batch.owned_units
-                if unit.table_context is not None
-                and unit.source_ref.rpartition(".r")[1]
-                and unit.source_ref.rpartition(".r")[2].isdigit()
+            def table_row_key(unit: ProtocolStructureUnit) -> tuple[str, int] | None:
+                if unit.table_context is None:
+                    return None
+                table_ref, marker, suffix = unit.source_ref.rpartition(".r")
+                row_token = suffix.partition(".")[0]
+                if (not marker or not row_token.isdigit()
+                        or int(row_token) != unit.table_context.row_index):
+                    return None
+                return table_ref, unit.table_context.row_index
+
+            owned_rows = {
+                row_key for unit in batch.owned_units
+                if (row_key := table_row_key(unit)) is not None
             }
+            owned_tables = {table_ref for table_ref, _ in owned_rows}
             table_context_ids = set()
             for unit in batch.context_units:
-                table_ref, row_marker, row_text = unit.source_ref.rpartition(".r")
+                row_key = table_row_key(unit)
                 if (
                     unit.structure_unit_id in expected_set
-                    and unit.table_context is not None
-                    and row_marker
-                    and row_text.isdigit()
-                    and int(row_text) == unit.table_context.row_index
-                    and 0 <= unit.table_context.row_index < 5
-                    and table_ref in owned_tables
+                    and row_key is not None
+                    and row_key[0] in owned_tables
+                    and (row_key in owned_rows or 0 <= row_key[1] < 5)
                 ):
                     table_context_ids.add(unit.structure_unit_id)
             if actual_context_ids & (non_control_ids - table_context_ids):
@@ -2770,6 +3143,14 @@ class ProtocolControlBatchDispositionHydrated(Phase5ControlModel):
     owned_source_span_ids: list[str] = Field(min_length=1)
     dispositions: list[ProtocolControlUnitDisposition] = Field(min_length=1)
     candidates: list[ProtocolControlCandidate] = Field(default_factory=list)
+    restricted_statements: list[RestrictedProtocolControlStatement] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_batch_shape(self, handler):
+        value = handler(self)
+        if not self.restricted_statements:
+            value.pop("restricted_statements", None)
+        return value
 
     @model_validator(mode="after")
     def validate_hydrated_result(self) -> "ProtocolControlBatchDispositionHydrated":
@@ -2806,6 +3187,47 @@ class ProtocolControlBatchDispositionHydrated(Phase5ControlModel):
         disposition_by_unit = {
             item.structure_unit_id: item for item in self.dispositions
         }
+        restricted_units = {item.source_structure_unit_id for item in self.restricted_statements}
+        if len({(item.source_structure_unit_id, item.source_statement_index)
+                for item in self.restricted_statements}) != len(self.restricted_statements):
+            raise ValueError("同一来源陈述不得重复受限登记")
+        restricted_by_unit: dict[str, list[RestrictedProtocolControlStatement]] = {}
+        for item in self.restricted_statements:
+            restricted_by_unit.setdefault(item.source_structure_unit_id, []).append(item)
+        for item in self.dispositions:
+            statements = restricted_by_unit.get(item.structure_unit_id)
+            if item.disposition == StructureUnitDispositionKind.RESTRICTED_SOURCE:
+                if not statements:
+                    raise ValueError("受限来源处置必须且只能绑定本批受限陈述")
+                continue
+            if not statements:
+                continue
+            # 同单元独立证明是保留可执行候选的唯一通道：整单元受限仍是默认，且每条受
+            # 限陈述都必须给出区间证明，否则单元只能整体受限。
+            if (
+                item.disposition != StructureUnitDispositionKind.OTHER_CONTROL_CANDIDATE
+                or any(statement.independent_scope_proof is None for statement in statements)
+            ):
+                raise ValueError(
+                    "受限来源处置必须且只能绑定本批受限陈述；同单元保留可执行候选必须"
+                    "逐条提供独立来源区间证明"
+                )
+        for item in self.restricted_statements:
+            if item.source_structure_unit_id not in owned or not set(item.source_span_ids) <= owned_spans:
+                raise ValueError("受限来源陈述不得越出本批冻结来源")
+            proof = item.independent_scope_proof
+            if proof is None:
+                continue
+            for excerpt in proof.independent_excerpts:
+                for candidate_id in excerpt.candidate_control_ids:
+                    candidate = candidate_by_id.get(candidate_id)
+                    if candidate is None or (
+                        item.source_structure_unit_id
+                        not in candidate.frozen_structure_unit_ids
+                    ):
+                        raise ValueError(
+                            "独立来源区间证明必须绑定本单元内已有的可执行候选"
+                        )
         referenced_candidate_ids = {
             candidate_id
             for disposition in self.dispositions
@@ -3304,6 +3726,33 @@ def hydrate_protocol_control_candidate_semantics(
     )
 
 
+def control_candidate_ids_by_draft_index(
+    batch: ProtocolControlDispositionBatch,
+    result: ProtocolControlBatchDisposition,
+) -> dict[int, str]:
+    """Map provider positions to stable identities before canonical ordering."""
+    ordered = sorted(
+        enumerate(result.candidate_drafts),
+        key=lambda item: (
+            tuple(item[1].source_structure_unit_ids),
+            _stable_digest(item[1].model_dump(mode="json")),
+            item[0],
+        ),
+    )
+    identities: dict[int, str] = {}
+    duplicate_ordinals: dict[tuple[tuple[str, ...], str], int] = {}
+    for draft_index, draft in ordered:
+        fingerprint = _stable_digest(draft.model_dump(mode="json"))
+        source_key = (tuple(draft.source_structure_unit_ids), fingerprint)
+        ordinal = duplicate_ordinals.get(source_key, 0)
+        duplicate_ordinals[source_key] = ordinal + 1
+        identities[draft_index] = stable_protocol_control_candidate_id(
+            batch.coverage_manifest_id, batch.batch_id,
+            draft.source_structure_unit_ids, fingerprint, ordinal,
+        )
+    return identities
+
+
 def hydrate_protocol_control_batch_disposition(
     batch: ProtocolControlDispositionBatch,
     result: ProtocolControlBatchDisposition,
@@ -3399,22 +3848,10 @@ def hydrate_protocol_control_batch_disposition(
             item[0],
         ),
     )
-    candidate_ids_by_draft_index: dict[int, str] = {}
+    candidate_ids_by_draft_index = control_candidate_ids_by_draft_index(batch, result)
     candidate_records: list[ProtocolControlCandidate] = []
-    duplicate_ordinals: dict[tuple[tuple[str, ...], str], int] = {}
     for draft_index, draft in ordered_candidates:
-        fingerprint = semantic_fingerprint(draft)
-        source_key = (tuple(draft.source_structure_unit_ids), fingerprint)
-        ordinal = duplicate_ordinals.get(source_key, 0)
-        duplicate_ordinals[source_key] = ordinal + 1
-        candidate_id = stable_protocol_control_candidate_id(
-            batch.coverage_manifest_id,
-            batch.batch_id,
-            draft.source_structure_unit_ids,
-            fingerprint,
-            ordinal,
-        )
-        candidate_ids_by_draft_index[draft_index] = candidate_id
+        candidate_id = candidate_ids_by_draft_index[draft_index]
         semantics = hydrate_protocol_control_candidate_semantics(
             draft,
             control_candidate_id=candidate_id,

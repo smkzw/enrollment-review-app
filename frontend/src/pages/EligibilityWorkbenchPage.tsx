@@ -49,6 +49,7 @@ function controlWorkItems(controls: ReadonlyArray<EligibilityControlView>): Elig
       fulfilled: "requirement_met",
       unfulfilled: "requirement_not_met",
       unverified: "indeterminate",
+      restricted: "indeterminate",
       not_applicable: "not_applicable",
     } as const)[obligation.status],
     decisionLabel: obligation.statusLabel,
@@ -56,10 +57,11 @@ function controlWorkItems(controls: ReadonlyArray<EligibilityControlView>): Elig
     continuingNote: obligation.continuingNote,
     factRefs: obligation.factRefs,
     gapType: null,
-    determinationMode: "semantic" as const,
-    actionOwner: null,
-    actionDetail: null,
-    actionEvidence: null,
+    determinationMode: obligation.status === "restricted" ? "restricted" as const : "semantic" as const,
+    limitationKind: obligation.limitationKind ?? null,
+    actionOwner: obligation.actionOwner ?? null,
+    actionDetail: obligation.actionDetail ?? null,
+    actionEvidence: obligation.actionEvidence ?? null,
   })));
 }
 
@@ -339,6 +341,9 @@ const ISSUE_SEVERITY_ORDER: Record<IssueSeverity, number> = {
 
 const FALLBACK_ISSUE_LABELS: Record<string, string> = {
   clause_not_satisfied: "条款未满足或已触发",
+  protocol_meaning_unresolved: "方案要求尚待核清",
+  review_method_unavailable: "审核方法待完善",
+  protocol_requirement_unresolved: "本项暂不能判定",
   unclassified: "原因待明确",
 };
 
@@ -353,6 +358,14 @@ function clauseIssueKey(clause: EligibilityClauseView): {
   key: string;
   severity: IssueSeverity;
 } {
+  if (clause.determinationMode === "restricted") {
+    return {
+      key: clause.limitationKind === "consumer_unavailable" ? "review_method_unavailable"
+        : clause.limitationKind === "interpretation_unresolved" ? "protocol_meaning_unresolved"
+        : "protocol_requirement_unresolved",
+      severity: "attention",
+    };
+  }
   switch (clause.decision) {
     case "conflict":
     case "exclusion_triggered":
@@ -532,9 +545,9 @@ function EligibilityClauseDetail({
           <strong>后续持续要求</strong>
           <span>{clause.continuingNote}</span>
         </li>}
-        {clause.actionOwner !== null && clause.actionDetail !== null && (
+        {clause.actionDetail !== null && (
           <li className="eligibility-detail-bullet">
-            <strong>建议动作 · {actionTargetLabel[clause.actionOwner]}</strong>
+            <strong>{clause.actionOwner === null ? "处理方向" : `建议动作 · ${actionTargetLabel[clause.actionOwner]}`}</strong>
             <span>{clause.actionDetail}</span>
             {clause.actionEvidence !== null && (
               <span className="eligibility-muted">可接受证据：{clause.actionEvidence}</span>
@@ -560,9 +573,11 @@ function EligibilityClauseDetail({
         </p>
       )}
       <section className="eligibility-detail-section" aria-labelledby="eligibility-facts-title">
-        <h3 id="eligibility-facts-title">关联事实</h3>
+        <h3 id="eligibility-facts-title">关联事实的原件位置</h3>
         {clause.factRefs.length === 0 ? (
-          <p className="eligibility-muted">当前条款没有关联事实。</p>
+          <p className="eligibility-muted">{clause.determinationMode === "restricted"
+            ? "方案要求尚待核清，暂不据此判定病历事实。"
+            : "当前条款没有关联事实。"}</p>
         ) : (
           <ul className="eligibility-fact-list">
             {clause.factRefs.map((fact, index) => (
@@ -586,20 +601,24 @@ function EligibilityClauseDetail({
         )}
       </section>
       {!clause.controlId && <p className="eligibility-clause-detail__mode">
-        {determinationModeLabel(clause.determinationMode)}
+        {determinationModeLabel(clause)}
       </p>}
     </div>
   );
 }
 
-function determinationModeLabel(mode: EligibilityClauseView["determinationMode"]): string {
-  switch (mode) {
+function determinationModeLabel(clause: EligibilityClauseView): string {
+  switch (clause.determinationMode) {
     case "deterministic":
       return "系统按结构化资料完成判断";
     case "semantic":
       return "系统按资料内容完成判断";
     case "investigator_judgment":
       return "需要研究者结合资料确认";
+    case "restricted":
+      return clause.limitationKind === "consumer_unavailable" ? "审核方法待完善"
+        : clause.limitationKind === "interpretation_unresolved" ? "方案要求尚待核清"
+        : "本项暂不能判定";
   }
 }
 
@@ -692,7 +711,7 @@ function EligibilityEvidencePanel({
       </header>
       {selectedPage !== null && (
         <div className="eligibility-evidence__state" role="status">
-          <strong>{isReferencePage ? "引用原文" : "浏览原件"}</strong>
+          <strong>{isReferencePage ? "事实来源页" : "浏览原件"}</strong>
           <span>
             {documentNames.get(selectedPage.sourceDocumentVersionId) ?? "原始资料"}
             {` · 第 ${selectedPage.pageNumber} 页`}
@@ -704,7 +723,7 @@ function EligibilityEvidencePanel({
       )}
       {(
         <>
-          <ul className="eligibility-evidence__refs" aria-label="关联事实原件定位">
+          <ul className="eligibility-evidence__refs" aria-label="关联事实的原件位置">
             {clause.factRefs.map((fact, index) => (
               <li key={`${fact.factId}-${fact.locatorId ?? "no-locator"}-${index}`}>
                 {fact.pageNumber === null ? (
@@ -748,7 +767,7 @@ function EligibilityEvidencePanel({
             <>
             {!isReferencePage && referencePage !== null ? (
               <button type="button" className="button button--quiet" onClick={returnToReference}>
-                返回引用原文
+                返回事实来源页
               </button>
             ) : null}
             {isReferencePage && locatorPage.state.status === "error" ? (
@@ -990,6 +1009,16 @@ export function EligibilityWorkbenchPage() {
           打开报告
         </RouteLink>
       </div>
+      {reviewData.workDraftState === "source_changed" && (
+        <section className="eligibility-context-bar" role="status" aria-label="审核资料已变化">
+          <p>资料已更正，先前的审核工作稿不再适用于本次资料。请重新核对后再查看结果。</p>
+          <RouteLink to="/reports"
+            params={{ project: selectedProject.projectId, subject: selectedSubject.subjectId, episode: selectedEpisode.reviewEpisodeId }}
+            className="button button--quiet" ariaLabel="前往重新审核">
+            前往重新审核
+          </RouteLink>
+        </section>
+      )}
       {unassignedConflictCount > 0 && (
         <section className="eligibility-context-bar" aria-label="病史记录待核对">
           <p>有 {unassignedConflictCount} 项病史或用药记录不一致，尚未确定影响哪些条款。</p>

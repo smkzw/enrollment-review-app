@@ -8,7 +8,9 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunResult
-from app.agents.protocol_control_source_interpretation import normalize_source_excerpt
+from app.agents.protocol_control_source_interpretation import (
+    is_post_eligibility_calculation, normalize_source_excerpt,
+)
 from app.domain.contracts.agent_io import ProtocolDeconstructionDraft, ProtocolDeconstructionInput
 from app.domain.contracts.agents import GateResult
 from app.domain.contracts.control_catalog_publication import (
@@ -17,11 +19,14 @@ from app.domain.contracts.control_catalog_publication import (
 from app.domain.contracts.enums import GateOutcome
 from app.domain.contracts.protocol_controls import (
     KnownRequiredProcedureTarget, ProtocolControlBatchDispositionHydrated,
+    ProtocolControlDefinitionConsumerRecord,
     ProtocolControlSourceUnitRelation,
     ProtocolControlBatchPlan, ProtocolControlDiscoveryToDeepPlan,
     ProtocolSectionCoverageManifest,
 )
-from app.domain.contracts.rules import EvidenceRequirement, RuleSet, WorkflowStage
+from app.domain.contracts.rules import (
+    EvidenceRequirement, RuleSet, WorkflowStage, iter_atomic_predicates,
+)
 from app.domain.contracts.protocol_ingestion import ProtocolSourceSpan
 from app.domain.publication import canonical_hash
 from app.protocols.control_catalog_materialization import (
@@ -31,6 +36,7 @@ from app.protocols.protocol_control_gate import CONTROL_PUBLICATION_GATE_VERSION
 from app.services.protocol_control_execution import (
     CANDIDATE_CONTROL_PACKAGE_RESULT_KIND, FORMAL_CATALOG_STATUS_NOT_MATERIALIZED,
     PROTOCOL_CONTROL_JOB_TYPE, STEP_CLOSURE, STEP_GATE,
+    _definition_consumer_atom,
     _validate_saved_source_review,
 )
 from app.storage.codecs import verify_payload_sha256
@@ -57,6 +63,7 @@ class SourceCalculationGap:
     linked_official_code: str | None
     review_decision: str | None
     unresolved_aspects: tuple[str, ...]
+    batch_id: str = ""
 
 
 def source_calculation_gaps(
@@ -97,9 +104,7 @@ def source_calculation_gaps(
                     _validate_saved_source_review(batch, run)
                 except ValueError as exc:
                     raise ScopeViolationError("非当前审核计算的来源核对记录无效") from exc
-                if (set(statement.decision_functions) <= {"action", "calculation_input"}
-                        and statement.eligibility_sequence == "after_eligibility_decision"
-                        and not statement.unresolved and not review.unresolved_aspects):
+                if is_post_eligibility_calculation(statement, review):
                     continue
             unit = units.get(statement.structure_unit_id)
             source_parts = ([unit.excerpt, *unit.heading_path] if unit is not None else [])
@@ -113,6 +118,7 @@ def source_calculation_gaps(
                            and review.target_id in official_codes else None)
             gaps.append(SourceCalculationGap(
                 batch_number=batch.batch_number, statement_index=index,
+                batch_id=batch.batch_id,
                 structure_unit_id=unit.structure_unit_id,
                 source_span_ids=tuple(unit.source_span_ids),
                 source_quote=(statement.quoted_text if statement.quoted_text in source_part
@@ -127,13 +133,181 @@ def source_calculation_gaps(
     return tuple(gaps)
 
 
+def _definition_consumer_official_predicate(
+    rule_set: RuleSet, consumer,
+) -> list[str]:
+    """Prove a declared official consumer against the frozen RuleSet.
+
+    The declared ``(rule_component_id, predicate_id)`` must resolve to one
+    frozen ``AtomicPredicate`` of the current RuleSet, and the consumer excerpt
+    must occur in that predicate's own exact source clauses. A parent IN/EX code
+    is never accepted as the consumer identity, and wording similarity is never
+    used as proof.
+    """
+
+    for rule in rule_set.rules:
+        for component in rule.components:
+            if component.rule_component_id != consumer.rule_component_id:
+                continue
+            predicates = [
+                predicate
+                for expression in (component.expression, component.exception_expression,
+                                   *(item.expression for item in component.repeat_trigger_conditions))
+                if expression is not None
+                for predicate in iter_atomic_predicates(expression)
+            ]
+            for predicate in predicates:
+                if predicate.predicate_id == consumer.predicate_id:
+                    return list(predicate.exact_source_clauses)
+    raise ValueError("官方条件消费未绑定当前冻结规则条件")
+
+
+def _require_valid_source_definition_consumers(
+    result: Mapping[str, object],
+    plan: ProtocolControlBatchPlan,
+    batches: Sequence[ProtocolControlBatchDispositionHydrated],
+    coverage_manifest: ProtocolSectionCoverageManifest,
+    rule_set: RuleSet,
+) -> list[ProtocolControlDefinitionConsumerRecord]:
+    """Re-verify saved definition→consumer records against the frozen inputs.
+
+    A stored record is never trusted by itself. The definition anchor (quote and
+    span set) is re-checked against the frozen coverage manifest, and each
+    consumer anchor is re-checked against that consumer's own declared excerpts
+    in the frozen input: a hydrated control candidate atom by position, an
+    official predicate by its content-derived identity in the frozen RuleSet.
+    The two anchors are independent: a definition in a calculation/method
+    chapter links to a consumer excerpted elsewhere without either side
+    containing the other. Any mismatch rejects publication. The records are
+    identity-bound evidence for the definition block; they release it only per
+    definition whose consumer scope is proven complete, and the same records
+    must then mark those consumers unresolved in the working draft.
+    """
+
+    raw = result.get("source_definition_consumers", [])
+    if not isinstance(raw, list):
+        raise ScopeViolationError("来源定义消费关系保存格式无效")
+    records = [ProtocolControlDefinitionConsumerRecord.model_validate(item) for item in raw]
+    if len({(item.batch_id, item.source_statement_index) for item in records}) != len(records):
+        raise ScopeViolationError("来源定义消费关系重复")
+    units = {unit.structure_unit_id: unit for unit in coverage_manifest.units}
+    batch_ids = {batch.batch_id for batch in plan.batches}
+    candidate_by_id = {
+        candidate.control_candidate_id: candidate
+        for batch in batches for candidate in batch.candidates
+    }
+    for record in records:
+        unit = units.get(record.source_structure_unit_id)
+        quote = normalize_source_excerpt(record.source_quote)
+        if (record.batch_id not in batch_ids or unit is None
+                or sorted(unit.source_span_ids) != sorted(record.source_span_ids)
+                or not quote
+                or not any(quote in normalize_source_excerpt(part)
+                           for part in [unit.excerpt, *unit.heading_path])):
+            raise ScopeViolationError("来源定义消费关系未绑定当前冻结定义与原文")
+        for consumer in record.consumers:
+            if consumer.consumer_kind == "official_predicate":
+                try:
+                    excerpts = _definition_consumer_official_predicate(rule_set, consumer)
+                except ValueError as exc:
+                    raise ScopeViolationError("来源定义消费条件未绑定冻结规则条件") from exc
+            else:
+                candidate = candidate_by_id.get(consumer.control_candidate_id)
+                if candidate is None:
+                    raise ScopeViolationError("来源定义消费原子引用了非冻结候选")
+                try:
+                    _, excerpts = _definition_consumer_atom(candidate, consumer)
+                except ValueError as exc:
+                    raise ScopeViolationError("来源定义消费原子未绑定冻结候选原子") from exc
+            consumer_excerpt = normalize_source_excerpt(consumer.consumer_excerpt)
+            if not consumer_excerpt or not any(
+                consumer_excerpt in normalize_source_excerpt(value) for value in excerpts
+            ):
+                raise ScopeViolationError("消费来源摘录不在该消费者自身声明的冻结原文中")
+    return records
+
+
+def _released_definition_keys(
+    records: Sequence[ProtocolControlDefinitionConsumerRecord],
+    plan: ProtocolControlBatchPlan,
+) -> frozenset[tuple[int, int]]:
+    """Definitions whose saved relation may release the calculation block.
+
+    Release is per definition and requires a stored, nonempty, completely
+    scoped consumer set without untyped unresolved reasons. An old job has no
+    records and releases nothing.
+    """
+
+    number_by_batch = {batch.batch_id: batch.batch_number for batch in plan.batches}
+    return frozenset(
+        (number_by_batch[record.batch_id], record.source_statement_index)
+        for record in records
+        if record.scope_complete and record.consumers and not record.unresolved_reasons
+        and record.batch_id in number_by_batch
+    )
+
+
+def _verified_calculation_release(
+    result: Mapping[str, object], plan: ProtocolControlBatchPlan,
+    batches: Sequence[ProtocolControlBatchDispositionHydrated],
+    coverage_manifest: ProtocolSectionCoverageManifest, rule_set: RuleSet,
+    gaps: Sequence[SourceCalculationGap],
+) -> frozenset[tuple[int, int]]:
+    """Use the same frozen anchors to preview and to publish a release."""
+    records = _require_valid_source_definition_consumers(
+        result, plan, batches, coverage_manifest, rule_set,
+    )
+    return _calculation_release_for_records(records, plan, gaps)
+
+
+def _calculation_release_for_records(
+    records: Sequence[ProtocolControlDefinitionConsumerRecord],
+    plan: ProtocolControlBatchPlan,
+    gaps: Sequence[SourceCalculationGap],
+) -> frozenset[tuple[int, int]]:
+    """Match already source-verified records to their exact calculation gaps."""
+    number_by_batch = {batch.batch_id: batch.batch_number for batch in plan.batches}
+    gap_keys = {(gap.batch_number, gap.statement_index) for gap in gaps}
+    if len(gap_keys) != len(gaps):
+        raise ScopeViolationError("计算定义来源清单存在重复")
+    released: set[tuple[int, int]] = set()
+    for record in records:
+        if not (record.scope_complete and record.consumers and not record.unresolved_reasons):
+            continue
+        matches = [gap for gap in gaps
+                   if gap.statement_index == record.source_statement_index
+                   and (gap.batch_id == record.batch_id if gap.batch_id
+                        else gap.batch_number == number_by_batch[record.batch_id])]
+        if len(matches) != 1:
+            raise ScopeViolationError("计算定义消费关系与逐批原文缺口不一致")
+        gap = matches[0]
+        if (record.source_structure_unit_id != gap.structure_unit_id
+                or set(record.source_span_ids) != set(gap.source_span_ids)
+                or normalize_source_excerpt(record.source_quote)
+                not in normalize_source_excerpt(gap.source_quote)):
+            raise ScopeViolationError("计算定义消费关系与逐批原文缺口不一致")
+        released.add((gap.batch_number, gap.statement_index))
+    return frozenset(released)
+
+
 def _require_source_calculations_consumable(
-    store: JobStore, source_job_id: str,
+    store: JobStore, source_job_id: str, *,
+    released: frozenset[tuple[int, int]] = frozenset(),
 ) -> None:
-    """Textual rule coverage cannot certify a source-defined calculation."""
+    """A source-defined calculation still needs its own proven consumer relation.
+
+    The block is narrowed per definition only after its saved affected scope
+    is verified and all affected consumers are carried into the working-draft
+    unknown set. No record, empty consumers, unproven cross-batch scope, or a
+    pre-contract job keeps the original hard block.
+    """
     gaps = source_calculation_gaps(store, source_job_id)
-    if gaps:
-        first = gaps[0]
+    blocking = [
+        gap for gap in gaps
+        if (gap.batch_number, gap.statement_index) not in released
+    ]
+    if blocking:
+        first = blocking[0]
         raise ScopeViolationError(
             "方案中的计算定义尚无可核验的正式求值方式，不能仅凭条款文字对应发布"
             f"（批次 {first.batch_number}，陈述 {first.statement_index}）"
@@ -218,8 +392,6 @@ def prepare_control_catalog_publication(
     ):
         raise ScopeViolationError("补充审核要求的最终核对记录不完整或版本不一致")
 
-    _require_source_calculations_consumable(JobStore(session), source_job_id)
-
     plan = ProtocolControlBatchPlan.model_validate(result["publication_plan"])
     batches = tuple(ProtocolControlBatchDispositionHydrated.model_validate(item)
                     for item in result["batch_dispositions"])
@@ -260,6 +432,20 @@ def prepare_control_catalog_publication(
                 or sorted(target.source_span_ids) != relation.target_span_ids
                 or relation.target_candidate_id not in candidate_ids):
             raise ScopeViolationError("跨章节来源对应未绑定当前方案原文和候选")
+    definition_consumers = _require_valid_source_definition_consumers(
+        result, plan, batches, coverage_manifest, rule_set,
+    )
+    released = _calculation_release_for_records(
+        definition_consumers, plan,
+        source_calculation_gaps(JobStore(session), source_job_id),
+    )
+    # The block is narrowed per definition only after that definition's saved
+    # relation has been re-verified above; an old job carries no records and
+    # therefore keeps the unconditional block.
+    _require_source_calculations_consumable(
+        JobStore(session), source_job_id,
+        released=released,
+    )
     catalog = materialize_control_catalog(
         coverage_manifest=coverage_manifest,
         plan=plan, batch_dispositions=batches,
@@ -280,12 +466,17 @@ def prepare_control_catalog_publication(
         procedure_targets=list(targets.values()), procedure_mappings=draft.procedure_catalog_mappings,
     )
     return ControlCatalogPublication(
+        schema_version=(
+            "control-catalog/v3" if catalog.restricted_statements else
+            "control-catalog/v2" if definition_consumers else "control-catalog/v1"
+        ),
         project_id=project_id, protocol_version_id=rule_set.protocol_version_id,
         rule_set_id=rule_set.rule_set_id, rule_set_revision=rule_set.revision,
         rule_set_sha256=canonical_hash(rule_set.model_dump(mode="json")),
         source_job_id=source_job_id, source_job_payload_sha256=job.payload_sha256,
         source_checkpoint_id=source_checkpoint_id, source_checkpoint_sha256=checkpoint.payload_sha256,
         catalog=catalog, workflow_stage_map=mapping,
+        definition_consumer_records=definition_consumers,
         gate_result_id=f"control-publication-gate:{canonical_hash([rule_set.rule_set_id, rule_set.revision, source_job_id, source_checkpoint_id])}",
         created_at=created_at,
     )

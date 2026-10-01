@@ -128,6 +128,8 @@ def publish_episode_rollup(
 ) -> EpisodeRollupPublication:
     episode = registry.require("review_episode", review_episode_id)
     rule_set = registry.require("rule_set", episode.rule_set_id)
+    if any(rule.restricted_components for rule in rule_set.rules):
+        raise ValueError("本版方案仍含有源未决要求，旧版汇总不能签发完整入排结论")
     expected_component_ids = {
         component.rule_component_id
         for rule in rule_set.rules

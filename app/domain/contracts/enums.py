@@ -140,6 +140,7 @@ class GapType(StableEnum):
     FUTURE_STAGE_NOT_DUE = "future_stage_not_due"
     PROVENANCE_FOLLOWUP = "provenance_followup"
     CONTROL_APPLICABILITY_PENDING = "control_applicability_pending"
+    APPLICABLE_POPULATION_UNVERIFIED = "applicable_population_unverified"
 
 
 class BlockingLevel(StableEnum):

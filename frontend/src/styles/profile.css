@@ -942,6 +942,65 @@
   border-color: color-mix(in srgb, var(--color-brand) 46%, var(--color-line));
 }
 
+.profile-highlight-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--space-4);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.profile-highlight {
+  min-width: 0;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.profile-highlight__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.profile-highlight__title {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.profile-highlight__kind,
+.profile-highlight__meta,
+.profile-highlight__detail,
+.profile-highlight-list__scope {
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+}
+
+.profile-highlight__kind {
+  flex: 0 0 auto;
+}
+
+.profile-highlight__reasons {
+  margin-top: var(--space-2);
+}
+
+.profile-highlight__meta,
+.profile-highlight__detail {
+  margin: var(--space-2) 0 0;
+}
+
+.profile-highlight-list__scope {
+  margin: 0 0 var(--space-2);
+}
+
+.profile-highlight-list__toggle {
+  margin-top: var(--space-3);
+}
+
 .profile-section__heading {
   display: flex;
   align-items: flex-start;

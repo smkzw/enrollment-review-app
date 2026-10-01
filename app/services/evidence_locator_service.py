@@ -192,7 +192,15 @@ class EvidenceLocatorService:
         existing = repository.get_or_none(locator_id)
         if existing is not None:
             if existing != artifact.model_copy(update={"created_at": existing.created_at}):
-                raise LocatorInputError("同一定位身份已存在但内容不一致")
+                old_fields = existing.model_dump(mode="json")
+                new_fields = artifact.model_dump(mode="json")
+                changed = sorted(
+                    key for key in old_fields if old_fields[key] != new_fields[key]
+                    and key != "created_at"
+                )
+                raise LocatorInputError(
+                    "同一定位身份已存在但内容不一致：" + "、".join(changed)
+                )
             return existing
         return repository.create(artifact)
 

@@ -35,6 +35,8 @@ export interface PreparedReviewWorkflow {
   state: PreparedReviewState;
   stateLabel: string;
   stageLabel: string;
+  failureReason: string | null;
+  retryAvailable: boolean;
   progressCompleted: number;
   progressTotal: number;
   items: PreparedReviewTask[];
@@ -111,12 +113,18 @@ export function createPreparedReviewHttp(fetchImpl: typeof fetch = fetch.bind(gl
       const payload = await request(subjectId, episodeId, `/${encodeURIComponent(workflowId)}`, { method: "GET", signal },
         "prepared-review-workflows");
       const row = object(payload, ["job_id", "context_id", "context_sha256", "review_run_id", "state", "state_label",
-        "stage_label", "progress_completed", "progress_total", "items", "report_saved"]);
-      if (typeof row.report_saved !== "boolean") return invalid();
+        "stage_label", "progress_completed", "progress_total", "items", "report_saved",
+        "failure_reason", "retry_available"]);
+      if (typeof row.report_saved !== "boolean" || typeof row.retry_available !== "boolean") return invalid();
       const contextSha256 = text(row.context_sha256);
       if (row.job_id !== workflowId || !/^[0-9a-f]{64}$/.test(contextSha256)) return invalid();
+      const state = choice(row.state, states);
+      const failureReason = nullableText(row.failure_reason);
+      if (row.retry_available && (failureReason !== null || !["failed_final", "failed_retryable"].includes(state))) return invalid();
+      if (failureReason !== null && !["failed_final", "failed_retryable"].includes(state)) return invalid();
       return { reportSaved: row.report_saved, jobId: workflowId, contextId: text(row.context_id), contextSha256, reviewRunId: text(row.review_run_id),
-        state: choice(row.state, states), stateLabel: text(row.state_label), stageLabel: text(row.stage_label),
+        state, stateLabel: text(row.state_label), stageLabel: text(row.stage_label),
+        failureReason, retryAvailable: row.retry_available,
         progressCompleted: count(row.progress_completed), progressTotal: count(row.progress_total), items: taskItems(row.items) };
     },
     async changeWorkflow(subjectId: string, episodeId: string, workflowId: string, operation: "cancel" | "retry", signal?: AbortSignal) {

@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field, model_validator
 
@@ -470,6 +471,7 @@ class SelectiveVisionTaskDTO(_StrictModel):
     skipped_page_count: int | None = Field(default=None, ge=0)
     observation_page_count: int | None = Field(default=None, ge=0)
     closed_page_count: int | None = Field(default=None, ge=0)
+    failed_page_artifact_ids: list[str] = Field(default_factory=list)
     closed_reason_label: str | None = None
     failed_scope_label: str | None = None
     created_at: datetime | None = None
@@ -483,6 +485,10 @@ class SelectiveVisionTaskActionDTO(_StrictModel):
     state: str
     state_label: str
     changed: bool
+
+
+class SelectiveVisionRetryRequest(_StrictModel):
+    reading_rotations: dict[str, Literal[90, 180, 270]] = Field(default_factory=dict)
 
 
 class ActivateRequest(_StrictModel):

@@ -1400,7 +1400,6 @@ def _process_visual_page(
     # 的 worker 才写 PROCESSING 页行并调用模型。PageLeaseBusyError 竞争者不写
     # PROCESSING 页、不调用模型；prepare 工件本身可以作为共享的不可变检查点保留。
     with config.session_factory() as session, session.begin():
-        print(f"DEBUG OCR: adapter.prepare called, source_sha256={source_sha256[:16]}, page_number={page_number}", flush=True)
         prepared = adapter.prepare(
             session=session,
             artifact_store=artifact_store,
@@ -1447,13 +1446,11 @@ def _process_visual_page(
                     detail="识别通道尚未配置，本次识别未开始，请稍后重试。",
                 )
             try:
-                print("DEBUG OCR: calling _run_prepared_segments", flush=True)
                 result, gate_lease = _run_prepared_segments(
                     config=config,
                     gate=gate,
                     prepared=prepared,
                 )
-                print("DEBUG OCR: _run_prepared_segments returned", flush=True)
             except SegmentInferenceError as exc:
                 cause = exc.cause
                 if isinstance(cause, OmlxLeaseLostError):

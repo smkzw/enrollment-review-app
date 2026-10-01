@@ -608,6 +608,59 @@ def test_cross_page_paragraph_uses_unique_exact_fragment_inside_body_context():
     assert verify_excerpt_against_page(span, pages[0])
 
 
+@pytest.mark.parametrize("intervening_paragraphs", [0, 8])
+def test_repeated_flow_note_uses_its_own_table_and_following_paragraph(
+    intervening_paragraphs: int,
+):
+    note = "筛选和基线可依时间间隔合并检查，超过规定间隔必须重新完成基线评估"
+    prefix = "筛选和基线可依时间间隔合并检查，"
+    suffix = "超过规定间隔必须重新完成基线评估"
+    blocks = [
+        StructureBlock(
+            source_ref="body.t0", document_part=DocumentPart.BODY,
+            section_index=0, block_order=0, kind=BlockKind.TABLE,
+            text="", table_rows=1, table_cols=1,
+        ),
+        _para("body.t0.r0.c0.p0", "第一张表独有检查", table_path=(0, 0), block_order=1),
+        _para("body.p0", note, block_order=2),
+        _para("body.p1", "第一张表后唯一正文", block_order=3),
+        StructureBlock(
+            source_ref="body.t1", document_part=DocumentPart.BODY,
+            section_index=0, block_order=4, kind=BlockKind.TABLE,
+            text="", table_rows=1, table_cols=1,
+        ),
+        _para("body.t1.r0.c0.p0", "第二张表独有检查", table_path=(0, 0), block_order=5),
+    ]
+    blocks.extend(
+        _para(f"body.p{10 + index}", f"未渲染的续行{index}", block_order=6 + index)
+        for index in range(intervening_paragraphs)
+    )
+    blocks.extend([
+        _para("body.p2", note, block_order=6 + intervening_paragraphs),
+        _para("body.p3", "第二张表后唯一正文", block_order=7 + intervening_paragraphs),
+    ])
+    pages = [
+        "第一张表独有检查",
+        prefix,
+        f"{suffix} 第一张表后唯一正文",
+        f"第二张表独有检查 {note} 第二张表后唯一正文",
+    ]
+
+    result = align_blocks(
+        blocks, snapshot_id="snap", render_artifact_id="render", page_texts=pages,
+    )
+    by_ref = {span.source_ref: span for span in result.spans}
+
+    assert by_ref["body.p0"].alignment_status == AlignmentStatus.ALIGNED
+    assert by_ref["body.p0"].render_page in (2, 3)
+    assert by_ref["body.p2"].alignment_status == AlignmentStatus.ALIGNED
+    assert by_ref["body.p2"].render_page == 4
+    assert all(
+        verify_excerpt_against_page(by_ref[ref], pages[by_ref[ref].render_page - 1])
+        for ref in ("body.p0", "body.p2")
+    )
+
+
 def test_unaligned_paragraph_gets_same_page_hint_only():
     blocks = [
         _para("body.p0", "前一条唯一正文", block_order=0),

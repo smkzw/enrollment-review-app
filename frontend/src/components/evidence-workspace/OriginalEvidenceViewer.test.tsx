@@ -90,6 +90,22 @@ function locator(overrides: Partial<LocatorView> = {}): LocatorView {
 }
 
 describe("OriginalEvidenceViewer", () => {
+  it("结果区展开引起的自动滚动不换原件页，手动滚动仍联动", () => {
+    const onSelectPage = vi.fn();
+    const { container } = render(<OriginalEvidenceViewer revisionId="revision-1" pages={[readyPage, failedPage]}
+      documentNames={new Map()} selectedEntryId="entry-1" selectedLocatorId={null} selectedPageLocators={[]} onSelectPage={onSelectPage} />);
+    const viewer = screen.getByLabelText("原始资料查看区");
+    Object.defineProperty(viewer, "clientHeight", { configurable: true, value: 600 });
+    vi.spyOn(viewer, "getBoundingClientRect").mockReturnValue({ top: 100 } as DOMRect);
+    const pages = container.querySelectorAll(".original-evidence-page");
+    vi.spyOn(pages[0], "getBoundingClientRect").mockReturnValue({ top: -900, bottom: -100 } as DOMRect);
+    vi.spyOn(pages[1], "getBoundingClientRect").mockReturnValue({ top: 100, bottom: 900 } as DOMRect);
+    fireEvent.scroll(viewer);
+    expect(onSelectPage).not.toHaveBeenCalled();
+    fireEvent.wheel(viewer);
+    fireEvent.scroll(viewer);
+    expect(onSelectPage).toHaveBeenCalledWith("entry-2");
+  });
   it("明确返回原文的操作优先于刚发生的手动滚动，滚动联动本身不回拉", () => {
     const scrollTo = vi.fn();
     const props = {

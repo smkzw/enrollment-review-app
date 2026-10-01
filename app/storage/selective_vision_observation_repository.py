@@ -129,6 +129,16 @@ class SelectiveVisionObservationRepository:
             raise SelectiveVisionObservationSourceError(
                 f"观察 {observation.observation_id} 的 page_image_sha256 与 PageArtifact 不一致"
             )
+        view = observation.reading_view
+        if view is not None and (
+            view.source_page_artifact_id != observation.page_artifact_id
+            or view.source_image_sha256 != observation.page_image_sha256
+            or page.page_width != view.source_width
+            or page.page_height != view.source_height
+        ):
+            raise SelectiveVisionObservationSourceError(
+                f"观察 {observation.observation_id} 的阅读方向与原始页不一致"
+            )
 
         if observation.ocr_page_id is None:
             return page
@@ -163,6 +173,7 @@ class SelectiveVisionObservationRepository:
             model_id=observation.model_id,
             prompt_sha256=observation.prompt_sha256,
             risk_reasons_sha256=observation.risk_reasons_sha256,
+            reading_view=observation.reading_view,
         )
         if observation.observation_identity_sha256 != expected_identity:
             raise SelectiveVisionObservationConflictError(
@@ -180,6 +191,7 @@ class SelectiveVisionObservationRepository:
             and existing.source_ref == incoming.source_ref
             and existing.page_ordinal == incoming.page_ordinal
             and existing.page_image_sha256 == incoming.page_image_sha256
+            and existing.reading_view == incoming.reading_view
             and existing.ocr_page_id == incoming.ocr_page_id
             and existing.ocr_raw_text_sha256 == incoming.ocr_raw_text_sha256
             and existing.plan_version == incoming.plan_version

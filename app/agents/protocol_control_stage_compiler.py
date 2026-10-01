@@ -25,6 +25,7 @@ from app.domain.contracts.enums import ReviewStage
 from app.domain.contracts.enums import ProtocolPeriod
 from app.protocols.protocol_control_gate import _split_prohibition_atom_covers_clause
 from app.protocols.supplementary_relation_contract import procedure_execution_workflow_stage_id
+from app.protocols.source_time_fragments import intraday_time_fragments
 
 from .protocol_control_deconstructor import (
     ProtocolControlAgentResponse,
@@ -41,9 +42,9 @@ from .protocol_control_source_interpretation import (
 )
 
 
-STAGE_BOUND_REQUIREMENT_VERSION = "phase5/control-stage-bound-requirement/v7"
-RELATIVE_STAGE_REQUIREMENT_VERSION = "phase5/control-relative-stage-requirement/v5"
-SHARED_PROHIBITION_REQUIREMENT_VERSION = "phase5/control-shared-prohibition-requirement/v1"
+STAGE_BOUND_REQUIREMENT_VERSION = "phase5/control-stage-bound-requirement/v8"
+RELATIVE_STAGE_REQUIREMENT_VERSION = "phase5/control-relative-stage-requirement/v6"
+SHARED_PROHIBITION_REQUIREMENT_VERSION = "phase5/control-shared-prohibition-requirement/v2"
 
 
 class _SourceRequirement(ContractModel):
@@ -106,6 +107,26 @@ def _time_parts(text: str) -> list[str]:
     ]
 
 
+def _visit_scope_in_stage(part: str, frozen_visit: str) -> bool:
+    """A simple 'visit period 内' belongs to that period, not to a new visit."""
+    if part in frozen_visit:
+        return True
+    if re.fullmatch(r"[^、，和及与/]+期内", part):
+        return part[:-1] in frozen_visit
+    return False
+
+
+def _simple_stage_scope(statement: SourceStatement) -> str | None:
+    if statement.scope_quote:
+        return statement.scope_quote
+    if len(statement.time_words) != 1:
+        return None
+    word = statement.time_words[0]
+    if normalize_source_excerpt(word) in normalize_source_excerpt(statement.quoted_text):
+        return word
+    return None
+
+
 def requires_temporal_resolution(interpretation: SourceInterpretation, statement_index: int) -> bool:
     """Keep explicit durations and cross-period duties out of the short visit path."""
 
@@ -114,7 +135,8 @@ def requires_temporal_resolution(interpretation: SourceInterpretation, statement
         statement.quoted_text, statement.scope_quote, *statement.time_words,
     ))))
     return bool(
-        re.search(r"\d+(?:天|日|周|月|年)(?:内|以上|以下)?", source)
+        intraday_time_fragments(source)
+        or re.search(r"\d+(?:天|日|周|月|年)(?:内|以上|以下)?", source)
         or re.search(r"(?:W|D)\d+[~～至-](?:W|D)?\d+", source)
         or re.search(r"整个|全程|持续|连续|继续", source)
         or re.search(r"期(?:、|和|及|与).{0,30}期", source)
@@ -136,6 +158,9 @@ def can_compile_shared_prohibition_requirement(
         statement.force == "prohibited"
         and not statement.exception_words
         and not statement.unresolved
+        and not intraday_time_fragments(" ".join(filter(None, (
+            statement.quoted_text, statement.scope_quote, *statement.time_words,
+        ))))
         and unit is not None
         and len(unit.source_span_ids) == 1
         and requires_temporal_resolution(interpretation, review.statement_index)
@@ -205,20 +230,27 @@ def can_compile_stage_bound_requirement(
         return False
     if (
         statement.force != "required"
-        or not statement.scope_quote
+        or not _simple_stage_scope(statement)
         or not statement.time_words
         or statement.exception_words
         or statement.unresolved
     ):
         return False
     required = [part for word in statement.time_words for part in _time_parts(word)]
-    scope_parts = _time_parts(statement.scope_quote)
-    return bool(scope_parts) and all(part in normalize_source_excerpt(statement.scope_quote) for part in required) and any(
-        all(part in normalize_source_excerpt(" ".join(filter(None, (
-            stage.display_name, stage.visit_instance, stage.visit_window
-        )))) for part in scope_parts)
-        for stage in batch.known_workflow_stage_targets
-    )
+    scope_text = _simple_stage_scope(statement)
+    assert scope_text is not None
+    scope_parts = _time_parts(scope_text)
+    if not scope_parts or not all(
+        part in normalize_source_excerpt(scope_text) for part in required
+    ):
+        return False
+    for stage in batch.known_workflow_stage_targets:
+        frozen_visit = normalize_source_excerpt(" ".join(filter(None, (
+            stage.display_name, stage.visit_instance, stage.visit_window,
+        ))))
+        if all(_visit_scope_in_stage(part, frozen_visit) for part in scope_parts):
+            return True
+    return False
 
 
 def can_compile_relative_stage_requirement(
@@ -266,6 +298,7 @@ def build_stage_bound_requirement_prompt(
         "statement_index": review.statement_index,
         "quoted_text": statement.quoted_text,
         "scope_quote": statement.scope_quote,
+        "simple_stage_scope": _simple_stage_scope(statement),
         "time_words": statement.time_words,
         "force": statement.force,
         "exception_words": statement.exception_words,
@@ -285,6 +318,7 @@ def build_stage_bound_requirement_prompt(
     return (
         "你是本系统内置方案 Agent 的单项语义解释步骤，不审核受试者，也不输出完整规则。"
         "只处理一个已核实尚未覆盖的原文动作。选择原文逐字动作摘录、逐字访视范围和冻结节点；"
+        "访视范围可来自动作句内唯一明确的时间措辞，也可来自已核共同范围，不得借相邻动作的时点；"
         "不要凭 D 日标记换算首次给药日期或补日历时限。"
         "仅当动作与全部时间措辞均能由同一冻结访视直接支持，且无未明条件、例外、持续期、"
         "复查频率或跨节点义务时才给出可装配的字段。其余情形在 unresolved_aspects 逐项说明，"
@@ -565,7 +599,7 @@ def compile_stage_bound_requirement(
         raise StageBoundCompilationGap("访视范围摘录不属于冻结原文")
     if action not in normalize_source_excerpt(statement.quoted_text):
         raise StageBoundCompilationGap("动作不属于本条来源陈述")
-    if scope != normalize_source_excerpt(statement.scope_quote or ""):
+    if scope != normalize_source_excerpt(_simple_stage_scope(statement) or ""):
         raise StageBoundCompilationGap("访视范围必须采用已核陈述的原文范围")
     if normalize_source_excerpt(review.source_action_excerpt) not in action:
         raise StageBoundCompilationGap("动作不得省略已核增量摘录中的限定")
@@ -621,8 +655,26 @@ def compile_stage_bound_requirement(
         })
     elif not declared_time or not scope_parts or any(
         part not in scope for part in declared_time
-    ) or any(part not in frozen_visit for part in scope_parts):
+    ) or any(not _visit_scope_in_stage(part, frozen_visit) for part in scope_parts):
         raise StageBoundCompilationGap("原文时间要求未被所选冻结访视逐项覆盖")
+    if isinstance(selection, StageBoundRequirement) and review.target_id:
+        procedure = next((item for item in batch.known_procedure_targets
+                          if item.catalog_item_id == review.target_id), None)
+        target_action = normalize_source_excerpt(review.target_action_excerpt or "")
+        if (procedure is not None and target_action and target_action in action
+                and any(target_action in normalize_source_excerpt(excerpt or "")
+                        for excerpt in procedure.source_excerpts)
+                and procedure_execution_workflow_stage_id(
+                    procedure, batch.known_workflow_stage_targets,
+                ) == stage.workflow_stage_id):
+            relations.append({
+                "kind": "supplementary_requirement",
+                "external_target_kind": "required_procedure",
+                "external_target_id": procedure.catalog_item_id,
+                "candidate_side": "left",
+                "affected_workflow_stage_id": stage.workflow_stage_id,
+                "notes": "原文动作在同一访视对既有流程目标提出增量要求。",
+            })
     if not selection.observation_scope or not selection.required_source_types:
         raise StageBoundCompilationGap("资料范围或来源类型未说明")
 

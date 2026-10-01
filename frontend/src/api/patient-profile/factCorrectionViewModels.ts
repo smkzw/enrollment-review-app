@@ -53,6 +53,7 @@ export interface FactCorrectionPreviewView {
   oldSnapshot: FactCorrectionJsonRecord;
   newSnapshot: FactCorrectionJsonRecord;
   impact: FactCorrectionImpactView;
+  siblingFactIds: string[];
 }
 
 export interface FactCorrectionSubmitView {
@@ -298,6 +299,10 @@ export function decodeFactCorrectionError(
 
 export function decodeFactCorrectionPreview(payload: unknown): FactCorrectionPreviewView {
   const row = record(payload, "preview");
+  const siblingRows = requiredField(row, "sibling_facts", "preview");
+  if (!Array.isArray(siblingRows)) {
+    throw new PatientProfileDecodeError("preview.sibling_facts 应为清单。");
+  }
   return {
     targetKind: targetKind(requiredField(row, "target_kind", "preview"), "preview.target_kind"),
     targetKindLabel: requiredString(
@@ -318,6 +323,13 @@ export function decodeFactCorrectionPreview(payload: unknown): FactCorrectionPre
       "preview.new_snapshot",
     ),
     impact: impact(requiredField(row, "impact", "preview"), "preview.impact"),
+    siblingFactIds: siblingRows.map((item, index) => {
+      const path = `preview.sibling_facts[${index}]`;
+      return requiredString(
+        requiredField(record(item, path), "fact_id", path),
+        `${path}.fact_id`,
+      );
+    }),
   };
 }
 

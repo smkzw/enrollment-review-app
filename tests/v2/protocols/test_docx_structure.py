@@ -10,7 +10,9 @@ from app.protocols.docx_structure import (
     BlockKind,
     HeaderFooterKind,
     StructureBlock,
+    _cells_with_col,
     _effective_numbering,
+    _table_size,
     extract_docx_structure,
     parse_numbering,
 )
@@ -64,6 +66,48 @@ def test_gridspan_table_size(tmp_path):
     # 合并单元格右边缘为 col + span = 3，而非 col + 1
     assert table[0].table_cols == 3
     assert table[0].table_rows == 1
+
+
+def test_omitted_leading_grid_columns_preserve_real_cell_positions():
+    row = parse_xml(
+        f'<w:tr {nsdecls("w")}>'
+        '<w:trPr><w:gridBefore w:val="2"/></w:trPr>'
+        '<w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p/></w:tc>'
+        '<w:tc><w:p/></w:tc></w:tr>'
+    )
+    assert [(col, span) for _cell, col, span in _cells_with_col(row)] == [
+        (2, 2), (4, 1),
+    ]
+
+
+def test_omitted_trailing_grid_columns_count_toward_table_width():
+    table = parse_xml(
+        f'<w:tbl {nsdecls("w")}><w:tr>'
+        '<w:trPr><w:gridBefore w:val="2"/><w:gridAfter w:val="1"/></w:trPr>'
+        '<w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p/></w:tc>'
+        '</w:tr></w:tbl>'
+    )
+    assert _table_size(table) == (1, 5)
+
+
+def test_vertical_and_horizontal_merge_are_retained_on_source_blocks(tmp_path):
+    def build(path):
+        document = Document()
+        table = document.add_table(rows=2, cols=3)
+        table.cell(0, 0).text = "筛选期"
+        table.cell(0, 0).merge(table.cell(0, 1))
+        table.cell(0, 2).text = "基线期"
+        table.cell(0, 2).merge(table.cell(1, 2))
+        table.cell(1, 0).text = "V1"
+        table.cell(1, 1).text = "V2"
+        document.save(path)
+
+    ext = _extract(tmp_path, "merged-grid", build)
+    blocks = {block.source_ref: block for block in ext.blocks}
+    assert blocks["body.t0.r0.c0.p0"].table_col_span == 2
+    assert blocks["body.t0.r0.c2.p0"].table_vertical_merge == "restart"
+    assert blocks["body.t0.r1.c2.p0"].table_vertical_merge == "continue"
+    assert blocks["body.t0"].table_cols == 3
 
 
 def test_superscript_and_subscript_are_preserved_as_semantic_text(tmp_path):

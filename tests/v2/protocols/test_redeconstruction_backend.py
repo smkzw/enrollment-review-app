@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,6 +29,7 @@ from app.domain.contracts.protocol_metadata import (
     AnchorResolutionStatement,
     InterpretationSource,
 )
+from app.domain.contracts.rules import RestrictedRuleComponent
 from app.services.protocol_draft_service import ProtocolDraftService
 from app.services.protocol_publication_service import (
     ProtocolPublicationRequest,
@@ -102,6 +104,10 @@ class InterpretationAwareGate(AlwaysPublishableGate):
 class FeedbackRegressionGate:
     """目标规则被无关重写时增加阻断问题。"""
 
+    def __init__(self, new_issue_code="TARGET_ISSUE_2", new_issue_check="tree_integrity"):
+        self.new_issue_code = new_issue_code
+        self.new_issue_check = new_issue_check
+
     def evaluate(self, _source_input, draft, **_kwargs):
         target = draft.proposed_rules[1].components[0]
         issue_count = (
@@ -113,8 +119,8 @@ class FeedbackRegressionGate:
         )
         issues = [
             ProtocolGateIssue(
-                issue_code=f"TARGET_ISSUE_{index}",
-                check_name="tree_integrity",
+                issue_code=(self.new_issue_code if index == 2 else "TARGET_ISSUE_1"),
+                check_name=(self.new_issue_check if index == 2 else "tree_integrity"),
                 level="阻止发布",
                 problem=f"目标规则问题 {index}",
                 impact="当前草稿不能发布。",
@@ -129,8 +135,8 @@ class FeedbackRegressionGate:
             checks=[
                 ProtocolGateCheckResult(
                     check_name=name,
-                    passed=name != "tree_integrity",
-                    issues=issues if name == "tree_integrity" else [],
+                    passed=not any(issue.check_name == name for issue in issues),
+                    issues=[issue for issue in issues if issue.check_name == name],
                 )
                 for name in CHECK_NAMES
             ],
@@ -744,8 +750,15 @@ def test_active_draft_interpretation_registration_revises_and_publishes(
     ]
 
 
+@pytest.mark.parametrize(
+    ("new_issue_code", "detail_fragment"),
+    [
+        ("TARGET_ISSUE_2", "原草稿保持不变"),
+        ("DISJUNCTION_NOT_BOUND_TO_SOURCE", "任选关系"),
+    ],
+)
 def test_source_error_feedback_rejects_target_rule_gate_regression(
-    slice4_env, data_paths
+    slice4_env, data_paths, new_issue_code, detail_fragment
 ) -> None:
     factory, _now = slice4_env
     source_input, draft, spans = confirmed_fixture()
@@ -759,7 +772,7 @@ def test_source_error_feedback_rejects_target_rule_gate_regression(
     service = _make_service(
         factory,
         data_paths,
-        gate=FeedbackRegressionGate(),
+        gate=FeedbackRegressionGate(new_issue_code),
         feedback_reviser=revise,
     )
     started = service.start_first_deconstruction(
@@ -788,13 +801,32 @@ def test_source_error_feedback_rejects_target_rule_gate_regression(
         )
 
     assert exc_info.value.code == "FEEDBACK_REVISION_FAILED"
+    assert detail_fragment in exc_info.value.detail
+    assert exc_info.value.context == {
+        "rule_code": "EX-01",
+        "component_id": None,
+        "unchanged_revision_id": before.revision.revision_id,
+        "attempts": 1,
+        "issue_codes": [new_issue_code],
+    }
+    rejected = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in (data_paths.root / "artifacts" / "raw_response").glob("*")
+    ]
+    rejected = [item for item in rejected
+                if item.get("format") == "protocol-feedback-rejected-candidate/v1"]
+    assert len(rejected) == 1
+    assert rejected[0]["accepted"] is False
+    assert rejected[0]["expected_revision_id"] == before.revision.revision_id
+    assert rejected[0]["target_rule_code"] == "EX-01"
+    assert rejected[0]["candidate"]["draft_id"] == draft.draft_id
     assert service.get_draft_detail(started.job_id).revision.revision_id == (
         before.revision.revision_id
     )
 
 
 def test_default_feedback_reviser_retries_one_rejected_candidate(
-    slice4_env, data_paths
+    slice4_env, data_paths, monkeypatch
 ) -> None:
     """默认模型候选首次引入新问题时，携带门禁原因重试一次。"""
 
@@ -802,7 +834,8 @@ def test_default_feedback_reviser_retries_one_rejected_candidate(
     source_input, draft, spans = confirmed_fixture()
     notes: list[str] = []
 
-    def revise(_source_input, current_draft, _target_rule_code, feedback_note):
+    def revise(_source_input, current_draft, _target_rule_code, feedback_note, _target_component_id=None, *, joint_source_repair=False):
+        assert joint_source_repair is False
         notes.append(feedback_note)
         revised = current_draft.model_copy(deep=True)
         title = "引入无关变化" if len(notes) == 1 else "按原文完成局部修订"
@@ -816,7 +849,9 @@ def test_default_feedback_reviser_retries_one_rejected_candidate(
         gate=FeedbackRegressionGate(),
     )
     # 保留默认修订器的自动恢复策略，仅用可控候选替代外部调用。
-    service.feedback_reviser = revise
+    monkeypatch.setattr(
+        ProtocolWorkbenchService, "_revise_feedback_with_model", staticmethod(revise)
+    )
     started = service.start_first_deconstruction(
         upload_path=_write_minimal_docx(data_paths, "feedback-retry.docx"),
         original_name="feedback-retry.docx",
@@ -842,11 +877,130 @@ def test_default_feedback_reviser_retries_one_rejected_candidate(
     )
 
     assert len(notes) == 2
+    assert (
+        "问题定位（仅供核对原文）："
+        + json.dumps([draft.proposed_rules[1].components[0].rule_component_id], ensure_ascii=False)
+    ) in notes[0]
     assert "上一个候选稿未通过" in notes[1]
     assert "TARGET_ISSUE_2" in notes[1]
     assert after.revision.revision_number == before.revision.revision_number + 1
     assert after.revision.content.proposed_rules[1].components[0].title == (
         "按原文完成局部修订"
+    )
+
+
+@pytest.mark.parametrize(("issue_code", "check_name"), [
+    ("DISJUNCTION_NOT_BOUND_TO_SOURCE", "boolean_logic"),
+    ("FREQUENCY_WINDOW_NOT_STRUCTURED", "temporal_semantics"),
+    ("NUMERIC_VALUE_NOT_IN_SOURCE", "numeric_semantics"),
+])
+def test_default_feedback_reviser_does_not_retry_new_core_semantics_regression(
+    slice4_env, data_paths, monkeypatch, issue_code, check_name,
+) -> None:
+    factory, _now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+    notes: list[str] = []
+
+    def revise(_source_input, current_draft, _target_rule_code, note, _component_id=None, *, joint_source_repair=False):
+        assert joint_source_repair is False
+        notes.append(note)
+        revised = current_draft.model_copy(deep=True)
+        revised.proposed_rules[1].components[0].title = "引入无关变化"
+        revised.component_drafts[1].proposed_component.title = "引入无关变化"
+        return revised
+
+    service = _make_service(
+        factory, data_paths,
+        gate=FeedbackRegressionGate(issue_code, check_name),
+    )
+    monkeypatch.setattr(
+        ProtocolWorkbenchService, "_revise_feedback_with_model", staticmethod(revise),
+    )
+    started = service.start_first_deconstruction(
+        upload_path=_write_minimal_docx(data_paths, "feedback-logic-regression.docx"),
+        original_name="feedback-logic-regression.docx",
+        idempotency_key="feedback-logic-regression-first",
+        actor="医学监查员",
+    )
+    service.seed_review_session(
+        started.job_id, source_input=source_input, draft=draft,
+        source_spans=spans, wait_at="await_review",
+    )
+    before = service.get_draft_detail(started.job_id)
+
+    with pytest.raises(ProtocolWorkbenchError) as exc_info:
+        service.apply_feedback(
+            started.job_id,
+            expected_revision_id=before.revision.revision_id,
+            feedback_kind=DraftFeedbackKind.SOURCE_ERROR,
+            target_rule_code="EX-01",
+            feedback_note="核对原文逻辑，不扩展任选关系。",
+            actor="医学监查员",
+        )
+
+    assert len(notes) == 1
+    assert exc_info.value.context["attempts"] == 1
+    assert exc_info.value.context["issue_codes"] == [issue_code]
+    assert service.get_draft_detail(started.job_id).revision.revision_id == before.revision.revision_id
+
+
+def test_feedback_saves_repaired_candidate_with_new_capability_reminder(
+    slice4_env, data_paths,
+) -> None:
+    factory, _now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+
+    class CapabilityReminderGate(FeedbackRegressionGate):
+        def evaluate(self, source_input, draft, **kwargs):
+            result = super().evaluate(source_input, draft, **kwargs)
+            target = draft.proposed_rules[1].components[0]
+            if target.title != "按原文完成局部修订":
+                return result
+            reminder = ProtocolGateIssue(
+                issue_code="APPLICABLE_POPULATION_NOT_EVALUATED",
+                check_name="boolean_logic", level="提醒",
+                problem="适用人群尚未核实。", impact="该条件保留未决。",
+                next_action="核对适用人群。",
+                affected_refs=[target.rule_component_id],
+                repair_scope=[target.rule_component_id],
+            )
+            return result.model_copy(update={
+                "publishable": True,
+                "checks": [check.model_copy(update={"issues": [reminder]})
+                           if check.check_name == "boolean_logic" else check
+                           for check in result.checks],
+            })
+
+    def revise(_source_input, current_draft, _target_rule_code, _note):
+        revised = current_draft.model_copy(deep=True)
+        revised.proposed_rules[1].components[0].title = "按原文完成局部修订"
+        revised.component_drafts[1].proposed_component.title = "按原文完成局部修订"
+        return revised
+
+    service = _make_service(factory, data_paths, gate=CapabilityReminderGate(),
+                            feedback_reviser=revise)
+    started = service.start_first_deconstruction(
+        upload_path=_write_minimal_docx(data_paths, "feedback-reminder.docx"),
+        original_name="feedback-reminder.docx",
+        idempotency_key="feedback-reminder-first", actor="医学监查员",
+    )
+    service.seed_review_session(started.job_id, source_input=source_input,
+                               draft=draft, source_spans=spans, wait_at="await_review")
+    before = service.get_draft_detail(started.job_id)
+    after = service.apply_feedback(
+        started.job_id, expected_revision_id=before.revision.revision_id,
+        feedback_kind=DraftFeedbackKind.SOURCE_ERROR, target_rule_code="EX-01",
+        feedback_note="按原文修订，保留适用范围未决。", actor="医学监查员",
+    )
+    assert after.revision.revision_number == before.revision.revision_number + 1
+    integrity = service.get_integrity(started.job_id)
+    assert integrity.publishable is True
+    assert [issue["issue_code"] for issue in integrity.issues] == [
+        "APPLICABLE_POPULATION_NOT_EVALUATED",
+    ]
+    assert service.get_draft_detail(started.job_id).revision.content == after.revision.content
+    assert before.revision.content.proposed_rules[1].components[0].title != (
+        after.revision.content.proposed_rules[1].components[0].title
     )
 
 
@@ -989,6 +1143,323 @@ def test_source_error_feedback_preserves_unrelated_or_ambiguous_unresolved_items
         ProtocolWorkbenchService._validate_source_error_scope(
             previous, current, target_rule_code="IN-01"
         )
+
+
+def test_source_error_feedback_keeps_unselected_sibling_and_its_source() -> None:
+    _source_input, original, _spans = confirmed_fixture()
+    parent = original.proposed_rules[0]
+    first = parent.components[0]
+    sibling = first.model_copy(update={
+        "rule_component_id": "component-in-sibling",
+        "display_code": "IN-01b",
+        "title": "独立的第二项要求",
+        "evidence_requirements": [],
+    })
+    sibling_binding = original.component_drafts[0].model_copy(update={
+        "draft_component_id": "draft-component-in-sibling",
+        "proposed_component": sibling,
+    })
+    previous = original.model_copy(update={
+        "proposed_rules": [parent.model_copy(update={"components": [first, sibling]}),
+                           *original.proposed_rules[1:]],
+        "component_drafts": [*original.component_drafts, sibling_binding],
+    })
+    revised_first = first.model_copy(update={"title": "有原文支持的局部修订"})
+    revised_binding = original.component_drafts[0].model_copy(update={
+        "proposed_component": revised_first,
+    })
+    valid = previous.model_copy(update={
+        "proposed_rules": [parent.model_copy(update={"components": [revised_first, sibling]}),
+                           *original.proposed_rules[1:]],
+        "component_drafts": [revised_binding, *original.component_drafts[1:], sibling_binding],
+    })
+    ProtocolWorkbenchService._validate_source_error_scope(
+        previous, valid, target_rule_code="IN-01", target_component_id=first.rule_component_id,
+    )
+
+    changed_sibling = sibling.model_copy(update={"title": "无关要求被改写"})
+    invalid = valid.model_copy(update={
+        "proposed_rules": [parent.model_copy(update={"components": [revised_first, changed_sibling]}),
+                           *original.proposed_rules[1:]],
+        "component_drafts": [revised_binding, *original.component_drafts[1:],
+                             sibling_binding.model_copy(update={"proposed_component": changed_sibling})],
+    })
+    with pytest.raises(ValueError, match="未选中的子项"):
+        ProtocolWorkbenchService._validate_source_error_scope(
+            previous, invalid, target_rule_code="IN-01", target_component_id=first.rule_component_id,
+        )
+
+
+def test_source_error_feedback_keeps_shared_and_sibling_review_questions() -> None:
+    _source_input, original, _spans = confirmed_fixture()
+    parent = original.proposed_rules[0]
+    first = parent.components[0]
+    sibling = first.model_copy(update={
+        "rule_component_id": "component-in-sibling", "display_code": "IN-01b",
+        "title": "独立要求", "evidence_requirements": [],
+    })
+    previous = original.model_copy(update={
+        "proposed_rules": [parent.model_copy(update={"components": [first, sibling]}),
+                           *original.proposed_rules[1:]],
+        "component_drafts": [*original.component_drafts,
+                             original.component_drafts[0].model_copy(update={
+                                 "draft_component_id": "draft-component-in-sibling",
+                                 "proposed_component": sibling,
+                             })],
+        "unresolved_items": [
+            UnresolvedItem(code="TARGET", affected_scope=[first.rule_component_id]),
+            UnresolvedItem(code="SIBLING", affected_scope=[sibling.rule_component_id]),
+            UnresolvedItem(code="SHARED", affected_scope=["IN-01"],
+                           source_refs=original.component_drafts[0].source_refs),
+        ],
+    })
+    selected = previous.model_copy(update={"unresolved_items": previous.unresolved_items[1:]}, deep=True)
+    ProtocolWorkbenchService._validate_source_error_scope(
+        previous, selected, target_rule_code="IN-01", target_component_id=first.rule_component_id,
+    )
+    for code in ("SIBLING", "SHARED"):
+        invalid = previous.model_copy(update={
+            "unresolved_items": [item for item in previous.unresolved_items if item.code != code],
+        }, deep=True)
+        with pytest.raises(ValueError, match="未选中子项或共用原文"):
+            ProtocolWorkbenchService._validate_source_error_scope(
+                previous, invalid, target_rule_code="IN-01", target_component_id=first.rule_component_id,
+            )
+
+
+def test_source_error_feedback_requires_child_selection_before_model_call(
+    slice4_env, data_paths,
+) -> None:
+    factory, _now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+    parent = draft.proposed_rules[0]
+    extra = RestrictedRuleComponent(
+        rule_component_id="component-in-extra", display_code="IN-01b",
+        title="另一项来源要求", source_span_ids=["span-in"],
+        source_excerpts=["另一项来源要求"],
+        limitation_kind="interpretation_unresolved",
+        unresolved_dimensions=["适用条件"],
+    )
+    draft = draft.model_copy(update={
+        "proposed_rules": [parent.model_copy(update={"restricted_components": [extra]}),
+                           *draft.proposed_rules[1:]],
+    })
+    calls = []
+    service = _make_service(
+        factory, data_paths, gate=AlwaysPublishableGate(),
+        feedback_reviser=lambda *args: calls.append(args),
+    )
+    started = service.start_first_deconstruction(
+        upload_path=_write_minimal_docx(data_paths, "multi-child-feedback.docx"),
+        original_name="multi-child-feedback.docx",
+        idempotency_key="multi-child-feedback",
+        actor="医学监查员",
+    )
+    service.seed_review_session(
+        started.job_id, source_input=source_input, draft=draft,
+        source_spans=spans, wait_at="await_review",
+    )
+    revision = service.get_draft_detail(started.job_id).revision
+    with pytest.raises(ProtocolWorkbenchError) as error:
+        service.apply_feedback(
+            started.job_id, expected_revision_id=revision.revision_id,
+            feedback_kind=DraftFeedbackKind.SOURCE_ERROR,
+            target_rule_code="IN-01", feedback_note="只修订第二项", actor="医学监查员",
+        )
+    assert error.value.code == "FEEDBACK_COMPONENT_REQUIRED"
+    assert calls == []
+
+
+def test_joint_exception_feedback_requires_all_siblings_same_source_and_both_issues() -> None:
+    source_input, draft, _spans = confirmed_fixture()
+    text = "存在可能影响吸收的情况，包括但不限于甲病、乙术（丙术除外）"
+    items = list(source_input.parent_rule_catalog.items)
+    items[1] = items[1].model_copy(update={"label": text})
+    source_input.parent_rule_catalog = source_input.parent_rule_catalog.model_copy(
+        update={"items": items}
+    )
+    next(item for item in source_input.source_materials
+         if item.source_span_id == "span-ex").text = text
+    rule = draft.proposed_rules[1]
+    rule.source_text = text
+    sibling = rule.components[0].model_copy(update={
+        "rule_component_id": "component-ex-sibling", "display_code": "EX-01b",
+    }, deep=True)
+    rule.components.append(sibling)
+    original_binding = next(item for item in draft.component_drafts
+                            if item.parent_official_code == "EX-01")
+    draft.component_drafts.append(original_binding.model_copy(update={
+        "draft_component_id": "draft-component-ex-sibling",
+        "proposed_component": sibling,
+    }))
+
+    def receipt(codes):
+        issues = [ProtocolGateIssue(
+            issue_code=code, check_name="boolean_logic", level="阻止发布",
+            problem="局部例外范围未核实", impact="不能发布", next_action="共同核对",
+            affected_refs=[component_id], repair_scope=["EX-01"],
+        ) for code, component_id in codes]
+        return ProtocolDeconstructionGateResult(publishable=False, checks=[
+            ProtocolGateCheckResult(
+                check_name=name, passed=name != "boolean_logic",
+                issues=issues if name == "boolean_logic" else [],
+            ) for name in CHECK_NAMES
+        ])
+
+    issues = [
+        ("LOCAL_EXCEPTION_REENTERED_OPEN_LIST", "component-ex"),
+        ("LOCAL_EXCEPTION_MAY_WAIVE_CONCURRENT_TRIGGER", "component-ex-sibling"),
+    ]
+    allowed = ProtocolWorkbenchService._joint_source_feedback_allowed
+    assert allowed(source_input, draft, "EX-01", receipt(issues))
+    assert not allowed(source_input, draft, "EX-01", receipt(issues[:1]))
+    draft.component_drafts[-1].source_refs = ["span-in"]
+    assert not allowed(source_input, draft, "EX-01", receipt(issues))
+
+
+def test_joint_source_feedback_requires_one_unresolved_frequency_segment() -> None:
+    source_input, draft, _spans = confirmed_fixture()
+    text = "有严重既往史（包括复发性病史（2年内发生2次或以上））或有现病史"
+    items = list(source_input.parent_rule_catalog.items)
+    items[1] = items[1].model_copy(update={"label": text})
+    source_input.parent_rule_catalog = source_input.parent_rule_catalog.model_copy(
+        update={"items": items}
+    )
+    next(item for item in source_input.source_materials
+         if item.source_span_id == "span-ex").text = text
+    rule = draft.proposed_rules[1]
+    rule.source_text = text
+    sibling = rule.components[0].model_copy(update={
+        "rule_component_id": "component-ex-sibling", "display_code": "EX-01b",
+    }, deep=True)
+    rule.components.append(sibling)
+    original = next(item for item in draft.component_drafts
+                    if item.parent_official_code == "EX-01")
+    draft.component_drafts.append(original.model_copy(update={
+        "draft_component_id": "draft-component-ex-sibling",
+        "proposed_component": sibling,
+    }))
+    issue = ProtocolGateIssue(
+        issue_code="DISJUNCTION_NOT_BOUND_TO_SOURCE", check_name="boolean_logic",
+        level="阻止发布", problem="连接关系待核", impact="不能发布",
+        next_action="核对同段原文", affected_refs=["component-ex"], repair_scope=["EX-01"],
+    )
+    receipt = ProtocolDeconstructionGateResult(publishable=False, checks=[
+        ProtocolGateCheckResult(
+            check_name=name, passed=name != "boolean_logic",
+            issues=[issue] if name == "boolean_logic" else [],
+        ) for name in CHECK_NAMES
+    ])
+    allowed = ProtocolWorkbenchService._joint_source_feedback_allowed
+    assert allowed(source_input, draft, "EX-01", receipt)
+    rule.source_text = text.replace("或有现病史", "；或有现病史")
+    next(item for item in source_input.source_materials
+         if item.source_span_id == "span-ex").text = rule.source_text
+    assert not allowed(source_input, draft, "EX-01", receipt)
+    rule.source_text = text
+    next(item for item in source_input.source_materials
+         if item.source_span_id == "span-ex").text = text
+    draft.component_drafts[-1].source_refs = ["span-in"]
+    assert not allowed(source_input, draft, "EX-01", receipt)
+
+
+def test_joint_source_feedback_population_gap_requires_every_executable_atom() -> None:
+    source_input, draft, _spans = confirmed_fixture()
+    rule = draft.proposed_rules[1]
+    sibling = rule.components[0].model_copy(update={
+        "rule_component_id": "component-ex-sibling", "display_code": "EX-01b",
+    }, deep=True)
+    rule.components.append(sibling)
+    original = next(item for item in draft.component_drafts
+                    if item.parent_official_code == "EX-01")
+    draft.component_drafts.append(original.model_copy(update={
+        "draft_component_id": "draft-component-ex-sibling",
+        "proposed_component": sibling,
+    }))
+    rule.restricted_components = [RestrictedRuleComponent(
+        rule_component_id="component-ex-note", display_code="EX-01c",
+        title="同源附加要求", source_span_ids=["span-ex"],
+        source_excerpts=[rule.source_text], limitation_kind="consumer_unavailable",
+        unresolved_dimensions=["适用人群尚不能由正式计算核实"],
+    )]
+    from app.domain.contracts.rules import iter_atomic_predicates
+
+    for predicate in iter_atomic_predicates(sibling.expression):
+        predicate.predicate_id += "-sibling"
+
+    predicates = [
+        predicate for component in rule.components
+        for predicate in iter_atomic_predicates(component.expression)
+    ]
+    for predicate in predicates:
+        predicate.applicable_population = "原文限定的人群"
+    issues = [ProtocolGateIssue(
+        issue_code="APPLICABLE_POPULATION_NOT_EVALUATED", check_name="boolean_logic",
+        level="阻止发布", problem="适用范围待核", impact="不能执行",
+        next_action="核对人群", affected_refs=[predicate.predicate_id], repair_scope=["EX-01"],
+    ) for predicate in predicates]
+    receipt = ProtocolDeconstructionGateResult(publishable=False, checks=[
+        ProtocolGateCheckResult(
+            check_name=name, passed=name != "boolean_logic",
+            issues=issues if name == "boolean_logic" else [],
+        ) for name in CHECK_NAMES
+    ])
+    allowed = ProtocolWorkbenchService._joint_source_feedback_allowed
+    assert allowed(source_input, draft, "EX-01", receipt)
+    predicate = predicates[-1]
+    predicate.applicable_population = None
+    assert not allowed(source_input, draft, "EX-01", receipt)
+    predicate.applicable_population = "原文限定的人群"
+    next(check for check in receipt.checks
+         if check.check_name == "boolean_logic").issues.pop()
+    assert not allowed(source_input, draft, "EX-01", receipt)
+
+
+def test_source_error_feedback_closes_only_selected_child_question(
+    slice4_env, data_paths,
+) -> None:
+    factory, _now = slice4_env
+    source_input, draft, spans = confirmed_fixture()
+    parent = draft.proposed_rules[0]
+    first = parent.components[0]
+    extra = RestrictedRuleComponent(
+        rule_component_id="component-in-extra", display_code="IN-01b",
+        title="另一项来源要求", source_span_ids=["span-in"],
+        source_excerpts=["另一项来源要求"],
+        limitation_kind="interpretation_unresolved",
+        unresolved_dimensions=["适用条件"],
+    )
+    draft = draft.model_copy(update={
+        "proposed_rules": [parent.model_copy(update={"restricted_components": [extra]}),
+                           *draft.proposed_rules[1:]],
+        "unresolved_items": [
+            UnresolvedItem(code="TARGET", affected_scope=[first.rule_component_id]),
+            UnresolvedItem(code="SHARED", affected_scope=["IN-01"], source_refs=["span-in"]),
+        ],
+    })
+
+    def revise(_source_input, current, _code, _note):
+        return current.model_copy(update={"unresolved_items": current.unresolved_items[1:]}, deep=True)
+
+    service = _make_service(factory, data_paths, gate=AlwaysPublishableGate(), feedback_reviser=revise)
+    started = service.start_first_deconstruction(
+        upload_path=_write_minimal_docx(data_paths, "selected-child-feedback.docx"),
+        original_name="selected-child-feedback.docx", idempotency_key="selected-child-feedback",
+        actor="医学监查员",
+    )
+    service.seed_review_session(
+        started.job_id, source_input=source_input, draft=draft,
+        source_spans=spans, wait_at="await_review",
+    )
+    before = service.get_draft_detail(started.job_id)
+    after = service.apply_feedback(
+        started.job_id, expected_revision_id=before.revision.revision_id,
+        feedback_kind=DraftFeedbackKind.SOURCE_ERROR,
+        target_rule_code="IN-01", target_component_id=first.rule_component_id,
+        feedback_note="只核对所选子项", actor="医学监查员",
+    )
+    assert after.revision.revision_number == before.revision.revision_number + 1
+    assert [item.code for item in after.revision.content.unresolved_items] == ["SHARED"]
 
 
 def test_failed_source_error_feedback_keeps_current_revision(

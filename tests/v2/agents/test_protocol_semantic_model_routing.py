@@ -273,6 +273,20 @@ def test_missing_glm_key_returns_explicit_chinese_skip_reason(monkeypatch):
     assert "GLM" in detail
 
 
+def test_ollama_cloud_route_requires_its_own_key(monkeypatch):
+    candidate = ProtocolSemanticRouteCandidate(
+        backend="ollama-cloud",
+        model="deepseek-v4.1-flash",
+        reasoning_effort="high",
+    )
+    monkeypatch.setenv("DECONSTRUCT_API_KEY", "another-provider-key")
+    monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+    assert "OLLAMA_API_KEY" in candidate_availability_error(candidate)
+
+    monkeypatch.setenv("OLLAMA_API_KEY", "ollama-test-key")
+    assert candidate_availability_error(candidate) is None
+
+
 def test_chinese_diagnostics_for_route_mode_and_failure_detail():
     with pytest.raises(ValueError, match="仅支持 graded/pinned"):
         resolve_route_mode("auto")

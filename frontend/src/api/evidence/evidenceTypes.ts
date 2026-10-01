@@ -52,6 +52,8 @@ export interface EvidenceMetadataRevisionWire {
   source_document_version_id: string;
   document_type: string;
   source_party: string;
+  document_category?: DocumentCategory | null;
+  source_category?: SourceCategory | null;
   reason: string;
   is_auto_suggestion: boolean;
   supersedes_metadata_revision_id: string | null;
@@ -63,11 +65,28 @@ export interface EvidenceMetadataRevisionWire {
 export interface EvidenceMetadataRevisionRequestWire {
   document_type: string;
   source_party: string;
+  document_category?: DocumentCategory | null;
+  source_category?: SourceCategory | null;
   reason: string;
   expected_metadata_revision: number;
   idempotency_key: string;
   actor?: string | null;
 }
+
+export type DocumentCategory =
+  | "objective_report"
+  | "historical_record"
+  | "study_chart"
+  | "screening_transcription"
+  | "other"
+  | "unknown";
+
+export type SourceCategory =
+  | "study_site"
+  | "external_hospital"
+  | "participant"
+  | "other"
+  | "unknown";
 
 export interface EvidenceMetadataRevisionResponseWire {
   metadata: EvidenceMetadataRevisionWire;
@@ -82,6 +101,7 @@ export interface EvidenceSnapshotMemberWire {
   file_name: string;
   media_type: string;
   version_number: number;
+  uploaded_by: string;
   origin: string;
   origin_label: string;
   metadata_head: EvidenceMetadataRevisionWire;

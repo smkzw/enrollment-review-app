@@ -23,10 +23,10 @@ class SeriesNumericResult:
     """Deterministic series aggregate; caller retains source and eligibility duty."""
 
     operation: str | None = None
-    declared_input_count: int = 0
+    declared_input_count: int | None = None
     present_input_count: int = 0
     allowed_missing_count: int = 0
-    missing_count: int = 0
+    missing_count: int | None = None
     missing_policy: str = "not_specified"
     source_range_complete: bool = False
     fact_ids: tuple[str, ...] = ()
@@ -65,7 +65,7 @@ def calculate_series_numeric_result(
     groups: Sequence[Sequence[ClinicalFact]],
     *,
     operation: str | None,
-    declared_input_count: int,
+    declared_input_count: int | None,
     allowed_missing_count: int = 0,
     missing_policy: Literal["exclude", "impute", "not_specified", "unresolved"] = "not_specified",
     source_range_complete: bool,
@@ -73,16 +73,19 @@ def calculate_series_numeric_result(
 ) -> SeriesNumericResult:
     """Aggregate verified independent acquisition groups for a numeric series.
 
-    The caller proves source qualification, eligibility, declared cardinality,
-    allowed absence, and whether the searched source range is complete. This
-    kernel does not invent missing values, convert units, authorize replacement,
+    The caller proves source qualification, eligibility, any declared cardinality,
+    allowed absence, and whether the searched source range is complete. An
+    unknown cardinality stays unknown instead of being inferred from the records.
+    This kernel does not invent missing values, convert units, authorize replacement,
     or emit a ClinicalFact.
     """
-    if type(declared_input_count) is not int or declared_input_count < 0:
-        raise ValueError("序列计算须声明非负的输入个数")
+    if declared_input_count is not None and (
+        type(declared_input_count) is not int or declared_input_count < 0
+    ):
+        raise ValueError("序列计算须声明非负的输入个数或明确保留未核实")
     if type(allowed_missing_count) is not int or allowed_missing_count < 0:
         raise ValueError("序列计算的允许缺失数须为非负整数")
-    if allowed_missing_count > declared_input_count:
+    if declared_input_count is not None and allowed_missing_count > declared_input_count:
         raise ValueError("允许缺失数不能超过声明输入数")
     if type(source_range_complete) is not bool:
         raise ValueError("来源范围完整性须由本次原件核对给出")
@@ -98,7 +101,10 @@ def calculate_series_numeric_result(
         raise ValueError("当前序列算术试验只接受旧版事实材料，不能直接用于正式审核事实")
 
     present_input_count = len(groups)
-    missing_count = max(declared_input_count - present_input_count, 0)
+    missing_count = (
+        None if declared_input_count is None
+        else max(declared_input_count - present_input_count, 0)
+    )
     fact_ids = tuple(
         sorted({fact.fact_id for group in groups for fact in group})
     )
@@ -122,6 +128,8 @@ def calculate_series_numeric_result(
 
     if not source_range_complete:
         return unresolved("series_source_range_incomplete")
+    if declared_input_count is None:
+        return unresolved("series_declared_input_count_unverified")
     if operation is not None and resolved_operation is None:
         return unresolved("series_operation_unverified")
     if present_input_count > declared_input_count:

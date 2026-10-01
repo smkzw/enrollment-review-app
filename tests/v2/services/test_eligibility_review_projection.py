@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -25,6 +26,9 @@ from app.domain.contracts.facts import (
 from app.services.eligibility_review_projection import (
     EligibilityReviewProjectionService,
     _continuing_obligation_note,
+    _fact_refs,
+    _restricted_clause_projection,
+    _selected_predicate_locators,
     adapt_clinical_fact_v2,
     fold_fact_chain_heads,
 )
@@ -41,6 +45,91 @@ from tests.v2.storage.test_fact_repositories import _seed_chain
 
 
 NOW = datetime(2026, 8, 22, 12, 0, 0, tzinfo=UTC)
+
+
+def test_work_draft_source_navigation_uses_only_proven_pair_location(monkeypatch) -> None:
+    from app.services import eligibility_review_projection as projection
+
+    predicate = SimpleNamespace(
+        predicate_id="predicate-1", predicate_identity_sha256="identity-1",
+        predicate=SimpleNamespace(repeat_scheme=None, occurrence_window=None),
+    )
+    selection = SimpleNamespace(
+        predicate_frozen_input=SimpleNamespace(components=[SimpleNamespace(
+            rule_component_id="component-1", binding_predicates=[predicate],
+        )]),
+        identity_outcomes=[SimpleNamespace(
+            identity_sha256="identity-1", status="usable", usable_pair_ids=["pair-1"],
+        )],
+        source_pair_locations=(("identity-1", "pair-1", "fact-1", "locator-1"),),
+    )
+    evaluation = SimpleNamespace(predicate_evaluations={
+        "predicate-1": SimpleNamespace(used_fact_ids=["fact-1"]),
+    })
+    selected = _selected_predicate_locators(selection, "component-1", evaluation, {"fact-1"})
+    assert selected == {"fact-1": {"locator-1"}}
+
+    locators = [SimpleNamespace(
+        locator_id=f"locator-{number}", page_number=number,
+        source_document_version_id="document-1", page_artifact_id=f"page-{number}",
+        excerpt=f"第{number}份扫描",
+    ) for number in (1, 2)]
+    monkeypatch.setattr(projection, "EvidenceLocatorRepository", lambda _session: SimpleNamespace(
+        get_many=lambda _ids: locators,
+    ))
+    fact = SimpleNamespace(fact_id="fact-1", locator_ids=["locator-1", "locator-2"])
+    refs = _fact_refs(object(), {"fact-1"}, {"fact-1": fact}, selected)
+    assert [(item.fact_id, item.locator_id) for item in refs] == [("fact-1", "locator-1")]
+    with pytest.raises(projection.EligibilityReviewProjectionError, match="原件范围不一致"):
+        _fact_refs(object(), {"fact-1"}, {"fact-1": fact}, {"fact-1": {"another"}})
+
+
+def test_repeat_or_unproven_source_does_not_guess_selected_location() -> None:
+    predicate = SimpleNamespace(
+        predicate_id="predicate-1", predicate_identity_sha256="identity-1",
+        predicate=SimpleNamespace(repeat_scheme=object(), occurrence_window=None),
+    )
+    selection = SimpleNamespace(
+        predicate_frozen_input=SimpleNamespace(components=[SimpleNamespace(
+            rule_component_id="component-1", binding_predicates=[predicate],
+        )]),
+        identity_outcomes=[SimpleNamespace(
+            identity_sha256="identity-1", status="usable", usable_pair_ids=["pair-1"],
+        )],
+        source_pair_locations=(("identity-1", "pair-1", "fact-1", "locator-1"),),
+    )
+    evaluation = SimpleNamespace(predicate_evaluations={
+        "predicate-1": SimpleNamespace(used_fact_ids=["fact-1"]),
+    })
+    assert _selected_predicate_locators(selection, "component-1", evaluation, {"fact-1"}) == {}
+
+
+@pytest.mark.parametrize("limitation,owner", [
+    ("interpretation_unresolved", "sponsor_medical_or_project"),
+    ("consumer_unavailable", None),
+])
+def test_source_bound_unresolved_rule_is_visible_without_patient_gap_or_positive_result(
+    limitation: str, owner: str | None,
+) -> None:
+    from app.domain.contracts.clause_pack import ClausePackRestrictedClause
+    from app.domain.contracts.enums import ComponentDecision, RuleKind
+
+    clause = ClausePackRestrictedClause(
+        clause_id="component:IN-01:02", rule_id="rule:IN-01",
+        official_code="IN-01", display_code="IN-01b", kind=RuleKind.INCLUSION,
+        title="独立来源要求", source_text="完整规则原文",
+        source_span_ids=["span:1"], source_excerpts=["独立来源要求"],
+        limitation_kind=limitation,
+        unresolved_dimensions=["适用对象尚未核清"],
+    )
+    projected = _restricted_clause_projection(clause)
+    assert projected.decision == ComponentDecision.INDETERMINATE.value
+    assert "适用对象尚未核清" in projected.reason
+    assert projected.fact_refs == ()
+    assert projected.limitation_kind == limitation
+    assert projected.action_owner == owner
+    assert projected.action_detail
+    assert projected.gap_type is None
 
 
 def test_future_control_is_explained_without_claiming_current_compliance() -> None:
@@ -111,6 +200,34 @@ def test_projection_preserves_published_source_separately_from_summary(session_f
         for item in result.clauses:
             assert item.source_text == by_id[item.rule_component_id].source_text
             assert item.text_summary == by_id[item.rule_component_id].title
+
+
+def test_latest_expectations_reads_current_authority_once(monkeypatch):
+    from app.services import eligibility_review_projection as projection
+
+    current_authority = object()
+    current = [SimpleNamespace(template_id="req-1", revision=1, authority=current_authority),
+               SimpleNamespace(template_id="req-1", revision=2, authority=current_authority),
+               SimpleNamespace(template_id="req-2", revision=1, authority=current_authority)]
+
+    class Repository:
+        def __init__(self, _session):
+            pass
+
+        def list_for_authority(self, authority):
+            assert authority is current_authority
+            return current
+
+        def list_by_episode(self, _episode_id):
+            pytest.fail("读取当前权威时不应扫描全体历史记录")
+
+        def latest_by_template(self, _episode_id, _template_id):
+            pytest.fail("同批已校验记录不应逐模板重读全库")
+
+    monkeypatch.setattr(projection, "EvidenceExpectationV2Repository", Repository)
+    assert [(item.template_id, item.revision) for item in projection._latest_expectations(
+        object(), current_authority,
+    )] == [("req-2", 1), ("req-1", 2)]
 
 
 def _standalone_fact(*, fact_id: str, revision: int, authority: FactAuthority):
@@ -336,6 +453,20 @@ def test_projection_without_published_fact_is_unknown_not_negative(session):
     assert by_code["EX-02"].gap_type == "observation_unverified"
     assert "资料尚未完成核实" in by_code["EX-02"].reason
     assert "未见" not in by_code["EX-02"].reason
+
+
+def test_changed_source_is_visible_without_reusing_old_work_draft(session, monkeypatch):
+    from app.services.eligibility_review_projection import _STALE_WORK_DRAFT
+
+    chain = _seed_chain(session, "eligibility-source-changed")
+    service = EligibilityReviewProjectionService(artifact_store=object())
+    monkeypatch.setattr(
+        service, "_completed_work_draft",
+        lambda _session, *, authority, rule_set: _STALE_WORK_DRAFT,
+    )
+    projection = service.project(session, chain["episode_id"])
+    assert projection.work_draft_state == "source_changed"
+    assert all(not clause.fact_refs for clause in projection.clauses)
 
 
 @pytest.mark.parametrize(

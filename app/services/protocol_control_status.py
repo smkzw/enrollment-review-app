@@ -27,8 +27,11 @@ from app.domain.contracts.protocol_controls import (
     ProtocolControlCandidate,
     ProtocolSectionCoverageManifest,
 )
-from app.domain.contracts.rules import WorkflowStage
+from app.domain.contracts.rules import RuleSet, WorkflowStage
 from app.protocols.protocol_control_gate import CONTROL_PUBLICATION_GATE_VERSION
+from app.services.protocol_control_catalog_publication import (
+    SourceCalculationGap, _verified_calculation_release, source_calculation_gaps,
+)
 from app.services.evidence_app_errors import (
     AppNotFoundError,
     EvidenceAppError,
@@ -43,13 +46,14 @@ from app.services.protocol_control_executor import (
 )
 from app.storage.codecs import verify_payload_sha256
 from app.storage.models import JobCheckpointRecord, JobStepRecord
+from app.storage.repositories import ProtocolDraftRevisionRepository, RepositoryError, ScopeViolationError
 from app.workflow.errors import JobNotFoundError
 from app.workflow.jobstore import JobStore
 from app.workflow.states import TERMINAL_JOB_STATES
 
 #: 面向用户的整理状态中文说明；只描述能否随方案发布，绝不表述临床结论。
 PROTOCOL_CONTROL_STATUS_LABELS = {
-    "candidate_ready": "补充审核要求已整理，等待随方案发布",
+    "candidate_ready": "补充审核要求已整理，仍需核对发布条件",
     "processing": "正在整理补充审核要求",
     "stopped": "补充审核要求整理未完成",
 }
@@ -92,6 +96,7 @@ class ProtocolControlRequirementsView:
     candidates: tuple[ProtocolControlCandidate, ...]
     workflow_stages: tuple[WorkflowStage, ...]
     relation_target_labels: Mapping[str, str]
+    calculation_gaps: tuple[SourceCalculationGap, ...]
 
 
 @app_error_boundary
@@ -141,10 +146,36 @@ def protocol_control_requirements(
                 if key in target_labels and target_labels[key] != value:
                     raise ProtocolControlCheckpointInvalidError()
                 target_labels[key] = value
+        calculation_gaps = source_calculation_gaps(JobStore(session), job_id)
+        try:
+            revision_id = payload.get("draft_revision_id")
+            if not isinstance(revision_id, str) or not revision_id:
+                raise ValueError("方案草稿修订身份缺失")
+            revision = ProtocolDraftRevisionRepository(session).get(revision_id)
+            if (revision.content_sha256 != payload.get("draft_content_sha256")
+                    or revision.protocol_version_id != manifest.protocol_version_id
+                    or revision.study_phase != manifest.study_phase):
+                raise ValueError("方案草稿修订与补充审核要求不一致")
+            rule_set = RuleSet(
+                rule_set_id=f"preview:{revision.protocol_version_id}",
+                protocol_version_id=revision.protocol_version_id,
+                study_phase=revision.study_phase,
+                rules=revision.content.proposed_rules,
+                revision=1,
+            )
+            released = _verified_calculation_release(
+                checkpoint, plan, batches, manifest, rule_set, calculation_gaps,
+            )
+        except (RepositoryError, ValidationError, ValueError, TypeError) as exc:
+            raise ProtocolControlCheckpointInvalidError() from exc
         return ProtocolControlRequirementsView(
             job_id=job_id, source_job_id=status.source_job_id, checkpoint_id=checkpoint_id,
             candidates=candidates,
             workflow_stages=workflow_stages, relation_target_labels=target_labels,
+            calculation_gaps=tuple(
+                gap for gap in calculation_gaps
+                if (gap.batch_number, gap.statement_index) not in released
+            ),
         )
 
 

@@ -2009,6 +2009,27 @@ def test_locator_same_occurrence_under_target_alias_rejected(revision_stack):
         repo.create(_locator(keys, locator_id="loc-alias", target_id="another-alias"))
 
 
+def test_locator_v2_same_range_can_link_distinct_risk_targets(revision_stack):
+    """同一原文位置可服务于两项不同风险，旧算法的别名限制不变。"""
+    session, _fixture, keys = revision_stack
+    repo = EvidenceLocatorRepository(session)
+    repo.create(_locator(
+        keys, locator_id="loc-risk-a", target_id="scan-a:risk-a",
+        locator_algorithm_version="slice4.4/v2",
+    ))
+    repo.create(_locator(
+        keys, locator_id="loc-risk-b", target_id="scan-b:risk-b",
+        locator_algorithm_version="slice4.4/v2",
+    ))
+    assert repo.get("loc-risk-a").target_id == "scan-a:risk-a"
+    assert repo.get("loc-risk-b").target_id == "scan-b:risk-b"
+    with pytest.raises(LocatorIdentityError, match="身份碰撞"):
+        repo.create(_locator(
+            keys, locator_id="loc-risk-a-alias", target_id="scan-a:risk-a",
+            locator_algorithm_version="slice4.4/v2",
+        ))
+
+
 # --- Finding 4: 风险 flag 必须锚定 raw OCR ---
 
 

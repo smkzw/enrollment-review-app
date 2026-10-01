@@ -11,8 +11,8 @@ def nested_example_definitions(text: str) -> list[tuple[str, str, str]]:
     """
 
     found: list[tuple[str, str, str]] = []
-    for marker in re.finditer(r"包括但不限于|包括|例如", text):
-        head = text[:marker.start()].rstrip("（( ")
+    for marker in re.finditer(r"例如(?:包括但不限于|包括)?|包括但不限于|包括", text):
+        head = re.split(r"[。；;]", text[:marker.start()])[-1].rstrip("（( ")
         listed = re.split(r"[。；;]", text[marker.end():], maxsplit=1)[0]
         for match in re.finditer(
             r"(?P<member>[^，、；;（）()]{1,80})[（(]"

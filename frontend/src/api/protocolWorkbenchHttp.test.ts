@@ -5,6 +5,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createProtocolWorkbenchHttp } from "./protocolWorkbenchHttp";
 import {
+  encodeFeedback,
   normalizeIdentityReview,
   normalizeSession,
   normalizeSources,
@@ -376,6 +377,25 @@ describe("protocolWorkbenchHttp", () => {
     });
     expect(revision.revisionNumber).toBe(2);
     expect(revision.reasonLabel).toBe("补充解释");
+  });
+
+  it("原文纠错请求保留所选子项身份，补充解释不虚构子项", () => {
+    expect(encodeFeedback({
+      expectedRevisionId: "rev-2",
+      feedbackKind: "source_error",
+      targetRuleCode: "EX-02",
+      targetComponentId: "component-ex-02b",
+      feedbackNote: "第二项的定义范围需要核对",
+    })).toMatchObject({
+      target_rule_code: "EX-02",
+      target_component_id: "component-ex-02b",
+    });
+    expect(encodeFeedback({
+      expectedRevisionId: "rev-2",
+      feedbackKind: "clarification",
+      targetRuleCode: "EX-02",
+      feedbackNote: "补充说明",
+    })).not.toHaveProperty("target_component_id");
   });
 
   it("editDraft 发送 PUT snake_case 手工修订正文", async () => {

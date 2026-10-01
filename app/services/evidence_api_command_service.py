@@ -110,6 +110,7 @@ from app.storage.evidence_locator_repositories import (
     EvidenceProcessingCandidateRepository,
     OCRRiskPageReviewRepository,
     OCRRiskReviewRepository,
+    OCRRiskScanRepository,
     ReferencedDocumentRepository,
     RevisionClosureError,
 )
@@ -331,6 +332,8 @@ class EvidenceApiCommandService:
         source_document_version_id: str,
         document_type: str,
         source_party: str,
+        document_category: str | None = None,
+        source_category: str | None = None,
         reason: str,
         expected_metadata_revision: int,
         idempotency_key: str,
@@ -348,6 +351,10 @@ class EvidenceApiCommandService:
             "expected_metadata_revision": expected_metadata_revision,
             "actor": actor,
         }
+        if document_category is not None:
+            submitted["document_category"] = document_category
+        if source_category is not None:
+            submitted["source_category"] = source_category
         with self.session_factory() as session:
             self._begin_write(session)
             # 读取资料本身会重验 project/subject/episode 作用域。
@@ -364,6 +371,8 @@ class EvidenceApiCommandService:
                         "revision": revision.revision,
                         "document_type": revision.document_type,
                         "source_party": revision.source_party,
+                        "document_category": revision.document_category,
+                        "source_category": revision.source_category,
                     }
                 return revision
 
@@ -393,6 +402,8 @@ class EvidenceApiCommandService:
                         "revision": current_revision,
                         "document_type": head.document_type if head else None,
                         "source_party": head.source_party if head else None,
+                        "document_category": head.document_category if head else None,
+                        "source_category": head.source_category if head else None,
                         "is_auto_suggestion": head.is_auto_suggestion if head else None,
                     },
                     field_diff={
@@ -406,6 +417,8 @@ class EvidenceApiCommandService:
                 not head.is_auto_suggestion
                 and head.document_type == document_type
                 and head.source_party == source_party
+                and head.document_category == document_category
+                and head.source_category == source_category
             ):
                 raise AppMetadataUnchangedError("资料类型和来源方与当前记录一致。")
 
@@ -420,6 +433,8 @@ class EvidenceApiCommandService:
                     revision=head.revision + 1,
                     document_type=document_type,
                     source_party=source_party,
+                    document_category=document_category,
+                    source_category=source_category,
                     reason=reason,
                     is_auto_suggestion=False,
                     supersedes_metadata_revision_id=head.metadata_revision_id,
@@ -1315,6 +1330,14 @@ class EvidenceApiCommandService:
             self._begin_write(session)
             snapshot = EvidenceSnapshotRepository(session).get(evidence_snapshot_id)
             episode_id = snapshot.review_episode_id
+            if scanner_rule_version is None:
+                resolved_scanner_rule_version = self._metadata_only_scanner_version(
+                    session,
+                    snapshot_id=evidence_snapshot_id,
+                    base_processing_revision_id=base_processing_revision_id,
+                    selected_locator_ids=selected_locator_ids or [],
+                    default_version=OCR_RISK_RULE_VERSION,
+                )
             scope = f"build:{episode_id}"
             submitted = {
                 "evidence_snapshot_id": evidence_snapshot_id,
@@ -1381,6 +1404,48 @@ class EvidenceApiCommandService:
                 job_id=job.job_id,
                 candidate_status=candidate.status.value,
             )
+
+    def _metadata_only_scanner_version(
+        self,
+        session: Session,
+        *,
+        snapshot_id: str,
+        base_processing_revision_id: str,
+        selected_locator_ids: list[str],
+        default_version: str,
+    ) -> str:
+        """仅资料信息变化时沿用活动版本的逐页核对，不重新定义已核原件。"""
+        if selected_locator_ids:
+            return default_version
+        episode_id = EvidenceSnapshotRepository(session).get(snapshot_id).review_episode_id
+        episode = EpisodeRepository(session).get(episode_id)
+        if episode.active_evidence_snapshot_id != snapshot_id or not episode.active_evidence_processing_revision_id:
+            return default_version
+        previous = self._load_complete(session, episode.active_evidence_processing_revision_id)
+        if previous.base_processing_revision_id != base_processing_revision_id or not previous.risk_scan_ids:
+            return default_version
+        scan_repo = OCRRiskScanRepository(session)
+        versions = {scan_repo.get(scan_id).scanner_rule_version for scan_id in previous.risk_scan_ids}
+        if len(versions) != 1:
+            return default_version
+        old_version = versions.pop()
+        if old_version == default_version:
+            return default_version
+        current = EvidenceRevisionBuilder(artifact_store=self.artifact_store).gather_closure(
+            session,
+            evidence_snapshot_id=snapshot_id,
+            base_processing_revision_id=base_processing_revision_id,
+            scanner_rule_version=old_version,
+        )
+        if sorted(current.metadata_revision_ids) == sorted(previous.metadata_revision_ids):
+            return default_version
+        for field in (
+            "risk_scan_ids", "risk_review_ids", "correction_ids",
+            "referenced_document_revision_ids", "resolution_revision_ids",
+        ):
+            if sorted(getattr(current, field)) != sorted(getattr(previous, field)):
+                return default_version
+        return old_version
 
     @staticmethod
     def _pending_referenced_document_actions(

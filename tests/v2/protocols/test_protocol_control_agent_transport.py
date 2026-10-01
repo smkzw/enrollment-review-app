@@ -9,6 +9,7 @@ model or write clinical artifacts.
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 import os
 import subprocess
 import sys
@@ -44,6 +45,7 @@ from app.agents.protocol_control_deconstructor import (
     ProtocolControlAgentWireObligationDnf,
     ProtocolControlAgentWireObligationGroup,
     protocol_control_agent_response_format,
+    protocol_control_batch_response_format,
 )
 from app.agents.protocol_control_discovery_transport import (
     protocol_control_discovery_transport_from_model_config,
@@ -373,6 +375,72 @@ def _valid_wire_text() -> str:
     return wire.model_dump_json()
 
 
+@pytest.mark.parametrize("bad_field", [None, "disposition", "candidate_unit", "atom_span"])
+def test_batch_author_schema_rejects_context_write_but_keeps_normal_result(bad_field) -> None:
+    from jsonschema import ValidationError as SchemaError, validate
+
+    batch = _batch()
+    context = _unit("su-context", 3, "span:context", "另一段仅供阅读的参照文字")
+    batch = batch.model_copy(update={
+        "context_units": [context], "context_structure_unit_ids": [context.structure_unit_id],
+        "context_source_span_ids": context.source_span_ids,
+    })
+    global_schema = protocol_control_agent_response_format()
+    frozen_global = deepcopy(global_schema)
+    scoped = protocol_control_batch_response_format(batch)["json_schema"]["schema"]
+    wire = json.loads(_valid_wire_text())
+    # Domain serialization omits absent ordering; the provider's strict schema
+    # requires explicit null, independently of the new batch scope constraints.
+    def explicit_ordering(value):
+        if isinstance(value, dict):
+            policy = value.get("observation_policy")
+            if isinstance(policy, dict):
+                policy.setdefault("selection", None)
+            predicate = value.get("predicate")
+            if isinstance(predicate, dict):
+                for field in ("semantic_proposition", "observation_policy", "repeat_scheme"):
+                    predicate.setdefault(field, None)
+            refs = value.get("atom_refs")
+            if isinstance(refs, list):
+                for ref in refs:
+                    ref.setdefault("condition_id", None)
+            for child in value.values():
+                explicit_ordering(child)
+        elif isinstance(value, list):
+            for child in value:
+                explicit_ordering(child)
+    explicit_ordering(wire)
+    validate(wire, global_schema["json_schema"]["schema"])
+    if bad_field == "disposition":
+        wire["dispositions"][0]["structure_unit_id"] = "su-context"
+    elif bad_field == "candidate_unit":
+        wire["candidate_drafts"][0]["source_structure_unit_ids"] = ["su-context"]
+    elif bad_field == "atom_span":
+        wire["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0]["source_span_ids"] = ["span:context"]
+    if bad_field is None:
+        validate(wire, scoped)
+    else:
+        with pytest.raises(SchemaError):
+            validate(wire, scoped)
+    assert protocol_control_agent_response_format() == frozen_global
+
+
+def test_batch_schema_survives_full_repair_and_separate_sessions() -> None:
+    client, calls = _client([_valid_wire_text(), _valid_wire_text(), _valid_wire_text()])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="ollama-cloud", model="deepseek-v4.1-flash",
+        api_key="test-only", response_format_mode="json_schema", model_identity_check=False,
+    )
+    batch = _batch()
+    first = transport.start_batch(prompt="冻结批次读取", batch=batch)
+    transport.continue_session(session_id=first.session_id, prompt="只修本批")
+    transport.start(prompt="普通独立读取")
+    scoped = protocol_control_batch_response_format(batch)
+    assert calls.calls[0]["response_format"] == scoped
+    assert calls.calls[1]["response_format"] == scoped
+    assert calls.calls[2]["response_format"] == protocol_control_agent_response_format()
+
+
 def test_protocol_control_defaults_use_current_independent_product_routes() -> None:
     values = _config_probe()
 
@@ -579,6 +647,55 @@ def test_control_call_receipts_keep_missing_provider_usage_unknown() -> None:
     assert transport.take_call_receipts() == []
 
 
+@pytest.mark.parametrize("mode", ["json_schema", "json_object", "text"])
+def test_call_metrics_measure_actual_format_without_retaining_source(mode, monkeypatch) -> None:
+    ticks = iter((10.0, 12.25))
+    monkeypatch.setattr(
+        "app.agents.protocol_control_agent_transport.monotonic", lambda: next(ticks),
+    )
+    client, completions = _client(['{"ok":true}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode=mode,
+    )
+    source = "受控原文，不写入测量回执"
+    transport.start(prompt=source)
+    receipt = transport.take_call_receipts()[0]
+    assert receipt["elapsed_seconds"] == 2.25
+    assert receipt["response_format_mode"] == mode
+    assert receipt["message_count"] == 1
+    assert receipt["request_content_chars"] == len(source)
+    assert receipt["attempt_number"] == 1
+    sent_format = completions.calls[0].get("response_format")
+    expected_bytes = len(json.dumps(
+        sent_format, ensure_ascii=False, separators=(",", ":"),
+    ).encode("utf-8")) if sent_format is not None else 0
+    assert receipt["structured_format_bytes"] == expected_bytes
+    assert receipt["request_json_bytes"] > len(source.encode("utf-8"))
+    assert receipt["usage"] is None
+    assert source not in str(receipt)
+
+
+def test_length_retry_metrics_keep_attempt_costs_separate(monkeypatch) -> None:
+    ticks = iter((10.0, 11.0, 12.0, 15.5))
+    monkeypatch.setattr(
+        "app.agents.protocol_control_agent_transport.monotonic", lambda: next(ticks),
+    )
+    client, _ = _client([('{"partial":true', "length"), ('{"ok":true}', "stop")])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384,
+    )
+    transport.start(prompt="冻结来源")
+    first, second = transport.take_call_receipts()
+    assert [first["attempt_number"], second["attempt_number"]] == [1, 2]
+    assert [first["elapsed_seconds"], second["elapsed_seconds"]] == [1.0, 3.5]
+    assert second["request_content_chars"] > first["request_content_chars"]
+    assert second["request_json_bytes"] > first["request_json_bytes"]
+    assert second["requested_max_tokens"] == first["requested_max_tokens"] * 2
+    assert "partial" not in str((first, second))
+
+
 def test_interrupted_stream_keeps_partial_metadata_without_replaying_request() -> None:
     class InterruptedCompletions:
         calls = 0
@@ -615,6 +732,8 @@ def test_interrupted_stream_keeps_partial_metadata_without_replaying_request() -
     assert receipts[0]["usage"] == {"completion_tokens": 9}
     assert receipts[0]["received_content_characters"] > 0
     assert len(receipts[0]["partial_content_sha256"]) == 64
+    assert receipts[0]["elapsed_seconds"] >= 0
+    assert receipts[0]["request_content_chars"] == len("冻结控制输入")
     assert "private" not in str(receipts)
 
 
@@ -644,6 +763,50 @@ def test_stream_reported_model_mismatch_is_rejected_without_retry() -> None:
     assert receipts[0]["requested_model"] == "deepseek-latest-cloud"
     assert receipts[0]["reported_model"] == "another-model"
     assert receipts[0]["error_kind"] == "reported_model_mismatch"
+
+
+def test_control_stream_ignores_empty_keepalive_before_model_response() -> None:
+    frames = [
+        SimpleNamespace(id="chatcmpl-keepalive", model="keepalive", choices=[
+            SimpleNamespace(finish_reason=None, delta=SimpleNamespace(content=None)),
+        ]),
+        SimpleNamespace(id="real-request", model="deepseek-latest-cloud", choices=[
+            SimpleNamespace(finish_reason="stop", delta=SimpleNamespace(content='{"ok":true}')),
+        ]),
+    ]
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
+        create=lambda **kwargs: iter(frames),
+    )))
+    response = OpenAICompatibleProtocolControlAgentTransport._stream_completion(
+        client, {"model": "deepseek-latest-cloud", "messages": []},
+    )
+    assert response.id == "real-request"
+    assert response.model == "deepseek-latest-cloud"
+    assert response.choices[0].message.content == '{"ok":true}'
+
+
+def test_control_stream_keeps_identity_from_reasoning_and_rejects_later_switch() -> None:
+    frames = [
+        SimpleNamespace(id="first", model="deepseek-latest-cloud", choices=[
+            SimpleNamespace(finish_reason=None, delta=SimpleNamespace(
+                content=None, reasoning_content="核对来源",
+            )),
+        ]),
+        SimpleNamespace(id="second", model="another-model", choices=[
+            SimpleNamespace(finish_reason="stop", delta=SimpleNamespace(content='{"ok":true}')),
+        ]),
+    ]
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
+        create=lambda **kwargs: iter(frames),
+    )))
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud", max_tokens=16384,
+    )
+    with pytest.raises(ProtocolControlAgentCallError, match="模型流在有效内容之间变更了模型身份"):
+        transport.start(prompt="冻结控制输入")
+    receipt = transport.take_call_receipts()[0]
+    assert receipt["reported_model"] == "deepseek-latest-cloud"
+    assert receipt["request_id"] == "first"
 
 
 def test_filtered_completion_is_not_accepted_as_a_parsed_answer() -> None:
@@ -849,9 +1012,9 @@ def test_text_mode_source_insert_includes_actual_candidate_schema(multiple: bool
 
 @pytest.mark.parametrize(
     ("reader", "version"), [
-        ("read_stage_bound_requirement", "phase5/control-stage-bound-requirement/v7"),
-        ("read_relative_stage_requirement", "phase5/control-relative-stage-requirement/v5"),
-        ("read_shared_prohibition_requirement", "phase5/control-shared-prohibition-requirement/v1"),
+        ("read_stage_bound_requirement", "phase5/control-stage-bound-requirement/v8"),
+        ("read_relative_stage_requirement", "phase5/control-relative-stage-requirement/v6"),
+        ("read_shared_prohibition_requirement", "phase5/control-shared-prohibition-requirement/v2"),
     ],
 )
 @pytest.mark.parametrize("mode", ["text", "json_object", "json_schema"])
@@ -932,7 +1095,7 @@ def test_local_repairs_send_only_frozen_source_and_keep_fallback_history() -> No
         {"role": "user", "content": "冻结的义务原子观察选择"}
     ]
     assert completions.calls[2]["response_format"]["json_schema"]["name"] == (
-        "protocol_control_observation_repair_v1"
+        "protocol_control_observation_repair_v2"
     )
     assert transport.history(first.session_id) == history
 

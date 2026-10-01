@@ -1,4 +1,6 @@
-import { Maximize2, Minus, Plus, RefreshCw, RotateCcw, RotateCw, ScanSearch } from "lucide-react";
+import { Crop, Maximize2, Minus, Plus, RefreshCw, RotateCcw, RotateCw, ScanSearch } from "lucide-react";
+import { LocalVisualVerificationPanel } from "./LocalVisualVerificationPanel";
+import type { LocalVisualRegion } from "../../api/evidence/localVisualHttp";
 import {
   evidencePageImageUrl,
   type LocatorView,
@@ -16,7 +18,9 @@ interface OriginalEvidenceViewerProps {
   /** Changes only for explicit source navigation, not scroll-follow selection. */
   navigationKey?: string;
   onSelectPage: (entryId: string) => void;
+  onReadingRotationChange?: (pageArtifactId: string, degrees: number) => void;
   unavailableRecoveryHint?: string;
+  allowLocalVerification?: boolean;
 }
 
 function authenticatedBoxes(locators: LocatorView[], page: ProcessingRevisionPageView): LocatorView[] {
@@ -46,12 +50,15 @@ export function OriginalEvidenceViewer({
   selectedPageLocators,
   navigationKey,
   onSelectPage,
+  onReadingRotationChange,
   unavailableRecoveryHint,
+  allowLocalVerification = false,
 }: OriginalEvidenceViewerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef(new Map<string, HTMLElement>());
   const locatorRefs = useRef(new Map<string, HTMLElement>());
   const userScrolling = useRef(false);
+  const manualScrollUntil = useRef(0);
   const programmaticScrolling = useRef(false);
   const scrollTimer = useRef<number | null>(null);
   const previousNavigationKey = useRef(navigationKey);
@@ -60,8 +67,14 @@ export function OriginalEvidenceViewer({
   const zoomAnchor = useRef<{ element: HTMLElement; fraction: number } | null>(null);
   const [imageAttempts, setImageAttempts] = useState<Record<string, { attempt: number; status: "loading" | "loaded" | "failed" }>>({});
   const selectedPage = pages.find((page) => page.entryId === selectedEntryId);
+  const [regionMode, setRegionMode] = useState(false);
+  const [regionSelection, setRegionSelection] = useState<{ pageId: string; box: LocalVisualRegion; width: number; height: number } | null>(null);
+  const drag = useRef<{ pageId: string; startX: number; startY: number; width: number; height: number } | null>(null);
+  const imageSizes = useRef(new Map<string, { width: number; height: number }>());
+  useEffect(() => { setRegionMode(false); setRegionSelection(null); drag.current = null; }, [revisionId, selectedEntryId]);
   function rotateSelectedPage(delta: number) {
     if (!selectedPage) return;
+    manualScrollUntil.current = 0;
     const key = JSON.stringify([revisionId, selectedPage.entryId]);
     const element = pageRefs.current.get(selectedPage.entryId);
     const container = scrollRef.current;
@@ -71,7 +84,10 @@ export function OriginalEvidenceViewer({
         element, fraction: (container.getBoundingClientRect().top - rect.top) / rect.height,
       };
     }
-    setViewRotations((previous) => ({ ...previous, [key]: ((previous[key] ?? 0) + delta + 360) % 360 }));
+    const next = ((viewRotations[key] ?? 0) + delta + 360) % 360;
+    setViewRotations((previous) => ({ ...previous, [key]: next }));
+    setRegionSelection(null); drag.current = null;
+    onReadingRotationChange?.(selectedPage.pageArtifactId, next);
   }
   const selectedBox = selectedPage
     ? authenticatedBoxes(selectedPageLocators, selectedPage).find((locator) => locator.locatorId === selectedLocatorId)
@@ -82,6 +98,7 @@ export function OriginalEvidenceViewer({
 
   function changeZoom(next: number) {
     if (next === zoom) return;
+    manualScrollUntil.current = 0;
     const container = scrollRef.current;
     if (container !== null) {
       const top = container.getBoundingClientRect().top;
@@ -162,7 +179,10 @@ export function OriginalEvidenceViewer({
 
   function handleScroll() {
     const container = scrollRef.current;
-    if (container === null || programmaticScrolling.current) return;
+    // Result panels and image loads can cause browser scroll anchoring. Only
+    // a recent user gesture may change the current clinical source page.
+    if (container === null || programmaticScrolling.current || Date.now() > manualScrollUntil.current) return;
+    manualScrollUntil.current = Date.now() + 220;
     userScrolling.current = true;
     if (scrollTimer.current !== null) window.clearTimeout(scrollTimer.current);
     scrollTimer.current = window.setTimeout(() => {
@@ -197,6 +217,10 @@ export function OriginalEvidenceViewer({
           <span>{pages.length} 页连续查看</span>
         </div>
         <div className="original-evidence-viewer__zoom">
+          {allowLocalVerification && <button type="button" aria-label="圈选原件局部" title="圈选原件局部" aria-pressed={regionMode}
+            disabled={!selectedPage?.imageAvailable} onClick={() => { setRegionMode(!regionMode); setRegionSelection(null); }}>
+            <Crop aria-hidden="true" />
+          </button>}
           <button type="button" aria-label="本页向左旋转" title="本页向左旋转"
             disabled={!selectedPage?.imageAvailable} onClick={() => rotateSelectedPage(-90)}>
             <RotateCcw aria-hidden="true" />
@@ -235,6 +259,20 @@ export function OriginalEvidenceViewer({
           </button>
         </div>
       </div>
+      {allowLocalVerification && selectedPage && <LocalVisualVerificationPanel
+        key={JSON.stringify([revisionId, selectedPage.pageArtifactId])}
+        revisionId={revisionId} pageId={selectedPage.pageArtifactId}
+        onLocateRegion={imageSizes.current.has(JSON.stringify([revisionId, selectedPage.entryId])) ? (box) => {
+          const key = JSON.stringify([revisionId, selectedPage.entryId]);
+          const size = imageSizes.current.get(key)!;
+          const sideways = box.clockwise_degrees === 90 || box.clockwise_degrees === 270;
+          setViewRotations((previous) => ({ ...previous, [key]: box.clockwise_degrees }));
+          onReadingRotationChange?.(selectedPage.pageArtifactId, box.clockwise_degrees);
+          setRegionSelection({ pageId: selectedPage.pageArtifactId, box,
+            width: sideways ? size.height : size.width, height: sideways ? size.width : size.height });
+          setRegionMode(false);
+        } : undefined}
+        region={regionSelection?.pageId === selectedPage.pageArtifactId ? regionSelection.box : null} />}
       <div
         ref={scrollRef}
         className="evidence-pages-scroll"
@@ -242,9 +280,17 @@ export function OriginalEvidenceViewer({
         onScroll={handleScroll}
         onWheel={() => {
           programmaticScrolling.current = false;
+          manualScrollUntil.current = Date.now() + 1000;
         }}
         onPointerDown={() => {
           programmaticScrolling.current = false;
+          manualScrollUntil.current = Date.now() + 1000;
+        }}
+        onKeyDown={(event) => {
+          if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(event.key)) {
+            programmaticScrolling.current = false;
+            manualScrollUntil.current = Date.now() + 1000;
+          }
         }}
       >
         {pages.map((page, pageIndex) => {
@@ -301,9 +347,41 @@ export function OriginalEvidenceViewer({
                 <div className="original-evidence-page__stage">
                   <div
                     className="original-evidence-page__canvas"
+                    onPointerDown={(event) => {
+                      if (!regionMode || !selected || !imageLoaded || event.button !== 0) return;
+                      const size = imageSizes.current.get(imageKey);
+                      if (!size) return;
+                      event.preventDefault(); event.stopPropagation();
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      if (rect.width <= 0 || rect.height <= 0) return;
+                      const width = sideways ? size.height : size.width;
+                      const height = sideways ? size.width : size.height;
+                      drag.current = { pageId: page.pageArtifactId, startX: Math.max(0, Math.min(width, (event.clientX - rect.left) / rect.width * width)),
+                        startY: Math.max(0, Math.min(height, (event.clientY - rect.top) / rect.height * height)), width, height };
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                    }}
+                    onPointerMove={(event) => {
+                      const origin = drag.current;
+                      if (!origin || origin.pageId !== page.pageArtifactId) return;
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      if (rect.width <= 0 || rect.height <= 0) return;
+                      const x = Math.max(0, Math.min(origin.width, (event.clientX - rect.left) / rect.width * origin.width));
+                      const y = Math.max(0, Math.min(origin.height, (event.clientY - rect.top) / rect.height * origin.height));
+                      const box = { x0: Math.floor(Math.min(origin.startX, x)), y0: Math.floor(Math.min(origin.startY, y)),
+                        x1: Math.ceil(Math.max(origin.startX, x)), y1: Math.ceil(Math.max(origin.startY, y)),
+                        clockwise_degrees: rotation as LocalVisualRegion["clockwise_degrees"] };
+                      setRegionSelection(box.x1 > box.x0 && box.y1 > box.y0 ? { pageId: origin.pageId, box, width: origin.width, height: origin.height } : null);
+                    }}
+                    onPointerUp={(event) => {
+                      if (!drag.current) return;
+                      drag.current = null;
+                      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+                    }}
+                    onPointerCancel={() => { drag.current = null; setRegionSelection(null); }}
                     style={{
                       width: `${zoom * 100}%`,
                       aspectRatio: sideways ? `${page.pageHeight} / ${page.pageWidth}` : `${page.pageWidth} / ${page.pageHeight}`,
+                      cursor: regionMode && selected ? "crosshair" : undefined,
                     }}
                   >
                     <div style={{
@@ -318,10 +396,11 @@ export function OriginalEvidenceViewer({
                       key={`${imageKey}:${imageState?.attempt ?? 0}`}
                       loading={selected || pageIndex === 0 ? "eager" : "lazy"}
                       decoding="async"
-                      onLoad={() => setImageAttempts((previous) => ({
+                      draggable={false}
+                      onLoad={(event) => { imageSizes.current.set(imageKey, { width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight }); setImageAttempts((previous) => ({
                         ...previous,
                         [imageKey]: { attempt: previous[imageKey]?.attempt ?? 0, status: "loaded" },
-                      }))}
+                      })); }}
                       onError={() => setImageAttempts((previous) => ({
                         ...previous,
                         [imageKey]: { attempt: previous[imageKey]?.attempt ?? 0, status: "failed" },
@@ -362,6 +441,12 @@ export function OriginalEvidenceViewer({
                       );
                     })}
                     </div>
+                    {regionSelection?.pageId === page.pageArtifactId && regionSelection.box.clockwise_degrees === rotation && <span
+                      className="original-evidence-page__region" role="img" aria-label="待核实的圈选区域"
+                      style={{ left: `${regionSelection.box.x0 / regionSelection.width * 100}%`,
+                        top: `${regionSelection.box.y0 / regionSelection.height * 100}%`,
+                        width: `${(regionSelection.box.x1 - regionSelection.box.x0) / regionSelection.width * 100}%`,
+                        height: `${(regionSelection.box.y1 - regionSelection.box.y0) / regionSelection.height * 100}%` }} />}
                     {imageFailed && <div className="original-evidence-page__loading">
                       <div>
                         <RefreshCw aria-hidden="true" />

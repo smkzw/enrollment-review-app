@@ -8,12 +8,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Mapping
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.evidence.selective_vision_review import SELECTIVE_VISION_PLAN_VERSION
+from app.domain.publication import canonical_hash
 from app.services.evidence_app_errors import (
     AppInternalError,
     AppNotFoundError,
@@ -34,8 +35,9 @@ from app.storage.selective_vision_observation_repository import (
 from app.domain.contracts.selective_vision_observation import (
     SelectiveVisionObservationStatus,
 )
-from app.storage.models import JobRecord
+from app.storage.models import JobEventRecord, JobRecord
 from app.storage.ocr_models import EvidenceProcessingRevisionRecord
+from app.storage.selective_vision_observation_models import SelectiveVisionObservationORM
 from app.workflow.errors import InvalidJobDefinitionError
 from app.workflow.jobstore import DEFAULT_LEASE_TTL, JobStore
 from app.workflow.states import FAILED_STEP_STATES, TERMINAL_JOB_STATES
@@ -72,6 +74,7 @@ class SelectiveVisionRevisionTaskView:
     observation_page_count: int | None = None
     closed_page_count: int | None = None
     closed_failure_kind: str | None = None
+    failed_page_artifact_ids: tuple[str, ...] = ()
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -88,14 +91,16 @@ def selective_vision_postprocess_idempotency_key(
     *,
     plan_version: str = SELECTIVE_VISION_PLAN_VERSION,
     route_sha256: str | None = None,
+    reading_rotations: Mapping[str, int] | None = None,
 ) -> str:
     revision_id = str(evidence_processing_revision_id or "").strip()
     if not revision_id:
         raise InvalidJobDefinitionError("证据处理修订标识不能为空")
-    return (
+    base = (
         f"{SELECTIVE_VISION_POSTPROCESS_IDEMPOTENCY_PREFIX}:"
         f"{revision_id}:{plan_version}:{route_sha256 or selective_vision_route_sha256()}"
     )
+    return base if not reading_rotations else f"{base}:view:{canonical_hash(dict(reading_rotations))}"
 
 
 class SelectiveVisionPostprocessJobService:
@@ -135,6 +140,7 @@ class SelectiveVisionPostprocessJobService:
         *,
         plan_version: str = SELECTIVE_VISION_PLAN_VERSION,
         trigger: str = "evidence_processing_freeze",
+        reading_rotations: Mapping[str, int] | None = None,
     ) -> EnqueueSelectiveVisionPostprocessResult:
         """幂等入队：同修订同计划版本复用原任务，不触发也不等待 VLM。"""
         with self.session_factory() as session, session.begin():
@@ -143,6 +149,7 @@ class SelectiveVisionPostprocessJobService:
                 evidence_processing_revision_id,
                 plan_version=plan_version,
                 trigger=trigger,
+                reading_rotations=reading_rotations,
             )
 
     def enqueue_for_revision_in_session(
@@ -152,16 +159,25 @@ class SelectiveVisionPostprocessJobService:
         *,
         plan_version: str = SELECTIVE_VISION_PLAN_VERSION,
         trigger: str = "evidence_processing_freeze",
+        reading_rotations: Mapping[str, int] | None = None,
     ) -> EnqueueSelectiveVisionPostprocessResult:
         revision_id = str(evidence_processing_revision_id or "").strip()
         if not revision_id:
             raise InvalidJobDefinitionError("证据处理修订标识不能为空")
-        EvidenceProcessingRevisionRepository(session).get(revision_id)
+        revision = EvidenceProcessingRevisionRepository(session).get(revision_id)
+        rotations = dict(reading_rotations or {})
+        page_ids = {item.page_artifact_id for item in revision.manifest}
+        if (set(rotations) - page_ids or any(
+            type(angle) is not int or angle not in (90, 180, 270)
+            for angle in rotations.values()
+        )):
+            raise InvalidJobDefinitionError("阅读方向必须对应当前资料中的原始页")
         plan = str(plan_version or "").strip() or SELECTIVE_VISION_PLAN_VERSION
         route_sha256 = selective_vision_route_sha256()
         trigger_name = str(trigger or "").strip() or "evidence_processing_freeze"
         idempotency_key = selective_vision_postprocess_idempotency_key(
             revision_id, plan_version=plan, route_sha256=route_sha256,
+            reading_rotations=rotations,
         )
         payload = {
             "contract": "selective_vision_postprocess_job/v2",
@@ -170,6 +186,7 @@ class SelectiveVisionPostprocessJobService:
             "route_sha256": route_sha256,
             "trigger": trigger_name,
             "idempotency_key": idempotency_key,
+            **({"reading_rotations": rotations} if rotations else {}),
         }
         steps = [
             StepSpec(
@@ -266,12 +283,13 @@ class SelectiveVisionPostprocessJobService:
         for job_id in like_rows:
             if job_id not in candidates:
                 candidates.append(job_id)
+        matching_jobs: list[tuple[JobRecord, dict[str, Any]]] = []
         for job_id in candidates:
             job = store.get_job(job_id)
             payload = verify_payload_sha256(job.payload_json, job.payload_sha256)
             if payload.get("evidence_processing_revision_id") == revision_id:
-                return job, payload
-        return None
+                matching_jobs.append((job, payload))
+        return max(matching_jobs, key=lambda item: (item[0].created_at, item[0].job_id)) if matching_jobs else None
 
     def _require_job_record(
         self, session: Session, revision_id: str
@@ -283,6 +301,51 @@ class SelectiveVisionPostprocessJobService:
         if job.job_type != SELECTIVE_VISION_POSTPROCESS_JOB_TYPE:
             raise AppInternalError("页面视觉核验任务与资料修订关联不一致。")
         return job, payload
+
+    def _failed_page_summary(
+        self, session: Session, revision_id: str, job: JobRecord, payload: dict[str, Any]
+    ) -> tuple[int | None, str | None, tuple[str, ...]]:
+        """Project only this attempt's persisted closed pages, never a prior retry's result."""
+        started = session.execute(
+            select(JobEventRecord.occurred_at)
+            .where(
+                JobEventRecord.job_id == job.job_id,
+                JobEventRecord.step_id == SELECTIVE_VISION_POSTPROCESS_STEP_ID,
+                JobEventRecord.event_type == "step_started",
+            )
+            .order_by(JobEventRecord.event_seq.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if started is None:
+            return None, None, ()
+        page_ids = {
+            item.page_artifact_id
+            for item in EvidenceProcessingRevisionRepository(session).get(revision_id).manifest
+        }
+        if not page_ids:
+            return None, None, ()
+        rows = session.execute(
+            select(SelectiveVisionObservationORM.observation_id)
+            .where(
+                SelectiveVisionObservationORM.page_artifact_id.in_(page_ids),
+                SelectiveVisionObservationORM.status == SelectiveVisionObservationStatus.CLOSED.value,
+                SelectiveVisionObservationORM.created_at >= started,
+                SelectiveVisionObservationORM.created_at <= job.updated_at,
+            )
+        ).scalars().all()
+        prefix = f"{payload.get('plan_version')}@{payload.get('route_sha256')}:"
+        observations = [
+            SelectiveVisionObservationRepository(session).get(observation_id)
+            for observation_id in rows
+        ]
+        matching = [row for row in observations if row.plan_version.startswith(prefix)]
+        if not matching:
+            return None, None, ()
+        kinds = {row.failure_kind for row in matching}
+        failed_ids = tuple(sorted({row.page_artifact_id for row in matching}))
+        return len(failed_ids), (
+            next(iter(kinds)) if len(kinds) == 1 else None
+        ), failed_ids
 
     @app_error_boundary
     def get_revision_task(
@@ -311,7 +374,15 @@ class SelectiveVisionPostprocessJobService:
             checkpoint = store.get_last_checkpoint(
                 job.job_id, SELECTIVE_VISION_POSTPROCESS_STEP_ID
             )
-            checkpoint_payload = checkpoint[1] if checkpoint is not None else {}
+            checkpoint_payload = checkpoint[1] if checkpoint is not None and (
+                job.state == "completed" or job.state in FAILED_STEP_STATES
+            ) else {}
+
+            failed_count, failed_kind, failed_ids = (None, None, ())
+            if job.state in {"failed_final", "failed_retryable"}:
+                failed_count, failed_kind, failed_ids = self._failed_page_summary(
+                    session, base_revision_id, job, payload
+                )
 
             def _count(key: str) -> int | None:
                 value = checkpoint_payload.get(key)
@@ -334,12 +405,15 @@ class SelectiveVisionPostprocessJobService:
                 eligible_page_count=_count("eligible_count"),
                 skipped_page_count=_count("skipped_count"),
                 observation_page_count=_count("observation_count"),
-                closed_page_count=_count("closed_count"),
+                closed_page_count=(
+                    _count("closed_count") if "closed_count" in checkpoint_payload else failed_count
+                ),
                 closed_failure_kind=(
                     str(checkpoint_payload["closed_failure_kind"])
                     if checkpoint_payload.get("closed_failure_kind")
-                    else None
+                    else failed_kind
                 ),
+                failed_page_artifact_ids=failed_ids,
                 created_at=job.created_at,
                 updated_at=job.updated_at,
             )
@@ -421,6 +495,10 @@ class SelectiveVisionPostprocessJobService:
                         ocr_raw_text_sha256=observation.ocr_raw_text_sha256,
                     )):
                 return None
+            rotation = payload.get("reading_rotations", {}).get(observation.page_artifact_id)
+            if (observation.reading_view.clockwise_degrees
+                    if observation.reading_view else None) != rotation:
+                return None
             accepted_pages.append(observation.page_artifact_id)
         if sorted(accepted_pages) != sorted(expected):
             return None
@@ -446,7 +524,8 @@ class SelectiveVisionPostprocessJobService:
 
     @app_error_boundary
     def retry_revision_task(
-        self, evidence_processing_revision_id: str
+        self, evidence_processing_revision_id: str,
+        *, reading_rotations: Mapping[str, int] | None = None,
     ) -> SelectiveVisionTaskActionResult:
         """人工重试当前失败范围；旧核验方式另建当前版本任务，保留旧历史。"""
         revision_id = str(evidence_processing_revision_id or "").strip()
@@ -455,6 +534,23 @@ class SelectiveVisionPostprocessJobService:
         with self.session_factory() as session, session.begin():
             base_revision_id = self._base_revision_id(session, revision_id)
             job, payload = self._require_job_record(session, base_revision_id)
+            if reading_rotations:
+                if job.state not in {"failed_final", "failed_retryable"}:
+                    raise AppSelectiveVisionPlanUnsupportedError()
+                _, _, failed_ids = self._failed_page_summary(
+                    session, base_revision_id, job, payload
+                )
+                if not set(reading_rotations) <= set(failed_ids):
+                    raise InvalidJobDefinitionError("请选择本次未能核验的页面再调整阅读方向")
+                rotations = {**payload.get("reading_rotations", {}), **reading_rotations}
+                upgraded = self.enqueue_for_revision_in_session(
+                    session, base_revision_id, trigger="reading_view_retry",
+                    reading_rotations=rotations,
+                )
+                return SelectiveVisionTaskActionResult(
+                    job_id=upgraded.job_id, state=upgraded.state,
+                    changed=upgraded.created,
+                )
             if (
                 str(payload.get("plan_version") or SELECTIVE_VISION_PLAN_VERSION)
                 != SELECTIVE_VISION_PLAN_VERSION

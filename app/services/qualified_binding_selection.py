@@ -23,6 +23,7 @@ from app.domain.contracts.qualified_binding_selection import (
     qualified_binding_selection_hash,
 )
 from app.domain.publication import canonical_hash
+from app.domain.expression import _canonical_unit
 from app.domain.contracts.enums import GateOutcome
 from app.storage.repositories import AppendRepository, GATE_RESULT_CONFIG, NotFoundError
 from app.services.predicate_binding_input import _frozen_fact, _frozen_component
@@ -59,9 +60,37 @@ def source_validity_operand_calculable(record, spec):
             and record.fact_attribute in {"value", "assertion_basis"})
 
 
+def _numeric_predicate_units(frozen) -> dict[str, str | None]:
+    if isinstance(frozen, PredicateBindingFrozenInput):
+        return {
+            item.predicate_identity_sha256: item.predicate.unit
+            for component in frozen.components for item in component.binding_predicates
+        }
+    return {
+        item.identity_sha256: (
+            item.atom.evaluation.predicate.unit
+            if item.atom.evaluation is not None and item.atom.evaluation.predicate is not None
+            else None
+        )
+        for item in project_control_atom_identities(frozen.publication, include_repeat_triggers=True)
+    }
+
+
+def _unit_equivalence_verified(record, predicate_units: Mapping[str, str | None]) -> bool:
+    if ("unit_equivalence_unverified" not in record.structural.pending_checks
+            or not record.structurally_valid or not record.structural.body_matches_frozen
+            or record.fact_attribute != "value" or record.structural.operand_shape != "numeric_value"):
+        return False
+    expected = predicate_units.get(record.identity_sha256)
+    observed = record.structural.referenced_unit
+    return (expected is not None and observed is not None
+            and _canonical_unit(expected) == _canonical_unit(observed))
+
+
 def pair_direct_selection_rejection_reasons(
     record: BindingQualificationPairRecord,
     *, written_content_verified: bool = False, source_validity_calculable: bool = False,
+    unit_equivalence_verified: bool = False,
 ) -> list[str]:
     """Reject dual-rejected/unresolved agreement and unsupported semantics."""
     reasons: list[str] = []
@@ -85,6 +114,8 @@ def pair_direct_selection_rejection_reasons(
                 resolved_checks.add("professional_judgment_applicability_unverified")
             if source_validity_calculable:
                 resolved_checks.add("source_validity_requires_policy_evaluation")
+            if unit_equivalence_verified:
+                resolved_checks.add("unit_equivalence_unverified")
     for judgment in record.lane_judgments.values():
         if judgment is not None:
             reasons.extend(judgment.unresolved_reasons)
@@ -432,6 +463,7 @@ class ReceiptVerifiedWorkDraftSelections:
     unresolved_proposition_pairs: tuple[Mapping[str, Any], ...] = ()
     observation_relations: tuple[Mapping[str, Any], ...] = ()
     frequency_statements: tuple[Mapping[str, Any], ...] = ()
+    source_pair_locations: tuple[tuple[str, str, str, str], ...] = ()
     _verified_digest: str = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -462,6 +494,7 @@ class ReceiptVerifiedWorkDraftSelections:
             "unresolved_proposition_pairs": self.unresolved_proposition_pairs,
             "observation_relations": self.observation_relations,
             "frequency_statements": self.frequency_statements,
+            "source_pair_locations": self.source_pair_locations,
         })
 
     def require_unchanged(self) -> None:
@@ -662,6 +695,7 @@ def build_receipt_verified_work_draft_selections(
 
     by_identity: dict[str, list[BindingQualificationPairRecord]] = {}
     rejected_by_identity: dict[str, list[str]] = {}
+    predicate_units = _numeric_predicate_units(frozen)
     for record in records:
         content_verified = (record.pair_id in supported or (
             record.fact_attribute == "date_range"
@@ -673,6 +707,7 @@ def build_receipt_verified_work_draft_selections(
             source_validity_calculable=source_validity_operand_calculable(
                 record, validity_specs.get(record.identity_sha256),
             ),
+            unit_equivalence_verified=_unit_equivalence_verified(record, predicate_units),
         )
         if (content is not None and record.fact_attribute == "value"
                 and record.identity_sha256 in professional_identities
@@ -961,6 +996,16 @@ def build_receipt_verified_work_draft_selections(
         "frequency_statements": frequency_statements,
     }
     selection_sha256 = canonical_hash(payload)
+    selected_pair_ids = {
+        pair_id for outcome in outcomes if outcome.status == "usable"
+        for pair_id in outcome.usable_pair_ids
+    }
+    source_pair_locations = tuple(sorted({
+        (record.identity_sha256, record.pair_id, record.fact_id, record.locator_id)
+        for record in records if record.pair_id in selected_pair_ids
+    }))
+    if {item[1] for item in source_pair_locations} != selected_pair_ids:
+        raise InvalidJobDefinitionError("已核实的资料位置缺少对应的原件配对记录")
     return ReceiptVerifiedWorkDraftSelections(
         _seal=_SEAL,
         identity_outcomes=tuple(outcomes),
@@ -984,6 +1029,7 @@ def build_receipt_verified_work_draft_selections(
         unresolved_proposition_pairs=tuple(unresolved_proposition_pairs),
         observation_relations=tuple(observation_relations),
         frequency_statements=tuple(frequency_statements),
+        source_pair_locations=source_pair_locations,
     )
 
 
@@ -1108,6 +1154,7 @@ def build_receipt_verified_qualified_binding_selections(
                                   if item.atom.requires_professional_judgment})
     by_identity: dict[str, list[BindingQualificationPairRecord]] = {}
     rejected_pairs: list[QualifiedBindingRejectedPair] = []
+    predicate_units = _numeric_predicate_units(frozen)
     for record in records:
         content_verified = (record.pair_id in supported or (
             record.fact_attribute == "date_range" and (record.identity_sha256, record.fact_id) in content_sources))
@@ -1115,6 +1162,7 @@ def build_receipt_verified_qualified_binding_selections(
         rejection = pair_direct_selection_rejection_reasons(
             record, written_content_verified=content_verified,
             source_validity_calculable=source_validity_operand_calculable(record, validity_spec),
+            unit_equivalence_verified=_unit_equivalence_verified(record, predicate_units),
         )
         if (content is not None and record.fact_attribute == "value"
                 and record.identity_sha256 in professional_identities

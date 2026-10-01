@@ -19,6 +19,24 @@ def reconcile_repeat_ordering(*, policy, observation, resolution, facts, qualifi
     if (resolution.get("multi_initial_selection") is not None or resolution["policy_selection"] is None
             or len(resolution["selected_group_ids"]) != 1 or resolution["policy_selection"]["combination"] is not None):
         return ("repeat_ordering_combination_unverified",), audit
+    if observation["relationship_graph"].get("version") == "observation-relation-graph/v3":
+        graph = observation["relationship_graph"]
+        groups = graph["acquisition_groups"]
+        if len({fact_id for group in groups for fact_id in group["fact_ids"]}) < sum(
+            len(group["fact_ids"]) for group in groups
+        ):
+            return ("repeat_ordering_instance_unverified",), audit
+        appearances = {item["appearance_id"]: item for item in graph["appearances"]}
+        for group in groups:
+            for appearance_id in group["appearance_ids"]:
+                item = appearances[appearance_id]
+                source = item["fact_id"], item["locator_id"]
+                if (not any((*source, attribute) in qualified for attribute in ("value", "assertion_basis"))
+                        if semantic else (*source, operand) not in qualified):
+                    return ("repeat_result_value_unverified",), audit
+                if (*source, "date_range") not in qualified:
+                    return ("known_date_unqualified",), audit
+        qualified = {(fact_id, attribute) for fact_id, _, attribute in qualified}
     representatives = {}
     for group in observation["relationship_graph"]["acquisition_groups"]:
         ids = group["fact_ids"]

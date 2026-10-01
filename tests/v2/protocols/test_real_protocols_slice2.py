@@ -353,12 +353,14 @@ def test_local_d001_rebuild_quantifies_cross_heading_packing_and_preserves_table
 
     assert len(extraction.blocks) == 3581
     assert len(phase.graph.blocks) == 3405
-    assert len(manifest.units) == 1848
+    # Long multi-paragraph rows now own each source paragraph separately;
+    # the short visit grid below remains row-based.
+    assert len(manifest.units) == 1918
     # The typed III-phase hypothesis lead-in resolves five formerly UNKNOWN
     # units out of the selected II-phase target set.
-    assert len(plan.expected_structure_unit_ids) == 1240
-    assert len(same_heading_plan.packages) == 210
-    assert len(plan.packages) == 131
+    assert len(plan.expected_structure_unit_ids) == 1310
+    assert len(same_heading_plan.packages) == 216
+    assert len(plan.packages) == 137
     assert len(plan.packages) < len(same_heading_plan.packages)
     assert plan.expected_structure_unit_ids == same_heading_plan.expected_structure_unit_ids
     assert [
@@ -373,6 +375,13 @@ def test_local_d001_rebuild_quantifies_cross_heading_packing_and_preserves_table
 
     table_5 = [unit for unit in manifest.units if unit.source_ref.startswith("body.t5.r")]
     assert [unit.source_ref for unit in table_5] == [f"body.t5.r{row}" for row in range(39)]
+    from app.protocols.procedure_catalog import schedule_row_values
+
+    assert all(
+        len(schedule_row_values(unit)) == len(unit.table_context.member_cell_paths)
+        for unit in table_5
+        if unit.table_context is not None
+    )
     member_refs = [ref for unit in table_5 for ref in unit.member_source_refs]
     assert len(member_refs) == 241
     assert len(set(member_refs)) == 241
@@ -386,3 +395,54 @@ def test_local_d001_rebuild_quantifies_cross_heading_packing_and_preserves_table
     }
 
     assert _snapshot(path) == before, "D001 只读重建不得改写源文件或源目录"
+
+
+@pytest.mark.parametrize("label,path,_,__,___,phase", REAL_PROTOCOLS)
+def test_real_protocol_table_members_keep_native_positions(
+    label, path, _, __, ___, phase, tmp_path,
+):
+    if not path.is_file():
+        pytest.skip(f"真实方案文件缺失：{label}")
+    before = _snapshot(path)
+    artifact = register_source_artifact(
+        path, source_artifact_id=f"table-members-{label}", storage_root=tmp_path,
+    )
+    extraction = extract_docx_structure(
+        path, snapshot_id=f"table-members-{label}-snapshot",
+        source_artifact=artifact, output_dir=tmp_path / "structure",
+    )
+    phase_result = build_phase_applicability_graph(
+        extraction.blocks, snapshot_id=extraction.snapshot.snapshot_id,
+    )
+    projection = project_single_phase(phase_result.graph, phase)
+    manifest = build_full_protocol_coverage_manifest(
+        extraction.blocks, projection, phase_result.graph,
+        protocol_version_id=f"table-members-{label}",
+        protocol_document_sha256=before[0],
+        snapshot_id=extraction.snapshot.snapshot_id,
+    )
+    from app.protocols.procedure_catalog import schedule_row_values
+
+    rows = [unit for unit in manifest.units if unit.table_context is not None
+            and unit.source_ref.rpartition(".r")[2].isdigit()]
+    assert rows
+    assert all(
+        unit.member_texts is not None
+        and len(unit.member_texts) == len(unit.member_source_refs)
+        and unit.member_source_span_ids is not None
+        and len(unit.member_source_span_ids) == len(unit.member_source_refs)
+        and len(schedule_row_values(unit)) == len(unit.table_context.member_cell_paths)
+        for unit in rows
+    )
+    row_keys = {
+        (unit.source_ref.rpartition(".r")[0], unit.table_context.row_index)
+        for unit in rows
+    }
+    marked_roots = {
+        unit.source_ref.rpartition(".r")[0]
+        for unit in rows
+        if len(unit.table_context.member_cell_paths) > 1
+        and any(text.strip().upper() == "X" for text in unit.member_texts or [])
+    }
+    assert all((root, 0) in row_keys for root in marked_roots)
+    assert _snapshot(path) == before

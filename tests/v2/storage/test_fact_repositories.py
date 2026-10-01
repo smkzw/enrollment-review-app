@@ -1387,6 +1387,39 @@ def test_candidate_call_id_mirror_drift_is_rejected(chain, session):
         FactNormalizationCandidateRepository(session).get(candidate.candidate_id)
 
 
+def test_candidate_run_read_ignores_invalid_other_run_but_checks_own_run(
+    chain, chain_other, session
+):
+    repository = FactNormalizationCandidateRepository(session)
+    other_row = session.get(
+        FactNormalizationCandidateRecord, chain_other["fact_candidate_id"]
+    )
+    other_payload = json.loads(other_row.payload_json)
+    other_payload["source_observation_refs"] = ["observation-z", "observation-a"]
+    other_row.payload_json = json.dumps(
+        other_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
+    other_row.payload_sha256 = _sha(other_row.payload_json)
+    session.flush()
+
+    assert chain["fact_candidate_id"] in {
+        item.candidate_id for item in repository.list_by_run(chain["run_id"])
+    }
+    with pytest.raises(PersistedContractInvalid, match="候选来源观察"):
+        repository.get(chain_other["fact_candidate_id"])
+
+    own_row = session.get(FactNormalizationCandidateRecord, chain["fact_candidate_id"])
+    own_payload = json.loads(own_row.payload_json)
+    own_payload["source_observation_refs"] = ["observation-z", "observation-a"]
+    own_row.payload_json = json.dumps(
+        own_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
+    own_row.payload_sha256 = _sha(own_row.payload_json)
+    session.flush()
+    with pytest.raises(PersistedContractInvalid, match="候选来源观察"):
+        repository.list_by_run(chain["run_id"])
+
+
 def test_run_and_run_scoped_lists_decode_before_filtering(
     chain, chain_other, session
 ):

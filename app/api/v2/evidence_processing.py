@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Query, Request, Response
+from fastapi import APIRouter, Body, Query, Request, Response
 from fastapi import status as http_status
 
 from app.api.v2.evidence_processing_schemas import (
@@ -55,6 +55,7 @@ from app.api.v2.evidence_processing_schemas import (
     RiskReviewCreateResponse,
     SelectiveVisionTaskActionDTO,
     SelectiveVisionTaskDTO,
+    SelectiveVisionRetryRequest,
     locator_dto,
 )
 from app.api.v2.vocabulary import (
@@ -755,6 +756,7 @@ def _selective_vision_task_dto(
         skipped_page_count=view.skipped_page_count,
         observation_page_count=view.observation_page_count,
         closed_page_count=view.closed_page_count,
+        failed_page_artifact_ids=list(view.failed_page_artifact_ids),
         closed_reason_label=selective_vision_closed_reason_label(
             view.closed_failure_kind
         ),
@@ -788,10 +790,14 @@ def get_selective_vision_task(
     response_model=SelectiveVisionTaskActionDTO,
 )
 def retry_selective_vision_task(
-    revision_id: str, request: Request
+    revision_id: str, request: Request,
+    body: SelectiveVisionRetryRequest | None = Body(default=None),
 ) -> SelectiveVisionTaskActionDTO:
     """人工重试：服务端先校验任务类型/修订关联/核验方式，再复用失败范围重试。"""
-    result = _vision_service(request).retry_revision_task(revision_id)
+    result = _vision_service(request).retry_revision_task(
+        revision_id,
+        reading_rotations=body.reading_rotations if body is not None else None,
+    )
     return SelectiveVisionTaskActionDTO(
         job_id=result.job_id,
         state=result.state,

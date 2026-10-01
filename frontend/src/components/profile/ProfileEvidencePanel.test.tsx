@@ -53,6 +53,7 @@ function makeSnapshotWire() {
         file_name: "筛选病历.pdf",
         media_type: "application/pdf",
         version_number: 1,
+        uploaded_by: "本地用户",
         origin: "added" as const,
         origin_label: "本次新增",
         metadata_head: {
@@ -76,6 +77,7 @@ function makeSnapshotWire() {
         file_name: "合并用药记录.pdf",
         media_type: "application/pdf",
         version_number: 1,
+        uploaded_by: "本地用户",
         origin: "added" as const,
         origin_label: "本次新增",
         metadata_head: {

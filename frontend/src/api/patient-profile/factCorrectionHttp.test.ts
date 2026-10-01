@@ -45,6 +45,7 @@ function correctionPreview() {
       unit: "mmHg",
     },
     impact: correctionImpact(),
+    sibling_facts: [{ fact_id: "fact-2", fact_type: "vital_sign", polarity: "affirmed", value: "120/80", unit: "mmHg" }],
   };
 }
 
@@ -134,6 +135,7 @@ describe("Patient Profile fact-correction HTTP contract", () => {
     const preview = await repo.previewFactCorrection("subject 1", "episode/1", requestInput);
     expect(preview.impact.scopeKind).toBe("node");
     expect(preview.impact.affectedConflictGroupIds).toEqual(["conflict-1"]);
+    expect(preview.siblingFactIds).toEqual(["fact-2"]);
     expect(calls).toHaveLength(1);
     expect(String(calls[0].input)).toBe(
       "/api/v2/subjects/subject%201/review-episodes/episode%2F1/fact-corrections/preview",

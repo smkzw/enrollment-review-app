@@ -2044,6 +2044,63 @@ def test_source_strength_is_derived_from_phase4_metadata_not_free_text(monkeypat
     assert any("Phase 4" in reason for reason in verdict.reasons)
 
 
+def test_source_strength_keeps_exact_issuer_separate_from_reviewed_category():
+    from app.domain.contracts.enums import SourceStrength
+    from app.domain.gates.fact_evidence_closure import derive_source_strength_from_metadata
+
+    assert derive_source_strength_from_metadata(
+        "某项检验原始报告", "某研究中心检验科",
+        document_category="objective_report", source_category="study_site",
+    ) == SourceStrength.CONTEMPORANEOUS_OBJECTIVE
+    assert derive_source_strength_from_metadata(
+        "检验报告", "研究中心",
+        document_category="unknown", source_category="unknown",
+    ) == SourceStrength.UNVERIFIABLE
+    assert derive_source_strength_from_metadata(
+        "某项检验原始报告", "受试者提供",
+        document_category="objective_report", source_category="participant",
+    ) == SourceStrength.UNVERIFIABLE
+
+
+def test_source_strength_does_not_promote_mixed_locator_provenance(monkeypatch):
+    from app.domain.gates import fact_evidence_closure as module
+    from app.domain.contracts.enums import SourceStrength
+    from app.storage.evidence_repositories import SourceDocumentMetadataRevisionRepository
+
+    monkeypatch.setattr(
+        module, "_fetch_locator",
+        lambda session, locator_id: SimpleNamespace(
+            source_document_version_id=f"doc-{locator_id}"
+        ),
+    )
+    metadata = {
+        "meta-strong": SimpleNamespace(
+            source_document_version_id="doc-loc-1",
+            document_type="原始检验报告",
+            source_party="某研究中心检验科",
+            document_category="objective_report",
+            source_category="study_site",
+        ),
+        "meta-unknown": SimpleNamespace(
+            source_document_version_id="doc-loc-2",
+            document_type="转录材料",
+            source_party="来源未核",
+            document_category="unknown",
+            source_category="unknown",
+        ),
+    }
+    monkeypatch.setattr(
+        SourceDocumentMetadataRevisionRepository,
+        "get",
+        lambda self, item_id: metadata[item_id],
+    )
+    candidate = _make_fact_candidate(locator_ids=["loc-1", "loc-2"])
+    revision = SimpleNamespace(metadata_revision_ids=sorted(metadata))
+
+    assert derive_source_strength_for_candidate(None, candidate, revision) == SourceStrength.UNVERIFIABLE
+    assert validate_source_strength_for_candidate(None, candidate, revision).outcome == GateOutcome.REJECTED
+
+
 @pytest.mark.parametrize(
     ("declared", "expected"),
     [

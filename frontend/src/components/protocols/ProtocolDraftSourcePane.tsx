@@ -3,13 +3,13 @@
  */
 
 import { PrecisionBadge } from "../evidence/PrecisionBadge";
-import type { ProtocolDraftComponentView } from "../../domain/protocolViewModels";
+import type { ProtocolDraftItemView } from "../../domain/protocolViewModels";
 import type { ProtocolSourceLocatorView } from "../../domain/protocolViewModels";
 import { EmptyState } from "../shell/Feedback";
 import { UI_PHRASES } from "../../domain/labels";
 
 interface ProtocolDraftSourcePaneProps {
-  component: ProtocolDraftComponentView | null;
+  component: ProtocolDraftItemView | null;
   locators: ReadonlyArray<ProtocolSourceLocatorView>;
   fileName: string | null;
 }

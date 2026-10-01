@@ -497,12 +497,7 @@ def _same_observation_siblings(
     session: Session, *, authority: FactAuthority,
     target_kind: str, target_id: str,
 ) -> list[dict[str, Any]]:
-    """F04：同一原件观察经其他发布通道派生的活动事实（不含目标自身）。
-
-    同源判定用当前权威 + 断言对象 + 原件定位重叠，不同 fact_type 的通道
-    互为兄弟；更正一条通道后其余通道仍持旧值，预览必须可见，避免医学
-    经理逐通道试错。不做跨来源的值匹配合并。
-    """
+    """Show active facts sharing an explicit original observation identity."""
     from sqlalchemy import select
     from app.storage.fact_repositories import ClinicalFactV2Repository
     from app.storage.active_facts import current_fact_heads
@@ -513,14 +508,16 @@ def _same_observation_siblings(
     target = next((f for f in facts if f.fact_id == target_id), None)
     if target is None or target_kind != "fact":
         return []
-    target_locators = set(target.locator_ids)
+    target_observations = set(target.source_observation_refs)
+    if not target_observations:
+        return []
     siblings = []
     for fact in current_fact_heads(session, authority):
         if fact.fact_id == target.fact_id:
             continue
         if fact.asserted_object != target.asserted_object:
             continue
-        if not set(fact.locator_ids) & target_locators:
+        if not set(fact.source_observation_refs) & target_observations:
             continue
         siblings.append({
             "fact_id": fact.fact_id,
@@ -565,6 +562,17 @@ def prepare_fact_correction(
         raise FactCorrectionValidationError("修订目标不属于当前审核节点的活动证据。")
     if FactCorrectionRepository(session).outgoing(target_id) is not None:
         raise FactCorrectionValidationError("该记录已被修订，不能再从同一原记录分叉。")
+    if target_kind == "fact" and target.source_observation_refs:
+        if set(locators) != set(target.locator_ids):
+            raise FactCorrectionValidationError(
+                "该事实关联多处原始观察；仅选择部分原文时无法核清其余观察的归属，请先逐处核对。"
+            )
+        if len(target.source_observation_refs) > 1 and set(updates) & {
+            "fact_type", "polarity", "asserted_object", "value", "unit", "date_range",
+        }:
+            raise FactCorrectionValidationError(
+                "该事实关联多项原始观察；不能将一次改值应用到所有观察，请先逐项核对。"
+            )
 
     new_entity, candidate_payload, replacement = _build_new_entity(
         session,
@@ -788,6 +796,7 @@ def _build_new_fact(session, target: ClinicalFactV2, locator_ids, updates, creat
         "date_range": None if date_range is None else date_range.model_dump(mode="json"),
         "record_time": None if target.record_time is None else target.record_time.isoformat(),
         "locator_ids": locator_ids,
+        "source_observation_refs": list(target.source_observation_refs),
         "candidate_source_semantics": (
             _SOURCE_STRENGTH_SEMANTICS[target.source_strength]
             if set(locator_ids) == set(target.locator_ids)
@@ -805,6 +814,7 @@ def _build_new_fact(session, target: ClinicalFactV2, locator_ids, updates, creat
         run_id=target.run_id,
         gate_id=placeholder_gate,
         source_candidate_ids=[],
+        source_observation_refs=list(target.source_observation_refs),
         gate_ids=[],
         authority=target.authority,
         fact_type=fact_type,

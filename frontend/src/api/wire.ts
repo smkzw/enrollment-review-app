@@ -98,6 +98,7 @@ export interface GapCountsWire {
   future_stage_not_due?: number;
   provenance_followup?: number;
   control_applicability_pending?: number;
+  applicable_population_unverified?: number;
 }
 
 export interface EpisodeRollupWire {

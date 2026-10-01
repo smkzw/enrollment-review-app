@@ -29,7 +29,9 @@ from app.domain.contracts.agent_io import (
 from app.domain.contracts.common import DateValue
 from app.domain.contracts.enums import DatePrecision, MetadataResolutionStatus, StudyPhase
 from app.domain.contracts.protocol_drafts import DraftFeedbackKind, ProtocolDraftRevision
+from app.evidence.artifacts import ArtifactStore
 from app.domain.contracts.protocol_ingestion import ProtocolSourceSpan
+from app.domain.contracts.rules import RestrictedRuleComponent, iter_atomic_predicates
 from app.domain.contracts.protocol_metadata import (
     InterpretationSource,
     ProtocolIdentityDecision,
@@ -41,6 +43,9 @@ from app.protocols.deconstruction_gate import (
     ProtocolDeconstructionGateResult,
     ProtocolDraftDiffDeclaration,
     ProtocolGateIssue,
+    _localized_open_list_exception_requires_exclusivity,
+    _source_proves_unsupported_member_frequency,
+    _substantive_obligation_segments,
 )
 from app.protocols.ingestion import (
     SourceIngestionError,
@@ -443,6 +448,8 @@ class ProtocolWorkbenchService:
         current_draft: ProtocolDeconstructionDraft,
         target_rule_code: str,
         feedback_note: str,
+        target_component_id: str | None = None,
+        joint_source_repair: bool = False,
     ) -> ProtocolDeconstructionDraft:
         from app.agents.protocol_deconstructor import (
             ProtocolAgentCallError,
@@ -456,8 +463,8 @@ class ProtocolWorkbenchService:
             select_protocol_semantic_route_candidates,
         )
 
-        # Feedback is a short, new-session repair: MTPLX then DeepSeek in
-        # graded mode. Each candidate is a whole attempt with a fresh transport.
+        # Feedback is a new-session repair. Each candidate is a whole attempt
+        # with a fresh transport and its provider-supported output contract.
         candidates = select_protocol_semantic_route_candidates(
             GRADE_SHORT,
             route_mode=resolve_route_mode(),
@@ -478,8 +485,10 @@ class ProtocolWorkbenchService:
                     source_input,
                     current_draft,
                     target_rule_code=target_rule_code,
+                    target_component_id=target_component_id,
                     feedback_note=feedback_note,
                     transport=transport,
+                    joint_source_repair=joint_source_repair,
                 )
             except ProtocolAgentCallError as exc:
                 last_error = exc
@@ -1672,6 +1681,7 @@ class ProtocolWorkbenchService:
         feedback_kind: DraftFeedbackKind,
         feedback_note: str,
         target_rule_code: str,
+        target_component_id: str | None = None,
         actor: str,
     ) -> DraftDetailView:
         merged = self._merged_payload(job_id)
@@ -1698,8 +1708,43 @@ class ProtocolWorkbenchService:
                 detail=f"当前草稿中没有 {target_rule_code}，未生成新稿。",
                 recovery="请刷新页面，从当前入排标准列表中重新选择。",
             )
+        target_rule = next(
+            rule for rule in current_draft.proposed_rules
+            if rule.official_code == target_rule_code
+        )
+        target_items = [*target_rule.components, *target_rule.restricted_components]
+        if feedback_kind == DraftFeedbackKind.SOURCE_ERROR:
+            joint_exception = False
+            if target_component_id is None and len(target_items) > 1:
+                source_input = self._load_source_input(merged)
+                previous_gate = self.gate.evaluate(
+                    source_input, current_draft,
+                    source_spans=self._load_source_spans(merged),
+                )
+                joint_exception = self._joint_source_feedback_allowed(
+                    source_input, current_draft, target_rule_code, previous_gate,
+                )
+            if target_component_id is None and len(target_items) > 1 and not joint_exception:
+                raise ProtocolWorkbenchError(
+                    "FEEDBACK_COMPONENT_REQUIRED",
+                    title="请选定需要纠正的子项",
+                    detail="同一标准含有多项独立要求，不能把整条标准都当作本次修改范围。",
+                    recovery="请选定具体子项，再写明需要纠正的原文含义。",
+                )
+            if target_component_id is not None and target_component_id not in {
+                item.rule_component_id for item in target_items
+            }:
+                raise ProtocolWorkbenchError(
+                    "FEEDBACK_COMPONENT_REQUIRED",
+                    title="请选定需要纠正的子项",
+                    detail="所选子项不属于当前标准或草稿已更新。",
+                    recovery="请选定具体子项，再写明需要纠正的原文含义。",
+                )
         draft = current_draft
         if feedback_kind == DraftFeedbackKind.SOURCE_ERROR:
+            rejected_issue_codes: list[str] = []
+            attempted_candidates: list[dict[str, Any]] = []
+            attempts_made = 0
             try:
                 from app.agents.protocol_deconstructor import (
                     _affected_rule_codes,
@@ -1717,7 +1762,29 @@ class ProtocolWorkbenchService:
                 previous_issues = [
                     issue for check in previous_gate.checks for issue in check.issues
                 ]
-                model_note = note
+                model_note = (
+                    f"本次仅修订子项 {target_component_id}；同条标准的其他子项及来源必须保持不变。\n"
+                    if target_component_id is not None else ""
+                ) + note
+                if (joint_exception and target_component_id is None
+                        and _source_proves_unsupported_member_frequency(
+                            [target_rule.source_text]
+                        )):
+                    model_note += (
+                        "\n本条多个子项共用一段冻结原文。先核对开放举例中的频次只限定其成员，"
+                        "不得把该频次加到整个上位类别，也不得只保留一个不影响判定的冗余分支。"
+                        "如当前表达与消费者无法忠实承接这个不可分割来源段，可提出一个"
+                        " consumer_unavailable 的有源受限子项，逐字保留完整段落、"
+                        "说明不能执行的具体关系，并撤下同段旧可执行子项及孤立资料要求；"
+                        "这是审核方法缺口，不是研究者医学判断缺失。独立来源要求不得随之撤下。"
+                    )
+                elif joint_exception and target_component_id is None and target_rule.restricted_components:
+                    model_note += (
+                        "\n当前可执行子项均含尚未接入正式计算的适用人群条件，且同源的附加要求已作为"
+                        "有源待核事项保留。若无法在现有消费者中逐项核实适用性，请以完整原文"
+                        "提出单一有源能力缺口，保留其中的数量、时间和附加要求，撤下所有与整段"
+                        "重叠的可执行子项及资料要求；不得把适用性缺口写成研究者书面判断缺失。"
+                    )
                 if self._uses_default_feedback_reviser:
                     target_gate_issues = [
                         issue
@@ -1727,9 +1794,16 @@ class ProtocolWorkbenchService:
                             current_draft, [issue], fallback_all=False
                         )
                     ]
+                    if target_component_id is not None:
+                        target_gate_issues = self._feedback_issues_for_component(
+                            target_rule, target_component_id, target_gate_issues,
+                        )
                     if target_gate_issues:
                         model_note += "\n\n当前确定性完整性问题：" + "；".join(
                             f"{issue.issue_code}：{issue.problem}。{issue.next_action}"
+                            + ("；问题定位（仅供核对原文）："
+                               + json.dumps(issue.affected_refs, ensure_ascii=False)
+                               if issue.affected_refs else "")
                             for issue in target_gate_issues
                         )
                 # 模型局部修订有小幅随机性。首个候选若未通过确定性
@@ -1738,49 +1812,41 @@ class ProtocolWorkbenchService:
                 attempt_count = 2 if self._uses_default_feedback_reviser else 1
                 retry_guidance = ""
                 for attempt in range(attempt_count):
+                    attempts_made += 1
+                    regressing = False
+                    new_core_semantics_issue = False
                     attempt_note = model_note + retry_guidance
-                    draft = self.feedback_reviser(
-                        source_input,
-                        current_draft,
-                        target_rule_code,
-                        attempt_note,
-                    )
+                    if self._uses_default_feedback_reviser:
+                        draft = self._revise_feedback_with_model(
+                            source_input, current_draft, target_rule_code,
+                            attempt_note, target_component_id,
+                            joint_source_repair=joint_exception,
+                        )
+                    else:
+                        draft = self.feedback_reviser(
+                            source_input, current_draft, target_rule_code, attempt_note,
+                        )
+                    attempted_candidates.append(draft.model_dump(mode="json"))
+                    if target_component_id is not None:
+                        draft = self._retain_protected_feedback_issues(
+                            current_draft, draft,
+                            target_rule_code=target_rule_code,
+                            target_component_id=target_component_id,
+                        )
                     self._validate_source_error_scope(
                         current_draft,
                         draft,
                         target_rule_code=target_rule_code,
+                        target_component_id=target_component_id,
                     )
                     changed_codes = set(
                         compute_draft_diff(current_draft, draft).modified_rule_codes
                     )
-                    unresolved_changed = any(
-                        current != revised
-                        for current, revised in (
-                            (
-                                [
-                                    item
-                                    for item in current_draft.unresolved_items
-                                    if self._feedback_scope_is_target_only(item, target_rule_code)
-                                ],
-                                [
-                                    item
-                                    for item in draft.unresolved_items
-                                    if self._feedback_scope_is_target_only(item, target_rule_code)
-                                ],
-                            ),
-                            (
-                                [
-                                    item
-                                    for item in current_draft.structural_warnings
-                                    if self._feedback_scope_is_target_only(item, target_rule_code)
-                                ],
-                                [
-                                    item
-                                    for item in draft.structural_warnings
-                                    if self._feedback_scope_is_target_only(item, target_rule_code)
-                                ],
-                            ),
-                        )
+                    # Scope validation above already proved that any issue change
+                    # belongs to the selected rule or component.
+                    unresolved_changed = (
+                        current_draft.unresolved_items != draft.unresolved_items
+                        or current_draft.structural_warnings != draft.structural_warnings
                     )
                     if changed_codes not in ({target_rule_code}, set()) or (
                         not changed_codes and not unresolved_changed
@@ -1824,18 +1890,43 @@ class ProtocolWorkbenchService:
                             )
                         ]
                         if regressing:
+                            previous_fingerprints = {
+                                (issue.issue_code, tuple(sorted(issue.affected_refs)))
+                                for issue in previous_issues
+                            }
+                            new_issues = [
+                                issue for issue in target_revised_issues
+                                if issue.level != "提醒"
+                                and (issue.issue_code, tuple(sorted(issue.affected_refs)))
+                                not in previous_fingerprints
+                            ]
+                            new_core_semantics_issue = any(
+                                issue.check_name in {
+                                    "boolean_logic", "numeric_semantics", "temporal_semantics",
+                                }
+                                for issue in new_issues
+                            )
+                            rejected_issue_codes = list(dict.fromkeys(
+                                issue.issue_code
+                                for issue in (new_issues or target_revised_issues)
+                            ))
                             rejection = (
                                 "候选稿产生了新的完整性问题："
                                 + "；".join(
                                     f"{issue.issue_code}：{issue.problem}"
-                                    for issue in target_revised_issues
+                                    for issue in (new_issues or target_revised_issues)
                                 )
                             )
                         else:
+                            rejected_issue_codes = list(dict.fromkeys(
+                                issue.issue_code for issue in target_revised_issues
+                            ))
                             rejection = (
                                 "候选稿没有消除当前标准的任何一个既有完整性问题"
                             )
                     if attempt + 1 >= attempt_count:
+                        raise ValueError(rejection)
+                    if regressing and new_core_semantics_issue:
                         raise ValueError(rejection)
                     retry_guidance = (
                         "\n\n上一个候选稿未通过确定性完整性检查，不能保存。"
@@ -1843,21 +1934,56 @@ class ProtocolWorkbenchService:
                         "不得用新问题替换旧问题。"
                     )
             except Exception as exc:
+                candidate_hashes: list[str] = []
+                for index, candidate in enumerate(attempted_candidates, start=1):
+                    record = {
+                        "format": "protocol-feedback-rejected-candidate/v1",
+                        "accepted": False,
+                        "job_id": job_id,
+                        "expected_revision_id": expected_revision_id,
+                        "target_rule_code": target_rule_code,
+                        "target_component_id": target_component_id,
+                        "attempt_index": index,
+                        "candidate": candidate,
+                    }
+                    try:
+                        candidate_hashes.append(ArtifactStore(self.data_paths).put(
+                            "raw_response",
+                            json.dumps(record, ensure_ascii=False, sort_keys=True).encode("utf-8"),
+                        ).sha256)
+                    except Exception:
+                        logger.exception("未采用的方案局部候选未能保留 job_id=%s", job_id)
                 logger.warning(
                     "方案草稿局部修订被拒绝 job_id=%s target_rule=%s revision=%s "
-                    "error_type=%s error=%s",
+                    "error_type=%s error=%s candidate_hashes=%s",
                     job_id,
                     target_rule_code,
                     expected_revision_id,
                     type(exc).__name__,
                     str(exc)[:2000],
+                    candidate_hashes,
                     exc_info=True,
                 )
                 raise ProtocolWorkbenchError(
                     "FEEDBACK_REVISION_FAILED",
                     title="未能完成本次反馈修订",
-                    detail="系统未产出可安全读取的局部修订，原草稿保持不变。",
-                    recovery="请把问题具体到原文词句、逻辑关系或时间窗后重试。",
+                    detail=(
+                        "本次修订未能用方案原文证明各条件之间的任选关系，原草稿保持不变。"
+                        if "DISJUNCTION_NOT_BOUND_TO_SOURCE" in rejected_issue_codes
+                        else "系统未产出可安全读取的局部修订，原草稿保持不变。"
+                    ),
+                    recovery=(
+                        "请核对原文哪些内容是独立条件、哪些只是举例；未核清前不采用本次修订。"
+                        if "DISJUNCTION_NOT_BOUND_TO_SOURCE" in rejected_issue_codes
+                        else "请核对所选条款的原文和具体待核问题后再修订。"
+                    ),
+                    context={
+                        "rule_code": target_rule_code,
+                        "component_id": target_component_id,
+                        "unchanged_revision_id": expected_revision_id,
+                        "attempts": attempts_made,
+                        "issue_codes": rejected_issue_codes,
+                    },
                 ) from exc
         with self.session_factory() as session:
             with session.begin():
@@ -1874,6 +2000,82 @@ class ProtocolWorkbenchService:
         return self.get_draft_detail(job_id)
 
     @staticmethod
+    def _joint_source_feedback_allowed(
+        source_input: ProtocolDeconstructionInput,
+        draft: ProtocolDeconstructionDraft,
+        rule_code: str,
+        gate_result: ProtocolDeconstructionGateResult,
+    ) -> bool:
+        """Allow parent repair only when one frozen source binds every sibling."""
+
+        rule = next(item for item in draft.proposed_rules if item.official_code == rule_code)
+        catalog = next((item for item in source_input.parent_rule_catalog.items
+                        if item.official_code == rule_code), None)
+        if (catalog is None or len(catalog.source_span_ids) != 1
+                or len(rule.components) < 2):
+            return False
+        source_id = catalog.source_span_ids[0]
+        source = next((item.text for item in source_input.source_materials
+                       if item.source_span_id == source_id), "")
+        if source != rule.source_text:
+            return False
+        bindings = [item for item in draft.component_drafts
+                    if item.parent_official_code == rule_code]
+        component_ids = {item.rule_component_id for item in rule.components}
+        if (len(bindings) != len(component_ids)
+                or {item.proposed_component.rule_component_id for item in bindings} != component_ids
+                or any(item.source_refs != [source_id] for item in bindings)):
+            return False
+        if rule.restricted_components:
+            if any(set(item.source_span_ids) != {source_id}
+                   for item in rule.restricted_components):
+                return False
+            population_issues = {
+                ref for check in gate_result.checks for issue in check.issues
+                if issue.issue_code == "APPLICABLE_POPULATION_NOT_EVALUATED"
+                for ref in issue.affected_refs
+            }
+            for component in rule.components:
+                predicates = [
+                    predicate
+                    for root in (component.expression, component.exception_expression)
+                    if root is not None
+                    for predicate in iter_atomic_predicates(root)
+                ]
+                if not predicates or any(
+                    predicate.applicable_population is None
+                    or predicate.predicate_id not in population_issues
+                    for predicate in predicates
+                ):
+                    return False
+            return True
+        affected = {
+            ref
+            for check in gate_result.checks for issue in check.issues
+            if issue.issue_code in {
+                "LOCAL_EXCEPTION_REENTERED_OPEN_LIST",
+                "LOCAL_EXCEPTION_MAY_WAIVE_CONCURRENT_TRIGGER",
+            }
+            for ref in issue.affected_refs
+        }
+        if (_localized_open_list_exception_requires_exclusivity([source])
+                and component_ids <= affected):
+            return True
+        return (
+            len(_substantive_obligation_segments(source)) == 1
+            and _source_proves_unsupported_member_frequency([source])
+            and any(
+                issue.issue_code in {
+                    "DISJUNCTION_NOT_BOUND_TO_SOURCE",
+                    "FREQUENCY_DEFINITION_SCOPE_UNVERIFIED",
+                    "FREQUENCY_WINDOW_NOT_STRUCTURED",
+                }
+                and set(issue.affected_refs) & component_ids
+                for check in gate_result.checks for issue in check.issues
+            )
+        )
+
+    @staticmethod
     def _feedback_scope_is_target_only(item: Any, target_rule_code: str) -> bool:
         codes = {
             code
@@ -1883,11 +2085,102 @@ class ProtocolWorkbenchService:
         return codes == {target_rule_code}
 
     @staticmethod
+    def _feedback_issues_for_component(
+        rule: Any,
+        component_id: str,
+        issues: Sequence[ProtocolGateIssue],
+    ) -> list[ProtocolGateIssue]:
+        items = [*rule.components, *rule.restricted_components]
+        if len(items) == 1:
+            return list(issues)
+        selected = next(item for item in items if item.rule_component_id == component_id)
+        identifiers = {selected.rule_component_id, selected.display_code}
+        if not isinstance(selected, RestrictedRuleComponent):
+            expressions = [selected.expression, selected.exception_expression]
+            expressions.extend(item.expression for item in selected.repeat_trigger_conditions)
+            identifiers.update(
+                predicate.predicate_id
+                for expression in expressions if expression is not None
+                for predicate in iter_atomic_predicates(expression)
+            )
+            identifiers.update(item.requirement_id for item in selected.evidence_requirements)
+        return [issue for issue in issues if identifiers.intersection(issue.affected_refs)]
+
+    @staticmethod
+    def _feedback_issue_is_selected_component_only(
+        item: Any, *, target_rule_code: str, target_component_id: str,
+        target_source_ids: set[str], sibling_source_ids: set[str],
+        sibling_component_ids: set[str],
+    ) -> bool:
+        codes = {
+            code for ref in item.affected_scope
+            for code in re.findall(r"(?:IN|EX)-\d{2}", ref)
+        }
+        if codes - {target_rule_code}:
+            return False
+        scope = set(item.affected_scope)
+        if scope & sibling_component_ids:
+            return False
+        if target_component_id in scope:
+            return True
+        refs = set(item.source_refs)
+        return codes == {target_rule_code} and bool(refs) and refs <= target_source_ids and not refs & sibling_source_ids
+
+    @staticmethod
+    def _retain_protected_feedback_issues(
+        previous: ProtocolDeconstructionDraft,
+        revised: ProtocolDeconstructionDraft,
+        *,
+        target_rule_code: str,
+        target_component_id: str,
+    ) -> ProtocolDeconstructionDraft:
+        before = next(rule for rule in previous.proposed_rules
+                      if rule.official_code == target_rule_code)
+        bindings = {
+            item.proposed_component.rule_component_id: item
+            for item in previous.component_drafts
+            if item.parent_official_code == target_rule_code
+        }
+        items = (*before.components, *before.restricted_components)
+        def source_ids(item):
+            if isinstance(item, RestrictedRuleComponent):
+                return set(item.source_span_ids)
+            binding = bindings.get(item.rule_component_id)
+            return set(binding.source_refs) if binding is not None else set()
+
+        target_sources = next(source_ids(item) for item in items
+                              if item.rule_component_id == target_component_id)
+        siblings = [item for item in items
+                    if item.rule_component_id != target_component_id]
+        sibling_sources = set().union(*(source_ids(item) for item in siblings))
+        sibling_ids = {item.rule_component_id for item in siblings}
+        def selected(item):
+            return ProtocolWorkbenchService._feedback_issue_is_selected_component_only(
+                item, target_rule_code=target_rule_code,
+                target_component_id=target_component_id,
+                target_source_ids=target_sources,
+                sibling_source_ids=sibling_sources,
+                sibling_component_ids=sibling_ids,
+            )
+
+        return revised.model_copy(update={
+            "unresolved_items": [
+                *[item for item in previous.unresolved_items if not selected(item)],
+                *[item for item in revised.unresolved_items if selected(item)],
+            ],
+            "structural_warnings": [
+                *[item for item in previous.structural_warnings if not selected(item)],
+                *[item for item in revised.structural_warnings if selected(item)],
+            ],
+        }, deep=True)
+
+    @staticmethod
     def _validate_source_error_scope(
         previous: ProtocolDeconstructionDraft,
         current: ProtocolDeconstructionDraft,
         *,
         target_rule_code: str,
+        target_component_id: str | None = None,
     ) -> None:
         """原文理解纠错只能重建选中的官方父规则及其附属结构。"""
 
@@ -1910,22 +2203,110 @@ class ProtocolWorkbenchService:
             if code != target_rule_code and rule != previous_rules[code]:
                 raise ValueError("原文理解纠错不得修改未选中的官方父规则")
 
-        for previous_items, current_items in (
-            (previous.unresolved_items, current.unresolved_items),
-            (previous.structural_warnings, current.structural_warnings),
-        ):
-            previous_outside = [
-                item
-                for item in previous_items
-                if not ProtocolWorkbenchService._feedback_scope_is_target_only(item, target_rule_code)
-            ]
-            current_outside = [
-                item
-                for item in current_items
-                if not ProtocolWorkbenchService._feedback_scope_is_target_only(item, target_rule_code)
-            ]
-            if previous_outside != current_outside:
-                raise ValueError("原文理解纠错不得改写其他入排标准的待确认事项")
+        if target_component_id is not None:
+            before = previous_rules[target_rule_code]
+            after = current_rules[target_rule_code]
+            if (before.rule_id, before.source_text, before.kind, before.study_phase) != (
+                after.rule_id, after.source_text, after.kind, after.study_phase
+            ):
+                raise ValueError("局部纠错不得修改所选标准的身份或原文")
+            before_items = {
+                item.rule_component_id: item
+                for item in (*before.components, *before.restricted_components)
+            }
+            after_items = {
+                item.rule_component_id: item
+                for item in (*after.components, *after.restricted_components)
+            }
+            if (target_component_id not in before_items
+                    or not set(before_items) <= set(after_items)):
+                raise ValueError("局部纠错不得删除或重新编号同条标准的其他子项")
+            new_ids = set(after_items) - set(before_items)
+            if any(not item_id.startswith(f"{target_component_id}:split:")
+                   for item_id in new_ids):
+                raise ValueError("局部纠错新增分支必须属于所选子项")
+            if any(
+                before_items[item_id] != after_items[item_id]
+                for item_id in before_items if item_id != target_component_id
+            ):
+                raise ValueError("局部纠错不得改写同条标准中未选中的子项")
+            before_bindings = {
+                item.proposed_component.rule_component_id: item
+                for item in previous.component_drafts
+                if item.parent_official_code == target_rule_code
+            }
+            after_bindings = {
+                item.proposed_component.rule_component_id: item
+                for item in current.component_drafts
+                if item.parent_official_code == target_rule_code
+            }
+            if any(
+                before_bindings.get(item_id) != after_bindings.get(item_id)
+                for item_id in before_items if item_id != target_component_id
+            ):
+                raise ValueError("局部纠错不得改写未选中子项的来源映射")
+
+            def item_sources(item_id: str) -> set[str]:
+                restricted = before_items[item_id]
+                if isinstance(restricted, RestrictedRuleComponent):
+                    return set(restricted.source_span_ids)
+                binding = before_bindings.get(item_id)
+                return set(binding.source_refs) if binding is not None else set()
+
+            target_sources = item_sources(target_component_id)
+            target_excerpts = "\n".join(
+                before_bindings[target_component_id].source_excerpts
+            ) if target_component_id in before_bindings else ""
+            for item_id in new_ids:
+                binding = after_bindings.get(item_id)
+                if binding is not None:
+                    new_sources = set(binding.source_refs)
+                    new_excerpts = binding.source_excerpts
+                else:
+                    restricted = after_items[item_id]
+                    if not isinstance(restricted, RestrictedRuleComponent):
+                        raise ValueError("局部纠错新增分支缺少原文来源")
+                    new_sources = set(restricted.source_span_ids)
+                    new_excerpts = restricted.source_excerpts
+                if (not new_sources or not new_sources <= target_sources
+                        or not all(excerpt in target_excerpts for excerpt in new_excerpts)):
+                    raise ValueError("局部纠错新增分支不得借用所选子项以外的原文")
+            sibling_sources = set().union(*(
+                item_sources(item_id) for item_id in before_items if item_id != target_component_id
+            ))
+            sibling_ids = set(before_items) - {target_component_id}
+            for before_issues, after_issues in (
+                (previous.unresolved_items, current.unresolved_items),
+                (previous.structural_warnings, current.structural_warnings),
+            ):
+                def protected(item: Any) -> bool:
+                    return not ProtocolWorkbenchService._feedback_issue_is_selected_component_only(
+                        item, target_rule_code=target_rule_code,
+                        target_component_id=target_component_id,
+                        target_source_ids=target_sources,
+                        sibling_source_ids=sibling_sources,
+                        sibling_component_ids=sibling_ids,
+                    )
+                if list(filter(protected, before_issues)) != list(filter(protected, after_issues)):
+                    raise ValueError("局部纠错不得改写未选中子项或共用原文的待核问题")
+
+        if target_component_id is None:
+            for previous_items, current_items in (
+                (previous.unresolved_items, current.unresolved_items),
+                (previous.structural_warnings, current.structural_warnings),
+            ):
+                previous_outside = [
+                    item
+                    for item in previous_items
+                    if not ProtocolWorkbenchService._feedback_scope_is_target_only(item, target_rule_code)
+                ]
+                current_outside = [
+                    item
+                    for item in current_items
+                    if not ProtocolWorkbenchService._feedback_scope_is_target_only(item, target_rule_code)
+                ]
+                if previous_outside != current_outside:
+                    raise ValueError("原文理解纠错不得改写其他入排标准的待确认事项")
 
         tree_components = [
             (code, component)
@@ -2040,6 +2421,11 @@ class ProtocolWorkbenchService:
             item.draft_component_id
             for item in [*previous.component_drafts, *current.component_drafts]
             if item.parent_official_code == target_rule_code
+            and (target_component_id is None
+                 or item.proposed_component.rule_component_id == target_component_id
+                 or item.proposed_component.rule_component_id.startswith(
+                     f"{target_component_id}:split:"
+                 ))
         }
         previous_other_requirements = {
             item.draft_requirement_id: item
@@ -2077,6 +2463,7 @@ class ProtocolWorkbenchService:
             )
             for stage in previous.proposed_workflow_stages
         }
+        previous_stage_ids = {stage.workflow_stage_id for stage in previous.proposed_workflow_stages}
         current_stage_scope = {
             (
                 stage.workflow_stage_id,
@@ -2091,6 +2478,11 @@ class ProtocolWorkbenchService:
                 if requirement_id not in target_requirement_ids
             )
             for stage in current.proposed_workflow_stages
+            if (
+                stage.workflow_stage_id in previous_stage_ids
+                or not stage.due_requirement_ids
+                or any(item not in target_requirement_ids for item in stage.due_requirement_ids)
+            )
         }
         if previous_stage_scope != current_stage_scope:
             raise ValueError("原文理解纠错不得改写审核节点或移动未选中规则的资料要求")

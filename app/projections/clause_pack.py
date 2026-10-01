@@ -8,6 +8,7 @@ from typing import Iterable
 from app.domain.contracts.clause_pack import (
     ClausePack,
     ClausePackClause,
+    ClausePackRestrictedClause,
     DeterminationMode,
 )
 from app.domain.contracts.enums import Comparator
@@ -98,6 +99,7 @@ def determine_component_mode(component: RuleComponent) -> DeterminationMode:
 
 def clause_pack_hash_material(rule_set: RuleSet) -> dict[str, object]:
     clauses: list[dict[str, object]] = []
+    restricted_clauses: list[dict[str, object]] = []
     seen_components: set[str] = set()
     for rule in sorted(rule_set.rules, key=lambda item: (item.official_code, item.rule_id)):
         for component in sorted(
@@ -128,8 +130,30 @@ def clause_pack_hash_material(rule_set: RuleSet) -> dict[str, object]:
                     determination_mode=determine_component_mode(component),
                 ).model_dump(mode="json")
             )
-    return {
-        "projection_version": ("clause-pack/v3" if any(
+        for component in sorted(
+            rule.restricted_components,
+            key=lambda item: (item.display_code, item.rule_component_id),
+        ):
+            if component.rule_component_id in seen_components:
+                raise ClausePackProjectionError(
+                    f"重复的规则组件身份：{component.rule_component_id}"
+                )
+            seen_components.add(component.rule_component_id)
+            restricted_clauses.append(ClausePackRestrictedClause(
+                clause_id=component.rule_component_id,
+                rule_id=rule.rule_id,
+                official_code=rule.official_code,
+                display_code=component.display_code,
+                kind=rule.kind,
+                title=component.title,
+                source_text=rule.source_text,
+                source_span_ids=list(component.source_span_ids),
+                source_excerpts=list(component.source_excerpts),
+                limitation_kind=component.limitation_kind,
+                unresolved_dimensions=list(component.unresolved_dimensions),
+            ).model_dump(mode="json"))
+    material = {
+        "projection_version": ("clause-pack/v4" if restricted_clauses else "clause-pack/v3" if any(
             item.get("repeat_trigger_conditions") for item in clauses
         ) else "clause-pack/v1"),
         "rule_set_id": rule_set.rule_set_id,
@@ -138,6 +162,9 @@ def clause_pack_hash_material(rule_set: RuleSet) -> dict[str, object]:
         "study_phase": rule_set.study_phase.value,
         "clauses": clauses,
     }
+    if restricted_clauses:
+        material["restricted_clauses"] = restricted_clauses
+    return material
 
 
 def project_clause_pack(
@@ -147,8 +174,10 @@ def project_clause_pack(
     if control_publication is not None:
         if control_publication.rule_set_sha256 != canonical_hash(rule_set.model_dump(mode="json")):
             raise ClausePackProjectionError("补充要求引用的完整规则内容不同")
-        if material["projection_version"] != "clause-pack/v3":
+        if material["projection_version"] == "clause-pack/v1":
             material["projection_version"] = "clause-pack/v2"
+        if control_publication.catalog.restricted_statements:
+            material["projection_version"] = "clause-pack/v4"
         material["control_publication"] = control_publication.model_dump(mode="json")
     digest = canonical_hash(material)
     return ClausePack(

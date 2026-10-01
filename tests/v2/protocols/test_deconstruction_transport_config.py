@@ -351,13 +351,22 @@ class _LengthThenStopCompletions:
     def create(self, **kwargs):
         self.calls.append(kwargs)
         finish_reason = next(self.finish_reasons)
+        content = '{"partial":true' if finish_reason == "length" else '{"ok":1}'
+        if kwargs.get("stream"):
+            return iter([SimpleNamespace(
+                id="length-request", model="glm-5.3-flash", usage=None,
+                choices=[SimpleNamespace(
+                    finish_reason=finish_reason,
+                    delta=SimpleNamespace(content=content, reasoning_content=""),
+                )],
+            )])
         return SimpleNamespace(
             usage=None,
             choices=[
                 SimpleNamespace(
                     finish_reason=finish_reason,
                     message=SimpleNamespace(
-                        content='{"partial":true' if finish_reason == "length" else '{"ok":1}',
+                        content=content,
                         reasoning_content="",
                     ),
                 )
@@ -386,6 +395,12 @@ def test_length_retry_raises_budget_once_capped_at_131072():
     budgets = [call["max_tokens"] for call in client.chat.completions.calls]
     # length 只重试一次：65536 → 131072（思考+正文共享额度）。
     assert budgets == [65536, 131072]
+    assert [item["finish_reason"] for item in response.call_metadata["attempts"]] == [
+        "length", "stop",
+    ]
+    assert [item["requested_max_tokens"] for item in response.call_metadata["attempts"]] == [
+        65536, 131072,
+    ]
 
 
 def test_length_retry_budget_cap_does_not_double_above_131072():

@@ -26,6 +26,7 @@ from app.domain.contracts.agent_io import (
     SemanticEvidenceRequirement,
     SemanticRule,
     SemanticRuleComponent,
+    SemanticRestrictedComponent,
     ProcedureCatalogMapping,
     RuleComponentDraft,
 )
@@ -39,6 +40,7 @@ from app.domain.contracts.rules import (
     EvidenceRequirement,
     Rule,
     RuleComponent,
+    RestrictedRuleComponent,
     WorkflowStage,
     iter_atomic_predicates,
 )
@@ -78,6 +80,7 @@ def _quote_normalize(text: str) -> str:
 class ProtocolAgentResponse(VersionedModel):
     session_id: str = Field(min_length=1)
     text: str = Field(min_length=1)
+    call_metadata: dict[str, object] = Field(default_factory=dict)
 
 
 class ProtocolAgentCallError(RuntimeError):
@@ -132,7 +135,7 @@ DNF_WIRE_MAX_REQUIREMENTS_PER_COMPONENT = 64
 
 # 当前生产 wire 合同版本。字段契约或解析口径变化时提升：旧版本响应不能再被
 # 当作当前生产方法读取（历史草稿仍按各自保存的内容原样读取）。
-DNF_WIRE_VERSION = "dnf-v18"
+DNF_WIRE_VERSION = "dnf-v20"
 
 # Compact semantic batches are sized from the actual prompt, not from protocol
 # names or clinical content. Oversized multi-block parents may use the separate
@@ -141,6 +144,7 @@ SEMANTIC_BATCH_MAX_INPUT_TOKENS = 16_000
 
 DNF_WIRE_ERROR_CODES = {
     "unknown_field": "DNF_WIRE_UNKNOWN_FIELD",
+    "missing_field": "DNF_WIRE_MISSING_FIELD",
     "legacy_graph_field": "DNF_WIRE_LEGACY_GRAPH_FIELD",
     "empty_group": "DNF_WIRE_EMPTY_GROUP",
     "duplicate_atom": "DNF_WIRE_DUPLICATE_ATOM",
@@ -257,7 +261,9 @@ _SYSTEM_CONTRACT = (
     "按方案说明可接受的资料来源。无法确认来源政策时保留未解决项，不猜测。"
     "required_source_types只填写方案明确要求的资料类型，不把常用核对方式升级为必备文件；"
     "方案未限定文件类型时该列表为空，不能自行要求某种证件或证明。"
-    "检查或测量结果的原子条件须用observation_policy说明观察范围、single/any/all/unresolved及逐字来源；"
+    "仅当方案明确规定如何在多次检查或测量记录中选取结果时，才用observation_policy保存"
+    "single/any/all/unresolved、适用范围及逐字来源；未规定时填null，不为数值阈值或病史编造选择政策。"
+    "后续资料核对若出现多条合格结果且无方案选取政策，必须保留待核，不得默取最新或有利值；"
     "仅统计临床事件发生次数的原子条件用occurrence_window保存计数期间，observation_policy和"
     "repeat_scheme均填null，不把事件复发误作检查结果复查。若原文同时要求选取复查结果而先后关系"
     "无法表达，应保留具体未决，不删掉任一项要求。"
@@ -272,8 +278,18 @@ _SYSTEM_CONTRACT = (
     "不要解释或比较另一研究期别。官方父规则目录和基线及以前必做项目录均已冻结，"
     "不得增加、删除、合并或调换成员。复杂条款可拆成子组件，但父规则官方编号和数量"
     "必须保持不变。必须保留原文中的且/或/例外、研究者复合判断、指标、阈值和单位。"
-    "父条款中每个实质性要求都必须进入原子条件：病史时长、疾病状态、"
-    "沟通与依从能力、时间窗、数值阈值和研究者判断都不得因为已引用部分原文而省略；"
+    "父条款中每个实质性要求必须分别进入可执行原子条件或有源未决子项：病史时长、疾病状态、"
+    "沟通与依从能力、时间窗、数值阈值和研究者判断都不得因为已引用部分原文而省略。"
+    "仅当具体独立要求的原文含义确实无法确定时，才用 interpretation_unresolved 写 restricted_components；"
+    "列举项括号内的频次仅限定该项、当前结构无法同时保留上位开放范围与该项定义时，"
+    "可用 consumer_unavailable 原字记录整个独立要求及具体缺失的执行能力。"
+    "开放列举中的局部括号例外如无法在并存其他触发情况时正确限定作用对象，"
+    "也只能把整个独立要求原字记录为 consumer_unavailable，不得留下会重新纳入例外对象的可执行兄弟项。"
+    "含括号内条件性适用人群的整条要求，如当前消费者不能先核实人群再核义务，"
+    "也可把整个独立要求逐字记录为 consumer_unavailable，不得将该义务套用于所有参与者。"
+    "程序将核查原文结构和完整覆盖，"
+    "其他能力自报不予采用；原件缺页或结构错误也不得写成原文歧义。逐项填写原字摘录和来源位置。"
+    "可执行部分仍放 components；两者都没有的父条款无效；"
     "随机/基线/筛选时间锚点和每一个访视实例。每个 RuleComponent 都会独立接受审核："
     "每个 RuleComponent 必须是一个完整、可独立裁决的条件单元，不是把同一官方条件按短句或"
     "单个原子条件任意拆开的容器；只有原文分支本身就是完整独立触发条件时才拆成多个组件。"
@@ -395,6 +411,9 @@ _SYSTEM_CONTRACT = (
     "研究者对特定对象作出判断时，才在对应资料要求的 required_source_types 中列出"
     "investigator_assessment，并明确判断对象、适用节点和可接受记录。不得将该来源类型扩散到"
     "同组件内只需客观检查或一般病史的其他资料要求；不得仅因审核需要临床理解而设专业判断标记。"
+    "数值比较不因父句另有研究者判断就自动改为专业判断；只有该数值本身须由专业人员评定，"
+    "且其资料要求明确绑定相应条件与评估记录时，才对该数值条件设专业判断标记。"
+    "另有独立临床判断时须另存其条件和书面依据，不能借客观阈值代替。"
     "若原文允许使用‘N天/周/月/年内的某项检查结果’，这是资料时效而不是"
     "临床事件回溯：必须为该项检查在原文指定的每个 due_stage 分别建立资料要求，"
     "并用 source_validity_window 保留原文时长和 day/week/month/year 单位；不得把它写成"
@@ -436,6 +455,12 @@ _INTERPRETATION_ANCHOR_CONTRACT = (
 
 
 _COMPACT_WIRE_COMPONENT_CONTRACT = (
+    "每条规则同时输出 components 和 restricted_components 两个数组；原文含义未核清才用"
+    "interpretation_unresolved。仅当列举项括号内频次限定该项，或开放列举中的局部括号例外无法"
+    "正确处理并存其他触发情况时，或括号内条件性人群无法可靠判断适用性时，"
+    "才可用 consumer_unavailable 并逐字引用整个独立要求；"
+    "后者不得保留可重新纳入例外对象的可执行兄弟项，程序会核查来源和完整覆盖。"
+    "没有则填空数组；不得以它替代其他已明确可执行的要求。"
     "每个atom须显式提供repeat_scheme，无复查采用要求填null；有要求时保留逐字来源、适用范围、"
     "许可/必做/禁止/研究者决定、触发条件、次数、期限及结果采用方式。来源未说明与尚未核实须区分。"
     "复查关系不是日期排序；不得默认一次、无限次、最后一次或有利结果。明确最后一次才用use_last_repeat，"
@@ -798,7 +823,7 @@ def _wire_observation_policy_schema():
     selection = schema["properties"]["selection"]
     selection["anyOf"] = [definitions[item["$ref"].rsplit("/", 1)[-1]]
                           if "$ref" in item else item for item in selection["anyOf"]]
-    return schema
+    return {"anyOf": [schema, {"type": "null"}]}
 
 
 def _wire_repeat_scheme_schema():
@@ -1140,7 +1165,7 @@ def _wire_rule_schema(
             "official_code": official_code_schema,
             "components": {
                 "type": "array",
-                "minItems": 1,
+                "minItems": 0,
                 "maxItems": component_limit,
                 "items": _wire_component_schema(
                     group_limit=group_limit,
@@ -1149,8 +1174,36 @@ def _wire_rule_schema(
                     allowed_source_span_ids=allowed_source_span_ids,
                 ),
             },
+            "restricted_components": {
+                "type": "array",
+                "maxItems": component_limit,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "title": {"type": "string", "minLength": 1},
+                        "source_span_ids": _bounded_array(
+                            {"type": "string", "enum": list(allowed_source_span_ids)}
+                            if allowed_source_span_ids else {"type": "string", "minLength": 1},
+                            maximum=source_limit,
+                        ),
+                        "source_excerpts": _bounded_array(
+                            {"type": "string", "minLength": 1}, maximum=source_limit,
+                        ),
+                        "limitation_kind": {"type": "string", "enum": [
+                            "interpretation_unresolved", "consumer_unavailable",
+                        ]},
+                        "unresolved_dimensions": {
+                            "type": "array", "minItems": 1,
+                            "items": {"type": "string", "minLength": 1},
+                        },
+                    },
+                    "required": ["title", "source_span_ids", "source_excerpts",
+                                 "limitation_kind", "unresolved_dimensions"],
+                },
+            },
         },
-        "required": ["official_code", "components"],
+        "required": ["official_code", "components", "restricted_components"],
     }
 
 
@@ -1469,6 +1522,8 @@ def _batch_prompt_payload(
     batch_id: str | None = None,
     agent_call_id: str | None = None,
     scoped_source_span_ids: Sequence[str] | None = None,
+    compact_unrelated_procedures: bool = False,
+    related_procedures_only: bool = False,
 ) -> dict[str, object]:
     """Build only the frozen context and source blocks needed by one batch."""
 
@@ -1530,11 +1585,19 @@ def _batch_prompt_payload(
         "created_by_agent_call_id": agent_call_id,
         "allowed_source_span_ids": list(selected_span_ids),
         "required_procedure_catalog": [
-            item.model_dump(mode="json")
+            (
+                item.model_copy(update={"source_excerpts": ()}).model_dump(mode="json")
+                if compact_unrelated_procedures
+                and not selected_span_id_set.intersection(item.source_span_ids)
+                else item.model_dump(mode="json")
+            )
             for item in sorted(
                 source_input.required_procedure_catalog.items,
                 key=lambda item: item.position,
             )
+            if not related_procedures_only
+            or selected_span_id_set.intersection(item.source_span_ids)
+            or item.official_code in selected_codes
         ],
         "parent_rule_catalog": [
             item.model_copy(
@@ -2186,7 +2249,10 @@ def _wire_atom(
     }[shape]
     unknown_keys = set(value) - common_keys - shape_keys
     if unknown_keys:
-        raise ValueError(f"wire {shape} atom 含未知字段：{sorted(unknown_keys)}")
+        _raise_wire_error(
+            DNF_WIRE_ERROR_CODES["unknown_field"],
+            f"wire {shape} atom 含未知字段：{sorted(unknown_keys)}",
+        )
     missing = {
         "subject",
         "attribute",
@@ -2210,7 +2276,10 @@ def _wire_atom(
             - set(value)
         )
     if missing:
-        raise ValueError(f"wire {shape} atom 缺少字段：{sorted(missing)}")
+        _raise_wire_error(
+            DNF_WIRE_ERROR_CODES["missing_field"],
+            f"wire {shape} atom 缺少字段：{sorted(missing)}",
+        )
     if not isinstance(value["negated"], bool):
         raise ValueError(f"wire {shape} atom 的 negated 必须是布尔值")
     for name in ("subject", "attribute"):
@@ -2354,8 +2423,14 @@ def _wire_atom(
         list(source_clauses) if source_clauses
         else ([source_clause] if source_clause else [])
     )
-    policy_payload = dict(value["observation_policy"])
-    if observation_clauses:
+    raw_policy = value["observation_policy"]
+    if raw_policy is not None and not isinstance(raw_policy, Mapping):
+        _raise_wire_error(
+            DNF_WIRE_ERROR_CODES["shape_mismatch"],
+            "wire observation_policy 必须是来源明确的对象或 null",
+        )
+    policy_payload = dict(raw_policy) if raw_policy is not None else None
+    if policy_payload is not None and observation_clauses:
         raw_excerpts = list(policy_payload.get("source_excerpts") or [])
         raw_span_ids = list(policy_payload.get("source_span_ids") or [])
         if len(raw_span_ids) == 1 and len(raw_excerpts) > 1:
@@ -2374,8 +2449,8 @@ def _wire_atom(
         if span_ids != raw_span_ids or excerpts != anchored_excerpts:
             policy_payload["source_span_ids"] = span_ids
             policy_payload["source_excerpts"] = excerpts
-    policy = ObservationPolicy.model_validate(policy_payload)
-    result["observation_policy"] = policy.model_dump(mode="json")
+    policy = ObservationPolicy.model_validate(policy_payload) if policy_payload is not None else None
+    result["observation_policy"] = policy.model_dump(mode="json") if policy is not None else None
     if value["repeat_scheme"] is not None:
         from app.domain.contracts.repeat_scheme import RepeatScheme
         scheme = RepeatScheme.model_validate(value["repeat_scheme"])
@@ -2640,13 +2715,24 @@ def _wire_dnf_expression(
                     f"wire {label} 的第 {group_index} 个 group 的 {field} 数量"
                     f"超过上限 {DNF_WIRE_MAX_ATOMS_PER_GROUP}",
                 )
-            for raw_atom in raw_atoms:
-                atom = _wire_atom(raw_atom, shape=shape)
+            for atom_index, raw_atom in enumerate(raw_atoms, start=1):
+                try:
+                    atom = _wire_atom(raw_atom, shape=shape)
+                except ProtocolWireError as exc:
+                    raise ProtocolWireError(
+                        exc.code,
+                        f"wire {label} 第 {group_index} 组 {field}[{atom_index}]：{exc}",
+                    ) from exc
+                except ValueError as exc:
+                    _raise_wire_error(
+                        DNF_WIRE_ERROR_CODES["shape_mismatch"],
+                        f"wire {label} 第 {group_index} 组 {field}[{atom_index}]：{exc}",
+                    )
                 atom_key = _canonical_wire_atom_key(shape, atom)
                 if atom_key in atom_identity_keys:
                     _raise_wire_error(
                         DNF_WIRE_ERROR_CODES["duplicate_atom"],
-                        f"wire {label} 的第 {group_index} 个 group 含重复 atom",
+                        f"wire {label} 第 {group_index} 组 {field}[{atom_index}] 含重复 atom",
                     )
                 atom_identity_keys.add(atom_key)
                 atoms.append((shape, atom))
@@ -2762,13 +2848,14 @@ def _wire_semantic_rule(value: Any) -> dict[str, object]:
     if not isinstance(value, Mapping):
         raise ValueError("wire semantic rule 必须是对象")
     _reject_legacy_graph_fields(value, context="wire semantic rule")
-    unknown_rule_keys = set(value) - {"official_code", "components"}
+    unknown_rule_keys = set(value) - {"official_code", "components", "restricted_components"}
     if unknown_rule_keys:
         raise ValueError(f"wire semantic rule 含未知字段：{sorted(unknown_rule_keys)}")
     components = value.get("components")
-    if not isinstance(components, list) or not components:
-        raise ValueError("wire semantic rule components 不能为空")
-    if len(components) > DNF_WIRE_MAX_COMPONENTS_PER_RULE:
+    restricted = value.get("restricted_components", [])
+    if not isinstance(components, list) or not isinstance(restricted, list) or not (components or restricted):
+        raise ValueError("wire semantic rule 必须有可执行或有源未决子项")
+    if len(components) + len(restricted) > DNF_WIRE_MAX_COMPONENTS_PER_RULE:
         _raise_wire_error(
             DNF_WIRE_ERROR_CODES["complexity_limit"],
             "wire semantic rule 的 component 数量超过上限 "
@@ -2957,9 +3044,23 @@ def _wire_semantic_rule(value: Any) -> dict[str, object]:
                 "source_excerpts": source_excerpts,
             }
         )
+    restricted_components = []
+    for item in restricted:
+        if not isinstance(item, Mapping) or set(item) != {
+            "title", "source_span_ids", "source_excerpts",
+            "limitation_kind", "unresolved_dimensions",
+        }:
+            raise ValueError("有源未决子项字段不完整或含未知内容")
+        if item["limitation_kind"] not in {"interpretation_unresolved", "consumer_unavailable"}:
+            raise ValueError("有源受限子项的原因类别无效")
+        if not all(isinstance(item[key], list) and item[key]
+                   for key in ("source_span_ids", "source_excerpts", "unresolved_dimensions")):
+            raise ValueError("有源未决子项必须有来源及具体未解之处")
+        restricted_components.append(dict(item))
     return {
         "official_code": value.get("official_code"),
         "components": hydrated_components,
+        "restricted_components": restricted_components,
     }
 
 
@@ -3205,6 +3306,8 @@ def _visit_slug(visit: str) -> str:
 def _hydrate_semantic_candidate(
     source_input: ProtocolDeconstructionInput,
     candidate: ProtocolSemanticDeconstructionCandidate,
+    *,
+    component_identity_overrides: Mapping[str, tuple[tuple[str, str], ...]] | None = None,
 ) -> ProtocolDeconstructionDraft:
     """Assemble catalog-owned structure without asking the Agent to copy it."""
 
@@ -3251,10 +3354,18 @@ def _hydrate_semantic_candidate(
         if semantic_rule is None or item.official_code is None:
             continue
         components: list[RuleComponent] = []
+        total_components = len(semantic_rule.components) + len(semantic_rule.restricted_components)
+        preserved = (component_identity_overrides or {}).get(item.official_code or "")
+        if preserved is not None and (
+            len(preserved) != total_components
+            or len({identity for identity, _display in preserved}) != total_components
+        ):
+            raise ValueError("局部修订的子项身份与本次规则数量不一致")
         for component_index, semantic_component in enumerate(
             semantic_rule.components
         ):
-            component_id = f"component:{item.official_code}:{component_index + 1:02d}"
+            component_id = (preserved[component_index][0] if preserved is not None
+                            else f"component:{item.official_code}:{component_index + 1:02d}")
             source_span_ids = list(semantic_component.source_span_ids)
             mapped_source_texts = [
                 source_materials[span_id]
@@ -3348,11 +3459,8 @@ def _hydrate_semantic_candidate(
             component = RuleComponent(
                 rule_component_id=component_id,
                 parent_rule_id=rule_id,
-                display_code=_component_display_code(
-                    item.official_code,
-                    component_index,
-                    len(semantic_rule.components),
-                ),
+                display_code=(preserved[component_index][1] if preserved is not None
+                              else _component_display_code(item.official_code, component_index, total_components)),
                 title=semantic_component.title,
                 expression=expression,
                 exception_expression=exception_expression,
@@ -3384,6 +3492,31 @@ def _hydrate_semantic_candidate(
                         source_refs=source_span_ids,
                     )
                 )
+        restricted_components = []
+        for offset, restricted in enumerate(semantic_rule.restricted_components, start=1):
+            source_span_ids = list(restricted.source_span_ids)
+            mapped_texts = [
+                source_materials[span_id]
+                for span_id in source_span_ids
+                if span_id in source_materials
+            ]
+            source_excerpts = [
+                _recover_exact_excerpt(excerpt, mapped_texts)
+                for excerpt in restricted.source_excerpts
+            ]
+            position = len(semantic_rule.components) + offset
+            restricted_identity = preserved[position - 1] if preserved is not None else None
+            restricted_components.append(RestrictedRuleComponent(
+                rule_component_id=(restricted_identity[0] if restricted_identity is not None
+                                   else f"component:{item.official_code}:{position:02d}"),
+                display_code=(restricted_identity[1] if restricted_identity is not None
+                              else _component_display_code(item.official_code, position - 1, total_components)),
+                title=restricted.title,
+                source_span_ids=source_span_ids,
+                source_excerpts=source_excerpts,
+                limitation_kind=restricted.limitation_kind,
+                unresolved_dimensions=list(restricted.unresolved_dimensions),
+            ))
         rule_source_text = "\n".join(
             source_materials[span_id]
             for span_id in item.source_span_ids
@@ -3397,6 +3530,7 @@ def _hydrate_semantic_candidate(
                 source_text=rule_source_text or item.label,
                 study_phase=source_input.selected_phase,
                 components=components,
+                restricted_components=restricted_components,
             )
         )
 
@@ -3621,7 +3755,20 @@ def semantic_candidate_from_draft(
                 )
             )
         semantic_rules.append(
-            SemanticRule(official_code=rule.official_code, components=components)
+            SemanticRule(
+                official_code=rule.official_code,
+                components=components,
+                restricted_components=[
+                    SemanticRestrictedComponent(
+                        title=item.title,
+                        source_span_ids=list(item.source_span_ids),
+                        source_excerpts=list(item.source_excerpts),
+                        limitation_kind=item.limitation_kind,
+                        unresolved_dimensions=list(item.unresolved_dimensions),
+                    )
+                    for item in rule.restricted_components
+                ],
+            )
         )
     candidate_id = draft.draft_id.removeprefix("draft:")
     return ProtocolSemanticDeconstructionCandidate(
@@ -3638,8 +3785,10 @@ def revise_protocol_draft_from_feedback(
     current_draft: ProtocolDeconstructionDraft,
     *,
     target_rule_code: str,
+    target_component_id: str | None = None,
     feedback_note: str,
     transport: ProtocolAgentTransport,
+    joint_source_repair: bool = False,
 ) -> ProtocolDeconstructionDraft:
     """依据一条明确的原文理解纠错，局部重新解构指定父规则。
 
@@ -3657,6 +3806,33 @@ def revise_protocol_draft_from_feedback(
     target = next(
         rule for rule in current.proposed_rules if rule.official_code == target_rule_code
     )
+    target_rule_draft = next(
+        rule for rule in current_draft.proposed_rules if rule.official_code == target_rule_code
+    )
+    component_index = next(
+        (index for index, component in enumerate(target_rule_draft.components)
+         if component.rule_component_id == target_component_id), None,
+    )
+    restricted_index = next(
+        (index for index, component in enumerate(target_rule_draft.restricted_components)
+         if component.rule_component_id == target_component_id), None,
+    )
+    if target_component_id is not None and component_index is None and restricted_index is None:
+        raise ValueError("反馈目标子项不属于指定官方规则")
+    component_only = component_index is not None or restricted_index is not None
+    if component_index is not None:
+        prompt_rule = SemanticRule(
+            official_code=target_rule_code,
+            components=[target.components[component_index]],
+        )
+    elif restricted_index is not None:
+        prompt_rule = SemanticRule(
+            official_code=target_rule_code,
+            components=[],
+            restricted_components=[target.restricted_components[restricted_index]],
+        )
+    else:
+        prompt_rule = target
     compact = _uses_compact_wire_contract(transport)
     repair_batch_id = _repair_batch_id([target_rule_code])
     output_contract = (
@@ -3670,36 +3846,19 @@ def revise_protocol_draft_from_feedback(
             _batch_source_span_ids(source_input, [target_rule_code])
         )
     )
-    compact_source_context = (
-        json.dumps(
-            _batch_prompt_payload(
-                source_input,
-                [target_rule_code],
-                batch_number=1,
-                batch_total=1,
-                candidate_id=current.candidate_id,
-                batch_id=repair_batch_id,
-            ),
-            ensure_ascii=False,
-            sort_keys=True,
-        )
-        if compact
-        else json.dumps(
-            {
-                **source_input.model_dump(
-                    mode="json",
-                    exclude={
-                        "interpretation_source_ids",
-                        "interpretation_sources",
-                    },
-                ),
-                "interpretation_clarifications": _interpretation_clarifications(
-                    source_input, {target_rule_code}
-                ),
-            },
-            ensure_ascii=False,
-            sort_keys=True,
-        )
+    scoped_source_context = json.dumps(
+        _batch_prompt_payload(
+            source_input,
+            [target_rule_code],
+            batch_number=1,
+            batch_total=1,
+            candidate_id=current.candidate_id,
+            batch_id=repair_batch_id,
+            compact_unrelated_procedures=True,
+            related_procedures_only=True,
+        ),
+        ensure_ascii=False,
+        sort_keys=True,
     )
     prompt = (
         "你正在根据医学监查员指出的原文理解错误，局部修正已有方案"
@@ -3707,21 +3866,65 @@ def revise_protocol_draft_from_feedback(
         "才能修正。你必须只返回 ProtocolSemanticRuleRepair JSON，"
         f"candidate_id 必须为 {current.candidate_id!r}，replacement_rules 必须且只能"
         f"包含 {target_rule_code}。不得修改官方编号、增删其他父规则或伪造来源。\n\n"
-        "本次是最小范围纠错，不是重写整条规则。除用户明确指出且方案原文支持修改的字段外，"
-        "目标规则中现有的子项、谓词、ALL/ANY/NOT 逻辑、数值和单位、频次结构、时间限定、"
-        "例外、资料要求、应完成阶段和来源片段都必须逐字段原样保留；compact wire 不得自行生成身份。"
+        + (
+            f"本次只返回子项 {target_component_id}：replacement_rules 中只能有一条官方父规则，"
+            "其 components 可有多个元素，但仅在原文含局部例外或完整替代分支、单个组件会错误豁免"
+            "其他同时存在的触发情况时拆分；各元素必须是完整、独立触发条件，且只能取自所选子项原文。"
+            "开放列举的局部例外拆分后，宽泛兄弟项不能重新纳入被排除的对象；"
+            "例外为某种情况‘存在’时，不能据此豁免同时存在的其他相关情况，须有针对同次事实及排他范围的依据。"
+            "否则只返回一个元素。若选中子项原文还有一项独立且确实无法解释或暂无消费者的要求，"
+            "可同时返回一个可执行元素和一个受限元素；两者须分别引用各自逐字原文，"
+            "已明确的数值界限仍须留在可执行元素中。也可令 components 为空、"
+            "restricted_components 中一个元素。整项撤下仅适用于本次来源门禁能够核实的"
+            "consumer_unavailable 能力缺口；其他解释疑问仍保留原可执行部分并报告，不能在"
+            "局部反馈中撤下整个子项。已明确的数值界限、比较方向及其他可执行条件不得撤下。"
+            "程序保留其他子项原身份和原文；待核事项的 affected_scope 必须指向本子项。\n"
+            if component_index is not None else
+            f"本次只返回待核子项 {target_component_id}：replacement_rules 中只能有一条官方父规则，"
+            "且只能返回一个有源可执行子项或一个仍待核子项。只有原文含义与正式消费者均已核清时"
+            "才能改为可执行；否则保留真实未决及其原文来源。不得改写同条其他子项。\n"
+            if restricted_index is not None else ""
+        )
+        + (
+            "本次多个子项绑定同一冻结来源段，且已由程序核实不能独立限定修改范围。"
+            "允许仅在此父规则内重组这些子项；若原文关系或消费者能力不能忠实支持拆分，"
+            "返回一个覆盖完整原文的 consumer_unavailable 受限子项，不要同时保留与其来源重叠的"
+            "可执行子项，也不要把原文已明确的频次或时间删掉。其他父规则不变。\n"
+            if joint_source_repair else
+            "本次是最小范围纠错，不是重写整条规则。"
+        )
+        + "可执行子项的修订中，除用户明确指出且方案原文"
+        "支持修改的字段外，现有谓词、ALL/ANY/NOT 逻辑、数值和单位、频次结构、时间限定、"
+        "例外、资料要求、应完成阶段和来源片段都必须逐字段原样保留；但反馈明确指出共享原文中的"
+        "例外、时间或限定词被错误归给本子项时，可以仅把本子项谓词的来源片段缩窄为原文中"
+        "连续且逐字存在的完整适用分支，同时保留父规则原文、来源编号和未选中兄弟子项。"
+        "不能通过截掉本子项真正适用的限定词、例外或连接语来消除检查问题；不确定归属时保持待核。"
+        "若确需将整个独立子项改为"
+        "有源能力缺口，只能返回该子项的原字摘录及具体未决维度，不能以待核掩盖已明确的阈值或移动"
+        "其他子项；程序将独立核查完整覆盖。compact wire 不得自行生成身份。"
         "每个谓词 observation_policy.source_excerpts 的每一项都必须是该谓词自身 "
         "source_clause/source_clauses 内的逐字子串；拆分‘或’分支时，各分支必须同时携带"
         "支撑该分支的共享连接语逐字片段，不得只在组件级来源中引用。"
         "每个谓词的原文定位只能二选一：单段原文写 source_clause，并保持 source_clauses=[]；"
         "需要多段共同支撑时写 source_clauses，并保持 source_clause=null，绝不能同时填写。"
+        "source_clauses 必须按原文出现顺序排列；共同期间或上位限定在原文先出现时，"
+        "必须先引用它，再引用本分支，不得为了突出人群而把共同前缀移到末尾。"
+        "适用人群若已写入 applicable_population，须在本谓词自有的某个逐字片段起始处"
+        "保留其有源方向，而不是要求它排在 source_clauses 数组第一项；不能为此改变适用对象。"
+        "数值比较不因父句另含研究者判断就设 requires_professional_judgment=true；只有数值本身"
+        "需要专业评定，且该谓词的资料要求绑定 investigator_assessment 时才可设置。独立判断"
+        "另做有书面来源的条件，不把客观阈值整体改成研究者裁量。"
+        "semantic_proposition 只能写可由受试者原始资料支持或否定的临床事实及原文限定；"
+        "不得写‘本例’、资料核实流程、方案原文、例示/上位条件/分支等规则解释。"
+        "开放列举的逐字内容保留在 source_clause/source_clauses，不能为满足来源覆盖而把"
+        "列举方式、规则结构或自拟的且/或关系塞入患者事实命题。"
         "输出前必须把 replacement_rules 与当前目标规则逐字段比较；任何无关变化都要撤销。\n\n"
         "replacement_unresolved_items 和 replacement_structural_warnings 仅填写本次修订后仍存在的目标父规则待核事项；"
         f"每项 affected_scope 必须明确包含 {target_rule_code} 或其子项定位，"
         "不得填写其他父规则、无父规则编号的范围或全方案事项；没有则返回空数组。\n\n"
         f"用户指出的问题：{note}\n\n"
-        f"当前目标规则：{target.model_dump_json()}\n\n"
-        f"冻结的方案输入：{compact_source_context}\n\n"
+        f"当前目标规则：{prompt_rule.model_dump_json()}\n\n"
+        f"冻结的方案输入：{scoped_source_context}\n\n"
         f"{output_contract}"
     )
     _configure_transport_output_scope(transport, source_input, [target_rule_code])
@@ -3739,6 +3942,26 @@ def revise_protocol_draft_from_feedback(
                     repair_batch_id if compact else None
                 ),
             )
+            restricted_conversion = False
+            split_count = 1
+            mixed_restriction = False
+            if component_only:
+                replacement = repair.replacement_rules[0] if len(repair.replacement_rules) == 1 else None
+                restricted_conversion = bool(
+                    replacement is not None and not replacement.components
+                    and len(replacement.restricted_components) == 1
+                )
+                mixed_restriction = bool(
+                    component_index is not None and replacement is not None
+                    and len(replacement.components) == 1
+                    and len(replacement.restricted_components) == 1
+                )
+                if replacement is not None and replacement.components:
+                    split_count = len(replacement.components)
+                repair = _merge_component_only_repair(
+                    repair, target, component_index, target_component_id,
+                    restricted_index=restricted_index,
+                )
             _validate_semantic_repair(
                 repair,
                 expected_codes=[target_rule_code],
@@ -3751,16 +3974,57 @@ def revise_protocol_draft_from_feedback(
                 repair,
                 expected_codes=[target_rule_code],
             )
-            hydrated = _hydrate_semantic_candidate(source_input, revised)
-            # 局部修订必须追加到当前不可变草稿链；语义候选 ID 只是模型会话
-            # 身份，不能反向生成一个新的 draft_id。
-            return hydrated.model_copy(
-                update={
-                    "draft_id": current_draft.draft_id,
-                    "draft_revision": current_draft.draft_revision,
-                    "previous_draft_id": current_draft.previous_draft_id,
-                }
+            preserved = None
+            if component_only:
+                original_executable = [
+                    (item.rule_component_id, item.display_code)
+                    for item in target_rule_draft.components
+                ]
+                original_restricted = [
+                    (item.rule_component_id, item.display_code)
+                    for item in target_rule_draft.restricted_components
+                ]
+                if restricted_conversion:
+                    if component_index is not None:
+                        selected_identity = original_executable.pop(component_index)
+                        original_restricted.append(selected_identity)
+                elif restricted_index is not None and replacement is not None and replacement.components:
+                    selected_identity = original_restricted.pop(restricted_index)
+                    original_executable.append(selected_identity)
+                elif split_count > 1:
+                    selected_identity = original_executable[component_index]
+                    occupied_ids = {identity for identity, _ in original_executable + original_restricted}
+                    occupied_codes = {display for _, display in original_executable + original_restricted}
+                    additions = []
+                    for offset in range(1, split_count):
+                        suffix = offset + 1
+                        while True:
+                            new_id = f"{target_component_id}:split:{suffix:02d}"
+                            new_display = f"{selected_identity[1]}-{suffix}"
+                            if new_id not in occupied_ids and new_display not in occupied_codes:
+                                break
+                            suffix += 1
+                        additions.append((new_id, new_display))
+                        occupied_ids.add(new_id)
+                        occupied_codes.add(new_display)
+                    original_executable[component_index + 1:component_index + 1] = additions
+                if mixed_restriction:
+                    selected_identity = original_executable[component_index]
+                    occupied_ids = {identity for identity, _ in original_executable + original_restricted}
+                    occupied_codes = {display for _, display in original_executable + original_restricted}
+                    suffix = 2
+                    while True:
+                        new_id = f"{target_component_id}:split:{suffix:02d}"
+                        new_display = f"{selected_identity[1]}-{suffix}"
+                        if new_id not in occupied_ids and new_display not in occupied_codes:
+                            break
+                        suffix += 1
+                    original_restricted.append((new_id, new_display))
+                preserved = {target_rule_code: tuple(original_executable + original_restricted)}
+            hydrated = _hydrate_semantic_candidate(
+                source_input, revised, component_identity_overrides=preserved,
             )
+            return _merge_feedback_hydration(current_draft, hydrated, target_rule_code)
         except Exception as exc:
             last_error = exc
             if attempt == 1:
@@ -3793,6 +4057,167 @@ def revise_protocol_draft_from_feedback(
         response.session_id,
         f"反馈修订经过一次结构纠正后仍无法读取：{last_error}",
     )
+
+
+def _merge_component_only_repair(
+    repair: ProtocolSemanticRuleRepair,
+    original: SemanticRule,
+    component_index: int | None,
+    target_component_id: str,
+    *,
+    restricted_index: int | None = None,
+) -> ProtocolSemanticRuleRepair:
+    if (component_index is None) == (restricted_index is None):
+        raise ValueError("局部修订必须指定唯一的原有子项")
+    if len(repair.replacement_rules) != 1 or repair.replacement_rules[0].official_code != original.official_code:
+        raise ValueError("子项局部修订只能返回选中的一个子项")
+    replacement = repair.replacement_rules[0]
+    mixed = (component_index is not None and len(replacement.components) == 1
+             and len(replacement.restricted_components) == 1)
+    if not ((replacement.components and not replacement.restricted_components)
+            or (not replacement.components and len(replacement.restricted_components) == 1)
+            or mixed):
+        raise ValueError("子项局部修订只能返回可执行分支或单个受限子项，也可各返回一个有源子项")
+    if (component_index is not None and not replacement.components
+            and replacement.restricted_components
+            and replacement.restricted_components[0].limitation_kind != "consumer_unavailable"):
+        raise ValueError("局部反馈不能把可执行子项改为含义待核；只能采用来源可核的能力缺口")
+    if restricted_index is not None and len(replacement.components) > 1:
+        raise ValueError("待核子项一次只能转为一个有源可执行子项")
+    selected = (original.components[component_index] if component_index is not None
+                else original.restricted_components[restricted_index])
+    selected_source_ids = set(selected.source_span_ids)
+    single_item_parent = len(original.components) + len(original.restricted_components) == 1
+    def scoped(items):
+        result = []
+        for item in items:
+            if target_component_id in item.affected_scope:
+                result.append(item)
+            elif (single_item_parent and item.affected_scope == [original.official_code]
+                  and item.source_refs and set(item.source_refs) <= selected_source_ids):
+                result.append(item.model_copy(update={"affected_scope": [target_component_id]}))
+            else:
+                raise ValueError("子项局部修订的待核问题必须指向选中的子项")
+        return result
+    repair = repair.model_copy(update={
+        "replacement_unresolved_items": scoped(repair.replacement_unresolved_items),
+        "replacement_structural_warnings": scoped(repair.replacement_structural_warnings),
+    })
+    components = list(original.components)
+    restricted = list(original.restricted_components)
+    if component_index is not None and replacement.components:
+        components[component_index:component_index + 1] = replacement.components
+        if mixed:
+            restricted.append(replacement.restricted_components[0])
+    elif restricted_index is not None and replacement.components:
+        restricted.pop(restricted_index)
+        components.extend(replacement.components)
+    elif restricted_index is not None:
+        restricted[restricted_index] = replacement.restricted_components[0]
+    else:
+        components.pop(component_index)
+        restricted.append(replacement.restricted_components[0])
+    return repair.model_copy(update={"replacement_rules": [SemanticRule(
+        official_code=original.official_code,
+        components=components,
+        restricted_components=restricted,
+    )]})
+
+
+def _merge_feedback_hydration(
+    current: ProtocolDeconstructionDraft,
+    hydrated: ProtocolDeconstructionDraft,
+    target_code: str,
+) -> ProtocolDeconstructionDraft:
+    """Keep persisted non-target structure while installing one recompiled rule."""
+
+    def replace(items, new_items, belongs):
+        replacement = [item for item in new_items if belongs(item)]
+        output = []
+        inserted = False
+        for item in items:
+            if belongs(item):
+                if not inserted:
+                    output.extend(replacement)
+                    inserted = True
+            else:
+                output.append(item)
+        if not inserted:
+            output.extend(replacement)
+        return output
+
+    before = next(rule for rule in current.proposed_rules if rule.official_code == target_code)
+    after = next(rule for rule in hydrated.proposed_rules if rule.official_code == target_code)
+    old_draft_ids = {
+        item.draft_component_id for item in current.component_drafts
+        if item.parent_official_code == target_code
+    }
+    new_draft_ids = {
+        item.draft_component_id for item in hydrated.component_drafts
+        if item.parent_official_code == target_code
+    }
+    old_requirements = {
+        item.requirement_id for component in before.components
+        for item in component.evidence_requirements
+    }
+    new_requirements = {
+        item.requirement_id for component in after.components
+        for item in component.evidence_requirements
+    }
+    rebuilt_stages = {item.workflow_stage_id: item for item in hydrated.proposed_workflow_stages}
+    old_stage_by_requirement = {
+        requirement_id: stage.workflow_stage_id
+        for stage in current.proposed_workflow_stages
+        for requirement_id in stage.due_requirement_ids
+        if requirement_id in old_requirements
+    }
+    new_stage_by_requirement = {
+        requirement_id: stage.workflow_stage_id
+        for stage in hydrated.proposed_workflow_stages
+        for requirement_id in stage.due_requirement_ids
+        if requirement_id in new_requirements
+    }
+    moved = {
+        requirement_id for requirement_id in old_requirements & new_requirements
+        if old_stage_by_requirement.get(requirement_id)
+        != new_stage_by_requirement.get(requirement_id)
+    }
+    removed = (old_requirements - new_requirements) | moved
+    added = (new_requirements - old_requirements) | moved
+    workflow_stages = []
+    for stage in current.proposed_workflow_stages:
+        new_ids = [
+            requirement_id for requirement_id in
+            rebuilt_stages.get(stage.workflow_stage_id, stage).due_requirement_ids
+            if requirement_id in added
+        ]
+        workflow_stages.append(stage.model_copy(update={
+            "due_requirement_ids": [
+                *[item for item in stage.due_requirement_ids if item not in removed],
+                *new_ids,
+            ]
+        }))
+    existing_stage_ids = {item.workflow_stage_id for item in workflow_stages}
+    for stage in hydrated.proposed_workflow_stages:
+        if stage.workflow_stage_id not in existing_stage_ids:
+            target_ids = [item for item in stage.due_requirement_ids if item in added]
+            if target_ids:
+                workflow_stages.append(stage.model_copy(update={"due_requirement_ids": target_ids}))
+
+    merged = current.model_copy(update={
+        "proposed_rules": replace(current.proposed_rules, hydrated.proposed_rules,
+                                  lambda item: item.official_code == target_code),
+        "component_drafts": replace(current.component_drafts, hydrated.component_drafts,
+                                    lambda item: item.parent_official_code == target_code),
+        "evidence_requirement_drafts": replace(
+            current.evidence_requirement_drafts, hydrated.evidence_requirement_drafts,
+            lambda item: item.draft_component_id in old_draft_ids | new_draft_ids,
+        ),
+        "proposed_workflow_stages": workflow_stages,
+        "structural_warnings": hydrated.structural_warnings,
+        "unresolved_items": hydrated.unresolved_items,
+    }, deep=True)
+    return ProtocolDeconstructionDraft.model_validate(merged.model_dump(mode="json"))
 
 
 def _parse_semantic_candidate(
@@ -3865,12 +4290,17 @@ def _validate_batch_source_closure(
     selected_source_ids = set(
         _batch_source_span_ids(source_input, expected_codes)
     )
-    component_source_ids = {
-        source_span_id
-        for rule in rules
-        for component in rule.components
-        for source_span_id in component.source_span_ids
-    }
+    component_source_ids = set()
+    for rule in rules:
+        owned_source_ids = set(_batch_source_span_ids(source_input, [rule.official_code]))
+        for component in (*rule.components, *rule.restricted_components):
+            source_ids = set(component.source_span_ids)
+            if source_ids - owned_source_ids:
+                raise ValueError(
+                    "来源片段不属于选定父规则来源闭包："
+                    f"{sorted(source_ids - owned_source_ids)}"
+                )
+            component_source_ids.update(source_ids)
     issue_source_ids = {
         source_ref
         for item in (*warning_items, *unresolved_items)
@@ -4187,6 +4617,10 @@ def regressing_rule_codes(
     revised_issues: Sequence[ProtocolGateIssue],
     selected_codes: Sequence[str],
 ) -> set[str]:
+    # Capability reminders remain recorded but do not block adoption/repair.
+    # A reminder promoted to a blocking issue is still a new regression.
+    previous_issues = [issue for issue in previous_issues if issue.level != "提醒"]
+    revised_issues = [issue for issue in revised_issues if issue.level != "提醒"]
     refined_prints = _refined_time_anchor_fingerprints(
         previous_draft,
         previous_issues,
@@ -4245,12 +4679,16 @@ def issue_reduced_for_rule(
 ) -> bool:
     """Return whether a local revision removed at least one prior gate issue."""
 
-    previous = _issue_fingerprints_by_rule(previous_draft, previous_issues).get(
+    previous = _issue_fingerprints_by_rule(
+        previous_draft, [issue for issue in previous_issues if issue.level != "提醒"]
+    ).get(
         rule_code, set()
     )
     if not previous:
         return True
-    revised = _issue_fingerprints_by_rule(revised_draft, revised_issues).get(
+    revised = _issue_fingerprints_by_rule(
+        revised_draft, [issue for issue in revised_issues if issue.level != "提醒"]
+    ).get(
         rule_code, set()
     )
     return bool(previous - revised)
@@ -5098,11 +5536,14 @@ def _collect_initial_semantic_response(
             agent_call_id=None,
         )
     transport_started = current_cached is None
+    batch_calls: list[dict[str, object]] = []
+    reused_batches: list[str] = []
     if transport_started:
         response = transport.start(
             prompt=first_prompt,
             output_kind="semantic_candidate",
         )
+        batch_calls.append({"batch_id": f"1/{len(batches)}", **response.call_metadata})
         session_id: str | None = response.session_id
     else:
         response = ProtocolAgentResponse(
@@ -5117,6 +5558,8 @@ def _collect_initial_semantic_response(
         batch_candidate = current_cached
         problem = ""
         batch_id = f"{batch_index}/{len(batches)}"
+        if batch_candidate is not None:
+            reused_batches.append(batch_id)
         for schema_attempt in range(2 if batch_candidate is None else 0):
             try:
                 batch_candidate = _parse_semantic_candidate(
@@ -5154,6 +5597,7 @@ def _collect_initial_semantic_response(
                         ),
                         output_kind="semantic_candidate",
                     )
+                    batch_calls.append({"batch_id": batch_id, **response.call_metadata})
                 except ProtocolAgentCallError:
                     raise
                 except Exception as exc:
@@ -5257,6 +5701,7 @@ def _collect_initial_semantic_response(
                     prompt=next_prompt,
                     output_kind="semantic_candidate",
                 )
+                batch_calls.append({"batch_id": f"{batch_index + 1}/{len(batches)}", **response.call_metadata})
                 session_id = response.session_id
                 transport_started = True
             else:
@@ -5276,6 +5721,7 @@ def _collect_initial_semantic_response(
                     prompt=next_prompt,
                     output_kind="semantic_candidate",
                 )
+                batch_calls.append({"batch_id": f"{batch_index + 1}/{len(batches)}", **response.call_metadata})
         except ProtocolAgentCallError:
             raise
         except Exception as exc:
@@ -5310,6 +5756,7 @@ def _collect_initial_semantic_response(
     return ProtocolAgentResponse(
         session_id=resolved_session_id,
         text=merged.model_dump_json(),
+        call_metadata={"batches": batch_calls, "reused_without_call": reused_batches},
     ), None
 
 
@@ -5409,6 +5856,7 @@ class ProtocolDeconstructorRunner:
                         raw_output_sha256=_sha256(response.text),
                         outcome="输出格式无效",
                         issues=[issue],
+                        call_metadata=response.call_metadata,
                     )
                 ],
             )
@@ -5513,6 +5961,7 @@ class ProtocolDeconstructorRunner:
                         raw_output_sha256=raw_hash,
                         outcome="输出格式无效",
                         issues=issues,
+                        call_metadata=response.call_metadata,
                     )
                 )
             else:
@@ -5583,6 +6032,7 @@ class ProtocolDeconstructorRunner:
                         ),
                         draft_id=draft.draft_id,
                         issues=issues,
+                        call_metadata=response.call_metadata,
                     )
                 )
                 if gate_result.publishable:
@@ -5686,6 +6136,8 @@ class ProtocolDeconstructorRunner:
                             _call_issue(exc) if isinstance(exc, ProtocolAgentCallError)
                             else _format_issue(f"定向修正调用未完成：{exc}")
                         ],
+                        call_metadata=(exc.error_metadata
+                                       if isinstance(exc, ProtocolAgentCallError) else {}),
                     )
                 )
                 break
@@ -5701,6 +6153,7 @@ class ProtocolDeconstructorRunner:
                                 "定向修正返回了新的会话，已停止，避免丢失原上下文。"
                             )
                         ],
+                        call_metadata=response.call_metadata,
                     )
                 )
                 break

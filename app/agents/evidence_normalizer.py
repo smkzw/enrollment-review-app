@@ -24,7 +24,7 @@ import re
 import unicodedata
 from copy import deepcopy
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from math import isfinite
 from typing import Literal, Protocol
@@ -1092,6 +1092,36 @@ def _normalize_dose_scalar(value: object, unit: object) -> object:
     return match.group(1) if match else value
 
 
+def _restore_source_datetime_precision(
+    raw_value: object, canonical_value: object, assertion_basis: object
+) -> object:
+    if not isinstance(raw_value, str) or not isinstance(canonical_value, str):
+        return canonical_value
+    raw = raw_value.strip()
+    canonical = canonical_value.strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", canonical):
+        return canonical_value
+    match = re.fullmatch(
+        r"(\d{4}-\d{2}-\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?", raw
+    )
+    if match is None:
+        return canonical_value
+    source_text = assertion_basis.get("assertion_text") if isinstance(assertion_basis, dict) else None
+    if not isinstance(source_text, str) or raw not in source_text:
+        return canonical_value
+    try:
+        if (
+            date.fromisoformat(match.group(1)) == date.fromisoformat(canonical)
+            and 0 <= int(match.group(2)) < 24
+            and 0 <= int(match.group(3)) < 60
+            and (match.group(4) is None or 0 <= int(match.group(4)) < 60)
+        ):
+            return raw_value
+    except ValueError:
+        pass
+    return canonical_value
+
+
 def _normalize_evidence_json(value):
     """仅做语义保持的 JSON 实例规范化（不改变候选语义）。"""
     if isinstance(value, list):
@@ -1132,6 +1162,12 @@ def _normalize_evidence_json(value):
             normalized.get("unit"),
             normalized.get("asserted_object"),
         )
+        if "fact_type" in normalized:
+            normalized["canonical_value"] = _restore_source_datetime_precision(
+                normalized.get("raw_value"),
+                normalized["canonical_value"],
+                normalized.get("assertion_basis"),
+            )
     canonical_value = normalized.get("canonical_value")
     if (
         "fact_type" in normalized
@@ -1652,6 +1688,8 @@ def _align_source_semantics(
     derived = derive_source_strength_from_metadata(
         evidence_input.context.document_type,
         evidence_input.context.source_party,
+        document_category=evidence_input.context.document_category,
+        source_category=evidence_input.context.source_category,
     )
     source_labels = {
         SourceStrength.CONTEMPORANEOUS_OBJECTIVE: "同期客观结果",

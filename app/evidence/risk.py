@@ -19,7 +19,8 @@ from hashlib import sha256
 from app.domain.contracts.enums import OcrRiskKind, OcrRiskLevel
 from app.domain.contracts.ocr import OcrRiskFlag
 
-OCR_RISK_RULE_VERSION = "slice4.6/v2"
+OCR_RISK_RULE_VERSION = "slice4.6/v3"
+_PREVIOUS_RISK_RULE_VERSION = "slice4.6/v2"
 
 # 冻结的风险等级矩阵（PRD P4-R08 / 验收 P4-AC07）。
 OCR_RISK_LEVEL_MATRIX: dict[OcrRiskKind, OcrRiskLevel] = {
@@ -38,26 +39,42 @@ _SEVERE_REPETITION_MIN_SHARE = 0.30
 
 # 否定/肯定极性标记（未配对 无/有 等易误报词，避免页面级误报超限）。
 # 复合短语先匹配，避免“未见异常”同时拆成两个同类风险片段。
-_POLARITY_RE = re.compile(
+_POLARITY_RE_V2 = re.compile(
     r"(未见(?:异常)?|否认|确认|可见|阴性|阳性|正常|异常|"
+    r"未使用|已使用|未接受|已接受|未接种|已接种)"
+)
+_POLARITY_RE = re.compile(
+    r"(未检测到|未检出|未发现|未见(?:异常)?|否认|确认|可见|阴性|阳性|正常|异常|"
     r"未使用|已使用|未接受|已接受|未接种|已接种)"
 )
 
 # 数值：整数或小数；含小数点时额外标记 DECIMAL_POINT。
-_NUMERIC_RE = re.compile(r"\d+(?:\.\d+)?")
+_NUMERIC_RE_V2 = re.compile(r"\d+(?:\.\d+)?")
+_NUMERIC_RE = re.compile(r"\d+(?:\.\d+)?(?:[Ee][+-]?\d+)?")
 
 # 临床单位（不含 年/月/日/天/周/月/岁 等日期/年龄上下文词）。
-_UNIT_RE = re.compile(
+_UNIT_RE_V2 = re.compile(
     r"(mg/dL|mg/dl|ug/L|μg/L|µg/L|U/L|u/L|IU/L|mmol/L|umol/L|μmol/L|µmol/L|"
+    r"ng/mL|pg/mL|g/L|mmHg|cmH2O|%)"
+)
+_UNIT_RE = re.compile(
+    r"(mg/dL|mg/dl|ug/L|μg/L|µg/L|mIU/mL|IU/mL|U/L|u/L|IU/L|mmol/L|umol/L|μmol/L|µmol/L|"
     r"ng/mL|pg/mL|g/L|mmHg|cmH2O|%)"
 )
 
 # 完整/部分日期：ISO 短横/斜杠或中文年月日。
-_DATE_RE = re.compile(
+_DATE_RE_V2 = re.compile(
     r"((?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?"
     r"|(?:\d{4}年\d{1,2}月\d{1,2}日)"
     r"|(?:\d{4}[-/.]\d{1,2})"
     r"|(?:\d{4}年\d{1,2}月))"
+)
+_DATE_RE = re.compile(
+    r"(?<!\d)(?:\d{4}[-/.](?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])"
+    r"(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?"
+    r"|\d{4}年(?:0?[1-9]|1[0-2])月(?:0?[1-9]|[12]\d|3[01])日"
+    r"|\d{4}[-/.](?:0?[1-9]|1[0-2])(?![-/.]\d)"
+    r"|\d{4}年(?:0?[1-9]|1[0-2])月)(?!\d)"
 )
 
 _IDENTIFIER_VALUE_RE = re.compile(
@@ -82,26 +99,26 @@ class _Match:
     detail: str | None = None
 
 
-def _risk_id(kind: OcrRiskKind, start: int, end: int) -> str:
+def _risk_id(kind: OcrRiskKind, start: int, end: int, rule_version: str) -> str:
     digest = sha256(
-        f"{kind.value}:{start}:{end}:{OCR_RISK_RULE_VERSION}".encode()
+        f"{kind.value}:{start}:{end}:{rule_version}".encode()
     ).hexdigest()
     return f"risk-{digest[:16]}"
 
 
-def _scan_polarity(text: str) -> list[_Match]:
+def _scan_polarity(text: str, pattern: re.Pattern[str]) -> list[_Match]:
     return [
         _Match(OcrRiskKind.NEGATION_POLARITY, m.group(0), m.start(), m.end())
-        for m in _POLARITY_RE.finditer(text)
+        for m in pattern.finditer(text)
     ]
 
 
-def _scan_numeric(text: str) -> list[_Match]:
+def _scan_numeric(text: str, pattern: re.Pattern[str]) -> list[_Match]:
     matches: list[_Match] = []
     identifier_ranges = [
         (match.start(), match.end()) for match in _IDENTIFIER_VALUE_RE.finditer(text)
     ]
-    for m in _NUMERIC_RE.finditer(text):
+    for m in pattern.finditer(text):
         prefix = text[max(0, m.start() - 16) : m.start()]
         suffix = text[m.end() : m.end() + 8]
         if any(start <= m.start() and m.end() <= end for start, end in identifier_ranges):
@@ -123,14 +140,14 @@ def _scan_numeric(text: str) -> list[_Match]:
     return matches
 
 
-def _scan_unit(text: str) -> list[_Match]:
+def _scan_unit(text: str, pattern: re.Pattern[str]) -> list[_Match]:
     return [
         _Match(OcrRiskKind.UNIT, m.group(0), m.start(), m.end())
-        for m in _UNIT_RE.finditer(text)
+        for m in pattern.finditer(text)
     ]
 
 
-def _scan_date(text: str) -> list[_Match]:
+def _scan_date(text: str, pattern: re.Pattern[str]) -> list[_Match]:
     # OCR 常混入“⽉/⽇”等康熙部首或兼容字。逐字符规范化且只接受
     # 一对一替换，既可识别日期，又保持所有原始字符位置可回放。
     shadow = "".join(
@@ -139,7 +156,7 @@ def _scan_date(text: str) -> list[_Match]:
     )
     return [
         _Match(OcrRiskKind.DATE, text[m.start() : m.end()], m.start(), m.end())
-        for m in _DATE_RE.finditer(shadow)
+        for m in pattern.finditer(shadow)
     ]
 
 
@@ -234,14 +251,19 @@ def _deduplicate_overlapping_matches(matches: list[_Match]) -> list[_Match]:
 
 def scan_ocr_risks(text: str, *, rule_version: str = OCR_RISK_RULE_VERSION) -> list[OcrRiskFlag]:
     """扫描文本并返回结构化风险项（按出现顺序，kind 稳定）。"""
-    if rule_version != OCR_RISK_RULE_VERSION:
+    if rule_version not in {OCR_RISK_RULE_VERSION, _PREVIOUS_RISK_RULE_VERSION}:
         raise ValueError(f"不支持的扫描规则版本: {rule_version}")
+    previous = rule_version == _PREVIOUS_RISK_RULE_VERSION
+    polarity_re = _POLARITY_RE_V2 if previous else _POLARITY_RE
+    numeric_re = _NUMERIC_RE_V2 if previous else _NUMERIC_RE
+    unit_re = _UNIT_RE_V2 if previous else _UNIT_RE
+    date_re = _DATE_RE_V2 if previous else _DATE_RE
     severe_repetition = _scan_output_repetition(text)
     if severe_repetition:
         match = severe_repetition[0]
         return [
             OcrRiskFlag(
-                risk_id=_risk_id(match.kind, match.start, match.end),
+                risk_id=_risk_id(match.kind, match.start, match.end, rule_version),
                 kind=match.kind,
                 level=OCR_RISK_LEVEL_MATRIX[match.kind],
                 text=match.text,
@@ -253,10 +275,10 @@ def scan_ocr_risks(text: str, *, rule_version: str = OCR_RISK_RULE_VERSION) -> l
         ]
 
     matches: list[_Match] = []
-    matches.extend(_deduplicate_overlapping_matches(_scan_polarity(text)))
-    matches.extend(_scan_numeric(text))
-    matches.extend(_scan_unit(text))
-    matches.extend(_scan_date(text))
+    matches.extend(_deduplicate_overlapping_matches(_scan_polarity(text, polarity_re)))
+    matches.extend(_scan_numeric(text, numeric_re))
+    matches.extend(_scan_unit(text, unit_re))
+    matches.extend(_scan_date(text, date_re))
     matches.extend(_scan_repeated_text(text))
     # 日期整体已作为 DATE 风险标记；其内部数字不再重复作为数值/小数风险。
     date_ranges = [(m.start, m.end) for m in matches if m.kind == OcrRiskKind.DATE]
@@ -272,7 +294,7 @@ def scan_ocr_risks(text: str, *, rule_version: str = OCR_RISK_RULE_VERSION) -> l
     for m in matches:
         flags.append(
             OcrRiskFlag(
-                risk_id=_risk_id(m.kind, m.start, m.end),
+                risk_id=_risk_id(m.kind, m.start, m.end, rule_version),
                 kind=m.kind,
                 level=OCR_RISK_LEVEL_MATRIX[m.kind],
                 text=m.text,

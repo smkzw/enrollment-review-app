@@ -15,6 +15,7 @@ from app.domain.contracts.enums import (
     CatalogItemKind,
     DocumentPart,
     PhaseScope,
+    ReviewStage,
     SourceLocatorPrecision,
     StudyPhase,
 )
@@ -38,7 +39,11 @@ from app.protocols.phase_detection import (
 )
 from app.protocols.procedure_catalog import (
     ProcedureCatalogError,
+    _Cell,
     _flow_footnote_refs,
+    _header_projection,
+    _make_cells,
+    _table_looks_like_flow,
     build_required_procedure_catalog,
     derive_review_stage,
 )
@@ -226,6 +231,49 @@ def _build(
     )
 
 
+def test_native_merged_heading_stops_at_its_actual_column_boundary() -> None:
+    def cell(row: int, col: int, text: str, span: int = 1) -> _Cell:
+        block = StructureBlock(
+            source_ref=f"body.t0.r{row}.c{col}.p0",
+            document_part=DocumentPart.BODY,
+            block_order=row * 10 + col,
+            kind=BlockKind.PARAGRAPH,
+            text=text,
+            table_path=(row, col),
+            table_col_span=span,
+        )
+        return _Cell("body.t0", row, col, (block,))
+
+    cells = {(0, 1): cell(0, 1, "筛选期", 2)}
+    cells.update({(1, col): cell(1, col, f"V{col}") for col in range(1, 5)})
+    headers = _header_projection(cells, first_mark_row=2, max_columns=5)
+
+    assert "筛选期" in headers[1][0]
+    assert "筛选期" in headers[2][0]
+    assert "筛选期" not in headers[3][0]
+    assert "筛选期" not in headers[4][0]
+    assert headers[2][1] == ("body.t0.r0.c1.p0", "body.t0.r1.c2.p0")
+
+
+def test_transposed_sampling_matrix_is_not_enrollment_visit_catalog() -> None:
+    flow, _ = _matrix(
+        [["项目", "筛选期", "基线期"], ["病史核对", "X", "X"]]
+    )
+    sampling, _ = _matrix(
+        [["研究日", "采样点", "PK", "PD"], ["首次访视", "D1", "X", "X"]]
+    )
+    for blocks, expected in ((flow, True), (sampling, False)):
+        root = blocks[0]
+        cells = _make_cells(blocks, root)
+        accepted, _marks, _first_row = _table_looks_like_flow(
+            root,
+            cells,
+            max_rows=root.table_rows or 0,
+            max_columns=root.table_cols or 0,
+        )
+        assert accepted is expected
+
+
 def test_merged_header_like_matrix_keeps_original_visit_text_and_structural_rows():
     blocks, spans = _matrix(
         [
@@ -254,15 +302,33 @@ def test_merged_header_like_matrix_keeps_original_visit_text_and_structural_rows
 
 
 def test_display_footnotes_are_removed_without_damaging_scientific_notation():
+    from app.protocols.procedure_catalog import _display_footnote_numbers, _without_display_footnotes
+
+    for value in ("血小板计数（10^9）", "给药剂量 10^9", "ANC<1.2×10^9/L"):
+        assert _without_display_footnotes(value) == value
+        assert _display_footnote_numbers(value) == ()
+    for value, expected in (("心电检查^2", "心电检查"), ("（X）^27", "（X）"),
+                            ("基线^2^6", "基线")):
+        assert _without_display_footnotes(value) == expected
+        assert _display_footnote_numbers(value)
+
     blocks, spans = _matrix(
         [
-            ["检查项目", "治疗期^2^6", "随访期"],
-            ["访视", "V2（基线^2）", "V3"],
-            ["胸片（正侧位）^14", "X", ""],
+            ["检查项目", "治疗期^1", "随访期"],
+            ["访视", "V2（基线^1）", "V3"],
+            ["胸片（正侧位）^1", "X", ""],
             ["ANC<1.2×10^9/L", "X", ""],
         ],
         cols=3,
     )
+    note = StructureBlock(
+        source_ref="body.p1", document_part=DocumentPart.BODY,
+        section_index=0, block_order=max(block.block_order for block in blocks) + 1,
+        kind=BlockKind.PARAGRAPH, text="基线访视检查窗口",
+        numbering=NumberingRef(num_id=7, level=0, start=1, num_fmt="decimal", lvl_text="%1."),
+    )
+    blocks.append(note)
+    spans.append(_span(note))
 
     catalog = _build(blocks, spans, _projection(blocks))
 
@@ -470,7 +536,7 @@ def test_flow_note_list_restart_and_heading_do_not_absorb_next_section():
     assert _flow_footnote_refs(blocks, root) == {1: ("body.p1",)}
 
 
-def test_visit_header_note_named_for_one_operation_does_not_pollute_sibling_rows():
+def test_visit_header_mixed_note_keeps_general_context_without_specific_pollution():
     blocks, spans = _matrix(
         [
             ["检查项目", "筛选期", "基线期^2^3"],
@@ -498,7 +564,11 @@ def test_visit_header_note_named_for_one_operation_does_not_pollute_sibling_rows
             ),
         )
         for index, text in enumerate(
-            ["签署知情同意", "基线访视合并规则", "血生化应空腹采样"],
+            [
+                "签署知情同意",
+                "筛选和基线访视间隔较短可合并检查。血生化应空腹采样",
+                "血生化应空腹采样",
+            ],
             start=1,
         )
     )
@@ -522,7 +592,88 @@ def test_visit_header_note_named_for_one_operation_does_not_pollute_sibling_rows
     assert "span:body.p3" in baseline_biochemistry.source_span_ids
     assert "span:body.p2" in baseline_vital_signs.source_span_ids
     assert "span:body.p3" not in baseline_vital_signs.source_span_ids
-    assert "血生化应空腹采样" not in baseline_vital_signs.source_excerpts
+    assert "筛选和基线访视间隔较短可合并检查。" in baseline_vital_signs.source_excerpts
+    assert not any(
+        excerpt and "血生化应空腹采样" in excerpt
+        for excerpt in baseline_vital_signs.source_excerpts
+    )
+
+
+def test_visit_note_with_general_and_specific_scope_in_one_sentence_is_unresolved():
+    blocks, spans = _matrix(
+        [
+            ["检查项目", "筛选期^1"], ["访视", "V1"],
+            ["血生化", "X"], ["生命体征", "X"],
+        ],
+        cols=2,
+    )
+    note = StructureBlock(
+        source_ref="body.p1", document_part=DocumentPart.BODY,
+        section_index=0, block_order=max(block.block_order for block in blocks) + 1,
+        kind=BlockKind.PARAGRAPH, text="筛选期所有检查须完成，血生化应空腹采样",
+        numbering=NumberingRef(num_id=7, level=0, start=1, num_fmt="decimal", lvl_text="%1."),
+    )
+    blocks.append(note)
+    spans.append(_span(note))
+
+    with pytest.raises(ProcedureCatalogError, match="note_scope_unresolved"):
+        _build(blocks, spans, _projection(blocks))
+
+
+def test_referenced_visit_note_cannot_disappear_when_render_alignment_fails():
+    blocks, spans = _matrix(
+        [["检查项目", "筛选期", "基线期^2"], ["访视", "V1", "V2"], ["生命体征", "X", "X"]],
+        cols=3,
+    )
+    note = StructureBlock(
+        source_ref="body.p1", document_part=DocumentPart.BODY,
+        section_index=0, block_order=max(block.block_order for block in blocks) + 1,
+        kind=BlockKind.PARAGRAPH, text="两次访视满足规定间隔时相同检查可合并",
+        numbering=NumberingRef(num_id=7, level=0, start=2, num_fmt="decimal", lvl_text="%1."),
+    )
+    blocks.append(note)
+    spans.append(_span(note).model_copy(update={
+        "render_artifact_id": None, "render_page": None,
+        "text_start": None, "text_end": None,
+        "precision": SourceLocatorPrecision.BLOCK,
+        "alignment_status": AlignmentStatus.UNALIGNED,
+        "degradation_reason": "原件文字跨页，尚无精确定位",
+    }))
+
+    with pytest.raises(ProcedureCatalogError, match="source_coverage_missing"):
+        _build(blocks, spans, _projection(blocks))
+
+
+@pytest.mark.parametrize("mark", ["X^2", "(X)^2"])
+def test_mark_and_parenthesized_header_keep_both_note_numbers(mark: str):
+    blocks, spans = _matrix(
+        [
+            ["检查项目", "筛选期", "基线期^1^2（D1）"],
+            ["访视", "V1", "V2"],
+            ["生命体征", "X", mark],
+        ],
+        cols=3,
+    )
+    for number, text in enumerate(
+        ["筛选与基线访视可按规定间隔合并", "生命体征在筛选异常时复测"], start=1,
+    ):
+        note = StructureBlock(
+            source_ref=f"body.p{number}", document_part=DocumentPart.BODY,
+            section_index=0, block_order=max(block.block_order for block in blocks) + 1,
+            kind=BlockKind.PARAGRAPH, text=text,
+            numbering=NumberingRef(
+                num_id=7, level=0, start=1, num_fmt="decimal", lvl_text="%1.",
+            ),
+        )
+        blocks.append(note)
+        spans.append(_span(note))
+
+    catalog = _build(blocks, spans, _projection(blocks))
+    baseline = next(item for item in catalog.items if item.review_stage == ReviewStage.BASELINE)
+    screening = next(item for item in catalog.items if item.review_stage == ReviewStage.SCREENING)
+    assert "^" not in (baseline.visit_instance or "")
+    assert {"span:body.p1", "span:body.p2"} <= set(baseline.source_span_ids)
+    assert "span:body.p2" not in screening.source_span_ids
 
 
 def test_flow_display_footnotes_stop_before_a_later_numbered_section():
@@ -857,6 +1008,24 @@ def test_real_protocol_required_procedure_catalog_is_read_only_and_phase_isolate
                        and item.review_stage.value == "baseline")
         assert any(excerpt and "试验期间受试者需每日" in excerpt
                    for excerpt in symptom.source_excerpts)
+        score = next(item for item in catalog.items
+                     if item.label == "iTNSS/iTOSS评估"
+                     and item.review_stage.value == "baseline")
+        assert "body.p279" in {
+            aligned_span.source_ref for source_id in score.source_span_ids
+            if (aligned_span := next(
+                span for span in aligned.spans if span.source_span_id == source_id
+            ))
+        }
+        vital = next(item for item in catalog.items
+                     if item.label == "生命体征"
+                     and item.review_stage.value == "baseline")
+        assert "body.p279" not in {
+            aligned_span.source_ref for source_id in vital.source_span_ids
+            if (aligned_span := next(
+                span for span in aligned.spans if span.source_span_id == source_id
+            ))
+        }
 
     if label == "CMS-D001":
         scoring_items = [
@@ -886,14 +1055,10 @@ def test_real_protocol_required_procedure_catalog_is_read_only_and_phase_isolate
         blocks_by_ref = {block.source_ref: block for block in extraction.blocks}
         assert all(
             excerpt is None
-            or excerpt
-            == (
-                (
-                    blocks_by_ref[spans_by_id[source_span_id].source_ref].text
-                    if item.kind == CatalogItemKind.REQUIRED_PROCEDURE
-                    else spans_by_id[source_span_id].excerpt
-                )
-                or spans_by_id[source_span_id].excerpt
+            or (
+                excerpt in blocks_by_ref[spans_by_id[source_span_id].source_ref].text
+                if item.kind == CatalogItemKind.REQUIRED_PROCEDURE
+                else excerpt == spans_by_id[source_span_id].excerpt
             )
             for source_span_id, excerpt in zip(
                 item.source_span_ids,
@@ -973,6 +1138,7 @@ def test_real_protocol_required_procedure_catalog_is_read_only_and_phase_isolate
     }
     assert note_source_refs <= numbered_note_refs
     if label == "CMS-D001":
+        assert "body.p316" in note_source_refs
         assert "body.p325" in note_source_refs
     assert not any(source_ref.startswith("body.t6") for source_ref in item_source_refs)
     assert all(

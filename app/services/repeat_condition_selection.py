@@ -206,15 +206,19 @@ def build_repeat_condition_selections(*, frozen, family, observation_relations, 
         owner_id = observation["identity_sha256"]
         usable_pairs = {item.pair_id for item in by_identity.get(owner_id, ())}
         observation["result_sources"] = {
-            "version": "repeat-result-sources/v1", "owner_identity_sha256": owner_id,
+            "version": ("repeat-result-sources/v2" if graph.get("version") == "observation-relation-graph/v3"
+                        else "repeat-result-sources/v1"),
+            "owner_identity_sha256": owner_id,
             "qualified_pairs": [
                 {"pair_id": item.pair_id, "fact_id": item.fact_id,
                  "fact_attribute": item.fact_attribute,
+                 **({"locator_id": item.locator_id} if graph.get("version") == "observation-relation-graph/v3" else {}),
                  "written_content_verified": item.pair_id in supported_pair_ids}
                 for item in by_identity.get(owner_id, ())
             ],
             "source_content_pairs": [
-                {"pair_id": item.pair_id, "fact_id": item.fact_id}
+                {"pair_id": item.pair_id, "fact_id": item.fact_id,
+                 **({"locator_id": item.locator_id} if graph.get("version") == "observation-relation-graph/v3" else {})}
                 for item in records if item.identity_sha256 == owner_id
                 and item.fact_attribute in {"value", "assertion_basis"}
             ],

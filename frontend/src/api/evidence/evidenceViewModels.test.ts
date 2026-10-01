@@ -207,6 +207,7 @@ describe("decodeSnapshot / decodeSnapshotList", () => {
           file_name: "检查报告.pdf",
           media_type: "application/pdf",
           version_number: 1,
+          uploaded_by: "上传者甲",
           origin: "added",
           origin_label: "本次新增",
           metadata_head: makeMetadataWire(),
@@ -225,6 +226,7 @@ describe("decodeSnapshot / decodeSnapshotList", () => {
     expect(snapshot.uploadJobId).toBe("upload-job-1");
     expect(snapshot.members[0].originLabel).toBe("本次新增");
     expect(snapshot.members[0].fileName).toBe("检查报告.pdf");
+    expect(snapshot.members[0].uploadedBy).toBe("上传者甲");
     expect(snapshot.members[0].metadataHead).toMatchObject({
       metadataRevisionId: "metadata-1",
       documentType: "检查报告",
@@ -319,6 +321,8 @@ describe("decodeMetadataRevisionResponse", () => {
         metadata_revision_id: "metadata-2",
         document_type: "影像学检查",
         source_party: "中心影像科",
+        document_category: "objective_report",
+        source_category: "study_site",
         reason: "已与原始资料核对。",
         is_auto_suggestion: false,
         supersedes_metadata_revision_id: "metadata-1",
@@ -332,6 +336,8 @@ describe("decodeMetadataRevisionResponse", () => {
       sourceDocumentVersionId: "version-1",
       documentType: "影像学检查",
       sourceParty: "中心影像科",
+      documentCategory: "objective_report",
+      sourceCategory: "study_site",
       reason: "已与原始资料核对。",
       isAutoSuggestion: false,
       supersedesMetadataRevisionId: "metadata-1",
@@ -343,6 +349,7 @@ describe("decodeMetadataRevisionResponse", () => {
   it.each([
     ["修订号不是正整数", { revision: 0 }],
     ["资料类型为空", { document_type: "  " }],
+    ["未知资料类别", { document_category: "guessed_report" }],
     ["创建时间不是 UTC 时间", { created_at: "2026-08-19T08:00:00" }],
     ["后续修订缺少前序引用", { revision: 2 }],
     [

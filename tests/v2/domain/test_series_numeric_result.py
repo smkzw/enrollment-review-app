@@ -192,6 +192,21 @@ def test_counterfactual_incomplete_range_or_excess_missing_stay_unresolved():
     assert exceeded.reason_codes == ("series_input_count_exceeded",)
 
 
+def test_unverified_declared_count_cannot_be_replaced_by_supplied_record_count():
+    result = calculate_series_numeric_result(
+        [[_fact("a", 2)], [_fact("b", 4)]],
+        operation="mean",
+        declared_input_count=None,
+        source_range_complete=True,
+    )
+    assert result.present_input_count == 2
+    assert result.declared_input_count is None
+    assert result.missing_count is None
+    assert result.value is None
+    assert result.reason_codes == ("series_declared_input_count_unverified",)
+    assert result.as_material()["eligible_for_rule_evaluation"] is False
+
+
 def test_fault_cases_reuse_acquisition_unit_conflict_and_do_not_emit_facts():
     overlap = calculate_series_numeric_result(
         [[_fact("same", 2)], [_fact("same", 2)], [_fact("other", 5)]],

@@ -38,7 +38,10 @@ from app.services.fact_normalization_job_service import (
     FactNormalizationExistingReferencesError,
     FactNormalizationJobService,
 )
-from app.services.fact_normalization_source_adapter import FactPlanningSourceError
+from app.services.fact_normalization_source_adapter import (
+    FactPlanningSourceError,
+    UnconfirmedDocumentMetadataError,
+)
 from app.storage.fact_authority import FactAuthorityError, FactAuthorityValidator
 from app.storage.models import ModelConfigRecord, PromptVersionRecord
 from app.storage.repositories import (
@@ -636,6 +639,11 @@ class FactNormalizationCommandService:
                 include_visual_sources=coverage_id is not None,
                 **({"verified_scope_prompt": True} if self.verified_scope_prompt else {}),
             )
+        except UnconfirmedDocumentMetadataError as exc:
+            raise AppFactNormalizationRejectedError(
+                "当前启用的资料版本仍使用未确认的资料类型。请在证据工作台核对资料类型与提供方，"
+                "生成并启用更新后的资料版本，再整理个例档案。"
+            ) from exc
         except FactPlanningSourceError as exc:
             raise AppFactNormalizationRejectedError(
                 "当前启用的完整资料版本缺少可整理的有效页或原文，无法开始个例档案整理。"

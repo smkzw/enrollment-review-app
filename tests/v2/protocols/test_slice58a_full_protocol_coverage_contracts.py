@@ -715,6 +715,11 @@ def test_builder_table_row_keeps_all_members_paths_and_spans() -> None:
         ]
     )
     assert row.table_context is not None
+    assert len(row.member_texts or []) == len(row.member_source_refs)
+    assert dict(zip(row.member_source_refs, row.member_texts or [], strict=True)) == {
+        blocks_map["t10"].source_ref: blocks_map["t10"].text,
+        blocks_map["t11"].source_ref: blocks_map["t11"].text,
+    }
     assert set(row.table_context.member_cell_paths) == {(1, 0), (1, 1)}
     assert row.source_span_ids == sorted(
         [
@@ -727,6 +732,35 @@ def test_builder_table_row_keeps_all_members_paths_and_spans() -> None:
     # 不能只保留首格定位。
     assert row.source_ref == "body.t0.r1"
     assert row.table_context.member_cell_paths != [row.table_context.table_path]
+
+
+def test_builder_carries_native_merge_width_into_frozen_table_row() -> None:
+    blocks, graph, projection, blocks_map = _build_coverage_inputs()
+    for name, width in (("t10", 1), ("t11", 2)):
+        original = blocks_map[name]
+        blocks[blocks.index(original)] = original.model_copy(update={"table_col_span": width})
+    manifest = build_full_protocol_coverage_manifest(
+        blocks, projection, graph,
+        protocol_version_id=_PROTOCOL,
+        protocol_document_sha256=_SHA,
+        snapshot_id=_SNAPSHOT,
+        source_span_ids={
+            blocks_map["fn"].source_ref: "span:footnote.p0",
+            blocks_map["tb"].source_ref: "span:textbox.p0",
+        },
+    )
+    row = next(unit for unit in manifest.units if unit.source_ref == "body.t0.r1")
+    assert row.table_context is not None
+    assert row.table_context.member_cell_paths == [(1, 0), (1, 1)]
+    assert row.table_context.member_cell_col_spans == [1, 2]
+    restored = ProtocolStructureUnit.model_validate_json(row.model_dump_json())
+    assert restored.table_context.member_cell_col_spans == [1, 2]
+
+    with pytest.raises(ValidationError, match="逐项对应"):
+        TableCellContext(
+            table_path=(1, 0), row_index=1, column_index=0,
+            member_cell_paths=[(1, 0), (1, 1)], member_cell_col_spans=[2],
+        )
 
 
 def test_builder_atomizes_only_conflicting_or_composite_table_members() -> None:
@@ -816,6 +850,100 @@ def test_builder_atomizes_only_conflicting_or_composite_table_members() -> None:
     assert atom.table_context.table_path == (2, 0)
     assert atom.table_context.row_headers == ["r2c0"]
     assert atom.table_context.column_headers == ["r0c0"]
+
+
+def test_builder_splits_long_multi_paragraph_row_without_splitting_short_visit_row() -> None:
+    blocks, graph, projection = _build_table_scope_inputs([
+        [[PhaseScope.SHARED], [PhaseScope.SHARED]],
+        [[PhaseScope.SHARED], [PhaseScope.SHARED]],
+        [[PhaseScope.SHARED], [PhaseScope.SHARED]],
+    ])
+    first = next(block for block in blocks if block.source_ref == "body.t9.r2.c1.p0")
+    blocks[blocks.index(first)] = first.model_copy(
+        update={"text": "逐项核查并记录来源。" * 70}
+    )
+    second = _para(
+        99, "body.t9.r2.c1.p1", "检查完成后记录实际时间。" * 70,
+        table_path=(2, 1),
+    )
+    blocks.append(second)
+    graph = _graph([*graph.blocks, _phase_block(second, scopes=[PhaseScope.SHARED])])
+    projection = _projection([
+        *projection.blocks, _phase_block(second, scopes=[PhaseScope.SHARED]),
+    ])
+    manifest = build_full_protocol_coverage_manifest(
+        blocks, projection, graph,
+        protocol_version_id=_PROTOCOL,
+        protocol_document_sha256=_SHA,
+        snapshot_id=_SNAPSHOT,
+    )
+
+    short_row = [
+        unit for unit in manifest.units
+        if unit.table_context and unit.table_context.row_index == 1
+    ]
+    long_row = [
+        unit for unit in manifest.units
+        if unit.table_context and unit.table_context.row_index == 2
+    ]
+    assert [unit.source_ref for unit in short_row] == ["body.t9.r1"]
+    assert {unit.source_ref for unit in long_row} == {
+        "body.t9.r2.c0.p0", "body.t9.r2.c1.p0", "body.t9.r2.c1.p1",
+    }
+    assert all(len(unit.member_source_refs) == 1 for unit in long_row)
+    assert all(unit.table_context.row_headers == ["r2c0"] for unit in long_row)
+    assert {unit.table_context.column_index for unit in long_row} == {0, 1}
+
+    short_blocks = [
+        first
+        if block.source_ref == first.source_ref else block
+        for block in blocks if block.source_ref != second.source_ref
+    ]
+    short_manifest = build_full_protocol_coverage_manifest(
+        short_blocks, _projection(projection.blocks[:-1]),
+        _graph(graph.blocks[:-1]),
+        protocol_version_id=_PROTOCOL,
+        protocol_document_sha256=_SHA,
+        snapshot_id=_SNAPSHOT,
+    )
+    assert manifest.manifest_id != short_manifest.manifest_id
+
+
+def test_builder_splits_many_short_paragraphs_in_one_cell_not_wide_visit_grid() -> None:
+    shared = [PhaseScope.SHARED]
+    blocks, graph, projection = _build_table_scope_inputs([
+        [shared] * 14, [shared] * 14, [shared, shared],
+    ])
+    additions = [
+        _para(100 + index, f"body.t9.r2.c1.p{index + 1}", "独立记录事项",
+              table_path=(2, 1))
+        for index in range(12)
+    ]
+    blocks.extend(additions)
+    new_phase_blocks = [_phase_block(block, scopes=shared) for block in additions]
+    graph = _graph([*graph.blocks, *new_phase_blocks])
+    projection = _projection([*projection.blocks, *new_phase_blocks])
+    manifest = build_full_protocol_coverage_manifest(
+        blocks, projection, graph,
+        protocol_version_id=_PROTOCOL,
+        protocol_document_sha256=_SHA,
+        snapshot_id=_SNAPSHOT,
+    )
+    visit_row = [
+        unit for unit in manifest.units
+        if unit.table_context and unit.table_context.row_index == 1
+    ]
+    dense_row = [
+        unit for unit in manifest.units
+        if unit.table_context and unit.table_context.row_index == 2
+    ]
+    assert [unit.source_ref for unit in visit_row] == ["body.t9.r1"]
+    assert len(dense_row) == 14
+    assert all(len(unit.member_source_refs) == 1 for unit in dense_row)
+    assert {ref for unit in dense_row for ref in unit.member_source_refs} == {
+        "body.t9.r2.c0.p0",
+        *(f"body.t9.r2.c1.p{index}" for index in range(13)),
+    }
 
 
 def test_nested_table_rows_do_not_merge_with_outer_table_rows() -> None:

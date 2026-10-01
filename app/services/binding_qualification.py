@@ -48,6 +48,20 @@ from app.workflow.errors import InvalidJobDefinitionError, StepFailure
 from app.workflow.jobstore import JobStore
 from app.workflow.runner import PreparedStepResult
 
+
+class QualificationSourcePolicyError(InvalidJobDefinitionError):
+    """No proposed pair has an attributed source policy to qualify against."""
+
+    code = "REVIEW_SOURCE_POLICY_NOT_READY"
+
+    def __init__(self):
+        super().__init__(
+            "相关原文已经找到，但方案的资料采用要求尚未明确对应到这些判断条件，"
+            "暂不能继续核对其能否作为审核依据。请先在方案核对中完善对应关系；"
+            "这不是受试者资料缺失，不需要因此重复上传原件。"
+        )
+
+
 def enqueue_binding_qualification(
     session_factory, *, candidate_job_id, routes, artifact_store,
     pair_batch_max_characters: int = DEFAULT_PAIR_BATCH_MAX_CHARACTERS,
@@ -65,6 +79,10 @@ def enqueue_binding_qualification(
             BindingQualificationPairContext.model_validate(item)
             for item in material["pairs"]
         ]
+        if pairs and not any(pair.source_policy_status == "present" for pair in pairs):
+            # Model agreement cannot supply a missing rule-side source policy.
+            # No job or fabricated read receipt is created on this path.
+            raise QualificationSourcePolicyError()
         batches = [
             batch.model_dump(mode="json")
             for batch in plan_qualification_batches(

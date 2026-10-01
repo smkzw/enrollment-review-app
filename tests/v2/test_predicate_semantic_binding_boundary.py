@@ -96,7 +96,7 @@ def test_isolated_selection_rejects_changed_scope(field):
         _selected(component, evaluation_context(), {component.expression.predicate.predicate_id: []}, **{field: "0" * 64})
 
 
-def test_isolated_selection_keeps_one_fact_for_two_bounds_and_detects_conflict():
+def test_isolated_selection_keeps_one_fact_for_two_bounds_and_leaves_multiple_observations_unresolved():
     lower = AtomicExpression(predicate=AtomicPredicate(predicate_id="lower", subject="measurement",
         attribute="amount", comparator="gte", value=10, unit="u"))
     upper = AtomicExpression(predicate=AtomicPredicate(predicate_id="upper", subject="measurement",
@@ -107,6 +107,6 @@ def test_isolated_selection_keeps_one_fact_for_two_bounds_and_detects_conflict()
                              polarity=FactPolarity.AFFIRMED, certainty=1, evidence_span_ids=[identity])
     context = evaluation_context(facts=[fact("a", 20), fact("b", 21)])
     assert _selected(component, context, {"lower": ["a"], "upper": ["a"]}).trigger.truth == TruthValue.TRUE
-    conflict = _selected(component, context, {"lower": ["a", "b"], "upper": ["a", "b"]})
-    assert conflict.trigger.truth == TruthValue.UNKNOWN
-    assert "source_conflict" in conflict.trigger.reason_codes
+    unresolved = _selected(component, context, {"lower": ["a", "b"], "upper": ["a", "b"]})
+    assert unresolved.trigger.truth == TruthValue.UNKNOWN
+    assert "observation_selection_unverified" in unresolved.trigger.reason_codes

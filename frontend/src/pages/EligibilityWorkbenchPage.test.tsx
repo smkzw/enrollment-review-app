@@ -128,7 +128,7 @@ function installSourcePages() {
     members: pages.map((page, index) => ({
       memberId: `member-${index}`, snapshotId: "snapshot-1", logicalDocumentId: `logical-${index}`,
       sourceDocumentVersionId: page.sourceDocumentVersionId, fileName: index === 0 ? "病历.pdf" : "检验报告.pdf",
-      mediaType: "application/pdf", versionNumber: 1, origin: "uploaded", originLabel: "上传资料",
+      mediaType: "application/pdf", versionNumber: 1, uploadedBy: "test", origin: "uploaded", originLabel: "上传资料",
       metadataHead: { metadataRevisionId: `metadata-${index}`, sourceDocumentVersionId: page.sourceDocumentVersionId,
         documentType: "medical_record", sourceParty: "site", reason: "原始资料", isAutoSuggestion: false,
         supersedesMetadataRevisionId: null, revision: 1, createdAt: "2026-09-13T00:00:00Z", createdBy: "test" },
@@ -143,6 +143,32 @@ function installSourcePages() {
 }
 
 describe("入排审核工作台", () => {
+  it("核对方法未支持时显示处理方向，不要求研究者替软件作判断", async () => {
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
+      ...review, clauses: [{ ...review.clauses[0]!, determinationMode: "restricted",
+        limitationKind: "consumer_unavailable", decision: "indeterminate", gapType: null,
+        factRefs: [], actionOwner: null, actionDetail: "完善这项要求的核对方法。",
+        actionEvidence: "已核实的方法与方案来源。",
+      }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    await screen.findByRole("heading", { name: "入排审核工作台" });
+    expect(screen.getByText("处理方向")).toBeInTheDocument();
+    expect(screen.getByText("完善这项要求的核对方法。")).toBeInTheDocument();
+    expect(screen.queryByText("建议动作 · 研究者方")).not.toBeInTheDocument();
+  });
+  it("资料更正后说明旧工作稿失效并回到同一节点重新审核", async () => {
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
+      ...review, workDraftState: "source_changed",
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    const reminder = await screen.findByRole("status", { name: "审核资料已变化" });
+    expect(within(reminder).getByText(/先前的审核工作稿不再适用于本次资料/)).toBeInTheDocument();
+    const href = within(reminder).getByRole("link", { name: "前往重新审核" }).getAttribute("href");
+    expect(href).toContain("/reports");
+    const sourceHref = screen.getByRole("link", { name: /的资料页$/ }).getAttribute("href");
+    expect(href?.split("?")[1]).toBe(sourceHref?.split("?")[1]);
+  });
   it("单独提示未确定影响范围的争议，不改变条款并可打开同节点病史", async () => {
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
       ...review, unassignedConflicts: [{ conflictGroupId: "private-conflict", memberKind: "event", memberIds: ["private-a", "private-b"] }],
@@ -179,7 +205,7 @@ describe("入排审核工作台", () => {
     expect(reference).not.toHaveAttribute("aria-current");
     expect(screen.queryByLabelText(/^重点标注/)).not.toBeInTheDocument();
     const panel = screen.getByRole("complementary", { name: "原件面板" });
-    await user.click(within(panel).getByRole("button", { name: "返回引用原文" }));
+    await user.click(within(panel).getByRole("button", { name: "返回事实来源页" }));
     expect(reference).toHaveAttribute("aria-current", "page");
     expect(adjacent).not.toHaveAttribute("aria-current");
   });
@@ -288,6 +314,27 @@ describe("入排审核工作台", () => {
     expect(screen.getByText(/本次入排审核不判定后续期间是否已遵守/)).toBeInTheDocument();
   });
 
+  it("方案含义待澄清的跨章要求列为未决并显示责任方", async () => {
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
+      ...review, clauses: [], controls: [{
+        protocolControlId: "restricted:unit-1", displayLabel: "方案补充要求",
+        title: "基线前要求", sourceSpanIds: ["span-1"],
+        obligations: [{
+          obligationId: "restricted:unit-1", obligationGroupId: "restricted",
+          statement: "基线前待确认事项", sourceExcerpts: ["基线前待确认事项"],
+          status: "restricted", statusLabel: "方案待澄清",
+          reason: "方案所指事项尚未核清。", factRefs: [],
+          actionOwner: "sponsor_medical_or_project",
+          actionDetail: "请澄清适用范围", actionEvidence: "方案书面澄清或正式修订",
+        }],
+      }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    expect((await screen.findAllByText("基线前要求")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("方案待澄清").length).toBeGreaterThan(0);
+    expect(screen.getByText("请澄清适用范围")).toBeInTheDocument();
+  });
+
   it("官方条款已满足但补充要求未满足时仍列入待处理", async () => {
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
       ...review,
@@ -392,6 +439,28 @@ describe("入排审核工作台", () => {
       expect(groups).toHaveLength(1);
       expect(groups[0]!.key).toBe("unclassified");
       expect(groups[0]!.label).toBe("原因待明确");
+    });
+
+    it("方案含义待核不会混入病历缺失或研究者判断", () => {
+      const groups = buildEligibilityIssueGroups([
+        clause({ ruleComponentId: "r", ruleCode: "IN-08",
+          determinationMode: "restricted", limitationKind: "interpretation_unresolved", gapType: null }),
+      ]);
+      expect(groups).toHaveLength(1);
+      expect(groups[0]!.key).toBe("protocol_meaning_unresolved");
+      expect(groups[0]!.label).toBe("方案要求尚待核清");
+    });
+
+    it("软件核对能力不足不被转给研究者澄清方案，旧缺字段结果也不猜原因", () => {
+      const groups = buildEligibilityIssueGroups([
+        clause({ ruleComponentId: "unsupported", determinationMode: "restricted",
+          limitationKind: "consumer_unavailable", gapType: null }),
+        clause({ ruleComponentId: "legacy", determinationMode: "restricted", gapType: null }),
+      ]);
+      expect(Object.fromEntries(groups.map((group) => [group.key, group.label]))).toEqual({
+        review_method_unavailable: "审核方法待完善",
+        protocol_requirement_unresolved: "本项暂不能判定",
+      });
     });
   });
 });

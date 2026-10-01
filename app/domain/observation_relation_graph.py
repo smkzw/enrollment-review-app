@@ -107,3 +107,107 @@ def analyze_observation_relationships(fact_ids, relationships, *, origins=None):
         material["origin_unresolved_fact_ids"] = sorted(item for key, members in groups.items()
             if len(source_roles[group_ids[key]]) != 1 for item in members)
     return {**material, "graph_sha256": canonical_hash(material)}
+
+
+def observation_appearance_id(fact_id: str, locator_id: str) -> str:
+    if not fact_id or not locator_id:
+        raise ValueError("检查原文位置必须同时绑定事实与定位")
+    return canonical_hash({
+        "version": "observation-appearance/v1", "fact_id": fact_id,
+        "locator_id": locator_id,
+    })
+
+
+def appearance_relationship_edge(key):
+    relation, left, right, *reference = key
+    if (relation not in {"same_acquisition", "repeat_of"}
+            or not isinstance(left, (tuple, list)) or len(left) != 2
+            or not isinstance(right, (tuple, list)) or len(right) != 2):
+        raise ValueError("逐处检查关系须指向两端已冻结的事实与原文位置")
+    return (relation, observation_appearance_id(*left),
+            observation_appearance_id(*right), *reference)
+
+
+def analyze_observation_appearances(appearances, relationships, *, origins=None):
+    """Group source presentations; a presentation is not itself an acquisition."""
+    indexed = {}
+    for item in appearances:
+        fact_id, locator_id = item["fact_id"], item["locator_id"]
+        appearance_id = observation_appearance_id(fact_id, locator_id)
+        if item.get("appearance_id") != appearance_id or appearance_id in indexed:
+            raise ValueError("检查原文位置重复或与冻结来源身份不一致")
+        indexed[appearance_id] = {"appearance_id": appearance_id,
+                                  "fact_id": fact_id, "locator_id": locator_id}
+    if not indexed:
+        raise ValueError("检查原文位置不能为空")
+    base = analyze_observation_relationships(
+        sorted(indexed), relationships, origins=origins,
+    )
+    groups = []
+    group_ids = {}
+    for group in base["acquisition_groups"]:
+        members = group["fact_ids"]
+        group_id = canonical_hash({
+            "version": "observation-acquisition-group/v2", "appearance_ids": members,
+        })
+        group_ids[group["group_id"]] = group_id
+        groups.append({
+            "group_id": group_id, "appearance_ids": members,
+            "fact_ids": sorted({indexed[key]["fact_id"] for key in members}),
+        })
+    material = {
+        "version": "observation-relation-graph/v3",
+        "appearances": [indexed[key] for key in sorted(indexed)],
+        "acquisition_groups": sorted(groups, key=lambda item: item["group_id"]),
+        "repeat_edges": [{
+            **edge, "repeat_group_id": group_ids[edge["repeat_group_id"]],
+            "prior_group_id": group_ids[edge["prior_group_id"]],
+        } for edge in base["repeat_edges"]],
+        "unclassified_appearance_ids": base["unclassified_fact_ids"],
+        "structural_reasons": base["structural_reasons"],
+        "clinical_identity_verified": False, "replacement_authorized": False,
+    }
+    if origins is not None:
+        unresolved = set(base["origin_unresolved_fact_ids"]) | (set(indexed) - set(origins))
+        roles_by_group = {
+            group_ids[item["group_id"]]: item["role"] for item in base["acquisition_roles"]
+        }
+        material["source_origins"] = [
+            {"appearance_id": item["fact_id"], "role": item["role"]}
+            for item in base["source_origins"]
+        ]
+        material["acquisition_roles"] = [
+            {"group_id": item["group_id"],
+             "role": ("unresolved" if set(item["appearance_ids"]) & unresolved
+                      else roles_by_group[item["group_id"]])}
+            for item in material["acquisition_groups"]
+        ]
+        material["origin_unresolved_appearance_ids"] = sorted(unresolved)
+    return {**material, "graph_sha256": canonical_hash(material)}
+
+
+def reused_fact_groups_follow_source_chain(graph) -> bool:
+    """Same semantic fact may recur only along a quoted repeat chain."""
+    if graph.get("version") != "observation-relation-graph/v3" or graph.get("structural_reasons"):
+        return False
+    by_fact = {}
+    for group in graph["acquisition_groups"]:
+        for fact_id in group["fact_ids"]:
+            by_fact.setdefault(fact_id, set()).add(group["group_id"])
+    predecessors = {}
+    for edge in graph["repeat_edges"]:
+        predecessors.setdefault(edge["repeat_group_id"], set()).add(edge["prior_group_id"])
+
+    def ancestors(group_id):
+        pending, visited = list(predecessors.get(group_id, ())), set()
+        while pending:
+            prior = pending.pop()
+            if prior not in visited:
+                visited.add(prior)
+                pending.extend(predecessors.get(prior, ()))
+        return visited
+
+    return all(
+        left in ancestors(right) or right in ancestors(left)
+        for groups in by_fact.values() for left in groups for right in groups if left != right
+    )

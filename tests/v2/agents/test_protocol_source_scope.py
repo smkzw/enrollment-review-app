@@ -22,6 +22,7 @@ from tests.v2.protocols.test_deconstruction_gate_slice3 import _fixture
 from tests.v2.protocols.test_protocol_deconstructor_adapter_slice3 import (
     _semantic_candidate,
     _wire_candidate,
+    CompactFakeTransport,
     FakeTransport,
 )
 
@@ -75,6 +76,55 @@ def test_frozen_workflow_context_does_not_expand_rule_source_scope():
     assert payload["required_procedure_catalog"] == expected
     assert payload["allowed_source_span_ids"] == list(rule.source_span_ids)
     assert {item["source_span_id"] for item in payload["source_materials"]} == set(rule.source_span_ids)
+
+
+@pytest.mark.parametrize("transport_type", [FakeTransport, CompactFakeTransport])
+def test_feedback_prompt_uses_only_target_rule_sources(transport_type):
+    source, draft, _ = _fixture()
+    target_code = source.parent_rule_catalog.items[0].official_code
+    transport = transport_type([
+        ProtocolAgentResponse(session_id="session", text="{}"),
+        ProtocolAgentResponse(session_id="session", text="{}"),
+    ])
+
+    with pytest.raises(ProtocolAgentCallError):
+        revise_protocol_draft_from_feedback(
+            source, draft, target_rule_code=target_code,
+            feedback_note="请核对这一条的原文", transport=transport,
+        )
+
+    source_context = transport.start_prompts[0].split("冻结的方案输入：", 1)[1]
+    source_context = source_context.split("\n\n", 1)[0]
+    payload = json.loads(source_context)
+    assert payload["batch_rule_codes"] == [target_code]
+    assert payload["allowed_source_span_ids"] == ["span-in"]
+    assert [item["official_code"] for item in payload["parent_rule_catalog"]] == [target_code]
+    assert [item["source_span_id"] for item in payload["source_materials"]] == ["span-in"]
+    assert len(payload["required_procedure_catalog"]) == 2
+    assert all(item["source_excerpts"] == [] for item in payload["required_procedure_catalog"])
+    assert {
+        item["item_id"] for item in payload["required_procedure_catalog"]
+    } == {item.item_id for item in source.required_procedure_catalog.items}
+    assert "span-ex" not in source_context
+    assert "ALT或AST≥1.5×ULN" not in source_context
+
+
+def test_feedback_keeps_procedure_excerpt_when_it_is_the_selected_rule_source():
+    source, _, _ = _fixture()
+    item = source.required_procedure_catalog.items[0].model_copy(update={
+        "source_span_ids": ("span-in",),
+        "source_excerpts": ("年龄≥18岁",),
+    })
+    catalog = source.required_procedure_catalog.model_copy(update={
+        "items": (item, *source.required_procedure_catalog.items[1:]),
+    })
+    scoped = source.model_copy(update={"required_procedure_catalog": catalog})
+    payload = _batch_prompt_payload(
+        scoped, ["IN-01"], batch_number=1, batch_total=1,
+        candidate_id="candidate", compact_unrelated_procedures=True,
+    )
+    assert payload["required_procedure_catalog"][0]["source_excerpts"] == ["年龄≥18岁"]
+    assert payload["required_procedure_catalog"][1]["source_excerpts"] == []
 
 
 def test_cache_identity_binds_frozen_input_even_for_identical_prompt():

@@ -83,6 +83,7 @@ export interface SelectiveVisionTaskView {
   skippedPageCount: number | null;
   observationPageCount: number | null;
   closedPageCount: number | null;
+  failedPageArtifactIds: string[];
   closedReasonLabel: string | null;
   failedScopeLabel: string | null;
   createdAt: string | null;
@@ -239,6 +240,9 @@ export function decodeSelectiveVisionTask(
       "visionTask",
     ),
     closedPageCount: optionalNumberValue(row, "closed_page_count", "visionTask"),
+    failedPageArtifactIds: arrayValue(row, "failed_page_artifact_ids", "visionTask").map(
+      (value, index) => stringValue({ value }, "value", `visionTask.failed_page_artifact_ids[${index}]`),
+    ),
     closedReasonLabel: optionalStringValue(
       row,
       "closed_reason_label",

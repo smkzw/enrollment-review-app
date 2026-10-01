@@ -305,14 +305,15 @@ def candidate_availability_error(
     """Return an explicit Chinese skip reason when a candidate cannot start."""
 
     backend = candidate.backend.strip().lower()
-    if backend in {"zhipu-coding-plan", "glm", "cms-router", "cms-smk", "opencode-go"}:
+    if backend in {"zhipu-coding-plan", "glm", "cms-router", "cms-smk", "opencode-go", "ollama-cloud"}:
         from app.llm.provider_profiles import resolve_openai_connection
 
         try:
+            provider_only = backend == "ollama-cloud"
             resolve_openai_connection(
                 backend,
-                role_base_url_env="DECONSTRUCT_BASE_URL",
-                role_api_key_env="DECONSTRUCT_API_KEY",
+                role_base_url_env=None if provider_only else "DECONSTRUCT_BASE_URL",
+                role_api_key_env=None if provider_only else "DECONSTRUCT_API_KEY",
             )
         except ValueError as exc:
             return f"方案解构服务尚未配置（{exc}）；已显式跳过该候选。"

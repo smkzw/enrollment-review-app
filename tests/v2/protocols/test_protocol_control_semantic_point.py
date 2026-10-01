@@ -1082,6 +1082,9 @@ def test_unresolved_schedule_columns_cannot_be_dismissed_as_background() -> None
     batch, interpretation = _source()
     unit = batch.owned_units[2]
     unit.excerpt = "某项检查 | X"
+    unit.source_ref = "body.t0.r0"
+    unit.member_source_refs = ["body.t0.r0.c0.p0", "body.t0.r0.c1.p0"]
+    unit.member_texts = ["某项检查", "X"]
     unit.unit_kind = StructureUnitKind.TABLE_ROW
     unit.table_context = TableCellContext(
         table_path=(0, 0), row_index=0, column_index=0,
@@ -1104,6 +1107,9 @@ def test_schedule_mark_alone_cannot_prove_eligibility_requirement() -> None:
     batch, interpretation = _source()
     unit = batch.owned_units[2]
     unit.excerpt = "某项探索性检查 | X"
+    unit.source_ref = "body.t0.r0"
+    unit.member_source_refs = ["body.t0.r0.c0.p0", "body.t0.r0.c1.p0"]
+    unit.member_texts = ["某项探索性检查", "X"]
     unit.unit_kind = StructureUnitKind.TABLE_ROW
     unit.table_context = TableCellContext(
         table_path=(0, 0), row_index=0, column_index=0,

@@ -93,6 +93,14 @@ def _calculate_operand(frozen, *, identity, fact, anchors_sha256):
         if spec.time_purpose == "unresolved":
             result.time_result = EvaluationResult(truth=TruthValue.UNKNOWN, reason_codes=["time_purpose_unresolved"])
             return result
+        if spec.time_purpose == "interval_condition":
+            # PartialDateRange is uncertainty about one date, not exposure
+            # start/end or uninterrupted conduct. It cannot prove a duration.
+            result.time_result = EvaluationResult(
+                truth=TruthValue.UNKNOWN,
+                reason_codes=["interval_calculation_unsupported"],
+            )
+            return result
         attribute = spec.operand_attribute if spec.operation == "time_constraint" else spec.time_operand_attribute
         event = None
         if attribute == "date_range" and fact.date_range is not None:

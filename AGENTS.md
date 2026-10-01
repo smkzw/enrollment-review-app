@@ -13,6 +13,8 @@
 
 # Enrollment Review Project Instructions
 
+Current execution supplement: `.trellis/tasks/09-11-e2e-eligibility-review/delivery_0929V1/00_START_HERE.md`. The approved 0927V1-R1 product decision remains in force; the 0929V1 native-structure-first and selective-visual trial is an incremental implementation scope, not proof of clinical acceptance. Current status is recorded in the task's `implement.md`.
+
 ## Current Phase
 
 - The approved rearchitecture is under implementation in `.trellis/tasks/09-11-e2e-eligibility-review/`; use its current PRD, design, implementation record, and the live user request for scope and status.

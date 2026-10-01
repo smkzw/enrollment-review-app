@@ -397,6 +397,32 @@ def _recover_exact_body_fragments(
         and span.text_start is not None
         and span.text_end is not None
     ]
+    table_pages: dict[str, set[int]] = {}
+    for block, span in zip(blocks, spans, strict=True):
+        table = _top_table_root(block)
+        if (
+            table is not None
+            and span.alignment_status == AlignmentStatus.ALIGNED
+            and span.precision == SourceLocatorPrecision.TEXT_RANGE
+            and span.render_page is not None
+        ):
+            table_pages.setdefault(table, set()).add(span.render_page)
+    preceding_table: dict[str, str] = {}
+    recent_table: str | None = None
+    recent_section: int | None = None
+    for block in blocks:
+        if block.document_part != DocumentPart.BODY or (
+            recent_table is not None and block.section_index != recent_section
+        ):
+            recent_table = None
+        if block.kind == BlockKind.TABLE and block.table_path is None:
+            recent_table = block.source_ref
+            recent_section = block.section_index
+        elif block.table_path is None and block.outline_level is not None:
+            recent_table = None
+        elif block.table_path is None and block.kind == BlockKind.PARAGRAPH and block.text.strip():
+            if recent_table is not None:
+                preceding_table[block.source_ref] = recent_table
     revised: list[ProtocolSourceSpan] = []
     for block, span in zip(blocks, spans, strict=True):
         if not (
@@ -416,20 +442,28 @@ def _recover_exact_body_fragments(
         ]
         previous = [item for item in peers if item[0].block_order < block.block_order]
         following = [item for item in peers if item[0].block_order > block.block_order]
-        if not previous or not following:
+        if not following:
             revised.append(span)
             continue
-        left_block, left_span = max(previous, key=lambda item: item[0].block_order)
+        left = max(previous, key=lambda item: item[0].block_order) if previous else None
         right_block, right_span = min(following, key=lambda item: item[0].block_order)
+        table = preceding_table.get(block.source_ref)
+        table_floor = max(table_pages.get(table, ()), default=None) if table else None
+        left_block, left_span = left if left is not None else (None, None)
+        lower_page = max(
+            page for page in (table_floor, left_span.render_page if left_span else None)
+            if page is not None
+        ) if table_floor is not None or left_span is not None else None
         if (
-            block.block_order - left_block.block_order
-            > _SECTION_RECOVERY_MAX_BLOCK_DISTANCE
+            lower_page is None
+            or (left_block is not None and table_floor is None
+                and block.block_order - left_block.block_order
+                > _SECTION_RECOVERY_MAX_BLOCK_DISTANCE)
             or right_block.block_order - block.block_order
             > _SECTION_RECOVERY_MAX_BLOCK_DISTANCE
-            or left_span.render_page is None
             or right_span.render_page is None
-            or right_span.render_page < left_span.render_page
-            or right_span.render_page - left_span.render_page
+            or right_span.render_page < lower_page
+            or right_span.render_page - lower_page
             > _SECTION_RECOVERY_MAX_PAGE_DISTANCE
         ):
             revised.append(span)
@@ -452,17 +486,24 @@ def _recover_exact_body_fragments(
                 bounded: list[tuple[int, int, int]] = []
                 for page_index, start in _match_locations(needle, page_compacts):
                     render_page = page_index + 1
-                    if not left_span.render_page <= render_page <= right_span.render_page:
+                    if not lower_page <= render_page <= right_span.render_page:
                         continue
                     _page_text, original_indices = page_compacts[page_index]
                     end = start + len(needle)
-                    bounded.append(
-                        (
-                            render_page,
-                            original_indices[start],
-                            original_indices[end - 1] + 1,
-                        )
-                    )
+                    raw_start = original_indices[start]
+                    raw_end = original_indices[end - 1] + 1
+                    if (
+                        left_span is not None
+                        and render_page == left_span.render_page
+                        and left_span.text_end is not None
+                        and raw_start < left_span.text_end
+                    ) or (
+                        render_page == right_span.render_page
+                        and right_span.text_start is not None
+                        and raw_end > right_span.text_start
+                    ):
+                        continue
+                    bounded.append((render_page, raw_start, raw_end))
                 if len(bounded) == 1:
                     render_page, raw_start, raw_end = bounded[0]
                     best = (length, source_start, render_page, raw_start, raw_end)
@@ -726,6 +767,11 @@ def align_blocks(
             table_anchors=table_anchors,
         )
         spans.append(span)
+
+    # Identical source paragraphs can have only one whole-page match when the
+    # other physical instance crosses a page. Resolve that collision before
+    # using either instance as a positional neighbour.
+    spans = _downgrade_colliding_ranges(spans)
 
     for _pass in range(_PAGE_HINT_MAX_BLOCK_DISTANCE):
         recovered = _recover_bounded_exact_ranges(

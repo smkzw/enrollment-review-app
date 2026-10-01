@@ -119,3 +119,55 @@ def make_reading_view(
             width, height = w, h
     return ReadingView(source_page_artifact_id, source_image_sha256, w, h,
                        clockwise_degrees, result, width, height)
+
+
+@dataclass(frozen=True)
+class ReadingRegion:
+    """A source-bound crop; its coverage is a region, never a complete page."""
+
+    reading_view: ReadingView
+    view_bbox: BoundingBox
+    image_bytes: bytes
+
+    def __post_init__(self) -> None:
+        self.reading_view.source_bbox(self.view_bbox)
+        edges = self.pixel_edges
+        if any(type(value) is not int for value in edges):
+            raise ValueError("局部阅读须使用整数像素边界")
+        with Image.open(io.BytesIO(self.image_bytes)) as image:
+            if image.size != (edges[2] - edges[0], edges[3] - edges[1]):
+                raise ValueError("局部图片尺寸与来源区域不一致")
+            with Image.open(io.BytesIO(self.reading_view.image_bytes)) as page:
+                expected = page.crop(edges)
+                if image.mode != expected.mode or image.tobytes() != expected.tobytes():
+                    raise ValueError("局部图片像素不属于声明的原件区域")
+
+    @property
+    def pixel_edges(self) -> tuple[int, int, int, int]:
+        values = (self.view_bbox.x0, self.view_bbox.y0,
+                  self.view_bbox.x1, self.view_bbox.y1)
+        if any(not float(value).is_integer() for value in values):
+            raise ValueError("局部阅读须使用整数像素边界")
+        return tuple(int(value) for value in values)
+
+    def identity(self) -> dict:
+        return {
+            "version": "reading-view/local-region/v1",
+            "coverage_scope": "region_only",
+            "reading_view": self.reading_view.identity(),
+            "view_bbox": self.view_bbox.model_dump(mode="json"),
+            "source_bbox": self.reading_view.source_bbox(self.view_bbox).model_dump(mode="json"),
+            "region_image_sha256": sha256(self.image_bytes).hexdigest(),
+        }
+
+
+def make_reading_region(view: ReadingView, box: BoundingBox) -> ReadingRegion:
+    view.source_bbox(box)
+    values = (box.x0, box.y0, box.x1, box.y1)
+    if any(not float(value).is_integer() for value in values):
+        raise ValueError("局部阅读须使用整数像素边界")
+    with Image.open(io.BytesIO(view.image_bytes)) as image:
+        cropped = image.crop(tuple(int(value) for value in values))
+        buffer = io.BytesIO()
+        cropped.save(buffer, format="PNG")
+    return ReadingRegion(view, box, buffer.getvalue())

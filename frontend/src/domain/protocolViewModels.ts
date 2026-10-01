@@ -17,6 +17,21 @@ export interface ProtocolDraftComponentView {
   sourceExcerpts: string[];
 }
 
+export interface ProtocolDraftRestrictedComponentView {
+  componentId: RuleComponentId;
+  parentRuleId: RuleId;
+  displayCode: string;
+  title: string;
+  sourceRefs: string[];
+  sourceExcerpts: string[];
+  unresolvedDimensions: string[];
+  limitationKind: "interpretation_unresolved" | "consumer_unavailable";
+}
+
+export type ProtocolDraftItemView =
+  | ProtocolDraftComponentView
+  | ProtocolDraftRestrictedComponentView;
+
 export interface ProtocolDraftRuleView {
   ruleId: RuleId;
   officialCode: string;
@@ -25,6 +40,7 @@ export interface ProtocolDraftRuleView {
   sourceText: string;
   sourceRefs: string[];
   components: ProtocolDraftComponentView[];
+  restrictedComponents: ProtocolDraftRestrictedComponentView[];
 }
 
 export interface ProtocolSourceLocatorView {
