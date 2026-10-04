@@ -3360,6 +3360,17 @@ class CompleteEvidenceProcessingRevisionRepository:
                 )
             ).scalars().all()
             expected_locator_ids.update(automatic_locator_ids)
+        elif not require_current_locators:
+            # Readback checks the frozen set, not automatic locators created
+            # later for the same page. Creation above still checks completeness.
+            locator_repo = EvidenceLocatorRepository(self.session, self.artifact_store)
+            for locator_id in revision.locator_ids:
+                locator = locator_repo.get(locator_id)
+                if locator.page_artifact_id in base_page_artifact_ids and (
+                    locator.target_id in risk_flag_ids
+                    or locator.target_id.startswith(SOURCE_LINE_TARGET_PREFIX)
+                ):
+                    expected_locator_ids.add(locator_id)
         referenced_repo = ReferencedDocumentRepository(self.session)
         for revision_id in revision.referenced_document_revision_ids:
             referenced = referenced_repo.get_revision(revision_id)

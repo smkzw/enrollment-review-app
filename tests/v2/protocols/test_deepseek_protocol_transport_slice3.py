@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from types import SimpleNamespace
 
 import httpx
@@ -124,6 +125,10 @@ def test_successful_stream_keeps_usage_and_reasoning_size_without_reasoning_text
     assert response.text == '{"ok":1}'
     assert response.call_metadata == {"attempts": [{
         "request_sha256": hashlib.sha256('[{"content":"有源方案输入","role":"user"}]'.encode()).hexdigest(),
+        "budget_request_sha256": hashlib.sha256(json.dumps({
+            **transport._completion_kwargs([{"role": "user", "content": "有源方案输入"}]),
+            "stream": True, "stream_options": {"include_usage": True},
+        }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
         "requested_model": "deepseek-v4-flash",
         "reported_model": "deepseek-v4-flash",
         "request_id": "request-7",
@@ -247,11 +252,110 @@ def test_formal_stream_rejects_identity_change_after_content() -> None:
     transport = DeepSeekProtocolAgentTransport(
         client=client, backend="deepseek", model="deepseek-v4-flash", max_tokens=60000,
     )
-    with pytest.raises(ProtocolAgentCallError, match="流式回包中断") as caught:
+    with pytest.raises(ProtocolAgentCallError, match="变更了模型身份") as caught:
         transport.start(prompt="冻结方案输入")
-    assert caught.value.error_code == "STREAM_INTERRUPTED"
+    assert caught.value.error_code == "MODEL_IDENTITY_MISMATCH"
     assert caught.value.error_metadata["reported_model"] == "deepseek-v4-flash"
-    assert "模型流在有效内容之间变更了模型身份" in str(caught.value.__cause__.__cause__)
+    assert caught.value.error_metadata["conflicting_model"] == "another-model"
+
+
+def test_nested_format_and_scope_repairs_share_one_budget():
+    client, completions = _client(['{"broken":', '{"draft":1}', '{"draft":2}'])
+    transport = DeepSeekProtocolAgentTransport(
+        client=client, backend="deepseek", model="test-model", max_tokens=60000,
+    )
+    transport.configure_logical_task(logical_task_id="frozen-unit")
+    response = transport.start(prompt="冻结来源")
+    assert len(completions.calls) == 2
+    assert response.call_metadata["logical_call_budget"]["requests_used"] == 2
+    transport.configure_logical_task(logical_task_id="frozen-unit")
+    with pytest.raises(ProtocolAgentCallError) as caught:
+        transport.continue_session(session_id=response.session_id, prompt="结构修复")
+    assert caught.value.error_code == "LOGICAL_BUDGET_EXHAUSTED"
+    assert len(completions.calls) == 2
+
+
+def test_new_transport_can_share_failed_attempt_budget():
+    first_client, first_calls = _client([TimeoutError("wait")])
+    second_client, second_calls = _client(['{"draft":1}', '{"draft":2}'])
+    first = DeepSeekProtocolAgentTransport(client=first_client, backend="deepseek", model="test-model")
+    second = DeepSeekProtocolAgentTransport(client=second_client, backend="deepseek", model="test-model")
+    first.configure_logical_task(logical_task_id="frozen-segment")
+    with pytest.raises(ProtocolAgentCallError) as failed:
+        first.start(prompt="同一冻结范围")
+    assert failed.value.error_code == "TRANSPORT_TIMEOUT"
+    second.configure_logical_task(logical_task_id="frozen-segment")
+    second.share_call_budget(first.logical_call_budget)
+    result = second.start(prompt="同一冻结范围")
+    assert result.call_metadata["logical_call_budget"]["requests_used"] == 2
+    with pytest.raises(ProtocolAgentCallError) as caught:
+        second.continue_session(session_id=result.session_id, prompt="再修")
+    assert caught.value.error_code == "LOGICAL_BUDGET_EXHAUSTED"
+    assert len(first_calls.calls) + len(second_calls.calls) == 2
+
+
+def test_scoped_repairs_do_not_reset_the_run_envelope():
+    client, calls = _client(['{"draft":1}', '{"draft":2}', '{"draft":3}'])
+    transport = DeepSeekProtocolAgentTransport(client=client, backend="deepseek", model="test-model")
+    transport.configure_logical_run(logical_task_id="run", max_requests=2, contract_sha256="frozen")
+    transport.configure_logical_task(logical_task_id="first-scope", max_requests=3)
+    first = transport.start(prompt="冻结完整分支")
+    transport.configure_logical_task(logical_task_id="target-subset", max_requests=3)
+    second = transport.continue_session(session_id=first.session_id, prompt="仅改目标")
+    assert second.call_metadata["logical_run_budget"]["requests_used"] == 2
+    assert second.call_metadata["attempts"][0]["budget_request_sha256"] == (
+        second.call_metadata["logical_run_budget"]["requests"][-1]["request_sha256"])
+    transport.configure_logical_task(logical_task_id="third-scope", max_requests=3)
+    with pytest.raises(ProtocolAgentCallError) as caught:
+        transport.continue_session(session_id=second.session_id, prompt="不允许重新发额度")
+    assert caught.value.error_code == "LOGICAL_BUDGET_EXHAUSTED"
+    assert len(calls.calls) == 2
+
+
+def test_planned_third_slot_can_repair_structure_after_json_repair():
+    client, calls = _client(['{"broken":', '{"draft":1}', '{"draft":2}'])
+    transport = DeepSeekProtocolAgentTransport(client=client, backend="deepseek", model="test-model")
+    transport.configure_logical_task(logical_task_id="planned", max_requests=3)
+    first = transport.start(prompt="冻结范围")
+    second = transport.continue_session(session_id=first.session_id, prompt="只修来源闭包")
+    assert second.call_metadata["logical_call_budget"]["requests_used"] == 3
+    with pytest.raises(ProtocolAgentCallError):
+        transport.continue_session(session_id=first.session_id, prompt="第四次")
+    assert len(calls.calls) == 3
+
+
+def test_run_identity_ignores_target_subset_but_keeps_endpoint_and_request_settings():
+    from app.agents.protocol_deconstructor import _configure_transport_output_scope
+    from tests.v2.protocols.test_deconstruction_gate_slice3 import _fixture
+    source_input, _draft, _spans = _fixture()
+    transport = DeepSeekProtocolAgentTransport(client=object(), backend="omlx", model="test-model")
+    before = transport.semantic_cache_identity(output_kind="semantic_candidate", frozen_run=True)
+    _configure_transport_output_scope(transport, source_input, [source_input.parent_rule_catalog.items[0].official_code])
+    after = transport.semantic_cache_identity(output_kind="semantic_candidate", frozen_run=True)
+    assert before == after
+    changed = DeepSeekProtocolAgentTransport(client=object(), backend="omlx", model="different-model")
+    assert before != changed.semantic_cache_identity(output_kind="semantic_candidate", frozen_run=True)
+
+
+def test_job_recovery_keeps_run_budget_and_rejects_changed_contract(tmp_path):
+    from app.services.protocol_deconstruction_executor import _ProtocolSemanticBatchFileCache
+    from app.storage.config import resolve_data_paths
+    store = _ProtocolSemanticBatchFileCache(resolve_data_paths(str(tmp_path / "data")), "job")
+    client, calls = _client(['{"draft":1}'])
+    first = DeepSeekProtocolAgentTransport(client=client, backend="deepseek", model="test-model")
+    first.bind_call_budget_store(store)
+    first.configure_logical_run(logical_task_id="c" * 64, max_requests=1, contract_sha256="frozen")
+    first.start(prompt="来源")
+    restored = DeepSeekProtocolAgentTransport(client=client, backend="deepseek", model="test-model")
+    restored.bind_call_budget_store(store)
+    restored.configure_logical_run(logical_task_id="c" * 64, max_requests=1, contract_sha256="frozen")
+    with pytest.raises(ProtocolAgentCallError) as caught:
+        restored.start(prompt="来源")
+    assert caught.value.error_code == "LOGICAL_BUDGET_EXHAUSTED"
+    with pytest.raises(ProtocolAgentCallError) as changed:
+        restored.configure_logical_run(logical_task_id="c" * 64, max_requests=1, contract_sha256="changed")
+    assert changed.value.error_code == "BUDGET_RECORD_INVALID"
+    assert len(calls.calls) == 1
 
 
 def test_interrupted_formal_stream_preserves_partial_identity_without_resending() -> None:
@@ -443,7 +547,7 @@ def test_formal_batch_repair_does_not_request_dnf_wire():
                    batch_id="batch-1", problem="invalid structure")
     formal = _batch_schema_repair_prompt(["IN-01"], compact=False, **options)
     compact = _batch_schema_repair_prompt(["IN-01"], compact=True, **options)
-    assert formal.endswith("输出结构：" + _compact_schema())
+    assert formal.endswith("输出结构：" + _compact_schema(repair=True))
     assert "wire_version=" not in formal
     assert f"wire_version='{DNF_WIRE_VERSION}'" in compact
 
@@ -464,23 +568,26 @@ def test_event_frequency_prompt_does_not_require_result_selection() -> None:
 
 
 def test_formal_local_semantic_repair_restores_frozen_source(monkeypatch):
-    from types import SimpleNamespace
     from app.agents import protocol_deconstructor as module
     from tests.v2.protocols.test_deconstruction_gate_slice3 import _fixture
+    from tests.v2.protocols.test_protocol_deconstructor_adapter_slice3 import _semantic_candidate
     captured = []
-    source, _, _ = _fixture()
+    source, draft, _ = _fixture()
+    candidate = _semantic_candidate(source, draft)
     def payload(source_input, rule_codes, **kwargs):
         captured.append((source_input, list(rule_codes)))
         return {"original_source": "frozen source excerpt"}
     monkeypatch.setattr(module, "_batch_prompt_payload", payload)
     options = dict(attempt=1, parsed_draft_available=True,
-        replacement_rule_codes=["IN-02"], compact=False,
-        candidate=SimpleNamespace(candidate_id="candidate"), source_input=source)
+        replacement_rule_codes=["IN-01"], compact=False,
+        candidate=candidate, source_input=source)
     prompt = module._repair_prompt([], include_frozen_context=True, **options)
     assert prompt.startswith(module._SYSTEM_CONTRACT + "\n")
-    assert captured == [(source, ["IN-02"])]
+    assert captured == [(source, ["IN-01"])]
     assert '"original_source": "frozen source excerpt"' in prompt
-    assert '"current_target_rule_codes": ["IN-02"]' in prompt
+    assert '"current_target_rule_codes": ["IN-01"]' in prompt
+    context = json.JSONDecoder().raw_decode(prompt.split("只返回 replacement_rules：", 1)[1])[0]
+    assert context["current_target_rules"] == [candidate.proposed_rules[0].model_dump(mode="json")]
     assert "compact wire" not in prompt
     captured.clear()
     assert "frozen source excerpt" not in module._repair_prompt([], **options)
@@ -711,6 +818,23 @@ def test_two_malformed_json_bodies_fail_without_exposing_raw_output():
     assert "still-broken" not in str(exc.value)
     assert "第1行" in str(exc.value)
     assert len(transport.history(exc.value.session_id)) == 1
+
+
+@pytest.mark.parametrize("body,first_code", [
+    ('说明\n```json\n{}\n```', "SCHEMA_INVALID"), ("", "EMPTY_OUTPUT"),
+])
+def test_denied_format_recovery_retains_first_failure_without_extra_call(body, first_code):
+    client, completions = _client([(body, "stop", "私有思考不可写入诊断")])
+    transport = DeepSeekProtocolAgentTransport(client=client, backend="omlx", model="synthetic")
+    transport.configure_logical_task(logical_task_id="one-authorized-call", max_requests=1)
+    with pytest.raises(ProtocolAgentCallError) as caught:
+        transport.start(prompt="合成来源")
+    assert len(completions.calls) == 1
+    assert caught.value.error_code == "LOGICAL_BUDGET_EXHAUSTED"
+    assert caught.value.error_metadata["first_completion_failure"]["error_code"] == first_code
+    assert caught.value.error_metadata["recovery_blocked_by"] == "LOGICAL_BUDGET_EXHAUSTED"
+    assert len(caught.value.error_metadata["attempts"]) == 1
+    assert "私有思考" not in json.dumps(caught.value.error_metadata, ensure_ascii=False)
 
 
 def test_deconstruct_completion_kwargs_use_independent_reasoning_setting(monkeypatch):

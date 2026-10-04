@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
@@ -36,10 +38,13 @@ from app.protocols.protocol_control_gate import CONTROL_PUBLICATION_GATE_VERSION
 from app.services.protocol_control_execution import (
     CANDIDATE_CONTROL_PACKAGE_RESULT_KIND, FORMAL_CATALOG_STATUS_NOT_MATERIALIZED,
     PROTOCOL_CONTROL_JOB_TYPE, STEP_CLOSURE, STEP_GATE,
+    PROTOCOL_CONTROL_EXECUTION_VERSION, STEP_SCOPE, ProtocolControlExecutorConfig,
+    _verified_definition_scope,
     _definition_consumer_atom,
     _validate_saved_source_review,
 )
 from app.storage.codecs import verify_payload_sha256
+from app.storage.config import DB_FILENAME, resolve_data_paths
 from app.storage.control_catalog_repository import ControlCatalogPublicationRepository
 from app.storage.models import EvidenceRequirementRecord, JobCheckpointRecord, JobRecord, JobStepRecord
 from app.storage.repositories import (
@@ -51,6 +56,8 @@ from app.storage.repositories import (
 from app.projections.control_evidence_requirements import shared_control_requirements
 from app.projections.evidence_expectation_templates import project_evidence_expectation_templates
 from app.workflow.jobstore import JobStore
+from app.workflow.runner import StepContext
+from app.workflow.errors import StepFailure
 
 
 @dataclass(frozen=True)
@@ -329,6 +336,48 @@ def _require_frozen_draft_revision(
         raise ScopeViolationError("补充审核要求对应旧版方案草稿，请重新整理后发布")
 
 
+def require_saved_definition_scope(
+    session: Session, *, source_job_id: str,
+    payload: Mapping[str, object], result: Mapping[str, object],
+) -> None:
+    """Read the original scope proof again in the caller's transaction; never run a model."""
+    found = JobStore(session).get_last_checkpoint(source_job_id, STEP_SCOPE)
+    records = result.get("source_definition_consumers", [])
+    if found is None:
+        if records:
+            raise ScopeViolationError("定义对应的核对记录缺失，不能仅凭整理后的关系用于发布")
+        # Legacy packages without records cannot release a calculation gap.
+        return
+    step = session.get(JobStepRecord, (source_job_id, STEP_SCOPE))
+    checkpoint_id, checkpoint = found
+    if (step is None or step.state != "completed"
+            or checkpoint.get("stage") != STEP_SCOPE
+            or checkpoint.get("attempt") != step.attempt
+            or checkpoint.get("source_definition_consumers") != records):
+        raise ScopeViolationError("定义对应关系与本次已完成核对记录不一致")
+    database = session.get_bind().engine.url.database
+    if not database or Path(database).name != DB_FILENAME:
+        raise ScopeViolationError("定义原始核对资料未绑定当前数据目录")
+
+    @contextmanager
+    def current_session():
+        yield session
+
+    config = ProtocolControlExecutorConfig(
+        data_paths=resolve_data_paths(str(Path(database).resolve().parent)),
+        session_factory=current_session,
+    )
+    context = StepContext(
+        job_id=source_job_id, job_type=PROTOCOL_CONTROL_JOB_TYPE,
+        job_payload=dict(payload), step_id=STEP_SCOPE, name="核对定义来源",
+        attempt=step.attempt, last_checkpoint_id=checkpoint_id, last_checkpoint=checkpoint,
+    )
+    try:
+        _verified_definition_scope(context, config, checkpoint=checkpoint)
+    except (StepFailure, ValueError, TypeError, KeyError) as exc:
+        raise ScopeViolationError("定义作用范围的原始核对依据未通过保存内容复核") from exc
+
+
 def prepare_control_catalog_publication(
     session: Session, *, source_job_id: str, source_checkpoint_id: str,
     source_input: ProtocolDeconstructionInput, source_spans: Mapping[str, ProtocolSourceSpan],
@@ -345,6 +394,8 @@ def prepare_control_catalog_publication(
             or (checkpoint.job_id, checkpoint.step_id) != (source_job_id, STEP_GATE)):
         raise ScopeViolationError("补充审核要求的原任务尚未完整结束或保存依据不一致")
     payload = verify_payload_sha256(job.payload_json, job.payload_sha256)
+    if payload.get("execution_version") != PROTOCOL_CONTROL_EXECUTION_VERSION:
+        raise ScopeViolationError("补充审核要求使用较早的整理版本，不能作为当前发布依据")
     result = verify_payload_sha256(checkpoint.payload_json, checkpoint.payload_sha256)
     current = JobStore(session).get_last_checkpoint(source_job_id, STEP_GATE)
     if current is None or current[0] != source_checkpoint_id:
@@ -432,6 +483,7 @@ def prepare_control_catalog_publication(
                 or sorted(target.source_span_ids) != relation.target_span_ids
                 or relation.target_candidate_id not in candidate_ids):
             raise ScopeViolationError("跨章节来源对应未绑定当前方案原文和候选")
+    require_saved_definition_scope(session, source_job_id=source_job_id, payload=payload, result=result)
     definition_consumers = _require_valid_source_definition_consumers(
         result, plan, batches, coverage_manifest, rule_set,
     )

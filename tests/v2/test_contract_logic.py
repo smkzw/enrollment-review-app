@@ -1597,6 +1597,26 @@ def test_population_scoped_condition_cannot_be_decided_from_selected_fact() -> N
     assert result.gaps == frozenset({GapType.APPLICABLE_POPULATION_UNVERIFIED})
 
 
+def test_component_calculation_preserves_consumed_judgment_gaps() -> None:
+    gaps = {"written-assessment": GapType.PROFESSIONAL_JUDGMENT}
+    requirement = EvidenceRequirement(
+        requirement_id="written-assessment", rule_component_id="component-1",
+        fact_type="history.condition_present", due_stage=ReviewStage.SCREENING,
+        description="对应项目的研究者书面判断。",
+        required_source_types=["investigator_assessment"],
+    )
+    result = calculate_component_review(
+        component=gate_component(requirements=[requirement]), rule_kind=RuleKind.EXCLUSION,
+        context=evaluation_context(facts=[]), episode_stage=ReviewStage.SCREENING,
+        expectations=[], conflicts=[], judgment_gap_by_requirement=gaps,
+    )
+    assert dict(result.judgment_gaps) == gaps
+    gaps["written-assessment"] = GapType.OBSERVATION_UNVERIFIED
+    assert dict(result.judgment_gaps) == {
+        "written-assessment": GapType.PROFESSIONAL_JUDGMENT,
+    }
+
+
 def test_population_scope_cannot_be_bypassed_by_semantic_result() -> None:
     predicate = AtomicPredicate(
         subject="history", attribute="condition", comparator="exists",

@@ -7,6 +7,19 @@ import { draftComparisonFixture } from "../../fixtures/protocol-deconstruction-w
 import { ProtocolFeedbackDialog } from "./ProtocolRedoDialogs";
 
 describe("方案草稿局部纠错", () => {
+  it("总标题核对使用独立请求，不冒充单个子项的修改权限", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(<ProtocolFeedbackDialog open busy={false}
+      candidateContent={draftComparisonFixture.candidate.content}
+      onClose={() => undefined} onSubmit={onSubmit} />);
+    await user.click(screen.getByRole("radio", { name: /原文理解纠错/ }));
+    await user.click(screen.getByRole("checkbox", { name: "仅核对总标题与各子项适用节点，不修改条件" }));
+    expect(screen.queryByRole("combobox", { name: "需要纠正的具体要求" })).not.toBeInTheDocument();
+    await user.type(screen.getByRole("textbox", { name: "具体意见（必填）" }), "核对总标题是否分别说明节点");
+    await user.click(screen.getByRole("button", { name: "提交反馈修订" }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ kind: "source_error", reviewParentScope: true, targetComponentId: null }));
+  });
   it("同条标准有多项要求时必须选定具体子项", async () => {
     const user = userEvent.setup();
     const content = structuredClone(draftComparisonFixture.candidate.content) as Record<string, unknown>;

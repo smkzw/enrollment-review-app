@@ -109,7 +109,7 @@ class ProtocolParentSegmentError(RuntimeError):
         self.error_code = error_code
 
 
-ProtocolOutputKind = Literal["semantic_candidate", "semantic_rule_repair"]
+ProtocolOutputKind = Literal["semantic_candidate", "semantic_rule_repair", "official_source_scope_review"]
 
 
 class ProtocolWireError(ValueError):
@@ -375,7 +375,10 @@ _SYSTEM_CONTRACT = (
     "原文分类内容，不得据此反转整个条件。"
     "若多个阈值共用前置指标名称，每个阈值谓词的 source_clauses 都必须包含一个带该指标名称的"
     "逐字片段和其自身阈值片段，使该阈值仍能独立核对；"
-    "非数值谓词省略 source_term，不要用它重复整个原文子句。"
+    "非数值谓词的 source_term 可省略；需要区分并列分支对象时，逐字填写该分支对象名称，"
+    "不要重复整个原文子句或自造包含共同动作的新名称。各分支自身对象、共同动作、否定、"
+    "连接语及例外须在自身 source_locator 中完整保留，不连续文字分别摘录，不能只复制同一整句"
+    "却无法指出各分支的对象，也不能为取得不同定位而删除共同限定。"
     "每个原子谓词必须用 source_clause 逐字复制直接支撑该谓词的最小连续原文子句；"
     "若语义由不连续的上位限定语、并列分支和结尾共同构成，改用 source_clauses 依原文顺序"
     "列出多个逐字片段，不得把不连续文字拼成方案中不存在的新句子；source_clause 与"
@@ -396,6 +399,9 @@ _SYSTEM_CONTRACT = (
     "资料要求的 due_stage 必须依据当前条款逐字可见的审核时点或冻结流程确定，不得为了"
     "‘再次确认’而把每个条件惯性复制到筛选、导入和基线；原文只要求一个节点时只建立一个"
     "资料要求。只读required_procedure_catalog提供方案既有流程上下文，不要求重新生成其中的项目；"
+    "总标题中的审核节点只有确实统辖当前子项时才与条件分别逐字绑定；分别描述各节点要求的"
+    "总标题不能机械套入每个子项，测量时点也不能替代最终审核节点。组件source_excerpts"
+    "保留实际统辖本项的原文；仅供阅读的上下文仍在冻结来源中，不得冒充本项义务。"
     "其来源不自动成为本条条件的来源，不得加入组件source_span_ids或扩展本批允许来源。"
     "若某阶段没有必做项目录条目但条款明确写有该阶段，仍保留该 due_stage，系统会"
     "确定性建立审核节点。若回溯条件以 baseline_date、randomization_date、first_dose_date "
@@ -587,10 +593,13 @@ def _semantic_generation_schema(
     return constrain_source_schema(schema, allowed_source_span_ids)
 
 
-def _compact_schema(allowed_source_span_ids: Sequence[str] = ()) -> str:
+def _compact_schema(allowed_source_span_ids: Sequence[str] = (), *, repair: bool = False) -> str:
     schema = _semantic_generation_schema(
         ProtocolSemanticDeconstructionCandidate, allowed_source_span_ids
     )
+    if repair:
+        from .protocol_schema_repair import project_repair_constraints
+        schema = project_repair_constraints(schema)
     return json.dumps(
         schema,
         ensure_ascii=False,
@@ -1367,6 +1376,12 @@ def protocol_output_response_format(
     requirement_limit: int = DNF_WIRE_MAX_REQUIREMENTS_PER_COMPONENT,
 ) -> dict[str, object]:
     """Return the strict provider schema for one semantic response kind."""
+    if output_kind == "official_source_scope_review":
+        from app.domain.contracts.protocol_scope_review import OfficialScopeReading
+        return {"type": "json_schema", "json_schema": {
+            "name": "official_source_scope_review", "strict": True,
+            "schema": OfficialScopeReading.model_json_schema(),
+        }}
     if compact:
         schema = _omlx_wire_schema(
             output_kind,
@@ -1584,6 +1599,10 @@ def _batch_prompt_payload(
         "candidate_id": candidate_id,
         "created_by_agent_call_id": agent_call_id,
         "allowed_source_span_ids": list(selected_span_ids),
+        "review_visit_nodes": sorted({(item.visit_instance, item.review_stage.value)
+                                     for item in source_input.required_procedure_catalog.items
+                                     if item.visit_instance and item.review_stage}),
+        "review_visit_tables": [item.model_dump(mode="json") for item in source_input.required_procedure_catalog.visit_tables],
         "required_procedure_catalog": [
             (
                 item.model_copy(update={"source_excerpts": ()}).model_dump(mode="json")
@@ -1788,7 +1807,7 @@ def _batch_schema_repair_prompt(
             "每个 atom 的 source_locator 只能包含 source_clause 或 source_clauses 其中一个字段；不要附加解释。"
         )
         if compact
-        else "输出结构：" + _compact_schema(allowed_source_span_ids)
+        else "输出结构：" + _compact_schema(allowed_source_span_ids, repair=True)
     )
     return (
         "本批输出无法按冻结目录合并。"
@@ -1798,6 +1817,9 @@ def _batch_schema_repair_prompt(
         + f"proposed_rules 必须且只能按顺序返回 {list(rule_codes)}。"
         + f"具体问题：{problem[:12000]}。"
         + "仅修正本批 JSON 结构和列出的父规则，不要返回其他批次或说明文字。"
+        + "结构错误修复须保留原本合法要求的顺序、数量和内容，以及既有未决记录；"
+        "每个待修要求的原文引用必须保留，不能靠删去条件通过校验。"
+        "来源闭包错误须更正列明的错误关联，不得改写无关要求。"
         + (
             "当问题涉及 observation_policy.source_excerpts 或 repeat_scheme.source_excerpts 时，"
             "这些字段只能逐字复制同一原子条件 source_locator 中的 source_clause，"
@@ -1816,6 +1838,18 @@ def _batch_schema_repair_prompt(
         )
         + schema_suffix
     )
+
+
+OFFICIAL_REPAIR_CONTEXT_VERSION = "official-target-repair-context/v1"
+
+
+def _unresolved_rule_codes(item: UnresolvedItem) -> set[str]:
+    """Reuse the existing typed issue-scope syntax, not diagnostic prose."""
+    return {
+        code
+        for ref in item.affected_scope
+        for code in re.findall(r"(?:IN|EX)-\d{2}", ref)
+    }
 
 
 def _repair_prompt(
@@ -1848,6 +1882,7 @@ def _repair_prompt(
             "修订后仍然真实存在的事项；已解决的不得残留，非本次父规则的不得重复返回。"
             f"官方父规则：{list(replacement_rule_codes)}。不要返回整份草稿，不要返回未列出的父规则；"
             "系统会保持其他父规则完全不变。"
+            "当前跨父规则的待核事项只供核对，宿主保留；不得借本次修订删除或改写。"
         )
     else:
         instruction = (
@@ -1883,6 +1918,13 @@ def _repair_prompt(
         )
     candidate_context = ""
     if (compact or include_frozen_context) and candidate is not None and source_input is not None:
+        rules_by_code = {rule.official_code: rule for rule in candidate.proposed_rules}
+        if (
+            len(rules_by_code) != len(candidate.proposed_rules)
+            or len(set(replacement_rule_codes)) != len(replacement_rule_codes)
+            or any(code not in rules_by_code for code in replacement_rule_codes)
+        ):
+            raise ValueError("定向修订目标必须唯一对应当前保存的语义规则")
         selected_payload = _batch_prompt_payload(
             source_input,
             replacement_rule_codes,
@@ -1898,7 +1940,20 @@ def _repair_prompt(
                 {
                     "candidate_id": candidate.candidate_id,
                     "batch_id": resolved_repair_batch_id,
+                    "repair_context_version": OFFICIAL_REPAIR_CONTEXT_VERSION,
                     "current_target_rule_codes": list(replacement_rule_codes),
+                    "current_target_rules": [
+                        rules_by_code[code].model_dump(mode="json")
+                        for code in replacement_rule_codes
+                    ],
+                    "current_target_structural_warnings": [
+                        item.model_dump(mode="json") for item in candidate.structural_warnings
+                        if _unresolved_rule_codes(item).intersection(replacement_rule_codes)
+                    ],
+                    "current_target_unresolved_items": [
+                        item.model_dump(mode="json") for item in candidate.unresolved_items
+                        if _unresolved_rule_codes(item).intersection(replacement_rule_codes)
+                    ],
                     "frozen_batch_input": selected_payload,
                 },
                 ensure_ascii=False,
@@ -3780,6 +3835,21 @@ def semantic_candidate_from_draft(
     )
 
 
+_PROSPECTIVE_FEEDBACK_CONTRACT = (
+    "未来期间局部核对：当前同意或计划仍是当前声明，不是未来行为已经履行。"
+    "仅当反馈指出本子项遗漏时间范围且自身逐字来源支持时，补齐现有 prospective_period 或 "
+    "prospective_window；这项有源补齐属于目标修订，不属于需要撤回的无关改动。"
+    "prospective_period 以 treatment_period 或 study_period 保存原文期间；prospective_window "
+    "以 study_completion_date、last_dose_date 或 study_drug_administration_date 加原文时长保存截止范围。"
+    "原文只写研究药物给药后、未指明首次或末次时用 study_drug_administration_date，"
+    "不得猜首次或末次给药。原文没有明确期间、锚点或时长时不能补造。"
+    "同一期间定义含明确结束后时长时须同时保留两项信息；不同条件则按原文关系分别表达，"
+    "不因出现两个时间字段机械改成且或或、不把持续义务改成当前已经完成。"
+    "后续履行与声明范围的证据由既有消费者分别核实，本次不得预先填写受试者已履行。"
+    "其余对象、数值、逻辑、来源、资料要求与兄弟子项均遵守本次原修改范围。"
+)
+
+
 def revise_protocol_draft_from_feedback(
     source_input: ProtocolDeconstructionInput,
     current_draft: ProtocolDeconstructionDraft,
@@ -3789,11 +3859,13 @@ def revise_protocol_draft_from_feedback(
     feedback_note: str,
     transport: ProtocolAgentTransport,
     joint_source_repair: bool = False,
+    preserve_review_items: bool = False,
 ) -> ProtocolDeconstructionDraft:
     """依据一条明确的原文理解纠错，局部重新解构指定父规则。
 
     反馈是输入资料，不是发布权威。返回内容必须使用当前
     candidate_id，且只能替换指定官方父规则；其他规则由程序原样保留。
+    preserve_review_items 用于不含待核事项处置权限的修订；原事项由宿主保全。
     """
 
     note = feedback_note.strip()
@@ -3905,12 +3977,19 @@ def revise_protocol_draft_from_feedback(
         "每个谓词 observation_policy.source_excerpts 的每一项都必须是该谓词自身 "
         "source_clause/source_clauses 内的逐字子串；拆分‘或’分支时，各分支必须同时携带"
         "支撑该分支的共享连接语逐字片段，不得只在组件级来源中引用。"
+        "非数值谓词也可用 source_term 逐字填写本分支对象名称，不重复整句或自造名称；"
+        "各分支自身对象、共同动作、否定、连接语及例外须在自身 source_locator 中完整保留，"
+        "不连续文字分别摘录。定位修订不授权改变 ALL/ANY/NOT、数值、时间或患者事实命题，"
+        "原逻辑确实不符原文时须保留问题，不靠不同摘录伪装已解决。"
         "每个谓词的原文定位只能二选一：单段原文写 source_clause，并保持 source_clauses=[]；"
         "需要多段共同支撑时写 source_clauses，并保持 source_clause=null，绝不能同时填写。"
         "source_clauses 必须按原文出现顺序排列；共同期间或上位限定在原文先出现时，"
         "必须先引用它，再引用本分支，不得为了突出人群而把共同前缀移到末尾。"
-        "适用人群若已写入 applicable_population，须在本谓词自有的某个逐字片段起始处"
-        "保留其有源方向，而不是要求它排在 source_clauses 数组第一项；不能为此改变适用对象。"
+        "适用人群若已写入 applicable_population，须逐字保留原文完整的对象限定，不截掉否定、例外或附加条件。"
+        "原文把对象写在相邻日历窗后的括号内时，可引用完整原句，保持对象与它所属时间窗的准确对应；"
+        "不必为来源绑定额外重复摘录括号，也不得借用其他对象的时间。"
+        "其他对象限定仍须有本谓词自身的直接逐字来源；不得为迎合摘录格式改变适用对象，"
+        "有源对象限定不代表患者归属已经核实。"
         "数值比较不因父句另含研究者判断就设 requires_professional_judgment=true；只有数值本身"
         "需要专业评定，且该谓词的资料要求绑定 investigator_assessment 时才可设置。独立判断"
         "另做有书面来源的条件，不把客观阈值整体改成研究者裁量。"
@@ -3919,10 +3998,17 @@ def revise_protocol_draft_from_feedback(
         "开放列举的逐字内容保留在 source_clause/source_clauses，不能为满足来源覆盖而把"
         "列举方式、规则结构或自拟的且/或关系塞入患者事实命题。"
         "输出前必须把 replacement_rules 与当前目标规则逐字段比较；任何无关变化都要撤销。\n\n"
-        "replacement_unresolved_items 和 replacement_structural_warnings 仅填写本次修订后仍存在的目标父规则待核事项；"
-        f"每项 affected_scope 必须明确包含 {target_rule_code} 或其子项定位，"
-        "不得填写其他父规则、无父规则编号的范围或全方案事项；没有则返回空数组。\n\n"
-        f"用户指出的问题：{note}\n\n"
+        + (
+            "本次没有增删或解决待核事项的权限。replacement_unresolved_items 和 "
+            "replacement_structural_warnings 返回空数组；程序原样保留全部已有事项，"
+            "字段描述的修订不能解除来源、能力或含义疑问。\n\n"
+            if preserve_review_items else
+            "replacement_unresolved_items 和 replacement_structural_warnings 仅填写本次修订后仍存在的目标父规则待核事项；"
+            f"每项 affected_scope 必须明确包含 {target_rule_code} 或其子项定位，"
+            "不得填写其他父规则、无父规则编号的范围或全方案事项；没有则返回空数组。\n\n"
+        )
+        + _PROSPECTIVE_FEEDBACK_CONTRACT + "\n\n"
+        + f"用户指出的问题：{note}\n\n"
         f"当前目标规则：{prompt_rule.model_dump_json()}\n\n"
         f"冻结的方案输入：{scoped_source_context}\n\n"
         f"{output_contract}"
@@ -3942,6 +4028,10 @@ def revise_protocol_draft_from_feedback(
                     repair_batch_id if compact else None
                 ),
             )
+            if preserve_review_items and (
+                repair.replacement_unresolved_items or repair.replacement_structural_warnings
+            ):
+                raise ValueError("本次修订无待核事项处置权限，不能返回替换事项")
             restricted_conversion = False
             split_count = 1
             mixed_restriction = False
@@ -3974,6 +4064,11 @@ def revise_protocol_draft_from_feedback(
                 repair,
                 expected_codes=[target_rule_code],
             )
+            if preserve_review_items:
+                revised = revised.model_copy(update={
+                    "unresolved_items": current.unresolved_items,
+                    "structural_warnings": current.structural_warnings,
+                }, deep=True)
             preserved = None
             if component_only:
                 original_executable = [
@@ -4024,7 +4119,12 @@ def revise_protocol_draft_from_feedback(
             hydrated = _hydrate_semantic_candidate(
                 source_input, revised, component_identity_overrides=preserved,
             )
-            return _merge_feedback_hydration(current_draft, hydrated, target_rule_code)
+            return _merge_feedback_hydration(
+                current_draft, hydrated, target_rule_code,
+                target_component_id=target_component_id,
+            )
+        except ProtocolRequirementIdentityError:
+            raise
         except Exception as exc:
             last_error = exc
             if attempt == 1:
@@ -4036,9 +4136,15 @@ def revise_protocol_draft_from_feedback(
                     f"问题：{str(exc)[:12000]}。请只返回符合下列结构的 JSON："
                     "每个谓词只能使用 source_clause 或 source_clauses 其中一种原文定位；"
                     "使用前者时后者必须为空数组，使用后者时前者必须为 null。"
-                    "replacement_unresolved_items 和 replacement_structural_warnings 只保留本次父规则"
-                    f" {target_rule_code} 修订后仍存在的事项，每项 affected_scope 须含该父规则编号；"
-                    "无该条事项时两个数组均为空，不得返回其他条款或无归属事项。"
+                    + _PROSPECTIVE_FEEDBACK_CONTRACT
+                    + (
+                        "本次待核事项只读；replacement_unresolved_items 和 replacement_structural_warnings "
+                        "均返回空数组，已有事项由程序原样保留，不得宣称已经解决。"
+                        if preserve_review_items else
+                        "replacement_unresolved_items 和 replacement_structural_warnings 只保留本次父规则"
+                        f" {target_rule_code} 修订后仍存在的事项，每项 affected_scope 须含该父规则编号；"
+                        "无该条事项时两个数组均为空，不得返回其他条款或无归属事项。"
+                    )
                     + (
                         f"服务端携带的 wire_version={DNF_WIRE_VERSION!r} 严格 JSON 合同；batch_id 必须为 "
                         f"{repair_batch_id}；"
@@ -4124,12 +4230,117 @@ def _merge_component_only_repair(
     )]})
 
 
+class ProtocolRequirementIdentityError(ValueError):
+    error_code = "REQUIREMENT_IDENTITY_AMBIGUOUS"
+
+    def __init__(self, component_id: str, requirement_ids: Sequence[str], *, candidate_draft=None):
+        super().__init__("资料要求删减后的对应关系尚未核清，不能按位置改写原有引用。")
+        self.component_id = component_id
+        self.affected_requirement_ids = tuple(requirement_ids)
+        self.candidate_draft = candidate_draft
+
+
+def _preserve_deleted_requirement_identities(
+    current: ProtocolDeconstructionDraft,
+    hydrated: ProtocolDeconstructionDraft,
+    target_code: str,
+    target_component_id: str,
+) -> ProtocolDeconstructionDraft:
+    """Match an exact deletion-only subset, never infer clinical equivalence."""
+    before = next(rule for rule in current.proposed_rules if rule.official_code == target_code)
+    after = next(rule for rule in hydrated.proposed_rules if rule.official_code == target_code)
+    original = {item.rule_component_id: item for item in before.components}
+    remap: dict[str, str] = {}
+
+    def identity_payload(requirement):
+        return json.dumps(
+            requirement.model_dump(mode="json", exclude={"requirement_id"}),
+            sort_keys=True, ensure_ascii=False,
+        )
+
+    for component in after.components:
+        if component.rule_component_id != target_component_id:
+            continue
+        old = original.get(component.rule_component_id)
+        if old is None or len(component.evidence_requirements) >= len(old.evidence_requirements):
+            continue
+        old_groups: dict[str, list[str]] = {}
+        new_groups: dict[str, list[str]] = {}
+        for requirement in old.evidence_requirements:
+            old_groups.setdefault(identity_payload(requirement), []).append(requirement.requirement_id)
+        for requirement in component.evidence_requirements:
+            new_groups.setdefault(identity_payload(requirement), []).append(requirement.requirement_id)
+        # A count change plus a rewrite is not a proven deletion. A partially
+        # retained duplicate group cannot identify which original item remains.
+        if any(
+            payload not in old_groups or len(ids) > len(old_groups[payload])
+            or (len(old_groups[payload]) > 1 and len(ids) != len(old_groups[payload]))
+            for payload, ids in new_groups.items()
+        ):
+            raise ProtocolRequirementIdentityError(
+                component.rule_component_id,
+                [item.requirement_id for item in old.evidence_requirements],
+                candidate_draft=hydrated.model_dump(mode="json"),
+            )
+        for payload, ids in new_groups.items():
+            for new_id, old_id in zip(ids, old_groups[payload], strict=True):
+                remap[new_id] = old_id
+    if not remap:
+        return hydrated
+    # Hydration shares model objects across rule/draft/source views. Rebuild
+    # separate views so a positional remap is applied once, not transitively.
+    result = ProtocolDeconstructionDraft.model_validate(hydrated.model_dump(mode="json"))
+    original_drafts = {
+        item.proposed_requirement.requirement_id: item
+        for item in current.evidence_requirement_drafts
+    }
+    original_component_drafts = {
+        item.proposed_component.rule_component_id: item
+        for item in current.component_drafts
+    }
+
+    def restore(requirement):
+        if requirement.requirement_id in remap:
+            requirement.requirement_id = remap[requirement.requirement_id]
+
+    for rule in result.proposed_rules:
+        if rule.official_code == target_code:
+            for component in rule.components:
+                for requirement in component.evidence_requirements:
+                    restore(requirement)
+    for item in result.component_drafts:
+        if item.parent_official_code == target_code:
+            if item.proposed_component.rule_component_id == target_component_id:
+                item.draft_component_id = original_component_drafts[target_component_id].draft_component_id
+            for requirement in item.proposed_component.evidence_requirements:
+                restore(requirement)
+    for item in result.evidence_requirement_drafts:
+        old_id = item.proposed_requirement.requirement_id
+        if old_id in remap:
+            restore(item.proposed_requirement)
+            original_draft = original_drafts[remap[old_id]]
+            item.draft_requirement_id = original_draft.draft_requirement_id
+            item.draft_component_id = original_draft.draft_component_id
+    for stage in result.proposed_workflow_stages:
+        stage.due_requirement_ids = [remap.get(item, item) for item in stage.due_requirement_ids]
+    return ProtocolDeconstructionDraft.model_validate(result.model_dump(mode="json"))
+
+
 def _merge_feedback_hydration(
     current: ProtocolDeconstructionDraft,
     hydrated: ProtocolDeconstructionDraft,
     target_code: str,
+    *,
+    target_component_id: str | None = None,
 ) -> ProtocolDeconstructionDraft:
     """Keep persisted non-target structure while installing one recompiled rule."""
+
+    # Component-scoped feedback has host-preserved component identities. A
+    # parent restructure does not supply that premise and cannot use this map.
+    if target_component_id is not None:
+        hydrated = _preserve_deleted_requirement_identities(
+            current, hydrated, target_code, target_component_id,
+        )
 
     def replace(items, new_items, belongs):
         replacement = [item for item in new_items if belongs(item)]
@@ -4461,23 +4672,17 @@ def _apply_semantic_repair(
     replacements = {rule.official_code: rule for rule in repair.replacement_rules}
     selected = set(expected_codes)
 
-    def scoped_rule_codes(item: UnresolvedItem) -> set[str]:
-        return {
-            code
-            for ref in item.affected_scope
-            for code in re.findall(r"(?:IN|EX)-\d{2}", ref)
-        }
-
     for item in (
         *repair.replacement_structural_warnings,
         *repair.replacement_unresolved_items,
     ):
-        item_codes = scoped_rule_codes(item)
+        item_codes = _unresolved_rule_codes(item)
         if not item_codes or not item_codes <= selected:
             raise ValueError("局部修正返回了指定父规则之外的待确认事项")
 
     def outside_selected(item: UnresolvedItem) -> bool:
-        return scoped_rule_codes(item).isdisjoint(selected)
+        codes = _unresolved_rule_codes(item)
+        return not codes or not codes <= selected
 
     merged = candidate.model_copy(
         update={
@@ -4501,6 +4706,44 @@ def _apply_semantic_repair(
     )
 
 
+def _rule_repair_identifiers(
+    draft: ProtocolDeconstructionDraft, rule: Rule,
+) -> set[str]:
+    """Resolve repair ownership from the saved tree, never label substrings."""
+    identifiers = {rule.rule_id, rule.official_code}
+    component_ids = {item.rule_component_id for item in rule.components}
+    requirement_ids: set[str] = set()
+    for component in rule.components:
+        identifiers.update({component.rule_component_id, component.display_code})
+        requirements = {item.requirement_id for item in component.evidence_requirements}
+        requirement_ids.update(requirements)
+        identifiers.update(requirements)
+        identifiers.update(item.condition_id for item in component.repeat_trigger_conditions)
+        roots = (component.expression, component.exception_expression,
+                 *(item.expression for item in component.repeat_trigger_conditions))
+        for root in roots:
+            if root is not None:
+                identifiers.update(item.predicate_id for item in iter_atomic_predicates(root))
+    for component in rule.restricted_components:
+        identifiers.update({component.rule_component_id, component.display_code})
+    draft_ids = {
+        item.draft_component_id for item in draft.component_drafts
+        if item.parent_official_code == rule.official_code
+        and item.proposed_component.rule_component_id in component_ids
+    }
+    identifiers.update(draft_ids)
+    identifiers.update(
+        item.draft_requirement_id for item in draft.evidence_requirement_drafts
+        if item.draft_component_id in draft_ids
+        and item.proposed_requirement.requirement_id in requirement_ids
+    )
+    identifiers.update(
+        item.catalog_item_id for item in draft.parent_catalog_mappings
+        if item.proposed_rule_id == rule.rule_id
+    )
+    return identifiers
+
+
 def _affected_rule_codes(
     draft: ProtocolDeconstructionDraft,
     issues: Sequence[ProtocolGateIssue],
@@ -4510,23 +4753,7 @@ def _affected_rule_codes(
     refs = {ref for issue in issues for ref in issue.affected_refs}
     affected: list[str] = []
     for rule in draft.proposed_rules:
-        identifiers = {rule.rule_id, rule.official_code}
-        for component in rule.components:
-            identifiers.update(
-                {
-                    component.rule_component_id,
-                    component.display_code,
-                }
-            )
-            expressions = [component.expression]
-            if component.exception_expression is not None:
-                expressions.append(component.exception_expression)
-            for expression in expressions:
-                identifiers.update(
-                    predicate.predicate_id
-                    for predicate in iter_atomic_predicates(expression)
-                )
-        if identifiers & refs:
+        if _rule_repair_identifiers(draft, rule) & refs:
             affected.append(rule.official_code)
     if affected or not fallback_all:
         return affected
@@ -4543,22 +4770,12 @@ def _repair_issues_for_rules(
     for rule in draft.proposed_rules:
         if rule.official_code not in selected:
             continue
-        allowed_refs.update({rule.rule_id, rule.official_code})
-        for component in rule.components:
-            allowed_refs.update(
-                {component.rule_component_id, component.display_code}
-            )
-            expressions = [component.expression]
-            if component.exception_expression is not None:
-                expressions.append(component.exception_expression)
-            for expression in expressions:
-                allowed_refs.update(
-                    predicate.predicate_id
-                    for predicate in iter_atomic_predicates(expression)
-                )
+        allowed_refs.update(_rule_repair_identifiers(draft, rule))
 
     scoped: list[ProtocolGateIssue] = []
     for issue in issues:
+        if issue.level == "提醒":
+            continue
         affected_refs = [ref for ref in issue.affected_refs if ref in allowed_refs]
         if not affected_refs:
             continue
@@ -4583,7 +4800,10 @@ def _select_repair_rule_codes(
 ) -> list[str]:
     """Give every affected parent a repair turn before repeatedly revisiting one."""
 
-    affected = _affected_rule_codes(draft, issues, fallback_all=False)
+    affected = _affected_rule_codes(
+        draft, [issue for issue in issues if issue.level != "提醒"],
+        fallback_all=False,
+    )
     official_order = {
         rule.official_code: index for index, rule in enumerate(draft.proposed_rules)
     }
@@ -4707,6 +4927,33 @@ def _issue_fingerprints_by_rule(
                 (issue.issue_code, tuple(sorted(issue.affected_refs)))
             )
     return fingerprints
+
+
+def _repair_stagnation_signature(
+    draft: ProtocolDeconstructionDraft,
+    issues: Sequence[ProtocolGateIssue],
+    rule_code: str,
+) -> str:
+    """Detect unchanged retained proposals, not medical equivalence or truth."""
+    rule = next(item for item in draft.proposed_rules if item.official_code == rule_code)
+    payload = rule.model_dump(mode="json")
+    for component in payload["components"] + payload.get("restricted_components", []):
+        component.pop("title", None)
+    sources = [
+        {"source_refs": item.source_refs, "source_excerpts": item.source_excerpts}
+        for item in draft.component_drafts
+        if item.parent_official_code == rule_code
+    ]
+    diagnostics = sorted({
+        (issue.check_name, issue.issue_code, issue.level,
+         tuple(sorted(issue.affected_refs)), tuple(sorted(issue.repair_scope)))
+        for issue in _repair_issues_for_rules(draft, issues, [rule_code])
+        if issue.level != "提醒"
+    })
+    return _sha256(json.dumps(
+        {"rule": payload, "sources": sources, "diagnostics": diagnostics},
+        ensure_ascii=False, sort_keys=True,
+    ))
 
 
 # The only allowed issue refinement: a local semantic revision may resolve a
@@ -4845,6 +5092,16 @@ def _restore_candidate_rules(
     restore_codes: set[str],
 ) -> ProtocolSemanticDeconstructionCandidate:
     previous_by_code = {rule.official_code: rule for rule in previous.proposed_rules}
+
+    def restore_items(field: str) -> list[UnresolvedItem]:
+        return [
+            item for item in getattr(revised, field)
+            if _unresolved_rule_codes(item).isdisjoint(restore_codes)
+        ] + [
+            item for item in getattr(previous, field)
+            if _unresolved_rule_codes(item).intersection(restore_codes)
+        ]
+
     return revised.model_copy(
         update={
             "proposed_rules": [
@@ -4852,7 +5109,9 @@ def _restore_candidate_rules(
                 if rule.official_code in restore_codes
                 else rule
                 for rule in revised.proposed_rules
-            ]
+            ],
+            "structural_warnings": restore_items("structural_warnings"),
+            "unresolved_items": restore_items("unresolved_items"),
         },
         deep=True,
     )
@@ -4993,6 +5252,14 @@ def _configure_transport_output_scope(
             max(4, max_span_count * 2),
         ),
     )
+    configure_task = getattr(transport, "configure_logical_task", None)
+    if callable(configure_task):
+        configure_task(max_requests=3, logical_task_id=_sha256(json.dumps({
+            "source": source_input.protocol_file_sha256,
+            "snapshot": source_input.extraction_snapshot_id,
+            "official_codes": list(rule_codes),
+            "source_span_ids": list(scoped_source_span_ids),
+        }, sort_keys=True, separators=(",", ":"))))
 
 
 def _plan_semantic_rule_batches(
@@ -5130,8 +5397,15 @@ def _collect_parent_segment(
     segment: ParentRuleSegment,
     transport_factory: Callable[[], ProtocolAgentTransport],
     batch_cache: ProtocolSemanticBatchCache | None,
+    run_budget: object | None = None,
 ) -> ProtocolSemanticDeconstructionCandidate:
     transport = transport_factory()
+    bind_budget_store = getattr(transport, "bind_call_budget_store", None)
+    if callable(bind_budget_store):
+        bind_budget_store(batch_cache)
+    share_run = getattr(transport, "share_run_budget", None)
+    if callable(share_run) and run_budget is not None:
+        share_run(run_budget)
     if not _supports_parent_rule_segmentation(transport):
         raise ProtocolParentSegmentError(
             segment.segment_id,
@@ -5199,6 +5473,14 @@ def _collect_parent_segment(
                     str(exc),
                 ) from exc
             retry_transport = transport_factory()
+            bind_retry_store = getattr(retry_transport, "bind_call_budget_store", None)
+            if callable(bind_retry_store):
+                bind_retry_store(batch_cache)
+            share_retry_run = getattr(retry_transport, "share_run_budget", None)
+            if callable(share_retry_run) and run_budget is not None:
+                share_retry_run(run_budget)
+            share_budget = getattr(retry_transport, "share_call_budget", None)
+            previous_budget = getattr(transport, "logical_call_budget", None)
             if not _supports_parent_rule_segmentation(retry_transport):
                 raise ProtocolParentSegmentError(
                     segment.segment_id,
@@ -5232,6 +5514,8 @@ def _collect_parent_segment(
                     "TRANSPORT_IDENTITY_CHANGED",
                     "同分段重试时模型或请求合同发生变化",
                 ) from exc
+            if callable(share_budget) and previous_budget is not None:
+                share_budget(previous_budget)
             transport = retry_transport
     assert response is not None
     for attempt in range(2):
@@ -5308,6 +5592,7 @@ def _try_collect_parent_segments(
     batch_cache: ProtocolSemanticBatchCache | None,
     candidate_id: str | None,
     agent_call_id: str | None,
+    run_budget: object | None = None,
 ) -> ProtocolSemanticDeconstructionCandidate | None:
     if transport_factory is None or len(rule_codes) != 1:
         return None
@@ -5346,6 +5631,7 @@ def _try_collect_parent_segments(
                         segment=segment,
                         transport_factory=transport_factory,
                         batch_cache=batch_cache,
+                        run_budget=run_budget,
                     ),
                     plan.segments,
                 )
@@ -5385,18 +5671,30 @@ def _try_collect_parent_segments(
         )
         return merged
     except Exception as exc:
-        if (
-            isinstance(exc, ProtocolParentSegmentError)
-            and exc.error_code == "QUOTA_EXHAUSTED"
-            and isinstance(exc.__cause__, ProtocolAgentCallError)
-        ):
-            raise exc.__cause__
         logger.warning(
-            "protocol parent segmentation fell back to whole parent: %s",
+            "protocol parent segmentation stopped without widening scope: %s",
             exc,
             extra={"official_code": item.official_code},
         )
-        return None
+        if getattr(exc, "error_code", None) == "SEMANTIC_CACHE_INVALID":
+            # A damaged saved response is not a new semantic/merge failure.
+            raise
+        if isinstance(exc, ProtocolAgentCallError):
+            raise
+        if isinstance(exc, ProtocolParentSegmentError):
+            if isinstance(exc.__cause__, ProtocolAgentCallError):
+                # The segment wrapper may itself report identity drift after a
+                # timeout. Preserve that first causal classification, not timeout.
+                if exc.error_code == exc.__cause__.error_code:
+                    raise exc.__cause__
+            raise ProtocolAgentCallError(
+                exc.segment_id, str(exc), error_code=exc.error_code,
+                error_metadata={"segment_id": exc.segment_id, "official_code": item.official_code},
+            ) from exc
+        raise ProtocolAgentCallError(
+            "protocol-parent-merge", str(exc), error_code="SEGMENT_MERGE_INVALID",
+            error_metadata={"official_code": item.official_code},
+        ) from exc
 
 
 def _collect_initial_semantic_response(
@@ -5410,6 +5708,9 @@ def _collect_initial_semantic_response(
     batch_progress: Callable[[int, int, ProtocolSemanticDeconstructionCandidate], None]
     | None = None,
 ) -> tuple[ProtocolAgentResponse, str | None]:
+    bind_budget_store = getattr(transport, "bind_call_budget_store", None)
+    if callable(bind_budget_store):
+        bind_budget_store(batch_cache)
     compact = _uses_compact_wire_contract(transport)
     segmentation_supported = _supports_parent_rule_segmentation(transport)
     expected_codes = [
@@ -5447,6 +5748,7 @@ def _collect_initial_semantic_response(
                 batch_cache=batch_cache,
                 candidate_id=None,
                 agent_call_id=None,
+                run_budget=getattr(transport, "logical_run_budget", None),
             )
             if segmentation_supported
             else None
@@ -5534,6 +5836,7 @@ def _collect_initial_semantic_response(
             batch_cache=batch_cache,
             candidate_id=None,
             agent_call_id=None,
+            run_budget=getattr(transport, "logical_run_budget", None),
         )
     transport_started = current_cached is None
     batch_calls: list[dict[str, object]] = []
@@ -5556,6 +5859,7 @@ def _collect_initial_semantic_response(
     agent_call_id: str | None = None
     for batch_index, rule_codes in enumerate(batches, start=1):
         batch_candidate = current_cached
+        structural_repair_source: str | None = None
         problem = ""
         batch_id = f"{batch_index}/{len(batches)}"
         if batch_candidate is not None:
@@ -5574,6 +5878,13 @@ def _collect_initial_semantic_response(
                     expected_agent_call_id=agent_call_id,
                     source_input=source_input,
                 )
+                if structural_repair_source is not None:
+                    from app.agents.protocol_schema_repair import verify_repair_preserves_valid_parts
+
+                    proof = verify_repair_preserves_valid_parts(
+                        structural_repair_source, batch_candidate,
+                    )
+                    batch_calls[-1]["structural_preservation"] = proof
             except Exception as exc:
                 problem = str(exc)
                 if schema_attempt == 1:
@@ -5581,6 +5892,10 @@ def _collect_initial_semantic_response(
                         f"第 {batch_index}/{len(batches)} 批经过一次结构修复后仍无法合并："
                         + problem
                     )
+                # Only a typed schema failure freezes valid siblings. Source/
+                # semantic closure failures may require a legitimate source repair.
+                if not compact and isinstance(exc.__cause__, ValidationError):
+                    structural_repair_source = response.text
                 try:
                     response = transport.continue_session(
                         session_id=session_id,
@@ -5688,6 +6003,7 @@ def _collect_initial_semantic_response(
                 batch_cache=batch_cache,
                 candidate_id=candidate_id,
                 agent_call_id=agent_call_id,
+                run_budget=getattr(transport, "logical_run_budget", None),
             )
         if current_cached is not None:
             response = ProtocolAgentResponse(
@@ -5765,9 +6081,10 @@ class ProtocolDeconstructorRunner:
 
     MAX_SCHEMA_REPAIRS = 2
     MAX_LOCAL_SCHEMA_REPAIRS = 1
-    # Real mixed-phase protocols have needed fourteen isolated parent repairs
-    # after a structurally valid first draft. The runtime also grants at least
-    # one turn per frozen parent so fair rotation cannot starve a late rule.
+    MAX_UNCHANGED_REPAIRS = 2
+    RECOVERY_POLICY = "bounded-recovery/v2-stalled-targets"
+    # A finite ceiling for distinct repairs, not an allowance to repeat an
+    # unchanged answer. Fair rotation keeps later parents from starvation.
     MAX_SEMANTIC_REPAIRS = 16
     MAX_RULES_PER_REPAIR = 3
     INITIAL_RULE_BATCH_SIZE = 3
@@ -5804,7 +6121,56 @@ class ProtocolDeconstructorRunner:
         ):
             raise ValueError("提示词正文与已登记版本哈希不一致")
 
+        semantic_repair_limit = (
+            self._max_semantic_repairs if self._max_semantic_repairs is not None
+            else max(self.MAX_SEMANTIC_REPAIRS, len(source_input.parent_rule_catalog.items))
+        )
         try:
+            configure_run = getattr(transport, "configure_logical_run", None)
+            if callable(configure_run):
+                bind_store = getattr(transport, "bind_call_budget_store", None)
+                if callable(bind_store):
+                    bind_store(batch_cache)
+                compact = _uses_compact_wire_contract(transport)
+                batches = _plan_semantic_rule_batches(
+                    source_input, prompt_template=prompt_template,
+                    batch_size=self.INITIAL_RULE_BATCH_SIZE, compact=compact,
+                )
+                initial_units = len(batches)
+                if transport_factory and _supports_parent_rule_segmentation(transport):
+                    items = {item.official_code: item for item in source_input.parent_rule_catalog.items}
+                    for index, codes in enumerate(batches, start=1):
+                        if len(codes) != 1:
+                            continue
+                        prompt = build_protocol_deconstruction_prompt(
+                            source_input, prompt_template=prompt_template, requested_rule_codes=codes,
+                            batch_number=index if compact else None,
+                            batch_total=len(batches) if compact else None, compact=compact, scoped_source=True,
+                        )
+                        plan = plan_parent_rule_segments(
+                            items[codes[0]], source_materials=source_input.source_materials,
+                            token_estimate=estimate_text_tokens(prompt), thresholds=_parent_segmentation_thresholds(),
+                        )
+                        if plan is not None:
+                            initial_units += len(plan.segments) - 1
+                # This finite run envelope also covers later target subsets;
+                # changing a schema scope never renews the overall allowance.
+                max_requests = max(1, initial_units) * 3 + 2 * (
+                    semantic_repair_limit + self.MAX_SCHEMA_REPAIRS + self.MAX_LOCAL_SCHEMA_REPAIRS
+                )
+                run_id = _sha256(json.dumps({
+                    "source": source_input.protocol_file_sha256,
+                    "snapshot": source_input.extraction_snapshot_id, "role": "official-run-budget/v1",
+                }, sort_keys=True))
+                identity = transport.semantic_cache_identity(output_kind="semantic_candidate", frozen_run=True)
+                configure_run(logical_task_id=run_id, max_requests=max_requests,
+                              contract_sha256=_sha256(json.dumps({
+                                  "prompt": prompt_version.template_sha256, "transport": identity,
+                                  "initial_units": initial_units, "semantic_repair_limit": semantic_repair_limit,
+                                  # Stop-only host policy does not renew or
+                                  # invalidate the frozen HTTP request allowance.
+                                  "recovery_policy": "bounded-recovery/v1",
+                              }, sort_keys=True)))
             response, collection_error = _collect_initial_semantic_response(
                 source_input,
                 prompt_template=prompt_template,
@@ -5816,6 +6182,8 @@ class ProtocolDeconstructorRunner:
             )
         except Exception as exc:
             session_id = getattr(exc, "session_id", "protocol-call-unavailable")
+            if getattr(exc, "error_code", None) == "SEMANTIC_CACHE_INVALID":
+                raise
             issue = (
                 _call_issue(exc) if isinstance(exc, ProtocolAgentCallError)
                 else _format_issue(f"方案解构调用未完成：{exc}")
@@ -5830,7 +6198,7 @@ class ProtocolDeconstructorRunner:
                         raw_output_sha256=_sha256(str(exc)),
                         outcome="会话异常",
                         issues=[issue],
-                        call_metadata=(exc.error_metadata
+                        call_metadata=({**exc.error_metadata, "error_code": exc.error_code}
                                        if isinstance(exc, ProtocolAgentCallError) else {}),
                     )
                 ],
@@ -5843,6 +6211,8 @@ class ProtocolDeconstructorRunner:
         current_candidate: ProtocolSemanticDeconstructionCandidate | None = None
         replacement_rule_codes: list[str] = []
         semantic_repair_counts: dict[str, int] = {}
+        unchanged_repair_counts: dict[str, int] = {}
+        stopped_rule_codes: set[str] = set()
 
         if collection_error is not None:
             issue = _format_issue(collection_error)
@@ -5865,14 +6235,6 @@ class ProtocolDeconstructorRunner:
         schema_repairs = 0
         semantic_repairs = 0
         local_schema_repairs = 0
-        semantic_repair_limit = (
-            self._max_semantic_repairs
-            if self._max_semantic_repairs is not None
-            else max(
-                self.MAX_SEMANTIC_REPAIRS,
-                len(source_input.parent_rule_catalog.items),
-            )
-        )
         while True:
             attempt_number += 1
             raw_hash = _sha256(response.text)
@@ -6010,6 +6372,16 @@ class ProtocolDeconstructorRunner:
                             for check in gate_result.checks
                             for issue in check.issues
                         ]
+                    for code in replacement_rule_codes:
+                        unchanged = (
+                            _repair_stagnation_signature(final_draft, previous_issues, code)
+                            == _repair_stagnation_signature(draft, issues, code)
+                        )
+                        unchanged_repair_counts[code] = (
+                            unchanged_repair_counts.get(code, 0) + 1 if unchanged else 0
+                        )
+                        if unchanged_repair_counts[code] >= self.MAX_UNCHANGED_REPAIRS:
+                            stopped_rule_codes.add(code)
                 final_draft = draft
                 final_gate = gate_result
                 if candidate_for_attempt is not None:
@@ -6018,8 +6390,19 @@ class ProtocolDeconstructorRunner:
                         draft,
                         issues,
                         semantic_repair_counts,
-                        limit=self.MAX_RULES_PER_REPAIR,
+                        limit=len(draft.proposed_rules),
                     )
+                    replacement_rule_codes = [
+                        code for code in replacement_rule_codes if code not in stopped_rule_codes
+                    ][:self.MAX_RULES_PER_REPAIR]
+                call_metadata = dict(response.call_metadata)
+                if unchanged_repair_counts:
+                    call_metadata["repair_recovery"] = {
+                        "policy": self.RECOVERY_POLICY,
+                        "unchanged_repair_limit": self.MAX_UNCHANGED_REPAIRS,
+                        "unchanged_repairs": dict(unchanged_repair_counts),
+                        "stopped_rule_codes": sorted(stopped_rule_codes),
+                    }
                 attempts.append(
                     ProtocolDeconstructionAttempt(
                         attempt=attempt_number,
@@ -6032,7 +6415,7 @@ class ProtocolDeconstructorRunner:
                         ),
                         draft_id=draft.draft_id,
                         issues=issues,
-                        call_metadata=response.call_metadata,
+                        call_metadata=call_metadata,
                     )
                 )
                 if gate_result.publishable:
@@ -6072,6 +6455,9 @@ class ProtocolDeconstructorRunner:
                     replacement_rule_codes,
                 )
             try:
+                restart_from_checkpoint = session_id.startswith((
+                    "protocol-parent-segments-", "protocol-semantic-cache",
+                ))
                 output_kind: ProtocolOutputKind = (
                     "semantic_rule_repair"
                     if current_candidate is not None and replacement_rule_codes
@@ -6086,7 +6472,7 @@ class ProtocolDeconstructorRunner:
                     compact=compact,
                     candidate=current_candidate,
                     source_input=source_input,
-                    include_frozen_context=bool(getattr(
+                    include_frozen_context=restart_from_checkpoint or bool(getattr(
                         transport, "supports_bounded_batch_context", False
                     )),
                 )
@@ -6099,7 +6485,7 @@ class ProtocolDeconstructorRunner:
                         if item.official_code is not None
                     ],
                 )
-                if current_candidate is not None:
+                if current_candidate is not None and not restart_from_checkpoint:
                     _compact_transport_history(
                         transport,
                         session_id,
@@ -6110,9 +6496,6 @@ class ProtocolDeconstructorRunner:
                             "仅依据后续修订提示和其中提供的目标规则/原文返回。"
                         ),
                     )
-                restart_from_checkpoint = session_id.startswith(
-                    "protocol-parent-segments-"
-                ) or session_id == "protocol-semantic-cache"
                 if restart_from_checkpoint:
                     response = transport.start(
                         prompt=repair_prompt,
@@ -6125,6 +6508,12 @@ class ProtocolDeconstructorRunner:
                         prompt=repair_prompt,
                         output_kind=output_kind,
                     )
+                if output_kind == "semantic_rule_repair":
+                    response = response.model_copy(update={"call_metadata": {
+                        **response.call_metadata,
+                        "repair_context_version": OFFICIAL_REPAIR_CONTEXT_VERSION,
+                        "repair_prompt_sha256": _sha256(repair_prompt),
+                    }})
             except Exception as exc:
                 attempts.append(
                     ProtocolDeconstructionAttempt(
@@ -6136,7 +6525,7 @@ class ProtocolDeconstructorRunner:
                             _call_issue(exc) if isinstance(exc, ProtocolAgentCallError)
                             else _format_issue(f"定向修正调用未完成：{exc}")
                         ],
-                        call_metadata=(exc.error_metadata
+                        call_metadata=({**exc.error_metadata, "error_code": exc.error_code}
                                        if isinstance(exc, ProtocolAgentCallError) else {}),
                     )
                 )

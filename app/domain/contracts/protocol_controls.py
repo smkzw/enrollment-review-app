@@ -103,6 +103,7 @@ __all__ = [
     "RestrictedStatementIndependentExcerpt",
     "RestrictedStatementScopeProof",
     "ReviewNodeBinding",
+    "ControlScopeCitation",
     "ReviewNodeRole",
     "StructureUnitDisposition",
     "StructureUnitDispositionKind",
@@ -1614,6 +1615,20 @@ class ProtocolControlCandidateSemantics(Phase5ControlModel):
         return value
 
 
+class ControlScopeCitation(ContractModel):
+    """Physical ancestor heading, not an additional authored requirement."""
+
+    structure_unit_id: str = Field(min_length=1)
+    source_span_ids: list[str] = Field(min_length=1)
+    source_excerpt: str = Field(min_length=1)
+    source_unit_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+    @model_validator(mode="after")
+    def validate_spans(self):
+        _require_sorted_unique(self.source_span_ids, "scope citation source_span_ids")
+        return self
+
+
 class ReviewNodeBinding(Phase5ControlModel):
     """控制在审核节点上的显式作用绑定。"""
 
@@ -1621,6 +1636,14 @@ class ReviewNodeBinding(Phase5ControlModel):
     review_stage: ReviewStage
     role: ReviewNodeRole
     guidance: str | None = Field(default=None, min_length=1)
+    scope_citation: ControlScopeCitation | None = None
+
+    @model_serializer(mode="wrap")
+    def preserve_historical_binding(self, handler):
+        value = handler(self)
+        if self.scope_citation is None:
+            value.pop("scope_citation", None)
+        return value
 
 
 class ControlMinimumEvidence(Phase5ControlModel):

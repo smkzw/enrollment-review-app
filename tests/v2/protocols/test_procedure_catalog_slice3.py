@@ -301,6 +301,29 @@ def test_merged_header_like_matrix_keeps_original_visit_text_and_structural_rows
     assert derive_review_stage(catalog.items[0].visit_instance or "") is not None
 
 
+def test_frozen_visit_inventory_includes_a_column_without_required_procedures():
+    blocks, spans = _matrix([
+        ["操作项目", "筛选期", "筛选/导入期", "基线期"],
+        ["访视", "V0", "V1", "V2"],
+        ["检查甲", "", "X", "X"],
+    ], cols=4)
+    spans.append(_span(blocks[0]))
+    catalog = _build(blocks, spans, _projection(blocks))
+    assert {item.visit_instance for item in catalog.items} == {"筛选/导入期 / V1", "基线期 / V2"}
+    table = catalog.visit_tables[0]
+    assert table.column_count == 4
+    assert [column.visit_instance for column in table.columns] == ["筛选期 / V0", "筛选/导入期 / V1", "基线期 / V2"]
+    assert table.columns[0].source_excerpts == ("筛选期", "V0")
+    assert table.columns[0].review_stage == ReviewStage.SCREENING
+    from app.domain.contracts.protocol_ingestion import FrozenProtocolCatalog, frozen_catalog_content_hash
+    legacy_model = catalog.model_copy(update={"visit_tables": ()})
+    legacy = legacy_model.model_dump(mode="json")
+    legacy["catalog_sha256"] = frozen_catalog_content_hash(legacy_model)
+    reloaded = FrozenProtocolCatalog.model_validate(legacy)
+    assert reloaded.visit_tables == ()
+    assert "visit_tables" not in reloaded.model_dump(mode="json")
+
+
 def test_display_footnotes_are_removed_without_damaging_scientific_notation():
     from app.protocols.procedure_catalog import _display_footnote_numbers, _without_display_footnotes
 

@@ -539,6 +539,7 @@ def submit_feedback(
         feedback_note=body.feedback_note,
         target_rule_code=body.target_rule_code,
         target_component_id=body.target_component_id,
+        review_parent_scope=body.review_parent_scope,
         actor=body.actor,
     )
     return _draft_dto(view)

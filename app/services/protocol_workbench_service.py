@@ -437,7 +437,7 @@ class ProtocolWorkbenchService:
         self.session_factory = session_factory
         self.data_paths = data_paths
         self.now = now
-        self.gate = gate or ProtocolDeconstructionGate()
+        self.gate = gate or ProtocolDeconstructionGate(artifact_reader=ArtifactStore(data_paths).read)
         self._uses_default_feedback_reviser = feedback_reviser is None
         self.feedback_reviser = feedback_reviser or self._revise_feedback_with_model
         self.jobs = JobService(session_factory, now=now)
@@ -450,6 +450,9 @@ class ProtocolWorkbenchService:
         feedback_note: str,
         target_component_id: str | None = None,
         joint_source_repair: bool = False,
+        preserve_review_items: bool = False,
+        budget_store: Any = None,
+        scope_review_store: ArtifactStore | None = None,
     ) -> ProtocolDeconstructionDraft:
         from app.agents.protocol_deconstructor import (
             ProtocolAgentCallError,
@@ -457,14 +460,40 @@ class ProtocolWorkbenchService:
         )
         from app.agents.protocol_semantic_model_router import (
             GRADE_SHORT,
+            NON_REPLAYABLE_ROUTE_ERRORS,
             build_transport_for_candidate,
             candidate_availability_error,
             resolve_route_mode,
             select_protocol_semantic_route_candidates,
         )
+        from app.llm.logical_call_budget import LogicalCallBudget
 
-        # Feedback is a new-session repair. Each candidate is a whole attempt
-        # with a fresh transport and its provider-supported output contract.
+        run_budget = None
+        if budget_store is not None:
+            run_id = hashlib.sha256(json.dumps({
+                "source": source_input.protocol_file_sha256,
+                "snapshot": source_input.extraction_snapshot_id,
+                "role": "official-run-budget/v1",
+            }, sort_keys=True).encode()).hexdigest()
+            try:
+                saved = budget_store.load_call_budget(run_id)
+                if saved is None:
+                    raise ProtocolAgentCallError(
+                        "protocol-feedback-budget", "原方案读取额度记录不存在，未再次调用模型",
+                        error_code="BUDGET_RECORD_MISSING",
+                    )
+                run_budget = LogicalCallBudget(
+                    run_id, max_requests=saved["max_requests"],
+                    max_output_tokens=saved["max_output_tokens"], saved=saved,
+                    contract_sha256=saved["contract_sha256"], persist=budget_store.store_call_budget,
+                )
+            except (ValueError, TypeError, KeyError, OSError) as exc:
+                raise ProtocolAgentCallError(
+                    "protocol-feedback-budget", "原方案读取额度记录无法核实，未再次调用模型",
+                    error_code="BUDGET_RECORD_INVALID",
+                ) from exc
+
+        # New provider sessions share persisted task/run allowances, not new budgets.
         candidates = select_protocol_semantic_route_candidates(
             GRADE_SHORT,
             route_mode=resolve_route_mode(),
@@ -481,6 +510,17 @@ class ProtocolWorkbenchService:
                 last_error = exc
                 continue
             try:
+                if budget_store is not None:
+                    transport.bind_call_budget_store(budget_store)
+                    transport.share_run_budget(run_budget)
+                if scope_review_store is not None:
+                    from app.agents.protocol_deconstructor import _configure_transport_output_scope
+                    from app.services.protocol_scope_review_service import review_official_source_scope
+                    _configure_transport_output_scope(transport, source_input, [target_rule_code])
+                    return review_official_source_scope(
+                        source_input, current_draft, official_code=target_rule_code,
+                        transport=transport, store=scope_review_store,
+                    )
                 return revise_protocol_draft_from_feedback(
                     source_input,
                     current_draft,
@@ -489,10 +529,20 @@ class ProtocolWorkbenchService:
                     feedback_note=feedback_note,
                     transport=transport,
                     joint_source_repair=joint_source_repair,
+                    preserve_review_items=preserve_review_items,
                 )
             except ProtocolAgentCallError as exc:
+                if exc.error_code in NON_REPLAYABLE_ROUTE_ERRORS:
+                    raise
                 last_error = exc
                 continue
+            finally:
+                close = getattr(getattr(transport, "_client", None), "close", None)
+                if callable(close):
+                    try:
+                        close()
+                    except Exception:
+                        logger.warning("方案修订连接关闭未完成", exc_info=True)
         if last_error is not None:
             raise last_error
         raise ProtocolAgentCallError(
@@ -1150,6 +1200,8 @@ class ProtocolWorkbenchService:
             record = json.loads(path.read_text(encoding="utf-8"))
             if record.get("contract") != SEMANTIC_PREVIEW_CONTRACT:
                 return unavailable("unreadable", "预览记录版本不匹配，已停止显示。")
+            if record.get("job_id") != job_id:
+                return unavailable("unreadable", "保存内容不属于本次方案读取，已停止显示。")
             candidate = ProtocolSemanticDeconstructionCandidate.model_validate(
                 record.get("candidate")
             )
@@ -1682,6 +1734,7 @@ class ProtocolWorkbenchService:
         feedback_note: str,
         target_rule_code: str,
         target_component_id: str | None = None,
+        review_parent_scope: bool = False,
         actor: str,
     ) -> DraftDetailView:
         merged = self._merged_payload(job_id)
@@ -1713,6 +1766,12 @@ class ProtocolWorkbenchService:
             if rule.official_code == target_rule_code
         )
         target_items = [*target_rule.components, *target_rule.restricted_components]
+        if review_parent_scope and (feedback_kind != DraftFeedbackKind.SOURCE_ERROR or target_component_id is not None or not self._uses_default_feedback_reviser):
+            raise ProtocolWorkbenchError(
+                "SCOPE_REVIEW_REQUEST_INVALID", title="请单独核对总标题作用范围",
+                detail="这项核对只检查总标题与各子项的关系，不修改条件或医学阈值。",
+                recovery="请选择原文理解纠错，并以本条总标题为核对范围。",
+            )
         if feedback_kind == DraftFeedbackKind.SOURCE_ERROR:
             joint_exception = False
             if target_component_id is None and len(target_items) > 1:
@@ -1724,7 +1783,7 @@ class ProtocolWorkbenchService:
                 joint_exception = self._joint_source_feedback_allowed(
                     source_input, current_draft, target_rule_code, previous_gate,
                 )
-            if target_component_id is None and len(target_items) > 1 and not joint_exception:
+            if target_component_id is None and len(target_items) > 1 and not joint_exception and not review_parent_scope:
                 raise ProtocolWorkbenchError(
                     "FEEDBACK_COMPONENT_REQUIRED",
                     title="请选定需要纠正的子项",
@@ -1747,6 +1806,8 @@ class ProtocolWorkbenchService:
             attempts_made = 0
             try:
                 from app.agents.protocol_deconstructor import (
+                    ProtocolAgentCallError,
+                    ProtocolRequirementIdentityError,
                     _affected_rule_codes,
                     issue_reduced_for_rule,
                     regressing_rule_codes,
@@ -1809,8 +1870,11 @@ class ProtocolWorkbenchService:
                 # 模型局部修订有小幅随机性。首个候选若未通过确定性
                 # 门禁，将具体问题回填后只重试一次；两次都不合格则
                 # 保留原草稿。注入的测试修订器仍只执行一次。
-                attempt_count = 2 if self._uses_default_feedback_reviser else 1
+                attempt_count = 2 if self._uses_default_feedback_reviser and not review_parent_scope else 1
                 retry_guidance = ""
+                if self._uses_default_feedback_reviser:
+                    from app.services.protocol_deconstruction_executor import _ProtocolSemanticBatchFileCache
+                    feedback_budget_store = _ProtocolSemanticBatchFileCache(self.data_paths, job_id)
                 for attempt in range(attempt_count):
                     attempts_made += 1
                     regressing = False
@@ -1821,6 +1885,8 @@ class ProtocolWorkbenchService:
                             source_input, current_draft, target_rule_code,
                             attempt_note, target_component_id,
                             joint_source_repair=joint_exception,
+                            budget_store=feedback_budget_store,
+                            **({"scope_review_store": ArtifactStore(self.data_paths)} if review_parent_scope else {}),
                         )
                     else:
                         draft = self.feedback_reviser(
@@ -1839,9 +1905,16 @@ class ProtocolWorkbenchService:
                         target_rule_code=target_rule_code,
                         target_component_id=target_component_id,
                     )
+                    if review_parent_scope:
+                        self._validate_scope_review_only(current_draft, draft, target_rule_code)
+                        from app.services.protocol_scope_review_service import validate_completed_scope_review
+                        validate_completed_scope_review(source_input, draft, official_code=target_rule_code,
+                                                        store=ArtifactStore(self.data_paths))
                     changed_codes = set(
                         compute_draft_diff(current_draft, draft).modified_rule_codes
                     )
+                    if review_parent_scope and current_draft != draft:
+                        changed_codes.add(target_rule_code)
                     # Scope validation above already proved that any issue change
                     # belongs to the selected rule or component.
                     unresolved_changed = (
@@ -1879,7 +1952,9 @@ class ProtocolWorkbenchService:
                             revised_issues,
                             target_rule_code,
                         )
-                        if not regressing and reduced:
+                        # A completed scope-only review must save new uncertainty
+                        # as well as clearance. Clinical/source content is frozen.
+                        if review_parent_scope or (not regressing and reduced):
                             break
                         target_revised_issues = [
                             issue
@@ -1934,6 +2009,14 @@ class ProtocolWorkbenchService:
                         "不得用新问题替换旧问题。"
                     )
             except Exception as exc:
+                from app.protocols.official_scope_review import OfficialScopeReviewError
+                structured_call_error = isinstance(exc, (ProtocolAgentCallError, OfficialScopeReviewError))
+                identity_error = isinstance(exc, ProtocolRequirementIdentityError)
+                if structured_call_error:
+                    rejected_issue_codes = [exc.error_code]
+                if identity_error and exc.candidate_draft is not None:
+                    attempted_candidates.append(exc.candidate_draft)
+                    rejected_issue_codes = [exc.error_code]
                 candidate_hashes: list[str] = []
                 for index, candidate in enumerate(attempted_candidates, start=1):
                     record = {
@@ -1964,25 +2047,59 @@ class ProtocolWorkbenchService:
                     candidate_hashes,
                     exc_info=True,
                 )
+                call_failure_copy = {
+                    "BUDGET_RECORD_MISSING": (
+                        "原方案读取的次数记录未保留，本次没有再次读取；原草稿保持不变。",
+                        "请由维护人员核对原读取记录及允许继续读取的范围；不要反复点击修订。",
+                    ),
+                    "BUDGET_RECORD_INVALID": (
+                        "原方案读取的次数记录无法核实，本次没有再次读取；原草稿保持不变。",
+                        "请由维护人员核对记录，不要删除记录后重新读取。",
+                    ),
+                    "LOGICAL_BUDGET_EXHAUSTED": (
+                        "这项读取允许的次数已用完，本次没有再次读取；原草稿保持不变。",
+                        "请先查看已保存的回答和具体问题，再决定是否需要额外核对。",
+                    ),
+                    "MODEL_IDENTITY_MISMATCH": (
+                        "回答来源与指定模型不一致，本次回答未采用；原草稿保持不变。",
+                        "请由维护人员核对模型连接，系统不会自行换模型继续读取。",
+                    ),
+                    "STREAM_INTERRUPTED": (
+                        "模型回答中途断开，不能确认回答完整；原草稿保持不变。",
+                        "请先核对已保存的回答和连接状态，系统不会自行重复读取。",
+                    ),
+                    "TRANSPORT_TIMEOUT": (
+                        "等待模型回答超时，不能确认读取是否完成；原草稿保持不变。",
+                        "请先核对已保存的读取记录，系统不会自行重复读取。",
+                    ),
+                }.get(exc.error_code) if structured_call_error else None
                 raise ProtocolWorkbenchError(
-                    "FEEDBACK_REVISION_FAILED",
+                    exc.error_code if identity_error or structured_call_error else "FEEDBACK_REVISION_FAILED",
                     title="未能完成本次反馈修订",
                     detail=(
+                        call_failure_copy[0] if call_failure_copy else (
+                        "删减后的资料要求无法与原稿逐项对应，原草稿保持不变。"
+                        if identity_error else
                         "本次修订未能用方案原文证明各条件之间的任选关系，原草稿保持不变。"
                         if "DISJUNCTION_NOT_BOUND_TO_SOURCE" in rejected_issue_codes
-                        else "系统未产出可安全读取的局部修订，原草稿保持不变。"
+                        else "系统未产出可安全读取的局部修订，原草稿保持不变。")
                     ),
                     recovery=(
+                        call_failure_copy[1] if call_failure_copy else (
+                        "请先单独处理已核实的多余要求，其他改动分开核对；相同内容不能区分时，先核明对应关系。"
+                        if identity_error else
                         "请核对原文哪些内容是独立条件、哪些只是举例；未核清前不采用本次修订。"
                         if "DISJUNCTION_NOT_BOUND_TO_SOURCE" in rejected_issue_codes
-                        else "请核对所选条款的原文和具体待核问题后再修订。"
+                        else "请核对所选条款的原文和具体待核问题后再修订。")
                     ),
                     context={
                         "rule_code": target_rule_code,
-                        "component_id": target_component_id,
+                        "component_id": exc.component_id if identity_error else target_component_id,
                         "unchanged_revision_id": expected_revision_id,
                         "attempts": attempts_made,
                         "issue_codes": rejected_issue_codes,
+                        **({"affected_requirement_ids": list(exc.affected_requirement_ids),
+                            "candidate_hashes": candidate_hashes} if identity_error else {}),
                     },
                 ) from exc
         with self.session_factory() as session:
@@ -2173,6 +2290,21 @@ class ProtocolWorkbenchService:
                 *[item for item in revised.structural_warnings if selected(item)],
             ],
         }, deep=True)
+
+    @staticmethod
+    def _validate_scope_review_only(previous, current, target_rule_code: str) -> None:
+        def clinical_content(value):
+            copy = value.model_copy(deep=True)
+            for rule in copy.proposed_rules:
+                if rule.official_code == target_rule_code:
+                    for component in rule.components:
+                        component.source_scope_review_ref = None
+            for binding in copy.component_drafts:
+                if binding.parent_official_code == target_rule_code:
+                    binding.proposed_component.source_scope_review_ref = None
+            return copy
+        if clinical_content(previous) != clinical_content(current):
+            raise ValueError("总标题核对只能保存来源核对记录，不得修改条件、来源或待核问题")
 
     @staticmethod
     def _validate_source_error_scope(

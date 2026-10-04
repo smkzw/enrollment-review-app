@@ -271,6 +271,51 @@ class ReviewHistoryControlSelectionDTO(BaseModel):
     not_selected: list[ReviewHistoryUnselectedObservationDTO]
 
 
+class ReviewHistoryRestrictedRequirementDTO(BaseModel):
+    """Frozen source limitations, not missing patient evidence or assessments."""
+
+    model_config = ConfigDict(extra="forbid")
+    origin: Literal["official", "control"]
+    requirement_id: str = Field(min_length=1)
+    display_label: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    source_text: str = Field(min_length=1)
+    source_span_ids: list[str] = Field(min_length=1)
+    source_excerpts: list[str] = Field(min_length=1)
+    scope_quote: str | None = None
+    time_words: list[str] = Field(default_factory=list)
+    exception_words: str | None = None
+    affected_stage: str | None = None
+    decision_functions: list[str] = Field(default_factory=list)
+    source_force: Literal["required", "prohibited", "recommended", "descriptive", "unclear"] | None = None
+    limitation_kind: Literal["interpretation_unresolved", "consumer_unavailable"]
+    unresolved_dimensions: list[str] = Field(min_length=1)
+    dependency_refs: list[str] = Field(default_factory=list)
+
+
+def _restricted_requirement_dtos(context: ReviewContextSnapshotV2):
+    pack = context.clause_pack
+    result = [ReviewHistoryRestrictedRequirementDTO(
+        origin="official", requirement_id=item.clause_id,
+        display_label=item.display_code, title=item.title, source_text=item.source_text,
+        source_span_ids=item.source_span_ids, source_excerpts=item.source_excerpts,
+        limitation_kind=item.limitation_kind, unresolved_dimensions=item.unresolved_dimensions,
+    ) for item in pack.restricted_clauses]
+    if pack.control_publication is not None:
+        result.extend(ReviewHistoryRestrictedRequirementDTO(
+            origin="control", requirement_id=item.restricted_statement_id,
+            display_label="方案补充要求", title=item.source_quote,
+            source_text=item.source_quote, source_span_ids=item.source_span_ids,
+            source_excerpts=[item.source_quote],
+            scope_quote=item.scope_quote, time_words=item.time_words,
+            exception_words=item.exception_words, affected_stage=item.affected_stage,
+            decision_functions=item.decision_functions, source_force=item.source_force,
+            limitation_kind=item.limitation_kind, unresolved_dimensions=item.unresolved_dimensions,
+            dependency_refs=item.dependency_refs,
+        ) for item in pack.control_publication.catalog.restricted_statements)
+    return result
+
+
 class ReviewHistoryRunResponse(BaseModel):
     """单次正式审核的冻结历史（运行 + 冻结输入 + 结论 + 待办）。"""
 
@@ -285,12 +330,21 @@ class ReviewHistoryRunResponse(BaseModel):
     controls: list[ReviewHistoryControlDTO] = Field(default_factory=list)
     missing_protocol_control_ids: list[str] = Field(default_factory=list)
     control_selection_records: list[ReviewHistoryControlSelectionDTO] = Field(default_factory=list)
+    restricted_requirements: list[ReviewHistoryRestrictedRequirementDTO] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_component_identity(self) -> "ReviewHistoryRunResponse":
         component_ids = [item.clause.rule_component_id for item in self.assessments]
         if len(component_ids) != len(set(component_ids)):
             raise ValueError("同一次审核出现重复的审核要点结论")
+        restricted = self.restricted_requirements
+        restricted_ids = [item.requirement_id for item in restricted]
+        if (len(restricted_ids) != len(set(restricted_ids))
+                or set(restricted_ids).intersection(component_ids)
+                or set(restricted_ids).intersection(item.protocol_control_id for item in self.controls)
+                or any(ref not in {entry.requirement_id for entry in restricted if entry.origin == "control"}
+                       for item in restricted for ref in item.dependency_refs)):
+            raise ValueError("方案待澄清或暂不能计算的要求身份不一致")
         control_keys = [(item.protocol_control_id, item.obligation_id) for item in self.controls]
         if (len(control_keys) != len(set(control_keys))
                 or len(self.missing_protocol_control_ids) != len(set(self.missing_protocol_control_ids))
@@ -659,6 +713,7 @@ def get_review_run(
         ) for control in detail.controls for item in control.obligations],
         missing_protocol_control_ids=list(detail.missing_protocol_control_ids),
         control_selection_records=selection_records,
+        restricted_requirements=_restricted_requirement_dtos(detail.context),
     )
 
 

@@ -37,6 +37,7 @@ from tests.v2.api.protocol_e2e_helpers import (
     page_texts_from_blocks,
 )
 from tests.v2.protocols.slice4_helpers import confirmed_fixture
+from tests.v2.protocols.joint_publication_helpers import seed_joint_control_publication
 
 
 def _minimal_docx_bytes() -> bytes:
@@ -123,6 +124,20 @@ def _seed_review_job(app, job_id: str, *, wait_at: str | None = None) -> tuple:
         kwargs["wait_at"] = wait_at
     service.seed_review_session(job_id, **kwargs)
     return source_input, draft
+
+
+def _joint_publish_payload(app, job_id: str, *, key: str) -> dict:
+    service = app.state.protocol_workbench_service
+    view = service.get_draft_detail(job_id)
+    merged = service._merged_payload(job_id)
+    source = service._load_source_input(merged)
+    spans = service._load_source_spans(merged)
+    control_job, checkpoint = seed_joint_control_publication(
+        app.state.session_factory, app.state.data_paths,
+        source, view.revision.content, spans, view.revision.revision_id,
+    )
+    return {"idempotency_key": key, "actor": "医学监查员",
+            "control_job_id": control_job, "control_checkpoint_id": checkpoint}
 
 
 def test_upload_registers_source_and_creates_protocol_job(client) -> None:
@@ -242,6 +257,101 @@ def test_sources_remain_available_when_semantic_service_is_unavailable(
         assert sources.json()["source_materials"]
 
 
+@pytest.mark.parametrize(
+    ("error_code", "expected_state"),
+    [("STREAM_INTERRUPTED", "failed_retryable"),
+     ("MODEL_IDENTITY_MISMATCH", "failed_final")],
+)
+def test_retained_candidate_after_terminal_call_is_diagnostic_not_saved_draft(
+    build_app, monkeypatch, error_code: str, expected_state: str,
+) -> None:
+    from types import SimpleNamespace
+
+    from app.agents.protocol_deconstructor import (
+        ProtocolDeconstructionAttempt,
+        ProtocolDeconstructionRunResult,
+        ProtocolDeconstructorRunner,
+        _hydrate_semantic_candidate,
+        _parse_semantic_candidate,
+    )
+    from app.protocols.deconstruction_gate import ProtocolDeconstructionGate
+    from app.storage.repositories import ProtocolDraftRevisionRepository
+
+    captured = {}
+
+    def failed_run(self, source_input, **kwargs):
+        captured["source_input"] = source_input
+        draft = _hydrate_semantic_candidate(
+            source_input,
+            _parse_semantic_candidate(build_passing_draft_json(
+                SimpleNamespace(source_input=source_input),
+            )),
+        )
+        gate = ProtocolDeconstructionGate().evaluate(
+            source_input, draft, source_spans=kwargs["source_spans"],
+        )
+        return ProtocolDeconstructionRunResult(
+            status="需要核对", same_session_id="synthetic-interrupted-session",
+            attempts=[ProtocolDeconstructionAttempt(
+                attempt=1, session_id="synthetic-interrupted-session",
+                raw_output_sha256="a" * 64, outcome="会话异常",
+                call_metadata={"error_code": error_code,
+                               "private_reasoning": "must-not-enter-checkpoint"},
+            )],
+            final_draft=draft, final_gate_result=gate,
+        )
+
+    app = build_app(run_runner=False)
+    with TestClient(app) as client:
+        job_id = _create_protocol_job(
+            client, key=f"retained-terminal-{error_code}",
+            docx_bytes=_pipeline_docx_bytes(),
+        )
+        _run_until(client, app, job_id, awaiting_user="identity")
+        confirmed = client.post(
+            f"/api/v2/protocol/deconstructions/{job_id}/identity/confirm",
+            json={
+                "protocol_code": "E2E-001", "project_name": "E2E 测试研究",
+                "official_version": "V1.0", "official_date_value": "2026-08-17",
+                "official_date_precision": "day", "study_phase": StudyPhase.PHASE_II.value,
+                "actor": "测试用户",
+            },
+        )
+        assert confirmed.status_code == 200, confirmed.text
+        monkeypatch.setattr(ProtocolDeconstructorRunner, "run", failed_run)
+        _test_executor(app).run_job(job_id)
+
+        job = client.get(f"/api/v2/jobs/{job_id}").json()
+        generate = next(step for step in job["steps"] if step["step_id"] == STEP_GENERATE)
+        assert generate["state"] == expected_state
+        assert generate["error_code"] == error_code
+        assert job["state"] == expected_state
+        with app.state.session_factory() as session:
+            checkpoint = JobStore(session).get_last_checkpoint(job_id, STEP_GENERATE)
+            assert checkpoint is not None
+            payload = checkpoint[1]
+            diagnostic = payload["semantic_generation_failure"]
+            assert diagnostic["final_draft"]
+            assert diagnostic["attempts"][0]["raw_output_sha256"] == "a" * 64
+            assert "call_metadata" not in diagnostic["attempts"][0]
+            assert "draft_revision_id" not in payload
+            source = captured["source_input"]
+            assert ProtocolDraftRevisionRepository(session).find_by_generation_scope(
+                project_id=source.project_id, protocol_version_id=source.protocol_version_id,
+            ) == []
+        assert client.get(
+            f"/api/v2/protocol/deconstructions/{job_id}/sources",
+        ).status_code == 200
+        retry = client.post(f"/api/v2/jobs/{job_id}/retry")
+        assert retry.status_code == 200, retry.text
+        _test_executor(app).run_job(job_id)
+        rerun = client.get(f"/api/v2/jobs/{job_id}").json()
+        generate_again = next(step for step in rerun["steps"] if step["step_id"] == STEP_GENERATE)
+        assert generate_again["state"] == "failed_final"
+        assert generate_again["error_code"] == error_code
+        assert next(step for step in rerun["steps"] if step["step_id"] == "integrity_check")["state"] != "completed"
+
+
 def test_upload_registration_survives_api_claim_race(client, monkeypatch) -> None:
     original_claim_job = JobStore.claim_job
     api_claims = 0
@@ -328,6 +438,98 @@ def test_draft_integrity_and_sources_after_seed(client, build_app) -> None:
         assert session.json()["awaiting_user"] == "review"
 
 
+def test_feedback_without_original_read_ledger_preserves_draft_and_explains(build_app, monkeypatch) -> None:
+    import app.agents.protocol_semantic_model_router as router
+    monkeypatch.setattr(router, "build_transport_for_candidate",
+                        lambda candidate: pytest.fail("missing ledger must stop before model connection"))
+    app = build_app()
+    with TestClient(app) as test_client:
+        job_id = _create_protocol_job(test_client, key="feedback-ledger-missing")
+        _source, seeded = _seed_review_job(app, job_id, wait_at="await_review")
+        before = test_client.get(f"/api/v2/protocol/deconstructions/{job_id}/draft").json()
+        target = seeded.proposed_rules[1].components[0].rule_component_id
+        response = test_client.post(
+            f"/api/v2/protocol/deconstructions/{job_id}/draft/feedback",
+            json={"expected_revision_id": before["revision_id"], "feedback_kind": "source_error",
+                  "feedback_note": "只核对当前子项。", "target_rule_code": "EX-01",
+                  "target_component_id": target, "actor": "医学监查员"},
+        )
+        assert response.status_code == 409, response.text
+        error = response.json()["error"]
+        assert error["code"] == "BUDGET_RECORD_MISSING"
+        assert "次数记录未保留" in error["detail"]
+        assert "不要反复点击" in error["recovery_action"]
+        assert error["context"]["unchanged_revision_id"] == before["revision_id"]
+        after = test_client.get(f"/api/v2/protocol/deconstructions/{job_id}/draft").json()
+        assert after["revision_id"] == before["revision_id"]
+        assert after["content"] == before["content"]
+
+
+def test_parent_scope_request_saves_proof_through_existing_feedback_api(build_app, monkeypatch):
+    from app.services.protocol_scope_review_service import review_official_source_scope
+    from tests.v2.protocols.test_official_scope_review import ScopeReader, UncertainScopeReader, scope_fixture
+    reader = ScopeReader()
+
+    def revise(source_input, current_draft, target_rule_code, feedback_note, target_component_id,
+               *, joint_source_repair, budget_store, scope_review_store):
+        assert scope_review_store is not None and target_component_id is None
+        return review_official_source_scope(source_input, current_draft, official_code=target_rule_code,
+                                           transport=reader, store=scope_review_store)
+
+    monkeypatch.setattr(ProtocolWorkbenchService, "_revise_feedback_with_model", staticmethod(revise))
+    app = build_app(run_runner=False)
+    with TestClient(app) as client:
+        job_id = _create_protocol_job(client, key="parent-scope-feedback")
+        source, draft, spans = scope_fixture()
+        app.state.protocol_workbench_service.seed_review_session(job_id, source_input=source, draft=draft,
+                                                               source_spans=spans, wait_at="await_review")
+        url = f"/api/v2/protocol/deconstructions/{job_id}/draft"
+        before = client.get(url).json()
+        response = client.post(url + "/feedback", json={
+            "expected_revision_id": before["revision_id"], "feedback_kind": "source_error",
+            "feedback_note": "只核对总标题与各节点的关系。", "target_rule_code": "IN-01", "review_parent_scope": True,
+        })
+        assert response.status_code == 200, response.text
+        after = client.get(url).json()
+        assert after["revision_id"] != before["revision_id"]
+        component = after["content"]["proposed_rules"][0]["components"][0]
+        assert component["source_scope_review_ref"].startswith("artifacts/evaluation_manifest/")
+        assert component["expression"] == before["content"]["proposed_rules"][0]["components"][0]["expression"]
+        assert len(reader.prompts) == 2
+        cleared_revision, cleared_content = after["revision_id"], after["content"]
+        reader = UncertainScopeReader()
+        uncertain = client.post(url + "/feedback", json={
+            "expected_revision_id": cleared_revision, "feedback_kind": "source_error",
+            "feedback_note": "新核对无法确认适用节点，保留当前具体疑问。", "target_rule_code": "IN-01", "review_parent_scope": True,
+        })
+        assert uncertain.status_code == 200, uncertain.text
+        latest = client.get(url).json()
+        assert latest["revision_id"] != cleared_revision
+        assert latest["content"]["proposed_rules"][0]["components"][0]["expression"] == component["expression"]
+        assert latest["content"]["proposed_rules"][0]["components"][0]["source_scope_review_ref"] != component["source_scope_review_ref"]
+        assert len(reader.prompts) == 2
+        from app.storage.repositories import ProtocolDraftRevisionRepository
+        with app.state.session_factory() as session:
+            historical = ProtocolDraftRevisionRepository(session).get(cleared_revision)
+            assert historical.content.model_dump(mode="json") == cleared_content
+
+
+def test_scope_request_cannot_be_disguised_as_clarification(build_app):
+    app = build_app(run_runner=False)
+    with TestClient(app) as client:
+        job_id = _create_protocol_job(client, key="parent-scope-invalid-feedback")
+        _seed_review_job(app, job_id, wait_at="await_review")
+        url = f"/api/v2/protocol/deconstructions/{job_id}/draft"
+        before = client.get(url).json()
+        response = client.post(url + "/feedback", json={
+            "expected_revision_id": before["revision_id"], "feedback_kind": "clarification",
+            "feedback_note": "只核对标题。", "target_rule_code": "IN-01", "review_parent_scope": True,
+        })
+        assert response.status_code == 409
+        assert response.json()["error"]["code"] == "SCOPE_REVIEW_REQUEST_INVALID"
+        assert client.get(url).json()["revision_id"] == before["revision_id"]
+
+
 def test_save_draft_is_idempotent(client, build_app) -> None:
     app = build_app()
     with TestClient(app) as test_client:
@@ -348,9 +550,10 @@ def test_publish_first_project(client, build_app) -> None:
         job_id = _create_protocol_job(test_client, key="publish-1")
         _seed_review_job(app, job_id, wait_at="publish")
         draft = test_client.get(f"/api/v2/protocol/deconstructions/{job_id}/draft").json()
+        payload = _joint_publish_payload(app, job_id, key="pub-key-1")
         response = test_client.post(
             f"/api/v2/protocol/deconstructions/{job_id}/publish",
-            json={"idempotency_key": "pub-key-1", "actor": "医学监查员"},
+            json=payload,
         )
         assert response.status_code == 200, response.text
         body = response.json()
@@ -360,7 +563,7 @@ def test_publish_first_project(client, build_app) -> None:
 
         replay = test_client.post(
             f"/api/v2/protocol/deconstructions/{job_id}/publish",
-            json={"idempotency_key": "pub-key-1", "actor": "医学监查员"},
+            json=payload,
         )
         assert replay.status_code == 200
         assert replay.json()["replay"] is True
@@ -622,7 +825,7 @@ def test_official_projects_list_and_version_read_after_publish(client, build_app
         draft = test_client.get(f"/api/v2/protocol/deconstructions/{first}/draft").json()
         published = test_client.post(
             f"/api/v2/protocol/deconstructions/{first}/publish",
-            json={"idempotency_key": "projects-read-pub", "actor": "医学监查员"},
+            json=_joint_publish_payload(app, first, key="projects-read-pub"),
         )
         assert published.status_code == 200, published.text
         project_id = published.json()["project_id"]
@@ -654,7 +857,7 @@ def test_redeconstruction_start_with_project_id_persists_target(client, build_ap
         draft = test_client.get(f"/api/v2/protocol/deconstructions/{first}/draft").json()
         published = test_client.post(
             f"/api/v2/protocol/deconstructions/{first}/publish",
-            json={"idempotency_key": "redo-persist-pub", "actor": "医学监查员"},
+            json=_joint_publish_payload(app, first, key="redo-persist-pub"),
         )
         project_id = published.json()["project_id"]
 
@@ -692,7 +895,7 @@ def test_feedback_redeconstruction_api_starts_without_upload(build_app) -> None:
         _seed_review_job(app, first, wait_at="publish")
         published = test_client.post(
             f"/api/v2/protocol/deconstructions/{first}/publish",
-            json={"idempotency_key": "feedback-formal-pub", "actor": "医学监查员"},
+            json=_joint_publish_payload(app, first, key="feedback-formal-pub"),
         )
         assert published.status_code == 200, published.text
         project_id = published.json()["project_id"]
@@ -717,10 +920,7 @@ def test_feedback_redeconstruction_api_starts_without_upload(build_app) -> None:
         assert comparison.json()["diff"]["modified_rule_codes"] == []
         republished = test_client.post(
             f"/api/v2/protocol/deconstructions/{job_id}/publish",
-            json={
-                "idempotency_key": "feedback-formal-republish",
-                "actor": "医学监查员",
-            },
+            json=_joint_publish_payload(app, job_id, key="feedback-formal-republish"),
         )
         assert republished.status_code == 200, republished.text
         assert republished.json()["rule_set_revision"] == 2
@@ -826,7 +1026,7 @@ def test_redeconstruction_confirm_identity_lineage_mismatch_rejected(
         draft = test_client.get(f"/api/v2/protocol/deconstructions/{first}/draft").json()
         published = test_client.post(
             f"/api/v2/protocol/deconstructions/{first}/publish",
-            json={"idempotency_key": "redo-lineage-pub", "actor": "医学监查员"},
+            json=_joint_publish_payload(app, first, key="redo-lineage-pub"),
         )
         project_id = published.json()["project_id"]
 
@@ -876,7 +1076,7 @@ def test_draft_comparison_endpoint_returns_baseline_candidate_and_diff(
         draft = test_client.get(f"/api/v2/protocol/deconstructions/{first}/draft").json()
         published = test_client.post(
             f"/api/v2/protocol/deconstructions/{first}/publish",
-            json={"idempotency_key": "compare-api-pub", "actor": "医学监查员"},
+            json=_joint_publish_payload(app, first, key="compare-api-pub"),
         )
         assert published.status_code == 200, published.text
         project_id = published.json()["project_id"]

@@ -328,6 +328,26 @@ class ProtocolControlAgentCallError(RuntimeError):
         super().__init__(message)
 
 
+def protocol_control_call_failure_code(exc: BaseException) -> str | None:
+    """Retain terminal causes across the adapter's explicit exception wrapper."""
+    from app.llm.logical_call_budget import LogicalCallBudgetExhausted
+
+    current = exc
+    seen = set()
+    uncertain = False
+    budget_exhausted = False
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, ProtocolControlModelIdentityError):
+            return "MODEL_IDENTITY_INVALID"
+        budget_exhausted |= isinstance(current, LogicalCallBudgetExhausted)
+        uncertain |= bool(getattr(current, "uncertain_completion", False))
+        current = current.__cause__
+    if budget_exhausted:
+        return "LOGICAL_BUDGET_EXHAUSTED"
+    return "FLOW_COMPLETION_UNCERTAIN" if uncertain else None
+
+
 class _ProtocolControlRequestTimeout(RuntimeError):
     """The client timed out while the serial local service may still be working."""
 
@@ -704,12 +724,32 @@ class OpenAICompatibleProtocolControlAgentTransport:
         ):
             # Generic gateway aliases do not prove the configured route.
             # Probe without protocol or subject material first.
-            response = self._client.chat.completions.create(
-                model=self._model,
-                messages=[{"role": "user", "content": "只回答：好"}],
-                max_tokens=32,
-                stream=False,
-            )
+            kwargs = dict(model=self._model,
+                          messages=[{"role": "user", "content": "只回答：好"}],
+                          max_tokens=32, stream=False)
+            started = monotonic()
+            response = None
+            error_kind = None
+            try:
+                self._reserve_logical_request(kwargs)
+                response = self._client.chat.completions.create(**kwargs)
+            except Exception as exc:
+                error_kind = type(exc).__name__
+                raise
+            finally:
+                usage = getattr(response, "usage", None)
+                if hasattr(usage, "model_dump"):
+                    usage = usage.model_dump(mode="json")
+                self._save_call_receipt({
+                    "call_role": "identity_probe", "requested_model": self._model,
+                    "requested_max_tokens": 32,
+                    "request_sha256": hashlib.sha256(json.dumps(kwargs, ensure_ascii=False,
+                        sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest(),
+                    "request_id": getattr(response, "id", None),
+                    "reported_model": getattr(response, "model", None),
+                    "usage": usage, "error_kind": error_kind,
+                    "elapsed_seconds": monotonic() - started,
+                })
             reported = getattr(response, "model", None)
             if isinstance(reported, str) and reported.strip():
                 return [reported.strip()]
@@ -792,22 +832,46 @@ class OpenAICompatibleProtocolControlAgentTransport:
             }
         return kwargs
 
+    def bind_logical_call_budget(self, budget) -> None:
+        """One owner/thread budget covers all readers, authors and recoveries."""
+        if budget is not None and self._max_retries != 0:
+            raise ValueError("累计请求预算不允许 SDK 隐式重试")
+        self._receipt_local.call_budget = budget
+        self._receipt_local.budget_request_sha256 = None
+
+    def _reserve_logical_request(self, kwargs: dict[str, Any]) -> None:
+        budget = getattr(self._receipt_local, "call_budget", None)
+        if budget is None:
+            return
+        digest = hashlib.sha256(json.dumps(
+            kwargs, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        self._receipt_local.budget_request_sha256 = None
+        budget.reserve(request_sha256=digest, max_tokens=kwargs["max_tokens"])
+        self._receipt_local.budget_request_sha256 = digest
+
     @staticmethod
-    def _stream_completion(client: Any, kwargs: dict[str, Any]) -> Any:
+    def _stream_completion(client: Any, kwargs: dict[str, Any], *, reserve_request=None) -> Any:
         """全模型统一 streaming（2026-09-19 用户指令）：云路由器对非流式长生成
         有队列等待上限（OmniRoute 504）；流式按块保活即不受限。重组为下游
-        已知的非流式响应对象；stream_options 不被支持时自动降级重试。"""
+        已知的非流式响应对象；仅参数拒绝响应可去掉 stream_options 重试。"""
         from types import SimpleNamespace
 
         kwargs = dict(kwargs)
         kwargs["stream"] = True
         kwargs.setdefault("stream_options", {"include_usage": True})
         try:
+            if reserve_request is not None:
+                reserve_request(kwargs)
             stream = client.chat.completions.create(**kwargs)
         except Exception as exc:
-            if "stream_options" not in str(exc):
+            if (protocol_control_call_failure_code(exc) is not None
+                    or getattr(exc, "status_code", None) not in {400, 422}
+                    or "stream_options" not in str(exc)):
                 raise
             kwargs.pop("stream_options", None)
+            if reserve_request is not None:
+                reserve_request(kwargs)
             stream = client.chat.completions.create(**kwargs)
         content_parts: list[str] = []
         finish_reason: str | None = None
@@ -953,9 +1017,10 @@ class OpenAICompatibleProtocolControlAgentTransport:
             }
             started = monotonic()
             try:
-                completion = self._stream_completion(
-                    self._client, kwargs,
-                )
+                budget = getattr(self._receipt_local, "call_budget", None)
+                completion = (self._stream_completion(
+                    self._client, kwargs, reserve_request=self._reserve_logical_request,
+                ) if budget is not None else self._stream_completion(self._client, kwargs))
             except _ProtocolControlStreamInterrupted as exc:
                 self._save_call_receipt({
                     **request_metrics, "elapsed_seconds": monotonic() - started,
@@ -1081,6 +1146,11 @@ class OpenAICompatibleProtocolControlAgentTransport:
         )
 
     def _save_call_receipt(self, receipt: dict[str, object]) -> None:
+        budget = getattr(self._receipt_local, "call_budget", None)
+        if budget is not None:
+            receipt["logical_call_budget"] = budget.snapshot()
+            receipt["budget_request_sha256"] = getattr(self._receipt_local, "budget_request_sha256", None)
+            receipt["request_reserved"] = receipt["budget_request_sha256"] is not None
         if not hasattr(self._receipt_local, "items"):
             self._receipt_local.items = []
         self._receipt_local.items.append(receipt)

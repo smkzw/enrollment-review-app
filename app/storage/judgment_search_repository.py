@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from pydantic import ValidationError
 
 from app.domain.contracts.facts import FactAuthority
 from app.domain.contracts.judgment_search import JudgmentSearchCoverageSummary
@@ -22,6 +23,7 @@ from app.storage.codecs import (
     decode_contract,
     encode_contract,
     to_utc_naive,
+    verify_payload_sha256,
 )
 from app.storage.judgment_search_models import JudgmentSearchSummaryORM
 from app.storage.repositories import (
@@ -31,7 +33,7 @@ from app.storage.repositories import (
     _flush_guarded,
     _get_required,
 )
-from app.storage.models import ReviewEpisodeRecord, SubjectRecord
+from app.storage.models import JobRecord, ReviewEpisodeRecord, SubjectRecord
 from app.storage.evidence_models import EvidenceSnapshotV2Record
 from app.storage.ocr_models import EvidenceProcessingRevisionRecord
 
@@ -160,6 +162,8 @@ class JudgmentSearchSummaryRepository:
             select(JudgmentSearchSummaryORM)
             .where(
                 JudgmentSearchSummaryORM.review_episode_id == authority.review_episode_id,
+                JudgmentSearchSummaryORM.subject_id == authority.subject_id,
+                JudgmentSearchSummaryORM.evidence_snapshot_id == authority.evidence_snapshot_v2_id,
                 JudgmentSearchSummaryORM.evidence_processing_revision_id
                 == authority.complete_processing_revision_id,
                 JudgmentSearchSummaryORM.rule_set_id == authority.rule_set_id,
@@ -175,6 +179,7 @@ class JudgmentSearchSummaryRepository:
             statement = statement.where(JudgmentSearchSummaryORM.job_id == job_id)
         rows = self.session.scalars(statement).all()
         latest: dict[str, JudgmentSearchSummaryEntry] = {}
+        jobs = None
         for row in rows:  # 排序后同 requirement 的最后一行即最新
             summary = self._decode(row)
             # Existing IDs bind the full authority, including fields absent from SQL columns.
@@ -183,6 +188,11 @@ class JudgmentSearchSummaryRepository:
                 _summary_identity(authority, payload),
                 _summary_identity(authority, payload, job_id=row.job_id),
             }:
+                if jobs is None:
+                    jobs = {job.job_id: job for job in self.session.scalars(
+                        select(JobRecord).where(JobRecord.job_id.in_({item.job_id for item in rows}))
+                    )}
+                self._require_other_authority(row, payload, authority, jobs.get(row.job_id))
                 continue
             latest[row.requirement_id] = JudgmentSearchSummaryEntry(
                 summary_id=row.summary_id,
@@ -191,6 +201,30 @@ class JudgmentSearchSummaryRepository:
                 summary=summary,
             )
         return latest
+
+    def _require_other_authority(self, row, payload, authority: FactAuthority, job) -> None:
+        """A different episode revision needs provenance, not a corrupt-head fallback."""
+        if job is None or job.job_type != "judgment_search":
+            raise InvalidReferenceError("书面判断核查记录身份不一致，且无法核验原任务范围")
+        material = verify_payload_sha256(job.payload_json, job.payload_sha256)
+        try:
+            original = FactAuthority.model_validate(material.get("authority"))
+        except ValidationError as exc:
+            raise InvalidReferenceError("书面判断核查的原任务缺少有效资料范围") from exc
+        scope_fields = {
+            "subject_id": "subject_id", "review_episode_id": "review_episode_id",
+            "evidence_snapshot_id": "evidence_snapshot_v2_id",
+            "evidence_processing_revision_id": "complete_processing_revision_id",
+            "rule_set_id": "rule_set_id", "rule_set_revision": "rule_set_revision",
+        }
+        if (original == authority or any(
+            getattr(row, column) != getattr(original, field)
+            for column, field in scope_fields.items()
+        ) or row.summary_id not in {
+            _summary_identity(original, payload),
+            _summary_identity(original, payload, job_id=row.job_id),
+        }):
+            raise InvalidReferenceError("书面判断核查记录与原任务身份不一致，未退回旧记录")
 
     def _decode(self, row: JudgmentSearchSummaryORM) -> JudgmentSearchCoverageSummary:
         summary = decode_contract(

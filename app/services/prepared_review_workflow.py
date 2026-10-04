@@ -122,11 +122,12 @@ class PreparedReviewContinuation:
         context = ReviewContextV2Repository(session).get(payload["review_context_id"])
         if context.context_sha256 != payload.get("review_context_sha256"):
             raise ScopeViolationError("本次审核的资料记录已变化，未自动续算")
+        FactAuthorityValidator(session).validate(context.authority)
         if (
             current_review_clinical_material_sha256(session, context.authority)
             != frozen_review_clinical_material_sha256(context)
         ):
-            raise ScopeViolationError("当前病史已经更新，请重新准备本次审核")
+            raise ScopeViolationError("当前病史或书面判断核查已经更新，请重新准备本次审核")
         publication = context.clause_pack.control_publication
         if payload.get("includes_controls") is not bool(publication is not None and publication.catalog.controls):
             raise ScopeViolationError("本次审核的方案要求范围不完整")

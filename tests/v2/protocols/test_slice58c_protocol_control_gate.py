@@ -128,7 +128,7 @@ def test_batch_candidate_diagnostics_collect_independent_first_errors(monkeypatc
     batch = SimpleNamespace(
         batch_id="batch", coverage_manifest_id="manifest",
         owned_structure_unit_ids=["u1", "u2"], owned_source_span_ids=["s1", "s2"],
-        owned_units=[], known_official_targets=[], known_procedure_targets=[],
+        owned_units=[], context_units=[], known_official_targets=[], known_procedure_targets=[],
         known_workflow_stage_targets=[],
     )
     output = SimpleNamespace(
@@ -1260,6 +1260,36 @@ def test_review_guidance_may_directly_verify_source_backed_rest() -> None:
             )
         ],
     )
+
+
+@pytest.mark.parametrize("extra_collection", [False, True])
+def test_review_guidance_collection_keeps_clause_boundaries(extra_collection: bool) -> None:
+    excerpt = "收集检查结果。"
+    expression = _explicit_obligation_dnf(atoms=[_obligation(
+        kind=ControlObligationKind.COMPLETE_OR_VERIFY,
+        statement=excerpt,
+        source_excerpts=[excerpt],
+    )])
+    guidance = "核对是否已收集检查结果；原文未限定资料种类。"
+    if extra_collection:
+        guidance += "另外收集既往病史资料。"
+    kwargs = dict(
+        entity_id="candidate-collection",
+        units=[_paragraph_unit("su-control", "span:control", 1, excerpt)],
+        obligation_expression=expression,
+        bindings=[ReviewNodeBinding(
+            workflow_stage_id="stage:screening:1",
+            review_stage=ReviewStage.SCREENING,
+            role=ReviewNodeRole.DECIDE_AT_NODE,
+            guidance=guidance,
+        )],
+    )
+    if extra_collection:
+        with pytest.raises(ProtocolControlGateError) as error:
+            _check_review_guidance_action_fidelity(**kwargs)
+        assert error.value.code == "REVIEW_GUIDANCE_ACTION_INVENTED"
+    else:
+        _check_review_guidance_action_fidelity(**kwargs)
 
 
 def test_minimum_evidence_cannot_harden_recommended_rest() -> None:
@@ -4692,6 +4722,34 @@ def test_current_deterministic_atom_cannot_carry_future_period() -> None:
             flat_atoms=[atom],
             global_time_constraint=None,
         )
+
+
+@pytest.mark.parametrize("cue,period", [
+    ("试验过程中", "study_period"), ("研究过程中", "study_period"),
+    ("治疗过程中", "treatment_period"), ("用药过程中", "treatment_period"),
+    ("给药过程中", "treatment_period"),
+])
+def test_process_period_cues_use_the_same_contract_in_control_consumers(cue, period):
+    excerpt = f"{cue}必须记录专项评估"
+    expression = _explicit_obligation_dnf(atoms=[_obligation(
+        kind=ControlObligationKind.MUST_PROFESSIONAL_ASSESSMENT,
+        statement="必须记录专项评估", source_excerpts=[excerpt],
+        prospective_period=ProspectivePeriod(period=period),
+    )])
+    _check_time_constraints(entity_id="control:process-period", texts=[excerpt],
+                            expressions=(expression,), flat_atoms=(), global_time_constraint=None)
+    wrong = "treatment_period" if period == "study_period" else "study_period"
+    expression.groups[0].atoms[0].prospective_period = ProspectivePeriod(period=wrong)
+    with pytest.raises(ProtocolControlGateError):
+        _check_time_constraints(entity_id="control:process-period", texts=[excerpt],
+                                expressions=(expression,), flat_atoms=(), global_time_constraint=None)
+
+
+@pytest.mark.parametrize("text", ["研究过程说明", "试验过程结束后", "治疗过程报告", "给药程序说明"])
+def test_process_metadata_does_not_invent_a_named_protocol_period(text):
+    from app.protocols.source_time_fragments import STUDY_PERIOD_SOURCE_PATTERN, TREATMENT_PERIOD_SOURCE_PATTERN
+    assert not STUDY_PERIOD_SOURCE_PATTERN.search(text)
+    assert not TREATMENT_PERIOD_SOURCE_PATTERN.search(text)
 
 
 def test_table_row_partial_source_closure_is_rejected() -> None:

@@ -25,6 +25,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from pathlib import Path
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -58,6 +59,8 @@ from app.domain.gates.integrity import (
     build_service_command_event,
 )
 from app.domain.publication import canonical_hash
+from app.evidence.artifacts import ArtifactStore
+from app.storage.config import DB_FILENAME, resolve_data_paths
 from app.services.protocol_integrity_payload import protocol_integrity_payload
 from app.projections.evidence_expectation_templates import (
     project_evidence_expectation_templates,
@@ -358,6 +361,13 @@ class ProtocolPublicationService:
             declared_diff = ProtocolDraftDiffDeclaration(
                 **revision.diff.model_dump(mode="python")
             )
+        scope_reader = None
+        if any(component.source_scope_review_ref for rule in draft.proposed_rules for component in rule.components):
+            database = session.get_bind().engine.url.database
+            if not database or Path(database).name != DB_FILENAME:
+                raise ProtocolPublicationError("source_scope_store_missing", "总标题核对记录未绑定当前数据目录，不能发布。")
+            paths = resolve_data_paths(str(Path(database).resolve().parent))
+            scope_reader = ArtifactStore(paths).read
         gate_result = self.gate.evaluate(
             request.source_input,
             draft,
@@ -365,6 +375,7 @@ class ProtocolPublicationService:
             interpretation_conflicts=request.interpretation_conflicts,
             previous_draft=previous_draft,
             declared_diff=declared_diff,
+            **({"scope_review_reader": scope_reader} if scope_reader is not None else {}),
         )
         if not gate_result.publishable:
             raise PublicationGateError(gate_result)

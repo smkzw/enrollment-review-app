@@ -206,65 +206,6 @@ def _strip_json_fences(text: str) -> str:
     return body.strip()
 
 
-def _repair_missing_unresolved_reasons(data):
-    """确定性格式修复：judgment 未通过/未核实但漏填 unresolved_reasons 时，
-    从其自有 explanation 提取首句作为原因；不改判断、不改其他字段。
-    无 explanation 可提取时保持原样交由合同报错。"""
-    if not isinstance(data, dict):
-        return data
-    results = data.get("results")
-    if not isinstance(results, list):
-        return data
-    for item in results:
-        if not isinstance(item, dict):
-            continue
-        judgment = item.get("judgment") if "judgment" in item else item
-        if not isinstance(judgment, dict):
-            continue
-        reasons = judgment.get("unresolved_reasons")
-        if reasons:
-            continue
-        explanation = judgment.get("explanation")
-        if isinstance(explanation, str) and explanation.strip():
-            head = explanation.strip().split("；", 1)[0].split(";", 1)[0].split("。", 1)[0]
-            head = head.strip().rstrip("，,")
-            if head:
-                judgment["unresolved_reasons"] = [head[:120]]
-    return data
-
-
-
-
-def _repair_enum_values(data):
-    """确定性修复模型输出中的无效枚举值，映射到最接近的安全值。
-
-    LLM偶发输出超出schema枚举的值（如"not_mentioned"而非"compatible"）。
-    将无效值映射到"uncertain"（最保守的回退），并在note中标注。
-    """
-    if not isinstance(data, dict):
-        return
-    _ENUM_FIELDS = {
-        "source_admissibility": {"admissible", "weak", "unresolved"},
-        "object_match": {"supported", "uncertain", "rejected"},
-        "attribute_match": {"direct", "derivation_operand", "context_only", "uncertain"},
-        "denial_scope": {"compatible", "uncertain", "incompatible"},
-        "temporal_role": {"event_date", "record_date", "reference_date", "not_applicable", "uncertain", "mismatched"},
-        "direct_operand_usable": {"usable", "not_usable", "unresolved"},
-    }
-    # 不同字段的安全回退值不同
-    _FALLBACK = {
-        "direct_operand_usable": "unresolved",
-    }
-    for result in data.get("results", []):
-        judgment = result.get("judgment") if "judgment" in result else result
-        if not isinstance(judgment, dict):
-            continue
-        for field, valid_values in _ENUM_FIELDS.items():
-            value = judgment.get(field)
-            if value is not None and value not in valid_values:
-                judgment[field] = _FALLBACK.get(field, "uncertain")
-
-
 def validate_binding_qualification_payload(
     pairs: list[BindingQualificationPairContext],
     raw_text: str,
@@ -274,10 +215,7 @@ def validate_binding_qualification_payload(
     expected = set(batch.pair_ids)
     if {item.pair_id for item in pairs} != expected:
         raise ValueError("资格校验配对必须与分批一致")
-    parsed = _repair_missing_unresolved_reasons(
-        json.loads(_strip_json_fences(raw_text), object_pairs_hook=_unique_object),
-    )
-    _repair_enum_values(parsed)
+    parsed = json.loads(_strip_json_fences(raw_text), object_pairs_hook=_unique_object)
     payload = BindingQualificationLanePayload.model_validate(parsed)
     actual = [item.pair_id for item in payload.results]
     if len(actual) != len(set(actual)) or set(actual) != expected:

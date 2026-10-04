@@ -19,6 +19,7 @@ from app.services.review_action_publication import publish_review_actions
 from app.services.review_history_service import get_run
 from app.services.review_method_evidence import read_review_method_approval
 from app.services.review_judgment_provenance import verify_frozen_judgment_search_result
+from app.services.review_context_assembly import require_current_review_clinical_material
 from app.storage.fact_authority import FactAuthorityValidator
 from app.storage.idempotency import IdempotencyConflict, IdempotencyRepository
 from app.storage.repositories import (
@@ -28,7 +29,7 @@ from app.storage.repositories import (
 from app.storage.review_context_repository import ReviewContextV2Repository
 from app.storage.review_control_repository import REVIEW_CONTROL_GATE_NAME, ReviewControlRepository
 
-PUBLICATION_VERSION = "frozen-review-publication/v17"
+PUBLICATION_VERSION = "frozen-review-publication/v18"
 
 
 def publish_frozen_review(
@@ -69,6 +70,7 @@ def publish_frozen_review(
         return prior
     authority = context.authority
     FactAuthorityValidator(session).validate(authority)
+    require_current_review_clinical_material(session, context)
     for search in context.judgment_search_results:
         verify_frozen_judgment_search_result(
             session, artifact_store, authority=authority, frozen=search,

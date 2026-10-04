@@ -19,14 +19,19 @@ from app.domain.contracts.protocol_controls import (
     StructureUnitDispositionKind,
 )
 from app.protocols.protocol_control_gate import _visit_scope_keys
-from app.protocols.procedure_catalog import schedule_column_scope, schedule_row_values
+from app.protocols.procedure_catalog import (
+    _without_display_footnotes,
+    schedule_column_scope,
+    schedule_row_values,
+)
 from app.protocols.source_time_fragments import intraday_time_fragments
 
 
 SOURCE_INTERPRETATION_VERSION = "phase5/control-source-interpretation/v11"
-SOURCE_INTERPRETATION_PROMPT_VERSION = "phase5/control-source-prompt/v19"
+SOURCE_INTERPRETATION_PROMPT_VERSION = "phase5/control-source-prompt/v20"
 SOURCE_QUOTE_RECOVERY_VERSION = "phase5/source-quote-local-recovery/v2"
 SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v23"
+SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v3"
 
 
 _DAY_WEEK_WINDOW_RE = re.compile(
@@ -118,16 +123,27 @@ _EXPLICIT_TIME_FRAGMENT_RE = re.compile(
 )
 
 
+def _scope_carries_stage_fragment(statement: "SourceStatement", fragment: str) -> bool:
+    """A sourced stage label may live in scope; clocks and windows may not."""
+    return bool(
+        re.fullmatch(r"(?:筛选|导入|基线|治疗|研究|试验|随访)期(?:间|内)?", fragment)
+        and fragment in normalize_source_excerpt(statement.scope_quote or "")
+        and fragment in normalize_source_excerpt(statement.affected_stage or "")
+    )
+
+
 def _unreported_time_fragments(statement: "SourceStatement") -> list[str]:
     reported = [normalize_source_excerpt(word) for word in statement.time_words]
     fragments = {
         normalize_source_excerpt(match.group())
-        for source in (statement.quoted_text, statement.scope_quote or "")
+        for is_scope, source in ((False, statement.quoted_text), (True, statement.scope_quote or ""))
         for match in _EXPLICIT_TIME_FRAGMENT_RE.finditer(source)
         if not any(
             title.start() <= match.start() < title.end()
             for title in re.finditer(r"《[^》]*》", source)
         )
+        if not (is_scope
+                and _scope_carries_stage_fragment(statement, normalize_source_excerpt(match.group())))
     }
     fragments.update(fragment for source in (statement.quoted_text, statement.scope_quote or "")
                      for fragment in intraday_time_fragments(source))
@@ -1176,6 +1192,11 @@ def build_source_target_review_prompt(
         "不能为了让流程通过而添加无源要求。"
         "若只因未找到条款或不确定用途，选 unresolved，不得当作背景。"
         "同段已有候选并不等于所有动作已覆盖；目录名称相似也不等于时间、条件、例外都已覆盖。"
+        "只引用目录名称或名称的一部分，只能证明项目关联，不能证明具体操作已覆盖。"
+        "除非宿主的 label_action_supported_target_ids 已提供该动作的来源依据，"
+        "完整覆盖须引用目标来源中真正承载操作的原文，而不是只截取项目名称。"
+        "目录只有项目名称而无动作依据时，原文动作明确则选 additional_requirement；"
+        "原文自身无法核清才选 unresolved；不得把系统无法证明对应关系说成受试者缺记录。"
         "完整覆盖必须从本陈述截出连续的 source_action_excerpt，并从目标的 source_excerpts 截出连续的"
         " target_action_excerpt。"
         "source_action_excerpt 必须是本条 quoted_text 内的连续原文，不得为了补齐医学条件而拼接"
@@ -1232,6 +1253,15 @@ def build_source_target_review_prompt(
         "不得返回同单元其他陈述或上一轮整批清单；items 数量必须与本次序号数量相同。\n"
         f"待核陈述：{json.dumps(source, ensure_ascii=False, sort_keys=True)}\n"
         f"冻结已有目标：{json.dumps(targets, ensure_ascii=False, sort_keys=True)}\n"
+        "名称引用的动作依据：" + json.dumps([
+            {"statement_index": index, "label_action_supported_target_ids": [
+                target.official_code if hasattr(target, "official_code") else target.catalog_item_id
+                for target in [*batch.known_official_targets, *batch.known_procedure_targets]
+                if target_action_established(batch, interpretation.statements[index], target)
+                and (comparison_target_id is None or comparison_target_id == (
+                    target.official_code if hasattr(target, "official_code") else target.catalog_item_id))
+            ]} for index in indexes
+        ], ensure_ascii=False, sort_keys=True) + "\n"
         f"只读来源线索：{json.dumps(read_only_sources, ensure_ascii=False, sort_keys=True)}"
     )
 
@@ -1495,6 +1525,12 @@ def validate_source_target_review(
                 target_action in normalize_source_excerpt(excerpt) for excerpt in target_excerpts
             ):
                 reject(item, "TARGET_ACTION_UNGROUNDED", "target_action_excerpt", f"第{item.statement_index}条目标动作缺少原文摘录")
+            if (covered and "action" in statement.decision_functions
+                    and normalize_source_excerpt(_without_display_footnotes(item.target_action_excerpt or ""))
+                    in normalize_source_excerpt(_without_display_footnotes(target.label))
+                    and not target_action_established(batch, statement, target)):
+                reject(item, "TARGET_ACTION_LABEL_ONLY_UNPROVEN", "target_action_excerpt",
+                       "目录名称只证明项目关联，尚未证明本条操作已被覆盖；须核对动作原文或保留增量要求")
         source_time = normalize_source_excerpt(item.source_time_excerpt or "")
         target_time = normalize_source_excerpt(item.target_time_excerpt or "")
         unit_text = normalize_source_excerpt(owned[statement.structure_unit_id].excerpt)
@@ -1756,19 +1792,73 @@ def normalize_source_excerpt(value: str) -> str:
     ).split())
 
 
+def target_action_established(batch, statement, target) -> bool:
+    """Proof for a label-only link, not a general semantic equivalence test."""
+    source = normalize_source_excerpt(statement.quoted_text).rstrip("。；;.!！?？")
+    required = set(batch.owned_required_action_kinds_by_structure_unit_id.get(
+        statement.structure_unit_id, []))
+    supported = set(getattr(target, "covered_action_kinds", []))
+    return any(source and source in normalize_source_excerpt(excerpt or "")
+               for excerpt in target.source_excerpts) or bool(required and required <= supported)
+
+
+def source_requires_temporal_resolution(statement) -> bool:
+    """A named visit is not a duration, frequency, or continuing obligation."""
+    source = normalize_source_excerpt(" ".join(filter(None, (
+        statement.quoted_text, statement.scope_quote, *statement.time_words,
+    ))))
+    return bool(
+        intraday_time_fragments(source)
+        or re.search(r"\d+(?:天|日|周|月|年)(?:内|以上|以下)?", source)
+        or re.search(r"(?:W|D)\d+[~～至-](?:W|D)?\d+", source)
+        or re.search(r"整个|全程|持续|连续|继续", source)
+        or re.search(r"期(?:、|和|及|与).{0,30}期", source)
+        or re.search(r"每(?:日|天|周|月)(?:\d+|[一二三四五六七八九十]+)次", source)
+    )
+
+
+def source_visit_scope_matches(scope: str, frozen_visit: str) -> bool:
+    # A day at the edge of a visit window is not the entire window.
+    visit_codes = re.compile(r"(?:W|D)-?\d+(?:[~～至-](?:W|D)?-?\d+)?", re.IGNORECASE)
+    scope_codes = {match.group().upper() for match in visit_codes.finditer(normalize_source_excerpt(scope))}
+    frozen_codes = {match.group().upper() for match in visit_codes.finditer(normalize_source_excerpt(frozen_visit))}
+    if not scope_codes <= frozen_codes:
+        return False
+    parts = [normalize_source_excerpt(part) for part in re.split(r"[（）()，,；;：:]", scope)
+             if normalize_source_excerpt(part)]
+    return bool(parts) and all(
+        part in frozen_visit or (
+            re.fullmatch(r"[^、，和及与/]+期内", part) is not None
+            and part[:-1] in frozen_visit
+        ) for part in parts
+    )
+
+
+def source_has_single_visit_anchor(statement) -> bool:
+    if len(statement.time_words) != 1 or source_requires_temporal_resolution(statement):
+        return False
+    word = normalize_source_excerpt(statement.time_words[0])
+    return bool(word) and (
+        normalize_source_excerpt(statement.quoted_text).startswith(word)
+        or normalize_source_excerpt(statement.scope_quote or "") == word
+        or (word in normalize_source_excerpt(statement.scope_quote or "")
+            and bool(statement.affected_stage)
+            and normalize_source_excerpt(statement.affected_stage) in normalize_source_excerpt(
+                statement.scope_quote or "")
+            and not _unreported_time_fragments(statement))
+    )
+
+
 def simple_visit_action_preserves_time(batch, statement, candidate) -> bool:
-    """A named visit scope may be carried by the bound stage, without a date window."""
+    """Only the complete frozen visit scope may be carried by the bound stage."""
 
     if (statement.force not in {"required", "descriptive"}
             or "action" not in statement.decision_functions
-            or len(statement.time_words) != 1):
+            or statement.exception_words or statement.unresolved
+            or not source_has_single_visit_anchor(statement)):
         return False
-    word = normalize_source_excerpt(statement.time_words[0])
+    word = normalize_source_excerpt(statement.scope_quote or statement.time_words[0])
     source = normalize_source_excerpt(statement.quoted_text)
-    scope = normalize_source_excerpt(statement.scope_quote or "")
-    if (not re.fullmatch(r"[^\d、，和及与/]+期内", word)
-            or not (source.startswith(word) or scope == word)):
-        return False
     stages = {item.workflow_stage_id: item for item in batch.known_workflow_stage_targets}
     for node in candidate.review_node_bindings:
         stage = stages.get(node.workflow_stage_id)
@@ -1777,7 +1867,7 @@ def simple_visit_action_preserves_time(batch, statement, candidate) -> bool:
         frozen_visit = normalize_source_excerpt(" ".join(filter(None, (
             stage.display_name, stage.visit_instance, stage.visit_window,
         ))))
-        if word[:-1] in frozen_visit:
+        if source_visit_scope_matches(word, frozen_visit):
             return any(
                 atom.kind == ControlObligationKind.COMPLETE_OR_VERIFY
                 and source in normalize_source_excerpt(atom.statement)
@@ -1969,7 +2059,7 @@ def validate_source_interpretation(
             if not any(
                 affected in normalize_source_excerpt(part)
                 for part in item.time_words if normalize_source_excerpt(part)
-            ):
+            ) and not (scope and affected in scope and not _unreported_time_fragments(item)):
                 reject("SOURCE_STAGE_TIME_MISSING", "明确阶段范围不得从时间措辞中遗漏",
                        "time_words", "correct_source_scope")
         for time_quote in item.time_words:
@@ -2087,7 +2177,9 @@ def build_source_interpretation_prompt(batch: ProtocolControlDispositionBatch) -
         "若本句另有明确的相对时点（例如某阶段结束后），而段首仅交代前一阶段的背景，"
         "保留 scope_quote 供理解，但 time_words 只列本句真正约束动作的时点；"
         "不要把同一动作同时标为前一阶段期间和该阶段结束后。"
-        "affected_stage 只可逐字取自本条或共同范围，且须在 time_words 中有对应原文；否则填 null。"
+        "affected_stage 只可逐字取自本条或共同范围；访视时期名称可以由已核 scope_quote 承载，"
+        "不必在 time_words 中重复整段标题。日期窗口、时长、频次、前后锚点和小时分钟仍须逐项保留；"
+        "没有原文依据则 affected_stage 填 null，不得猜测。"
         "时间、例外、阶段有歧义时保留 unresolved，"
         "表格项目行的 X 应按 member_cell_paths 列位置与同表前置访视行核对，"
         "不可按压缩后的 X 文本顺序推断访视；无法对应时明确写 unresolved。"

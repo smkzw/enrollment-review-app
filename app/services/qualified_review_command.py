@@ -16,7 +16,9 @@ from app.domain.publication import canonical_hash
 from app.services.binding_qualification_support import verify_completed_binding_qualification
 from app.services.frozen_review_calculation import EVALUATOR_VERSION
 from app.services.frozen_review_publication import PUBLICATION_VERSION, publish_frozen_review
-from app.services.review_method_evidence import read_review_method_approval, require_evaluated_binding_method
+from app.services.review_method_evidence import (
+    read_binding_evaluation, read_review_method_approval, require_evaluated_binding_method,
+)
 from app.storage.repositories import (
     AppendRepository, DuplicateRecordError, GATE_RESULT_CONFIG, ScopeViolationError,
 )
@@ -127,6 +129,7 @@ def publish_review_from_qualified_jobs(
         if len(matches) != 1:
             raise ScopeViolationError("采用确认未覆盖本次核对方法")
         digest, manifest = matches[0]
+        manifest = read_binding_evaluation(artifact_store, digest)
         method = require_evaluated_binding_method(manifest, verified, QUALIFIED_BINDING_CONSUMER_ALGORITHM)
         if method.evaluator_version != EVALUATOR_VERSION or method.publication_version != PUBLICATION_VERSION:
             raise ScopeViolationError("采用确认未覆盖当前审核计算版本")

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -43,7 +43,17 @@ from app.domain.interpretation import (
 )
 from app.domain.publication import canonical_hash
 from app.protocols.definition_scope_check import nested_example_definitions
+from app.protocols.official_source_scope import (
+    FrozenParentScopeError,
+    frozen_parent_scope_fragments,
+)
+from app.protocols.official_scope_review import OfficialScopeReviewError, OfficialScopeUnresolvedError, reviewed_scope_stages
 from app.protocols.section_index import formal_source_span_ids
+from app.protocols.source_time_fragments import (
+    STUDY_PERIOD_SOURCE_PATTERN,
+    TREATMENT_PERIOD_SOURCE_PATTERN,
+    frozen_review_stage_aliases,
+)
 
 
 CHECK_NAMES = (
@@ -63,7 +73,7 @@ CHECK_NAMES = (
 
 # 完整性检查结果会写入持久任务检查点。任何会改变问题判定语义的
 # 修改都必须提升此版本，避免旧检查结果在升级后继续冒充当前结论。
-DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/2026-09-30.33"
+DECONSTRUCTION_GATE_VERSION = "protocol-deconstruction-gate/2026-10-04.51"
 
 
 class ProtocolGateIssue(VersionedModel):
@@ -245,6 +255,22 @@ def _predicate_text(predicate) -> str:
     return "\n".join(predicate.exact_source_clauses)
 
 
+def _source_review_stages(fragments: Iterable[str], *, stage_aliases=None) -> set[ReviewStage]:
+    """Detect existing node cues within each source fragment, not across fragments."""
+    stages: set[ReviewStage] = set()
+    for fragment in fragments:
+        text = re.sub(r"\s+", "", fragment)
+        if re.search(r"筛选(?:期|访视)?时", text) or re.search(
+            r"筛选(?:期|访视)?(?:或|和|及|与|、)基线(?:期|访视)?时", text
+        ):
+            stages.add(ReviewStage.SCREENING)
+        if re.search(r"基线(?:期|访视)?时", text):
+            stages.add(ReviewStage.BASELINE)
+        if re.search(r"导入(?:期|访视)?时", text):
+            stages.add(ReviewStage.RUN_IN)
+    return {(stage_aliases or {}).get(stage, stage) for stage in stages}
+
+
 def _shared_period_lead_in(predicate, component_source: str) -> str:
     """Bind ordered exact fragments inside one explicitly named period scope."""
     clauses = predicate.exact_source_clauses
@@ -347,9 +373,12 @@ def _predicate_temporal_text(predicate, component_source: str = "") -> str:
             compact_identity,
         )
     )
-    identity_owns_period = any(
+    identity_owns_period = bool(
+        STUDY_PERIOD_SOURCE_PATTERN.search(identity)
+        or TREATMENT_PERIOD_SOURCE_PATTERN.search(identity)
+    ) or any(
         marker in compact_identity
-        for marker in ("研究期间", "治疗期间", "筛选/导入期", "筛选导入期")
+        for marker in ("筛选/导入期", "筛选导入期")
     )
     identity_quantities = _source_time_quantities(identity)
     parenthetical_quantities = set().union(*(
@@ -398,20 +427,88 @@ def _predicate_temporal_text(predicate, component_source: str = "") -> str:
     return cleaned_source
 
 
+def _source_population_identity(value: str | None) -> str | None:
+    population = (value or "").strip()
+    if population.startswith(("（", "(")):
+        qualifier = re.fullmatch(r"(?:（([^（）()]+)）|\(([^（）()]+)\))", population)
+        if qualifier is None:
+            return None
+        population = next(group for group in qualifier.groups() if group is not None).strip()
+    return population or None
+
+
 def _is_population_scoped_any(expression) -> bool:
     if expression.kind != "logical" or expression.operator != LogicalOperator.ANY:
         return False
     branch_populations: list[frozenset[str]] = []
     for child in expression.children:
-        populations = {
-            predicate.applicable_population
-            for predicate in iter_atomic_predicates(child)
-            if predicate.applicable_population
-        }
+        populations = set()
+        for predicate in iter_atomic_predicates(child):
+            if predicate.applicable_population is None:
+                continue
+            population = _source_population_identity(predicate.applicable_population)
+            if population is None:
+                return False
+            populations.add(population)
         if not populations:
             return False
         branch_populations.append(frozenset(populations))
     return len(set(branch_populations)) == len(branch_populations)
+
+
+def _population_source_bound(expression) -> bool:
+    """Keep an exact qualifier tied to its adjacent calendar window, not a sibling's."""
+    predicate = expression.predicate
+    population = _source_population_identity(predicate.applicable_population)
+    if not population:
+        return False
+
+    def exact_prefix(clause: str) -> bool:
+        stripped = clause.strip()
+        if stripped.startswith(("（", "(")):
+            parenthesis = re.fullmatch(r"(?:（([^（）()]+)）|\(([^（）()]+)\))", stripped)
+            return parenthesis is not None and next(
+                group for group in parenthesis.groups() if group is not None
+            ).strip() == population
+        return stripped.startswith(population)
+
+    has_exact_prefix = any(
+        exact_prefix(clause)
+        for clause in predicate.exact_source_clauses
+    )
+    notes = [
+        match
+        for clause in predicate.exact_source_clauses
+        for match in re.finditer(
+            r"(?P<quantity>\d+\s*(?:个月|星期|天|日|周|月|年|days?|weeks?|months?|years?))"
+            r"\s*(?:内\s*)?[（(](?P<qualifier>[^（）()]+)[）)]",
+            clause, flags=re.IGNORECASE,
+        )
+        if population in match.group("qualifier")
+    ]
+    if not notes:
+        return has_exact_prefix
+    if any(match.group("qualifier").strip() != population for match in notes):
+        return False
+    quantities = [_source_time_quantities(match.group("quantity")) for match in notes]
+    if any(len(quantity) != 1 for quantity in quantities):
+        return False
+    pairs = set().union(*quantities)
+    # A source qualifier is still not an executable applicability decision.
+    # Only a uniquely bound window may enter the existing explicit gap path.
+    constraint = expression.time_constraint
+    if len(pairs) != 1 or constraint is None:
+        return False
+    if constraint.upper_bound is not None:
+        bound = (constraint.upper_bound.value, constraint.upper_bound.unit)
+    elif constraint.upper_bound_days is not None:
+        bound = (constraint.upper_bound_days, TimeUnit.DAY)
+    else:
+        return False
+    source_value, source_unit = next(iter(pairs))
+    return bound == (source_value, source_unit) or (
+        source_unit == TimeUnit.WEEK and bound == (source_value * 7, TimeUnit.DAY)
+    )
 
 
 def _any_branches_preserve_internal_conjunction(expression) -> bool:
@@ -772,10 +869,6 @@ def _branches_have_source_disjunction(expression, source: str) -> bool:
                 _source_separator_in_shared_scope(compact_source, left, right)
                 for left, right in zip(path, path[1:])
             ]
-            raw_separators = [
-                compact_source[left[1]:right[0]]
-                for left, right in zip(path, path[1:])
-            ]
             if any(
                 not right[2].startswith(("以上", "以下", "等于", "更多", "更少"))
                 and (
@@ -790,15 +883,34 @@ def _branches_have_source_disjunction(expression, source: str) -> bool:
                 return True
             # 原文以“满足以下条件之一/任一”显式引导替代关系时，各分支之间的
             # 分隔可以由顿号、逗号或分号承担；分支本身仍必须逐一定名于原文。
-            if _ALTERNATIVE_LEAD_IN.search(compact_source) and any(
-                re.search(r"[、，；。;,\n]", separator)
+            scoped_lead_in = any(
+                (
+                    match.end() <= path[0][0]
+                    and _parenthetical_stack_at(compact_source, path[0][0])[:len(
+                        _parenthetical_stack_at(compact_source, match.start())
+                    )] == _parenthetical_stack_at(compact_source, match.start())
+                    and not re.search(r"[。；;]", compact_source[match.end():path[0][0]])
+                ) or (
+                    match.start() >= path[-1][1]
+                    and _parenthetical_stack_at(compact_source, match.start())
+                    == _parenthetical_stack_at(compact_source, path[-1][0])
+                    and not re.search(r"[、，；。:：;,]", compact_source[path[-1][1]:match.start()])
+                )
+                for match in _ALTERNATIVE_LEAD_IN.finditer(compact_source)
+            )
+            if scoped_lead_in and separators and all(
+                re.fullmatch(r"(?:[、，；;,]|和|及|与)+", separator)
                 for separator in separators
             ):
                 return True
             if quantified_open_list and all(
                 anchor[0] >= open_list + len("包括但不限于")
                 for anchor in path
-            ) and any(re.search(r"[、，；。;,\n]", separator) for separator in raw_separators):
+            # Punctuation must connect every branch at their shared scope;
+            # nested notes and sentence boundaries are not alternative evidence.
+            ) and separators and all(
+                re.fullmatch(r"、+", separator) for separator in separators
+            ):
                 return True
     return False
 
@@ -1038,7 +1150,7 @@ def _substantive_obligation_segments(text: str) -> list[str]:
         r"^根据[^，；。]{1,40}(?:推断|判断|评估)$|"
         r"^(?:整个|全程)?(?:研究|试验|治疗|用药|随访)期间(?:从.{1,80})?$|"
         r"^(?:预筛|筛选|导入|基线|随机|首次给药)(?:期|访视)?(?:时)?"
-        r"(?:(?:和|与|及|或|、)(?:预筛|筛选|导入|基线|随机|首次给药)(?:期|访视)?(?:时)?)+"
+        r"(?:(?:和|与|及|或|、)(?:预筛|筛选|导入|基线|随机|首次给药)(?:期|访视)?(?:时)?)*"
         r"(?:必须|应|需|需要)?(?:满足|符合|具备|达到)(?:以下|下列|下述|如下)"
         r"(?:条件|标准|要求|情形|情况|条款)$"
     )
@@ -1511,6 +1623,17 @@ def _frequency_repair_action() -> str:
     )
 
 
+def _predicate_frequency_bindings(predicate) -> set[str]:
+    """A literal locator supplements, rather than replaces, semantic identity."""
+
+    bindings = {_normalized(predicate.attribute)}
+    term = _normalized(predicate.source_term or "")
+    if term and any(term in _normalized(clause) for clause in predicate.exact_source_clauses):
+        bindings.add(term)
+    bindings.discard("")
+    return bindings
+
+
 def _predicate_preserves_frequency(
     predicate, spec: tuple[int, TimeUnit, int, str]
 ) -> bool:
@@ -1520,28 +1643,23 @@ def _predicate_preserves_frequency(
         for clause in predicate.exact_source_clauses
         if spec in _source_frequency_specs(clause)
     ]
-    binding = _normalized(predicate.source_term or predicate.attribute)
-    binding_without_possession = re.sub(r"^有", "", binding)
     # 语义身份可能带频次分母前缀（如“1周内无任何白天户外活动的天数”），而逐字
     # 子句只写“定义为1周≥4天…”；剥离前导周期短语与尾部“的/天数”后再核对绑定词
     # （EX-04 反例，2026-09-18 会商）。
-    binding_without_leading_period = re.sub(
-        r"^\d+\s*(?:个?天|个?日|周|星期|个月|月|年)内", "", binding
-    )
-
     def _strip_binding_suffix(text: str) -> str:
         return re.sub(
             r"(?:发生次数|发作次数|复发次数|既往史|现病史|病史|的?天数|的)$", "", text
         )
 
-    binding_terms = {
-        binding,
-        _strip_binding_suffix(binding),
-        binding_without_possession,
-        _strip_binding_suffix(binding_without_possession),
-        binding_without_leading_period,
-        _strip_binding_suffix(binding_without_leading_period),
-    }
+    binding_terms = set()
+    for binding in _predicate_frequency_bindings(predicate):
+        variants = (
+            binding,
+            re.sub(r"^有", "", binding),
+            re.sub(r"^\d+\s*(?:个?天|个?日|周|星期|个月|月|年)内", "", binding),
+        )
+        binding_terms.update(variants)
+        binding_terms.update(_strip_binding_suffix(item) for item in variants)
     binding_terms.discard("")
     if not any(
         any(term in _normalized(clause) for term in binding_terms)
@@ -1575,11 +1693,11 @@ def _frequency_window_on_example_head(predicate, component_source: str = "") -> 
     window = predicate.occurrence_window
     if window is None:
         return False
-    binding = _normalized(predicate.source_term or predicate.attribute)
+    bindings = _predicate_frequency_bindings(predicate)
     for clause in dict.fromkeys((*predicate.exact_source_clauses, component_source)):
         for _head, member, definition in nested_example_definitions(clause):
             member_binding = _normalized(member)
-            if not member_binding or member_binding in binding:
+            if not member_binding or any(member_binding in binding for binding in bindings):
                 continue
             if any(
                 window.duration.value == duration
@@ -1635,6 +1753,12 @@ def _source_proves_unsupported_whole_requirement(restricted, rule, item, materia
         return False
     excerpt = restricted.source_excerpts[0]
     source = _normalized(excerpt)
+    outside_notes = excerpt
+    for note in _scoped_population_notes(excerpt):
+        outside_notes = outside_notes.replace(note, "")
+    if (_has_explicit_quantity(outside_notes)
+            or (_numeric_tokens(outside_notes) and _source_comparators(outside_notes))):
+        return False
     return bool(
         source == _normalized(rule.source_text)
         and (
@@ -1686,6 +1810,18 @@ def _source_proves_unsupported_scoped_branch(
     return False
 
 
+def _restricted_component_capability_proof(restricted, rule, item, materials) -> str | None:
+    """Recognize only existing source-proven limitations, not model self-reports."""
+    if _source_proves_unsupported_member_frequency(restricted.source_excerpts):
+        return "nested_member_frequency"
+    mapped_texts = [materials.get(ref, "") for ref in restricted.source_span_ids]
+    if _source_proves_unsupported_scoped_branch(restricted, rule, mapped_texts):
+        return "scoped_population_note"
+    if _source_proves_unsupported_whole_requirement(restricted, rule, item, materials):
+        return "whole_scoped_requirement"
+    return None
+
+
 def _has_explicit_quantity(text: str) -> bool:
     """Distinguish clinical quantities from section numbers and identifiers."""
 
@@ -1709,13 +1845,13 @@ def _frequency_definition_required_as_sibling(expression, definitions) -> bool:
                 continue
             parent_branches = {
                 index for index, predicates in enumerate(child_predicates)
-                if any(_normalized(item.source_term or item.attribute).startswith(parent)
-                       for item in predicates)
+                if any(binding.startswith(parent)
+                       for item in predicates for binding in _predicate_frequency_bindings(item))
             }
             member_branches = {
                 index for index, predicates in enumerate(child_predicates)
                 if any(
-                    member_binding in _normalized(item.source_term or item.attribute)
+                    any(member_binding in binding for binding in _predicate_frequency_bindings(item))
                     and any(_predicate_preserves_frequency(item, spec)
                             for spec in _source_frequency_specs(definition))
                     for item in predicates
@@ -1751,6 +1887,9 @@ def _rule_map(draft: ProtocolDeconstructionDraft) -> dict[str, Rule]:
 class ProtocolDeconstructionGate:
     """Run all twelve checks and return Chinese, repair-scoped issues."""
 
+    def __init__(self, *, artifact_reader=None):
+        self.artifact_reader = artifact_reader
+
     def evaluate(
         self,
         source_input: ProtocolDeconstructionInput,
@@ -1760,6 +1899,7 @@ class ProtocolDeconstructionGate:
         interpretation_conflicts: Sequence[InterpretationConflict] = (),
         previous_draft: ProtocolDeconstructionDraft | None = None,
         declared_diff: ProtocolDraftDiffDeclaration | None = None,
+        scope_review_reader=None,
     ) -> ProtocolDeconstructionGateResult:
         issues: dict[str, list[ProtocolGateIssue]] = {name: [] for name in CHECK_NAMES}
 
@@ -1773,7 +1913,8 @@ class ProtocolDeconstructionGate:
             source_input, interpretation_conflicts
         )
         self._temporal_semantics(
-            source_input, draft, issues["temporal_semantics"], anchor_context
+            source_input, draft, issues["temporal_semantics"], anchor_context,
+            scope_review_reader=scope_review_reader or self.artifact_reader,
         )
         self._workflow_coverage(source_input, draft, issues["workflow_coverage"])
         self._evidence_coverage(draft, issues["evidence_coverage"])
@@ -2098,12 +2239,12 @@ class ProtocolDeconstructionGate:
                 ]
                 if population_predicates:
                     source_bound = all(
-                        predicate.applicable_population.strip()
-                        and any(
-                            clause.lstrip().lstrip("（(").startswith(predicate.applicable_population.strip())
-                            for clause in predicate.exact_source_clauses
-                        )
-                        for predicate in population_predicates
+                        _population_source_bound(node)
+                        for root in (component.expression, component.exception_expression)
+                        if root is not None
+                        for node in _walk_expression_tree(root)
+                        if node.kind == "predicate"
+                        and node.predicate.applicable_population is not None
                     )
                     supported_position = (
                         not any(predicate.applicable_population is not None
@@ -2547,7 +2688,8 @@ class ProtocolDeconstructionGate:
                             )
 
     @staticmethod
-    def _temporal_semantics(source_input, draft, issues, anchor_context=None):
+    def _temporal_semantics(source_input, draft, issues, anchor_context=None, *, scope_review_reader=None):
+        stage_aliases = frozen_review_stage_aliases(source_input)
         if anchor_context is None:
             anchor_context = _AnchorResolutionContext()
         anchor_markers = {
@@ -2597,6 +2739,20 @@ class ProtocolDeconstructionGate:
         ] = {}
         rules_with_unanchored_lookback: set[str] = set()
         for rule in draft.proposed_rules:
+            try:
+                parent_scope = frozen_parent_scope_fragments(
+                    source_input, rule.official_code,
+                    scope_has_stages=lambda text: bool(_source_review_stages([text])),
+                    is_substantive=lambda text: bool(_substantive_obligation_segments(text)),
+                )
+            except FrozenParentScopeError as exc:
+                issues.append(_issue(
+                    "temporal_semantics", exc.code,
+                    f"{rule.official_code} 的冻结来源身份不完整，不能核对总标题作用范围。",
+                    list(exc.source_refs),
+                    action="请核对冻结来源和官方目录身份；这不是研究者医学判断事项。",
+                ))
+                parent_scope = ()
             for component in rule.components:
                 component_text = _component_text(
                     rule,
@@ -2637,11 +2793,9 @@ class ProtocolDeconstructionGate:
                         for excerpt in (component_draft.source_excerpts if component_draft else ())
                     ]
                     if any(
-                        _normalized(item.predicate.source_term or item.predicate.attribute).startswith(parent)
-                        or member_binding in _normalized(
-                            item.predicate.source_term or item.predicate.attribute
-                        )
+                        binding.startswith(parent) or member_binding in binding
                         for item in atomic_expressions
+                        for binding in _predicate_frequency_bindings(item.predicate)
                     ) or any(
                         len(quote) >= 4 and (
                             parent in quote or quote in parent or member_binding in quote
@@ -2685,38 +2839,109 @@ class ProtocolDeconstructionGate:
                             action=_frequency_repair_action(),
                         )
                     )
-                compact_component_text = re.sub(r"\s+", "", component_text)
-                required_stages: set[ReviewStage] = set()
-                if re.search(r"筛选(?:期|访视)?时", compact_component_text) or re.search(
-                    r"筛选(?:期|访视)?(?:或|和|及|与|、)基线(?:期|访视)?时",
-                    compact_component_text,
-                ):
-                    required_stages.add(ReviewStage.SCREENING)
-                if re.search(r"基线(?:期|访视)?时", compact_component_text):
-                    required_stages.add(ReviewStage.BASELINE)
+                stage_fragments = (
+                    component_draft.source_excerpts if has_precise_excerpt
+                    else [component_text]
+                )
+                required_stages = _source_review_stages(stage_fragments, stage_aliases=stage_aliases)
+                source_cued_stages = set(required_stages)
+                predicate_clauses = [
+                    clause for expression in atomic_expressions
+                    for clause in expression.predicate.exact_source_clauses
+                ]
+                direct_stages = _source_review_stages(predicate_clauses, stage_aliases=stage_aliases)
+                unbound_shared_stages: set[ReviewStage] = set()
+                omitted_parent_scope = [
+                    item for item in parent_scope
+                    if not any(_normalized(item.excerpt.rstrip("：:")) in _normalized(clause)
+                               for clause in stage_fragments)
+                    and _source_review_stages([item.excerpt], stage_aliases=stage_aliases) - source_cued_stages
+                ]
+                for item in omitted_parent_scope:
+                    unbound_shared_stages.update(_source_review_stages([item.excerpt], stage_aliases=stage_aliases))
+                if direct_stages:
+                    for fragment in stage_fragments:
+                        # Existing structural classification only diagnoses a
+                        # missing binding. It never authorizes dropping a stage.
+                        if _substantive_obligation_segments(fragment.rstrip("：:")):
+                            continue
+                        if any(_normalized(fragment) in _normalized(clause)
+                               for clause in predicate_clauses):
+                            continue
+                        unbound_shared_stages.update(
+                            _source_review_stages([fragment], stage_aliases=stage_aliases) - direct_stages
+                        )
+                try:
+                    reviewed_stages = reviewed_scope_stages(
+                        source_input, draft, rule, component, parent_scope, scope_review_reader,
+                        heading_stages=[stage.value for stage in _source_review_stages([item.excerpt for item in parent_scope], stage_aliases=stage_aliases)],
+                    )
+                except OfficialScopeReviewError as exc:
+                    reviewed_stages = None
+                    unresolved_scope = isinstance(exc, OfficialScopeUnresolvedError)
+                    issues.append(_issue(
+                        "temporal_semantics", exc.code,
+                        (f"{component.display_code} 的总标题作用范围仍有待核实：" + "；".join(exc.dimensions)
+                         if unresolved_scope else f"{component.display_code} 的总标题核对记录与当前原文或条件不一致，不能采用。"),
+                        [component.rule_component_id],
+                        action=("请核对所列具体作用范围；当前疑问不能沿用旧版已核清结果。" if unresolved_scope
+                                else "请核对本次原文、条件和原始核对回答；旧记录不能替代当前核对。"),
+                    ))
+                if reviewed_stages is not None:
+                    required_stages = reviewed_stages
+                    source_cued_stages = set(reviewed_stages)
+                    direct_stages = set(reviewed_stages)
+                    omitted_parent_scope = []
+                    unbound_shared_stages.clear()
                 baseline_decision_anchors = {
                     AnchorType.BASELINE_DATE,
                     AnchorType.RANDOMIZATION_DATE,
                     AnchorType.FIRST_DOSE_DATE,
                     AnchorType.STUDY_DRUG_ADMINISTRATION_DATE,
                 }
-                if any(
+                has_final_review_anchor = any(
                     expression.time_constraint is not None
                     and expression.time_constraint.anchor_type
                     in baseline_decision_anchors
                     and expression.time_constraint.direction
                     in {TimeDirection.BEFORE, TimeDirection.ON}
                     for expression in atomic_expressions
-                ):
+                )
+                if has_final_review_anchor:
                     required_stages.add(ReviewStage.BASELINE)
+                # A disputed heading cannot create downstream validity duties.
+                # Keep the scope failure and independently bound child/final nodes.
+                validity_stages = (
+                    (source_cued_stages if omitted_parent_scope else direct_stages)
+                    | ({ReviewStage.BASELINE} if has_final_review_anchor else set())
+                    if unbound_shared_stages else required_stages
+                )
                 actual_stages = {
                     requirement.due_stage
                     for requirement in component.evidence_requirements
                 }
                 missing_stages = required_stages - actual_stages
-                if missing_stages:
+                unsupported_stages = (
+                    (actual_stages & {
+                        ReviewStage.SCREENING, ReviewStage.RUN_IN, ReviewStage.BASELINE,
+                    }) - required_stages
+                    if source_cued_stages else set()
+                )
+                if unbound_shared_stages:
+                    issues.append(_issue(
+                        "temporal_semantics", "REVIEW_STAGE_SCOPE_UNVERIFIED",
+                        f"{component.display_code} 的总标题与子项审核节点尚未核清作用范围。",
+                        [component.rule_component_id],
+                        action=(
+                            "请先核对总标题是否要求每个子项在所有节点满足，还是分别描述各节点的要求；"
+                            "真正统辖本子项的限定语须与条件分别逐字绑定，只有上下文作用的文字不得作为本项义务。"
+                            "核清前不要仅为消除提示新增审核节点，也不要删除实际共同要求；测量时点不等于审核节点。"
+                        ),
+                    ))
+                elif missing_stages:
                     stage_names = {
                         ReviewStage.SCREENING: "筛选期",
+                        ReviewStage.RUN_IN: "导入期",
                         ReviewStage.BASELINE: "基线",
                     }
                     issues.append(
@@ -2735,6 +2960,18 @@ class ProtocolDeconstructionGate:
                             action="请保留一个原子条件，并为原文明确要求的每个审核阶段分别建立 due_stage 资料要求；以基线、随机或首次给药为锚点的前置条件必须在基线节点完成最终复核，筛选期提前关注不能替代该节点；不要复制原子条件或添加日期约束。",
                         )
                     )
+                if unsupported_stages and not unbound_shared_stages:
+                    issues.append(_issue(
+                        "temporal_semantics", "REVIEW_STAGE_ADDITIONAL_SCOPE_UNVERIFIED",
+                        f"{component.display_code} 的部分资料核对节点尚无本子项来源支持。",
+                        [component.rule_component_id],
+                        action=(
+                            "请区分原文规定的测量节点、资料采集节点和最终审核节点；"
+                            "新增节点须有共同限定、最终复核或解释来源依据，不能为保持旧资料要求数量而保留。"
+                            "若只是旧稿误添的要求，可在限定范围修订中删除该要求；"
+                            "不得删除真实共同要求、阈值、计算定义或其他子项。"
+                        ),
+                    ))
                 component_validity_specs = _source_validity_specs(component_text)
                 predicate_validity_windows = {
                     window
@@ -2754,9 +2991,12 @@ class ProtocolDeconstructionGate:
                         for requirement in component.evidence_requirements
                         if _requirement_matches_validity_spec(requirement, named_item)
                     ]
-                    expected_validity_stages = required_stages or {
-                        requirement.due_stage for requirement in matching_requirements
-                    }
+                    expected_validity_stages = (
+                        validity_stages if unbound_shared_stages else
+                        validity_stages or {
+                            requirement.due_stage for requirement in matching_requirements
+                        }
+                    )
                     missing_validity_stages = [
                         stage
                         for stage in expected_validity_stages
@@ -2768,7 +3008,9 @@ class ProtocolDeconstructionGate:
                             for requirement in matching_requirements
                         )
                     ]
-                    if not expected_validity_stages or missing_validity_stages:
+                    if missing_validity_stages or (
+                        not expected_validity_stages and not unbound_shared_stages
+                    ):
                         stage_names = {
                             ReviewStage.PRE_SCREENING: "预筛选期",
                             ReviewStage.SCREENING: "筛选期",
@@ -2967,10 +3209,13 @@ class ProtocolDeconstructionGate:
                                 )
                             )
                         ]
-                        expected_validity_stages = required_stages or {
-                            requirement.due_stage
-                            for requirement in matching_requirements
-                        }
+                        expected_validity_stages = (
+                            validity_stages if unbound_shared_stages else
+                            validity_stages or {
+                                requirement.due_stage
+                                for requirement in matching_requirements
+                            }
+                        )
                         missing_validity: list[str] = []
                         stage_names = {
                             ReviewStage.PRE_SCREENING: "预筛选期",
@@ -3001,7 +3246,9 @@ class ProtocolDeconstructionGate:
                                     missing_validity.append(
                                         f"{stage_names.get(stage, stage.value)}{value}{unit_names[unit]}"
                                     )
-                        if not expected_validity_stages or missing_validity:
+                        if missing_validity or (
+                            not expected_validity_stages and not unbound_shared_stages
+                        ):
                             issues.append(
                                 _issue(
                                     "temporal_semantics",
@@ -3094,9 +3341,9 @@ class ProtocolDeconstructionGate:
                             )
                         )
                     expected_periods: set[ProtocolPeriod] = set()
-                    if "治疗期间" in predicate_text:
+                    if TREATMENT_PERIOD_SOURCE_PATTERN.search(predicate_text):
                         expected_periods.add(ProtocolPeriod.TREATMENT_PERIOD)
-                    if "研究期间" in predicate_text:
+                    if STUDY_PERIOD_SOURCE_PATTERN.search(predicate_text):
                         expected_periods.add(ProtocolPeriod.STUDY_PERIOD)
                     if expected_periods:
                         period_valid = (
@@ -3983,24 +4230,7 @@ class ProtocolDeconstructionGate:
             for restricted in rule.restricted_components:
                 mapped_texts = [materials.get(ref, "") for ref in restricted.source_span_ids]
                 source_valid = (
-                    (
-                        restricted.limitation_kind == "interpretation_unresolved"
-                        or (
-                            restricted.limitation_kind == "consumer_unavailable"
-                            and (
-                                _source_proves_unsupported_member_frequency(
-                                    restricted.source_excerpts
-                                )
-                                or _source_proves_unsupported_scoped_branch(
-                                    restricted, rule, mapped_texts
-                                )
-                                or _source_proves_unsupported_whole_requirement(
-                                    restricted, rule, item, materials
-                                )
-                            )
-                        )
-                    )
-                    and set(restricted.source_span_ids) <= set(item.source_span_ids)
+                    set(restricted.source_span_ids) <= set(item.source_span_ids)
                     and set(restricted.source_span_ids) <= formal_ids
                     and all(any(excerpt in text for text in mapped_texts)
                             for excerpt in restricted.source_excerpts)
@@ -4008,8 +4238,19 @@ class ProtocolDeconstructionGate:
                 if not source_valid:
                     issues.append(_issue(
                         "source_coverage", "RESTRICTED_COMPONENT_SOURCE_INVALID",
-                        f"{code} 的受限要求未能逐字对应当前官方来源，或能力缺口缺少可核的限定结构。",
+                        f"{code} 的待处理要求未能逐字对应当前方案来源。",
                         [code, restricted.rule_component_id], scope=[code],
+                    ))
+                    continue
+                if (restricted.limitation_kind == "consumer_unavailable"
+                        and _restricted_component_capability_proof(
+                            restricted, rule, item, materials) is None):
+                    issues.append(_issue(
+                        "source_coverage", "RESTRICTED_COMPONENT_CAPABILITY_UNPROVEN",
+                        f"{code} 的原文位置已对应，但尚不能核实所报审核能力缺口的范围。",
+                        [code, restricted.rule_component_id], scope=[code],
+                        action="请保留已明确且可独立判断的条件，核对实际缺少的表达或计算能力；"
+                        "不能仅凭模型声明撤下要求，也不要求研究者替程序补判。",
                     ))
                     continue
                 valid_restricted_by_parent.setdefault(code, []).append(restricted)
@@ -4060,8 +4301,18 @@ class ProtocolDeconstructionGate:
             ]
             if not parent_texts and item.label:
                 parent_texts = [item.label]
+            headings = frozen_parent_scope_fragments(
+                source_input, official_code,
+                scope_has_stages=lambda text: bool(_source_review_stages([text])),
+                is_substantive=lambda text: bool(_substantive_obligation_segments(text)),
+            )
             obligations = []
             for text in parent_texts:
+                # A structurally identified stage lead-in supplies scope, not
+                # another clinical predicate. Its relationship is checked above.
+                for heading in headings:
+                    if text.startswith(heading.excerpt):
+                        text = text[len(heading.excerpt):]
                 for segment in _substantive_obligation_segments(text):
                     obligations.append(segment)
                     obligations.extend(

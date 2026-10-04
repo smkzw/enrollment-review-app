@@ -265,6 +265,7 @@ class FeedbackRequest(_StrictModel):
     target_rule_code: str = Field(pattern=r"^(IN|EX)-\d{2}$")
     target_component_id: str | None = Field(default=None, min_length=1, max_length=128)
     feedback_note: str = Field(min_length=1, max_length=12000)
+    review_parent_scope: bool = False
     actor: str = Field(default="用户", min_length=1, max_length=128)
 
 

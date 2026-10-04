@@ -12,6 +12,7 @@ from app.domain.contracts.protocol_drafts import (
     _legacy_content_payload_without_source_validity_window,
 )
 from app.domain.publication import canonical_hash
+from app.domain.contracts.rules import RestrictedRuleComponent
 from app.services.protocol_draft_service import (
     DraftEditBoundaryError,
     DuplicateDraftError,
@@ -33,6 +34,18 @@ def _save_initial(session, draft=None):
     return _service(session).save_initial_draft(
         draft, actor="医学监查员", created_at=NOW
     ), base_draft
+
+
+def _draft_with_restricted_component():
+    _, draft, _ = confirmed_fixture()
+    draft.proposed_rules[1].restricted_components = [RestrictedRuleComponent(
+        rule_component_id="restricted-ex", display_code="EX-01b",
+        title="尚待核清的要求", source_span_ids=["span-ex"],
+        source_excerpts=[draft.proposed_rules[1].source_text],
+        limitation_kind="interpretation_unresolved",
+        unresolved_dimensions=["适用范围尚待核清"],
+    )]
+    return draft
 
 
 def test_initial_save_creates_revision_1_and_rejects_duplicate(session) -> None:
@@ -587,3 +600,156 @@ def test_any_edit_cannot_rebind_parent_mapping_source(session) -> None:
                 created_at=NOW,
             )
         assert exc_info.value.code == "PARENT_SOURCE_REBOUND"
+
+
+@pytest.mark.parametrize("change", ["remove", "add", "identity", "display"])
+def test_manual_edit_cannot_rewrite_restricted_component_tree(session, change) -> None:
+    with session.begin():
+        draft = _draft_with_restricted_component()
+        r1, _ = _save_initial(session, draft)
+        edited = draft.model_copy(deep=True)
+        rule = edited.proposed_rules[1]
+        item = rule.restricted_components[0]
+        if change == "remove":
+            rule.restricted_components = []
+        elif change == "add":
+            rule.restricted_components.append(item.model_copy(update={
+                "rule_component_id": "restricted-second", "display_code": "EX-01c",
+            }))
+        else:
+            field = "rule_component_id" if change == "identity" else "display_code"
+            rule.restricted_components[0] = item.model_copy(update={field: "changed"})
+        with pytest.raises(DraftEditBoundaryError) as caught:
+            _service(session).apply_manual_edit(
+                edited, expected_revision_id=r1.revision_id,
+                actor="医学监查员", created_at=NOW,
+            )
+        assert caught.value.code == "MANUAL_EDIT_REWRITES_RULE_TREE"
+        assert _service(session).revisions.count(draft.draft_id) == 1
+
+
+@pytest.mark.parametrize("field,value", [
+    ("source_span_ids", ["span-in"]),
+    ("source_excerpts", ["替换后的摘录"]),
+])
+@pytest.mark.parametrize("feedback_kind", [None, DraftFeedbackKind.CLARIFICATION])
+def test_restricted_source_binding_obeys_existing_edit_boundary(
+    session, field, value, feedback_kind,
+) -> None:
+    with session.begin():
+        draft = _draft_with_restricted_component()
+        r1, _ = _save_initial(session, draft)
+        edited = draft.model_copy(deep=True)
+        item = edited.proposed_rules[1].restricted_components[0]
+        edited.proposed_rules[1].restricted_components[0] = item.model_copy(
+            update={field: value},
+        )
+        service = _service(session)
+        with pytest.raises(DraftEditBoundaryError) as caught:
+            if feedback_kind is None:
+                service.apply_manual_edit(
+                    edited, expected_revision_id=r1.revision_id,
+                    actor="医学监查员", created_at=NOW,
+                )
+            else:
+                service.apply_feedback(
+                    edited, expected_revision_id=r1.revision_id,
+                    feedback_kind=feedback_kind, feedback_note="解释材料",
+                    actor="医学监查员", created_at=NOW,
+                )
+        assert caught.value.code == (
+            "MANUAL_EDIT_REWRITES_SOURCE" if feedback_kind is None
+            else "CLARIFICATION_ALTERS_SOURCE_BINDING"
+        )
+        assert service.revisions.count(draft.draft_id) == 1
+
+
+@pytest.mark.parametrize("field,value", [
+    ("limitation_kind", "consumer_unavailable"),
+    ("unresolved_dimensions", ["时间尚待核清"]),
+])
+def test_clarification_cannot_change_restricted_semantics(session, field, value) -> None:
+    with session.begin():
+        draft = _draft_with_restricted_component()
+        r1, _ = _save_initial(session, draft)
+        edited = draft.model_copy(deep=True)
+        item = edited.proposed_rules[1].restricted_components[0]
+        edited.proposed_rules[1].restricted_components[0] = item.model_copy(
+            update={field: value},
+        )
+        with pytest.raises(DraftEditBoundaryError) as caught:
+            _service(session).apply_feedback(
+                edited, expected_revision_id=r1.revision_id,
+                feedback_kind=DraftFeedbackKind.CLARIFICATION,
+                feedback_note="解释材料", actor="医学监查员", created_at=NOW,
+            )
+        assert caught.value.code == "CLARIFICATION_ALTERS_SEMANTICS"
+
+
+def test_restricted_revision_is_saved_diffed_and_reported_in_stale_envelope(session) -> None:
+    with session.begin():
+        draft = _draft_with_restricted_component()
+        r1, _ = _save_initial(session, draft)
+        old_hash = r1.content_sha256
+        service = _service(session)
+        edited = draft.model_copy(deep=True)
+        edited.proposed_rules[1].restricted_components[0].unresolved_dimensions = [
+            "具体时间尚待核清",
+        ]
+        r2 = service.apply_manual_edit(
+            edited, expected_revision_id=r1.revision_id,
+            actor="医学监查员", created_at=NOW,
+        )
+        assert "restricted-ex" in r1.diff.changed_component_ids
+        assert r1.diff.rule_diffs[1].added_component_refs == ["EX-01a", "EX-01b"]
+        assert r2.diff.modified_rule_codes == ["EX-01"]
+        assert r2.diff.changed_component_ids == ["restricted-ex"]
+        assert r2.diff.clarification_semantics_changed
+        changes = next(x for x in r2.diff.rule_diffs if x.official_code == "EX-01")
+        assert changes.logic_changes[0].current["unresolved_dimensions"] == [
+            "具体时间尚待核清",
+        ]
+        assert service.revisions.get(r1.revision_id).content_sha256 == old_hash
+        assert r2.content.proposed_rules[0] == draft.proposed_rules[0]
+        assert r2.content.proposed_rules[1].components == draft.proposed_rules[1].components
+        with pytest.raises(StaleRevisionError) as caught:
+            service.apply_manual_edit(
+                draft, expected_revision_id=r1.revision_id,
+                actor="另一个窗口", created_at=NOW,
+            )
+        fields = caught.value.field_diff
+        assert fields["rule:EX-01"].current["restricted_components"][0][
+            "unresolved_dimensions"
+        ] == ["具体时间尚待核清"]
+        assert fields["rule_component:restricted-ex"].submitted["component"][
+            "unresolved_dimensions"
+        ] == ["适用范围尚待核清"]
+        assert fields["rule_component:restricted-ex"].current["component"][
+            "unresolved_dimensions"
+        ] == ["具体时间尚待核清"]
+        assert service.revisions.count(draft.draft_id) == 2
+
+
+def test_source_error_can_correct_restricted_sources_with_append_only_history(session) -> None:
+    with session.begin():
+        draft = _draft_with_restricted_component()
+        r1, _ = _save_initial(session, draft)
+        edited = draft.model_copy(deep=True)
+        edited.proposed_rules[1].restricted_components[0].source_excerpts = [
+            "经冻结方案重新核对的摘录",
+        ]
+        r2 = _service(session).apply_feedback(
+            edited, expected_revision_id=r1.revision_id,
+            feedback_kind=DraftFeedbackKind.SOURCE_ERROR,
+            feedback_note="重新核对原文", actor="医学监查员", created_at=NOW,
+        )
+        changes = next(x for x in r2.diff.rule_diffs if x.official_code == "EX-01")
+        assert changes.original_text_changes[0].current["source_binding"][
+            "source_excerpts"
+        ] == ["经冻结方案重新核对的摘录"]
+        assert r2.diff.modified_rule_codes == ["EX-01"]
+        assert r1.content.proposed_rules[1].restricted_components[0].source_excerpts == [
+            draft.proposed_rules[1].source_text,
+        ]
+        # Saving a feedback revision is not a publication or source-authenticity gate.
+        assert r2.status == DraftRevisionStatus.SAVED

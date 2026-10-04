@@ -325,6 +325,9 @@ def test_assembly_is_minimal_catalog_complete_and_runner_ready():
         for item in catalog.items
         for span_id in item.source_span_ids
     }
+    catalog_source_ids.update(ref for table in package.required_procedure_catalog.visit_tables
+                              for ref in (table.table_source_span_id,
+                                          *(ref for column in table.columns for ref in column.source_span_ids)))
     material_ids = {item.source_span_id for item in source_input.source_materials}
     assert material_ids == catalog_source_ids
     assert set(source_input.allowed_source_span_ids) == catalog_source_ids
@@ -341,10 +344,12 @@ def test_assembly_is_minimal_catalog_complete_and_runner_ready():
     ]
 
     blocks_by_ref = {block.source_ref: block for block in fixture.extraction.blocks}
-    assert all(
-        item.text == blocks_by_ref[item.source_ref].text
-        for item in source_input.source_materials
-    )
+    for item in source_input.source_materials:
+        block = blocks_by_ref[item.source_ref]
+        expected = block.text or "\n".join(descendant.text for descendant in sorted(
+            fixture.extraction.blocks, key=lambda value: (value.block_order, value.source_ref))
+            if descendant.source_ref.startswith(block.source_ref + ".") and descendant.text.strip())
+        assert item.text == expected
     assert "span-body.p11" not in material_ids
     assert "span-body.p5" not in material_ids
     with pytest.raises(TypeError):
@@ -538,6 +543,9 @@ def test_real_protocol_input_assembly_is_read_only_and_phase_scoped(
         for item in catalog.items
         for span_id in item.source_span_ids
     }
+    catalog_source_ids.update(ref for table in package.required_procedure_catalog.visit_tables
+                              for ref in (table.table_source_span_id,
+                                          *(ref for column in table.columns for ref in column.source_span_ids)))
     material_ids = {item.source_span_id for item in package.source_input.source_materials}
     assert material_ids == catalog_source_ids
     assert material_ids == set(package.source_input.allowed_source_span_ids)

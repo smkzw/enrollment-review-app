@@ -2,7 +2,7 @@
   "id": "e2e-eligibility-review",
   "name": "e2e-eligibility-review",
   "title": "端到端入排审核：判断检索界面+入排工作台+真实全链验收",
-  "description": "0927V1-R1完整覆盖与混合执行；0929V1增量推进P1原生表格来源与受限采用、P2有源事实更正、P3完整个例和宽屏验收",
+  "description": "1001V1固定workflow与单一语义主责候选；保留R1/P1-P3及原生优先局部视觉，先修按原因恢复与共享预算，再做同模型同消费者对照和真实闭环",
   "status": "in_progress",
   "dev_type": null,
   "scope": null,
@@ -40,15 +40,15 @@
     "acceptance.md",
     "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md"
   ],
-  "notes": "2026-10-01按用户指令无损暂停，当前读取已failed_retryable且不重试；现行入口HANDOFF_20261001_0929V1_PAUSE.md。代码d04a199a已推送，P1真实共同发布、P2/P3及临床验收未完成，claims_complete=false。",
+  "notes": "2026-10-04按用户要求完成当前相连阶段后无损暂停，运行时Goal paused；不归档、不宣称整产品完成。来源节点component-local-v1和持久预算恢复完成；最后一授权读取终态，额外2/2耗尽、原IN04scope2/3不变/run34/142；保存候选未采用。最终后端603passed、前端19passed。C03经批准fallback实际Pi/openai-codex/gpt-6.1-sol/high，只读工程挑战，不是医学批准。用户要求限定文件提交GitHub；真实交付范围见本轮HANDOFF/SOURCE_SNAPSHOT/review_index，其他继承dirty保留。完整共同发布/病例/更正/六族/Q3未完成，claims_complete=false。",
   "meta": {
     "execution_paused_by_user": true,
-    "current_checkpoint": "HANDOFF_20261001_0929V1_PAUSE.md",
-    "current_scope": "0927V1-R1 P1-P3 with 0929V1 native-structure-first and selective visual validation; P1/P2 active, P3 not accepted.",
+    "current_checkpoint": "implement.md",
+    "current_scope": "1001V1 RV1001-FLOW candidate and same-model baseline; reason-based recovery first; R1/P1-P3 and selective visual boundaries retained.",
     "claims_complete": false,
-    "review_packet_status": "paused_by_user_incomplete",
+    "review_packet_status": "paused_current_package_closed_product_incomplete",
     "runtime_goal_status_observed": "paused",
-    "current_handoff": "HANDOFF_20261001_0929V1_PAUSE.md",
-    "current_decision_source": "delivery_0927V1_R1/01_DECISION.md; delivery_0929V1/02_DECISION.md"
+    "current_handoff": "HANDOFF_20261004_1001V1_PAUSE.md",
+    "current_decision_source": "delivery_1001V1/00_START_HERE.md; delivery_0927V1_R1/01_DECISION.md; delivery_0929V1/02_DECISION.md"
   }
 }

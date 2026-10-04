@@ -17,7 +17,9 @@ from app.services.review_protocol_source import load_review_protocol_source
 from app.storage.fact_authority import FactAuthorityValidator
 from app.storage.fact_rule_link_repository import FactRuleLinkV2Repository
 from app.storage.judgment_search_repository import JudgmentSearchSummaryRepository
-from app.storage.repositories import EpisodeRepository, ProjectRepository, SubjectRepository
+from app.storage.repositories import (
+    EpisodeRepository, ProjectRepository, ScopeViolationError, SubjectRepository,
+)
 
 
 def review_clinical_material_sha256(
@@ -28,16 +30,21 @@ def review_clinical_material_sha256(
     medication_exposures,
     expectations,
     conflict_groups,
+    judgment_search_results,
 ) -> str:
-    """Content identity of the mutable clinical heads frozen into a review context."""
+    """Current heads and pinned search summaries; not clinical acceptance."""
     return canonical_hash({
-        "identity": "review-clinical-material/v1",
+        "identity": "review-clinical-material/v2",
         "facts": [item.model_dump(mode="json") for item in facts],
         "fact_rule_links": [item.model_dump(mode="json") for item in fact_rule_links],
         "events": [item.model_dump(mode="json") for item in events],
         "medication_exposures": [item.model_dump(mode="json") for item in medication_exposures],
         "expectations": [item.model_dump(mode="json") for item in expectations],
         "conflict_groups": [item.model_dump(mode="json") for item in conflict_groups],
+        "judgment_search_results": sorted(
+            (item.summary_id, item.job_id, item.payload_sha256)
+            for item in judgment_search_results
+        ),
     })
 
 
@@ -65,6 +72,9 @@ def current_review_clinical_material_sha256(session: Session, authority) -> str:
         conflict_groups=tuple(sorted(
             profile._published_conflicts(session, authority), key=lambda item: item.conflict_group_id,
         )),
+        judgment_search_results=JudgmentSearchSummaryRepository(session).latest_entries_for_authority(
+            authority,
+        ).values(),
     )
 
 
@@ -77,7 +87,16 @@ def frozen_review_clinical_material_sha256(context: ReviewContextSnapshotV2) -> 
         medication_exposures=context.medication_exposures,
         expectations=context.expectations,
         conflict_groups=context.conflict_groups,
+        judgment_search_results=context.judgment_search_results,
     )
+
+
+def require_current_review_clinical_material(session: Session, context: ReviewContextSnapshotV2) -> None:
+    if (
+        current_review_clinical_material_sha256(session, context.authority)
+        != frozen_review_clinical_material_sha256(context)
+    ):
+        raise ScopeViolationError("当前病史或书面判断核查已经更新，请重新准备本次审核")
 
 
 def assemble_review_context(

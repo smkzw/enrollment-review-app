@@ -27,7 +27,11 @@ from app.domain.contracts.protocol_drafts import (
     ProtocolDraftRevision,
     ProtocolDraftRevisionDiff,
 )
-from app.domain.contracts.rules import RuleComponent, iter_atomic_predicates
+from app.domain.contracts.rules import (
+    RestrictedRuleComponent,
+    RuleComponent,
+    iter_atomic_predicates,
+)
 from app.domain.publication import canonical_hash
 from app.storage.concurrency import StaleRevisionError
 from app.storage.repositories import (
@@ -79,7 +83,7 @@ def compute_draft_diff(
             changed_component_ids=[
                 component.rule_component_id
                 for rule in current.proposed_rules
-                for component in rule.components
+                for component in (*rule.components, *rule.restricted_components)
             ],
             changed_requirement_ids=[
                 item.proposed_requirement.requirement_id
@@ -133,7 +137,7 @@ def compute_draft_diff(
         proposed = {
             component.rule_component_id: component.model_dump(mode="json")
             for rule in draft.proposed_rules
-            for component in rule.components
+            for component in (*rule.components, *rule.restricted_components)
         }
         sources = {
             item.proposed_component.rule_component_id: {
@@ -142,6 +146,14 @@ def compute_draft_diff(
             }
             for item in draft.component_drafts
         }
+        sources.update({
+            item.rule_component_id: {
+                "source_refs": sorted(item.source_span_ids),
+                "source_excerpts": item.source_excerpts,
+            }
+            for rule in draft.proposed_rules
+            for item in rule.restricted_components
+        })
         return {
             component_id: canonical_hash(
                 {"component": payload, "source_binding": sources.get(component_id)}
@@ -262,7 +274,7 @@ def _component_refs(rule) -> list[str]:
 
     counts: dict[str, int] = {}
     refs: list[str] = []
-    for component in rule.components:
+    for component in (*rule.components, *rule.restricted_components):
         code = component.display_code
         counts[code] = counts.get(code, 0) + 1
         refs.append(code if counts[code] == 1 else f"{code}#{counts[code]}")
@@ -270,7 +282,8 @@ def _component_refs(rule) -> list[str]:
 
 
 def _component_source_key(
-    draft: ProtocolDeconstructionDraft, component: RuleComponent
+    draft: ProtocolDeconstructionDraft,
+    component: RuleComponent | RestrictedRuleComponent,
 ) -> str | None:
     """子条件的稳定来源身份；没有真实来源时返回 ``None``。
 
@@ -296,25 +309,31 @@ def _align_components(
     current_rule,
     previous: ProtocolDeconstructionDraft,
     current: ProtocolDeconstructionDraft,
-) -> tuple[list[tuple[str, RuleComponent, RuleComponent]], list[str], list[str]]:
+) -> tuple[
+    list[tuple[str, RuleComponent | RestrictedRuleComponent, RuleComponent | RestrictedRuleComponent]],
+    list[str],
+    list[str],
+]:
     """按展示编号 + 稳定来源范围对齐两稿子条件。
 
     返回 (对齐对, 新增引用, 删除引用)；引用与 :func:`_component_refs` 一致，
     不依赖随机组件 ID（设计书 §10.2）。
     """
 
-    def grouped(components: list[RuleComponent]) -> dict[str, list[RuleComponent]]:
-        result: dict[str, list[RuleComponent]] = {}
+    def grouped(components) -> dict[str, list[RuleComponent | RestrictedRuleComponent]]:
+        result: dict[str, list[RuleComponent | RestrictedRuleComponent]] = {}
         for component in components:
             result.setdefault(component.display_code, []).append(component)
         return result
 
-    aligned: list[tuple[str, RuleComponent, RuleComponent]] = []
+    aligned: list[
+        tuple[str, RuleComponent | RestrictedRuleComponent, RuleComponent | RestrictedRuleComponent]
+    ] = []
     added: list[str] = []
     removed: list[str] = []
 
-    old_remaining = list(previous_rule.components)
-    new_remaining = list(current_rule.components)
+    old_remaining = [*previous_rule.components, *previous_rule.restricted_components]
+    new_remaining = [*current_rule.components, *current_rule.restricted_components]
 
     # 第一轮按冻结来源全局对齐。即使模型把 a/b 子项交换输出顺序，只要来源
     # 未变就仍是同一临床子条件，不制造原文或逻辑假差异。
@@ -416,6 +435,13 @@ def _component_binding(
 ) -> dict[str, Any] | None:
     """从组件草稿取来源绑定（引用 + 摘录）；无对应草稿项时返回 None。"""
 
+    for rule in draft.proposed_rules:
+        for item in rule.restricted_components:
+            if item.rule_component_id == component_id:
+                return {
+                    "source_refs": sorted(item.source_span_ids),
+                    "source_excerpts": list(item.source_excerpts),
+                }
     for item in draft.component_drafts:
         if item.proposed_component.rule_component_id == component_id:
             return {
@@ -439,13 +465,16 @@ def _verbatim_fragments(expression) -> list[dict[str, Any]]:
 
 
 def _original_text_payload(
-    rule, component: RuleComponent, draft: ProtocolDeconstructionDraft
+    rule, component: RuleComponent | RestrictedRuleComponent, draft: ProtocolDeconstructionDraft
 ) -> dict[str, Any]:
     # 父规则原文由 kind=rule 的条目单独承载；组件条目只携带组件级来源与逐字片段。
     return {
         "title": component.title,
         "source_binding": _component_binding(draft, component.rule_component_id),
-        "verbatim_fragments": _verbatim_fragments(component.expression),
+        "verbatim_fragments": (
+            [] if isinstance(component, RestrictedRuleComponent)
+            else _verbatim_fragments(component.expression)
+        ),
     }
 
 
@@ -476,16 +505,24 @@ def _strip_expression(node: dict[str, Any]) -> dict[str, Any]:
 
 
 def _logic_payload(
-    rule, component: RuleComponent, draft: ProtocolDeconstructionDraft
+    rule, component: RuleComponent | RestrictedRuleComponent, draft: ProtocolDeconstructionDraft
 ) -> dict[str, Any]:
+    if isinstance(component, RestrictedRuleComponent):
+        return {
+            "kind": "restricted",
+            "limitation_kind": component.limitation_kind,
+            "unresolved_dimensions": sorted(component.unresolved_dimensions),
+        }
     return _strip_expression(component.expression.model_dump(mode="json"))
 
 
 def _time_window_payload(
-    rule, component: RuleComponent, draft: ProtocolDeconstructionDraft
+    rule, component: RuleComponent | RestrictedRuleComponent, draft: ProtocolDeconstructionDraft
 ) -> list[dict[str, Any]]:
     """收集主条件和例外条件的全部时间语义快照。"""
 
+    if isinstance(component, RestrictedRuleComponent):
+        return []
     payloads: list[dict[str, Any]] = []
     expressions = [("main", component.expression)]
     if component.exception_expression is not None:
@@ -528,8 +565,10 @@ def _iter_expression_nodes(expression) -> list[dict[str, Any]]:
 
 
 def _exception_payload(
-    rule, component: RuleComponent, draft: ProtocolDeconstructionDraft
+    rule, component: RuleComponent | RestrictedRuleComponent, draft: ProtocolDeconstructionDraft
 ) -> dict[str, Any] | None:
+    if isinstance(component, RestrictedRuleComponent):
+        return None
     if component.exception_expression is None:
         return None
     return _strip_expression(component.exception_expression.model_dump(mode="json"))
@@ -540,10 +579,12 @@ def _json_key(value: Any) -> str:
 
 
 def _requirement_rows(
-    component: RuleComponent,
+    component: RuleComponent | RestrictedRuleComponent,
 ) -> list[tuple[dict[str, Any], str]]:
     """证据要求行：证据语义（不含应完成阶段）与应完成阶段，按证据键排序。"""
 
+    if isinstance(component, RestrictedRuleComponent):
+        return []
     rows: list[tuple[dict[str, Any], str]] = []
     for requirement in component.evidence_requirements:
         evidence = {
@@ -563,13 +604,13 @@ def _requirement_rows(
 
 
 def _evidence_payload(
-    rule, component: RuleComponent, draft: ProtocolDeconstructionDraft
+    rule, component: RuleComponent | RestrictedRuleComponent, draft: ProtocolDeconstructionDraft
 ) -> list[dict[str, Any]]:
     return [evidence for evidence, _due_stage in _requirement_rows(component)]
 
 
 def _due_stage_payload(
-    rule, component: RuleComponent, draft: ProtocolDeconstructionDraft
+    rule, component: RuleComponent | RestrictedRuleComponent, draft: ProtocolDeconstructionDraft
 ) -> list[dict[str, Any]]:
     """按证据语义分组的应完成阶段，不受资料要求输出顺序影响。"""
 
@@ -586,7 +627,7 @@ def _due_stage_payload(
 
 
 def _requirement_evidence_snapshots(
-    component: RuleComponent,
+    component: RuleComponent | RestrictedRuleComponent,
 ) -> list[dict[str, Any]]:
     """资料要求的证据快照；排除随机 ID 和应完成阶段。"""
 
@@ -749,6 +790,10 @@ def enforce_draft_edit_boundary(
                     )
                     for component in rule.components
                 ),
+                "restricted_components": sorted(
+                    (component.rule_component_id, component.display_code)
+                    for component in rule.restricted_components
+                ),
                 "requirements": sorted(
                     (
                         requirement.requirement_id,
@@ -772,6 +817,10 @@ def enforce_draft_edit_boundary(
                         component.display_code,
                     )
                     for component in rule.components
+                ),
+                "restricted_components": sorted(
+                    (component.rule_component_id, component.display_code)
+                    for component in rule.restricted_components
                 ),
                 "requirements": sorted(
                     (
@@ -974,6 +1023,17 @@ def _source_bindings_changed(
         for item in current.component_drafts
     }
     if previous_component_sources != current_component_sources:
+        return True
+    def restricted_sources(draft: ProtocolDeconstructionDraft):
+        return {
+            (rule.official_code, item.rule_component_id): (
+                tuple(sorted(item.source_span_ids)), tuple(item.source_excerpts)
+            )
+            for rule in draft.proposed_rules
+            for item in rule.restricted_components
+        }
+
+    if restricted_sources(previous) != restricted_sources(current):
         return True
     previous_requirement_sources = {
         item.draft_requirement_id: tuple(sorted(item.source_refs))
@@ -1369,7 +1429,7 @@ def _draft_diff_as_field_changes(
         proposed = {
             component.rule_component_id: component.model_dump(mode="json")
             for rule in draft.proposed_rules
-            for component in rule.components
+            for component in (*rule.components, *rule.restricted_components)
         }
         sources = {
             item.proposed_component.rule_component_id: {
@@ -1378,6 +1438,14 @@ def _draft_diff_as_field_changes(
             }
             for item in draft.component_drafts
         }
+        sources.update({
+            item.rule_component_id: {
+                "source_refs": item.source_span_ids,
+                "source_excerpts": item.source_excerpts,
+            }
+            for rule in draft.proposed_rules
+            for item in rule.restricted_components
+        })
         return {
             component_id: {
                 "component": payload,

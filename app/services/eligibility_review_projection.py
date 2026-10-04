@@ -634,6 +634,45 @@ def _selected_predicate_locators(
     return {fact_id: locators for fact_id, locators in chosen.items() if fact_id not in unproven}
 
 
+def _selected_control_locators(
+    selection: Any,
+    identity: str,
+    used_fact_ids: set[str],
+) -> dict[str, set[str]]:
+    """Keep an obligation's navigation within its verified source pairs."""
+    if not used_fact_ids:
+        return {}
+    if selection is None:
+        raise EligibilityReviewProjectionError("补充要求使用的事实缺少本次核对依据")
+    outcome = next(
+        (item for item in selection.identity_outcomes if item.identity_sha256 == identity),
+        None,
+    )
+    if outcome is None or outcome.status != "usable":
+        raise EligibilityReviewProjectionError("补充要求使用的事实缺少本次核对依据")
+    chosen: dict[str, set[str]] = {}
+    for pair_identity, pair_id, fact_id, locator_id in selection.source_pair_locations:
+        if pair_identity != identity or fact_id not in used_fact_ids:
+            continue
+        if pair_id not in outcome.usable_pair_ids:
+            raise EligibilityReviewProjectionError("原件配对不属于本次核对的资料范围")
+        chosen.setdefault(fact_id, set()).add(locator_id)
+    if set(chosen) != used_fact_ids:
+        raise EligibilityReviewProjectionError("补充要求使用的事实缺少已核对的原件位置")
+    return chosen
+
+
+def _unassigned_conflict_projections(groups) -> tuple[EligibilityUnassignedConflict, ...]:
+    return tuple(
+        EligibilityUnassignedConflict(
+            conflict_group_id=group.conflict_group_id,
+            member_kind=group.member_kind,
+            member_ids=tuple(group.event_ids or group.exposure_ids),
+        )
+        for group in groups if group.member_kind != "fact"
+    )
+
+
 def _used_fact_ids(evaluation: ComponentEvaluation) -> set[str]:
     used = set(evaluation.trigger.used_fact_ids)
     if (
@@ -990,14 +1029,7 @@ class EligibilityReviewProjectionService:
                 for item in clause_pack.restricted_clauses
             ),
             controls=_unverified_control_projections(clause_pack),
-            unassigned_conflicts=tuple(
-                EligibilityUnassignedConflict(
-                    conflict_group_id=group.conflict_group_id,
-                    member_kind=group.member_kind,
-                    member_ids=tuple(group.event_ids or group.exposure_ids),
-                )
-                for group in unassigned_groups
-            ),
+            unassigned_conflicts=_unassigned_conflict_projections(unassigned_groups),
             work_draft_state=(
                 "source_changed" if frozen_work_draft is _STALE_WORK_DRAFT else "not_started"
             ),
@@ -1137,6 +1169,7 @@ class EligibilityReviewProjectionService:
                     decision=decision,
                     gap=gap,
                     summaries=summaries,
+                    judgment_gaps=dict(result.judgment_gaps),
                 ),
                 fact_refs=_fact_refs(
                     session,
@@ -1153,6 +1186,9 @@ class EligibilityReviewProjectionService:
             ))
 
         controls = []
+        control_selection = next(
+            (item for item in selections if item.candidate_family == "control"), None
+        )
         publication = frozen.clause_pack.control_publication
         if publication is not None:
             sources = {item.protocol_control_id: item for item in publication.catalog.controls}
@@ -1199,6 +1235,17 @@ class EligibilityReviewProjectionService:
                         reason=reason,
                         fact_refs=_fact_refs(
                             session, set(obligation.used_fact_ids), facts_by_id,
+                            _selected_control_locators(
+                                control_selection, obligation.identity_sha256,
+                                set(obligation.used_fact_ids),
+                            ) if (
+                                source_atoms[obligation.obligation_id].evaluation is not None
+                                and source_atoms[obligation.obligation_id].evaluation.repeat_scheme is None
+                                and (
+                                    source_atoms[obligation.obligation_id].evaluation.predicate is None
+                                    or source_atoms[obligation.obligation_id].evaluation.predicate.occurrence_window is None
+                                )
+                            ) else None,
                         ),
                         continuing_note=_continuing_obligation_note(continuation),
                     ))
@@ -1225,6 +1272,7 @@ class EligibilityReviewProjectionService:
                 _restricted_control_projections(publication)
                 if publication is not None else ()
             ),
+            unassigned_conflicts=_unassigned_conflict_projections(frozen.conflict_groups),
             work_draft_state="current",
         )
 

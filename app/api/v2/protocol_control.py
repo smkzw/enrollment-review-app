@@ -83,6 +83,7 @@ def get_protocol_control_requirements(job_id: str, request: Request) -> Protocol
         job_id=view.job_id, source_job_id=view.source_job_id, checkpoint_id=view.checkpoint_id,
         candidates=list(view.candidates), workflow_stages=list(view.workflow_stages),
         relation_target_labels=dict(view.relation_target_labels),
+        restricted_statements=list(view.restricted_statements),
         calculation_gaps=[ProtocolControlCalculationGapResponse(
             batch_number=item.batch_number, statement_index=item.statement_index,
             structure_unit_id=item.structure_unit_id,

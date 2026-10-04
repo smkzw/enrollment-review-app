@@ -582,12 +582,15 @@ class RuleComponent(VersionedModel):
     exception_expression: RuleExpression | None = None
     repeat_trigger_conditions: list[RepeatTriggerCondition] = Field(default_factory=list)
     evidence_requirements: list[EvidenceRequirement] = Field(default_factory=list)
+    source_scope_review_ref: str | None = Field(default=None, pattern=r"^artifacts/evaluation_manifest/[0-9a-f]{64}$")
 
     @model_serializer(mode="wrap")
     def preserve_historical_repeat_conditions(self, handler):
         value = handler(self)
         if not self.repeat_trigger_conditions:
             value.pop("repeat_trigger_conditions", None)
+        if self.source_scope_review_ref is None:
+            value.pop("source_scope_review_ref", None)
         return value
 
     @model_validator(mode="after")

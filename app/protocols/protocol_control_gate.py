@@ -54,10 +54,15 @@ from app.protocols.supplementary_relation_contract import (
     procedure_execution_workflow_stage_id,
 )
 from app.protocols.protocol_control_planning import detect_required_action_kinds
-from app.protocols.source_time_fragments import intraday_time_fragments
+from app.protocols.source_time_fragments import (
+    STUDY_PERIOD_SOURCE_PATTERN as _STUDY_PERIOD_CUE_RE,
+    TREATMENT_PERIOD_SOURCE_PATTERN as _TREATMENT_PERIOD_CUE_RE,
+    intraday_time_fragments,
+)
+from app.protocols.control_scope_sources import validate_scope_citations
 
 
-CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v42"
+CONTROL_PUBLICATION_GATE_VERSION = "phase5/control-publication-gate/v43"
 
 __all__ = [
     "CONTROL_PUBLICATION_GATE_VERSION",
@@ -208,15 +213,6 @@ _CONDITIONAL_SHORTEN_CUE_RE = re.compile(
     r"(?:(?:清除剂|洗脱).{0,32}(?:可缩短|缩短至)|可缩短至|缩短至|"
     r"washout\s+may\s+be\s+shortened)",
     re.IGNORECASE | re.DOTALL,
-)
-_STUDY_PERIOD_CUE_RE = re.compile(
-    r"(?:试验期间|研究期间|整个试验|整个研究|至(?:试验|研究)结束|"
-    r"until\s+(?:study\s+)?completion|throughout\s+the\s+study)",
-    re.IGNORECASE,
-)
-_TREATMENT_PERIOD_CUE_RE = re.compile(
-    r"(?:治疗期(?:间|内)?|用药期间|给药期间|during\s+(?:the\s+)?treatment)",
-    re.IGNORECASE,
 )
 _SINCE_VISIT_REFERENCE_RE = re.compile(
     r"(?:自|从)?(?:筛选|基线|上次|前次|上一(?:次)?)[^，。；\n]{0,8}访视以来",
@@ -4126,6 +4122,7 @@ def _validate_candidate(
     official_codes: set[str],
     procedure_ids: set[str],
     candidate_ids: set[str],
+    scope_units: Sequence[ProtocolStructureUnit] | None = None,
 ) -> None:
     candidate_id = getattr(candidate, "control_candidate_id", None)
     if not isinstance(candidate_id, str) or not candidate_id.strip():
@@ -4152,6 +4149,13 @@ def _validate_candidate(
         _fail("CANDIDATE_SCOPE_MISMATCH", "候选语义结构单元范围与冻结候选不一致", entity_id=candidate_id)
     if list(getattr(semantics, "source_span_ids", ())) != source_span_ids:
         _fail("CANDIDATE_SCOPE_MISMATCH", "候选语义来源闭包与冻结候选不一致", entity_id=candidate_id)
+    try:
+        validate_scope_citations(
+            semantics.review_node_bindings, units,
+            scope_units if scope_units is not None else list(unit_by_id.values()),
+        )
+    except ValueError as exc:
+        _fail("SCOPE_CITATION_INVALID", str(exc), entity_id=candidate_id)
     source_spans = set(source_span_ids)
     _check_dnf(
         getattr(semantics, "applicability_expression", None),
@@ -4466,6 +4470,10 @@ def _validate_control(
     source_spans = set(source_span_ids)
 
     obligation_expression = getattr(control, "obligation_expression", None)
+    try:
+        validate_scope_citations(control.review_node_bindings, units, list(unit_by_id.values()))
+    except ValueError as exc:
+        _fail("SCOPE_CITATION_INVALID", str(exc), entity_id=control_id)
     if obligation_expression is None:
         _fail(
             "LEGACY_FLAT_OBLIGATION_REJECTED",
@@ -5183,6 +5191,7 @@ def check_protocol_control_batch_candidates(
                 official_codes=official_codes,
                 procedure_ids=procedure_ids,
                 candidate_ids=candidate_id_set,
+                scope_units=[*batch.owned_units, *batch.context_units],
             )
         except ProtocolControlGateError as error:
             issues.append(error)

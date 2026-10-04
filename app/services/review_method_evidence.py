@@ -1,6 +1,9 @@
 """Read persisted method evidence; this module never creates user approval."""
+import json
 from app.domain.contracts.enums import GateOutcome
-from app.domain.contracts.review_method_adoption import BindingEvaluationManifest, ReviewMethodApproval
+from app.domain.contracts.review_method_adoption import (
+    BINDING_SCORING_REPORT_VERSION, BindingEvaluationManifest, ReviewMethodApproval,
+)
 from app.domain.contracts.judgment_method_evaluation import JudgmentEvaluationManifest
 from app.domain.contracts.proposition_method_evaluation import PropositionEvaluationManifest
 from app.domain.contracts.observation_method_evaluation import ObservationEvaluationManifest
@@ -34,7 +37,11 @@ def read_binding_evaluation(artifact_store, digest: str) -> BindingEvaluationMan
         artifact_store.read_by_sha("evaluation_manifest", digest),
     )
     # The report is still evidence to inspect, not a score-triggered approval.
-    artifact_store.read_by_sha("raw_response", manifest.scoring_report_sha256)
+    report = json.loads(artifact_store.read_by_sha("raw_response", manifest.scoring_report_sha256))
+    if (report.get("version") != BINDING_SCORING_REPORT_VERSION
+            or report.get("gold_split_sha256") != manifest.gold_split_sha256
+            or report.get("scoring_version") != manifest.scoring_version):
+        raise ScopeViolationError("评测计分版本或范围不符合当前采用要求；历史记录仍保留")
     return manifest
 
 

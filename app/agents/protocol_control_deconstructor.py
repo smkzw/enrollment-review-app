@@ -30,7 +30,7 @@ from copy import deepcopy
 from types import SimpleNamespace
 from typing import Literal, Protocol
 
-from pydantic import Field, ValidationError, model_validator
+from pydantic import Field, ValidationError, model_serializer, model_validator
 
 from app.domain.contracts.common import ContractModel
 from app.domain.contracts.repeat_scheme import RepeatEvidenceRoleReference, resolve_repeat_evidence_roles
@@ -43,6 +43,7 @@ from app.protocols.supplementary_relation_contract import (
     procedure_execution_workflow_stage_id,
 )
 from app.domain.contracts.protocol_controls import (
+    ControlScopeCitation,
     ControlConditionAtomDraft,
     ControlConditionDnfDraft,
     ControlConditionGroupDraft,
@@ -83,6 +84,7 @@ from app.domain.contracts.enums import AnchorType, ReviewStage, StudyPhase, Time
 from app.domain.contracts.rules import ProspectivePeriod, TimeConstraint
 from app.domain.contracts.control_evidence_policy import ControlEvidenceSourcePolicy
 from app.domain.contracts.control_evidence_dependency import ControlEvidenceAtomReference
+from app.protocols.control_scope_sources import validate_scope_citations
 
 
 from .control_excerpt_restoration import (
@@ -92,10 +94,14 @@ from .control_excerpt_restoration import (
 )
 from .protocol_control_candidate_alignment import (
     SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+    EVIDENCE_POLICY_ALIGNMENT_VERSION,
+    EvidencePolicyCheckError,
     SourceCandidateAlignment,
     alignment_with_items,
     bind_candidate_alignment,
     build_candidate_alignment_prompt,
+    evidence_policy_alignment_pairs,
+    require_evidence_policy_alignment,
     reusable_proven_alignment_items,
     validate_candidate_alignment,
 )
@@ -112,6 +118,7 @@ from .protocol_control_source_interpretation import (
     SOURCE_INTERPRETATION_PROMPT_VERSION,
     SOURCE_QUOTE_RECOVERY_VERSION,
     SOURCE_TARGET_REVIEW_VERSION,
+    SOURCE_TARGET_REVIEW_POLICY_VERSION,
     SourceDefinitionConsumers,
     SourceInterpretation,
     SourceInterpretationValidationError,
@@ -150,7 +157,7 @@ from .protocol_control_source_interpretation import (
 CONTROL_AGENT_WIRE_VERSION = "phase5/control-agent-wire/v26"
 MAX_SOURCE_INSERT_REPAIRS = 2
 CONTROL_AGENT_INPUT_VERSION = "phase5/control-agent-input/v1"
-CONTROL_AGENT_PROMPT_VERSION = "phase5/control-agent-prompt/v2.82"
+CONTROL_AGENT_PROMPT_VERSION = "phase5/control-agent-prompt/v2.83"
 CONTROL_DISCOVERY_INPUT_VERSION = "phase5/control-discovery-input/v1"
 CONTROL_DISCOVERY_PROMPT_VERSION = "phase5/control-discovery-prompt/v3"
 CONTROL_DISCOVERY_WIRE_VERSION = "phase5/control-discovery-wire/v1"
@@ -227,6 +234,9 @@ __all__ = [
 
 
 PUBLICATION_REPAIR_SCOPE_VERSION = "phase5/publication-candidate-repair-scope/v2"
+SOURCE_REQUIREMENT_FAILURE_POLICY_VERSION = "phase5/source-requirement-failure-policy/v3"
+# Reporting changes do not change author/repair prompts or invalidate successful reads.
+SOURCE_REQUIREMENT_FAILURE_REASON_VERSION = "phase5/source-requirement-failure-reason/v1"
 
 
 class ProtocolControlAgentWireValidationError(ValueError):
@@ -758,6 +768,14 @@ class ProtocolControlAgentWireNode(_WireModel):
     review_stage: ReviewStage
     role: ReviewNodeRole
     guidance: str | None = Field(..., min_length=1)
+    scope_citation: ControlScopeCitation | None = None
+
+    @model_serializer(mode="wrap")
+    def preserve_historical_binding(self, handler):
+        value = handler(self)
+        if self.scope_citation is None:
+            value.pop("scope_citation", None)
+        return value
 
 
 class ProtocolControlAgentWireEvidence(_WireModel):
@@ -2098,6 +2116,8 @@ _CONTROL_AGENT_SYSTEM_CONTRACT = (
     "解释适用范围，不得成为候选的直接来源摘录。"
     "方案正文、方案附录、评分细则、操作规范、评估手册或SOP是控制规则的权威依据，不是某名受试者"
     "完成该控制所需补充的个例证据。minimum_evidence.required_source_types 只能列受试者层面的实际记录，"
+    "且仅填写原文明文限定的资料种类；原文未限定时必须为空列表 []。"
+    "可用记录的示例只写入 description 或审核指引，不得将示例变成必须满足的来源限制。"
     "例如已完成的评分表、检查报告、病历记录或研究者评估记录；不得把方案、附录、评分细则、操作规范、"
     "评估手册或SOP列为个例最低证据，也不得因此制造证据不足。可在义务、审核指引或关系说明中保留"
     "‘按附录/SOP执行’的规则要求。requires_professional_judgment 仅在该原子本身需要研究者、医生或其他"
@@ -2420,8 +2440,8 @@ def _repair_problem_guidance(problem: str) -> str:
     if "MINIMUM_EVIDENCE_AUTHORITY_SOURCE_CONFLATED" in problem:
         return (
             "本轮重点：方案、附录、评分细则、操作规范、评估手册和SOP属于规则依据，不是受试者个例证据。"
-            "从 minimum_evidence.required_source_types 删除这些权威依据，只保留实际评分表、检查报告、病历记录、"
-            "研究者评估记录等受试者层面资料；规则引用仍保留在义务、审核指引或关系说明中。"
+            "从 minimum_evidence.required_source_types 删除这些权威依据，仅保留原文明文限定的受试者资料种类；"
+            "未限定时保持空列表，不能另填示例。规则引用仍保留在义务、审核指引或关系说明中。"
         )
     if "SELF_REPORTED_TOOL_MARKED_PROFESSIONAL" in problem:
         return (
@@ -2805,6 +2825,8 @@ def protocol_control_agent_prompt_template_sha256(
             prompt_version,
             SOURCE_INTERPRETATION_PROMPT_VERSION,
             SOURCE_TARGET_REVIEW_VERSION,
+            SOURCE_TARGET_REVIEW_POLICY_VERSION,
+            EVIDENCE_POLICY_ALIGNMENT_VERSION,
             SOURCE_CANDIDATE_ALIGNMENT_VERSION,
             SOURCE_DEFINITION_CONSUMER_VERSION,
             SOURCE_DEFINITION_CONSUMER_PROMPT_VERSION,
@@ -2839,6 +2861,7 @@ def protocol_control_agent_repair_contract_sha256(
         parts.append(SOURCE_QUOTE_RECOVERY_VERSION)
         parts.append(SOURCE_FUNCTION_RECHECK_VERSION)
         parts.append(PUBLICATION_REPAIR_SCOPE_VERSION)
+        parts.append(SOURCE_REQUIREMENT_FAILURE_POLICY_VERSION)
     material = "\n".join(parts)
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
@@ -3402,6 +3425,19 @@ def _validate_workflow_stage_bindings(
     batch: ProtocolControlDispositionBatch,
     candidate_index: int,
 ) -> None:
+    try:
+        validate_scope_citations(
+            candidate.review_node_bindings,
+            [unit for unit in batch.owned_units
+             if unit.structure_unit_id in candidate.source_structure_unit_ids],
+            [*batch.owned_units, *batch.context_units],
+        )
+    except ValueError as exc:
+        raise ProtocolControlAgentWireValidationError(
+            "SCOPE_CITATION_INVALID", str(exc),
+            structure_unit_ids=candidate.source_structure_unit_ids,
+            candidate_indexes=[candidate_index],
+        ) from exc
     targets = {
         item.workflow_stage_id: item
         for item in batch.known_workflow_stage_targets
@@ -3728,6 +3764,7 @@ def _candidate_to_domain(
                 review_stage=item.review_stage,
                 role=item.role,
                 guidance=item.guidance,
+                scope_citation=item.scope_citation,
             )
             for item in candidate.review_node_bindings
         ],
@@ -3929,6 +3966,8 @@ class ProtocolControlDiscoveryAgentRunner:
         accepted_batch_ids: Sequence[str] = (),
         on_attempt: ProtocolControlDiscoveryAgentAttemptCallback | None = None,
     ) -> ProtocolControlDiscoveryAgentRunResult:
+        from .protocol_control_agent_transport import protocol_control_call_failure_code
+
         discovery_input = (
             batch
             if isinstance(batch, ProtocolControlDiscoveryAgentInput)
@@ -3969,7 +4008,8 @@ class ProtocolControlDiscoveryAgentRunner:
                 break
             except Exception as exc:  # noqa: BLE001 - transport boundary
                 attempt_id = len(attempts) + 1
-                sid = session_id or f"transport-failed-{attempt_id}"
+                terminal_code = protocol_control_call_failure_code(exc)
+                sid = session_id or getattr(exc, "session_id", None) or f"transport-failed-{attempt_id}"
                 record_attempt(
                     ProtocolControlDiscoveryAgentAttempt(
                         attempt=attempt_id,
@@ -3977,11 +4017,13 @@ class ProtocolControlDiscoveryAgentRunner:
                         raw_output_sha256=_sha256(str(exc)),
                         outcome="transport_failed",
                         issues=[str(exc)[:2000]],
+                        error_code=terminal_code,
+                        error_classes=[terminal_code] if terminal_code else [],
                     )
                 )
                 transport_failures += 1
                 if (
-                    getattr(exc, "uncertain_completion", False)
+                    terminal_code is not None
                     or session_id is not None
                     or transport_failures > self._max_transport_retries
                 ):
@@ -4095,6 +4137,11 @@ class ProtocolControlDiscoveryAgentRunner:
                             raw_output_sha256=_sha256(str(exc2)),
                             outcome="transport_failed",
                             issues=[str(exc2)[:2000]],
+                            error_code=protocol_control_call_failure_code(exc2),
+                            error_classes=(
+                                [protocol_control_call_failure_code(exc2)]
+                                if protocol_control_call_failure_code(exc2) else []
+                            ),
                             rejected_structure_unit_ids=rejected_ids,
                         )
                     )
@@ -4135,6 +4182,8 @@ class ProtocolControlAgentRunResult(ContractModel):
     source_interpretation: SourceInterpretation | None = None
     source_statement_coverage: list[SourceStatementCoverage] = Field(default_factory=list)
     source_target_review: SourceTargetReview | None = None
+    # Pre-author comparison uses pending coverage, not the completed wire.
+    source_front_target_review: SourceTargetReview | None = None
     source_candidate_alignment: SourceCandidateAlignment | None = None
     # Bounded per-statement declarations of which hydrated candidate atoms
     # evaluate a source calculation definition. They are only proposals: the
@@ -4147,6 +4196,10 @@ class ProtocolControlAgentRunResult(ContractModel):
     # failure. The source restriction producer revalidates it on every read.
     capability_wire: ProtocolControlAgentWire | None = None
     repair_used: bool = False
+    workflow_variant_requested: Literal["RV1001-BASELINE", "RV1001-FLOW"] = "RV1001-BASELINE"
+    workflow_path_executed: Literal[
+        "not_recorded", "not_started", "front_stage_flow", "baseline_wire", "resumed_saved_wire",
+    ] = "not_recorded"
 
 
 def declare_source_definition_consumers(
@@ -4170,6 +4223,7 @@ def declare_source_definition_consumers(
     so the publication block stays in place and the batch is reported for review
     instead of passing silently.
     """
+    from .protocol_control_agent_transport import protocol_control_call_failure_code
 
     if interpretation is None:
         return None, False
@@ -4213,8 +4267,9 @@ def declare_source_definition_consumers(
             outcome=("publication_invalid" if response is not None else "transport_failed"),
             issues=["来源定义消费登记未通过有源校验：" + str(exc)[:1400]],
             error_classes=[
-                exc.code if isinstance(exc, SourceTargetReviewValidationError)
-                else "SOURCE_DEFINITION_CONSUMER_INVALID"
+                protocol_control_call_failure_code(exc)
+                or (exc.code if isinstance(exc, SourceTargetReviewValidationError)
+                    else "SOURCE_DEFINITION_CONSUMER_INVALID")
             ],
             error_detail=(
                 {
@@ -6501,7 +6556,15 @@ class ProtocolControlAgentRunner:
         resume_source_candidate_alignment: SourceCandidateAlignment | None = None,
         official_predicate_identities: Mapping[str, Sequence[tuple[str, str]]] | None = None,
         official_predicate_sources: Mapping[str, Mapping[tuple[str, str], Sequence[str]]] | None = None,
+        workflow_variant: str = "RV1001-BASELINE",
     ) -> ProtocolControlAgentRunResult:
+        from .protocol_control_agent_transport import protocol_control_call_failure_code
+
+        from .protocol_control_fixed_flow import (
+            BASELINE, FIXED_FLOW, prepare_front_stage_flow, supports_front_stage_flow,
+        )
+        if workflow_variant not in {BASELINE, FIXED_FLOW}:
+            raise ValueError("未知方案语义工作流程")
         if batch.batch_id in set(accepted_batch_ids):
             raise ValueError(f"已接受批次不得被同会话修复替换：{batch.batch_id}")
 
@@ -6540,9 +6603,94 @@ class ProtocolControlAgentRunner:
         raw_text: str | None = None
         source_interpretation: SourceInterpretation | None = None
         partial_wire: ProtocolControlAgentWire | None = None
+        front_flow_assembled = False
+        front_target_review: SourceTargetReview | None = None
+        front_candidate_alignment: SourceCandidateAlignment | None = None
+        workflow_path_executed = "not_started"
+        def build_result(**values) -> ProtocolControlAgentRunResult:
+            values.setdefault("source_front_target_review", front_target_review)
+            values.setdefault("workflow_variant_requested", workflow_variant)
+            values.setdefault("workflow_path_executed", workflow_path_executed)
+            if values.get("final_output") is not None and values.get("source_interpretation") is not None:
+                inventory = values["source_interpretation"]
+                saved_wire = values["partial_wire"]
+                raw_coverage = source_statement_coverage(batch, inventory, saved_wire)
+                pairs = evidence_policy_alignment_pairs(inventory, raw_coverage, saved_wire)
+                if pairs:
+                    alignment = values.get("source_candidate_alignment")
+                    proven = reusable_proven_alignment_items(
+                        batch, inventory, raw_coverage, saved_wire, alignment,
+                    )
+                    pending = [pair for pair in pairs if pair not in {
+                        (item.statement_index, item.candidate_index) for item in proven
+                    }]
+                    response = None
+                    reader = getattr(transport, "start_source_candidate_alignment", None)
+                    try:
+                        if pending:
+                            if not callable(reader):
+                                raise ValueError("当前读取通道未提供资料来源限制核对")
+                            response = reader(prompt=build_candidate_alignment_prompt(
+                                batch, inventory, saved_wire, pending,
+                            ))
+                            fresh = SourceCandidateAlignment.model_validate_json(response.text)
+                            if {(item.statement_index, item.candidate_index) for item in fresh.items} != set(pending):
+                                raise ValueError("资料来源限制核对没有逐项对应本次范围")
+                            fresh = bind_candidate_alignment(
+                                batch, inventory, raw_coverage, saved_wire, fresh, response.text,
+                            )
+                            previous = alignment_with_items(alignment, proven) if proven else None
+                            alignment = SourceCandidateAlignment(
+                                version=SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+                                items=[*(previous.items if previous else []), *fresh.items],
+                                proofs=[*(previous.proofs if previous else []), *fresh.proofs],
+                            )
+                            values["source_candidate_alignment"] = alignment
+                            attempts.append(ProtocolControlAgentAttempt(
+                                attempt=len(attempts) + 1, session_id=response.session_id,
+                                raw_output_sha256=_sha256(response.text),
+                                raw_output_chars=len(response.text), raw_output_text=response.text,
+                                outcome="parsed", issues=["已保存资料来源限制的局部核对，仍须通过采用校验"],
+                            ))
+                        require_evidence_policy_alignment(
+                            batch, inventory, raw_coverage, saved_wire, alignment,
+                        )
+                    except Exception as policy_error:  # noqa: BLE001 - retain source and failed review
+                        from .protocol_control_agent_transport import protocol_control_call_failure_code
+                        code = (protocol_control_call_failure_code(policy_error) or (
+                                "EVIDENCE_POLICY_REVIEW_UNAVAILABLE" if not callable(reader)
+                                else "SOURCE_CANDIDATE_ALIGNMENT_TRANSPORT_FAILED" if response is None
+                                else "EVIDENCE_POLICY_UNJUSTIFIED"))
+                        attempts.append(ProtocolControlAgentAttempt(
+                            attempt=len(attempts) + 1,
+                            session_id=response.session_id if response else values.get("session_id"),
+                            raw_output_sha256=_sha256(response.text if response else str(policy_error)),
+                            raw_output_chars=len(response.text) if response else None,
+                            raw_output_text=response.text if response else None,
+                            outcome=("transport_failed" if code == "SOURCE_CANDIDATE_ALIGNMENT_TRANSPORT_FAILED"
+                                     else "publication_invalid"),
+                            issues=["资料来源限制尚未核实：" + str(policy_error)[:1000]],
+                            error_classes=[code], error_detail=(policy_error.error_detail
+                                if isinstance(policy_error, EvidencePolicyCheckError) else {
+                                "code": code, "statement_ids": sorted({index for index, _ in pending}),
+                                "candidate_indexes": sorted({index for _, index in pending}),
+                                "json_path": "/candidate_drafts/minimum_evidence",
+                                "source_refs": sorted({span for index, _ in pending
+                                    for unit in batch.owned_units
+                                    if unit.structure_unit_id == inventory.statements[index].structure_unit_id
+                                    for span in unit.source_span_ids}),
+                                "retry_class": "source_semantic_review" if response else "technical_failure",
+                            }),
+                        ))
+                        values.update(status="需要核对", final_output=None)
+            return ProtocolControlAgentRunResult(**values)
+
         resuming_partial = resume_wire is not None
         repair_used = resuming_partial
         if resume_wire is not None:
+            if workflow_variant == FIXED_FLOW:
+                raise ValueError("FLOW_RESUME_PROOF_REQUIRED：局部装配缺少可恢复的前置核对证明，未调用模型")
+            workflow_path_executed = "resumed_saved_wire"
             if resume_source_interpretation is None or not resume_session_id or output_validator is None:
                 raise ValueError("局部恢复缺少来源、会话或发布校验")
             validate_source_interpretation(batch, resume_source_interpretation)
@@ -6556,6 +6704,7 @@ class ProtocolControlAgentRunner:
                 session_id=session_id,
                 raw_output_sha256=_sha256(raw_text),
                 raw_output_chars=len(raw_text),
+                raw_output_text=raw_text,
                 outcome="parsed",
                 issues=["已保存的局部草稿重新通过来源与原批次门禁"],
             ))
@@ -6580,18 +6729,19 @@ class ProtocolControlAgentRunner:
                         batch, source_interpretation
                     )
                     validate_source_interpretation(batch, source_interpretation)
-                    if anchor_ids or mixed_scope_ids:
-                        attempts.append(ProtocolControlAgentAttempt(
-                            attempt=len(attempts) + 1,
-                            session_id=source_response.session_id,
-                            raw_output_sha256=_sha256(source_response.text),
-                            raw_output_chars=len(source_response.text),
-                            outcome="parsed",
-                            issues=(["日程表纯随机节点标记按原文结构保留为流程背景：" + ",".join(anchor_ids)]
-                                    if anchor_ids else []) +
-                                   (["混合访视行错误共享范围按原列来源拆除：" + ",".join(mixed_scope_ids)]
-                                    if mixed_scope_ids else []),
-                        ))
+                    attempts.append(ProtocolControlAgentAttempt(
+                        attempt=len(attempts) + 1,
+                        session_id=source_response.session_id,
+                        raw_output_sha256=_sha256(source_response.text),
+                        raw_output_chars=len(source_response.text),
+                        raw_output_text=source_response.text,
+                        outcome="parsed",
+                        issues=["有源陈述：实际回答，尚未采用"] +
+                               (["日程表纯随机节点标记按原文结构保留为流程背景：" + ",".join(anchor_ids)]
+                                if anchor_ids else []) +
+                               (["混合访视行错误共享范围按原列来源拆除：" + ",".join(mixed_scope_ids)]
+                                if mixed_scope_ids else []),
+                    ))
                     break
                 except Exception as exc:  # noqa: BLE001 - product transport/schema boundary
                     source_session_id = (
@@ -6614,7 +6764,8 @@ class ProtocolControlAgentRunner:
                         issues=[f"有源陈述核对未通过：{str(exc)[:1800]}"],
                         error_classes=(
                             [exc.code] if isinstance(exc, SourceInterpretationValidationError)
-                            else []
+                            else [protocol_control_call_failure_code(exc)]
+                            if protocol_control_call_failure_code(exc) else []
                         ),
                         error_detail=(
                             {
@@ -6691,6 +6842,7 @@ class ProtocolControlAgentRunner:
                                     continue
                                 break
                             except Exception as correction_exc:  # noqa: BLE001 - bounded source correction
+                                failure_code = protocol_control_call_failure_code(correction_exc)
                                 attempts.append(ProtocolControlAgentAttempt(
                                     attempt=len(attempts) + 1,
                                     session_id=(correction_response.session_id if correction_response
@@ -6703,7 +6855,14 @@ class ProtocolControlAgentRunner:
                                     raw_output_text=(correction_response.text if correction_response else None),
                                     outcome="schema_invalid" if correction_response else "transport_failed",
                                     issues=["单条来源范围校正未通过：" + str(correction_exc)[:1200]],
+                                    error_classes=[failure_code or "SOURCE_INTERPRETATION_CORRECTION_TRANSPORT_FAILED"]
+                                    if correction_response is None else [],
                                 ))
+                                if correction_response is None:
+                                    return build_result(
+                                        status="需要核对", batch_id=batch.batch_id,
+                                        session_id=source_session_id, attempts=attempts,
+                                    )
                                 break
                         if corrected_scope_indexes:
                             try:
@@ -6760,6 +6919,7 @@ class ProtocolControlAgentRunner:
                                     continue
                                 break
                             except Exception as correction_exc:  # noqa: BLE001 - bounded correction
+                                failure_code = protocol_control_call_failure_code(correction_exc)
                                 attempts.append(ProtocolControlAgentAttempt(
                                     attempt=len(attempts) + 1,
                                     session_id=(correction_response.session_id if correction_response
@@ -6772,7 +6932,14 @@ class ProtocolControlAgentRunner:
                                     raw_output_text=(correction_response.text if correction_response else None),
                                     outcome="schema_invalid" if correction_response else "transport_failed",
                                     issues=["单条来源摘录校正未通过：" + str(correction_exc)[:1200]],
+                                    error_classes=[failure_code or "SOURCE_INTERPRETATION_CORRECTION_TRANSPORT_FAILED"]
+                                    if correction_response is None else [],
                                 ))
+                                if correction_response is None:
+                                    return build_result(
+                                        status="需要核对", batch_id=batch.batch_id,
+                                        session_id=source_session_id, attempts=attempts,
+                                    )
                                 break
                         if corrected_quote_indexes:
                             try:
@@ -6782,7 +6949,7 @@ class ProtocolControlAgentRunner:
                             else:
                                 break
                     if source_response is None or source_attempt == 1:
-                        return ProtocolControlAgentRunResult(
+                        return build_result(
                             status="需要核对",
                             batch_id=batch.batch_id,
                             session_id=source_session_id,
@@ -6796,6 +6963,59 @@ class ProtocolControlAgentRunner:
                         "逐字定位时填写 scope_quote；否则留空。仍须返回全部原文陈述，"
                         "不得改写原文、推断医学含义或遗漏其他单元。"
                     )
+        if (workflow_variant == FIXED_FLOW and raw_text is None
+                and source_interpretation is not None
+                and output_validator is not None
+                and supports_front_stage_flow(batch, source_interpretation)):
+            workflow_path_executed = "front_stage_flow"
+            prepared = prepare_front_stage_flow(
+                batch, source_interpretation, transport, output_validator,
+            )
+            if prepared.review_validated:
+                front_target_review = prepared.review
+            front_candidate_alignment = prepared.alignment
+            for phase, actual_response in prepared.responses:
+                attempts.append(ProtocolControlAgentAttempt(
+                    attempt=len(attempts) + 1,
+                    session_id=actual_response.session_id,
+                    raw_output_sha256=_sha256(actual_response.text),
+                    raw_output_chars=len(actual_response.text),
+                    raw_output_text=actual_response.text,
+                    outcome="parsed",
+                    issues=[f"RV1001-FLOW/{phase}：实际回答，尚未采用"],
+                ))
+            if prepared.error is not None or prepared.wire is None:
+                sid = (prepared.responses[-1][1].session_id if prepared.responses
+                       else getattr(prepared.error, "session_id", None) or "flow-failed")
+                attempts.append(ProtocolControlAgentAttempt(
+                    attempt=len(attempts) + 1, session_id=sid,
+                    raw_output_sha256=_sha256(str(prepared.error)),
+                    outcome=("transport_failed" if prepared.error_code in {
+                        "FLOW_TRANSPORT_FAILED", "FLOW_COMPLETION_UNCERTAIN", "LOGICAL_BUDGET_EXHAUSTED",
+                        "MODEL_IDENTITY_INVALID"}
+                             else "publication_invalid"),
+                    error_classes=[prepared.error_code or "FLOW_ASSEMBLY_INVALID"],
+                    issues=[str(prepared.error)[:1800]],
+                    error_detail=(prepared.error.error_detail
+                                  if isinstance(prepared.error, EvidencePolicyCheckError) else None),
+                ))
+                return build_result(
+                    status="需要核对", batch_id=batch.batch_id, session_id=sid,
+                    attempts=attempts, source_interpretation=source_interpretation,
+                    source_front_target_review=front_target_review,
+                    source_candidate_alignment=front_candidate_alignment,
+                )
+            # This is host assembly, not a provider-authored final wire. Actual
+            # short answers remain above; the normal consumer still checks it.
+            raw_text = prepared.wire.model_dump_json()
+            front_flow_assembled = True
+            session_id = prepared.responses[-1][1].session_id
+            attempts.append(ProtocolControlAgentAttempt(
+                attempt=len(attempts) + 1, session_id=session_id,
+                raw_output_sha256=_sha256(raw_text), raw_output_chars=len(raw_text),
+                raw_output_text=raw_text,
+                outcome="parsed", issues=["RV1001-FLOW：宿主装配，非模型原答，仍待完整采用检查"],
+            ))
         prompt = build_protocol_control_agent_prompt(
             batch,
             prompt_template=prompt_template,
@@ -6804,6 +7024,7 @@ class ProtocolControlAgentRunner:
         )
         transport_failures = 0
         while raw_text is None:
+            workflow_path_executed = "baseline_wire"
             try:
                 response = (
                     (transport.start_batch(prompt=prompt, batch=batch)
@@ -6819,7 +7040,9 @@ class ProtocolControlAgentRunner:
                 break
             except Exception as exc:  # noqa: BLE001 - transport boundary
                 attempt_id = len(attempts) + 1
-                sid = session_id or f"transport-failed-{attempt_id}"
+                from .protocol_control_agent_transport import protocol_control_call_failure_code
+                terminal_code = protocol_control_call_failure_code(exc)
+                sid = getattr(exc, "session_id", None) or session_id or f"transport-failed-{attempt_id}"
                 attempts.append(
                     ProtocolControlAgentAttempt(
                         attempt=attempt_id,
@@ -6827,13 +7050,14 @@ class ProtocolControlAgentRunner:
                         raw_output_sha256=_sha256(str(exc)),
                         outcome="transport_failed",
                         issues=[str(exc)[:2000]],
+                        error_classes=[terminal_code] if terminal_code else [],
                     )
                 )
                 transport_failures += 1
-                if getattr(exc, "uncertain_completion", False) or (
+                if terminal_code is not None or (
                     transport_failures > self._max_transport_retries
                 ):
-                    return ProtocolControlAgentRunResult(
+                    return build_result(
                         status="需要核对",
                         batch_id=batch.batch_id,
                         session_id=sid,
@@ -6873,6 +7097,14 @@ class ProtocolControlAgentRunner:
             {entry.statement_index: entry for entry in resume_source_statement_coverage}
             if resumed_review_items else {}
         )
+        if (front_flow_assembled and front_target_review is not None
+                and all(item.decision in {"covered_by_official", "covered_by_procedure"}
+                        for item in front_target_review.items)):
+            front_wire = parse_protocol_control_agent_wire(raw_text)
+            front_coverage = source_statement_coverage(batch, source_interpretation, front_wire)
+            validate_source_target_review(batch, source_interpretation, front_coverage, front_target_review)
+            latest_source_target_review = front_target_review
+            validated_target_coverage = {entry.statement_index: entry for entry in front_coverage}
         latest_source_statement_coverage: list[SourceStatementCoverage] = []
         latest_source_candidate_alignment: SourceCandidateAlignment | None = None
 
@@ -7061,6 +7293,7 @@ class ProtocolControlAgentRunner:
                         session_id=session_id,
                         raw_output_sha256=_sha256(raw_text),
                         raw_output_chars=len(raw_text),
+                        raw_output_text=raw_text,
                         outcome="parsed",
                         output=output,
                         issues=(
@@ -7338,7 +7571,8 @@ class ProtocolControlAgentRunner:
                                                 )
                                         except Exception as function_error:  # noqa: BLE001 - bounded proposal
                                             function_code = (
-                                                "SOURCE_FUNCTION_RECHECK_TRANSPORT_FAILED"
+                                                protocol_control_call_failure_code(function_error)
+                                                or "SOURCE_FUNCTION_RECHECK_TRANSPORT_FAILED"
                                                 if function_response is None else
                                                 "SOURCE_FUNCTION_RECHECK_SCHEMA_INVALID"
                                                 if isinstance(function_error, ValidationError) else
@@ -7371,7 +7605,7 @@ class ProtocolControlAgentRunner:
                                                 issues=["单条用途复核未获证实，原来源清单保留："
                                                         + str(function_error)[:1000]],
                                             ))
-                                            return ProtocolControlAgentRunResult(
+                                            return build_result(
                                                 status="需要核对", batch_id=batch.batch_id,
                                                 session_id=session_id, attempts=attempts,
                                                 source_interpretation=source_interpretation,
@@ -7430,7 +7664,10 @@ class ProtocolControlAgentRunner:
                                                 raw_output_text=(comparison_response.text if comparison_response else None),
                                                 outcome="publication_invalid" if comparison_response else "transport_failed",
                                                 issues=["跨章节原文对应未获证实：" + str(comparison_error)[:900]],
-                                                error_classes=["SOURCE_UNIT_COMPARISON_INVALID"],
+                                                error_classes=[
+                                                    protocol_control_call_failure_code(comparison_error)
+                                                    or "SOURCE_UNIT_COMPARISON_INVALID"
+                                                ],
                                             ))
                                             if comparison_response is None:
                                                 review_response = None
@@ -7539,7 +7776,8 @@ class ProtocolControlAgentRunner:
                                             "SOURCE_TARGET_FOCUSED_SCHEMA_INVALID"
                                             if focused_response is not None and isinstance(focused_error, ValidationError)
                                             else "SOURCE_TARGET_FOCUSED_INVALID" if focused_response is not None
-                                            else "SOURCE_TARGET_FOCUSED_TRANSPORT_FAILED"
+                                            else protocol_control_call_failure_code(focused_error)
+                                            or "SOURCE_TARGET_FOCUSED_TRANSPORT_FAILED"
                                         )
                                         detail = {
                                             "code": failure_code,
@@ -7589,7 +7827,7 @@ class ProtocolControlAgentRunner:
                                             error_classes=[failure_code],
                                             error_detail=detail,
                                         ))
-                                        return ProtocolControlAgentRunResult(
+                                        return build_result(
                                             status="需要核对", batch_id=batch.batch_id,
                                             session_id=session_id, attempts=attempts,
                                             source_interpretation=source_interpretation,
@@ -7637,7 +7875,9 @@ class ProtocolControlAgentRunner:
                             "review_proof_origin": (
                                 "assembled_source_target_review"
                                 if review_response and repaired_review_indexes else
-                                "model_response" if review_response else "saved_source_target_review"
+                                "model_response" if review_response else
+                                "current_front_target_review" if front_target_review is not None else
+                                "saved_source_target_review"
                             ),
                             "review_proof_sha256": _sha256(target_review.model_dump_json()),
                         }
@@ -7650,8 +7890,21 @@ class ProtocolControlAgentRunner:
                             if item.decision == "unresolved"
                         ]
                         if unresolved_indexes:
-                            raise ValueError(
-                                "来源陈述尚未逐项闭合：" + ",".join(map(str, unresolved_indexes))
+                            unresolved_units = {
+                                source_interpretation.statements[index].structure_unit_id
+                                for index in unresolved_indexes
+                            }
+                            raise SourceTargetReviewValidationError(
+                                "已读原文与审核要求的对应关系仍需核清。",
+                                code="SOURCE_TARGET_REVIEW_UNRESOLVED",
+                                statement_index=(unresolved_indexes[0]
+                                                 if len(unresolved_indexes) == 1 else None),
+                                json_path="/items",
+                                source_refs=tuple(sorted({
+                                    span for unit in batch.owned_units
+                                    if unit.structure_unit_id in unresolved_units
+                                    for span in unit.source_span_ids
+                                })),
                             )
                         additional = [
                             item for item in target_review.items
@@ -7683,6 +7936,7 @@ class ProtocolControlAgentRunner:
                                 single_read_calls = 0
                                 short_reviews = []
                                 short_responses = []
+                                short_failure = None
                                 for item in [*simple_additional, *(entry for entry in additional
                                                                      if entry.statement_index in temporal_unresolved_indexes)]:
                                     if single_read_calls >= 3:
@@ -7707,8 +7961,11 @@ class ProtocolControlAgentRunner:
                                         continue
                                     single_read_calls += 1
                                     response = None
+                                    request_started = False
                                     try:
-                                        response = reader(prompt=builder(batch, source_interpretation, item))
+                                        requirement_prompt = builder(batch, source_interpretation, item)
+                                        request_started = True
+                                        response = reader(prompt=requirement_prompt)
                                         short_reviews.append(item)
                                         short_responses.append(response)
                                         attempts.append(ProtocolControlAgentAttempt(
@@ -7721,6 +7978,11 @@ class ProtocolControlAgentRunner:
                                             issues=["单项解释已返回，待同批来源与发布门禁核实"],
                                         ))
                                     except Exception as stage_exc:  # noqa: BLE001 - bounded alternate path
+                                        if request_started and response is None:
+                                            from .protocol_control_agent_transport import protocol_control_call_failure_code
+                                            code = protocol_control_call_failure_code(stage_exc) or "SOURCE_REQUIREMENT_TRANSPORT_FAILED"
+                                            short_failure = (stage_exc, item.statement_index, code)
+                                            break
                                         if item.statement_index not in temporal_unresolved_indexes:
                                             pending_additional.append(item)
                                         attempts.append(ProtocolControlAgentAttempt(
@@ -7780,6 +8042,31 @@ class ProtocolControlAgentRunner:
                                             issues=["同批单项解释未通过原门禁：" + str(stage_exc)[:1400]],
                                             error_classes=["STAGE_BOUND_INSERT_INVALID"],
                                         ))
+                                if short_failure is not None:
+                                    failure, failed_index, code = short_failure
+                                    failed_statement = source_interpretation.statements[failed_index]
+                                    failed_unit = next(unit for unit in batch.owned_units
+                                                       if unit.structure_unit_id == failed_statement.structure_unit_id)
+                                    failed_session = getattr(failure, "session_id", None) or session_id
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1, session_id=failed_session,
+                                        raw_output_sha256=_sha256(str(failure)), outcome="transport_failed",
+                                        issues=["单项读取未完成，已保留此前通过的部分：" + str(failure)[:1400]],
+                                        error_classes=[code], error_detail={
+                                            "code": code, "statement_ids": [failed_index],
+                                            "json_path": f"/source_interpretation/statements/{failed_index}",
+                                            "source_refs": list(failed_unit.source_span_ids),
+                                            "retry_class": ("technical_failure" if code == "SOURCE_REQUIREMENT_TRANSPORT_FAILED"
+                                                            else "stop_current_read"),
+                                            "affected_dependents": [failed_index],
+                                        },
+                                    ))
+                                    return build_result(
+                                        status="需要核对", batch_id=batch.batch_id, session_id=failed_session,
+                                        attempts=attempts, source_interpretation=source_interpretation,
+                                        source_statement_coverage=coverage, source_target_review=target_review,
+                                        partial_wire=wire, source_candidate_alignment=checkpoint_alignment(),
+                                    )
                             else:
                                 pending_additional = simple_additional
                             candidate_alignment: SourceCandidateAlignment | None = None
@@ -7932,6 +8219,28 @@ class ProtocolControlAgentRunner:
                                         issues=["候选与原文的对应关系未通过核对：" + str(alignment_error)[:1000]],
                                         error_classes=["SOURCE_CANDIDATE_ALIGNMENT_INVALID"],
                                     ))
+                                    if alignment_response is None:
+                                        from .protocol_control_agent_transport import protocol_control_call_failure_code
+                                        code = protocol_control_call_failure_code(alignment_error) or "SOURCE_CANDIDATE_ALIGNMENT_TRANSPORT_FAILED"
+                                        attempts[-1].error_classes = [code]
+                                        attempts[-1].error_detail = {
+                                            "code": code,
+                                            "statement_ids": sorted({index for index, _ in pending_alignment_pairs}),
+                                            "candidate_indexes": sorted({index for _, index in pending_alignment_pairs}),
+                                            "json_path": "/source_candidate_alignment/items",
+                                            "source_refs": sorted({span for index, _ in pending_alignment_pairs
+                                                for unit in batch.owned_units
+                                                if unit.structure_unit_id == source_interpretation.statements[index].structure_unit_id
+                                                for span in unit.source_span_ids}),
+                                            "retry_class": ("technical_failure" if code == "SOURCE_CANDIDATE_ALIGNMENT_TRANSPORT_FAILED"
+                                                            else "stop_current_read"),
+                                        }
+                                        return build_result(
+                                            status="需要核对", batch_id=batch.batch_id, session_id=attempts[-1].session_id,
+                                            attempts=attempts, source_interpretation=source_interpretation,
+                                            source_statement_coverage=coverage, source_target_review=target_review,
+                                            source_candidate_alignment=checkpoint_alignment(), partial_wire=wire,
+                                        )
                             elif resumed_alignment_items:
                                 candidate_alignment = alignment_with_items(
                                     resume_source_candidate_alignment, resumed_alignment_items,
@@ -7995,7 +8304,7 @@ class ProtocolControlAgentRunner:
                                     )
                                 )
                                 if definition_failed:
-                                    return ProtocolControlAgentRunResult(
+                                    return build_result(
                                         status="需要核对",
                                         batch_id=batch.batch_id,
                                         session_id=session_id,
@@ -8006,7 +8315,7 @@ class ProtocolControlAgentRunner:
                                         source_candidate_alignment=checkpoint_alignment(),
                                         partial_wire=partial_wire,
                                     )
-                                return ProtocolControlAgentRunResult(
+                                return build_result(
                                     status=("待跨章核验" if any(
                                         item.decision == "potential_same_requirement"
                                         for item in target_review.items
@@ -8072,7 +8381,7 @@ class ProtocolControlAgentRunner:
                                         "affected_dependents": candidate_indexes,
                                     },
                                 ))
-                                return ProtocolControlAgentRunResult(
+                                return build_result(
                                     status="需要核对", batch_id=batch.batch_id,
                                     session_id=session_id, attempts=attempts,
                                     source_interpretation=source_interpretation,
@@ -8082,7 +8391,27 @@ class ProtocolControlAgentRunner:
                                     partial_wire=wire,
                                 )
                             if output_validator is None or source_insert_repairs >= MAX_SOURCE_INSERT_REPAIRS:
-                                raise ValueError("增量要求需要受限补入，当前修订能力或次数不足")
+                                addition_indexes = [item.statement_index for item in additional]
+                                addition_units = {
+                                    source_interpretation.statements[index].structure_unit_id
+                                    for index in addition_indexes
+                                }
+                                raise SourceTargetReviewValidationError(
+                                    "原文支持的补充要求尚缺可靠的装配核验能力。"
+                                    if output_validator is None else
+                                    "补充要求在本次限定修订次数内尚未核验完成。",
+                                    code=("SOURCE_REQUIREMENT_CONSUMER_UNAVAILABLE"
+                                          if output_validator is None else
+                                          "SOURCE_REQUIREMENT_INSERTION_LIMIT_REACHED"),
+                                    statement_index=(addition_indexes[0]
+                                                     if len(addition_indexes) == 1 else None),
+                                    json_path="/items",
+                                    source_refs=tuple(sorted({
+                                        span for unit in batch.owned_units
+                                        if unit.structure_unit_id in addition_units
+                                        for span in unit.source_span_ids
+                                    })),
+                                )
                             units = {
                                 source_interpretation.statements[item.statement_index].structure_unit_id
                                 for item in additional
@@ -8134,6 +8463,21 @@ class ProtocolControlAgentRunner:
                             or (review_response.session_id if review_response else None)
                             or "source-target-review-invalid"
                         )
+                        failure_statement_ids = (
+                            unresolved_indexes
+                            if isinstance(exc, SourceTargetReviewValidationError)
+                            and exc.code == "SOURCE_TARGET_REVIEW_UNRESOLVED" else
+                            [item.statement_index for item in target_review.items
+                             if item.decision == "additional_requirement"]
+                            if isinstance(exc, SourceTargetReviewValidationError)
+                            and exc.code in {
+                                "SOURCE_REQUIREMENT_CONSUMER_UNAVAILABLE",
+                                "SOURCE_REQUIREMENT_INSERTION_LIMIT_REACHED",
+                            } and target_review is not None else
+                            [exc.statement_index]
+                            if isinstance(exc, SourceTargetReviewValidationError)
+                            and exc.statement_index is not None else []
+                        )
                         attempts.append(ProtocolControlAgentAttempt(
                             attempt=len(attempts) + 1,
                             session_id=review_session,
@@ -8145,34 +8489,39 @@ class ProtocolControlAgentRunner:
                             ),
                             raw_output_text=(review_response.text if review_response else None),
                             outcome=("publication_invalid" if review_response is not None
-                                     or isinstance(exc, SourceTemporalScopeUnresolved)
+                                     or isinstance(exc, (SourceTemporalScopeUnresolved,
+                                                         SourceTargetReviewValidationError))
                                      else "transport_failed"),
                             output=output,
                             issues=[f"逐项来源与已有目标核对未通过：{str(exc)[:1800]}"],
                             error_classes=[
+                                protocol_control_call_failure_code(exc)
+                                or (exc.code if isinstance(exc, SourceTargetReviewValidationError)
+                                    and exc.code in {
+                                        "SOURCE_TARGET_REVIEW_UNRESOLVED",
+                                        "SOURCE_REQUIREMENT_CONSUMER_UNAVAILABLE",
+                                        "SOURCE_REQUIREMENT_INSERTION_LIMIT_REACHED",
+                                    } else
                                 "SOURCE_TARGET_REVIEW_UNAVAILABLE" if review_unavailable else
                                 "TEMPORAL_SCOPE_UNRESOLVED"
                                 if temporal_unresolved_indexes
                                 else
                                 "SOURCE_TARGET_REVIEW_UNRESOLVED"
-                                if unresolved_indexes or (
-                                    target_review is not None and any(
-                                        item.decision == "additional_requirement"
-                                        for item in target_review.items
-                                    )
-                                )
+                                if unresolved_indexes
                                 else "SOURCE_TARGET_REVIEW_INVALID"
                                 if review_response is not None
-                                else "SOURCE_TARGET_REVIEW_TRANSPORT_FAILED"
+                                else "SOURCE_TARGET_REVIEW_TRANSPORT_FAILED")
                             ],
                             error_detail=(
                                 {
                                     "code": exc.code,
+                                    "failure_reason_version": SOURCE_REQUIREMENT_FAILURE_REASON_VERSION,
                                     "statement_id": exc.statement_index,
+                                    "statement_ids": failure_statement_ids,
                                     "json_path": exc.json_path,
                                     "source_refs": list(exc.source_refs),
                                     "retry_class": exc.retry_class,
-                                    "affected_dependents": list(exc.affected_dependents),
+                                    "affected_dependents": failure_statement_ids or list(exc.affected_dependents),
                                     "review_snapshot_kind": review_validation_kind,
                                     "review_snapshot": (
                                         review_validation_snapshot.model_dump(mode="json")
@@ -8182,7 +8531,7 @@ class ProtocolControlAgentRunner:
                                 else _temporal_scope_error_detail(exc)
                             ),
                         ))
-                        return ProtocolControlAgentRunResult(
+                        return build_result(
                             status="需要核对",
                             batch_id=batch.batch_id,
                             session_id=session_id,
@@ -8199,7 +8548,7 @@ class ProtocolControlAgentRunner:
                     official_predicate_sources=official_predicate_sources,
                 )
                 if definition_failed:
-                    return ProtocolControlAgentRunResult(
+                    return build_result(
                         status="需要核对",
                         batch_id=batch.batch_id,
                         session_id=session_id,
@@ -8210,7 +8559,7 @@ class ProtocolControlAgentRunner:
                         source_candidate_alignment=checkpoint_alignment(),
                         partial_wire=partial_wire,
                     )
-                return ProtocolControlAgentRunResult(
+                return build_result(
                     status=("待跨章核验" if target_review is not None and any(
                         item.decision == "potential_same_requirement"
                         for item in target_review.items
@@ -8219,6 +8568,8 @@ class ProtocolControlAgentRunner:
                     session_id=session_id,
                     attempts=attempts,
                     final_output=output,
+                    source_front_target_review=front_target_review,
+                    source_candidate_alignment=front_candidate_alignment,
                     source_interpretation=source_interpretation,
                     source_statement_coverage=hydrated_source_coverage_indexes(
                         batch, wire, output, coverage,
@@ -8655,7 +9006,7 @@ class ProtocolControlAgentRunner:
                     "NUMERIC_VALUE_NOT_IN_SOURCE", "COMPARATOR_CHANGED", "NUMERIC_UNIT_NOT_IN_SOURCE",
                 }:
                     # Unscoped candidate rewriting cannot repair a source-bound scalar safely.
-                    return ProtocolControlAgentRunResult(
+                    return build_result(
                         status="需要核对", batch_id=batch.batch_id,
                         session_id=session_id, attempts=attempts,
                         source_interpretation=source_interpretation,
@@ -8751,7 +9102,7 @@ class ProtocolControlAgentRunner:
                                 issues=["单候选逐项修订未通过：" + str(focused_error)[:1400]],
                                 error_classes=["CANDIDATE_REPAIR_INVALID"],
                             ))
-                            return ProtocolControlAgentRunResult(
+                            return build_result(
                                 status="需要核对", batch_id=batch.batch_id,
                                 session_id=session_id, attempts=attempts,
                                 source_interpretation=source_interpretation,
@@ -8795,6 +9146,7 @@ class ProtocolControlAgentRunner:
                 )
                 if (
                     no_progress
+                    or front_flow_assembled
                     or error.code == "REPAIR_SCOPE_ESCAPE"
                     or error.code == "TIME_OPERAND_UNRESOLVED"
                     or repair_scope_unknown
@@ -8811,7 +9163,7 @@ class ProtocolControlAgentRunner:
                         attempts[-1].issues.append(
                             "多条要求的时间问题无法逐条定位，本批次停止自动改写并转为需要核对"
                         )
-                    return ProtocolControlAgentRunResult(
+                    return build_result(
                         status="需要核对",
                         batch_id=batch.batch_id,
                         session_id=session_id,
@@ -9095,13 +9447,17 @@ class ProtocolControlAgentRunner:
                             raw_output_sha256=_sha256(str(exc2)),
                             outcome="transport_failed",
                             issues=[str(exc2)[:2000]],
+                            error_classes=(
+                                [protocol_control_call_failure_code(exc2)]
+                                if protocol_control_call_failure_code(exc2) else []
+                            ),
                             rejected_structure_unit_ids=list(
                                 error.structure_unit_ids or batch.owned_structure_unit_ids
                             ),
                             rejected_candidate_ids=list(error.candidate_ids or candidate_ids),
                         )
                     )
-                    return ProtocolControlAgentRunResult(
+                    return build_result(
                         status="需要核对",
                         batch_id=batch.batch_id,
                         session_id=session_id,

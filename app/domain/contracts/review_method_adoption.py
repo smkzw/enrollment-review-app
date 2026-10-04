@@ -10,6 +10,8 @@ from .common import ContractModel
 Digest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 Text = Annotated[str, Field(min_length=1, pattern=r"\S")]
 
+BINDING_SCORING_REPORT_VERSION = "binding-evaluation-scoring-report/v2"
+
 
 class EvaluatedRoute(ContractModel):
     provider: Text

@@ -379,6 +379,29 @@ describe("protocolWorkbenchHttp", () => {
     expect(revision.reasonLabel).toBe("补充解释");
   });
 
+  it("修订次数记录缺失保留服务端说明，不提示重新读取", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(409, {
+      error: {
+        code: "BUDGET_RECORD_MISSING",
+        title: "未能完成本次反馈修订",
+        detail: "原方案读取的次数记录未保留，本次没有再次读取；原草稿保持不变。",
+        recovery_action: "请由维护人员核对原读取记录及允许继续读取的范围；不要反复点击修订。",
+        context: { unchanged_revision_id: "rev-current", attempts: 1 },
+      },
+    }));
+    const repo = createProtocolWorkbenchHttp({ fetchImpl });
+    await expect(repo.submitFeedback("job-current", {
+      expectedRevisionId: "rev-current", feedbackKind: "source_error",
+      targetRuleCode: "EX-01", targetComponentId: "component-current",
+      feedbackNote: "只核对当前子项。",
+    })).rejects.toMatchObject({
+      code: "BUDGET_RECORD_MISSING",
+      message: expect.stringContaining("次数记录未保留"),
+      recoveryAction: expect.stringContaining("不要反复点击"),
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it("原文纠错请求保留所选子项身份，补充解释不虚构子项", () => {
     expect(encodeFeedback({
       expectedRevisionId: "rev-2",

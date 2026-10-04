@@ -28,6 +28,7 @@ from app.domain.contracts.jobs import JobEvent
 from app.storage.codecs import utc_now, verify_payload_sha256
 from app.storage.models import (
     JobCheckpointRecord,
+    JobEventRecord,
     JobRecord,
     JobStepRecord,
     job_step_dependencies,
@@ -359,6 +360,14 @@ class JobStore:
             )
             for row in rows
         ]
+
+    def checkpoint_is_diagnostic(self, job_id: str, checkpoint_id: str) -> bool:
+        """失败事件关联的记录可用于局部恢复，但不能证明步骤完成。"""
+        return bool(self.session.scalar(select(exists().where(
+            JobEventRecord.job_id == job_id,
+            JobEventRecord.checkpoint_id == checkpoint_id,
+            JobEventRecord.event_type == JobEventType.STEP_FAILED.value,
+        ))))
 
     def list_event_rows(self, job_id: str, after_seq: int = 0) -> list[EventRow]:
         return [
@@ -1466,7 +1475,7 @@ class JobStore:
             if step.state != "running":
                 continue
             last = self.get_last_checkpoint(job_id, step.step_id)
-            if last is not None:
+            if last is not None and not self.checkpoint_is_diagnostic(job_id, last[0]):
                 checkpoint_id, _payload = last
                 step.state = "completed"
                 step.error_code = None

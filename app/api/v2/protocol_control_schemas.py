@@ -4,7 +4,7 @@ from __future__ import annotations
 from pydantic import Field
 
 from app.api.v2.schemas import _StrictModel
-from app.domain.contracts.protocol_controls import ProtocolControlCandidate
+from app.domain.contracts.protocol_controls import ProtocolControlCandidate, RestrictedProtocolControlStatement
 from app.domain.contracts.rules import WorkflowStage
 
 
@@ -59,3 +59,4 @@ class ProtocolControlRequirementsResponse(_StrictModel):
     workflow_stages: list[WorkflowStage]
     relation_target_labels: dict[str, str]
     calculation_gaps: list[ProtocolControlCalculationGapResponse]
+    restricted_statements: list[RestrictedProtocolControlStatement]

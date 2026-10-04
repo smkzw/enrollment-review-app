@@ -318,14 +318,16 @@ def _validate_upstream_scope(
 
 
 def _catalog_source_ids(*catalogs: FrozenProtocolCatalog) -> tuple[str, ...]:
-    return tuple(
-        dict.fromkeys(
+    item_sources = (
             span_id
             for catalog in catalogs
             for item in sorted(catalog.items, key=lambda item: item.position)
             for span_id in item.source_span_ids
-        )
     )
+    header_sources = (ref for catalog in catalogs for table in catalog.visit_tables
+                      for ref in (table.table_source_span_id,
+                                  *(ref for column in table.columns for ref in column.source_span_ids)))
+    return tuple(dict.fromkeys((*item_sources, *header_sources)))
 
 
 def _validate_catalog_sources(

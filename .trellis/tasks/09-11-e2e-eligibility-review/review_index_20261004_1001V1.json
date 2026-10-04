@@ -1,0 +1,238 @@
+{
+  "schema_version": "review-index/0929v1/v1",
+  "document_kind": "handoff",
+  "round_id": "1001V1",
+  "recorded_at": "2026-10-04",
+  "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
+  "execution_variant": "official-source-scope/v3; component-local/v1; gate/2026-10-04.51",
+  "base_review_commit": "60a849e603f69ffa669b8d57a661bcee47d3cd3c",
+  "delivered_snapshot_id": "S-01",
+  "runtime_state": "goal_paused_by_user; task_in_progress_with_pause_metadata; claims_complete=false; owned model/test/conference commands terminal",
+  "code_snapshots": [
+    {
+      "id": "S-01",
+      "kind": "base_plus_explicit_manifest",
+      "base_commit": "60a849e603f69ffa669b8d57a661bcee47d3cd3c",
+      "manifest_artifact_id": "E-02",
+      "access": "local_pending_selected_git_delivery",
+      "note": "Selected source/test static import closure includes inherited task prerequisites; not all modified this turn. All other dirty files preserved. Local test/source identity and staged snapshot verification are distinct."
+    }
+  ],
+  "changes": [
+    {
+      "id": "CH-01",
+      "delivery_state": "pending_selected_commit",
+      "paths": [
+        "app/protocols/official_scope_review.py",
+        "app/services/protocol_scope_review_service.py",
+        "app/agents/protocol_semantic_transport.py",
+        "app/protocols/deconstruction_gate.py",
+        "app/domain/contracts/protocol_ingestion.py",
+        "app/protocols/procedure_catalog.py",
+        "app/protocols/source_time_fragments.py",
+        "tests/v2/protocols/test_official_scope_review.py"
+      ],
+      "evidence_ids": [
+        "E-01",
+        "E-02",
+        "E-03",
+        "X-01"
+      ],
+      "note": "Frozen full visit identity, per-component accepted/rejected proof, latest persisted scope/run recovery checks, real transport offline fault cases; no clinical condition rewriting or formal adoption."
+    }
+  ],
+  "claims": [
+    {
+      "id": "CL-01",
+      "status": "verified",
+      "snapshot_id": "S-01",
+      "statement": "Connected source/proof/recovery/save/gate/API boundaries pass local synthetic checks.",
+      "limitations": "Not full clinical validation, final independent reapproval or whole application verification.",
+      "evidence_ids": [
+        "E-01",
+        "E-02"
+      ],
+      "test_ids": [
+        "T-01",
+        "T-02"
+      ]
+    },
+    {
+      "id": "CL-02",
+      "status": "verified",
+      "snapshot_id": "S-01",
+      "statement": "Authorized final proposal request completed and candidate saved without adoption; protected source, database and prior draft unchanged.",
+      "limitations": "Four IN04 components have supported stage relationship; three still rejected. Model agreement=true is not actual source or proposal agreement.",
+      "evidence_ids": [
+        "X-01"
+      ],
+      "test_ids": [
+        "T-03"
+      ]
+    },
+    {
+      "id": "CL-03",
+      "status": "not_verified",
+      "snapshot_id": "S-01",
+      "statement": "Complete jointly adopted rules, current patient review and correction/new-report closure.",
+      "limitations": "Not performed; claims_complete=false; no whole-source rerun or signing on pause.",
+      "evidence_ids": [
+        "E-01"
+      ],
+      "test_ids": [
+        "T-04"
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "id": "T-01",
+      "status": "passed",
+      "snapshot_id": "S-01",
+      "command": ".venv/bin/python -m pytest tests/v2/protocols/test_official_scope_review.py tests/v2/protocols/test_deconstruction_gate_slice3.py tests/v2/protocols/test_procedure_catalog_slice3.py tests/v2/protocols/test_deconstruction_service.py tests/v2/protocols/test_publication_service.py tests/v2/protocols/test_draft_revision_service.py tests/v2/api/test_protocols_api.py tests/v2/protocols/test_deepseek_protocol_transport_slice3.py tests/v2/llm/test_logical_call_budget.py -q --junitxml=/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/scope-and-visit-package-final.xml",
+      "exit_code": 0,
+      "counts": {
+        "passed": 603,
+        "failed": 0,
+        "skipped": 0
+      },
+      "seconds": 171.03,
+      "evidence_ids": [
+        "E-02",
+        "X-02"
+      ],
+      "note": "Actual session23870 terminal; five SWIG warnings. Dirty-tree final bytes, not automatically the remote commit. Earlier results not summed."
+    },
+    {
+      "id": "T-02",
+      "status": "passed",
+      "snapshot_id": "S-01",
+      "command": "frontend: npm test -- src/api/protocolWorkbenchHttp.test.ts src/components/protocols/ProtocolFeedbackDialog.test.tsx",
+      "exit_code": 0,
+      "counts": {
+        "passed": 19,
+        "failed": 0,
+        "skipped": 0
+      },
+      "seconds": 1.57,
+      "evidence_ids": [
+        "E-01",
+        "E-02"
+      ],
+      "note": "Actual session2644 terminal; request/entry components only, not rendered scope-feedback/Q3."
+    },
+    {
+      "id": "T-03",
+      "status": "passed_bounded_not_adopted",
+      "snapshot_id": "S-01",
+      "command": ".venv/bin/python /Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/resume_authorized_heading_relationship.py",
+      "exit_code": 0,
+      "counts": {
+        "physical_model_calls": 1
+      },
+      "seconds": 187.58749729100964,
+      "evidence_ids": [
+        "X-01"
+      ],
+      "note": "Actual session86928; scope2/2, run34/142, original IN04 scope2/3 unchanged. Stop, requested/reported glm-5.3-flash, high/65536. Input16066/completion14534; thinking subdivision and cost unknown; user approval does not grant a third call."
+    },
+    {
+      "id": "T-04",
+      "status": "not_run",
+      "snapshot_id": "S-01",
+      "command": "Full library, six-family paired comparison, complete jointly adopted rules/patient/correction/report, holdout, scope-feedback Ego/Q3",
+      "exit_code": null,
+      "counts": {
+        "passed": null,
+        "failed": null,
+        "skipped": null
+      },
+      "evidence_ids": [
+        "E-01"
+      ],
+      "reason": "Current bounded phase closed and user-directed pause; prerequisites and formal authority remain incomplete."
+    },
+    {
+      "id": "T-05",
+      "status": "passed",
+      "snapshot_id": "S-01",
+      "command": "In /Users/smkzw/tmp/enrollment-pause-staged-20261004: original task .venv/bin/python -m pytest [same nine T-01 modules] -q --junitxml=/Users/smkzw/tmp/enrollment-pause-staged-tests-20261004.xml; frontend npm test -- [same two T-02 modules]; env VITE_PROTOCOL_WORKBENCH_STUB=false VITE_ENROLLMENT_INTERFACE_TRIAL=false npm run build",
+      "exit_code": 0,
+      "counts": {
+        "backend_passed": 603,
+        "frontend_passed": 19,
+        "failed": 0
+      },
+      "seconds": {
+        "backend": 133.59,
+        "frontend": 1.49
+      },
+      "evidence_ids": [
+        "E-01",
+        "E-02"
+      ],
+      "note": "git checkout-index --all exported precisely the selected staging snapshot plus unchanged HEAD files. Same installed task virtualenv/node_modules, no credentials or clinical originals exported. Formal frontend TypeScript+Vite build exit0 with existing large-chunk warning. Not another clinical run or full-source/test acceptance."
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "E-01",
+      "access": "selected_git_delivery",
+      "sensitivity": "public_technical",
+      "path": ".trellis/tasks/09-11-e2e-eligibility-review/HANDOFF_20261004_1001V1_PAUSE.md",
+      "note": "Current detailed facts, retrospective pointers, goal verbatim and next bounded work."
+    },
+    {
+      "id": "E-02",
+      "access": "selected_git_delivery",
+      "sensitivity": "public_technical",
+      "path": ".trellis/tasks/09-11-e2e-eligibility-review/SOURCE_SNAPSHOT_20261004_SCOPE_RECOVERY.json",
+      "note": "Selected paths and hashes, static dependency closure and retained local differences."
+    },
+    {
+      "id": "E-03",
+      "access": "selected_git_delivery",
+      "sensitivity": "public_technical",
+      "path": "reviews/codex_conference_enrollment-rv1001-component-scope-recovery-20261004_review.md",
+      "note": "Primary/fallback explicitly separated; actual Pi/openai-codex/gpt-6.1-sol/high read-only adviser found F1–F4. Freeze precedes owner remedies."
+    },
+    {
+      "id": "E-04",
+      "access": "selected_git_delivery",
+      "sensitivity": "public_technical",
+      "path": ".trellis/tasks/09-11-e2e-eligibility-review/EVIDENCE_20261004_SCOPE_RESUME_SUMMARY.json",
+      "note": "Sanitized owner extract of the real terminal result and component-level replay, no original text or private reasoning."
+    }
+  ],
+  "external_evidence": [
+    {
+      "id": "X-01",
+      "access": "controlled_local_only",
+      "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/authorized-heading-relationship-resume-v1/result.json",
+      "note": "Candidate e93ef6ae…/gate a9c89a8f…/proof86699b51…; 14 publication blockers plus3 reminders; not publishable. Raw clinical response remains private; hash proves identity, not clinical accuracy."
+    },
+    {
+      "id": "X-02",
+      "access": "local_only",
+      "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/scope-and-visit-package-final.xml",
+      "note": "JUnit of actual final dirty-tree connected tests, not remotely accessible merely because this path is listed."
+    }
+  ],
+  "alternative_explanations": [
+    "IN04:01 proposal mismatch is a source/node production inconsistency, not proof of model incapability or transport failure.",
+    "IN04 note-stage rejection may reflect insufficient dependency representation or genuine source ambiguity; model agreement and proximity cannot distinguish them.",
+    "Large passing test counts mostly cover contract boundaries; they do not demonstrate ordinary complete clinical task usability."
+  ],
+  "next_actions": [
+    "After user resume, inspect the final proof per component without reissuing the exhausted two-call scope; preserve candidate and source history.",
+    "Close one ordinary P1 source-qualified requirement and one P2 source/identity/correction consumer; do not wait for every complex requirement to become executable.",
+    "Use legitimate versioned joint adoption and current patient/correction/report closure before holdout and wide-screen Ego/Q3 acceptance. No new platform or model purchase."
+  ],
+  "dependency_versions": {
+    "pytest": "9.0.2",
+    "pydantic": "2.13.3",
+    "sqlalchemy": "2.0.52",
+    "openai": "2.37.0",
+    "frontend": "package.json/package-lock.json unchanged; task node_modules reused"
+  }
+}

@@ -9,6 +9,16 @@ from .common import ContractModel
 from .rules import TimeConstraint
 
 
+def has_explicit_evidence_policy(evidence) -> bool:
+    """Detect policy assertions needing source review, not their clinical validity."""
+    policy = evidence.source_policy
+    return bool(evidence.required_source_types or (policy is not None and (
+        policy.requires_contemporaneous_objective_source is not None
+        or policy.allows_screening_record_transcription is not None
+        or policy.result_validity_status == "specified"
+    )))
+
+
 class ControlEvidenceSourcePolicy(ContractModel):
     # None means unresolved, never the legacy template's permissive default.
     requires_contemporaneous_objective_source: bool | None = Field(...)

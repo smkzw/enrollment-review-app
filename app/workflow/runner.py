@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class StepContext:
-    """执行器输入：任务/步骤范围 + 尝试次数 + 上次成功检查点（幂等重放依据）。"""
+    """执行器输入：任务范围与保存记录；失败诊断不是成功重放依据。"""
 
     job_id: str
     job_type: str
@@ -64,6 +64,7 @@ class StepContext:
     last_checkpoint_id: str | None
     last_checkpoint: dict[str, Any] | None
     max_attempts: int = 1
+    last_checkpoint_is_diagnostic: bool = False
 
 
 StepApply = Callable[[Session], None]
@@ -391,6 +392,11 @@ class JobRunner:
                                             else None
                                         ),
                                         max_attempts=started_wave.max_attempts,
+                                        last_checkpoint_is_diagnostic=(
+                                            last_checkpoint is not None and store.checkpoint_is_diagnostic(
+                                                lease.job_id, last_checkpoint[0],
+                                            )
+                                        ),
                                     )
                                 )
                             context = parallel_contexts[0]
@@ -415,6 +421,11 @@ class JobRunner:
                                     last_checkpoint[1] if last_checkpoint else None
                                 ),
                                 max_attempts=started.max_attempts,
+                                last_checkpoint_is_diagnostic=(
+                                    last_checkpoint is not None and store.checkpoint_is_diagnostic(
+                                        lease.job_id, last_checkpoint[0],
+                                    )
+                                ),
                             )
                             step_id = started.step_id
             if cancelled_at_boundary:

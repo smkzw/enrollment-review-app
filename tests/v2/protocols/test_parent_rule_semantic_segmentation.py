@@ -20,11 +20,13 @@ from app.agents.protocol_deconstructor import (
     ProtocolAgentResponse,
     _collect_parent_segment,
     _collect_initial_semantic_response,
+    _hydrate_semantic_candidate,
     _parse_semantic_candidate,
 )
 from app.domain.contracts.agent_io import (
     ProtocolSemanticDeconstructionCandidate,
     SemanticEvidenceRequirement,
+    SemanticRestrictedComponent,
     SemanticRule,
     SemanticRuleComponent,
 )
@@ -477,6 +479,65 @@ def test_merge_is_deterministic_ordered_and_assigns_system_identity():
         )
 
 
+@pytest.mark.parametrize("restricted_indexes", [(0,), (2,), (0, 1, 2, 3)])
+def test_segment_restrictions_survive_merge_and_draft_consumption(restricted_indexes):
+    source, parent, _base = _segmented_collection_input()
+    plan = plan_parent_rule_segments(
+        parent, source_materials=source.source_materials,
+        token_estimate=100, thresholds=_thresholds(),
+    )
+    assert plan is not None
+    parts = []
+    expected = []
+    for index, segment in enumerate(plan.segments):
+        span = segment.body_source_span_ids[0]
+        text = next(item.text for item in source.source_materials if item.source_span_id == span)
+        restricted = SemanticRestrictedComponent(
+            title=f"restricted-{index}", source_span_ids=[span], source_excerpts=[text],
+            limitation_kind="interpretation_unresolved", unresolved_dimensions=["适用范围"],
+        )
+        rule = SemanticRule(
+            official_code=parent.official_code,
+            components=[] if index in restricted_indexes else [
+                _component(title=f"normal-{index}", span_ids=[span], excerpts=[text])
+            ],
+            restricted_components=[restricted] if index in restricted_indexes else [],
+        )
+        if index in restricted_indexes:
+            expected.append(restricted)
+        parts.append(ProtocolSemanticDeconstructionCandidate(
+            candidate_id=f"segment-{index}", created_by_agent_call_id=f"call-{index}",
+            proposed_rules=[rule],
+        ))
+    before = [part.model_dump(mode="json") for part in parts]
+    merged = merge_parent_rule_segments(
+        parts, plan=plan, candidate_id="merged", agent_call_id="merged-call",
+    )
+    assert merged.proposed_rules[0].restricted_components == expected
+    assert len(merged.proposed_rules[0].components) == len(plan.segments) - len(expected)
+    draft = _hydrate_semantic_candidate(source, merged)
+    restrictions = draft.proposed_rules[0].restricted_components
+    assert [item.source_span_ids for item in restrictions] == [item.source_span_ids for item in expected]
+    assert [item.unresolved_dimensions for item in restrictions] == [item.unresolved_dimensions for item in expected]
+    assert len({item.rule_component_id for item in (
+        *draft.proposed_rules[0].components, *restrictions,
+    )}) == len(plan.segments)
+    assert [part.model_dump(mode="json") for part in parts] == before
+
+
+def test_restricted_source_cannot_escape_its_segment_even_if_body_is_covered():
+    segment = ParentRuleSegment("EX-88", "segment-1", ("body",), ("body",))
+    candidate = _candidate(official_code="EX-88", components=[
+        _component(title="covered", span_ids=["body"], excerpts=["须完成核查。"])
+    ])
+    candidate.proposed_rules[0].restricted_components = [SemanticRestrictedComponent(
+        title="foreign", source_span_ids=["other"], source_excerpts=["另一要求。"],
+        limitation_kind="consumer_unavailable", unresolved_dimensions=["计算能力"],
+    )]
+    with pytest.raises(ValueError, match="闭包之外"):
+        validate_segment_source_closure(candidate, segment)
+
+
 def test_collection_respects_concurrency_hard_cap_and_merges_one_parent(monkeypatch):
     source_input, _parent, base_candidate = _segmented_collection_input()
     base_rule = next(
@@ -515,7 +576,15 @@ def test_collection_respects_concurrency_hard_cap_and_merges_one_parent(monkeypa
                 if item["source_span_id"] == body_id
             )
             component = base_rule.components[0].model_copy(
-                update={"source_span_ids": [body_id], "source_excerpts": [body]},
+                update={
+                    "expression": AtomicExpression(predicate=AtomicPredicate(
+                        predicate_id=f"predicate:{body_id}", subject="受试者", attribute="条件块",
+                        comparator="exists", source_clause=body,
+                        observation_policy={"mode": "unresolved", "scope": "测试条件未指定观察采用方式",
+                                            "source_span_ids": [body_id], "source_excerpts": [body]},
+                    )),
+                    "source_span_ids": [body_id], "source_excerpts": [body],
+                },
                 deep=True,
             )
             candidate = base_candidate.model_copy(
@@ -570,7 +639,7 @@ def test_collection_respects_concurrency_hard_cap_and_merges_one_parent(monkeypa
     } == {f"span-body-{index}" for index in range(1, 5)}
 
 
-def test_segment_failure_falls_back_once_to_whole_parent(monkeypatch):
+def test_segment_failure_does_not_replay_whole_parent(monkeypatch):
     source_input, parent, base_candidate = _segmented_collection_input()
     base_rule = next(
         rule for rule in base_candidate.proposed_rules if rule.official_code == "EX-01"
@@ -617,17 +686,16 @@ def test_segment_failure_falls_back_once_to_whole_parent(monkeypatch):
             )
         ]
     )
-    response, error = _collect_initial_semantic_response(
-        source_input,
-        prompt_template="按正式方案原文进行结构化解构。",
-        transport=primary,
-        transport_factory=FailingSegmentTransport,
-        batch_size=3,
-    )
-
-    assert error is None
-    assert response.session_id == "whole-parent"
-    assert len(primary.start_prompts) == 1
+    with pytest.raises(ProtocolAgentCallError) as caught:
+        _collect_initial_semantic_response(
+            source_input,
+            prompt_template="按正式方案原文进行结构化解构。",
+            transport=primary,
+            transport_factory=FailingSegmentTransport,
+            batch_size=3,
+        )
+    assert caught.value.error_code == "SEGMENT_MERGE_INVALID"
+    assert primary.start_prompts == []
 
 
 def test_noncompact_glm_style_transport_can_collect_and_checkpoint_one_segment():
@@ -640,7 +708,13 @@ def test_noncompact_glm_style_transport_can_collect_and_checkpoint_one_segment()
     body_id = parent.source_span_ids[0]
     body = parent.source_excerpts[0]
     component = base_rule.components[0].model_copy(
-        update={"source_span_ids": [body_id], "source_excerpts": [body]},
+        update={
+            "expression": AtomicExpression(predicate=AtomicPredicate(
+                predicate_id=f"predicate:{body_id}", subject="受试者", attribute="条件块",
+                comparator="exists", source_clause=body,
+            )),
+            "source_span_ids": [body_id], "source_excerpts": [body],
+        },
         deep=True,
     )
     candidate = base_candidate.model_copy(
@@ -714,7 +788,13 @@ def test_segment_timeout_retries_once_with_same_identity_then_checkpoints():
     body_id = parent.source_span_ids[0]
     body = parent.source_excerpts[0]
     component = base_rule.components[0].model_copy(
-        update={"source_span_ids": [body_id], "source_excerpts": [body]},
+        update={
+            "expression": AtomicExpression(predicate=AtomicPredicate(
+                predicate_id=f"predicate:{body_id}", subject="受试者", attribute="条件块",
+                comparator="exists", source_clause=body,
+            )),
+            "source_span_ids": [body_id], "source_excerpts": [body],
+        },
         deep=True,
     )
     candidate = base_candidate.model_copy(

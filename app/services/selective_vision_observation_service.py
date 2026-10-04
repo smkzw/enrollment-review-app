@@ -216,7 +216,43 @@ def _assert_ocr_unchanged(
         )
 
 
-def local_visual_prompts(region_ref: str, read_format: LocalReadFormat = "transcript") -> tuple[str, str]:
+def local_visual_focus_coordinates(context_bbox: BoundingBox, focus_bbox: BoundingBox) -> dict[str, int]:
+    """Bind a requested target to its context image, without guessing field meaning."""
+    from math import ceil, floor
+
+    if not (context_bbox.x0 <= focus_bbox.x0 < focus_bbox.x1 <= context_bbox.x1
+            and context_bbox.y0 <= focus_bbox.y0 < focus_bbox.y1 <= context_bbox.y1):
+        raise ValueError("核实范围必须完整位于本次读取图片内")
+    width, height = context_bbox.x1 - context_bbox.x0, context_bbox.y1 - context_bbox.y0
+    return {
+        "x0": floor((focus_bbox.x0 - context_bbox.x0) * 1000 / width),
+        "y0": floor((focus_bbox.y0 - context_bbox.y0) * 1000 / height),
+        "x1": ceil((focus_bbox.x1 - context_bbox.x0) * 1000 / width),
+        "y1": ceil((focus_bbox.y1 - context_bbox.y0) * 1000 / height),
+    }
+
+
+def local_visual_prompts(
+    region_ref: str, read_format: LocalReadFormat = "transcript", *,
+    focus_coordinates: dict[str, int] | None = None,
+) -> tuple[str, str]:
+    focus_instruction = ""
+    if focus_coordinates is not None:
+        from app.domain.contracts.local_region_read import LocalRegionRelativeBox
+
+        focus = LocalRegionRelativeBox.model_validate(focus_coordinates)
+        focus_instruction = (
+            "\n本次要核实的范围为图片中的以下框，横纵各按0至1000表示："
+            + json.dumps(focus.model_dump(), ensure_ascii=False, separators=(",", ":"))
+            + "。框外内容只供理解项目名、列头、单位或批注连线，不能另列框外项目。"
+            "只输出框内可见项目；若一个项目被框边截断，可引用紧邻的原文补足标签，"
+            "但不得把相邻项目的值借入。框内无法读清或无法确认归属时具体说明，不能省略。"
+            "不推断日期与其他项目的关系，也不为无关页脚内容添加疑问。框外上下文不是已核实内容。"
+        )
+        if read_format in {"structured_candidate", "localized_candidate"}:
+            focus_instruction += "日期标题与日期值分开记录：time_label抄日期标题，不抄日期或时刻。"
+        if read_format == "localized_candidate":
+            focus_instruction += "proposed_bbox仍相对于整个所附图片，不是相对于核实框。"
     if read_format in {"structured_candidate", "localized_candidate"}:
         schema = json.dumps(local_region_read_model(read_format).model_json_schema(), ensure_ascii=False)
         location_instruction = (
@@ -239,7 +275,7 @@ def local_visual_prompts(region_ref: str, read_format: LocalReadFormat = "transc
             "读不清时保留疑似读法并标unclear，不能补全字符。annotation_target仅在明确连线或"
             "原图直接说明时摘录批注对象，否则null。可见不清的手写字不得写成没有研究者判断。"
             "截取范围外的内容、书写者及医学含义不得推断；疑问写unresolved，不能编造新项目。"
-            + location_instruction,
+            + location_instruction + focus_instruction,
         )
     if read_format != "transcript":
         raise ValueError("局部读取格式不受支持")
@@ -252,12 +288,16 @@ def local_visual_prompts(region_ref: str, read_format: LocalReadFormat = "transc
         "如批注所指对象不在区域内或没有明确连线，只说明无法确定对象。"
         "可见但读不清的批注不得被描述为没有批注或没有研究者判断。"
         "不要推断书写者、日期、整页或其他页面是否存在判断，不作入排结论。"
-        "第一行原样输出 source_ref=" + region_ref,
+        "第一行原样输出 source_ref=" + region_ref + focus_instruction,
     )
 
 
-def local_visual_prompt_identity(read_format: LocalReadFormat = "transcript") -> str:
-    return canonical_hash(local_visual_prompts("{region_source_ref}", read_format))
+def local_visual_prompt_identity(
+    read_format: LocalReadFormat = "transcript", *, focus_coordinates: dict[str, int] | None = None,
+) -> str:
+    return canonical_hash(local_visual_prompts(
+        "{region_source_ref}", read_format, focus_coordinates=focus_coordinates,
+    ))
 
 
 class SelectiveVisionObservationService:
@@ -282,6 +322,8 @@ class SelectiveVisionObservationService:
         clockwise_degrees: int, artifact_store: ArtifactStore,
         max_tokens: int | None = None, reasoning_effort: str | None = None,
         read_format: LocalReadFormat = "transcript",
+        focus_bbox: BoundingBox | None = None,
+        requested_processing_revision_id: str | None = None,
     ) -> StoredArtifact:
         """Read an explicitly selected region without qualifying a page or fact.
 
@@ -310,7 +352,10 @@ class SelectiveVisionObservationService:
         region = make_reading_region(view, view_bbox)
         binding = region.identity()
         region_ref = "region:" + canonical_hash(binding)
-        system, prompt = local_visual_prompts(region_ref, read_format)
+        focus_coordinates = (
+            local_visual_focus_coordinates(view_bbox, focus_bbox) if focus_bbox is not None else None
+        )
+        system, prompt = local_visual_prompts(region_ref, read_format, focus_coordinates=focus_coordinates)
         request_options = vlm.independent_vlm_completion_kwargs(
             messages=[], model=self.default_model_id, max_tokens=max_tokens,
             reasoning_effort=reasoning_effort,
@@ -328,13 +373,17 @@ class SelectiveVisionObservationService:
             "region_source_ref": region_ref, "region": binding,
             "image_artifact_ref": image_artifact.storage_ref,
             "prompt": prompt, "system_prompt": system,
-            "prompt_sha256": local_visual_prompt_identity(read_format),
+            "prompt_sha256": local_visual_prompt_identity(read_format, focus_coordinates=focus_coordinates),
             "read_format": read_format,
             "requested_model": request_options["model"],
             "requested_max_tokens": request_options["max_tokens"],
             "requested_effort": request_options["reasoning_effort"],
             "created_at": _utcnow().isoformat(),
         }
+        if focus_bbox is not None:
+            payload["focus_bbox"] = focus_bbox.model_dump(mode="json")
+        if requested_processing_revision_id is not None:
+            payload["requested_processing_revision_id"] = requested_processing_revision_id
         try:
             result = await vlm.independent_vlm_page_chat(
                 prompt, [vlm.PageVisionInput(
@@ -355,6 +404,10 @@ class SelectiveVisionObservationService:
             if read_format in {"structured_candidate", "localized_candidate"} and payload["status"] == "read":
                 try:
                     candidate = parse_local_region_read(result.text, source_ref=region_ref, read_format=read_format)
+                    if focus_coordinates is not None:
+                        from app.domain.contracts.local_region_read import LocalRegionRelativeBox, require_localized_focus_scope
+
+                        require_localized_focus_scope(candidate, LocalRegionRelativeBox.model_validate(focus_coordinates))
                     payload["structured_read"] = candidate.model_dump(mode="json")
                 except (ValueError, TypeError):
                     payload.update({"status": "failed", "failure_kind": "local_structure_invalid"})

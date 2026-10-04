@@ -1,7 +1,7 @@
 """只读读取补充审核要求作业的状态与可随方案发布的检查点。
 
-本模块只读取已持久化的 Job/步骤/检查点记录：不调用模型、不读取原始方案
-文件、不经过执行器、不写入任何记录、不做状态迁移。
+本模块读取已持久化的 Job/步骤/检查点及定义核对原答工件：不调用模型、
+不读取原始方案文件、不运行执行器、不写入任何记录、不做状态迁移。
 
 只有同时满足以下条件才给出"可发布检查点"与候选数量：作业已完成、没有被
 取消、发布门禁步骤已完成，且该步骤最终检查点的原样摘要、执行版本、门禁
@@ -26,11 +26,13 @@ from app.domain.contracts.protocol_controls import (
     ProtocolControlBatchPlan,
     ProtocolControlCandidate,
     ProtocolSectionCoverageManifest,
+    RestrictedProtocolControlStatement,
 )
 from app.domain.contracts.rules import RuleSet, WorkflowStage
 from app.protocols.protocol_control_gate import CONTROL_PUBLICATION_GATE_VERSION
 from app.services.protocol_control_catalog_publication import (
     SourceCalculationGap, _verified_calculation_release, source_calculation_gaps,
+    require_saved_definition_scope,
 )
 from app.services.evidence_app_errors import (
     AppNotFoundError,
@@ -56,6 +58,37 @@ PROTOCOL_CONTROL_STATUS_LABELS = {
     "candidate_ready": "补充审核要求已整理，仍需核对发布条件",
     "processing": "正在整理补充审核要求",
     "stopped": "补充审核要求整理未完成",
+}
+
+_STOPPED_REASON_LABELS = {
+    "PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED":
+        "原文已保存，仍需核清它与审核要求的对应关系",
+    "PROTOCOL_CONTROL_SOURCE_REQUIREMENT_CONSUMER_UNAVAILABLE":
+        "原文支持的补充要求尚未接通可靠核验，由系统建设继续处理",
+    "PROTOCOL_CONTROL_SOURCE_REQUIREMENT_INSERTION_LIMIT_REACHED":
+        "本次补充要求修订尚未完成，已核清的部分仍保留",
+    "PROTOCOL_CONTROL_SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED":
+        "已找到原文，仍需核实整理出的要求是否忠实表达其含义",
+    "PROTOCOL_CONTROL_DEFINITION_SCOPE_INVALID":
+        "定义影响哪些要求尚未核清，已保存原文和本次核对记录",
+    "PROTOCOL_CONTROL_DEFINITION_SCOPE_TRANSPORT_FAILED":
+        "定义影响范围的读取连接中断，已完成内容保留，可按原范围重试",
+    "PROTOCOL_CONTROL_DEFINITION_SCOPE_COMPLETION_UNCERTAIN":
+        "本次读取连接中断，尚不能确认是否完成，不会立即重复发送",
+    "PROTOCOL_CONTROL_LOGICAL_BUDGET_EXHAUSTED":
+        "本次读取已达到约定次数，已有内容保留，尚未完成的部分仍需处理",
+    "PROTOCOL_CONTROL_BUDGET_RECORD_INVALID":
+        "读取范围已变化或原调用记录不完整，未继续发送；原结果保留，需重新建立整理任务",
+    "PROTOCOL_CONTROL_BUDGET_INVALID":
+        "本次整理缺少有效的读取次数约定，尚未发送请求",
+    "PROTOCOL_CONTROL_BUDGET_UNSUPPORTED":
+        "当前读取服务无法遵守约定次数，尚未发送请求",
+    "PROTOCOL_CONTROL_DEFINITION_SCOPE_UNAVAILABLE":
+        "当前读取服务无法核对定义的影响范围，已完成内容保留",
+    "PROTOCOL_CONTROL_CHECKPOINT_MISSING":
+        "前一步保存的内容缺失，未继续整理，需先恢复原记录",
+    "PROTOCOL_CONTROL_CHECKPOINT_INVALID":
+        "已保存内容与当前原文或核对依据不一致，未继续采用，原记录保留",
 }
 
 _JOB_NOT_FOUND_DETAIL = (
@@ -97,6 +130,7 @@ class ProtocolControlRequirementsView:
     workflow_stages: tuple[WorkflowStage, ...]
     relation_target_labels: Mapping[str, str]
     calculation_gaps: tuple[SourceCalculationGap, ...]
+    restricted_statements: tuple[RestrictedProtocolControlStatement, ...]
 
 
 @app_error_boundary
@@ -129,6 +163,24 @@ def protocol_control_requirements(
             all_candidates,
             key=lambda item: (min(source_order[key] for key in item.frozen_structure_unit_ids),
                               item.control_candidate_id),
+        ))
+        restricted = [statement for batch in batches for statement in batch.restricted_statements]
+        restricted_ids = [item.restricted_statement_id for item in restricted]
+        units_by_id = {unit.structure_unit_id: unit for unit in manifest.units}
+        if (len(restricted_ids) != len(set(restricted_ids))
+                or any(item.source_structure_unit_id not in source_order for item in restricted)
+                or any(not set(item.dependency_refs).issubset(restricted_ids) for item in restricted)):
+            raise ProtocolControlCheckpointInvalidError()
+        for item in restricted:
+            unit = units_by_id[item.source_structure_unit_id]
+            if (item.source_span_ids != sorted(unit.source_span_ids)
+                    or not any(item.source_quote in text
+                               for text in [unit.excerpt, *unit.heading_path])):
+                raise ProtocolControlCheckpointInvalidError()
+        restricted_statements = tuple(sorted(
+            restricted,
+            key=lambda item: (source_order[item.source_structure_unit_id],
+                              item.source_statement_index, item.restricted_statement_id),
         ))
         if any(item.semantics is None for item in candidates):
             raise ProtocolControlCheckpointInvalidError()
@@ -172,6 +224,7 @@ def protocol_control_requirements(
             job_id=job_id, source_job_id=status.source_job_id, checkpoint_id=checkpoint_id,
             candidates=candidates,
             workflow_stages=workflow_stages, relation_target_labels=target_labels,
+            restricted_statements=restricted_statements,
             calculation_gaps=tuple(
                 gap for gap in calculation_gaps
                 if (gap.batch_number, gap.statement_index) not in released
@@ -226,7 +279,10 @@ def protocol_control_execution_status(
             state=job.state,
             source_job_id=source_job_id,
             status=status,
-            status_label=PROTOCOL_CONTROL_STATUS_LABELS[status],
+            status_label=(
+                _STOPPED_REASON_LABELS.get(job.error_code, PROTOCOL_CONTROL_STATUS_LABELS[status])
+                if status == "stopped" else PROTOCOL_CONTROL_STATUS_LABELS[status]
+            ),
             publishable_checkpoint_id=checkpoint_id,
             candidate_count=candidate_count,
         )
@@ -280,6 +336,10 @@ def _verified_candidate_package(
         or checkpoint.get("publication_plan_id") != plan.plan_id
     ):
         raise ProtocolControlCheckpointInvalidError()
+    try:
+        require_saved_definition_scope(session, source_job_id=job_id, payload=payload, result=checkpoint)
+    except (ScopeViolationError, ValidationError, ValueError, TypeError, KeyError) as exc:
+        raise ProtocolControlCheckpointInvalidError() from exc
     return checkpoint_id, len(candidate_ids)
 
 

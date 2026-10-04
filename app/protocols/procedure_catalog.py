@@ -35,6 +35,8 @@ from app.domain.contracts.enums import (
 from app.domain.contracts.protocol_ingestion import (
     FrozenCatalogItem,
     FrozenProtocolCatalog,
+    FrozenVisitColumn,
+    FrozenVisitTable,
     ProtocolSourceSpan,
     frozen_catalog_content_hash,
     optional_source_excerpts_for_spans,
@@ -1604,6 +1606,8 @@ def build_required_procedure_catalog(
         key=lambda item: (item.block_order, item.source_ref),
     )
     all_instances: list[_OperationInstance] = []
+    visit_tables: list[FrozenVisitTable] = []
+    visit_context_complete = True
     structural_roots = 0
     for root in roots:
         max_columns = root.table_cols or 0
@@ -1632,6 +1636,26 @@ def build_required_procedure_catalog(
             # whether it is in scope.
             continue
         structural_roots += 1
+        header = _header_projection(cells, first_mark_row=min(cell.row for cell in all_marks),
+                                    max_columns=max_columns)
+        root_span = spans_by_ref.get(root.source_ref)
+        table_context_available = root_span is not None
+        columns = []
+        for column in range(1, max_columns):
+            text, refs = header.get(column, ("", ()))
+            if any(ref not in spans_by_ref or ref not in blocks_by_ref for ref in refs):
+                table_context_available = False
+                break
+            columns.append(FrozenVisitColumn(
+                column_index=column, visit_instance=text, review_stage=derive_review_stage(text),
+                source_span_ids=tuple(spans_by_ref[ref].source_span_id for ref in refs),
+                source_excerpts=tuple(blocks_by_ref[ref].text for ref in refs),
+            ))
+        if table_context_available:
+            visit_tables.append(FrozenVisitTable(table_source_span_id=root_span.source_span_id,
+                                                column_count=max_columns, columns=tuple(columns)))
+        else:
+            visit_context_complete = False
         all_instances.extend(
             _build_instances_for_table(
                 root,
@@ -1760,6 +1784,7 @@ def build_required_procedure_catalog(
         "catalog_kind": CatalogKind.REQUIRED_PROCEDURES,
         "study_phase": phase,
         "items": tuple(items),
+        "visit_tables": tuple(visit_tables) if visit_context_complete else (),
         "frozen_at": frozen_timestamp,
         "frozen_by": frozen_by,
         "schema_version": "fixture/v1",

@@ -39,6 +39,12 @@ ProtocolSemanticRouteMode = Literal["graded", "pinned"]
 GRADE_COMPLEX: ProtocolSemanticTaskGrade = "complex_protocol_semantic"
 GRADE_SHORT: ProtocolSemanticTaskGrade = "short_prompt_semantic"
 
+NON_REPLAYABLE_ROUTE_ERRORS = frozenset({
+    "BUDGET_RECORD_INVALID", "BUDGET_RECORD_MISSING", "LOGICAL_BUDGET_EXHAUSTED",
+    "MODEL_IDENTITY_MISMATCH", "STREAM_INTERRUPTED", "TRANSPORT_TIMEOUT",
+    "SEMANTIC_CACHE_INVALID",
+})
+
 _ACTIVE_ROUTE_IDENTITIES: dict[ProtocolSemanticTaskGrade, frozenset[str]] | None = None
 
 
@@ -379,6 +385,12 @@ def summarize_run_result_for_route(
     """Map a runner result to route outcome / error_class / session_id."""
 
     session_id = getattr(result, "same_session_id", None)
+    attempts = list(getattr(result, "attempts", []) or [])
+    recorded_error = (
+        getattr(attempts[-1], "call_metadata", {}).get("error_code") if attempts else None
+    )
+    if recorded_error in NON_REPLAYABLE_ROUTE_ERRORS:
+        return "failed", recorded_error, session_id
     gate_result = getattr(result, "final_gate_result", None)
     gate_publishable = bool(
         gate_result is not None and getattr(gate_result, "publishable", False)
@@ -389,7 +401,6 @@ def summarize_run_result_for_route(
         and gate_publishable
     ):
         return "accepted", None, session_id
-    attempts = list(getattr(result, "attempts", []) or [])
     if not attempts:
         return "empty_result", "EMPTY_RESULT", session_id
     last = attempts[-1]
@@ -406,6 +417,9 @@ def summarize_run_result_for_route(
         error_class = "TRANSPORT_TIMEOUT"
     elif "AGENT_CALL_FAILED" in call_codes:
         error_class = "SEMANTIC_CALL_FAILED"
+    recorded_error = getattr(last, "call_metadata", {}).get("error_code")
+    if isinstance(recorded_error, str) and recorded_error:
+        error_class = recorded_error
     detail_parts: list[str] = []
     for issue in list(getattr(last, "issues", []) or [])[:3]:
         problem = " ".join(str(getattr(issue, "problem", "")).split())[:240]

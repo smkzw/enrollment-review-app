@@ -46,6 +46,7 @@ from app.llm.provider_profiles import (
     provider_default_headers,
     resolve_openai_connection,
 )
+from app.llm.logical_call_budget import LogicalCallBudget, LogicalCallBudgetExhausted
 
 from .protocol_deconstructor import (
     ProtocolAgentCallError,
@@ -411,6 +412,108 @@ class DeepSeekProtocolAgentTransport:
         self._histories: dict[str, list[dict[str, str]]] = {}
         self._output_scope: dict[str, Any] = {}
         self._bounded_batch_context = bounded_batch_context
+        self._call_budgets: dict[str, LogicalCallBudget] = {}
+        self.logical_call_budget: LogicalCallBudget | None = None
+        self._call_budget_store: Any = None
+        self.logical_run_budget: LogicalCallBudget | None = None
+        self._last_budget_request_sha256: str | None = None
+
+    def bind_call_budget_store(self, store: Any) -> None:
+        self._call_budget_store = store
+
+    def configure_logical_run(self, *, logical_task_id: str, max_requests: int,
+                              contract_sha256: str) -> None:
+        self.logical_run_budget = self._restore_budget(
+            logical_task_id, max_requests=max_requests,
+            max_output_tokens=max_requests * self._output_budget_limit,
+            contract_sha256=contract_sha256,
+        )
+
+    def share_run_budget(self, budget: LogicalCallBudget) -> None:
+        self.logical_run_budget = budget
+
+    def verify_recovery_budgets(self, metadata: Mapping[str, Any]) -> None:
+        """Saved answers never authorize resetting either latest persisted ledger."""
+        load = getattr(self._call_budget_store, "load_call_budget", None)
+        if not callable(load):
+            raise ValueError("恢复核对缺少原始持久预算记录")
+        for key, budget in (("logical_call_budget", self.logical_call_budget),
+                            ("logical_run_budget", self.logical_run_budget)):
+            saved = metadata.get(key)
+            if saved is None and budget is None and key == "logical_run_budget":
+                continue
+            if saved is None or budget is None:
+                raise ValueError("恢复核对缺少原始范围或总作业额度")
+            current = budget.snapshot()
+            if load(current["logical_task_id"]) != current:
+                raise ValueError("当前额度不是最新持久记录，不能恢复调用")
+            if any(saved.get(field) != current.get(field) for field in (
+                    "policy", "logical_task_id", "max_requests", "max_output_tokens", "contract_sha256")):
+                raise ValueError("恢复额度的身份或上限发生变化")
+            # Validate the historical snapshot itself, then prove it is a prefix.
+            LogicalCallBudget(saved["logical_task_id"], max_requests=saved["max_requests"],
+                              max_output_tokens=saved["max_output_tokens"],
+                              contract_sha256=saved.get("contract_sha256"), saved=saved)
+            if current["requests"][:saved["requests_used"]] != saved["requests"]:
+                raise ValueError("恢复额度没有保留原调用历史")
+
+    def _restore_budget(self, logical_task_id: str, *, max_requests: int,
+                        max_output_tokens: int, contract_sha256: str | None = None) -> LogicalCallBudget:
+        load = getattr(self._call_budget_store, "load_call_budget", None)
+        persist = getattr(self._call_budget_store, "store_call_budget", None)
+        try:
+            return LogicalCallBudget(
+                logical_task_id, max_requests=max_requests, max_output_tokens=max_output_tokens,
+                saved=load(logical_task_id) if callable(load) else None,
+                persist=persist if callable(persist) else None, contract_sha256=contract_sha256,
+            )
+        except (ValueError, TypeError, KeyError, OSError) as exc:
+            raise ProtocolAgentCallError(
+                "protocol-budget-recovery", "方案读取预算记录无法核实，未重新调用模型",
+                error_code="BUDGET_RECORD_INVALID", error_metadata={"logical_task_id": logical_task_id},
+            ) from exc
+
+    def configure_logical_task(self, *, logical_task_id: str, max_requests: int = 2) -> None:
+        """Initial output and one repair share all nested HTTP attempts."""
+        budget = self._call_budgets.get(logical_task_id)
+        if budget is None:
+            budget = self._restore_budget(
+                logical_task_id, max_requests=max_requests,
+                max_output_tokens=(max_requests - 1) * self._max_tokens
+                + min(self._max_tokens * 2, self._output_budget_limit),
+            )
+            self._call_budgets[logical_task_id] = budget
+        self.logical_call_budget = budget
+
+    def share_call_budget(self, budget: LogicalCallBudget) -> None:
+        self._call_budgets[budget.logical_task_id] = budget
+        self.logical_call_budget = budget
+
+    def _call_budget_metadata(self) -> dict[str, object]:
+        return {
+            **({"logical_call_budget": self.logical_call_budget.snapshot()} if self.logical_call_budget else {}),
+            **({"logical_run_budget": self.logical_run_budget.snapshot()} if self.logical_run_budget else {}),
+        }
+
+    def _reserve_completion(self, kwargs: Mapping[str, Any]) -> None:
+        request_hash = hashlib.sha256(json.dumps(
+            dict(kwargs), ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        self._last_budget_request_sha256 = request_hash
+        try:
+            for budget in (self.logical_call_budget, self.logical_run_budget):
+                if budget is not None:
+                    budget.reserve(request_sha256=request_hash, max_tokens=int(kwargs["max_tokens"]))
+        except LogicalCallBudgetExhausted as exc:
+            raise ProtocolAgentCallError(
+                "protocol-call-budget", str(exc), error_code="LOGICAL_BUDGET_EXHAUSTED",
+                error_metadata=self._call_budget_metadata(),
+            ) from exc
+        except (ValueError, TypeError, KeyError, OSError) as exc:
+            raise ProtocolAgentCallError(
+                "protocol-call-budget", "调用预算记录未保存，未发送模型请求",
+                error_code="BUDGET_RECORD_INVALID", error_metadata=self._call_budget_metadata(),
+            ) from exc
 
     def configure_output_scope(
         self,
@@ -436,11 +539,17 @@ class DeepSeekProtocolAgentTransport:
         self,
         *,
         output_kind: ProtocolOutputKind,
+        frozen_run: bool = False,
     ) -> str:
         """Hash the provider/model/schema contract without credentials."""
 
         kwargs = self._completion_kwargs([], output_kind=output_kind)
         kwargs.pop("messages", None)
+        if frozen_run and "response_format" in kwargs:
+            # Target subsets may change during repairs, not the run identity.
+            kwargs["response_format"] = protocol_output_response_format(
+                output_kind, compact=self.uses_compact_wire_contract,
+            )
         payload = {
             "backend": self._backend,
             "model": self._model,
@@ -448,6 +557,8 @@ class DeepSeekProtocolAgentTransport:
             "response_gate_version": "reported-model-and-stop/v1",
             "request": kwargs,
         }
+        if frozen_run:
+            payload["endpoint"] = str(getattr(self._client, "base_url", ""))
         if self._backend in _GRAMMAR_INCOMPATIBLE_BACKENDS:
             payload["text_contract_mode"] = (
                 "compact_schema_prompt" if self.uses_compact_wire_contract
@@ -511,7 +622,7 @@ class DeepSeekProtocolAgentTransport:
         output_kind: ProtocolOutputKind = "semantic_candidate",
         max_tokens: int | None = None,
     ) -> dict[str, Any]:
-        if output_kind not in {"semantic_candidate", "semantic_rule_repair"}:
+        if output_kind not in {"semantic_candidate", "semantic_rule_repair", "official_source_scope_review"}:
             raise ValueError(f"未知的方案解构输出类型：{output_kind}")
         kwargs: dict[str, Any] = {
             "model": self._model,
@@ -616,7 +727,12 @@ class DeepSeekProtocolAgentTransport:
                     chunk_model = getattr(chunk, "model", None)
                     if chunk_model:
                         if reported_model and chunk_model.casefold() != reported_model.casefold():
-                            raise RuntimeError("模型流在有效内容之间变更了模型身份")
+                            raise ProtocolAgentCallError(
+                                "protocol-stream-identity", "模型流在有效内容之间变更了模型身份",
+                                error_code="MODEL_IDENTITY_MISMATCH",
+                                error_metadata={**partial_metadata(), "conflicting_model": chunk_model,
+                                                **self._call_budget_metadata()},
+                            )
                         reported_model = chunk_model
                     request_id = request_id or getattr(chunk, "id", None)
                 if terminal:
@@ -625,6 +741,8 @@ class DeepSeekProtocolAgentTransport:
                     content_parts.append(piece)
                 if reasoning:
                     reasoning_parts.append(reasoning)
+        except ProtocolAgentCallError:
+            raise
         except Exception as exc:  # noqa: BLE001 - provider iterator may fail after dispatch
             raise ProtocolSemanticStreamInterrupted(exc, partial_metadata()) from exc
         if finish_reason is None:
@@ -670,13 +788,20 @@ class DeepSeekProtocolAgentTransport:
                     kwargs["stream"] = True
                     kwargs.setdefault("stream_options", {"include_usage": True})
                     try:
+                        self._reserve_completion(kwargs)
                         stream = self._client.chat.completions.create(**kwargs)
                     except Exception as stream_opt_exc:
                         if "stream_options" not in str(stream_opt_exc):
                             raise
                         kwargs.pop("stream_options", None)
+                        self._reserve_completion(kwargs)
                         stream = self._client.chat.completions.create(**kwargs)
-                    return self._accumulate_stream(stream)
+                    try:
+                        return self._accumulate_stream(stream)
+                    finally:
+                        close = getattr(stream, "close", None)
+                        if callable(close):
+                            close()
             except ProtocolSemanticStreamInterrupted:
                 raise
             except _TRANSPORT_TIMEOUT_ERRORS:
@@ -711,6 +836,7 @@ class DeepSeekProtocolAgentTransport:
         receipts: list[dict[str, object]] = []
         length_attempts = 0
         malformed_attempts = 0
+        recovery_trigger: dict[str, object] | None = None
         # One logical request carries one shared reasoning+content budget; a
         # single length-finish retry may raise it once, capped, never silently.
         request_budget = self._max_tokens
@@ -719,11 +845,31 @@ class DeepSeekProtocolAgentTransport:
                 request_messages, ensure_ascii=False, sort_keys=True,
                 separators=(",", ":"),
             ).encode("utf-8")).hexdigest()
-            response = self._send_completion(
-                request_messages,
-                output_kind=output_kind,
-                max_tokens=request_budget,
-            )
+            try:
+                response = self._send_completion(
+                    request_messages,
+                    output_kind=output_kind,
+                    max_tokens=request_budget,
+                )
+            except ProtocolAgentCallError as exc:
+                exc.error_metadata = {**exc.error_metadata, "attempts": receipts,
+                                      **self._call_budget_metadata()}
+                if recovery_trigger is not None:
+                    exc.error_metadata["first_completion_failure"] = recovery_trigger
+                    exc.error_metadata["recovery_blocked_by"] = exc.error_code
+                raise
+            except ProtocolSemanticStreamInterrupted as exc:
+                if receipts:
+                    exc.metadata = {**exc.metadata, "attempts": receipts}
+                raise
+            except Exception as exc:
+                code = ("TRANSPORT_TIMEOUT" if isinstance(exc, _TRANSPORT_TIMEOUT_ERRORS)
+                        else "QUOTA_EXHAUSTED" if _quota_exhausted(exc, self._backend)
+                        else "SEMANTIC_CALL_FAILED")
+                raise ProtocolAgentCallError(
+                    "protocol-completion", str(exc), error_code=code,
+                    error_metadata={"attempts": receipts, **self._call_budget_metadata()},
+                ) from exc
             choice = response.choices[0]
             message = choice.message
             text = message.content or ""
@@ -733,6 +879,7 @@ class DeepSeekProtocolAgentTransport:
             raw_usage = getattr(response, "usage", None)
             receipts.append({
                 "request_sha256": request_hash,
+                "budget_request_sha256": self._last_budget_request_sha256,
                 "requested_model": self._model,
                 "reported_model": reported_model,
                 "request_id": getattr(response, "id", None),
@@ -745,16 +892,22 @@ class DeepSeekProtocolAgentTransport:
             })
             if (isinstance(reported_model, str) and reported_model.strip()
                     and reported_model.strip().casefold() != self._model.casefold()):
-                raise RuntimeError(
+                raise ProtocolAgentCallError(
+                    "protocol-response-identity",
                     "方案解构模型实际回报身份与本次配置不一致，结果未采用："
-                    f"配置={self._model}，回报={reported_model.strip()}"
+                    f"配置={self._model}，回报={reported_model.strip()}",
+                    error_code="MODEL_IDENTITY_MISMATCH",
+                    error_metadata={"attempts": receipts, **self._call_budget_metadata()},
                 )
             if finish_reason == "length":
                 if local_early_length(self._backend, getattr(response, "usage", None), request_budget):
-                    raise RuntimeError(
-                        "方案解构模型在额度用尽前停止，结果不完整；不扩大额度或重复原请求，需核查运行原因"
+                    raise ProtocolAgentCallError(
+                        "protocol-length", "方案解构模型在额度用尽前停止，结果不完整；不扩大额度或重复原请求，需核查运行原因",
+                        error_code="OUTPUT_TRUNCATED",
+                        error_metadata={"attempts": receipts, **self._call_budget_metadata()},
                     )
                 length_attempts += 1
+                recovery_trigger = recovery_trigger or {"error_code": "OUTPUT_TRUNCATED", "attempt": attempt + 1}
                 diagnostics.append(
                     f"第{attempt + 1}次结束原因=length（请求预算{request_budget} tokens），"
                     f"输出已被长度上限截断，"
@@ -791,8 +944,10 @@ class DeepSeekProtocolAgentTransport:
                     continue
                 continue
             if finish_reason != "stop":
-                raise RuntimeError(
-                    f"方案解构模型未正常完成，结果未采用：{finish_reason}"
+                raise ProtocolAgentCallError(
+                    "protocol-finish", f"方案解构模型未正常完成，结果未采用：{finish_reason}",
+                    error_code="CONTENT_FILTERED" if finish_reason == "content_filter" else "COMPLETION_INCOMPLETE",
+                    error_metadata={"attempts": receipts, **self._call_budget_metadata()},
                 )
             if text.strip():
                 json_text = _unwrap_complete_json_fence(text)
@@ -800,6 +955,10 @@ class DeepSeekProtocolAgentTransport:
                     parsed = json.loads(json_text)
                 except json.JSONDecodeError as exc:
                     malformed_attempts += 1
+                    recovery_trigger = recovery_trigger or {
+                        "error_code": "SCHEMA_INVALID", "attempt": attempt + 1,
+                        "line": exc.lineno, "column": exc.colno,
+                    }
                     diagnostics.append(
                         f"第{attempt + 1}次结束原因={finish_reason}，JSON无法解析，"
                         f"错误位置=第{exc.lineno}行第{exc.colno}列"
@@ -822,6 +981,7 @@ class DeepSeekProtocolAgentTransport:
                     continue
                 if not isinstance(parsed, dict):
                     malformed_attempts += 1
+                    recovery_trigger = recovery_trigger or {"error_code": "SCHEMA_INVALID", "attempt": attempt + 1}
                     diagnostics.append(
                         f"第{attempt + 1}次结束原因={finish_reason}，JSON顶层不是对象"
                     )
@@ -839,7 +999,8 @@ class DeepSeekProtocolAgentTransport:
                         ]
                         continue
                     continue
-                return (json_text, {"attempts": receipts}) if with_receipt else json_text
+                return (json_text, {"attempts": receipts, **self._call_budget_metadata()}) if with_receipt else json_text
+            recovery_trigger = recovery_trigger or {"error_code": "EMPTY_OUTPUT", "attempt": attempt + 1}
             diagnostics.append(
                 f"第{attempt + 1}次结束原因={finish_reason}，推理内容长度={reasoning_chars}"
             )
@@ -856,19 +1017,24 @@ class DeepSeekProtocolAgentTransport:
                     },
                 ]
         if length_attempts:
-            raise RuntimeError(
+            raise ProtocolAgentCallError(
+                "protocol-length",
                 "方案解构模型连续2次未返回完整JSON，输出被长度上限截断（"
                 + "；".join(diagnostics)
-                + "）"
+                + "）", error_code="OUTPUT_TRUNCATED",
+                error_metadata={"attempts": receipts, **self._call_budget_metadata()},
             )
         if malformed_attempts:
-            raise RuntimeError(
+            raise ProtocolAgentCallError(
+                "protocol-schema",
                 "方案解构模型连续2次未返回可解析的JSON对象（"
                 + "；".join(diagnostics)
-                + "）"
+                + "）", error_code="SCHEMA_INVALID",
+                error_metadata={"attempts": receipts, **self._call_budget_metadata()},
             )
-        raise RuntimeError(
-            "方案解构模型连续2次返回空正文（" + "；".join(diagnostics) + "）"
+        raise ProtocolAgentCallError(
+            "protocol-empty", "方案解构模型连续2次返回空正文（" + "；".join(diagnostics) + "）",
+            error_code="EMPTY_OUTPUT", error_metadata={"attempts": receipts, **self._call_budget_metadata()},
         )
 
     def _wire_contract_prompt(self, prompt: str, output_kind: ProtocolOutputKind) -> str:
@@ -880,6 +1046,10 @@ class DeepSeekProtocolAgentTransport:
         校验共同保证。
         """
 
+        if output_kind == "official_source_scope_review":
+            # This role already carries its complete, small schema in the frozen
+            # prompt; exact replay cannot depend on a second opaque wrapper.
+            return prompt
         if (
             self._backend not in _GRAMMAR_INCOMPATIBLE_BACKENDS
             or not self.uses_compact_wire_contract
@@ -932,22 +1102,28 @@ class DeepSeekProtocolAgentTransport:
         self._histories[session_id] = history
         try:
             text, metadata = self._complete(history, output_kind=output_kind, with_receipt=True)
+        except ProtocolAgentCallError as exc:
+            raise ProtocolAgentCallError(
+                session_id, str(exc), error_code=exc.error_code, error_metadata=exc.error_metadata,
+            ) from exc
         except ProtocolSemanticStreamInterrupted as exc:
             raise ProtocolAgentCallError(
                 session_id, str(exc), error_code="STREAM_INTERRUPTED",
-                error_metadata=exc.metadata,
+                error_metadata={**exc.metadata, **self._call_budget_metadata()},
             ) from exc
         except (APITimeoutError, httpx.TimeoutException, TimeoutError) as exc:
             raise ProtocolAgentCallError(
                 session_id,
                 str(exc),
                 error_code="TRANSPORT_TIMEOUT",
+                error_metadata=self._call_budget_metadata(),
             ) from exc
         except Exception as exc:
             raise ProtocolAgentCallError(
                 session_id, str(exc),
                 error_code="QUOTA_EXHAUSTED" if _quota_exhausted(exc, self._backend)
                 else "SEMANTIC_CALL_FAILED",
+                error_metadata=self._call_budget_metadata(),
             ) from exc
         history.append({"role": "assistant", "content": text})
         self._histories[session_id] = history
@@ -969,22 +1145,28 @@ class DeepSeekProtocolAgentTransport:
         self._histories[session_id] = history
         try:
             text, metadata = self._complete(history, output_kind=output_kind, with_receipt=True)
+        except ProtocolAgentCallError as exc:
+            raise ProtocolAgentCallError(
+                session_id, str(exc), error_code=exc.error_code, error_metadata=exc.error_metadata,
+            ) from exc
         except ProtocolSemanticStreamInterrupted as exc:
             raise ProtocolAgentCallError(
                 session_id, str(exc), error_code="STREAM_INTERRUPTED",
-                error_metadata=exc.metadata,
+                error_metadata={**exc.metadata, **self._call_budget_metadata()},
             ) from exc
         except (APITimeoutError, httpx.TimeoutException, TimeoutError) as exc:
             raise ProtocolAgentCallError(
                 session_id,
                 str(exc),
                 error_code="TRANSPORT_TIMEOUT",
+                error_metadata=self._call_budget_metadata(),
             ) from exc
         except Exception as exc:
             raise ProtocolAgentCallError(
                 session_id, str(exc),
                 error_code="QUOTA_EXHAUSTED" if _quota_exhausted(exc, self._backend)
                 else "SEMANTIC_CALL_FAILED",
+                error_metadata=self._call_budget_metadata(),
             ) from exc
         history.append({"role": "assistant", "content": text})
         self._histories[session_id] = history

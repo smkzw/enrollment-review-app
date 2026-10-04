@@ -19,7 +19,7 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import ConfigDict, Field, model_serializer, model_validator
 
 from .common import ContractModel, VersionedModel
 from .enums import (
@@ -311,6 +311,34 @@ class FrozenCatalogItem(ContractModel):
         return self
 
 
+class FrozenVisitColumn(ContractModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    column_index: int = Field(ge=1)
+    visit_instance: str
+    review_stage: ReviewStage | None
+    source_span_ids: tuple[str, ...] = ()
+    source_excerpts: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_sources(self):
+        if len(self.source_span_ids) != len(self.source_excerpts):
+            raise ValueError("访视表头与来源摘录必须一一对应")
+        return self
+
+
+class FrozenVisitTable(ContractModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    table_source_span_id: str = Field(min_length=1)
+    column_count: int = Field(ge=2)
+    columns: tuple[FrozenVisitColumn, ...]
+
+    @model_validator(mode="after")
+    def validate_inventory(self):
+        if [item.column_index for item in self.columns] != list(range(1, self.column_count)):
+            raise ValueError("访视表头须按原列顺序覆盖完整表格，不能仅列有操作的访视")
+        return self
+
+
 class FrozenProtocolCatalog(VersionedModel):
     """Agent 调用前冻结的只读目录（不可变）。
 
@@ -329,6 +357,14 @@ class FrozenProtocolCatalog(VersionedModel):
     frozen_at: datetime
     frozen_by: str = Field(min_length=1)
     catalog_sha256: str = Field(pattern=_SHA256)
+    visit_tables: tuple[FrozenVisitTable, ...] = ()
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_visit_inventory(self, handler):
+        payload = handler(self)
+        if not self.visit_tables:
+            payload.pop("visit_tables", None)
+        return payload
 
     @model_validator(mode="after")
     def validate_catalog(self) -> "FrozenProtocolCatalog":
@@ -346,6 +382,11 @@ class FrozenProtocolCatalog(VersionedModel):
         positions = [item.position for item in self.items]
         if len(positions) != len(set(positions)):
             raise ValueError("目录项 position 必须唯一")
+        table_ids = [item.table_source_span_id for item in self.visit_tables]
+        if len(table_ids) != len(set(table_ids)):
+            raise ValueError("冻结访视表来源不得重复")
+        if self.visit_tables and self.catalog_kind != CatalogKind.REQUIRED_PROCEDURES:
+            raise ValueError("官方父规则目录不承载访视表")
         for item in self.items:
             if self.catalog_kind == CatalogKind.OFFICIAL_PARENT_RULES:
                 if item.kind != CatalogItemKind.PARENT_RULE:

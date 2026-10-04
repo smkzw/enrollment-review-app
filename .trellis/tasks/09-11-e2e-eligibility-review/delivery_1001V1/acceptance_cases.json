@@ -1,0 +1,117 @@
+{
+  "schema_version": "acceptance-plan/1001v1/v1",
+  "document_kind": "planned_cases",
+  "round_id": "1001V1",
+  "claims_executed": false,
+  "note": "索引供现有测试/任务复用，不是产品输入Schema；不要求每个补丁运行所有案例。",
+  "cases": [
+    {
+      "case_id": "F1001-01",
+      "workstream": "P1",
+      "family": "正常要求实际消费",
+      "input": "来源明确、当前消费者支持的普通条件；再加入独立无关背景",
+      "must_prove": "正确含义和来源进入现有保存、读回、资格与工作稿；不新增重复控制，不全部UNKNOWN",
+      "method": "原模块测试＋有源小样",
+      "execution_status": "not_run_in_this_package"
+    },
+    {
+      "case_id": "F1001-02",
+      "workstream": "P1",
+      "family": "等义不变与真反事实",
+      "input": "同一要求换措辞/布局；再改变AND/OR、否定或边界之一",
+      "must_prove": "等义变体稳定；真正改变含义后结果随之改变；不加项目/数值特例",
+      "method": "既有语义家族＋配对实验",
+      "execution_status": "not_run_in_this_package"
+    },
+    {
+      "case_id": "F1001-03",
+      "workstream": "P1",
+      "family": "定义作用域与局部修订",
+      "input": "开放列举中的子项定义及其上位条件、无关兄弟项",
+      "must_prove": "定义仅约束真实对象；开放列表不被封闭；局部修订不改未授权兄弟",
+      "method": "作用域正反例＋实际消费者",
+      "execution_status": "not_run_in_this_package"
+    },
+    {
+      "case_id": "F1001-04",
+      "workstream": "P1",
+      "family": "结构与原图证据",
+      "input": "一格多段、合并表头、脚注、图像正文/页眉文字层、缺失必要区域",
+      "must_prove": "原生位置不由分隔串反推；缺源不能冒充真歧义；局部视觉候选可回原件且不直接采信",
+      "method": "结构测试＋受控视觉小样",
+      "execution_status": "not_run_in_this_package"
+    },
+    {
+      "case_id": "F1001-05",
+      "workstream": "P1",
+      "family": "真歧义不是技术错误",
+      "input": "原文允许两种未消解范围；另有清晰定义但装配不支持；再有坏JSON",
+      "must_prove": "三者分别为解释未决、能力缺口、技术失败；不投票，不洗白非法结构",
+      "method": "源核对＋状态负例",
+      "execution_status": "not_run_in_this_package"
+    },
+    {
+      "case_id": "F1001-06",
+      "workstream": "P1",
+      "family": "R1限制与独立正常项",
+      "input": "完整同源包有一项忠实受限要求和独立正例；对照已知错误表达式",
+      "must_prove": "受影响项保留未决，独立项可用；整体不假合格；已知错义版本仍拒；新状态不得旧读者默认通过",
+      "method": "采用事务→仓储→API→工作稿",
+      "execution_status": "not_run_in_this_package"
+    },
+    {
+      "case_id": "F1001-07",
+      "workstream": "P1",
+      "family": "跨层恢复与预算",
+      "input": "传输前暂态、流中断、length、分段失败、已成功兄弟、同错重复",
+      "must_prove": "错误按原因恢复；断流不隐式整父重读；各层预算累计；缓存合法保留；身份异常拒绝；不承诺远端exactly-once",
+      "method": "故障注入，无需真实模型故障",
+      "execution_status": "not_run_in_this_package"
+    },
+    {
+      "case_id": "F1001-08",
+      "workstream": "P1",
+      "family": "结构修复与范围保护",
+      "input": "纯格式错误、合法语义、非法来源、未知对象及跨患者/路由变化",
+      "must_prove": "机械修复不变临床含义；不合规来源/身份硬拒；扩大取证不扩大写权限",
+      "method": "原模块正反例",
+      "execution_status": "not_run_in_this_package"
+    },
+    {
+      "case_id": "F1001-09",
+      "workstream": "P1",
+      "family": "状态与退出不误报",
+      "input": "failed_retryable、failed_final、cancelled、waiting_user、queued、完成但无回执",
+      "must_prove": "按明确任务终态和出口合同返回；exit0/completed不能单独证明工作完成；未运行不填成功",
+      "method": "驱动/Job/API集成",
+      "execution_status": "not_run_in_this_package"
+    },
+    {
+      "case_id": "F1001-10",
+      "workstream": "P2",
+      "family": "观察与采集资格",
+      "input": "同次扫描两份；同日同值两次真实采集；日期/单位/批注归属不清",
+      "must_prove": "重复呈现不增临床次数；独立采集不误并；源位置/资格限制不因新流程而解除；正常可判实例须能消费",
+      "method": "既有观察/计算家族＋隔离原件",
+      "execution_status": "not_run_in_this_package"
+    },
+    {
+      "case_id": "F1001-11",
+      "workstream": "P1",
+      "family": "复核不是投票或金标",
+      "input": "同模型独立会话复核；提出新反证；无新证据持续分歧；普通未触发样本",
+      "must_prove": "独立性准确标session_only；引用相同不等于正确；无多数投票；有需要才取证；未触发样本有有限抽查",
+      "method": "复核合同＋有源小样",
+      "execution_status": "not_run_in_this_package"
+    },
+    {
+      "case_id": "F1001-12",
+      "workstream": "P3",
+      "family": "完整病例与一次更正",
+      "input": "同源完整采用包下一例当前节点，进入风险/全部要求与原件，完成更正或补证",
+      "must_prove": "新旧来源/报告不覆盖；仅真实依赖重算；否定检索范围正确失效；风险/未决可达；宽屏分页/返回上下文和运行恢复实证",
+      "method": "真实授权当前节点＋浏览器＋历史回查",
+      "execution_status": "not_run_in_this_package"
+    }
+  ]
+}

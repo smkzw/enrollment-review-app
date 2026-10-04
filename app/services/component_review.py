@@ -21,6 +21,7 @@ class ComponentReviewResult:
     gaps: frozenset[GapType]
     decision: ComponentDecision
     blocking_level: BlockingLevel
+    judgment_gaps: tuple[tuple[str, GapType], ...] = ()
 
 
 def calculate_component_review(
@@ -59,4 +60,5 @@ def calculate_component_review(
     return ComponentReviewResult(
         evaluation=evaluation, gaps=frozenset(gaps), decision=decision,
         blocking_level=derive_assessment_blocking_level(decision, gaps),
+        judgment_gaps=tuple(sorted((judgment_gap_by_requirement or {}).items())),
     )

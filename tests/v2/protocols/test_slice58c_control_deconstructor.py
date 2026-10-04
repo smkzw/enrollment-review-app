@@ -371,7 +371,7 @@ def _candidate() -> ProtocolControlAgentWireCandidate:
                 fact_type="demographics",
                 description="核对年龄资料",
                 due_stage=ReviewStage.SCREENING,
-                required_source_types=["原始资料"],
+                required_source_types=[],  # This source imposes no record-type restriction.
                 workflow_stage_ids=["stage:screening:one"],
                 source_policy={
                     "requires_contemporaneous_objective_source": None,
@@ -2451,7 +2451,10 @@ def test_source_inventory_repairs_distinct_quotes_and_preserves_siblings(second_
     else:
         assert result.status == "需要核对"
         assert result.source_interpretation is None
-        assert transport.source_calls == 2
+        assert transport.source_calls == (1 if second_failure == "transport" else 2)
+        if second_failure == "transport":
+            assert result.attempts[-1].error_classes == ["SOURCE_INTERPRETATION_CORRECTION_TRANSPORT_FAILED"]
+            assert "筛选时记录末次用药日期" in result.attempts[1].raw_output_text
         assert result.attempts[2].outcome == (
             "transport_failed" if second_failure == "transport" else "schema_invalid"
         )
@@ -2955,10 +2958,133 @@ def test_runner_rechecks_one_function_without_reauthoring_candidate(failed: bool
         assert result.final_output is not None
 
 
+def _raise_wrapped_terminal_failure(kind):
+    from app.agents.protocol_control_agent_transport import (
+        ProtocolControlAgentCallError, ProtocolControlModelIdentityError,
+    )
+    from app.llm.logical_call_budget import LogicalCallBudgetExhausted
+
+    cause = {
+        "identity": ProtocolControlModelIdentityError(
+            "synthetic wrong model", configured_model="expected", reason="mismatch",
+        ),
+        "budget": LogicalCallBudgetExhausted("synthetic shared budget exhausted"),
+        "interrupted": ProtocolControlAgentCallError(
+            "interrupted-reader", "synthetic stream failure", uncertain_completion=True,
+        ),
+    }[kind]
+    raise ProtocolControlAgentCallError("wrapped-reader", "synthetic adapter failure") from cause
+
+
+@pytest.mark.parametrize("phase", ["discovery_start", "discovery_repair", "source_inventory", "wire_repair"])
+@pytest.mark.parametrize("kind, code", [
+    ("identity", "MODEL_IDENTITY_INVALID"),
+    ("budget", "LOGICAL_BUDGET_EXHAUSTED"),
+    ("interrupted", "FLOW_COMPLETION_UNCERTAIN"),
+])
+def test_sibling_read_terminal_causes_survive_wrappers_without_replay(phase, kind, code):
+    from app.agents.protocol_control_deconstructor import (
+        CONTROL_DISCOVERY_INPUT_VERSION, ProtocolControlDiscoveryAgentInput,
+        ProtocolControlDiscoveryAgentRunner,
+    )
+
+    class Transport(_FakeTransport):
+        calls = 0
+
+        def start(self, *, prompt):
+            self.calls += 1
+            if phase == "discovery_start":
+                _raise_wrapped_terminal_failure(kind)
+            return ProtocolControlAgentResponse(session_id="first", text="{")
+
+        def continue_session(self, **kwargs):
+            self.calls += 1
+            _raise_wrapped_terminal_failure(kind)
+
+        def start_source_interpretation(self, **kwargs):
+            self.calls += 1
+            _raise_wrapped_terminal_failure(kind)
+
+    transport = Transport([])
+    batch = _batch()
+    if phase.startswith("discovery"):
+        unit = batch.owned_units[0]
+        source = ProtocolControlDiscoveryAgentInput(
+            schema_version=CONTROL_DISCOVERY_INPUT_VERSION,
+            discovery_batch_id="discovery-synthetic", coverage_manifest_id="manifest-synthetic",
+            protocol_version_id=batch.protocol_version_id, study_phase=unit.study_phase,
+            target_units=[unit], target_structure_unit_ids=[unit.structure_unit_id],
+        )
+        result = ProtocolControlDiscoveryAgentRunner(max_transport_retries=3).run(source, transport)
+    else:
+        if phase == "wire_repair":
+            transport.start_source_interpretation = None
+        result = ProtocolControlAgentRunner(max_transport_retries=3).run(batch, transport)
+    assert result.final_output is None
+    assert result.attempts[-1].error_classes == [code]
+    assert result.attempts[-1].outcome == "transport_failed"
+    assert transport.calls == (2 if phase.endswith("repair") else 1)
+
+
+@pytest.mark.parametrize("correction_kind", ["scope", "quote"])
+@pytest.mark.parametrize("kind, code", [
+    ("transport", "SOURCE_INTERPRETATION_CORRECTION_TRANSPORT_FAILED"),
+    ("identity", "MODEL_IDENTITY_INVALID"),
+    ("budget", "LOGICAL_BUDGET_EXHAUSTED"),
+    ("interrupted", "FLOW_COMPLETION_UNCERTAIN"),
+])
+def test_inventory_correction_transport_failure_does_not_reread_all_sources(correction_kind, kind, code):
+    invalid = _source_inventory({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [{"structure_unit_id": "su-01",
+                        "quoted_text": "年龄至少18周岁" if correction_kind == "quote" else "年龄至少18岁",
+                        "force": "required",
+                        "time_words": [] if correction_kind == "quote" else ["给药后7天"]}],
+        "units_without_statement": ["su-02"],
+    })
+
+    class Transport(_FakeTransport):
+        source_calls = 0
+        repair_calls = 0
+
+        def start_source_interpretation(self, **kwargs):
+            self.source_calls += 1
+            assert self.source_calls == 1
+            return ProtocolControlAgentResponse(session_id="source-1", text=invalid.model_dump_json())
+
+        def correct_source_scope(self, **kwargs):
+            assert correction_kind == "scope"
+            self.repair_calls += 1
+            if kind == "transport":
+                raise OSError("synthetic unavailable")
+            _raise_wrapped_terminal_failure(kind)
+
+        def correct_source_quote(self, **kwargs):
+            assert correction_kind == "quote"
+            self.repair_calls += 1
+            if kind == "transport":
+                raise OSError("synthetic unavailable")
+            _raise_wrapped_terminal_failure(kind)
+
+        def start(self, **kwargs):
+            pytest.fail("Unvalidated source must not enter authoring")
+
+    transport = Transport([])
+    result = ProtocolControlAgentRunner().run(_batch(), transport)
+    assert result.final_output is None and result.source_interpretation is None
+    assert transport.source_calls == transport.repair_calls == 1
+    assert result.attempts[-1].error_classes == [code]
+    assert result.attempts[-1].raw_output_text is None
+    assert result.attempts[0].raw_output_text == invalid.model_dump_json()
+
+
 @pytest.mark.parametrize("failure, code, outcome", [
     ("transport", "SOURCE_FUNCTION_RECHECK_TRANSPORT_FAILED", "transport_failed"),
     ("schema", "SOURCE_FUNCTION_RECHECK_SCHEMA_INVALID", "schema_invalid"),
     ("scope", "SOURCE_FUNCTION_RECHECK_INVALID", "publication_invalid"),
+    ("identity", "MODEL_IDENTITY_INVALID", "transport_failed"),
+    ("budget", "LOGICAL_BUDGET_EXHAUSTED", "transport_failed"),
+    ("interrupted", "FLOW_COMPLETION_UNCERTAIN", "transport_failed"),
 ])
 def test_runner_function_failure_keeps_actual_cause_and_verified_wire(failure, code, outcome) -> None:
     batch, original, entry, review, proposal = _function_disagreement()
@@ -2968,6 +3094,8 @@ def test_runner_function_failure_keeps_actual_cause_and_verified_wire(failure, c
         target_calls = 0
 
         def start_source_interpretation(self, *, prompt: str):
+            if failure in {"identity", "budget", "interrupted"}:
+                _raise_wrapped_terminal_failure(failure)
             if failure == "transport":
                 raise RuntimeError("isolated provider unavailable")
             return ProtocolControlAgentResponse(
@@ -2995,7 +3123,7 @@ def test_runner_function_failure_keeps_actual_cause_and_verified_wire(failure, c
     assert result.attempts[-1].error_classes == [code]
     assert result.attempts[-1].outcome == outcome
     assert result.attempts[-1].error_detail["statement_id"] == 0
-    if failure != "transport":
+    if failure not in {"transport", "identity", "budget", "interrupted"}:
         assert result.attempts[-1].raw_output_text != review.model_dump_json()
 
 
@@ -4411,7 +4539,8 @@ def test_source_target_review_selects_unexpressed_enrollment_requirements() -> N
     assert target_review_indexes(inventory, coverage) == [0, 1]
 
 
-def test_source_target_review_preserves_uncovered_statement_as_failure() -> None:
+@pytest.mark.parametrize("capacity", ["unavailable", "exhausted"])
+def test_source_target_review_preserves_uncovered_statement_as_failure(monkeypatch, capacity) -> None:
     batch = _batch().model_copy(deep=True)
     batch.owned_units[0].excerpt = "其他控制：年龄至少18岁；筛选前说明年龄记录来源"
     batch.known_official_targets[0].source_excerpts = ["年龄至少18岁"]
@@ -4438,14 +4567,26 @@ def test_source_target_review_preserves_uncovered_statement_as_failure() -> None
             assert "说明年龄记录来源" in prompt
             return ProtocolControlAgentResponse(session_id="target-1", text=claim.model_dump_json())
 
+    if capacity == "exhausted":
+        monkeypatch.setattr("app.agents.protocol_control_deconstructor.MAX_SOURCE_INSERT_REPAIRS", 0)
     result = ProtocolControlAgentRunner().run(
         batch,
         ReviewingTransport([ProtocolControlAgentResponse(session_id="wire-1", text=_wire(candidate=_candidate()).model_dump_json())]),
+        output_validator=(lambda _output: None) if capacity == "exhausted" else None,
     )
     assert result.status == "需要核对"
     assert result.final_output is None
     assert result.source_target_review == claim
-    assert result.attempts[-1].error_classes == ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
+    expected = ("SOURCE_REQUIREMENT_CONSUMER_UNAVAILABLE" if capacity == "unavailable"
+                else "SOURCE_REQUIREMENT_INSERTION_LIMIT_REACHED")
+    assert result.attempts[-1].error_classes == [expected]
+    assert result.attempts[-1].outcome == "publication_invalid"
+    detail = result.attempts[-1].error_detail
+    assert detail["code"] == expected
+    assert detail["statement_ids"] == [0]
+    assert detail["source_refs"] == ["span:01"]
+    assert detail["review_snapshot"] == claim.model_dump(mode="json")
+    assert result.source_interpretation.statements[0].unresolved == []
     assert result.attempts[-2].output is not None
     assert result.partial_wire == _wire(candidate=_candidate())
 
@@ -4687,7 +4828,8 @@ def test_target_review_repairs_distinct_items_without_rereading_valid_sibling(fa
 
 
 @pytest.mark.parametrize("kind", ["time_scope", "frequency_comparison"])
-def test_adjacent_target_repair_transport_fault_does_not_borrow_previous_response(kind) -> None:
+@pytest.mark.parametrize("fault", ["transport", "identity", "budget", "interrupted"])
+def test_adjacent_target_repair_transport_fault_does_not_borrow_previous_response(kind, fault) -> None:
     batch = _batch().model_copy(deep=True)
     quote = ("整个治疗期（W0~W4）每日记录用药" if kind == "time_scope"
              else "每日1次记录用药情况")
@@ -4725,11 +4867,15 @@ def test_adjacent_target_repair_transport_fault_does_not_borrow_previous_respons
         def correct_source_scope(self, *, prompt):
             assert kind == "time_scope"
             self.repair_calls += 1
+            if fault != "transport":
+                _raise_wrapped_terminal_failure(fault)
             raise OSError("isolated scope service fault")
 
         def start_source_unit_comparison(self, *, prompt):
             assert kind == "frequency_comparison"
             self.repair_calls += 1
+            if fault != "transport":
+                _raise_wrapped_terminal_failure(fault)
             raise OSError("isolated comparison service fault")
 
     transport = ReviewingTransport([
@@ -4741,7 +4887,10 @@ def test_adjacent_target_repair_transport_fault_does_not_borrow_previous_respons
     assert result.final_output is None
     assert result.partial_wire == original
     assert result.source_interpretation == inventory
-    assert result.attempts[-1].error_classes == ["SOURCE_TARGET_REVIEW_TRANSPORT_FAILED"]
+    expected = {"transport": "SOURCE_TARGET_REVIEW_TRANSPORT_FAILED",
+                "identity": "MODEL_IDENTITY_INVALID", "budget": "LOGICAL_BUDGET_EXHAUSTED",
+                "interrupted": "FLOW_COMPLETION_UNCERTAIN"}[fault]
+    assert result.attempts[-1].error_classes == [expected]
     assert result.attempts[-1].outcome == "transport_failed"
     assert result.attempts[-1].raw_output_text is None
 
@@ -4827,9 +4976,16 @@ def test_candidate_linked_unresolved_target_gets_one_source_bound_read(
     assert result.status == expected_status
     assert result.source_target_review is not None
     assert result.source_target_review.items[0].decision == focused_decision
+    if focused_decision == "unresolved":
+        assert result.attempts[-1].error_classes == ["SOURCE_TARGET_REVIEW_UNRESOLVED"]
+        assert result.attempts[-1].error_detail["statement_ids"] == [0]
+        assert result.attempts[-1].error_detail["source_refs"] == ["span:01"]
+        assert result.attempts[-1].outcome == "publication_invalid"
+        assert result.source_interpretation.statements[0].unresolved == []
+        assert result.partial_wire == _wire(candidate=_candidate())
 
 
-@pytest.mark.parametrize("kind", ["transport", "schema", "source"])
+@pytest.mark.parametrize("kind", ["transport", "schema", "source", "identity", "budget", "interrupted"])
 def test_focused_target_failure_preserves_actual_response_and_checked_baseline(kind: str) -> None:
     batch = _batch().model_copy(deep=True)
     quote = "筛选前说明年龄记录来源"
@@ -4866,6 +5022,8 @@ def test_focused_target_failure_preserves_actual_response_and_checked_baseline(k
             if self.calls == 1:
                 return ProtocolControlAgentResponse(session_id="initial", text=initial.model_dump_json())
             assert self.calls == 2
+            if kind in {"identity", "budget", "interrupted"}:
+                _raise_wrapped_terminal_failure(kind)
             if kind == "transport":
                 raise OSError("isolated focused service failure")
             return ProtocolControlAgentResponse(session_id="rejected-focused", text=raw)
@@ -4879,15 +5037,18 @@ def test_focused_target_failure_preserves_actual_response_and_checked_baseline(k
     assert result.source_target_review == initial
     assert result.source_statement_coverage == source_statement_coverage(batch, inventory, original)
     failure = result.attempts[-1]
-    assert failure.error_classes == ["SOURCE_TARGET_FOCUSED_TRANSPORT_FAILED" if kind == "transport"
+    transport_failed = kind in {"transport", "identity", "budget", "interrupted"}
+    terminal_code = {"identity": "MODEL_IDENTITY_INVALID", "budget": "LOGICAL_BUDGET_EXHAUSTED",
+                     "interrupted": "FLOW_COMPLETION_UNCERTAIN"}.get(kind)
+    assert failure.error_classes == [terminal_code or "SOURCE_TARGET_FOCUSED_TRANSPORT_FAILED" if transport_failed
                                      else "SOURCE_TARGET_FOCUSED_SCHEMA_INVALID" if kind == "schema"
                                      else "SOURCE_TARGET_FOCUSED_INVALID"]
-    assert failure.outcome == ("transport_failed" if kind == "transport"
+    assert failure.outcome == ("transport_failed" if transport_failed
                                else "schema_invalid" if kind == "schema" else "publication_invalid")
-    assert failure.raw_output_text == (None if kind == "transport" else raw)
-    assert failure.raw_output_chars == (None if kind == "transport" else len(raw))
-    assert failure.session_id == ("wire" if kind == "transport" else "rejected-focused")
-    if kind != "transport":
+    assert failure.raw_output_text == (None if transport_failed else raw)
+    assert failure.raw_output_chars == (None if transport_failed else len(raw))
+    assert failure.session_id == ("wrapped-reader" if terminal_code else "wire" if transport_failed else "rejected-focused")
+    if not transport_failed:
         assert failure.raw_output_sha256 == hashlib.sha256(raw.encode()).hexdigest()
     detail = failure.error_detail
     assert detail["statement_id"] == 0 and detail["code"]
@@ -6083,6 +6244,9 @@ def test_restored_saved_review_keeps_additional_requirement_for_the_real_consume
 
         def read_stage_bound_requirement(self, *, prompt: str) -> ProtocolControlAgentResponse:
             return ProtocolControlAgentResponse(session_id="stage-1", text=selection.model_dump_json())
+
+        def start_source_candidate_alignment(self, *, prompt):
+            return _consent_policy_alignment_response(selection.action_excerpt, prompt)
 
     result = ProtocolControlAgentRunner().run(
         batch, StageReaderTransport([]),
@@ -9774,6 +9938,45 @@ def test_temporal_candidate_is_reviewed_before_insert_guard_without_forging_acce
     assert any("TEMPORAL_SCOPE_UNRESOLVED" in attempt.error_classes for attempt in result.attempts)
 
 
+def _synthetic_policy_checks_from_prompt(prompt, candidate_index=0):
+    """Agreeing reader fixture only; not a clinical semantic baseline."""
+    from app.domain.contracts.control_evidence_policy import has_explicit_evidence_policy
+    from app.agents.protocol_control_deconstructor import ProtocolControlAgentWireEvidence
+    selected = json.loads(prompt.split("待核对应：", 1)[1])
+    candidate = next(row["candidate"] for row in selected
+                     if row["candidate_index"] == candidate_index)
+    checks = []
+    for index, evidence in enumerate(candidate["minimum_evidence"]):
+        if not has_explicit_evidence_policy(ProtocolControlAgentWireEvidence.model_validate(evidence)):
+            continue
+        policy = evidence["source_policy"]
+        source = dict(evidence_index=index, source_span_id=policy["source_span_ids"][0],
+                      source_excerpt=policy["source_excerpts"][0])
+        checks.extend([
+            dict(source, dimension="contemporaneous_objective_source",
+                 boolean_value=policy["requires_contemporaneous_objective_source"]),
+            dict(source, dimension="screening_record_transcription",
+                 boolean_value=policy["allows_screening_record_transcription"]),
+            dict(source, dimension="result_validity",
+                 validity_status=policy["result_validity_status"],
+                 validity_constraint=policy["result_validity_constraint"]),
+        ])
+        if evidence["required_source_types"]:
+            checks.append(dict(source, dimension="required_source_types",
+                               source_types=evidence["required_source_types"]))
+    return checks
+
+
+def _consent_policy_alignment_response(quote, prompt):
+    from app.agents.protocol_control_candidate_alignment import SOURCE_CANDIDATE_ALIGNMENT_VERSION
+    return ProtocolControlAgentResponse(session_id="synthetic-policy-review", text=json.dumps({
+        "version": SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+        "items": [{"statement_index": 0, "candidate_index": 1, "decision": "fully_expressed",
+                   "source_excerpt": quote, "candidate_atom_quotes": [quote], "unresolved_dimensions": [],
+                   "evidence_policy_checks": _synthetic_policy_checks_from_prompt(prompt, 1)}],
+    }, ensure_ascii=False))
+
+
 def test_stage_bound_insert_uses_product_reader_and_keeps_original_candidate() -> None:
     batch, inventory, review, selection = _stage_bound_example()
     batch.owned_units[0].excerpt = "年龄至少18岁；" + batch.owned_units[0].excerpt
@@ -9791,6 +9994,9 @@ def test_stage_bound_insert_uses_product_reader_and_keeps_original_candidate() -
         def read_stage_bound_requirement(self, *, prompt: str) -> ProtocolControlAgentResponse:
             assert "reason_for_insertion" in prompt
             return ProtocolControlAgentResponse(session_id="stage-1", text=selection.model_dump_json())
+
+        def start_source_candidate_alignment(self, *, prompt):
+            return _consent_policy_alignment_response(selection.action_excerpt, prompt)
 
     validated = []
     result = ProtocolControlAgentRunner().run(
@@ -9889,6 +10095,7 @@ def test_two_sourced_actions_insert_together_without_rewriting_existing_draft() 
         "target_procedure_id": second_review.target_id,
         "relative_time_excerpt": second_review.source_time_excerpt,
         "obligation_statement": "导入治疗结束后再次核查资格",
+        "required_source_types": [],  # This second action does not inherit the consent record type.
     })
     target_review = SourceTargetReview(
         version=SOURCE_TARGET_REVIEW_VERSION, items=[first_review, second_review]
@@ -9909,6 +10116,9 @@ def test_two_sourced_actions_insert_together_without_rewriting_existing_draft() 
 
         def read_relative_stage_requirement(self, *, prompt: str) -> ProtocolControlAgentResponse:
             return ProtocolControlAgentResponse(session_id="relative-1", text=relative.model_dump_json())
+
+        def start_source_candidate_alignment(self, *, prompt):
+            return _consent_policy_alignment_response(first.action_excerpt, prompt)
 
     validated_sizes = []
 
@@ -10103,6 +10313,81 @@ def test_mixed_source_actions_keep_verified_partial_on_failure_and_resume() -> N
         )
 
 
+@pytest.mark.parametrize("failure_kind", ["transport", "interrupted", "identity", "budget"])
+@pytest.mark.parametrize("failed_index", [0, 1])
+@pytest.mark.parametrize("adapter_wrapped", [False, True])
+def test_short_requirement_transport_failure_does_not_expand_and_keeps_success(failure_kind, failed_index, adapter_wrapped):
+    from app.agents.protocol_control_agent_transport import (
+        ProtocolControlAgentCallError, ProtocolControlModelIdentityError,
+    )
+    from app.llm.logical_call_budget import LogicalCallBudgetExhausted
+
+    batch, inventory, review, selection = _stage_bound_example()
+    actions = ["拟参加者须完成知情同意记录", "拟参加者须完成既往病史记录"]
+    batch.owned_units[0].excerpt = "年龄至少18岁；筛选期（D-7~D-1）：" + "。".join(actions) + "。"
+    inventory.statements = [inventory.statements[0].model_copy(update={"quoted_text": text})
+                            for text in actions]
+    reviews = [review.model_copy(update={"statement_index": index, "source_action_excerpt": text})
+               for index, text in enumerate(actions)]
+    failures = {
+        "transport": RuntimeError("synthetic connection failure"),
+        "interrupted": ProtocolControlAgentCallError("short-reader", "synthetic stream failure", uncertain_completion=True),
+        "identity": ProtocolControlModelIdentityError("synthetic wrong model", configured_model="expected", reason="mismatch"),
+        "budget": LogicalCallBudgetExhausted("synthetic shared budget exhausted"),
+    }
+
+    class ShortFailure(_FakeTransport):
+        def __init__(self):
+            super().__init__([ProtocolControlAgentResponse(session_id="wire-1", text=_wire(candidate=_candidate()).model_dump_json())])
+            self.read_indexes = []
+
+        def start_source_interpretation(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="source-1", text=inventory.model_dump_json())
+
+        def start_source_target_review(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="target-1", text=SourceTargetReview(
+                version=SOURCE_TARGET_REVIEW_VERSION, items=reviews,
+            ).model_dump_json())
+
+        def read_stage_bound_requirement(self, *, prompt):
+            index = json.loads(prompt.split("冻结来源：", 1)[1])["statement_index"]
+            self.read_indexes.append(index)
+            if index == failed_index:
+                if adapter_wrapped:
+                    raise ProtocolControlAgentCallError("wrapped-reader", "synthetic adapter failure") from failures[failure_kind]
+                raise failures[failure_kind]
+            return ProtocolControlAgentResponse(session_id=f"short-{index}", text=selection.model_copy(update={
+                "statement_index": index, "action_excerpt": actions[index], "obligation_statement": actions[index],
+            }).model_dump_json())
+
+        def start_source_insert(self, **kwargs):
+            pytest.fail("A failed short read must not trigger a larger source insert")
+
+        def start_source_candidate_alignment(self, **kwargs):
+            pytest.fail("A failed short read must not trigger another semantic call")
+
+        def continue_session(self, **kwargs):
+            pytest.fail("A failed short read must not trigger whole-wire repair")
+
+    transport = ShortFailure()
+    result = ProtocolControlAgentRunner(max_schema_repairs=2).run(
+        batch, transport, output_validator=lambda _output: None,
+    )
+    expected = {"transport": "SOURCE_REQUIREMENT_TRANSPORT_FAILED", "interrupted": "FLOW_COMPLETION_UNCERTAIN",
+                "identity": "MODEL_IDENTITY_INVALID", "budget": "LOGICAL_BUDGET_EXHAUSTED"}[failure_kind]
+    assert result.final_output is None
+    assert transport.read_indexes == list(range(failed_index + 1))
+    assert result.attempts[-1].error_classes == [expected]
+    assert result.attempts[-1].outcome == "transport_failed"
+    assert result.attempts[-1].error_detail["statement_ids"] == [failed_index]
+    assert result.partial_wire is not None
+    assert len(result.partial_wire.candidate_drafts) == 1 + failed_index
+    assert [item.statement_index for item in result.source_target_review.items] == list(range(failed_index, 2))
+    restored = type(result).model_validate_json(result.model_dump_json())
+    assert restored.partial_wire == result.partial_wire
+    assert restored.attempts[-1].error_detail == result.attempts[-1].error_detail
+
+
 def _two_independent_candidate_linked_alignment_material():
     from app.agents.protocol_control_candidate_alignment import SOURCE_CANDIDATE_ALIGNMENT_VERSION
 
@@ -10162,6 +10447,49 @@ def _two_independent_candidate_linked_alignment_material():
         ],
     }
     return batch, inventory, review, wire, alignment
+
+
+@pytest.mark.parametrize("failure_kind", ["transport", "interrupted", "identity", "budget"])
+def test_alignment_transport_failure_keeps_partial_and_does_not_expand(failure_kind):
+    from app.agents.protocol_control_agent_transport import ProtocolControlAgentCallError, ProtocolControlModelIdentityError
+    from app.llm.logical_call_budget import LogicalCallBudgetExhausted
+    batch, inventory, review, wire, _ = _two_independent_candidate_linked_alignment_material()
+    cause = {
+        "transport": RuntimeError("synthetic connection failure"),
+        "interrupted": ProtocolControlAgentCallError("alignment-failed", "synthetic disconnect", uncertain_completion=True),
+        "identity": ProtocolControlModelIdentityError("synthetic wrong model", configured_model="expected", reason="mismatch"),
+        "budget": LogicalCallBudgetExhausted("synthetic exhausted budget"),
+    }[failure_kind]
+
+    class Transport(_FakeTransport):
+        alignment_calls = 0
+
+        def start_source_target_review(self, *, prompt):
+            return ProtocolControlAgentResponse(session_id="target", text=review.model_dump_json())
+
+        def start_source_candidate_alignment(self, *, prompt):
+            self.alignment_calls += 1
+            raise ProtocolControlAgentCallError("wrapped-alignment", "synthetic adapter failure") from cause
+
+        def start_source_insert(self, **kwargs):
+            pytest.fail("Transport failure cannot authorize a larger source insert")
+
+        def continue_session(self, **kwargs):
+            pytest.fail("Transport failure cannot authorize whole-wire repair")
+
+    transport = Transport([])
+    result = ProtocolControlAgentRunner().run(
+        batch, transport, resume_wire=wire, resume_source_interpretation=inventory,
+        resume_session_id="existing-wire", output_validator=lambda _output: None,
+    )
+    expected = {"transport": "SOURCE_CANDIDATE_ALIGNMENT_TRANSPORT_FAILED", "interrupted": "FLOW_COMPLETION_UNCERTAIN",
+                "identity": "MODEL_IDENTITY_INVALID", "budget": "LOGICAL_BUDGET_EXHAUSTED"}[failure_kind]
+    assert transport.alignment_calls == 1
+    assert result.final_output is None and result.partial_wire == wire
+    assert result.source_candidate_alignment is None
+    assert result.attempts[-1].error_classes == [expected]
+    assert result.attempts[-1].error_detail["statement_ids"] == [0, 1]
+    assert result.attempts[-1].error_detail["candidate_indexes"] == [0, 1]
 
 
 def test_partial_candidate_alignment_keeps_verified_pair_when_sibling_temporal_fails() -> None:

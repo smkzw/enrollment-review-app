@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +27,7 @@ from app.agents.protocol_deconstructor import (
     protocol_prompt_template_sha256,
 )
 from app.agents.protocol_semantic_model_router import (
+    NON_REPLAYABLE_ROUTE_ERRORS,
     ProtocolSemanticRouteAttemptRecord,
     ProtocolSemanticRouteAudit,
     build_transport_for_candidate,
@@ -42,6 +43,7 @@ from app.agents.protocol_semantic_model_router import (
 from app.config import DECONSTRUCT_BACKEND, DECONSTRUCT_ROUTE_MODE, DEEPSEEK_API_KEY
 from app.domain.contracts.agents import PromptVersion
 from app.domain.contracts.agent_io import ProtocolDeconstructionInput
+from app.evidence.artifacts import ArtifactStore
 from app.domain.contracts.enums import (
     AgentNode,
     ExtractionStatus,
@@ -154,7 +156,12 @@ class _ProtocolSemanticBatchFileCache(ProtocolSemanticBatchCache):
 
     def load(self, cache_key: str) -> str | None:
         path = self._path(cache_key)
-        if not path.is_file() or path.is_symlink():
+        if path.is_symlink() or (path.exists() and not path.is_file()):
+            raise StepFailure(
+                retryable=False, error_code="SEMANTIC_CACHE_INVALID",
+                detail="已保存的方案读取记录位置异常，请核对原记录；系统没有重新读取或覆盖它。",
+            )
+        if not path.exists():
             return None
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
@@ -162,14 +169,17 @@ class _ProtocolSemanticBatchFileCache(ProtocolSemanticBatchCache):
             if payload.get("cache_key") != cache_key or not isinstance(
                 response_text, str
             ):
-                return None
+                raise ValueError("缓存身份或结果类型不一致")
             if hashlib.sha256(response_text.encode("utf-8")).hexdigest() != payload.get(
                 "response_sha256"
             ):
-                return None
+                raise ValueError("缓存结果内容与保存的身份不一致")
             return response_text
         except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
-            return None
+            raise StepFailure(
+                retryable=False, error_code="SEMANTIC_CACHE_INVALID",
+                detail="已保存的方案读取记录损坏或无法核实，请核对原记录；系统没有重新读取或覆盖它。",
+            ) from None
 
     def store(
         self,
@@ -195,6 +205,39 @@ class _ProtocolSemanticBatchFileCache(ProtocolSemanticBatchCache):
                 separators=(",", ":"),
             ).encode("utf-8"),
         )
+
+    def load_call_budget(self, logical_task_id: str) -> dict[str, Any] | None:
+        root = self._path(logical_task_id).parent / "call-budgets" / logical_task_id
+        paths = sorted(root.glob("*.json"))
+        if not paths:
+            return None
+        # Missing or damaged reservations are not cache misses: resending
+        # would reset the upstream budget after process/Job recovery.
+        previous: dict[str, Any] | None = None
+        for sequence, path in enumerate(paths, start=1):
+            if path.is_symlink() or path.name != f"{sequence:04}.json":
+                raise ValueError("方案读取预算记录缺失或位置异常，不能自动恢复调用")
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if payload["logical_task_id"] != logical_task_id or payload["requests_used"] != sequence:
+                raise ValueError("方案读取预算记录身份或计数不一致")
+            if previous is not None and (
+                payload["requests"][:-1] != previous["requests"]
+                or any(payload.get(key) != previous.get(key) for key in (
+                    "policy", "max_requests", "max_output_tokens", "contract_sha256"))
+            ):
+                raise ValueError("方案调用预算历史发生变化，不能自动恢复")
+            previous = payload
+        return previous
+
+    def store_call_budget(self, payload: dict[str, Any]) -> None:
+        root = self._path(payload["logical_task_id"]).parent / "call-budgets" / payload["logical_task_id"]
+        target = root / f'{payload["requests_used"]:04}.json'
+        content = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        if target.exists():
+            if target.is_symlink() or target.read_bytes() != content:
+                raise ValueError("已有方案调用预算记录不同，不得覆盖历史")
+            return
+        self._data_paths.boundary.atomic_write_bytes(target, content)
 
 
 SEMANTIC_PREVIEW_CONTRACT = "protocol-semantic-preview/v1"
@@ -258,7 +301,7 @@ def create_protocol_deconstruction_executor(
     """Build the ``protocol_deconstruction`` step executor."""
 
     def execute(context: StepContext) -> dict[str, Any]:
-        if context.last_checkpoint is not None:
+        if context.last_checkpoint is not None and not context.last_checkpoint_is_diagnostic:
             return dict(context.last_checkpoint)
         handlers = {
             STEP_REGISTER: lambda ctx: _handle_register(ctx, config),
@@ -608,10 +651,20 @@ def _persist_route_audit(
         / job_id
         / "route-audit.json"
     )
-    config.data_paths.boundary.atomic_write_bytes(
-        target,
-        dumps_route_audit(audit),
-    )
+    try:
+        config.data_paths.boundary.atomic_write_bytes(target, dumps_route_audit(audit))
+    except OSError as exc:
+        primary_error = (
+            audit.attempts[-1].error_class
+            if audit.final_outcome == "stopped" and audit.attempts else None
+        )
+        raise StepFailure(
+            retryable=False, error_code=primary_error or "SEMANTIC_ROUTE_AUDIT_WRITE_FAILED",
+            detail="方案读取记录未能保存，已停止继续读取；请核对存储空间和保存位置。",
+            diagnostic_checkpoint={"semantic_route_audit_failure": {
+                "audit": payload, "storage_error_type": type(exc).__name__,
+            }},
+        ) from exc
     return payload
 
 
@@ -859,6 +912,11 @@ def _run_semantic_generation_with_routing(
                     discarded_merged_candidate=True,
                 )
             )
+            if error_code in NON_REPLAYABLE_ROUTE_ERRORS:
+                audit.final_identity = candidate.identity
+                audit.final_outcome = "stopped"
+                _persist_route_audit(config, context.job_id, audit)
+                raise
             continue
         last_result = result
         outcome, error_class, session_id = summarize_run_result_for_route(result)
@@ -875,12 +933,18 @@ def _run_semantic_generation_with_routing(
                 detail=None if accepted else route_failure_detail(result),
                 session_id=session_id,
                 semantic_repair_limit=semantic_repair_limit,
-                discarded_merged_candidate=not accepted,
+                discarded_merged_candidate=(
+                    not accepted and error_class not in NON_REPLAYABLE_ROUTE_ERRORS
+                ),
             )
         )
         if accepted:
             audit.final_identity = candidate.identity
             audit.final_outcome = "accepted"
+            return result, _persist_route_audit(config, context.job_id, audit)
+        if error_class in NON_REPLAYABLE_ROUTE_ERRORS:
+            audit.final_identity = candidate.identity
+            audit.final_outcome = "stopped"
             return result, _persist_route_audit(config, context.job_id, audit)
         # Whole-attempt boundary: discard this provider's merged candidate and
         # start the next provider with a fresh transport/session identity.
@@ -1139,7 +1203,7 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
             except ProtocolAgentCallError as exc:
                 error_code = getattr(exc, "error_code", "SEMANTIC_CALL_FAILED")
                 raise StepFailure(
-                    retryable=True,
+                    retryable=error_code in {"TRANSPORT_TIMEOUT", "STREAM_INTERRUPTED", "QUOTA_EXHAUSTED", "SEMANTIC_CALL_FAILED"},
                     error_code=error_code,
                     detail=f"方案语义解构调用未完成，请稍后重试。（{exc}）",
                 ) from exc
@@ -1155,12 +1219,25 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
             except ProtocolAgentCallError as exc:
                 error_code = getattr(exc, "error_code", "SEMANTIC_CALL_FAILED")
                 raise StepFailure(
-                    retryable=True,
+                    retryable=error_code in {"TRANSPORT_TIMEOUT", "STREAM_INTERRUPTED", "QUOTA_EXHAUSTED", "SEMANTIC_CALL_FAILED"},
                     error_code=error_code,
                     detail=f"方案语义解构调用未完成，请稍后重试。（{exc}）",
                 ) from exc
 
+        _, failure_code, _ = summarize_run_result_for_route(result)
+        if failure_code in NON_REPLAYABLE_ROUTE_ERRORS:
+            # A retained earlier candidate is recovery material, not a successful
+            # generation step after an uncertain or identity-invalid new call.
+            raise StepFailure(
+                retryable=failure_code in {"TRANSPORT_TIMEOUT", "STREAM_INTERRUPTED"},
+                error_code=failure_code,
+                detail=_semantic_failure_detail(result),
+                diagnostic_checkpoint={"semantic_generation_failure": result.model_dump(
+                    mode="json", exclude={"attempts": {"__all__": {"call_metadata"}}},
+                )},
+            )
         if result.final_draft is None:
+            _, failure_code, _ = summarize_run_result_for_route(result)
             detail = _semantic_failure_detail(result)
             if route_audit_payload is not None:
                 detail = (
@@ -1185,8 +1262,8 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
                     )
                 )
             raise StepFailure(
-                retryable=True,
-                error_code="SEMANTIC_DRAFT_MISSING",
+                retryable=failure_code in {"TRANSPORT_TIMEOUT", "STREAM_INTERRUPTED", "QUOTA_EXHAUSTED", "SEMANTIC_CALL_FAILED"},
+                error_code=failure_code or "SEMANTIC_DRAFT_MISSING",
                 detail=detail,
             )
         final_draft = result.final_draft
@@ -1205,7 +1282,7 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
     if baseline_draft is not None:
         from app.protocols.deconstruction_gate import ProtocolDraftDiffDeclaration
 
-        gate = (config.gate or ProtocolDeconstructionGate()).evaluate(
+        gate = (config.gate or ProtocolDeconstructionGate(artifact_reader=ArtifactStore(config.data_paths).read)).evaluate(
             package.source_input,
             final_draft,
             source_spans=package.source_spans,
@@ -1215,7 +1292,7 @@ def _handle_generate(context: StepContext, config: ProtocolDeconstructionExecuto
             ),
         )
     elif gate is None:
-        gate = (config.gate or ProtocolDeconstructionGate()).evaluate(
+        gate = (config.gate or ProtocolDeconstructionGate(artifact_reader=ArtifactStore(config.data_paths).read)).evaluate(
             package.source_input,
             final_draft,
             source_spans=package.source_spans,
@@ -1273,7 +1350,7 @@ def _handle_integrity(context: StepContext, config: ProtocolDeconstructionExecut
         revision = ProtocolDraftRevisionRepository(session).get(
             str(merged["draft_revision_id"])
         )
-    gate = (config.gate or ProtocolDeconstructionGate()).evaluate(
+    gate = (config.gate or ProtocolDeconstructionGate(artifact_reader=ArtifactStore(config.data_paths).read)).evaluate(
         source_input,
         revision.content,
         source_spans={span.source_span_id: span for span in spans},
@@ -1306,8 +1383,25 @@ class _FakeSingleResponseTransport:
 
     def __init__(self, text: str) -> None:
         self._text = text
+        self._official_codes: tuple[str, ...] | None = None
         self.start_prompts: list[str] = []
         self.repair_prompts: list[tuple[str, str]] = []
+
+    def configure_output_scope(self, *, official_codes: Sequence[str], **_scope: Any) -> None:
+        self._official_codes = tuple(official_codes)
+
+    def _scoped_text(self) -> str:
+        if self._official_codes is None:
+            return self._text
+        try:
+            payload = json.loads(self._text)
+        except json.JSONDecodeError:
+            return self._text
+        if not isinstance(payload, dict) or not isinstance(payload.get("proposed_rules"), list):
+            return self._text
+        payload["proposed_rules"] = [rule for rule in payload["proposed_rules"]
+                                     if rule.get("official_code") in self._official_codes]
+        return json.dumps(payload, ensure_ascii=False)
 
     def start(
         self,
@@ -1316,7 +1410,7 @@ class _FakeSingleResponseTransport:
         output_kind: str = "semantic_candidate",
     ) -> ProtocolAgentResponse:
         self.start_prompts.append(prompt)
-        return ProtocolAgentResponse(session_id="test-session", text=self._text)
+        return ProtocolAgentResponse(session_id="test-session", text=self._scoped_text())
 
     def continue_session(
         self,
@@ -1326,4 +1420,4 @@ class _FakeSingleResponseTransport:
         output_kind: str = "semantic_candidate",
     ) -> ProtocolAgentResponse:
         self.repair_prompts.append((session_id, prompt))
-        return ProtocolAgentResponse(session_id=session_id, text=self._text)
+        return ProtocolAgentResponse(session_id=session_id, text=self._scoped_text())

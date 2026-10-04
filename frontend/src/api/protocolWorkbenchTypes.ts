@@ -438,6 +438,7 @@ export interface FeedbackInput {
   feedbackKind: FeedbackKind;
   targetRuleCode: string;
   targetComponentId?: string;
+  reviewParentScope?: boolean;
   feedbackNote: string;
   actor?: string;
 }

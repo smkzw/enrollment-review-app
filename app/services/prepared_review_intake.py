@@ -32,7 +32,7 @@ def require_prepared_review_intent(session_factory, *, subject_id, review_episod
             current_review_clinical_material_sha256(session, context.authority)
             != frozen_review_clinical_material_sha256(context)
         ):
-            raise ScopeViolationError("当前病史已经更新，请重新准备本次审核")
+            raise ScopeViolationError("当前病史或书面判断核查已经更新，请重新准备本次审核")
         if candidate_job_id is not None:
             parent = JobStore(session).get_job(candidate_job_id)
             if parent.state != "completed":

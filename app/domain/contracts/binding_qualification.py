@@ -24,7 +24,7 @@ _LANES = ("main-A", "main-B")
 
 BINDING_QUALIFICATION_PAIR_VERSION = "binding-qualification-pair/v2"
 BINDING_QUALIFICATION_SUMMARY_VERSION = "binding-qualification-summary/v2"
-BINDING_QUALIFICATION_PROMPT_VERSION = "binding-qualification/v5"
+BINDING_QUALIFICATION_PROMPT_VERSION = "binding-qualification/v6"
 BINDING_QUALIFICATION_BATCH_VERSION = "binding-qualification-batch/v1"
 
 CandidateFamily = Literal["predicate", "control"]
@@ -159,6 +159,20 @@ class BindingQualificationBatch(ContractModel):
         return self
 
 
+def qualification_judgment_needs_reason(judgment) -> bool:
+    """Require explicit reasons for negative or uncertain dimensions."""
+    return (
+        judgment.get("source_admissibility") in {"inadmissible", "unresolved"}
+        or judgment.get("object_match") in {"uncertain", "rejected"}
+        or judgment.get("attribute_match") in {
+            "uncertain", "rejected", "context_only", "derivation_operand",
+        }
+        or judgment.get("denial_scope") != "compatible"
+        or judgment.get("temporal_role") in {"uncertain", "mismatched"}
+        or judgment.get("direct_operand_usable") != "usable"
+    )
+
+
 class BindingQualificationJudgment(ContractModel):
     """One lane's structured recheck; explanation/reasons stay private to that lane."""
 
@@ -176,16 +190,7 @@ class BindingQualificationJudgment(ContractModel):
     def validate_judgment(self) -> "BindingQualificationJudgment":
         if any(not item.strip() for item in self.unresolved_reasons):
             raise ValueError("未核实原因不得为空字符串")
-        needs_reason = (
-            self.source_admissibility == "unresolved"
-            or self.object_match in {"uncertain", "rejected"}
-            or self.attribute_match in {
-                "uncertain", "rejected", "context_only", "derivation_operand",
-            }
-            or self.denial_scope != "compatible"
-            or self.temporal_role in {"uncertain", "mismatched"}
-            or self.direct_operand_usable != "usable"
-        )
+        needs_reason = qualification_judgment_needs_reason(self.model_dump())
         if needs_reason and not self.unresolved_reasons:
             raise ValueError("未通过或未核实的资格判断必须保留具体原因")
         return self
@@ -309,7 +314,7 @@ class BindingQualificationSummary(ContractModel):
     version: Literal["binding-qualification-summary/v2"] = (
         BINDING_QUALIFICATION_SUMMARY_VERSION
     )
-    prompt_version: Literal["binding-qualification/v2", "binding-qualification/v3", "binding-qualification/v4", "binding-qualification/v5"] = (
+    prompt_version: Literal["binding-qualification/v2", "binding-qualification/v3", "binding-qualification/v4", "binding-qualification/v5", "binding-qualification/v6"] = (
         BINDING_QUALIFICATION_PROMPT_VERSION
     )
     candidate_family: CandidateFamily

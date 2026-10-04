@@ -348,7 +348,7 @@ def validate_segment_source_closure(candidate: Any, segment: ParentRuleSegment) 
     referenced = {
         source_span_id
         for rule in candidate.proposed_rules
-        for component in rule.components
+        for component in (*rule.components, *rule.restricted_components)
         for source_span_id in component.source_span_ids
     }
     issue_refs = {
@@ -373,6 +373,7 @@ def merge_parent_rule_segments(
         raise ValueError("同父规则分段结果数量与冻结计划不一致")
     first = candidates[0]
     components = []
+    restricted_components = []
     warnings = []
     unresolved = []
     for segment, candidate in zip(plan.segments, candidates, strict=True):
@@ -383,9 +384,13 @@ def merge_parent_rule_segments(
             raise ValueError(f"分段 {segment.segment_id} 返回了其他官方父规则")
         validate_segment_source_closure(candidate, segment)
         components.extend(rule.components)
+        restricted_components.extend(rule.restricted_components)
         warnings.extend(candidate.structural_warnings)
         unresolved.extend(candidate.unresolved_items)
-    merged_rule = first.proposed_rules[0].model_copy(update={"components": components})
+    merged_rule = first.proposed_rules[0].model_copy(update={
+        "components": components,
+        "restricted_components": restricted_components,
+    })
     return first.model_copy(
         update={
             "candidate_id": candidate_id,

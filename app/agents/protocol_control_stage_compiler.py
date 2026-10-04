@@ -13,9 +13,10 @@ from collections.abc import Callable
 from types import SimpleNamespace
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.domain.contracts.common import ContractModel
+from app.domain.contracts.control_evidence_policy import ControlEvidenceSourcePolicy
 from app.domain.contracts.protocol_controls import (
     ControlObligationKind,
     ProtocolControlDispositionBatch,
@@ -26,6 +27,7 @@ from app.domain.contracts.enums import ProtocolPeriod
 from app.protocols.protocol_control_gate import _split_prohibition_atom_covers_clause
 from app.protocols.supplementary_relation_contract import procedure_execution_workflow_stage_id
 from app.protocols.source_time_fragments import intraday_time_fragments
+from app.protocols.control_scope_sources import resolve_ancestor_scope_citation
 
 from .protocol_control_deconstructor import (
     ProtocolControlAgentResponse,
@@ -39,12 +41,15 @@ from .protocol_control_source_interpretation import (
     SourceInterpretation,
     SourceTargetReviewItem,
     normalize_source_excerpt,
+    source_requires_temporal_resolution,
+    source_visit_scope_matches,
+    source_has_single_visit_anchor,
 )
 
 
-STAGE_BOUND_REQUIREMENT_VERSION = "phase5/control-stage-bound-requirement/v8"
-RELATIVE_STAGE_REQUIREMENT_VERSION = "phase5/control-relative-stage-requirement/v6"
-SHARED_PROHIBITION_REQUIREMENT_VERSION = "phase5/control-shared-prohibition-requirement/v2"
+STAGE_BOUND_REQUIREMENT_VERSION = "phase5/control-stage-bound-requirement/v10"
+RELATIVE_STAGE_REQUIREMENT_VERSION = "phase5/control-relative-stage-requirement/v8"
+SHARED_PROHIBITION_REQUIREMENT_VERSION = "phase5/control-shared-prohibition-requirement/v3"
 
 
 class _SourceRequirement(ContractModel):
@@ -63,8 +68,17 @@ class _SourceRequirement(ContractModel):
     observation_scope: str = Field(min_length=1)
     fact_type: str = Field(min_length=1)
     evidence_description: str = Field(min_length=1)
-    required_source_types: list[str] = Field(min_length=1)
+    required_source_types: list[str]
+    source_policy: ControlEvidenceSourcePolicy | None = None
     unresolved_aspects: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_action_mode(self) -> "_SourceRequirement":
+        if self.result_requirement == "action_only" and (
+            self.kind != "complete_or_verify" or self.determination_mode != "semantic"
+        ):
+            raise ValueError("只核操作完成须采用普通必做操作类型，不能改作记录或研究者判断")
+        return self
 
 
 class StageBoundRequirement(_SourceRequirement):
@@ -91,7 +105,7 @@ class SharedProhibitionRequirement(ContractModel):
     observation_scope: str = Field(min_length=1)
     fact_type: str = Field(min_length=1)
     evidence_description: str = Field(min_length=1)
-    required_source_types: list[str] = Field(min_length=1)
+    required_source_types: list[str]
     unresolved_aspects: list[str] = Field(default_factory=list)
 
 
@@ -130,18 +144,7 @@ def _simple_stage_scope(statement: SourceStatement) -> str | None:
 def requires_temporal_resolution(interpretation: SourceInterpretation, statement_index: int) -> bool:
     """Keep explicit durations and cross-period duties out of the short visit path."""
 
-    statement = interpretation.statements[statement_index]
-    source = normalize_source_excerpt(" ".join(filter(None, (
-        statement.quoted_text, statement.scope_quote, *statement.time_words,
-    ))))
-    return bool(
-        intraday_time_fragments(source)
-        or re.search(r"\d+(?:天|日|周|月|年)(?:内|以上|以下)?", source)
-        or re.search(r"(?:W|D)\d+[~～至-](?:W|D)?\d+", source)
-        or re.search(r"整个|全程|持续|连续|继续", source)
-        or re.search(r"期(?:、|和|及|与).{0,30}期", source)
-        or re.search(r"每(?:日|天|周|月)(?:\d+|[一二三四五六七八九十]+)次", source)
-    )
+    return source_requires_temporal_resolution(interpretation.statements[statement_index])
 
 
 def can_compile_shared_prohibition_requirement(
@@ -200,6 +203,8 @@ def build_shared_prohibition_requirement_prompt(
         "不得把未来未发生的行为写进本次观察范围，"
         "不得创造节点、日期、药物或医学结论。prospective_period 只从原文明确的治疗期或研究期选择。"
         "全部字段只根据这条原文和冻结节点填写，不能借同单元另一句话补时间。"
+        "required_source_types 仅填写原文明文限定的受试者资料种类；未限定时必须填写空列表 []，"
+        "不把可用的证明材料编成强制来源限制。"
         "只返回随附结构的 JSON 对象。\n"
         f"冻结来源：{json.dumps(source, ensure_ascii=False, sort_keys=True)}"
     )
@@ -225,8 +230,19 @@ def can_compile_stage_bound_requirement(
 
     if review.decision != "additional_requirement" or review.statement_index >= len(interpretation.statements):
         return False
-    statement = interpretation.statements[review.statement_index]
-    if requires_temporal_resolution(interpretation, review.statement_index):
+    return can_compile_stage_bound_source(batch, interpretation, review.statement_index)
+
+
+def can_compile_stage_bound_source(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+    statement_index: int,
+) -> bool:
+    """Capability preflight only; this does not approve a source or its meaning."""
+    if not 0 <= statement_index < len(interpretation.statements):
+        return False
+    statement = interpretation.statements[statement_index]
+    if not source_has_single_visit_anchor(statement):
         return False
     if (
         statement.force != "required"
@@ -239,6 +255,14 @@ def can_compile_stage_bound_requirement(
     required = [part for word in statement.time_words for part in _time_parts(word)]
     scope_text = _simple_stage_scope(statement)
     assert scope_text is not None
+    unit = next((item for item in batch.owned_units
+                 if item.structure_unit_id == statement.structure_unit_id), None)
+    if unit is None:
+        return False
+    try:
+        resolve_ancestor_scope_citation(unit, scope_text, [*batch.owned_units, *batch.context_units])
+    except ValueError:
+        return False
     scope_parts = _time_parts(scope_text)
     if not scope_parts or not all(
         part in normalize_source_excerpt(scope_text) for part in required
@@ -248,7 +272,7 @@ def can_compile_stage_bound_requirement(
         frozen_visit = normalize_source_excerpt(" ".join(filter(None, (
             stage.display_name, stage.visit_instance, stage.visit_window,
         ))))
-        if all(_visit_scope_in_stage(part, frozen_visit) for part in scope_parts):
+        if source_visit_scope_matches(scope_text, frozen_visit):
             return True
     return False
 
@@ -262,6 +286,14 @@ def can_compile_relative_stage_requirement(
         return False
     statement = interpretation.statements[review.statement_index]
     if requires_temporal_resolution(interpretation, review.statement_index):
+        return False
+    unit = next((item for item in batch.owned_units
+                 if item.structure_unit_id == statement.structure_unit_id), None)
+    if unit is None or not statement.scope_quote:
+        return False
+    try:
+        resolve_ancestor_scope_citation(unit, statement.scope_quote, [*batch.owned_units, *batch.context_units])
+    except ValueError:
         return False
     return bool(
         statement.force == "required"
@@ -305,6 +337,7 @@ def build_stage_bound_requirement_prompt(
         "source_action_excerpt": review.source_action_excerpt,
         "reason_for_insertion": review.unresolved_aspects,
         "owned_unit": {"structure_unit_id": unit.structure_unit_id,
+                       "source_span_ids": unit.source_span_ids,
                        "excerpt": unit.excerpt, "heading_path": unit.heading_path},
         "frozen_stages": [
             {"workflow_stage_id": item.workflow_stage_id,
@@ -329,8 +362,14 @@ def build_stage_bound_requirement_prompt(
         "普通必做操作用 semantic，确需研究者书面判断才用 investigator_judgment；"
         "result_requirement 仅按本条方案原文判断：只要求在该节点完成操作、不要求结果方向时填 action_only；"
         "另要求结果或合格性时填 result_required；无法区分时填 unresolved。"
+        "action_only 必须与 kind=complete_or_verify、determination_mode=semantic 配套；"
+        "must_record 表示独立的记录义务，不能与 action_only 搭配。"
         "操作已完成只能证明操作要求，不能证明检验结果正常或其他入排条款满足。"
-        "所需资料种类只能据原文提出，不额外要求未写明的签名或时间。"
+        "required_source_types 只填写原文明文限定的受试者资料种类；未限定时必须填写空列表 []，"
+        "不把可能用于证明操作的记录种类改成强制来源限制，也不额外要求未写明的签名或时间。"
+        "source_policy 仅按冻结原文解释同期客观原件、筛选记录转述及结果有效期要求，并逐字引用对应 source_span_ids；"
+        "不能仅凭本句没有说明就推断整个方案没有限制。未查清的布尔维度填 null、有效期填 unknown；"
+        "已有明确依据的维度须保留，不能把整个对象一律清空。没有可引用的政策依据时 source_policy 填 null。"
         "本路径不向你询问选用哪次观察；原文未规定时系统固定保留为未核实，"
         "不得在其他字段暗示只取一份、最新一份或所有记录。"
         "不要把来源标题、背景信息或已有官方条款文字改写为新动作。"
@@ -343,7 +382,7 @@ def stage_bound_requirement_response_format() -> dict[str, object]:
     return {
         "type": "json_schema",
         "json_schema": {
-            "name": "protocol_control_stage_bound_requirement_v7",
+            "name": "protocol_control_stage_bound_requirement_v10",
             "strict": True,
             "schema": StageBoundRequirement.model_json_schema(),
         },
@@ -369,6 +408,7 @@ def build_relative_stage_requirement_prompt(
         "source_time_excerpt": review.source_time_excerpt,
         "reason_for_insertion": review.unresolved_aspects,
         "owned_unit": {"structure_unit_id": unit.structure_unit_id,
+                       "source_span_ids": unit.source_span_ids,
                        "excerpt": unit.excerpt, "heading_path": unit.heading_path},
         "frozen_stages": [
             {"workflow_stage_id": stage.workflow_stage_id,
@@ -399,12 +439,18 @@ def build_relative_stage_requirement_prompt(
         "按已有入排条款再次核查合格性是 complete_or_verify 加 semantic；"
         "result_requirement 只按本条来源判断：仅完成复核动作填 action_only；"
         "还要求资格结果填 result_required；不明填 unresolved。不能把复核已做当作资格合格。"
+        "action_only 必须与 complete_or_verify 加 semantic 配套，不能与 must_record 搭配。"
         "只有原文要求研究者作独立书面临床判断时才用 must_professional_assessment"
         "加 investigator_judgment。两字段不能互相矛盾。"
         "workflow_stage_id 是执行此次核查的后续节点，不是先前导入节点；"
         "先后关系由 prior_workflow_stage_id 和 relative_time_excerpt 表达。"
         "obligation_statement 必须完整保留本条逐字 quoted_text，不得把复核动作改写成合格结论。"
         "本路径不询问选用哪次记录，原文未定则系统保留未核实。"
+        "required_source_types 只填写原文明文限定的受试者资料种类，未限定时必须填写空列表 []；"
+        "不得把可能的证明材料改成强制来源限制。"
+        "source_policy 按冻结原文保留同期原件、筛选记录转述与有效期要求及逐字引用；"
+        "只允许使用所给 source_span_ids。未查清维度保持 null 或 unknown，不能从本句未提及推断全方案无限制；"
+        "没有可引用的政策依据时 source_policy 填 null。"
         "只返回随附结构的 JSON 对象。\n"
         f"冻结来源：{json.dumps(source, ensure_ascii=False, sort_keys=True)}"
     )
@@ -414,7 +460,7 @@ def relative_stage_requirement_response_format() -> dict[str, object]:
     return {
         "type": "json_schema",
         "json_schema": {
-            "name": "protocol_control_relative_stage_requirement_v5",
+            "name": "protocol_control_relative_stage_requirement_v8",
             "strict": True,
             "schema": RelativeStageRequirement.model_json_schema(),
         },
@@ -675,15 +721,22 @@ def compile_stage_bound_requirement(
                 "affected_workflow_stage_id": stage.workflow_stage_id,
                 "notes": "原文动作在同一访视对既有流程目标提出增量要求。",
             })
-    if not selection.observation_scope or not selection.required_source_types:
-        raise StageBoundCompilationGap("资料范围或来源类型未说明")
+    if not selection.observation_scope:
+        raise StageBoundCompilationGap("资料范围未说明")
 
-    # The source quote remains exact.  Repeating a span with two distinct
-    # excerpts is legal and keeps the action separate from its visit scope.
     if len(unit.source_span_ids) != 1:
         raise StageBoundCompilationGap("多处来源定位需要逐处语义解释")
-    spans = [unit.source_span_ids[0], unit.source_span_ids[0]]
-    excerpts = [selection.stage_scope_excerpt, statement.quoted_text]
+    try:
+        scope_citation = resolve_ancestor_scope_citation(
+            unit, selection.stage_scope_excerpt, [*batch.owned_units, *batch.context_units],
+        )
+    except ValueError as exc:
+        raise StageBoundCompilationGap(str(exc)) from exc
+    # Only physically inline scopes belong to the body's atom source pairs.
+    spans = ([unit.source_span_ids[0]] if scope_citation else
+             [unit.source_span_ids[0], unit.source_span_ids[0]])
+    excerpts = ([statement.quoted_text] if scope_citation else
+                [selection.stage_scope_excerpt, statement.quoted_text])
     judgment = selection.determination_mode == "investigator_judgment"
     evaluation = {
         "version": "control-atom-evaluation/v4",
@@ -726,6 +779,7 @@ def compile_stage_bound_requirement(
                 "review_stage": stage.review_stage,
                 "role": ReviewNodeRole.DECIDE_AT_NODE,
                 "guidance": None,
+                "scope_citation": scope_citation.model_dump(mode="json") if scope_citation else None,
             }],
             "minimum_evidence": [{
                 "fact_type": selection.fact_type,
@@ -733,10 +787,10 @@ def compile_stage_bound_requirement(
                 "due_stage": stage.review_stage,
                 "required_source_types": selection.required_source_types,
                 "workflow_stage_ids": [stage.workflow_stage_id],
-                "source_policy": {
+                "source_policy": selection.source_policy.model_dump(mode="json") if selection.source_policy else {
                     "requires_contemporaneous_objective_source": None,
                     "allows_screening_record_transcription": None,
-                    "result_validity_status": "not_specified",
+                    "result_validity_status": "unknown",
                     "result_validity_constraint": None,
                     "source_span_ids": spans,
                     "source_excerpts": excerpts,

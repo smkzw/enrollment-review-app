@@ -7,16 +7,77 @@ import hashlib
 import re
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, StrictBool, model_serializer, model_validator
 
 from app.domain.contracts.common import ContractModel
+from app.domain.contracts.control_evidence_policy import has_explicit_evidence_policy
+from app.domain.contracts.rules import TimeConstraint
+from app.protocols.control_scope_sources import resolve_ancestor_scope_citation, validate_scope_citations
 
 
 SOURCE_CANDIDATE_ALIGNMENT_VERSION = "phase5/control-source-candidate-alignment/v8"
+EVIDENCE_POLICY_ALIGNMENT_VERSION = "phase5/control-evidence-policy-alignment/v2"
 
 
 class SourceCandidateAlignmentValidationError(ValueError):
     pass
+
+
+class EvidencePolicyCheckError(SourceCandidateAlignmentValidationError):
+    """A source-policy mismatch, scoped to the unchanged candidate field."""
+
+    code = "EVIDENCE_POLICY_UNJUSTIFIED"
+
+    def __init__(self, message, *, item, evidence_index, dimension, reason, policy=None):
+        field = {
+            "contemporaneous_objective_source": "source_policy/requires_contemporaneous_objective_source",
+            "screening_record_transcription": "source_policy/allows_screening_record_transcription",
+            "result_validity": "source_policy/result_validity_status",
+            "required_source_types": "required_source_types",
+        }[dimension]
+        self.error_detail = {
+            "code": self.code,
+            "statement_ids": [item.statement_index],
+            "candidate_indexes": [item.candidate_index],
+            "json_path": f"/candidate_drafts/{item.candidate_index}/minimum_evidence/{evidence_index}/{field}",
+            "source_refs": list(policy.source_span_ids) if policy else [],
+            "retry_class": "source_semantic_review",
+            "affected_dependents": [item.candidate_index],
+            "evidence_index": evidence_index,
+            "dimension": dimension,
+            "reason": reason,
+        }
+        if dimension == "result_validity":
+            self.error_detail["related_paths"] = [
+                f"/candidate_drafts/{item.candidate_index}/minimum_evidence/{evidence_index}/source_policy/result_validity_constraint",
+            ]
+        if reason == "out_of_scope":
+            self.error_detail["json_path"] = f"/candidate_drafts/{item.candidate_index}/minimum_evidence"
+        super().__init__(message)
+
+
+def evidence_policy_alignment_pairs(interpretation, coverage, wire):
+    """Select literal action candidates whose policy is not proved by the quote alone."""
+    pairs = set()
+    for entry in coverage:
+        if entry.status not in {"expressed", "semantically_aligned", "candidate_linked"}:
+            continue
+        statement = interpretation.statements[entry.statement_index]
+        if "action" not in statement.decision_functions:
+            continue
+        for index in entry.action_candidate_indexes:
+            if any(has_explicit_evidence_policy(row) for row in wire.candidate_drafts[index].minimum_evidence):
+                pairs.add((entry.statement_index, index))
+    return sorted(pairs)
+
+
+def require_evidence_policy_alignment(batch, interpretation, coverage, wire, alignment):
+    pairs = set(evidence_policy_alignment_pairs(interpretation, coverage, wire))
+    if not pairs:
+        return
+    proven = reusable_proven_alignment_items(batch, interpretation, coverage, wire, alignment)
+    if not pairs <= {(item.statement_index, item.candidate_index) for item in proven}:
+        raise SourceCandidateAlignmentValidationError("资料来源限制缺少绑定当前候选与原文的核对证明")
 
 _COMPARISON_WORDS = (
     (r"(?:≥|>=|大于等于|不小于|至少|不少于|不低于|以上)", "gte"),
@@ -93,6 +154,37 @@ def _matches_time_anchor_direction(word: str, atoms) -> bool:
     )
 
 
+class EvidencePolicyCheck(ContractModel):
+    evidence_index: int = Field(ge=0)
+    dimension: Literal["contemporaneous_objective_source", "screening_record_transcription",
+                       "result_validity", "required_source_types"]
+    boolean_value: StrictBool | None = None
+    validity_status: Literal["specified", "not_specified", "unknown"] | None = None
+    validity_constraint: TimeConstraint | None = None
+    source_types: list[str] | None = None
+    source_span_id: str = Field(min_length=1)
+    source_excerpt: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_dimension(self):
+        if not self.source_span_id.strip() or not self.source_excerpt.strip():
+            raise ValueError("资料要求核对的位置和摘录不得为空白")
+        if self.dimension == "result_validity":
+            if (self.validity_status is None or self.boolean_value is not None
+                    or self.source_types is not None
+                    or (self.validity_status == "specified") != (self.validity_constraint is not None)):
+                raise ValueError("有效期核对须明确状态并保留对应约束，不得混入其他维度")
+        elif self.dimension == "required_source_types":
+            if (self.source_types is None or any(not value.strip() for value in self.source_types)
+                    or self.boolean_value is not None or self.validity_status is not None
+                    or self.validity_constraint is not None):
+                raise ValueError("资料种类核对须使用明确列表，不得混入其他维度")
+        elif (self.validity_status is not None or self.validity_constraint is not None
+              or self.source_types is not None):
+            raise ValueError("原件与转述核对只使用真、假或未知")
+        return self
+
+
 class SourceCandidateAlignmentItem(ContractModel):
     statement_index: int = Field(ge=0)
     candidate_index: int = Field(ge=0)
@@ -100,6 +192,14 @@ class SourceCandidateAlignmentItem(ContractModel):
     source_excerpt: str = Field(min_length=1)
     candidate_atom_quotes: list[str] = Field(default_factory=list)
     unresolved_dimensions: list[str] = Field(default_factory=list)
+    evidence_policy_checks: list[EvidencePolicyCheck] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def preserve_ordinary_identity(self, handler):
+        body = handler(self)
+        if not self.evidence_policy_checks:
+            body.pop("evidence_policy_checks", None)
+        return body
 
     @model_validator(mode="after")
     def require_grounded_positive(self) -> "SourceCandidateAlignmentItem":
@@ -133,7 +233,7 @@ def candidate_alignment_response_format() -> dict[str, object]:
     return {
         "type": "json_schema",
         "json_schema": {
-            "name": "protocol_control_candidate_alignment_v8",
+            "name": "protocol_control_candidate_alignment_v8_policy_v2",
             "strict": True,
             "schema": schema,
         },
@@ -168,6 +268,20 @@ def build_candidate_alignment_prompt(batch, interpretation, wire, pairs) -> str:
         "此前的核对仅说明官方条款和访视目录未完整覆盖本句，不能据此断言本候选也未覆盖。"
         "逐项判断候选中已经写出的条件、对象、全称/数量、时间、否定、后果、例外和证据政策，"
         "是否共同且仅共同表达本句原文。多原子合取可以表达一句话。"
+        "证据政策 action_completion 仅证明操作已经完成，不证明检查结果正常或达到入排阈值；"
+        "原文若另有结果条件，不得用操作完成替代该条件；原文只要求完成操作时，也不得新增结果正常要求。"
+        "required_source_types 是原文明文限定的可接受资料种类，不是建议示例；"
+        "原文未限定时应为空列表。逐项核对候选的资料种类、同期原件、转述及有效期限制，"
+        "不得因义务句子逐字相同就忽略新增的资料限制；无源新增限制选 incomplete，"
+        "只有原文无法判清才选 uncertain。description 中明确标作示例的记录种类不构成硬限制。"
+        "evidence_policy_checks 按 minimum_evidence 原顺序填写 evidence_index。先独立读原文政策，再比较候选，不能照抄候选值；"
+        "对有明确资料种类、原件/转述布尔声明或有效期约束的行，逐项核 contemporaneous_objective_source、"
+        "screening_record_transcription、result_validity；资料种类非空时另核 required_source_types。"
+        "布尔只填 boolean_value 真/假/null，有效期填 validity_status 及仅 specified 时的完整 validity_constraint，"
+        "资料种类填 source_types，其余值字段为 null。每项用该行 source_policy 内对应 span 和逐字摘录；"
+        "本句未提及不等于全方案无限制，未查清用 null/unknown。无声明且全未知的行不额外核，列表为空。"
+        "只有各维度都有源、无重复遗漏且与草稿一致（包括未知与未知）才可 fully_expressed；"
+        "不一致列出具体维度，不能修改草稿或补写来源。相等只是核对一致，不代表患者符合或正式采用。"
         "仅当本句的‘任一项’等回指在同一冻结来源单元中有唯一明确的先行要求时，"
         "可引用该要求解释所指对象；不得借标题、其他来源单元或不明确的邻句新增条件。"
         "只有上述所有适用维度与原文一致，才选 fully_expressed；有确定差额选 incomplete，"
@@ -198,7 +312,10 @@ def _alignment_input_identity(batch, interpretation, wire, item):
         _alignment_digest({"protocol_version_id": batch.protocol_version_id,
                            "coverage_manifest_id": batch.coverage_manifest_id,
                            "statement": statement.model_dump(mode="json"),
-                           "source_unit": unit.model_dump(mode="json")}),
+                           "source_unit": unit.model_dump(mode="json"),
+                           **({"evidence_policy_review": EVIDENCE_POLICY_ALIGNMENT_VERSION}
+                              if any(has_explicit_evidence_policy(row) for row in candidate.minimum_evidence)
+                              else {})}),
         _alignment_digest(candidate.model_dump(mode="json")),
     )
 
@@ -271,6 +388,58 @@ def reusable_proven_alignment_items(batch, interpretation, coverage, wire, align
     return kept
 
 
+def _validate_evidence_policy_checks(candidate, item) -> None:
+    """Validate reviewed dimensions and provenance, not infer their meaning."""
+    expected = {}
+    for index, evidence in enumerate(candidate.minimum_evidence):
+        if not has_explicit_evidence_policy(evidence):
+            continue
+        policy = evidence.source_policy
+        if policy is None:
+            raise ValueError("资料要求缺少明确来源政策")
+        expected[index, "contemporaneous_objective_source"] = policy.requires_contemporaneous_objective_source
+        expected[index, "screening_record_transcription"] = policy.allows_screening_record_transcription
+        expected[index, "result_validity"] = (policy.result_validity_status, policy.result_validity_constraint)
+        if evidence.required_source_types:
+            expected[index, "required_source_types"] = frozenset(evidence.required_source_types)
+    seen = set()
+    for check in item.evidence_policy_checks:
+        key = check.evidence_index, check.dimension
+        if key in seen or key not in expected:
+            policy = (candidate.minimum_evidence[check.evidence_index].source_policy
+                      if check.evidence_index < len(candidate.minimum_evidence) else None)
+            raise EvidencePolicyCheckError(
+                "资料要求核对重复、越界或不属于本次明确声明", item=item,
+                evidence_index=check.evidence_index, dimension=check.dimension,
+                reason="duplicate" if key in seen else "out_of_scope", policy=policy,
+            )
+        seen.add(key)
+        policy = candidate.minimum_evidence[check.evidence_index].source_policy
+        if not any(span == check.source_span_id and check.source_excerpt.strip() in excerpt
+                   for span, excerpt in zip(policy.source_span_ids, policy.source_excerpts, strict=True)):
+            raise EvidencePolicyCheckError(
+                "资料要求核对摘录不属于该维度引用的政策来源", item=item,
+                evidence_index=check.evidence_index, dimension=check.dimension,
+                reason="source_mismatch", policy=policy,
+            )
+        value = (frozenset(check.source_types) if check.dimension == "required_source_types" else
+                 (check.validity_status, check.validity_constraint) if check.dimension == "result_validity" else
+                 check.boolean_value)
+        if item.decision == "fully_expressed" and value != expected[key]:
+            raise EvidencePolicyCheckError(
+                "资料要求核对与草稿声明不一致，不能作为完整表达证明", item=item,
+                evidence_index=check.evidence_index, dimension=check.dimension,
+                reason="value_mismatch", policy=policy,
+            )
+    if item.decision == "fully_expressed" and seen != set(expected):
+        index, dimension = sorted(set(expected) - seen)[0]
+        raise EvidencePolicyCheckError(
+            "资料要求核对遗漏明确声明的维度", item=item,
+            evidence_index=index, dimension=dimension, reason="missing_dimension",
+            policy=candidate.minimum_evidence[index].source_policy,
+        )
+
+
 def validate_candidate_alignment(batch, interpretation, coverage, wire, alignment) -> None:
     """Check identity and literal support; the model remains responsible for semantics."""
     from app.agents.protocol_control_source_interpretation import (
@@ -295,14 +464,29 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
         candidate = selected.semantics if hasattr(selected, "semantics") else selected
         if candidate is None:
             raise ValueError("候选语义核对缺少已水合候选")
+        _validate_evidence_policy_checks(candidate, item)
         entry = by_statement.get(item.statement_index)
         if (entry is None or entry.structure_unit_id != statement.structure_unit_id
-                or entry.status not in {"candidate_linked", "semantically_aligned"}
+                or entry.status not in {"candidate_linked", "semantically_aligned", "expressed"}
+                or (entry.status == "expressed" and item.candidate_index not in entry.candidate_indexes)
                 or item.candidate_index not in entry.action_candidate_indexes
                 or statement.structure_unit_id not in candidate.source_structure_unit_ids
                 or normalize_source_excerpt(item.source_excerpt) != normalize_source_excerpt(statement.quoted_text)):
             raise ValueError("候选语义核对未绑定本条原文与已有动作候选")
         unit = units[statement.structure_unit_id]
+        validate_scope_citations(
+            candidate.review_node_bindings,
+            [units[unit_id] for unit_id in candidate.source_structure_unit_ids],
+            [*batch.owned_units, *batch.context_units],
+        )
+        if item.decision == "fully_expressed" and statement.scope_quote:
+            expected_scope = resolve_ancestor_scope_citation(
+                unit, statement.scope_quote, [*batch.owned_units, *batch.context_units],
+            )
+            if expected_scope is not None and not any(
+                node.scope_citation == expected_scope for node in candidate.review_node_bindings
+            ):
+                raise ValueError("候选审核时期缺少对应原文标题的物理来源")
         atoms = [atom for expression in (
             candidate.applicability_expression, candidate.trigger_expression,
             candidate.obligation_expression, candidate.exception_expression,
@@ -366,6 +550,9 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
             for word in statement.time_words:
                 normalized_word = normalize_source_excerpt(word)
                 if normalized_word in rendered:
+                    continue
+                if (normalized_word in scope
+                        and simple_visit_action_preserves_time(batch, statement, candidate)):
                     continue
                 if (normalized_word not in scope or _NUMBER.search(normalized_word)
                         or not _matches_time_anchor_direction(normalized_word, selected_atoms)):

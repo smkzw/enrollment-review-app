@@ -16,10 +16,14 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.agents.protocol_control_agent_transport import (
     protocol_control_transport_from_environment,
+    PROTOCOL_CONTROL_LENGTH_RETRY_MAX_TOKENS,
+    ProtocolControlAgentCallError,
+    protocol_control_call_failure_code,
 )
 from app.agents.protocol_control_definition_scope import (
     DefinitionScopeReview, build_definition_scope_prompt,
@@ -30,6 +34,7 @@ from app.agents.protocol_control_deconstructor import (
     DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE,
     DEFAULT_PROTOCOL_CONTROL_DISCOVERY_PROMPT_TEMPLATE,
     SOURCE_TARGET_REPAIR_VERSION,
+    SOURCE_REQUIREMENT_FAILURE_REASON_VERSION,
     ProtocolControlAgentRunner,
     ProtocolControlAgentRunResult,
     ProtocolControlAgentWire,
@@ -84,11 +89,14 @@ from app.agents.protocol_control_candidate_alignment import (
     alignment_with_items,
     SourceCandidateAlignmentValidationError,
     reusable_proven_alignment_items,
+    evidence_policy_alignment_pairs,
+    require_evidence_policy_alignment,
     validate_candidate_alignment,
 )
 from app.services.protocol_control_definition_scope import (
     close_definition_scope, definition_scope_inputs,
 )
+from app.llm.logical_call_budget import LogicalCallBudget
 from app.services.protocol_control_restricted_source import (
     TEMPORAL_RESTRICTION_VERSION,
     restricted_batch_from_review,
@@ -171,6 +179,7 @@ from app.services.protocol_workbench_service import (
 )
 from app.storage.codecs import utc_now, verify_payload_sha256
 from app.storage.config import DataPaths
+from app.storage.models import JobCheckpointRecord
 from app.storage.repositories import NotFoundError, ProtocolDraftRevisionRepository
 from app.workflow.errors import JobNotFoundError, StepFailure
 from app.workflow.jobstore import DEFAULT_LEASE_TTL, JobStore
@@ -349,6 +358,8 @@ class ProtocolControlJobService:
         workflow_stages: Sequence[WorkflowStage] = (),
         discovery_prompt_template: str = DEFAULT_PROTOCOL_CONTROL_DISCOVERY_PROMPT_TEMPLATE,
         deep_prompt_template: str = DEFAULT_PROTOCOL_CONTROL_AGENT_PROMPT_TEMPLATE,
+        deep_workflow_variant: str = "RV1001-BASELINE",
+        deep_request_limit: int | None = None,
         discovery_step_max_attempts: int = _DEFAULT_OUTER_STEP_ATTEMPTS,
         deep_step_max_attempts: int = _DEFAULT_OUTER_STEP_ATTEMPTS,
         discovery_max_transport_retries: int = DEFAULT_MAX_TRANSPORT_RETRIES,
@@ -412,7 +423,15 @@ class ProtocolControlJobService:
         self.actor = actor.strip()
         self.workflow_stages = workflow_stages
         self.discovery_prompt_template = discovery_prompt_template
-        self.deep_prompt_template = deep_prompt_template
+        from app.agents.protocol_control_fixed_flow import workflow_template
+        self.deep_workflow_variant = deep_workflow_variant
+        if (deep_request_limit is not None and
+                (type(deep_request_limit) is not int or deep_request_limit < 1)):
+            raise ValueError("方案深审累计请求上限必须为正整数")
+        if deep_workflow_variant == "RV1001-FLOW" and deep_request_limit is None:
+            raise ValueError("隔离固定流程必须显式冻结累计请求上限")
+        self.deep_request_limit = deep_request_limit
+        self.deep_prompt_template = workflow_template(deep_prompt_template, deep_workflow_variant)
         self.discovery_step_max_attempts = discovery_step_max_attempts
         self.deep_step_max_attempts = deep_step_max_attempts
         self.discovery_max_transport_retries = discovery_max_transport_retries
@@ -890,6 +909,8 @@ class ProtocolControlJobService:
 
         return {
             "execution_version": PROTOCOL_CONTROL_EXECUTION_VERSION,
+            "deep_workflow_variant": self.deep_workflow_variant,
+            "deep_request_limit": self.deep_request_limit,
             "frozen_model_routes": frozen_routes,
             **local_deployment_job_fields(),
             "source_deconstruction_job_id": prepared.source_job_id,
@@ -1026,8 +1047,24 @@ def create_protocol_control_executor(
                 )
             if (
                 context.last_checkpoint is not None
-                and context.last_checkpoint.get("stage") != "deep_failure_diagnostic"
+                and not context.last_checkpoint_is_diagnostic
+                and context.last_checkpoint.get("stage") not in {
+                    "deep_failure_diagnostic", "definition_scope_failure_diagnostic",
+                }
             ):
+                if context.step_id == STEP_SCOPE:
+                    _verified_definition_scope(context, config, checkpoint=context.last_checkpoint)
+                    return {key: value for key, value in context.last_checkpoint.items() if key != "attempt"}
+                if context.step_id in {STEP_HYDRATE, STEP_GATE}:
+                    saved = _replay_checkpoint(context)
+                    current = (_execute_hydrate(context, config) if context.step_id == STEP_HYDRATE
+                               else _execute_gate(context, config))
+                    if {key: value for key, value in saved.items() if key != "attempt"} != current:
+                        raise StepFailure(
+                            retryable=False, error_code="PROTOCOL_CONTROL_CHECKPOINT_INVALID",
+                            detail="已保存的整理结果与当前冻结来源及核对依据不一致，原记录保留。",
+                        )
+                    return {key: value for key, value in saved.items() if key != "attempt"}
                 return _replay_checkpoint(context)
             from app.llm.mtplx_model_lifecycle import MtplxOwnershipError, require_local_deployment_job
 
@@ -1224,6 +1261,16 @@ def _prompt_from_payload(context: StepContext, stage: str, config: ProtocolContr
             error_code="PROTOCOL_CONTROL_PROMPT_INVALID",
             detail="方案控制模型提示模板不能为空。",
         )
+    if stage == "deep":
+        from app.agents.protocol_control_fixed_flow import BASELINE, FIXED_FLOW, FIXED_FLOW_VERSION
+        variant = context.job_payload.get("deep_workflow_variant", BASELINE)
+        if variant not in {BASELINE, FIXED_FLOW} or (
+            prompt.endswith("\n" + FIXED_FLOW_VERSION) != (variant == FIXED_FLOW)
+        ):
+            raise StepFailure(
+                retryable=False, error_code="PROTOCOL_CONTROL_WORKFLOW_IDENTITY_INVALID",
+                detail="冻结工作流程与提示身份不一致，不能发送方案读取请求。",
+            )
     return prompt
 
 
@@ -2435,6 +2482,7 @@ def _repair_material_matches(saved: Mapping[str, Any]) -> bool:
 def _validate_saved_source_review(
     batch: ProtocolControlDispositionBatch, result: ProtocolControlAgentRunResult,
 ) -> None:
+    front_alignment_verified = False
     interpretation = result.source_interpretation
     if interpretation is None:
         if result.source_target_review is not None:
@@ -2446,6 +2494,54 @@ def _validate_saved_source_review(
             json_path="/source_interpretation",
         )
     validate_source_interpretation(batch, interpretation)
+    if result.workflow_variant_requested == "RV1001-FLOW" and result.final_output is not None:
+        from app.agents.protocol_control_fixed_flow import supports_front_stage_flow
+        if supports_front_stage_flow(batch, interpretation) and result.source_front_target_review is None:
+            raise ValueError("前置流程请求缺少实际来源核对，不能改路径名称绕过")
+    if result.workflow_path_executed == "front_stage_flow" and result.source_front_target_review is None:
+        raise ValueError("固定流程结果缺少已核前置来源证明")
+    if result.source_front_target_review is not None:
+        from app.agents.protocol_control_fixed_flow import validate_front_review
+        validate_front_review(batch, interpretation, result.source_front_target_review)
+        if any(item.decision not in {"additional_requirement", "covered_by_official", "covered_by_procedure"}
+               for item in result.source_front_target_review.items):
+            raise ValueError("前置新增要求核对不能借已有覆盖或未决通过采用")
+        if result.final_output is None or result.partial_wire is None:
+            raise ValueError("前置来源核对缺少最终候选与装配结果")
+        if hydrate_protocol_control_agent_output(result.partial_wire, batch) != result.final_output:
+            raise ValueError("前置要求的保存候选与实际装配草稿不一致")
+        raw_front_coverage = source_statement_coverage(batch, interpretation, result.partial_wire)
+        derived = hydrated_source_coverage_indexes(
+            batch, result.partial_wire, result.final_output,
+            raw_front_coverage,
+        )
+        front_decisions = {item.statement_index: item.decision for item in result.source_front_target_review.items}
+        if derived != result.source_statement_coverage or any(
+            entry.status != ("expressed" if front_decisions.get(entry.statement_index) == "additional_requirement"
+                             else "linked_only") for entry in derived
+        ):
+            raise ValueError("前置要求未由保存的正式候选逐项表达")
+        if all(item.decision in {"covered_by_official", "covered_by_procedure"}
+               for item in result.source_front_target_review.items):
+            from app.agents.protocol_control_fixed_flow import covered_front_wire
+            expected_wire = covered_front_wire(batch, interpretation, result.source_front_target_review)
+            if expected_wire != result.partial_wire:
+                raise ValueError("已有覆盖的装配链接与实际来源核对不一致")
+            validate_source_target_review(batch, interpretation, derived, result.source_front_target_review)
+        else:
+            alignment = result.source_candidate_alignment
+            pairs = {(entry.statement_index, index) for entry in raw_front_coverage
+                     for index in entry.candidate_indexes}
+            if alignment is None or not pairs:
+                raise ValueError("前置装配要求缺少实际返回的含义核对证明")
+            validate_candidate_alignment(batch, interpretation, raw_front_coverage, result.partial_wire, alignment)
+            proven = reusable_proven_alignment_items(
+                batch, interpretation, raw_front_coverage, result.partial_wire, alignment,
+            )
+            if (len(proven) != len(pairs) or
+                    {(item.statement_index, item.candidate_index) for item in proven} != pairs):
+                raise ValueError("前置装配要求的含义核对证明不完整或已失效")
+            front_alignment_verified = True
     review = result.source_target_review or SourceTargetReview(
         version=SOURCE_TARGET_REVIEW_VERSION, items=[],
     )
@@ -2456,6 +2552,15 @@ def _validate_saved_source_review(
         raise ValueError("待核来源陈述缺少逐项核对结果")
     if any(item.decision == "unresolved" for item in review.items):
         raise ValueError("来源逐项核对仍有未闭合要求")
+    policy_pairs = []
+    if result.final_output is not None and result.partial_wire is not None:
+        if hydrate_protocol_control_agent_output(result.partial_wire, batch) != result.final_output:
+            raise SourceCandidateAlignmentValidationError("保存的候选与实际装配草稿不一致")
+        raw_policy_coverage = source_statement_coverage(batch, interpretation, result.partial_wire)
+        policy_pairs = evidence_policy_alignment_pairs(interpretation, raw_policy_coverage, result.partial_wire)
+        require_evidence_policy_alignment(
+            batch, interpretation, raw_policy_coverage, result.partial_wire, result.source_candidate_alignment,
+        )
     additions = {item.statement_index for item in review.items
                  if item.decision == "additional_requirement"}
     if additions:
@@ -2477,16 +2582,22 @@ def _validate_saved_source_review(
         except ValueError as exc:
             raise SourceCandidateAlignmentValidationError(str(exc)) from exc
         aligned = {item.statement_index for item in result.source_candidate_alignment.items
-                   if item.decision == "fully_expressed"}
-        if aligned != additions or len(result.source_candidate_alignment.items) != len(additions):
+                   if item.decision == "fully_expressed" and item.statement_index in additions}
+        expected_pairs = set(policy_pairs) | {
+            (item.statement_index, item.candidate_index) for item in result.source_candidate_alignment.items
+            if item.statement_index in additions
+        }
+        if aligned != additions or len(result.source_candidate_alignment.items) != len(expected_pairs):
             raise SourceCandidateAlignmentValidationError("新增要求与已核候选未逐项对应")
         proven = reusable_proven_alignment_items(
             batch, interpretation, result.source_statement_coverage,
             result.partial_wire, result.source_candidate_alignment,
         )
-        if len(proven) != len(additions):
+        if len(proven) != len(expected_pairs):
             raise SourceCandidateAlignmentValidationError("候选对应证明未绑定当前完整来源与候选")
         for item in result.source_candidate_alignment.items:
+            if item.statement_index not in additions:
+                continue
             entry = next((entry for entry in result.source_statement_coverage
                           if entry.statement_index == item.statement_index), None)
             expected = next((entry for entry in expected_coverage
@@ -2502,8 +2613,9 @@ def _validate_saved_source_review(
                     or entry.action_candidate_indexes != expected.action_candidate_indexes
                     or entry.candidate_indexes != mapped.candidate_indexes):
                 raise SourceCandidateAlignmentValidationError("已核候选与来源覆盖账不一致")
-    elif result.source_candidate_alignment is not None:
-        raise SourceCandidateAlignmentValidationError("没有新增要求却保留候选语义核对")
+    elif result.source_candidate_alignment is not None and not front_alignment_verified:
+        if {(item.statement_index, item.candidate_index) for item in result.source_candidate_alignment.items} != set(policy_pairs):
+            raise SourceCandidateAlignmentValidationError("没有对应要求却保留候选语义核对")
     if result.source_definition_consumers is not None:
         validate_source_definition_consumers(
             batch, interpretation, result.source_definition_consumers,
@@ -2653,6 +2765,77 @@ def _frozen_official_predicates(
                     excerpts[rule.official_code][key] = source_clauses
                     identities.setdefault(rule.official_code, []).append(key)
     return identities, excerpts
+
+
+def _bind_control_request_budget(
+    context: StepContext, config: ProtocolControlExecutorConfig,
+    transport: Any, *, request_basis: Callable[[], Mapping[str, Any]],
+) -> LogicalCallBudget | None:
+    """Bind one frozen work-unit allowance, including probes and nested retries."""
+    request_limit = context.job_payload.get("deep_request_limit")
+    binder = getattr(transport, "bind_logical_call_budget", None)
+    if request_limit is None:
+        if context.job_payload.get("deep_workflow_variant") == "RV1001-FLOW":
+            raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_BUDGET_INVALID",
+                              detail="隔离固定流程缺少冻结的累计请求上限，未发送请求。")
+        if callable(binder):
+            binder(None)
+        return
+    if type(request_limit) is not int or request_limit < 1:
+        raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_BUDGET_INVALID",
+                          detail="冻结的累计请求上限无效，未发送请求。")
+    if not callable(binder):
+        raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_BUDGET_UNSUPPORTED",
+                          detail="模型传输尚不支持累计预算，未发送请求。")
+    from app.services.protocol_deconstruction_executor import _ProtocolSemanticBatchFileCache
+    identity = hashlib.sha256(json.dumps({
+        "job_id": context.job_id, "step_id": context.step_id,
+        "policy": "rv1001/deep-request-budget/v1",
+    }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    contract = hashlib.sha256(json.dumps({
+        **request_basis(), "transport": _transport_identity(transport, stage="deep"),
+        "request_limit": request_limit,
+    }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    cache = _ProtocolSemanticBatchFileCache(config.data_paths, context.job_id)
+    try:
+        saved = cache.load_call_budget(identity)
+        previous_payloads = [context.last_checkpoint] if getattr(context, "last_checkpoint", None) else []
+        if getattr(config, "session_factory", None) is not None:
+            with config.session_factory() as session:
+                rows = session.scalars(select(JobCheckpointRecord).where(
+                    JobCheckpointRecord.job_id == context.job_id,
+                    JobCheckpointRecord.step_id == context.step_id,
+                ))
+                previous_payloads.extend(verify_payload_sha256(row.payload_json, row.payload_sha256)
+                                         for row in rows)
+        for previous in previous_payloads:
+            snapshots = [previous.get("logical_call_budget")]
+            snapshots.extend(receipt.get("logical_call_budget") for receipt in
+                             previous.get("model_call_receipts", []) if isinstance(receipt, Mapping))
+            for snapshot in snapshots:
+                if not isinstance(snapshot, Mapping) or snapshot.get("logical_task_id") != identity:
+                    continue
+                used = snapshot.get("requests_used")
+                reserved = snapshot.get("reserved_output_tokens")
+                if used == 0 and reserved == 0 and snapshot.get("requests") == []:
+                    continue
+                if (type(used) is not int or type(reserved) is not int
+                        or used < 0 or reserved < 0 or saved is None
+                        or saved.get("requests_used", -1) < used
+                        or saved.get("reserved_output_tokens", -1) < reserved
+                        or saved.get("requests", [])[:used] != snapshot.get("requests")):
+                    raise ValueError("已有步骤回执证明调用额度曾被使用，预算记录缺失或回退")
+        budget = LogicalCallBudget(
+            identity, max_requests=request_limit,
+            max_output_tokens=request_limit * max(transport.max_tokens, PROTOCOL_CONTROL_LENGTH_RETRY_MAX_TOKENS),
+            contract_sha256=contract, saved=saved,
+            persist=cache.store_call_budget,
+        )
+        binder(budget)
+        return budget
+    except (ValueError, OSError, TypeError, KeyError, AttributeError) as exc:
+        raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_BUDGET_RECORD_INVALID",
+                          detail="累计请求记录缺失、回退或读取范围已变，未发送请求；请保留原记录，从方案整理建立有据的新任务。") from exc
 
 
 def _execute_deep(
@@ -2833,6 +3016,9 @@ def _execute_deep(
             resume_alignment_saved = draft
 
     resume_candidate_alignment = None
+    if resume_wire is not None and context.job_payload.get("deep_workflow_variant") == "RV1001-FLOW":
+        raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_FLOW_RESUME_PROOF_REQUIRED",
+                          detail="该局部装配尚无经过恢复消费者核验的前置证明；旧产物保留，未发送模型请求。")
     if (resume_alignment_saved is not None and resume_interpretation is not None
             and resume_wire is not None):
         coverage_payload = resume_alignment_saved.get("source_statement_coverage")
@@ -2858,6 +3044,10 @@ def _execute_deep(
             error_code="PROTOCOL_CONTROL_SOURCE_READER_UNAVAILABLE",
             detail="方案来源逐项核对服务不可用，不能跳过来源陈述直接生成控制。",
         )
+    _bind_control_request_budget(context, config, transport, request_basis=lambda: {
+        "batch": batch.model_dump(mode="json"),
+        "prompt": protocol_control_agent_prompt_template_sha256(prompt_template),
+    })
     result = ProtocolControlAgentRunner(
         max_transport_retries=max_transport_retries,
         max_schema_repairs=max_schema_repairs,
@@ -2878,6 +3068,7 @@ def _execute_deep(
         resume_source_candidate_alignment=resume_candidate_alignment,
         official_predicate_identities=official_predicate_identities,
         official_predicate_sources=official_predicate_sources,
+        workflow_variant=context.job_payload.get("deep_workflow_variant", "RV1001-BASELINE"),
     )
     take_receipts = getattr(transport, "take_call_receipts", None)
     model_call_receipts = take_receipts() if callable(take_receipts) else []
@@ -2893,6 +3084,7 @@ def _execute_deep(
     if restricted_batch is not None:
         return {
             "stage": "deep",
+            "workflow_variant": context.job_payload.get("deep_workflow_variant", "RV1001-BASELINE"),
             "model_call_receipts": model_call_receipts,
             "batch_id": batch.batch_id,
             "prompt_template_sha256": protocol_control_agent_prompt_template_sha256(prompt_template),
@@ -2900,12 +3092,16 @@ def _execute_deep(
             "component_identity": _deep_component_identity(context.job_payload, prompt_template),
             "repair_contract_sha256": protocol_control_agent_repair_contract_sha256(),
             "run_result": result.model_dump(mode="json"),
+            "attempt_raw_outputs": _deep_attempt_raw_outputs(result),
             "source_review_reuse": _source_review_reuse_record(resume_review),
             "restricted_batch": restricted_batch.model_dump(mode="json"),
         }
     if (restricted_error is not None or result.status not in {"已解析", "待跨章核验"}
             or result.final_output is None):
         source_review_failure_codes = {
+            "LOGICAL_BUDGET_EXHAUSTED",
+            "FLOW_TRANSPORT_FAILED", "FLOW_COMPLETION_UNCERTAIN", "FLOW_RESPONSE_INVALID", "FLOW_ASSEMBLY_INVALID",
+            "FLOW_SOURCE_SCOPE_UNRESOLVED", "FLOW_TARGET_ALREADY_COVERED",
             "SOURCE_FUNCTION_RECHECK_TRANSPORT_FAILED",
             "SOURCE_FUNCTION_RECHECK_SCHEMA_INVALID",
             "SOURCE_FUNCTION_RECHECK_INVALID",
@@ -2915,16 +3111,28 @@ def _execute_deep(
             "SOURCE_TARGET_FOCUSED_INVALID",
             "SOURCE_TARGET_FOCUSED_SCHEMA_INVALID",
             "SOURCE_TARGET_REVIEW_UNAVAILABLE",
+            "SOURCE_TARGET_REVIEW_UNRESOLVED",
+            "SOURCE_REQUIREMENT_CONSUMER_UNAVAILABLE",
+            "SOURCE_REQUIREMENT_INSERTION_LIMIT_REACHED",
+            "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED",
+            "SOURCE_CANDIDATE_ALIGNMENT_TRANSPORT_FAILED",
+            "SOURCE_REQUIREMENT_TRANSPORT_FAILED",
+            "SOURCE_INTERPRETATION_CORRECTION_TRANSPORT_FAILED",
+            "EVIDENCE_POLICY_REVIEW_UNAVAILABLE", "EVIDENCE_POLICY_UNJUSTIFIED",
+            "MODEL_IDENTITY_INVALID",
         }
         source_review_failure = next((code for code in (
             result.attempts[-1].error_classes if result.attempts else []
-        ) if code in source_review_failure_codes), None)
+        ) if code in source_review_failure_codes or result.workflow_path_executed == "front_stage_flow"), None)
         raise StepFailure(
             retryable=(restricted_error is None
                        and source_review_failure in {
+                           "FLOW_TRANSPORT_FAILED",
                            "SOURCE_FUNCTION_RECHECK_TRANSPORT_FAILED",
                            "SOURCE_TARGET_REVIEW_TRANSPORT_FAILED",
                            "SOURCE_TARGET_FOCUSED_TRANSPORT_FAILED",
+                           "SOURCE_CANDIDATE_ALIGNMENT_TRANSPORT_FAILED",
+                           "SOURCE_REQUIREMENT_TRANSPORT_FAILED",
                        }),
             error_code=("PROTOCOL_CONTROL_RESTRICTED_SOURCE_INVALID" if restricted_error
                         else "PROTOCOL_CONTROL_" + source_review_failure if source_review_failure
@@ -2937,12 +3145,23 @@ def _execute_deep(
                  if restricted_error else
                  "原文要求小时或分钟精度，但该批尚未满足有源局部采用条件；结果保持未采信。"
                  if result.capability_wire is not None else
-                 "深析批次在限定修复次数内未产出合规输出。"),
+                 {
+                     "SOURCE_TARGET_REVIEW_UNRESOLVED":
+                         "原文已保存，但它与审核要求的对应关系仍需核清；尚不能作为完整采用依据。",
+                     "SOURCE_REQUIREMENT_CONSUMER_UNAVAILABLE":
+                         "原文支持的补充要求尚缺可靠的装配核验能力，由系统建设继续处理。",
+                     "SOURCE_REQUIREMENT_INSERTION_LIMIT_REACHED":
+                         "补充要求在本次限定修订次数内尚未核验完成；已核清的部分保留。",
+                     "SOURCE_CANDIDATE_SEMANTICS_UNVERIFIED":
+                         "已保存原文引用，但尚未证明审核要求忠实表达了原文含义。",
+                 }.get(source_review_failure, "深析批次在限定修复次数内未产出合规输出。")),
             ),
             diagnostic_checkpoint={
                 "stage": "deep_failure_diagnostic",
+                "workflow_variant": context.job_payload.get("deep_workflow_variant", "RV1001-BASELINE"),
                 "model_call_receipts": model_call_receipts,
                 "schema_version": "phase5/deep-failure-diagnostic/v3",
+                "failure_reason_version": SOURCE_REQUIREMENT_FAILURE_REASON_VERSION,
                 "batch_id": batch.batch_id,
                 "session_id": result.session_id,
                 "partial_wire": (
@@ -2971,6 +3190,11 @@ def _execute_deep(
                     result.source_target_review.model_dump(mode="json")
                     if result.source_target_review is not None else None
                 ),
+                "source_front_target_review": (
+                    result.source_front_target_review.model_dump(mode="json")
+                    if result.source_front_target_review is not None else None
+                ),
+                "workflow_path_executed": result.workflow_path_executed,
                 "source_candidate_alignment": (
                     result.source_candidate_alignment.model_dump(mode="json")
                     if result.source_candidate_alignment is not None else None
@@ -2993,6 +3217,7 @@ def _execute_deep(
         )
     return {
         "stage": "deep",
+        "workflow_variant": context.job_payload.get("deep_workflow_variant", "RV1001-BASELINE"),
         "model_call_receipts": model_call_receipts,
         "batch_id": batch.batch_id,
         "prompt_template_sha256": protocol_control_agent_prompt_template_sha256(
@@ -3002,8 +3227,21 @@ def _execute_deep(
         "component_identity": _deep_component_identity(context.job_payload, prompt_template),
         "repair_contract_sha256": protocol_control_agent_repair_contract_sha256(),
         "run_result": result.model_dump(mode="json"),
+        "attempt_raw_outputs": _deep_attempt_raw_outputs(result),
         "source_review_reuse": _source_review_reuse_record(resume_review),
     }
+
+
+def _deep_attempt_raw_outputs(result: ProtocolControlAgentRunResult) -> list[dict[str, Any]]:
+    """Keep answer evidence in the private checkpoint, outside the public run model."""
+
+    return [{
+        "attempt": item.attempt,
+        "session_id": item.session_id,
+        "raw_output_sha256": item.raw_output_sha256,
+        "raw_output_chars": item.raw_output_chars,
+        "raw_output_text": item.raw_output_text,
+    } for item in result.attempts]
 
 
 def _source_review_reuse_record(resume_review: _ResumedSourceReview) -> dict[str, Any]:
@@ -3442,6 +3680,11 @@ def _execute_definition_scope(
     session_id = None
     prompt_sha256 = None
     raw_output_sha256 = None
+    source_scope_evidence: dict[str, str] = {}
+    model_call_receipts: list[dict[str, object]] = []
+    prior_unassigned_model_receipts: list[dict[str, object]] = []
+    logical_call_budget = None
+    budget = None
     if records:
         transport = _resolve_transport(config, stage="deep")
         _require_frozen_route(context, config, transport, stage="deep")
@@ -3454,18 +3697,74 @@ def _execute_definition_scope(
         try:
             prompt = build_definition_scope_prompt(inventory)
             prompt_sha256 = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+            take_receipts = getattr(transport, "take_call_receipts", None)
+            if callable(take_receipts):
+                prior_unassigned_model_receipts = take_receipts()
+            budget = _bind_control_request_budget(context, config, transport, request_basis=lambda: {
+                "inventory_sha256": inventory["sha256"], "prompt": prompt_sha256,
+            })
+            artifacts = ArtifactStore(config.data_paths)
+            source_scope_evidence["raw_request_ref"] = artifacts.put(
+                "raw_request", prompt.encode("utf-8"),
+            ).storage_ref
             response = reader(prompt=prompt)
+            take_receipts = getattr(transport, "take_call_receipts", None)
+            if callable(take_receipts):
+                model_call_receipts = take_receipts()
+            logical_call_budget = budget.snapshot() if budget is not None else None
             session_id = response.session_id
             raw_output_sha256 = hashlib.sha256(response.text.encode("utf-8")).hexdigest()
+            source_scope_evidence["raw_response_ref"] = artifacts.put(
+                "raw_response", response.text.encode("utf-8"),
+            ).storage_ref
             review = DefinitionScopeReview.model_validate_json(response.text)
             closed = close_definition_scope(
                 records, review, inventory, keyed,
                 scope_unproven_reason=_DEFINITION_CONSUMER_SCOPE_UNPROVEN,
             )
-        except (ValueError, TypeError, AttributeError) as exc:
+        except ProtocolControlAgentCallError as exc:
+            failure = protocol_control_call_failure_code(exc)
+            code = {
+                "MODEL_IDENTITY_INVALID": "MODEL_IDENTITY_INVALID",
+                "LOGICAL_BUDGET_EXHAUSTED": "PROTOCOL_CONTROL_LOGICAL_BUDGET_EXHAUSTED",
+                "FLOW_COMPLETION_UNCERTAIN": "PROTOCOL_CONTROL_DEFINITION_SCOPE_COMPLETION_UNCERTAIN",
+            }.get(failure, "PROTOCOL_CONTROL_DEFINITION_SCOPE_TRANSPORT_FAILED")
+            take_receipts = getattr(transport, "take_call_receipts", None)
+            raise StepFailure(
+                retryable=failure is None, error_code=code,
+                detail=("定义影响范围的本次读取未完成，原记录保留；"
+                        "连接故障、可能已执行的断流与额度用尽分别处理。"),
+                diagnostic_checkpoint={
+                    "stage": "definition_scope_failure_diagnostic", "inventory_sha256": inventory["sha256"],
+                    "prompt_sha256": prompt_sha256, "raw_output_sha256": raw_output_sha256,
+                    "session_id": exc.session_id, "source_scope_evidence": source_scope_evidence,
+                    "model_call_receipts": take_receipts() if callable(take_receipts) else [],
+                    "prior_unassigned_model_receipts": prior_unassigned_model_receipts,
+                    "logical_call_budget": budget.snapshot() if budget is not None else None,
+                },
+            ) from exc
+        except StepFailure as exc:
+            raise StepFailure(
+                retryable=exc.retryable, error_code=exc.error_code, detail=exc.detail,
+                diagnostic_checkpoint={
+                    "stage": "definition_scope_failure_diagnostic", "inventory_sha256": inventory["sha256"],
+                    "prompt_sha256": prompt_sha256, "source_scope_evidence": source_scope_evidence,
+                    "model_call_receipts": [],
+                    "prior_unassigned_model_receipts": prior_unassigned_model_receipts,
+                },
+            ) from exc
+        except (ValueError, TypeError, AttributeError, ArtifactStoreError, OSError) as exc:
             raise StepFailure(
                 retryable=False, error_code="PROTOCOL_CONTROL_DEFINITION_SCOPE_INVALID",
                 detail="全批次定义影响范围未核清：" + str(exc)[:900],
+                diagnostic_checkpoint={
+                    "stage": "definition_scope_failure_diagnostic", "inventory_sha256": inventory["sha256"],
+                    "prompt_sha256": prompt_sha256, "raw_output_sha256": raw_output_sha256,
+                    "session_id": session_id, "source_scope_evidence": source_scope_evidence,
+                    "model_call_receipts": model_call_receipts,
+                    "prior_unassigned_model_receipts": prior_unassigned_model_receipts,
+                    "logical_call_budget": logical_call_budget,
+                },
             ) from exc
     else:
         closed = []
@@ -3476,14 +3775,20 @@ def _execute_definition_scope(
         "raw_output_sha256": raw_output_sha256,
         "review": None if review is None else review.model_dump(mode="json"),
         "session_id": session_id,
+        "source_scope_evidence": source_scope_evidence,
+        "model_call_receipts": model_call_receipts,
+        "prior_unassigned_model_receipts": prior_unassigned_model_receipts,
+        "logical_call_budget": logical_call_budget,
         "source_definition_consumers": [item.model_dump(mode="json") for item in closed],
     }
 
 
 def _verified_definition_scope(
     context: StepContext, config: ProtocolControlExecutorConfig,
+    *, checkpoint: Mapping[str, Any] | None = None,
 ) -> list[ProtocolControlDefinitionConsumerRecord]:
-    checkpoint = _checkpoint_for_step(context, STEP_SCOPE, config)
+    if checkpoint is None:
+        checkpoint = _checkpoint_for_step(context, STEP_SCOPE, config)
     records, inventory, keyed = _definition_scope_basis(context, config)
     if (checkpoint.get("stage") != STEP_SCOPE
             or checkpoint.get("inventory_sha256") != inventory["sha256"]):
@@ -3504,16 +3809,32 @@ def _verified_definition_scope(
             raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEFINITION_SCOPE_INVALID",
                               detail="全批次定义核对缺少对应提示与模型返回身份。")
         try:
+            evidence = checkpoint.get("source_scope_evidence")
+            if (not isinstance(evidence, dict)
+                    or set(evidence) != {"raw_request_ref", "raw_response_ref"}
+                    or not all(isinstance(ref, str) for ref in evidence.values())
+                    or evidence["raw_request_ref"] != "artifacts/raw_request/" + expected_prompt
+                    or evidence["raw_response_ref"] != "artifacts/raw_response/" + checkpoint["raw_output_sha256"]):
+                raise ValueError("缺少本次实际提示与原始返回工件，旧哈希记录不能替代核对依据")
+            artifacts = ArtifactStore(config.data_paths)
+            prompt_bytes = artifacts.read(evidence["raw_request_ref"])
+            response_bytes = artifacts.read(evidence["raw_response_ref"])
+            if prompt_bytes != build_definition_scope_prompt(inventory).encode("utf-8"):
+                raise ValueError("核对提示工件与当前来源清单不一致")
+            actual_review = DefinitionScopeReview.model_validate_json(response_bytes)
+            if actual_review.model_dump(mode="json") != raw:
+                raise ValueError("已保存核对内容与实际模型原始返回不一致")
             reviewed = close_definition_scope(
-                records, DefinitionScopeReview.model_validate(raw), inventory, keyed,
+                records, actual_review, inventory, keyed,
                 scope_unproven_reason=_DEFINITION_CONSUMER_SCOPE_UNPROVEN,
             )
-        except (TypeError, ValueError) as exc:
+        except (TypeError, ValueError, AttributeError, ArtifactStoreError, OSError) as exc:
             raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEFINITION_SCOPE_INVALID",
                               detail="全批次定义核对内容无效：" + str(exc)[:900]) from exc
     else:
         if (raw is not None or checkpoint.get("prompt_sha256") is not None
-                or checkpoint.get("raw_output_sha256") is not None):
+                or checkpoint.get("raw_output_sha256") is not None
+                or checkpoint.get("source_scope_evidence")):
             raise StepFailure(retryable=False, error_code="PROTOCOL_CONTROL_DEFINITION_SCOPE_INVALID",
                               detail="无计算定义的任务不能夹带模型核对。")
         reviewed = []

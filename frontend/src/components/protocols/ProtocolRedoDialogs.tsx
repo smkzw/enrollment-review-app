@@ -17,6 +17,7 @@ export interface FeedbackDraftValues {
   kind: FeedbackKind;
   targetRuleCode: string;
   targetComponentId: string | null;
+  reviewParentScope?: boolean;
   note: string;
 }
 
@@ -57,6 +58,7 @@ export function ProtocolFeedbackDialog({
   );
   const [targetRuleCode, setTargetRuleCode] = useState("");
   const [targetComponentId, setTargetComponentId] = useState("");
+  const [reviewParentScope, setReviewParentScope] = useState(false);
   const targetRule = rules.find((rule) => rule.officialCode === targetRuleCode);
   const targetItems = targetRule === undefined
     ? [] : [...targetRule.components, ...targetRule.restrictedComponents];
@@ -70,6 +72,7 @@ export function ProtocolFeedbackDialog({
     setKind("clarification");
     setTargetRuleCode(rules[0]?.officialCode ?? "");
     setTargetComponentId("");
+    setReviewParentScope(false);
     setNote("");
     requestAnimationFrame(() => noteRef.current?.focus());
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -82,13 +85,15 @@ export function ProtocolFeedbackDialog({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open, onClose, rules]);
 
-  const needsComponent = kind === "source_error" && targetItems.length > 1;
+  const needsComponent = kind === "source_error" && !reviewParentScope && targetItems.length > 1;
   const canSubmit = targetRuleCode.length > 0 && note.trim().length > 0
     && (!needsComponent || targetComponentId.length > 0);
 
   const submit = () => {
     if (!canSubmit) return;
-    onSubmit({ kind, targetRuleCode, targetComponentId: needsComponent ? targetComponentId : null, note: note.trim() });
+    onSubmit({ kind, targetRuleCode, targetComponentId: needsComponent ? targetComponentId : null, note: note.trim(),
+      ...(reviewParentScope ? { reviewParentScope: true } : {}),
+    });
   };
 
   if (!open) return null;
@@ -115,7 +120,7 @@ export function ProtocolFeedbackDialog({
                 name="protocol-feedback-kind"
                 value={item.kind}
                 checked={kind === item.kind}
-                onChange={() => { setKind(item.kind); setTargetComponentId(""); }}
+                onChange={() => { setKind(item.kind); setTargetComponentId(""); setReviewParentScope(false); }}
               />
               <span>
                 <strong>{item.label}</strong>
@@ -137,6 +142,13 @@ export function ProtocolFeedbackDialog({
             ))}
           </select>
         </label>
+        {kind === "source_error" && (
+          <label className="protocol-feedback-kind__option">
+            <input type="checkbox" checked={reviewParentScope}
+              onChange={(event) => { setReviewParentScope(event.target.checked); setTargetComponentId(""); }} />
+            <span>仅核对总标题与各子项适用节点，不修改条件</span>
+          </label>
+        )}
         {needsComponent && (
           <label className="protocol-feedback-note">
             <span>需要纠正的具体要求</span>

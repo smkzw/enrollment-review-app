@@ -54,10 +54,10 @@ class QualificationAdoptionAuthorization(ContractModel):
     authorizing_service: str = Field(min_length=1)
     qualification_job_id: str = Field(min_length=1)
     qualification_job_type: Literal["binding_qualification"] = "binding_qualification"
-    qualification_contract: Literal["binding-qualification-job/v2"] = (
-        "binding-qualification-job/v2"
+    qualification_contract: Literal["binding-qualification-job/v2", "binding-qualification-job/v3"] = (
+        "binding-qualification-job/v3"
     )
-    qualification_prompt_version: Literal["binding-qualification/v2", "binding-qualification/v3", "binding-qualification/v4", "binding-qualification/v5"] = (
+    qualification_prompt_version: Literal["binding-qualification/v2", "binding-qualification/v3", "binding-qualification/v4", "binding-qualification/v5", "binding-qualification/v6"] = (
         BINDING_QUALIFICATION_PROMPT_VERSION
     )
     qualification_summary_version: Literal["binding-qualification-summary/v2"] = (

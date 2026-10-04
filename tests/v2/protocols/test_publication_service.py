@@ -148,6 +148,60 @@ def test_first_publication_writes_full_formal_chain_in_one_transaction(
         )
 
 
+def test_source_scope_review_persists_through_real_publication_and_rule_readback(slice4_env, data_paths):
+    from app.evidence.artifacts import ArtifactStore
+    from app.services.protocol_scope_review_service import review_official_source_scope
+    from tests.v2.protocols.test_official_scope_review import ScopeReader, scope_fixture
+    factory, _ = slice4_env
+    source, draft, spans = scope_fixture()
+    reviewed = review_official_source_scope(source, draft, official_code="IN-01",
+                                           transport=ScopeReader(), store=ArtifactStore(data_paths))
+    revision = _save_revision(factory, reviewed)
+    result = _publish(factory, source, reviewed, spans, revision.revision_id, "pub-source-scope")
+    with factory() as session:
+        formal = get_rule_set(session, result.rule_set_id, result.rule_set_revision)
+        component = formal.rules[0].components[0]
+        assert component.source_scope_review_ref == reviewed.proposed_rules[0].components[0].source_scope_review_ref
+        assert [item.due_stage.value for item in component.evidence_requirements] == ["screening"]
+        assert ProtocolDraftRevisionRepository(session).get_head(draft.draft_id).status.value == "published"
+
+
+def test_client_scope_reference_without_original_reads_cannot_publish(slice4_env, data_paths):
+    from app.evidence.artifacts import ArtifactStore
+    from tests.v2.protocols.test_official_scope_review import scope_fixture
+    factory, _ = slice4_env
+    source, draft, spans = scope_fixture()
+    fake = ArtifactStore(data_paths).put("evaluation_manifest", b'{"accepted":true}').storage_ref
+    draft.proposed_rules[0].components[0].source_scope_review_ref = fake
+    draft.component_drafts[0].proposed_component = draft.proposed_rules[0].components[0].model_copy(deep=True)
+    revision = _save_revision(factory, draft)
+    with pytest.raises(PublicationGateError) as error:
+        _publish(factory, source, draft, spans, revision.revision_id, "pub-fake-source-scope")
+    assert any(item.issue_code == "SOURCE_SCOPE_REVIEW_INVALID"
+               for check in error.value.result.checks for item in check.issues)
+    with factory() as session:
+        assert _count(session, RuleSetRecord) == 0
+        assert _count(session, ProtocolAuthorityRecordRow) == 0
+
+
+def test_new_unresolved_scope_blocks_publication_instead_of_reusing_old_clearance(slice4_env, data_paths):
+    from app.evidence.artifacts import ArtifactStore
+    from app.services.protocol_scope_review_service import review_official_source_scope
+    from tests.v2.protocols.test_official_scope_review import ScopeReader, UncertainScopeReader, scope_fixture
+    factory, _ = slice4_env
+    source, draft, spans = scope_fixture()
+    store = ArtifactStore(data_paths)
+    cleared = review_official_source_scope(source, draft, official_code="IN-01", transport=ScopeReader(), store=store)
+    current = review_official_source_scope(source, cleared, official_code="IN-01", transport=UncertainScopeReader(), store=store)
+    revision = _save_revision(factory, current)
+    with pytest.raises(PublicationGateError) as error:
+        _publish(factory, source, current, spans, revision.revision_id, "pub-new-scope-unknown")
+    assert any(item.issue_code == "SOURCE_SCOPE_REVIEW_UNRESOLVED" for check in error.value.result.checks for item in check.issues)
+    with factory() as session:
+        assert _count(session, RuleSetRecord) == 0
+        assert _count(session, ProtocolAuthorityRecordRow) == 0
+
+
 def test_source_bound_unresolved_requirement_survives_formal_rule_storage(slice4_env) -> None:
     factory, _ = slice4_env
     source, draft, spans = confirmed_fixture()
@@ -174,6 +228,135 @@ def test_source_bound_unresolved_requirement_survives_formal_rule_storage(slice4
         assert pack.projection_version == "clause-pack/v4"
         assert pack.restricted_clauses[0].clause_id == restricted[0].rule_component_id
         verify_clause_pack(pack)
+
+
+def test_saved_predicate_quote_cannot_publish_omitted_parent_scope(slice4_env) -> None:
+    factory, _ = slice4_env
+    source, draft, spans = confirmed_fixture()
+    heading, child = "筛选时和基线时需满足以下标准：", "年龄≥18岁"
+    source.source_materials[0].text = heading + child
+    predicate = draft.proposed_rules[0].components[0].expression.predicate
+    predicate.source_clause = None
+    predicate.source_clauses = [heading, child]
+    draft.component_drafts[0].source_excerpts = [child]
+    before = draft.model_dump_json()
+    revision = _save_revision(factory, draft)
+
+    with pytest.raises(PublicationGateError) as rejected:
+        _publish(factory, source, draft, spans, revision.revision_id, "pub-omitted-scope")
+
+    assert any(
+        issue.issue_code == "REVIEW_STAGE_SCOPE_UNVERIFIED"
+        and "component-in" in issue.affected_refs
+        for check in rejected.value.result.checks
+        for issue in check.issues
+    )
+    assert draft.model_dump_json() == before
+    with factory() as session:
+        for model in (ProjectRecord, RuleSetRecord, ProtocolAuthorityRecordRow,
+                      EvidenceRequirementRecord, EvidenceExpectationTemplateRecord):
+            assert _count(session, model) == 0
+        head = ProtocolDraftRevisionRepository(session).get_head(draft.draft_id)
+        assert head.status.value != "published"
+
+
+@pytest.mark.parametrize("mixed", [False, True])
+def test_merged_segment_restrictions_reach_gate_storage_and_clause_consumer(slice4_env, mixed):
+    from app.agents.protocol_deconstructor import _hydrate_semantic_candidate
+    from app.domain.contracts.agent_io import (
+        ProtocolSemanticDeconstructionCandidate, SemanticRestrictedComponent, SemanticRule,
+    )
+    from app.protocols.deconstruction_gate import ProtocolDeconstructionGate
+    from app.protocols.parent_rule_semantic_segmentation import (
+        merge_parent_rule_segments, plan_parent_rule_segments,
+    )
+    from tests.v2.protocols.test_parent_rule_semantic_segmentation import _thresholds
+    from tests.v2.protocols.test_protocol_deconstructor_adapter_slice3 import _semantic_candidate
+
+    factory, _ = slice4_env
+    source, original, spans = confirmed_fixture()
+    original_candidate = _semantic_candidate(source, original)
+    texts = [
+        "年龄≥18岁。" if mixed else "须完成专项评估。",
+        "须完成独立资格核查。", "须取得专科意见。", "须核对适用人群。",
+    ]
+    span_ids = ["span-in", "span-second", "span-third", "span-fourth"]
+    template = source.source_materials[0]
+    source.source_materials = [
+        x for x in source.source_materials if x.source_span_id != "span-in"
+    ] + [template.model_copy(update={
+        "source_span_id": span_id, "text": text,
+        "block_order": 10 + index, "source_ref": f"body.p{10 + index}",
+    }) for index, (span_id, text) in enumerate(zip(span_ids, texts, strict=True))]
+    for index, span_id in enumerate(span_ids):
+        spans[span_id] = spans["span-in"].model_copy(update={
+            "source_span_id": span_id, "source_ref": f"body.p{10 + index}",
+            "block_order": 10 + index, "render_page": 10 + index,
+            "text_start": 0, "text_end": len(texts[index]), "excerpt": texts[index],
+        })
+    source.allowed_source_span_ids = list(spans)
+    items = list(source.parent_rule_catalog.items)
+    parent = items[0].model_copy(update={
+        "label": "\n".join(texts), "source_span_ids": tuple(span_ids),
+        "source_excerpts": tuple(texts),
+    })
+    items[0] = parent
+    source.parent_rule_catalog = _catalog(CatalogKind.OFFICIAL_PARENT_RULES, items)
+    plan = plan_parent_rule_segments(
+        parent, source_materials=source.source_materials,
+        token_estimate=100, thresholds=_thresholds(),
+    )
+    assert plan is not None and len(plan.segments) == 4
+    candidates = []
+    for index, (span_id, text) in enumerate(zip(span_ids, texts, strict=True)):
+        executable = mixed and index == 0
+        component = original_candidate.proposed_rules[0].components[0].model_copy(deep=True)
+        component.source_excerpts = [text]
+        rule = SemanticRule(
+            official_code="IN-01", components=[component] if executable else [],
+            restricted_components=[] if executable else [SemanticRestrictedComponent(
+                title=f"独立要求{index}", source_span_ids=[span_id], source_excerpts=[text],
+                limitation_kind="interpretation_unresolved",
+                unresolved_dimensions=["具体执行条件尚待核清"],
+            )],
+        )
+        candidates.append(ProtocolSemanticDeconstructionCandidate(
+            candidate_id=f"segment-{index}", proposed_rules=[rule],
+            created_by_agent_call_id=f"segment-call-{index}",
+        ))
+    merged = merge_parent_rule_segments(
+        candidates, plan=plan, candidate_id="merged-parent", agent_call_id="merged-call",
+    )
+    complete = merged.model_copy(update={
+        "proposed_rules": [merged.proposed_rules[0], original_candidate.proposed_rules[1]],
+    })
+    draft = _hydrate_semantic_candidate(source, complete)
+    report = ProtocolDeconstructionGate().evaluate(source, draft, source_spans=spans)
+    assert report.publishable, "\n".join(
+        f"{check.check_name}: {issue.issue_code}: {issue.affected_refs}"
+        for check in report.checks for issue in check.issues
+    )
+    invalid = draft.model_copy(deep=True)
+    invalid.proposed_rules[0].restricted_components[-1].source_span_ids = ["span-ex"]
+    rejected = ProtocolDeconstructionGate().evaluate(source, invalid, source_spans=spans)
+    assert not rejected.publishable
+    assert any(
+        issue.issue_code == "RESTRICTED_COMPONENT_SOURCE_INVALID"
+        for check in rejected.checks for issue in check.issues
+    )
+    revision = _save_revision(factory, draft)
+    result = _publish(
+        factory, source, draft, spans, revision.revision_id, f"merged-restriction-{mixed}",
+    )
+    with factory() as session:
+        rule_set = get_rule_set(session, result.rule_set_id, result.rule_set_revision)
+        pack = project_clause_pack(rule_set)
+        verify_clause_pack(pack)
+        assert len(pack.restricted_clauses) == (3 if mixed else 4)
+        assert [x.source_excerpts for x in rule_set.rules[0].restricted_components] == [
+            [text] for text in texts[(1 if mixed else 0):]
+        ]
+        assert len(rule_set.rules[0].components) == int(mixed)
 
 
 def test_population_gap_survives_publication_pack_and_actual_component_consumer(slice4_env):
