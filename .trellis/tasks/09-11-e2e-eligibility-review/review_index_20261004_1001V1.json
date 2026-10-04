@@ -7,21 +7,22 @@
   "execution_variant": "official-source-scope/v3; component-local/v1; gate/2026-10-04.51",
   "base_review_commit": "60a849e603f69ffa669b8d57a661bcee47d3cd3c",
   "delivered_snapshot_id": "S-01",
-  "runtime_state": "goal_paused_by_user; task_in_progress_with_pause_metadata; claims_complete=false; owned model/test/conference commands terminal",
+  "runtime_state": "goal_paused_by_user; task_in_progress_with_pause_metadata; claims_complete=false; owned commands terminal; selected package committed and remote verified",
   "code_snapshots": [
     {
       "id": "S-01",
-      "kind": "base_plus_explicit_manifest",
+      "kind": "committed_selected_snapshot",
       "base_commit": "60a849e603f69ffa669b8d57a661bcee47d3cd3c",
       "manifest_artifact_id": "E-02",
-      "access": "local_pending_selected_git_delivery",
-      "note": "Selected source/test static import closure includes inherited task prerequisites; not all modified this turn. All other dirty files preserved. Local test/source identity and staged snapshot verification are distinct."
+      "access": "github_selected_package",
+      "note": "Selected source/test static import closure includes inherited task prerequisites; not all modified this turn. All other dirty files preserved. Local test/source identity and staged snapshot verification are distinct.",
+      "commit": "d0d502e0efee2fa28565eb57094f77e8758c9bb8"
     }
   ],
   "changes": [
     {
       "id": "CH-01",
-      "delivery_state": "pending_selected_commit",
+      "delivery_state": "committed_pushed_selected_package",
       "paths": [
         "app/protocols/official_scope_review.py",
         "app/services/protocol_scope_review_service.py",
@@ -234,5 +235,18 @@
     "sqlalchemy": "2.0.52",
     "openai": "2.37.0",
     "frontend": "package.json/package-lock.json unchanged; task node_modules reused"
+  },
+  "delivery": {
+    "source_commit": "d0d502e0efee2fa28565eb57094f77e8758c9bb8",
+    "branch": "codex/phase5-clinical-facts-profile",
+    "github_url": "https://github.com/smkzw/enrollment-review-app/commit/d0d502e0efee2fa28565eb57094f77e8758c9bb8",
+    "remote_head_verified": "d0d502e0efee2fa28565eb57094f77e8758c9bb8",
+    "selected_files": 105,
+    "selected_source_test_files": 80,
+    "staged_reachable_hashes_matched": 511,
+    "remaining_local_entries": 1508,
+    "all_expected_remaining_preserved": true,
+    "no_credentials_clinical_originals_or_databases_submitted": true,
+    "note": "Current delivery-receipt document may be a later documentation-only commit. Final source/test bytes bind to the source commit above; no claim of full product/source/UI acceptance."
   }
 }

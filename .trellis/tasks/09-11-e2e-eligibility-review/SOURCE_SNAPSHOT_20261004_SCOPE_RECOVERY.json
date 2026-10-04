@@ -2,6 +2,22 @@
   "contract": "rv1001-pause-source-snapshot/v1",
   "base_commit": "60a849e603f69ffa669b8d57a661bcee47d3cd3c",
   "branch": "codex/phase5-clinical-facts-profile",
+  "delivery": {
+    "source_commit": "d0d502e0efee2fa28565eb57094f77e8758c9bb8",
+    "remote_verified_commit": "d0d502e0efee2fa28565eb57094f77e8758c9bb8",
+    "selected_paths_count": 105,
+    "selected_source_test_hashes_count": 80,
+    "static_reachable_hashes_matched_in_staged_export": 511,
+    "remaining_local_count_after_commit": 1508,
+    "all_expected_remaining_preserved": true,
+    "index_empty_after_source_commit": true,
+    "staged_checks": {
+      "backend": "603 passed/133.59s/exit0",
+      "frontend": "19 passed/1.49s/exit0",
+      "formal_build": "TypeScript+Vite exit0, existing large-chunk warning"
+    },
+    "note": "No new clinical/model request for snapshot verification. Later handoff receipt edits are documentation only."
+  },
   "selection": "explicit current scope-recovery package plus static import/test dependency closure; not all dirty files",
   "reachable_file_hashes": {
     "app/agents/__init__.py": "5558f1ee1a32957d0a0e472cd797f94dd5632c8debbf32e1534b56c1456e27f0",
