@@ -462,6 +462,7 @@ export function SubjectsPage() {
       </section>
 
       <div className={`subjects-layout${evidenceItem !== null ? " subjects-layout--with-evidence" : ""}`}>
+        {evidenceItem === null && (
         <aside className="subjects-list" aria-label="受试者列表">
           <h2 className="subjects-list__title">受试者</h2>
           <ul>
@@ -483,9 +484,26 @@ export function SubjectsPage() {
             })}
           </ul>
         </aside>
+        )}
 
         <section className="profile" aria-label="个例全景">
           <div className="profile-nodes" role="group" aria-label="审核节点">
+            {evidenceItem !== null && (
+              <label className="profile-subject-switch">
+                <span>受试者</span>
+                <select
+                  aria-label="切换受试者"
+                  value={selectedSubject.subjectId}
+                  onChange={(event) => setSubject(event.target.value)}
+                >
+                  {subjectList.map((subject) => (
+                    <option key={subject.subjectId} value={subject.subjectId}>
+                      {subject.subjectCode} · {centerLabel(subject)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             {episodeList.map((episode) => {
               const isActive = episode.reviewEpisodeId === selectedEpisode?.reviewEpisodeId;
               return (

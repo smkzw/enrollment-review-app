@@ -424,9 +424,35 @@
 }
 /* ---------- 宽屏原文证据面板（Slice 5.6，worker_03） ---------- */
 
-/* 打开证据面板后，三栏流体布局：受试者列表 | Profile | 证据。 */
+/* 核对原件时把受试者切换收进节点栏，避免短列表占用整列。 */
 .subjects-layout--with-evidence {
-  grid-template-columns: minmax(10rem, 0.45fr) minmax(0, 1fr) minmax(22rem, 1.2fr);
+  grid-template-columns: minmax(0, 1fr) minmax(22rem, 1.2fr);
+}
+
+.profile-nodes {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.profile-subject-switch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.profile-subject-switch select {
+  min-width: 0;
+  max-width: 100%;
+  padding: var(--space-2);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-s);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
 }
 
 .profile-evidence {
@@ -886,10 +912,6 @@
 @media (max-width: 75rem) {
   .subjects-layout--with-evidence {
     grid-template-columns: minmax(0, 0.9fr) minmax(22rem, 1.1fr);
-  }
-
-  .subjects-layout--with-evidence .subjects-list {
-    display: none;
   }
 }
 

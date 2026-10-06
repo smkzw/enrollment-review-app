@@ -489,5 +489,18 @@ describe("受试者与 Patient Profile 页", () => {
     expect(within(evidence).getByRole("heading", { name: GENERATED_TITLE })).toBeInTheDocument();
     expect(within(evidence).queryByText(PRE_CORRECTION_TITLE)).not.toBeInTheDocument();
     expect(getRevision).toHaveBeenCalled();
+    expect(screen.queryByRole("complementary", { name: "受试者列表" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "切换受试者" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "关闭原文证据" }));
+    expect(screen.getByRole("complementary", { name: "受试者列表" })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "切换受试者" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "查看原文" }));
+    await screen.findByLabelText("该条目的原文证据与定位");
+    await user.selectOptions(screen.getByRole("combobox", { name: "切换受试者" }), SUBJECT_UAT03);
+    await screen.findByRole("heading", { name: /首屏重点/ });
+    expect(window.location.hash).toContain(`subject=${SUBJECT_UAT03}`);
+    expect(screen.queryByLabelText("该条目的原文证据与定位")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "修订记录" })).not.toBeInTheDocument();
   });
 });
