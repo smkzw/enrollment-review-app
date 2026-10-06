@@ -6,7 +6,49 @@
   "runtime_state": "active",
   "claims_complete": false,
   "base_review_commit": "7b3ed4f9251323b3194371764f2bcd17ad94559e",
-  "delivered_snapshot_id": "S-08",
+  "delivered_snapshot_id": "S-12",
+  "phase_source_package": {
+    "snapshot_id": "S-12", "commit": "f2c79b7a75ca3461a0234fd454909f4bf5485991",
+    "tests": {"passed": 169, "seconds": 24.98, "exit_code": 0, "scope": "six connected original modules", "junit": "/Users/smkzw/tmp/rv1006-cell-phase-connected-20261007-final-v2.xml", "note": "Generic compound heading, mixed boundary, physical-cell suppression, full manifest and discovery/deep planning; overlapping windows not additive."},
+    "source_audit": {"model_calls": 0, "database_writes": 0, "preserved_atomic_texts": 2765, "full_manifest_units": 1927, "changed_scopes": 7, "protected_unchanged": true, "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-cell-phase-readonly-20261007-v2.json", "access": "controlled_local_only"},
+    "new_source": {"job_id": "1153e25b4eba40db964202a1c3ed07c3", "state": "queued", "completed_through": "freeze_deconstruction_input", "seconds": 11.434468041989021, "model_calls": 0, "old_jobs_unchanged": true, "protected_unchanged": true, "source_bytes_unchanged": true, "new_snapshot": true, "new_generation_scope": true, "old_draft_reused": false, "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-corrected-phase-source-20261007-v1", "access": "controlled_local_only"},
+    "conference": {"session_id": "01a11354-6243-77e5-a812-e49d88b5cfeb", "route": "CodeBuddy/codebuddy-cli/deepseek-v4.1-flash/max", "seconds": 218.49, "parent_wait_seconds": 218.8607, "exit_code": 0, "fallback": false, "parsed_tool_calls": 19, "reported_tool_calls": 17, "parsed_tool_results": 0, "review": "reviews/codex_conference_rv1006-cell-phase-source-boundary-20261007_review.md", "limitations": "No clinical/DB/Git/tests; final owner patches not re-reviewed; new-scope draft reuse suggestion refuted."},
+    "claims_complete": false
+  },
+  "multi_policy_repair_package": {
+    "snapshot_id": "S-11", "commit": "6baa144107353f744f76ebb041813eea0632a0df", "compiler_behavior": "multi-candidate-focused-repair/v2",
+    "tests": {"passed": 891, "seconds": 48.42, "exit_code": 0, "junit": "/Users/smkzw/tmp/rv1006-multi-policy-repair-20261006-final-v3.xml", "scope": "three connected original modules", "note": "Intermediate failures retained and explained;overlapping checks not additive;five SWIG warnings. Includes exact field freezing,canonical normalization,budget,failed route and actual publication consumer."},
+    "readonly": {"path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-multi-policy-repair-readonly-20261006.json", "access": "controlled_local_only", "model_calls": 0, "database_writes": 0, "protected_unchanged": true, "original_checkpoint_unchanged": true, "located_policies": 2, "adopted": false},
+    "conference": {"session_id": "01a11335-32b9-7843-8aed-ca09e239393c", "route": "CodeBuddy/codebuddy-cli/deepseek-v4.1-flash/max", "seconds": 296.797, "exit_code": 0, "fallback": false, "reported_tools": 51, "preflight_exit_code": 0, "previous_attempt_exit": 3, "previous_attempt_seconds": 15.575, "previous_failure": "owner max-turns2 exhausted,not provider unavailable", "note": "Three-file static review;post-review changes owner-verified,not clinical approval.120min silent completion wait."},
+    "live_job": {"id": "aa17764465104607a49692134fbfb95a", "status": "failed_final", "error_code": "PROTOCOL_CONTROL_SOURCE_TARGET_REVIEW_UNRESOLVED", "exit_code": 3, "seconds": 682.6424739590148, "new_physical_calls": 18, "cumulative_first_unit_calls": 63, "tokens": {"input": 200711, "output": 218275, "total": 418986, "cached_input_included": 70912, "reasoning": null, "api_fee": null}, "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-multi-policy-window-20261006-v8", "access": "controlled_local_only", "reuse": false, "initial_driver_exit": 1, "initial_driver_model_calls": 0, "reuse_decision": "refresh_required", "reuse_reason": "new_or_incomplete_batch", "prior_requests": 45, "new_copy_created": false, "old_pending_draft_migration": false, "protected_unchanged": true, "old_jobs_unchanged": true, "first_cause": "Native compound cell heading did not scope7 following paragraphs;identical II/III text is not identical applicability"},
+    "claims_complete": false
+  },
+  "repair_field_package": {
+    "snapshot_id": "S-10", "commit": "ac709142e4b665fa02e368d9e19b4b2f77daddba", "gate": "phase5/control-publication-gate/v44",
+    "tests": {"passed": 883, "seconds": 50.86, "exit_code": 0, "junit": "/Users/smkzw/tmp/rv1006-repair-field-location-20261006-v2.xml", "scope": "three connected original modules", "note": "Earlier880 overlap;five SWIG warnings. Same scope failure stops,malformed path rejected,siblings frozen."},
+    "readonly": {"path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-repair-field-location-readonly-20261006.json", "access": "controlled_local_only", "model_calls": 0, "database_writes": 0, "protected_unchanged": true, "gate_rejection_retained": true, "located_candidate_scopes": 2, "adopted": false},
+    "conference": {"session_id": "01a112ff-4bc8-7316-a139-b8b3b1d77b80", "round": 4, "route": "CodeBuddy/codebuddy-cli/deepseek-v4.1-flash/max", "seconds": 303.812, "exit_code": 0, "fallback": false, "preflight_exit_code": 0, "reported_tools": 41, "tokens": null, "note": "Read-only engineering. Owner checked complete atom-order-preserving hydrators after reviewer read-set limitation;not clinical approval."},
+    "live_job": {"id": "1d56fc85b5f64ec6a2ef541b08a140f1", "status": "failed_final", "exit_code": 3, "seconds": 123.68354808399454, "new_physical_calls": 2, "cumulative_first_unit_calls": 45, "tokens": {"input": 132133, "output": 28967, "total": 161100, "cached_input_included": 109056, "reasoning": null, "api_fee": null}, "access": "controlled_local_only", "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-located-field-window-20261006-v7", "reuse_decision": "resume_partial", "reuse_reason": "verified_source_interpretation", "prior_requests": 43, "new_copy_created": false, "old_pending_draft_migration": false, "protected_unchanged": true, "old_jobs_unchanged": true, "first_cause": "Two null observation policies;whole candidate recovery omitted field again;located future repair not reached"},
+    "claims_complete": false
+  },
+  "definition_dependency_package": {
+    "snapshot_id": "S-09", "commit": "c2603c47916874c5585b10ad624a36e6987a7afb",
+    "policy": "phase5/control-source-target-policy/v9",
+    "definition_prompt": "phase5/control-source-definition-consumer-prompt/v3",
+    "flow": "rv1001/front-stage-flow/v18",
+    "tests": {"passed": 1293, "seconds": 55.57, "exit_code": 0, "junit": "/Users/smkzw/tmp/rv1006-definition-dependency-connected-20261006-final-v4.xml", "scope": "nine connected original modules", "note": "Five SWIG warnings; overlapping interim counts not additive; fixture omissions and preserved error precedence fixed without relaxing source gates."},
+    "frontend": {"passed": 23, "seconds": 1.24, "build_exit_code": 0, "actual_browser_new_labels": false},
+    "conference": {"session_id": "01a112ff-4bc8-7316-a139-b8b3b1d77b80", "route": "CodeBuddy/codebuddy-cli/deepseek-v4.1-flash/max", "seconds": [439.856, 199.68], "exit_codes": [0, 0], "fallback": false, "tool_calls_reported": [72, 22], "billing_tokens": null, "review": "reviews/codex_conference_rv1006-definition-dependency-boundary-20261006_review.md", "limitations": "Round1 one extra read; Bash unavailable; final restricted/background/selector patches owner-tested,not reviewer-approved. Same-session not independent models."},
+    "live_job": {"id": "ec04e98d3c8c49f9b67aa6c955166433", "status": "failed_final", "error_code": "PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID", "exit_code": 3, "seconds": 317.106908750, "new_physical_calls": 6, "cumulative_first_unit_calls": 43, "access": "controlled_local_only", "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-definition-dependency-window-20261006-v6", "prior_requests": 37, "reuse_decision": "refresh_required", "initial_driver_exit": 1, "initial_driver_model_calls": 0, "tokens": {"input": 229398, "output": 84968, "total": 314366, "cached_input_included": 130816, "reasoning": null, "api_fee": null}, "protected_unchanged": true, "old_jobs_unchanged": true, "note": "Repeated future-scope failures before target/alignment/definition review. Source-context change not bypassed; no old pending-draft migration,no extra DB copy."},
+    "claims_complete": false
+  },
+  "p2_scope_audit": {
+    "source_commit": "a02b0caf03add6a4706236fe852f00bb42d26139", "run_id": "708d246c05444fc3990348db1884f9e4",
+    "value_date_candidates_with_own_page_risk": 355, "without_value_date_dependencies": 103, "risk_pages": 24,
+    "value_candidates_blocked_only_by_other_page": 0, "model_calls": 0, "database_writes": 0, "protected_unchanged": true,
+    "execution": {"session_id": "01a112ee-b69a-70ae-a006-b5ece56cfaf4", "route": "CodeBuddy/codebuddy-cli/deepseek-v4.1-flash/max", "seconds": 179.345, "exit_code": 0, "fallback": false, "read_boundary": "15 extra vs12 allowed; reduced compliance", "review": "reviews/codex_execution_rv1006-p2-qualified-consumer-trace-20261006_review.md"},
+    "adopted": false
+  },
   "code_snapshots": [
     {"id": "S-01", "commit": "cc4048348f12afde4d3221415e884c7966e5bf4c", "kind": "committed_source", "manifest_artifact_id": "E-01"},
     {"id": "S-02", "commit": "0e9b9bb99643ad074b2033d408ed8b7fc3dd1936", "kind": "committed_frontend_layout", "manifest_artifact_id": "E-01", "note": "Frontend checks/rendering preceded JSX bracket/CSS blank-line formatting only. Backend unchanged from S-01."},
