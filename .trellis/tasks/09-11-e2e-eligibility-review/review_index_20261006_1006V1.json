@@ -6,7 +6,7 @@
   "runtime_state": "active",
   "claims_complete": false,
   "base_review_commit": "7b3ed4f9251323b3194371764f2bcd17ad94559e",
-  "delivered_snapshot_id": "S-06",
+  "delivered_snapshot_id": "S-07",
   "code_snapshots": [
     {"id": "S-01", "commit": "cc4048348f12afde4d3221415e884c7966e5bf4c", "kind": "committed_source", "manifest_artifact_id": "E-01"},
     {"id": "S-02", "commit": "0e9b9bb99643ad074b2033d408ed8b7fc3dd1936", "kind": "committed_frontend_layout", "manifest_artifact_id": "E-01", "note": "Frontend checks/rendering preceded JSX bracket/CSS blank-line formatting only. Backend unchanged from S-01."},
@@ -15,6 +15,15 @@
     {"id": "S-05", "commit": "7a6132043813e65e93f125e9d0596dc5d006798c", "kind": "committed_candidate_relationship_field_repair", "manifest_artifact_id": "E-01", "note": "Frozen clinical fields and exact unrelated relation sequence; final owner safeguards follow independent review."},
     {"id": "S-06", "commit": "3472fa2859277fd18fe98d39c5da34434b19a92d", "kind": "committed_source_terminal_clause_fix", "manifest_artifact_id": "E-01", "note": "Allow verbatim terminal punctuation,still reject inner boundaries and next-sentence object/scope borrowing; deterministic source-backed fix,no additional conference."}
   ],
+  "source_purpose_package": {
+    "snapshot_id": "S-07",
+    "commit": "4c7ee2d15f5d1069654a65dc023e2c78773eaf9b",
+    "reviewed_and_product_diagnostic_commit": "c067ed220e85cc5fd1f50788fde8faf9f01c9f06",
+    "final_tests": {"modules": ["tests/v2/protocols/test_slice58c_control_deconstructor.py", "tests/v2/services/test_protocol_control_execution.py", "tests/v2/protocols/test_protocol_control_fixed_flow.py", "tests/v2/protocols/test_slice58c_protocol_control_gate.py"], "exit_code": 0, "passed": 1103, "seconds": 69.34, "junit": "/Users/smkzw/tmp/rv1006-source-function-connected-20261006-final.xml", "note": "Earlier1097overlap;wrong initial filename exit4/no collection;5SWIGwarnings."},
+    "diagnostic": {"model": "ollama-cloud/deepseek-v4.1-flash/high", "physical_calls": 2, "seconds": 17.621439291047864, "exit_code": 0, "database_writes": 0, "protected_unchanged": true, "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-source-purpose-20261006-v1", "access": "controlled_local_only", "note": "Changed purpose has a separate actual target review;not Job continuation/publication/adoption. Historical37 and diagnostic2 separate."},
+    "conference": {"session_id": "01a112c5-47cc-7bba-a894-cebf043f6b35", "route": "CodeBuddy/codebuddy-cli/deepseek-v4.1-flash/max", "rounds_seconds": [279.14, 54.397], "exit_codes": [0, 0], "fallback": false, "review_path": "reviews/codex_conference_rv1006-source-purpose-route-20261006_review.md", "note": "Round1preflight failed but launch proceeded erroneously;round2preflight passed. Final heading protection owner-verified after frozen review. Engineering only."},
+    "remaining": "Period-definition consumer and mixed-batch additional requirements remain unconnected;v3 identity does not permit silently reusing v2 saved results. No new current-node report."
+  },
   "changes": [
     {"id": "CH-01", "snapshot_id": "S-01", "paths": ["app/agents/protocol_control_source_interpretation.py", "tests/v2/protocols/test_slice58c_control_deconstructor.py"], "note": "Explicit context target namespace; wrong source refs rejected,never rewritten; clinical gates unchanged."},
     {"id": "CH-02", "snapshot_id": "S-01", "paths": ["frontend/src/components/profile/ProfileItemCard.tsx", "frontend/src/components/profile/ProfileItemCard.test.tsx"], "note": "Boolean Chinese display; literal strings and zero preserved."},

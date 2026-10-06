@@ -74,12 +74,20 @@
     {"path": "app/agents/protocol_control_source_interpretation.py", "sha256": "2e945c3507424becaefb8715694d478a90e4c00c9796da15cba447c00c74198a", "bytes": 129215},
     {"path": "tests/v2/protocols/test_slice58c_control_deconstructor.py", "sha256": "4c1d1edaada698c1e154a221577f5c2dd502a82d374f455e67ff003b924432f2", "bytes": 553243}
   ],
+  "source_purpose_commit": "4c7ee2d15f5d1069654a65dc023e2c78773eaf9b",
+  "source_purpose_reviewed_commit": "c067ed220e85cc5fd1f50788fde8faf9f01c9f06",
+  "source_purpose_files": [
+    {"path": "app/agents/protocol_control_source_function.py", "sha256": "0c89eb5e1ac7c8061b8047c8e69724d09d12f5526545d69791ba59f5666e9df1", "bytes": 8346},
+    {"path": "app/agents/protocol_control_deconstructor.py", "sha256": "7df45ad6b08a0a94901ae801f6bb2b7a5f9b679d8b2a4f597219729337497716", "bytes": 573042},
+    {"path": "tests/v2/protocols/test_slice58c_control_deconstructor.py", "sha256": "982c4751ec3615f8f25058847e65edf1f5523b71698b87862705ec2b65762c2b", "bytes": 560009}
+  ],
   "notes": [
     "Backend two-module checks match this commit; frontend four-module checks match these two exact frontend files.",
     "Real P1 trial ran the base backend before this identity-feedback patch; do not claim new live acceptance.",
     "P2 recovery and UI correction used base backend and the same frontend display patch; not a complete clinical review chain.",
     "Layout file hashes bind frontend_layout_commit,not the later clinical_display_commit. Current v2 P1 used S-02 backend,failed before target review. Clinical display tests bind the exact five files above;CSS sticky top was verified by final build/render.",
     "S-05 final five-module822 checks and v3/v4 real runs use candidate_field_repair_commit. V3 reached source target review but did not trigger the new relationship-only branch; its absence of the former stage failure does not establish causal clinical improvement.",
-    "S-06 terminal-clause fix matches final three-module845 checks,zero-call saved-response revalidation and v5 runtime. Verbatim raw response and clinical content remain unchanged; no source/adoption policy or request material changed."
+    "S-06 terminal-clause fix matches final three-module845 checks,zero-call saved-response revalidation and v5 runtime. Verbatim raw response and clinical content remain unchanged; no source/adoption policy or request material changed.",
+    "S-07 source-purpose v3 matches final four-module1103 checks. Conference frozen diff and two-call read-only product diagnostic used c067; heading-only guard added afterward by owner. No new joint publication or legal Job continuation claimed."
   ]
 }
