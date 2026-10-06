@@ -2241,7 +2241,7 @@ class EvidenceNormalizerAttempt(ContractModel):
     attempt: int = Field(ge=1)
     session_id: str = Field(min_length=1)
     raw_output_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    outcome: Literal["parsed", "schema_invalid", "transport_failed"]
+    outcome: Literal["parsed", "partitioned", "schema_invalid", "transport_failed"]
     output: EvidenceNormalizerOutput | None = None
     issues: list[str] = Field(default_factory=list)
     error_code: Literal["EMPTY_OUTPUT", "PARTIAL_OUTPUT", "TRANSPORT_FAILED"] | None = None
@@ -2250,10 +2250,11 @@ class EvidenceNormalizerAttempt(ContractModel):
 class EvidenceNormalizerRunResult(ContractModel):
     """有界适配运行结果（不写发布事实/Profile，仅候选/unresolved）。"""
 
-    status: Literal["已解析", "需要核对"]
+    status: Literal["已解析", "部分已解析", "需要核对"]
     session_id: str = Field(min_length=1)
     attempts: list[EvidenceNormalizerAttempt] = Field(min_length=1)
     final_output: EvidenceNormalizerOutput | None = None
+    candidate_partition_receipt: dict | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class EvidenceNormalizerRunner:
@@ -2285,6 +2286,7 @@ class EvidenceNormalizerRunner:
         compact_references: bool = False,
         verified_scope_prompt: bool = False,
         require_current_draft: bool = False,
+        allow_candidate_partition: bool = False,
     ) -> EvidenceNormalizerRunResult:
         # 传输层若已用 JSON Schema 受限解码强制输出结构（如 omlx json_schema
         # response_format），提示内不再重复内嵌同一份 Schema；其余传输保持
@@ -2356,6 +2358,29 @@ class EvidenceNormalizerRunner:
                 continue
 
         assert session_id is not None and raw_text is not None
+        initial_raw_text = raw_text
+
+        def terminal_schema_failure():
+            failed = EvidenceNormalizerRunResult(status="需要核对", session_id=session_id,
+                attempts=attempts, final_output=None)
+            if not allow_candidate_partition or not require_current_draft:
+                return failed
+            from app.agents.evidence_candidate_partition import recover_source_local_candidates
+
+            try:
+                # Always freeze the initial response; a failed repair cannot
+                # replace good siblings or establish a new clinical interpretation.
+                partition = recover_source_local_candidates(initial_raw_text, evidence_input,
+                    reference_aliases=reference_aliases)
+            except (ValueError, TypeError, KeyError):
+                return failed
+            attempts.append(EvidenceNormalizerAttempt(attempt=len(attempts) + 1,
+                session_id=session_id, raw_output_sha256=_sha256(initial_raw_text), outcome="partitioned",
+                output=partition.output, issues=["未通过核对的候选及其依赖已隔离保留。"],
+                error_code="PARTIAL_OUTPUT"))
+            return EvidenceNormalizerRunResult(status="部分已解析", session_id=session_id,
+                attempts=attempts, final_output=partition.output,
+                candidate_partition_receipt=partition.receipt)
 
         # 尝试解析与 schema 修复循环
         schema_repairs = 0
@@ -2435,12 +2460,7 @@ class EvidenceNormalizerRunner:
                     )
                 )
                 if schema_repairs >= self._max_schema_repairs:
-                    return EvidenceNormalizerRunResult(
-                        status="需要核对",
-                        session_id=session_id,
-                        attempts=attempts,
-                        final_output=None,
-                    )
+                    return terminal_schema_failure()
                 if isinstance(exc, EvidenceSourceObjectError):
                     scope_unavailable = not exc.bounded_repair or (object_repair is None and schema_repairs > 0)
                     repair_type = (EvidenceContextRepair if isinstance(exc, EvidenceContextError)
@@ -2448,8 +2468,7 @@ class EvidenceNormalizerRunner:
                         else EvidenceSourceObjectRepair)
                     family_changed = object_repair is not None and type(object_repair) is not repair_type
                     if scope_unavailable or family_changed:
-                        return EvidenceNormalizerRunResult(status="需要核对", session_id=session_id,
-                            attempts=attempts, final_output=None)
+                        return terminal_schema_failure()
                 if (isinstance(exc, EvidenceSourceObjectError) and exc.bounded_repair
                         and object_repair is None):
                     try:

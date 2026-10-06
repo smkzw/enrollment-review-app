@@ -81,6 +81,23 @@ def test_command_freezes_explicit_text_reference_strategy(session_factory):
     assert "verified_evidence_strategy" not in payload
 
 
+def test_command_freezes_new_partition_identity_without_rewriting_old_job(session_factory):
+    from app.agents.evidence_candidate_partition import CANDIDATE_PARTITION_POLICY
+    registered = register_evidence_normalizer_runtime_config(session_factory)
+    with session_factory() as session, session.begin():
+        chain = _seed_chain(session, prefix="cmd-partition")
+    plain = FactNormalizationCommandService(session_factory, registered_config=registered)
+    enabled = FactNormalizationCommandService(session_factory, registered_config=registered,
+        allow_candidate_partition=True)
+    ids = dict(subject_id=chain["subject_id"], review_episode_id=chain["episode_id"])
+    old = plain.create_or_reuse(**ids)
+    current = enabled.create_or_reuse(**ids)
+    assert old.job_id != current.job_id
+    assert plain.job_service.get_job(old.job_id)["payload"].get("candidate_partition_policy") is None
+    assert enabled.job_service.get_job(current.job_id)["payload"]["candidate_partition_policy"] == CANDIDATE_PARTITION_POLICY
+    assert enabled.create_or_reuse(**ids).job_id == current.job_id
+
+
 def test_authority_rejects_mismatched_active_revision(session_factory):
     with session_factory() as session, session.begin():
         chain = _seed_chain(session, prefix="cmd-mismatch")
@@ -110,7 +127,7 @@ def test_select_config_happy_path(session_factory):
         assert model is not None
         assert (
             model.parameters["normalization_policy_version"]
-            == "phase5/normalization-policy/v9"
+            == "phase5/normalization-policy/v10"
         )
 
 

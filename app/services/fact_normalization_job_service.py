@@ -302,6 +302,7 @@ class FactNormalizationJobService:
         verified_scope_prompt: bool = False,
         compact_text_references: bool = False,
         account_source_text: bool = False,
+        allow_candidate_partition: bool = False,
     ) -> CreateNormalizationJobResult:
         """从活动完整处理修订生成计划，避免调用方自行拼接页组或输入哈希。
 
@@ -450,6 +451,7 @@ class FactNormalizationJobService:
                 verified_scope_prompt=verified_scope_prompt,
                 compact_text_references=compact_text_references,
                 account_source_text=account_source_text,
+                allow_candidate_partition=allow_candidate_partition,
             )
         stitched_scope = _compute_input_scope_sha256(
             authority,
@@ -470,6 +472,7 @@ class FactNormalizationJobService:
             verified_scope_prompt=verified_scope_prompt,
             compact_text_references=compact_text_references,
             account_source_text=account_source_text,
+            allow_candidate_partition=allow_candidate_partition,
         )
 
     @app_error_boundary
@@ -490,6 +493,7 @@ class FactNormalizationJobService:
         verified_scope_prompt: bool = False,
         compact_text_references: bool = False,
         account_source_text: bool = False,
+        allow_candidate_partition: bool = False,
     ) -> CreateNormalizationJobResult:
         """幂等创建规范化 Job 与冻结的 FactNormalizationRun。
 
@@ -560,6 +564,14 @@ class FactNormalizationJobService:
                                               "verified_evidence_strategy": strategy})
         if len(effective_scope) != 64 or any(c not in "0123456789abcdef" for c in effective_scope):
             raise InvalidJobDefinitionError("input_scope_sha256 必须是 64 位十六进制")
+        partition_policy = None
+        partition_scope = None
+        if allow_candidate_partition:
+            from app.agents.evidence_candidate_partition import CANDIDATE_PARTITION_POLICY
+            partition_policy = CANDIDATE_PARTITION_POLICY
+            partition_scope = effective_scope
+            effective_scope = canonical_hash({"input_scope_sha256": effective_scope,
+                                              "candidate_partition_policy": partition_policy})
 
         expected_key = fact_run_idempotency_key(
             authority=authority,
@@ -591,6 +603,10 @@ class FactNormalizationJobService:
             job_request_payload["page_review_coverage_id"] = page_review_coverage_id
             job_request_payload["pending_normalization_policy"] = PENDING_NORMALIZATION_POLICY
         submitted_hash = _job_payload_hash(job_request_payload)
+        if partition_policy is not None:
+            job_request_payload["candidate_partition_policy"] = partition_policy
+            job_request_payload["candidate_partition_precondition_scope_sha256"] = partition_scope
+            submitted_hash = _job_payload_hash(job_request_payload)
         if strategy is not None:
             job_request_payload["verified_evidence_strategy"] = strategy
             submitted_hash = _job_payload_hash(job_request_payload)
@@ -688,6 +704,9 @@ class FactNormalizationJobService:
                 job_payload["text_reference_strategy"] = text_strategy
             if text_accounting_policy is not None:
                 job_payload["text_accounting_policy"] = text_accounting_policy
+            if partition_policy is not None:
+                job_payload["candidate_partition_policy"] = partition_policy
+                job_payload["candidate_partition_precondition_scope_sha256"] = partition_scope
             store = self._store(session)
             store.create_job(
                 job_id=job_id,

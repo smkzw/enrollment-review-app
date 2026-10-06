@@ -282,6 +282,7 @@ def create_app(
             require_page_review=False,
             require_source_readiness=True,
             page_reader_identity=lambda: app.state.page_review_runtime.main_reader_identity(),
+            allow_candidate_partition=True,
         )
         app.state.evidence_normalizer_runtime_config = evidence_normalizer_runtime_config
         app.state.fact_correction_job_service = FactCorrectionJobService(
