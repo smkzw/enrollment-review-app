@@ -1,0 +1,223 @@
+{
+  "schema_version": "review-index/0929v1/v1",
+  "document_kind": "delivery_record",
+  "round_id": "1001V1",
+  "recorded_at": "2026-10-06T17:57:19+02:00",
+  "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
+  "execution_variant": "RV1001-FLOW",
+  "base_review_commit": "60a849e603f69ffa669b8d57a661bcee47d3cd3c",
+  "delivered_snapshot_id": "S-01",
+  "runtime_state": "paused_by_user",
+  "code_snapshots": [
+    {
+      "id": "S-01",
+      "kind": "base_plus_selected_exact_source",
+      "base_commit": "f2603a9fea5dfc0615abf5a1c0d5f21915168d8c",
+      "manifest_artifact_id": "E-02",
+      "access": "selected_git_delivery",
+      "note": "Five exact source/test files on base; AST static import closure188 matches HEAD outside selected files, not proof of dynamic/environment reproducibility."
+    }
+  ],
+  "changes": [
+    {
+      "id": "CH-01",
+      "delivery_state": "selected_for_commit",
+      "paths": [
+        "app/agents/deepseek_evidence_normalizer_transport.py",
+        "app/domain/contracts/facts.py",
+        "app/services/fact_normalization_executor.py",
+        "app/services/fact_normalization_response_recovery.py",
+        "tests/v2/services/test_normalizer_response_recovery.py"
+      ],
+      "evidence_ids": [
+        "E-02",
+        "E-03",
+        "E-04"
+      ],
+      "note": "Explicit saved initial response revalidation default off; durable call/proof/checkpoint/finalize consumers. No real recovery DB execution."
+    }
+  ],
+  "claims": [
+    {
+      "id": "CL-01",
+      "status": "verified",
+      "snapshot_id": "S-01",
+      "statement": "Synthetic actual Runner/transport request equality, same-call initial-answer recovery, save/finalize/Profile/read service and checkpoint recovery pass connected tests.",
+      "limitations": "Not real patient full chain, UI recovery endpoint or clinical acceptance.",
+      "evidence_ids": [
+        "E-02"
+      ],
+      "test_ids": [
+        "T-01"
+      ]
+    },
+    {
+      "id": "CL-02",
+      "status": "verified",
+      "snapshot_id": "S-01",
+      "statement": "Real frozen initial answer passes read-only current request/source revalidation without model calls or clinical DB writes.",
+      "limitations": "50 candidate facts,10 events,6 exposures,22 questions; zero facts published. A current revalidation is not a fresh model read.",
+      "evidence_ids": [
+        "E-03"
+      ],
+      "test_ids": [
+        "T-02"
+      ]
+    },
+    {
+      "id": "CL-03",
+      "status": "unresolved",
+      "statement": "Complete same-source adoption, real current-node report, correction, holdout and Q3 remain incomplete.",
+      "evidence_ids": [
+        "E-01"
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "id": "T-01",
+      "status": "passed",
+      "snapshot_id": "S-01",
+      "command": ".venv/bin/python -m pytest tests/v2/services/test_normalizer_response_recovery.py tests/v2/services/test_normalizer_candidate_partition.py tests/v2/services/test_fact_normalization_persistence.py tests/v2/agents/test_evidence_normalizer_transport_config.py tests/v2/agents/test_evidence_candidate_partition.py tests/v2/services/test_evidence_question_repair_persistence.py tests/v2/services/test_normalizer_text_accounting.py -q --tb=short --junitxml=/Users/smkzw/tmp/enrollment-normalizer-saved-response-window-20261006-v5.xml",
+      "exit_code": 0,
+      "counts": {
+        "passed": 178,
+        "failed": 0,
+        "skipped": 0
+      },
+      "seconds": 251.63,
+      "evidence_ids": [
+        "E-02"
+      ],
+      "note": "Actual final session44772. Five SWIG warnings; v4 fixture-source failure corrected without weakening product."
+    },
+    {
+      "id": "T-02",
+      "status": "passed",
+      "snapshot_id": "S-01",
+      "command": "Explicit project env + PYTHONPATH, preflight_saved_response_recovery_20261006.py; read-only protected source DB",
+      "exit_code": 0,
+      "evidence_ids": [
+        "E-03"
+      ],
+      "note": "Original terminal session47639; no new rerun on pause. Saved request SHA688004aa... exact body verified; no clinical acceptance."
+    },
+    {
+      "id": "T-03",
+      "status": "failed",
+      "command": "Existing controlled failed-scope retry, product executor",
+      "seconds": 489.9322828,
+      "exit_code": null,
+      "evidence_ids": [
+        "E-05"
+      ],
+      "note": "Actual Job failed_final/PARTIAL_OUTPUT; driver exit not re-established in this recap. loc1 absent from84 current locator IDs; no guessing or deletion."
+    },
+    {
+      "id": "T-04",
+      "status": "failed",
+      "command": "P1 v6 two-source-target real diagnostic",
+      "seconds": 41.554876,
+      "exit_code": null,
+      "evidence_ids": [
+        "E-06"
+      ],
+      "note": "TARGET_VISIT_SCOPE_UNPROVEN, zero DB write; does not establish semantic scope from a missing scope_quote."
+    },
+    {
+      "id": "T-05",
+      "status": "not_run",
+      "command": "Complete clinical node/correction/holdout/Ego Q3",
+      "exit_code": null,
+      "note": "Explicit user pause; not hidden behind software pass count."
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "E-01",
+      "access": "selected_git_delivery",
+      "sensitivity": "technical_summary",
+      "path": ".trellis/tasks/09-11-e2e-eligibility-review/HANDOFF_20261006_1001V1_PAUSE.md"
+    },
+    {
+      "id": "E-02",
+      "access": "selected_git_manifest_and_local_xml",
+      "sensitivity": "synthetic_software_tests",
+      "path": ".trellis/tasks/09-11-e2e-eligibility-review/SOURCE_SNAPSHOT_20261006_1001V1.json",
+      "note": "XML local only; source/test bytes available in selected Git commit."
+    },
+    {
+      "id": "E-03",
+      "access": "local_only_external_review_unavailable",
+      "sensitivity": "controlled_clinical_receipt",
+      "path": "/Users/smkzw/tmp/enrollment-rv1001-case-source-consumer-20261006-v2/saved-response-production-preflight-20261006-v1",
+      "note": "Raw response not committed; handoff lists hashes. Identity is not medical correctness."
+    },
+    {
+      "id": "E-04",
+      "access": "selected_git_delivery",
+      "sensitivity": "sanitized_engineering_review",
+      "path": "reviews/codex_conference_enrollment-rv1001-saved-response-recovery-20261006_review.md",
+      "note": "CodeBuddy/DS/max1 round564.064s, no fallback; new F1-F3 tests owner checked after frozen review."
+    },
+    {
+      "id": "E-05",
+      "access": "local_only_external_review_unavailable",
+      "sensitivity": "controlled_clinical_run",
+      "path": "/Users/smkzw/tmp/enrollment-rv1001-case-source-consumer-20261006-v2/current-failed-scope-controlled-retry-20261006-v1"
+    },
+    {
+      "id": "E-06",
+      "access": "local_only_external_review_unavailable",
+      "sensitivity": "controlled_protocol_run",
+      "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003"
+    }
+  ],
+  "hypotheses": [
+    {
+      "id": "H-01",
+      "statement": "Repeated same-protocol/case feedback risks overfitting beyond literal hardcoding.",
+      "support": "Same SAR/D001/31001 used to alter prompts and guards; independent holdout missing.",
+      "counterevidence": "Identity/value/source/replay contracts transferable; no new disease/drug thresholds.",
+      "alternative": "Examples expose general assembly/consumer gaps rather than model overfit.",
+      "falsification": "Frozen same-budget unrelated-source positive/equivalent/counterfactual and user-action holdout."
+    },
+    {
+      "id": "H-02",
+      "statement": "Full-answer repair and missing normal consumers drive repeated paid loops.",
+      "support": "Fresh retry length plus repair introduced invalid locator;23/25 valid points not full adopted package.",
+      "counterevidence": "Source/semantic model errors and runtime delays also contribute; breakdown missing.",
+      "alternative": "Model capability constraints persist even after shorter bounded flow.",
+      "falsification": "Same model/source/budget/final consumers baseline versus bounded repair."
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "R-01",
+      "statement": "Prioritize failed-family closure and one real current node, not another whole-protocol retry.",
+      "status": "recommendation_with_existing_direction_approved",
+      "benefit": "Avoid repeating unaffected work.",
+      "risk": "Do not drop full coverage or adoption qualifications.",
+      "validation": "Source QC and current-node correction/holdout/Q3."
+    },
+    {
+      "id": "R-02",
+      "statement": "Fix period/time-of-day/dependency classification and ordinary consumer capability generically.",
+      "status": "recommendation",
+      "validation": "Normal, equivalent, counterfactual, missing-dependency and recovery tests; retain exhausted call budget."
+    },
+    {
+      "id": "R-03",
+      "statement": "Freeze independent holdout before further prompt tuning.",
+      "status": "recommendation",
+      "validation": "No answer feed-back or relabeling SAR/D001 as unseen."
+    }
+  ],
+  "next_actions": [
+    "User resume first; then inspect legitimate new P2 copy, frozen actual request and selected failure proof before legal scoped recovery. Do not run now.",
+    "P1 fix first causal classification/consumer family without reusing exhausted extra-call budget.",
+    "Complete same-source current node, real correction/new report, independent holdout and Ego wide-screen/recovery acceptance."
+  ],
+  "product_claims_complete": false,
+  "notes": "Goal paused already observed. No clinical/raw answers/env/DB submitted. Commit/push verified after staging; current file content identifies exact tested source without a self-hash commit loop. Model pairing winner/generalization/automatic clinical adoption not demonstrated."
+}

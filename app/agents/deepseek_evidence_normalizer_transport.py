@@ -392,6 +392,13 @@ class DeepSeekEvidenceNormalizerTransport:
             kwargs["extra_body"] = glm_request["extra_body"]
         return kwargs
 
+    def initial_request_body(self, *, prompt: str) -> dict[str, Any]:
+        """Describe the initial request without invoking or loading any model."""
+        body = self._completion_kwargs([{"role": "user", "content": prompt}])
+        if self._backend in ZHIPU_EVIDENCE_NORMALIZER_BACKENDS or self._backend in {"deepseek", "deepseek-api"}:
+            body.update(stream=True, stream_options={"include_usage": True})
+        return body
+
     def _request(self, kwargs):
         started = monotonic()
         receipt = {"started_at": datetime.now(timezone.utc).isoformat(),
@@ -622,6 +629,7 @@ def evidence_normalizer_transport_from_model_config(
     model_config: ModelConfigContract,
     *, receipt_callback: Callable[[dict[str, Any]], None] | None = None,
     request_callback: Callable[[dict[str, Any]], str] | None = None,
+    client: Any | None = None,
 ) -> DeepSeekEvidenceNormalizerTransport:
     """按已冻结模型配置创建 OpenAI 兼容传输，不静默替换供应商或模型。"""
     provider = model_config.provider.strip().lower()
@@ -632,10 +640,11 @@ def evidence_normalizer_transport_from_model_config(
     )
     temperature = None if raw_temperature is None else float(raw_temperature)
     if provider in {"deepseek", "deepseek-api"}:
-        if not DEEPSEEK_API_KEY:
+        if client is None and not DEEPSEEK_API_KEY:
             raise ValueError("DeepSeek 语义服务尚未配置")
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
+            client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
             api_key=DEEPSEEK_API_KEY,
@@ -657,6 +666,7 @@ def evidence_normalizer_transport_from_model_config(
             raise ValueError("本次整理的模型加载配置已改变，请新建整理任务，历史结果仍保留")
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
+            client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
             api_key=MTPLX_API_KEY or "local-mtplx",
@@ -672,6 +682,7 @@ def evidence_normalizer_transport_from_model_config(
     if provider in {"omlx", "local-omlx"}:
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
+            client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
             api_key=OMLX_API_KEY or "local-omlx",
@@ -690,7 +701,7 @@ def evidence_normalizer_transport_from_model_config(
             },
         )
     if provider == "zhipu-coding-plan":
-        if not EVIDENCE_NORMALIZER_GLM_API_KEY:
+        if client is None and not EVIDENCE_NORMALIZER_GLM_API_KEY:
             raise ValueError(
                 "GLM 证据规范化服务尚未配置"
                 "（缺少 EVIDENCE_NORMALIZER_GLM_API_KEY；"
@@ -700,6 +711,7 @@ def evidence_normalizer_transport_from_model_config(
             )
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
+            client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
             api_key=EVIDENCE_NORMALIZER_GLM_API_KEY,
@@ -717,6 +729,7 @@ def evidence_normalizer_transport_from_model_config(
         # the transport. The frozen job still owns model, effort and budget.
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
+            client=client,
             receipt_callback=receipt_callback,
             request_callback=request_callback,
             model=model_config.model,

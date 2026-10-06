@@ -1,0 +1,50 @@
+{
+  "schema_version": "source-snapshot/v1",
+  "recorded_at": "2026-10-06T17:57:19+02:00",
+  "base_commit": "f2603a9fea5dfc0615abf5a1c0d5f21915168d8c",
+  "files": [
+    {
+      "path": "app/agents/deepseek_evidence_normalizer_transport.py",
+      "sha256": "c203d85a11a2f9909354e9c598e40dd5b3f0fdc0eee65d961b6dce4705ddf967"
+    },
+    {
+      "path": "app/domain/contracts/facts.py",
+      "sha256": "444e8d44b940682aa00c75bc8804419cdba4c971b9acff9615ef93e1890f0bfb"
+    },
+    {
+      "path": "app/services/fact_normalization_executor.py",
+      "sha256": "ad9f73c812196c54b2ba1b0924be80548d31e726526d0a2651449dc966ab2999"
+    },
+    {
+      "path": "app/services/fact_normalization_response_recovery.py",
+      "sha256": "955346c3bcffc89785b6563647479f77184cf8979779ddcc689353223688b06d"
+    },
+    {
+      "path": "tests/v2/services/test_normalizer_response_recovery.py",
+      "sha256": "dc9279b2db2885c120a77404a4a9eea87ddddc8bab89edb9d15cf1d4e91bbc73"
+    }
+  ],
+  "static_import_check": {
+    "files": 188,
+    "nonselected_dependency_drift": [],
+    "limitations": "AST named app/tests imports only; not dynamic imports, full repository or environment identity."
+  },
+  "environment": {
+    "python": "3.12.13",
+    "sqlite": "3.53.4",
+    "pytest": "9.0.2",
+    "pydantic": "2.13.3",
+    "SQLAlchemy": "2.0.52",
+    "openai": "2.37.0"
+  },
+  "test_receipt": {
+    "path": "/Users/smkzw/tmp/enrollment-normalizer-saved-response-window-20261006-v5.xml",
+    "sha256": "37af86666d4d7eb327516866c6fbf6a513007dbdf69e17059a01d1933ac4a63e",
+    "passed": 178,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 251.63,
+    "exit_code": 0
+  },
+  "notes": "Base plus five exact source/test files; selected stage export checked separately. Clinical files, original answers, databases and credentials excluded. No full clinical/UI acceptance."
+}

@@ -1,5 +1,21 @@
 <!-- RV1001-CURRENT:BEGIN -->
-## 当前状态（2026-10-06；下方轨迹为历史，不覆盖本表）
+## 当前状态（2026-10-06；用户要求阶段收口后无损暂停）
+
+Goal现场查询paused；execution_paused_by_user=true、claims_complete=false，任务保持in_progress，不归档。恢复入口HANDOFF_20261006_1001V1_PAUSE.md、review_index_20261006_1001V1.json。收口前HEAD f2603a9fea5dfc0615abf5a1c0d5f21915168d8c；本次源码绑定SOURCE_SNAPSHOT_20261006_1001V1.json。单所有者内联集成＋已完成C03关键恢复挑战，共享可变事务不另派执行；顾问不是产品病例读取/医学批准。原件/旧失败/额度/共享服务与7份继承delivery修改保留。
+
+| 当前项 | 实际状态与证据边界 |
+|---|---|
+| P2正式隔离首错 | Job4b08b1fd8b9c4faabf3a98db5e6ebad6/run708d246c05444fc3990348db1884f9e4，854.8107s failed_final：6组完成、第7组失败、余7未读、汇总依赖失败，251候选0事实。首错对象来源不匹配，repair另缺canonical_value，不是患者缺资料。 |
+| P2受控副本retry | 实际489.9322828s仍失败，length→预算恢复→repair后出现loc1，不属于84合法来源且冻结请求无简称映射；不能猜/删项放行。原失败及6成功hash保持。原初答现行只读重核保留50事实候选/10事件/6暴露/22疑问，0模型调用0DB写，0事实发布。 |
+| 新保存原答恢复 | normalizer-saved-response-revalidation/v1默认关闭，显式同call选失败清单的首次完整回答；实际请求/模型/来源/当前解析与分区不放宽。证明绑定调用；检查点、缺检查点重建、首汇总及重放重验。不伪造新读取，真实库恢复/余7组/临床QC/完整报告未执行。 |
+| C03恢复独立挑战 | CodeBuddy/DeepSeek-v4.1-flash/max，564.064s/1轮/exit0/no fallback/session01a111d7-55b8-78bc-97c6-549615074319；18reported工具/0parsed结果不当零工具。补非自证实际Runner→传输比较、首次/第二答拒绝、缺检查点及缺证明反例；新测试由所有者核，不追认顾问审过。 |
+| P1现行 | v6保留238处来源，bytes65944→62453但字符37406→40960，token/速度unknown；两目标实际41.554876s仍TARGET_VISIT_SCOPE_UNPROVEN/0写库。25项23单项有效、14/19关系未证、10项短编译能力缺口；旧6/6不重置。target-scope C03631.697s只作首错建议，不采无据全访视推断。 |
+| 最终集中窗口 | v5七模块178pass/251.63s/exit0/5SWIG，XML /Users/smkzw/tmp/enrollment-normalizer-saved-response-window-20261006-v5.xml。v3 173pass/130.73s；v4 177pass1fail/94s，新verified夹具缺来源，改已有合成来源未改门禁。不相加；P1旧919pass9.05s不重跑。无全库/前端/Ego/Q3/完整病例更正验证。 |
+| 复盘与接续 | 同SAR/D001/31001反复提示/guard调优存在反馈过拟合风险；通用身份/局部分区不是病种特例，但缺独立留出。整段repair/语义包装耦合/普通消费者未完成/文档叠加消耗主要时间。暂停后不读取。恢复先P2合法副本及原件QC，P1先通用分类/消费者家族，随后完整采用/当前节点/更正/留出/Q3。 |
+<!-- RV1001-CURRENT:END -->
+
+## 截至f2603a9f的执行轨迹（历史快照，不覆盖上述当前状态）
+
 
 Goal active，原1001V1目标不变；execution_paused_by_user=false、claims_complete=false。沿原HEAD6920091629ee72c6a1cc3435a29122b310066bc4与继承dirty连续实施，源码里程碑e9657f08、023342f3、fa9f5dc6、833fcc8e及638cc407已普通push同分支；当前后续补丁不因此冒称已提交。未reset/clean，原件/旧终态/共享服务不改。单所有者集成，必要C03只读顾问不作产品读取或临床批准。完整交付仍须P1同源官方+跨章、P2实际事实及更正、P3当前节点/报告/留出/Q3，不用通过数量或预览替代。
 
@@ -286,7 +302,7 @@ C03 enrollment-rv1001-joint-visit-consumer-20261004实际最终ZCode/GLM-5.3-Fla
 | 产品/临床验收 | 完整共同发布、真实当前节点、更正后结果、留出与Q3仍未完成；claims_complete=false |
 
 产品路线保持显式配置核对，不新增模型；数字/位置自动核实仅隔离验证获准，正式采用未批准。原件、旧失败、旧回执和共享服务保留。现行规格见 delivery_1001V1/00_START_HERE.md。
-<!-- RV1001-CURRENT:END -->
+<!-- RV1001-HISTORICAL-TRACE:END -->
 
 <!-- ENROLLMENT-0929V1-CURRENT:BEGIN -->
 ## 2026-10-01 21:10 无损暂停：Goal paused，尚未临床交付
