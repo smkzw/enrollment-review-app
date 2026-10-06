@@ -636,7 +636,7 @@ def test_saved_front_result_requires_actual_unchanged_semantic_review(change):
         _validate_saved_source_review(batch, result)
 
 
-def test_shared_prohibition_empty_source_limits_reach_existing_gate():
+def _shared_prohibition_example():
     from app.agents.protocol_control_stage_compiler import (
         SHARED_PROHIBITION_REQUIREMENT_VERSION, SharedProhibitionRequirement,
         compile_shared_prohibition_requirement,
@@ -662,12 +662,184 @@ def test_shared_prohibition_empty_source_limits_reach_existing_gate():
         "fact_type": "treatment_change", "evidence_description": "筛选期既定治疗记录",
         "required_source_types": [], "unresolved_aspects": [],
     })
+    inventory.statements[0].decision_functions = ["action", "time_validity"]
+    return batch, inventory, review, selection
+
+
+def test_shared_prohibition_empty_source_limits_reach_existing_gate():
+    from app.agents.protocol_control_stage_compiler import compile_shared_prohibition_requirement
+    from app.agents.protocol_control_deconstructor import hydrate_protocol_control_agent_output, _merge_source_candidate_insert
+    from app.agents.protocol_control_fixed_flow import pending_front_wire
+    batch, inventory, review, selection = _shared_prohibition_example()
     candidate = compile_shared_prohibition_requirement(batch, inventory, review, selection)
     merged = _merge_source_candidate_insert(json.dumps({"candidate_drafts": [candidate.model_dump(mode="json")]}),
         pending_front_wire(batch), authorized_unit_ids={inventory.statements[0].structure_unit_id})
     output = hydrate_protocol_control_agent_output(merged, batch)
     validate_protocol_control_batch_candidates(batch, output)
     assert output.candidates[0].semantics.minimum_evidence[0].required_source_types == []
+
+
+class _SharedTransport(_Transport):
+    def read_stage_bound_requirement(self, *, prompt):
+        raise AssertionError("a shared prohibition must use its existing dedicated contract")
+
+    def read_shared_prohibition_requirement(self, *, prompt):
+        self.calls.append("shared_author")
+        return ProtocolControlAgentResponse(session_id="shared-author", text=self.selection.model_dump_json())
+
+    def start_source_candidate_alignment(self, *, prompt):
+        from app.agents.protocol_control_candidate_alignment import SOURCE_CANDIDATE_ALIGNMENT_VERSION
+        self.calls.append("alignment")
+        return ProtocolControlAgentResponse(session_id="independent-shared-alignment", text=json.dumps({
+            "version": SOURCE_CANDIDATE_ALIGNMENT_VERSION,
+            "items": [{"statement_index": 0, "candidate_index": 0,
+                       "decision": "fully_expressed", "source_excerpt": self.review.source_action_excerpt,
+                       "candidate_atom_quotes": [self.selection.current_statement],
+                       "unresolved_dimensions": [],
+                       "evidence_policy_checks": _synthetic_policy_checks_from_prompt(prompt)}],
+        }, ensure_ascii=False))
+
+
+@pytest.mark.parametrize("separator", ["、", "和", "及", "，"])
+def test_shared_prohibition_front_reaches_saved_consumer_with_future_scope_preserved(separator):
+    batch, inventory, review, selection = _shared_prohibition_example()
+    source = inventory.statements[0].quoted_text.replace("、", separator)
+    inventory.statements[0].quoted_text = batch.owned_units[0].excerpt = source
+    inventory.statements[0].scope_quote = "筛选期" + separator + "治疗期"
+    review.source_action_excerpt = source
+    transport = _SharedTransport(review, selection)
+    assert supports_front_stage_flow(batch, inventory)
+    result = ProtocolControlAgentRunner().run(
+        batch, transport, resume_source_interpretation=inventory, workflow_variant=FIXED_FLOW,
+        output_validator=lambda out: validate_protocol_control_batch_candidates(batch, out),
+    )
+    assert result.final_output is not None, result.attempts
+    assert transport.calls == ["review", "shared_author", "alignment"]
+    restored = type(result).model_validate_json(result.model_dump_json())
+    _validate_saved_source_review(batch, restored)
+    atom = restored.final_output.candidates[0].semantics.obligation_expression.groups[0].atoms[0]
+    assert atom.statement == selection.current_statement
+    assert atom.continuing_obligation.statement == selection.future_statement
+    assert "治疗期" not in atom.evaluation.observation_policy.scope
+
+
+@pytest.mark.parametrize("defect", ["future_action", "future_in_current_scope", "missing_reader", "unknown_source", "exception"])
+def test_shared_prohibition_front_never_bypasses_source_or_failed_author(defect):
+    batch, inventory, review, selection = _shared_prohibition_example()
+    review.source_action_excerpt = inventory.statements[0].quoted_text
+    if defect == "future_action":
+        selection.future_statement = "治疗期不得更换既定治疗"
+    elif defect == "future_in_current_scope":
+        selection.observation_scope = "筛选期、治疗期既定治疗调整记录"
+    elif defect == "unknown_source":
+        inventory.statements[0].unresolved = ["时期关系不明"]
+    elif defect == "exception":
+        inventory.statements[0].exception_words = "经允许可调整"
+    transport = _SharedTransport(review, selection)
+    if defect == "missing_reader":
+        transport.read_shared_prohibition_requirement = None
+    result = prepare_front_stage_flow(batch, inventory, transport, lambda out: validate_protocol_control_batch_candidates(batch, out))
+    assert result.error is not None and result.wire is None
+    assert transport.calls == (["review", "shared_author"] if defect in {"future_action", "future_in_current_scope"}
+                               else ["review"] if defect == "missing_reader" else [])
+
+
+@pytest.mark.parametrize("mutation", ["future", "status", "source", "span"])
+def test_saved_shared_prohibition_cannot_borrow_a_wrong_continuation(mutation):
+    from app.agents.protocol_control_candidate_alignment import validate_candidate_alignment
+    from app.agents.protocol_control_deconstructor import source_statement_coverage
+    batch, inventory, review, selection = _shared_prohibition_example()
+    review.source_action_excerpt = inventory.statements[0].quoted_text
+    result = prepare_front_stage_flow(batch, inventory, _SharedTransport(review, selection),
+        lambda out: validate_protocol_control_batch_candidates(batch, out))
+    assert result.error is None
+    future = result.wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0].continuing_obligation
+    if mutation == "future":
+        future.statement = "治疗期不得更换既定治疗"
+    elif mutation == "status":
+        future.status = "ongoing_after_review_node"
+    elif mutation == "span":
+        future.source_span_ids = ["span:other"]
+    else:
+        future.source_excerpts = ["治疗期不得调整既定治疗"]
+    coverage = source_statement_coverage(batch, inventory, result.wire)
+    with pytest.raises(ValueError):
+        validate_candidate_alignment(batch, inventory, coverage, result.wire, result.alignment)
+
+
+@pytest.mark.parametrize("condition", ["若受试者妊娠", "存在活动性感染时", "仅在症状加重时"])
+def test_shared_shortcut_cannot_assign_a_condition_only_to_the_future(condition):
+    from app.agents.protocol_control_stage_compiler import compile_shared_prohibition_requirement, StageBoundCompilationGap
+    from app.agents.protocol_control_deconstructor import _merge_source_candidate_insert, source_statement_coverage
+    from app.agents.protocol_control_fixed_flow import pending_front_wire
+    batch, inventory, review, selection = _shared_prohibition_example()
+    good = compile_shared_prohibition_requirement(batch, inventory, review, selection)
+    source = "筛选期、治疗期" + condition + "不得调整既定治疗。"
+    inventory.statements[0].quoted_text = batch.owned_units[0].excerpt = source
+    review.source_action_excerpt = source
+    selection.future_statement = "治疗期" + condition + "不得调整既定治疗"
+    with pytest.raises(StageBoundCompilationGap):
+        compile_shared_prohibition_requirement(batch, inventory, review, selection)
+    # An ordinary whole-wire author cannot bypass the same boundary.
+    atom = good.obligation_expression.groups[0].atoms[0]
+    atom.source_excerpts = atom.continuing_obligation.source_excerpts = [source]
+    atom.continuing_obligation.statement = selection.future_statement
+    atom.evaluation = atom.evaluation.model_copy(update={"source_excerpts": [source],
+        "observation_policy": atom.evaluation.observation_policy.model_copy(update={"source_excerpts": [source]})})
+    wire = _merge_source_candidate_insert(json.dumps({"candidate_drafts": [good.model_dump(mode="json")]}),
+        pending_front_wire(batch), authorized_unit_ids={inventory.statements[0].structure_unit_id})
+    assert source_statement_coverage(batch, inventory, wire)[0].status != "expressed"
+
+
+@pytest.mark.parametrize("defect", ["future_scope", "wrong_period"])
+def test_ordinary_author_cannot_gain_shared_coverage_without_period_and_scope_proof(defect):
+    from app.agents.protocol_control_deconstructor import source_statement_coverage
+    from app.agents.protocol_control_candidate_alignment import validate_candidate_alignment
+    batch, inventory, review, selection = _shared_prohibition_example()
+    review.source_action_excerpt = inventory.statements[0].quoted_text
+    result = prepare_front_stage_flow(batch, inventory, _SharedTransport(review, selection),
+        lambda out: validate_protocol_control_batch_candidates(batch, out))
+    assert result.error is None
+    atom = result.wire.candidate_drafts[0].obligation_expression.groups[0].atoms[0]
+    if defect == "future_scope":
+        atom.evaluation = atom.evaluation.model_copy(update={"observation_policy":
+            atom.evaluation.observation_policy.model_copy(update={"scope": "筛选期及治疗期既定治疗调整记录"})})
+    else:
+        atom.continuing_obligation.prospective_period.period = "study_period"
+    coverage = source_statement_coverage(batch, inventory, result.wire)
+    assert coverage[0].status != "expressed"
+    with pytest.raises(ValueError):
+        validate_candidate_alignment(batch, inventory, coverage, result.wire, result.alignment)
+
+
+def test_shared_front_reaches_full_catalog_publication_and_rejects_future_scope():
+    from app.domain.contracts.rules import WorkflowStage
+    from app.protocols.protocol_control_planning import plan_protocol_control_batches
+    from app.protocols.control_catalog_materialization import materialize_control_catalog
+    from app.protocols.protocol_control_gate import validate_protocol_control_publication, ProtocolControlGateError
+    from tests.v2.protocols.test_slice58c_protocol_control_gate import _manifest
+    batch, inventory, review, selection = _shared_prohibition_example()
+    manifest = _manifest(units=batch.owned_units, dispositions=[], claims_full_coverage=False)
+    plan = plan_protocol_control_batches(manifest, workflow_stages=[WorkflowStage(
+        workflow_stage_id=stage.workflow_stage_id, stage=stage.review_stage,
+        display_name=stage.display_name, visit_instance=stage.visit_instance,
+        visit_window=stage.visit_window,
+    ) for stage in batch.known_workflow_stage_targets])
+    batch = plan.batches[0]
+    review.source_action_excerpt = inventory.statements[0].quoted_text
+    result = ProtocolControlAgentRunner().run(batch, _SharedTransport(review, selection),
+        resume_source_interpretation=inventory, workflow_variant=FIXED_FLOW,
+        output_validator=lambda out: validate_protocol_control_batch_candidates(batch, out))
+    assert result.final_output is not None, result.attempts
+    outputs = [result.final_output]
+    catalog = materialize_control_catalog(coverage_manifest=manifest, plan=plan,
+        batch_dispositions=outputs, rule_component_ids=[])
+    assert validate_protocol_control_publication(manifest, catalog, plan, outputs) == catalog
+    atom = catalog.controls[0].obligation_expression.groups[0].atoms[0]
+    atom.evaluation = atom.evaluation.model_copy(update={"observation_policy":
+        atom.evaluation.observation_policy.model_copy(update={"scope": "筛选期及治疗期调整记录"})})
+    with pytest.raises(ProtocolControlGateError):
+        validate_protocol_control_publication(manifest, catalog, plan, outputs)
 
 
 @pytest.mark.parametrize("change", ["exception", "unresolved", "definition", "empty", "duration"])

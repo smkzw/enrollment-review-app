@@ -445,6 +445,7 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
     from app.agents.protocol_control_source_interpretation import (
         normalize_source_excerpt,
         simple_visit_action_preserves_time,
+        shared_prohibition_preserves_source,
     )
 
     if alignment.version != SOURCE_CANDIDATE_ALIGNMENT_VERSION:
@@ -545,11 +546,16 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
                               getattr(getattr(atom, "evaluation", None), "proposition", None))
                 if isinstance(value, str)
             )
+            shared_prohibition_time = any(
+                shared_prohibition_preserves_source(statement, atom) for atom in obligation_selected
+            )
             if statement.exception_words and normalize_source_excerpt(statement.exception_words) not in rendered:
                 raise ValueError("候选未逐项保留来源时点或例外")
             for word in statement.time_words:
                 normalized_word = normalize_source_excerpt(word)
                 if normalized_word in rendered:
+                    continue
+                if shared_prohibition_time:
                     continue
                 if (normalized_word in scope
                         and simple_visit_action_preserves_time(batch, statement, candidate)):
@@ -557,7 +563,7 @@ def validate_candidate_alignment(batch, interpretation, coverage, wire, alignmen
                 if (normalized_word not in scope or _NUMBER.search(normalized_word)
                         or not _matches_time_anchor_direction(normalized_word, selected_atoms)):
                     raise ValueError("候选未逐项保留来源时点或例外")
-            if "time_validity" in functions and not simple_visit_action_preserves_time(
+            if "time_validity" in functions and not shared_prohibition_time and not simple_visit_action_preserves_time(
                 batch, statement, candidate
             ):
                 for word in statement.time_words:

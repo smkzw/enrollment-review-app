@@ -154,7 +154,18 @@ def can_compile_shared_prohibition_requirement(
 ) -> bool:
     if review.decision != "additional_requirement" or review.statement_index >= len(interpretation.statements):
         return False
-    statement = interpretation.statements[review.statement_index]
+    return can_compile_shared_prohibition_source(batch, interpretation, review.statement_index)
+
+
+def can_compile_shared_prohibition_source(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+    statement_index: int,
+) -> bool:
+    """Source-only capability check; no invented source-target decision."""
+    if not 0 <= statement_index < len(interpretation.statements):
+        return False
+    statement = interpretation.statements[statement_index]
     unit = next((item for item in batch.owned_units
                  if item.structure_unit_id == statement.structure_unit_id), None)
     return bool(
@@ -166,7 +177,7 @@ def can_compile_shared_prohibition_requirement(
         ))))
         and unit is not None
         and len(unit.source_span_ids) == 1
-        and requires_temporal_resolution(interpretation, review.statement_index)
+        and requires_temporal_resolution(interpretation, statement_index)
         and re.search(r"不允许|不得|禁止|严禁|不应", statement.quoted_text)
     )
 
@@ -524,7 +535,7 @@ def compile_shared_prohibition_requirement(
         item.display_name, item.visit_instance, item.visit_window
     )))) for item in batch.known_workflow_stage_targets]
     stage_parts = [normalize_source_excerpt(part).rstrip("期")
-                   for part in re.split(r"[/、和及与]", current_prefix) if part]
+                   for part in re.split(r"[/、，,和及与]", current_prefix) if part]
     matching = [item.review_stage for item, text in zip(batch.known_workflow_stage_targets,
                                                          stage_texts, strict=True)
                 if any(part and part in text for part in stage_parts)]

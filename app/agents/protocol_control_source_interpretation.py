@@ -1854,7 +1854,7 @@ def source_requires_temporal_resolution(statement) -> bool:
         or re.search(r"\d+(?:天|日|周|月|年)(?:内|以上|以下)?", source)
         or re.search(r"(?:W|D)\d+[~～至-](?:W|D)?\d+", source)
         or re.search(r"整个|全程|持续|连续|继续", source)
-        or re.search(r"期(?:、|和|及|与).{0,30}期", source)
+        or re.search(r"期(?:、|，|,|和|及|与).{0,30}期", source)
         or re.search(r"每(?:日|天|周|月)(?:\d+|[一二三四五六七八九十]+)次", source)
     )
 
@@ -1888,6 +1888,40 @@ def source_has_single_visit_anchor(statement) -> bool:
             and normalize_source_excerpt(statement.affected_stage) in normalize_source_excerpt(
                 statement.scope_quote or "")
             and not _unreported_time_fragments(statement))
+    )
+
+
+def shared_prohibition_preserves_source(statement, atom) -> bool:
+    """Reuse the gate's exact current/future split, not a semantic shortcut."""
+    from app.protocols.protocol_control_gate import _split_prohibition_atom_covers_clause
+    source = normalize_source_excerpt(statement.quoted_text)
+    continuation = getattr(atom, "continuing_obligation", None)
+    if continuation is None:
+        return False
+    current_verb = re.search(r"不允许|不得|禁止|严禁|不应", atom.statement)
+    future_verb = re.search(r"不允许|不得|禁止|严禁|不应", continuation.statement)
+    if current_verb is None or future_verb is None:
+        return False
+    current_prefix = normalize_source_excerpt(atom.statement[:current_verb.start()])
+    future_prefix = normalize_source_excerpt(continuation.statement[:future_verb.start()])
+    policy = getattr(getattr(atom, "evaluation", None), "observation_policy", None)
+    scope = normalize_source_excerpt(getattr(policy, "scope", "") or "")
+    period = getattr(getattr(continuation, "prospective_period", None), "period", None)
+    period = getattr(period, "value", period)
+    future_period_matches = (
+        bool(re.search(r"治疗|给药|用药", future_prefix)) if period == "treatment_period" else
+        bool(re.search(r"(?:随机|基线|给药|入组)后", future_prefix)) if period == "study_period" else False
+    )
+    return bool(
+        statement.force == "prohibited"
+        and not statement.exception_words and not statement.unresolved
+        and set(statement.decision_functions) <= {"action", "time_validity"}
+        and all(normalize_source_excerpt(word) in source for word in statement.time_words)
+        and (not statement.scope_quote or normalize_source_excerpt(statement.scope_quote) in source)
+        and current_prefix in scope and future_prefix not in scope and future_period_matches
+        and _split_prohibition_atom_covers_clause(
+            re.sub(r"[。；;]+$", "", re.sub(r"\s+", "", statement.quoted_text)), atom,
+        )
     )
 
 

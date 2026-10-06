@@ -156,6 +156,14 @@ def _normalize_prohibition_quote(value: str) -> str:
     return re.sub(r"[。；;]+$", "", re.sub(r"\s+", "", value))
 
 
+_SIMPLE_PROHIBITION_PERIOD = re.compile(
+    r"(?:(?:筛选|导入|基线|入组)(?:/(?:筛选|导入|基线|入组))*(?:期(?:内|间)?|访视|前)?"
+    r"|(?:双盲|单盲|开放标签|开放|维持|诱导|延长)?(?:治疗|给药|用药|研究|试验)期(?:内|间)?"
+    r"|(?:随机(?:化|分组)?|基线|首次给药|入组)后)"
+    r"(?:[（(]第\d+访视[）)])?"
+)
+
+
 def _split_prohibition_atom_covers_clause(clause: str, atom: object) -> bool:
     """Accept only a verbatim shared-action sentence split by review period."""
 
@@ -197,6 +205,11 @@ def _split_prohibition_atom_covers_clause(clause: str, atom: object) -> bool:
     source_prefix = clause[:source_match.start()]
     current_prefix = current[:current_match.start()]
     future_prefix = future[:future_match.start()]
+    # This shortcut supports period-only prefixes, not conditions assigned to
+    # only one half. Unsupported language needs the ordinary semantic path.
+    if not all(_SIMPLE_PROHIBITION_PERIOD.fullmatch(prefix)
+               for prefix in (current_prefix, future_prefix)):
+        return False
     return any(
         source_prefix == f"{first}{separator}{second}"
         for first, second in ((current_prefix, future_prefix), (future_prefix, current_prefix))

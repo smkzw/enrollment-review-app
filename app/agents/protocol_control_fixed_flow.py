@@ -34,6 +34,9 @@ from .protocol_control_stage_compiler import (
     build_stage_bound_requirement_prompt,
     can_compile_stage_bound_requirement,
     can_compile_stage_bound_source,
+    build_shared_prohibition_requirement_prompt,
+    can_compile_shared_prohibition_requirement,
+    can_compile_shared_prohibition_source,
 )
 from .protocol_control_candidate_alignment import (
     SourceCandidateAlignment, bind_candidate_alignment, build_candidate_alignment_prompt,
@@ -46,7 +49,7 @@ from app.domain.contracts.protocol_controls import (
 
 BASELINE = "RV1001-BASELINE"
 FIXED_FLOW = "RV1001-FLOW"
-FIXED_FLOW_VERSION = "rv1001/front-stage-flow/v16"
+FIXED_FLOW_VERSION = "rv1001/front-stage-flow/v17"
 FRONT_REVIEW_CORRECTION_CODES = frozenset({
     "TARGET_VISIT_SCOPE_UNPROVEN", "TIME_SCOPE_MISMATCH",
     "TARGET_TIME_INCOMPLETE", "TARGET_EXCEPTION_UNGROUNDED",
@@ -111,8 +114,24 @@ def front_stage_supported_indexes(batch, interpretation: SourceInterpretation) -
             and statement.eligibility_sequence == "current_or_unknown"
             and statement.structure_unit_id in units
             and len(units[statement.structure_unit_id].source_span_ids) == 1
-            and can_compile_stage_bound_source(batch, interpretation, index))
+            and (can_compile_stage_bound_source(batch, interpretation, index)
+                 or can_compile_shared_prohibition_source(batch, interpretation, index)))
     }
+
+
+def _requirement_reader(batch, interpretation, item, transport):
+    """Reuse the existing compiler contracts, never fall back to a whole author."""
+    paths = (
+        (can_compile_stage_bound_requirement, "read_stage_bound_requirement", build_stage_bound_requirement_prompt),
+        (can_compile_shared_prohibition_requirement, "read_shared_prohibition_requirement", build_shared_prohibition_requirement_prompt),
+    )
+    for predicate, method, builder in paths:
+        if predicate(batch, interpretation, item):
+            reader = getattr(transport, method, None)
+            if callable(reader):
+                return reader, builder
+            return None
+    return None
 
 
 def supports_front_stage_flow(batch, interpretation: SourceInterpretation) -> bool:
@@ -330,7 +349,7 @@ def prepare_front_stage_flow(
                     if item.decision not in {"additional_requirement", "covered_by_official", "covered_by_procedure", "background_context"}
                     or (item.decision == "additional_requirement" and (
                         item.statement_index not in supported
-                        or not can_compile_stage_bound_requirement(batch, interpretation, item)))]
+                        or _requirement_reader(batch, interpretation, item, transport) is None))]
         retained_indexes = frozenset(item.statement_index for item in retained)
         if not retained and all(item.decision != "additional_requirement"
                for item in result.review.items):
@@ -378,9 +397,8 @@ def prepare_front_stage_flow(
         authors = []
         for position, item in enumerate(reviews):
             phase = f"author:{item.statement_index}"
-            response = transport.read_stage_bound_requirement(
-                prompt=build_stage_bound_requirement_prompt(batch, interpretation, item),
-            )
+            reader, builder = _requirement_reader(batch, interpretation, item, transport)
+            response = reader(prompt=builder(batch, interpretation, item))
             result.responses.append((phase, response))
             phase = "assembly"
             compile_source_requirement_response(batch, interpretation, item, response)

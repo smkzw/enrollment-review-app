@@ -4337,6 +4337,8 @@ def source_statement_coverage(
 ) -> list[SourceStatementCoverage]:
     """Record literal source-to-output links without inferring clinical equivalence."""
 
+    from .protocol_control_source_interpretation import shared_prohibition_preserves_source
+
     unit_spans = {
         unit.structure_unit_id: set(unit.source_span_ids)
         for unit in batch.owned_units
@@ -4353,7 +4355,12 @@ def source_statement_coverage(
                 continue
             unit_candidates.append(candidate_index)
             source_action = normalize_source_excerpt(statement.quoted_text).rstrip("。；;.!！?？")
-            time_scope_preserved = _candidate_preserves_source_time_words(
+            shared_prohibition = any(
+                set(atom.source_span_ids) & unit_spans[statement.structure_unit_id]
+                and shared_prohibition_preserves_source(statement, atom)
+                for group in candidate.obligation_expression.groups for atom in group.atoms
+            )
+            time_scope_preserved = shared_prohibition or _candidate_preserves_source_time_words(
                 statement, candidate, unit_spans[statement.structure_unit_id]
             )
             if time_scope_preserved and any(
@@ -4385,6 +4392,8 @@ def source_statement_coverage(
                     for atom in group.atoms:
                         if not set(atom.source_span_ids) & unit_spans[statement.structure_unit_id]:
                             continue
+                        if role == "obligation" and shared_prohibition_preserves_source(statement, atom):
+                            candidate_roles.add(role)
                         if any(
                             quote in normalize_source_excerpt(excerpt)
                             for excerpt in atom.source_excerpts
@@ -4407,6 +4416,8 @@ def source_statement_coverage(
             }
             if statement.decision_functions in (["background"], ["unclassified"]):
                 expressed = False
+            elif shared_prohibition:
+                expressed = "obligation" in candidate_roles
             elif defining_functions or statement.force == "descriptive":
                 compatible_kinds = {
                     "definition": {ControlObligationKind.SELECT_BASELINE_VALUE,
@@ -4527,7 +4538,9 @@ def source_statement_coverage(
                     for atom_index, atom in enumerate(group.atoms):
                         if not set(atom.source_span_ids) & unit_spans[unit_id]:
                             continue
-                        if (quote in normalize_source_excerpt(atom.statement)
+                        if shared_prohibition_preserves_source(interpretation.statements[statement_index], atom):
+                            refs.add((candidate_index, group_index, atom_index, "current_and_continuing"))
+                        elif (quote in normalize_source_excerpt(atom.statement)
                                 and any(quote in normalize_source_excerpt(excerpt)
                                         for excerpt in atom.source_excerpts)):
                             refs.add((candidate_index, group_index, atom_index, "current"))
