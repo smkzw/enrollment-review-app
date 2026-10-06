@@ -4020,11 +4020,12 @@ def test_context_correspondence_is_only_a_sourced_pending_relation() -> None:
 
 
 @pytest.mark.parametrize("scope_before_action", [True, False])
+@pytest.mark.parametrize("terminal_mark", ["", "。", "；", "!", "?", ";"])
 def test_context_relation_keeps_scope_before_or_inside_exact_action(
-    scope_before_action: bool,
+    scope_before_action: bool, terminal_mark: str,
 ) -> None:
     batch = _batch().model_copy(deep=True)
-    action = "所有受试者自筛选期开始接受背景治疗，每次给药10 mg"
+    action = "所有受试者自筛选期开始接受背景治疗，每次给药10 mg" + terminal_mark
     period = "自筛选期开始"
     batch.owned_units[1].excerpt = action
     batch.context_units[0].excerpt = (period + "：" if scope_before_action else "实施安排：") + action
@@ -4069,6 +4070,48 @@ def test_context_relation_keeps_scope_before_or_inside_exact_action(
     with pytest.raises(SourceTargetReviewValidationError) as error:
         validate_source_target_review(neighboring_period, scoped_inventory, coverage, scoped_review)
     assert error.value.code == "CONTEXT_RELATION_UNGROUNDED"
+
+
+@pytest.mark.parametrize("boundary", ["。", "；", "!", "?", ";"])
+def test_context_terminal_quote_cannot_borrow_object_or_period_from_next_clause(
+    boundary: str,
+) -> None:
+    batch = _batch().model_copy(deep=True)
+    action = "记录本次评估结果" + boundary
+    batch.owned_units[1].excerpt = "筛选期：受试者" + action
+    batch.context_units[0].excerpt = "筛选期：受试者" + action
+    inventory = _source_inventory({
+        "version": SOURCE_INTERPRETATION_VERSION,
+        "statements": [{"structure_unit_id": "su-02", "quoted_text": action,
+                        "scope_quote": "筛选期", "force": "required", "time_words": ["筛选期"]}],
+        "units_without_statement": ["su-01"],
+    })
+    coverage = [SourceStatementCoverage(
+        statement_index=0, structure_unit_id="su-02",
+        disposition="other_control_candidate", status="candidate_linked",
+    )]
+    review = SourceTargetReview.model_validate({
+        "version": SOURCE_TARGET_REVIEW_VERSION,
+        "items": [{"statement_index": 0, "decision": "potential_same_requirement",
+                   "target_id": "su-03", "source_action_excerpt": action,
+                   "target_action_excerpt": action, "target_scope_excerpt": "筛选期",
+                   "source_object_excerpt": "受试者", "target_object_excerpt": "受试者"}],
+    })
+    validate_source_interpretation(batch, inventory)
+    validate_source_target_review(batch, inventory, coverage, review)
+    for text in (
+        "筛选期：" + action + "受试者接受另一项检查",
+        "受试者" + action + "筛选期安排另一项检查",
+        "筛选期：受试者" + action + "核查另一项结果" + boundary,
+    ):
+        changed_batch = batch.model_copy(deep=True)
+        changed_review = review.model_copy(deep=True)
+        changed_batch.context_units[0].excerpt = text
+        if text.endswith("核查另一项结果" + boundary):
+            changed_review.items[0].target_action_excerpt = action + "核查另一项结果" + boundary
+        with pytest.raises(SourceTargetReviewValidationError) as error:
+            validate_source_target_review(changed_batch, inventory, coverage, changed_review)
+        assert error.value.code == "CONTEXT_RELATION_UNGROUNDED"
 
 
 @pytest.mark.parametrize("action, object_text, text", [
@@ -6321,8 +6364,18 @@ def test_saved_source_review_identity_includes_stage_and_sequence_basis(
     assert _source_statement_reuse_identity(original) != _source_statement_reuse_identity(changed)
 
 
-def test_restored_saved_review_skips_rereading_and_keeps_pending_relation() -> None:
-    batch, inventory, relations, _first, _second = _context_relation_example()
+@pytest.mark.parametrize("include_terminal_mark", [False, True])
+def test_restored_saved_review_skips_rereading_and_keeps_pending_relation(
+    include_terminal_mark: bool,
+) -> None:
+    batch, inventory, relations, _first, second = _context_relation_example()
+    if include_terminal_mark:
+        for unit in (batch.owned_units[0], batch.context_units[0]):
+            unit.excerpt = unit.excerpt.replace(second, second + "。")
+        for statement, relation in zip(inventory.statements, relations, strict=True):
+            statement.quoted_text += "。"
+            relation.source_action_excerpt += "。"
+            relation.target_action_excerpt += "。"
     pending = SourceTargetReview(
         version=SOURCE_TARGET_REVIEW_VERSION, items=relations,
     )

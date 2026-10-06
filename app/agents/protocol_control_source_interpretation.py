@@ -64,10 +64,13 @@ _STUDY_ADOPTION_RE = re.compile(
 
 
 def _object_in_action_clause(text: str, action: str, action_at: int, object_text: str) -> bool:
-    if action_at < 0 or not object_text or any(mark in action for mark in "。！？!?；;"):
+    # A verbatim clause may include its terminal punctuation, but not two clauses.
+    clause_action = action.rstrip("。！？!?；;")
+    if (action_at < 0 or not object_text or not clause_action
+            or any(mark in clause_action for mark in "。！？!?；;")):
         return False
     start = max((text.rfind(mark, 0, action_at) for mark in "。！？!?；;"), default=-1) + 1
-    ends = [text.find(mark, action_at + len(action)) for mark in "。！？!?；;"]
+    ends = [text.find(mark, action_at + len(clause_action)) for mark in "。！？!?；;"]
     end = min((pos for pos in ends if pos >= 0), default=len(text))
     return object_text in text[start:end]
 
