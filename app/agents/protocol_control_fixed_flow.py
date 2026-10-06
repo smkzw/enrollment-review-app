@@ -29,6 +29,7 @@ from .protocol_control_source_interpretation import (
 )
 from .protocol_control_stage_compiler import (
     assemble_source_requirement_inserts,
+    compile_source_requirement_response,
     build_stage_bound_requirement_prompt,
     can_compile_stage_bound_requirement,
     can_compile_stage_bound_source,
@@ -44,7 +45,7 @@ from app.domain.contracts.protocol_controls import (
 
 BASELINE = "RV1001-BASELINE"
 FIXED_FLOW = "RV1001-FLOW"
-FIXED_FLOW_VERSION = "rv1001/front-stage-flow/v13"
+FIXED_FLOW_VERSION = "rv1001/front-stage-flow/v14"
 
 
 def _failure_code(exc: Exception) -> str | None:
@@ -292,6 +293,8 @@ def prepare_front_stage_flow(
                 prompt=build_stage_bound_requirement_prompt(batch, interpretation, item),
             )
             result.responses.append((phase, response))
+            phase = "assembly"
+            compile_source_requirement_response(batch, interpretation, item, response)
             authors.append(response)
         phase = "assembly"
         result.wire, _, coverage = assemble_source_requirement_inserts(

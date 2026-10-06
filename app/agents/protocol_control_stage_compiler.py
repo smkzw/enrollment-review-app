@@ -805,6 +805,30 @@ def compile_stage_bound_requirement(
         raise StageBoundCompilationGap(str(exc)) from exc
 
 
+def compile_source_requirement_response(
+    batch: ProtocolControlDispositionBatch,
+    interpretation: SourceInterpretation,
+    review: SourceTargetReviewItem,
+    response: ProtocolControlAgentResponse,
+) -> ProtocolControlAgentWireCandidate:
+    """Check one actual short answer before spending on the next author."""
+
+    payload = json.loads(response.text)
+    if not isinstance(payload, dict):
+        raise StageBoundCompilationGap("单项解释必须返回本次合同的对象")
+    if payload.get("version") == STAGE_BOUND_REQUIREMENT_VERSION:
+        selection = StageBoundRequirement.model_validate(payload)
+    elif payload.get("version") == RELATIVE_STAGE_REQUIREMENT_VERSION:
+        selection = RelativeStageRequirement.model_validate(payload)
+    elif payload.get("version") == SHARED_PROHIBITION_REQUIREMENT_VERSION:
+        selection = SharedProhibitionRequirement.model_validate(payload)
+    else:
+        raise StageBoundCompilationGap("单项解释版本不属于本次装配合同")
+    if isinstance(selection, SharedProhibitionRequirement):
+        return compile_shared_prohibition_requirement(batch, interpretation, review, selection)
+    return compile_stage_bound_requirement(batch, interpretation, review, selection)
+
+
 def assemble_source_requirement_inserts(
     batch: ProtocolControlDispositionBatch,
     interpretation: SourceInterpretation,
@@ -817,21 +841,8 @@ def assemble_source_requirement_inserts(
 
     if not reviews or len(reviews) != len(responses):
         raise StageBoundCompilationGap("逐项解释回执与待补来源数目不一致")
-    candidates = []
-    for review, response in zip(reviews, responses, strict=True):
-        payload = json.loads(response.text)
-        if payload.get("version") == STAGE_BOUND_REQUIREMENT_VERSION:
-            selection = StageBoundRequirement.model_validate(payload)
-        elif payload.get("version") == RELATIVE_STAGE_REQUIREMENT_VERSION:
-            selection = RelativeStageRequirement.model_validate(payload)
-        elif payload.get("version") == SHARED_PROHIBITION_REQUIREMENT_VERSION:
-            selection = SharedProhibitionRequirement.model_validate(payload)
-        else:
-            raise StageBoundCompilationGap("单项解释版本不属于本次装配合同")
-        if isinstance(selection, SharedProhibitionRequirement):
-            candidates.append(compile_shared_prohibition_requirement(batch, interpretation, review, selection))
-        else:
-            candidates.append(compile_stage_bound_requirement(batch, interpretation, review, selection))
+    candidates = [compile_source_requirement_response(batch, interpretation, review, response)
+                  for review, response in zip(reviews, responses, strict=True)]
     owned = {interpretation.statements[item.statement_index].structure_unit_id for item in reviews}
     merged = _merge_source_candidate_insert(
         json.dumps({"candidate_drafts": [item.model_dump(mode="json") for item in candidates]}, ensure_ascii=False),

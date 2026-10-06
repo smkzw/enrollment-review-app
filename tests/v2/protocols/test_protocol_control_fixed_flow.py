@@ -1007,6 +1007,60 @@ class _MixedTransport(_Transport):
                                             text=selection.model_dump_json())
 
 
+@pytest.mark.parametrize("failure_index", [None, 0, 1])
+@pytest.mark.parametrize("failure", ["scope", "version", "nonobject"])
+def test_each_short_answer_is_checked_before_the_next_author(failure_index, failure):
+    batch, inventory, review, second = _independent_mixed_example()
+    first = second.model_copy(deep=True)
+    first.statement_index = 0
+    first.action_excerpt = first.obligation_statement = inventory.statements[0].quoted_text
+    first.title = first.evidence_description = "知情同意签署"
+    first.fact_type = "informed_consent"
+    first.required_source_types = ["知情同意记录"]
+    first.observation_scope = "筛选期知情同意签署记录"
+    review.items[0] = review.items[0].model_copy(update={
+        "decision": "additional_requirement", "target_id": None,
+        "target_action_excerpt": None, "source_time_excerpt": None,
+        "target_time_excerpt": None, "unresolved_aspects": ["保留独立的签署要求"],
+    })
+
+    class Checked(_MixedTransport):
+        def read_stage_bound_requirement(self, *, prompt):
+            index = self.author_index
+            response = super().read_stage_bound_requirement(prompt=prompt)
+            if index != failure_index:
+                return response
+            payload = json.loads(response.text)
+            if failure == "scope":
+                payload["statement_index"] = 100
+            elif failure == "version":
+                payload["version"] = "unsupported/v1"
+            else:
+                payload = []
+            return response.model_copy(update={"text": json.dumps(payload, ensure_ascii=False)})
+
+    transport = Checked(review, [first, second])
+    result = ProtocolControlAgentRunner().run(
+        batch, transport, resume_source_interpretation=inventory, workflow_variant=FIXED_FLOW,
+        output_validator=lambda output: validate_protocol_control_batch_candidates(batch, output),
+    )
+    if failure_index is None:
+        assert result.final_output is not None
+        assert transport.calls == ["review", "author", "author", "alignment"]
+        assert len(result.final_output.candidates) == 2
+        _validate_saved_source_review(batch, type(result).model_validate_json(result.model_dump_json()))
+    else:
+        assert result.final_output is None and result.partial_wire is None
+        assert transport.calls == ["review", *(["author"] * (failure_index + 1))]
+        assert result.attempts[-1].error_classes == ["FLOW_ASSEMBLY_INVALID"]
+        retained = [attempt for attempt in result.attempts if attempt.raw_output_text is not None]
+        assert len(retained) == failure_index + 2  # review and every actual author answer
+        if failure_index == 1:
+            assert json.loads(retained[1].raw_output_text) == first.model_dump(mode="json")
+        with pytest.raises(ValueError):
+            _validate_saved_source_review(batch, result)
+
+
 @pytest.mark.parametrize("order", ["source", "reversed"])
 def test_independent_covered_and_new_units_reach_saved_consumer(order):
     batch, inventory, review, selection = _independent_mixed_example()
