@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+from types import SimpleNamespace
 
 from sqlalchemy import select, update
 
@@ -227,9 +229,18 @@ def test_failed_transport_retains_bound_receipt(
     )
     artifacts = ArtifactStore(data_paths)
 
-    def failed_factory(model_config, *, receipt_callback):
-        receipt_callback({"error_type": "TimeoutError", "elapsed_seconds": 1.0})
-        raise TimeoutError("injected transport setup failure")
+    def failed_factory(model_config, *, receipt_callback, request_callback):
+        from app.agents.deepseek_evidence_normalizer_transport import DeepSeekEvidenceNormalizerTransport
+
+        def fail(**kwargs):
+            raise TimeoutError("injected transport request failure")
+
+        return DeepSeekEvidenceNormalizerTransport(
+            backend="omlx", model=model_config.model,
+            client=SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=fail))),
+            receipt_callback=receipt_callback,
+            request_callback=request_callback,
+        )
 
     monkeypatch.setattr(
         executor_module, "evidence_normalizer_transport_from_model_config",
@@ -250,6 +261,15 @@ def test_failed_transport_retains_bound_receipt(
         assert receipt["job_id"] == created.job_id
         assert receipt["call_id"] and receipt["run_id"] and receipt["step_id"]
         assert receipt["error_type"] == "TimeoutError"
+        assert receipt["request_receipt_version"] == "normalizer-request/v1"
+        request = json.loads(artifacts.read_by_sha("raw_request", receipt["request_artifact_sha256"]))
+        for key in ("job_id", "run_id", "call_id", "step_id"):
+            assert request[key] == receipt[key]
+        assert request["request_body"]["messages"][0]["role"] == "user"
+        assert request["request_body"]["messages"][0]["content"]
+        assert receipt["request_sha256"] == hashlib.sha256(json.dumps(
+            request["request_body"], ensure_ascii=False, sort_keys=True,
+            separators=(",", ":"), allow_nan=False).encode("utf-8")).hexdigest()
         if compact:
             assert receipt["text_reference_strategy"]["version"] == "text-reference-aliases/v1"
             assert receipt["reference_aliases"]["locator"]

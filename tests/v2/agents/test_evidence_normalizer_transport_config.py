@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import subprocess
 import sys
@@ -163,7 +164,7 @@ def _glm_stream_client(create):
 
 @pytest.mark.parametrize("second_fails", [False, True])
 def test_completion_receipts_preserve_length_retry_and_failure(second_fails):
-    receipts, budgets = [], []
+    receipts, budgets, requests = [], [], []
     def create(**kwargs):
         budgets.append(kwargs["max_tokens"])
         if len(budgets) == 2 and second_fails:
@@ -175,7 +176,8 @@ def test_completion_receipts_preserve_length_retry_and_failure(second_fails):
     client = _glm_stream_client(create)
     transport = transport_module.DeepSeekEvidenceNormalizerTransport(
         backend="zhipu-coding-plan", model="glm-5.3-flash", reasoning_effort="high",
-        max_tokens=1024, client=client, receipt_callback=receipts.append)
+        max_tokens=1024, client=client, receipt_callback=receipts.append,
+        request_callback=lambda body: (requests.append(body), f"request-{len(requests)}")[1])
     if second_fails:
         with pytest.raises(transport_module.EvidenceNormalizerAgentCallError):
             transport.start(prompt="private source prompt")
@@ -187,6 +189,60 @@ def test_completion_receipts_preserve_length_retry_and_failure(second_fails):
     assert receipts[0]["finish_reason"] == "length"
     assert receipts[1].get("error_type") == ("TimeoutError" if second_fails else None)
     assert all(r["elapsed_seconds"] >= 0 for r in receipts)
+    assert "private" not in json.dumps(receipts)
+    assert all(body["messages"] == [
+        {"role": "user", "content": "private source prompt"}] for body in requests)
+    assert receipts[0]["request_sha256"] != receipts[1]["request_sha256"]
+    for i, (receipt, budget, body) in enumerate(zip(receipts, budgets, requests, strict=True), 1):
+        assert receipt["request_artifact_sha256"] == f"request-{i}"
+        assert body["max_tokens"] == budget
+        assert body["stream"] is True
+        assert receipt["request_sha256"] == hashlib.sha256(json.dumps(
+            body, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            allow_nan=False).encode("utf-8")).hexdigest()
+
+
+def test_request_receipt_freezes_actual_schema_and_excludes_connection_secrets():
+    receipts, calls, requests = [], [], []
+    completion = SimpleNamespace(id="receipt-id", model="test-model", usage=None,
+        choices=[SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content="{}"))])
+    client = _glm_stream_client(lambda **kwargs: (calls.append(kwargs), completion)[1])
+    client.api_key = "connection-secret"
+    client.default_headers = {"Authorization": "Bearer connection-secret"}
+    transport = transport_module.DeepSeekEvidenceNormalizerTransport(
+        backend="omlx", model="test-model", client=client,
+        response_format={"type": "json_schema", "json_schema": {
+            "name": "normalizer", "strict": True, "schema": {"type": "object"}}},
+        receipt_callback=receipts.append,
+        request_callback=lambda body: (requests.append(body), "stored-request")[1])
+    patch_schema = {"type": "object", "required": ["changes"]}
+    transport.propose_question_classifications(prompt="bounded source", output_schema=patch_schema)
+    body = requests[0]
+    assert body == calls[0]
+    assert body["response_format"]["json_schema"]["schema"] == patch_schema
+    patch_schema["required"].append("mutation")
+    assert body["response_format"]["json_schema"]["schema"]["required"] == ["changes"]
+    assert "connection-secret" not in json.dumps(receipts)
+    assert "connection-secret" not in json.dumps(requests)
+    assert receipts[0]["request_artifact_sha256"] == "stored-request"
+    assert receipts[0]["request_receipt_version"] == "normalizer-request/v1"
+
+
+def test_request_storage_failure_prevents_paid_call_and_keeps_hash_receipt():
+    calls, receipts = [], []
+    def fail_store(body):
+        raise OSError("injected storage failure")
+    transport = transport_module.DeepSeekEvidenceNormalizerTransport(
+        backend="omlx", model="test-model",
+        client=_glm_stream_client(lambda **kwargs: calls.append(kwargs)),
+        receipt_callback=receipts.append, request_callback=fail_store)
+    with pytest.raises(transport_module.EvidenceNormalizerAgentCallError, match="storage failure"):
+        transport.start(prompt="private source prompt")
+    assert calls == []
+    assert len(receipts) == 1
+    assert receipts[0]["error_type"] == "OSError"
+    assert len(receipts[0]["request_sha256"]) == 64
+    assert "request_artifact_sha256" not in receipts[0]
     assert "private" not in json.dumps(receipts)
 
 

@@ -1242,6 +1242,15 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                 evidence_input, pending_details_retained=strategy is not None,
             )
 
+        def record_request(body):
+            envelope = {"request_receipt_version": "normalizer-request/v1",
+                        "job_id": context.job_id, "step_id": context.step_id,
+                        "call_id": call["call_id"], "run_id": run_id,
+                        "provider": model_config.provider, "request_body": body}
+            return config.artifact_store.put("raw_request", json.dumps(
+                envelope, ensure_ascii=False, sort_keys=True,
+                separators=(",", ":"), allow_nan=False).encode("utf-8")).sha256
+
         def record_completion(receipt):
             if config.artifact_store is None:
                 return
@@ -1303,7 +1312,8 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                 try:
                     transport = (transport_factory(model_config)
                                  if config.transport_factory is not None
-                                 else transport_factory(model_config, receipt_callback=record_completion))
+                                 else transport_factory(model_config, receipt_callback=record_completion,
+                                     request_callback=record_request if config.artifact_store is not None else None))
                 except Exception as exc:
                     raise StepFailure(
                         retryable=True,

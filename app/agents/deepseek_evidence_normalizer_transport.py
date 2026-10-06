@@ -8,6 +8,8 @@ GLM（zhipu-coding-plan）请求使用可观测流式传输：逐块累积、思
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone
@@ -217,8 +219,10 @@ class DeepSeekEvidenceNormalizerTransport:
         response_format: Mapping[str, Any] | None = None,
         client: Any | None = None,
         receipt_callback: Callable[[dict[str, Any]], None] | None = None,
+        request_callback: Callable[[dict[str, Any]], str] | None = None,
     ) -> None:
         self._receipt_callback = receipt_callback
+        self._request_callback = request_callback
         selected_backend = (backend or EVIDENCE_NORMALIZER_PROVIDER).strip().lower()
         if selected_backend not in {
             "deepseek",
@@ -395,6 +399,7 @@ class DeepSeekEvidenceNormalizerTransport:
                    "max_tokens": kwargs["max_tokens"],
                    "reasoning_effort": kwargs.get("reasoning_effort")}
         try:
+            self._bind_request_receipt(receipt, kwargs)
             from app.llm.mtplx_model_lifecycle import sync_mtplx_model_session
 
             with sync_mtplx_model_session(
@@ -433,6 +438,7 @@ class DeepSeekEvidenceNormalizerTransport:
         state = _new_glm_stream_state()
         stream = None
         try:
+            self._bind_request_receipt(receipt, kwargs)
             stream = self._client.chat.completions.create(**kwargs)
             _assemble_glm_stream(
                 stream, state, allow_model_identity_change=not strict_model_check,
@@ -456,7 +462,7 @@ class DeepSeekEvidenceNormalizerTransport:
                 )],
             )
         except Exception as exc:
-            # 小票不得携带请求细节：错误消息只进服务日志，小票仅记类型。
+            # 原始请求仅进入受控工件；异常消息不得混入该工件。
             import logging
 
             logging.getLogger(__name__).warning(
@@ -479,6 +485,19 @@ class DeepSeekEvidenceNormalizerTransport:
             receipt["elapsed_seconds"] = round(monotonic() - started, 3)
             if self._receipt_callback is not None:
                 self._receipt_callback(receipt)
+
+    def _bind_request_receipt(self, receipt: dict[str, Any], kwargs: Mapping[str, Any]) -> None:
+        # These are generated inference arguments, never client credentials or headers.
+        body = {key: kwargs[key] for key in (
+            "model", "messages", "max_tokens", "temperature", "response_format",
+            "reasoning_effort", "extra_body", "stream", "stream_options",
+        ) if key in kwargs}
+        encoded = json.dumps(body, ensure_ascii=False, sort_keys=True,
+                             separators=(",", ":"), allow_nan=False).encode("utf-8")
+        receipt["request_receipt_version"] = "normalizer-request/v1"
+        receipt["request_sha256"] = hashlib.sha256(encoded).hexdigest()
+        if self._request_callback is not None:
+            receipt["request_artifact_sha256"] = self._request_callback(json.loads(encoded))
 
     def _streaming_completion(self, kwargs):
         """GLM 流式补全：length 重试一次并抬升预算（上限 131072）；仅接受 stop。"""
@@ -602,6 +621,7 @@ OpenAICompatibleEvidenceNormalizerTransport = DeepSeekEvidenceNormalizerTranspor
 def evidence_normalizer_transport_from_model_config(
     model_config: ModelConfigContract,
     *, receipt_callback: Callable[[dict[str, Any]], None] | None = None,
+    request_callback: Callable[[dict[str, Any]], str] | None = None,
 ) -> DeepSeekEvidenceNormalizerTransport:
     """按已冻结模型配置创建 OpenAI 兼容传输，不静默替换供应商或模型。"""
     provider = model_config.provider.strip().lower()
@@ -617,6 +637,7 @@ def evidence_normalizer_transport_from_model_config(
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
             receipt_callback=receipt_callback,
+            request_callback=request_callback,
             api_key=DEEPSEEK_API_KEY,
             base_url=DEEPSEEK_BASE_URL,
             model=model_config.model,
@@ -637,6 +658,7 @@ def evidence_normalizer_transport_from_model_config(
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
             receipt_callback=receipt_callback,
+            request_callback=request_callback,
             api_key=MTPLX_API_KEY or "local-mtplx",
             base_url=_with_v1_suffix(MTPLX_BASE_URL),
             model=model_config.model,
@@ -651,6 +673,7 @@ def evidence_normalizer_transport_from_model_config(
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
             receipt_callback=receipt_callback,
+            request_callback=request_callback,
             api_key=OMLX_API_KEY or "local-omlx",
             base_url=_with_v1_suffix(OMLX_BASE_URL),
             model=model_config.model,
@@ -678,6 +701,7 @@ def evidence_normalizer_transport_from_model_config(
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
             receipt_callback=receipt_callback,
+            request_callback=request_callback,
             api_key=EVIDENCE_NORMALIZER_GLM_API_KEY,
             base_url=EVIDENCE_NORMALIZER_GLM_BASE_URL,
             model=model_config.model,
@@ -694,6 +718,7 @@ def evidence_normalizer_transport_from_model_config(
         return DeepSeekEvidenceNormalizerTransport(
             backend=provider,
             receipt_callback=receipt_callback,
+            request_callback=request_callback,
             model=model_config.model,
             reasoning_effort=model_config.reasoning_effort,
             max_tokens=max_tokens,
