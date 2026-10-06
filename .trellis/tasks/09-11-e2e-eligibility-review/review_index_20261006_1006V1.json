@@ -6,7 +6,7 @@
   "runtime_state": "active",
   "claims_complete": false,
   "base_review_commit": "7b3ed4f9251323b3194371764f2bcd17ad94559e",
-  "delivered_snapshot_id": "S-07",
+  "delivered_snapshot_id": "S-08",
   "code_snapshots": [
     {"id": "S-01", "commit": "cc4048348f12afde4d3221415e884c7966e5bf4c", "kind": "committed_source", "manifest_artifact_id": "E-01"},
     {"id": "S-02", "commit": "0e9b9bb99643ad074b2033d408ed8b7fc3dd1936", "kind": "committed_frontend_layout", "manifest_artifact_id": "E-01", "note": "Frontend checks/rendering preceded JSX bracket/CSS blank-line formatting only. Backend unchanged from S-01."},
@@ -15,6 +15,15 @@
     {"id": "S-05", "commit": "7a6132043813e65e93f125e9d0596dc5d006798c", "kind": "committed_candidate_relationship_field_repair", "manifest_artifact_id": "E-01", "note": "Frozen clinical fields and exact unrelated relation sequence; final owner safeguards follow independent review."},
     {"id": "S-06", "commit": "3472fa2859277fd18fe98d39c5da34434b19a92d", "kind": "committed_source_terminal_clause_fix", "manifest_artifact_id": "E-01", "note": "Allow verbatim terminal punctuation,still reject inner boundaries and next-sentence object/scope borrowing; deterministic source-backed fix,no additional conference."}
   ],
+  "stage_header_package": {
+    "snapshot_id": "S-08",
+    "commit": "6eadd2f2ff3bf3503e617f9f635aa607c8fa9bb6",
+    "policy_version": "protocol-control-source-target-review/v8",
+    "final_tests": {"passed": 923, "seconds": 82.27, "exit_code": 0, "junit": "/Users/smkzw/tmp/rv1006-stage-header-connected-20261006-final.xml", "note": "Four connected original modules; initial912pass/11fail fixture enum error retained;5SWIGwarnings;not full suite/clinical acceptance."},
+    "readonly_diagnostic": {"path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-stage-header-readonly-20261006.json", "access": "controlled_local_only", "stage_count": 2, "verified_header_refs_per_stage": 4, "full_definition_in_header": false, "model_calls": 0, "database_writes": 0, "protected_unchanged": true, "definition_consumed": false},
+    "conference": {"route": "CodeBuddy/codebuddy-cli/deepseek-v4.1-flash/max", "session_id": "01a112e0-7312-79cd-a163-e0cb4389c6e1", "seconds": 152.45, "exit_code": 0, "reported_tool_calls": 39, "preflight_passed": true, "fallback": false, "review_path": "reviews/codex_conference_rv1006-period-consumer-boundary-20261006_review.md", "note": "Frozen1c1780before owner implementation;header prerequisite accepted;unit separation insufficient to prove no shared dependencies."},
+    "remaining": "Real period-definition consumer and mixed-batch dependency isolation;no new Job/publication/current-node report."
+  },
   "source_purpose_package": {
     "snapshot_id": "S-07",
     "commit": "4c7ee2d15f5d1069654a65dc023e2c78773eaf9b",

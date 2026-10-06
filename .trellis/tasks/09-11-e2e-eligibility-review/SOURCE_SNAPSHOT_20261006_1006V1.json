@@ -81,7 +81,17 @@
     {"path": "app/agents/protocol_control_deconstructor.py", "sha256": "7df45ad6b08a0a94901ae801f6bb2b7a5f9b679d8b2a4f597219729337497716", "bytes": 573042},
     {"path": "tests/v2/protocols/test_slice58c_control_deconstructor.py", "sha256": "982c4751ec3615f8f25058847e65edf1f5523b71698b87862705ec2b65762c2b", "bytes": 560009}
   ],
+  "stage_header_commit": "6eadd2f2ff3bf3503e617f9f635aa607c8fa9bb6",
+  "stage_header_files": [
+    {"path": "app/agents/protocol_control_source_interpretation.py", "sha256": "5503bfc3fb84fefb8365c5d7c0c032f031ad06fb8b1f5ddb2a7576d3fde682c3", "bytes": 130128},
+    {"path": "app/domain/contracts/protocol_controls.py", "sha256": "41f8cb08d91eaa4cc8d7c34921b84b03080533341e0e7c0cdde631d94ee64088", "bytes": 178980},
+    {"path": "app/protocols/protocol_control_gate.py", "sha256": "cd4dd6a0fa67b48e9e23b08ed6fabda70059ace3f8a8f4c8e551cf95a80ceffb", "bytes": 235537},
+    {"path": "app/protocols/protocol_control_planning.py", "sha256": "28dc516871f29c36a20b544ed6cf0f7f66cbd62b78d1b6d2d17dba1d192d8523", "bytes": 54258},
+    {"path": "app/services/protocol_control_execution.py", "sha256": "b0a390b31d41428c075f1bbd72c7502d6cd542e29dfcdfc905ac46e4cb67fbcc", "bytes": 212076},
+    {"path": "tests/v2/protocols/test_slice58b_control_planning.py", "sha256": "afcc6f3de81fbdac9aaa82481543390b0f9ce1810946ce9cc2a026f29ffe15ae", "bytes": 45988}
+  ],
   "notes": [
+    "S-08 stage-header context matches final923connected checks;initial11failures were fixture enum misuse. Actual read-only audit used base1c1780 plus these exact patched files:two stages,four anchors each,no full period definition in headers,zero calls/writes. Adviser reviewed base before implementation;no Job/adoption/report acceptance.",
     "Backend two-module checks match this commit; frontend four-module checks match these two exact frontend files.",
     "Real P1 trial ran the base backend before this identity-feedback patch; do not claim new live acceptance.",
     "P2 recovery and UI correction used base backend and the same frontend display patch; not a complete clinical review chain.",
