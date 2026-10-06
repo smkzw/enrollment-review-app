@@ -41,6 +41,14 @@ class EvidenceNumericUnitError(ValueError):
         self.candidate_ref = candidate_ref
 
 
+class EvidenceNormalizedValueError(ValueError):
+    """A source-bound candidate cannot express a value; never invent one."""
+
+    def __init__(self, message: str, candidate_ref: str):
+        super().__init__(message)
+        self.candidate_ref = candidate_ref
+
+
 class EvidenceProspectiveError(EvidenceSourceObjectError):
     """Explicit future/uncertain scope conflicts with actual-occurrence membership."""
 

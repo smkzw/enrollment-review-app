@@ -70,6 +70,58 @@ def test_dependency_quarantine_never_shrinks_an_event_to_its_good_subset():
 
 
 @pytest.mark.parametrize("compact", [False, True])
+@pytest.mark.parametrize("dependent", [False, True])
+def test_unexpressed_value_is_retained_without_guessing_or_repair(compact, dependent):
+    original = _draft()
+    bad = original["fact_candidates"][0]
+    bad["assertion_basis"].update(asserted_object="项目乙", contextual_qualifiers=[])
+    bad.update(raw_value=None, canonical_value=None)
+    if dependent:
+        original["event_candidates"] = [{"candidate_ref": "event", "event_type": "检查记录",
+            "profile_lane": "test_exam_score", "duration_status": "single", "fact_candidate_refs": ["f1", "good"],
+            "locator_ids": ["loc-2"], "candidate_source_semantics": "同期客观结果", "model_uncertainty": 0}]
+    aliases = NormalizerReferenceAliases.from_payload(_source_input().model_dump(mode="json"))
+    raw = json.dumps(aliases.transform(original) if compact else original, ensure_ascii=False)
+    transport = _FakeTransport([(raw, "incomplete-value")])
+    result = EvidenceNormalizerRunner(max_transport_retries=0, max_schema_repairs=1).run(
+        _source_input(), transport, prompt_template=DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE,
+        require_current_draft=True, compact_references=compact, allow_candidate_partition=True)
+    assert result.status == "部分已解析" and not transport.repair_prompts
+    assert [fact.candidate_id for fact in result.final_output.fact_candidates] == ["good"]
+    assert result.final_output.fact_candidates[0].canonical_value == 2
+    assert not result.final_output.event_candidates
+    receipt = result.candidate_partition_receipt
+    assert receipt["original_draft"] == original
+    assert receipt["original_response"] == raw
+    assert receipt["retained_draft"]["fact_candidates"] == [original["fact_candidates"][1]]
+    assert receipt["quarantined_candidate_refs"] == (["event", "f1"] if dependent else ["f1"])
+    question = next(item for item in result.final_output.unresolved_items if item.code == "normalized_value_missing")
+    assert question.affected_locator_ids == bad["locator_ids"]
+    assert question.affected_pages == [1, 2]
+    assert question.gap_type is None and not question.affected_requirement_ids
+
+
+@pytest.mark.parametrize("fault", ["foreign", "identifier", "duplicate", "shape", "unknown_scope"])
+def test_unexpressed_value_does_not_hide_global_damage(fault):
+    original = _draft()
+    bad = original["fact_candidates"][0]
+    bad["assertion_basis"].update(asserted_object="项目乙", contextual_qualifiers=[])
+    bad.update(raw_value=None, canonical_value=None)
+    if fault == "foreign":
+        bad["locator_ids"] = ["other-subject"]
+    elif fault == "identifier":
+        bad["value_kind"] = "identifier"
+    elif fault == "duplicate":
+        original["fact_candidates"][1]["candidate_ref"] = "f1"
+    elif fault == "shape":
+        bad["invented_field"] = True
+    else:
+        bad["assertion_scope"] = None
+    with pytest.raises(ValueError):
+        recover_source_local_candidates(json.dumps(original, ensure_ascii=False), _source_input())
+
+
+@pytest.mark.parametrize("compact", [False, True])
 def test_missing_numeric_unit_isolated_without_guessing_or_model_repair(compact):
     original = _draft()
     bad = original["fact_candidates"][0]

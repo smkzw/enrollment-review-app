@@ -73,7 +73,7 @@ from app.agents.evidence_normalizer_repair import (
     EvidenceSourceObjectError, EvidenceSourceObjectRepair, SOURCE_OBJECT_REPAIR_VERSION,
     EvidenceContextError, EvidenceContextRepair, EvidenceDraftScopeError, CONTEXT_REPAIR_VERSION,
     EvidencePendingContextRetention,
-    EvidenceDerivedSourceError, EvidenceNumericUnitError,
+    EvidenceDerivedSourceError, EvidenceNumericUnitError, EvidenceNormalizedValueError,
     EvidenceProspectiveError, EvidenceProspectiveRepair, PROSPECTIVE_SCOPES, PROSPECTIVE_REPAIR_VERSION,
 )
 
@@ -1556,6 +1556,12 @@ def _hydrate_draft_output(
             )
         except ValidationError as exc:
             errors = exc.errors()
+            if len(errors) == 1 and errors[0]["type"] == "normalized_value_missing":
+                raise EvidenceNormalizedValueError(
+                    f"事实候选 {candidate.candidate_ref}（{candidate.asserted_object}）"
+                    "尚无明确规范值；保留原记录待核，不能猜值或作为正式事实采用。",
+                    candidate.candidate_ref,
+                ) from exc
             if len(errors) == 1 and errors[0]["type"] == "numeric_unit_missing":
                 raise EvidenceNumericUnitError(
                     f"事实候选 {candidate.candidate_ref}（{candidate.asserted_object}）"
@@ -2516,7 +2522,8 @@ class EvidenceNormalizerRunner:
                         partition_receipt = None
                         try:
                             output = replay_question_repair(receipt, evidence_input, reference_aliases=reference_aliases)
-                        except (EvidenceSourceObjectError, EvidenceDerivedSourceError, EvidenceNumericUnitError):
+                        except (EvidenceSourceObjectError, EvidenceDerivedSourceError, EvidenceNumericUnitError,
+                                EvidenceNormalizedValueError):
                             if not allow_candidate_partition:
                                 raise
                             from app.agents.evidence_candidate_partition import recover_source_local_candidates
@@ -2539,7 +2546,8 @@ class EvidenceNormalizerRunner:
                     return EvidenceNormalizerRunResult(status="已解析", session_id=proposal_response.session_id,
                         attempts=attempts, final_output=output, question_classification_receipt=receipt,
                         candidate_partition_receipt=partition_receipt)
-                if isinstance(exc, (EvidenceDerivedSourceError, EvidenceNumericUnitError)) and allow_candidate_partition:
+                if isinstance(exc, (EvidenceDerivedSourceError, EvidenceNumericUnitError,
+                                    EvidenceNormalizedValueError)) and allow_candidate_partition:
                     return terminal_schema_failure()
                 if isinstance(exc, EvidenceSourceObjectError):
                     scope_unavailable = not exc.bounded_repair or (object_repair is None and schema_repairs > 0)

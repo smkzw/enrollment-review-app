@@ -9,7 +9,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 
 from app.agents.evidence_normalizer_repair import (
     EvidenceContextError, EvidenceProspectiveError, EvidenceSourceObjectError,
-    EvidenceDerivedSourceError, EvidenceNumericUnitError,
+    EvidenceDerivedSourceError, EvidenceNumericUnitError, EvidenceNormalizedValueError,
     _unique_object,
 )
 from app.domain.contracts.evidence_normalizer import EvidenceNormalizerUnresolvedItem
@@ -58,7 +58,7 @@ def partition_source_local_candidates(text, evidence_input, *, validate):
     """Revalidate the unchanged remainder; global faults still fail closed.
 
     ``validate`` is the normal production decoder and semantic validator. It may
-    identify only a bounded source/context/scope failure or a missing numeric unit.
+    identify only a bounded source/context/scope failure or an unexpressed value/unit.
     No model, word list, alternative value or invented source is used here.
     """
     from app.agents.evidence_normalizer import (
@@ -185,9 +185,13 @@ def partition_source_local_candidates(text, evidence_input, *, validate):
                 lids = sorted(set(item["locator_ids"]))
                 missing_unit = any(failure["code"] == "EvidenceNumericUnitError"
                     and item["candidate_ref"] in failure["candidate_refs"] for failure in failures)
+                missing_value = any(failure["code"] == "EvidenceNormalizedValueError"
+                    and item["candidate_ref"] in failure["candidate_refs"] for failure in failures)
                 questions.append(EvidenceNormalizerUnresolvedItem(
-                    code="numeric_unit_missing" if missing_unit else "candidate_source_validation_failed",
+                    code=("numeric_unit_missing" if missing_unit else "normalized_value_missing" if missing_value
+                          else "candidate_source_validation_failed"),
                     message=("这项数值的单位尚未核清，未作为正式数值采用。" if missing_unit
+                        else "这项记录的明确取值尚未核清，保留原文待核，未作为病史采用。" if missing_value
                         else "这项记录尚未通过原文及含义核对，未作为病史采用。"),
                     affected_pages=sorted({locators[lid].page_number for lid in lids}),
                     affected_locator_ids=lids,
@@ -233,6 +237,12 @@ def partition_source_local_candidates(text, evidence_input, *, validate):
             break
         except EvidenceNumericUnitError as exc:
             if type(exc) is not EvidenceNumericUnitError or exc.candidate_ref not in fact_refs - rejected:
+                raise
+            rejected.add(exc.candidate_ref)
+            failures.append({"code": type(exc).__name__, "candidate_refs": [exc.candidate_ref],
+                "detail": str(exc)})
+        except EvidenceNormalizedValueError as exc:
+            if type(exc) is not EvidenceNormalizedValueError or exc.candidate_ref not in fact_refs - rejected:
                 raise
             rejected.add(exc.candidate_ref)
             failures.append({"code": type(exc).__name__, "candidate_refs": [exc.candidate_ref],

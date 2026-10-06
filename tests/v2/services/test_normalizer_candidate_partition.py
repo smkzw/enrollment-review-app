@@ -15,9 +15,10 @@ from tests.v2.services.test_fact_normalization_persistence import _seed_chain
 
 
 class SourceDraftTransport:
-    def __init__(self, chain):
+    def __init__(self, chain, *, missing_value=False):
         self.chain = chain
         self.calls = 0
+        self.missing_value = missing_value
 
     def start(self, *, prompt):
         self.calls += 1
@@ -30,6 +31,9 @@ class SourceDraftTransport:
         broken = deepcopy(fact)
         broken["candidate_ref"] = "bad"
         broken["assertion_basis"]["asserted_object"] = "原文没有的对象"
+        if self.missing_value:
+            broken["assertion_basis"]["asserted_object"] = "ALT"
+            broken.update(raw_value=None, canonical_value=None)
         payload = {"schema_version": "phase5/normalizer-draft/v5", "fact_candidates": [fact, broken],
             "event_candidates": [], "exposure_candidates": [], "actual_exposure_fact_refs": [],
             "non_exposure_medication_fact_refs": [], "unresolved_items": []}
@@ -40,7 +44,10 @@ class SourceDraftTransport:
 
 
 @pytest.mark.parametrize("recovery", [False, True])
-def test_partition_persists_good_source_and_bad_question_with_legal_job_and_restart(session_factory, data_paths, recovery):
+@pytest.mark.parametrize("missing_value", [False, True])
+def test_partition_persists_good_source_and_bad_question_with_legal_job_and_restart(
+    session_factory, data_paths, recovery, missing_value,
+):
     with session_factory() as session:
         chain = _seed_chain(session, prefix="source-partition")
         session.commit()
@@ -52,7 +59,7 @@ def test_partition_persists_good_source_and_bad_question_with_legal_job_and_rest
     assert old.job_id != created.job_id
     assert service.get_job(old.job_id)["payload"].get("candidate_partition_policy") is None
     artifacts = ArtifactStore(data_paths)
-    transport = SourceDraftTransport(chain)
+    transport = SourceDraftTransport(chain, missing_value=missing_value)
     executor = create_fact_normalization_executor(FactNormalizationExecutorConfig(
         session_factory=session_factory, transport=transport, artifact_store=artifacts, max_schema_repairs=0))
     payload = service.get_job(created.job_id)["payload"]

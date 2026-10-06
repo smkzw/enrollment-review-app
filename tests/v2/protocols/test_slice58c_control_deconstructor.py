@@ -2841,7 +2841,8 @@ def test_runner_reaffirmed_function_requires_one_valid_target_review(resolved: b
 
         def start_source_target_review(self, *, prompt: str):
             self.target_calls += 1
-            assert '"background_context_allowed": false' in prompt
+            source_line = next(line for line in prompt.splitlines() if line.startswith("待核陈述："))
+            assert json.loads(source_line.removeprefix("待核陈述："))[0]["background_context_allowed"] is False
             assert "本次必须且只能返回这些 statement_index：[0]" in prompt
             return ProtocolControlAgentResponse(
                 session_id=f"target-{self.target_calls}",
@@ -3629,9 +3630,9 @@ def test_source_target_review_requires_real_target_excerpts_and_matching_time() 
         validate_source_target_review(batch, inventory, linked, review)
     linked[0].linked_official_code = "EX-01"
     validate_source_target_review(batch, inventory, linked, review)
-    assert '"linked_official_code": "EX-01"' in build_source_target_review_prompt(
-        batch, inventory, linked
-    )
+    source_line = next(line for line in build_source_target_review_prompt(
+        batch, inventory, linked).splitlines() if line.startswith("待核陈述："))
+    assert json.loads(source_line.removeprefix("待核陈述："))[0]["linked_official_code"] == "EX-01"
     from app.agents.protocol_control_source_interpretation import source_target_review_response_format
     review_prompt = build_source_target_review_prompt(batch, inventory, linked)
     assert f'"version":"{SOURCE_TARGET_REVIEW_VERSION}"' in review_prompt
@@ -3640,7 +3641,8 @@ def test_source_target_review_requires_real_target_excerpts_and_matching_time() 
     assert "时间和例外仍须另行核对" in review_prompt
     assert "只读来源线索：" in review_prompt
     assert "其他所有 decision 的这三个字段必须填 null" in review_prompt
-    assert '"structure_unit_id": "su-03"' in review_prompt
+    context_line = next(line for line in review_prompt.splitlines() if line.startswith("只读来源线索："))
+    assert json.loads(context_line.removeprefix("只读来源线索："))[0]["structure_unit_id"] == "su-03"
     assert source_target_review_response_format()["json_schema"]["name"].endswith(
         SOURCE_TARGET_REVIEW_VERSION.rsplit("/", 1)[-1]
     )
@@ -10961,3 +10963,73 @@ def test_definition_failure_keeps_alignment_and_exact_wire_then_rechecks_changed
     assert first.source_candidate_alignment.proofs[0].candidate_sha256 != (
         second.source_candidate_alignment.proofs[0].candidate_sha256
     )
+
+
+@pytest.mark.parametrize("selected", [None, "visit-a"])
+def test_target_review_packet_deduplicates_text_without_merging_visits(selected):
+    from app.agents.protocol_control_source_interpretation import _target_review_source_packet
+    batch = _batch().model_copy(deep=True)
+    quote = "各访视均保留检查原件。" * 80
+    batch.known_procedure_targets = [KnownRequiredProcedureTarget(
+        catalog_item_id=key, label="检查", visit_instance=visit, review_stage=stage,
+        position=index, source_span_ids=["shared-location"], source_excerpts=[quote],
+    ) for index, (key, visit, stage) in enumerate((
+        ("visit-a", "筛选期", ReviewStage.SCREENING),
+        ("visit-b", "基线期", ReviewStage.BASELINE),
+    ))]
+    targets, excerpts = _target_review_source_packet(batch, selected)
+    by_id = {value["excerpt_id"]: value for value in excerpts}
+    actual = targets["procedure"]
+    assert len(actual) == (2 if selected is None else 1)
+    for target in actual:
+        assert len(target["shared_visit_source_positions"]) == 1
+        ref = target["source_refs"][0]
+        assert by_id[ref] == {
+            "excerpt_id": ref, "source_position": target["shared_visit_source_positions"][0], "excerpt": quote}
+    assert sum(row["excerpt"] == quote for row in excerpts) == 1
+    if selected is None:
+        assert actual[0]["source_refs"] == actual[1]["source_refs"]
+        assert actual[0]["visit_instance"] != actual[1]["visit_instance"]
+        assert len(json.dumps((actual, excerpts), ensure_ascii=False)) < len(quote) * 2
+
+
+@pytest.mark.parametrize("difference", ["text", "position", "missing"])
+def test_target_review_packet_keeps_different_or_missing_source_layers(difference):
+    from app.agents.protocol_control_source_interpretation import _target_review_source_packet
+    batch = _batch().model_copy(deep=True)
+    targets = [KnownRequiredProcedureTarget(
+        catalog_item_id=f"target-{n}", label="检查", visit_instance="筛选期",
+        review_stage=ReviewStage.SCREENING, position=n,
+        source_span_ids=["span-a"], source_excerpts=["筛选期完成检查"],
+    ) for n in (0, 1)]
+    if difference == "text":
+        targets[1].source_excerpts = ["筛选期未完成检查"]
+    elif difference == "position":
+        targets[1].source_span_ids = ["span-b"]
+    else:
+        targets[1].source_excerpts = []
+    batch.known_procedure_targets = targets
+    payload, excerpts = _target_review_source_packet(batch, None)
+    refs = [target["source_refs"][0] for target in payload["procedure"]]
+    assert refs[0] != refs[1]
+    assert all("shared_visit_source_positions" not in t for t in payload["procedure"])
+    by_id = {e["excerpt_id"]: e for e in excerpts}
+    assert (by_id[refs[0]]["source_position"] == by_id[refs[1]]["source_position"]) == (difference != "position")
+    assert by_id[refs[1]]["excerpt"] == (
+        None if difference == "missing" else targets[1].source_excerpts[0])
+
+
+def test_target_review_prompt_supplies_force_without_declaring_coverage():
+    batch = _batch()
+    inventory = SourceInterpretation(version=SOURCE_INTERPRETATION_VERSION,
+        statements=[SourceStatement(structure_unit_id="su-01", quoted_text="年龄至少18岁",
+            force="recommended", decision_functions=["action"], time_words=[])],
+        units_without_statement=["su-02"])
+    coverage = [SourceStatementCoverage(statement_index=0, structure_unit_id="su-01",
+        disposition="other_control_candidate", status="not_located")]
+    prompt = build_source_target_review_prompt(batch, inventory, coverage)
+    line = next(line for line in prompt.splitlines() if line.startswith("待核陈述："))
+    assert json.loads(line.removeprefix("待核陈述："))[0]["force"] == "recommended"
+    assert "force 只记原文语气，不决定是否要核对" in prompt
+    assert "不是时间已对应的证明" in prompt
+    assert "shared_visit_source_positions" in prompt

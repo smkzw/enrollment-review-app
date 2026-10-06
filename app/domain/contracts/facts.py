@@ -296,7 +296,7 @@ class ClinicalFactCandidateV2(Phase5Model):
                 raise ValueError("未知极性候选不能携带断言依据")
         else:
             if self.canonical_value is None:
-                raise ValueError("肯定或否定候选必须携带规范值")
+                raise PydanticCustomError("normalized_value_missing", "肯定或否定候选必须携带规范值")
             if isinstance(self.canonical_value, float) and not math.isfinite(
                 self.canonical_value
             ):

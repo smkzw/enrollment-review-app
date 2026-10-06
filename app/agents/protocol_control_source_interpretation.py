@@ -31,7 +31,7 @@ SOURCE_INTERPRETATION_VERSION = "phase5/control-source-interpretation/v11"
 SOURCE_INTERPRETATION_PROMPT_VERSION = "phase5/control-source-prompt/v20"
 SOURCE_QUOTE_RECOVERY_VERSION = "phase5/source-quote-local-recovery/v2"
 SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v23"
-SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v5"
+SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v6"
 
 
 _DAY_WEEK_WINDOW_RE = re.compile(
@@ -1107,6 +1107,39 @@ def _is_schedule_randomization_anchor(
     )
 
 
+def _target_review_source_packet(batch, comparison_target_id):
+    excerpts, by_source, positions = [], {}, {}
+    targets = {"official": [], "procedure": []}
+    for category, entries in (("official", batch.known_official_targets),
+                              ("procedure", batch.known_procedure_targets)):
+        for target in entries:
+            target_id = target.official_code if category == "official" else target.catalog_item_id
+            if comparison_target_id is not None and target_id != comparison_target_id:
+                continue
+            refs = []
+            for span_id, excerpt in zip(target.source_span_ids,
+                                       target.source_excerpts or [None] * len(target.source_span_ids), strict=True):
+                key = (span_id, excerpt)
+                if span_id not in positions:
+                    positions[span_id] = f"p{len(positions)}"
+                if key not in by_source:
+                    by_source[key] = f"e{len(excerpts)}"
+                    excerpts.append({"excerpt_id": by_source[key], "source_position": positions[span_id],
+                                     "excerpt": excerpt})
+                refs.append(by_source[key])
+            item = {"target_id": target_id, "label": target.label, "source_refs": refs}
+            if category == "procedure":
+                item["visit_instance"] = target.visit_instance
+                shared = [positions[span_id] for span_id in target.source_span_ids
+                    if any(other.catalog_item_id != target.catalog_item_id
+                           and other.visit_instance != target.visit_instance
+                           and span_id in other.source_span_ids for other in entries)]
+                if shared:
+                    item["shared_visit_source_positions"] = shared
+            targets[category].append(item)
+    return targets, excerpts
+
+
 def build_source_target_review_prompt(
     batch: ProtocolControlDispositionBatch,
     interpretation: SourceInterpretation,
@@ -1124,6 +1157,7 @@ def build_source_target_review_prompt(
             "linked_official_code": coverage_by_index[index].linked_official_code,
             "linked_procedure_target_ids": coverage_by_index[index].linked_procedure_target_ids,
             "quoted_text": interpretation.statements[index].quoted_text,
+            "force": interpretation.statements[index].force,
             "scope_quote": interpretation.statements[index].scope_quote,
             "affected_stage": interpretation.statements[index].affected_stage,
             "time_words": interpretation.statements[index].time_words,
@@ -1139,27 +1173,7 @@ def build_source_target_review_prompt(
         }
         for index in indexes
     ]
-    targets = {
-        "official": [
-            {
-                "target_id": target.official_code,
-                "label": target.label,
-                "source_excerpts": target.source_excerpts,
-            }
-            for target in batch.known_official_targets
-            if comparison_target_id is None or target.official_code == comparison_target_id
-        ],
-        "procedure": [
-            {
-                "target_id": target.catalog_item_id,
-                "label": target.label,
-                "visit_instance": target.visit_instance,
-                "source_excerpts": target.source_excerpts,
-            }
-            for target in batch.known_procedure_targets
-            if comparison_target_id is None or target.catalog_item_id == comparison_target_id
-        ],
-    }
+    targets, target_excerpts = _target_review_source_packet(batch, comparison_target_id)
     read_only_sources = [
         {
             "structure_unit_id": unit.structure_unit_id,
@@ -1197,7 +1211,11 @@ def build_source_target_review_prompt(
         "完整覆盖须引用目标来源中真正承载操作的原文，而不是只截取项目名称。"
         "目录只有项目名称而无动作依据时，原文动作明确则选 additional_requirement；"
         "原文自身无法核清才选 unresolved；不得把系统无法证明对应关系说成受试者缺记录。"
-        "完整覆盖必须从本陈述截出连续的 source_action_excerpt，并从目标的 source_excerpts 截出连续的"
+        "目标原文按 source_refs 列出的摘录编号在目标来源摘录表中查找；相同位置相同原文只提供一次，"
+        "不代表合并不同访视。同一位置不同原文仍分别保留，缺原文的 null 不能作引用。"
+        "source_refs 列出摘录编号；source_position 是宿主按冻结来源位置分配的短标识，不是页码。"
+        "shared_visit_source_positions 只表示多访视共用位置，不是时间已对应的证明。"
+        "完整覆盖必须从本陈述截出连续的 source_action_excerpt，并从目标引用的实际原文截出连续的"
         " target_action_excerpt。"
         "source_action_excerpt 必须是本条 quoted_text 内的连续原文，不得为了补齐医学条件而拼接"
         "scope_quote 的时间前缀或 quoted_text 外的例外尾句；时间和例外仍须另行核对，不能省略。"
@@ -1222,7 +1240,7 @@ def build_source_target_review_prompt(
         "未完整覆盖时可以附上已有目标的逐字动作和时间作为核对线索，同时在 unresolved_aspects"
         "写明未对齐之处；此类目标引用不代表已覆盖。"
         "引用已有目标作对照时，target_id 必须是该冻结目标的编号，target_action_excerpt "
-        "必须逐字摘自该目标的 source_excerpts，两者须同时填写；不引用目标时两者都填 null，"
+        "必须逐字摘自该目标 source_refs 指向的原文，两者须同时填写；不引用目标时两者都填 null，"
         "target_time_excerpt 也填 null。不能把本条原文复制到目标摘录，"
         "也不能因选择 additional_requirement 就省略所引用目标的编号。"
         "不要把未来要求提前判作当前已完成，不推断原文未写的例外。"
@@ -1251,8 +1269,9 @@ def build_source_target_review_prompt(
         '非跨章节关系的对象与另一来源时期字段一律填 null。\n'
         f"本次必须且只能返回这些 statement_index：{json.dumps(indexes)}。"
         "不得返回同单元其他陈述或上一轮整批清单；items 数量必须与本次序号数量相同。\n"
-        f"待核陈述：{json.dumps(source, ensure_ascii=False, sort_keys=True)}\n"
-        f"冻结已有目标：{json.dumps(targets, ensure_ascii=False, sort_keys=True)}\n"
+        f"待核陈述：{json.dumps(source, ensure_ascii=False, sort_keys=True, separators=(',', ':'))}\n"
+        f"冻结已有目标：{json.dumps(targets, ensure_ascii=False, sort_keys=True, separators=(',', ':'))}\n"
+        f"目标来源摘录表：{json.dumps(target_excerpts, ensure_ascii=False, sort_keys=True, separators=(',', ':'))}\n"
         "名称引用的动作依据：" + json.dumps([
             {"statement_index": index, "label_action_supported_target_ids": [
                 target.official_code if hasattr(target, "official_code") else target.catalog_item_id
@@ -1262,7 +1281,7 @@ def build_source_target_review_prompt(
                     target.official_code if hasattr(target, "official_code") else target.catalog_item_id))
             ]} for index in indexes
         ], ensure_ascii=False, sort_keys=True) + "\n"
-        f"只读来源线索：{json.dumps(read_only_sources, ensure_ascii=False, sort_keys=True)}"
+        f"只读来源线索：{json.dumps(read_only_sources, ensure_ascii=False, sort_keys=True, separators=(',', ':'))}"
     )
 
 
