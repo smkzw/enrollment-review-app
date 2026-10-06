@@ -1795,6 +1795,14 @@ def validate_evidence_normalizer_output(
         expected_logical_document_id=evidence_input.logical_document_id,
         expected_page_numbers=evidence_input.page_numbers,
         available_locator_ids=set(evidence_input.available_locator_ids),
+        locator_source_hashes={
+            item.locator_id: item.source_text_sha256
+            for item in evidence_input.available_locators
+        },
+        locator_source_texts={
+            item.locator_id: item.localized_text
+            for item in evidence_input.available_locators
+        },
     )
     return _validate_normalizer_semantics(validated, evidence_input)
 

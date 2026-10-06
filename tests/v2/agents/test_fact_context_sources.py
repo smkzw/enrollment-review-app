@@ -7,6 +7,7 @@ import pytest
 
 from app.agents.evidence_normalizer import (
     DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE, EvidenceNormalizerRunner, parse_evidence_normalizer_output,
+    validate_evidence_normalizer_output,
 )
 from app.domain.contracts.evidence_normalizer import EvidenceNormalizerInput, EvidenceNormalizerOutput, evidence_normalizer_input_scope_hash
 from app.domain.contracts.facts import AssertionBasis, ClinicalFactCandidateV2, ClinicalFactV2
@@ -61,6 +62,28 @@ def _parse(payload, *, texts=None, aliases=None):
         locator_source_hashes={loc.locator_id: loc.source_text_sha256 for loc in inp.available_locators},
         locator_source_texts=texts if texts is not None else {loc.locator_id: loc.localized_text for loc in inp.available_locators},
         reference_aliases=aliases, require_current_draft=True)
+
+
+@pytest.mark.parametrize("change", [None, "hash", "excerpt", "nonmember"])
+def test_structured_revalidation_uses_frozen_context_sources(change):
+    inp, output = _source_input(), _parse(_payload())
+    if change is not None:
+        payload = output.model_dump(mode="json")
+        fact = payload["fact_candidates"][0]
+        source = fact["assertion_basis"]["contextual_qualifiers"][0]["source"]
+        if change == "hash":
+            source["source_text_sha256"] = "0" * 64
+        elif change == "excerpt":
+            source["excerpt"] = "量表甲外"
+        else:
+            fact["locator_ids"] = ["loc-2"]
+        with pytest.raises(ValueError):
+            output = EvidenceNormalizerOutput.model_validate(payload)
+            validate_evidence_normalizer_output(output, inp)
+        return
+    revalidated = validate_evidence_normalizer_output(output, inp)
+    assert revalidated == output
+    assert gate_fact_candidate(revalidated.fact_candidates[0])[FactGate.POLARITY_AND_ASSERTED_OBJECT].outcome == GateOutcome.BLOCKED
 
 
 @pytest.mark.parametrize("compact", [False, True])

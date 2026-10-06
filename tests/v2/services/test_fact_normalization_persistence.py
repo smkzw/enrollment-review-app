@@ -1207,8 +1207,9 @@ def test_executor_maps_text_transport_empty_json_to_empty_output(session_factory
 
 
 @pytest.mark.parametrize("separate_context", [False, True])
+@pytest.mark.parametrize("account_source_text", [False, True])
 def test_model_draft_is_hydrated_gated_and_persisted_by_real_executor(
-    session_factory, separate_context, data_paths,
+    session_factory, separate_context, data_paths, account_source_text,
 ):
     from app.workflow.runner import JobRunner
 
@@ -1216,7 +1217,13 @@ def test_model_draft_is_hydrated_gated_and_persisted_by_real_executor(
         chain = _seed_chain(session, prefix="draft-output")
         session.commit()
     service = FactNormalizationJobService(session_factory)
-    created = _create_job_from_source(service, chain)
+    created = service.create_or_reuse_from_source(
+        authority=chain["authority"],
+        prompt_version_id=chain["prompt_version_id"],
+        model_config_id=chain["model_config_id"],
+        created_by="tester",
+        account_source_text=account_source_text,
+    )
 
     class DraftTransport:
         def start(self, *, prompt):
@@ -1254,6 +1261,14 @@ def test_model_draft_is_hydrated_gated_and_persisted_by_real_executor(
                 "non_exposure_medication_fact_refs": [],
                 "unresolved_items": [],
             }
+            if account_source_text:
+                from copy import deepcopy
+                sibling = deepcopy(body["fact_candidates"][0])
+                sibling.update(candidate_ref="f2", asserted_object="AST", raw_value="AST 3",
+                    canonical_value="AST 3", locator_ids=[chain["locator_id_2"]])
+                sibling["assertion_basis"].update(asserted_object="AST", assertion_text="AST 3",
+                    locator_id=chain["locator_id_2"], contextual_qualifiers=[])
+                body["fact_candidates"].append(sibling)
             return type(
                 "Response",
                 (),
@@ -1286,8 +1301,10 @@ def test_model_draft_is_hydrated_gated_and_persisted_by_real_executor(
                 FactNormalizationCandidateRecord.run_id == created.run_id
             )
         ).scalars().all()
-        assert run.status.value == ("partial" if separate_context else "succeeded")
-        assert len(candidates) == 1
+        assert run.status.value == ("partial" if separate_context or account_source_text else "succeeded")
+        assert len(candidates) == (2 if account_source_text else 1)
+        candidates.sort(key=lambda record: decode_contract(ClinicalFactCandidateV2,
+            record.payload_json, record.payload_sha256).asserted_object)
         candidate = decode_contract(
             ClinicalFactCandidateV2,
             candidates[0].payload_json,
@@ -1302,6 +1319,11 @@ def test_model_draft_is_hydrated_gated_and_persisted_by_real_executor(
             source = candidate.assertion_basis.contextual_qualifiers[0].source
             assert source.excerpt == "ALT" and source.source_text_sha256 == _sha(SOURCE_TEXT)
             assert gate_fact_candidate(candidate)[FactGate.POLARITY_AND_ASSERTED_OBJECT].outcome == GateOutcome.BLOCKED
+        if account_source_text:
+            from app.storage.facts_models import ClinicalFactV2Record
+            published = session.execute(select(ClinicalFactV2Record).where(
+                ClinicalFactV2Record.run_id == created.run_id)).scalars().all()
+            assert {record.assertion_object for record in published} == ({"AST"} if separate_context else {"ALT", "AST"})
 
     if separate_context:
         from app.services.evidence_api_read_service import EvidenceApiReadService
