@@ -148,6 +148,12 @@ export function clinicalDisplayLanes(
         model.highlightedItemIds.has(item.itemId) ||
         referencedFacts.has(item.sourceId) || item.provenanceFollowup
       ) return true;
+      const clinicalAnnotation = /(?:^|[^A-Za-z])(?:NCS|CS)(?:$|[^A-Za-z])|临床意义|研究者判断|医学判断|研究者评估/i;
+      const annotations = [
+        item.title, item.subtitle, typeof item.value === "string" ? item.value : "",
+        ...locatorsForItem(model, item).map((locator) => locator.excerpt ?? ""),
+      ];
+      if (annotations.some((text) => clinicalAnnotation.test(text ?? ""))) return true;
       // Exact administrative labels only: never hide judgments, clinical dates or unknown fields.
       const field = (item.assertedObject ?? "").normalize("NFKC")
         .replace(/\s+/g, "").replace(/[:：]$/, "");

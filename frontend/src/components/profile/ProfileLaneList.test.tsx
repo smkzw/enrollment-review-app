@@ -56,6 +56,21 @@ describe("ProfileLaneList", () => {
     ["规则关联签名", "事件引用签名", "签名来源待核", "发热"].forEach((title) => expect(screen.getByText(title)).toBeInTheDocument());
   });
 
+  it("医师字段带临床批注时保留，不把CS/NCS判断当作普通署名隐藏", () => {
+    const values = ["NCS", "cs", "无临床意义，已签字", "已作研究者评估"];
+    const facts = values.map((value, index) => makeFactItem({
+      item_id: `annotation-${index}`, source_id: `annotation-source-${index}`,
+      title: `临床批注${index}`, asserted_object: "报告医师", value,
+      locator_ids: [], requirement_ids: [],
+    }));
+    const model = adaptPatientProfile(decodePatientProfileRevision(makeRevision({
+      lanes: PROFILE_LANE_ORDER.map((lane) => makeLaneSection(lane, lane === "demographics" ? facts : [])),
+      highlights: [], evidence_locators: [],
+    })));
+    render(<ProfileLaneList model={model} />);
+    values.forEach((_, index) => expect(screen.getByText(`临床批注${index}`)).toBeInTheDocument());
+  });
+
   it("13 条泳道按稳定顺序全部展示（含空泳道）", () => {
     const model = adaptPatientProfile(decodePatientProfileRevision(makeRevision()));
     render(<ProfileLaneList model={model} />);
