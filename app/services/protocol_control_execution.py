@@ -2050,25 +2050,56 @@ def _resumable_saved_source_review(
         if (front is None or saved.get("workflow_path_executed") != "front_stage_flow"
                 or saved.get("partial_wire") is not None):
             return _ResumedSourceReview(state="absent", reason="no_saved_source_review")
-        from app.agents.protocol_control_fixed_flow import pending_front_wire, validate_front_review
+        from app.agents.protocol_control_fixed_flow import (
+            FRONT_REVIEW_CORRECTION_CODES, pending_front_wire, validate_front_review,
+        )
 
         review = SourceTargetReview.model_validate(front)
         validate_front_review(batch, interpretation, review)
         witnessed = False
+        reconstructed = None
+        correction_count = 0
+        coverage = source_statement_coverage(batch, interpretation, pending_front_wire(batch))
         for attempt in saved.get("attempts", []):
             if not isinstance(attempt, Mapping) or not isinstance(attempt.get("error_detail"), Mapping):
                 continue
-            if attempt["error_detail"].get("workflow_phase") != "source_review":
+            phase = attempt["error_detail"].get("workflow_phase")
+            if phase not in {"source_review", "source_review_correction"}:
                 continue
             raw = attempt.get("raw_output_text")
             if (not isinstance(raw, str) or not isinstance(attempt.get("session_id"), str)
-                    or hashlib.sha256(raw.encode()).hexdigest() != attempt.get("raw_output_sha256")
-                    or SourceTargetReview.model_validate_json(raw) != review):
+                    or hashlib.sha256(raw.encode()).hexdigest() != attempt.get("raw_output_sha256")):
                 raise ValueError("前置来源核对与实际保存原答不一致，不能复用")
+            actual = SourceTargetReview.model_validate_json(raw)
+            if phase == "source_review":
+                if reconstructed is not None:
+                    raise ValueError("前置来源核对含多个起始原答，不能复用")
+                reconstructed = actual
+            else:
+                if reconstructed is None or correction_count:
+                    raise ValueError("局部来源核对缺少唯一前置原答，不能复用")
+                try:
+                    validate_source_target_review(batch, interpretation, coverage, reconstructed)
+                except SourceTargetReviewValidationError as exc:
+                    index = exc.statement_index
+                    if exc.code not in FRONT_REVIEW_CORRECTION_CODES:
+                        raise ValueError("来源错误不属于允许的局部关系复核范围") from exc
+                else:
+                    raise ValueError("局部来源核对不能替换已通过的兄弟条目")
+                if index is None:
+                    raise ValueError("整个来源范围错误不能降为单条修复")
+                selected = [entry for entry in coverage if entry.statement_index == index]
+                validate_source_target_review(batch, interpretation, selected, actual)
+                reconstructed = reconstructed.model_copy(update={"items": [
+                    actual.items[0] if item.statement_index == index else item
+                    for item in reconstructed.items
+                ]})
+                correction_count += 1
             witnessed = True
         if not witnessed:
             return _ResumedSourceReview(state="refresh_required", reason="front_review_receipt_unproven")
-        coverage = source_statement_coverage(batch, interpretation, pending_front_wire(batch))
+        if reconstructed != review:
+            raise ValueError("前置来源核对与实际保存原答不一致，不能复用")
         return _ResumedSourceReview(
             state="reused", reason="verified_pending_front_review",
             review=review, coverage=tuple(coverage),

@@ -20,6 +20,7 @@ from .protocol_control_deconstructor import (
 from .protocol_control_source_interpretation import (
     SourceInterpretation,
     SourceTargetReview,
+    SourceTargetReviewValidationError,
     build_source_target_review_prompt,
     normalize_source_excerpt,
     target_action_established,
@@ -45,7 +46,11 @@ from app.domain.contracts.protocol_controls import (
 
 BASELINE = "RV1001-BASELINE"
 FIXED_FLOW = "RV1001-FLOW"
-FIXED_FLOW_VERSION = "rv1001/front-stage-flow/v15"
+FIXED_FLOW_VERSION = "rv1001/front-stage-flow/v16"
+FRONT_REVIEW_CORRECTION_CODES = frozenset({
+    "TARGET_VISIT_SCOPE_UNPROVEN", "TIME_SCOPE_MISMATCH",
+    "TARGET_TIME_INCOMPLETE", "TARGET_EXCEPTION_UNGROUNDED",
+})
 
 
 def _failure_code(exc: Exception) -> str | None:
@@ -174,6 +179,35 @@ def build_front_target_review_prompt(batch, interpretation, coverage) -> str:
     )
 
 
+def _review_error_detail(exc: SourceTargetReviewValidationError) -> dict[str, object]:
+    return {
+        "code": exc.code, "statement_id": exc.statement_index,
+        "json_path": exc.json_path, "source_refs": list(exc.source_refs),
+        "retry_class": exc.retry_class,
+        "affected_dependents": list(exc.affected_dependents),
+    }
+
+
+def _correct_front_review(batch, interpretation, coverage, exc, transport):
+    """One actual local proposal; unchanged siblings and full gates remain."""
+    index = exc.statement_index
+    entries = [entry for entry in coverage if entry.statement_index == index]
+    if index is None or len(entries) != 1:
+        raise exc
+    reader = getattr(transport, "start_source_target_review", None)
+    if not callable(reader):
+        raise exc
+    prompt = build_front_target_review_prompt(batch, interpretation, entries) + (
+        "\n仅核对被拒绝的这一条，不重读或重答其他条目；返回 items 中恰好这一条。"
+        "原文、已有目标及来源范围不变。上一项未经采信，不得原样重复被拒声明。"
+        "不强制把失败改为新增要求或未知，不得因格式或程序错误要求研究者判断。"
+        "只有原文关系本身无法核清才说明该关系的未决。\n"
+        + json.dumps(_review_error_detail(exc), ensure_ascii=False, sort_keys=True)
+    )
+    response = reader(prompt=prompt)
+    return response
+
+
 def covered_front_wire(
     batch, interpretation, review, *, allow_additional_units: bool = False,
     retained_indexes: frozenset[int] = frozenset(),
@@ -270,7 +304,26 @@ def prepare_front_stage_flow(
             result.review = SourceTargetReview.model_validate_json(response.text)
         else:
             result.review = review_seed.model_copy(deep=True)
-        validate_source_target_review(batch, interpretation, coverage, result.review)
+        try:
+            validate_source_target_review(batch, interpretation, coverage, result.review)
+        except SourceTargetReviewValidationError as exc:
+            # An unproven restored seed is not permission for another repair.
+            if (review_seed is not None or exc.statement_index is None
+                    or exc.code not in FRONT_REVIEW_CORRECTION_CODES):
+                raise
+            phase = "source_review_correction"
+            response = _correct_front_review(
+                batch, interpretation, coverage, exc, transport,
+            )
+            result.responses.append((phase, response))
+            correction = SourceTargetReview.model_validate_json(response.text)
+            selected = [entry for entry in coverage if entry.statement_index == exc.statement_index]
+            validate_source_target_review(batch, interpretation, selected, correction)
+            result.review = result.review.model_copy(update={"items": [
+                correction.items[0] if item.statement_index == exc.statement_index else item
+                for item in result.review.items
+            ]})
+            validate_source_target_review(batch, interpretation, coverage, result.review)
         result.review_validated = True
         supported = front_stage_supported_indexes(batch, interpretation)
         retained = [item for item in result.review.items
@@ -375,6 +428,8 @@ def prepare_front_stage_flow(
             raise ValueError("已保存可装配要求及其核对依据；其余具体来源仍待处理，整批未完成、未采用")
     except Exception as exc:  # product boundary; retained without parent reread
         result.error = exc
+        if isinstance(exc, SourceTargetReviewValidationError):
+            result.error_detail = _review_error_detail(exc)
         result.error_code = result.error_code or _failure_code(exc) or (
             "FLOW_ASSEMBLY_INVALID" if phase == "assembly" else
             "FLOW_RESPONSE_INVALID" if result.responses and result.responses[-1][0] == phase else

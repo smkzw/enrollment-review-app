@@ -702,6 +702,98 @@ def test_bad_target_review_never_calls_author_or_falls_back():
     assert transport.calls == ["review"]
     assert result.attempts[-1].error_classes == ["SOURCE_ACTION_MISMATCH"]
     assert result.attempts[0].raw_output_text is not None
+    assert result.attempts[-1].error_detail["statement_id"] == 0
+    assert result.attempts[-1].error_detail["retry_class"] == "single_statement"
+
+
+@pytest.mark.parametrize("defect", [None, "repeat", "wrong_index", "changed_quote", "transport"])
+def test_front_time_relation_has_one_local_correction_and_no_parent_reread(defect):
+    batch, inventory, correct, selection = _covered_procedure_example()
+    bad = correct.model_copy(update={"target_time_excerpt": None})
+    class Local(_Transport):
+        def start_source_target_review(self, *, prompt):
+            self.calls.append("review")
+            value = bad
+            if len(self.calls) == 2:
+                assert "恰好这一条" in prompt and "TIME_SCOPE_MISMATCH" in prompt
+                if defect == "transport":
+                    raise RuntimeError("unavailable")
+                value = correct.model_copy(deep=True)
+                if defect == "repeat":
+                    value = bad
+                elif defect == "wrong_index":
+                    value.statement_index = 12
+                elif defect == "changed_quote":
+                    value.source_action_excerpt = "没有在原件中的操作"
+            return ProtocolControlAgentResponse(session_id=f"review-{len(self.calls)}", text=SourceTargetReview(
+                version=SOURCE_TARGET_REVIEW_VERSION, items=[value]).model_dump_json())
+    transport = Local(correct, selection)
+    result = ProtocolControlAgentRunner().run(
+        batch, transport, resume_source_interpretation=inventory, workflow_variant=FIXED_FLOW,
+        output_validator=lambda output: validate_protocol_control_batch_candidates(batch, output),
+    )
+    assert transport.calls == ["review", "review"]
+    assert result.attempts[0].raw_output_text is not None
+    if defect is None:
+        assert result.final_output is not None
+        _validate_saved_source_review(batch, result)
+        assert result.source_front_target_review.items == [correct]
+    else:
+        assert result.final_output is None and result.source_front_target_review is None
+        if defect == "repeat":
+            assert result.attempts[-1].error_detail["code"] == "TIME_SCOPE_MISMATCH"
+            assert result.attempts[-1].error_detail["statement_id"] == 0
+
+
+@pytest.mark.parametrize("defect", [None, "missing", "hash", "order", "phase", "second_correction", "saved_item"])
+def test_local_front_review_recovery_replays_ordered_actual_answers(defect):
+    from app.services.protocol_control_execution import _resumable_saved_source_review
+    batch, inventory, correct, selection = _covered_procedure_example()
+    bad = correct.model_copy(update={"target_time_excerpt": None})
+    class Local(_Transport):
+        def start_source_target_review(self, *, prompt):
+            self.calls.append("review")
+            return ProtocolControlAgentResponse(session_id=f"review-{len(self.calls)}", text=SourceTargetReview(
+                version=SOURCE_TARGET_REVIEW_VERSION,
+                items=[bad if len(self.calls) == 1 else correct]).model_dump_json())
+    def fail_after_review(output):
+        raise ValueError("downstream unavailable")
+    failed = ProtocolControlAgentRunner().run(
+        batch, Local(correct, selection), resume_source_interpretation=inventory,
+        workflow_variant=FIXED_FLOW, output_validator=fail_after_review,
+    )
+    assert failed.final_output is None and failed.partial_wire is None
+    assert failed.source_front_target_review.items == [correct]
+    saved = failed.model_dump(mode="json")
+    saved["attempts"] = [{**attempt.model_dump(mode="json"), "raw_output_text": attempt.raw_output_text}
+                         for attempt in failed.attempts]
+    if defect == "missing":
+        saved["attempts"].pop(1)
+    elif defect == "hash":
+        saved["attempts"][1]["raw_output_sha256"] = "0" * 64
+    elif defect == "order":
+        saved["attempts"][0], saved["attempts"][1] = saved["attempts"][1], saved["attempts"][0]
+    elif defect == "phase":
+        saved["attempts"][1]["error_detail"]["workflow_phase"] = "source_review"
+    elif defect == "second_correction":
+        saved["attempts"].insert(2, dict(saved["attempts"][1]))
+    elif defect == "saved_item":
+        saved["source_front_target_review"]["items"][0]["target_time_excerpt"] = "筛选期"
+    if defect is not None:
+        with pytest.raises(ValueError):
+            _resumable_saved_source_review(batch, inventory, saved)
+    else:
+        recovered = _resumable_saved_source_review(batch, inventory, saved)
+        assert recovered.state == "reused" and recovered.review.items == [correct]
+        transport = _Transport(correct, selection)
+        result = ProtocolControlAgentRunner().run(
+            batch, transport, resume_source_interpretation=inventory,
+            workflow_variant=FIXED_FLOW, resume_source_target_review=recovered.review,
+            resume_source_statement_coverage=recovered.coverage,
+            output_validator=lambda output: validate_protocol_control_batch_candidates(batch, output),
+        )
+        assert result.final_output is not None and transport.calls == []
+        _validate_saved_source_review(batch, result)
 
 
 def test_known_meaning_missing_stage_does_not_trigger_parent_reread():
