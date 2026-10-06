@@ -1,5 +1,9 @@
+<!-- RV1006-CONTEXT:BEGIN -->
+1006V1为现行交付窗口，入口为.trellis/tasks/09-11-e2e-eligibility-review/delivery_1006V1/00_START_HERE.md。用户2026-10-06明确恢复实施；具体进度和证据仅维护implement.md文头D0–D5用户流程表，prd/design/plan/acceptance已同步窗口范围。R1及1001V1的来源、含义、历史和权限边界继续有效。当前窗口先交付完整同源范围下的一例隔离工作稿、原件导航、一次有源更正和新旧结果；不以难例全部自动化或通用能力扩展作为无关正确结果前置。正式自动采用、规则激活与临床签发不因窗口批准获得授权。下方均为历史快照或不冲突技术参考，不是当前作业状态，不据此恢复旧终态。
+<!-- RV1006-CONTEXT:END -->
+
 <!-- RV1001-CONTEXT:BEGIN -->
-1001V1现行入口：.trellis/tasks/09-11-e2e-eligibility-review/delivery_1001V1/00_START_HERE.md；prd/design/plan/acceptance为本任务规范，具体进度与证据仅维护implement.md。用户现已解除暂停，继续实施；2026-10-05Goal已回读active，先前blocked观察是历史，不新建/重置目标。HANDOFF_20261004_1001V1_PAUSE.md及其SOURCE_SNAPSHOT/review_index为前次暂停历史，不是当前停止指令。OmniRouter/cms-router保持批准路线，共享服务不改，不恢复原临床库或旧终态。
+1001V1历史执行记录：.trellis/tasks/09-11-e2e-eligibility-review/delivery_1001V1/00_START_HERE.md；现行排序以上方1006V1入口为准。该块中的“当前”、Goal和暂停状态仅属于当时快照。OmniRouter/cms-router保持批准路线，共享服务不改，不恢复原临床库或旧终态。
 
 2026-10-06当前来源消费：普通既往事件沿真实逐条件检索范围进入冻结工作稿，不造否定病史；已有视觉观察与文字分别来源化，相关记录未成正式事实时仍可从界面回原件。当前来源头与历史读取分开，补证/更正不能沿旧“未见记录”。局部来源错误隔离而不重读所有合法兄弟；处方、医嘱、购药与实际服药分开。软件合同、实际调用、临床资格及Q3各守证据层，详细状态只见implement.md。
 
@@ -22,7 +26,7 @@
 <!-- ENROLLMENT-0927V1-R1:BEGIN -->
 > **现行产品规范已更新：0927V1-R1（2026-09-27，用户已确认）。**
 > 入排子系统采用“完整覆盖、混合执行、例外驱动、先闭环再扩展”。完整有源包可保留严格的真实未决/能力缺口；独立已核工作稿继续，受影响项不假判通过。已知错义、来源缺失、越界和损坏仍硬拒绝；官方与相关跨章同源共同纳入。
-> 唯一当前入口：`.trellis/tasks/09-11-e2e-eligibility-review/delivery_0927V1_R1/00_START_HERE.md`；需求/设计/排序/验收为同任务 `prd.md`、`design.md`、`plan.md`、`acceptance.md`。旧“等待该宏观确认”、全机器化前置、旧模型默认和旧串行排序不再作为现行指令。
+> R1历史决策入口：`.trellis/tasks/09-11-e2e-eligibility-review/delivery_0927V1_R1/00_START_HERE.md`；现行执行窗口为上方1006V1，需求/设计/排序/验收为同任务 `prd.md`、`design.md`、`plan.md`、`acceptance.md`。旧“等待该宏观确认”、全机器化前置、旧模型默认和旧串行排序不再作为现行指令。
 > 下方内容保留为历史或不冲突技术参考，不代表当前完成。规范批准不等于代码迁移、临床验证、规则激活或签发；不自动恢复暂停Goal。更高层安全/工具权限和原件保护不变。
 <!-- ENROLLMENT-0927V1-R1:END -->
 

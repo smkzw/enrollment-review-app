@@ -1,11 +1,11 @@
-<!-- RV1001-AGENT:BEGIN -->
-本轮现行执行入口：.trellis/tasks/09-11-e2e-eligibility-review/delivery_1001V1/00_START_HERE.md；用户2026-10-02明确解除暂停，当前实施记录见同任务 implement.md。HANDOFF_20261002_1001V1_PAUSE.md保留为恢复来源，不再代表当前暂停状态。1001V1候选采用固定workflow、单一语义主责、按需取证/复核；不等待新模型，不改变原件/事实采用权限。R1及真实历史0929V1保留。
-<!-- RV1001-AGENT:END -->
+<!-- RV1006-AGENT:BEGIN -->
+现行执行入口：.trellis/tasks/09-11-e2e-eligibility-review/delivery_1006V1/00_START_HERE.md；用户2026-10-06明确恢复实施。仅维护implement文头一张当前用户流程表。窗口终点为完整同源范围下的一例隔离当前节点工作稿、原件回源、一次有源更正/补证、新旧结果；仅直接阻断或错误采用保护修复准入，不默认继续扩展恢复/通用能力。R1、1001V1及历史边界继续有效，旧暂停交接不代表当前Goal；正式事实自动采用、规则激活与临床签发不因窗口认可获授权。共享事务单一所有者；必要会商按全局触发，routine修复不增加多轮会商。达到本窗口先回交，不自动扩大优化。
+<!-- RV1006-AGENT:END -->
 
 <!-- ENROLLMENT-0927V1-R1:BEGIN -->
 > **现行产品规范已更新：0927V1-R1（2026-09-27，用户已确认）。**
 > 入排子系统采用“完整覆盖、混合执行、例外驱动、先闭环再扩展”。完整有源包可保留严格的真实未决/能力缺口；独立已核工作稿继续，受影响项不假判通过。已知错义、来源缺失、越界和损坏仍硬拒绝；官方与相关跨章同源共同纳入。
-> 唯一当前入口：`.trellis/tasks/09-11-e2e-eligibility-review/delivery_0927V1_R1/00_START_HERE.md`；需求/设计/排序/验收为同任务 `prd.md`、`design.md`、`plan.md`、`acceptance.md`。旧“等待该宏观确认”、全机器化前置、旧模型默认和旧串行排序不再作为现行指令。
+> R1历史决策入口：`.trellis/tasks/09-11-e2e-eligibility-review/delivery_0927V1_R1/00_START_HERE.md`；现行窗口以上方1006V1为准，需求/设计/排序/验收为同任务 `prd.md`、`design.md`、`plan.md`、`acceptance.md`。旧“等待该宏观确认”、全机器化前置、旧模型默认和旧串行排序不再作为现行指令。
 > 下方内容保留为历史或不冲突技术参考，不代表当前完成。规范批准不等于代码迁移、临床验证、规则激活或签发；不自动恢复暂停Goal。更高层安全/工具权限和原件保护不变。
 <!-- ENROLLMENT-0927V1-R1:END -->
 
@@ -17,7 +17,7 @@
 
 # Enrollment Review Project Instructions
 
-Current execution supplement: `.trellis/tasks/09-11-e2e-eligibility-review/delivery_0929V1/00_START_HERE.md`. The approved 0927V1-R1 product decision remains in force; the 0929V1 native-structure-first and selective-visual trial is an incremental implementation scope, not proof of clinical acceptance. Current status is recorded in the task's `implement.md`.
+Current execution supplement: `.trellis/tasks/09-11-e2e-eligibility-review/delivery_1006V1/00_START_HERE.md`. The approved 0927V1-R1 and 1001V1 boundaries remain in force; prior native-structure-first and selective-visual results remain scoped evidence, not proof of clinical acceptance. Current status is recorded in the task's `implement.md`.
 
 ## Current Phase
 

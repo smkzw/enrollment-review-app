@@ -1,0 +1,54 @@
+{
+  "schema_version": "review-index/0929v1/v1",
+  "document_kind": "delivery_record",
+  "round_id": "1006V1",
+  "task_path": ".trellis/tasks/09-11-e2e-eligibility-review",
+  "runtime_state": "active",
+  "claims_complete": false,
+  "base_review_commit": "7b3ed4f9251323b3194371764f2bcd17ad94559e",
+  "delivered_snapshot_id": "S-03",
+  "code_snapshots": [
+    {"id": "S-01", "commit": "cc4048348f12afde4d3221415e884c7966e5bf4c", "kind": "committed_source", "manifest_artifact_id": "E-01"},
+    {"id": "S-02", "commit": "0e9b9bb99643ad074b2033d408ed8b7fc3dd1936", "kind": "committed_frontend_layout", "manifest_artifact_id": "E-01", "note": "Frontend checks/rendering preceded JSX bracket/CSS blank-line formatting only. Backend unchanged from S-01."},
+    {"id": "S-03", "commit": "0c6f40291e95eae6fce17467d02f75b4d14890ca", "kind": "committed_clinical_display", "manifest_artifact_id": "E-01", "note": "Presentation only;raw records,locators,clinical associations and history remain intact."}
+  ],
+  "changes": [
+    {"id": "CH-01", "snapshot_id": "S-01", "paths": ["app/agents/protocol_control_source_interpretation.py", "tests/v2/protocols/test_slice58c_control_deconstructor.py"], "note": "Explicit context target namespace; wrong source refs rejected,never rewritten; clinical gates unchanged."},
+    {"id": "CH-02", "snapshot_id": "S-01", "paths": ["frontend/src/components/profile/ProfileItemCard.tsx", "frontend/src/components/profile/ProfileItemCard.test.tsx"], "note": "Boolean Chinese display; literal strings and zero preserved."},
+    {"id": "CH-03", "snapshot_id": "S-02", "paths": ["frontend/src/pages/SubjectsPage.tsx", "frontend/src/pages/SubjectsPage.test.tsx", "frontend/src/styles/profile.css"], "note": "Two-column evidence workspace,compact subject selector,close restores list,switch clears old evidence/history."},
+    {"id": "CH-04", "snapshot_id": "S-03", "paths": ["frontend/src/features/patient-profile/model/patientProfileModel.ts", "frontend/src/features/patient-profile/model/index.ts", "frontend/src/components/profile/ProfileLaneList.tsx", "frontend/src/components/profile/ProfileLaneList.test.tsx", "frontend/src/styles/profile.css"], "note": "Exact administrative metadata suppressed only in clinical display;clinical dates/judgments/linked/highlighted/referenced/pending items retained;subject list sticky clear of topbar."}
+  ],
+  "claims": [
+    {"id": "CL-01", "status": "verified", "statement": "14 groups/5 files/24 pages disposed;30 facts/Profile3 saved.", "limitations": "Partial:426 blocked,584 unresolved,5 conflicts,55 Profile pending;not complete fact qualification or clinical review.", "evidence_ids": ["E-02"]},
+    {"id": "CL-02", "status": "verified", "statement": "UI sourced description correction produced new fact/Profile4;old payload hashes preserved.", "limitations": "Zero rule links: no recalculated eligibility report;clinical polarity/value unchanged.", "evidence_ids": ["E-03"]},
+    {"id": "CL-03", "status": "verified", "statement": "Wasted column removed in real1080P/2K/4K evidence-open page,zero horizontal overflow.", "limitations": "Targeted read-only layout validation,not fullQ3/zoom matrix.", "evidence_ids": ["E-04"]},
+    {"id": "CL-04", "status": "unresolved", "statement": "Complete same-source work draft and correction-derived new report incomplete.", "evidence_ids": ["E-05"]},
+    {"id": "CL-05", "status": "verified", "statement": "Profile4 display omits8 administrative items;198raw/190displayed;clinical record index unchanged.", "limitations": "Conservative exact-field presentation filter,not a complete semantic relevance classifier or clinical qualification.", "evidence_ids": ["E-06"]}
+  ],
+  "tests": [
+    {"id": "T-01", "status": "passed", "snapshot_id": "S-01", "command": ".venv/bin/python -m pytest tests/v2/protocols/test_slice58c_control_deconstructor.py tests/v2/services/test_protocol_control_execution.py -q --tb=short --junitxml=/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-context-id-connected-v1.xml", "exit_code": 0, "passed": 643, "seconds": 43.73, "note": "Five SWIG warnings;synthetic module/consumer checks."},
+    {"id": "T-02", "status": "passed", "snapshot_id": "S-01", "command": "npm test -- src/components/profile/ProfileItemCard.test.tsx src/components/profile/ProfileEvidencePanel.test.tsx src/components/profile/ProfileFactCorrectionDialog.test.tsx src/components/profile/ProfileCorrectionHistory.test.tsx", "exit_code": 0, "passed": 31, "seconds": 2.13},
+    {"id": "T-03", "status": "passed_partial_processing", "command": "Private run_saved_response_window_20261006.py: legal same-Job retry in isolated copy", "exit_code": 0, "seconds": 1429.09234462498, "job_id": "4b08b1fd8b9c4faabf3a98db5e6ebad6", "note": "Base backend;original DB/first6 checkpoints unchanged;saved first answer revalidated and remaining7 groups read."},
+    {"id": "T-04", "status": "failed", "command": "Private run_rv1006_current_control_window.py execute", "exit_code": 3, "seconds": 405.10876783297863, "job_id": "bb3ab7946f3243769bfec34dfa94a0ab", "new_physical_calls": 7, "prior_physical_calls": 5, "error_code": "PROTOCOL_CONTROL_LOGICAL_BUDGET_EXHAUSTED", "tokens": {"input": 113771, "output": 109901, "total": 223672, "cached_input_included": 1728, "reasoning": null, "api_fee": null}, "note": "Pre-v7. Seven stop responses;primary review confused context ID/source ref;local first-item correction succeeded,next sibling remained wrong. Old budget retained."},
+    {"id": "T-05", "status": "passed_profile_correction_only", "command": "Ego formal UI preview/confirm/submit;scoped correction Runner", "exit_code": 0, "seconds": 37.1176431660424, "job_id": "5d4d8c58b5e2400291da0273366ad5ea", "model_calls": 0, "note": "Not new eligibility report;page8 source actually decoded."},
+    {"id": "T-06", "status": "passed", "snapshot_id": "S-02", "command": "npm test -- src/pages/SubjectsPage.test.tsx src/components/profile/ProfileEvidencePanel.test.tsx src/components/profile/ProfileCorrectionHistory.test.tsx; npm run build; Ego114 read-only49504", "exit_code": 0, "passed": 27, "seconds": 3.39, "viewport_columns": [[1920,738,886],[2560,1029,1235],[3840,1611,1933]], "note": "Runner disabled/all writes refused;owned PID9773 exited130. Existing bundle-size warning retained."},
+    {"id": "T-07", "status": "failed", "snapshot_id": "S-02", "command": "Private run_rv1006_authorized_control_window.py", "exit_code": 3, "seconds": 326.49716162501136, "job_id": "09e55762a458420ca72dcea22bdd25ce", "new_physical_calls": 6, "prior_physical_calls": 12, "error_code": "PROTOCOL_CONTROL_DEEP_OUTPUT_INVALID", "tokens": {"input": 153548, "output": 89978, "total": 243526, "cached_input_included": 64000, "reasoning": null, "api_fee": null}, "note": "Six stop responses. Uncapped testing authorized,old12 retained. SOURCE_STAGE_TIME_MISSING locally repaired;two candidate-stage mismatches remain. Target review not reached,therefore v7 live identity-review acceptance unknown. Protected DB and old jobs unchanged."},
+    {"id": "T-08", "status": "passed", "snapshot_id": "S-03", "command": "npm test -- src/components/profile/ProfileLaneList.test.tsx src/features/patient-profile/model/patientProfileModel.test.ts src/components/profile/ProfileHighlights.test.tsx src/pages/SubjectsPage.test.tsx; npm run build; Ego114 read-only52507", "exit_code": 0, "passed": 33, "seconds": 3.36, "note": "Clinical-display module tests;later sticky CSS checked by final build and1080P rendering.198raw/190displayed,zero ordinary administrative titles,no overflow,listtop68/topbar52. OwnedPID12658/session77157 exited130,no clinical writes or model calls."}
+  ],
+  "artifacts": [
+    {"id": "E-01", "path": ".trellis/tasks/09-11-e2e-eligibility-review/SOURCE_SNAPSHOT_20261006_1006V1.json", "access": "git"},
+    {"id": "E-02", "path": "/Users/smkzw/tmp/enrollment-rv1001-case-source-consumer-20261006-v2/rv1006-saved-response-current-node-20261006-v1/execute_record.json", "access": "controlled_local_only"},
+    {"id": "E-03", "path": "/Users/smkzw/tmp/enrollment-rv1001-case-source-consumer-20261006-v2/rv1006-ui-fact-correction-20261006-v1/execute_record.json", "access": "controlled_local_only"},
+    {"id": "E-04", "path": "/Users/smkzw/tmp/enrollment-rv1001-case-source-consumer-20261006-v2/rv1006-profile-two-columns-loaded-1080p.png", "access": "controlled_local_only", "note": "2K/4K siblings same root;clinical screenshots excluded fromGit."},
+    {"id": "E-05", "path": ".trellis/tasks/09-11-e2e-eligibility-review/HANDOFF.md", "access": "git"},
+    {"id": "E-06", "path": "/Users/smkzw/tmp/enrollment-rv1001-case-source-consumer-20261006-v2/rv1006-clinical-display-sticky-final-1080p.png", "access": "controlled_local_only", "note": "Actual clinical screenshot excluded fromGit;synthetic display tests public."},
+    {"id": "E-07", "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-authorized-control-window-20261006-v2/execute_record.json", "access": "controlled_local_only"}
+  ],
+  "independent_reviews": [
+    {"id": "enrollment-rv1006-complete-scope-boundary-20261006", "route": "CodeBuddy/codebuddy-cli/DeepSeek-v4.1-flash/max", "session_id": "01a1122f-9e75-7eea-be29-fa9a6d47ce34", "seconds": 200.079, "exit_code": 0, "fallback": false, "note": "Engineering only;no clinical/DB/test execution."},
+    {"id": "enrollment-rv1006-context-target-identity-20261006", "route": "CodeBuddy/codebuddy-cli/DeepSeek-v4.1-flash/max", "session_id": "01a1125f-53a9-76b4-90b8-72dd66bb5db4", "seconds": 239.98, "exit_code": 0, "fallback": false, "note": "Proposal before patch,owner tests afterward;not clinical approval."}
+  ],
+  "unrun": ["complete_same_source_work_draft", "correction_derived_new_report", "holdout", "full_zoom_matrix", "operations_restore", "full_Q3"],
+  "authorization": {"testing_request_count_cap": null, "prior_calls_immutable": 12, "formal_numeric_auto_adoption": false, "clinical_signing": false},
+  "inheritance": {"seven_legacy_modified_files_preserved": true, "clinical_sources_databases_raw_answers_credentials_excluded": true}
+}

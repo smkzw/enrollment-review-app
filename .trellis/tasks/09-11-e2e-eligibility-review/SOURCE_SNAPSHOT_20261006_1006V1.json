@@ -1,0 +1,66 @@
+{
+  "schema_version": "source-snapshot/1006v1/v1",
+  "worktree": "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile",
+  "commit": "cc4048348f12afde4d3221415e884c7966e5bf4c",
+  "base_commit": "7b3ed4f9251323b3194371764f2bcd17ad94559e",
+  "source_files": [
+    {
+      "path": "app/agents/protocol_control_source_interpretation.py",
+      "sha256": "edeaa20a966f00971910b64c1f7a30d3a9c8e846b91022bcf101d291f6af524b",
+      "bytes": 129030
+    },
+    {
+      "path": "tests/v2/protocols/test_slice58c_control_deconstructor.py",
+      "sha256": "c5d688a12c8dab81c7dfad70a3ad26a63db36d87f684221b503e4c47a4226bcf",
+      "bytes": 545011
+    },
+    {
+      "path": "frontend/src/components/profile/ProfileItemCard.tsx",
+      "sha256": "d71d4c799f46c842bcc881016a9f51048a37da792f7683faafc96bff7f9cc7dd",
+      "bytes": 8190
+    },
+    {
+      "path": "frontend/src/components/profile/ProfileItemCard.test.tsx",
+      "sha256": "a0cdb8d6690e6c5602d0295ba690799e5bf825430e6a9c4e2828ee9fd8e13d68",
+      "bytes": 7352
+    }
+  ],
+  "dependency_files": [
+    {
+      "path": "pyproject.toml",
+      "sha256": "88fcc26870b8e678619662463fb11a11bcbb51f2ada10925e21b7f7ab7c14b96",
+      "bytes": 646
+    },
+    {
+      "path": "frontend/package.json",
+      "sha256": "50d96a31e62e333de77f8259517174dce2de6d6e01cf265a92d90e5f78414975",
+      "bytes": 1188
+    },
+    {
+      "path": "frontend/package-lock.json",
+      "sha256": "1f21ed58e7535dad4c103edcae4b55b5046c40a929d96d4182dc97355a835ed4",
+      "bytes": 90656
+    }
+  ],
+  "clinical_files_included": false,
+  "frontend_layout_commit": "0e9b9bb99643ad074b2033d408ed8b7fc3dd1936",
+  "frontend_layout_files": [
+    {"path": "frontend/src/pages/SubjectsPage.tsx", "sha256": "9b13d4737b03ad43037d7dfd531225354127fdf127c54d2c654bf96cf9d28110", "bytes": 33898},
+    {"path": "frontend/src/pages/SubjectsPage.test.tsx", "sha256": "9cdccfa107fb51134f0ccf2fe3b4df0c6672beea0c0b39249e190c0808647a00", "bytes": 20538},
+    {"path": "frontend/src/styles/profile.css", "sha256": "9b49cf2712de163f3ea3ccb631d7fa39cdcfdf8a3384315c819a51ec8030fc1b", "bytes": 36967}
+  ],
+  "clinical_display_commit": "0c6f40291e95eae6fce17467d02f75b4d14890ca",
+  "clinical_display_files": [
+    {"path": "frontend/src/features/patient-profile/model/patientProfileModel.ts", "sha256": "a9cdf99ab438a79348eaa14086b43aca6a2ce3d8df9f57b0844ac7d445f2b16a", "bytes": 8569},
+    {"path": "frontend/src/features/patient-profile/model/index.ts", "sha256": "f59a4f273b716562c1ec9548a6361bf3864e3220da35939ed6af6a19e13556b2", "bytes": 345},
+    {"path": "frontend/src/components/profile/ProfileLaneList.tsx", "sha256": "7ceadc6c3e5162588ef4df51d842f7494c2c931f922d6332502b363e2529024e", "bytes": 2043},
+    {"path": "frontend/src/components/profile/ProfileLaneList.test.tsx", "sha256": "190b037b99d955729f63e2de7966b646acf3b494fb66375290f2804c0a2e7a5e", "bytes": 5115},
+    {"path": "frontend/src/styles/profile.css", "sha256": "065bbe4650be72b6471198fd2bed4ddd9f1bc0f9a6646f87e2ee9d18addd78ca", "bytes": 37131}
+  ],
+  "notes": [
+    "Backend two-module checks match this commit; frontend four-module checks match these two exact frontend files.",
+    "Real P1 trial ran the base backend before this identity-feedback patch; do not claim new live acceptance.",
+    "P2 recovery and UI correction used base backend and the same frontend display patch; not a complete clinical review chain.",
+    "Layout file hashes bind frontend_layout_commit,not the later clinical_display_commit. Current v2 P1 used S-02 backend,failed before target review. Clinical display tests bind the exact five files above;CSS sticky top was verified by final build/render."
+  ]
+}

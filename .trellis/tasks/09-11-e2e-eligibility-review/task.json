@@ -2,7 +2,7 @@
   "id": "e2e-eligibility-review",
   "name": "e2e-eligibility-review",
   "title": "端到端入排审核：判断检索界面+入排工作台+真实全链验收",
-  "description": "1001V1固定workflow与单一语义主责候选；保留R1/P1-P3及原生优先局部视觉，先修按原因恢复与共享预算，再做同模型同消费者对照和真实闭环",
+  "description": "1006V1交付冻结窗口：同源完整要求下既有5份24页隔离当前节点工作稿，正式UI一次有源更正/补证、受影响重算、新旧结果。保留R1及1001V1，只有直接阻断/错误采用保护修复准入。",
   "status": "in_progress",
   "dev_type": null,
   "scope": null,
@@ -15,7 +15,7 @@
   "branch": "codex/phase5-clinical-facts-profile",
   "base_branch": "codex/phase5-clinical-facts-profile",
   "worktree_path": "/Users/smkzw/Documents/康哲项目资料/AI/入排/enrollment-review-app/.worktrees/phase5-clinical-facts-profile",
-  "commit": "8b5b4c4f75f85110dfc81ce080755b1c8457144f",
+  "commit": "0c6f40291e95eae6fce17467d02f75b4d14890ca",
   "pr_url": null,
   "subtasks": [],
   "children": [],
@@ -40,16 +40,17 @@
     "acceptance.md",
     "HANDOFF_20260929_R1_PAUSE_AND_REVIEW.md"
   ],
-  "notes": "2026-10-06按用户要求阶段收口后无损暂停，Goal现场paused；完整产品未交付、不归档。状态见implement.md与HANDOFF_20261006_1001V1_PAUSE.md。旧失败/原件/额度及7份继承delivery修改保留；新增保存初答恢复只证合成链和真实只读预检，真实恢复/完整节点/更正/留出/Q3未完成。",
+  "notes": "1006V1连续实施，Goal active，claims_complete=false。资料14组/24页恢复、30事实及UI有源修订/Profile4成立；完整要求/工作稿/新审核报告未达。测试无次数硬上限，旧12不改；v2新6调用终态DEEP_OUTPUT_INVALID，流程执行节点关联两次不匹配，停止同分支盲重试。cc404834/0e9b9bb9/0c6f4029源码已提交，档案临床展示33检查及实际Ego成立，原198项/展示190项；7份继承dirty/原件/旧失败不改。",
   "meta": {
-    "execution_paused_by_user": true,
+    "execution_paused_by_user": false,
     "current_checkpoint": "implement.md",
-    "current_scope": "1001V1 RV1001-FLOW candidate and same-model baseline; reason-based recovery first; R1/P1-P3 and selective visual boundaries retained.",
+    "current_scope": "1006V1 frozen delivery window: complete same-source requirements, isolated current-node work draft, source navigation, one UI correction/supplement, affected recalculation and old/new history; R1/1001V1 retained.",
     "claims_complete": false,
-    "review_packet_status": "stage_paused_product_incomplete",
-    "runtime_goal_status_observed": "paused",
-    "current_handoff": "HANDOFF_20261006_1001V1_PAUSE.md",
-    "current_decision_source": "delivery_1001V1/00_START_HERE.md; delivery_0927V1_R1/01_DECISION.md; delivery_0929V1/02_DECISION.md",
-    "last_verified_source_commit": "8b5b4c4f75f85110dfc81ce080755b1c8457144f"
+    "review_packet_status": "delivery_window_unmet_candidate_stage_relationship_invalid",
+    "runtime_goal_status_observed": "active",
+    "current_handoff": "HANDOFF.md",
+    "current_decision_source": "delivery_1006V1/00_START_HERE.md; delivery_0927V1_R1/01_DECISION.md; delivery_1001V1/00_START_HERE.md",
+    "last_verified_source_commit": "0c6f40291e95eae6fce17467d02f75b4d14890ca",
+    "current_review_index": "review_index_20261006_1006V1.json"
   }
 }

@@ -1,0 +1,27 @@
+{
+  "package_id": "1006V1-EXEC-01",
+  "checked_at": "2026-10-06T18:30:12+02:00",
+  "scope": "package_files_only",
+  "checks": {
+    "seven_markdown_documents_present": true,
+    "utf8_and_no_replacement_characters": true,
+    "relative_markdown_links_resolve": true,
+    "relative_link_count": 9,
+    "markdown_fences_balanced": true,
+    "manifest_json_parseable": true,
+    "all_listed_document_hashes_and_lengths_match": true,
+    "candidate_approval_not_reported_as_product_validation": true,
+    "no_runtime_or_formal_adoption_authorization_claimed": true
+  },
+  "not_run": [
+    "product_pytest",
+    "frontend_build",
+    "browser_e2e",
+    "model_calls",
+    "clinical_validation",
+    "job_resume",
+    "database_writes"
+  ],
+  "not_a_security_or_medical_audit": true,
+  "zip_crc_check": "passed"
+}
