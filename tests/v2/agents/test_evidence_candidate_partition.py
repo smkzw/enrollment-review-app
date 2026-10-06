@@ -61,12 +61,157 @@ def test_dependency_quarantine_never_shrinks_an_event_to_its_good_subset():
     original["event_candidates"] = [{"candidate_ref": "event", "event_type": "检查记录",
         "profile_lane": "test_exam_score", "duration_status": "single",
         "fact_candidate_refs": ["f1", "good"], "locator_ids": ["loc-2"],
-        "candidate_source_semantics": "primary_source", "model_uncertainty": 0}]
+        "candidate_source_semantics": "同期客观结果", "model_uncertainty": 0}]
     partition = recover_source_local_candidates(json.dumps(original, ensure_ascii=False), _source_input())
     assert not partition.output.event_candidates
     assert partition.receipt["quarantined_candidate_refs"] == ["event", "f1"]
     assert len(partition.output.unresolved_items) == 2
     assert partition.receipt["original_draft"] == original
+
+
+@pytest.mark.parametrize("compact", [False, True])
+def test_missing_numeric_unit_isolated_without_guessing_or_model_repair(compact):
+    original = _draft()
+    bad = original["fact_candidates"][0]
+    bad["assertion_basis"].update(asserted_object="项目乙", contextual_qualifiers=[])
+    bad["unit"] = None
+    original["event_candidates"] = [{"candidate_ref": "event", "event_type": "检查记录",
+        "profile_lane": "test_exam_score", "duration_status": "single",
+        "fact_candidate_refs": ["f1", "good"], "locator_ids": ["loc-2"],
+        "candidate_source_semantics": "同期客观结果", "model_uncertainty": 0}]
+    aliases = NormalizerReferenceAliases.from_payload(_source_input().model_dump(mode="json"))
+    raw = json.dumps(aliases.transform(original) if compact else original, ensure_ascii=False)
+    transport = _FakeTransport([(raw, "unit-read")])
+    result = EvidenceNormalizerRunner(max_transport_retries=0, max_schema_repairs=1).run(
+        _source_input(), transport, prompt_template=DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE,
+        require_current_draft=True, compact_references=compact, allow_candidate_partition=True)
+    assert result.status == "部分已解析" and not transport.repair_prompts
+    assert [fact.candidate_id for fact in result.final_output.fact_candidates] == ["good"]
+    assert not result.final_output.event_candidates
+    receipt = result.candidate_partition_receipt
+    assert receipt["policy"] == "evidence-candidate-partition/v3"
+    assert receipt["quarantined_candidate_refs"] == ["event", "f1"]
+    assert receipt["original_draft"] == original
+    assert receipt["retained_draft"]["fact_candidates"] == [original["fact_candidates"][1]]
+    questions = result.final_output.unresolved_items
+    assert {item.code for item in questions} == {"numeric_unit_missing", "candidate_source_validation_failed"}
+    assert all(item.gap_type is None for item in questions)
+
+
+@pytest.mark.parametrize("fault", ["foreign", "duplicate", "unknown_dependency", "identifier", "uncertainty",
+    "foreign_requirement", "source_semantics", "object_mismatch"])
+def test_missing_unit_cannot_hide_global_or_other_contract_damage(fault):
+    original = _draft()
+    bad = original["fact_candidates"][0]
+    bad["assertion_basis"].update(asserted_object="项目乙", contextual_qualifiers=[])
+    bad["unit"] = None
+    if fault == "foreign":
+        bad["locator_ids"].append("other-patient")
+    elif fault == "duplicate":
+        original["fact_candidates"][1]["candidate_ref"] = "f1"
+    elif fault == "identifier":
+        bad.update(value_kind="identifier", raw_value=2, canonical_value=2)
+    elif fault == "uncertainty":
+        bad["model_uncertainty"] = 2
+    elif fault == "foreign_requirement":
+        bad["supported_requirement_ids"] = ["other-requirement"]
+    elif fault == "source_semantics":
+        bad["candidate_source_semantics"] = "not-a-source"
+    elif fault == "object_mismatch":
+        bad["asserted_object"] = "另一个对象"
+    else:
+        original["actual_exposure_fact_refs"] = ["unknown"]
+    with pytest.raises(ValueError):
+        recover_source_local_candidates(json.dumps(original, ensure_ascii=False), _source_input())
+
+
+@pytest.mark.parametrize("reference_case", ["reverse", "duplicate", "foreign"])
+def test_observation_reference_order_does_not_rewrite_or_hide_source_membership(reference_case):
+    from tests.v2.agents.test_evidence_normalizer_adapter import _r3_input_with_accepted_fact
+    inp, refs = _r3_input_with_accepted_fact()
+    original = _draft()
+    for index, fact in enumerate(original["fact_candidates"]):
+        fact.update(asserted_object="糖尿病病史", raw_value=2 if index == 0 else "患者无糖尿病病史。",
+            canonical_value=2 if index == 0 else "患者无糖尿病病史。",
+            unit=None, locator_ids=["loc-1"], source_observation_refs=sorted(refs))
+        fact["assertion_basis"].update(asserted_object="糖尿病病史", assertion_text="患者无糖尿病病史。",
+            locator_id="loc-1", contextual_qualifiers=[])
+    reference_ids = sorted(refs, reverse=True)
+    if reference_case == "duplicate":
+        reference_ids.append(reference_ids[0])
+    elif reference_case == "foreign":
+        reference_ids.append("other-patient-observation")
+    original["unresolved_items"] = [{"code": "reading_pending", "message": "原件观察尚待核对",
+        "affected_pages": [1], "affected_locator_ids": ["loc-1"],
+        "affected_observation_refs": reference_ids, "reason": "原件内容保留，不先整理为事实。"},
+        {"code": "page_pending", "message": "第二页待核", "affected_pages": [2],
+            "affected_locator_ids": ["loc-2"], "reason": "本例仅核观察引用。"}]
+    raw = json.dumps(original, ensure_ascii=False)
+    if reference_case != "reverse":
+        with pytest.raises(ValueError):
+            recover_source_local_candidates(raw, inp)
+        return
+    result = recover_source_local_candidates(raw, inp)
+    assert result.receipt["original_draft"] == original
+    assert result.output.unresolved_items[0].affected_observation_refs == sorted(refs)
+    assert next(q for q in result.output.unresolved_items if q.code == "numeric_unit_missing").affected_observation_refs == sorted(refs)
+    assert result.receipt["retained_draft"]["fact_candidates"] == [original["fact_candidates"][1]]
+
+
+def test_foreign_observation_on_missing_unit_candidate_is_rejected_before_deletion():
+    from tests.v2.agents.test_evidence_normalizer_adapter import _r3_input_with_accepted_fact
+    inp, refs = _r3_input_with_accepted_fact()
+    original = _draft()
+    bad = original["fact_candidates"][0]
+    bad["assertion_basis"].update(asserted_object="项目乙", contextual_qualifiers=[])
+    bad.update(unit=None, source_observation_refs=["other-patient-observation"])
+    with pytest.raises(ValueError, match="本次已采信观察"):
+        recover_source_local_candidates(json.dumps(original, ensure_ascii=False), inp)
+
+
+def test_two_independent_observation_groups_keep_quarantined_group_as_a_question():
+    from tests.v2.agents.test_evidence_normalizer_adapter import _r3_input_with_accepted_fact
+    from app.domain.page_normalization import fact_normalization_key
+    from app.domain.contracts.evidence_normalizer import page_review_input_scope_hash, evidence_normalizer_input_scope_hash
+    from app.projections.page_review_sources import accepted_observations
+    inp, group_a = _r3_input_with_accepted_fact()
+    attachment = inp.page_review
+    key, value, unit = fact_normalization_key("记录对象", "患者", context={"target_text": "患者"})
+    reviews = []
+    for review in attachment.reviews:
+        extra = review.facts[0].model_copy(update={"observation_id": review.facts[0].observation_id + "-object",
+            "field_name": "记录对象", "raw_text": "患者", "raw_value": "患者",
+            "normalized_value": value, "normalized_unit": unit, "normalization_key": key})
+        reviews.append(review.model_copy(update={"facts": [*review.facts, extra]}))
+    reconciliation = attachment.reconciliations[0].model_copy(update={
+        "accepted_fact_keys": sorted([*attachment.reconciliations[0].accepted_fact_keys, key])})
+    attachment = attachment.model_copy(update={"reviews": reviews, "reconciliations": [reconciliation],
+        "scope_sha256": page_review_input_scope_hash(coverage_id=attachment.coverage_id,
+            clause_pack_sha256=attachment.clause_pack_sha256, entries=attachment.entries,
+            reviews=reviews, reconciliations=[reconciliation])})
+    inp = inp.model_copy(update={"page_review": attachment, "input_scope_sha256": evidence_normalizer_input_scope_hash(
+        authority=inp.authority, logical_document_id=inp.logical_document_id, context=inp.context,
+        related_requirements=inp.related_requirements, manifest_sha256=inp.manifest_sha256,
+        completion_manifest_sha256=inp.completion_manifest_sha256, page_numbers=inp.page_numbers,
+        pages=inp.pages, available_locator_ids=inp.available_locator_ids, available_locators=inp.available_locators,
+        page_review=attachment)})
+    group_b = sorted(item["source_observation_ref"] for item in accepted_observations(reviews, reconciliation,
+        include_clause_signals=False) if item["observation"]["normalization_key"] == key)
+    original = _draft()
+    for index, fact in enumerate(original["fact_candidates"]):
+        obj = "糖尿病病史" if index == 0 else "患者"
+        fact.update(asserted_object=obj, raw_value=2 if index == 0 else "患者",
+            canonical_value=2 if index == 0 else "患者", unit=None, locator_ids=["loc-1"],
+            source_observation_refs=sorted(group_a) if index == 0 else group_b)
+        fact["assertion_basis"].update(asserted_object=obj, assertion_text="患者无糖尿病病史。",
+            locator_id="loc-1", contextual_qualifiers=[])
+    original["unresolved_items"] = [{"code": "page_pending", "message": "第二页待核", "affected_pages": [2],
+        "affected_locator_ids": ["loc-2"], "reason": "本例仅核观察引用闭合。"}]
+    result = recover_source_local_candidates(json.dumps(original, ensure_ascii=False), inp)
+    assert result.output.fact_candidates[0].source_observation_refs == group_b
+    question = next(q for q in result.output.unresolved_items if q.code == "numeric_unit_missing")
+    assert question.affected_observation_refs == sorted(group_a)
+    assert result.receipt["quarantined_candidate_refs"] == ["f1"]
 
 
 @pytest.mark.parametrize("change", ["foreign", "duplicate", "unknown_top", "unknown_fact",
@@ -128,7 +273,7 @@ def test_quarantining_a_source_error_cannot_hide_another_contract_error(fault):
     else:
         original["event_candidates"] = [{"candidate_ref": "event", "profile_lane": "test_exam_score",
             "duration_status": "single", "fact_candidate_refs": ["f1"], "locator_ids": ["loc-2"],
-            "candidate_source_semantics": "primary_source", "model_uncertainty": 0}]
+            "candidate_source_semantics": "同期客观结果", "model_uncertainty": 0}]
     with pytest.raises(ValueError):
         recover_source_local_candidates(json.dumps(original, ensure_ascii=False), _source_input())
 
@@ -153,7 +298,7 @@ def test_medication_closure_is_quarantined_without_losing_an_independent_measure
     original["actual_exposure_fact_refs"] = ["f1", "medicine"]
     original["exposure_candidates"] = [{"candidate_ref": "exposure", "medication_name": "来源用药",
         "duration_status": "single", "fact_candidate_refs": ["f1", "medicine"],
-        "locator_ids": ["loc-2"], "candidate_source_semantics": "primary_source", "model_uncertainty": 0}]
+        "locator_ids": ["loc-2"], "candidate_source_semantics": "同期客观结果", "model_uncertainty": 0}]
     result = recover_source_local_candidates(json.dumps(original, ensure_ascii=False), _source_input())
     assert [item.candidate_id for item in result.output.fact_candidates] == ["good"]
     assert result.receipt["quarantined_candidate_refs"] == ["exposure", "f1", "medicine"]

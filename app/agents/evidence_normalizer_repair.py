@@ -33,6 +33,14 @@ class EvidenceDerivedSourceError(ValueError):
         self.collection = collection
 
 
+class EvidenceNumericUnitError(ValueError):
+    """A precisely identified numeric candidate lacks a declared unit."""
+
+    def __init__(self, message: str, candidate_ref: str):
+        super().__init__(message)
+        self.candidate_ref = candidate_ref
+
+
 class EvidenceProspectiveError(EvidenceSourceObjectError):
     """Explicit future/uncertain scope conflicts with actual-occurrence membership."""
 

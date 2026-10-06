@@ -1447,8 +1447,7 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
             )
             _validate_saved_text_accounting(session, payload, authority, run_id, calls)
             final_status = FactNormalizationRunStatus.SUCCEEDED
-            has_partition_questions = any(item.item.code == "candidate_source_validation_failed"
-                                          for item in unresolved_items)
+            has_partitioned_calls = any(call.candidate_partition_sha256 is not None for call in calls)
             if facts or events or exposures:
                 run_result = orchestrate_run_gates(
                     authority=authority, run_id=run_id, calls=calls,
@@ -1568,7 +1567,7 @@ def create_fact_normalization_executor(config: FactNormalizationExecutorConfig) 
                 checkpoint.update(gate_result_count=0, conflict_group_count=0, rejected_candidate_count=0)
                 final_status = FactNormalizationRunStatus.PARTIAL
             checkpoint["unresolved_item_count"] = len(unresolved_items)
-            if has_partition_questions:
+            if has_partitioned_calls:
                 final_status = FactNormalizationRunStatus.PARTIAL
             if payload.get("text_accounting_policy") is not None and unresolved_items:
                 final_status = FactNormalizationRunStatus.PARTIAL

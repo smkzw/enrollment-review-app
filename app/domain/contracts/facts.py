@@ -32,6 +32,7 @@ from datetime import date, datetime
 from typing import Literal
 
 from pydantic import ConfigDict, Field, model_serializer, model_validator
+from pydantic_core import PydanticCustomError
 
 from .common import ContractModel, ScalarValue
 from .identifier_value import validate_identifier_value
@@ -300,10 +301,6 @@ class ClinicalFactCandidateV2(Phase5Model):
                 self.canonical_value
             ):
                 raise ValueError("候选规范数值必须是有限数")
-            if isinstance(self.canonical_value, (int, float)) and not isinstance(
-                self.canonical_value, bool
-            ) and not self.unit:
-                raise ValueError("数值候选必须声明单位；无量纲值显式使用 unitless")
             if self.assertion_basis is None:
                 raise ValueError("肯定或否定候选必须携带明确断言依据")
             if self.assertion_basis.locator_id not in self.locator_ids:
@@ -311,6 +308,12 @@ class ClinicalFactCandidateV2(Phase5Model):
             if self.assertion_basis.asserted_object != self.asserted_object:
                 raise ValueError("候选被断言对象必须与断言依据对象一致")
             self.assertion_basis.require_context_locators(self.locator_ids)
+            if isinstance(self.canonical_value, (int, float)) and not isinstance(
+                self.canonical_value, bool
+            ) and not self.unit:
+                raise PydanticCustomError(
+                    "numeric_unit_missing", "数值候选必须声明单位；无量纲值显式使用 unitless"
+                )
         return self
 
 

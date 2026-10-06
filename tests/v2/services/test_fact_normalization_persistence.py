@@ -1206,12 +1206,16 @@ def test_executor_maps_text_transport_empty_json_to_empty_output(session_factory
     assert exc.value.error_code == "EMPTY_OUTPUT"
 
 
-@pytest.mark.parametrize("separate_context", [False, True])
+@pytest.mark.parametrize("reading_issue", ["none", "context", "missing_unit"])
 @pytest.mark.parametrize("account_source_text", [False, True])
 def test_model_draft_is_hydrated_gated_and_persisted_by_real_executor(
-    session_factory, separate_context, data_paths, account_source_text,
+    session_factory, reading_issue, data_paths, account_source_text,
 ):
     from app.workflow.runner import JobRunner
+    from app.evidence.artifacts import ArtifactStore
+    separate_context = reading_issue == "context"
+    missing_unit = reading_issue == "missing_unit"
+    has_sibling = account_source_text or missing_unit
 
     with session_factory() as session:
         chain = _seed_chain(session, prefix="draft-output")
@@ -1223,6 +1227,7 @@ def test_model_draft_is_hydrated_gated_and_persisted_by_real_executor(
         model_config_id=chain["model_config_id"],
         created_by="tester",
         account_source_text=account_source_text,
+        allow_candidate_partition=missing_unit,
     )
 
     class DraftTransport:
@@ -1261,7 +1266,7 @@ def test_model_draft_is_hydrated_gated_and_persisted_by_real_executor(
                 "non_exposure_medication_fact_refs": [],
                 "unresolved_items": [],
             }
-            if account_source_text:
+            if has_sibling:
                 from copy import deepcopy
                 sibling = deepcopy(body["fact_candidates"][0])
                 sibling.update(candidate_ref="f2", asserted_object="AST", raw_value="AST 3",
@@ -1269,6 +1274,8 @@ def test_model_draft_is_hydrated_gated_and_persisted_by_real_executor(
                 sibling["assertion_basis"].update(asserted_object="AST", assertion_text="AST 3",
                     locator_id=chain["locator_id_2"], contextual_qualifiers=[])
                 body["fact_candidates"].append(sibling)
+            if missing_unit:
+                body["fact_candidates"][0].update(raw_value=5, canonical_value=5)
             return type(
                 "Response",
                 (),
@@ -1288,6 +1295,7 @@ def test_model_draft_is_hydrated_gated_and_persisted_by_real_executor(
                 FactNormalizationExecutorConfig(
                     session_factory=session_factory,
                     transport=DraftTransport(),
+                    artifact_store=ArtifactStore(data_paths),
                 )
             )
         },
@@ -1295,14 +1303,18 @@ def test_model_draft_is_hydrated_gated_and_persisted_by_real_executor(
 
     assert runner.run_job(created.job_id) is True
     with session_factory() as session:
+        from app.workflow.jobstore import JobStore
+        assert service.get_job(created.job_id)["state"] == "completed", [
+            row.event.payload for row in JobStore(session).list_event_rows(created.job_id)
+            if row.event.event_type.value == "step_failed"]
         run = FactNormalizationRunRepository(session).get(created.run_id)
         candidates = session.execute(
             select(FactNormalizationCandidateRecord).where(
                 FactNormalizationCandidateRecord.run_id == created.run_id
             )
         ).scalars().all()
-        assert run.status.value == ("partial" if separate_context or account_source_text else "succeeded")
-        assert len(candidates) == (2 if account_source_text else 1)
+        assert run.status.value == ("partial" if separate_context or account_source_text or missing_unit else "succeeded")
+        assert len(candidates) == (1 if missing_unit else 2 if has_sibling else 1)
         candidates.sort(key=lambda record: decode_contract(ClinicalFactCandidateV2,
             record.payload_json, record.payload_sha256).asserted_object)
         candidate = decode_contract(
@@ -1319,19 +1331,23 @@ def test_model_draft_is_hydrated_gated_and_persisted_by_real_executor(
             source = candidate.assertion_basis.contextual_qualifiers[0].source
             assert source.excerpt == "ALT" and source.source_text_sha256 == _sha(SOURCE_TEXT)
             assert gate_fact_candidate(candidate)[FactGate.POLARITY_AND_ASSERTED_OBJECT].outcome == GateOutcome.BLOCKED
-        if account_source_text:
+        if has_sibling:
             from app.storage.facts_models import ClinicalFactV2Record
             published = session.execute(select(ClinicalFactV2Record).where(
                 ClinicalFactV2Record.run_id == created.run_id)).scalars().all()
-            assert {record.assertion_object for record in published} == ({"AST"} if separate_context else {"ALT", "AST"})
+            assert {record.assertion_object for record in published} == ({"AST"} if separate_context or missing_unit else {"ALT", "AST"})
 
-    if separate_context:
+    if separate_context or missing_unit:
         from app.services.evidence_api_read_service import EvidenceApiReadService
         from app.api.v2.fact_normalization_schemas import NormalizationUnresolvedPageDTO
         from app.evidence.artifacts import ArtifactStore
         view = EvidenceApiReadService(session_factory, ArtifactStore(data_paths)).normalization_unresolved(
             chain["subject_id"], chain["episode_id"], created.job_id)
         decoded = NormalizationUnresolvedPageDTO.model_validate(view)
+        if missing_unit:
+            assert any("单位尚未核清" in item.message and item.sources for item in decoded.items)
+            assert decoded.is_current
+            return
         relations = [item for item in decoded.items if "归属关系尚待核实" in item.message]
         assert len(relations) == 1
         assert relations[0].kind == "reading_uncertainty"

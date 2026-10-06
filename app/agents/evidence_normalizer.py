@@ -73,7 +73,7 @@ from app.agents.evidence_normalizer_repair import (
     EvidenceSourceObjectError, EvidenceSourceObjectRepair, SOURCE_OBJECT_REPAIR_VERSION,
     EvidenceContextError, EvidenceContextRepair, EvidenceDraftScopeError, CONTEXT_REPAIR_VERSION,
     EvidencePendingContextRetention,
-    EvidenceDerivedSourceError,
+    EvidenceDerivedSourceError, EvidenceNumericUnitError,
     EvidenceProspectiveError, EvidenceProspectiveRepair, PROSPECTIVE_SCOPES, PROSPECTIVE_REPAIR_VERSION,
 )
 
@@ -1550,6 +1550,13 @@ def _hydrate_draft_output(
                 created_at=created_at,
             )
         except ValidationError as exc:
+            errors = exc.errors()
+            if len(errors) == 1 and errors[0]["type"] == "numeric_unit_missing":
+                raise EvidenceNumericUnitError(
+                    f"事实候选 {candidate.candidate_ref}（{candidate.asserted_object}）"
+                    "数值候选必须声明单位；须回原文核实，不能猜单位或作为正式数值采用。",
+                    candidate.candidate_ref,
+                ) from exc
             raise ValueError(
                 f"事实候选 {candidate.candidate_ref}（{candidate.asserted_object}）"
                 f"未通过合同校验：{_validation_error_summary(exc)}"
@@ -2476,7 +2483,7 @@ class EvidenceNormalizerRunner:
                 )
                 if schema_repairs >= self._max_schema_repairs:
                     return terminal_schema_failure()
-                if isinstance(exc, EvidenceDerivedSourceError) and allow_candidate_partition:
+                if isinstance(exc, (EvidenceDerivedSourceError, EvidenceNumericUnitError)) and allow_candidate_partition:
                     return terminal_schema_failure()
                 if isinstance(exc, EvidenceSourceObjectError):
                     scope_unavailable = not exc.bounded_repair or (object_repair is None and schema_repairs > 0)
