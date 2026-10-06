@@ -57,6 +57,11 @@
     {"path": "frontend/src/components/profile/ProfileLaneList.test.tsx", "sha256": "190b037b99d955729f63e2de7966b646acf3b494fb66375290f2804c0a2e7a5e", "bytes": 5115},
     {"path": "frontend/src/styles/profile.css", "sha256": "065bbe4650be72b6471198fd2bed4ddd9f1bc0f9a6646f87e2ee9d18addd78ca", "bytes": 37131}
   ],
+  "clinical_annotation_commit": "09e00e63f528fe1db6cd8139f0c716c82c9926ad",
+  "clinical_annotation_files": [
+    {"path": "frontend/src/features/patient-profile/model/patientProfileModel.ts", "sha256": "0b832799b60c1c622151c4d4c8e8229cf3dabd89c2711972df4a2825c0f22ab5", "bytes": 8996},
+    {"path": "frontend/src/components/profile/ProfileLaneList.test.tsx", "sha256": "7986dfab176b7ef306e1d76dec62878e13014f2e9a69adf586b8c103c62362c4", "bytes": 5977}
+  ],
   "notes": [
     "Backend two-module checks match this commit; frontend four-module checks match these two exact frontend files.",
     "Real P1 trial ran the base backend before this identity-feedback patch; do not claim new live acceptance.",
