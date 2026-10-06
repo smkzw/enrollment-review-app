@@ -2458,6 +2458,25 @@ class KnownWorkflowStageTarget(Phase5ControlModel):
     display_name: str = Field(min_length=1)
     visit_instance: str | None = Field(default=None, min_length=1)
     visit_window: str | None = Field(default=None, min_length=1)
+    source_span_ids: list[str] = Field(default_factory=list)
+    source_excerpts: list[str] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def preserve_unsourced_stage_shape(self, handler):
+        payload = handler(self)
+        if not self.source_span_ids and not self.source_excerpts:
+            payload.pop("source_span_ids", None)
+            payload.pop("source_excerpts", None)
+        return payload
+
+    @model_validator(mode="after")
+    def validate_sources(self) -> "KnownWorkflowStageTarget":
+        _require_sorted_unique(self.source_span_ids, "流程节点来源")
+        if len(self.source_span_ids) != len(self.source_excerpts):
+            raise ValueError("流程节点来源与原始表头摘录须一一对应")
+        if any(not excerpt.strip() for excerpt in self.source_excerpts):
+            raise ValueError("流程节点原始表头摘录不得为空")
+        return self
 
 
 MAX_SOURCE_LIST_GROUP_UNITS = 24

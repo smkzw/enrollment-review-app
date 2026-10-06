@@ -750,13 +750,16 @@ def _target_signatures(
     expected = (
         signature(first_official, ("catalog_item_id", "official_code", "position")),
         signature(first_procedure, ("catalog_item_id", "visit_instance", "review_stage", "position")),
-        signature(first_workflow, ("workflow_stage_id", "review_stage", "visit_instance")),
+        signature(first_workflow, ("workflow_stage_id", "review_stage", "visit_instance", "display_name",
+                                   "visit_window", "source_span_ids", "source_excerpts")),
     )
     for batch in batches[1:]:
         actual = (
             signature(getattr(batch, "known_official_targets", ()), ("catalog_item_id", "official_code", "position")),
             signature(getattr(batch, "known_procedure_targets", ()), ("catalog_item_id", "visit_instance", "review_stage", "position")),
-            signature(getattr(batch, "known_workflow_stage_targets", ()), ("workflow_stage_id", "review_stage", "visit_instance")),
+            signature(getattr(batch, "known_workflow_stage_targets", ()),
+                      ("workflow_stage_id", "review_stage", "visit_instance", "display_name",
+                       "visit_window", "source_span_ids", "source_excerpts")),
         )
         if actual != expected:
             _fail("FROZEN_TARGET_CATALOG_DRIFT", "不同批次的冻结目标目录不一致")

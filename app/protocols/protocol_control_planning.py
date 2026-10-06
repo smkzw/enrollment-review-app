@@ -36,6 +36,7 @@ from app.domain.contracts.protocol_controls import (
     stable_protocol_control_batch_id,
 )
 from app.domain.contracts.protocol_ingestion import FrozenProtocolCatalog
+from app.domain.contracts.agent_io import ProtocolSourceMaterial
 from app.domain.contracts.rules import WorkflowStage
 from app.protocols.adaptive_batch_budget import (
     AdaptiveBatchBudget,
@@ -396,11 +397,17 @@ def _catalog_targets(
 
 def _workflow_stage_targets(
     workflow_stages: Sequence[WorkflowStage] | None,
+    *,
+    required_procedure_catalog: FrozenProtocolCatalog | None = None,
+    source_materials: Sequence[ProtocolSourceMaterial] | None = None,
 ) -> tuple[KnownWorkflowStageTarget, ...]:
     if not workflow_stages:
         return ()
     targets: list[KnownWorkflowStageTarget] = []
     seen: set[str] = set()
+    materials = {item.source_span_id: item for item in source_materials or ()}
+    if len(materials) != len(source_materials or ()):
+        raise ProtocolControlPlanningError("workflow_source_duplicate", "流程节点原始来源身份重复。")
     for stage in workflow_stages:
         if stage.workflow_stage_id in seen:
             raise ProtocolControlPlanningError(
@@ -408,6 +415,41 @@ def _workflow_stage_targets(
                 f"workflow_stage_id 重复：{stage.workflow_stage_id}。",
             )
         seen.add(stage.workflow_stage_id)
+        sources: dict[str, str] = {}
+        if required_procedure_catalog is not None and source_materials is not None:
+            from app.protocols.procedure_catalog import _derive_visit_stage, _without_display_footnotes
+
+            for table in required_procedure_catalog.visit_tables:
+                for column in table.columns:
+                    if (column.review_stage, column.visit_instance) != (stage.stage, stage.visit_instance):
+                        continue
+                    # A legacy header without anchors remains unverified, not fabricated.
+                    if not column.source_span_ids:
+                        continue
+                    root = materials.get(table.table_source_span_id)
+                    cells: dict[str, list[str]] = {}
+                    for ref, excerpt in zip(column.source_span_ids, column.source_excerpts, strict=True):
+                        material = materials.get(ref)
+                        if (root is None or material is None or material.text != excerpt
+                                or excerpt not in root.text
+                                or not material.source_ref.startswith(root.source_ref + ".r")):
+                            raise ProtocolControlPlanningError(
+                                "workflow_header_source_invalid", "流程节点表头来源无法在冻结原件中核验。",
+                            )
+                        cells.setdefault(material.source_ref.rpartition(".p")[0], []).append(excerpt)
+                        if ref in sources and sources[ref] != excerpt:
+                            raise ProtocolControlPlanningError(
+                                "workflow_header_source_conflict", "同一流程表头来源出现不同摘录。",
+                            )
+                        sources[ref] = excerpt
+                    projected = " / ".join(dict.fromkeys(
+                        _without_display_footnotes("\n".join(values)) for values in cells.values()
+                    ))
+                    if projected != column.visit_instance or _derive_visit_stage(projected) != stage.stage:
+                        raise ProtocolControlPlanningError(
+                            "workflow_header_identity_invalid", "流程节点身份与冻结表头投影不一致。",
+                        )
+        source_pairs = sorted(sources.items())
         targets.append(
             KnownWorkflowStageTarget(
                 workflow_stage_id=stage.workflow_stage_id,
@@ -415,6 +457,8 @@ def _workflow_stage_targets(
                 display_name=stage.display_name,
                 visit_instance=stage.visit_instance,
                 visit_window=stage.visit_window,
+                source_span_ids=[ref for ref, _ in source_pairs],
+                source_excerpts=[excerpt for _, excerpt in source_pairs],
             )
         )
     return tuple(targets)
@@ -472,6 +516,7 @@ def plan_protocol_control_batches(
     context_radius: int = 1,
     prioritize_keyword_rank: bool = False,
     workflow_stages: Sequence[WorkflowStage] | None = None,
+    source_materials: Sequence[ProtocolSourceMaterial] | None = None,
 ) -> ProtocolControlBatchPlan:
     """Build deterministic bounded work packets for all manifest units.
 
@@ -515,7 +560,10 @@ def plan_protocol_control_batches(
         expected_kind=CatalogKind.REQUIRED_PROCEDURES,
         coverage=coverage_manifest,
     )
-    workflow_stage_targets = _workflow_stage_targets(workflow_stages)
+    workflow_stage_targets = _workflow_stage_targets(
+        workflow_stages, required_procedure_catalog=required_procedure_catalog,
+        source_materials=source_materials,
+    )
     _validate_procedure_stage_reconciliation(
         procedure_targets,
         workflow_stage_targets,
@@ -1118,6 +1166,7 @@ def plan_protocol_control_deep_batches_from_discovery(
     *,
     max_owned_units_per_batch: int = 12,
     workflow_stages: Sequence[WorkflowStage] | None = None,
+    source_materials: Sequence[ProtocolSourceMaterial] | None = None,
 ) -> ProtocolControlDiscoveryToDeepPlan:
     """Build deep batches only for candidate/uncertain discovery outcomes."""
 
@@ -1193,7 +1242,10 @@ def plan_protocol_control_deep_batches_from_discovery(
         expected_kind=CatalogKind.REQUIRED_PROCEDURES,
         coverage=coverage_manifest,
     )
-    workflow_stage_targets = _workflow_stage_targets(workflow_stages)
+    workflow_stage_targets = _workflow_stage_targets(
+        workflow_stages, required_procedure_catalog=required_procedure_catalog,
+        source_materials=source_materials,
+    )
     _validate_procedure_stage_reconciliation(
         procedure_targets,
         workflow_stage_targets,

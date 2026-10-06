@@ -53,7 +53,10 @@ from app.domain.contracts.protocol_controls import (
 from app.domain.contracts.protocol_ingestion import (
     FrozenCatalogItem,
     FrozenProtocolCatalog,
+    FrozenVisitColumn,
+    FrozenVisitTable,
 )
+from app.domain.contracts.agent_io import ProtocolSourceMaterial
 from app.domain.contracts.rules import WorkflowStage
 from app.domain.publication import canonical_hash
 from app.protocols.protocol_control_planning import (
@@ -1056,3 +1059,107 @@ def test_planner_rejects_catalog_from_another_phase() -> None:
     ).model_copy(update={"study_phase": StudyPhase.PHASE_III})
     with pytest.raises(ProtocolControlPlanningError, match="期别不一致"):
         plan_protocol_control_batches(_manifest(_unit(1, "章节 A")), official)
+
+
+def _stage_header_inputs():
+    visit = "筛选期 / V1 / D-9~D-1"
+    excerpts = ("筛选期", "V1", "D-9~D-1")
+    refs = ("header:1", "header:2", "header:3")
+    materials = [ProtocolSourceMaterial(
+        source_span_id="table:1", source_ref="body.t1", block_order=0,
+        text="\n".join(excerpts),
+    ), *[ProtocolSourceMaterial(
+        source_span_id=ref, source_ref=f"body.t1.r{number}.c1.p0", block_order=number + 1,
+        text=excerpt,
+    ) for number, (ref, excerpt) in enumerate(zip(refs, excerpts, strict=True))]]
+    catalog = _catalog(CatalogKind.REQUIRED_PROCEDURES, [FrozenCatalogItem(
+        item_id="procedure:1", kind=CatalogItemKind.REQUIRED_PROCEDURE, label="心电图",
+        position=0, source_span_ids=("span:01",), review_stage=ReviewStage.SCREENING,
+        visit_instance=visit,
+    )])
+    catalog = catalog.model_copy(update={"visit_tables": (FrozenVisitTable(
+        table_source_span_id="table:1", column_count=2, columns=(FrozenVisitColumn(
+            column_index=1, visit_instance=visit, review_stage=ReviewStage.SCREENING,
+            source_span_ids=refs, source_excerpts=excerpts,
+        ),),
+    ),)})
+    catalog = catalog.model_copy(update={"catalog_sha256": canonical_hash(
+        catalog.model_dump(mode="json", exclude={"catalog_sha256"}),
+    )})
+    catalog = FrozenProtocolCatalog.model_validate(catalog.model_dump(mode="json"))
+    stage = WorkflowStage(workflow_stage_id="stage:screening", stage=ReviewStage.SCREENING,
+                          display_name=visit, visit_instance=visit)
+    return catalog, materials, stage
+
+
+def test_planning_retains_exact_stage_header_sources_and_prompt_context():
+    from app.agents.protocol_control_source_interpretation import (
+        SOURCE_INTERPRETATION_VERSION, SourceInterpretation, build_source_target_review_prompt,
+    )
+    catalog, materials, stage = _stage_header_inputs()
+    plan = plan_protocol_control_batches(
+        _manifest(_unit(1, "章节 A")), required_procedure_catalog=catalog,
+        workflow_stages=[stage], source_materials=materials,
+    )
+    target = plan.batches[0].known_workflow_stage_targets[0]
+    assert target.source_span_ids == ["header:1", "header:2", "header:3"]
+    assert target.source_excerpts == ["筛选期", "V1", "D-9~D-1"]
+    assert target.visit_window is None
+    prompt = build_source_target_review_prompt(plan.batches[0], SourceInterpretation(
+        version=SOURCE_INTERPRETATION_VERSION, statements=[], units_without_statement=[],
+    ), [])
+    assert '"source_verified":true' in prompt
+    assert '"source_excerpts":["筛选期","V1","D-9~D-1"]' in prompt
+    assert "仅上下文，不是已有操作目标" in prompt
+
+
+@pytest.mark.parametrize("fault", ["missing", "excerpt", "parent", "duplicate", "projection"])
+def test_stage_header_corruption_is_not_silent_missing_source(fault):
+    catalog, materials, stage = _stage_header_inputs()
+    if fault == "missing":
+        materials = materials[:-1]
+    elif fault == "excerpt":
+        materials[-1] = materials[-1].model_copy(update={"text": "D-8~D-1"})
+    elif fault == "parent":
+        materials[-1] = materials[-1].model_copy(update={"source_ref": "body.t2.r2.c1.p0"})
+    elif fault == "duplicate":
+        materials.append(materials[-1])
+    else:
+        column = catalog.visit_tables[0].columns[0].model_copy(update={"visit_instance": "筛选期 / V1"})
+        catalog = catalog.model_copy(update={"visit_tables": (catalog.visit_tables[0].model_copy(
+            update={"columns": (column,)}),)})
+        stage = stage.model_copy(update={"visit_instance": column.visit_instance})
+    with pytest.raises(ProtocolControlPlanningError):
+        plan_protocol_control_batches(_manifest(_unit(1, "章节 A")),
+                                      workflow_stages=[stage], required_procedure_catalog=catalog,
+                                      source_materials=materials)
+
+
+def test_unsourced_stage_preserves_legacy_shape_and_cannot_claim_verification():
+    catalog, materials, stage = _stage_header_inputs()
+    legacy = catalog.model_copy(update={"visit_tables": ()})
+    plan = plan_protocol_control_batches(_manifest(_unit(1, "章节 A")),
+                                        workflow_stages=[stage], required_procedure_catalog=legacy,
+                                        source_materials=materials)
+    target = plan.batches[0].known_workflow_stage_targets[0]
+    assert not target.source_span_ids and not target.source_excerpts
+    assert "source_span_ids" not in target.model_dump(mode="json")
+    assert KnownWorkflowStageTarget.model_validate(target.model_dump(mode="json")) == target
+    with pytest.raises(ValidationError, match="一一对应"):
+        KnownWorkflowStageTarget(**target.model_dump(mode="json"), source_span_ids=["header:1"])
+
+
+@pytest.mark.parametrize("field", ["source_span_ids", "source_excerpts", "visit_window", "display_name"])
+def test_cross_batch_gate_rejects_stage_source_or_context_drift(field):
+    from app.protocols.protocol_control_gate import _target_signatures
+    catalog, materials, stage = _stage_header_inputs()
+    plan = plan_protocol_control_batches(_manifest(_unit(1, "A"), _unit(2, "B")),
+                                        workflow_stages=[stage], required_procedure_catalog=catalog,
+                                        source_materials=materials)
+    assert len(plan.batches) == 2
+    assert _target_signatures(plan)[2][0].source_span_ids
+    target = plan.batches[1].known_workflow_stage_targets[0]
+    change = ["wrong"] if field in {"source_span_ids", "source_excerpts"} else "changed"
+    plan.batches[1].known_workflow_stage_targets = [target.model_copy(update={field: change})]
+    with pytest.raises(ValueError, match="冻结目标目录不一致"):
+        _target_signatures(plan)

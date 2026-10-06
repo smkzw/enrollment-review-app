@@ -1680,6 +1680,7 @@ def _execute_closure(
         required_procedure_catalog=source_input.required_procedure_catalog,
         max_owned_units_per_batch=int(context.job_payload["max_deep_units_per_batch"]),
         workflow_stages=workflow_stages,
+        source_materials=source_input.source_materials,
     )
     publication_plan = _build_publication_plan(coverage_manifest, deep_plan)
     deep_steps = [
@@ -2355,6 +2356,7 @@ def _preflight_deep_source(
             WorkflowStage.model_validate(item)
             for item in current_payload.get("workflow_stages", [])
         ],
+        source_materials=source_input.source_materials,
     )
     source_steps = {item.step_id: item for item in store.list_steps(source_job_id)}
     old_batches_by_number = {

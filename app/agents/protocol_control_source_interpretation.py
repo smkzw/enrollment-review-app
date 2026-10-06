@@ -31,7 +31,7 @@ SOURCE_INTERPRETATION_VERSION = "phase5/control-source-interpretation/v11"
 SOURCE_INTERPRETATION_PROMPT_VERSION = "phase5/control-source-prompt/v20"
 SOURCE_QUOTE_RECOVERY_VERSION = "phase5/source-quote-local-recovery/v2"
 SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v23"
-SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v7"
+SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v8"
 
 
 _DAY_WEEK_WINDOW_RE = re.compile(
@@ -1208,6 +1208,9 @@ def build_source_target_review_prompt(
         "用途复核若维持原分类，应核对其实际目标或保留具体用途/依赖未决，"
         "不能为了让流程通过而添加无源要求。"
         "若只因未找到条款或不确定用途，选 unresolved，不得当作背景。"
+        "流程节点原始表头只供核查时期定义与上下文；它不是操作已被完整覆盖或患者已完成操作的证明。"
+        "没有表头原文时不能以派生访视名称补造来源；表头未写出的时长、锚点、例外继续保留具体未决。"
+        "此步骤仍不得把流程节点编号填作官方或必做项目 target_id，也不得把时期定义改成患者义务。"
         "同段已有候选并不等于所有动作已覆盖；目录名称相似也不等于时间、条件、例外都已覆盖。"
         "只引用目录名称或名称的一部分，只能证明项目关联，不能证明具体操作已覆盖。"
         "除非宿主的 label_action_supported_target_ids 已提供该动作的来源依据，"
@@ -1277,6 +1280,12 @@ def build_source_target_review_prompt(
         f"待核陈述：{json.dumps(source, ensure_ascii=False, sort_keys=True, separators=(',', ':'))}\n"
         f"冻结已有目标：{json.dumps(targets, ensure_ascii=False, sort_keys=True, separators=(',', ':'))}\n"
         f"目标来源摘录表：{json.dumps(target_excerpts, ensure_ascii=False, sort_keys=True, separators=(',', ':'))}\n"
+        "流程节点原始表头（仅上下文，不是已有操作目标）：" + json.dumps([
+            {"workflow_stage_id": stage.workflow_stage_id, "visit_instance": stage.visit_instance,
+             "source_verified": bool(stage.source_span_ids),
+             "source_span_ids": stage.source_span_ids, "source_excerpts": stage.source_excerpts}
+            for stage in batch.known_workflow_stage_targets
+        ], ensure_ascii=False, sort_keys=True, separators=(',', ':')) + "\n"
         "名称引用的动作依据：" + json.dumps([
             {"statement_index": index, "label_action_supported_target_ids": [
                 target.official_code if hasattr(target, "official_code") else target.catalog_item_id
