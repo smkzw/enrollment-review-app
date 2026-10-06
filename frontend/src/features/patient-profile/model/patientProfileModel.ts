@@ -127,6 +127,37 @@ export function locatorsForItem(
   return resolved;
 }
 
+const DOCUMENT_ADMINISTRATIVE_FIELDS = new Set([
+  "报告医师", "报告医生", "报告者", "申请医师", "申请医生",
+  "送检医师", "送检医生", "检验者", "检验医师", "检验医生",
+  "审核医师", "审核医生", "审核者", "打印者", "打印人员",
+  "打印时间", "打印日期", "页码", "总页数",
+]);
+
+/** Only presentation changes; source records and every lookup remain intact. */
+export function clinicalDisplayLanes(
+  model: PatientProfileModel,
+): ReadonlyArray<ProfileLaneModel> {
+  const referencedFacts = new Set(
+    model.items.flatMap((item) => [...item.factIds, ...item.conflictMemberIds]),
+  );
+  return model.lanes.map((lane) => {
+    const items = lane.items.filter((item) => {
+      if (
+        item.kind !== "fact" || item.requirementIds.length > 0 ||
+        model.highlightedItemIds.has(item.itemId) ||
+        referencedFacts.has(item.sourceId) || item.provenanceFollowup
+      ) return true;
+      // Exact administrative labels only: never hide judgments, clinical dates or unknown fields.
+      const field = (item.assertedObject ?? "").normalize("NFKC")
+        .replace(/\s+/g, "").replace(/[:：]$/, "");
+      return !DOCUMENT_ADMINISTRATIVE_FIELDS.has(field) &&
+        !/^第\d+页[/／]共\d+页$/.test(field);
+    });
+    return { ...lane, items, isEmpty: items.length === 0 };
+  });
+}
+
 export function adaptPatientProfile(
   revision: PatientProfileRevisionView,
 ): PatientProfileModel {

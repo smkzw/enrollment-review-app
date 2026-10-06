@@ -4,6 +4,7 @@
 
 export {
   adaptPatientProfile,
+  clinicalDisplayLanes,
   formatProfileDateTime,
   locatorsForItem,
   PROFILE_LANE_ORDER,

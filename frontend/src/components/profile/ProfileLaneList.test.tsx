@@ -15,11 +15,47 @@ import {
 import {
   laneLabelFor,
   makeLaneSection,
+  makeFactItem,
+  makeEventItem,
   makeRevision,
 } from "../../api/patient-profile/patientProfileFixtures";
 import { ProfileLaneList } from "./ProfileLaneList";
 
 describe("ProfileLaneList", () => {
+  it("普通报告行政信息不挤占正文，临床内容、研究者判断及原始索引保留", () => {
+    const fields = ["报告医师", "申请医生", "第１页／共１页", "血压", "白细胞计数",
+      "报告日期", "用药开始日期", "研究者书面判断", "报告医师判断异常有临床意义"];
+    const facts = fields.map((field, index) => makeFactItem({
+      item_id: `fact-${index}`, source_id: `source-${index}`, title: `记录${index}`,
+      asserted_object: field, locator_ids: [], requirement_ids: [],
+    }));
+    const model = adaptPatientProfile(decodePatientProfileRevision(makeRevision({
+      lanes: PROFILE_LANE_ORDER.map((lane) => makeLaneSection(lane, lane === "demographics" ? facts : [])),
+      highlights: [], evidence_locators: [],
+    })));
+    render(<ProfileLaneList model={model} />);
+    [0, 1, 2].forEach((index) => expect(screen.queryByText(`记录${index}`)).not.toBeInTheDocument());
+    [3, 4, 5, 6, 7, 8].forEach((index) => expect(screen.getByText(`记录${index}`)).toBeInTheDocument());
+    expect(model.items).toHaveLength(9);
+    expect(model.itemById.get("fact-0")?.assertedObject).toBe("报告医师");
+  });
+
+  it("行政字段若参与要求、临床事件或来源待核仍可见", () => {
+    const facts = [
+      makeFactItem({ item_id: "linked", source_id: "source-linked", title: "规则关联签名", asserted_object: "报告医师", locator_ids: [] }),
+      makeFactItem({ item_id: "referenced", source_id: "source-referenced", title: "事件引用签名", asserted_object: "审核医师", locator_ids: [], requirement_ids: [] }),
+      makeFactItem({ item_id: "followup", source_id: "source-followup", title: "签名来源待核", asserted_object: "报告医师", locator_ids: [], requirement_ids: [], provenance_followup: true, provenance_reason: "需要核对原件" }),
+    ];
+    const event = makeEventItem({ locator_ids: [], requirement_ids: [], fact_ids: ["source-referenced"] });
+    const model = adaptPatientProfile(decodePatientProfileRevision(makeRevision({
+      lanes: PROFILE_LANE_ORDER.map((lane) => makeLaneSection(lane,
+        lane === "demographics" ? facts : lane === "symptoms_signs" ? [event] : [])),
+      highlights: [], evidence_locators: [],
+    })));
+    render(<ProfileLaneList model={model} />);
+    ["规则关联签名", "事件引用签名", "签名来源待核", "发热"].forEach((title) => expect(screen.getByText(title)).toBeInTheDocument());
+  });
+
   it("13 条泳道按稳定顺序全部展示（含空泳道）", () => {
     const model = adaptPatientProfile(decodePatientProfileRevision(makeRevision()));
     render(<ProfileLaneList model={model} />);
