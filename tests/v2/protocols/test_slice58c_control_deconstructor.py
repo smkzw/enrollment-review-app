@@ -2925,6 +2925,24 @@ def test_source_function_recheck_never_backgrounds_unconsumed_time(quote, time_w
     assert original.statements[0].decision_functions == ["definition", "time_validity"]
 
 
+@pytest.mark.parametrize("heading", ["筛选期为一周", "D-7~D-1", "整个治疗期"])
+@pytest.mark.parametrize("decision", ["background_context", "unresolved"])
+def test_source_function_recheck_keeps_heading_only_period(heading: str, decision: str):
+    batch, original, entry, review, proposal = _function_disagreement()
+    batch.owned_units[1].heading_path = ["研究流程", heading]
+    before = original.model_dump_json()
+    item = review.items[0].model_copy(update={
+        "decision": decision,
+        "non_control_basis_excerpt": (original.statements[0].quoted_text
+                                      if decision == "background_context" else None),
+        "unresolved_aspects": [] if decision == "background_context" else ["标题期间的用途尚未核清"],
+    })
+    assert not can_recheck_source_function(batch, original, entry, item)
+    with pytest.raises(ValueError):
+        apply_source_function_recheck(batch, original, entry, item, proposal)
+    assert original.model_dump_json() == before
+
+
 @pytest.mark.parametrize("resolved", [True, False])
 def test_runner_reaffirmed_function_requires_one_valid_target_review(resolved: bool) -> None:
     batch, original, entry, review, proposal = _function_disagreement()

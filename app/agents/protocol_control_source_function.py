@@ -50,15 +50,22 @@ def can_recheck_source_function(
             or entry.exact_official_excerpt_matches or entry.exact_procedure_excerpt_matches
             or entry.schedule_columns):
         return False
-    # An absent consumer is not proof that a concrete period is background.
-    if (statement.time_words or statement.affected_stage or statement.scope_quote
-            or source_requires_temporal_resolution(statement)
-            or re.search(r"[一二三四五六七八九十百两半]+(?:天|日|周|月|年)|(?:W|D)-?\d+",
-                         normalize_source_excerpt(statement.quoted_text), re.IGNORECASE)):
-        return False
     unit = next((unit for unit in batch.owned_units
                  if unit.structure_unit_id == statement.structure_unit_id), None)
     if unit is None:
+        return False
+    # Probe inherited headings without altering the verbatim source statement.
+    temporal_probe = statement.model_copy(update={
+        "quoted_text": " ".join([statement.quoted_text, *unit.heading_path]),
+    })
+    heading_text = normalize_source_excerpt(" ".join(unit.heading_path))
+    if (statement.time_words or statement.affected_stage or statement.scope_quote
+            or source_requires_temporal_resolution(temporal_probe)
+            or re.search(r"[一二三四五六七八九十百两半]+(?:天|日|周|月|年)|(?:W|D)-?\d+",
+                         normalize_source_excerpt(temporal_probe.quoted_text), re.IGNORECASE)
+            or any(normalize_source_excerpt(stage.display_name)
+                   and normalize_source_excerpt(stage.display_name) in heading_text
+                   for stage in batch.known_workflow_stage_targets)):
         return False
     source_spans = set(unit.source_span_ids)
     if any(source_spans.intersection(target.source_span_ids)
