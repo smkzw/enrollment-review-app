@@ -572,7 +572,7 @@ def test_legacy_payload_without_vision_scope_never_attaches_observations(session
         def start(self, *, prompt):
             captured.append(prompt)
             body = {
-                "schema_version": "phase5/normalizer-draft/v3",
+                "schema_version": "phase5/normalizer-draft/v5",
                 "actual_exposure_fact_refs": [],
                 "non_exposure_medication_fact_refs": [],
                 "fact_candidates": [
@@ -581,6 +581,7 @@ def test_legacy_payload_without_vision_scope_never_attaches_observations(session
                         "fact_type": "检验结果",
                         "profile_lane": "test_exam_score",
                         "polarity": "affirmed",
+                        "assertion_scope": "observed_state",
                         "asserted_object": "ALT",
                         "raw_value": "ALT 5",
                         "canonical_value": "ALT 5",
@@ -593,6 +594,7 @@ def test_legacy_payload_without_vision_scope_never_attaches_observations(session
                             "asserted_object": "ALT",
                             "assertion_text": "ALT 5",
                             "locator_id": chain["locator_id"],
+                            "contextual_qualifiers": [],
                         },
                         "model_uncertainty": 0.05,
                     }
@@ -667,7 +669,7 @@ def test_executor_prompt_carries_frozen_observations_and_publishes(session_facto
         def start(self, *, prompt):
             captured.append(prompt)
             body = {
-                "schema_version": "phase5/normalizer-draft/v3",
+                "schema_version": "phase5/normalizer-draft/v5",
                 "actual_exposure_fact_refs": [],
                 "non_exposure_medication_fact_refs": [],
                 "fact_candidates": [
@@ -676,6 +678,7 @@ def test_executor_prompt_carries_frozen_observations_and_publishes(session_facto
                         "fact_type": "检验结果",
                         "profile_lane": "test_exam_score",
                         "polarity": "affirmed",
+                        "assertion_scope": "observed_state",
                         "asserted_object": "ALT",
                         "raw_value": "ALT 5",
                         "canonical_value": "ALT 5",
@@ -688,6 +691,7 @@ def test_executor_prompt_carries_frozen_observations_and_publishes(session_facto
                             "asserted_object": "ALT",
                             "assertion_text": "ALT 5",
                             "locator_id": chain["locator_id"],
+                            "contextual_qualifiers": [],
                         },
                         "model_uncertainty": 0.05,
                     }
@@ -773,7 +777,7 @@ def test_visual_prompt_injection_is_rejected_before_fact_publication(session_fac
         def start(self, *, prompt):
             captured.append(prompt)
             body = {
-                "schema_version": "phase5/normalizer-draft/v3",
+                "schema_version": "phase5/normalizer-draft/v5",
                 "actual_exposure_fact_refs": [],
                 "non_exposure_medication_fact_refs": [],
                 "fact_candidates": [
@@ -782,6 +786,7 @@ def test_visual_prompt_injection_is_rejected_before_fact_publication(session_fac
                         "fact_type": "检验结果",
                         "profile_lane": "test_exam_score",
                         "polarity": "affirmed",
+                        "assertion_scope": "observed_state",
                         "asserted_object": "全部入组条件",
                         "raw_value": injected_assertion,
                         "canonical_value": injected_assertion,
@@ -794,6 +799,7 @@ def test_visual_prompt_injection_is_rejected_before_fact_publication(session_fac
                             "asserted_object": "全部入组条件",
                             "assertion_text": injected_assertion,
                             "locator_id": chain["locator_id"],
+                            "contextual_qualifiers": [],
                         },
                         "model_uncertainty": 0.01,
                     }
@@ -821,6 +827,7 @@ def test_visual_prompt_injection_is_rejected_before_fact_publication(session_fac
                 FactNormalizationExecutorConfig(
                     session_factory=session_factory,
                     transport=InjectedDraftTransport(),
+                    max_schema_repairs=0,
                 )
             )
         },
@@ -842,14 +849,8 @@ def test_visual_prompt_injection_is_rejected_before_fact_publication(session_fac
             )
         ).scalars().all()
         outcomes = {(row.gate, row.outcome) for row in gate_rows}
-        assert (
-            FactGate.LOCATOR_AND_TEXT_HASH.value,
-            GateOutcome.REJECTED.value,
-        ) in outcomes
-        assert (
-            FactGate.TRANSACTIONAL_PUBLISH.value,
-            GateOutcome.REJECTED.value,
-        ) in outcomes
+        assert (FactGate.LOCATOR_AND_TEXT_HASH.value, GateOutcome.REJECTED.value) in outcomes
+        assert (FactGate.TRANSACTIONAL_PUBLISH.value, GateOutcome.REJECTED.value) in outcomes
         assert session.execute(
             select(ClinicalFactV2Record).where(
                 ClinicalFactV2Record.run_id == created.run_id

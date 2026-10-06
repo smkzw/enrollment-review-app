@@ -138,6 +138,15 @@ class EligibilityFactRef:
 
 
 @dataclass(frozen=True)
+class EligibilitySourceReadRef:
+    source_document_version_id: str
+    page_artifact_id: str
+    page_number: int
+    excerpt: str | None
+    disposition: str
+
+
+@dataclass(frozen=True)
 class EligibilityClauseProjection:
     rule_component_id: str
     rule_code: str
@@ -157,6 +166,7 @@ class EligibilityClauseProjection:
     action_detail: str | None = None
     action_evidence: str | None = None
     limitation_kind: str | None = None
+    source_read_refs: tuple[EligibilitySourceReadRef, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -181,6 +191,7 @@ class EligibilityControlObligationProjection:
     action_detail: str | None = None
     action_evidence: str | None = None
     limitation_kind: str | None = None
+    source_read_refs: tuple[EligibilitySourceReadRef, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1142,6 +1153,7 @@ class EligibilityReviewProjectionService:
                     computation_input_job_id=children.get(
                         f"{family}_computation_input",
                     ),
+                    history_source_search_job_id=children.get(f"{family}_history_source_search"),
                 )
                 for family in families
             )
@@ -1199,7 +1211,17 @@ class EligibilityReviewProjectionService:
                     summaries=summaries,
                     judgment_gaps=dict(result.judgment_gaps),
                 ) + ((" " + computation_notes[clause.rule_component_id])
-                     if computation_notes.get(clause.rule_component_id) else ""),
+                     if computation_notes.get(clause.rule_component_id) else "")
+                  + _history_search_notice([
+                      row for row in (() if predicate_selection is None else predicate_selection.history_search_results)
+                      if any(entry.predicate_identity_sha256 == row["identity_sha256"]
+                             and entry.predicate_id in result.evaluation.predicate_evaluations
+                             and "supplied_records_history_not_seen" in
+                                 result.evaluation.predicate_evaluations[entry.predicate_id].reason_codes
+                             for component in predicate_selection.predicate_frozen_input.components
+                             if component.rule_component_id == clause.rule_component_id
+                             for entry in (*component.trigger_predicates, *component.exception_predicates))
+                  ]),
                 fact_refs=_fact_refs(
                     session,
                     _used_fact_ids(result.evaluation),
@@ -1211,6 +1233,13 @@ class EligibilityReviewProjectionService:
                 ),
                 gap_type=gap.value if gap is not None else None,
                 determination_mode=clause.determination_mode.value,
+                source_read_refs=_history_source_refs([
+                    row for row in (() if predicate_selection is None else predicate_selection.history_search_results)
+                    if any(entry.predicate_identity_sha256 == row["identity_sha256"]
+                           for component in predicate_selection.predicate_frozen_input.components
+                           if component.rule_component_id == clause.rule_component_id
+                           for entry in (*component.trigger_predicates, *component.exception_predicates))
+                ]),
                 **_action_directive_fields(gap),
             ))
 
@@ -1255,6 +1284,15 @@ class EligibilityReviewProjectionService:
                         calculation.computation_atom_evaluations.get("control", {}).get(obligation.identity_sha256))
                     if computation_note:
                         reason += " " + computation_note
+                    reason += _history_search_notice([
+                        row for row in (() if calculation.controls is None else calculation.controls.history_search_results)
+                        if row["identity_sha256"] == obligation.identity_sha256
+                    ])
+                    history_rows = [row for row in (() if control_selection is None
+                        else control_selection.history_search_results)
+                        if row["identity_sha256"] == obligation.identity_sha256]
+                    if any(row["status"] == "mentioned" for row in history_rows) and obligation.status == "unverified":
+                        reason += " 检索已找到相关原文，尚待核清其对象、时间及含义，不按未发生处理。"
                     obligations.append(EligibilityControlObligationProjection(
                         obligation_id=obligation.obligation_id,
                         obligation_group_id=obligation.obligation_group_id,
@@ -1266,6 +1304,7 @@ class EligibilityReviewProjectionService:
                         status=obligation.status,
                         status_label=status_labels[obligation.status],
                         reason=reason,
+                        source_read_refs=_history_source_refs(history_rows),
                         fact_refs=_fact_refs(
                             session, set(obligation.used_fact_ids), facts_by_id,
                             _selected_control_locators(
@@ -1308,6 +1347,24 @@ class EligibilityReviewProjectionService:
             unassigned_conflicts=_unassigned_conflict_projections(frozen.conflict_groups),
             work_draft_state="current",
         )
+
+
+def _history_search_notice(rows) -> str:
+    if not rows:
+        return ""
+    pages = {key for row in rows for key in row["page_keys"]}
+    return f" 本次已提供的{len(pages)}页资料已核对，未见相关事件记录；按本次资料范围判断，并非额外检查证明。"
+
+
+def _history_source_refs(rows) -> tuple[EligibilitySourceReadRef, ...]:
+    result = {}
+    for row in rows:
+        for source in row.get("source_refs", []):
+            for excerpt in source["excerpts"] or [{"text": None}]:
+                ref = EligibilitySourceReadRef(source["source_document_version_id"],
+                    source["page_artifact_id"], source["page_number"], excerpt["text"], source["disposition"])
+                result[(ref.source_document_version_id, ref.page_number, ref.excerpt, ref.disposition)] = ref
+    return tuple(result.values())
 
 
 def _continuing_obligation_note(continuation: object | None) -> str | None:

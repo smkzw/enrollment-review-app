@@ -40,6 +40,19 @@ function reviewBody() {
 }
 
 describe("eligibility review HTTP repository", () => {
+  it("将检索原文与采用事实分开，并拒绝无法回源的页码", async () => {
+    const body = { ...reviewBody(), clauses: [{ ...reviewBody().clauses[0], source_read_refs: [{
+      source_document_version_id: "document", page_artifact_id: "page", page_number: 2,
+      excerpt: "明确否认示例事件史", disposition: "mentioned",
+    }] }] };
+    const repository = createEligibilityReviewHttp({ fetchImpl: (() => Promise.resolve(response(body))) as typeof fetch });
+    const decoded = await repository.getEligibilityReview("subject", "episode");
+    expect(decoded.clauses[0]?.sourceReadRefs?.[0]).toEqual({ sourceDocumentVersionId: "document",
+      pageArtifactId: "page", pageNumber: 2, excerpt: "明确否认示例事件史", disposition: "mentioned" });
+    expect(decoded.clauses[0]?.factRefs).toHaveLength(1);
+    body.clauses[0]!.source_read_refs[0]!.page_number = 0;
+    await expect(repository.getEligibilityReview("subject", "episode")).rejects.toThrow(EligibilityReviewDecodeError);
+  });
   it.each(["source_changed", "method_changed"])("keeps a %s work draft distinct from an unstarted review", async (state) => {
     const body = { ...reviewBody(), work_draft_state: state };
     const repository = createEligibilityReviewHttp({ fetchImpl: (() => Promise.resolve(response(body))) as typeof fetch });

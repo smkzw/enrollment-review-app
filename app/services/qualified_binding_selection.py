@@ -498,6 +498,8 @@ class ReceiptVerifiedWorkDraftSelections:
     observation_relation: str | None = None
     frequency_evidence: str | None = None
     computation_input: str | None = None
+    history_source_search: str | None = None
+    history_search_results: tuple[Mapping[str, Any], ...] = ()
     content_supported_pair_ids: tuple[str, ...] = ()
     verified_judgment_requirement_ids: tuple[str, ...] = ()
     proposition_relations: tuple[Mapping[str, Any], ...] = ()
@@ -540,6 +542,9 @@ class ReceiptVerifiedWorkDraftSelections:
             **({"computation_input": self.computation_input,
                 "computation_sources": self.computation_sources}
                if self.computation_input is not None or self.computation_sources else {}),
+            **({"history_source_search": self.history_source_search,
+                "history_search_results": self.history_search_results}
+               if self.history_source_search is not None else {}),
         })
 
     def require_unchanged(self) -> None:
@@ -606,6 +611,7 @@ def build_receipt_verified_work_draft_selections(
     observation_relation_job_id: str | None = None,
     frequency_evidence_job_id: str | None = None,
     computation_input_job_id: str | None = None,
+    history_source_search_job_id: str | None = None,
 ) -> ReceiptVerifiedWorkDraftSelections:
     """Build conservative work-draft selections from a completed qualification.
 
@@ -636,6 +642,21 @@ def build_receipt_verified_work_draft_selections(
             raise InvalidJobDefinitionError("工作稿核对使用的审核资料版本已变化")
 
     validity_specs = _work_draft_validity_specs(frozen)
+    history_results = []
+    if history_source_search_job_id is not None:
+        from app.services.history_source_search_job import verify_completed_history_search
+        search = verify_completed_history_search(session, artifact_store, history_source_search_job_id)
+        scope = search["scope"]
+        if (scope["candidate_job_id"] != verified["payload"]["candidate_job_id"]
+                or scope["candidate_family"] != family
+                or scope["review_context_id"] != context_id
+                or scope["review_context_sha256"] != context_sha256
+                or scope["frozen_input_sha256"] != verified["frozen_input_sha256"]):
+            raise InvalidJobDefinitionError("病史检索范围不属于本次工作稿")
+        mentioned_identities = {pair.identity_sha256 for pair in verified["pairs"]}
+        history_results = [{**row, "summary_sha256": search["summary_sha256"],
+                            "candidate_mentions_present": row["identity_sha256"] in mentioned_identities}
+                           for row in search["summary"]]
     content = None
     supported = frozenset()
     content_sources: set[tuple[str, str]] = set()
@@ -1022,6 +1043,8 @@ def build_receipt_verified_work_draft_selections(
         "frequency_statements": frequency_statements,
         **({"computation_input": computation_input_job_id, "computation_sources": computation_sources}
            if computation_input_job_id is not None else {}),
+        **({"history_source_search": history_source_search_job_id, "history_search_results": history_results}
+           if history_source_search_job_id is not None else {}),
     }
     selection_sha256 = canonical_hash(payload)
     selected_pair_ids = {
@@ -1052,6 +1075,8 @@ def build_receipt_verified_work_draft_selections(
         observation_relation=observation_relation_job_id,
         frequency_evidence=frequency_evidence_job_id,
         computation_input=computation_input_job_id,
+        history_source_search=history_source_search_job_id,
+        history_search_results=tuple(history_results),
         content_supported_pair_ids=tuple(sorted(supported)),
         verified_judgment_requirement_ids=tuple(verified_requirements),
         proposition_relations=tuple(proposition_relations),

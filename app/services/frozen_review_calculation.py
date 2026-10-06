@@ -1,5 +1,6 @@
 """Calculate a frozen review with the workbench evaluator, without publishing it."""
 from dataclasses import asdict, dataclass, field
+from app.domain.contracts.enums import TruthValue
 from collections.abc import Mapping, Sequence
 
 from app.agents.protocol_control_source_interpretation import normalize_source_excerpt
@@ -30,7 +31,7 @@ from app.services.qualified_binding_selection import (
     assert_qualified_selections_match_review_context,
 )
 
-EVALUATOR_VERSION = "component-review/v38"
+EVALUATOR_VERSION = "component-review/v39"
 
 #: Reason attached to a consumer whose source definition has no proven
 #: consumer relation yet. It never replaces the evidence-based reason of an
@@ -612,6 +613,12 @@ def calculate_frozen_review(
     controls = _calculate_controls(frozen, control_input, control_selections, control_unverified,
                                    control_relations, control_pair_gaps, control_repeat_for_review,
                                    control_frequency_for_review, control_computation_for_review)
+    if controls is not None:
+        from app.services.control_history_search_calculation import apply_control_history_search
+        for item in draft_items:
+            if item.candidate_family == "control":
+                controls = apply_control_history_search(controls, control_input, item.history_search_results,
+                    blocked_identities=definition_control_unverified)
     templates = {item.template_id: item for item in frozen.expectation_templates}
     templates_by_requirement = {item.requirement_id: item for item in templates.values()}
     expectations = _expectation_views(frozen.expectations, templates)
@@ -641,6 +648,10 @@ def calculate_frozen_review(
                 predicate.predicate_id
                 for predicate in (*component.trigger_predicates, *component.exception_predicates)
                 if predicate.predicate_identity_sha256 in unresolved
+                and not (
+                    proposition_by_component.get(component.rule_component_id, {}).get(predicate.predicate_id)
+                    and proposition_by_component[component.rule_component_id][predicate.predicate_id].truth != TruthValue.UNKNOWN
+                )
                 and predicate.predicate_id not in repeat_by_component.get(component.rule_component_id, {})
                 and predicate.predicate_id not in frequency_by_component.get(component.rule_component_id, {})
                 and predicate.predicate_id not in computation_by_component.get(component.rule_component_id, {})

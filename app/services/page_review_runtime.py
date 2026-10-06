@@ -73,13 +73,14 @@ class PageReviewRuntime:
                 from app.services.observation_relation_job import ObservationRelationJobExecutor
                 from app.services.frequency_evidence_job import FrequencyEvidenceJobExecutor
                 from app.services.computation_input_job import ComputationInputJobExecutor
+                from app.services.history_source_search_job import HistorySourceSearchJobExecutor
                 self._prepared_review_executors = {
                     executor.job_type: executor(self.session_factory, self.artifact_store, routes,
                                                 completion=admission)
                     for executor in (PredicateBindingJobExecutor, ControlBindingJobExecutor,
                                      BindingQualificationJobExecutor, JudgmentContentJobExecutor,
                                      PropositionEvidenceJobExecutor, ObservationRelationJobExecutor, FrequencyEvidenceJobExecutor,
-                                     ComputationInputJobExecutor)
+                                     ComputationInputJobExecutor, HistorySourceSearchJobExecutor)
                 }
                 self._targeted_executor = TargetedPageReviewExecutor(
                     self.session_factory, self.artifact_store, routes, completion=admission)

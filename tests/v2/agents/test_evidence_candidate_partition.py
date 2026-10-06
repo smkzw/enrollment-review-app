@@ -160,3 +160,33 @@ def test_medication_closure_is_quarantined_without_losing_an_independent_measure
     assert not result.output.exposure_candidates
     assert len(result.output.unresolved_items) == 3
     assert all("原答候选" not in item.reason for item in result.output.unresolved_items)
+
+
+@pytest.mark.parametrize("name", ["来源用药", "同义但无原文支持的药名"])
+def test_derived_source_failure_retains_measurements_and_full_exposure_dependencies(name):
+    original = _draft()
+    bad = original["fact_candidates"][0]
+    bad["assertion_basis"].update(asserted_object="项目乙", contextual_qualifiers=[])
+    original["fact_candidates"].append(deepcopy(bad))
+    original["fact_candidates"][-1]["candidate_ref"] = "other-medicine"
+    for fact in (bad, original["fact_candidates"][-1]):
+        fact["profile_lane"] = "medication"
+    original["actual_exposure_fact_refs"] = ["f1", "other-medicine"]
+    original["exposure_candidates"] = [{"candidate_ref": "derived", "medication_name": name,
+        "duration_status": "single", "fact_candidate_refs": ["f1", "other-medicine"],
+        "locator_ids": ["loc-2"], "candidate_source_semantics": "同期客观结果", "model_uncertainty": 0}]
+    # Two distinct cited objects keep the existing unique-name repair unavailable.
+    original["fact_candidates"][-1]["assertion_basis"].update(asserted_object="项目", assertion_text="项目乙2")
+    original["fact_candidates"][-1]["asserted_object"] = "项目"
+    raw = json.dumps(original, ensure_ascii=False)
+    transport = _FakeTransport([(raw, "read-once")])
+    result = EvidenceNormalizerRunner(max_transport_retries=0, max_schema_repairs=1).run(
+        _source_input(), transport, prompt_template=DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE,
+        require_current_draft=True, compact_references=False, allow_candidate_partition=True)
+    assert result.status == "部分已解析" and not transport.repair_prompts
+    assert [fact.candidate_id for fact in result.final_output.fact_candidates] == ["good"]
+    assert not result.final_output.exposure_candidates
+    receipt = result.candidate_partition_receipt
+    assert receipt["quarantined_candidate_refs"] == ["derived", "f1", "other-medicine"]
+    assert any(row["code"] == "EvidenceDerivedSourceError" for row in receipt["failures"])
+    assert receipt["retained_draft"]["fact_candidates"] == [original["fact_candidates"][1]]

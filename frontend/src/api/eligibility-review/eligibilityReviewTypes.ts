@@ -35,6 +35,14 @@ export interface EligibilityFactRefWire {
   page_number: number | null;
 }
 
+export interface EligibilitySourceReadRefWire {
+  source_document_version_id: string;
+  page_artifact_id: string;
+  page_number: number;
+  excerpt: string | null;
+  disposition: "mentioned" | "not_seen" | "unresolved";
+}
+
 export interface EligibilityClauseWire {
   rule_component_id: string;
   rule_code: string;
@@ -46,6 +54,7 @@ export interface EligibilityClauseWire {
   decision_label: string;
   reason: string;
   fact_refs: EligibilityFactRefWire[];
+  source_read_refs?: EligibilitySourceReadRefWire[];
   gap_type: string | null;
   determination_mode: EligibilityDeterminationModeWire;
   limitation_kind?: EligibilityLimitationKindWire | null;
@@ -67,6 +76,7 @@ export interface EligibilityControlObligationWire {
   limitation_kind?: EligibilityLimitationKindWire | null;
   reason: string;
   fact_refs: EligibilityFactRefWire[];
+  source_read_refs?: EligibilitySourceReadRefWire[];
   continuing_note?: string | null;
   action_owner?: "investigator" | "crc" | "cra" | "sponsor_medical_or_project" | null;
   action_detail?: string | null;

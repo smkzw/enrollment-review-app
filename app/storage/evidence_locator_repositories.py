@@ -3570,6 +3570,12 @@ class CompleteEvidenceProcessingRevisionRepository:
         )
         return contract
 
+    def get_current(self, evidence_processing_revision_id: str) -> CompleteEvidenceProcessingRevision:
+        """Validate live source heads without changing historical replay semantics."""
+        contract = self.get(evidence_processing_revision_id)
+        self._verify_referenced(contract, require_current_heads=True)
+        return contract
+
     def _verify_page_mirror(
         self, contract: CompleteEvidenceProcessingRevision
     ) -> list[EvidenceProcessingRevisionPageRecord]:

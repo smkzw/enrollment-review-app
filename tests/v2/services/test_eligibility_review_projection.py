@@ -245,6 +245,7 @@ def test_frozen_work_draft_control_consumer_keeps_verified_location(
     )
     selection = SimpleNamespace(
         candidate_family="control",
+        history_search_results=[],
         identity_outcomes=[SimpleNamespace(
             identity_sha256="identity", status="usable", usable_pair_ids=["pair"],
         )],
@@ -260,6 +261,7 @@ def test_frozen_work_draft_control_consumer_keeps_verified_location(
     # Calculator output is frozen here to test the real projection consumer.
     monkeypatch.setattr(calculation_module, "calculate_frozen_review", lambda *_args, **_kw: SimpleNamespace(
         components=[], control_outcomes=[outcome], computation_atom_evaluations={},
+        controls=SimpleNamespace(history_search_results=[]),
     ))
     locators = [SimpleNamespace(
         locator_id=value, page_number=index + 1, source_document_version_id="document",

@@ -38,6 +38,8 @@ def _saved_workflow(session_factory, *, contract, controls=False, failed=False):
                   "control_observation_relation", "control_frequency_evidence"}
     if contract in workflow.COMPUTATION_CONTRACTS:
         names |= {f"{family}_computation_input" for family in families}
+    if contract == workflow.CONTRACT:
+        names |= {f"{family}_history_source_search" for family in families}
     children = {}
     for name in sorted(names):
         family = "control" if name.startswith("control_") else "predicate"
@@ -56,7 +58,7 @@ def _saved_workflow(session_factory, *, contract, controls=False, failed=False):
     return parent.job_id, payload, {"children": children, "review_context_sha256": "a" * 64}
 
 
-@pytest.mark.parametrize("contract", ["prepared-review-workflow/v7", "prepared-review-workflow/v8", workflow.CONTRACT])
+@pytest.mark.parametrize("contract", ["prepared-review-workflow/v7", "prepared-review-workflow/v8", "prepared-review-workflow/v9", workflow.CONTRACT])
 @pytest.mark.parametrize("controls", [False, True])
 def test_new_source_child_and_historical_scope_are_distinct(session_factory, contract, controls):
     parent, payload, checkpoint = _saved_workflow(session_factory, contract=contract, controls=controls)
@@ -99,6 +101,7 @@ def test_verification_schedules_source_checks_with_existing_owner_scope(monkeypa
         ("observation_relation_job", "enqueue_observation_relation"),
         ("frequency_evidence_job", "enqueue_frequency_evidence"),
         ("computation_input_job", "enqueue_computation_input"),
+        ("history_source_search_job", "enqueue_history_source_search"),
     ):
         monkeypatch.setattr(f"app.services.{module}.{function}", enqueue)
     continuation = workflow.PreparedReviewContinuation(None, object(), lambda: {}, worker_id="synthetic-owner")
@@ -115,3 +118,4 @@ def test_verification_schedules_source_checks_with_existing_owner_scope(monkeypa
                for item in source_calls)
     versions = workflow.current_review_task_versions()
     assert versions["computation_input"]["contract"] == "computation-input-job/v2"
+    assert versions["history_source_search"]["contract"] == "history-source-search-job/v2"

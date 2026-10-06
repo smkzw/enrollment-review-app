@@ -29,12 +29,12 @@ from app.workflow.jobstore import JobStore
 from app.workflow.recovery import recover_expired_jobs
 
 logger = logging.getLogger(__name__)
-CONTRACT = "prepared-review-workflow/v9"
-READABLE_CONTRACTS = {"prepared-review-workflow/v1", "prepared-review-workflow/v2", "prepared-review-workflow/v3", "prepared-review-workflow/v4", "prepared-review-workflow/v5", "prepared-review-workflow/v6", "prepared-review-workflow/v7", "prepared-review-workflow/v8", CONTRACT}
-PROPOSITION_CONTRACTS = {"prepared-review-workflow/v5", "prepared-review-workflow/v6", "prepared-review-workflow/v7", "prepared-review-workflow/v8", CONTRACT}
-OBSERVATION_CONTRACTS = {"prepared-review-workflow/v6", "prepared-review-workflow/v7", "prepared-review-workflow/v8", CONTRACT}
-FREQUENCY_CONTRACTS = {"prepared-review-workflow/v7", "prepared-review-workflow/v8", CONTRACT}
-COMPUTATION_CONTRACTS = {"prepared-review-workflow/v8", CONTRACT}
+CONTRACT = "prepared-review-workflow/v10"
+READABLE_CONTRACTS = {"prepared-review-workflow/v1", "prepared-review-workflow/v2", "prepared-review-workflow/v3", "prepared-review-workflow/v4", "prepared-review-workflow/v5", "prepared-review-workflow/v6", "prepared-review-workflow/v7", "prepared-review-workflow/v8", "prepared-review-workflow/v9", CONTRACT}
+PROPOSITION_CONTRACTS = {"prepared-review-workflow/v5", "prepared-review-workflow/v6", "prepared-review-workflow/v7", "prepared-review-workflow/v8", "prepared-review-workflow/v9", CONTRACT}
+OBSERVATION_CONTRACTS = {"prepared-review-workflow/v6", "prepared-review-workflow/v7", "prepared-review-workflow/v8", "prepared-review-workflow/v9", CONTRACT}
+FREQUENCY_CONTRACTS = {"prepared-review-workflow/v7", "prepared-review-workflow/v8", "prepared-review-workflow/v9", CONTRACT}
+COMPUTATION_CONTRACTS = {"prepared-review-workflow/v8", "prepared-review-workflow/v9", CONTRACT}
 CHILD_TYPES = {
     "predicate": "predicate_binding_candidates", "control": "control_binding_candidates",
     "predicate_qualification": "binding_qualification", "control_qualification": "binding_qualification",
@@ -48,6 +48,8 @@ CHILD_TYPES = {
     "control_frequency_evidence": "frequency_evidence",
     "predicate_computation_input": "computation_input",
     "control_computation_input": "computation_input",
+    "predicate_history_source_search": "history_source_search",
+    "control_history_source_search": "history_source_search",
 }
 
 
@@ -64,11 +66,12 @@ def current_review_task_versions():
     from app.services.observation_relation_job import ObservationRelationJobExecutor
     from app.services.frequency_evidence_job import FrequencyEvidenceJobExecutor
     from app.services.computation_input_job import ComputationInputJobExecutor
+    from app.services.history_source_search_job import HistorySourceSearchJobExecutor
     return {task.job_type: {"contract": task.contract, "prompt_version": task.prompt_version}
             for task in (PredicateBindingJobExecutor, ControlBindingJobExecutor,
                          BindingQualificationJobExecutor, JudgmentContentJobExecutor,
                          PropositionEvidenceJobExecutor, ObservationRelationJobExecutor,
-                         FrequencyEvidenceJobExecutor, ComputationInputJobExecutor)}
+                         FrequencyEvidenceJobExecutor, ComputationInputJobExecutor, HistorySourceSearchJobExecutor)}
 
 
 def require_current_review_tasks(payload):
@@ -307,6 +310,8 @@ class PreparedReviewContinuation:
             expected.add("predicate_frequency_evidence")
         if step_id == "ready" and payload["contract"] in COMPUTATION_CONTRACTS:
             expected.add("predicate_computation_input")
+        if step_id == "ready" and payload["contract"] == CONTRACT:
+            expected.add("predicate_history_source_search")
         if payload["includes_controls"]:
             expected.add("control" if step_id == "verification" else "control_qualification")
             if step_id == "ready" and payload["contract"] != "prepared-review-workflow/v1":
@@ -319,6 +324,8 @@ class PreparedReviewContinuation:
                 expected.add("control_frequency_evidence")
             if step_id == "ready" and payload["contract"] in COMPUTATION_CONTRACTS:
                 expected.add("control_computation_input")
+            if step_id == "ready" and payload["contract"] == CONTRACT:
+                expected.add("control_history_source_search")
         if set(children) != expected or checkpoint.get("review_context_sha256") != payload["review_context_sha256"]:
             raise ScopeViolationError("本次审核的核对范围或资料记录不完整")
         owned = {row.job_id: row for row in cls._children(session, workflow_id, payload)}
@@ -401,10 +408,17 @@ class PreparedReviewContinuation:
                         self.session_factory, candidate_job_id=candidate_id, context_id=context.context_id,
                         routes=routes, artifact_store=self.artifact_store, product_runtime=True,
                     ).job_id
-            if payload["contract"] == CONTRACT:
+            if payload["contract"] in COMPUTATION_CONTRACTS:
                 from app.services.computation_input_job import enqueue_computation_input
                 for family, candidate_id in candidates.items():
                     children[f"{family}_computation_input"] = enqueue_computation_input(
+                        self.session_factory, candidate_job_id=candidate_id, context_id=context.context_id,
+                        routes=routes, artifact_store=self.artifact_store, product_runtime=True,
+                    ).job_id
+            if payload["contract"] == CONTRACT:
+                from app.services.history_source_search_job import enqueue_history_source_search
+                for family, candidate_id in candidates.items():
+                    children[f"{family}_history_source_search"] = enqueue_history_source_search(
                         self.session_factory, candidate_job_id=candidate_id, context_id=context.context_id,
                         routes=routes, artifact_store=self.artifact_store, product_runtime=True,
                     ).job_id

@@ -70,6 +70,7 @@ from app.domain.contracts.rules import (
     Rule,
     RuleComponent,
     RuleSet,
+    TimeConstraint,
     WorkflowStage,
 )
 from app.domain.publication import canonical_hash
@@ -173,7 +174,7 @@ def _counterexample_predicate() -> AtomicPredicate:
     )
 
 
-def _synthetic_material(*, computation=False, positive=None, record=None):
+def _synthetic_material(*, computation=False, positive=None, record=None, time_constraint=None, anchor_dates=None):
     """One executable ANY-component (usable + unresolved) plus restricted sibling."""
     authority = _authority()
     positive = positive or _positive_predicate(computation=computation)
@@ -183,7 +184,7 @@ def _synthetic_material(*, computation=False, positive=None, record=None):
     expression = LogicalExpression(
         operator=LogicalOperator.ANY,
         children=[
-            AtomicExpression(predicate=positive),
+            AtomicExpression(predicate=positive, time_constraint=time_constraint),
             AtomicExpression(predicate=counter),
         ],
     )
@@ -306,7 +307,7 @@ def _synthetic_material(*, computation=False, positive=None, record=None):
         stage=ReviewStage.SCREENING,
         revision=authority.episode_revision,
         workflow_stage_id=STAGE_ID,
-        anchor_dates={},
+        anchor_dates=anchor_dates or {},
         active_evidence_snapshot_id=authority.evidence_snapshot_v2_id,
         active_evidence_processing_revision_id=authority.complete_processing_revision_id,
     )
@@ -780,20 +781,24 @@ def test_consumer_upgrade_reads_history_without_relabeling_its_authority(version
     "computation_qualification_identity_changed", "computation_sources", "computation_sources_length",
     "computation_sources_changed", "computation_sources_request_changed", "computation_sources_missing_field",
     "computation_sources_qualified", "prescription_history", "purchase_history",
-    "prescription_duration", "purchase_duration", "prescription_last_use", "purchase_last_use"])
+    "prescription_duration", "purchase_duration", "prescription_last_use", "purchase_last_use",
+    "prescription_window_inside", "purchase_window_inside", "prescription_window_outside", "purchase_window_outside",
+    "prescription_window_anchor_missing", "purchase_window_anchor_missing"])
 def test_receipt_verified_work_draft_consumes_normal_clause_and_keeps_restricted_sibling(
     session_factory, data_paths, monkeypatch, case,
 ):
     is_computation = case.startswith("computation")
     is_medication = case.startswith(("prescription_", "purchase_"))
-    history_supported = is_medication and case.endswith("_history")
+    has_window = is_medication and "_window_" in case
+    history_supported = is_medication and (case.endswith("_history") or has_window)
     is_withheld = (case == "rejected" or is_computation and case != "computation_sources_qualified"
                    or is_medication and not history_supported)
     medication = {}
     if is_medication:
         record = "2025-04-12" + ("处方：示例药物，每日一次" if case.startswith("prescription_")
                                  else "购药记录：示例药物一盒")
-        clause = ("曾有示例药物用药史" if history_supported else
+        clause = ("筛选前两年内有示例药物用药史" if has_window else
+                  "曾有示例药物用药史" if history_supported else
                   "示例药物连续实际使用至少30天" if case.endswith("_duration") else
                   "示例药物末次实际服药日期为2025-04-12")
         medication = dict(record=record, positive=AtomicPredicate(
@@ -802,12 +807,23 @@ def test_receipt_verified_work_draft_consumes_normal_clause_and_keeps_restricted
             observation_policy={"mode": "any", "scope": "本项用药史记录",
                                 "source_span_ids": ["synthetic-history-clause"], "source_excerpts": [clause]},
         ))
+        if has_window:
+            medication["time_constraint"] = TimeConstraint(anchor_type="screening_date", direction="before",
+                upper_bound={"value": 2, "unit": "year"})
+            if not case.endswith("anchor_missing"):
+                medication["anchor_dates"] = {"screening_date": DateValue(value=("2028-04-13"
+                    if case.endswith("outside") else "2026-04-12"), precision="day")}
     authority, rule_set, frozen, clinical_fact, episode, candidate_response = (
         _synthetic_material(computation="single" if case == "computation_sources_qualified" else is_computation,
                             **medication)
     )
     if case == "computation_input":
         candidate_response["results"][0]["candidates"][0]["attribute_correspondence"] = "derivation_operand"
+    if has_window:
+        candidate_response["results"][0]["candidates"].append(dict(
+            fact_id=FACT_ID, fact_attribute="date_range", locator_id=LOCATOR_ID,
+            object_correspondence="supported", attribute_correspondence="direct",
+            correspondence_explanation="核对处方或购药记录本身的日期，不能推定实际给药日期。"))
     source_review = None
     if case.startswith("computation_sources") or case == "normal_sources" or is_medication:
         source_review = _aligned_review_context(authority=authority, rule_set=rule_set,
@@ -851,11 +867,15 @@ def test_receipt_verified_work_draft_consumes_normal_clause_and_keeps_restricted
                     unresolved_reasons=["Selected input set and arithmetic have not been qualified."],
                     explanation="The original individual measurement remains a computation input.")
         if is_medication:
+            request = json.loads(messages[1]["content"][0]["text"])
+            attributes = {item["pair_id"]: item["fact_attribute"] for item in request["pairs"]}
             for judgment in payload["results"]:
                 judgment["explanation"] = "原文仅记载处方或购药，保留该记录日期，不推测实际给药。"
                 if not history_supported:
                     judgment.update(attribute_match="uncertain", direct_operand_usable="not_usable",
                                     unresolved_reasons=["本记录不能证明连续疗程或末次实际服药日期。"])
+                elif attributes[judgment["pair_id"]] == "date_range":
+                    judgment["temporal_role"] = "event_date"
         return PageCompletion(
             json.dumps(payload, ensure_ascii=False),
             "stop",
@@ -1219,7 +1239,10 @@ def test_receipt_verified_work_draft_consumes_normal_clause_and_keeps_restricted
     assert [
         item.model_dump(mode="json") for item in review.clause_pack.restricted_clauses
     ] == before_restricted
-    if case in {"normal", "normal_sources", "computation_sources_qualified"} or history_supported:
+    if has_window and not case.endswith("inside"):
+        assert calculation.components[0].result.decision != ComponentDecision.EXCLUSION_TRIGGERED
+        assert calculation.components[0].result.gaps
+    elif case in {"normal", "normal_sources", "computation_sources_qualified"} or history_supported:
         assert calculation.components[0].result.decision == ComponentDecision.EXCLUSION_TRIGGERED
         assert calculation.components[0].result.gaps == frozenset()
         if is_computation:

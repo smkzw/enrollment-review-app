@@ -31,6 +31,16 @@ class EligibilityFactRefDTO(BaseModel):
     excerpt: str | None
 
 
+class EligibilitySourceReadRefDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_document_version_id: str = Field(min_length=1)
+    page_artifact_id: str = Field(min_length=1)
+    page_number: int = Field(ge=1)
+    excerpt: str | None
+    disposition: Literal["mentioned", "not_seen", "unresolved"]
+
+
 class EligibilityClauseDTO(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -56,6 +66,7 @@ class EligibilityClauseDTO(BaseModel):
     decision_label: str = Field(min_length=1)
     reason: str = Field(min_length=1)
     fact_refs: list[EligibilityFactRefDTO] = Field(default_factory=list)
+    source_read_refs: list[EligibilitySourceReadRefDTO] = Field(default_factory=list)
     gap_type: str | None = Field(default=None, min_length=1)
     determination_mode: Literal[
         "deterministic", "semantic", "investigator_judgment", "restricted"
@@ -93,6 +104,7 @@ class EligibilityControlObligationDTO(BaseModel):
     status_label: str = Field(min_length=1)
     reason: str = Field(min_length=1)
     fact_refs: list[EligibilityFactRefDTO] = Field(default_factory=list)
+    source_read_refs: list[EligibilitySourceReadRefDTO] = Field(default_factory=list)
     continuing_note: str | None = None
     action_owner: Literal[
         "investigator", "crc", "cra", "sponsor_medical_or_project"

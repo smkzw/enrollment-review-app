@@ -86,6 +86,18 @@ def calculate_predicate_propositions(selections, context, *, repeat_triggers_onl
                        if item["identity_sha256"] == entry.predicate_identity_sha256]
             gaps = [item for item in pair_gaps
                     if item["identity_sha256"] == entry.predicate_identity_sha256]
+            from app.services.qualified_binding_selection import ReceiptVerifiedWorkDraftSelections
+            history_rows = (material.history_search_results
+                            if isinstance(material, ReceiptVerifiedWorkDraftSelections) else ())
+            history = next((row for row in history_rows
+                            if row["identity_sha256"] == entry.predicate_identity_sha256), None)
+            if history is not None and outcome is not None and not outcome.fact_ids and not records and not gaps:
+                from app.services.history_source_search_calculation import calculate_history_not_seen
+                scoped = calculate_history_not_seen(history, predicate.record_semantics,
+                    time_constraint=entry.time_constraint, anchor_dates=context.anchor_dates)
+                if scoped is not None:
+                    outcomes[entry.predicate_id] = scoped
+                    continue
             if outcome.status != "usable" or material.proposition_evidence is None:
                 outcomes[entry.predicate_id] = EvaluationResult(
                     truth=TruthValue.UNKNOWN,

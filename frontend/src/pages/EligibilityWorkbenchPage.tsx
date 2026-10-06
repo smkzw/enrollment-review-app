@@ -56,6 +56,7 @@ function controlWorkItems(controls: ReadonlyArray<EligibilityControlView>): Elig
     reason: obligation.reason,
     continuingNote: obligation.continuingNote,
     factRefs: obligation.factRefs,
+    sourceReadRefs: obligation.sourceReadRefs,
     gapType: null,
     determinationMode: obligation.status === "restricted" ? "restricted" as const : "semantic" as const,
     limitationKind: obligation.limitationKind ?? null,
@@ -720,6 +721,22 @@ function EligibilityEvidencePanel({
       )}
       {clause.factRefs.length === 0 && (
         <p className="eligibility-muted">当前条款没有已采用事实，可浏览全部原件页核实。</p>
+      )}
+      {(clause.sourceReadRefs ?? []).length > 0 && (
+        <ul className="eligibility-evidence__refs" aria-label="检索范围与待核原文">
+          {(clause.sourceReadRefs ?? []).map((ref, index) => {
+            const page = pages.find((item) => item.sourceDocumentVersionId === ref.sourceDocumentVersionId
+              && item.pageArtifactId === ref.pageArtifactId && item.pageNumber === ref.pageNumber);
+            return <li key={`${ref.pageArtifactId}-${index}`}>
+              <button type="button" className="eligibility-evidence__ref" disabled={!page}
+                onClick={() => page && setBrowsedPage({ context: sourceContext, entryId: page.entryId })}>
+                <strong>{ref.disposition === "mentioned" ? "已找到相关原文，待核清" : ref.disposition === "not_seen" ? "本页未见相关记录" : "本页尚未核清"}</strong>
+                {ref.excerpt && <span>{ref.excerpt}</span>}
+                <span>{documentNames.get(ref.sourceDocumentVersionId) ?? "原始资料"} · 第 {ref.pageNumber} 页</span>
+              </button>
+            </li>;
+          })}
+        </ul>
       )}
       {(
         <>

@@ -11,7 +11,7 @@ WORKFLOW_JOB_TYPE = "prepared_review_workflow"
 OWNED_TYPES = (
     "predicate_binding_candidates", "control_binding_candidates",
     "binding_qualification", "judgment_content", "proposition_evidence", "observation_relation",
-    "frequency_evidence", "computation_input",
+    "frequency_evidence", "computation_input", "history_source_search",
 )
 
 

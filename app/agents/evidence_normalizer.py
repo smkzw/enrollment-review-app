@@ -73,6 +73,7 @@ from app.agents.evidence_normalizer_repair import (
     EvidenceSourceObjectError, EvidenceSourceObjectRepair, SOURCE_OBJECT_REPAIR_VERSION,
     EvidenceContextError, EvidenceContextRepair, EvidenceDraftScopeError, CONTEXT_REPAIR_VERSION,
     EvidencePendingContextRetention,
+    EvidenceDerivedSourceError,
     EvidenceProspectiveError, EvidenceProspectiveRepair, PROSPECTIVE_SCOPES, PROSPECTIVE_REPAIR_VERSION,
 )
 
@@ -2059,9 +2060,9 @@ def _enforce_exposure_source_fields(
                 and _source_token(fact.asserted_object) in cited_text
             }
             if len(source_names) != 1:
-                raise ValueError(
-                    f"用药暴露 {candidate.candidate_id} 的药名未逐字出现在所引原文中"
-                )
+                raise EvidenceDerivedSourceError(
+                    f"用药暴露 {candidate.candidate_id} 的药名未逐字出现在所引原文中",
+                    candidate.candidate_id, collection="exposure_candidates")
             candidate = candidate.model_copy(
                 update={"medication_name": source_names.pop()}
             )
@@ -2255,6 +2256,7 @@ class EvidenceNormalizerRunResult(ContractModel):
     attempts: list[EvidenceNormalizerAttempt] = Field(min_length=1)
     final_output: EvidenceNormalizerOutput | None = None
     candidate_partition_receipt: dict | None = Field(default=None, exclude_if=lambda value: value is None)
+    candidate_partition_failure: dict | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class EvidenceNormalizerRunner:
@@ -2365,15 +2367,20 @@ class EvidenceNormalizerRunner:
                 attempts=attempts, final_output=None)
             if not allow_candidate_partition or not require_current_draft:
                 return failed
-            from app.agents.evidence_candidate_partition import recover_source_local_candidates
+            from app.agents.evidence_candidate_partition import (
+                CANDIDATE_PARTITION_POLICY, recover_source_local_candidates,
+            )
 
             try:
                 # Always freeze the initial response; a failed repair cannot
                 # replace good siblings or establish a new clinical interpretation.
                 partition = recover_source_local_candidates(initial_raw_text, evidence_input,
                     reference_aliases=reference_aliases)
-            except (ValueError, TypeError, KeyError):
-                return failed
+            except (ValueError, TypeError, KeyError) as exc:
+                return failed.model_copy(update={"candidate_partition_failure": {
+                    "policy": CANDIDATE_PARTITION_POLICY,
+                    "type": type(exc).__name__, "detail": str(exc),
+                    "raw_output_sha256": _sha256(initial_raw_text)}})
             attempts.append(EvidenceNormalizerAttempt(attempt=len(attempts) + 1,
                 session_id=session_id, raw_output_sha256=_sha256(initial_raw_text), outcome="partitioned",
                 output=partition.output, issues=["未通过核对的候选及其依赖已隔离保留。"],
@@ -2460,6 +2467,8 @@ class EvidenceNormalizerRunner:
                     )
                 )
                 if schema_repairs >= self._max_schema_repairs:
+                    return terminal_schema_failure()
+                if isinstance(exc, EvidenceDerivedSourceError) and allow_candidate_partition:
                     return terminal_schema_failure()
                 if isinstance(exc, EvidenceSourceObjectError):
                     scope_unavailable = not exc.bounded_repair or (object_repair is None and schema_repairs > 0)

@@ -3193,6 +3193,33 @@ def test_complete_revision_history_survives_later_chain_successors(revision_stac
     assert replayed.correction_ids == ["corr-history-1"]
     assert replayed.metadata_revision_ids == ["mdr-1"]
     assert replayed.referenced_document_revision_ids == ["rd-history-1"]
+    with pytest.raises(RevisionClosureError):
+        repo.get_current("complete-1")
+
+
+@pytest.mark.parametrize("change", ["correction", "new-reference", "metadata"])
+def test_current_source_read_rejects_new_heads_but_keeps_old_history(revision_stack, change):
+    from app.domain.contracts.evidence_ingestion import SourceDocumentMetadataRevision
+    session, _fixture, keys = revision_stack
+    metadata_id = _seed_metadata(session, keys)
+    scan_id, review_ids = _seed_scan_and_review(session, keys)
+    repository = CompleteEvidenceProcessingRevisionRepository(session)
+    revision = _complete_revision(keys, session, metadata_revision_ids=[metadata_id],
+        risk_scan_ids=[scan_id], risk_review_ids=review_ids)
+    repository.create(revision)
+    assert repository.get_current("complete-1") == revision
+    if change == "correction":
+        CorrectionRepository(session).create(_correction(keys, correction_id="corr-new-source"))
+    elif change == "new-reference":
+        ReferencedDocumentRepository(session).create_revision(_referenced(keys, revision_id="rd-new-source"))
+    else:
+        SourceDocumentMetadataRevisionRepository(session).append(SourceDocumentMetadataRevision(
+            metadata_revision_id="mdr-new-source", source_document_version_id="doc-1", document_type="lab",
+            source_party="hospital", reason="新来源说明", is_auto_suggestion=False, revision=2,
+            supersedes_metadata_revision_id=metadata_id, created_at=FIXED_UTC, created_by="tester"))
+    assert repository.get("complete-1") == revision
+    with pytest.raises(RevisionClosureError):
+        repository.get_current("complete-1")
 
 
 def test_sql_review_base_fk_not_null(revision_stack):

@@ -143,6 +143,21 @@ function installSourcePages() {
 }
 
 describe("入排审核工作台", () => {
+  it("检索发现可打开正确原件但不会显示成已采用事实", async () => {
+    installSourcePages();
+    setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({ ...review,
+      clauses: [{ ...review.clauses[0]!, factRefs: [], sourceReadRefs: [{
+        sourceDocumentVersionId: "document-b", pageArtifactId: "page-b", pageNumber: 1,
+        excerpt: "既往事件日期不详", disposition: "mentioned",
+      }] }],
+    }) });
+    render(<EligibilityWorkbenchPage />);
+    const button = await screen.findByRole("button", { name: /已找到相关原文，待核清/ });
+    await userEvent.click(button);
+    expect(await screen.findByText("当前条款没有已采用事实，可浏览全部原件页核实。")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("原始资料查看区"))
+      .getByRole("button", { name: "检验报告.pdf 第 1 页" })).toHaveAttribute("aria-current", "page");
+  });
   it("核对方法未支持时显示处理方向，不要求研究者替软件作判断", async () => {
     setEligibilityReviewRepository({ kind: "http", getEligibilityReview: async () => ({
       ...review, clauses: [{ ...review.clauses[0]!, determinationMode: "restricted",

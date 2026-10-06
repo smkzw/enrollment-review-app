@@ -8,13 +8,14 @@ from jsonschema import Draft202012Validator, FormatChecker
 
 from app.agents.evidence_normalizer_repair import (
     EvidenceContextError, EvidenceProspectiveError, EvidenceSourceObjectError,
+    EvidenceDerivedSourceError,
     _unique_object,
 )
 from app.domain.contracts.evidence_normalizer import EvidenceNormalizerUnresolvedItem
 from app.domain.publication import canonical_hash
 
 
-CANDIDATE_PARTITION_POLICY = "evidence-candidate-partition/v1"
+CANDIDATE_PARTITION_POLICY = "evidence-candidate-partition/v2"
 
 
 @dataclass(frozen=True)
@@ -170,7 +171,8 @@ def partition_source_local_candidates(text, evidence_input, *, validate):
         # Isolate the full closure, never shorten an exposure or reclassify its facts.
         while True:
             removed_exposures = [item for item in collections["exposure_candidates"]
-                                 if set(item["fact_candidate_refs"]) & rejected]
+                                 if item["candidate_ref"] in rejected
+                                 or set(item["fact_candidate_refs"]) & rejected]
             remaining_exposure_refs = {ref for item in collections["exposure_candidates"]
                                       if item not in removed_exposures
                                       for ref in item["fact_candidate_refs"]}
@@ -193,6 +195,13 @@ def partition_source_local_candidates(text, evidence_input, *, validate):
         try:
             output = validate(json.dumps(projection, ensure_ascii=False, sort_keys=True))
             break
+        except EvidenceDerivedSourceError as exc:
+            valid_refs = {item["candidate_ref"] for item in collections.get(exc.collection, [])}
+            if exc.collection not in {"event_candidates", "exposure_candidates"} or exc.candidate_ref not in valid_refs - rejected:
+                raise
+            rejected.add(exc.candidate_ref)
+            failures.append({"code": type(exc).__name__, "candidate_refs": [exc.candidate_ref],
+                             "collection": exc.collection, "detail": str(exc)})
         except EvidenceSourceObjectError as exc:
             if (type(exc) not in {EvidenceSourceObjectError, EvidenceContextError, EvidenceProspectiveError}
                     or not exc.bounded_repair or not exc.candidate_refs

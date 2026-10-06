@@ -24,6 +24,15 @@ class EvidenceContextError(EvidenceSourceObjectError):
     """Invalid or undeclared source context, with an explicit repair target."""
 
 
+class EvidenceDerivedSourceError(ValueError):
+    """A derived candidate's cited source does not support its content."""
+
+    def __init__(self, message: str, candidate_ref: str, *, collection: str):
+        super().__init__(message)
+        self.candidate_ref = candidate_ref
+        self.collection = collection
+
+
 class EvidenceProspectiveError(EvidenceSourceObjectError):
     """Explicit future/uncertain scope conflicts with actual-occurrence membership."""
 

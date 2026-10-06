@@ -30,7 +30,7 @@ class ControlConditionalObservation(ContractModel):
 
 
 class ControlCalculationExperiment(ContractModel):
-    version: Literal["control-calculation-experiment/v3", "control-calculation-experiment/v4", "control-calculation-experiment/v5", "control-calculation-experiment/v6", "control-calculation-experiment/v7", "control-calculation-experiment/v8", "control-calculation-experiment/v9", "control-calculation-experiment/v10", "control-calculation-experiment/v11", "control-calculation-experiment/v12", "control-calculation-experiment/v13", "control-calculation-experiment/v14", "control-calculation-experiment/v15", "control-calculation-experiment/v16", "control-calculation-experiment/v17", "control-calculation-experiment/v18", "control-calculation-experiment/v19"] = "control-calculation-experiment/v19"
+    version: Literal["control-calculation-experiment/v3", "control-calculation-experiment/v4", "control-calculation-experiment/v5", "control-calculation-experiment/v6", "control-calculation-experiment/v7", "control-calculation-experiment/v8", "control-calculation-experiment/v9", "control-calculation-experiment/v10", "control-calculation-experiment/v11", "control-calculation-experiment/v12", "control-calculation-experiment/v13", "control-calculation-experiment/v14", "control-calculation-experiment/v15", "control-calculation-experiment/v16", "control-calculation-experiment/v17", "control-calculation-experiment/v18", "control-calculation-experiment/v19", "control-calculation-experiment/v20"] = "control-calculation-experiment/v19"
     frozen_input_sha256: str
     selections_sha256: str
     accepted: Literal[False] = False
@@ -46,15 +46,19 @@ class ControlCalculationExperiment(ContractModel):
     frequency_evaluations: dict[str, FrequencyAtomEvaluation] = Field(default_factory=dict)
 
     computation_evaluations: dict[str, ComputationAtomEvaluation] = Field(default_factory=dict)
+    history_search_results: list[dict] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_repeat_scope(self):
-        if self.repeat_evaluations and (self.version not in {"control-calculation-experiment/v11", "control-calculation-experiment/v12", "control-calculation-experiment/v13", "control-calculation-experiment/v14", "control-calculation-experiment/v15", "control-calculation-experiment/v16", "control-calculation-experiment/v17", "control-calculation-experiment/v18", "control-calculation-experiment/v19"} or self.purpose != "four_layer"):
+        if self.history_search_results and (self.version != "control-calculation-experiment/v20"
+                                            or self.purpose != "four_layer"):
+            raise ValueError("病史范围检索不能补写到历史或辅助触发记录")
+        if self.repeat_evaluations and (self.version not in {"control-calculation-experiment/v11", "control-calculation-experiment/v12", "control-calculation-experiment/v13", "control-calculation-experiment/v14", "control-calculation-experiment/v15", "control-calculation-experiment/v16", "control-calculation-experiment/v17", "control-calculation-experiment/v18", "control-calculation-experiment/v19", "control-calculation-experiment/v20"} or self.purpose != "four_layer"):
             raise ValueError("旧计算或复查触发条件不能夹带新的最终复查求值")
-        if self.frequency_evaluations and (self.version not in {"control-calculation-experiment/v12", "control-calculation-experiment/v13", "control-calculation-experiment/v14", "control-calculation-experiment/v15", "control-calculation-experiment/v16", "control-calculation-experiment/v17", "control-calculation-experiment/v18", "control-calculation-experiment/v19"}
+        if self.frequency_evaluations and (self.version not in {"control-calculation-experiment/v12", "control-calculation-experiment/v13", "control-calculation-experiment/v14", "control-calculation-experiment/v15", "control-calculation-experiment/v16", "control-calculation-experiment/v17", "control-calculation-experiment/v18", "control-calculation-experiment/v19", "control-calculation-experiment/v20"}
                 or (self.version == "control-calculation-experiment/v12" and self.purpose != "four_layer")):
             raise ValueError("频次计算须使用当前完整审核，不能补写历史")
-        if self.computation_evaluations and (self.version not in {"control-calculation-experiment/v17", "control-calculation-experiment/v18", "control-calculation-experiment/v19"}
+        if self.computation_evaluations and (self.version not in {"control-calculation-experiment/v17", "control-calculation-experiment/v18", "control-calculation-experiment/v19", "control-calculation-experiment/v20"}
                 or self.purpose != "four_layer"):
             raise ValueError("计算输入求值不能夹带到历史或复查触发范围")
         return self
@@ -70,6 +74,8 @@ class ControlCalculationExperiment(ContractModel):
             value.pop("frequency_evaluations", None)
         if not self.computation_evaluations:
             value.pop("computation_evaluations", None)
+        if not self.history_search_results:
+            value.pop("history_search_results", None)
         return value
 
 

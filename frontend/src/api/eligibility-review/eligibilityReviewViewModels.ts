@@ -22,6 +22,14 @@ export interface EligibilityFactRefView {
   pageNumber: number | null;
 }
 
+export interface EligibilitySourceReadRefView {
+  sourceDocumentVersionId: string;
+  pageArtifactId: string;
+  pageNumber: number;
+  excerpt: string | null;
+  disposition: "mentioned" | "not_seen" | "unresolved";
+}
+
 export interface EligibilityClauseView {
   ruleComponentId: string;
   ruleCode: string;
@@ -33,6 +41,7 @@ export interface EligibilityClauseView {
   decisionLabel: string;
   reason: string;
   factRefs: EligibilityFactRefView[];
+  sourceReadRefs?: EligibilitySourceReadRefView[];
   gapType: string | null;
   determinationMode: EligibilityDeterminationMode;
   limitationKind?: EligibilityLimitationKindWire | null;
@@ -53,6 +62,7 @@ export interface EligibilityControlObligationView {
   limitationKind?: EligibilityLimitationKindWire | null;
   reason: string;
   factRefs: EligibilityFactRefView[];
+  sourceReadRefs?: EligibilitySourceReadRefView[];
   continuingNote?: string | null;
   actionOwner?: EligibilityActionTarget | null;
   actionDetail?: string | null;
@@ -241,6 +251,23 @@ function decodeFactRef(value: unknown, index: number, parentPath = "clauses[].fa
   };
 }
 
+function decodeSourceReads(value: unknown, path: string): EligibilitySourceReadRefView[] {
+  if (value === undefined) return [];
+  return arrayValue(value, path).map((item, index) => {
+    const child = `${path}[${index}]`;
+    const row = objectValue(item, child);
+    const pageNumber = nullablePositiveInteger(field(row, "page_number", child), `${child}.page_number`);
+    if (pageNumber === null) throw new EligibilityReviewDecodeError(`${child}.page_number 不得为空`);
+    return {
+      sourceDocumentVersionId: requiredString(field(row, "source_document_version_id", child), `${child}.source_document_version_id`),
+      pageArtifactId: requiredString(field(row, "page_artifact_id", child), `${child}.page_artifact_id`),
+      pageNumber,
+      excerpt: nullableString(field(row, "excerpt", child), `${child}.excerpt`),
+      disposition: enumValue(field(row, "disposition", child), ["mentioned", "not_seen", "unresolved"] as const, `${child}.disposition`),
+    };
+  });
+}
+
 function decodeClause(value: unknown, index: number): EligibilityClauseView {
   const path = `clauses[${index}]`;
   const row = objectValue(value, path);
@@ -278,6 +305,7 @@ function decodeClause(value: unknown, index: number): EligibilityClauseView {
     ),
     reason: requiredString(field(row, "reason", path), `${path}.reason`),
     factRefs: refs.map((value, index) => decodeFactRef(value, index)),
+    sourceReadRefs: decodeSourceReads(row.source_read_refs, `${path}.source_read_refs`),
     gapType: nullableString(field(row, "gap_type", path), `${path}.gap_type`),
     limitationKind: optionalEnumValue(row.limitation_kind ?? null, LIMITATION_KINDS, `${path}.limitation_kind`),
     determinationMode: enumValue(
@@ -318,6 +346,7 @@ function decodeControl(value: unknown, index: number): EligibilityControlView {
         limitationKind: optionalEnumValue(obligation.limitation_kind ?? null, LIMITATION_KINDS, `${obligationPath}.limitation_kind`),
         reason: requiredString(field(obligation, "reason", obligationPath), `${obligationPath}.reason`),
         factRefs: refs.map((item, refIndex) => decodeFactRef(item, refIndex, `${obligationPath}.fact_refs`)),
+        sourceReadRefs: decodeSourceReads(obligation.source_read_refs, `${obligationPath}.source_read_refs`),
         continuingNote: obligation.continuing_note == null
           ? null
           : requiredString(obligation.continuing_note, `${obligationPath}.continuing_note`),
