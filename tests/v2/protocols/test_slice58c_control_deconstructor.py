@@ -8048,6 +8048,136 @@ def test_runner_uses_policy_only_repair_for_one_missing_policy() -> None:
     assert len(result.attempts) == 2
 
 
+@pytest.mark.parametrize("failure", [None, "field_only", "quote", "session", "budget", "missing_reader"])
+def test_multiple_candidates_missing_policy_use_only_frozen_field_repairs(failure) -> None:
+    original = _wire_with_two_candidates(
+        _candidate().model_copy(update={"exception_expression": None}),
+        _candidate_for_second_unit().model_copy(update={"exception_expression": None}),
+    ).model_dump(mode="json")
+    second_atom = original["candidate_drafts"][1]["obligation_expression"]["groups"][0]["atoms"][0]
+    second_atom["evaluation"] = _evaluation(
+        second_atom["statement"], second_atom["source_span_ids"][0], second_atom["source_excerpts"][0],
+    )
+    original = ProtocolControlAgentWire.model_validate(original).model_dump(mode="json")
+    initial = deepcopy(original)
+    for draft in initial["candidate_drafts"]:
+        draft["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]["observation_policy"] = None
+    snapshot = deepcopy(initial)
+    expected = deepcopy(initial)
+
+    class PolicyTransport(_FakeTransport):
+        policy_calls = 0
+
+        def continue_observation_policies(self, *, session_id, prompt):
+            index = self.policy_calls
+            self.policy_calls += 1
+            atom = initial["candidate_drafts"][index]["obligation_expression"]["groups"][0]["atoms"][0]
+            policy = {
+                "mode": "unresolved", "scope": "原文未明确采用哪次记录",
+                "source_span_ids": atom["source_span_ids"],
+                "source_excerpts": atom["source_excerpts"],
+            }
+            expected["candidate_drafts"][index]["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]["observation_policy"] = policy
+            if failure == "quote":
+                other = initial["candidate_drafts"][1 - index]["obligation_expression"]["groups"][0]["atoms"][0]
+                policy = {**policy, "source_span_ids": other["source_span_ids"],
+                          "source_excerpts": other["source_excerpts"]}
+            assert "仅为列出的条件或义务原子补充观察采用说明" in prompt
+            return ProtocolControlAgentResponse(
+                session_id="foreign-session" if failure == "session" else session_id,
+                text=json.dumps({"items": [{
+                    "layer": "obligation", "group_index": 0, "atom_index": 0, "policy": policy,
+                }]}, ensure_ascii=False),
+            )
+
+        def continue_candidate(self, **kwargs):
+            pytest.fail("缺少观察说明不能重写整条要求或退回整候选")
+
+        def continue_session(self, **kwargs):
+            pytest.fail("字段恢复失败不能扩大整批请求")
+
+    transport = PolicyTransport([
+        ProtocolControlAgentResponse(session_id="policies", text=json.dumps(initial)),
+    ])
+    if failure == "missing_reader":
+        transport.continue_observation_policies = None
+    elif failure == "field_only":
+        transport.continue_candidate = None
+    consumers = []
+    from app.protocols.protocol_control_gate import validate_protocol_control_batch_candidates
+
+    def consume(output):
+        validate_protocol_control_batch_candidates(_batch(), output)
+        consumers.append(output)
+
+    result = ProtocolControlAgentRunner(max_schema_repairs=1 if failure == "budget" else 2).run(
+        _batch(), transport, output_validator=consume,
+    )
+    assert initial == snapshot
+    if failure in {None, "field_only"}:
+        assert result.status == "已解析", [attempt.issues for attempt in result.attempts]
+        assert len(consumers) == 1
+        assert result.partial_wire.model_dump(mode="json") == expected
+        assert transport.policy_calls == 2
+        assert len(transport.prompts) == 1
+        assert len(result.attempts) == 4  # Final assembled validation is not another model call.
+    else:
+        assert result.status == "需要核对"
+        assert result.final_output is None
+        assert consumers == []
+        assert transport.policy_calls == (0 if failure == "missing_reader" else 1)
+        if failure == "budget":
+            assert result.attempts[-1].error_classes == ["REPAIR_BUDGET_EXHAUSTED"]
+
+
+def test_candidate_relative_policy_selector_rejects_other_errors() -> None:
+    from pydantic import ValidationError
+    from app.agents.protocol_control_deconstructor import _invalid_observation_policy_paths
+
+    baseline = _wire_with_two_candidates(_candidate(), _candidate_for_second_unit()).model_dump(mode="json")
+    draft = baseline["candidate_drafts"][1]
+    draft["obligation_expression"]["groups"][0]["atoms"][0]["evaluation"]["observation_policy"] = None
+    with pytest.raises(ValidationError) as missing:
+        ProtocolControlAgentWireCandidate.model_validate(draft)
+    assert _invalid_observation_policy_paths(missing.value, baseline, 1) == (("obligation", 0, 0),)
+    draft["title"] = ""
+    with pytest.raises(ValidationError) as mixed:
+        ProtocolControlAgentWireCandidate.model_validate(draft)
+    assert _invalid_observation_policy_paths(mixed.value, baseline, 1) == ()
+
+
+def test_multi_policy_probe_reuses_canonical_normalization_without_changing_raw() -> None:
+    from pydantic import ValidationError
+    from app.agents.protocol_control_deconstructor import _invalid_candidate_payload, _invalid_observation_policy_paths
+
+    baseline = _wire_with_two_candidates(_candidate(), _candidate_for_second_unit()).model_dump(mode="json")
+    for draft in baseline["candidate_drafts"]:
+        atom = draft["obligation_expression"]["groups"][0]["atoms"][0]
+        atom["evaluation"]["observation_policy"] = None
+        del atom["evaluation"]["source_span_ids"]
+        del atom["evaluation"]["source_excerpts"]
+        atom["time_constraint"] = {
+            "anchor_type": "screening_date", "direction": "before",
+            "upper_bound_days": None, "upper_bound_inclusive": False,
+        }
+        atom["evaluation"]["time_operand_attribute"] = "date_range"
+        atom["evaluation"]["time_purpose"] = "interval_condition"
+    raw = json.dumps(baseline)
+    snapshot = deepcopy(baseline)
+    salvaged, indexes = _invalid_candidate_payload(raw)
+    assert indexes == (0, 1)
+    assert baseline == snapshot
+    assert raw == json.dumps(baseline)
+    for index in indexes:
+        with pytest.raises(ValidationError) as invalid:
+            ProtocolControlAgentWireCandidate.model_validate(salvaged["candidate_drafts"][index])
+        assert _invalid_observation_policy_paths(invalid.value, salvaged, index) == (("obligation", 0, 0),)
+        atom = salvaged["candidate_drafts"][index]["obligation_expression"]["groups"][0]["atoms"][0]
+        assert atom["evaluation"]["source_excerpts"] == atom["source_excerpts"]
+        assert atom["time_constraint"]["upper_bound_inclusive"] is True
+        assert atom["time_constraint"]["upper_bound_days"] is None
+
+
 def test_time_operand_repair_is_exact_and_unresolved_stays_unverified() -> None:
     valid = _wire_with_two_candidates(_candidate(), _candidate_for_second_unit())
     baseline = valid.model_dump(mode="json")
@@ -8352,7 +8482,7 @@ def test_multiple_candidate_repair_uses_typed_dates_without_rewriting_siblings(f
             raise ProtocolControlAgentWireValidationError("PUBLICATION_GATE_REJECTED", "synthetic semantic rejection")
 
     transport = Transport([ProtocolControlAgentResponse(session_id="multi-dates", text=json.dumps(initial))])
-    result = ProtocolControlAgentRunner(max_schema_repairs=1 if failure == "budget" else 2).run(
+    result = ProtocolControlAgentRunner(max_schema_repairs=1 if failure == "budget" else 3).run(
         _batch(), transport, output_validator=validate,
     )
     assert initial["candidate_drafts"][0]["obligation_expression"]["groups"][0]["atoms"][0].get("evaluation") is None
@@ -10821,7 +10951,7 @@ def test_two_invalid_candidate_drafts_are_repaired_separately() -> None:
             )
 
     transport = FocusedTransport()
-    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(
+    result = ProtocolControlAgentRunner(max_schema_repairs=2).run(
         _batch(), transport, output_validator=lambda _output: None,
     )
     assert result.status == "已解析", [attempt.issues for attempt in result.attempts]
@@ -10857,6 +10987,14 @@ def test_two_invalid_candidate_drafts_are_repaired_separately() -> None:
     )
     assert no_budget.status == "需要核对"
     assert disabled.focused_indexes == []
+
+    limited = FocusedTransport()
+    exhausted = ProtocolControlAgentRunner(max_schema_repairs=1).run(
+        _batch(), limited, output_validator=lambda _output: None,
+    )
+    assert exhausted.status == "需要核对"
+    assert limited.focused_indexes == [0]
+    assert exhausted.final_output is None
 
 
 def test_mixed_source_actions_keep_verified_partial_on_failure_and_resume() -> None:

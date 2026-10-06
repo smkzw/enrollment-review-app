@@ -6019,6 +6019,11 @@ def _invalid_candidate_payload(raw_text: str) -> tuple[dict[str, Any], tuple[int
         return None
     if _find_forbidden_provider_key(payload) is not None:
         return None
+    # Probe the same deterministic representation as the canonical parser.
+    # Otherwise omitted defaults can disguise a field-only repair as a full rewrite.
+    _collapse_exact_duplicate_day_bounds(payload)
+    _normalize_absent_time_bound_flags(payload)
+    _copy_atom_sources_to_evaluation(payload)
     dispositions = payload["dispositions"]
     drafts = payload["candidate_drafts"]
     if not isinstance(dispositions, list) or not dispositions or not isinstance(drafts, list):
@@ -6114,18 +6119,21 @@ def _invalid_obligation_atom_path(
 
 
 def _invalid_observation_policy_paths(
-    error: ProtocolControlAgentWireValidationError,
+    error: ProtocolControlAgentWireValidationError | ValidationError,
     baseline: Mapping[str, Any],
     candidate_index: int,
 ) -> tuple[tuple[str, int, int], ...]:
     """Select only same-candidate atoms whose sole missing field is selection policy."""
 
-    cause = error.__cause__
+    candidate_relative = isinstance(error, ValidationError)
+    cause = error if candidate_relative else error.__cause__
     if not isinstance(cause, ValidationError):
         return ()
     paths: set[tuple[str, int, int]] = set()
     for item in cause.errors(include_url=False):
         location = tuple(item["loc"])
+        if candidate_relative:
+            location = ("candidate_drafts", candidate_index, *location)
         layer = (
             str(location[2]).removesuffix("_expression")
             if len(location) > 2 and isinstance(location[2], str) else ""
@@ -9414,7 +9422,9 @@ class ProtocolControlAgentRunner:
                     and error.code == "WIRE_SCHEMA_INVALID"
                     and 1 < len(focused_invalid_indexes) <= 3
                     and repair_baseline_raw is not None
-                    and callable(focused_reader)
+                    and (callable(focused_reader) or callable(
+                        getattr(transport, "continue_observation_policies", None)
+                    ))
                     and not no_progress
                     and not repair_scope_unknown
                     and repairs < self._max_schema_repairs
@@ -9435,16 +9445,58 @@ class ProtocolControlAgentRunner:
                     if grounded:
                         repaired = deepcopy(repair_baseline_raw)
                         focused_response = None
-                        repairs += 1
                         try:
                             for index in focused_invalid_indexes:
+                                focused_response = None
                                 draft = repaired["candidate_drafts"][index]
+                                policy_paths = ()
                                 try:
                                     ProtocolControlAgentWireCandidate.model_validate(draft)
                                 except ValidationError as draft_error:
                                     problem = _validation_error_summary(draft_error)
+                                    policy_paths = _invalid_observation_policy_paths(
+                                        draft_error, repaired, index,
+                                    )
                                 else:
                                     raise ValueError("候选已有效，不能再次请求修订")
+                                if repairs >= self._max_schema_repairs:
+                                    raise ProtocolControlAgentWireValidationError(
+                                        "REPAIR_BUDGET_EXHAUSTED",
+                                        "逐项修订次数已用完，剩余候选未通过校验",
+                                    )
+                                repairs += 1
+                                if policy_paths:
+                                    policy_reader = getattr(transport, "continue_observation_policies", None)
+                                    if not callable(policy_reader):
+                                        raise ValueError("缺少观察说明字段修订能力，不能退回整候选改写")
+                                    focused_response = None
+                                    focused_response = policy_reader(
+                                        session_id=session_id,
+                                        prompt=_build_observation_policy_repair_prompt(
+                                            repaired, index, policy_paths, problem,
+                                        ),
+                                    )
+                                    if focused_response.session_id != session_id:
+                                        raise ValueError("观察说明修订不得更换原会话")
+                                    # Other candidates may still be invalid: retain only
+                                    # these fields, then validate this candidate and the full wire.
+                                    repaired = _merge_observation_policy_repair_payload(
+                                        focused_response.text, repaired, index, policy_paths,
+                                    )
+                                    ProtocolControlAgentWireCandidate.model_validate(
+                                        repaired["candidate_drafts"][index],
+                                    )
+                                    attempts.append(ProtocolControlAgentAttempt(
+                                        attempt=len(attempts) + 1, session_id=session_id,
+                                        raw_output_sha256=_sha256(focused_response.text),
+                                        raw_output_chars=len(focused_response.text),
+                                        raw_output_text=focused_response.text,
+                                        outcome="parsed",
+                                        issues=["仅补入授权观察说明，整批仍须通过原发布门禁"],
+                                    ))
+                                    continue
+                                if not callable(focused_reader):
+                                    raise ValueError("缺少候选修订能力，不能扩大整批重读")
                                 focused_prompt = build_protocol_control_repair_prompt(
                                     batch,
                                     problem=problem,
@@ -9512,7 +9564,7 @@ class ProtocolControlAgentRunner:
                                     outcome="parsed",
                                     issues=["单个候选结构已核，整批仍须通过原发布门禁"],
                                 ))
-                            repaired_wire = ProtocolControlAgentWire.model_validate(repaired)
+                            repaired_wire = parse_protocol_control_agent_wire(_stable_json(repaired))
                         except Exception as focused_error:  # noqa: BLE001 - fail closed
                             attempts.append(ProtocolControlAgentAttempt(
                                 attempt=len(attempts) + 1,
@@ -9528,7 +9580,9 @@ class ProtocolControlAgentRunner:
                                     focused_response.text if focused_response is not None else None
                                 ),
                                 outcome=("publication_invalid" if focused_response is not None
-                                         else "transport_failed"),
+                                         else "schema_invalid" if isinstance(
+                                             focused_error, ProtocolControlAgentWireValidationError
+                                         ) else "transport_failed"),
                                 issues=["单候选逐项修订未通过：" + str(focused_error)[:1400]],
                                 error_classes=[protocol_control_call_failure_code(focused_error)
                                                or (focused_error.code if isinstance(
@@ -9539,6 +9593,10 @@ class ProtocolControlAgentRunner:
                                 status="需要核对", batch_id=batch.batch_id,
                                 session_id=session_id, attempts=attempts,
                                 source_interpretation=source_interpretation,
+                                source_statement_coverage=latest_source_statement_coverage,
+                                source_target_review=latest_source_target_review,
+                                source_candidate_alignment=checkpoint_alignment(),
+                                partial_wire=partial_wire,
                             )
                         raw_text = repaired_wire.model_dump_json()
                         repair_baseline_raw = None

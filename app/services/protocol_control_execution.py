@@ -1918,7 +1918,7 @@ def _deep_component_identity(
             "source-insert-partial-resume/v1",
             "source-insert-batch-merge/v1",
             "source-insert-pending-authority-and-append-order/v1",
-            "multi-candidate-focused-repair/v1",
+            "multi-candidate-focused-repair/v2",
             "calendar-bound-wrapper-normalization/v1",
             "calendar-bound-distinct-atom-repair/v1",
             "calendar-bound-evaluation-pair/v1",
