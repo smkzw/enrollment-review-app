@@ -105,6 +105,8 @@ def test_runner_uses_one_source_bound_proposal_and_shares_existing_budget():
     lambda p: p["changes"][0].update(gap_type=None),
     lambda p: p["changes"][0].update(gap_type="required_procedure_not_done"),
     lambda p: p["changes"][0].update(gap_type="record_incomplete"),
+    lambda p: p["changes"][0].update(gap_type="professional_judgment"),
+    lambda p: p["changes"][0].update(gap_type="source_conflict"),
     lambda p: p["changes"][0].update(message="没有研究者判断"),
     lambda p: p.update(fact_candidates=[]),
     lambda p: p.update(changes=[]),
@@ -119,6 +121,46 @@ def test_bad_or_declined_proposal_never_triggers_whole_answer_rewrite(mutation):
     assert result.final_output is None
     assert result.question_classification_receipt is None
     assert (transport.starts, transport.proposals, transport.full_repairs) == (1, 1, 0)
+
+
+@pytest.mark.parametrize("message", [
+    "两份记录的对象与最终版本关系尚待核实",
+    "后续记录称已更正，但当前结果与此前记录的关系尚待核实",
+])
+def test_relation_question_retains_scope_without_declaring_clinical_conflict(message):
+    from app.agents.evidence_normalizer import evidence_normalizer_json_schema
+    from app.domain.contracts.evidence_normalizer import EvidenceNormalizerUnresolvedItem
+    from jsonschema import Draft202012Validator
+    inp, payload = _case()
+    payload["unresolved_items"][0].update(gap_type="source_conflict", message=message, reason=message)
+    raw = json.dumps(payload, ensure_ascii=False)
+    repair = QuestionClassificationRepair(raw, inp, [0])
+    text, receipt = repair.apply(json.dumps(_proposal(repair, "observation_unverified")))
+    expected = deepcopy(payload)
+    expected["unresolved_items"][0]["gap_type"] = "observation_unverified"
+    assert json.loads(text) == expected
+    schema = evidence_normalizer_json_schema()
+    question = EvidenceNormalizerUnresolvedItem.model_validate(expected["unresolved_items"][0]).model_dump(mode="json")
+    question.pop("source_text_range", None)
+    question["affected_observation_refs"] = []
+    Draft202012Validator({"$defs": schema["$defs"], "$ref": "#/$defs/EvidenceNormalizerUnresolvedItem"}).validate(question)
+    output = replay_question_repair(receipt, inp)
+    assert output.unresolved_items[0].gap_type.value == "observation_unverified"
+    assert output.unresolved_items[0].affected_requirement_ids == ["req-history"]
+    assert output.unresolved_items[0].reason == message
+    assert receipt["original_response"] == raw
+
+
+def test_question_instructions_and_allowed_classifications_change_runtime_identity(monkeypatch):
+    from app.agents import evidence_question_repair as repair_module
+    from app.agents.evidence_normalizer import evidence_normalizer_prompt_template_sha256
+    template = DEFAULT_EVIDENCE_NORMALIZER_PROMPT_TEMPLATE
+    current = evidence_normalizer_prompt_template_sha256(template)
+    monkeypatch.setattr(repair_module, "QUESTION_REPAIR_INSTRUCTIONS", repair_module.QUESTION_REPAIR_INSTRUCTIONS + "版本关系另核。")
+    assert evidence_normalizer_prompt_template_sha256(template) != current
+    monkeypatch.undo()
+    monkeypatch.setattr(repair_module, "RECOVERABLE_GAP_TYPES", repair_module.RECOVERABLE_GAP_TYPES - {"observation_unverified"})
+    assert evidence_normalizer_prompt_template_sha256(template) != current
 
 
 @pytest.mark.parametrize("change", ["unknown_type", "other_requirement", "other_page", "extra_field", "valid_type"])

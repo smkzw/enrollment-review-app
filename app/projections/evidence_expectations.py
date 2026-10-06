@@ -354,7 +354,7 @@ def project_expectation(
         elif unverified:
             gap_type = GapType.OBSERVATION_UNVERIFIED
             provenance_followup = False
-            reason = "现有资料尚未核实是否包含本条要求的记录，暂无法判定"
+            reason = "相关记录及其关联尚待核实，暂无法判定"
         elif any(
             signal.kind == GapType.HISTORICAL_SOURCE_UNAVAILABLE
             for signal in signals
@@ -379,6 +379,15 @@ def project_expectation(
             source_coverage="complete" if complete_facts else "weak",
             provenance_followup=provenance_followup,
             provenance_reason=reason,
+            gap_detail=(
+                "；".join(dict.fromkeys(
+                    signal.detail for signal in signals
+                    if signal.kind == GapType.OBSERVATION_UNVERIFIED
+                    and (not signal.fallback_only or not complete_facts)
+                    and signal.detail
+                )) or None
+                if gap_type == GapType.OBSERVATION_UNVERIFIED else None
+            ),
             created_at=created_at,
         )
 

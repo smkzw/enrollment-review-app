@@ -14,11 +14,21 @@ from app.domain.publication import canonical_hash
 QUESTION_REPAIR_POLICY = "evidence-question-classification-repair/v1"
 # Recovery cannot introduce an assertion that a procedure/file/judgment is absent.
 RECOVERABLE_GAP_TYPES = frozenset({
+    GapType.OBSERVATION_UNVERIFIED.value,
     GapType.DESCRIPTION_INSUFFICIENT.value,
     GapType.DATE_OR_ANCHOR_MISSING.value,
     GapType.PROVENANCE_FOLLOWUP.value,
     GapType.OCR_OR_PARSE_RISK.value,
 })
+QUESTION_REPAIR_INSTRUCTIONS = (
+    "仅核对以下已保存疑问的分类，不重新读取或改写事实、事件、用药、日期、原句及来源。"
+    "根据原有疑问和冻结来源，选择能忠实表示问题的分类。已写但字迹不清不等于未记录；"
+    "记录含义不明不等于未执行。不得新增患者缺资料、缺研究者判断或未做检查的断言。"
+    "observation_unverified表示相关记录的对象、时间先后或最终版本关系尚未核定，"
+    "不表示已确认资料冲突、缺失记录或缺少研究者判断。"
+    "没有忠实分类时gap_type返回null，保留失败；不能为了通过检查强行映射。"
+    "只返回本次小提案对象，不返回整份草稿，不改变原来的疑问或资料要求关联。"
+)
 
 
 class EvidenceQuestionClassificationError(ValueError):
@@ -88,11 +98,7 @@ class QuestionClassificationRepair:
 
     def prompt(self):
         return (
-            "仅核对以下已保存疑问的分类，不重新读取或改写事实、事件、用药、日期、原句及来源。"
-            "根据原有疑问和冻结来源，选择能忠实表示问题的分类。已写但字迹不清不等于未记录；"
-            "记录含义不明不等于未执行。不得新增患者缺资料、缺研究者判断或未做检查的断言。"
-            "没有忠实分类时gap_type返回null，保留失败；不能为了通过检查强行映射。"
-            "只返回本次小提案对象，不返回整份草稿，不改变原来的疑问或资料要求关联。"
+            QUESTION_REPAIR_INSTRUCTIONS
             + json.dumps({"policy": QUESTION_REPAIR_POLICY, "precondition_sha256": self.precondition,
                 "input_scope_sha256": self.input_scope, "allowed_gap_types": sorted(RECOVERABLE_GAP_TYPES),
                 "targets": [{"index": index, "question_sha256": self.targets[index],

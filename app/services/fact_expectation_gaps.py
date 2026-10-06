@@ -161,7 +161,9 @@ def expectation_gap_signals(
                 )
             signals.append(CoverageGapSignal(
                 kind=item.gap_type,
-                detail=item.reason,
+                detail=("相关记录尚待核实；以下是资料整理时保留的疑问，"
+                        "不代表已确认冲突或资料缺失：" + item.reason
+                        if item.gap_type == GapType.OBSERVATION_UNVERIFIED else item.reason),
                 referenced_file_id=item.referenced_file_id,
                 applies_to_template_id=template.template_id,
             ))

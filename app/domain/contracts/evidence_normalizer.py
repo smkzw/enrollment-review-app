@@ -462,6 +462,7 @@ class EvidenceNormalizerUnresolvedItem(ContractModel):
         if bool(self.affected_requirement_ids) != (self.gap_type is not None):
             raise ValueError("资料要求绑定与结构化缺口类型必须同时提供")
         allowed_gap_types = {
+            GapType.OBSERVATION_UNVERIFIED,
             GapType.RECORD_INCOMPLETE,
             GapType.DESCRIPTION_INSUFFICIENT,
             GapType.REQUIRED_PROCEDURE_NOT_DONE,

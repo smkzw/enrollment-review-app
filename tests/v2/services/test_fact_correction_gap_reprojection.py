@@ -410,7 +410,8 @@ def _assert_completed(session_factory, job_id):
     return snapshot
 
 
-def test_correction_keeps_source_risk_recorded_on_unresolved_item(session_factory):
+@pytest.mark.parametrize("gap_type", [GapType.OCR_OR_PARSE_RISK, GapType.OBSERVATION_UNVERIFIED])
+def test_correction_keeps_source_risk_recorded_on_unresolved_item(session_factory, gap_type):
     """缺陷 A 回归：源运行持久化未解决项记录的 OCR 风险不得因修订重投影丢失。"""
     with session_factory() as session, session.begin():
         chain, template = _seed_chain_with_template(session, "fcorr-gap-a")
@@ -427,13 +428,13 @@ def test_correction_keeps_source_risk_recorded_on_unresolved_item(session_factor
             run_id=chain["run_id"],
             call_id=chain["call_id"],
             requirement_id=template.requirement_id,
-            gap_type=GapType.OCR_OR_PARSE_RISK,
+            gap_type=gap_type,
             reason="原运行未解决项：第1页 OCR/解析存在风险，需人工校对",
         )
         initial = _project_initial_expectations(session, chain)
         assert len(initial) == 1
         assert initial[0].status == ExpectationStatus.OBSERVED_WEAK
-        assert initial[0].gap_type == GapType.OCR_OR_PARSE_RISK
+        assert initial[0].gap_type == gap_type
         PatientProfileService().generate(
             session, authority=chain["authority"], created_at=NOW, generated_at=NOW
         )
@@ -465,14 +466,14 @@ def test_correction_keeps_source_risk_recorded_on_unresolved_item(session_factor
             f"源运行风险被重投影丢弃：status={expectation.status}, "
             f"gap_type={expectation.gap_type}"
         )
-        assert expectation.gap_type == GapType.OCR_OR_PARSE_RISK
+        assert expectation.gap_type == gap_type
         # 先期具体输入被当前源记录精确复现：不得再产生保守填充。
         details = [signal.detail or "" for signal in expectation.input_gap_signals or []]
         assert not any("先前期望" in detail for detail in details), details
         reproduced = [
             signal
             for signal in expectation.input_gap_signals or []
-            if signal.kind == GapType.OCR_OR_PARSE_RISK
+            if signal.kind == gap_type
             and "原运行未解决项" in (signal.detail or "")
         ]
         assert reproduced, details

@@ -36,17 +36,23 @@ class RecoveryTransport(SourceDraftTransport):
         super().__init__(chain)
         self.proposals = 0
         self.keep_bad_candidate = False
+        self.proposed_gap_type = "date_or_anchor_missing"
+        self.source_gap_type = "interpretation_conflict"
+        self.question_reason = "年份与持续时间尚未区分"
+        self.bind_fact = False
 
     def start(self, *, prompt):
         response = super().start(prompt=prompt)
         payload = json.loads(response.text)
         if not self.keep_bad_candidate:
             payload["fact_candidates"] = payload["fact_candidates"][:1]
+        if self.bind_fact:
+            payload["fact_candidates"][0]["supported_requirement_ids"] = [self.chain["question_requirement_id"]]
         payload["unresolved_items"] = [{"code": "source_meaning_unclear",
-            "message": "来源日期的含义尚待核对", "reason": "年份与持续时间尚未区分",
+            "message": "来源记录的关系尚待核对", "reason": self.question_reason,
             "affected_pages": [1], "affected_locator_ids": [self.chain["locator_id"]],
             "affected_requirement_ids": [self.chain["question_requirement_id"]],
-            "gap_type": "interpretation_conflict"}]
+            "gap_type": self.source_gap_type}]
         return response.model_copy(update={"text": json.dumps(payload, ensure_ascii=False)})
 
     def propose_question_classifications(self, *, prompt, output_schema):
@@ -54,7 +60,7 @@ class RecoveryTransport(SourceDraftTransport):
         frozen, _ = json.JSONDecoder().raw_decode(prompt[prompt.index("{"):])
         proposal = {key: frozen[key] for key in ("policy", "precondition_sha256", "input_scope_sha256")}
         proposal["changes"] = [{"index": item["index"], "question_sha256": item["question_sha256"],
-            "gap_type": "date_or_anchor_missing"} for item in frozen["targets"]]
+            "gap_type": self.proposed_gap_type} for item in frozen["targets"]]
         return EvidenceNormalizerAgentResponse(session_id="question-proposal", text=json.dumps(proposal))
 
 
@@ -106,7 +112,52 @@ def test_source_bound_question_proof_persists_and_replays_without_rereading(sess
         chain["subject_id"], chain["episode_id"], created.job_id)
     assert len(view["items"]) == 1
     assert view["items"][0]["sources"]
-    assert "日期" in view["items"][0]["message"]
+    assert "尚待核对" in view["items"][0]["message"]
+
+
+@pytest.mark.parametrize("restart", [False, True])
+def test_unverified_relationship_survives_save_and_replay_without_upgrading_coverage(session_factory, data_paths, restart):
+    from app.domain.contracts.enums import ExpectationStatus, GapType
+    from app.storage.evidence_expectation_repository import EvidenceExpectationV2Repository
+    from app.services.fact_expectation_gaps import expectation_gap_signals
+    from app.storage.fact_repositories import FactNormalizationUnresolvedItemRepository
+    chain, service, created, artifacts, transport, executor, context = _prepare(session_factory, data_paths)
+    transport.source_gap_type = "source_conflict"
+    transport.proposed_gap_type = "observation_unverified"
+    transport.question_reason = "两份记录的最终版本关系尚未核定"
+    transport.bind_fact = True
+    if restart:
+        prepared = executor(context)
+        with session_factory() as session, session.begin():
+            prepared.apply(session)
+    assert JobRunner(session_factory, {"fact_normalization": executor}).run_job(created.job_id)
+    with session_factory() as session:
+        assert JobStore(session).job_status(created.job_id).state == "completed"
+        facts = ClinicalFactV2Repository(session).list_by_episode(chain["episode_id"])
+        assert len(facts) == 1
+        assert chain["question_requirement_id"] in facts[0].supported_requirement_ids
+        expectations = EvidenceExpectationV2Repository(session).list_by_episode(chain["episode_id"])
+        linked = [e for e in expectations if e.gap_type == GapType.OBSERVATION_UNVERIFIED]
+        assert len(linked) == 1
+        assert linked[0].status == ExpectationStatus.OBSERVED_WEAK
+        assert facts[0].fact_id in linked[0].coverage_fact_ids
+        assert linked[0].source_coverage == "complete"
+        assert "不代表已确认冲突" in linked[0].gap_detail
+        questions = FactNormalizationUnresolvedItemRepository(session).list_by_run(created.run_id)
+        assert questions[0].item.reason == transport.question_reason
+        call = FactNormalizationCallRepository(session).list_by_run(created.run_id)[0]
+        proof = json.loads(artifacts.read_by_sha("evaluation_manifest", call.question_classification_sha256))
+        assert json.loads(proof["original_response"])["unresolved_items"][0]["gap_type"] == "source_conflict"
+        signals = expectation_gap_signals(session, chain["authority"], questions)
+        concrete = [s for s in signals if s.applies_to_template_id == linked[0].template_id]
+        assert len(concrete) == 1 and not concrete[0].fallback_only
+        assert concrete[0].kind == GapType.OBSERVATION_UNVERIFIED
+    view = EvidenceApiReadService(session_factory, artifacts).normalization_unresolved(
+        chain["subject_id"], chain["episode_id"], created.job_id)
+    assert view["items"][0]["sources"]
+    assert view["items"][0]["kind"] == "reading_uncertainty"
+    assert view["items"][0]["reason"] == transport.question_reason
+    assert (transport.calls, transport.proposals) == (1, 1)
 
 
 @pytest.mark.parametrize("mutation", ["raw_hash", "proof_missing", "candidate_value", "question_message"])

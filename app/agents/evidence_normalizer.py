@@ -682,6 +682,8 @@ def _sha256(text: str) -> str:
 
 def evidence_normalizer_prompt_template_sha256(prompt_template: str) -> str:
     """对模板、合同、生成 schema、修复规则与布局的完整可审计哈希。"""
+    from app.agents.evidence_question_repair import QUESTION_REPAIR_INSTRUCTIONS, RECOVERABLE_GAP_TYPES
+
     return _sha256(
         "\n\n".join(
             (
@@ -693,6 +695,8 @@ def evidence_normalizer_prompt_template_sha256(prompt_template: str) -> str:
                 _SYSTEM_CONTRACT,
                 _VISUAL_OBSERVATION_PROMPT_BOUNDARY,
                 _SCHEMA_REPAIR_CONTRACT,
+                QUESTION_REPAIR_INSTRUCTIONS,
+                json.dumps(sorted(RECOVERABLE_GAP_TYPES)),
                 _compact_schema(),
             )
         )
@@ -760,6 +764,7 @@ def evidence_normalizer_json_schema() -> dict:
     linked_gap_types = [
         gap_type.value
         for gap_type in (
+            GapType.OBSERVATION_UNVERIFIED,
             GapType.RECORD_INCOMPLETE,
             GapType.DESCRIPTION_INSUFFICIENT,
             GapType.REQUIRED_PROCEDURE_NOT_DONE,
