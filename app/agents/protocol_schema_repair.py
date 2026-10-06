@@ -18,6 +18,7 @@ from app.domain.contracts.source_computation import (
 
 SCHEMA_REPAIR_CONTRACT_VERSION = "protocol-schema-repair/v1"
 SOURCE_FIELD_REPAIR_VERSION = "protocol-source-fields/v3"
+PERIOD_SOURCE_REPAIR_VERSION = "protocol-period-source-fields/v1"
 
 
 class SourceFieldRepairDeclined(ValueError):
@@ -25,8 +26,11 @@ class SourceFieldRepairDeclined(ValueError):
 
 
 def source_field_repair_schema(*, version: str = SOURCE_FIELD_REPAIR_VERSION) -> dict:
-    if version not in {"protocol-source-fields/v2", SOURCE_FIELD_REPAIR_VERSION}:
+    if version not in {"protocol-source-fields/v2", SOURCE_FIELD_REPAIR_VERSION, PERIOD_SOURCE_REPAIR_VERSION}:
         raise ValueError("未知来源字段修复版本")
+    field = "source_excerpts" if version == PERIOD_SOURCE_REPAIR_VERSION else "input_refs"
+    item_schema = ({"type": "string", "minLength": 1}
+                   if version == PERIOD_SOURCE_REPAIR_VERSION else SourceQuote.model_json_schema())
     return {
         "type": "object", "additionalProperties": False,
         "required": ["version", "precondition_sha256", "fields"],
@@ -35,14 +39,64 @@ def source_field_repair_schema(*, version: str = SOURCE_FIELD_REPAIR_VERSION) ->
             "precondition_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
             "fields": {"type": "array", "maxItems": 8,
                 "items": {"type": "object", "additionalProperties": False,
-                    "required": ["path", "input_refs"], "properties": {
+                    "required": ["path", field], "properties": {
                         "path": {"type": "array", "minItems": 1, "items": {
                             "anyOf": [{"type": "string"}, {"type": "integer", "minimum": 0}]}},
-                        "input_refs": {"type": "array", "minItems": 1,
-                            "items": SourceQuote.model_json_schema()},
+                        field: {"type": "array", "minItems": 1, "items": item_schema},
                     }}},
         },
     }
+
+
+def plan_period_source_repair(previous_text: str, *, source_input, rule_codes: list[str]) -> dict | None:
+    """Admit only duplicate provenance fields; never select a new period or clause."""
+    from app.agents.protocol_deconstructor import _batch_source_span_ids, _normalize_model_json
+
+    try:
+        previous = _unique_json(previous_text)
+        rules = previous.get("proposed_rules")
+        if not isinstance(rules, list) or [row["official_code"] for row in rules] != rule_codes:
+            return None
+        checked = copy.deepcopy(previous)
+        targets = []
+
+        def visit(value, path, materials):
+            if isinstance(value, list):
+                for index, item in enumerate(value):
+                    visit(item, [*path, index], materials)
+            elif isinstance(value, dict):
+                period = value.get("prospective_period")
+                if isinstance(period, dict) and period.get("kind") == "source_defined":
+                    if set(period) != {"kind", "source_excerpts"}:
+                        raise ValueError("期间来源字段不完整")
+                    clauses = value.get("source_clauses") or [value.get("source_clause")]
+                    quotes = period["source_excerpts"]
+                    if quotes != clauses:
+                        if (not isinstance(quotes, list) or not quotes or not clauses
+                                or not all(isinstance(q, str) and q for q in [*clauses, *quotes])
+                                or not all(any(clause in quote for quote in quotes) for clause in clauses)
+                                or not all(any(quote in text for text in materials) for quote in quotes)):
+                            raise ValueError("期间引用不是本父规则中完整有源的较宽引用")
+                        targets.append({"path": [*path, "prospective_period", "source_excerpts"],
+                                        "source_clauses": list(clauses), "previous_excerpts": list(quotes),
+                                        "predicate": copy.deepcopy(value), "parent_sources": list(materials)})
+                        # Validation probe only. No returned proposal or saved answer is changed here.
+                        period["source_excerpts"] = list(clauses)
+                for key, item in value.items():
+                    if key != "prospective_period":
+                        visit(item, [*path, key], materials)
+
+        for index, rule in enumerate(checked["proposed_rules"]):
+            ids = set(_batch_source_span_ids(source_input, [rule["official_code"]]))
+            materials = [item.text for item in source_input.source_materials if item.source_span_id in ids]
+            visit(rule, ["proposed_rules", index], materials)
+        if not 1 <= len(targets) <= 8:
+            return None
+        ProtocolSemanticDeconstructionCandidate.model_validate(_normalize_model_json(checked))
+        return {"version": PERIOD_SOURCE_REPAIR_VERSION,
+                "precondition_sha256": hashlib.sha256(previous_text.encode()).hexdigest(), "targets": targets}
+    except (ValueError, TypeError, KeyError):
+        return None
 
 
 def _unique_json(text: str) -> dict:
@@ -247,6 +301,18 @@ def assemble_unresolved_observation_sources(previous_text: str, *, candidate_id:
 
 
 def source_field_repair_prompt(plan: dict) -> str:
+    if plan["version"] == PERIOD_SOURCE_REPAIR_VERSION:
+        return (
+            "本次只核对并修正列出的prospective_period.source_excerpts。原答使用了较宽的父条引用，"
+            "而本条件已有独立source_clauses。请核对后逐项返回完整source_clauses，文字及顺序不变。"
+            "不得改主体、期间含义、命题、条件来源、数值、例外、兄弟项或其他字段；若这些也需要改变，"
+            "尤其是较宽引文中未被本条件来源保留的文字仍限定共同期间、例外或适用人群时，"
+            "必须返回fields=[]；不能因为文字包含关系或其他兄弟引用过就认定本条件已保留这些限定。"
+            "返回fields=[]，不要用修来源字段来改含义。这里只修重复来源包装，不批准规则或入组。"
+            "仅返回字段提案JSON，不重答整个规则。\n"
+            + json.dumps({"frozen_plan": plan, "output_schema": source_field_repair_schema(version=plan["version"])},
+                         ensure_ascii=False, sort_keys=True)
+        )
     return (
         "上一提案的计算输入引用遗漏或未完整连接已声明依据。本次仅修复targets中列出的input_refs字段，"
         "不重写任何规则、算子、数值、日期、选择方式、窗口、例外或未决事项。"
@@ -278,14 +344,31 @@ def apply_source_field_repair(previous_text: str, proposal_text: str, *, plan: d
     if proposal["precondition_sha256"] != plan["precondition_sha256"]:
         raise ValueError("来源字段修复不能替换原答身份")
     if not proposal["fields"]:
-        raise SourceFieldRepairDeclined("未能有据补齐计算输入引用；未判断受试者资料是否缺失")
+        raise SourceFieldRepairDeclined("未能有据修复期间引用；未判断受试者资料是否缺失"
+            if plan["version"] == PERIOD_SOURCE_REPAIR_VERSION else
+            "未能有据补齐计算输入引用；未判断受试者资料是否缺失")
     expected = {tuple(target["path"]): target for target in plan["targets"]}
-    fields = {tuple(field["path"]): field["input_refs"] for field in proposal["fields"]}
+    period_repair = plan["version"] == PERIOD_SOURCE_REPAIR_VERSION
+    field_name = "source_excerpts" if period_repair else "input_refs"
+    fields = {tuple(field["path"]): field[field_name] for field in proposal["fields"]}
     if len(fields) != len(proposal["fields"]) or fields.keys() != expected.keys():
         raise ValueError("来源字段修复缺项、重复或超出原缺失范围")
     assembled = _unique_json(previous_text)
     for path, references in fields.items():
         target = expected[path]
+        if period_repair:
+            owner = assembled
+            for step in path[:-2]:
+                owner = owner[step]
+            clauses = owner.get("source_clauses") or [owner.get("source_clause")]
+            period = owner.get("prospective_period")
+            if (path[-2:] != ("prospective_period", "source_excerpts")
+                    or clauses != target["source_clauses"] or references != clauses
+                    or not isinstance(period, dict)
+                    or period != {"kind": "source_defined", "source_excerpts": target["previous_excerpts"]}):
+                raise ValueError("期间来源修复超出原条件或改变原文范围")
+            period["source_excerpts"] = copy.deepcopy(references)
+            continue
         for reference in references:
             ref = SourceQuote.model_validate(reference)
             if ref.statement_index >= len(target["source_clauses"]) or ref.quote not in target["source_clauses"][ref.statement_index]:
@@ -319,8 +402,10 @@ def apply_source_field_repair(previous_text: str, proposal_text: str, *, plan: d
         "previous_output_sha256": plan["precondition_sha256"],
         "field_output_sha256": hashlib.sha256(proposal_text.encode()).hexdigest(),
         "assembled_output_sha256": hashlib.sha256(text.encode()).hexdigest(),
-        "added_paths": [target["path"] for target in plan["targets"] if "input_refs" not in target["calculation"]],
+        "added_paths": [] if period_repair else [target["path"] for target in plan["targets"] if "input_refs" not in target["calculation"]],
         "adoption_checked": False}
+    if period_repair:
+        proof["repaired_paths"] = [target["path"] for target in plan["targets"]]
     if plan["version"] == SOURCE_FIELD_REPAIR_VERSION:
         proof["repaired_paths"] = [target["path"] for target in plan["targets"] if "input_refs" in target["calculation"]]
     return text, proof
@@ -355,7 +440,8 @@ def recover_source_fields(*, previous_response, plan: dict, transport):
             _compact_transport_history(transport, previous_response.session_id,
                 context=json.dumps(plan, ensure_ascii=False, sort_keys=True))
         response = transport.continue_session(session_id=previous_response.session_id,
-            prompt=prompt, output_kind="semantic_source_fields")
+            prompt=prompt, output_kind=("semantic_period_sources"
+                if plan["version"] == PERIOD_SOURCE_REPAIR_VERSION else "semantic_source_fields"))
         if input_refs and callable(save_response):
             response_refs = save_response(response=response, requested_session_id=previous_response.session_id,
                                           plan=plan, input_refs=input_refs)

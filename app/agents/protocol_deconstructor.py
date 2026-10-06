@@ -117,7 +117,7 @@ class ProtocolParentSegmentError(RuntimeError):
         self.error_code = error_code
 
 
-ProtocolOutputKind = Literal["semantic_candidate", "semantic_rule_repair", "official_source_scope_review", "semantic_source_fields"]
+ProtocolOutputKind = Literal["semantic_candidate", "semantic_rule_repair", "official_source_scope_review", "semantic_source_fields", "semantic_period_sources"]
 
 
 class ProtocolWireError(ValueError):
@@ -1440,11 +1440,12 @@ def protocol_output_response_format(
     requirement_limit: int = DNF_WIRE_MAX_REQUIREMENTS_PER_COMPONENT,
 ) -> dict[str, object]:
     """Return the strict provider schema for one semantic response kind."""
-    if output_kind == "semantic_source_fields":
-        from .protocol_schema_repair import source_field_repair_schema
+    if output_kind in {"semantic_source_fields", "semantic_period_sources"}:
+        from .protocol_schema_repair import source_field_repair_schema, SOURCE_FIELD_REPAIR_VERSION, PERIOD_SOURCE_REPAIR_VERSION
         return {"type": "json_schema", "json_schema": {
-            "name": "protocol_semantic_source_fields", "strict": True,
-            "schema": source_field_repair_schema(),
+            "name": "protocol_" + output_kind, "strict": True,
+            "schema": source_field_repair_schema(version=(PERIOD_SOURCE_REPAIR_VERSION
+                if output_kind == "semantic_period_sources" else SOURCE_FIELD_REPAIR_VERSION)),
         }}
     if output_kind == "official_source_scope_review":
         from app.domain.contracts.protocol_scope_review import OfficialScopeReading
@@ -6081,21 +6082,28 @@ def _collect_initial_semantic_response(
                 if not compact and isinstance(exc.__cause__, ValidationError):
                     structural_repair_source = response.text
                 try:
-                    response = transport.continue_session(
-                        session_id=session_id,
-                        prompt=_batch_schema_repair_prompt(
-                            rule_codes,
-                            candidate_id=candidate_id,
-                            agent_call_id=agent_call_id,
-                            batch_id=batch_id,
-                            problem=problem,
-                            compact=compact,
-                            allowed_source_span_ids=_batch_source_span_ids(
-                                source_input, rule_codes
+                    from app.agents.protocol_schema_repair import plan_period_source_repair, recover_source_fields
+
+                    period_plan = (plan_period_source_repair(response.text, source_input=source_input,
+                        rule_codes=list(rule_codes)) if structural_repair_source is not None else None)
+                    if period_plan is not None:
+                        response = recover_source_fields(previous_response=response, plan=period_plan, transport=transport)
+                    else:
+                        response = transport.continue_session(
+                            session_id=session_id,
+                            prompt=_batch_schema_repair_prompt(
+                                rule_codes,
+                                candidate_id=candidate_id,
+                                agent_call_id=agent_call_id,
+                                batch_id=batch_id,
+                                problem=problem,
+                                compact=compact,
+                                allowed_source_span_ids=_batch_source_span_ids(
+                                    source_input, rule_codes
+                                ),
                             ),
-                        ),
-                        output_kind="semantic_candidate",
-                    )
+                            output_kind="semantic_candidate",
+                        )
                     batch_calls.append({"batch_id": batch_id, **response.call_metadata})
                 except ProtocolAgentCallError:
                     raise

@@ -731,7 +731,7 @@ class DeepSeekProtocolAgentTransport:
         output_kind: ProtocolOutputKind = "semantic_candidate",
         max_tokens: int | None = None,
     ) -> dict[str, Any]:
-        if output_kind not in {"semantic_candidate", "semantic_rule_repair", "official_source_scope_review", "semantic_source_fields"}:
+        if output_kind not in {"semantic_candidate", "semantic_rule_repair", "official_source_scope_review", "semantic_source_fields", "semantic_period_sources"}:
             raise ValueError(f"未知的方案解构输出类型：{output_kind}")
         kwargs: dict[str, Any] = {
             "model": self._model,
@@ -1047,7 +1047,7 @@ class DeepSeekProtocolAgentTransport:
                                 "请不要重复分析，立即按上一请求指定的结构重新输出完整JSON对象，"
                                 "不要附加解释。"
                                 + ("只返回原请求的来源字段提案，不返回整规则或任何其他字段。"
-                                   if output_kind == "semantic_source_fields" else
+                                   if output_kind in {"semantic_source_fields", "semantic_period_sources"} else
                                    "只处理原请求指定的1-3个父规则，返回最小完整图；"
                                    "不要重复节点、组件、source_excerpts或其他批次内容。")
                             ),
@@ -1177,7 +1177,7 @@ class DeepSeekProtocolAgentTransport:
         校验共同保证。
         """
 
-        if output_kind in {"official_source_scope_review", "semantic_source_fields"}:
+        if output_kind in {"official_source_scope_review", "semantic_source_fields", "semantic_period_sources"}:
             # This role already carries its complete, small schema in the frozen
             # prompt; exact replay cannot depend on a second opaque wrapper.
             return prompt

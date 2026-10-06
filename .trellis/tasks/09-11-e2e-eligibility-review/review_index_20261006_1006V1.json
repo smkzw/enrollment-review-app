@@ -6,7 +6,16 @@
   "runtime_state": "active",
   "claims_complete": false,
   "base_review_commit": "7b3ed4f9251323b3194371764f2bcd17ad94559e",
-  "delivered_snapshot_id": "S-12",
+  "delivered_snapshot_id": "S-13",
+  "period_source_field_package": {
+    "snapshot_id": "S-13", "base_commit": "03e3e105", "contract": "protocol-period-source-fields/v1",
+    "paths": ["app/agents/protocol_schema_repair.py", "app/agents/protocol_deconstructor.py", "app/agents/protocol_semantic_transport.py", "tests/v2/agents/test_protocol_schema_repair.py"],
+    "tests": {"passed": 783, "seconds": 6.41, "exit_code": 0, "scope": "six connected original modules", "junit": "/Users/smkzw/tmp/rv1006-period-source-fields-20261007-v3.xml", "note": "782 overlaps; wrong initial filename exit4/no collection; five SWIG warnings."},
+    "last_official_run": {"job_id": "1153e25b4eba40db964202a1c3ed07c3", "state": "failed_final", "error_code": "SCHEMA_INVALID", "physical_calls": 9, "seconds": 1949.932986834, "exit_code": 3, "first_completed_batches": 5, "failed_batch": "6/23", "unread_batches": 17, "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-corrected-phase-official-20261007-v1", "access": "controlled_local_only"},
+    "admission": {"model_calls": 0, "database_writes": 0, "targets": 3, "plan_characters": 2961, "prompt_characters": 3852, "scope_used": 2, "scope_max": 3, "run_used": 9, "run_max": 142, "original_db_unchanged": true, "path": "/Users/smkzw/tmp/enrollment-rv1001-official-continuation-20261003/rv1006-period-field-admission-20261007-v1.json", "access": "controlled_local_only"},
+    "conference": {"session_id": "01a11385-586f-7d4e-a832-1d4aadb5cb5c", "route": "CodeBuddy/codebuddy-cli/deepseek-v4.1-flash/max", "round_seconds": [179.212, 137.52], "exit_codes": [0, 0], "fallback": false, "review": "reviews/codex_conference_rv1006-period-source-assembly-20261007_review.md", "limits": "Same-session continuation, not second model. No cases/DB/tests/Git. Last qualifier prompt and counterexample owner-verified after review."},
+    "recovery_executed": false, "adoption_checked": false, "claims_complete": false
+  },
   "phase_source_package": {
     "snapshot_id": "S-12", "commit": "f2c79b7a75ca3461a0234fd454909f4bf5485991",
     "tests": {"passed": 169, "seconds": 24.98, "exit_code": 0, "scope": "six connected original modules", "junit": "/Users/smkzw/tmp/rv1006-cell-phase-connected-20261007-final-v2.xml", "note": "Generic compound heading, mixed boundary, physical-cell suppression, full manifest and discovery/deep planning; overlapping windows not additive."},

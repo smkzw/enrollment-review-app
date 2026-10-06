@@ -14,6 +14,7 @@ from app.agents.protocol_schema_repair import (
     plan_source_field_repair, apply_source_field_repair, SOURCE_FIELD_REPAIR_VERSION,
     recover_source_fields, source_field_repair_prompt,
     assemble_declared_input_references, assemble_unresolved_observation_sources,
+    plan_period_source_repair, PERIOD_SOURCE_REPAIR_VERSION,
 )
 from app.domain.contracts.agent_io import ProtocolSemanticDeconstructionCandidate
 from app.domain.contracts.agent_io import ProtocolSemanticRuleRepair
@@ -26,6 +27,170 @@ from tests.v2.protocols.test_protocol_deconstructor_adapter_slice3 import FakeTr
 def candidate():
     source, draft, _ = _fixture()
     return source, _semantic_candidate(source, draft)
+
+
+def period_source_proposal():
+    from app.domain.contracts.rules import AtomicExpression, AtomicPredicate
+
+    source, good = candidate()
+    prefix = "在准备期及治疗后六个月内，"
+    branch = "甲类受试者同意采取措施甲"
+    full = prefix + branch + "，乙类受试者同意采取措施乙。"
+    source.source_materials[0].text = full
+    component = good.proposed_rules[0].components[0]
+    component.source_excerpts = [prefix, branch]
+    component.expression = AtomicExpression(predicate=AtomicPredicate(
+        predicate_id="period-plan", subject="受试者", attribute="计划采取措施甲",
+        comparator="exists", source_clauses=[prefix, branch], semantic_proposition=prefix + branch,
+        prospective_period={"kind": "source_defined", "source_excerpts": [prefix, branch]},
+    ))
+    before = good.model_dump(mode="json")
+    before["proposed_rules"][0]["components"][0]["expression"]["predicate"]["prospective_period"]["source_excerpts"] = [full]
+    text = json.dumps(before, ensure_ascii=False)
+    codes = [rule.official_code for rule in good.proposed_rules]
+    plan = plan_period_source_repair(text, source_input=source, rule_codes=codes)
+    proposal = {"version": PERIOD_SOURCE_REPAIR_VERSION, "precondition_sha256": plan["precondition_sha256"],
+        "fields": [{"path": target["path"], "source_excerpts": target["source_clauses"]}
+                   for target in plan["targets"]]}
+    return source, good, text, plan, proposal
+
+
+def test_period_repair_requires_author_fields_and_freezes_every_other_field(tmp_path):
+    from app.agents.protocol_deconstructor import _parse_semantic_candidate, protocol_output_response_format
+    from app.domain.expression import evaluate_expression
+    from app.domain.contracts.enums import TruthValue
+    from tests.v2.test_contract_logic import evaluation_context
+    from app.services.protocol_deconstruction_executor import _ProtocolSemanticBatchFileCache
+    from app.evidence.artifacts import ArtifactStore
+    from app.storage.config import resolve_data_paths
+
+    _, good, before, plan, proposal = period_source_proposal()
+    with pytest.raises(ValueError, match="全部逐字来源"):
+        _parse_semantic_candidate(before)
+    assembled, proof = apply_source_field_repair(before, json.dumps(proposal), plan=plan)
+    assert json.loads(assembled) == good.model_dump(mode="json")
+    assert not proof["adoption_checked"] and proof["added_paths"] == []
+    assert proof["repaired_paths"] == [plan["targets"][0]["path"]]
+    schema = protocol_output_response_format("semantic_period_sources")["json_schema"]["schema"]
+    jsonschema.validate(proposal, schema)
+    assert "semantic_proposition" in source_field_repair_prompt(plan)
+    parsed = _parse_semantic_candidate(assembled)
+    assert evaluate_expression(parsed.proposed_rules[0].components[0].expression,
+                               evaluation_context()).truth == TruthValue.UNKNOWN
+    paths = resolve_data_paths(tmp_path / "data")
+    cache = _ProtocolSemanticBatchFileCache(paths, "synthetic-period-repair")
+    refs = cache.store_source_field_input(raw_text=before, previous_text=before, plan=plan)
+    saved = cache.store_source_field_result(previous_text=before, proposal_text=json.dumps(proposal),
+        raw_text=json.dumps(proposal), assembled_text=assembled, plan=plan, input_refs=refs)
+    store = ArtifactStore(paths)
+    assert store.read(saved["previous_proposal_ref"]).decode() == before
+    assert store.read(saved["assembled_proposal_ref"]).decode() == assembled
+    assert json.loads(store.read(saved["field_repair_proof_ref"]))["repaired_paths"] == proof["repaired_paths"]
+
+
+@pytest.mark.parametrize("fault", ["short", "foreign", "missing", "another_failure", "unsupported", "already_valid"])
+def test_period_repair_does_not_complete_missing_scope_or_other_schema_errors(fault):
+    source, good, before, _, _ = period_source_proposal()
+    raw = json.loads(before)
+    atom = raw["proposed_rules"][0]["components"][0]["expression"]["predicate"]
+    if fault == "short":
+        atom["prospective_period"]["source_excerpts"] = [atom["source_clauses"][0]]
+    elif fault == "foreign":
+        atom["prospective_period"]["source_excerpts"] = ["另一个要求的期间"]
+    elif fault == "missing":
+        atom["source_clauses"] = []
+    elif fault == "another_failure":
+        raw["proposed_rules"][1]["components"][0]["title"] = None
+    elif fault == "unsupported":
+        atom["prospective_period"]["period"] = "study_period"
+    else:
+        raw = good.model_dump(mode="json")
+    assert plan_period_source_repair(json.dumps(raw), source_input=source,
+        rule_codes=[rule.official_code for rule in good.proposed_rules]) is None
+
+
+@pytest.mark.parametrize("fault", ["stale", "short", "foreign", "duplicate", "missing", "scope", "extra"])
+def test_period_field_reply_cannot_change_scope_or_meaning(fault):
+    _, _, before, plan, proposal = period_source_proposal()
+    if fault == "stale":
+        proposal["precondition_sha256"] = "f" * 64
+    elif fault in {"short", "foreign"}:
+        proposal["fields"][0]["source_excerpts"] = ["另一个期间"] if fault == "foreign" else proposal["fields"][0]["source_excerpts"][:1]
+    elif fault == "duplicate":
+        proposal["fields"].append(copy.deepcopy(proposal["fields"][0]))
+    elif fault == "missing":
+        proposal["fields"] = []
+    elif fault == "scope":
+        proposal["fields"][0]["path"][-1] = "semantic_proposition"
+    else:
+        proposal["proposed_rules"] = []
+    with pytest.raises(ValueError):
+        apply_source_field_repair(before, json.dumps(proposal), plan=plan)
+
+
+def test_period_field_repair_runs_through_existing_batch_cache_and_preservation(monkeypatch, tmp_path):
+    from app.services.protocol_deconstruction_executor import _ProtocolSemanticBatchFileCache
+    from app.storage.config import resolve_data_paths
+
+    source, good, before, _, _ = period_source_proposal()
+    raw = json.loads(before)
+    raw["proposed_rules"] = raw["proposed_rules"][:1]
+    before = json.dumps(raw)
+    codes = [rule.official_code for rule in good.proposed_rules]
+    plan = plan_period_source_repair(before, source_input=source, rule_codes=codes[:1])
+    proposal = {"version": PERIOD_SOURCE_REPAIR_VERSION, "precondition_sha256": plan["precondition_sha256"],
+        "fields": [{"path": target["path"], "source_excerpts": target["source_clauses"]} for target in plan["targets"]]}
+    second = good.model_copy(update={"proposed_rules": good.proposed_rules[1:]})
+    transport = FakeTransport([
+        ProtocolAgentResponse(session_id="same", text=before),
+        ProtocolAgentResponse(session_id="same", text=json.dumps(proposal)),
+        ProtocolAgentResponse(session_id="same", text=second.model_dump_json()),
+    ])
+    transport.semantic_cache_identity = lambda **kwargs: {"model": "synthetic-frozen-model"}
+    cache = _ProtocolSemanticBatchFileCache(resolve_data_paths(tmp_path / "data"), "synthetic-period-batches")
+    transport._call_budget_store = cache
+    monkeypatch.setattr("app.agents.protocol_deconstructor._plan_semantic_rule_batches",
+                        lambda *args, **kwargs: [[code] for code in codes])
+    response, error = _collect_initial_semantic_response(source, prompt_template="冻结原文",
+        transport=transport, batch_size=1, batch_cache=cache)
+    assert error is None
+    assert transport.repair_output_kinds == ["semantic_period_sources", "semantic_candidate"]
+    assert response.call_metadata["batches"][1]["source_field_repair"]["field_repair_proof_ref"]
+    assert ProtocolSemanticDeconstructionCandidate.model_validate_json(response.text) == good
+
+
+def test_period_author_decline_preserves_unaccounted_common_qualifier(monkeypatch, tmp_path):
+    from app.agents.protocol_deconstructor import ProtocolAgentCallError
+    from app.services.protocol_deconstruction_executor import _ProtocolSemanticBatchFileCache
+    from app.storage.config import resolve_data_paths
+
+    source, good, before, _, _ = period_source_proposal()
+    raw = json.loads(before)
+    raw["proposed_rules"] = raw["proposed_rules"][:1]
+    atom = raw["proposed_rules"][0]["components"][0]["expression"]["predicate"]
+    atom["source_clauses"] = atom["source_clauses"][1:]
+    atom["semantic_proposition"] = atom["source_clauses"][0]
+    before = json.dumps(raw)
+    codes = [rule.official_code for rule in good.proposed_rules]
+    plan = plan_period_source_repair(before, source_input=source, rule_codes=codes[:1])
+    assert plan is not None  # Containment is admission for author review, not meaning approval.
+    prompt = source_field_repair_prompt(plan)
+    assert "共同期间、例外或适用人群" in prompt and "必须返回fields=[]" in prompt
+    decline = {"version": plan["version"], "precondition_sha256": plan["precondition_sha256"], "fields": []}
+    transport = FakeTransport([
+        ProtocolAgentResponse(session_id="same", text=before),
+        ProtocolAgentResponse(session_id="same", text=json.dumps(decline)),
+    ])
+    cache = _ProtocolSemanticBatchFileCache(resolve_data_paths(tmp_path / "data"), "period-decline")
+    transport._call_budget_store = cache
+    monkeypatch.setattr("app.agents.protocol_deconstructor._plan_semantic_rule_batches",
+                        lambda *args, **kwargs: [[code] for code in codes])
+    with pytest.raises(ProtocolAgentCallError) as error:
+        _collect_initial_semantic_response(source, prompt_template="冻结原文", transport=transport,
+            batch_size=1, batch_cache=cache)
+    assert error.value.error_code == "SOURCE_FIELD_REPAIR_DECLINED"
+    assert transport.repair_output_kinds == ["semantic_period_sources"]
+    assert not list(cache._root.glob("*.json"))
 
 
 def missing_input_source_proposal():
