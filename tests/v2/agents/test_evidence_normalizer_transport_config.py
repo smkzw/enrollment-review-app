@@ -94,6 +94,33 @@ class _FakeStream:
         self.closed = True
 
 
+@pytest.mark.parametrize("backend", ["omlx", "ollama-cloud"])
+def test_question_proposal_is_fresh_context_and_keeps_provider_and_original_schema(backend):
+    calls = []
+    completion = SimpleNamespace(id="patch-id", model="test-model", usage=None,
+        choices=[SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content='{"changes": []}'))])
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
+        create=lambda **kwargs: (calls.append(kwargs), completion)[1])))
+    original_format = {"type": "json_schema", "json_schema": {
+        "name": "normalizer", "strict": True, "schema": {"type": "object"}}}
+    transport = transport_module.DeepSeekEvidenceNormalizerTransport(backend=backend,
+        model="test-model", client=client, reasoning_effort="high", max_tokens=65536,
+        response_format=original_format if backend == "omlx" else None)
+    transport.restore_history(session_id="long-draft", messages=[{"role": "user", "content": "old full source"}])
+    patch_schema = {"type": "object", "required": ["changes"]}
+    response = transport.propose_question_classifications(prompt="short bounded source", output_schema=patch_schema)
+    assert response.session_id != "long-draft"
+    assert calls[0]["messages"] == [{"role": "user", "content": "short bounded source"}]
+    assert calls[0]["max_tokens"] == 65536
+    assert calls[0]["reasoning_effort"] == "high"
+    assert "temperature" not in calls[0]
+    if backend == "omlx":
+        assert calls[0]["response_format"]["json_schema"]["schema"] == patch_schema
+        assert transport._completion_kwargs([])["response_format"] == original_format
+    else:
+        assert "response_format" not in calls[0]
+
+
 @pytest.mark.parametrize("model,finish", [("glm-5.3-flash", "stop"), ("wrong", "stop"), (None, "stop"), ("glm-5.3-flash", None)])
 def test_glm_stream_closes_and_checks_actual_model(model, finish):
     stream = _FakeStream([_stream_chunk(content="{}", model=model, finish=finish)])

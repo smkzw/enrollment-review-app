@@ -27,6 +27,7 @@ from typing import Literal
 from datetime import datetime
 
 from pydantic import ConfigDict, Field, model_validator
+from pydantic_core import PydanticCustomError
 
 from .common import ContractModel
 from .evidence_ingestion import DocumentCategory, SourceCategory
@@ -472,7 +473,8 @@ class EvidenceNormalizerUnresolvedItem(ContractModel):
             GapType.HISTORICAL_SOURCE_UNAVAILABLE,
         }
         if self.gap_type is not None and self.gap_type not in allowed_gap_types:
-            raise ValueError("未解决项使用了不支持的资料缺口类型")
+            raise PydanticCustomError("normalizer_gap_type_not_supported",
+                                      "未解决项使用了不支持的资料缺口类型")
         if self.gap_type == GapType.REFERENCED_FILE_MISSING:
             if not self.referenced_file_id:
                 raise ValueError("已引用文件未提供必须给出结构化文件身份")

@@ -162,6 +162,7 @@ def test_finalize_checkpoint_also_rechecks_partition_proof(session_factory, data
 
 def test_old_job_cannot_gain_new_recovery_semantics_from_a_policy_string(session_factory, data_paths):
     from app.workflow.errors import StepFailure
+    from app.agents.evidence_candidate_partition import CANDIDATE_PARTITION_POLICY
     with session_factory() as session:
         chain = _seed_chain(session, prefix="old-policy")
         session.commit()
@@ -169,7 +170,7 @@ def test_old_job_cannot_gain_new_recovery_semantics_from_a_policy_string(session
     created = service.create_or_reuse_from_source(authority=chain["authority"],
         prompt_version_id=chain["prompt_version_id"], model_config_id=chain["model_config_id"], created_by="tester")
     payload = service.get_job(created.job_id)["payload"]
-    payload["candidate_partition_policy"] = "evidence-candidate-partition/v1"
+    payload["candidate_partition_policy"] = CANDIDATE_PARTITION_POLICY
     payload["candidate_partition_precondition_scope_sha256"] = payload["input_scope_sha256"]
     transport = SourceDraftTransport(chain)
     executor = create_fact_normalization_executor(FactNormalizationExecutorConfig(

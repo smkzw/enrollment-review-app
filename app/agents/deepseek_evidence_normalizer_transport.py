@@ -501,9 +501,12 @@ class DeepSeekEvidenceNormalizerTransport:
             )
         return completion
 
-    def _complete(self, messages: list[dict[str, str]]) -> str:
+    def _complete(self, messages: list[dict[str, str]], *, output_schema=None) -> str:
         request_messages = [dict(message) for message in messages]
         kwargs = self._completion_kwargs(request_messages)
+        if output_schema is not None and self.enforces_output_json_schema:
+            kwargs["response_format"] = {"type": "json_schema", "json_schema": {
+                "name": "question_classification_proposal", "strict": True, "schema": output_schema}}
         try:
             if self._backend in ZHIPU_EVIDENCE_NORMALIZER_BACKENDS:
                 completion = self._streaming_completion(kwargs)
@@ -563,6 +566,16 @@ class DeepSeekEvidenceNormalizerTransport:
             exc.session_id = session_id
             raise
         self._histories[session_id] = messages + [{"role": "assistant", "content": text}]
+        return EvidenceNormalizerAgentResponse(session_id=session_id, text=text)
+
+    def propose_question_classifications(self, *, prompt: str, output_schema: dict) -> EvidenceNormalizerAgentResponse:
+        """Same configured model/task budget, fresh bounded source context; not an independent opinion."""
+        session_id = f"evidence-normalizer-question-{uuid4().hex}"
+        try:
+            text = self._complete([{"role": "user", "content": prompt}], output_schema=output_schema)
+        except EvidenceNormalizerAgentCallError as exc:
+            exc.session_id = session_id
+            raise
         return EvidenceNormalizerAgentResponse(session_id=session_id, text=text)
 
     def restore_history(

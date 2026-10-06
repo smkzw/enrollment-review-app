@@ -519,6 +519,7 @@ class FactNormalizationCommandService:
         verified_scope_prompt: bool = False,
         compact_text_references: bool | None = None,
         allow_candidate_partition: bool = False,
+        allow_question_classification_repair: bool = False,
     ) -> None:
         self.session_factory = session_factory
         self.require_page_review = require_page_review
@@ -526,6 +527,7 @@ class FactNormalizationCommandService:
         self.page_reader_identity = page_reader_identity
         self.verified_scope_prompt = verified_scope_prompt
         self.allow_candidate_partition = allow_candidate_partition
+        self.allow_question_classification_repair = allow_question_classification_repair
         self.compact_text_references = (
             runtime_config.EVIDENCE_NORMALIZER_COMPACT_TEXT_REFERENCES
             if compact_text_references is None else compact_text_references
@@ -648,6 +650,7 @@ class FactNormalizationCommandService:
                 **({"compact_text_references": True} if self.compact_text_references else {}),
                 account_source_text=coverage_id is None,
                 **({"allow_candidate_partition": True} if self.allow_candidate_partition else {}),
+                **({"allow_question_classification_repair": True} if self.allow_question_classification_repair else {}),
             )
         except UnconfirmedDocumentMetadataError as exc:
             raise AppFactNormalizationRejectedError(

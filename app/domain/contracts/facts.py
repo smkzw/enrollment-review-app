@@ -831,6 +831,7 @@ class FactNormalizationCall(Phase5Model):
     raw_output_sha256: str | None = Field(default=None, pattern=_SHA256)
     reading_method: Literal["model_response", "adapter_response", "retained_pending"] | None = None
     candidate_partition_sha256: str | None = Field(default=None, pattern=_SHA256)
+    question_classification_sha256: str | None = Field(default=None, pattern=_SHA256)
     created_at: datetime
 
     @model_serializer(mode="wrap")
@@ -840,6 +841,8 @@ class FactNormalizationCall(Phase5Model):
             value.pop("reading_method", None)
         if self.candidate_partition_sha256 is None:
             value.pop("candidate_partition_sha256", None)
+        if self.question_classification_sha256 is None:
+            value.pop("question_classification_sha256", None)
         return value
 
     @model_validator(mode="after")
@@ -853,6 +856,8 @@ class FactNormalizationCall(Phase5Model):
             raise ValueError("读取方式只记录已持久化且有原答身份的成功调用，不证明资料核清")
         if self.candidate_partition_sha256 is not None and self.reading_method != "model_response":
             raise ValueError("局部保留证明必须属于有原答身份的模型读取")
+        if self.question_classification_sha256 is not None and self.reading_method != "model_response":
+            raise ValueError("限定疑问恢复必须属于有原答身份的模型读取")
         return self
 
 

@@ -303,6 +303,7 @@ class FactNormalizationJobService:
         compact_text_references: bool = False,
         account_source_text: bool = False,
         allow_candidate_partition: bool = False,
+        allow_question_classification_repair: bool = False,
     ) -> CreateNormalizationJobResult:
         """从活动完整处理修订生成计划，避免调用方自行拼接页组或输入哈希。
 
@@ -452,6 +453,7 @@ class FactNormalizationJobService:
                 compact_text_references=compact_text_references,
                 account_source_text=account_source_text,
                 allow_candidate_partition=allow_candidate_partition,
+                allow_question_classification_repair=allow_question_classification_repair,
             )
         stitched_scope = _compute_input_scope_sha256(
             authority,
@@ -473,6 +475,7 @@ class FactNormalizationJobService:
             compact_text_references=compact_text_references,
             account_source_text=account_source_text,
             allow_candidate_partition=allow_candidate_partition,
+            allow_question_classification_repair=allow_question_classification_repair,
         )
 
     @app_error_boundary
@@ -494,6 +497,7 @@ class FactNormalizationJobService:
         compact_text_references: bool = False,
         account_source_text: bool = False,
         allow_candidate_partition: bool = False,
+        allow_question_classification_repair: bool = False,
     ) -> CreateNormalizationJobResult:
         """幂等创建规范化 Job 与冻结的 FactNormalizationRun。
 
@@ -564,6 +568,14 @@ class FactNormalizationJobService:
                                               "verified_evidence_strategy": strategy})
         if len(effective_scope) != 64 or any(c not in "0123456789abcdef" for c in effective_scope):
             raise InvalidJobDefinitionError("input_scope_sha256 必须是 64 位十六进制")
+        question_policy = None
+        question_scope = None
+        if allow_question_classification_repair:
+            from app.agents.evidence_question_repair import QUESTION_REPAIR_POLICY
+            question_policy = QUESTION_REPAIR_POLICY
+            question_scope = effective_scope
+            effective_scope = canonical_hash({"input_scope_sha256": effective_scope,
+                "question_classification_repair_policy": question_policy})
         partition_policy = None
         partition_scope = None
         if allow_candidate_partition:
@@ -603,6 +615,10 @@ class FactNormalizationJobService:
             job_request_payload["page_review_coverage_id"] = page_review_coverage_id
             job_request_payload["pending_normalization_policy"] = PENDING_NORMALIZATION_POLICY
         submitted_hash = _job_payload_hash(job_request_payload)
+        if question_policy is not None:
+            job_request_payload["question_classification_repair_policy"] = question_policy
+            job_request_payload["question_classification_precondition_scope_sha256"] = question_scope
+            submitted_hash = _job_payload_hash(job_request_payload)
         if partition_policy is not None:
             job_request_payload["candidate_partition_policy"] = partition_policy
             job_request_payload["candidate_partition_precondition_scope_sha256"] = partition_scope
@@ -696,6 +712,9 @@ class FactNormalizationJobService:
                 job_payload["page_review_coverage_id"] = page_review_coverage_id
                 job_payload["pending_normalization_policy"] = PENDING_NORMALIZATION_POLICY
             step_defs = _build_step_specs(calls)
+            if question_policy is not None:
+                job_payload["question_classification_repair_policy"] = question_policy
+                job_payload["question_classification_precondition_scope_sha256"] = question_scope
             if strategy is not None:
                 job_payload["verified_evidence_strategy"] = strategy
             if include_visual_sources:

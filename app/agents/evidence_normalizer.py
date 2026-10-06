@@ -1741,6 +1741,10 @@ def parse_evidence_normalizer_output(
                 locator_source_texts=locator_source_texts or {},
             )
         except ValidationError as exc:
+            from app.agents.evidence_question_repair import classification_error
+            classification = classification_error(exc)
+            if classification is not None:
+                raise classification from exc
             raise ValueError(_validation_error_summary(exc)) from exc
     # 期望一致性校验（run/call/logical_document）
     if expected_run_id is not None and output.run_id != expected_run_id:
@@ -2272,6 +2276,7 @@ class EvidenceNormalizerRunResult(ContractModel):
     final_output: EvidenceNormalizerOutput | None = None
     candidate_partition_receipt: dict | None = Field(default=None, exclude_if=lambda value: value is None)
     candidate_partition_failure: dict | None = Field(default=None, exclude_if=lambda value: value is None)
+    question_classification_receipt: dict | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class EvidenceNormalizerRunner:
@@ -2304,6 +2309,7 @@ class EvidenceNormalizerRunner:
         verified_scope_prompt: bool = False,
         require_current_draft: bool = False,
         allow_candidate_partition: bool = False,
+        allow_question_classification_repair: bool = False,
     ) -> EvidenceNormalizerRunResult:
         # 传输层若已用 JSON Schema 受限解码强制输出结构（如 omlx json_schema
         # response_format），提示内不再重复内嵌同一份 Schema；其余传输保持
@@ -2483,6 +2489,51 @@ class EvidenceNormalizerRunner:
                 )
                 if schema_repairs >= self._max_schema_repairs:
                     return terminal_schema_failure()
+                from app.agents.evidence_question_repair import (
+                    EvidenceQuestionClassificationError, QuestionClassificationRepair,
+                    replay_question_repair,
+                )
+                if allow_question_classification_repair and isinstance(exc, EvidenceQuestionClassificationError):
+                    # One short, source-bound proposal shares the existing repair
+                    # budget. Never fall back to a whole-answer rewrite afterwards.
+                    if schema_repairs or raw_text != initial_raw_text:
+                        return terminal_schema_failure()
+                    proposal_response = None
+                    try:
+                        repair = QuestionClassificationRepair(initial_raw_text, evidence_input,
+                            exc.indices, reference_aliases=reference_aliases)
+                        proposer = getattr(transport, "propose_question_classifications", None)
+                        if not callable(proposer):
+                            raise ValueError("当前传输不支持限定疑问提案，保留原答")
+                        schema_repairs += 1
+                        proposal_response = proposer(prompt=repair.prompt(), output_schema=repair.schema())
+                        composed, receipt = repair.apply(proposal_response.text)
+                        partition_receipt = None
+                        try:
+                            output = replay_question_repair(receipt, evidence_input, reference_aliases=reference_aliases)
+                        except (EvidenceSourceObjectError, EvidenceDerivedSourceError, EvidenceNumericUnitError):
+                            if not allow_candidate_partition:
+                                raise
+                            from app.agents.evidence_candidate_partition import recover_source_local_candidates
+                            partition = recover_source_local_candidates(composed, evidence_input,
+                                reference_aliases=reference_aliases)
+                            partition_receipt = partition.receipt
+                            output = replay_question_repair(receipt, evidence_input,
+                                reference_aliases=reference_aliases, partition_receipt=partition_receipt)
+                    except Exception as repair_error:
+                        attempts.append(EvidenceNormalizerAttempt(attempt=len(attempts) + 1,
+                            session_id=session_id, raw_output_sha256=_sha256(
+                                proposal_response.text if proposal_response is not None else initial_raw_text),
+                            outcome="transport_failed" if isinstance(repair_error, EvidenceNormalizerAgentCallError) else "schema_invalid",
+                            issues=[str(repair_error)[:2000]],
+                            error_code="TRANSPORT_FAILED" if isinstance(repair_error, EvidenceNormalizerAgentCallError) else "PARTIAL_OUTPUT"))
+                        return terminal_schema_failure()
+                    attempts.append(EvidenceNormalizerAttempt(attempt=len(attempts) + 1,
+                        session_id=proposal_response.session_id, raw_output_sha256=_sha256(proposal_response.text),
+                        outcome="parsed", output=output))
+                    return EvidenceNormalizerRunResult(status="已解析", session_id=proposal_response.session_id,
+                        attempts=attempts, final_output=output, question_classification_receipt=receipt,
+                        candidate_partition_receipt=partition_receipt)
                 if isinstance(exc, (EvidenceDerivedSourceError, EvidenceNumericUnitError)) and allow_candidate_partition:
                     return terminal_schema_failure()
                 if isinstance(exc, EvidenceSourceObjectError):
