@@ -6937,7 +6937,8 @@ def test_candidate_repair_retains_only_unchanged_checked_time_attribute() -> Non
             _merge_candidate_repair(json.dumps({"candidate_draft": changed_meaning}), baseline, 0)
 
 
-def test_wire_stage_error_repairs_only_its_candidate_without_rewriting_batch() -> None:
+@pytest.mark.parametrize("remove_unrelated_link", [False, True])
+def test_wire_stage_error_repairs_only_its_candidate_without_rewriting_batch(remove_unrelated_link) -> None:
     batch = _batch()
     relation = ProtocolControlAgentWireRelation(
         kind=CrossSourceRelationKind.SUPPLEMENTARY_REQUIREMENT,
@@ -6947,24 +6948,38 @@ def test_wire_stage_error_repairs_only_its_candidate_without_rewriting_batch() -
         affected_workflow_stage_id="stage:screening:two",
         notes="需核对具体访视",
     )
-    first = _candidate()
+    first = _candidate().model_copy(update={"exception_expression": None})
     invalid_first = first.model_copy(update={"cross_source_relations": [relation]})
     valid_relation = relation.model_copy(
         update={"affected_workflow_stage_id": "stage:screening:one"}
     )
-    fixed_first = first.model_copy(update={"cross_source_relations": [valid_relation]})
-    second = _candidate_for_second_unit()
+    fixed_first = first.model_copy(update={
+        "cross_source_relations": [] if remove_unrelated_link else [valid_relation],
+    })
+    second = _candidate_for_second_unit().model_copy(update={"exception_expression": None})
+    second.applicability_expression = None
+    second_atom = second.obligation_expression.groups[0].atoms[0]
+    second_atom.kind = ControlObligationKind.MUST_RECORD
+    second_atom.evaluation = type(second_atom.evaluation).model_validate(
+        _evaluation("记录末次用药日期", "span:02", "筛选时记录末次用药日期")
+    )
     initial = _wire_with_two_candidates(invalid_first, second)
 
     class CandidateTransport(_FakeTransport):
-        def continue_candidate(self, *, session_id: str, prompt: str):
+        supports_candidate_field_repair = True
+
+        def continue_candidate(self, *, session_id: str, prompt: str, fields=()):
             self.prompts.append(prompt)
             assert "仅返回包含 candidate_draft" in prompt
             assert "本轮获授权候选原稿" in prompt
             assert invalid_first.title in prompt
+            assert fields == ("cross_source_relations",)
+            assert "系统原样保留疗程、时间、义务、判定节点和证据" in prompt
             return ProtocolControlAgentResponse(
                 session_id=session_id,
-                text=json.dumps({"candidate_draft": fixed_first.model_dump(mode="json")}),
+                text=json.dumps({"candidate_draft": {
+                    "cross_source_relations": fixed_first.model_dump(mode="json")["cross_source_relations"],
+                }}),
             )
 
     transport = CandidateTransport([
@@ -6979,6 +6994,8 @@ def test_wire_stage_error_repairs_only_its_candidate_without_rewriting_batch() -
     assert result.final_output.dispositions[1].structure_unit_id == "su-02"
     assert len(result.attempts) == 2
     assert result.attempts[0].error_classes[0] == "PROCEDURE_AFFECTED_STAGE_MISMATCH"
+    from app.protocols.protocol_control_gate import validate_protocol_control_batch_candidates
+    validate_protocol_control_batch_candidates(batch, result.final_output)
 
 
 def test_repair_prompt_repeats_target_index_without_claiming_coverage() -> None:
@@ -6990,6 +7007,85 @@ def test_repair_prompt_repeats_target_index_without_claiming_coverage() -> None:
     assert _batch().known_official_targets[0].official_code in prompt
     assert _batch().known_procedure_targets[0].catalog_item_id in prompt
     assert "cross_source_relations" in prompt
+
+
+def test_relation_field_repair_retains_clinical_meaning_and_other_targets() -> None:
+    first = _candidate()
+    relation = ProtocolControlAgentWireRelation(
+        kind=CrossSourceRelationKind.SUPPLEMENTARY_REQUIREMENT,
+        external_target_kind=ControlRelationTargetKind.REQUIRED_PROCEDURE,
+        external_target_id="procedure-screening-1", candidate_side="left",
+        affected_workflow_stage_id="stage:screening:two", notes="待核对的关联",
+    )
+    unrelated = relation.model_copy(update={"external_target_id": "other-target"})
+    first = first.model_copy(update={"cross_source_relations": [relation, unrelated]})
+    baseline = _wire_with_two_candidates(first, _candidate_for_second_unit())
+    retained = unrelated.model_dump(mode="json")
+    payload = {"candidate_draft": {"cross_source_relations": [retained]}}
+    merged = _merge_candidate_repair(
+        json.dumps(payload), baseline, 0, fields=("cross_source_relations",),
+        relation_target_ids=("procedure-screening-1",), relation_indexes=(0,),
+    )
+    expected = baseline.model_dump(mode="json")
+    expected["candidate_drafts"][0]["cross_source_relations"] = [retained]
+    assert merged.model_dump(mode="json") == expected
+    assert baseline.candidate_drafts[0] == first
+    for changed in (
+        {"cross_source_relations": [], "workflow_stage_nodes": []},
+        {"cross_source_relations": []},
+        {"cross_source_relations": [retained, retained]},
+        {"cross_source_relations": [retained, {**relation.model_dump(mode="json"), "kind": "mentions"}]},
+    ):
+        with pytest.raises(ProtocolControlAgentWireValidationError, match="CANDIDATE_REPAIR_INVALID"):
+            _merge_candidate_repair(
+                json.dumps({"candidate_draft": changed}), baseline, 0,
+                fields=("cross_source_relations",), relation_target_ids=("procedure-screening-1",),
+                relation_indexes=(0,),
+            )
+    schema = protocol_control_candidate_repair_response_format(fields=("cross_source_relations",))
+    patch_schema = schema["json_schema"]["schema"]["properties"]["candidate_draft"]
+    assert list(patch_schema["properties"]) == ["cross_source_relations"]
+    assert patch_schema["additionalProperties"] is False
+    with pytest.raises(ValueError, match="未授权"):
+        protocol_control_candidate_repair_response_format(fields=("workflow_stage_nodes",))
+    same_target = unrelated.model_copy(update={
+        "external_target_id": relation.external_target_id, "candidate_side": "right",
+    })
+    same_target_wire = baseline.model_copy(update={"candidate_drafts": [
+        first.model_copy(update={"cross_source_relations": [relation, same_target]}),
+        baseline.candidate_drafts[1],
+    ]})
+    with pytest.raises(ProtocolControlAgentWireValidationError, match="未授权关系"):
+        _merge_candidate_repair(
+            json.dumps({"candidate_draft": {"cross_source_relations": []}}),
+            same_target_wire, 0, fields=("cross_source_relations",),
+            relation_target_ids=(relation.external_target_id,), relation_indexes=(0,),
+        )
+
+
+def test_stage_field_repair_cannot_fall_back_to_full_candidate_transport() -> None:
+    first = _candidate()
+    relation = ProtocolControlAgentWireRelation(
+        kind=CrossSourceRelationKind.SUPPLEMENTARY_REQUIREMENT,
+        external_target_kind=ControlRelationTargetKind.REQUIRED_PROCEDURE,
+        external_target_id="procedure-screening-1", candidate_side="left",
+        affected_workflow_stage_id="stage:screening:two", notes="待核对",
+    )
+    baseline = _wire_with_two_candidates(
+        first.model_copy(update={"cross_source_relations": [relation]}), _candidate_for_second_unit(),
+    )
+
+    class LegacyTransport(_FakeTransport):
+        def continue_candidate(self, **kwargs):
+            raise AssertionError("不支持字段修订时不可重写整候选")
+
+    result = ProtocolControlAgentRunner(max_schema_repairs=1).run(
+        _batch(), LegacyTransport([ProtocolControlAgentResponse(session_id="s", text=baseline.model_dump_json())]),
+    )
+    assert result.status == "需要核对"
+    assert result.final_output is None
+    assert result.attempts[-1].outcome == "transport_failed"
+    assert "不能退回整候选改写" in result.attempts[-1].issues[0]
 
 
 def test_missing_affected_stage_decision_repair_does_not_assume_cross_stage() -> None:

@@ -566,9 +566,11 @@ def test_batch_author_schema_rejects_context_write_but_keeps_normal_result(bad_f
             policy = value.get("observation_policy")
             if isinstance(policy, dict):
                 policy.setdefault("selection", None)
+            if {"determination_mode", "time_purpose", "source_excerpts"}.issubset(value):
+                value.setdefault("record_semantics", None)
             predicate = value.get("predicate")
             if isinstance(predicate, dict):
-                for field in ("semantic_proposition", "observation_policy", "repeat_scheme", "source_computation"):
+                for field in ("semantic_proposition", "observation_policy", "repeat_scheme", "source_computation", "record_semantics"):
                     predicate.setdefault(field, None)
             refs = value.get("atom_refs")
             if isinstance(refs, list):
@@ -1121,6 +1123,29 @@ def test_candidate_repair_changes_only_response_schema_in_same_session() -> None
     assert [item["role"] for item in completions.calls[1]["messages"]] == [
         "user", "assistant", "user"
     ]
+    assert len(transport.history(first.session_id)) == 4
+
+
+@pytest.mark.parametrize("mode", ["json_schema", "text"])
+def test_candidate_field_repair_sends_only_authorized_field_schema(mode: str) -> None:
+    client, completions = _client(['{"wire":1}', '{"candidate_draft":{"cross_source_relations":[]}}'])
+    transport = OpenAICompatibleProtocolControlAgentTransport(
+        client=client, backend="cms-router", model="deepseek-latest-cloud",
+        max_tokens=16384, response_format_mode=mode,
+    )
+    transport._stream_completion = lambda fake_client, kwargs: fake_client.chat.completions.create(**kwargs)
+    first = transport.start(prompt="冻结输入")
+    response = transport.continue_candidate(
+        session_id=first.session_id, prompt="仅核对关联", fields=("cross_source_relations",),
+    )
+    assert response.session_id == first.session_id
+    call = completions.calls[-1]
+    if mode == "json_schema":
+        candidate_schema = call["response_format"]["json_schema"]["schema"]["properties"]["candidate_draft"]
+        assert list(candidate_schema["properties"]) == ["cross_source_relations"]
+    else:
+        assert "response_format" not in call
+        assert '"required":["cross_source_relations"]' in call["messages"][-1]["content"]
     assert len(transport.history(first.session_id)) == 4
 
 

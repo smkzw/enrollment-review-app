@@ -236,6 +236,7 @@ __all__ = [
 
 
 PUBLICATION_REPAIR_SCOPE_VERSION = "phase5/publication-candidate-repair-scope/v2"
+_CANDIDATE_FIELD_REPAIR_VERSION = "phase5/candidate-field-repair/v1"
 SOURCE_REQUIREMENT_FAILURE_POLICY_VERSION = "phase5/source-requirement-failure-policy/v3"
 # Reporting changes do not change author/repair prompts or invalidate successful reads.
 SOURCE_REQUIREMENT_FAILURE_REASON_VERSION = "phase5/source-requirement-failure-reason/v1"
@@ -1606,22 +1607,36 @@ def protocol_control_batch_response_format(
     return response_format
 
 
-def protocol_control_candidate_repair_response_format() -> dict[str, object]:
+def protocol_control_candidate_repair_response_format(
+    *, fields: tuple[str, ...] = (),
+) -> dict[str, object]:
     """Ask for one candidate only; the system retains the rest of the wire."""
 
     original = protocol_control_agent_json_schema()
+    candidate_schema: dict[str, Any] = {
+        "$ref": "#/$defs/ProtocolControlAgentWireCandidate"
+    }
+    if fields:
+        if fields != ("cross_source_relations",):
+            raise ValueError("未授权的候选字段修订范围")
+        properties = original["$defs"]["ProtocolControlAgentWireCandidate"]["properties"]
+        candidate_schema = {
+            "type": "object",
+            "properties": {field: properties[field] for field in fields},
+            "required": list(fields),
+            "additionalProperties": False,
+        }
     return {
         "type": "json_schema",
         "json_schema": {
-            "name": "protocol_control_candidate_repair_v1",
+            "name": ("protocol_control_candidate_fields_v1" if fields
+                     else "protocol_control_candidate_repair_v1"),
             "strict": True,
             "schema": {
                 "$defs": original["$defs"],
                 "type": "object",
                 "properties": {
-                    "candidate_draft": {
-                        "$ref": "#/$defs/ProtocolControlAgentWireCandidate"
-                    }
+                    "candidate_draft": candidate_schema
                 },
                 "required": ["candidate_draft"],
                 "additionalProperties": False,
@@ -2869,6 +2884,7 @@ def protocol_control_agent_repair_contract_sha256(
         parts.append(SOURCE_QUOTE_RECOVERY_VERSION)
         parts.append(SOURCE_FUNCTION_RECHECK_VERSION)
         parts.append(PUBLICATION_REPAIR_SCOPE_VERSION)
+        parts.append(_CANDIDATE_FIELD_REPAIR_VERSION)
         parts.append(SOURCE_REQUIREMENT_FAILURE_POLICY_VERSION)
     material = "\n".join(parts)
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
@@ -3351,6 +3367,7 @@ def _validate_known_targets(
                 validation_findings=[{
                     "code": "PROCEDURE_AFFECTED_STAGE_MISMATCH",
                     "json_path": f"cross_source_relations.{relation_index}.affected_workflow_stage_id",
+                    "relation_index": relation_index,
                     "source_refs": list(candidate.source_span_ids),
                     "external_target_id": relation.external_target_id,
                     "execution_workflow_stage_id": execution_id,
@@ -5213,6 +5230,8 @@ def _merge_candidate_repair_payload(
     raw_text: str,
     baseline: ProtocolControlAgentWire | Mapping[str, Any],
     index: int,
+    *, fields: tuple[str, ...] = (), relation_target_ids: tuple[str, ...] = (),
+    relation_indexes: tuple[int, ...] = (),
 ) -> dict[str, Any]:
     """Replace one validated draft without accepting its unvalidated siblings."""
 
@@ -5236,6 +5255,42 @@ def _merge_candidate_repair_payload(
             "PROVIDER_ID_FORBIDDEN", f"模型不得填写系统身份 {forbidden[1]}"
         )
     try:
+        if fields:
+            if fields != ("cross_source_relations",) or not isinstance(baseline, ProtocolControlAgentWire):
+                raise ValueError("字段修订缺少已解析的授权基稿")
+            if not 0 <= index < len(baseline.candidate_drafts):
+                raise ValueError("字段修订位置不属于原始批次")
+            if set(payload["candidate_draft"]) != set(fields):
+                raise ValueError("字段修订不得增加、遗漏或改写授权范围外字段")
+            original = baseline.candidate_drafts[index].model_dump(mode="json")
+            relations = payload["candidate_draft"]["cross_source_relations"]
+            if not relation_target_ids or not relation_indexes or not isinstance(relations, list):
+                raise ValueError("关联字段修订缺少机器可核的目标范围")
+            old_relations = original["cross_source_relations"]
+            if any(not isinstance(item, dict) for item in relations):
+                raise ValueError("关联修订必须返回关系对象")
+            identities = ("kind", "external_target_kind", "external_target_id", "candidate_side")
+            if any(type(index) is not int or not 0 <= index < len(old_relations)
+                   for index in relation_indexes):
+                raise ValueError("关联字段修订位置不属于原始候选")
+            selected = [old_relations[index] for index in relation_indexes]
+            if {item["external_target_id"] for item in selected} != set(relation_target_ids):
+                raise ValueError("关联修订位置与授权目标不一致")
+            available = [tuple(item[key] for key in identities) for item in selected]
+            authorized = set(available)
+
+            def outside(items):
+                return [item for item in items
+                        if tuple(item.get(key) for key in identities) not in authorized]
+            if outside(relations) != outside(old_relations):
+                raise ValueError("关联修订不得改变未授权关系")
+            for item in relations:
+                identity = tuple(item.get(key) for key in identities)
+                if identity in authorized:
+                    if identity not in available:
+                        raise ValueError("关联修订不得新建目标、改变关系性质或重复关系")
+                    available.remove(identity)
+            payload["candidate_draft"] = {**original, **payload["candidate_draft"]}
         _collapse_exact_duplicate_day_bounds(payload["candidate_draft"])
         _normalize_absent_time_bound_flags(payload["candidate_draft"])
         if isinstance(baseline, ProtocolControlAgentWire) and 0 <= index < len(baseline.candidate_drafts):
@@ -5272,12 +5327,17 @@ def _merge_candidate_repair(
     raw_text: str,
     baseline: ProtocolControlAgentWire | Mapping[str, Any],
     index: int,
+    *, fields: tuple[str, ...] = (), relation_target_ids: tuple[str, ...] = (),
+    relation_indexes: tuple[int, ...] = (),
 ) -> ProtocolControlAgentWire:
     """Replace one draft and validate the complete wire."""
 
     try:
         return ProtocolControlAgentWire.model_validate(
-            _merge_candidate_repair_payload(raw_text, baseline, index)
+            _merge_candidate_repair_payload(
+                raw_text, baseline, index, fields=fields, relation_target_ids=relation_target_ids,
+                relation_indexes=relation_indexes,
+            )
         )
     except ValidationError as exc:
         raise ProtocolControlAgentWireValidationError(
@@ -7221,6 +7281,9 @@ class ProtocolControlAgentRunner:
                     if matched else None)
 
         candidate_repair_index: int | None = None
+        candidate_repair_fields: tuple[str, ...] = ()
+        candidate_repair_relation_targets: tuple[str, ...] = ()
+        candidate_repair_relation_indexes: tuple[int, ...] = ()
         post_treatment_repair_index: int | None = None
         future_repair_path: tuple[int, int, int] | None = None
         calendar_repair_path: tuple[int, int, int] | None = None
@@ -7306,6 +7369,9 @@ class ProtocolControlAgentRunner:
                         raw_text,
                         repair_baseline_wire or repair_baseline_raw,
                         candidate_repair_index,
+                        fields=candidate_repair_fields,
+                        relation_target_ids=candidate_repair_relation_targets,
+                        relation_indexes=candidate_repair_relation_indexes,
                     )
                     if candidate_repair_index is not None
                     and (repair_baseline_wire is not None or repair_baseline_raw is not None)
@@ -9351,6 +9417,7 @@ class ProtocolControlAgentRunner:
                 )
                 if (
                     no_progress
+                    or (candidate_repair_fields and wire is None)
                     or front_flow_assembled
                     or error.code == "REPAIR_SCOPE_ESCAPE"
                     or error.code == "TIME_OPERAND_UNRESOLVED"
@@ -9479,6 +9546,34 @@ class ProtocolControlAgentRunner:
                 candidate_repair_index = (
                     next(iter(repair_candidate_indexes)) if candidate_only else None
                 )
+                candidate_repair_fields = (
+                    ("cross_source_relations",)
+                    if candidate_only and repair_baseline_wire is not None
+                    and "PROCEDURE_AFFECTED_STAGE_MISMATCH" in error.error_class_codes
+                    else ()
+                )
+                if (
+                    "PROCEDURE_AFFECTED_STAGE_MISMATCH" in error.error_class_codes
+                    and not allow_candidate_repartition and not candidate_repair_fields
+                ):
+                    attempts[-1].issues.append("关系错误缺少单一候选字段范围，不授权整候选或多候选改写")
+                    return build_result(
+                        status="需要核对", batch_id=batch.batch_id, session_id=session_id,
+                        attempts=attempts, source_interpretation=source_interpretation,
+                        source_statement_coverage=latest_source_statement_coverage,
+                        source_target_review=latest_source_target_review, partial_wire=partial_wire,
+                    )
+                candidate_repair_relation_targets = tuple(dict.fromkeys(
+                    str(finding["external_target_id"])
+                    for finding in error.validation_findings
+                    if finding.get("code") == "PROCEDURE_AFFECTED_STAGE_MISMATCH"
+                    and isinstance(finding.get("external_target_id"), str)
+                )) if candidate_repair_fields else ()
+                candidate_repair_relation_indexes = tuple(dict.fromkeys(
+                    finding["relation_index"] for finding in error.validation_findings
+                    if finding.get("code") == "PROCEDURE_AFFECTED_STAGE_MISMATCH"
+                    and type(finding.get("relation_index")) is int
+                )) if candidate_repair_fields else ()
                 candidate_repair_indexes = (
                     tuple(sorted(repair_candidate_indexes)) if candidates_only else ()
                 )
@@ -9587,6 +9682,15 @@ class ProtocolControlAgentRunner:
                         "\n本次为作业恢复的新会话；以下已核候选只供去重，不得改写："
                         + json.dumps(frozen_candidates, ensure_ascii=False)
                     )
+                if candidate_repair_fields:
+                    repair_prompt += (
+                        "\n本次仅授权 candidate_draft.cross_source_relations。"
+                        "返回 {\"candidate_draft\":{\"cross_source_relations\":[...]}}；"
+                        "不要重发候选其他字段。系统原样保留疗程、时间、义务、判定节点和证据。"
+                        "若所引用流程不能表达该要求，应删除错误关联、保留独立要求；"
+                        "不得为适配流程而提前完成时间或改变临床含义。"
+                        "关联调整后仍须完整来源、语义及采用核对；空关联不表示已完成审核。"
+                    )
                 try:
                     repair_used = True
                     if resuming_partial and allow_source_insert:
@@ -9631,8 +9735,15 @@ class ProtocolControlAgentRunner:
                             session_id=session_id, prompt=repair_prompt
                         )
                     elif candidate_only or source_insert_candidate_only:
+                        if candidate_repair_fields and (
+                            not candidate_repair_relation_targets
+                            or not candidate_repair_relation_indexes
+                            or not getattr(transport, "supports_candidate_field_repair", False)
+                        ):
+                            raise RuntimeError("缺少字段修订能力或关系位置证明，不能退回整候选改写")
                         response = transport.continue_candidate(
-                            session_id=session_id, prompt=repair_prompt
+                            session_id=session_id, prompt=repair_prompt,
+                            **({"fields": candidate_repair_fields} if candidate_repair_fields else {}),
                         )
                     elif candidates_only or source_insert_candidates_only:
                         response = transport.continue_candidates(
