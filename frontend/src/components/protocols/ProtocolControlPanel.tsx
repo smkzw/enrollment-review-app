@@ -59,7 +59,7 @@ export function ProtocolControlPanel({ controls }: Props) {
     {state.status === "error" && <p role="alert">{state.message}</p>}
     {state.status === "ready" && <>
       <p>{state.data.calculationGaps.length > 0
-        ? `已整理${state.data.requirements.length}项补充要求，另有${state.data.calculationGaps.length}处计算相关原文尚未纳入可靠审核，当前不能发布。`
+        ? `已整理${state.data.requirements.length}项补充要求，另有${state.data.calculationGaps.length}处方案定义尚未核清影响范围，当前不能发布。`
         : state.data.restrictedStatements.length > 0
           ? `已整理${state.data.requirements.length}项补充要求，另有${state.data.restrictedStatements.length}段方案原文尚不能自动核对，以下一并保留。`
         : state.data.requirements.length === 0
@@ -79,9 +79,9 @@ export function ProtocolControlPanel({ controls }: Props) {
           {item.dependencyLabels.length > 0 && <p>还需结合{item.dependencyLabels.join("、")}核对。</p>}
         </li>)}</ol>
       </section>}
-      {state.data.calculationGaps.length > 0 && <section className="kz-control-layer" aria-label="尚未纳入审核的计算相关原文">
-        <h4>尚未纳入审核的计算相关原文</h4>
-        <p>这里保留了方案原文。仍需核对它对哪些审核要求起作用，并接通可靠的取值或计算方式；这不是请研究者补写医学判断。</p>
+      {state.data.calculationGaps.length > 0 && <section className="kz-control-layer" aria-label="尚未核清影响范围的方案定义">
+        <h4>尚未核清影响范围的方案定义</h4>
+        <p>这里保留了方案原文。仍需核对它对哪些具体要求起作用；涉及的取值、计算或时期限定尚不能直接用于判断，不需要研究者补写医学意见。</p>
         <ol>{state.data.calculationGaps.map((gap) => <li key={gap.id}>
           <strong>{gap.linkedOfficialCode === null
             ? "关联的审核条款尚待核对"
@@ -89,6 +89,8 @@ export function ProtocolControlPanel({ controls }: Props) {
           <blockquote>{gap.sourceQuote}</blockquote>
           <p>{gap.unresolvedAspects.length > 0 || gap.reviewDecision === "unresolved"
             ? "这段原文的适用含义仍需核清，不能先当作已确定要求。"
+            : gap.reviewDecision === "definition_dependency"
+              ? "定义原文已保留，正在核对它影响哪些具体要求；尚未作为已执行的判断依据。"
             : gap.reviewDecision === "covered_by_official" || gap.reviewDecision === "covered_by_procedure" || gap.reviewDecision === "additional_requirement"
               ? "已记录原文与审核要求的对应；可靠计算方式尚未接通，由系统建设继续处理。"
               : "这段原文是否属于本次审核、对应哪些要求仍需核对。"}</p>

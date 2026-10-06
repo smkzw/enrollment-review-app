@@ -27,6 +27,7 @@ from .protocol_control_source_interpretation import (
     validate_source_interpretation,
     validate_source_target_review,
     target_review_indexes,
+    is_non_action_definition,
 )
 from .protocol_control_stage_compiler import (
     assemble_source_requirement_inserts,
@@ -49,7 +50,7 @@ from app.domain.contracts.protocol_controls import (
 
 BASELINE = "RV1001-BASELINE"
 FIXED_FLOW = "RV1001-FLOW"
-FIXED_FLOW_VERSION = "rv1001/front-stage-flow/v17"
+FIXED_FLOW_VERSION = "rv1001/front-stage-flow/v18"
 FRONT_REVIEW_CORRECTION_CODES = frozenset({
     "TARGET_VISIT_SCOPE_UNPROVEN", "TIME_SCOPE_MISMATCH",
     "TARGET_TIME_INCOMPLETE", "TARGET_EXCEPTION_UNGROUNDED",
@@ -149,7 +150,9 @@ def supports_front_stage_flow(batch, interpretation: SourceInterpretation) -> bo
          and not statement.unresolved
         for statement in interpretation.statements
     )
-    if not background_only and not front_stage_supported_indexes(batch, interpretation):
+    definitions_only = all(is_non_action_definition(statement)
+                           for statement in interpretation.statements)
+    if not background_only and not definitions_only and not front_stage_supported_indexes(batch, interpretation):
         return False
     coverage = source_statement_coverage(batch, interpretation, pending_front_wire(batch))
     # An exact match only routes to the established comparison path; it does
@@ -234,9 +237,9 @@ def covered_front_wire(
     """Whole-unit links require full coverage; mixed units keep point-level proof."""
     validate_front_review(batch, interpretation, review)
     if (len(review.items) != len(interpretation.statements)
-            or any(item.statement_index not in retained_indexes and item.decision not in ({"covered_by_official", "covered_by_procedure", "background_context", "additional_requirement"}
+            or any(item.statement_index not in retained_indexes and item.decision not in ({"covered_by_official", "covered_by_procedure", "background_context", "definition_dependency", "additional_requirement"}
                                         if allow_additional_units else
-                                        {"covered_by_official", "covered_by_procedure", "background_context"})
+                                        {"covered_by_official", "covered_by_procedure", "background_context", "definition_dependency"})
                    for item in review.items)):
         raise ProtocolControlAgentWireValidationError(
             "FLOW_TARGET_COVERAGE_UNASSEMBLED", "已有覆盖和新增要求混合，尚无对应装配，保留全部来源")
@@ -244,7 +247,7 @@ def covered_front_wire(
     officials = {target.official_code: target for target in batch.known_official_targets}
     pending_dispositions = {item.structure_unit_id: item for item in pending_front_wire(batch).dispositions}
     for item in review.items:
-        if item.statement_index in retained_indexes or item.decision in {"additional_requirement", "background_context"}:
+        if item.statement_index in retained_indexes or item.decision in {"additional_requirement", "background_context", "definition_dependency"}:
             continue
         statement = interpretation.statements[item.statement_index]
         target = (procedures if item.decision == "covered_by_procedure" else officials)[item.target_id]
@@ -261,7 +264,7 @@ def covered_front_wire(
         if any(item.statement_index in retained_indexes for item in items):
             dispositions.append(pending_dispositions[unit.structure_unit_id])
             continue
-        kinds = {item.decision for item in items} - {"background_context"}
+        kinds = {item.decision for item in items} - {"background_context", "definition_dependency"}
         if not kinds:
             if batch.owned_required_action_kinds_by_structure_unit_id.get(unit.structure_unit_id):
                 raise ProtocolControlAgentWireValidationError(
@@ -269,13 +272,31 @@ def covered_front_wire(
                     "冻结来源仍有独立动作，不能仅凭已枚举的背景陈述省略整段要求",
                     structure_unit_ids=[unit.structure_unit_id],
                 )
+            if items:
+                # This is a bounded completeness check, not a semantic oracle:
+                # a source unit cannot lose an unquoted neighbouring sentence.
+                remaining = normalize_source_excerpt(unit.excerpt)
+                for statement in sorted((statement for statement in interpretation.statements
+                                         if statement.structure_unit_id == unit.structure_unit_id),
+                                        key=lambda statement: len(statement.quoted_text), reverse=True):
+                    remaining = remaining.replace(normalize_source_excerpt(statement.quoted_text), "")
+                if any(character.isalnum() for character in remaining):
+                    raise ProtocolControlAgentWireValidationError(
+                        "DEFINITION_SOURCE_SCOPE_INCOMPLETE",
+                        "来源处置尚未覆盖该单元的全部正文，不能省略邻近要求",
+                        structure_unit_ids=[unit.structure_unit_id],
+                    )
             dispositions.append(ProtocolControlAgentWireDisposition(
                 structure_unit_id=unit.structure_unit_id,
-                disposition=StructureUnitDispositionKind.ADMINISTRATIVE_STATISTICAL_BACKGROUND,
+                disposition=(StructureUnitDispositionKind.SUPPORTING_OR_SUPPLEMENT
+                             if any(item.decision == "definition_dependency" for item in items)
+                             else StructureUnitDispositionKind.ADMINISTRATIVE_STATISTICAL_BACKGROUND),
                 linked_official_code=None,
                 linked_procedure_catalog_item_id=None,
                 linked_procedure_catalog_item_ids=[],
-                notes="逐项有源核对确认为纯背景，不生成受试者义务",
+                notes=("来源定义原文保留，待核全量依赖；不生成受试者义务"
+                       if any(item.decision == "definition_dependency" for item in items)
+                       else "逐项有源核对确认为纯背景，不生成受试者义务"),
             ))
             continue
         if "additional_requirement" in kinds and allow_additional_units:
@@ -346,7 +367,7 @@ def prepare_front_stage_flow(
         result.review_validated = True
         supported = front_stage_supported_indexes(batch, interpretation)
         retained = [item for item in result.review.items
-                    if item.decision not in {"additional_requirement", "covered_by_official", "covered_by_procedure", "background_context"}
+                    if item.decision not in {"additional_requirement", "covered_by_official", "covered_by_procedure", "background_context", "definition_dependency"}
                     or (item.decision == "additional_requirement" and (
                         item.statement_index not in supported
                         or _requirement_reader(batch, interpretation, item, transport) is None))]

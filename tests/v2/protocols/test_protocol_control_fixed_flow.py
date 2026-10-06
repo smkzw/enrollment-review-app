@@ -1570,6 +1570,127 @@ def test_pure_background_requires_saved_source_proof_but_no_patient_obligation()
         _validate_saved_source_review(batch, restored)
 
 
+def _definition_example(*, same_unit=False, definition_only=False):
+    batch, inventory, review, selection = _background_example(
+        same_unit=same_unit, background_only=definition_only,
+    )
+    statement = inventory.statements[-1]
+    unit = next(unit for unit in batch.owned_units
+                if unit.structure_unit_id == statement.structure_unit_id)
+    quote = "筛选期定义为首次筛选检查至基线访视之间的期间"
+    unit.excerpt = unit.excerpt.replace(statement.quoted_text, quote)
+    statement.quoted_text = quote
+    statement.decision_functions = ["definition", "time_validity"]
+    statement.time_words = ["筛选期", "基线访视"]
+    review.items[-1].decision = "definition_dependency"
+    review.items[-1].source_action_excerpt = quote
+    review.items[-1].non_control_basis_excerpt = None
+    return batch, inventory, review, selection
+
+
+@pytest.mark.parametrize("same_unit,definition_only", [(False, True), (False, False), (True, False)])
+def test_definition_reaches_saved_flow_without_patient_obligation(same_unit, definition_only):
+    from app.agents.protocol_control_source_interpretation import (
+        SOURCE_DEFINITION_CONSUMER_VERSION, SourceDefinitionConsumers,
+    )
+
+    class Reader(_MixedTransport):
+        def start_source_definition_consumers(self, *, prompt):
+            self.calls.append("definition")
+            assert "筛选期定义为" in prompt
+            return ProtocolControlAgentResponse(session_id="definition-empty", text=SourceDefinitionConsumers(
+                version=SOURCE_DEFINITION_CONSUMER_VERSION, items=[],
+            ).model_dump_json())
+
+    batch, inventory, review, selection = _definition_example(
+        same_unit=same_unit, definition_only=definition_only,
+    )
+    reader = Reader(review, selection)
+    result = ProtocolControlAgentRunner().run(
+        batch, reader, resume_source_interpretation=inventory, workflow_variant=FIXED_FLOW,
+        output_validator=lambda output: validate_protocol_control_batch_candidates(batch, output),
+    )
+    assert result.final_output is not None
+    assert len(result.final_output.candidates) == (0 if definition_only else 1)
+    assert reader.calls == (["review", "definition"] if definition_only
+                            else ["review", "author", "alignment", "definition"])
+    assert result.source_statement_coverage[-1].action_candidate_indexes == []
+    assert result.source_definition_consumers.items == []  # Not a complete dependency scope.
+    if not same_unit:
+        assert result.partial_wire.dispositions[-1].disposition.value == "supporting_or_supplement"
+    restored = type(result).model_validate_json(result.model_dump_json())
+    _validate_saved_source_review(batch, restored)
+    absent = restored.model_copy(deep=True)
+    absent.source_definition_consumers = None
+    with pytest.raises(ValueError, match="缺少实际依赖登记回执"):
+        _validate_saved_source_review(batch, absent)
+    restored.source_interpretation.statements[-1].unresolved = ["定义原文范围仍有歧义"]
+    with pytest.raises(ValueError):
+        _validate_saved_source_review(batch, restored)
+
+
+@pytest.mark.parametrize("defect", ["action", "required", "unknown", "target", "gap", "foreign_quote"])
+def test_definition_dependency_cannot_launder_an_action_or_ambiguity(defect):
+    from app.agents.protocol_control_fixed_flow import pending_front_wire
+    from app.agents.protocol_control_deconstructor import source_statement_coverage
+    batch, inventory, review, _ = _definition_example(definition_only=True)
+    statement = inventory.statements[0]
+    item = review.items[0]
+    if defect == "action":
+        statement.decision_functions.append("action")
+    elif defect == "required":
+        statement.force = "required"
+    elif defect == "unknown":
+        statement.unresolved = ["原文未核清"]
+    elif defect == "target":
+        item.target_id = "stage-not-a-consumer"
+        item.target_action_excerpt = statement.quoted_text
+    elif defect == "gap":
+        item.unresolved_aspects = ["原文锚点不明"]
+    else:
+        item.source_action_excerpt = "另一段原文"
+    with pytest.raises(SourceTargetReviewValidationError):
+        validate_source_target_review(batch, inventory, source_statement_coverage(
+            batch, inventory, pending_front_wire(batch)), review)
+
+
+@pytest.mark.parametrize("quote", [
+    "受试者须在每次给药前禁食至少8小时",
+    "研究者应在每次访视核查依从情况",
+    "Participants must avoid food before dosing",
+])
+def test_imperative_cannot_be_laundered_as_descriptive_definition(quote):
+    from app.agents.protocol_control_fixed_flow import pending_front_wire
+    from app.agents.protocol_control_deconstructor import source_statement_coverage
+    batch, inventory, review, _ = _definition_example(definition_only=True)
+    batch.owned_units[0].excerpt = quote
+    inventory.statements[0].quoted_text = quote
+    inventory.statements[0].time_words = []
+    review.items[0].source_action_excerpt = quote
+    with pytest.raises(SourceTargetReviewValidationError) as rejected:
+        validate_source_target_review(batch, inventory, source_statement_coverage(
+            batch, inventory, pending_front_wire(batch)), review)
+    assert rejected.value.code == "DEFINITION_DEPENDENCY_UNPROVEN"
+
+
+def test_definition_supporting_disposition_preserves_unquoted_neighbour():
+    batch, inventory, review, selection = _definition_example(definition_only=True)
+    batch.owned_units[0].excerpt += "。另须核查依从记录。"
+    result = prepare_front_stage_flow(batch, inventory, _MixedTransport(review, selection),
+        lambda output: validate_protocol_control_batch_candidates(batch, output))
+    assert result.wire is None and result.error is not None
+    assert result.error.code == "DEFINITION_SOURCE_SCOPE_INCOMPLETE"
+
+
+def test_background_disposition_preserves_unquoted_neighbour():
+    batch, inventory, review, selection = _background_example(background_only=True)
+    batch.owned_units[0].excerpt += "。给药前需核查依从记录。"
+    result = prepare_front_stage_flow(batch, inventory, _MixedTransport(review, selection),
+        lambda output: validate_protocol_control_batch_candidates(batch, output))
+    assert result.wire is None and result.error is not None
+    assert result.error.code == "DEFINITION_SOURCE_SCOPE_INCOMPLETE"
+
+
 def test_saved_background_rechecks_unresolved_source_after_restore():
     batch, inventory, review, selection = _background_example(background_only=True)
     result = ProtocolControlAgentRunner().run(

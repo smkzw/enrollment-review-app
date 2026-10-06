@@ -2964,6 +2964,16 @@ def test_runner_reaffirmed_function_requires_one_valid_target_review(resolved: b
     class Transport(_FakeTransport):
         function_calls = 0
         target_calls = 0
+        definition_calls = 0
+
+        def start_source_definition_consumers(self, *, prompt: str):
+            self.definition_calls += 1
+            return ProtocolControlAgentResponse(
+                session_id="definition-consumers",
+                text=json.dumps({
+                    "version": "phase5/control-source-definition-consumer/v2", "items": [],
+                }),
+            )
 
         def start_source_interpretation(self, *, prompt: str):
             self.function_calls += 1
@@ -2990,6 +3000,7 @@ def test_runner_reaffirmed_function_requires_one_valid_target_review(resolved: b
     )
     assert transport.function_calls == 1
     assert transport.target_calls == 2
+    assert transport.definition_calls == int(resolved)
     assert result.source_interpretation == original
     assert result.source_target_review == corrected
     assert result.partial_wire == wire

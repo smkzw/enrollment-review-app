@@ -93,6 +93,19 @@ def test_global_scope_closes_definition_to_other_batch_and_official_predicate():
     }
 
 
+def test_global_scope_cannot_replace_unexecuted_local_registration():
+    record, inventory, keyed, definition_key = _basis()
+    missing = "来源定义缺少实际依赖登记回执，需补齐后重新核对"
+    record.unresolved_reasons.append(missing)
+    closed = close_definition_scope(
+        [record], _review(inventory, definition_key, list(keyed)), inventory, keyed,
+        scope_unproven_reason=UNPROVEN,
+    )
+    assert closed[0].scope_complete is False
+    assert missing in closed[0].unresolved_reasons
+    assert UNPROVEN in closed[0].unresolved_reasons
+
+
 def test_scope_rejects_stale_inventory_and_unlisted_consumer():
     _, inventory, keyed, definition_key = _basis()
     with pytest.raises(ValueError, match="冻结来源清单"):
@@ -536,8 +549,10 @@ def test_replay_of_downstream_result_rechecks_current_sources_not_saved_acceptan
         return {**saved, "fixture_output": "current"}
     monkeypatch.setattr(execution, entry, current)
     executor = execution.create_protocol_control_executor(SimpleNamespace())
-    context = SimpleNamespace(step_id=step, last_checkpoint=saved,
-                              job_payload={"execution_version": execution.PROTOCOL_CONTROL_EXECUTION_VERSION})
+    context = StepContext(job_id="job-scope-test", job_type=execution.PROTOCOL_CONTROL_JOB_TYPE,
+                          job_payload={"execution_version": execution.PROTOCOL_CONTROL_EXECUTION_VERSION},
+                          step_id=step, name=step, attempt=1,
+                          last_checkpoint_id="checkpoint-test", last_checkpoint=saved)
     with pytest.raises(execution.StepFailure) as failure:
         executor(context)
     assert failure.value.error_code == "PROTOCOL_CONTROL_CHECKPOINT_INVALID"

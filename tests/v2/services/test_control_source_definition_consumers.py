@@ -209,6 +209,42 @@ def _assemble(
     )
 
 
+@pytest.mark.parametrize("quote", [
+    "筛选期为首次检查至基线之间的期间",
+    "首次检查至基线之间的期间称为筛选期",
+])
+def test_period_definition_saved_record_does_not_claim_global_scope(quote) -> None:
+    statement = _definition_statement(decision_functions=["definition", "time_validity"])
+    statement.force = "descriptive"
+    statement.quoted_text = quote
+    batch = _batch(_unit(excerpt=quote))
+    records = execution_module._source_definition_consumers(
+        _plan(batch), {batch.batch_id: SimpleNamespace(candidates=[])},
+        {batch.batch_id: _run(statement, declarations=None)},
+    )
+    assert len(records) == 1
+    restored = ProtocolControlDefinitionConsumerRecord.model_validate_json(records[0].model_dump_json())
+    assert restored.source_quote == quote
+    assert restored.scope_complete is False and restored.consumers == []
+    assert "来源定义缺少实际依赖登记回执，需补齐后重新核对" in restored.unresolved_reasons
+    assert publication_module._released_definition_keys(records, _plan(batch)) == frozenset()
+
+
+def test_definition_with_action_words_still_requires_dependency_registration():
+    from app.agents.protocol_control_source_interpretation import (
+        is_non_action_definition, source_definition_statement_indexes,
+    )
+    statement = _definition_statement(decision_functions=["definition", "time_validity"])
+    statement.force = "descriptive"
+    statement.quoted_text = "研究者应当按方案定义核查筛选期范围"
+    interpretation = SimpleNamespace(statements=[statement])
+    assert not is_non_action_definition(statement)
+    assert source_definition_statement_indexes(interpretation) == [0]
+    records = _assemble(statement=statement)
+    assert len(records) == 1 and not records[0].scope_complete
+    assert "来源定义缺少实际依赖登记回执，需补齐后重新核对" in records[0].unresolved_reasons
+
+
 def test_deep_step_uses_frozen_draft_predicate_identity_and_source(monkeypatch) -> None:
     predicate = SimpleNamespace(
         predicate_id=PREDICATE_ID,
@@ -713,6 +749,27 @@ def test_work_draft_consumes_only_the_affected_consumers() -> None:
     assert set(predicate_unverified) == {RULE_COMPONENT_ID}
 
 
+def test_period_definition_reuses_exact_consumer_withholding_not_patient_gap() -> None:
+    record = _official_frozen_record().model_copy(update={
+        "source_quote": "筛选期为首次检查至基线之间的期间",
+    })
+    predicate_unverified, control_unverified, consumed = calculation_module._definition_consumer_consumption(
+        _pack(), _rule_set(), [ProtocolControlDefinitionConsumerRecord.model_validate_json(record.model_dump_json())],
+    )
+    assert predicate_unverified == {RULE_COMPONENT_ID: frozenset({PREDICATE_ID})}
+    assert control_unverified == {} and len(consumed) == 1
+    choices = {RULE_COMPONENT_ID: {PREDICATE_ID: ["fact-a"], "sibling": ["fact-b"]}}
+    values = {RULE_COMPONENT_ID: {PREDICATE_ID: object(), "sibling": object()}}
+    unverified = {}
+    calculation_module._withhold_unverified_definition_predicates(
+        choices, (values,), unverified, predicate_unverified,
+    )
+    assert choices[RULE_COMPONENT_ID][PREDICATE_ID] == []
+    assert choices[RULE_COMPONENT_ID]["sibling"] == ["fact-b"]
+    assert list(values[RULE_COMPONENT_ID]) == ["sibling"]
+    assert unverified == predicate_unverified
+
+
 def test_work_draft_rejects_an_unresolvable_consumer() -> None:
     with pytest.raises(ValueError):
         calculation_module._definition_consumer_consumption(
@@ -887,7 +944,7 @@ def test_calculation_block_narrows_only_for_a_released_definition(monkeypatch) -
     monkeypatch.setattr(
         publication_module, "source_calculation_gaps", lambda store, job: (gap,),
     )
-    with pytest.raises(ScopeViolationError, match="计算定义尚无可核验的正式求值方式"):
+    with pytest.raises(ScopeViolationError, match="方案定义尚未核清影响范围"):
         publication_module._require_source_calculations_consumable(object(), "job-generic")
     with pytest.raises(ScopeViolationError):
         publication_module._require_source_calculations_consumable(

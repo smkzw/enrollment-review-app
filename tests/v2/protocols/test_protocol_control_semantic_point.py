@@ -228,7 +228,7 @@ def test_publication_requires_exact_frozen_draft_revision(monkeypatch) -> None:
 def test_publication_refuses_textual_coverage_without_calculation_consumer() -> None:
     batch, interpretation = _source()
     store = _publication_source_store(batch, interpretation)
-    with pytest.raises(ScopeViolationError, match="计算定义尚无可核验的正式求值方式"):
+    with pytest.raises(ScopeViolationError, match="方案定义尚未核清影响范围"):
         _require_source_calculations_consumable(store, "job-generic")
     gaps = source_calculation_gaps(store, "job-generic")
     assert [(item.batch_number, item.statement_index, item.source_span_ids, item.source_quote)
@@ -238,6 +238,23 @@ def test_publication_refuses_textual_coverage_without_calculation_consumer() -> 
     ]
     assert all(item.linked_official_code is None for item in gaps)
     assert all(item.review_decision is None and not item.unresolved_aspects for item in gaps)
+
+
+@pytest.mark.parametrize("quote", [
+    "筛选期是首次检查至基线之间的期间。",
+    "从首次检查开始、到基线结束的期间称为筛选期。",
+])
+def test_non_action_definition_remains_in_publication_gaps(quote) -> None:
+    batch, interpretation = _source()
+    batch.owned_units[0].excerpt = quote
+    interpretation.statements[0].quoted_text = quote
+    interpretation.statements[0].decision_functions = ["definition", "time_validity"]
+    store = _publication_source_store(batch, interpretation)
+    gaps = source_calculation_gaps(store, "job-generic")
+    assert [gap.statement_index for gap in gaps] == [0, 1]
+    assert gaps[0].source_quote == quote
+    with pytest.raises(ScopeViolationError, match="方案定义尚未核清影响范围"):
+        _require_source_calculations_consumable(store, "job-generic", released=frozenset({(1, 1)}))
 
 
 def test_calculation_preview_only_links_a_frozen_official_target() -> None:
@@ -306,6 +323,9 @@ def test_post_eligibility_calculation_does_not_block_current_review() -> None:
             "source_action_excerpt": statement.quoted_text,
             "non_control_basis_excerpt": statement.eligibility_sequence_quote,
         }],
+    }
+    saved["source_definition_consumers"] = {
+        "version": "phase5/control-source-definition-consumer/v2", "items": [],
     }
     assert [gap.statement_index for gap in source_calculation_gaps(store, "job-generic")] == [1]
 

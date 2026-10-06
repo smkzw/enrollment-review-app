@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.agents.protocol_control_deconstructor import ProtocolControlAgentRunResult
 from app.agents.protocol_control_source_interpretation import (
-    is_post_eligibility_calculation, normalize_source_excerpt,
+    is_post_eligibility_calculation, normalize_source_excerpt, source_definition_statement_indexes,
 )
 from app.domain.contracts.agent_io import ProtocolDeconstructionDraft, ProtocolDeconstructionInput
 from app.domain.contracts.agents import GateResult
@@ -102,8 +102,9 @@ def source_calculation_gaps(
         reviews = ({item.statement_index: item for item in run.source_target_review.items}
                    if run.source_target_review is not None else {})
         official_codes = {item.official_code for item in batch.known_official_targets}
+        definition_indexes = set(source_definition_statement_indexes(interpretation))
         for index, statement in enumerate(interpretation.statements):
-            if "calculation_input" not in statement.decision_functions:
+            if index not in definition_indexes:
                 continue
             review = reviews.get(index)
             if review is not None and review.decision == "not_current_control":
@@ -316,7 +317,7 @@ def _require_source_calculations_consumable(
     if blocking:
         first = blocking[0]
         raise ScopeViolationError(
-            "方案中的计算定义尚无可核验的正式求值方式，不能仅凭条款文字对应发布"
+            "方案定义尚未核清影响范围与对应要求，不能仅凭条款文字对应发布"
             f"（批次 {first.batch_number}，陈述 {first.statement_index}）"
         )
 

@@ -5,6 +5,23 @@ import { ProtocolControlPanel } from "./ProtocolControlPanel";
 import type { useProtocolControls } from "./useProtocolControls";
 
 describe("ProtocolControlPanel stopped reason", () => {
+  it("明确区分定义依赖未核清与患者缺少资料", () => {
+    const controls: ReturnType<typeof useProtocolControls> = {
+      state: { sourceJobId: "source", draftRevisionId: "revision", status: "ready", data: {
+        jobId: "control", sourceJobId: "source", checkpointId: "checkpoint",
+        requirements: [], restrictedStatements: [], calculationGaps: [{
+          id: "definition:0", sourceQuote: "筛选期为首次检查至基线之间的期间",
+          linkedOfficialCode: null, reviewDecision: "definition_dependency", unresolvedAspects: [],
+        }],
+      } }, retry: vi.fn(), retryFailed: vi.fn(), retrying: false,
+    };
+    render(<ProtocolControlPanel controls={controls} />);
+    expect(screen.getByRole("heading", { name: "尚未核清影响范围的方案定义" })).toBeVisible();
+    expect(screen.getByText(/定义原文已保留，正在核对它影响哪些具体要求/)).toBeVisible();
+    expect(screen.getByText(/当前不能发布/)).toBeVisible();
+    expect(screen.getByText(/不需要研究者补写医学意见/)).toBeVisible();
+  });
+
   it.each([
     "原文已保存，仍需核清它与审核要求的对应关系",
     "原文支持的补充要求尚未接通可靠核验，由系统建设继续处理",

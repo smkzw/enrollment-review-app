@@ -71,6 +71,7 @@ from app.agents.protocol_control_source_interpretation import (
     SourceTargetReviewValidationError,
     is_post_eligibility_calculation,
     is_study_phase_label,
+    source_definition_statement_indexes,
     normalize_source_excerpt,
     parse_product_source_interpretation,
     validate_source_definition_consumers,
@@ -2632,7 +2633,7 @@ def _validate_saved_source_review(
     if result.source_front_target_review is not None:
         from app.agents.protocol_control_fixed_flow import validate_front_review
         validate_front_review(batch, interpretation, result.source_front_target_review)
-        if any(item.decision not in {"additional_requirement", "covered_by_official", "covered_by_procedure", "background_context"}
+        if any(item.decision not in {"additional_requirement", "covered_by_official", "covered_by_procedure", "background_context", "definition_dependency"}
                for item in result.source_front_target_review.items):
             raise ValueError("前置新增要求核对不能借已有覆盖或未决通过采用")
         if result.final_output is None or result.partial_wire is None:
@@ -2772,6 +2773,8 @@ def _validate_saved_source_review(
     elif result.source_candidate_alignment is not None and not front_alignment_verified:
         if {(item.statement_index, item.candidate_index) for item in result.source_candidate_alignment.items} != set(policy_pairs):
             raise SourceCandidateAlignmentValidationError("没有对应要求却保留候选语义核对")
+    if source_definition_statement_indexes(interpretation) and result.source_definition_consumers is None:
+        raise ValueError("来源定义缺少实际依赖登记回执，不能以全量核对替代未执行步骤")
     if result.source_definition_consumers is not None:
         validate_source_definition_consumers(
             batch, interpretation, result.source_definition_consumers,
@@ -3515,16 +3518,13 @@ def _source_definition_consumers(
             {item.statement_index: item for item in run.source_target_review.items}
             if run.source_target_review is not None else {}
         )
-        definition_indexes = {
-            index for index, statement in enumerate(interpretation.statements)
-            if "calculation_input" in statement.decision_functions
-        }
+        definition_indexes = set(source_definition_statement_indexes(interpretation))
         stray = sorted(set(declared) - definition_indexes)
         if stray:
             raise StepFailure(
                 retryable=False,
                 error_code="PROTOCOL_CONTROL_SOURCE_DEFINITION_CONSUMER_INVALID",
-                detail="定义消费登记引用了非计算来源陈述：" + ",".join(map(str, stray)),
+                detail="定义消费登记引用了非定义来源陈述：" + ",".join(map(str, stray)),
             )
         for index, statement in enumerate(interpretation.statements):
             if index not in definition_indexes:
@@ -3543,6 +3543,8 @@ def _source_definition_consumers(
                 *statement.unresolved,
                 *(review.unresolved_aspects if review is not None else ()),
             }
+            if run.source_definition_consumers is None:
+                reasons.add("来源定义缺少实际依赖登记回执，需补齐后重新核对")
             entry = declared.get(index)
             consumers: list[ProtocolControlDefinitionAtomConsumption] = []
             official_targets = {

@@ -7239,7 +7239,7 @@ class ProtocolControlAgentRunner:
             front_review_indexes = set(target_review_indexes(source_interpretation, front_coverage, batch))
             covered_review = front_target_review.model_copy(update={"items": [
                 item for item in front_target_review.items
-                if item.decision in {"covered_by_official", "covered_by_procedure", "background_context"}
+                if item.decision in {"covered_by_official", "covered_by_procedure", "background_context", "definition_dependency"}
                 and item.statement_index in front_review_indexes
             ]})
             try:
@@ -7558,7 +7558,7 @@ class ProtocolControlAgentRunner:
                             item.statement_index: item
                             for item in (latest_source_target_review.items
                                          if latest_source_target_review is not None else [])
-                            if item.decision in {"covered_by_official", "covered_by_procedure", "background_context"}
+                            if item.decision in {"covered_by_official", "covered_by_procedure", "background_context", "definition_dependency"}
                             or (item.statement_index in resumed_review_indexes
                                 and item.decision != "unresolved")
                         }
