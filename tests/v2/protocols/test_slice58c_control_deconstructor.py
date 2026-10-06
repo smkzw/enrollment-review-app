@@ -3969,6 +3969,31 @@ def test_context_correspondence_is_only_a_sourced_pending_relation() -> None:
     })
     validate_source_interpretation(batch, inventory)
     validate_source_target_review(batch, inventory, coverage, review)
+    review_prompt = build_source_target_review_prompt(batch, inventory, coverage)
+    assert "target_id 必须填写该只读单元的 structure_unit_id" in review_prompt
+    assert "不能填写 source_ref" in review_prompt
+    for duplicate_source_ref in (False, True):
+        wrong_namespace_batch = batch.model_copy(deep=True)
+        if duplicate_source_ref:
+            sibling = wrong_namespace_batch.context_units[0].model_copy(deep=True)
+            sibling.structure_unit_id = "su-another-context"
+            wrong_namespace_batch.context_units.append(sibling)
+        wrong_namespace = review.model_copy(deep=True)
+        wrong_namespace.items[0].target_id = batch.context_units[0].source_ref
+        original = wrong_namespace.model_dump(mode="json")
+        with pytest.raises(SourceTargetReviewValidationError) as error:
+            validate_source_target_review(wrong_namespace_batch, inventory, coverage, wrong_namespace)
+        assert error.value.code == "CONTEXT_TARGET_ID_INVALID"
+        assert error.value.json_path == "/items/0/target_id"
+        assert wrong_namespace.model_dump(mode="json") == original
+
+    canonical_overlap = batch.model_copy(deep=True)
+    sibling = canonical_overlap.context_units[0].model_copy(deep=True)
+    sibling.structure_unit_id = "su-another-context"
+    sibling.source_ref = review.items[0].target_id
+    sibling.excerpt = "本条并非同一要求"
+    canonical_overlap.context_units.append(sibling)
+    validate_source_target_review(canonical_overlap, inventory, coverage, review)
     with_alias = batch.model_copy(deep=True)
     with_alias.context_units[0].excerpt = "所有受试者自筛选期开始接受背景治疗[别名]：" + action
     validate_source_target_review(with_alias, inventory, coverage, review)

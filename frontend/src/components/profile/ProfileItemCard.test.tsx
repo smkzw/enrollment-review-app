@@ -88,6 +88,18 @@ describe("ProfileItemCard", () => {
     expect(screen.getByText("120/80 mmHg")).toBeInTheDocument();
   });
 
+  it.each([
+    [true, "是"],
+    [false, "否"],
+    [0, "0"],
+    ["false", "false"],
+  ])("记录结果只把布尔值 %s 显示为 %s，不改变数值或原文字串", (value, text) => {
+    const { model, item } = demographicsFact();
+    render(<ProfileItemCard model={model} item={{ ...item, value, unit: null }} />);
+    const row = screen.getByText("记录结果").closest("div");
+    expect(row?.querySelector("dd")).toHaveTextContent(new RegExp(`^${text}$`));
+  });
+
   it("用药暴露展示药名、类别、适应证、剂量、频次与途径", () => {
     const { model, item } = medicationExposure();
     render(<ProfileItemCard model={model} item={item} />);

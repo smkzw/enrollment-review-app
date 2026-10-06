@@ -64,7 +64,7 @@ export function ProfileItemCard({
 
   const valueText =
     item.value !== null
-      ? `${String(item.value)}${item.unit !== null ? ` ${item.unit}` : ""}`
+      ? `${typeof item.value === "boolean" ? (item.value ? "是" : "否") : String(item.value)}${item.unit !== null ? ` ${item.unit}` : ""}`
       : null;
 
   const medicationParts = [

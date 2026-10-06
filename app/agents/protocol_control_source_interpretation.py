@@ -31,7 +31,7 @@ SOURCE_INTERPRETATION_VERSION = "phase5/control-source-interpretation/v11"
 SOURCE_INTERPRETATION_PROMPT_VERSION = "phase5/control-source-prompt/v20"
 SOURCE_QUOTE_RECOVERY_VERSION = "phase5/source-quote-local-recovery/v2"
 SOURCE_TARGET_REVIEW_VERSION = "phase5/control-source-target-review/v23"
-SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v6"
+SOURCE_TARGET_REVIEW_POLICY_VERSION = "phase5/control-source-target-policy/v7"
 
 
 _DAY_WEEK_WINDOW_RE = re.compile(
@@ -1248,6 +1248,8 @@ def build_source_target_review_prompt(
         "不得因两段文字相似就报完整覆盖，也不得把只读来源的时期、例外或完成强度写成本陈述自己的原文。"
         "如后文可能补充本句但当前无法证明完整关系，列出具体差异并选增量或未核，不能直接舍弃本句。"
         "potential_same_requirement 只可引用给出的另一只读原文单元；两端对象与核心动作均须逐字相同，"
+        "此项 target_id 必须填写该只读单元的 structure_unit_id，不能填写 source_ref、"
+        "原文位置、摘录编号或已有官方/流程目标编号；source_ref 仅供定位原文。"
         "对象可在同句动作之前、之后或包含在动作摘录内，不得从另一句借用。"
         "并给出该单元同句的明确适用时期 target_scope_excerpt。此判断仅登记待核关系，"
         "不等于已有控制覆盖；后文必须独立解构并在最终发布前再次核验。"
@@ -1449,6 +1451,11 @@ def validate_source_target_review(
         if item.decision == "potential_same_requirement":
             context = next((unit for unit in batch.context_units
                             if unit.structure_unit_id == item.target_id), None)
+            if context is None and any(
+                unit.source_ref == item.target_id for unit in batch.context_units
+            ):
+                reject(item, "CONTEXT_TARGET_ID_INVALID", "target_id",
+                       "target_id 填写了 source_ref 原文位置；须填写只读单元的 structure_unit_id，不能自动转换来源编号")
             source_unit = owned[statement.structure_unit_id]
             source_context = normalize_source_excerpt(source_unit.excerpt)
             target_action = normalize_source_excerpt(item.target_action_excerpt or "")
